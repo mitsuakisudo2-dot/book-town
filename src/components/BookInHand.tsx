@@ -2,8 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type TouchEvent } from "react";
-import type { Shelf, Shop, TownActions, TownState } from "../lib/types";
+import {
+  POP_REACTIONS,
+  popReactionKey,
+  type Shelf,
+  type Shop,
+  type TownActions,
+  type TownState,
+} from "../lib/types";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
+import { BookActions } from "./BookActions";
+import { BookDiscovery } from "./BookDiscovery";
 import "./book-in-hand.css";
 
 type BookInHandProps = {
@@ -25,19 +34,31 @@ type TouchStart = {
 };
 
 export function BookInHand({
-  shop,
-  shelf,
+  shop: sourceShop,
+  shelf: sourceShelf,
   itemId,
   state,
   actions,
   onClose,
   notify,
 }: BookInHandProps) {
-  const [selectedId, setSelectedId] = useState(itemId);
+  const [context, setContext] = useState({
+    shopId: sourceShop.id,
+    shelfId: sourceShelf.id,
+    itemId,
+  });
+  const shop =
+    [...state.shops, ...(state.ownShop ? [state.ownShop] : [])].find(
+      (entry) => entry.id === context.shopId,
+    ) ?? sourceShop;
+  const shelf =
+    shop.shelves.find((entry) => entry.id === context.shelfId) ?? sourceShelf;
+  const selectedId = context.itemId;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const touchRef = useRef<TouchStart | null>(null);
+  const wheelRef = useRef({ total: 0, last: 0, moved: 0 });
   const restoreViewportRef = useRef(true);
   const titleId = useId();
   const shelfLabelId = useId();
@@ -56,7 +77,8 @@ export function BookInHand({
     shop.ownerId === state.me.id
       ? state.me
       : state.readers.find((reader) => reader.id === shop.ownerId);
-  const wished = book ? state.wishlist.includes(book.id) : false;
+  const reactionKey = item ? popReactionKey(shop.id, shelf.id, item.id) : "";
+  const reactions = state.popReactions[reactionKey] ?? [];
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -103,7 +125,7 @@ export function BookInHand({
   function move(direction: -1 | 1) {
     const next = availableItems[index + direction];
     if (!next) return;
-    setSelectedId(next.id);
+    setContext({ shopId: shop.id, shelfId: shelf.id, itemId: next.id });
     contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
   }
 
@@ -117,7 +139,7 @@ export function BookInHand({
     if (
       event.touches.length !== 1 ||
       (event.target as HTMLElement).closest(
-        "button,a,input,textarea,select,summary",
+        "button,a,input,textarea,select,summary,[data-book-rail]",
       )
     ) {
       touchRef.current = null;
@@ -128,7 +150,7 @@ export function BookInHand({
       id: touch.identifier,
       x: touch.clientX,
       y: touch.clientY,
-      time: Date.now(),
+      time: event.timeStamp,
       axis: null,
     };
   }
@@ -160,11 +182,49 @@ export function BookInHand({
     if (
       Math.abs(dx) >= 56 &&
       Math.abs(dx) > Math.abs(dy) * 1.5 &&
-      Date.now() - start.time < 1000
+      event.timeStamp - start.time < 1000
     ) {
       move(dx < 0 ? 1 : -1);
     }
   }
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const wheel = (event: WheelEvent) => {
+      if ((event.target as HTMLElement).closest("[data-book-rail]")) return;
+      const horizontal =
+        event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX;
+      if (
+        Math.abs(horizontal) <=
+          Math.abs(event.shiftKey ? 0 : event.deltaY) * 1.5 ||
+        Math.abs(horizontal) < 2
+      )
+        return;
+      const now = event.timeStamp;
+      const gesture = wheelRef.current;
+      if (
+        now - gesture.last > 180 ||
+        Math.sign(horizontal) !== Math.sign(gesture.total)
+      )
+        gesture.total = 0;
+      gesture.last = now;
+      event.preventDefault();
+      if (gesture.moved && now - gesture.moved < 650) return;
+      gesture.total += horizontal * (event.deltaMode === 1 ? 16 : 1);
+      if (Math.abs(gesture.total) >= 60) {
+        const next = availableItems[index + (gesture.total > 0 ? 1 : -1)];
+        gesture.total = 0;
+        gesture.moved = now;
+        if (next) {
+          setContext({ shopId: shop.id, shelfId: shelf.id, itemId: next.id });
+          content.scrollTo({ top: 0, behavior: "instant" });
+        }
+      }
+    };
+    content.addEventListener("wheel", wheel, { passive: false });
+    return () => content.removeEventListener("wheel", wheel);
+  }, [shop.id, shelf.id, availableItems, index]);
 
   if (!book || !item) return null;
 
@@ -191,7 +251,12 @@ export function BookInHand({
       }}
       onKeyDown={(event) => {
         if (event.altKey || event.ctrlKey || event.metaKey) return;
-        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        if (
+          (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+          !(event.target as HTMLElement).closest(
+            "[data-book-rail],input,textarea,select",
+          )
+        ) {
           event.preventDefault();
           move(event.key === "ArrowLeft" ? -1 : 1);
         }
@@ -239,7 +304,7 @@ export function BookInHand({
           touchRef.current = null;
         }}
       >
-        <div className="bh-book-body" key={item.id}>
+        <div className="bh-book-body" key={reactionKey}>
           <div className="bh-book-intro">
             <div className="bh-cover">
               <BookJacket book={book} />
@@ -250,6 +315,11 @@ export function BookInHand({
               <p className="bh-author">{book.author}</p>
             </div>
           </div>
+
+          <section className="bh-summary" aria-label="あらすじ">
+            <h3>あらすじ</h3>
+            <p>{book.summary}</p>
+          </section>
 
           <section className="bh-pop owner-pop" aria-label="この棚の店主のPOP">
             <div className="bh-pop-label">
@@ -263,6 +333,43 @@ export function BookInHand({
                 この本のPOPは、まだ書かれていません。
               </p>
             )}
+            <div
+              className="bh-pop-reactions"
+              role="group"
+              aria-label="このPOPへのリアクション"
+            >
+              {POP_REACTIONS.map((reaction) => (
+                <button
+                  key={reaction}
+                  type="button"
+                  aria-pressed={reactions.includes(reaction)}
+                  onClick={() =>
+                    actions.togglePopReaction(
+                      shop.id,
+                      shelf.id,
+                      item.id,
+                      reaction,
+                    )
+                  }
+                >
+                  <Icon
+                    name={
+                      reaction === "like"
+                        ? "heart"
+                        : reaction === "read"
+                          ? "book"
+                          : "leaf"
+                    }
+                    size={16}
+                  />
+                  {reaction === "like"
+                    ? "いいね"
+                    : reaction === "read"
+                      ? "読む！"
+                      : "私も好き！"}
+                </button>
+              ))}
+            </div>
             <div className="bh-pop-signature">
               {owner && (
                 <Link
@@ -288,45 +395,36 @@ export function BookInHand({
             </div>
           </section>
 
-          <div className="bh-actions">
-            <button
-              type="button"
-              className={`bh-save${wished ? " bh-saved" : ""}`}
-              aria-pressed={wished}
-              onClick={() => {
-                actions.toggleWish(book.id);
-                notify(
-                  wished
-                    ? "読みたいリストから外しました"
-                    : "読みたいリストに保存しました",
-                );
-              }}
-            >
-              <Icon name={wished ? "check" : "bookmark"} size={18} />
-              {wished ? "読みたいに登録済み" : "読みたいに加える"}
-            </button>
-            <p className="bh-private-hint">自分だけの読みたいリストに</p>
-          </div>
-
+          <BookActions
+            book={book}
+            state={state}
+            actions={actions}
+            notify={notify}
+          />
+          <BookDiscovery
+            shop={shop}
+            bookId={book.id}
+            state={state}
+            onSelect={(targetShop, targetShelf, targetItem) => {
+              setContext({
+                shopId: targetShop.id,
+                shelfId: targetShelf.id,
+                itemId: targetItem.id,
+              });
+              contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
+              closeButtonRef.current?.focus({ preventScroll: true });
+            }}
+          />
           <Link
+            className="bh-work-page"
             href={`/books/${book.id}/`}
-            className="bh-other-shops"
             onNavigate={leaveForPage}
           >
-            <span>
-              <Icon name="store" size={19} />
-              この本を並べるほかの書店
-            </span>
-            <Icon name="arrow" size={18} />
+            作品のページを開く <Icon name="arrow" size={16} />
           </Link>
-
-          <details className="bh-details">
-            <summary>あらすじ・書籍情報</summary>
-            <p>{book.summary}</p>
-            <span className="bh-cover-note">
-              表紙はデモ用のオリジナルデザインです。
-            </span>
-          </details>
+          <span className="bh-cover-note">
+            表紙はデモ用のオリジナルデザインです。リアクションはこのブラウザに保存されます。
+          </span>
         </div>
       </div>
 
@@ -350,7 +448,7 @@ export function BookInHand({
           <span className="bh-sr-only">
             {availableItems.length}冊中{index + 1}冊目、{book.title}
           </span>
-          <small aria-hidden="true">棚の並び順に</small>
+          <small aria-hidden="true">左右にスワイプ · 棚の順に</small>
         </span>
         <button
           type="button"

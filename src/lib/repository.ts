@@ -1,6 +1,9 @@
 import { createInitialState } from "./data";
 import {
   ME_ID,
+  POP_REACTIONS,
+  popReactionKey,
+  type PopReaction,
   OWN_SHOP_ID,
   shelfUsed,
   type PersistenceStatus,
@@ -25,7 +28,7 @@ export interface TownRepository {
 
 type PersonalData = Pick<
   TownState,
-  "me" | "ownShop" | "following" | "wishlist"
+  "me" | "ownShop" | "following" | "wishlist" | "favorites" | "popReactions"
 >;
 interface StoredEnvelope {
   version: number;
@@ -146,8 +149,45 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
     ) {
       return { state: initial, status: "recovered" };
     }
+    // Optional additions migrate independently, so an older save never loses its shop.
+    const data = envelope.data;
+    const ownShop = data.ownShop as Shop | null;
+    const reactionKeys = new Set(
+      [...initial.shops, ...(ownShop ? [ownShop] : [])].flatMap((shop) =>
+        shop.shelves
+          .filter((shelf) => shelf.isPublic)
+          .flatMap((shelf) =>
+            shelf.items.map((item) =>
+              popReactionKey(shop.id, shelf.id, item.id),
+            ),
+          ),
+      ),
+    );
+    const popReactions: Record<string, PopReaction[]> = {};
+    if (object(data.popReactions)) {
+      for (const [key, reactions] of Object.entries(data.popReactions)) {
+        if (!reactionKeys.has(key) || !Array.isArray(reactions)) continue;
+        const valid = [...new Set(reactions)].filter(
+          (reaction): reaction is PopReaction =>
+            POP_REACTIONS.includes(reaction as PopReaction),
+        );
+        if (valid.length) popReactions[key] = valid;
+      }
+    }
     return {
-      state: { ...initial, ...(envelope.data as unknown as PersonalData) },
+      state: {
+        ...initial,
+        me: data.me as Reader,
+        ownShop,
+        following: data.following as string[],
+        wishlist: data.wishlist as string[],
+        favorites: Array.isArray(data.favorites)
+          ? [...new Set(data.favorites)].filter(
+              (id): id is string => typeof id === "string" && bookIds.has(id),
+            )
+          : [],
+        popReactions,
+      },
       status: "saved",
     };
   } catch {
@@ -163,6 +203,8 @@ export function serializeTown(state: TownState): string {
       ownShop: state.ownShop,
       following: state.following,
       wishlist: state.wishlist,
+      favorites: state.favorites,
+      popReactions: state.popReactions,
     },
   };
   return JSON.stringify(envelope);

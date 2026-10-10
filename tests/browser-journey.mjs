@@ -132,9 +132,7 @@ try {
       await page
         .getByRole("button", { name: "読みたいに加える", exact: true })
         .click();
-      await page
-        .getByRole("link", { name: "この本を並べるほかの書店" })
-        .click();
+      await page.getByRole("link", { name: "作品のページを開く" }).click();
       await expect(page).toHaveURL(/\/books\/solaris\/$/);
       await expect(
         page.getByRole("heading", { name: "ソラリス", exact: true }),
@@ -359,9 +357,7 @@ try {
       await expect(
         page.getByRole("dialog").locator(".owner-pop"),
       ).toContainText("理解できないもの");
-      await page
-        .getByRole("link", { name: "この本を並べるほかの書店" })
-        .click();
+      await page.getByRole("link", { name: "作品のページを開く" }).click();
       await expect(page).toHaveURL(/\/books\/solaris\/$/);
       const own = page.locator(".stockist").filter({
         has: page.getByRole("heading", {

@@ -2,6 +2,14 @@ export const ME_ID = "me";
 export const OWN_SHOP_ID = "mine";
 export const DEFAULT_SHELF_CAPACITY = 20;
 
+export const POP_REACTIONS = ["like", "read", "love"] as const;
+export type PopReaction = (typeof POP_REACTIONS)[number];
+export const popReactionKey = (
+  shopId: string,
+  shelfId: string,
+  itemId: string,
+) => JSON.stringify([shopId, shelfId, itemId]);
+
 export type BookDisplay = "spine" | "face";
 export type ShopTheme = "sage" | "ink" | "ochre" | "rose";
 
@@ -62,6 +70,8 @@ export interface TownState {
   ownShop: Shop | null;
   following: string[];
   wishlist: string[];
+  favorites: string[];
+  popReactions: Record<string, PopReaction[]>;
 }
 
 export interface TownActions {
@@ -82,6 +92,13 @@ export interface TownActions {
   updatePop(shelfId: string, itemId: string, pop: string): void;
   toggleFollow(shopId: string): void;
   toggleWish(bookId: string): void;
+  toggleFavorite(bookId: string): void;
+  togglePopReaction(
+    shopId: string,
+    shelfId: string,
+    itemId: string,
+    reaction: PopReaction,
+  ): void;
   updateProfile(name: string, bio: string): void;
   updateNine(ids: string[], notes: Record<string, string>): void;
 }

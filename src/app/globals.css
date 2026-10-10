@@ -2257,7 +2257,7 @@ div.book-jacket:hover {
     flex-direction: column;
     align-items: center;
     gap: 7px;
-    width: 23%;
+    flex: 1;
     color: #a2ad92;
   }
   .town-bottom-nav a.active {

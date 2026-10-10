@@ -5,6 +5,8 @@ import { seedState } from "./data";
 import { localTownRepository, type TownRepository } from "./repository";
 import {
   ME_ID,
+  POP_REACTIONS,
+  popReactionKey,
   OWN_SHOP_ID,
   displayCost,
   normalizeCapacity,
@@ -52,7 +54,26 @@ export function createTownStore(
   }
 
   function withShop(nextShop: Shop) {
-    commit({ ...state, ownShop: nextShop });
+    const validKeys = new Set(
+      [...state.shops, nextShop].flatMap((shop) =>
+        shop.shelves
+          .filter((shelf) => shelf.isPublic)
+          .flatMap((shelf) =>
+            shelf.items.map((item) =>
+              popReactionKey(shop.id, shelf.id, item.id),
+            ),
+          ),
+      ),
+    );
+    commit({
+      ...state,
+      ownShop: nextShop,
+      popReactions: Object.fromEntries(
+        Object.entries(state.popReactions).filter(([key]) =>
+          validKeys.has(key),
+        ),
+      ),
+    });
   }
   function editShelf(shelfId: string, edit: (shelf: Shelf) => Shelf) {
     const shop = state.ownShop;
@@ -265,6 +286,40 @@ export function createTownStore(
           ? state.wishlist.filter((id) => id !== bookId)
           : [...state.wishlist, bookId],
       });
+    },
+    toggleFavorite(bookId) {
+      initialize();
+      if (!state.books.some((book) => book.id === bookId)) return;
+      commit({
+        ...state,
+        favorites: state.favorites.includes(bookId)
+          ? state.favorites.filter((id) => id !== bookId)
+          : [...state.favorites, bookId],
+      });
+    },
+    togglePopReaction(shopId, shelfId, itemId, reaction) {
+      initialize();
+      const shop = [
+        ...state.shops,
+        ...(state.ownShop ? [state.ownShop] : []),
+      ].find((entry) => entry.id === shopId);
+      const shelf = shop?.shelves.find(
+        (entry) => entry.id === shelfId && entry.isPublic,
+      );
+      if (
+        !shelf?.items.some((entry) => entry.id === itemId) ||
+        !POP_REACTIONS.includes(reaction)
+      )
+        return;
+      const key = popReactionKey(shopId, shelfId, itemId);
+      const current = state.popReactions[key] ?? [];
+      const next = current.includes(reaction)
+        ? current.filter((entry) => entry !== reaction)
+        : [...current, reaction];
+      const popReactions = { ...state.popReactions };
+      if (next.length) popReactions[key] = next;
+      else delete popReactions[key];
+      commit({ ...state, popReactions });
     },
     updateProfile(name, bio) {
       initialize();

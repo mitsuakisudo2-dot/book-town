@@ -17,6 +17,7 @@ import { ShopEditor } from "./ShopEditor";
 import { ProfileView } from "./ProfileView";
 import { StreetView } from "./StreetView";
 import { BookInHand } from "./BookInHand";
+import { BookActions } from "./BookActions";
 
 type View = "town" | "shop" | "editor" | "book" | "profile" | "wishlist";
 type Shared = {
@@ -26,12 +27,6 @@ type Shared = {
 };
 const links = [
   { href: "/", icon: "store", label: "本の街", view: "town" },
-  {
-    href: "/reading-list/",
-    icon: "bookmark",
-    label: "読みたい",
-    view: "wishlist",
-  },
   { href: "/my-shop/", icon: "edit", label: "わたしの書店", view: "editor" },
   {
     href: "/profiles/me/",
@@ -755,7 +750,6 @@ function BookView({
           .map((item) => ({ shop, shelf, item })),
       ),
   );
-  const saved = state.wishlist.includes(book.id);
   return (
     <>
       <Link href="/" className="back-link">
@@ -770,20 +764,12 @@ function BookView({
           <h1>{book.title}</h1>
           <p className="book-page-author">{book.author}</p>
           <p className="book-summary">{book.summary}</p>
-          <button
-            className={"button " + (saved ? "secondary" : "")}
-            onClick={() => {
-              actions.toggleWish(book.id);
-              notify(
-                saved
-                  ? "読みたいリストから外しました"
-                  : "読みたいリストに加えました",
-              );
-            }}
-          >
-            <Icon name={saved ? "check" : "plus"} size={16} />
-            {saved ? "読みたいに登録済み" : "読みたいに加える"}
-          </button>
+          <BookActions
+            book={book}
+            state={state}
+            actions={actions}
+            notify={notify}
+          />
           <span className="jacket-disclaimer">
             表紙はデモ用のオリジナルデザインです
           </span>

@@ -26,6 +26,9 @@ export function ProfileView({
   const shop = isSelf
     ? state.ownShop
     : state.shops.find((place) => place.ownerId === readerId);
+  const [collection, setCollection] = useState<"wishlist" | "favorites">(
+    "wishlist",
+  );
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingNine, setEditingNine] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -234,6 +237,88 @@ export function ProfileView({
           )}
         </div>
       </section>
+
+      {isSelf && (
+        <section
+          className="profile-collections"
+          aria-labelledby="profile-collection-title"
+        >
+          <div className="profile-section-heading">
+            <div>
+              <p className="profile-eyebrow">BOOKS TO RETURN TO</p>
+              <h2 id="profile-collection-title">わたしの本のしおり</h2>
+            </div>
+            <span className="profile-private-label">
+              <Icon name="lock" size={14} /> 自分だけ
+            </span>
+          </div>
+          <div
+            className="profile-collection-tabs"
+            role="group"
+            aria-label="保存した本の種類"
+          >
+            <button
+              aria-pressed={collection === "wishlist"}
+              onClick={() => setCollection("wishlist")}
+            >
+              <Icon name="bookmark" size={17} /> 読みたい{" "}
+              <span>{state.wishlist.length}</span>
+            </button>
+            <button
+              aria-pressed={collection === "favorites"}
+              onClick={() => setCollection("favorites")}
+            >
+              <Icon name="star" size={17} /> お気に入り{" "}
+              <span>{state.favorites.length}</span>
+            </button>
+          </div>
+          <p className="profile-section-description">
+            {collection === "wishlist"
+              ? "気になった一冊を、次の読書の楽しみに。"
+              : "何度でも戻りたい一冊を、ここに。"}
+          </p>
+          {state[collection].length ? (
+            <div className="profile-collection-grid">
+              {state[collection].map((id) => {
+                const book = state.books.find((entry) => entry.id === id);
+                return book ? (
+                  <article className="profile-saved-book" key={id}>
+                    <Link
+                      href={`/books/${id}/`}
+                      aria-label={`${book.title}の詳細を見る`}
+                    >
+                      <BookJacket book={book} />
+                      <strong>{book.title}</strong>
+                      <small>{book.author}</small>
+                    </Link>
+                    <button
+                      onClick={() =>
+                        collection === "wishlist"
+                          ? actions.toggleWish(id)
+                          : actions.toggleFavorite(id)
+                      }
+                      aria-label={`${book.title}を${collection === "wishlist" ? "読みたい" : "お気に入り"}から外す`}
+                    >
+                      <Icon name="close" size={14} /> 外す
+                    </button>
+                  </article>
+                ) : null;
+              })}
+            </div>
+          ) : (
+            <div className="profile-collection-empty">
+              <p>
+                {collection === "wishlist"
+                  ? "読みたい本は、まだありません。"
+                  : "お気に入りの本は、まだありません。"}
+              </p>
+              <Link href="/">
+                本の街で一冊に出会う <Icon name="arrow" size={16} />
+              </Link>
+            </div>
+          )}
+        </section>
+      )}
 
       <section
         className="profile-shop-section"

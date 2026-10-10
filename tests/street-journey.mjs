@@ -186,7 +186,9 @@ try {
       await expect(dialog).toContainText(
         "翻訳で読む、理解の届かなさ。異なる世界に触れる入口として。",
       );
-      await expect(dialog).not.toContainText("自分の記憶に出会ってしまう");
+      await expect(dialog.locator(".bh-pop-text")).not.toContainText(
+        "自分の記憶に出会ってしまう",
+      );
       await page.keyboard.press("Escape");
     },
   );
