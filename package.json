@@ -10,6 +10,7 @@
     "build": "next build --webpack",
     "test:domain": "tsx tests/domain.test.ts",
     "test:browser": "node tests/browser-journey.mjs",
+    "test:street": "node tests/street-journey.mjs",
     "format": "prettier --write src tests *.json *.ts *.mjs README.md"
   },
   "dependencies": {

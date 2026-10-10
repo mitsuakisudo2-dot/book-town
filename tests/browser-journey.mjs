@@ -82,9 +82,11 @@ try {
     "Desktop town discovery and original bookstore signs",
     async () => {
       await go(page, "/");
-      await expect(page.locator(".shop-card")).toHaveCount(6);
+      await expect(page.locator(".street-shop")).toHaveCount(6);
       await expect(
-        page.getByRole("heading", { name: /いつもの一冊から/ }),
+        page.getByRole("heading", {
+          name: /本を探していたら、\s*人に出会った。/,
+        }),
       ).toBeVisible();
       await noOverflow(page, "desktop town");
       await page.screenshot({
@@ -93,12 +95,15 @@ try {
         animations: "disabled",
       });
       const before = await page
-        .locator(".shop-front")
+        .locator(".street-shop-title a")
         .first()
         .getAttribute("aria-label");
       await page.getByRole("button", { name: "路地を変えてみる" }).click();
       expect(
-        await page.locator(".shop-front").first().getAttribute("aria-label"),
+        await page
+          .locator(".street-shop-title a")
+          .first()
+          .getAttribute("aria-label"),
       ).not.toBe(before);
       await page
         .getByRole("button", { name: "軌道書房をフォロー", exact: true })
@@ -107,7 +112,7 @@ try {
       await page
         .getByRole("button", { name: "フォロー中", exact: true })
         .click();
-      await expect(page.locator(".shop-card")).toHaveCount(1);
+      await expect(page.locator(".street-shop")).toHaveCount(1);
       await page
         .getByRole("button", { name: "フォロー中", exact: true })
         .click();
@@ -358,14 +363,12 @@ try {
         .getByRole("link", { name: "この本を並べるほかの書店" })
         .click();
       await expect(page).toHaveURL(/\/books\/solaris\/$/);
-      const own = page
-        .locator(".stockist")
-        .filter({
-          has: page.getByRole("heading", {
-            name: "夜と寄り道書房",
-            exact: true,
-          }),
-        });
+      const own = page.locator(".stockist").filter({
+        has: page.getByRole("heading", {
+          name: "夜と寄り道書房",
+          exact: true,
+        }),
+      });
       await expect(own).toHaveCount(1);
       await expect(own).toContainText("夜にひらく異世界");
       await expect(own).not.toContainText("まだ内緒");

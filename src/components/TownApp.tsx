@@ -9,11 +9,14 @@ import type {
   Book,
   Shop,
   ShelfItem,
+  Shelf,
 } from "../lib/types";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
 import { ShopEditor } from "./ShopEditor";
 import { ProfileView } from "./ProfileView";
+import { StreetView } from "./StreetView";
+import { BookInHand } from "./BookInHand";
 
 type View = "town" | "shop" | "editor" | "book" | "profile" | "wishlist";
 type Shared = {
@@ -50,6 +53,7 @@ export default function TownApp({
   const [toast, setToast] = useState("");
   const [search, setSearch] = useState("");
   const [about, setAbout] = useState(false);
+  const [directory, setDirectory] = useState(false);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 3500);
@@ -161,7 +165,25 @@ export default function TownApp({
         </div>
         <main className={"town-main view-" + view} key={view + selectedId}>
           {view === "town" ? (
-            <TownHome {...shared} search={search} setSearch={setSearch} />
+            directory ? (
+              <>
+                <button
+                  className="street-return"
+                  onClick={() => setDirectory(false)}
+                >
+                  <Icon name="back" size={16} />
+                  街の散歩に戻る
+                </button>
+                <TownHome {...shared} search={search} setSearch={setSearch} />
+              </>
+            ) : (
+              <StreetView
+                {...shared}
+                search={search}
+                setSearch={setSearch}
+                onDirectory={() => setDirectory(true)}
+              />
+            )
           ) : view === "shop" ? (
             <ShopView {...shared} shopId={selectedId || ""} />
           ) : view === "book" ? (
@@ -554,7 +576,7 @@ function ShopView({
       : state.shops.find((s) => s.id === shopId);
   const [selected, setSelected] = useState<{
     item: ShelfItem;
-    shelfName: string;
+    shelf: Shelf;
   } | null>(null);
   if (!shop)
     return (
@@ -573,9 +595,6 @@ function ShopView({
       ? state.me
       : state.readers.find((r) => r.id === shop.ownerId);
   const shelves = shop.shelves.filter((s) => s.isPublic);
-  const book = selected
-    ? state.books.find((b) => b.id === selected.item.bookId)
-    : undefined;
   const followed = state.following.includes(shop.id);
   return (
     <>
@@ -665,7 +684,7 @@ function ShopView({
           <WoodenShelf
             shelf={s}
             books={state.books}
-            onSelect={(item) => setSelected({ item, shelfName: s.name })}
+            onSelect={(item) => setSelected({ item, shelf: s })}
           />
           <div className="shelf-under-note">
             <span>店主の感性で、並べられた一冊たち。</span>
@@ -700,62 +719,17 @@ function ShopView({
           </Link>
         </div>
       )}
-      {selected && book && (
-        <Modal
-          title="この一冊との出会い"
+      {selected && (
+        <BookInHand
+          key={`${shop.id}:${selected.shelf.id}:${selected.item.id}`}
+          shop={shop}
+          shelf={selected.shelf}
+          itemId={selected.item.id}
+          state={state}
+          actions={actions}
+          notify={notify}
           onClose={() => setSelected(null)}
-          wide
-        >
-          <div className="quick-book-info">
-            <BookJacket book={book} />
-            <div>
-              <span className="genre-tag">{book.genre}</span>
-              <h2>{book.title}</h2>
-              <p>{book.author}</p>
-              <span className="jacket-disclaimer">オリジナルの仮装丁</span>
-            </div>
-          </div>
-          <p className="book-summary">{book.summary}</p>
-          <div className="owner-pop">
-            <span>
-              <Icon name="edit" size={16} />
-              {shop.name}のPOP
-            </span>
-            <p>
-              {selected.item.pop ||
-                "この一冊は、言葉を添えずに並べられています。"}
-            </p>
-            <small>「{selected.shelfName}」の棚より</small>
-          </div>
-          <div className="quick-book-actions">
-            <button
-              className={
-                "button " +
-                (state.wishlist.includes(book.id) ? "secondary" : "")
-              }
-              onClick={() => {
-                actions.toggleWish(book.id);
-                notify(
-                  state.wishlist.includes(book.id)
-                    ? "読みたいリストから外しました"
-                    : "読みたいリストに加えました",
-                );
-              }}
-            >
-              <Icon
-                name={state.wishlist.includes(book.id) ? "check" : "plus"}
-                size={16}
-              />
-              {state.wishlist.includes(book.id)
-                ? "読みたいに登録済み"
-                : "読みたいに加える"}
-            </button>
-            <Link href={"/books/" + book.id + "/"} className="text-button">
-              この本を並べるほかの書店
-              <Icon name="arrow" size={16} />
-            </Link>
-          </div>
-        </Modal>
+        />
       )}
     </>
   );
