@@ -1,15 +1,22 @@
 import { createInitialState } from "./data";
+import { createRegisteredBook, normalizeIsbn, REGISTERED_GENRE } from "./books";
 import {
+  COMPOSE_ICONS,
   ME_ID,
   POP_REACTIONS,
   POST_MAX_LENGTH,
+  READING_MODES,
   popReactionKey,
   type PopReaction,
   OWN_SHOP_ID,
   shelfUsed,
+  type Book,
+  type ComposeIcon,
   type PersistenceStatus,
   type Post,
   type Reader,
+  type ReadingMode,
+  type ReadingSession,
   type Shop,
   type TownState,
 } from "./types";
@@ -39,9 +46,16 @@ type PersonalData = Pick<
   | "likedPosts"
   | "wantedPosts"
   | "spoilerReports"
+  | "readingSessions"
+  | "finishedBooks"
+  | "library"
+  | "settings"
+  | "seenNotifications"
 > & {
   /** Only the viewer's own posts; demo posts always come from the current catalog. */
   posts: Post[];
+  /** Only books the viewer registered; their jackets are redrawn on load. */
+  addedBooks: Pick<Book, "id" | "title" | "author" | "isbn">[];
 };
 interface StoredEnvelope {
   version: number;
@@ -143,6 +157,73 @@ function validShop(value: unknown, bookIds: Set<string>): value is Shop | null {
   return true;
 }
 
+/** Registered books are rebuilt from their id, title and author, so stored styling is never trusted. */
+function restoreBooks(value: unknown, catalogIds: Set<string>): Book[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set(catalogIds);
+  const books: Book[] = [];
+  for (const entry of value) {
+    if (
+      !object(entry) ||
+      !text(entry.id, 200) ||
+      ids.has(entry.id) ||
+      !text(entry.title, 200) ||
+      !entry.title.trim() ||
+      !text(entry.author, 200)
+    )
+      continue;
+    const isbn = entry.id.startsWith("isbn-")
+      ? normalizeIsbn(entry.id.slice(5))
+      : null;
+    if (isbn ? entry.id !== "isbn-" + isbn : !/^my-book-\d+$/.test(entry.id))
+      continue;
+    ids.add(entry.id);
+    books.push(
+      createRegisteredBook(entry.id, {
+        title: entry.title.trim(),
+        author: entry.author.trim(),
+        ...(isbn ? { isbn } : {}),
+      }),
+    );
+  }
+  return books;
+}
+
+function restoreSessions(
+  value: unknown,
+  bookIds: Set<string>,
+): ReadingSession[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
+  const sessions = value.filter((entry): entry is ReadingSession => {
+    if (
+      !object(entry) ||
+      !text(entry.id, 200) ||
+      !/^me-reading-\d+$/.test(entry.id) ||
+      ids.has(entry.id) ||
+      !text(entry.bookId, 200) ||
+      !bookIds.has(entry.bookId) ||
+      !READING_MODES.includes(entry.mode as ReadingMode) ||
+      !text(entry.startedAt, 40) ||
+      Number.isNaN(Date.parse(entry.startedAt)) ||
+      (entry.endedAt !== null &&
+        (!text(entry.endedAt, 40) ||
+          !(Date.parse(entry.endedAt) >= Date.parse(entry.startedAt))))
+    )
+      return false;
+    ids.add(entry.id);
+    return true;
+  });
+  // Only the newest running session keeps running.
+  const running = sessions.filter((entry) => entry.endedAt === null);
+  const keep = running[running.length - 1];
+  return sessions.map((entry) =>
+    entry.endedAt === null && entry !== keep
+      ? { ...entry, endedAt: entry.startedAt }
+      : entry,
+  );
+}
+
 /** Keeps each valid post of the viewer's own; replies need a surviving top-level parent. */
 function restorePosts(
   value: unknown,
@@ -170,19 +251,29 @@ function restorePosts(
         post.parentId !== null ||
         post.bookId !== null) &&
       text(post.createdAt, 40) &&
-      !Number.isNaN(Date.parse(post.createdAt)),
+      !Number.isNaN(Date.parse(post.createdAt)) &&
+      (post.readingMode === undefined ||
+        post.readingMode === null ||
+        (READING_MODES.includes(post.readingMode as ReadingMode) &&
+          post.bookId !== null &&
+          post.parentId === null)),
   );
   const kept: Post[] = [];
   for (const post of candidates.filter((entry) => entry.parentId === null)) {
     if (ids.has(post.id)) continue;
     ids.add(post.id);
     topLevel.add(post.id);
-    kept.push({ ...post, likes: 0, wants: 0 });
+    kept.push({
+      ...post,
+      likes: 0,
+      wants: 0,
+      readingMode: post.readingMode ?? null,
+    });
   }
   for (const post of candidates.filter((entry) => entry.parentId !== null)) {
     if (ids.has(post.id) || !topLevel.has(post.parentId as string)) continue;
     ids.add(post.id);
-    kept.push({ ...post, likes: 0, wants: 0 });
+    kept.push({ ...post, likes: 0, wants: 0, readingMode: null });
   }
   return kept;
 }
@@ -193,7 +284,14 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
   if (raw === null) return { state: initial, status: "saved" };
   try {
     const envelope: unknown = JSON.parse(raw);
-    const bookIds = new Set(initial.books.map((book) => book.id));
+    const addedBooks = restoreBooks(
+      object(envelope) && object(envelope.data)
+        ? envelope.data.addedBooks
+        : undefined,
+      new Set(initial.books.map((book) => book.id)),
+    );
+    const books = [...initial.books, ...addedBooks];
+    const bookIds = new Set(books.map((book) => book.id));
     const shopIds = new Set(initial.shops.map((shop) => shop.id));
     if (
       !object(envelope) ||
@@ -231,6 +329,13 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
         if (valid.length) popReactions[key] = valid;
       }
     }
+    const knownBooks = (value: unknown): string[] =>
+      Array.isArray(value)
+        ? [...new Set(value)].filter(
+            (id): id is string => typeof id === "string" && bookIds.has(id),
+          )
+        : [];
+    const settings = object(data.settings) ? data.settings : {};
     const posts = [
       ...initial.posts,
       ...restorePosts(data.posts, initial.posts, bookIds),
@@ -249,6 +354,7 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
     return {
       state: {
         ...initial,
+        books,
         me: data.me as Reader,
         ownShop,
         following: data.following as string[],
@@ -269,6 +375,21 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
           data.spoilerReports,
           (post) => !post.spoiler && post.authorId !== ME_ID,
         ),
+        readingSessions: restoreSessions(data.readingSessions, bookIds),
+        finishedBooks: knownBooks(data.finishedBooks),
+        library: knownBooks(data.library),
+        settings: {
+          composeIcon: COMPOSE_ICONS.includes(
+            settings.composeIcon as ComposeIcon,
+          )
+            ? (settings.composeIcon as ComposeIcon)
+            : initial.settings.composeIcon,
+        },
+        seenNotifications: Array.isArray(data.seenNotifications)
+          ? [...new Set(data.seenNotifications)]
+              .filter((id): id is string => text(id, 200))
+              .slice(-500)
+          : [],
       },
       status: "saved",
     };
@@ -291,6 +412,14 @@ export function serializeTown(state: TownState): string {
       likedPosts: state.likedPosts,
       wantedPosts: state.wantedPosts,
       spoilerReports: state.spoilerReports,
+      readingSessions: state.readingSessions,
+      finishedBooks: state.finishedBooks,
+      library: state.library,
+      settings: state.settings,
+      seenNotifications: state.seenNotifications,
+      addedBooks: state.books
+        .filter((book) => book.genre === REGISTERED_GENRE)
+        .map(({ id, title, author, isbn }) => ({ id, title, author, isbn })),
     },
   };
   return JSON.stringify(envelope);

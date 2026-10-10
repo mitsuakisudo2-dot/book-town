@@ -14,6 +14,15 @@ import {
   wantCount,
   wantSources,
 } from "../src/lib/social";
+import {
+  activeSession,
+  currentBookId,
+  readersNow,
+  readingMemos,
+  readingTotals,
+} from "../src/lib/reading";
+import { notificationsFor, unreadCount } from "../src/lib/notifications";
+import { normalizeIsbn } from "../src/lib/books";
 import { popReactionKey, shelfUsed, type TownState } from "../src/lib/types";
 
 let passed = 0;
@@ -515,6 +524,197 @@ check("saves from before posts existed load with empty social data", () => {
   assert.equal(loaded.status, "saved");
   assert.equal(loaded.state.posts.length, seedState.posts.length);
   assert.deepEqual(loaded.state.likedPosts, []);
+});
+
+check("reading sessions time themselves and keep one running at a time", () => {
+  let clock = Date.parse("2026-10-11T10:00:00Z");
+  const fresh = createTownStore(
+    createMemoryRepository(),
+    () => new Date(clock),
+  );
+  assert.equal(fresh.actions.startReading("missing", "solo"), null);
+  assert.ok(fresh.actions.startReading("solaris", "together"));
+  clock += 25 * 60_000;
+  assert.ok(fresh.actions.startReading("momo", "solo"));
+  let state = fresh.getSnapshot();
+  assert.equal(state.readingSessions.filter((s) => !s.endedAt).length, 1);
+  assert.equal(activeSession(state)?.bookId, "momo");
+  clock += 5 * 60_000;
+  fresh.actions.endReading(true);
+  state = fresh.getSnapshot();
+  assert.equal(activeSession(state), undefined);
+  assert.deepEqual(state.finishedBooks, ["momo"]);
+  const totals = readingTotals(state, clock);
+  assert.equal(totals.total, 30 * 60);
+  assert.equal(totals.byBook.get("solaris"), 25 * 60);
+  // The finished book is skipped, so the default returns to the unfinished one.
+  assert.equal(currentBookId(state), "solaris");
+  fresh.actions.startReading("momo", "solo");
+  assert.deepEqual(fresh.getSnapshot().finishedBooks, []);
+});
+
+check("reading memos: together is public, solo stays private", () => {
+  const fresh = createTownStore(createMemoryRepository());
+  assert.equal(
+    fresh.actions.createPost({ body: "a", fromReading: true }),
+    null,
+  );
+  fresh.actions.startReading("solaris", "together");
+  const shared = fresh.actions.createPost({
+    body: "第二章",
+    bookId: "momo",
+    fromReading: true,
+  });
+  fresh.actions.endReading(false);
+  fresh.actions.startReading("solaris", "solo");
+  const note = fresh.actions.createPost({ body: "自分用", fromReading: true });
+  assert.ok(shared && note);
+  const state = fresh.getSnapshot();
+  const posted = state.posts.find((post) => post.id === shared);
+  assert.equal(posted?.bookId, "solaris");
+  assert.equal(posted?.readingMode, "together");
+  assert.ok(timelinePosts(state).some((post) => post.id === shared));
+  assert.ok(!timelinePosts(state).some((post) => post.id === note));
+  assert.ok(
+    !bookReviews(state, "solaris").open.some((post) => post.id === note),
+  );
+  assert.ok(readingMemos(state, "solaris").some((post) => post.id === note));
+  assert.ok(readingMemos(state, "solaris").some((post) => post.id === "p-m1"));
+});
+
+check(
+  "readers now count demo readers and the viewer only when together",
+  () => {
+    const fresh = createTownStore(createMemoryRepository());
+    const opened = Date.parse("2026-10-11T12:00:00Z");
+    assert.equal(readersNow(fresh.getSnapshot(), opened).length, 4);
+    fresh.actions.startReading("solaris", "solo");
+    assert.equal(readersNow(fresh.getSnapshot(), opened).length, 4);
+    fresh.actions.startReading("solaris", "together");
+    const now = readersNow(fresh.getSnapshot(), opened);
+    assert.equal(now.length, 5);
+    assert.equal(now.filter((entry) => entry.bookId === "solaris").length, 3);
+  },
+);
+
+check("ISBNs are checked and registered books are deduplicated", () => {
+  assert.equal(normalizeIsbn("978-4-10-109205-8"), "9784101092058");
+  assert.equal(normalizeIsbn("4101092052"), "9784101092058");
+  assert.equal(normalizeIsbn("9784101092059"), null);
+  const fresh = createTownStore(createMemoryRepository());
+  assert.equal(
+    fresh.actions.addBook({ title: "x", author: "", isbn: "123" }),
+    null,
+  );
+  assert.equal(fresh.actions.addBook({ title: " ", author: "" }), null);
+  const first = fresh.actions.addBook({
+    title: "QAの本",
+    author: "試験",
+    isbn: "4101092052",
+  });
+  assert.equal(first, "isbn-9784101092058");
+  assert.equal(
+    fresh.actions.addBook({ title: "別名", author: "", isbn: "9784101092058" }),
+    first,
+  );
+  const manual = fresh.actions.addBook({ title: "手書きの本", author: "" });
+  assert.equal(manual, "my-book-1");
+  const state = fresh.getSnapshot();
+  assert.equal(state.books.length, seedState.books.length + 2);
+  assert.deepEqual(state.library, [first, manual]);
+  fresh.actions.toggleLibrary(manual);
+  assert.deepEqual(fresh.getSnapshot().library, [first]);
+});
+
+check("reading, books, settings and seen notices survive reload", () => {
+  const repo = createMemoryRepository();
+  const first = createTownStore(repo);
+  const book = first.actions.addBook({ title: "残る本", author: "誰か" });
+  assert.ok(book);
+  first.actions.startReading(book, "together");
+  first.actions.setComposeIcon("quill");
+  first.actions.markNotificationsSeen(["reply:x", "reply:x"]);
+  first.actions.createShop("棚", "", "sage");
+  first.actions.addShelfBook("mine-shelf-1", book, "face");
+  const loaded = repo.load().state;
+  assert.equal(
+    loaded.books.find((entry) => entry.id === book)?.title,
+    "残る本",
+  );
+  assert.equal(activeSession(loaded)?.bookId, book);
+  assert.equal(loaded.settings.composeIcon, "quill");
+  assert.deepEqual(loaded.seenNotifications, ["reply:x"]);
+  assert.equal(loaded.ownShop?.shelves[0].items[0].bookId, book);
+});
+
+check(
+  "tampered reading data and books are dropped without losing the save",
+  () => {
+    const fresh = createTownStore(createMemoryRepository());
+    fresh.actions.createShop("keep", "", "sage");
+    fresh.actions.startReading("solaris", "solo");
+    const envelope = JSON.parse(serializeTown(fresh.getSnapshot()));
+    const running = envelope.data.readingSessions[0];
+    envelope.data.readingSessions.push(
+      { ...running, id: "me-reading-2", startedAt: "2026-10-12T00:00:00Z" },
+      { ...running, id: "me-reading-3", bookId: "missing" },
+      { ...running, id: "me-reading-4", mode: "public" },
+      { ...running, id: "me-reading-5", endedAt: "2000-01-01T00:00:00Z" },
+    );
+    envelope.data.addedBooks = [
+      { id: "isbn-9784101092059", title: "bad check digit", author: "" },
+      { id: "solaris", title: "overwrite", author: "" },
+      { id: "my-book-1", title: "ok", author: "" },
+    ];
+    envelope.data.settings = { composeIcon: "rocket" };
+    envelope.data.library = ["my-book-1", "missing"];
+    const loaded = deserializeTown(JSON.stringify(envelope));
+    assert.equal(loaded.status, "saved");
+    assert.equal(loaded.state.ownShop?.name, "keep");
+    assert.deepEqual(
+      loaded.state.readingSessions.map((session) => session.id),
+      ["me-reading-1", "me-reading-2"],
+    );
+    assert.equal(
+      loaded.state.readingSessions.filter((session) => !session.endedAt).length,
+      1,
+    );
+    assert.deepEqual(
+      loaded.state.books.slice(seedState.books.length).map((book) => book.id),
+      ["my-book-1"],
+    );
+    assert.equal(
+      loaded.state.books.find((book) => book.id === "solaris")?.title,
+      "ソラリス",
+    );
+    assert.equal(loaded.state.settings.composeIcon, "pen");
+    assert.deepEqual(loaded.state.library, ["my-book-1"]);
+  },
+);
+
+check("notifications come only from what happened in this town", () => {
+  const fresh = createTownStore(createMemoryRepository());
+  assert.deepEqual(notificationsFor(fresh.getSnapshot()), []);
+  fresh.actions.toggleWish("traveling-tree");
+  fresh.actions.toggleFollow("shop-orbit");
+  const state = fresh.getSnapshot();
+  const notices = notificationsFor(state);
+  assert.ok(notices.some((notice) => notice.id === "wish:p-3"));
+  const orbitOwner = state.shops.find(
+    (shop) => shop.id === "shop-orbit",
+  )?.ownerId;
+  assert.ok(
+    notices.some(
+      (notice) =>
+        notice.id.startsWith("follow:") && notice.readerId === orbitOwner,
+    ),
+  );
+  // Spoilers never become notices.
+  assert.ok(!notices.some((notice) => notice.id.endsWith(":p-7")));
+  const unread = unreadCount(state);
+  assert.ok(unread > 0);
+  fresh.actions.markNotificationsSeen(notices.map((notice) => notice.id));
+  assert.equal(unreadCount(fresh.getSnapshot()), 0);
 });
 
 console.log(`${passed} domain checks passed.`);

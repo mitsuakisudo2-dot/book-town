@@ -45,12 +45,25 @@ const card = (author, text) =>
     .locator("main article.post-card:not(.is-reply)")
     .filter({ has: page.getByRole("link", { name: author, exact: true }) })
     .filter({ hasText: text });
+async function pickBook(scope, title) {
+  await scope.getByRole("searchbox").fill(title);
+  await scope
+    .getByRole("button", { name: new RegExp("^" + title) })
+    .first()
+    .click();
+}
+/** Posts from the round button on the home screen. */
 async function compose(text, { book, spoiler = false } = {}) {
-  const form = page.locator("main form.post-composer:not(.is-reply)").first();
-  await form.locator("textarea").fill(text);
-  if (book) await form.locator("select").selectOption({ label: book });
-  if (spoiler) await form.getByLabel("ネタバレあり").check();
-  await form.getByRole("button", { name: "投稿する" }).click();
+  await page.locator(".compose-fab").click();
+  const dialog = page.getByRole("dialog", { name: "投稿する" });
+  await dialog.locator("textarea").fill(text);
+  if (book) {
+    await dialog.getByRole("button", { name: "本を添える" }).click();
+    await pickBook(dialog, book);
+  }
+  if (spoiler) await dialog.getByLabel("ネタバレあり").check();
+  await dialog.getByRole("button", { name: "投稿する" }).click();
+  await expect(dialog).toHaveCount(0);
 }
 
 try {
@@ -73,11 +86,16 @@ try {
         const nav = page.locator(
           viewport.width > 760 ? ".town-sidebar nav" : ".town-bottom-nav",
         );
+        await expect(nav.getByRole("link", { name: "ホーム" })).toHaveClass(
+          /active/,
+        );
         await expect(
-          nav.getByRole("link", { name: "タイムライン" }),
-        ).toHaveClass(/active/);
+          page
+            .getByRole("navigation", { name: "ホームの表示" })
+            .getByRole("link", { name: "タイムライン" }),
+        ).toHaveAttribute("aria-current", "page");
         await expect(card("すみれ", "二駅乗り過ごした")).toBeVisible();
-        await expect(card("凪", "ソラリス")).toBeVisible();
+        await expect(card("凪", "十年ぶりに再読")).toBeVisible();
         await expect(page.getByText("最後の数章を読んだ夜は")).toHaveCount(0);
         await expect(page.getByText("あの終わり方でなければ")).toHaveCount(0);
         await noOverflow(`${label} timeline`);
@@ -92,7 +110,7 @@ try {
       `${label} a post with a book reaches the timeline and the book page`,
       async () => {
         await compose("灰色の男たちが怖かった。時間の使い方を考え直した。", {
-          book: "モモ（ミヒャエル・エンデ）",
+          book: "モモ",
         });
         const mine = card("あなた", "灰色の男たち");
         await expect(mine).toBeVisible();
@@ -113,7 +131,7 @@ try {
       async () => {
         await go("/timeline/");
         await compose("ラストの一行で、すべての章がつながった。", {
-          book: "沈黙（遠藤周作）",
+          book: "沈黙",
           spoiler: true,
         });
         await expect(page.getByText("ラストの一行で")).toHaveCount(0);
@@ -132,7 +150,7 @@ try {
       `${label} 読みたくなった saves the book and remembers who inspired it`,
       async () => {
         await go("/timeline/");
-        const post = card("すみれ", "見えない都市");
+        const post = card("すみれ", "どこから開いてもいい本");
         const want = post.getByRole("button", { name: /読みたくなった/ });
         await expect(want).toHaveAttribute("aria-pressed", "false");
         await want.click();
@@ -164,8 +182,9 @@ try {
         const reply = review.locator("form.post-composer.is-reply");
         await reply.locator("textarea").fill("海の描写、わたしも好きです。");
         await reply
-          .locator("select")
-          .selectOption({ label: "見えない都市（イタロ・カルヴィーノ）" });
+          .getByRole("button", { name: "おすすめの本を添える" })
+          .click();
+        await pickBook(reply, "見えない都市");
         await reply.getByRole("button", { name: "返信する" }).click();
         await expect(review.locator(".post-card.is-reply")).toHaveCount(3);
         await expect(

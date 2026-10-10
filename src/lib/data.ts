@@ -3,6 +3,7 @@ import {
   type Book,
   type Post,
   type Reader,
+  type ReadingNow,
   type Shelf,
   type ShelfItem,
   type Shop,
@@ -810,7 +811,9 @@ const post = (
   authorId: string,
   createdAt: string,
   body: string,
-  extra: Partial<Pick<Post, "bookId" | "spoiler" | "parentId">> & {
+  extra: Partial<
+    Pick<Post, "bookId" | "spoiler" | "parentId" | "readingMode">
+  > & {
     likes?: number;
     wants?: number;
   } = {},
@@ -824,6 +827,7 @@ const post = (
   createdAt,
   likes: extra.likes ?? 0,
   wants: extra.wants ?? 0,
+  readingMode: extra.readingMode ?? null,
 });
 
 // Original demo posts by the fictional readers. Spoiler-marked posts stay vague on purpose.
@@ -934,6 +938,43 @@ export const posts: Post[] = [
     "最後の場面のあとで最初の章に戻ると、語り手の距離感がまるで違って感じられますよね。わたしも読み返しました。",
     { parentId: "p-7", spoiler: true, likes: 1 },
   ),
+  // Memos written while reading together. They are ordinary public posts with a reading badge.
+  post(
+    "p-m1",
+    "r-nagi",
+    "2026-10-10T21:18:00+09:00",
+    "読書中。海の描写のところで、いつも少しだけページをめくる手がゆっくりになる。",
+    { bookId: "solaris", readingMode: "together", likes: 5 },
+  ),
+  post(
+    "p-m2",
+    "r-haru",
+    "2026-10-10T21:32:00+09:00",
+    "凪さんと同じ本を、同じ夜に。初めて読むので、まだ序盤です。",
+    { bookId: "solaris", readingMode: "together", likes: 3 },
+  ),
+  post(
+    "p-m3",
+    "r-sou",
+    "2026-10-10T20:55:00+09:00",
+    "今夜は三十ページだけと決めて開いた。静かな場面がつづいて、時計の音がよく聞こえる。",
+    { bookId: "silence", readingMode: "together", likes: 4 },
+  ),
+  post(
+    "p-m4",
+    "r-sumire",
+    "2026-10-10T21:40:00+09:00",
+    "寝る前にひとつだけ、と思った都市がもう三つ目。",
+    { bookId: "invisible-cities", readingMode: "together", likes: 6 },
+  ),
+];
+
+// Demo readers who chose to read together. Times count back from when the page opens.
+export const readingNow: ReadingNow[] = [
+  { readerId: "r-nagi", bookId: "solaris", minutesAgo: 34 },
+  { readerId: "r-haru", bookId: "solaris", minutesAgo: 12 },
+  { readerId: "r-sou", bookId: "silence", minutesAgo: 58 },
+  { readerId: "r-sumire", bookId: "invisible-cities", minutesAgo: 6 },
 ];
 
 export function createInitialState(): TownState {
@@ -958,6 +999,12 @@ export function createInitialState(): TownState {
     likedPosts: [],
     wantedPosts: [],
     spoilerReports: [],
+    readingNow,
+    readingSessions: [],
+    finishedBooks: [],
+    library: [],
+    settings: { composeIcon: "pen" },
+    seenNotifications: [],
   });
 }
 

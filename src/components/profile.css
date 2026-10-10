@@ -982,7 +982,8 @@
   color: #757c6c;
   font-size: 13px;
 }
-.profile-collection-empty a {
+.profile-collection-empty a,
+.profile-collection-empty button {
   display: flex;
   align-items: center;
   gap: 8px;

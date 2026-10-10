@@ -4,6 +4,9 @@ const time = (post: Post) => Date.parse(post.createdAt) || 0;
 const newestFirst = (a: Post, b: Post) => time(b) - time(a);
 const oldestFirst = (a: Post, b: Post) => time(a) - time(b);
 
+/** Private reading notes stay on the reading screen only. */
+const isPublic = (post: Post) => post.readingMode !== "solo";
+
 /** A post the viewer marked as a possible spoiler is hidden for them like a marked one. */
 export const isSpoilerFor = (state: TownState, post: Post): boolean =>
   post.spoiler || state.spoilerReports.includes(post.id);
@@ -11,13 +14,19 @@ export const isSpoilerFor = (state: TownState, post: Post): boolean =>
 /** The timeline carries every top-level post except spoilers. */
 export const timelinePosts = (state: TownState): Post[] =>
   state.posts
-    .filter((post) => post.parentId === null && !isSpoilerFor(state, post))
+    .filter(
+      (post) =>
+        post.parentId === null && isPublic(post) && !isSpoilerFor(state, post),
+    )
     .sort(newestFirst);
 
 /** Reviews are top-level posts with this book; spoilers are kept apart, behind the door. */
 export function bookReviews(state: TownState, bookId: string) {
   const reviews = state.posts
-    .filter((post) => post.parentId === null && post.bookId === bookId)
+    .filter(
+      (post) =>
+        post.parentId === null && post.bookId === bookId && isPublic(post),
+    )
     .sort(newestFirst);
   return {
     open: reviews.filter((post) => !isSpoilerFor(state, post)),

@@ -3,10 +3,13 @@
 import { useSyncExternalStore } from "react";
 import { seedState } from "./data";
 import { localTownRepository, type TownRepository } from "./repository";
+import { createRegisteredBook, normalizeIsbn } from "./books";
 import {
+  COMPOSE_ICONS,
   ME_ID,
   POP_REACTIONS,
   POST_MAX_LENGTH,
+  READING_MODES,
   popReactionKey,
   OWN_SHOP_ID,
   displayCost,
@@ -15,6 +18,7 @@ import {
   type BookDisplay,
   type PersistenceStatus,
   type Post,
+  type ReadingSession,
   type Shelf,
   type Shop,
   type ShopTheme,
@@ -353,8 +357,13 @@ export function createTownStore(
     createPost(draft) {
       initialize();
       const body = draft.body.trim();
-      const bookId = draft.bookId ?? null;
-      const parentId = draft.parentId ?? null;
+      const session = draft.fromReading
+        ? state.readingSessions.find((entry) => entry.endedAt === null)
+        : undefined;
+      if (draft.fromReading && !session) return null;
+      // A reading memo belongs to the running session's book and never starts a thread reply.
+      const bookId = session ? session.bookId : (draft.bookId ?? null);
+      const parentId = session ? null : (draft.parentId ?? null);
       const spoiler = draft.spoiler === true;
       const parent = parentId
         ? state.posts.find((entry) => entry.id === parentId)
@@ -381,6 +390,7 @@ export function createTownStore(
         createdAt: now().toISOString(),
         likes: 0,
         wants: 0,
+        readingMode: session ? session.mode : null,
       };
       commit({ ...state, posts: [...state.posts, post] });
       return post.id;
@@ -421,6 +431,111 @@ export function createTownStore(
           adding && !state.wishlist.includes(post.bookId)
             ? [...state.wishlist, post.bookId]
             : state.wishlist,
+      });
+    },
+    startReading(bookId, mode) {
+      initialize();
+      if (
+        !state.books.some((book) => book.id === bookId) ||
+        !READING_MODES.includes(mode)
+      )
+        return null;
+      const time = now().toISOString();
+      const session: ReadingSession = {
+        id: nextId(
+          "me-reading-",
+          state.readingSessions.map((entry) => entry.id),
+        ),
+        bookId,
+        mode,
+        startedAt: time,
+        endedAt: null,
+      };
+      commit({
+        ...state,
+        readingSessions: [
+          // Starting a new book closes whatever was running.
+          ...state.readingSessions.map((entry) =>
+            entry.endedAt === null ? { ...entry, endedAt: time } : entry,
+          ),
+          session,
+        ],
+        // Opening a finished book again is a reread.
+        finishedBooks: state.finishedBooks.filter((id) => id !== bookId),
+      });
+      return session.id;
+    },
+    endReading(finished) {
+      initialize();
+      const active = state.readingSessions.find(
+        (entry) => entry.endedAt === null,
+      );
+      if (!active) return;
+      const time = now().toISOString();
+      commit({
+        ...state,
+        readingSessions: state.readingSessions.map((entry) =>
+          entry.id === active.id ? { ...entry, endedAt: time } : entry,
+        ),
+        finishedBooks:
+          finished && !state.finishedBooks.includes(active.bookId)
+            ? [...state.finishedBooks, active.bookId]
+            : state.finishedBooks,
+      });
+    },
+    addBook(input) {
+      initialize();
+      const title = input.title.trim();
+      const author = input.author.trim();
+      const isbn = input.isbn ? normalizeIsbn(input.isbn) : null;
+      if (!title || title.length > 200 || author.length > 200) return null;
+      if (input.isbn && !isbn) return null;
+      const existing = isbn
+        ? state.books.find((book) => book.isbn === isbn)
+        : undefined;
+      if (existing) {
+        if (!state.library.includes(existing.id))
+          commit({ ...state, library: [...state.library, existing.id] });
+        return existing.id;
+      }
+      const id = isbn
+        ? "isbn-" + isbn
+        : nextId(
+            "my-book-",
+            state.books.map((book) => book.id),
+          );
+      const book = createRegisteredBook(id, {
+        title,
+        author,
+        ...(isbn ? { isbn } : {}),
+      });
+      commit({
+        ...state,
+        books: [...state.books, book],
+        library: [...state.library, id],
+      });
+      return id;
+    },
+    toggleLibrary(bookId) {
+      initialize();
+      if (!state.books.some((book) => book.id === bookId)) return;
+      commit({ ...state, library: toggled(state.library, bookId) });
+    },
+    setComposeIcon(icon) {
+      initialize();
+      if (!COMPOSE_ICONS.includes(icon) || state.settings.composeIcon === icon)
+        return;
+      commit({ ...state, settings: { ...state.settings, composeIcon: icon } });
+    },
+    markNotificationsSeen(ids) {
+      initialize();
+      const fresh = ids.filter(
+        (id) => typeof id === "string" && !state.seenNotifications.includes(id),
+      );
+      if (!fresh.length) return;
+      commit({
+        ...state,
+        seenNotifications: [...state.seenNotifications, ...fresh].slice(-500),
       });
     },
     toggleSpoilerReport(postId) {

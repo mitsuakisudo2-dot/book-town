@@ -1,0 +1,351 @@
+import { chromium, expect } from "@playwright/test";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
+const output = path.resolve(
+  process.env.BOOK_TOWN_QA_OUTPUT ?? "../../work/booktown/app-qa",
+);
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({
+  executablePath:
+    process.env.BOOK_TOWN_CHROME ??
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  headless: true,
+});
+const errors = [];
+const passed = [];
+let page;
+
+async function check(name, operation) {
+  await operation();
+  passed.push(name);
+  console.log(`PASS ${name}`);
+}
+async function go(route) {
+  await page.goto(`${baseURL}${route}`);
+  await expect(page.locator("main")).toBeVisible();
+  await page.waitForFunction(() => localStorage.getItem("book-town-v1"));
+}
+async function noOverflow(label) {
+  const size = await page.evaluate(() => ({
+    width: innerWidth,
+    document: document.documentElement.scrollWidth,
+  }));
+  expect(size.document, `${label}: overflow`).toBeLessThanOrEqual(
+    size.width + 1,
+  );
+}
+/** Dispatches a one-finger horizontal swipe that starts on the given element. */
+async function swipe(locator, dx) {
+  await locator.evaluate((element, delta) => {
+    const box = element.getBoundingClientRect();
+    const start = {
+      identifier: 1,
+      target: element,
+      clientX: box.left + box.width / 2,
+      clientY: box.top + Math.min(box.height / 2, 40),
+    };
+    const first = new Touch(start);
+    const last = new Touch({ ...start, clientX: start.clientX + delta });
+    element.dispatchEvent(
+      new TouchEvent("touchstart", {
+        bubbles: true,
+        touches: [first],
+        changedTouches: [first],
+      }),
+    );
+    element.dispatchEvent(
+      new TouchEvent("touchmove", {
+        bubbles: true,
+        touches: [last],
+        changedTouches: [last],
+      }),
+    );
+    element.dispatchEvent(
+      new TouchEvent("touchend", {
+        bubbles: true,
+        touches: [],
+        changedTouches: [last],
+      }),
+    );
+  }, dx);
+}
+const stored = () =>
+  page.evaluate(
+    () => JSON.parse(localStorage.getItem("book-town-v1") ?? "{}").data,
+  );
+
+try {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  page = await context.newPage();
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  // The ISBN lookup is answered locally so the test never depends on the network.
+  await page.route("https://api.openbd.jp/**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([
+        { summary: { title: "QAの本", author: "試験 太郎／著" } },
+      ]),
+    }),
+  );
+
+  await check("bottom bar reads home, search, reading, profile", async () => {
+    await go("/");
+    const nav = page.getByRole("navigation", {
+      name: "スマートフォンナビゲーション",
+    });
+    await expect(nav.getByRole("link")).toHaveText([
+      "ホーム",
+      "検索",
+      "読書を開始",
+      "プロフィール",
+    ]);
+    await expect(nav.getByRole("link", { name: "ホーム" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect(page.getByRole("link", { name: "お知らせ" })).toBeVisible();
+    await noOverflow("home");
+  });
+
+  await check(
+    "swipes on a shelf stay on the shelf; other swipes switch home",
+    async () => {
+      await go("/");
+      const shelf = page.locator(".street-shelf").first();
+      await shelf.scrollIntoViewIfNeeded();
+      await swipe(shelf, -160);
+      await page.waitForTimeout(400);
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await swipe(page.locator(".street-intro"), -160);
+      await expect(page).toHaveURL(/\/timeline\/$/);
+      await expect(
+        page.getByRole("heading", { name: "タイムライン" }),
+      ).toBeVisible();
+      await swipe(page.locator(".page-subtitle"), 160);
+      await expect(page).toHaveURL(`${baseURL}/`);
+    },
+  );
+
+  await check(
+    "search finds books and shops, with talked-about, popular and quiet books",
+    async () => {
+      await go("/search/");
+      await expect(
+        page.getByRole("heading", { name: "話題の本" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "人気の本" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "棚の隅の本" }),
+      ).toBeVisible();
+      const box = page.getByRole("searchbox", { name: "本と書店を検索" });
+      await box.fill("ル＝グウィン");
+      await expect(page.locator(".search-results .search-book")).toHaveCount(2);
+      await box.fill("雨と翻訳");
+      await expect(page.locator(".search-results .search-shop")).toHaveCount(1);
+      await page.getByRole("link", { name: /雨と翻訳/ }).click();
+      await expect(page).toHaveURL(/shops\/shop-rain/);
+    },
+  );
+
+  await check(
+    "reading together: default book, timer, public memo and readers now",
+    async () => {
+      await go("/reading/");
+      await expect(
+        page.getByRole("heading", { name: /いま4人が、みんなで読んでいます/ }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /みんなで読む/ }),
+      ).toBeDisabled();
+      await page
+        .getByRole("searchbox", { name: "読む本を探す" })
+        .fill("ソラリス");
+      await page.getByRole("button", { name: /^ソラリス/ }).click();
+      await page.getByRole("button", { name: /みんなで読む/ }).click();
+      await expect(
+        page.getByRole("heading", { name: "ソラリス" }),
+      ).toBeVisible();
+      await expect(page.getByRole("timer")).toHaveText(/00:0[1-9]/, {
+        timeout: 5000,
+      });
+      await expect(
+        page.getByRole("heading", { name: /同じ本を、いま3人が読んでいます/ }),
+      ).toBeVisible();
+      const nav = page.getByRole("navigation", {
+        name: "スマートフォンナビゲーション",
+      });
+      await expect(nav.getByRole("link", { name: "読書中" })).toBeVisible();
+      await page
+        .getByRole("textbox", { name: "読書中のつぶやき" })
+        .fill("ちょうど第二章。");
+      await page.getByRole("button", { name: "つぶやく" }).click();
+      const memo = page
+        .locator(".reading-memos article.post-card")
+        .filter({ hasText: "ちょうど第二章。" });
+      await expect(memo).toBeVisible();
+      await memo.getByRole("button", { name: /いいね/ }).click();
+      await expect(
+        memo.getByRole("button", { name: /いいね/ }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await go("/timeline/");
+      await expect(page.getByText("ちょうど第二章。")).toBeVisible();
+    },
+  );
+
+  await check("notifications show readers reading the same book", async () => {
+    await go("/timeline/");
+    await expect(
+      page.getByRole("link", { name: /お知らせ（未読\d+件）/ }),
+    ).toBeVisible();
+    await page.getByRole("link", { name: /お知らせ/ }).click();
+    await expect(
+      page.getByText("凪さんも今『ソラリス』を読んでいます"),
+    ).toBeVisible();
+    await page.reload();
+    await page.waitForFunction(() => localStorage.getItem("book-town-v1"));
+    await expect(page.getByRole("link", { name: "お知らせ" })).toBeVisible();
+  });
+
+  await check(
+    "ending a session records time and the book stays the default",
+    async () => {
+      await go("/reading/");
+      await page.waitForTimeout(1200);
+      await page.getByRole("button", { name: "読書を終える" }).click();
+      await expect(
+        page.getByRole("heading", { name: "読書を開始" }),
+      ).toBeVisible();
+      await expect(page.locator(".picker-chosen")).toContainText("ソラリス");
+      await expect(
+        page.getByText("いま読んでいる本を選んでいます。"),
+      ).toBeVisible();
+      const data = await stored();
+      expect(data.readingSessions).toHaveLength(1);
+      expect(data.readingSessions[0].endedAt).not.toBeNull();
+      await expect(page.locator(".reading-log li")).toHaveCount(1);
+    },
+  );
+
+  await check(
+    "reading alone keeps memos private and off the timeline",
+    async () => {
+      await page.getByRole("button", { name: /一人で読む/ }).click();
+      await expect(
+        page.getByRole("heading", { name: /同じ本を、いま2人が読んでいます/ }),
+      ).toBeVisible();
+      await page
+        .getByLabel("読書メモ（自分だけ）")
+        .fill("ここは自分だけのメモ。");
+      await page.getByRole("button", { name: "メモする" }).click();
+      await expect(
+        page.getByText("自分だけのメモ", { exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "読み終えた！" }).click();
+      expect((await stored()).finishedBooks).toEqual(["solaris"]);
+      await go("/timeline/");
+      await expect(page.getByText("ここは自分だけのメモ。")).toHaveCount(0);
+      await go("/books/solaris/");
+      await expect(page.getByText("ここは自分だけのメモ。")).toHaveCount(0);
+    },
+  );
+
+  await check("the compose button icon follows the setting", async () => {
+    await go("/profiles/me/");
+    await expect(page.locator(".profile-stats")).toContainText("読書時間");
+    await page.getByRole("button", { name: "設定" }).click();
+    await page
+      .getByRole("dialog", { name: "設定" })
+      .locator("label", { hasText: "タイプライター" })
+      .click();
+    await expect(page.getByLabel("タイプライター")).toBeChecked();
+    await page.keyboard.press("Escape");
+    await go("/");
+    await expect(page.locator(".compose-fab")).toHaveClass(/icon-typewriter/);
+    expect((await stored()).settings.composeIcon).toBe("typewriter");
+  });
+
+  await check(
+    "a book registered by ISBN can be read and attached to posts",
+    async () => {
+      await go("/profiles/me/");
+      await page.getByRole("button", { name: "本を登録" }).click();
+      const dialog = page.getByRole("dialog", { name: "本を登録" });
+      await dialog.getByLabel("ISBN").fill("978-4-00-000000-2");
+      await dialog.getByRole("button", { name: "ISBNで探す" }).click();
+      await expect(
+        dialog.getByText("ISBNとして読めませんでした"),
+      ).toBeVisible();
+      await dialog.getByLabel("ISBN").fill("978-4-10-109205-8");
+      await dialog.getByRole("button", { name: "ISBNで探す" }).click();
+      await expect(dialog.getByLabel("タイトル")).toHaveValue("QAの本");
+      await expect(dialog.getByLabel("著者")).toHaveValue("試験 太郎");
+      await dialog.getByRole("button", { name: "登録する" }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: /^登録した本/ }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await expect(page.locator(".profile-saved-book")).toContainText("QAの本");
+      await page.reload();
+      await page.waitForFunction(() => localStorage.getItem("book-town-v1"));
+      await go("/reading/");
+      await page
+        .getByRole("searchbox", { name: "読む本を探す" })
+        .fill("9784101092058");
+      await expect(page.getByRole("button", { name: /^QAの本/ })).toBeVisible();
+    },
+  );
+
+  await check("following list opens from the profile", async () => {
+    await go("/profiles/r-nagi/");
+    await page.getByRole("button", { name: "書店をフォロー" }).click();
+    await go("/profiles/me/");
+    await page.getByRole("button", { name: /1 フォロー/ }).click();
+    const dialog = page.getByRole("dialog", { name: "フォロー" });
+    await expect(dialog.getByRole("link", { name: /凪/ })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await go("/notifications/");
+    await expect(
+      page.getByText(/フォロー中の凪さんが投稿しました/).first(),
+    ).toBeVisible();
+    await noOverflow("notifications");
+  });
+
+  await check(
+    "No hydration errors, uncaught exceptions or console errors",
+    async () => {
+      expect(errors).toEqual([]);
+    },
+  );
+  await context.close();
+  await writeFile(
+    path.join(output, "app-results.json"),
+    JSON.stringify({ baseURL, passed, errors }, null, 2),
+  );
+} catch (error) {
+  await page
+    ?.screenshot({ path: path.join(output, "app-failure.png"), fullPage: true })
+    .catch(() => {});
+  await writeFile(
+    path.join(output, "app-results.json"),
+    JSON.stringify(
+      { baseURL, passed, errors, failure: String(error) },
+      null,
+      2,
+    ),
+  );
+  throw error;
+} finally {
+  await browser.close();
+}

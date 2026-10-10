@@ -22,7 +22,9 @@ import {
   wantCount,
   wantSources,
 } from "../lib/social";
-import { BookJacket, Icon, ReaderAvatar } from "./ui";
+import { currentBookId } from "../lib/reading";
+import { BookPicker } from "./BookPicker";
+import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
 
 type Shared = {
@@ -40,7 +42,6 @@ export function TimelineView(props: Shared) {
       <p className="page-subtitle">
         本のことも、そうでないことも。気になった人の好きな本へ。
       </p>
-      <PostComposer {...props} />
       <div className="post-feed" aria-label="タイムラインの投稿">
         {posts.map((post) => (
           <PostCard key={post.id} {...props} post={post} showBook />
@@ -48,7 +49,7 @@ export function TimelineView(props: Shared) {
         {!posts.length && (
           <div className="empty-state">
             <h2>まだ、誰の声もありません。</h2>
-            <p>最初のひとことを書いてみませんか。</p>
+            <p>右下のボタンから、最初のひとことを。</p>
           </div>
         )}
       </div>
@@ -150,22 +151,35 @@ export function ProfilePosts({
   );
 }
 
-function PostComposer({
+export function PostComposer({
   state,
   actions,
   notify,
   fixedBook,
   parent,
   onDone,
-}: Shared & { fixedBook?: Book; parent?: Post; onDone?: () => void }) {
+  autoFocus = false,
+}: Shared & {
+  fixedBook?: Book;
+  parent?: Post;
+  onDone?: (postId: string) => void;
+  autoFocus?: boolean;
+}) {
   const id = useId();
   const [body, setBody] = useState("");
-  const [bookId, setBookId] = useState("");
+  const [bookId, setBookId] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
   const [spoiler, setSpoiler] = useState(false);
-  const attached = fixedBook?.id ?? (bookId || null);
+  const attached = fixedBook?.id ?? bookId;
   const isReply = Boolean(parent);
   // A top-level spoiler needs a book to sit behind; replies already belong to one.
   const canSpoil = isReply || attached !== null;
+  const reading = currentBookId(state);
+  const suggestions = [
+    ...(reading ? [reading] : []),
+    ...state.wishlist,
+    ...state.library,
+  ].filter((entry, index, list) => list.indexOf(entry) === index);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const created = actions.createPost({
@@ -176,7 +190,8 @@ function PostComposer({
     });
     if (!created) return;
     setBody("");
-    setBookId("");
+    setBookId(null);
+    setPicking(false);
     setSpoiler(false);
     notify(
       isReply
@@ -187,7 +202,7 @@ function PostComposer({
             ? "タイムラインと作品ページに投稿しました"
             : "タイムラインに投稿しました",
     );
-    onDone?.();
+    onDone?.(created);
   }
   return (
     <form
@@ -206,8 +221,9 @@ function PostComposer({
         <textarea
           id={id + "-body"}
           className="field composer-text"
-          rows={isReply ? 2 : 3}
+          rows={isReply ? 2 : 4}
           maxLength={POST_MAX_LENGTH}
+          autoFocus={autoFocus}
           placeholder={
             isReply
               ? "返信を書く"
@@ -218,30 +234,32 @@ function PostComposer({
           value={body}
           onChange={(event) => setBody(event.target.value)}
         />
+        {!fixedBook && (picking || bookId) && (
+          <BookPicker
+            books={state.books}
+            value={bookId}
+            onChange={(next) => {
+              setBookId(next);
+              if (!next) {
+                setPicking(false);
+                if (!isReply) setSpoiler(false);
+              }
+            }}
+            label={isReply ? "おすすめの本を探す" : "添える本を探す"}
+            suggestions={suggestions}
+            suggestionLabel="読んでいる本・読みたい本・登録した本"
+          />
+        )}
         <div className="composer-tools">
-          {!fixedBook && (
-            <label className="composer-book">
+          {!fixedBook && !picking && !bookId && (
+            <button
+              type="button"
+              className="composer-book"
+              onClick={() => setPicking(true)}
+            >
               <Icon name="book" size={15} />
-              <span className="sr-only">
-                {isReply ? "おすすめの本を添える" : "本を添える"}
-              </span>
-              <select
-                value={bookId}
-                onChange={(event) => {
-                  setBookId(event.target.value);
-                  if (!event.target.value && !isReply) setSpoiler(false);
-                }}
-              >
-                <option value="">
-                  {isReply ? "おすすめの本を添える" : "本を添える"}
-                </option>
-                {state.books.map((book) => (
-                  <option key={book.id} value={book.id}>
-                    {book.title}（{book.author}）
-                  </option>
-                ))}
-              </select>
-            </label>
+              {isReply ? "おすすめの本を添える" : "本を添える"}
+            </button>
           )}
           <label
             className={"composer-spoiler" + (canSpoil ? "" : " is-disabled")}
@@ -271,7 +289,40 @@ function PostComposer({
   );
 }
 
-function PostCard({
+/** The round button at the lower right. Its icon is a setting on the profile. */
+export function ComposeFab({
+  onPosted,
+  ...props
+}: Shared & { onPosted?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const icon = props.state.settings.composeIcon;
+  return (
+    <>
+      <button
+        type="button"
+        className={"compose-fab icon-" + icon}
+        onClick={() => setOpen(true)}
+        aria-label="投稿する"
+      >
+        <Icon name={icon} size={26} />
+      </button>
+      {open && (
+        <Modal title="投稿する" onClose={() => setOpen(false)}>
+          <PostComposer
+            {...props}
+            autoFocus
+            onDone={() => {
+              setOpen(false);
+              onPosted?.();
+            }}
+          />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+export function PostCard({
   state,
   actions,
   notify,
@@ -327,6 +378,18 @@ function PostCard({
             {formatPostTime(post.createdAt)}
           </time>
         </header>
+        {post.readingMode === "solo" && (
+          <span className="reading-tag is-private">
+            <Icon name="lock" size={12} />
+            自分だけのメモ
+          </span>
+        )}
+        {post.readingMode === "together" && (
+          <span className="reading-tag">
+            <Icon name="reading" size={12} />
+            読書中のつぶやき
+          </span>
+        )}
         {(post.spoiler || reported) && (
           <span className="spoiler-tag">
             {post.spoiler ? "ネタバレあり" : "ネタバレの可能性を報告済み"}
@@ -364,7 +427,7 @@ function PostCard({
             <Icon name="heart" size={16} />
             いいね<span>{likes || ""}</span>
           </button>
-          {!isReply && (
+          {!isReply && post.readingMode !== "solo" && (
             <button
               type="button"
               aria-expanded={threadOpen}

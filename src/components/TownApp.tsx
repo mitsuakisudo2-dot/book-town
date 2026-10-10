@@ -18,26 +18,57 @@ import { ProfileView } from "./ProfileView";
 import { StreetView } from "./StreetView";
 import { BookInHand } from "./BookInHand";
 import { BookActions } from "./BookActions";
-import { BookReviews, TimelineView } from "./Social";
+import { BookReviews } from "./Social";
+import { HomeView } from "./HomeView";
+import { SearchView } from "./SearchView";
+import { ReadingView } from "./ReadingView";
+import { NotificationsView } from "./NotificationsView";
+import { activeSession } from "../lib/reading";
+import { unreadCount } from "../lib/notifications";
 
 type View =
-  "town" | "timeline" | "shop" | "editor" | "book" | "profile" | "wishlist";
+  | "town"
+  | "timeline"
+  | "search"
+  | "reading"
+  | "notifications"
+  | "shop"
+  | "editor"
+  | "book"
+  | "profile"
+  | "wishlist";
 type Shared = {
   state: TownState;
   actions: TownActions;
   notify: (message: string) => void;
 };
-const links = [
-  { href: "/", icon: "store", label: "本の街", view: "town" },
-  { href: "/timeline/", icon: "chat", label: "タイムライン", view: "timeline" },
-  { href: "/my-shop/", icon: "edit", label: "わたしの書店", view: "editor" },
-  {
-    href: "/profiles/me/",
-    icon: "user",
-    label: "プロフィール",
-    view: "profile",
-  },
-];
+type Section = "home" | "search" | "reading" | "profile";
+const links: { href: string; icon: string; label: string; section: Section }[] =
+  [
+    { href: "/", icon: "home", label: "ホーム", section: "home" },
+    { href: "/search/", icon: "search", label: "検索", section: "search" },
+    {
+      href: "/reading/",
+      icon: "reading",
+      label: "読書を開始",
+      section: "reading",
+    },
+    {
+      href: "/profiles/me/",
+      icon: "user",
+      label: "プロフィール",
+      section: "profile",
+    },
+  ];
+/** Which item of the main navigation a view belongs to. */
+function sectionOf(view: View, selectedId?: string): Section | null {
+  if (view === "town" || view === "timeline" || view === "shop") return "home";
+  if (view === "search") return "search";
+  if (view === "reading") return "reading";
+  if (view === "editor" || view === "wishlist") return "profile";
+  if (view === "profile" && (selectedId ?? "me") === "me") return "profile";
+  return null;
+}
 export default function TownApp({
   view,
   selectedId,
@@ -67,6 +98,9 @@ export default function TownApp({
     return () => window.removeEventListener("hashchange", load);
   }, [view]);
   const shared = { state, actions, notify: setToast };
+  const section = sectionOf(view, selectedId);
+  const reading = Boolean(activeSession(state));
+  const unread = unreadCount(state);
   return (
     <div className="town-shell">
       <aside className="town-sidebar">
@@ -82,17 +116,16 @@ export default function TownApp({
         <nav aria-label="メインナビゲーション">
           {links.map((l) => (
             <Link
-              key={l.view}
+              key={l.section}
               href={l.href}
-              className={
-                "side-link " +
-                (view === l.view || (view === "shop" && l.view === "town")
-                  ? "active"
-                  : "")
-              }
+              className={"side-link " + (section === l.section ? "active" : "")}
+              aria-current={section === l.section ? "page" : undefined}
             >
               <Icon name={l.icon} size={21} />
-              {l.label}
+              {l.section === "reading" && reading ? "読書中" : l.label}
+              {l.section === "reading" && reading && (
+                <i className="nav-live" aria-hidden="true" />
+              )}
             </Link>
           ))}
         </nav>
@@ -147,7 +180,25 @@ export default function TownApp({
               デモの街
               <Icon name="leaf" size={12} />
             </button>
-            <Link href="/profiles/me/" aria-label="自分のプロフィール">
+            <Link
+              href="/notifications/"
+              className={
+                "top-bell" + (view === "notifications" ? " active" : "")
+              }
+              aria-label={unread ? `お知らせ（未読${unread}件）` : "お知らせ"}
+            >
+              <Icon name="bell" size={21} />
+              {unread > 0 && (
+                <span className="bell-badge" aria-hidden="true">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              )}
+            </Link>
+            <Link
+              href="/profiles/me/"
+              className="top-avatar"
+              aria-label="自分のプロフィール"
+            >
               <ReaderAvatar reader={state.me} size={31} />
             </Link>
           </div>
@@ -163,27 +214,37 @@ export default function TownApp({
         </div>
         <main className={"town-main view-" + view} key={view + selectedId}>
           {view === "town" ? (
-            directory ? (
-              <>
-                <button
-                  className="street-return"
-                  onClick={() => setDirectory(false)}
-                >
-                  <Icon name="back" size={16} />
-                  街の散歩に戻る
-                </button>
-                <TownHome {...shared} search={search} setSearch={setSearch} />
-              </>
-            ) : (
-              <StreetView
-                {...shared}
-                search={search}
-                setSearch={setSearch}
-                onDirectory={() => setDirectory(true)}
-              />
-            )
+            <HomeView {...shared} tab="shelves">
+              {directory ? (
+                <>
+                  <button
+                    className="street-return"
+                    onClick={() => setDirectory(false)}
+                  >
+                    <Icon name="back" size={16} />
+                    街の散歩に戻る
+                  </button>
+                  <TownHome {...shared} search={search} setSearch={setSearch} />
+                </>
+              ) : (
+                <StreetView
+                  {...shared}
+                  search={search}
+                  setSearch={setSearch}
+                  onDirectory={() => setDirectory(true)}
+                />
+              )}
+            </HomeView>
           ) : view === "timeline" ? (
-            <TimelineView {...shared} />
+            <HomeView {...shared} tab="timeline">
+              {null}
+            </HomeView>
+          ) : view === "search" ? (
+            <SearchView {...shared} />
+          ) : view === "reading" ? (
+            <ReadingView {...shared} />
+          ) : view === "notifications" ? (
+            <NotificationsView {...shared} />
           ) : view === "shop" ? (
             <ShopView {...shared} shopId={selectedId || ""} />
           ) : view === "book" ? (
@@ -208,11 +269,18 @@ export default function TownApp({
         {links.map((l) => (
           <Link
             href={l.href}
-            key={l.view}
-            className={view === l.view ? "active" : ""}
+            key={l.section}
+            className={
+              (section === l.section ? "active" : "") +
+              (l.section === "reading" ? " nav-reading" : "") +
+              (l.section === "reading" && reading ? " is-live" : "")
+            }
+            aria-current={section === l.section ? "page" : undefined}
           >
             <Icon name={l.icon} size={22} />
-            <span>{l.view === "editor" ? "自分の書店" : l.label}</span>
+            <span>
+              {l.section === "reading" && reading ? "読書中" : l.label}
+            </span>
           </Link>
         ))}
       </nav>
