@@ -96,6 +96,35 @@ const shapes: Record<string, ReactNode> = {
     </>
   ),
   bookmark: <path d="M6 3h12v18l-6-4-6 4z" />,
+  chat: <path d="M4 5h16v11H9l-5 4z" />,
+  reply: (
+    <>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h11a5 5 0 0 1 5 5v6" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="10" r="2" />
+      <path d="m21 16-5-5-8 9" />
+    </>
+  ),
+  flag: <path d="M5 21V4m0 0h11l-2 4 2 4H5" />,
+  trash: <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" />,
+  "eye-off": (
+    <>
+      <path d="m3 3 18 18M10.6 6.1A9.8 9.8 0 0 1 12 6c6 0 10 6 10 6a17.6 17.6 0 0 1-3.1 3.6M6.3 7.6C3.7 9.4 2 12 2 12s4 7 10 7c1.6 0 3-.4 4.3-1" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </>
+  ),
+  "want-read": (
+    <>
+      <path d="M3 5c3-1 6 0 9 2v13c-3-2-6-3-9-2z" />
+      <path d="M12 7c3-2 6-3 9-2v5" />
+      <path d="m18 13 1.1 2.2 2.4.4-1.7 1.6.4 2.3-2.2-1.1-2.2 1.1.4-2.3-1.7-1.6 2.4-.4z" />
+    </>
+  ),
   more: (
     <>
       <circle cx="5" cy="12" r="1" />
@@ -197,11 +226,13 @@ export function Modal({
   onClose,
   children,
   wide = false,
+  className = "",
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
@@ -248,7 +279,7 @@ export function Modal({
       }}
     >
       <div
-        className={"modal " + (wide ? "wide" : "")}
+        className={"modal " + (wide ? "wide " : "") + className}
         ref={ref}
         role="dialog"
         aria-modal="true"

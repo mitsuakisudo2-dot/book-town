@@ -820,6 +820,7 @@ export function createInitialState(): TownState {
     ownShop: null,
     following: [],
     wishlist: [],
+    wishSources: {},
     favorites: [],
     popReactions: {},
   });

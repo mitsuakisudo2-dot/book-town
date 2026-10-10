@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import type { TownActions, TownState } from "../lib/types";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
+import {
+  FollowReaderButton,
+  ProfilePosts,
+  ReaderSocialSummary,
+} from "./social/ProfileSocial";
+import { WishSourceNote } from "./social/WishSourceNote";
 import "./profile.css";
 
 interface ProfileViewProps {
@@ -132,7 +138,9 @@ export function ProfileView({
           <p className="profile-bio">
             {reader.bio || "読書家の名刺は、好きな本から。"}
           </p>
+          <ReaderSocialSummary reader={reader} />
           <div className="profile-reader-actions">
+            <FollowReaderButton reader={reader} />
             {isSelf ? (
               <button className="button secondary" onClick={beginProfileEdit}>
                 <Icon name="edit" /> プロフィールを編集
@@ -291,6 +299,9 @@ export function ProfileView({
                       <strong>{book.title}</strong>
                       <small>{book.author}</small>
                     </Link>
+                    {collection === "wishlist" && (
+                      <WishSourceNote bookId={id} />
+                    )}
                     <button
                       onClick={() =>
                         collection === "wishlist"
@@ -410,6 +421,8 @@ export function ProfileView({
           </div>
         )}
       </section>
+
+      <ProfilePosts reader={reader} />
 
       {editingProfile && (
         <Modal

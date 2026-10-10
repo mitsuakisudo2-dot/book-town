@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-label="机の上の読書灯と、開いた本">
+  <defs>
+    <radialGradient id="glow" cx="0.58" cy="0.52" r="0.5">
+      <stop offset="0" stop-color="#ffe9b8" stop-opacity="0.95"/>
+      <stop offset="0.55" stop-color="#f3d79a" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#2f3a33" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="900" fill="#2f3a33"/>
+  <rect y="610" width="1200" height="290" fill="#5b4632"/>
+  <rect y="610" width="1200" height="14" fill="#6f5740"/>
+  <ellipse cx="690" cy="560" rx="520" ry="330" fill="url(#glow)"/>
+  <path d="M300 610h40l60-330 210-80" fill="none" stroke="#c9b48a" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="250" y="600" width="140" height="26" rx="8" fill="#a8946c"/>
+  <path d="M560 160l190 60-60 140-190-60z" fill="#3f5a4a"/>
+  <path d="M600 330l110 35" stroke="#2b3f33" stroke-width="10"/>
+  <ellipse cx="660" cy="350" rx="40" ry="16" fill="#fff4cf" transform="rotate(18 660 350)"/>
+  <path d="M560 640c90-36 170-36 240 0 70-36 150-36 240 0v40c-90-30-170-30-240 6-70-36-150-36-240-6z" fill="#efe6d1"/>
+  <path d="M800 640v46" stroke="#cdbf9f" stroke-width="4"/>
+  <path d="M600 655c60-16 120-16 170 4M600 672c60-16 120-16 170 4M830 659c50-20 110-20 170-4M830 676c50-20 110-20 170-4" stroke="#b9ab8c" stroke-width="5" stroke-linecap="round"/>
+  <rect x="140" y="560" width="70" height="50" rx="10" fill="#d9cdb3"/>
+  <path d="M210 572c26 0 26 26 0 26" fill="none" stroke="#d9cdb3" stroke-width="10"/>
+</svg>

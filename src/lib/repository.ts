@@ -6,6 +6,7 @@ import {
   type PopReaction,
   OWN_SHOP_ID,
   shelfUsed,
+  type DiscoverySource,
   type PersistenceStatus,
   type Reader,
   type Shop,
@@ -28,7 +29,13 @@ export interface TownRepository {
 
 type PersonalData = Pick<
   TownState,
-  "me" | "ownShop" | "following" | "wishlist" | "favorites" | "popReactions"
+  | "me"
+  | "ownShop"
+  | "following"
+  | "wishlist"
+  | "wishSources"
+  | "favorites"
+  | "popReactions"
 >;
 interface StoredEnvelope {
   version: number;
@@ -46,6 +53,19 @@ const knownList = (value: unknown, allowed: Set<string>): value is string[] =>
   strings(value) && unique(value) && value.every((id) => allowed.has(id));
 const hex = (value: unknown): value is string =>
   typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+const timestamp = (value: unknown): value is string =>
+  text(value, 40) && !Number.isNaN(Date.parse(value));
+
+/** Sources only shape-check the post ID: posts live in a separate repository and may be deleted. */
+function validSource(value: unknown): value is DiscoverySource {
+  return (
+    object(value) &&
+    value.kind === "post" &&
+    typeof value.postId === "string" &&
+    /^[a-z0-9-]{1,80}$/.test(value.postId) &&
+    timestamp(value.savedAt)
+  );
+}
 
 function validReader(value: unknown, bookIds: Set<string>): value is Reader {
   if (
@@ -174,13 +194,26 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
         if (valid.length) popReactions[key] = valid;
       }
     }
+    const wishlist = data.wishlist as string[];
+    const wishSources: Record<string, DiscoverySource> = {};
+    if (object(data.wishSources)) {
+      for (const [bookId, source] of Object.entries(data.wishSources)) {
+        if (!wishlist.includes(bookId) || !validSource(source)) continue;
+        wishSources[bookId] = {
+          kind: source.kind,
+          postId: source.postId,
+          savedAt: source.savedAt,
+        };
+      }
+    }
     return {
       state: {
         ...initial,
         me: data.me as Reader,
         ownShop,
         following: data.following as string[],
-        wishlist: data.wishlist as string[],
+        wishlist,
+        wishSources,
         favorites: Array.isArray(data.favorites)
           ? [...new Set(data.favorites)].filter(
               (id): id is string => typeof id === "string" && bookIds.has(id),
@@ -203,6 +236,7 @@ export function serializeTown(state: TownState): string {
       ownShop: state.ownShop,
       following: state.following,
       wishlist: state.wishlist,
+      wishSources: state.wishSources,
       favorites: state.favorites,
       popReactions: state.popReactions,
     },

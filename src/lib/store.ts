@@ -29,6 +29,7 @@ const clean = (value: string, max = 10000): string => value.slice(0, max);
 
 export function createTownStore(
   repository: TownRepository = localTownRepository,
+  clock: () => string = () => new Date().toISOString(),
 ) {
   // This stable snapshot is used both by static rendering and the first hydration render.
   let state: TownState = seedState;
@@ -280,12 +281,35 @@ export function createTownStore(
     toggleWish(bookId) {
       initialize();
       if (!state.books.some((book) => book.id === bookId)) return;
+      if (state.wishlist.includes(bookId)) {
+        // Unsaving forgets the route too, so a later save never shows a stale source.
+        const wishSources = { ...state.wishSources };
+        delete wishSources[bookId];
+        commit({
+          ...state,
+          wishlist: state.wishlist.filter((id) => id !== bookId),
+          wishSources,
+        });
+      } else commit({ ...state, wishlist: [...state.wishlist, bookId] });
+    },
+    saveWishFrom(bookId, origin) {
+      initialize();
+      if (
+        !state.books.some((book) => book.id === bookId) ||
+        state.wishlist.includes(bookId) ||
+        origin.kind !== "post" ||
+        !origin.postId
+      )
+        return false;
       commit({
         ...state,
-        wishlist: state.wishlist.includes(bookId)
-          ? state.wishlist.filter((id) => id !== bookId)
-          : [...state.wishlist, bookId],
+        wishlist: [...state.wishlist, bookId],
+        wishSources: {
+          ...state.wishSources,
+          [bookId]: { kind: "post", postId: origin.postId, savedAt: clock() },
+        },
       });
+      return true;
     },
     toggleFavorite(bookId) {
       initialize();

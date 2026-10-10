@@ -8,11 +8,12 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build": "next build --webpack",
-    "test:domain": "tsx tests/domain.test.ts",
+    "test:domain": "tsx tests/domain.test.ts && tsx tests/social.test.ts",
     "test:browser": "node tests/browser-journey.mjs",
     "test:street": "node tests/street-journey.mjs",
     "format": "prettier --write src tests *.json *.ts *.mjs README.md",
-    "test:feedback": "node tests/feedback-journey.mjs"
+    "test:feedback": "node tests/feedback-journey.mjs",
+    "test:sns": "node tests/sns-journey.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

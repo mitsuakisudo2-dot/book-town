@@ -10,6 +10,14 @@ export const popReactionKey = (
   itemId: string,
 ) => JSON.stringify([shopId, shelfId, itemId]);
 
+/**
+ * Where a reader met a book before saving it. Recording the route is not the same as
+ * claiming the source "made" them want it; that is a separate, explicit reaction.
+ * Future origins (a shop POP, a shelf) extend this union.
+ */
+export type DiscoveryOrigin = { kind: "post"; postId: string };
+export type DiscoverySource = DiscoveryOrigin & { savedAt: string };
+
 export type BookDisplay = "spine" | "face";
 export type ShopTheme = "sage" | "ink" | "ochre" | "rose";
 
@@ -70,6 +78,8 @@ export interface TownState {
   ownShop: Shop | null;
   following: string[];
   wishlist: string[];
+  /** Keyed by book ID; only books still in the wishlist keep a source. Private to the viewer. */
+  wishSources: Record<string, DiscoverySource>;
   favorites: string[];
   popReactions: Record<string, PopReaction[]>;
 }
@@ -92,6 +102,8 @@ export interface TownActions {
   updatePop(shelfId: string, itemId: string, pop: string): void;
   toggleFollow(shopId: string): void;
   toggleWish(bookId: string): void;
+  /** Adds an unsaved book and records the route. Never overwrites an existing save. */
+  saveWishFrom(bookId: string, origin: DiscoveryOrigin): boolean;
   toggleFavorite(bookId: string): void;
   togglePopReaction(
     shopId: string,

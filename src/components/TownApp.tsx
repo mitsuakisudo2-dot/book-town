@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTownStore, usePersistenceStatus } from "../lib/store";
@@ -18,8 +18,26 @@ import { ProfileView } from "./ProfileView";
 import { StreetView } from "./StreetView";
 import { BookInHand } from "./BookInHand";
 import { BookActions } from "./BookActions";
+import { BookReviews } from "./social/BookReviews";
+import { Composer } from "./social/Composer";
+import { FeedView } from "./social/FeedView";
+import { PostDetailRoute } from "./social/PostDetailView";
+import {
+  SocialUIProvider,
+  type ComposerPreset,
+  type SocialUI,
+} from "./social/SocialContext";
+import { WishSourceNote } from "./social/WishSourceNote";
 
-type View = "town" | "shop" | "editor" | "book" | "profile" | "wishlist";
+type View =
+  | "town"
+  | "shop"
+  | "editor"
+  | "book"
+  | "profile"
+  | "wishlist"
+  | "feed"
+  | "post";
 type Shared = {
   state: TownState;
   actions: TownActions;
@@ -27,6 +45,7 @@ type Shared = {
 };
 const links = [
   { href: "/", icon: "store", label: "本の街", view: "town" },
+  { href: "/feed/", icon: "chat", label: "タイムライン", view: "feed" },
   { href: "/my-shop/", icon: "edit", label: "わたしの書店", view: "editor" },
   {
     href: "/profiles/me/",
@@ -49,6 +68,11 @@ export default function TownApp({
   const [search, setSearch] = useState("");
   const [about, setAbout] = useState(false);
   const [directory, setDirectory] = useState(false);
+  const [composer, setComposer] = useState<ComposerPreset | null>(null);
+  const socialUI = useMemo<SocialUI>(
+    () => ({ notify: setToast, compose: (preset = {}) => setComposer(preset) }),
+    [],
+  );
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 3500);
@@ -83,7 +107,9 @@ export default function TownApp({
               href={l.href}
               className={
                 "side-link " +
-                (view === l.view || (view === "shop" && l.view === "town")
+                (view === l.view ||
+                (view === "shop" && l.view === "town") ||
+                (view === "post" && l.view === "feed")
                   ? "active"
                   : "")
               }
@@ -93,6 +119,14 @@ export default function TownApp({
             </Link>
           ))}
         </nav>
+        <button
+          type="button"
+          className="side-compose"
+          onClick={() => setComposer({})}
+        >
+          <Icon name="edit" size={16} />
+          投稿する
+        </button>
         <Link className="open-shop-link" href="/my-shop/">
           <Icon name="plus" size={18} />
           {state.ownShop ? "書店を整える" : "あなたも、店主に。"}
@@ -158,39 +192,49 @@ export default function TownApp({
             ? "このブラウザに保存できません。ブラウザの保存設定を確認してください。今の操作はページを閉じると失われます。"
             : "保存データを読み込めなかったため、デモの初期状態に戻しました。"}
         </div>
-        <main className={"town-main view-" + view} key={view + selectedId}>
-          {view === "town" ? (
-            directory ? (
-              <>
-                <button
-                  className="street-return"
-                  onClick={() => setDirectory(false)}
-                >
-                  <Icon name="back" size={16} />
-                  街の散歩に戻る
-                </button>
-                <TownHome {...shared} search={search} setSearch={setSearch} />
-              </>
+        <SocialUIProvider value={socialUI}>
+          <main className={"town-main view-" + view} key={view + selectedId}>
+            {view === "town" ? (
+              directory ? (
+                <>
+                  <button
+                    className="street-return"
+                    onClick={() => setDirectory(false)}
+                  >
+                    <Icon name="back" size={16} />
+                    街の散歩に戻る
+                  </button>
+                  <TownHome {...shared} search={search} setSearch={setSearch} />
+                </>
+              ) : (
+                <StreetView
+                  {...shared}
+                  search={search}
+                  setSearch={setSearch}
+                  onDirectory={() => setDirectory(true)}
+                />
+              )
+            ) : view === "shop" ? (
+              <ShopView {...shared} shopId={selectedId || ""} />
+            ) : view === "book" ? (
+              <BookView {...shared} bookId={selectedId || ""} />
+            ) : view === "editor" ? (
+              <ShopEditor {...shared} />
+            ) : view === "profile" ? (
+              <ProfileView {...shared} readerId={selectedId || "me"} />
+            ) : view === "feed" ? (
+              <FeedView />
+            ) : view === "post" ? (
+              <Suspense
+                fallback={<p className="sns-loading">読み込んでいます…</p>}
+              >
+                <PostDetailRoute />
+              </Suspense>
             ) : (
-              <StreetView
-                {...shared}
-                search={search}
-                setSearch={setSearch}
-                onDirectory={() => setDirectory(true)}
-              />
-            )
-          ) : view === "shop" ? (
-            <ShopView {...shared} shopId={selectedId || ""} />
-          ) : view === "book" ? (
-            <BookView {...shared} bookId={selectedId || ""} />
-          ) : view === "editor" ? (
-            <ShopEditor {...shared} />
-          ) : view === "profile" ? (
-            <ProfileView {...shared} readerId={selectedId || "me"} />
-          ) : (
-            <Wishlist {...shared} />
-          )}
-        </main>
+              <Wishlist {...shared} />
+            )}
+          </main>
+        </SocialUIProvider>
         <footer className="town-footer">
           <span>読書の終わりを、交流の始まりに。</span>
           <small>BOOK TOWN · それぞれの「好き」が集まる、本の街。</small>
@@ -204,13 +248,32 @@ export default function TownApp({
           <Link
             href={l.href}
             key={l.view}
-            className={view === l.view ? "active" : ""}
+            className={
+              view === l.view || (view === "post" && l.view === "feed")
+                ? "active"
+                : ""
+            }
           >
             <Icon name={l.icon} size={22} />
             <span>{l.view === "editor" ? "自分の書店" : l.label}</span>
           </Link>
         ))}
       </nav>
+      {view === "feed" && !composer && (
+        <button
+          type="button"
+          className="sns-fab"
+          aria-label="新しく投稿する"
+          onClick={() => setComposer({})}
+        >
+          <Icon name="edit" size={24} />
+        </button>
+      )}
+      {composer && (
+        <SocialUIProvider value={socialUI}>
+          <Composer preset={composer} onClose={() => setComposer(null)} />
+        </SocialUIProvider>
+      )}
       {toast && (
         <div className="toast" role="status">
           <Icon name="check" size={17} />
@@ -775,6 +838,7 @@ function BookView({
           </span>
         </div>
       </section>
+      <BookReviews bookId={book.id} />
       <div className="book-path-heading">
         <span className="eyebrow">FOLLOW THE BOOK, MEET THE READER</span>
         <h2>この本を並べている書店</h2>
@@ -850,6 +914,7 @@ function Wishlist({ state, actions, notify }: Shared) {
                 <p>{b.author}</p>
               </Link>
               <span>{b.genre}</span>
+              <WishSourceNote bookId={b.id} />
               <button
                 className="text-button"
                 onClick={() => {

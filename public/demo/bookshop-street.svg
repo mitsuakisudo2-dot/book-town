@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-label="手書きのPOPが貼られた小さな本屋の店先">
+  <rect width="1200" height="900" fill="#dfe6db"/>
+  <rect y="760" width="1200" height="140" fill="#b9b3a2"/>
+  <rect x="220" y="170" width="760" height="590" fill="#e8dcc0"/>
+  <path d="M190 170h820l-40-70H230z" fill="#5c7455"/>
+  <g fill="#f4eedc">
+    <path d="M220 220h95l-8 50h-80z"/><path d="M410 220h95l-8 50h-80z"/><path d="M600 220h95l-8 50h-80z"/><path d="M790 220h95l-8 50h-80z"/>
+  </g>
+  <g fill="#5c7455">
+    <path d="M315 220h95l-8 50h-80z"/><path d="M505 220h95l-8 50h-80z"/><path d="M695 220h95l-8 50h-80z"/><path d="M885 220h95l-8 50h-80z"/>
+  </g>
+  <rect x="270" y="320" width="420" height="380" fill="#4f6349"/>
+  <g>
+    <rect x="290" y="440" width="380" height="12" fill="#b89b70"/>
+    <rect x="290" y="580" width="380" height="12" fill="#b89b70"/>
+    <rect x="300" y="365" width="28" height="75" fill="#dfd4b1"/><rect x="332" y="375" width="22" height="65" fill="#af7960"/><rect x="358" y="360" width="30" height="80" fill="#819783"/><rect x="392" y="372" width="24" height="68" fill="#e7d2a0"/><rect x="420" y="366" width="28" height="74" fill="#a8bfa0"/><rect x="452" y="380" width="22" height="60" fill="#b77f65"/><rect x="478" y="362" width="30" height="78" fill="#e4ded0"/><rect x="512" y="374" width="24" height="66" fill="#dfd4b1"/><rect x="540" y="368" width="28" height="72" fill="#819783"/>
+    <rect x="300" y="508" width="26" height="72" fill="#a8bfa0"/><rect x="330" y="500" width="30" height="80" fill="#e7d2a0"/><rect x="364" y="514" width="22" height="66" fill="#af7960"/><rect x="390" y="504" width="28" height="76" fill="#e4ded0"/><rect x="422" y="512" width="24" height="68" fill="#819783"/><rect x="450" y="498" width="30" height="82" fill="#dfd4b1"/>
+  </g>
+  <g transform="rotate(-4 590 520)">
+    <rect x="520" y="470" width="150" height="110" rx="4" fill="#fff9e6"/>
+    <path d="M540 500h105M540 522h90M540 544h100M540 562h60" stroke="#a34b3d" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <rect x="740" y="320" width="190" height="440" fill="#6a7b60"/>
+  <circle cx="900" cy="560" r="10" fill="#e4d3a2"/>
+</svg>
