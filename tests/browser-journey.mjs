@@ -1,230 +1,547 @@
-/**
- * Run while the preview server is listening:
- * node tests/browser-journey.mjs
- * Each viewport uses a fresh browser context; no personal browser data is touched.
- */
-import { chromium, expect } from '@playwright/test';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { chromium, expect } from "@playwright/test";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 
-const baseURL = process.env.BASE_URL || 'http://127.0.0.1:5173';
-const output = resolve(process.env.QA_OUTPUT || '../../work/qa');
+const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
+const output = path.resolve(
+  process.env.BOOK_TOWN_QA_OUTPUT ?? "../../work/booktown/qa",
+);
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  executablePath:
+    process.env.BOOK_TOWN_CHROME ??
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   headless: true,
 });
+const errors = [];
 const results = [];
-
-async function runJourney(label, viewport) {
-  const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
-  const page = await context.newPage();
-  page.setDefaultTimeout(10000);
-  const errors = [];
-  page.on('pageerror', error => errors.push(error.message));
-  const result = { viewport: label, checks: [], errors };
-  const check = message => { result.checks.push(message); console.log(`[${label}] ${message}`); };
-  const main = page.locator('.main-content');
-  const nav = page.getByRole('navigation', { name: label === 'mobile' ? 'スマートフォンナビゲーション' : 'メインナビゲーション' });
-  const go = async name => { await nav.getByRole('button', { name, exact: name !== '投稿する' }).click(); };
-  const shot = async name => {
-    await page.screenshot({ path: resolve(output, `${label}-${name}.png`), fullPage: name !== 'home' });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  };
-  try {
-    await page.goto(baseURL);
-    await expect(main.getByRole('heading', { name: 'ホーム', exact: true })).toBeVisible();
-    await shot('home');
-    if (label === 'mobile') {
-      const discovery = main.locator('.mobile-reader-discovery');
-      await expect(discovery.getByRole('heading', { name: '本棚の向こうにいる人', exact: true })).toBeVisible();
-      await expect(discovery).toContainText('好きの近さも、違うまなざしも。');
-      const reader = discovery.locator('.mobile-reader-card').nth(1);
-      await expect(reader).toContainText('まだ知らない国の物語へ');
-      await reader.getByRole('button', { name: 'フォローする', exact: true }).click();
-      await expect(reader.getByRole('button', { name: 'フォロー中', exact: true })).toBeVisible();
-      await reader.locator('.reader-link').click();
-      await expect(main.getByRole('heading', { name: '灯', exact: true })).toBeVisible();
-      await main.getByRole('button', { name: 'フォロー中', exact: true }).click();
-      await go('ホーム');
-      check('Mobile home reader recommendations expose diverse reasons, working follow and profile navigation');
-    }
-    await main.locator('.post-card').first().locator('.post-book').click();
-    await expect(main.getByRole('heading', { name: '西の魔女が死んだ', exact: true })).toBeVisible();
-    await main.locator('.book-readers').getByRole('button', { name: /^栞/ }).click();
-    await expect(main.getByRole('heading', { name: '栞', exact: true })).toBeVisible();
-    await expect(main.locator('.p-nine-slot')).toHaveCount(9);
-    await expect(main.getByRole('heading', { name: '雨の日にひらく本', exact: true })).toBeVisible();
-    await shot('profile');
-    await main.getByRole('button', { name: 'フォロー中', exact: true }).click();
-    await expect(main.getByRole('button', { name: 'フォローする', exact: true })).toBeVisible();
-    await main.getByRole('button', { name: 'フォローする', exact: true }).click();
-    await main.locator('.p-nine-grid').getByRole('button', { name: '西の魔女が死んだの詳細', exact: true }).click();
-    const firstPost = main.locator('.post-card').first();
-    await firstPost.getByRole('button', { name: 'いいね', exact: true }).click();
-    await expect(firstPost.getByRole('button', { name: 'いいね', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await firstPost.getByRole('button', { name: '読みたくなった', exact: false }).click();
-    await firstPost.getByRole('button', { name: 'コメント', exact: true }).click();
-    await firstPost.getByLabel('返信を書く').fill(`私も朝のお茶の場面を思い出しました。${label}`);
-    await firstPost.getByRole('button', { name: '返信する', exact: false }).click();
-    await expect(firstPost.getByText(`私も朝のお茶の場面を思い出しました。${label}`, { exact: true })).toBeVisible();
-    await main.locator('.status-buttons').getByRole('button', { name: '読書中', exact: true }).click();
-    await page.reload();
-    await expect(main.locator('.status-buttons').getByRole('button', { name: '読書中', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await expect(firstPost.getByRole('button', { name: 'いいね', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await firstPost.getByRole('button', { name: 'コメント', exact: true }).click();
-    await expect(firstPost.getByText(`私も朝のお茶の場面を思い出しました。${label}`, { exact: true })).toBeVisible();
-    check('Home → book → reader → nine/bookshelf → book → reaction and reply; persisted after reload');
-
-    await go('マイライブラリ');
-    await expect(main.getByRole('heading', { name: 'わたしの本棚', exact: true })).toBeVisible();
-    await shot('library');
-    await main.getByRole('img', { name: /本棚のジャンル構成/ }).scrollIntoViewIfNeeded();
-    await expect(main.getByRole('img', { name: /本棚のジャンル構成/ })).toBeVisible();
-    await main.getByRole('button', { name: '本を登録', exact: true }).click();
-    let dialog = page.getByRole('dialog');
-    await dialog.getByRole('button', { name: '新しい本を登録', exact: true }).click();
-    const customTitle = `読書の余白 ${label}`;
-    await dialog.getByLabel('タイトル', { exact: true }).fill(customTitle);
-    await dialog.getByLabel('著者', { exact: true }).fill('試作 花子');
-    await dialog.getByLabel('ジャンル', { exact: true }).fill('文芸評論');
-    await dialog.getByLabel('ISBN（任意）', { exact: true }).fill('978-4-123456-78-9');
-    await dialog.getByLabel('本とのいまの関係').selectOption('unread');
-    await dialog.getByLabel('所有している', { exact: true }).check();
-    await dialog.getByRole('button', { name: '本棚に追加する', exact: true }).click();
-    await expect(main.getByRole('button', { name: customTitle, exact: true })).toBeVisible();
-    await main.locator('.p-filter-row').getByRole('button', { name: '積読', exact: true }).click();
-    await main.getByLabel('ジャンルで絞り込む').selectOption('文芸評論');
-    await expect(main.locator('.p-library-book')).toHaveCount(1);
-    await expect(main.getByRole('button', { name: customTitle, exact: true })).toBeVisible();
-    await main.getByLabel('ライブラリをタイトル・著者・ISBNで検索').fill('978-4-123456-78-9');
-    await expect(main.locator('.p-library-book')).toHaveCount(1);
-    await page.reload();
-    await expect(main.getByRole('button', { name: customTitle, exact: true })).toBeVisible();
-    check('Custom book with title/author/ISBN; automatic genre grouping, ownership/status filters, donut and persistence');
-
-    await go('プロフィール');
-    await main.getByRole('button', { name: '編集', exact: true }).click();
-    dialog = page.getByRole('dialog', { name: '人生の9冊を、あなたらしく' });
-    await dialog.getByRole('button', { name: '西の魔女が死んだを前に', exact: true }).click();
-    await expect(dialog.locator('.p-nine-editor-row').first()).toContainText('西の魔女が死んだ');
-    await dialog.locator('.p-nine-editor-row').first().getByPlaceholder('この本へのひとこと（任意）').fill('日々の小さな選択を思い出す一冊。');
-    await dialog.getByLabel('人生の9冊に追加する本を検索').fill(customTitle);
-    await dialog.locator('.p-picker-book').click();
-    await dialog.getByRole('button', { name: 'この本たちを並べる', exact: true }).click();
-    await expect(main.locator('.p-nine-slot').first()).toContainText('西の魔女が死んだ');
-    await expect(main.locator('.p-nine-slot').first()).toContainText('日々の小さな選択を思い出す一冊。');
-    await expect(main.locator('.p-nine-grid')).toContainText(customTitle);
-    await page.reload();
-    await expect(main.locator('.p-nine-slot').first()).toContainText('日々の小さな選択を思い出す一冊。');
-    await main.getByRole('button', { name: '本棚をつくる', exact: true }).click();
-    dialog = page.getByRole('dialog', { name: 'あなたの本棚をつくる' });
-    await dialog.getByLabel('本棚の名前').fill(`秘密の本棚 ${label}`);
-    await dialog.getByRole('button', { name: /^自分だけ/ }).click();
-    await dialog.getByLabel('本棚に並べる本を検索').fill(customTitle);
-    await dialog.locator('.p-picker-book').click();
-    await dialog.getByRole('button', { name: '保存する', exact: true }).click();
-    await expect(main.locator('.p-shelf-section').filter({ hasText: `秘密の本棚 ${label}` })).toContainText('自分だけ');
-    await page.reload();
-    await expect(main.getByRole('heading', { name: `秘密の本棚 ${label}`, exact: true })).toBeVisible();
-    check('Life nine reordered, additional book and optional note saved; custom private shelf persists for owner');
-
-    // A private demo shelf is a visitor fixture: it must be absent from a different reader profile.
-    await page.evaluate(() => {
-      const saved = JSON.parse(localStorage.getItem('yohaku-reading-sns'));
-      saved.state.users[0].shelves.push({ id: 'qa-private-shelf', name: '訪問者に見せない棚', isPublic: false, bookIds: ['b1'] });
-      localStorage.setItem('yohaku-reading-sns', JSON.stringify(saved));
-    });
-    await page.reload();
-    await go('ホーム');
-    await main.locator('.post-card').first().getByRole('button', { name: '栞のプロフィール', exact: true }).click();
-    await expect(main.getByRole('heading', { name: '雨の日にひらく本', exact: true })).toBeVisible();
-    await expect(main.getByText('訪問者に見せない棚', { exact: true })).toHaveCount(0);
-    await expect(main.getByRole('button', { name: 'フォロー中', exact: true })).toBeVisible();
-    check('Visitor profile exposes public shelves and excludes private shelves; follow state persisted');
-
-    await go('探す');
-    const search = main.getByLabel('本・著者・ISBN・読書家の検索');
-    await search.fill('銀河鉄道の夜');
-    await main.locator('.explore-book').getByRole('button', { name: '銀河鉄道の夜', exact: true }).click();
-    const spoiler = main.locator('.post-card');
-    const protectedText = '最後の場面を読み返しました。カムパネルラの不在を知ったとき';
-    await expect(spoiler.getByText(protectedText, { exact: false })).toHaveCount(0);
-    await spoiler.getByRole('button', { name: 'コメント', exact: true }).click();
-    await expect(spoiler.locator('.comment')).toHaveCount(0);
-    await expect(spoiler.getByLabel('返信を書く')).toHaveCount(0);
-    await expect(spoiler.locator('.avatar-link')).toHaveCount(0);
-    await expect(spoiler.locator('.post-author button')).toHaveCount(0);
-    await spoiler.getByRole('button', { name: '感想を読む', exact: true }).click();
-    await expect(spoiler.getByText(protectedText, { exact: false })).toBeVisible();
-    await expect(spoiler.locator('.comment')).toHaveCount(1);
-    await spoiler.getByRole('button', { name: 'ネタバレを閉じる', exact: true }).click();
-    await expect(spoiler.getByText(protectedText, { exact: false })).toHaveCount(0);
-    await expect(spoiler.locator('.comment')).toHaveCount(0);
-    check('Spoiler post and replies require explicit reveal; hide closes both; anonymous post has no profile links');
-
-    await main.getByRole('button', { name: '感想・呼びかけを書く', exact: false }).click();
-    dialog = page.getByRole('dialog', { name: 'いまの気持ちを、綴る。' });
-    await dialog.getByLabel('投稿内容').fill(`面白かった！！ 話を聞く人に会いたい。${label}`);
-    await dialog.getByLabel('匿名モード', { exact: true }).check();
-    await dialog.getByRole('button', { name: '投稿する', exact: false }).click();
-    const ownAnonymous = main.locator('.post-card').first();
-    await expect(ownAnonymous.locator('.post-text')).toHaveText(`面白かった！！ 話を聞く人に会いたい。${label}`);
-    const alias = await ownAnonymous.locator('.post-author b').textContent();
-    expect(alias).toMatch(/^匿名の読者・/);
-    await expect(ownAnonymous.locator('.post-author button')).toHaveCount(0);
-    await ownAnonymous.getByRole('button', { name: 'コメント', exact: true }).click();
-    await expect(ownAnonymous.getByLabel('匿名で返信', { exact: true })).toBeChecked();
-    await ownAnonymous.getByLabel('返信を書く').fill(`私もこの場面を話したい。${label}`);
-    await ownAnonymous.getByRole('button', { name: '返信する', exact: false }).click();
-    await ownAnonymous.getByLabel('返信を書く').fill(`二つ目の匿名返信。${label}`);
-    await ownAnonymous.getByRole('button', { name: '返信する', exact: false }).click();
-    await expect(ownAnonymous.locator('.comment b')).toHaveText([alias, alias]);
-    await expect(ownAnonymous.locator('.comment .avatar-link')).toHaveCount(0);
-    await page.reload();
-    await expect(ownAnonymous.locator('.post-author b')).toHaveText(alias);
-    await ownAnonymous.getByRole('button', { name: 'コメント', exact: true }).click();
-    await expect(ownAnonymous.locator('.comment b')).toHaveText([alias, alias]);
-    await go('プロフィール');
-    await main.getByRole('tab', { name: '感想・ことば', exact: true }).click();
-    await expect(main.getByText(`面白かった！！ 話を聞く人に会いたい。${label}`, { exact: true })).toHaveCount(0);
-    check('Anonymous post and multiple replies preserve thread alias after reload; omitted from profile history');
-
-    await go('投稿する');
-    dialog = page.getByRole('dialog', { name: 'いまの気持ちを、綴る。' });
-    await dialog.getByLabel('投稿内容').fill(`本を添えなくても自由に話せる。${label}`);
-    await dialog.getByRole('button', { name: '投稿する', exact: false }).click();
-    await expect(main.locator('.post-card').first().locator('.post-text')).toHaveText(`本を添えなくても自由に話せる。${label}`);
-    await expect(main.locator('.post-card').first().locator('.post-book')).toHaveCount(0);
-    await go('プロフィール');
-    await main.getByRole('tab', { name: '感想・ことば', exact: true }).click();
-    await expect(main.getByText(`本を添えなくても自由に話せる。${label}`, { exact: true })).toBeVisible();
-    await go('探す');
-    await search.fill('凪');
-    await main.getByRole('tab', { name: '読書家', exact: true }).click();
-    await expect(main.locator('.reader-card')).toHaveCount(1);
-    await expect(main.locator('.reader-card')).toContainText('凪');
-    check('Free public post requires no book or rating; public history and reader search work');
-    expect(errors).toEqual([]);
-    result.passed = true;
-  } catch (error) {
-    result.passed = false;
-    result.failure = error.stack || String(error);
-    await page.screenshot({ path: resolve(output, `${label}-failure.png`), fullPage: true }).catch(() => {});
-    result.location = page.url();
-    result.dom = await main.innerText().catch(() => '');
-  } finally {
-    results.push(result);
-    await context.close();
-  }
+function watch(page) {
+  page.on("pageerror", (error) =>
+    errors.push({
+      page: page.url(),
+      type: "pageerror",
+      message: error.message,
+    }),
+  );
+  page.on("console", (message) => {
+    if (message.type() === "error")
+      errors.push({
+        page: page.url(),
+        type: "console",
+        message: message.text(),
+      });
+  });
 }
-
+async function check(name, operation) {
+  await operation();
+  results.push(name);
+  console.log(`PASS ${name}`);
+}
+async function go(page, route) {
+  await page.goto(`${baseURL}${route}`);
+  await expect(page.locator("main")).toBeVisible();
+  await page.waitForFunction(
+    () => localStorage.getItem("book-town-v1") !== null,
+  );
+}
+async function stored(page) {
+  return page.evaluate(
+    () => JSON.parse(localStorage.getItem("book-town-v1")).data,
+  );
+}
+async function noOverflow(page, name) {
+  const size = await page.evaluate(() => ({
+    width: innerWidth,
+    body: document.body.scrollWidth,
+    document: document.documentElement.scrollWidth,
+  }));
+  expect(size.body, `${name}: body overflow`).toBeLessThanOrEqual(
+    size.width + 1,
+  );
+  expect(size.document, `${name}: document overflow`).toBeLessThanOrEqual(
+    size.width + 1,
+  );
+}
+async function addFirstBook(page, shelf) {
+  await shelf.getByRole("button", { name: "本を並べる", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const choice = dialog.locator(".editor-book-choice:not([disabled])").first();
+  const title = await choice.locator(".editor-book-choice-title").textContent();
+  await choice.click();
+  await expect(dialog).not.toBeVisible();
+  return title;
+}
+const context = await browser.newContext({
+  viewport: { width: 1440, height: 1000 },
+  locale: "ja-JP",
+});
+const page = await context.newPage();
+watch(page);
 try {
-  await runJourney('mobile', { width: 390, height: 844 });
-  await runJourney('desktop', { width: 1440, height: 1000 });
+  await check(
+    "Desktop town discovery and original bookstore signs",
+    async () => {
+      await go(page, "/");
+      await expect(page.locator(".shop-card")).toHaveCount(6);
+      await expect(
+        page.getByRole("heading", { name: /いつもの一冊から/ }),
+      ).toBeVisible();
+      await noOverflow(page, "desktop town");
+      await page.screenshot({
+        path: path.join(output, "town-desktop.png"),
+        fullPage: true,
+        animations: "disabled",
+      });
+      const before = await page
+        .locator(".shop-front")
+        .first()
+        .getAttribute("aria-label");
+      await page.getByRole("button", { name: "路地を変えてみる" }).click();
+      expect(
+        await page.locator(".shop-front").first().getAttribute("aria-label"),
+      ).not.toBe(before);
+      await page
+        .getByRole("button", { name: "軌道書房をフォロー", exact: true })
+        .click();
+      expect((await stored(page)).following).toContain("shop-orbit");
+      await page
+        .getByRole("button", { name: "フォロー中", exact: true })
+        .click();
+      await expect(page.locator(".shop-card")).toHaveCount(1);
+      await page
+        .getByRole("button", { name: "フォロー中", exact: true })
+        .click();
+    },
+  );
+  await check(
+    "Book -> several different POPs -> exact shelf -> reader profile",
+    async () => {
+      await page.getByRole("link", { name: "軌道書房に入る" }).click();
+      await expect(page.locator(".store-shelf-section")).toHaveCount(2);
+      await page
+        .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
+        .click();
+      await expect(
+        page.getByRole("dialog").locator(".owner-pop"),
+      ).toContainText("自分の記憶に出会ってしまう");
+      await page
+        .getByRole("button", { name: "読みたいに加える", exact: true })
+        .click();
+      await page
+        .getByRole("link", { name: "この本を並べるほかの書店" })
+        .click();
+      await expect(page).toHaveURL(/\/books\/solaris\/$/);
+      await expect(
+        page.getByRole("heading", { name: "ソラリス", exact: true }),
+      ).toBeVisible();
+      const cards = page.locator(".stockist");
+      await expect.poll(() => cards.count()).toBeGreaterThanOrEqual(4);
+      const pops = await cards.locator("blockquote").allTextContents();
+      expect(new Set(pops).size).toBe(pops.length);
+      await cards
+        .filter({
+          has: page.getByRole("heading", { name: "雨と翻訳", exact: true }),
+        })
+        .getByRole("link", { name: "この棚を見に行く" })
+        .click();
+      await expect(page).toHaveURL(/\/shops\/shop-rain\/#shelf-rain-cities$/);
+      await expect(page.locator("#shelf-rain-cities")).toBeInViewport();
+      await page.locator(".owner-profile-link").click();
+      await expect(
+        page.getByRole("heading", { name: "すみれ", exact: true }),
+      ).toBeVisible();
+      await expect(page.locator(".profile-nine-grid > div")).toHaveCount(9);
+      await expect(page.locator(".profile-shelf-link")).toHaveCount(2);
+      await page.locator(".profile-shelf-link").first().click();
+      await expect(page).toHaveURL(/#shelf-rain-cities$/);
+      expect((await stored(page)).wishlist).toContain("solaris");
+    },
+  );
+  await check(
+    "Create bookstore, change sign and theme, name shelves",
+    async () => {
+      await go(page, "/my-shop/");
+      await page.getByLabel("書店の名前").fill("夜の寄り道書房");
+      await page
+        .getByLabel("書店の紹介")
+        .fill("静かな夜に、違う世界へ寄り道するための棚。");
+      await page.getByRole("button", { name: "藍色", exact: true }).click();
+      await page
+        .getByRole("button", { name: "書店をひらく", exact: true })
+        .click();
+      await expect(page.locator(".editor-shelf-panel")).toHaveCount(1);
+      const settings = page.locator(".editor-settings");
+      await settings.locator("summary").click();
+      await settings.getByLabel("書店の名前").fill("夜と寄り道書房");
+      await settings.getByLabel("ひとこと").fill("一頁ぶん、遠回り。");
+      await settings
+        .getByRole("button", { name: "あずき", exact: true })
+        .click();
+      await settings
+        .getByRole("button", { name: "変更を保存", exact: true })
+        .click();
+      await settings.locator("summary").click();
+      const shelf = page.locator(".editor-shelf-panel").first();
+      await shelf
+        .getByRole("textbox", { name: "本棚の名前", exact: true })
+        .fill("夜にひらく異世界");
+      await shelf
+        .getByRole("textbox", { name: "本棚の名前", exact: true })
+        .press("Enter");
+      await page
+        .getByRole("button", { name: "本棚を追加", exact: true })
+        .click();
+      await page
+        .getByRole("dialog")
+        .getByRole("textbox", { name: "本棚の名前", exact: true })
+        .fill("まだ内緒の一冊");
+      await page
+        .getByRole("button", { name: "この名前で本棚をつくる", exact: true })
+        .click();
+      const privateShelf = page.locator(".editor-shelf-panel").nth(1);
+      await privateShelf
+        .getByRole("button", { name: "本棚を非公開にする" })
+        .click();
+      await addFirstBook(page, privateShelf);
+      const data = await stored(page);
+      expect(data.ownShop.name).toBe("夜と寄り道書房");
+      expect(data.ownShop.theme).toBe("rose");
+      expect(data.ownShop.shelves.map((shelf) => shelf.name)).toEqual([
+        "夜にひらく異世界",
+        "まだ内緒の一冊",
+      ]);
+      expect(data.ownShop.shelves[1].isPublic).toBe(false);
+    },
+  );
+  let reorderedBookId;
+  await check(
+    "Spine/face space accounting, owner POP and actual pointer drag reorder",
+    async () => {
+      const shelf = page.locator(".editor-shelf-panel").first();
+      for (let n = 0; n < 3; n++) await addFirstBook(page, shelf);
+      await shelf.locator(".shelf-book-button").first().click();
+      await shelf
+        .locator(".editor-selected-book")
+        .getByRole("button", { name: /^面陳/ })
+        .click();
+      await expect(shelf.getByRole("meter")).toHaveAttribute(
+        "aria-valuenow",
+        "5",
+      );
+      await shelf
+        .locator(".editor-selected-book textarea")
+        .fill("理解できないもののそばに、静かに立ってみたい夜に。");
+      await expect(shelf.locator(".shelf-book").first()).toHaveAttribute(
+        "data-display",
+        "face",
+      );
+      const before = (await stored(page)).ownShop.shelves[0].items.map(
+        (item) => item.id,
+      );
+      const buttons = shelf.locator(".shelf-book-button");
+      await buttons.first().scrollIntoViewIfNeeded();
+      const source = await buttons.first().boundingBox();
+      const target = await buttons.nth(2).boundingBox();
+      await page.mouse.move(
+        source.x + source.width / 2,
+        source.y + source.height / 2,
+      );
+      await page.mouse.down();
+      await page.mouse.move(
+        source.x + source.width / 2 + 10,
+        source.y + source.height / 2,
+        { steps: 3 },
+      );
+      await page.mouse.move(
+        target.x + target.width / 2,
+        target.y + target.height / 2,
+        { steps: 20 },
+      );
+      await page.mouse.up();
+      await expect
+        .poll(async () =>
+          (await stored(page)).ownShop.shelves[0].items
+            .map((item) => item.id)
+            .join(","),
+        )
+        .not.toBe(before.join(","));
+      const after = (await stored(page)).ownShop.shelves[0].items;
+      expect(after.map((item) => item.id)).toEqual([
+        before[1],
+        before[2],
+        before[0],
+      ]);
+      expect(after[2].pop).toContain("理解できないもの");
+      reorderedBookId = after[2].bookId;
+      await shelf.locator(".shelf-book-button").last().click();
+      await shelf
+        .locator(".editor-selected-book")
+        .getByRole("button", { name: /^背表紙/ })
+        .click();
+      await expect(shelf.getByRole("meter")).toHaveAttribute(
+        "aria-valuenow",
+        "3",
+      );
+    },
+  );
+  await check(
+    "Capacity rejects face conversion and additions; removal frees space",
+    async () => {
+      const shelf = page.locator(".editor-shelf-panel").first();
+      for (let n = 3; n < 19; n++) await addFirstBook(page, shelf);
+      await expect(shelf.getByRole("meter")).toHaveAttribute(
+        "aria-valuenow",
+        "19",
+      );
+      await shelf.locator(".shelf-book-button").first().click();
+      await expect(
+        shelf
+          .locator(".editor-selected-book")
+          .getByRole("button", { name: /^面陳/ }),
+      ).toBeDisabled();
+      await shelf
+        .getByRole("button", { name: "本を並べる", exact: true })
+        .click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByRole("button", { name: /^面陳/ }).click();
+      await expect(dialog.locator(".editor-capacity-warning")).toBeVisible();
+      await expect(
+        dialog.locator(".editor-book-choice:not([disabled])"),
+      ).toHaveCount(0);
+      await dialog.getByRole("button", { name: /^背表紙/ }).click();
+      await dialog
+        .locator(".editor-book-choice:not([disabled])")
+        .first()
+        .click();
+      await expect(shelf.getByRole("meter")).toHaveAttribute(
+        "aria-valuenow",
+        "20",
+      );
+      await expect(
+        shelf.getByRole("button", { name: "本を並べる", exact: true }),
+      ).toBeDisabled();
+      expect((await stored(page)).ownShop.shelves[0].items).toHaveLength(20);
+      await shelf.locator(".shelf-book-button").first().click();
+      await shelf.getByRole("button", { name: "この本を棚から外す" }).click();
+      await expect(shelf.getByRole("meter")).toHaveAttribute(
+        "aria-valuenow",
+        "19",
+      );
+      await expect(
+        shelf.getByRole("button", { name: "本を並べる", exact: true }),
+      ).toBeEnabled();
+    },
+  );
+  await check(
+    "Reload persistence and public/private shelf visibility",
+    async () => {
+      const before = await stored(page);
+      await page.reload();
+      await expect(page.locator(".editor-shelf-panel")).toHaveCount(2);
+      expect(await stored(page)).toEqual(before);
+      await page.getByRole("link", { name: "お店を眺める" }).click();
+      await expect(
+        page.getByRole("heading", { name: "夜と寄り道書房", exact: true }),
+      ).toBeVisible();
+      await expect(page.locator(".store-shelf-section")).toHaveCount(1);
+      await expect(page.locator(".shop-shelf-index")).not.toContainText(
+        "まだ内緒",
+      );
+      const popBook = page
+        .locator(".shelf-book-button")
+        .filter({ hasText: "ソラリス" });
+      await popBook.click();
+      await expect(
+        page.getByRole("dialog").locator(".owner-pop"),
+      ).toContainText("理解できないもの");
+      await page
+        .getByRole("link", { name: "この本を並べるほかの書店" })
+        .click();
+      await expect(page).toHaveURL(/\/books\/solaris\/$/);
+      const own = page
+        .locator(".stockist")
+        .filter({
+          has: page.getByRole("heading", {
+            name: "夜と寄り道書房",
+            exact: true,
+          }),
+        });
+      await expect(own).toHaveCount(1);
+      await expect(own).toContainText("夜にひらく異世界");
+      await expect(own).not.toContainText("まだ内緒");
+      await go(page, "/reading-list/");
+      await expect(page.locator(".catalog-book")).toHaveCount(1);
+      await expect(page.locator(".catalog-book")).toContainText("ソラリス");
+    },
+  );
+  await check(
+    "Edit profile and life-nine ordering, add/remove, notes and reload",
+    async () => {
+      await go(page, "/profiles/me/");
+      await expect(page.locator(".profile-nine-grid > div")).toHaveCount(9);
+      await page.getByRole("button", { name: "プロフィールを編集" }).click();
+      await page.getByLabel("ユーザー名", { exact: true }).fill("夜の読書家");
+      await page
+        .getByLabel("自己紹介", { exact: true })
+        .fill("SFと翻訳文学のあいだを、ゆっくり歩いています。");
+      await page.getByRole("button", { name: "保存する", exact: true }).click();
+      await page.locator(".profile-edit-nine").click();
+      const dialog = page.getByRole("dialog");
+      const first = dialog.locator(".profile-nine-editor-item").first();
+      const title = await first.locator("strong").textContent();
+      await dialog
+        .getByRole("button", { name: `${title}を後ろへ移動`, exact: true })
+        .click();
+      await dialog
+        .getByRole("textbox", { name: `${title}へのひとこと`, exact: true })
+        .fill("いつでも戻ってこられる、わたしの一冊。");
+      await dialog
+        .getByRole("button", { name: "伝奇集を人生の9冊に加える", exact: true })
+        .click();
+      await dialog
+        .getByRole("textbox", { name: "ソラリスへのひとこと", exact: true })
+        .fill("遠い惑星で、他者を思う。");
+      const addedTitles = [];
+      for (let n = 0; n < 4; n++) {
+        const extra = dialog
+          .locator(".profile-picker-book:not([disabled])")
+          .first();
+        addedTitles.push(await extra.locator("strong").textContent());
+        await extra.click();
+      }
+      await expect(dialog.locator(".profile-nine-editor-item")).toHaveCount(9);
+      await expect(
+        dialog.locator(".profile-picker-book:not([disabled])"),
+      ).toHaveCount(0);
+      await expect(dialog.locator(".profile-picker-limit")).toBeVisible();
+      for (const addedTitle of addedTitles)
+        await dialog
+          .getByRole("button", {
+            name: `${addedTitle}を人生の9冊から外す`,
+            exact: true,
+          })
+          .click();
+      await expect(dialog.locator(".profile-nine-editor-item")).toHaveCount(5);
+      await dialog
+        .getByRole("button", { name: "この並びを保存", exact: true })
+        .click();
+      await page.reload();
+      await expect(
+        page.getByRole("heading", { name: "夜の読書家", exact: true }),
+      ).toBeVisible();
+      await expect(page.locator(".profile-nine-item")).toHaveCount(5);
+      expect((await stored(page)).me.lifeNine).toContain("solaris");
+      await page
+        .getByRole("button", { name: "ソラリスについてのひとことを読む" })
+        .click();
+      await expect(page.getByRole("dialog")).toContainText(
+        "遠い惑星で、他者を思う。",
+      );
+      await page.getByRole("link", { name: "本の詳細へ" }).click();
+      await expect(
+        page.getByRole("heading", { name: "ソラリス", exact: true }),
+      ).toBeVisible();
+    },
+  );
+  const storageState = await context.storageState();
+  const mobile = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 1,
+    isMobile: true,
+    hasTouch: true,
+    locale: "ja-JP",
+    storageState,
+  });
+  const phone = await mobile.newPage();
+  watch(phone);
+  await check(
+    "390px mobile discovery, store, book, profile and wishlist fit viewport",
+    async () => {
+      for (const [route, name] of [
+        ["/", "town"],
+        ["/shops/shop-orbit/", "store"],
+        ["/books/solaris/", "book"],
+        ["/profiles/r-sumire/", "profile"],
+        ["/reading-list/", "wishlist"],
+      ]) {
+        await go(phone, route);
+        await noOverflow(phone, `mobile ${name}`);
+        await expect(
+          phone.getByRole("navigation", {
+            name: "スマートフォンナビゲーション",
+          }),
+        ).toBeVisible();
+        if (name === "town" || name === "store" || name === "profile")
+          await phone.screenshot({
+            path: path.join(output, `${name}-mobile.png`),
+            fullPage: true,
+            animations: "disabled",
+          });
+      }
+    },
+  );
+  await check(
+    "Mobile move-button fallback, persistence and shelf horizontal scroll",
+    async () => {
+      await go(phone, "/my-shop/");
+      await noOverflow(phone, "mobile editor");
+      const shelf = phone.locator(".editor-shelf-panel").first();
+      const before = (await stored(phone)).ownShop.shelves[0].items;
+      await shelf.locator(".shelf-book-button").first().tap();
+      await shelf.getByRole("button", { name: /を一つ右へ移動$/ }).tap();
+      const after = (await stored(phone)).ownShop.shelves[0].items;
+      expect(after[1].id).toBe(before[0].id);
+      expect(after[0].id).toBe(before[1].id);
+      await phone.reload();
+      expect((await stored(phone)).ownShop.shelves[0].items).toEqual(after);
+      const scroll = shelf.locator(".shelf-scroll");
+      expect(
+        await scroll.evaluate(
+          (element) => element.scrollWidth > element.clientWidth,
+        ),
+      ).toBe(true);
+      await phone.screenshot({
+        path: path.join(output, "editor-mobile.png"),
+        fullPage: true,
+        animations: "disabled",
+      });
+      expect(
+        after.some(
+          (item) =>
+            item.bookId === reorderedBookId &&
+            item.pop.includes("理解できないもの"),
+        ),
+      ).toBe(true);
+    },
+  );
+  await mobile.close();
+  await check(
+    "No hydration failures, browser exceptions or console errors",
+    async () => {
+      expect(errors).toEqual([]);
+    },
+  );
+  await writeFile(
+    path.join(output, "browser-results.json"),
+    JSON.stringify({ baseURL, passed: results, errors }, null, 2),
+  );
+} catch (error) {
+  await page
+    .screenshot({
+      path: path.join(output, "failure-desktop.png"),
+      fullPage: true,
+      animations: "disabled",
+    })
+    .catch(() => {});
+  await writeFile(
+    path.join(output, "browser-results.json"),
+    JSON.stringify(
+      { baseURL, passed: results, errors, failure: String(error) },
+      null,
+      2,
+    ),
+  );
+  throw error;
 } finally {
   await browser.close();
-  await writeFile(resolve(output, 'browser-journey-results.json'), JSON.stringify(results, null, 2));
-  console.log(JSON.stringify(results, null, 2));
 }
-if (results.some(result => !result.passed)) process.exitCode = 1;

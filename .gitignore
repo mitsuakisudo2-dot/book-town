@@ -1,5 +1,8 @@
 node_modules/
+.next/
+out/
 dist/
+*.tsbuildinfo
 .sites-runtime/
 .sites-archive/
 test-results/
