@@ -1,6 +1,7 @@
 import {
   ME_ID,
   type Book,
+  type Post,
   type Reader,
   type Shelf,
   type ShelfItem,
@@ -804,6 +805,137 @@ export const shops: Shop[] = [
   },
 ];
 
+const post = (
+  id: string,
+  authorId: string,
+  createdAt: string,
+  body: string,
+  extra: Partial<Pick<Post, "bookId" | "spoiler" | "parentId">> & {
+    likes?: number;
+    wants?: number;
+  } = {},
+): Post => ({
+  id,
+  authorId,
+  body,
+  bookId: extra.bookId ?? null,
+  spoiler: extra.spoiler ?? false,
+  parentId: extra.parentId ?? null,
+  createdAt,
+  likes: extra.likes ?? 0,
+  wants: extra.wants ?? 0,
+});
+
+// Original demo posts by the fictional readers. Spoiler-marked posts stay vague on purpose.
+export const posts: Post[] = [
+  post(
+    "p-1",
+    "r-nagi",
+    "2026-10-10T09:12:00+09:00",
+    "『ソラリス』を十年ぶりに再読。わからないものを、わからないまま見つめ続ける話だと思っていたけれど、今回は「わかってほしい」と願う側の話に読めた。読むたびに、こちらが試されている気がする。",
+    { bookId: "solaris", likes: 12, wants: 4 },
+  ),
+  post(
+    "p-2",
+    "r-sumire",
+    "2026-10-10T08:40:00+09:00",
+    "朝の電車で、隣の人が文庫に紙のカバーをかけて読んでいた。何の本だったんだろう。気になって、二駅乗り過ごした。",
+    { likes: 21 },
+  ),
+  post(
+    "p-3",
+    "r-haru",
+    "2026-10-09T22:05:00+09:00",
+    "『旅をする木』を読むと、遠くへ行かなくても旅はできるんだと思える。寝る前に一編ずつ。季節がひとつ進むたびに、また最初から読みたくなる本。",
+    { bookId: "traveling-tree", likes: 9, wants: 3 },
+  ),
+  post(
+    "p-4",
+    "r-tou",
+    "2026-10-09T20:30:00+09:00",
+    "『夜と霧』は、読み終えたというより、まだ読んでいる途中だと感じる本です。答えが書いてあるのではなく、問いを手渡される。重い本だと構えずに、まず最初の数ページだけでも。",
+    { bookId: "night-fog", likes: 15, wants: 6 },
+  ),
+  post(
+    "p-5",
+    "r-sou",
+    "2026-10-09T18:10:00+09:00",
+    "積読が二十冊を超えた。今週は一冊も買わない、と書いておく。（たぶん）",
+    { likes: 33 },
+  ),
+  post(
+    "p-6",
+    "r-shiori",
+    "2026-10-09T12:45:00+09:00",
+    "美術館の帰りに『イメージ』を開いたら、さっき見た絵がまったく違って見えてきた。見ることは、思っていたよりずっと能動的な行為なのかもしれない。",
+    { bookId: "ways-of-seeing", likes: 8, wants: 2 },
+  ),
+  post(
+    "p-7",
+    "r-nagi",
+    "2026-10-08T23:20:00+09:00",
+    "『闇の左手』、最後の数章を読んだ夜は眠れなかった。旅の終わりにふたりが交わす言葉と、そのあとに残された沈黙の重さ。冒頭の報告書の書き方まで、意味が変わって見える。",
+    { bookId: "left-hand", spoiler: true, likes: 6 },
+  ),
+  post(
+    "p-8",
+    "r-sumire",
+    "2026-10-08T21:00:00+09:00",
+    "『見えない都市』は、どこから開いてもいい本。今日は旅先の宿で、目についた都市をひとつだけ読んだ。地図のない街を歩いているみたいで、続きは明日の自分にとっておく。",
+    { bookId: "invisible-cities", likes: 11, wants: 5 },
+  ),
+  post(
+    "p-9",
+    "r-haru",
+    "2026-10-08T19:30:00+09:00",
+    "『銀河鉄道の夜』の結末、子どもの頃は寂しいだけだった。大人になって読み返したら、あの終わり方でなければいけなかった理由が、少しだけわかった気がする。",
+    { bookId: "galaxy-railroad", spoiler: true, likes: 14 },
+  ),
+  post(
+    "p-10",
+    "r-tou",
+    "2026-10-08T07:50:00+09:00",
+    "早起きして、コーヒーと『老子』を少し。ほんの数行で、一日のペースがゆっくりになる。",
+    { bookId: "laozi", likes: 7, wants: 1 },
+  ),
+  // Conversations inside reviews.
+  post(
+    "p-1-r1",
+    "r-tou",
+    "2026-10-10T09:40:00+09:00",
+    "「わかってほしいと願う側の話」、すごく腑に落ちました。初めて読んだときは、海の描写の長さに戸惑ったのを覚えています。",
+    { parentId: "p-1", likes: 3 },
+  ),
+  post(
+    "p-1-r2",
+    "r-nagi",
+    "2026-10-10T10:05:00+09:00",
+    "あの長さが、再読だと心地よくなるんです。これが好きなら、こちらも。わからなさと一緒に旅をする本です。",
+    { parentId: "p-1", bookId: "left-hand", likes: 4 },
+  ),
+  post(
+    "p-4-r1",
+    "r-sou",
+    "2026-10-09T21:15:00+09:00",
+    "わたしも何年もかけて、少しずつ読んでいます。急がなくていい本だと言ってもらえると、手に取りやすくなりますね。",
+    { parentId: "p-4", likes: 2 },
+  ),
+  post(
+    "p-8-r1",
+    "r-shiori",
+    "2026-10-08T22:10:00+09:00",
+    "旅先で一都市ずつ、素敵な読み方。わたしは美術館のベンチで読むことが多いです。",
+    { parentId: "p-8", likes: 2 },
+  ),
+  post(
+    "p-7-r1",
+    "r-sumire",
+    "2026-10-09T07:30:00+09:00",
+    "最後の場面のあとで最初の章に戻ると、語り手の距離感がまるで違って感じられますよね。わたしも読み返しました。",
+    { parentId: "p-7", spoiler: true, likes: 1 },
+  ),
+];
+
 export function createInitialState(): TownState {
   return structuredClone({
     books,
@@ -822,6 +954,10 @@ export function createInitialState(): TownState {
     wishlist: [],
     favorites: [],
     popReactions: {},
+    posts,
+    likedPosts: [],
+    wantedPosts: [],
+    spoilerReports: [],
   });
 }
 
@@ -829,4 +965,5 @@ export function createInitialState(): TownState {
 export const demoBooks = books;
 export const demoReaders = readers;
 export const demoShops = shops;
+export const demoPosts = posts;
 export const seedState = createInitialState();

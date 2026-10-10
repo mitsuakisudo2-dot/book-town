@@ -18,8 +18,10 @@ import { ProfileView } from "./ProfileView";
 import { StreetView } from "./StreetView";
 import { BookInHand } from "./BookInHand";
 import { BookActions } from "./BookActions";
+import { BookReviews, TimelineView } from "./Social";
 
-type View = "town" | "shop" | "editor" | "book" | "profile" | "wishlist";
+type View =
+  "town" | "timeline" | "shop" | "editor" | "book" | "profile" | "wishlist";
 type Shared = {
   state: TownState;
   actions: TownActions;
@@ -27,6 +29,7 @@ type Shared = {
 };
 const links = [
   { href: "/", icon: "store", label: "本の街", view: "town" },
+  { href: "/timeline/", icon: "chat", label: "タイムライン", view: "timeline" },
   { href: "/my-shop/", icon: "edit", label: "わたしの書店", view: "editor" },
   {
     href: "/profiles/me/",
@@ -179,6 +182,8 @@ export default function TownApp({
                 onDirectory={() => setDirectory(true)}
               />
             )
+          ) : view === "timeline" ? (
+            <TimelineView {...shared} />
           ) : view === "shop" ? (
             <ShopView {...shared} shopId={selectedId || ""} />
           ) : view === "book" ? (
@@ -775,6 +780,12 @@ function BookView({
           </span>
         </div>
       </section>
+      <BookReviews
+        book={book}
+        state={state}
+        actions={actions}
+        notify={notify}
+      />
       <div className="book-path-heading">
         <span className="eyebrow">FOLLOW THE BOOK, MEET THE READER</span>
         <h2>この本を並べている書店</h2>

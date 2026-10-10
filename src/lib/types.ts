@@ -62,6 +62,31 @@ export interface Shop {
   demo: boolean;
 }
 
+export const POST_MAX_LENGTH = 1000;
+
+/** One kind of post. A top-level post with a book is also a review on that book's page. */
+export interface Post {
+  id: string;
+  authorId: string;
+  body: string;
+  bookId: string | null;
+  /** Spoiler posts never reach the timeline; they wait behind the book page's door. */
+  spoiler: boolean;
+  /** Replies point to a top-level post. Threads are one level deep. */
+  parentId: string | null;
+  createdAt: string;
+  /** Reactions from other readers in the demo data. The viewer's own are stored separately. */
+  likes: number;
+  wants: number;
+}
+
+export interface PostDraft {
+  body: string;
+  bookId?: string | null;
+  spoiler?: boolean;
+  parentId?: string | null;
+}
+
 export interface TownState {
   books: Book[];
   readers: Reader[];
@@ -72,6 +97,11 @@ export interface TownState {
   wishlist: string[];
   favorites: string[];
   popReactions: Record<string, PopReaction[]>;
+  posts: Post[];
+  likedPosts: string[];
+  /** Posts that made the viewer want to read their book; the post records who inspired it. */
+  wantedPosts: string[];
+  spoilerReports: string[];
 }
 
 export interface TownActions {
@@ -101,6 +131,11 @@ export interface TownActions {
   ): void;
   updateProfile(name: string, bio: string): void;
   updateNine(ids: string[], notes: Record<string, string>): void;
+  createPost(draft: PostDraft): string | null;
+  deletePost(postId: string): void;
+  toggleLike(postId: string): void;
+  toggleWant(postId: string): void;
+  toggleSpoilerReport(postId: string): void;
 }
 
 export type AppActions = TownActions;

@@ -6,6 +6,7 @@ import { localTownRepository, type TownRepository } from "./repository";
 import {
   ME_ID,
   POP_REACTIONS,
+  POST_MAX_LENGTH,
   popReactionKey,
   OWN_SHOP_ID,
   displayCost,
@@ -13,6 +14,7 @@ import {
   shelfUsed,
   type BookDisplay,
   type PersistenceStatus,
+  type Post,
   type Shelf,
   type Shop,
   type ShopTheme,
@@ -27,8 +29,12 @@ const validDisplay = (display: BookDisplay): boolean =>
   display === "spine" || display === "face";
 const clean = (value: string, max = 10000): string => value.slice(0, max);
 
+const toggled = (list: string[], id: string): string[] =>
+  list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id];
+
 export function createTownStore(
   repository: TownRepository = localTownRepository,
+  now: () => Date = () => new Date(),
 ) {
   // This stable snapshot is used both by static rendering and the first hydration render.
   let state: TownState = seedState;
@@ -342,6 +348,88 @@ export function createTownStore(
       commit({
         ...state,
         me: { ...state.me, lifeNine: validIds, nineNotes: validNotes },
+      });
+    },
+    createPost(draft) {
+      initialize();
+      const body = draft.body.trim();
+      const bookId = draft.bookId ?? null;
+      const parentId = draft.parentId ?? null;
+      const spoiler = draft.spoiler === true;
+      const parent = parentId
+        ? state.posts.find((entry) => entry.id === parentId)
+        : undefined;
+      if (
+        !body ||
+        body.length > POST_MAX_LENGTH ||
+        (bookId !== null && !state.books.some((book) => book.id === bookId)) ||
+        (parentId !== null && (!parent || parent.parentId !== null)) ||
+        // A top-level spoiler needs a book, so it has a door to wait behind.
+        (spoiler && parentId === null && bookId === null)
+      )
+        return null;
+      const post: Post = {
+        id: nextId(
+          "me-post-",
+          state.posts.map((entry) => entry.id),
+        ),
+        authorId: ME_ID,
+        body,
+        bookId,
+        spoiler,
+        parentId,
+        createdAt: now().toISOString(),
+        likes: 0,
+        wants: 0,
+      };
+      commit({ ...state, posts: [...state.posts, post] });
+      return post.id;
+    },
+    deletePost(postId) {
+      initialize();
+      const post = state.posts.find((entry) => entry.id === postId);
+      if (!post || post.authorId !== ME_ID) return;
+      const removed = new Set(
+        state.posts
+          .filter((entry) => entry.id === postId || entry.parentId === postId)
+          .map((entry) => entry.id),
+      );
+      const keep = (id: string) => !removed.has(id);
+      commit({
+        ...state,
+        posts: state.posts.filter((entry) => keep(entry.id)),
+        likedPosts: state.likedPosts.filter(keep),
+        wantedPosts: state.wantedPosts.filter(keep),
+        spoilerReports: state.spoilerReports.filter(keep),
+      });
+    },
+    toggleLike(postId) {
+      initialize();
+      if (!state.posts.some((entry) => entry.id === postId)) return;
+      commit({ ...state, likedPosts: toggled(state.likedPosts, postId) });
+    },
+    toggleWant(postId) {
+      initialize();
+      const post = state.posts.find((entry) => entry.id === postId);
+      if (!post?.bookId || post.authorId === ME_ID) return;
+      const adding = !state.wantedPosts.includes(postId);
+      commit({
+        ...state,
+        wantedPosts: toggled(state.wantedPosts, postId),
+        // Wanting a book saves it; taking the reaction back keeps the list as the reader left it.
+        wishlist:
+          adding && !state.wishlist.includes(post.bookId)
+            ? [...state.wishlist, post.bookId]
+            : state.wishlist,
+      });
+    },
+    toggleSpoilerReport(postId) {
+      initialize();
+      const post = state.posts.find((entry) => entry.id === postId);
+      if (!post || post.authorId === ME_ID || post.spoiler) return;
+      commit({
+        ...state,
+        spoilerReports: toggled(state.spoilerReports, postId),
       });
     },
   };

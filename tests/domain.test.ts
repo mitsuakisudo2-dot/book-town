@@ -6,6 +6,14 @@ import {
   serializeTown,
 } from "../src/lib/repository";
 import { createTownStore } from "../src/lib/store";
+import {
+  bookReviews,
+  likeCount,
+  repliesOf,
+  timelinePosts,
+  wantCount,
+  wantSources,
+} from "../src/lib/social";
 import { popReactionKey, shelfUsed, type TownState } from "../src/lib/types";
 
 let passed = 0;
@@ -257,6 +265,256 @@ check("removing an item clears reactions before its ID can be reused", () => {
   fresh.actions.removeShelfBook(id, item.id);
   fresh.actions.addShelfBook(id, "momo", "spine");
   assert.deepEqual(fresh.getSnapshot().popReactions, {});
+});
+
+check(
+  "timeline keeps spoilers out and the book page keeps them behind the door",
+  () => {
+    const timeline = timelinePosts(seedState);
+    assert.ok(timeline.length > 0);
+    assert.ok(
+      timeline.every((post) => !post.spoiler && post.parentId === null),
+    );
+    for (let i = 1; i < timeline.length; i += 1)
+      assert.ok(
+        Date.parse(timeline[i - 1].createdAt) >=
+          Date.parse(timeline[i].createdAt),
+      );
+    const leftHand = bookReviews(seedState, "left-hand");
+    assert.ok(leftHand.spoilers.some((post) => post.id === "p-7"));
+    assert.ok(leftHand.open.every((post) => !post.spoiler));
+  },
+);
+
+check(
+  "posts with a book become reviews; replies continue the conversation",
+  () => {
+    let clock = Date.parse("2026-10-11T00:00:00Z");
+    const fresh = createTownStore(
+      createMemoryRepository(),
+      () => new Date((clock += 60_000)),
+    );
+    const daily = fresh.actions.createPost({ body: "  今日は雨。  " });
+    const review = fresh.actions.createPost({
+      body: "最後まで眠れなかった。",
+      bookId: "momo",
+    });
+    assert.ok(daily && review);
+    const state = fresh.getSnapshot();
+    assert.equal(
+      state.posts.find((post) => post.id === daily)?.body,
+      "今日は雨。",
+    );
+    assert.deepEqual(
+      timelinePosts(state)
+        .slice(0, 2)
+        .map((post) => post.id),
+      [review, daily],
+    );
+    assert.ok(
+      bookReviews(state, "momo").open.some((post) => post.id === review),
+    );
+    const reply = fresh.actions.createPost({
+      body: "これが好きなら、こちらも。",
+      bookId: "walking",
+      parentId: review,
+    });
+    assert.ok(reply);
+    assert.deepEqual(
+      repliesOf(fresh.getSnapshot(), review).map((post) => post.id),
+      [reply],
+    );
+    assert.ok(
+      !timelinePosts(fresh.getSnapshot()).some((post) => post.id === reply),
+    );
+    assert.ok(
+      !bookReviews(fresh.getSnapshot(), "walking").open.some(
+        (post) => post.id === reply,
+      ),
+    );
+  },
+);
+
+check("invalid posts are rejected without changing the snapshot", () => {
+  const fresh = createTownStore(createMemoryRepository());
+  fresh.initialize();
+  const before = fresh.getSnapshot();
+  assert.equal(fresh.actions.createPost({ body: "   " }), null);
+  assert.equal(fresh.actions.createPost({ body: "x".repeat(1001) }), null);
+  assert.equal(
+    fresh.actions.createPost({ body: "a", bookId: "missing" }),
+    null,
+  );
+  // A top-level spoiler needs a book page to wait on.
+  assert.equal(fresh.actions.createPost({ body: "a", spoiler: true }), null);
+  assert.equal(
+    fresh.actions.createPost({ body: "a", parentId: "missing" }),
+    null,
+  );
+  assert.equal(
+    fresh.actions.createPost({ body: "a", parentId: "p-1-r1" }),
+    null,
+  );
+  assert.equal(fresh.getSnapshot(), before);
+});
+
+check("spoiler posts and reported posts leave the timeline", () => {
+  const fresh = createTownStore(createMemoryRepository());
+  const spoiler = fresh.actions.createPost({
+    body: "結末で泣いた。",
+    bookId: "silence",
+    spoiler: true,
+  });
+  assert.ok(spoiler);
+  assert.ok(
+    !timelinePosts(fresh.getSnapshot()).some((post) => post.id === spoiler),
+  );
+  assert.ok(
+    bookReviews(fresh.getSnapshot(), "silence").spoilers.some(
+      (post) => post.id === spoiler,
+    ),
+  );
+  fresh.actions.toggleSpoilerReport("p-1");
+  assert.ok(
+    !timelinePosts(fresh.getSnapshot()).some((post) => post.id === "p-1"),
+  );
+  assert.ok(
+    bookReviews(fresh.getSnapshot(), "solaris").spoilers.some(
+      (post) => post.id === "p-1",
+    ),
+  );
+  // Own posts and already-marked posts cannot be reported.
+  fresh.actions.toggleSpoilerReport(spoiler);
+  fresh.actions.toggleSpoilerReport("p-7");
+  assert.deepEqual(fresh.getSnapshot().spoilerReports, ["p-1"]);
+  fresh.actions.toggleSpoilerReport("p-1");
+  assert.ok(
+    timelinePosts(fresh.getSnapshot()).some((post) => post.id === "p-1"),
+  );
+});
+
+check(
+  "wanting to read records whose words inspired it and saves the book",
+  () => {
+    const fresh = createTownStore(createMemoryRepository());
+    const base = seedState.posts.find((post) => post.id === "p-3");
+    assert.ok(base);
+    fresh.actions.toggleWant("p-3");
+    fresh.actions.toggleLike("p-3");
+    let state = fresh.getSnapshot();
+    assert.ok(state.wishlist.includes("traveling-tree"));
+    assert.equal(wantCount(state, base), base.wants + 1);
+    assert.equal(likeCount(state, base), base.likes + 1);
+    assert.deepEqual(
+      wantSources(state, "traveling-tree").map((post) => post.authorId),
+      ["r-haru"],
+    );
+    fresh.actions.toggleWant("p-3");
+    state = fresh.getSnapshot();
+    assert.deepEqual(state.wantedPosts, []);
+    assert.ok(state.wishlist.includes("traveling-tree"));
+    // Posts without a book, and one's own posts, have nothing to want.
+    fresh.actions.toggleWant("p-2");
+    const own = fresh.actions.createPost({ body: "再読中", bookId: "solaris" });
+    assert.ok(own);
+    fresh.actions.toggleWant(own);
+    assert.deepEqual(fresh.getSnapshot().wantedPosts, []);
+  },
+);
+
+check(
+  "own posts, replies and reactions survive reload; deleting cascades",
+  () => {
+    const repo = createMemoryRepository();
+    const first = createTownStore(repo);
+    const review = first.actions.createPost({
+      body: "良かった",
+      bookId: "momo",
+    });
+    assert.ok(review);
+    const reply = first.actions.createPost({ body: "追記", parentId: review });
+    const demoReply = first.actions.createPost({
+      body: "同感です",
+      parentId: "p-1",
+    });
+    assert.ok(reply && demoReply);
+    first.actions.toggleLike(review);
+    first.actions.toggleWant("p-1");
+    first.actions.toggleSpoilerReport("p-6");
+    const loaded = repo.load().state;
+    assert.deepEqual(
+      loaded.posts
+        .filter((post) => post.authorId === "me")
+        .map((post) => post.id),
+      [review, reply, demoReply],
+    );
+    assert.equal(loaded.posts.length, seedState.posts.length + 3);
+    assert.deepEqual(loaded.likedPosts, [review]);
+    assert.deepEqual(loaded.wantedPosts, ["p-1"]);
+    assert.deepEqual(loaded.spoilerReports, ["p-6"]);
+
+    const second = createTownStore(repo);
+    second.actions.deletePost("p-1");
+    second.actions.deletePost(review);
+    const after = repo.load().state;
+    assert.ok(after.posts.some((post) => post.id === "p-1"));
+    assert.ok(
+      !after.posts.some((post) => post.id === review || post.id === reply),
+    );
+    assert.ok(after.posts.some((post) => post.id === demoReply));
+    assert.deepEqual(after.likedPosts, []);
+  },
+);
+
+check(
+  "tampered stored posts are dropped without losing the rest of the save",
+  () => {
+    const fresh = createTownStore(createMemoryRepository());
+    fresh.actions.createShop("keep me", "", "sage");
+    const kept = fresh.actions.createPost({ body: "残る", bookId: "momo" });
+    assert.ok(kept);
+    const envelope = JSON.parse(serializeTown(fresh.getSnapshot()));
+    const valid = envelope.data.posts[0];
+    envelope.data.posts.push(
+      { ...valid, id: "p-1" },
+      { ...valid, id: "me-post-9", authorId: "r-nagi" },
+      { ...valid, id: "me-post-10", bookId: "missing" },
+      { ...valid, id: "me-post-11", bookId: null, spoiler: true },
+      { ...valid, id: "me-post-12", parentId: "missing" },
+      { ...valid, id: "me-post-13", body: "   " },
+      { ...valid, id: "me-post-14", createdAt: "yesterday" },
+      { ...valid, id: "me-post-15", likes: 999 },
+    );
+    envelope.data.wantedPosts = ["p-2", "missing", kept, "p-1"];
+    envelope.data.spoilerReports = ["p-7", "p-6", "p-6"];
+    const loaded = deserializeTown(JSON.stringify(envelope));
+    assert.equal(loaded.status, "saved");
+    assert.equal(loaded.state.ownShop?.name, "keep me");
+    assert.deepEqual(
+      loaded.state.posts
+        .filter((post) => post.authorId === "me")
+        .map((post) => post.id),
+      [kept, "me-post-15"],
+    );
+    assert.equal(
+      loaded.state.posts.find((post) => post.id === "me-post-15")?.likes,
+      0,
+    );
+    assert.deepEqual(loaded.state.wantedPosts, ["p-1"]);
+    assert.deepEqual(loaded.state.spoilerReports, ["p-6"]);
+  },
+);
+
+check("saves from before posts existed load with empty social data", () => {
+  const legacy = JSON.parse(serializeTown(seedState));
+  delete legacy.data.posts;
+  delete legacy.data.likedPosts;
+  delete legacy.data.wantedPosts;
+  delete legacy.data.spoilerReports;
+  const loaded = deserializeTown(JSON.stringify(legacy));
+  assert.equal(loaded.status, "saved");
+  assert.equal(loaded.state.posts.length, seedState.posts.length);
+  assert.deepEqual(loaded.state.likedPosts, []);
 });
 
 console.log(`${passed} domain checks passed.`);

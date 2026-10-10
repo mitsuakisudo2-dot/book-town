@@ -2,11 +2,13 @@ import { createInitialState } from "./data";
 import {
   ME_ID,
   POP_REACTIONS,
+  POST_MAX_LENGTH,
   popReactionKey,
   type PopReaction,
   OWN_SHOP_ID,
   shelfUsed,
   type PersistenceStatus,
+  type Post,
   type Reader,
   type Shop,
   type TownState,
@@ -28,8 +30,19 @@ export interface TownRepository {
 
 type PersonalData = Pick<
   TownState,
-  "me" | "ownShop" | "following" | "wishlist" | "favorites" | "popReactions"
->;
+  | "me"
+  | "ownShop"
+  | "following"
+  | "wishlist"
+  | "favorites"
+  | "popReactions"
+  | "likedPosts"
+  | "wantedPosts"
+  | "spoilerReports"
+> & {
+  /** Only the viewer's own posts; demo posts always come from the current catalog. */
+  posts: Post[];
+};
 interface StoredEnvelope {
   version: number;
   data: PersonalData;
@@ -130,6 +143,50 @@ function validShop(value: unknown, bookIds: Set<string>): value is Shop | null {
   return true;
 }
 
+/** Keeps each valid post of the viewer's own; replies need a surviving top-level parent. */
+function restorePosts(
+  value: unknown,
+  demoPosts: Post[],
+  bookIds: Set<string>,
+): Post[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set(demoPosts.map((post) => post.id));
+  const topLevel = new Set(
+    demoPosts.filter((post) => post.parentId === null).map((post) => post.id),
+  );
+  const candidates = value.filter(
+    (post): post is Post =>
+      object(post) &&
+      text(post.id, 200) &&
+      post.id.startsWith("me-post-") &&
+      post.authorId === ME_ID &&
+      text(post.body, POST_MAX_LENGTH) &&
+      Boolean(post.body.trim()) &&
+      (post.bookId === null ||
+        (typeof post.bookId === "string" && bookIds.has(post.bookId))) &&
+      typeof post.spoiler === "boolean" &&
+      (post.parentId === null || text(post.parentId, 200)) &&
+      (post.spoiler === false ||
+        post.parentId !== null ||
+        post.bookId !== null) &&
+      text(post.createdAt, 40) &&
+      !Number.isNaN(Date.parse(post.createdAt)),
+  );
+  const kept: Post[] = [];
+  for (const post of candidates.filter((entry) => entry.parentId === null)) {
+    if (ids.has(post.id)) continue;
+    ids.add(post.id);
+    topLevel.add(post.id);
+    kept.push({ ...post, likes: 0, wants: 0 });
+  }
+  for (const post of candidates.filter((entry) => entry.parentId !== null)) {
+    if (ids.has(post.id) || !topLevel.has(post.parentId as string)) continue;
+    ids.add(post.id);
+    kept.push({ ...post, likes: 0, wants: 0 });
+  }
+  return kept;
+}
+
 /** Invalid records fall back atomically. Demo catalog changes are never overwritten by stored snapshots. */
 export function deserializeTown(raw: string | null): RepositorySnapshot {
   const initial = createInitialState();
@@ -174,6 +231,21 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
         if (valid.length) popReactions[key] = valid;
       }
     }
+    const posts = [
+      ...initial.posts,
+      ...restorePosts(data.posts, initial.posts, bookIds),
+    ];
+    const byId = new Map(posts.map((post) => [post.id, post]));
+    const postList = (
+      value: unknown,
+      allowed: (post: Post) => boolean,
+    ): string[] =>
+      Array.isArray(value)
+        ? [...new Set(value)].filter((id): id is string => {
+            const post = typeof id === "string" ? byId.get(id) : undefined;
+            return Boolean(post && allowed(post));
+          })
+        : [];
     return {
       state: {
         ...initial,
@@ -187,6 +259,16 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
             )
           : [],
         popReactions,
+        posts,
+        likedPosts: postList(data.likedPosts, () => true),
+        wantedPosts: postList(
+          data.wantedPosts,
+          (post) => post.bookId !== null && post.authorId !== ME_ID,
+        ),
+        spoilerReports: postList(
+          data.spoilerReports,
+          (post) => !post.spoiler && post.authorId !== ME_ID,
+        ),
       },
       status: "saved",
     };
@@ -205,6 +287,10 @@ export function serializeTown(state: TownState): string {
       wishlist: state.wishlist,
       favorites: state.favorites,
       popReactions: state.popReactions,
+      posts: state.posts.filter((post) => post.authorId === ME_ID),
+      likedPosts: state.likedPosts,
+      wantedPosts: state.wantedPosts,
+      spoilerReports: state.spoilerReports,
     },
   };
   return JSON.stringify(envelope);

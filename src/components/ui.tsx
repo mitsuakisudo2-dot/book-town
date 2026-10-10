@@ -42,6 +42,7 @@ const shapes: Record<string, ReactNode> = {
     <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z" />
   ),
   check: <path d="m5 12 4 4L19 6" />,
+  chat: <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12Z" />,
   chevron: <path d="m9 5 7 7-7 7" />,
   lock: (
     <>

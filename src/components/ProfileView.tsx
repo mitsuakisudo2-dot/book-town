@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import type { TownActions, TownState } from "../lib/types";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
+import { ProfilePosts } from "./Social";
 import "./profile.css";
 
 interface ProfileViewProps {
@@ -410,6 +411,13 @@ export function ProfileView({
           </div>
         )}
       </section>
+
+      <ProfilePosts
+        state={state}
+        actions={actions}
+        notify={notify}
+        readerId={reader.id}
+      />
 
       {editingProfile && (
         <Modal
