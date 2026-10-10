@@ -6,7 +6,7 @@
 
 ## 起動
 
-Node.js 20.9以降とpnpmを用意してください。
+Node.js 22.13以降（動作確認: 24.19）とpnpm 11を用意してください。
 
 ```sh
 pnpm install
@@ -22,7 +22,7 @@ pnpm test:domain
 pnpm build
 ```
 
-ビルドすると `out/` に静的サイトが生成されます。本番サーバーやデータベースなしでホスティングできます。
+この実行環境でのTurbopackのローカル処理制限を避け、ビルドにはNext.jsの正式なWebpackオプションを使っています。ビルドすると `out/` に静的サイトが生成されます。本番サーバーやデータベースなしでホスティングできます。
 
 ブラウザの操作テストは、開発サーバーを起動した状態で `pnpm test:browser` を実行します。既定ではmacOSのGoogle Chromeを使います。他の環境では `BOOK_TOWN_CHROME` にChromium系ブラウザの実行ファイルを指定してください。`BOOK_TOWN_URL` でテスト先、`BOOK_TOWN_QA_OUTPUT` で結果保存先を変更できます。
 
