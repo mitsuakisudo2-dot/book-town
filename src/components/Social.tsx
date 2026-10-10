@@ -294,6 +294,7 @@ function PostCard({
   const replies = isReply ? [] : repliesOf(state, post.id);
   const [threadOpen, setThreadOpen] = useState(false);
   const [shown, setShown] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const mine = post.authorId === ME_ID;
   const reported = state.spoilerReports.includes(post.id);
   const hidden = isSpoilerFor(state, post) && !revealed && !shown;
@@ -409,21 +410,42 @@ function PostCard({
               {reported ? "報告を取り消す" : "ネタバレでは？"}
             </button>
           )}
-          {mine && (
+          {mine && !confirmingDelete && (
             <button
               type="button"
               className="report-button"
-              onClick={() => {
-                if (!window.confirm("この投稿を削除しますか？返信も消えます。"))
-                  return;
-                actions.deletePost(post.id);
-                notify("投稿を削除しました");
-              }}
+              onClick={() => setConfirmingDelete(true)}
             >
               削除
             </button>
           )}
         </div>
+        {mine && confirmingDelete && (
+          <div className="delete-confirm" role="group" aria-label="投稿の削除">
+            <span>
+              {replies.length
+                ? "この投稿と返信を削除しますか？"
+                : "この投稿を削除しますか？"}
+            </span>
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                actions.deletePost(post.id);
+                notify("投稿を削除しました");
+              }}
+            >
+              削除する
+            </button>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => setConfirmingDelete(false)}
+            >
+              やめる
+            </button>
+          </div>
+        )}
         {mine && wants > 0 && (
           <p className="want-thanks">
             あなたの感想で、{wants}人が読みたくなりました。

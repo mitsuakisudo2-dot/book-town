@@ -64,7 +64,6 @@ try {
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(message.text());
     });
-    page.on("dialog", (dialog) => dialog.accept());
     const label = `${viewport.width}px`;
 
     await check(
@@ -216,9 +215,12 @@ try {
         await expect(page.getByText("最後の数章を読んだ夜は")).toHaveCount(0);
         await go("/profiles/me/");
         await expect(card("あなた", "灰色の男たち")).toBeVisible();
-        await card("あなた", "灰色の男たち")
-          .getByRole("button", { name: "削除" })
-          .click();
+        const own = card("あなた", "灰色の男たち");
+        await own.getByRole("button", { name: "削除", exact: true }).click();
+        await own.getByRole("button", { name: "やめる" }).click();
+        await expect(own).toBeVisible();
+        await own.getByRole("button", { name: "削除", exact: true }).click();
+        await own.getByRole("button", { name: "削除する" }).click();
         await expect(card("あなた", "灰色の男たち")).toHaveCount(0);
         await noOverflow(`${label} profile`);
       },
