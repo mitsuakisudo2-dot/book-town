@@ -127,14 +127,19 @@ try {
     );
 
     await check(
-      `${label} spoiler posts wait behind the book page door`,
+      `${label} spoiler posts are covered on the timeline and wait behind the book page door`,
       async () => {
         await go("/timeline/");
         await compose("ラストの一行で、すべての章がつながった。", {
           book: "沈黙",
           spoiler: true,
         });
+        // On the timeline the post is there, covered until the reader chooses to see it.
         await expect(page.getByText("ラストの一行で")).toHaveCount(0);
+        const covered = card("あなた", "沈黙");
+        await expect(covered).toContainText("ネタバレを含むため、隠しています");
+        await covered.getByRole("button", { name: "表示する" }).click();
+        await expect(covered).toContainText("ラストの一行で");
         await go("/books/silence/");
         await expect(page.getByText("ラストの一行で")).toHaveCount(0);
         const door = page.getByRole("button", {
@@ -201,12 +206,16 @@ try {
     );
 
     await check(
-      `${label} reporting a possible spoiler hides it on the timeline`,
+      `${label} reporting a possible spoiler covers it on the timeline`,
       async () => {
         await go("/timeline/");
-        const post = card("栞", "イメージ");
+        const post = card("栞", "美術館の帰りに");
         await post.getByRole("button", { name: "ネタバレでは？" }).click();
-        await expect(card("栞", "イメージ")).toHaveCount(0);
+        await expect(card("栞", "美術館の帰りに")).toHaveCount(0);
+        const reported = card("栞", "ネタバレの可能性を報告済み");
+        await expect(
+          reported.getByRole("button", { name: "表示する" }),
+        ).toBeVisible();
         await go("/books/ways-of-seeing/");
         await page
           .getByRole("button", { name: /ネタバレありのレビュー（1件）/ })

@@ -8,6 +8,7 @@ import {
 import { createTownStore } from "../src/lib/store";
 import {
   bookReviews,
+  isSpoilerFor,
   likeCount,
   repliesOf,
   timelinePosts,
@@ -18,7 +19,7 @@ import {
   activeSession,
   currentBookId,
   readersNow,
-  readingMemos,
+  readingFeed,
   readingTotals,
 } from "../src/lib/reading";
 import { notificationsFor, unreadCount } from "../src/lib/notifications";
@@ -277,13 +278,13 @@ check("removing an item clears reactions before its ID can be reused", () => {
 });
 
 check(
-  "timeline keeps spoilers out and the book page keeps them behind the door",
+  "timeline carries spoilers to be covered; the book page keeps them behind the door",
   () => {
     const timeline = timelinePosts(seedState);
     assert.ok(timeline.length > 0);
-    assert.ok(
-      timeline.every((post) => !post.spoiler && post.parentId === null),
-    );
+    assert.ok(timeline.every((post) => post.parentId === null));
+    // Spoilers stay on the timeline; the card covers them until the reader taps 表示する.
+    assert.ok(timeline.some((post) => post.id === "p-7" && post.spoiler));
     for (let i = 1; i < timeline.length; i += 1)
       assert.ok(
         Date.parse(timeline[i - 1].createdAt) >=
@@ -367,40 +368,47 @@ check("invalid posts are rejected without changing the snapshot", () => {
   assert.equal(fresh.getSnapshot(), before);
 });
 
-check("spoiler posts and reported posts leave the timeline", () => {
-  const fresh = createTownStore(createMemoryRepository());
-  const spoiler = fresh.actions.createPost({
-    body: "結末で泣いた。",
-    bookId: "silence",
-    spoiler: true,
-  });
-  assert.ok(spoiler);
-  assert.ok(
-    !timelinePosts(fresh.getSnapshot()).some((post) => post.id === spoiler),
-  );
-  assert.ok(
-    bookReviews(fresh.getSnapshot(), "silence").spoilers.some(
+check(
+  "spoiler and reported posts are covered on the timeline and behind the door",
+  () => {
+    const fresh = createTownStore(createMemoryRepository());
+    const spoiler = fresh.actions.createPost({
+      body: "結末で泣いた。",
+      bookId: "silence",
+      spoiler: true,
+    });
+    assert.ok(spoiler);
+    const covered = timelinePosts(fresh.getSnapshot()).find(
       (post) => post.id === spoiler,
-    ),
-  );
-  fresh.actions.toggleSpoilerReport("p-1");
-  assert.ok(
-    !timelinePosts(fresh.getSnapshot()).some((post) => post.id === "p-1"),
-  );
-  assert.ok(
-    bookReviews(fresh.getSnapshot(), "solaris").spoilers.some(
+    );
+    assert.ok(covered && isSpoilerFor(fresh.getSnapshot(), covered));
+    assert.ok(
+      bookReviews(fresh.getSnapshot(), "silence").spoilers.some(
+        (post) => post.id === spoiler,
+      ),
+    );
+    fresh.actions.toggleSpoilerReport("p-1");
+    const reported = timelinePosts(fresh.getSnapshot()).find(
       (post) => post.id === "p-1",
-    ),
-  );
-  // Own posts and already-marked posts cannot be reported.
-  fresh.actions.toggleSpoilerReport(spoiler);
-  fresh.actions.toggleSpoilerReport("p-7");
-  assert.deepEqual(fresh.getSnapshot().spoilerReports, ["p-1"]);
-  fresh.actions.toggleSpoilerReport("p-1");
-  assert.ok(
-    timelinePosts(fresh.getSnapshot()).some((post) => post.id === "p-1"),
-  );
-});
+    );
+    assert.ok(reported && isSpoilerFor(fresh.getSnapshot(), reported));
+    assert.ok(
+      bookReviews(fresh.getSnapshot(), "solaris").spoilers.some(
+        (post) => post.id === "p-1",
+      ),
+    );
+    // Own posts and already-marked posts cannot be reported.
+    fresh.actions.toggleSpoilerReport(spoiler);
+    fresh.actions.toggleSpoilerReport("p-7");
+    assert.deepEqual(fresh.getSnapshot().spoilerReports, ["p-1"]);
+    fresh.actions.toggleSpoilerReport("p-1");
+    assert.ok(
+      bookReviews(fresh.getSnapshot(), "solaris").open.some(
+        (post) => post.id === "p-1",
+      ),
+    );
+  },
+);
 
 check(
   "wanting to read records whose words inspired it and saves the book",
@@ -578,8 +586,12 @@ check("reading memos: together is public, solo stays private", () => {
   assert.ok(
     !bookReviews(state, "solaris").open.some((post) => post.id === note),
   );
-  assert.ok(readingMemos(state, "solaris").some((post) => post.id === note));
-  assert.ok(readingMemos(state, "solaris").some((post) => post.id === "p-m1"));
+  const feed = readingFeed(state);
+  assert.ok(feed.some((post) => post.id === note));
+  // Everyone's reading posts, whatever book they are on.
+  assert.ok(feed.some((post) => post.id === "p-m1"));
+  assert.ok(feed.some((post) => post.id === "p-m3"));
+  assert.ok(feed.every((post) => post.readingMode !== null));
 });
 
 check(
@@ -715,6 +727,59 @@ check("notifications come only from what happened in this town", () => {
   assert.ok(unread > 0);
   fresh.actions.markNotificationsSeen(notices.map((notice) => notice.id));
   assert.equal(unreadCount(fresh.getSnapshot()), 0);
+});
+
+check("reading can start without a book", () => {
+  const fresh = createTownStore(createMemoryRepository());
+  assert.ok(fresh.actions.startReading(null, "together"));
+  const memo = fresh.actions.createPost({
+    body: "なんとなく開いた",
+    fromReading: true,
+  });
+  assert.ok(memo);
+  // Without a book there is nothing to hide a spoiler behind.
+  assert.equal(
+    fresh.actions.createPost({ body: "x", spoiler: true, fromReading: true }),
+    null,
+  );
+  let state = fresh.getSnapshot();
+  assert.equal(state.posts.find((post) => post.id === memo)?.bookId, null);
+  assert.ok(timelinePosts(state).some((post) => post.id === memo));
+  assert.equal(readersNow(state, Date.now())[0].bookId, null);
+  fresh.actions.endReading(true);
+  state = fresh.getSnapshot();
+  assert.deepEqual(state.finishedBooks, []);
+  assert.equal(currentBookId(state), null);
+  const reloaded = deserializeTown(serializeTown(state)).state;
+  assert.equal(reloaded.readingSessions[0].bookId, null);
+  assert.ok(reloaded.posts.some((post) => post.id === memo));
+});
+
+check("profile links keep only web pages, up to five", () => {
+  const fresh = createTownStore(createMemoryRepository());
+  fresh.actions.updateProfile("あなた", "", [
+    "note.com/reader",
+    "javascript:alert(1)",
+    "https://www.youtube.com/@reader",
+    "https://note.com/reader",
+    "ftp://example.com",
+    "localhost",
+  ]);
+  let me = fresh.getSnapshot().me;
+  assert.deepEqual(me.links, [
+    "https://note.com/reader",
+    "https://www.youtube.com/@reader",
+  ]);
+  // Saving the profile without links keeps them.
+  fresh.actions.updateProfile("新しい名前", "bio");
+  me = fresh.getSnapshot().me;
+  assert.equal(me.links?.length, 2);
+  const envelope = JSON.parse(serializeTown(fresh.getSnapshot()));
+  envelope.data.me.links = ["data:text/html,x", "example.org", 3];
+  const loaded = deserializeTown(JSON.stringify(envelope));
+  assert.equal(loaded.status, "saved");
+  assert.equal(loaded.state.me.name, "新しい名前");
+  assert.deepEqual(loaded.state.me.links, ["https://example.org/"]);
 });
 
 console.log(`${passed} domain checks passed.`);

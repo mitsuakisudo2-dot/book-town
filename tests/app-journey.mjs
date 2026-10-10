@@ -112,6 +112,9 @@ try {
       "aria-current",
       "page",
     );
+    await expect(
+      page.getByRole("navigation", { name: "ホームの表示" }).getByRole("link"),
+    ).toHaveText(["書店", "タイムライン"]);
     await expect(page.getByRole("link", { name: "お知らせ" })).toBeVisible();
     await noOverflow("home");
   });
@@ -166,9 +169,13 @@ try {
       await expect(
         page.getByRole("heading", { name: /いま4人が、みんなで読んでいます/ }),
       ).toBeVisible();
+      // Everyone's reading posts show before starting, whatever book they are on.
+      const feed = page.locator(".reading-memos");
       await expect(
-        page.getByRole("button", { name: /みんなで読む/ }),
-      ).toBeDisabled();
+        page.getByRole("heading", { name: "みんなの読書中のつぶやき" }),
+      ).toBeVisible();
+      await expect(feed).toContainText("もう三つ目");
+      await expect(feed).toContainText("時計の音がよく聞こえる");
       await page
         .getByRole("searchbox", { name: "読む本を探す" })
         .fill("ソラリス");
@@ -321,6 +328,68 @@ try {
     ).toBeVisible();
     await noOverflow("notifications");
   });
+
+  await check("reading can start without choosing a book", async () => {
+    await go("/reading/");
+    const clear = page.locator(".picker-chosen .picker-clear");
+    if (await clear.count()) await clear.click();
+    await page.getByRole("button", { name: /一人で読む/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "読書中", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("本を選ばずに読んでいます")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "読み終えた！" }),
+    ).toHaveCount(0);
+    await expect(page.getByText("ネタバレあり")).toHaveCount(0);
+    await page
+      .getByRole("textbox", { name: "読書メモ（自分だけ）" })
+      .fill("本を決めずに、ぱらぱらと。");
+    await page.getByRole("button", { name: "メモする" }).click();
+    await expect(page.locator(".reading-memos")).toContainText(
+      "本を決めずに、ぱらぱらと。",
+    );
+    await page.getByRole("button", { name: "読書を終える" }).click();
+    await expect(page.locator(".reading-log")).toContainText("本を選ばずに");
+  });
+
+  await check(
+    "profile links accept web pages and refuse other schemes",
+    async () => {
+      await go("/profiles/me/");
+      await page.getByRole("button", { name: "プロフィールを編集" }).click();
+      const dialog = page.getByRole("dialog", { name: "読書家のプロフィール" });
+      await dialog
+        .getByLabel("リンク1", { exact: true })
+        .fill("javascript:alert(1)");
+      await dialog.getByRole("button", { name: "保存する" }).click();
+      await expect(dialog.getByRole("alert")).toContainText(
+        "URLとして読めない",
+      );
+      await dialog
+        .getByLabel("リンク1", { exact: true })
+        .fill("note.com/qa_reader");
+      await dialog.getByRole("button", { name: "リンクを追加" }).click();
+      await dialog
+        .getByLabel("リンク2", { exact: true })
+        .fill("https://www.youtube.com/@qa");
+      await dialog.getByRole("button", { name: "保存する" }).click();
+      await expect(dialog).toHaveCount(0);
+      const links = page.getByRole("list", { name: "リンク" });
+      await expect(links.getByRole("link")).toHaveText(["note", "YouTube"]);
+      await expect(links.getByRole("link", { name: "note" })).toHaveAttribute(
+        "href",
+        "https://note.com/qa_reader",
+      );
+      await expect(links.getByRole("link", { name: "note" })).toHaveAttribute(
+        "target",
+        "_blank",
+      );
+      await page.reload();
+      await page.waitForFunction(() => localStorage.getItem("book-town-v1"));
+      await expect(links.getByRole("link")).toHaveCount(2);
+    },
+  );
 
   await check(
     "No hydration errors, uncaught exceptions or console errors",

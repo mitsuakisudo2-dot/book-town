@@ -16,7 +16,7 @@ import {
   formatDuration,
   formatTimer,
   readersNow,
-  readingMemos,
+  readingFeed,
   readingTotals,
   sessionSeconds,
 } from "../lib/reading";
@@ -41,13 +41,38 @@ const modeLabel: Record<ReadingMode, string> = {
 export function ReadingView(props: Shared) {
   const clock = useClock();
   const active = activeSession(props.state);
-  const book = active
+  const book = active?.bookId
     ? props.state.books.find((entry) => entry.id === active.bookId)
     : undefined;
-  return active && book ? (
+  return active ? (
     <ReadingRoom {...props} book={book} clock={clock} />
   ) : (
     <StartReading {...props} clock={clock} />
+  );
+}
+
+/** Everyone's reading-together posts, across every book; the viewer's private notes too. */
+function ReadingFeed({ state, actions, notify }: Shared) {
+  const posts = readingFeed(state).slice(0, 30);
+  return (
+    <section className="reading-memos" aria-labelledby="reading-feed-title">
+      <h2 id="reading-feed-title">みんなの読書中のつぶやき</h2>
+      <div className="post-feed">
+        {posts.map((post) => (
+          <PostCard
+            key={post.id}
+            state={state}
+            actions={actions}
+            notify={notify}
+            post={post}
+            showBook
+          />
+        ))}
+        {!posts.length && (
+          <p className="reading-muted">まだつぶやきはありません。</p>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -84,7 +109,7 @@ function ReadersNow({
           {readers.map((entry) => {
             const reader = findReader(state, entry.readerId);
             const book = state.books.find((item) => item.id === entry.bookId);
-            if (!reader || !book) return null;
+            if (!reader) return null;
             return (
               <li key={entry.readerId}>
                 <Link href={"/profiles/" + reader.id + "/"}>
@@ -97,7 +122,8 @@ function ReadersNow({
                       )}
                     </b>
                     <small>
-                      {!bookId && <>『{book.title}』・</>}
+                      {!bookId &&
+                        (book ? <>『{book.title}』・</> : <>本を選ばずに・</>)}
                       {minutesSince(entry.startedAt, clock?.now)}
                     </small>
                   </span>
@@ -127,7 +153,7 @@ function StartReading({
   const bookId = picked === undefined ? current : picked;
   const recent = [...state.readingSessions]
     .reverse()
-    .map((session) => session.bookId);
+    .flatMap((session) => (session.bookId ? [session.bookId] : []));
   const suggestions = [
     ...(current ? [current] : []),
     ...recent,
@@ -140,7 +166,7 @@ function StartReading({
   const totals = readingTotals(state, clock?.now ?? 0);
   const sessions = [...state.readingSessions].reverse().slice(0, 5);
   function start(mode: ReadingMode) {
-    if (!bookId || !actions.startReading(bookId, mode)) return;
+    if (!actions.startReading(bookId, mode)) return;
     notify(
       mode === "solo"
         ? "一人で読み始めました。メモはあなただけに見えます"
@@ -153,10 +179,13 @@ function StartReading({
       <span className="eyebrow">OPEN A BOOK</span>
       <h1 className="page-title">読書を開始</h1>
       <p className="page-subtitle">
-        これから読む本を選んで、読み方を決めてください。読書時間を記録します。
+        読み方を選ぶと、読書時間の記録が始まります。本は選ばなくても始められます。
       </p>
       <section className="reading-start" aria-label="これから読む本">
-        <h2>これから読む本</h2>
+        <h2>
+          これから読む本{" "}
+          <small className="reading-optional">選ばなくてもOK</small>
+        </h2>
         <BookPicker
           books={state.books}
           value={bookId}
@@ -172,7 +201,6 @@ function StartReading({
           <button
             type="button"
             className="reading-mode"
-            disabled={!bookId}
             onClick={() => start("solo")}
           >
             <Icon name="lock" size={20} />
@@ -184,18 +212,18 @@ function StartReading({
           <button
             type="button"
             className="reading-mode is-together"
-            disabled={!bookId}
             onClick={() => start("together")}
           >
             <Icon name="users" size={20} />
             <b>みんなで読む</b>
             <small>
-              同じ時間に読んでいる人に、あなたと本が見えます。つぶやきはタイムラインにも流れます。
+              同じ時間に読んでいる人に、あなたが読書中だと見えます。つぶやきはタイムラインにも流れます。
             </small>
           </button>
         </div>
       </section>
       <ReadersNow state={state} clock={clock} />
+      <ReadingFeed state={state} actions={actions} notify={notify} />
       <section className="reading-log" aria-labelledby="reading-log-title">
         <h2 id="reading-log-title">読書の記録</h2>
         <p className="reading-total">
@@ -212,11 +240,13 @@ function StartReading({
               return (
                 <li key={session.id}>
                   <span>
-                    <b>{book?.title}</b>
+                    <b>{book?.title ?? "本を選ばずに"}</b>
                     <small>
                       {formatPostTime(session.startedAt)}・
                       {modeLabel[session.mode]}
-                      {state.finishedBooks.includes(session.bookId) && "・読了"}
+                      {session.bookId &&
+                        state.finishedBooks.includes(session.bookId) &&
+                        "・読了"}
                     </small>
                   </span>
                   <em>
@@ -240,21 +270,28 @@ function ReadingRoom({
   notify,
   book,
   clock,
-}: Shared & { book: Book; clock: ReturnType<typeof useClock> }) {
+}: Shared & { book?: Book; clock: ReturnType<typeof useClock> }) {
   const id = useId();
   const session = activeSession(state);
   const [memo, setMemo] = useState("");
   const [spoiler, setSpoiler] = useState(false);
   if (!session) return null;
   const seconds = clock ? sessionSeconds(session, clock.now) : null;
-  const bookTotal = clock
-    ? (readingTotals(state, clock.now).byBook.get(book.id) ?? 0)
-    : null;
-  const memos = readingMemos(state, book.id);
+  const bookTotal =
+    clock && book
+      ? (readingTotals(state, clock.now).byBook.get(book.id) ?? 0)
+      : null;
   const together = session.mode === "together";
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!actions.createPost({ body: memo, spoiler, fromReading: true })) return;
+    if (
+      !actions.createPost({
+        body: memo,
+        spoiler: Boolean(book) && spoiler,
+        fromReading: true,
+      })
+    )
+      return;
     setMemo("");
     setSpoiler(false);
     notify(together ? "つぶやきました" : "メモしました（自分だけ）");
@@ -263,7 +300,13 @@ function ReadingRoom({
     <div className="reading-page">
       <span className="eyebrow">NOW READING</span>
       <section className="reading-now-card" aria-label="読書中">
-        <BookJacket book={book} className="reading-jacket" />
+        {book ? (
+          <BookJacket book={book} className="reading-jacket" />
+        ) : (
+          <span className="reading-jacket reading-no-book" aria-hidden="true">
+            <Icon name="reading" size={34} />
+          </span>
+        )}
         <div className="reading-now-main">
           <span
             className={"reading-mode-tag" + (together ? " is-together" : "")}
@@ -271,14 +314,17 @@ function ReadingRoom({
             <Icon name={together ? "users" : "lock"} size={13} />
             {modeLabel[session.mode]}
           </span>
-          <h1>{book.title}</h1>
-          <p>{book.author}</p>
+          <h1>{book ? book.title : "読書中"}</h1>
+          <p>{book ? book.author : "本を選ばずに読んでいます"}</p>
           <p className="reading-timer" role="timer" aria-label="読書時間">
             {seconds === null ? "--:--" : formatTimer(seconds)}
           </p>
-          <p className="reading-muted">
-            この本の合計 {bookTotal === null ? "—" : formatDuration(bookTotal)}
-          </p>
+          {book && (
+            <p className="reading-muted">
+              この本の合計{" "}
+              {bookTotal === null ? "—" : formatDuration(bookTotal)}
+            </p>
+          )}
           <div className="reading-end">
             <button
               type="button"
@@ -290,17 +336,19 @@ function ReadingRoom({
             >
               読書を終える
             </button>
-            <button
-              type="button"
-              className="button"
-              onClick={() => {
-                actions.endReading(true);
-                notify(`『${book.title}』を読み終えました`);
-              }}
-            >
-              <Icon name="check" size={16} />
-              読み終えた！
-            </button>
+            {book && (
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  actions.endReading(true);
+                  notify(`『${book.title}』を読み終えました`);
+                }}
+              >
+                <Icon name="check" size={16} />
+                読み終えた！
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -323,14 +371,16 @@ function ReadingRoom({
           onChange={(event) => setMemo(event.target.value)}
         />
         <div className="composer-tools">
-          <label className="composer-spoiler">
-            <input
-              type="checkbox"
-              checked={spoiler}
-              onChange={(event) => setSpoiler(event.target.checked)}
-            />
-            ネタバレあり
-          </label>
+          {book && (
+            <label className="composer-spoiler">
+              <input
+                type="checkbox"
+                checked={spoiler}
+                onChange={(event) => setSpoiler(event.target.checked)}
+              />
+              ネタバレあり
+            </label>
+          )}
           <span className="composer-count" aria-hidden="true">
             {memo.length}/{POST_MAX_LENGTH}
           </span>
@@ -340,25 +390,8 @@ function ReadingRoom({
         </div>
       </form>
 
-      <ReadersNow state={state} clock={clock} bookId={book.id} />
-
-      <section className="reading-memos" aria-labelledby="reading-memos-title">
-        <h2 id="reading-memos-title">この本の読書中のつぶやき</h2>
-        <div className="post-feed">
-          {memos.map((post) => (
-            <PostCard
-              key={post.id}
-              state={state}
-              actions={actions}
-              notify={notify}
-              post={post}
-            />
-          ))}
-          {!memos.length && (
-            <p className="reading-muted">まだつぶやきはありません。</p>
-          )}
-        </div>
-      </section>
+      <ReadersNow state={state} clock={clock} bookId={book?.id} />
+      <ReadingFeed state={state} actions={actions} notify={notify} />
     </div>
   );
 }

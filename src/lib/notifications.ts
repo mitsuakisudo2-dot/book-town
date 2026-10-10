@@ -79,7 +79,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
       });
   }
   const active = activeSession(state);
-  if (active?.mode === "together")
+  if (active?.mode === "together" && active.bookId)
     for (const entry of readersNow(state, openedAt))
       if (entry.readerId !== ME_ID && entry.bookId === active.bookId)
         notices.push({

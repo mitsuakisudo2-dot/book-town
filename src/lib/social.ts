@@ -11,13 +11,10 @@ const isPublic = (post: Post) => post.readingMode !== "solo";
 export const isSpoilerFor = (state: TownState, post: Post): boolean =>
   post.spoiler || state.spoilerReports.includes(post.id);
 
-/** The timeline carries every top-level post except spoilers. */
+/** The timeline carries every public top-level post; spoilers arrive covered until shown. */
 export const timelinePosts = (state: TownState): Post[] =>
   state.posts
-    .filter(
-      (post) =>
-        post.parentId === null && isPublic(post) && !isSpoilerFor(state, post),
-    )
+    .filter((post) => post.parentId === null && isPublic(post))
     .sort(newestFirst);
 
 /** Reviews are top-level posts with this book; spoilers are kept apart, behind the door. */

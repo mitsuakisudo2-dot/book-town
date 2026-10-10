@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import { seedState } from "./data";
 import { localTownRepository, type TownRepository } from "./repository";
 import { createRegisteredBook, normalizeIsbn } from "./books";
+import { cleanLinks } from "./links";
 import {
   COMPOSE_ICONS,
   ME_ID,
@@ -331,12 +332,18 @@ export function createTownStore(
       else delete popReactions[key];
       commit({ ...state, popReactions });
     },
-    updateProfile(name, bio) {
+    updateProfile(name, bio, links) {
       initialize();
       if (!name.trim()) return;
       commit({
         ...state,
-        me: { ...state.me, name: clean(name.trim(), 120), bio: clean(bio) },
+        me: {
+          ...state.me,
+          name: clean(name.trim(), 120),
+          bio: clean(bio),
+          links:
+            links === undefined ? (state.me.links ?? []) : cleanLinks(links),
+        },
       });
     },
     updateNine(ids, notes) {
@@ -436,7 +443,7 @@ export function createTownStore(
     startReading(bookId, mode) {
       initialize();
       if (
-        !state.books.some((book) => book.id === bookId) ||
+        (bookId !== null && !state.books.some((book) => book.id === bookId)) ||
         !READING_MODES.includes(mode)
       )
         return null;
@@ -478,7 +485,9 @@ export function createTownStore(
           entry.id === active.id ? { ...entry, endedAt: time } : entry,
         ),
         finishedBooks:
-          finished && !state.finishedBooks.includes(active.bookId)
+          finished &&
+          active.bookId !== null &&
+          !state.finishedBooks.includes(active.bookId)
             ? [...state.finishedBooks, active.bookId]
             : state.finishedBooks,
       });

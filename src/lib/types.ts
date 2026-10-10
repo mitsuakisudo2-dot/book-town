@@ -35,6 +35,8 @@ export interface Reader {
   color: string;
   lifeNine: string[];
   nineNotes: Record<string, string>;
+  /** Web pages the reader shares on their profile (note, YouTube, an official site…). */
+  links?: string[];
 }
 
 export interface ShelfItem {
@@ -101,7 +103,8 @@ export type ReadingMode = (typeof READING_MODES)[number];
 
 export interface ReadingSession {
   id: string;
-  bookId: string;
+  /** Null when the reader started without choosing a book. */
+  bookId: string | null;
   mode: ReadingMode;
   startedAt: string;
   /** Null while the session is running. Only one session runs at a time. */
@@ -177,14 +180,14 @@ export interface TownActions {
     itemId: string,
     reaction: PopReaction,
   ): void;
-  updateProfile(name: string, bio: string): void;
+  updateProfile(name: string, bio: string, links?: string[]): void;
   updateNine(ids: string[], notes: Record<string, string>): void;
   createPost(draft: PostDraft): string | null;
   deletePost(postId: string): void;
   toggleLike(postId: string): void;
   toggleWant(postId: string): void;
   toggleSpoilerReport(postId: string): void;
-  startReading(bookId: string, mode: ReadingMode): string | null;
+  startReading(bookId: string | null, mode: ReadingMode): string | null;
   endReading(finished: boolean): void;
   addBook(book: NewBook): string | null;
   toggleLibrary(bookId: string): void;

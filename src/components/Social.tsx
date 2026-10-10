@@ -54,7 +54,7 @@ export function TimelineView(props: Shared) {
         )}
       </div>
       <p className="social-note">
-        ネタバレありの投稿は、タイムラインには流れません。作品ページの扉の向こうで読めます。
+        ネタバレを含む投稿は隠しています。「表示する」を押すと読めます。
       </p>
     </div>
   );
@@ -197,7 +197,7 @@ export function PostComposer({
       isReply
         ? "返信しました"
         : spoiler
-          ? "作品ページの扉の向こうに置きました"
+          ? "ネタバレを隠して投稿しました"
           : attached
             ? "タイムラインと作品ページに投稿しました"
             : "タイムラインに投稿しました",
@@ -281,7 +281,7 @@ export function PostComposer({
         </div>
         {!isReply && spoiler && canSpoil && (
           <p className="composer-hint">
-            タイムラインには流さず、作品ページの「ネタバレあり」の扉の向こうにだけ置きます。
+            タイムラインでは隠して表示し、「表示する」を押した人だけが読めます。作品ページでは「ネタバレあり」の扉の向こうに置きます。
           </p>
         )}
       </div>
@@ -396,14 +396,17 @@ export function PostCard({
           </span>
         )}
         {hidden ? (
-          <button
-            type="button"
-            className="spoiler-cover"
-            onClick={() => setShown(true)}
-          >
-            <Icon name="eye" size={15} />
-            ネタバレを含みます。読み終えていれば、表示する
-          </button>
+          <div className="spoiler-cover">
+            <span>
+              <Icon name="lock" size={15} />
+              ネタバレを含むため、隠しています
+              {book && <small>『{book.title}』</small>}
+            </span>
+            <button type="button" onClick={() => setShown(true)}>
+              <Icon name="eye" size={15} />
+              表示する
+            </button>
+          </div>
         ) : (
           <p className="post-text">{post.body}</p>
         )}

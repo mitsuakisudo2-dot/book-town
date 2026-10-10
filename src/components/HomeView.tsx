@@ -91,7 +91,7 @@ export function HomeView({
           href={routes.shelves}
           aria-current={tab === "shelves" ? "page" : undefined}
         >
-          本棚
+          書店
         </Link>
         <Link
           href={routes.timeline}

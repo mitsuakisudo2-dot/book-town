@@ -9,7 +9,11 @@ export function currentBookId(state: TownState): string | null {
   if (active) return active.bookId;
   const last = [...state.readingSessions]
     .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
-    .find((session) => !state.finishedBooks.includes(session.bookId));
+    .find(
+      (session) =>
+        session.bookId !== null &&
+        !state.finishedBooks.includes(session.bookId),
+    );
   return last?.bookId ?? null;
 }
 
@@ -29,14 +33,15 @@ export function readingTotals(state: TownState, now: number) {
   for (const session of state.readingSessions) {
     const seconds = sessionSeconds(session, now);
     total += seconds;
-    byBook.set(session.bookId, (byBook.get(session.bookId) ?? 0) + seconds);
+    if (session.bookId)
+      byBook.set(session.bookId, (byBook.get(session.bookId) ?? 0) + seconds);
   }
   return { total, byBook };
 }
 
 export interface ReaderReadingNow {
   readerId: string;
-  bookId: string;
+  bookId: string | null;
   startedAt: number;
 }
 
@@ -66,14 +71,13 @@ export function readersNow(
     : demo;
 }
 
-/** Memos for a book: everyone's together memos, plus the viewer's own private notes. */
-export const readingMemos = (state: TownState, bookId: string): Post[] =>
+/** Everyone's reading-together posts across all books, plus the viewer's private notes. */
+export const readingFeed = (state: TownState): Post[] =>
   state.posts
     .filter(
       (post) =>
-        post.bookId === bookId &&
-        post.readingMode !== null &&
-        (post.readingMode === "together" || post.authorId === ME_ID),
+        post.readingMode === "together" ||
+        (post.readingMode === "solo" && post.authorId === ME_ID),
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 

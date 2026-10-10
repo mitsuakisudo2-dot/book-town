@@ -21,7 +21,6 @@ type Props = {
   notify: (message: string) => void;
   search: string;
   setSearch: (value: string) => void;
-  onDirectory: () => void;
 };
 
 export function StreetView({
@@ -30,7 +29,6 @@ export function StreetView({
   notify,
   search,
   setSearch,
-  onDirectory,
 }: Props) {
   const [genre, setGenre] = useState("すべて");
   const [followingOnly, setFollowingOnly] = useState(false);
@@ -40,12 +38,8 @@ export function StreetView({
     shelf: Shelf;
     item: ShelfItem;
   } | null>(null);
-  const [view, setView] = useState<"street" | "books">("street");
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
   const term = search.trim().toLocaleLowerCase();
-  const matchesBook = (book: Book) =>
-    (genre === "すべて" || book.genre === genre) &&
-    (!term || (book.title + book.author).toLocaleLowerCase().includes(term));
   const matching = shops.filter((shop) => {
     const stock = shop.shelves
       .filter((s) => s.isPublic)
@@ -72,18 +66,6 @@ export function StreetView({
   });
   const pivot = offset % Math.max(1, matching.length);
   const ordered = [...matching.slice(pivot), ...matching.slice(0, pivot)];
-  const books = state.books.filter(
-    (b) =>
-      matchesBook(b) &&
-      (!followingOnly ||
-        shops.some(
-          (s) =>
-            state.following.includes(s.id) &&
-            s.shelves.some(
-              (sh) => sh.isPublic && sh.items.some((i) => i.bookId === b.id),
-            ),
-        )),
-  );
   const reset = () => {
     setSearch("");
     setGenre("すべて");
@@ -128,28 +110,6 @@ export function StreetView({
         </div>
       </header>
 
-      <div className="street-toolbar">
-        <div className="street-tabs" aria-label="発見の方法">
-          <button
-            aria-pressed={view === "street"}
-            onClick={() => setView("street")}
-          >
-            <Icon name="store" size={17} />
-            街を歩く
-          </button>
-          <button
-            aria-pressed={view === "books"}
-            onClick={() => setView("books")}
-          >
-            <Icon name="book" size={17} />
-            一冊からたどる
-          </button>
-        </div>
-        <button className="street-directory" onClick={onDirectory}>
-          <Icon name="grid" size={15} />
-          書店一覧
-        </button>
-      </div>
       <div className="street-filters">
         <div className="street-genres" aria-label="本のジャンル">
           {["すべて", ...new Set(state.books.map((b) => b.genre))].map((g) => (
@@ -173,8 +133,7 @@ export function StreetView({
       </div>
       {term && (
         <div className="street-search-result" role="status">
-          「{search}」からつながる
-          {view === "street" ? `${matching.length}軒` : `${books.length}冊`}
+          「{search}」からつながる{matching.length}軒
           <button onClick={() => setSearch("")} aria-label="検索をクリア">
             <Icon name="close" size={15} />
             クリア
@@ -184,170 +143,121 @@ export function StreetView({
 
       <div className="street-layout">
         <div className="street-walk">
-          {view === "street" ? (
-            <>
-              <div className="street-route-label">
-                <span>
-                  <i />
-                  今日の路地 <small>— 棚を選ぶのは、それぞれの店主。</small>
-                </span>
-                <button onClick={() => setOffset(offset + 1)}>
-                  <Icon name="shuffle" size={15} />
-                  路地を変えてみる
-                </button>
-              </div>
-              {ordered.map((shop, index) => {
-                const owner =
-                  shop.ownerId === "me"
-                    ? state.me
-                    : state.readers.find((r) => r.id === shop.ownerId);
-                const shelves = shop.shelves.filter((s) => s.isPublic);
-                const followed = state.following.includes(shop.id);
-                return (
-                  <article
-                    className={"street-shop theme-" + shop.theme}
-                    key={shop.id}
-                    id={"street-" + shop.id}
-                  >
-                    <header className="street-shop-header">
-                      <div className="street-shop-label">
+          <div className="street-route-label">
+            <span>
+              <i />
+              今日の路地 <small>— 棚を選ぶのは、それぞれの店主。</small>
+            </span>
+            <button onClick={() => setOffset(offset + 1)}>
+              <Icon name="shuffle" size={15} />
+              路地を変えてみる
+            </button>
+          </div>
+          {ordered.map((shop) => {
+            const owner =
+              shop.ownerId === "me"
+                ? state.me
+                : state.readers.find((r) => r.id === shop.ownerId);
+            const shelves = shop.shelves.filter((s) => s.isPublic);
+            const followed = state.following.includes(shop.id);
+            // The street shows one shelf per shop; the whole shop is one tap away.
+            const [first] = shelves;
+            const more = shelves.length - 1;
+            return (
+              <article
+                className={"street-shop is-compact theme-" + shop.theme}
+                key={shop.id}
+                id={"street-" + shop.id}
+              >
+                <header className="street-shop-header">
+                  <div className="street-shop-title">
+                    <Link
+                      href={`/shops/${shop.id}/`}
+                      aria-label={shop.name + "に入る"}
+                    >
+                      <h2>{shop.name}</h2>
+                      <Icon name="arrow" size={18} />
+                    </Link>
+                    {!shop.demo && (
+                      <small className="street-own-tag">あなたの書店</small>
+                    )}
+                  </div>
+                  <div className="street-shop-owner">
+                    {owner && (
+                      <Link href={`/profiles/${owner.id}/`}>
+                        <ReaderAvatar reader={owner} size={28} />
                         <span>
-                          BOOKSHOP {String(index + 1).padStart(2, "0")}
+                          <small>店主</small> {owner.name}
                         </span>
-                        <small>{shop.demo ? "デモ書店" : "あなたの書店"}</small>
-                      </div>
-                      <div className="street-shop-title">
-                        <Link
-                          href={`/shops/${shop.id}/`}
-                          aria-label={shop.name + "に入る"}
-                        >
-                          <h2>{shop.name}</h2>
-                          <Icon name="arrow" size={23} />
-                        </Link>
-                        <p>{shop.tagline}</p>
-                      </div>
-                      <p className="street-shop-description">
-                        {shop.description}
-                      </p>
-                      <div className="street-shop-owner">
-                        {owner && (
-                          <Link href={`/profiles/${owner.id}/`}>
-                            <ReaderAvatar reader={owner} size={32} />
-                            <span>
-                              <small>店主</small> {owner.name}
-                            </span>
-                            <Icon name="chevron" size={14} />
-                          </Link>
-                        )}
-                        {shop.ownerId === "me" ? (
-                          <Link href="/my-shop/" className="street-follow">
-                            <Icon name="edit" size={14} />
-                            棚を整える
-                          </Link>
-                        ) : (
-                          <button
-                            className="street-follow"
-                            aria-pressed={followed}
-                            aria-label={
-                              shop.name +
-                              (followed ? "のフォローを解除" : "をフォロー")
-                            }
-                            onClick={() => {
-                              actions.toggleFollow(shop.id);
-                              notify(
-                                followed
-                                  ? "フォローを解除しました"
-                                  : shop.name + "をフォローしました",
-                              );
-                            }}
-                          >
-                            <Icon
-                              name={followed ? "check" : "plus"}
-                              size={14}
-                            />
-                            {followed ? "フォロー済み" : "フォロー"}
-                          </button>
-                        )}
-                      </div>
-                    </header>
-                    <div className="street-shop-shelves">
-                      {shelves.map((shelf, shelfIndex) => (
-                        <StreetShelf
-                          key={shelf.id}
-                          shelf={shelf}
-                          books={state.books}
-                          index={shelfIndex}
-                          onSelect={(item) =>
-                            setSelected({ shop, shelf, item })
-                          }
-                        />
-                      ))}
-                      {!shelves.length && (
-                        <div className="street-empty-shelf">
-                          <Icon name="book" size={26} />
-                          <p>このお店の棚は、これから育ちます。</p>
-                        </div>
-                      )}
-                    </div>
-                    <footer className="street-shop-footer">
-                      <span>本をタップして、店主の言葉を読む</span>
-                      <Link href={`/shops/${shop.id}/`}>
-                        この書店をもっと見る
-                        <Icon name="arrow" size={15} />
                       </Link>
-                    </footer>
-                  </article>
-                );
-              })}
-              {!ordered.length && (
-                <div className="street-empty">
-                  <Icon name="search" size={28} />
-                  <h2>この路地では、まだ見つかりませんでした。</h2>
-                  <p>言葉やジャンルを変えて、もう少し歩いてみましょう。</p>
-                  <button className="button secondary" onClick={reset}>
-                    絞り込みを戻す
-                  </button>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="street-book-grid">
-              {books.map((book) => (
-                <article key={book.id}>
-                  <Link href={`/books/${book.id}/`}>
-                    <BookJacket book={book} />
-                    <h2>{book.title}</h2>
-                    <p>{book.author}</p>
-                  </Link>
-                  <button
-                    aria-pressed={state.wishlist.includes(book.id)}
-                    onClick={() => {
-                      actions.toggleWish(book.id);
-                      notify(
-                        state.wishlist.includes(book.id)
-                          ? "読みたいリストから外しました"
-                          : "読みたいリストに加えました",
-                      );
-                    }}
-                  >
-                    <Icon
-                      name={
-                        state.wishlist.includes(book.id) ? "check" : "bookmark"
+                    )}
+                    {shop.ownerId === "me" ? (
+                      <Link href="/my-shop/" className="street-follow">
+                        <Icon name="edit" size={14} />
+                        棚を整える
+                      </Link>
+                    ) : (
+                      <button
+                        className="street-follow"
+                        aria-pressed={followed}
+                        aria-label={
+                          shop.name +
+                          (followed ? "のフォローを解除" : "をフォロー")
+                        }
+                        onClick={() => {
+                          actions.toggleFollow(shop.id);
+                          notify(
+                            followed
+                              ? "フォローを解除しました"
+                              : shop.name + "をフォローしました",
+                          );
+                        }}
+                      >
+                        <Icon name={followed ? "check" : "plus"} size={14} />
+                        {followed ? "フォロー済み" : "フォロー"}
+                      </button>
+                    )}
+                  </div>
+                </header>
+                <div className="street-shop-shelves">
+                  {first ? (
+                    <StreetShelf
+                      shelf={first}
+                      books={state.books}
+                      index={0}
+                      onSelect={(item) =>
+                        setSelected({ shop, shelf: first, item })
                       }
-                      size={15}
                     />
-                    {state.wishlist.includes(book.id) ? "保存済み" : "読みたい"}
-                  </button>
-                </article>
-              ))}
-              {!books.length && (
-                <div className="street-empty">
-                  <h2>この条件の本は見つかりませんでした。</h2>
-                  <button className="button secondary" onClick={reset}>
-                    絞り込みを戻す
-                  </button>
+                  ) : (
+                    <div className="street-empty-shelf">
+                      <Icon name="book" size={26} />
+                      <p>このお店の棚は、これから育ちます。</p>
+                    </div>
+                  )}
                 </div>
-              )}
+                <footer className="street-shop-footer">
+                  <span>
+                    {more > 0
+                      ? `ほかに${more}段の棚があります`
+                      : "本をタップして、店主の言葉を読む"}
+                  </span>
+                  <Link href={`/shops/${shop.id}/`}>
+                    この書店へ
+                    <Icon name="arrow" size={15} />
+                  </Link>
+                </footer>
+              </article>
+            );
+          })}
+          {!ordered.length && (
+            <div className="street-empty">
+              <Icon name="search" size={28} />
+              <h2>この路地では、まだ見つかりませんでした。</h2>
+              <p>言葉やジャンルを変えて、もう少し歩いてみましょう。</p>
+              <button className="button secondary" onClick={reset}>
+                絞り込みを戻す
+              </button>
             </div>
           )}
           <section className="street-end">
@@ -355,7 +265,7 @@ export function StreetView({
             <Icon name="leaf" size={27} />
             <h2>今日の路地は、ここまで。</h2>
             <p>
-              いま見られる{view === "street" ? "書店" : "本"}は、ここまでです。
+              いま見られる書店は、ここまでです。
               <br />
               気になった棚に戻ったり、あなたの一冊を並べたり。
             </p>

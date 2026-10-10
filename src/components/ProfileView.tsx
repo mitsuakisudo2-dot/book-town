@@ -11,6 +11,7 @@ import {
 import { readerPosts } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { BarcodeRegister } from "./BarcodeRegister";
+import { linkLabel, normalizeLink, PROFILE_LINK_LIMIT } from "../lib/links";
 import { useClock } from "./useClock";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { ProfilePosts } from "./Social";
@@ -54,6 +55,8 @@ export function ProfileView({
   const [editingNine, setEditingNine] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftBio, setDraftBio] = useState("");
+  const [draftLinks, setDraftLinks] = useState<string[]>([]);
+  const [linkError, setLinkError] = useState("");
   const [draftNine, setDraftNine] = useState<string[]>([]);
   const [draftNotes, setDraftNotes] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
@@ -99,6 +102,8 @@ export function ProfileView({
     if (!reader) return;
     setDraftName(reader.name);
     setDraftBio(reader.bio);
+    setDraftLinks(reader.links?.length ? reader.links : [""]);
+    setLinkError("");
     setEditingProfile(true);
   }
 
@@ -106,7 +111,15 @@ export function ProfileView({
     event.preventDefault();
     const name = draftName.trim();
     if (!name) return;
-    actions.updateProfile(name, draftBio.trim());
+    const filled = draftLinks.map((link) => link.trim()).filter(Boolean);
+    const links = filled.map(normalizeLink);
+    if (links.some((link) => !link)) {
+      setLinkError(
+        "URLとして読めないものがあります。https:// から始まるWebページのアドレスを入れてください。",
+      );
+      return;
+    }
+    actions.updateProfile(name, draftBio.trim(), links as string[]);
     setEditingProfile(false);
     notify("プロフィールを保存しました");
   }
@@ -159,6 +172,23 @@ export function ProfileView({
           <p className="profile-bio">
             {reader.bio || "読書家の名刺は、好きな本から。"}
           </p>
+          {reader.links && reader.links.length > 0 && (
+            <ul className="profile-links" aria-label="リンク">
+              {reader.links.map((url) => (
+                <li key={url}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow"
+                    title={url}
+                  >
+                    <Icon name="link" size={14} />
+                    {linkLabel(url)}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="profile-stats">
             <span>
               <b>{postCount}</b> 投稿
@@ -615,6 +645,63 @@ export function ProfileView({
               onChange={(event) => setDraftBio(event.target.value)}
               placeholder="好きな本や、いま気になっていること。"
             />
+            <fieldset className="profile-link-fields">
+              <legend>リンク（note・YouTube・公式サイトなど）</legend>
+              {draftLinks.map((link, index) => (
+                <div key={index} className="profile-link-row">
+                  <label className="sr-only" htmlFor={`reader-link-${index}`}>
+                    リンク{index + 1}
+                  </label>
+                  <input
+                    id={`reader-link-${index}`}
+                    type="text"
+                    inputMode="url"
+                    autoComplete="url"
+                    maxLength={300}
+                    placeholder="https://note.com/..."
+                    value={link}
+                    onChange={(event) => {
+                      setLinkError("");
+                      setDraftLinks(
+                        draftLinks.map((entry, position) =>
+                          position === index ? event.target.value : entry,
+                        ),
+                      );
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="profile-link-remove"
+                    aria-label={`リンク${index + 1}を削除`}
+                    onClick={() =>
+                      setDraftLinks(
+                        draftLinks.length > 1
+                          ? draftLinks.filter(
+                              (_, position) => position !== index,
+                            )
+                          : [""],
+                      )
+                    }
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+              ))}
+              {draftLinks.length < PROFILE_LINK_LIMIT && (
+                <button
+                  type="button"
+                  className="profile-link-add"
+                  onClick={() => setDraftLinks([...draftLinks, ""])}
+                >
+                  <Icon name="plus" size={14} /> リンクを追加
+                </button>
+              )}
+              {linkError && (
+                <p className="profile-link-error" role="alert">
+                  {linkError}
+                </p>
+              )}
+            </fieldset>
             <p className="profile-form-hint">
               この名刺は、街を訪れる読書家に公開されます。
             </p>

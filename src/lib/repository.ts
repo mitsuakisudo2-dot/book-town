@@ -1,4 +1,5 @@
 import { createInitialState } from "./data";
+import { cleanLinks } from "./links";
 import { createRegisteredBook, normalizeIsbn, REGISTERED_GENRE } from "./books";
 import {
   COMPOSE_ICONS,
@@ -201,8 +202,8 @@ function restoreSessions(
       !text(entry.id, 200) ||
       !/^me-reading-\d+$/.test(entry.id) ||
       ids.has(entry.id) ||
-      !text(entry.bookId, 200) ||
-      !bookIds.has(entry.bookId) ||
+      (entry.bookId !== null &&
+        (!text(entry.bookId, 200) || !bookIds.has(entry.bookId))) ||
       !READING_MODES.includes(entry.mode as ReadingMode) ||
       !text(entry.startedAt, 40) ||
       Number.isNaN(Date.parse(entry.startedAt)) ||
@@ -255,7 +256,6 @@ function restorePosts(
       (post.readingMode === undefined ||
         post.readingMode === null ||
         (READING_MODES.includes(post.readingMode as ReadingMode) &&
-          post.bookId !== null &&
           post.parentId === null)),
   );
   const kept: Post[] = [];
@@ -355,7 +355,11 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
       state: {
         ...initial,
         books,
-        me: data.me as Reader,
+        // Links migrate on their own: a bad one is dropped, the profile stays.
+        me: {
+          ...(data.me as Reader),
+          links: cleanLinks((data.me as Reader).links),
+        },
         ownShop,
         following: data.following as string[],
         wishlist: data.wishlist as string[],

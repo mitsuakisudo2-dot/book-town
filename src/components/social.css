@@ -156,10 +156,10 @@
 }
 .spoiler-cover {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
+  justify-content: space-between;
+  gap: 8px 12px;
   font-size: 12px;
   color: #8a6f5c;
   background: repeating-linear-gradient(
@@ -170,7 +170,33 @@
     #efe5d8 16px
   );
   border-radius: 6px;
-  padding: 13px 14px;
+  padding: 10px 12px;
+}
+.spoiler-cover > span {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.spoiler-cover small {
+  font-size: 11px;
+  color: #a2846f;
+}
+.spoiler-cover button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c5a46;
+  background: #fffaf2;
+  border: 1px solid #e3cfbb;
+  border-radius: 999px;
+  padding: 5px 13px;
+}
+.spoiler-cover button:hover {
+  background: #fff;
 }
 .post-book {
   display: flex;
