@@ -15,5 +15,6 @@ Before implementing product features or changing UX, read `docs/README.md` and i
 - `docs/02_三者会議_2026-10-10.md`: user/ChatGPT/Claude design discussion and rationale.
 - `docs/03_Codex実装仕様_v0.1.md`: implementation prototype and acceptance criteria.
 - `docs/04_未決定事項と次回議題.md`: proposals and unresolved choices.
+- `docs/05_SNS機能_投稿とレビュー_2026-10-10.md`: SNS direction (timeline, posts, book reviews and conversations).
 
 These docs are **not an instruction to implement everything**. Distinguish agreed principles from experiments and undecided items, and only implement what the user requests. Preserve existing behavior and tests; verify platform docs in `node_modules/next/dist/docs/` before editing Next.js code.
