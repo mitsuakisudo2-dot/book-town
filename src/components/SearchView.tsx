@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import type { Book, Shop, TownActions, TownState } from "../lib/types";
 import { findReader } from "../lib/social";
+import { bookPath } from "../lib/books";
 import { matchBooks } from "./BookPicker";
 import { postsWithTag, popularTags, takeRequestedSearch } from "../lib/tags";
 import { PostCard } from "./Social";
@@ -127,7 +128,7 @@ export function SearchView({ state, actions, notify }: Shared) {
 
   const bookRow = (book: Book, meta: string) => (
     <li key={book.id}>
-      <Link href={"/books/" + book.id + "/"} className="search-book">
+      <Link href={bookPath(book.id)} className="search-book">
         <BookJacket book={book} className="search-jacket" />
         <span>
           <b>{book.title}</b>

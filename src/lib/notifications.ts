@@ -1,4 +1,5 @@
 import { activeSession, readersNow } from "./reading";
+import { bookPath } from "./books";
 import { findReader, isSpoilerFor } from "./social";
 import { ME_ID, type TownState } from "./types";
 
@@ -36,7 +37,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         readerId: post.authorId,
         createdAt: post.createdAt,
         text: `${name(post.authorId)}さんがあなたの投稿に返信しました ${quote(post.body)}`,
-        href: parent.bookId ? `/books/${parent.bookId}/` : "/profiles/me/",
+        href: parent.bookId ? bookPath(parent.bookId) : "/profiles/me/",
       });
   }
   for (const post of mine.values())
@@ -46,7 +47,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         readerId: ME_ID,
         createdAt: post.createdAt,
         text: `あなたの感想で、${post.wants}人が『${title(post.bookId)}』を読みたくなりました`,
-        href: `/books/${post.bookId}/`,
+        href: post.bookId ? bookPath(post.bookId) : "/profiles/me/",
       });
   const followed = new Set(
     state.shops
@@ -75,7 +76,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         readerId: post.authorId,
         createdAt: post.createdAt,
         text: `読みたい本『${title(post.bookId)}』に、${name(post.authorId)}さんの感想が届いています`,
-        href: `/books/${post.bookId}/`,
+        href: bookPath(post.bookId),
       });
   }
   const active = activeSession(state);

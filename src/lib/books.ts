@@ -64,6 +64,13 @@ function hash(text: string): number {
 
 export const REGISTERED_GENRE = "登録した本";
 
+/** Runtime registrations use one exported page; demo books retain their existing URLs. */
+export function bookPath(id: string): string {
+  return /^(my-book-\d+|isbn-\d+)$/.test(id)
+    ? "/books/registered/?id=" + encodeURIComponent(id)
+    : "/books/" + encodeURIComponent(id) + "/";
+}
+
 export function createRegisteredBook(id: string, book: NewBook): Book {
   const seed = hash(id + book.title);
   const [color, ink] = jackets[seed % jackets.length];

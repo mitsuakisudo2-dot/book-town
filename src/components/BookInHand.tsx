@@ -13,6 +13,7 @@ import {
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookDiscovery } from "./BookDiscovery";
+import { bookPath } from "../lib/books";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./book-in-hand.css";
 
@@ -374,7 +375,7 @@ export function BookInHand({
           <div className="bh-book-intro">
             <Link
               className="bh-cover"
-              href={`/books/${book.id}/`}
+              href={bookPath(book.id)}
               onNavigate={leaveForPage}
               aria-label={`${book.title}の作品ページへ`}
             >
@@ -383,7 +384,7 @@ export function BookInHand({
             <div className="bh-book-heading">
               <span className="bh-genre">{book.genre}</span>
               <h2 id={titleId}>
-                <Link href={`/books/${book.id}/`} onNavigate={leaveForPage}>
+                <Link href={bookPath(book.id)} onNavigate={leaveForPage}>
                   {book.title}
                 </Link>
               </h2>
@@ -547,7 +548,7 @@ export function BookInHand({
           />
           <Link
             className="bh-work-page"
-            href={`/books/${book.id}/`}
+            href={bookPath(book.id)}
             onNavigate={leaveForPage}
           >
             作品のページを開く <Icon name="arrow" size={16} />

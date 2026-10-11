@@ -10,6 +10,7 @@ import {
 } from "../lib/types";
 import { readerPosts } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
+import { bookPath } from "../lib/books";
 import { BarcodeRegister } from "./BarcodeRegister";
 import { linkLabel, normalizeLink, PROFILE_LINK_LIMIT } from "../lib/links";
 import { handleProblem, normalizeHandle } from "../lib/handles";
@@ -305,14 +306,14 @@ export function ProfileView({
             book ? (
               <div className="profile-nine-item" key={`${book.id}-${index}`}>
                 <Link
-                  href={`/books/${book.id}`}
+                  href={bookPath(book.id)}
                   className="profile-nine-book"
                   aria-label={`${book.title}の詳細を見る`}
                 >
                   <span className="profile-nine-number">0{index + 1}</span>
                   <BookJacket book={book} />
                 </Link>
-                <Link className="profile-nine-title" href={`/books/${book.id}`}>
+                <Link className="profile-nine-title" href={bookPath(book.id)}>
                   {book.title}
                 </Link>
                 <p className="profile-nine-author">{book.author}</p>
@@ -406,7 +407,7 @@ export function ProfileView({
                 return book ? (
                   <article className="profile-saved-book" key={id}>
                     <Link
-                      href={`/books/${id}/`}
+                      href={bookPath(id)}
                       aria-label={`${book.title}の詳細を見る`}
                     >
                       <BookJacket book={book} />
@@ -909,7 +910,7 @@ export function ProfileView({
             <p>— {reader.name}</p>
             <Link
               className="button secondary"
-              href={`/books/${selectedNote}`}
+              href={bookPath(selectedNote)}
               onClick={() => setSelectedNote(null)}
             >
               本の詳細へ <Icon name="arrow" />

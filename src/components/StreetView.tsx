@@ -239,10 +239,20 @@ export function StreetView({
           {!ordered.length && (
             <div className="street-empty">
               <Icon name="search" size={28} />
-              <h2>この路地では、まだ見つかりませんでした。</h2>
-              <p>言葉やジャンルを変えて、もう少し歩いてみましょう。</p>
+              <h2>
+                {followingOnly && !state.following.length
+                  ? "気になる書店を、フォローしてみましょう。"
+                  : "この路地では、まだ見つかりませんでした。"}
+              </h2>
+              <p>
+                {followingOnly && !state.following.length
+                  ? "店主の選書や投稿を、あとからまとめて見られます。"
+                  : "言葉を変えたり、絞り込みを戻したりしてみましょう。"}
+              </p>
               <button className="button secondary" onClick={reset}>
-                絞り込みを戻す
+                {followingOnly && !state.following.length
+                  ? "書店を見る"
+                  : "絞り込みを戻す"}
               </button>
             </div>
           )}

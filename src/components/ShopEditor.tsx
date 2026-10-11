@@ -11,6 +11,7 @@ import type {
   TownActions,
 } from "../lib/types";
 import { shelfUsed, usePersistenceStatus } from "../lib/store";
+import { bookPath } from "../lib/books";
 import { BookJacket, Icon, Modal } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
 import "./editor.css";
@@ -667,7 +668,7 @@ function ShelfEditingPanel({
           </label>
           <div className="editor-selected-footer">
             <Link
-              href={`/books/${selectedBook.id}`}
+              href={bookPath(selectedBook.id)}
               className="editor-text-button"
             >
               本の詳細を見る
