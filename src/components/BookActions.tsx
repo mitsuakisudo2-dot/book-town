@@ -23,6 +23,42 @@ export function BookPrice({
   );
 }
 
+/** Shop links sit beside the title and price, one tap from the book. */
+export function BookPurchase({ book }: { book: Book }) {
+  const query = encodeURIComponent(`${book.title} ${book.author}`);
+  return (
+    <div className="book-purchase" role="group" aria-label="購入する">
+      <a
+        href={`https://www.amazon.co.jp/s?k=${query}&i=stripbooks`}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Amazonで探す（新しいタブで開きます）"
+      >
+        Amazon<span aria-hidden="true">↗</span>
+      </a>
+      <a
+        href={`https://books.rakuten.co.jp/search?sitem=${query}&g=001`}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="楽天ブックスで探す（新しいタブで開きます）"
+      >
+        楽天ブックス<span aria-hidden="true">↗</span>
+      </a>
+    </div>
+  );
+}
+
+/** The fine print for the jacket, the price and the shop links. */
+export function bookNote(book: Book): string {
+  return [
+    "表紙はデモ用のオリジナルデザインです。",
+    book.price && book.genre !== REGISTERED_GENRE
+      ? "定価はデモ用の仮の値です。"
+      : "",
+    "購入ボタンはタイトル・著者で外部書店を検索します。版や在庫は購入先でご確認ください。",
+  ].join("");
+}
+
 export function BookActions({
   book,
   state,
@@ -36,7 +72,6 @@ export function BookActions({
 }) {
   const wished = state.wishlist.includes(book.id);
   const favorite = state.favorites.includes(book.id);
-  const query = encodeURIComponent(`${book.title} ${book.author}`);
   return (
     <div className="bh-actions">
       <div className="bh-save-row">
@@ -72,34 +107,6 @@ export function BookActions({
           <Icon name="star" size={18} />
           {favorite ? "お気に入りに登録済み" : "お気に入り"}
         </button>
-      </div>
-      <div className="bh-purchase">
-        <span className="bh-purchase-label">
-          <Icon name="store" size={15} /> 購入する
-        </span>
-        <div className="bh-purchase-links">
-          <a
-            href={`https://www.amazon.co.jp/s?k=${query}&i=stripbooks`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Amazonで探す ↗
-          </a>
-          <a
-            href={`https://books.rakuten.co.jp/search?sitem=${query}&g=001`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            楽天ブックスで探す ↗
-          </a>
-        </div>
-        <p>
-          タイトル・著者で検索します。
-          {book.price && book.genre !== REGISTERED_GENRE
-            ? "定価はデモ用の仮の値です。"
-            : ""}
-          版や在庫は購入先でご確認ください。
-        </p>
       </div>
     </div>
   );

@@ -100,12 +100,12 @@ try {
           ["like", "read", "love"],
         ]);
         // The shop links sit in the open; no extra tap is needed.
-        await expect(dialog().locator(".bh-purchase summary")).toHaveCount(0);
-        for (const provider of ["Amazonで探す ↗", "楽天ブックスで探す ↗"]) {
-          const link = dialog().getByRole("link", {
-            name: provider,
-            exact: true,
-          });
+        // The shop links sit beside the title and price; no extra tap is needed.
+        for (const provider of [/^Amazonで探す/, /^楽天ブックスで探す/]) {
+          const link = dialog()
+            .locator(".bh-book-intro")
+            .getByRole("link", { name: provider });
+          await expect(link).toBeVisible();
           await expect(link).toHaveAttribute("target", "_blank");
           await expect(link).toHaveAttribute("rel", "noopener noreferrer");
           const url = new URL(await link.getAttribute("href"));
@@ -198,8 +198,13 @@ try {
             has: page.getByRole("heading", { name: "雨と翻訳", exact: true }),
           })
           .first();
+        // The card's link goes to the shop; its shelf still opens the POP in place.
+        await expect(
+          rain.getByRole("link", { name: "この書店へ", exact: true }),
+        ).toHaveAttribute("href", /\/shops\/shop-rain\/#shelf-/);
         await rain
-          .getByRole("button", { name: "この店のPOPを読む", exact: true })
+          .locator(".shelf-book-button")
+          .filter({ hasText: "ソラリス" })
           .click();
         await expectTitle("ソラリス");
         await expect(page).toHaveURL(beforeURL);
@@ -218,6 +223,26 @@ try {
         await expectTitle(nextTitle);
         await expect(page).toHaveURL(beforeURL);
         await page.keyboard.press("Escape");
+        await solarisTrigger().click();
+        await dialog()
+          .locator(".bh-shop-card")
+          .filter({
+            has: page.getByRole("heading", { name: "雨と翻訳", exact: true }),
+          })
+          .first()
+          .getByRole("link", { name: "この書店へ", exact: true })
+          .click();
+        await expect(page).toHaveURL(/\/shops\/shop-rain\//);
+        await expect(dialog()).toHaveCount(0);
+        await go();
+        // Tapping the cover opens the book's own page.
+        await solarisTrigger().click();
+        await dialog()
+          .getByRole("link", { name: "ソラリスの作品ページへ", exact: true })
+          .click();
+        await expect(page).toHaveURL(/\/books\/solaris\/$/);
+        await expect(dialog()).toHaveCount(0);
+        await go();
       },
     );
     await check(

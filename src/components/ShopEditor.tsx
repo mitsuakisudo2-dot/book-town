@@ -240,6 +240,8 @@ function AddBookPicker({
 } & Pick<ShopEditorProps, "actions" | "notify">) {
   const [search, setSearch] = useState("");
   const [display, setDisplay] = useState<ShelfItem["display"]>("spine");
+  // Books placed while this picker is open; only these can be taken back here.
+  const [addedHere, setAddedHere] = useState<string[]>([]);
   const remaining = shelf.capacity - shelfUsed(shelf);
   const cost = display === "face" ? 3 : 1;
   const query = search.trim().toLocaleLowerCase();
@@ -297,17 +299,25 @@ function AddBookPicker({
         )}
         <div className="editor-picker-grid">
           {filtered.map((book) => {
-            const already = shelf.items.some((item) => item.bookId === book.id);
+            const placed = shelf.items.find((item) => item.bookId === book.id);
+            const mine = Boolean(placed) && addedHere.includes(book.id);
+            const already = Boolean(placed) && !mine;
             return (
               <button
-                className="editor-book-choice"
+                className={"editor-book-choice" + (mine ? " is-added" : "")}
                 key={book.id}
                 type="button"
-                disabled={cost > remaining || already}
+                aria-pressed={mine}
+                disabled={already || (!placed && cost > remaining)}
                 onClick={() => {
-                  if (actions.addShelfBook(shelf.id, book.id, display)) {
+                  if (placed && mine) {
+                    actions.removeShelfBook(shelf.id, placed.id);
+                    setAddedHere(addedHere.filter((id) => id !== book.id));
+                    notify(`「${book.title}」を棚から外しました。`);
+                  } else if (actions.addShelfBook(shelf.id, book.id, display)) {
+                    // The picker stays open so several books can be placed in a row.
+                    setAddedHere([...addedHere, book.id]);
                     notify(`「${book.title}」を本棚に並べました。`);
-                    onClose();
                   } else {
                     notify(
                       "棚の空きスペースが足りません。並べ方を変えてみてください。",
@@ -319,7 +329,12 @@ function AddBookPicker({
                 <span className="editor-book-choice-title">{book.title}</span>
                 <span className="editor-book-choice-author">{book.author}</span>
                 <span className="editor-book-choice-add">
-                  {already ? (
+                  {mine ? (
+                    <>
+                      <Icon name="check" size={14} />
+                      並べました・押すと外す
+                    </>
+                  ) : already ? (
                     <>
                       <Icon name="check" size={14} />
                       この棚にあります
@@ -348,6 +363,16 @@ function AddBookPicker({
             </button>
           </div>
         )}
+        <div className="editor-picker-footer">
+          <span role="status">
+            {addedHere.length
+              ? `この画面で${addedHere.length}冊並べました`
+              : "続けて何冊でも選べます"}
+          </span>
+          <button type="button" className="button" onClick={onClose}>
+            完了
+          </button>
+        </div>
         <p className="editor-field-note">
           サンプルの書籍と、デモ用のオリジナル装丁を使用しています。
         </p>

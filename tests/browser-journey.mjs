@@ -68,6 +68,9 @@ async function addFirstBook(page, shelf) {
   const choice = dialog.locator(".editor-book-choice:not([disabled])").first();
   const title = await choice.locator(".editor-book-choice-title").textContent();
   await choice.click();
+  // The picker stays open for more books until 完了.
+  await expect(choice).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: "完了", exact: true }).click();
   await expect(dialog).not.toBeVisible();
   return title;
 }
@@ -291,7 +294,27 @@ try {
     "Capacity rejects face conversion and additions; removal frees space",
     async () => {
       const shelf = page.locator(".editor-shelf-panel").first();
-      for (let n = 3; n < 19; n++) await addFirstBook(page, shelf);
+      // One picker session places many books in a row; a book just placed can be taken back.
+      await shelf
+        .getByRole("button", { name: "本を並べる", exact: true })
+        .click();
+      const picker = page.getByRole("dialog", { name: "本棚に並べる本を選ぶ" });
+      const unplaced = () =>
+        picker.locator(
+          '.editor-book-choice:not([disabled]):not([aria-pressed="true"])',
+        );
+      for (let n = 3; n < 19; n++) await unplaced().first().click();
+      const tally = picker.locator(".editor-picker-footer [role=status]");
+      await expect(tally).toContainText("16冊");
+      await picker
+        .locator('.editor-book-choice[aria-pressed="true"]')
+        .last()
+        .click();
+      await expect(tally).toContainText("15冊");
+      await unplaced().first().click();
+      await expect(tally).toContainText("16冊");
+      await picker.getByRole("button", { name: "完了", exact: true }).click();
+      await expect(picker).not.toBeVisible();
       await expect(shelf.getByRole("meter")).toHaveAttribute(
         "aria-valuenow",
         "19",
@@ -316,6 +339,11 @@ try {
         .locator(".editor-book-choice:not([disabled])")
         .first()
         .click();
+      // A full shelf leaves only the book just placed, which can be taken back.
+      await expect(
+        dialog.locator(".editor-book-choice:not([disabled])"),
+      ).toHaveCount(1);
+      await dialog.getByRole("button", { name: "完了", exact: true }).click();
       await expect(shelf.getByRole("meter")).toHaveAttribute(
         "aria-valuenow",
         "20",

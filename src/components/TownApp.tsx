@@ -10,7 +10,7 @@ import { ShopEditor } from "./ShopEditor";
 import { ProfileView } from "./ProfileView";
 import { StreetView } from "./StreetView";
 import { BookInHand } from "./BookInHand";
-import { BookActions, BookPrice } from "./BookActions";
+import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookReviews } from "./Social";
 import { HomeView } from "./HomeView";
 import { SearchView } from "./SearchView";
@@ -490,6 +490,7 @@ function BookView({
           <h1>{book.title}</h1>
           <p className="book-page-author">{book.author}</p>
           <BookPrice book={book} />
+          <BookPurchase book={book} />
           <p className="book-summary">{book.summary}</p>
           <BookActions
             book={book}
@@ -497,9 +498,7 @@ function BookView({
             actions={actions}
             notify={notify}
           />
-          <span className="jacket-disclaimer">
-            表紙はデモ用のオリジナルデザインです
-          </span>
+          <span className="jacket-disclaimer">{bookNote(book)}</span>
         </div>
       </section>
       <BookReviews

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import type { Shelf, ShelfItem, Shop, TownState } from "../lib/types";
 import { BookJacket, Icon } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
@@ -87,11 +88,14 @@ export function BookDiscovery({
   bookId,
   state,
   onSelect,
+  onLeave,
 }: {
   shop: Shop;
   bookId: string;
   state: TownState;
   onSelect: (shop: Shop, shelf: Shelf, item: ShelfItem) => void;
+  /** Called when a link leaves the open book for another page. */
+  onLeave?: () => void;
 }) {
   // Shelves express a selection, not a reading status. Never imply these books were read.
   const seen = new Set([bookId]);
@@ -152,12 +156,13 @@ export function BookDiscovery({
                   <h4>{other.name}</h4>
                   <p>{shelf.name}</p>
                 </div>
-                <button
+                <Link
                   className="bh-shop-pop-button"
-                  onClick={() => onSelect(other, shelf, item)}
+                  href={`/shops/${other.id}/#shelf-${shelf.id}`}
+                  onNavigate={onLeave}
                 >
-                  この店のPOPを読む <Icon name="arrow" size={16} />
-                </button>
+                  この書店へ <Icon name="arrow" size={16} />
+                </Link>
               </div>
               <WoodenShelf
                 shelf={shelf}

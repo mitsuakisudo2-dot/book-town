@@ -26,6 +26,12 @@ async function go(route) {
   await page.goto(`${baseURL}${route}`);
   await expect(page.locator("main")).toBeVisible();
   await page.waitForFunction(() => localStorage.getItem("book-town-v1"));
+  // Saved data can exist before this page hydrates; wait until React owns the page.
+  await page.waitForFunction(() =>
+    Object.keys(document.querySelector("main") ?? {}).some((key) =>
+      key.startsWith("__reactFiber"),
+    ),
+  );
 }
 async function noOverflow(label) {
   const size = await page.evaluate(() => ({
@@ -477,7 +483,9 @@ try {
         "¥1,540",
       );
       await expect(
-        page.getByRole("link", { name: "Amazonで探す ↗", exact: true }),
+        page
+          .locator(".book-page-hero")
+          .getByRole("link", { name: /^Amazonで探す/ }),
       ).toBeVisible();
       const reviews = page.locator(
         ".book-reviews > .post-feed > article.post-card",
