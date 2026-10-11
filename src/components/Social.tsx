@@ -23,6 +23,12 @@ import {
   wantSources,
 } from "../lib/social";
 import { currentBookId } from "../lib/reading";
+import {
+  extractTags,
+  popularTags,
+  requestSearch,
+  splitTags,
+} from "../lib/tags";
 import { BookPicker } from "./BookPicker";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
@@ -60,10 +66,15 @@ export function TimelineView(props: Shared) {
   );
 }
 
+const REVIEW_PREVIEW = 3;
+
 export function BookReviews({ book, ...props }: Shared & { book: Book }) {
   const { open, spoilers } = bookReviews(props.state, book.id);
   const [doorOpen, setDoorOpen] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const sources = wantSources(props.state, book.id);
+  // The newest three come first; the rest wait behind one button.
+  const shown = showAll ? open : open.slice(0, REVIEW_PREVIEW);
   return (
     <section className="book-reviews" aria-labelledby="book-reviews-title">
       <div className="book-path-heading">
@@ -83,9 +94,18 @@ export function BookReviews({ book, ...props }: Shared & { book: Book }) {
       )}
       <PostComposer {...props} fixedBook={book} />
       <div className="post-feed">
-        {open.map((post) => (
+        {shown.map((post) => (
           <PostCard key={post.id} {...props} post={post} />
         ))}
+        {open.length > shown.length && (
+          <button
+            type="button"
+            className="reviews-more"
+            onClick={() => setShowAll(true)}
+          >
+            残りのレビューをすべて表示（{open.length - shown.length}件）
+          </button>
+        )}
         {!open.length && (
           <div className="empty-state">
             <h3>この本の、最初の感想を。</h3>
@@ -170,6 +190,11 @@ export function PostComposer({
   const [bookId, setBookId] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [spoiler, setSpoiler] = useState(false);
+  const tags = extractTags(body);
+  const tagSuggestions = popularTags(state, 8)
+    .map((entry) => entry.tag)
+    .filter((tag) => !tags.includes(tag))
+    .slice(0, 4);
   const attached = fixedBook?.id ?? bookId;
   const isReply = Boolean(parent);
   // A top-level spoiler needs a book to sit behind; replies already belong to one.
@@ -234,6 +259,36 @@ export function PostComposer({
           value={body}
           onChange={(event) => setBody(event.target.value)}
         />
+        {!isReply && (
+          <div className="composer-tags">
+            <span className="composer-tag-label">タグ</span>
+            {tags.map((tag) => (
+              <span key={tag} className="tag-chip is-set">
+                #{tag}
+              </span>
+            ))}
+            {tagSuggestions.map((tag) => (
+              <button
+                type="button"
+                key={tag}
+                className="tag-chip"
+                aria-label={`タグ「${tag}」を付ける`}
+                onClick={() =>
+                  setBody((current) =>
+                    (current.trimEnd() + " #" + tag + " ").trimStart(),
+                  )
+                }
+              >
+                ＋#{tag}
+              </button>
+            ))}
+            {!tags.length && (
+              <small className="composer-tag-hint">
+                本文に「#ことば」と書くとタグになります
+              </small>
+            )}
+          </div>
+        )}
         {!fixedBook && (picking || bookId) && (
           <BookPicker
             books={state.books}
@@ -322,6 +377,28 @@ export function ComposeFab({
   );
 }
 
+/** Post text with each #tag as a link to the posts that share it. */
+export function PostText({ body }: { body: string }) {
+  return (
+    <p className="post-text">
+      {splitTags(body).map((part, index) =>
+        part.tag ? (
+          <Link
+            key={index}
+            className="post-tag"
+            href={"/search/?q=" + encodeURIComponent("#" + part.tag)}
+            onClick={() => requestSearch("#" + part.tag)}
+          >
+            {part.text}
+          </Link>
+        ) : (
+          part.text
+        ),
+      )}
+    </p>
+  );
+}
+
 export function PostCard({
   state,
   actions,
@@ -373,6 +450,7 @@ export function PostCard({
           <Link href={profile} className="post-author">
             {author.name}
           </Link>
+          <span className="post-handle">@{author.handle}</span>
           {!mine && <small className="demo-tag">デモの読書家</small>}
           <time dateTime={post.createdAt}>
             {formatPostTime(post.createdAt)}
@@ -408,7 +486,7 @@ export function PostCard({
             </button>
           </div>
         ) : (
-          <p className="post-text">{post.body}</p>
+          <PostText body={post.body} />
         )}
         {book && (showBook || isReply) && (
           <Link href={"/books/" + book.id + "/"} className="post-book">

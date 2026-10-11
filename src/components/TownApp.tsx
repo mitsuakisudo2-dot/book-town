@@ -10,7 +10,7 @@ import { ShopEditor } from "./ShopEditor";
 import { ProfileView } from "./ProfileView";
 import { StreetView } from "./StreetView";
 import { BookInHand } from "./BookInHand";
-import { BookActions } from "./BookActions";
+import { BookActions, BookPrice } from "./BookActions";
 import { BookReviews } from "./Social";
 import { HomeView } from "./HomeView";
 import { SearchView } from "./SearchView";
@@ -489,6 +489,7 @@ function BookView({
           <span className="genre-tag">{book.genre}</span>
           <h1>{book.title}</h1>
           <p className="book-page-author">{book.author}</p>
+          <BookPrice book={book} />
           <p className="book-summary">{book.summary}</p>
           <BookActions
             book={book}

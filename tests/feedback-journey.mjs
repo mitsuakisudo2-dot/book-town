@@ -99,7 +99,8 @@ try {
         expect(Object.values(saved.popReactions)).toEqual([
           ["like", "read", "love"],
         ]);
-        await dialog().locator(".bh-purchase summary").click();
+        // The shop links sit in the open; no extra tap is needed.
+        await expect(dialog().locator(".bh-purchase summary")).toHaveCount(0);
         for (const provider of ["Amazonで探す ↗", "楽天ブックスで探す ↗"]) {
           const link = dialog().getByRole("link", {
             name: provider,

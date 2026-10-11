@@ -71,6 +71,13 @@ async function swipe(locator, dx) {
     );
   }, dx);
 }
+/** Answers the reading confirmation and checks it greeted the reader with a phrase. */
+async function confirmIn(title, answer) {
+  const dialog = page.getByRole("dialog", { name: title });
+  await expect(dialog.locator(".reading-confirm-phrase")).not.toBeEmpty();
+  await dialog.getByRole("button", { name: answer, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+}
 const stored = () =>
   page.evaluate(
     () => JSON.parse(localStorage.getItem("book-town-v1") ?? "{}").data,
@@ -181,6 +188,7 @@ try {
         .fill("ソラリス");
       await page.getByRole("button", { name: /^ソラリス/ }).click();
       await page.getByRole("button", { name: /みんなで読む/ }).click();
+      await confirmIn("読書をはじめますか？", "はじめる");
       await expect(
         page.getByRole("heading", { name: "ソラリス" }),
       ).toBeVisible();
@@ -231,6 +239,7 @@ try {
       await go("/reading/");
       await page.waitForTimeout(1200);
       await page.getByRole("button", { name: "読書を終える" }).click();
+      await confirmIn("読書を終えますか？", "終える");
       await expect(
         page.getByRole("heading", { name: "読書を開始" }),
       ).toBeVisible();
@@ -249,6 +258,7 @@ try {
     "reading alone keeps memos private and off the timeline",
     async () => {
       await page.getByRole("button", { name: /一人で読む/ }).click();
+      await confirmIn("読書をはじめますか？", "はじめる");
       await expect(
         page.getByRole("heading", { name: /同じ本を、いま2人が読んでいます/ }),
       ).toBeVisible();
@@ -260,6 +270,7 @@ try {
         page.getByText("自分だけのメモ", { exact: true }),
       ).toBeVisible();
       await page.getByRole("button", { name: "読み終えた！" }).click();
+      await confirmIn("読み終えましたか？", "読み終えた");
       expect((await stored()).finishedBooks).toEqual(["solaris"]);
       await go("/timeline/");
       await expect(page.getByText("ここは自分だけのメモ。")).toHaveCount(0);
@@ -334,6 +345,7 @@ try {
     const clear = page.locator(".picker-chosen .picker-clear");
     if (await clear.count()) await clear.click();
     await page.getByRole("button", { name: /一人で読む/ }).click();
+    await confirmIn("読書をはじめますか？", "はじめる");
     await expect(
       page.getByRole("heading", { name: "読書中", exact: true }),
     ).toBeVisible();
@@ -350,6 +362,7 @@ try {
       "本を決めずに、ぱらぱらと。",
     );
     await page.getByRole("button", { name: "読書を終える" }).click();
+    await confirmIn("読書を終えますか？", "終える");
     await expect(page.locator(".reading-log")).toContainText("本を選ばずに");
   });
 
@@ -388,6 +401,94 @@ try {
       await page.reload();
       await page.waitForFunction(() => localStorage.getItem("book-town-v1"));
       await expect(links.getByRole("link")).toHaveCount(2);
+    },
+  );
+
+  await check("reading confirmations can be declined", async () => {
+    await go("/reading/");
+    await page.getByRole("button", { name: /一人で読む/ }).click();
+    const dialog = page.getByRole("dialog", { name: "読書をはじめますか？" });
+    await expect(dialog.locator(".reading-confirm-phrase")).not.toBeEmpty();
+    await dialog.getByRole("button", { name: "もう少し準備する" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "読書を開始" }),
+    ).toBeVisible();
+    expect((await stored()).readingSessions.every((s) => s.endedAt)).toBe(true);
+  });
+
+  await check("tags link to every post that shares them", async () => {
+    await go("/timeline/");
+    await page.getByRole("link", { name: "#積読" }).first().click();
+    await expect(page).toHaveURL(/\/search\//);
+    await expect(
+      page.getByRole("heading", { name: /#積読 の投稿/ }),
+    ).toBeVisible();
+    await expect(page.locator(".search-results")).toContainText(
+      "今週は一冊も買わない",
+    );
+    await go("/timeline/");
+    await page.locator(".compose-fab").click();
+    const compose = page.getByRole("dialog", { name: "投稿する" });
+    await compose.locator("textarea").fill("雨の日は");
+    await compose
+      .getByRole("button", { name: /タグ「.+」を付ける/ })
+      .first()
+      .click();
+    await expect(compose.locator("textarea")).toHaveValue(/^雨の日は #\S+ $/);
+    await expect(compose.locator(".tag-chip.is-set")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+  });
+
+  await check(
+    "every reader has an @ID; the viewer can set a free one",
+    async () => {
+      await go("/timeline/");
+      await expect(page.locator(".post-handle").first()).toHaveText(
+        /^@[a-z0-9_]+$/,
+      );
+      await go("/profiles/me/");
+      await expect(page.locator(".profile-handle")).toHaveText("@reader");
+      await page.getByRole("button", { name: "プロフィールを編集" }).click();
+      const dialog = page.getByRole("dialog", { name: "読書家のプロフィール" });
+      await dialog.getByLabel("ユーザーID").fill("nagi");
+      await dialog.getByRole("button", { name: "保存する" }).click();
+      await expect(dialog.getByRole("alert")).toContainText("ほかの読書家");
+      await dialog.getByLabel("ユーザーID").fill("Book_Reader");
+      await dialog.getByRole("button", { name: "保存する" }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(page.locator(".profile-handle")).toHaveText("@book_reader");
+      await go("/search/");
+      await page
+        .getByRole("searchbox", { name: "本と書店を検索" })
+        .fill("@book_r");
+      await expect(page.getByRole("heading", { name: /読書家/ })).toBeVisible();
+      await expect(page.locator(".search-results")).toContainText(
+        "@book_reader",
+      );
+    },
+  );
+
+  await check(
+    "book page shows the price, open shop links and three reviews first",
+    async () => {
+      await go("/books/solaris/");
+      await expect(page.locator(".book-page-hero .book-price")).toContainText(
+        "¥1,540",
+      );
+      await expect(
+        page.getByRole("link", { name: "Amazonで探す ↗", exact: true }),
+      ).toBeVisible();
+      const reviews = page.locator(
+        ".book-reviews > .post-feed > article.post-card",
+      );
+      await expect(reviews).toHaveCount(3);
+      const more = page.getByRole("button", {
+        name: /残りのレビューをすべて表示/,
+      });
+      await more.click();
+      await expect(more).toHaveCount(0);
+      expect(await reviews.count()).toBeGreaterThan(3);
     },
   );
 

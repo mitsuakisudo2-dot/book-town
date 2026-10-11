@@ -5,6 +5,7 @@ import { seedState } from "./data";
 import { localTownRepository, type TownRepository } from "./repository";
 import { createRegisteredBook, normalizeIsbn } from "./books";
 import { cleanLinks } from "./links";
+import { handleProblem, normalizeHandle } from "./handles";
 import {
   COMPOSE_ICONS,
   ME_ID,
@@ -332,19 +333,24 @@ export function createTownStore(
       else delete popReactions[key];
       commit({ ...state, popReactions });
     },
-    updateProfile(name, bio, links) {
+    updateProfile(name, bio, links, handle) {
       initialize();
-      if (!name.trim()) return;
+      if (!name.trim()) return false;
+      const nextHandle =
+        handle === undefined ? state.me.handle : normalizeHandle(handle);
+      if (handleProblem(nextHandle, state.readers)) return false;
       commit({
         ...state,
         me: {
           ...state.me,
+          handle: nextHandle,
           name: clean(name.trim(), 120),
           bio: clean(bio),
           links:
             links === undefined ? (state.me.links ?? []) : cleanLinks(links),
         },
       });
+      return true;
     },
     updateNine(ids, notes) {
       initialize();
@@ -513,10 +519,18 @@ export function createTownStore(
             "my-book-",
             state.books.map((book) => book.id),
           );
+      const price =
+        typeof input.price === "number" &&
+        Number.isInteger(input.price) &&
+        input.price > 0 &&
+        input.price <= 1_000_000
+          ? input.price
+          : undefined;
       const book = createRegisteredBook(id, {
         title,
         author,
         ...(isbn ? { isbn } : {}),
+        ...(price ? { price } : {}),
       });
       commit({
         ...state,

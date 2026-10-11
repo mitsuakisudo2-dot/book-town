@@ -1,5 +1,6 @@
 import { createInitialState } from "./data";
 import { cleanLinks } from "./links";
+import { DEFAULT_HANDLE, handleProblem } from "./handles";
 import { createRegisteredBook, normalizeIsbn, REGISTERED_GENRE } from "./books";
 import {
   COMPOSE_ICONS,
@@ -56,7 +57,7 @@ type PersonalData = Pick<
   /** Only the viewer's own posts; demo posts always come from the current catalog. */
   posts: Post[];
   /** Only books the viewer registered; their jackets are redrawn on load. */
-  addedBooks: Pick<Book, "id" | "title" | "author" | "isbn">[];
+  addedBooks: Pick<Book, "id" | "title" | "author" | "isbn" | "price">[];
 };
 interface StoredEnvelope {
   version: number;
@@ -158,6 +159,12 @@ function validShop(value: unknown, bookIds: Set<string>): value is Shop | null {
   return true;
 }
 
+const validPrice = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value > 0 &&
+  value <= 1_000_000;
+
 /** Registered books are rebuilt from their id, title and author, so stored styling is never trusted. */
 function restoreBooks(value: unknown, catalogIds: Set<string>): Book[] {
   if (!Array.isArray(value)) return [];
@@ -184,6 +191,7 @@ function restoreBooks(value: unknown, catalogIds: Set<string>): Book[] {
         title: entry.title.trim(),
         author: entry.author.trim(),
         ...(isbn ? { isbn } : {}),
+        ...(validPrice(entry.price) ? { price: entry.price } : {}),
       }),
     );
   }
@@ -358,6 +366,12 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
         // Links migrate on their own: a bad one is dropped, the profile stays.
         me: {
           ...(data.me as Reader),
+          // A missing, malformed or taken ID falls back to the default; the profile stays.
+          handle:
+            typeof (data.me as Reader).handle === "string" &&
+            !handleProblem((data.me as Reader).handle, initial.readers)
+              ? (data.me as Reader).handle
+              : DEFAULT_HANDLE,
           links: cleanLinks((data.me as Reader).links),
         },
         ownShop,
@@ -423,7 +437,13 @@ export function serializeTown(state: TownState): string {
       seenNotifications: state.seenNotifications,
       addedBooks: state.books
         .filter((book) => book.genre === REGISTERED_GENRE)
-        .map(({ id, title, author, isbn }) => ({ id, title, author, isbn })),
+        .map(({ id, title, author, isbn, price }) => ({
+          id,
+          title,
+          author,
+          isbn,
+          price,
+        })),
     },
   };
   return JSON.stringify(envelope);

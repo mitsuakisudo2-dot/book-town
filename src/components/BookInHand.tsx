@@ -11,7 +11,7 @@ import {
   type TownState,
 } from "../lib/types";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
-import { BookActions } from "./BookActions";
+import { BookActions, BookPrice } from "./BookActions";
 import { BookDiscovery } from "./BookDiscovery";
 import "./book-in-hand.css";
 
@@ -313,6 +313,7 @@ export function BookInHand({
               <span className="bh-genre">{book.genre}</span>
               <h2 id={titleId}>{book.title}</h2>
               <p className="bh-author">{book.author}</p>
+              <BookPrice book={book} />
             </div>
           </div>
 

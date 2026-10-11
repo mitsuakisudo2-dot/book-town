@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Shelf, ShelfItem, Shop, TownState } from "../lib/types";
 import { BookJacket, Icon } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
+import { BookPrice } from "./BookActions";
 
 function BookRail({
   title,
@@ -132,6 +133,7 @@ export function BookDiscovery({
               <BookJacket book={book} />
               <strong>{book.title}</strong>
               <small>{book.author}</small>
+              <BookPrice book={book} compact />
               <span>{shelf.name}</span>
             </button>
           ))}

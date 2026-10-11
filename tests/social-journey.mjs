@@ -100,6 +100,7 @@ try {
         await expect(page.getByText("あの終わり方でなければ")).toHaveCount(0);
         await noOverflow(`${label} timeline`);
         await page.screenshot({
+          caret: "initial",
           path: path.join(output, `timeline-${viewport.width}.png`),
           fullPage: true,
         });
@@ -258,6 +259,7 @@ try {
       await go("/books/solaris/");
       await noOverflow(`${label} book`);
       await page.screenshot({
+        caret: "initial",
         path: path.join(output, `book-reviews-${viewport.width}.png`),
         fullPage: true,
       });

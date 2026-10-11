@@ -188,7 +188,7 @@
   overflow-wrap: anywhere;
 }
 .bh-actions {
-  margin: 25px 0 15px;
+  margin: 18px 0 10px;
   text-align: center;
 }
 .bh-save {
@@ -497,41 +497,71 @@
   fill: #cbbf87;
 }
 .bh-purchase {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
   text-align: left;
-  margin-top: 18px;
+  margin-top: 12px;
+  padding-block: 8px;
   border-block: 1px solid #e4dfd2;
 }
-.bh-purchase summary {
-  display: flex;
+.bh-purchase-label {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  min-height: 48px;
+  gap: 6px;
   font-size: 12px;
   color: #365242;
 }
-.bh-purchase summary span {
-  margin-left: auto;
-  font-size: 10px;
-  color: #7c7f71;
-}
 .bh-purchase-links {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .bh-purchase-links a {
-  min-height: 44px;
-  padding: 12px 14px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 12px;
   border: 1px solid #dedbce;
-  border-radius: 4px;
+  border-radius: 999px;
   font-size: 12px;
+  color: #365242;
+  background: #fffdf7;
+}
+.bh-purchase-links a:hover {
+  border-color: #b9c6ae;
+  background: #f3f6ee;
 }
 .bh-purchase p {
+  flex-basis: 100%;
   color: #7b7d6f;
   font-size: 10px;
-  line-height: 1.9;
-  margin: 12px 0 18px;
+  line-height: 1.7;
+  margin: 0;
+}
+.book-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6f7a66;
+}
+.book-price b {
+  font-size: 16px;
+  color: #2f4a3a;
+  font-variant-numeric: tabular-nums;
+}
+.book-price small {
+  font-size: 10px;
+}
+.book-price.is-compact {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #3f5f4c;
+  font-variant-numeric: tabular-nums;
 }
 .bh-discovery {
   margin-top: 30px;

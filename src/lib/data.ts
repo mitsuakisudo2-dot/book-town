@@ -12,7 +12,7 @@ import {
 
 // Every cover and spine is drawn by the app from these original design tokens.
 // The summaries and shop-owner notes are original demo copy, not quoted text.
-export const books: Book[] = [
+const catalog: Book[] = [
   {
     id: "solaris",
     title: "ソラリス",
@@ -327,9 +327,42 @@ export const books: Book[] = [
   },
 ];
 
+// Placeholder list prices (tax included) for the demo catalog. The UI labels them as provisional.
+const demoPrices: Record<string, number> = {
+  solaris: 1540,
+  "left-hand": 1320,
+  dispossessed: 1452,
+  fahrenheit: 1100,
+  momo: 880,
+  "invisible-cities": 1045,
+  fictions: 1012,
+  walking: 2420,
+  "book-of-disquiet": 3960,
+  "hundred-years": 1375,
+  "lonely-hunter": 1320,
+  "old-man-sea": 693,
+  "night-fog": 1980,
+  "ways-of-seeing": 1650,
+  walden: 1067,
+  utopia: 1001,
+  laozi: 935,
+  poetics: 1078,
+  "galaxy-railroad": 572,
+  "ten-nights": 605,
+  silence: 693,
+  "stone-history": 726,
+  "traveling-tree": 715,
+  "secret-garden": 1045,
+};
+export const books: Book[] = catalog.map((book) => ({
+  ...book,
+  price: demoPrices[book.id],
+}));
+
 export const readers: Reader[] = [
   {
     id: "r-nagi",
+    handle: "nagi",
     name: "凪",
     bio: "遠い惑星の話を読むと、いつもの帰り道が少し違って見えます。SFから、ときどき哲学へ。",
     color: "#536b6f",
@@ -351,6 +384,7 @@ export const readers: Reader[] = [
   },
   {
     id: "r-sumire",
+    handle: "sumire",
     name: "すみれ",
     bio: "翻訳の向こうに、まだ知らない暮らしを探しています。散歩のように読むのが好き。",
     color: "#957568",
@@ -372,6 +406,7 @@ export const readers: Reader[] = [
   },
   {
     id: "r-tou",
+    handle: "akari",
     name: "灯",
     bio: "答えを急がず、問いを持って帰れる本を。専門家ではありません。ひとつの言葉をゆっくり考えたい。",
     color: "#817851",
@@ -393,6 +428,7 @@ export const readers: Reader[] = [
   },
   {
     id: "r-haru",
+    handle: "haru",
     name: "はる",
     bio: "ジャンルの境目を気にしない、小さな本棚。旅、物語、庭と、読み終えたあとに残るもの。",
     color: "#63806d",
@@ -411,6 +447,7 @@ export const readers: Reader[] = [
   },
   {
     id: "r-shiori",
+    handle: "shiori",
     name: "栞",
     bio: "美術と文章のあいだを行ったり来たり。見慣れたものを、もう一度見てみるための選書です。",
     color: "#987578",
@@ -425,6 +462,7 @@ export const readers: Reader[] = [
   },
   {
     id: "r-sou",
+    handle: "sou",
     name: "蒼",
     bio: "一冊を何年もかけて読むことがあります。小説のなかの声と、日々の静けさが好きです。",
     color: "#627988",
@@ -836,21 +874,21 @@ export const posts: Post[] = [
     "p-1",
     "r-nagi",
     "2026-10-10T09:12:00+09:00",
-    "『ソラリス』を十年ぶりに再読。わからないものを、わからないまま見つめ続ける話だと思っていたけれど、今回は「わかってほしい」と願う側の話に読めた。読むたびに、こちらが試されている気がする。",
+    "『ソラリス』を十年ぶりに再読。わからないものを、わからないまま見つめ続ける話だと思っていたけれど、今回は「わかってほしい」と願う側の話に読めた。読むたびに、こちらが試されている気がする。 #再読",
     { bookId: "solaris", likes: 12, wants: 4 },
   ),
   post(
     "p-2",
     "r-sumire",
     "2026-10-10T08:40:00+09:00",
-    "朝の電車で、隣の人が文庫に紙のカバーをかけて読んでいた。何の本だったんだろう。気になって、二駅乗り過ごした。",
+    "朝の電車で、隣の人が文庫に紙のカバーをかけて読んでいた。何の本だったんだろう。気になって、二駅乗り過ごした。 #電車読書",
     { likes: 21 },
   ),
   post(
     "p-3",
     "r-haru",
     "2026-10-09T22:05:00+09:00",
-    "『旅をする木』を読むと、遠くへ行かなくても旅はできるんだと思える。寝る前に一編ずつ。季節がひとつ進むたびに、また最初から読みたくなる本。",
+    "『旅をする木』を読むと、遠くへ行かなくても旅はできるんだと思える。寝る前に一編ずつ。季節がひとつ進むたびに、また最初から読みたくなる本。 #寝る前の一冊",
     { bookId: "traveling-tree", likes: 9, wants: 3 },
   ),
   post(
@@ -864,14 +902,14 @@ export const posts: Post[] = [
     "p-5",
     "r-sou",
     "2026-10-09T18:10:00+09:00",
-    "積読が二十冊を超えた。今週は一冊も買わない、と書いておく。（たぶん）",
+    "積読が二十冊を超えた。今週は一冊も買わない、と書いておく。（たぶん） #積読",
     { likes: 33 },
   ),
   post(
     "p-6",
     "r-shiori",
     "2026-10-09T12:45:00+09:00",
-    "美術館の帰りに『イメージ』を開いたら、さっき見た絵がまったく違って見えてきた。見ることは、思っていたよりずっと能動的な行為なのかもしれない。",
+    "美術館の帰りに『イメージ』を開いたら、さっき見た絵がまったく違って見えてきた。見ることは、思っていたよりずっと能動的な行為なのかもしれない。 #美術館帰り",
     { bookId: "ways-of-seeing", likes: 8, wants: 2 },
   ),
   post(
@@ -885,7 +923,7 @@ export const posts: Post[] = [
     "p-8",
     "r-sumire",
     "2026-10-08T21:00:00+09:00",
-    "『見えない都市』は、どこから開いてもいい本。今日は旅先の宿で、目についた都市をひとつだけ読んだ。地図のない街を歩いているみたいで、続きは明日の自分にとっておく。",
+    "『見えない都市』は、どこから開いてもいい本。今日は旅先の宿で、目についた都市をひとつだけ読んだ。地図のない街を歩いているみたいで、続きは明日の自分にとっておく。 #旅先の本 #寝る前の一冊",
     { bookId: "invisible-cities", likes: 11, wants: 5 },
   ),
   post(
@@ -899,7 +937,7 @@ export const posts: Post[] = [
     "p-10",
     "r-tou",
     "2026-10-08T07:50:00+09:00",
-    "早起きして、コーヒーと『老子』を少し。ほんの数行で、一日のペースがゆっくりになる。",
+    "早起きして、コーヒーと『老子』を少し。ほんの数行で、一日のペースがゆっくりになる。 #朝読書",
     { bookId: "laozi", likes: 7, wants: 1 },
   ),
   // Conversations inside reviews.
@@ -957,7 +995,7 @@ export const posts: Post[] = [
     "p-m3",
     "r-sou",
     "2026-10-10T20:55:00+09:00",
-    "今夜は三十ページだけと決めて開いた。静かな場面がつづいて、時計の音がよく聞こえる。",
+    "今夜は三十ページだけと決めて開いた。静かな場面がつづいて、時計の音がよく聞こえる。 #夜の読書",
     { bookId: "silence", readingMode: "together", likes: 4 },
   ),
   post(
@@ -984,6 +1022,7 @@ export function createInitialState(): TownState {
     shops,
     me: {
       id: ME_ID,
+      handle: "reader",
       name: "あなた",
       bio: "好きな本から、あなたの小さな書店を。",
       color: "#68816a",

@@ -1,7 +1,27 @@
 "use client";
 
 import type { Book, TownActions, TownState } from "../lib/types";
+import { formatPrice, REGISTERED_GENRE } from "../lib/books";
 import { Icon } from "./ui";
+
+/** 定価, tax included. Books without a known price show nothing. */
+export function BookPrice({
+  book,
+  compact = false,
+}: {
+  book: Book;
+  compact?: boolean;
+}) {
+  if (!book.price) return null;
+  return compact ? (
+    <span className="book-price is-compact">{formatPrice(book.price)}</span>
+  ) : (
+    <p className="book-price">
+      定価 <b>{formatPrice(book.price)}</b>
+      <small>（税込）</small>
+    </p>
+  );
+}
 
 export function BookActions({
   book,
@@ -53,13 +73,10 @@ export function BookActions({
           {favorite ? "お気に入りに登録済み" : "お気に入り"}
         </button>
       </div>
-      <p className="bh-private-hint">
-        読みたい本とお気に入りは、あなたのプロフィールに
-      </p>
-      <details className="bh-purchase">
-        <summary>
-          <Icon name="store" size={17} /> 購入する <span>外部書店で探す ↗</span>
-        </summary>
+      <div className="bh-purchase">
+        <span className="bh-purchase-label">
+          <Icon name="store" size={15} /> 購入する
+        </span>
         <div className="bh-purchase-links">
           <a
             href={`https://www.amazon.co.jp/s?k=${query}&i=stripbooks`}
@@ -76,8 +93,14 @@ export function BookActions({
             楽天ブックスで探す ↗
           </a>
         </div>
-        <p>タイトル・著者で検索します。版や在庫は購入先でご確認ください。</p>
-      </details>
+        <p>
+          タイトル・著者で検索します。
+          {book.price && book.genre !== REGISTERED_GENRE
+            ? "定価はデモ用の仮の値です。"
+            : ""}
+          版や在庫は購入先でご確認ください。
+        </p>
+      </div>
     </div>
   );
 }

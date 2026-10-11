@@ -12,6 +12,7 @@ import { readerPosts } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { BarcodeRegister } from "./BarcodeRegister";
 import { linkLabel, normalizeLink, PROFILE_LINK_LIMIT } from "../lib/links";
+import { handleProblem, normalizeHandle } from "../lib/handles";
 import { useClock } from "./useClock";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { ProfilePosts } from "./Social";
@@ -56,6 +57,8 @@ export function ProfileView({
   const [draftName, setDraftName] = useState("");
   const [draftBio, setDraftBio] = useState("");
   const [draftLinks, setDraftLinks] = useState<string[]>([]);
+  const [draftHandle, setDraftHandle] = useState("");
+  const [handleError, setHandleError] = useState("");
   const [linkError, setLinkError] = useState("");
   const [draftNine, setDraftNine] = useState<string[]>([]);
   const [draftNotes, setDraftNotes] = useState<Record<string, string>>({});
@@ -103,6 +106,8 @@ export function ProfileView({
     setDraftName(reader.name);
     setDraftBio(reader.bio);
     setDraftLinks(reader.links?.length ? reader.links : [""]);
+    setDraftHandle(reader.handle);
+    setHandleError("");
     setLinkError("");
     setEditingProfile(true);
   }
@@ -111,6 +116,12 @@ export function ProfileView({
     event.preventDefault();
     const name = draftName.trim();
     if (!name) return;
+    const handle = normalizeHandle(draftHandle);
+    const problem = handleProblem(handle, state.readers);
+    if (problem) {
+      setHandleError(problem);
+      return;
+    }
     const filled = draftLinks.map((link) => link.trim()).filter(Boolean);
     const links = filled.map(normalizeLink);
     if (links.some((link) => !link)) {
@@ -119,7 +130,7 @@ export function ProfileView({
       );
       return;
     }
-    actions.updateProfile(name, draftBio.trim(), links as string[]);
+    actions.updateProfile(name, draftBio.trim(), links as string[], handle);
     setEditingProfile(false);
     notify("プロフィールを保存しました");
   }
@@ -169,6 +180,7 @@ export function ProfileView({
             {!isSelf && <span className="profile-demo">デモの読書家</span>}
           </p>
           <h1 id="profile-name">{reader.name}</h1>
+          <p className="profile-handle">@{reader.handle}</p>
           <p className="profile-bio">
             {reader.bio || "読書家の名刺は、好きな本から。"}
           </p>
@@ -555,7 +567,9 @@ export function ProfileView({
                       <ReaderAvatar reader={owner} size={36} />
                       <span>
                         <b>{owner.name}</b>
-                        <small>{place.name}</small>
+                        <small>
+                          @{owner.handle}・{place.name}
+                        </small>
                       </span>
                     </Link>
                     <button
@@ -636,6 +650,33 @@ export function ProfileView({
               onChange={(event) => setDraftName(event.target.value)}
               autoFocus
             />
+            <label htmlFor="reader-handle">ユーザーID</label>
+            <div className="profile-handle-field">
+              <span aria-hidden="true">@</span>
+              <input
+                id="reader-handle"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                maxLength={21}
+                value={draftHandle}
+                onChange={(event) => {
+                  setHandleError("");
+                  setDraftHandle(event.target.value);
+                }}
+                aria-describedby="reader-handle-hint"
+              />
+            </div>
+            <p
+              id="reader-handle-hint"
+              className={
+                handleError ? "profile-link-error" : "profile-form-hint"
+              }
+              role={handleError ? "alert" : undefined}
+            >
+              {handleError ||
+                "3〜20文字の半角英小文字・数字・_。ほかの読書家と同じIDは使えません。"}
+            </p>
             <label htmlFor="reader-bio">自己紹介</label>
             <textarea
               id="reader-bio"

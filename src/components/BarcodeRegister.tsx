@@ -19,18 +19,30 @@ const detectorClass = (): DetectorClass | undefined =>
 /** Looks an ISBN up in openBD. Any failure falls back to typing the title by hand. */
 async function lookup(
   isbn: string,
-): Promise<{ title: string; author: string } | null> {
+): Promise<{ title: string; author: string; price?: number } | null> {
   try {
     const response = await fetch(`https://api.openbd.jp/v1/get?isbn=${isbn}`);
     if (!response.ok) return null;
     const [record] = (await response.json()) as Array<{
       summary?: { title?: string; author?: string };
+      onix?: {
+        ProductSupply?: {
+          SupplyDetail?: { Price?: Array<{ PriceAmount?: string }> };
+        };
+      };
     } | null>;
     const title = record?.summary?.title?.trim();
+    // openBD lists the price before tax; the app shows prices with tax included.
+    const net = Number(
+      record?.onix?.ProductSupply?.SupplyDetail?.Price?.[0]?.PriceAmount,
+    );
     return title
       ? {
           title,
           author: (record?.summary?.author ?? "").replace(/／著.*$/, "").trim(),
+          ...(Number.isFinite(net) && net > 0
+            ? { price: Math.floor(net * 1.1) }
+            : {}),
         }
       : null;
   } catch {
@@ -60,6 +72,7 @@ export function BarcodeRegister({
   const [isbn, setIsbn] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
+  const [price, setPrice] = useState("");
   const [message, setMessage] = useState("");
   const [looking, setLooking] = useState(false);
   const canScan = Boolean(detectorClass());
@@ -116,6 +129,7 @@ export function BarcodeRegister({
     if (known) {
       setTitle(known.title);
       setAuthor(known.author);
+      setPrice(known.price ? String(known.price) : "");
       setMessage("この本はもう登録されています。");
       return;
     }
@@ -126,6 +140,7 @@ export function BarcodeRegister({
     if (record) {
       setTitle(record.title);
       setAuthor(record.author);
+      setPrice(record.price ? String(record.price) : "");
       setMessage("書籍情報が見つかりました。確認して登録してください。");
     } else {
       setMessage(
@@ -148,10 +163,14 @@ export function BarcodeRegister({
 
   function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const yen = Number(price.replace(/[,，円¥\s]/g, ""));
     const bookId = actions.addBook({
       title,
       author,
       ...(isbn ? { isbn } : {}),
+      ...(price.trim() && Number.isInteger(yen) && yen > 0
+        ? { price: yen }
+        : {}),
     });
     if (!bookId) {
       setMessage("タイトルを入力してください。");
@@ -242,6 +261,18 @@ export function BarcodeRegister({
             value={author}
             maxLength={200}
             onChange={(event) => setAuthor(event.target.value)}
+          />
+        </label>
+        <label className="form-label" htmlFor={id + "-price"}>
+          定価（税込・任意）
+          <input
+            id={id + "-price"}
+            className="field"
+            inputMode="numeric"
+            placeholder="1540"
+            value={price}
+            maxLength={9}
+            onChange={(event) => setPrice(event.target.value)}
           />
         </label>
         <button
