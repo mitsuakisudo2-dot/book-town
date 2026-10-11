@@ -130,7 +130,14 @@ try {
       ).toBeVisible();
       const names = await page.locator(".street-shop-title").allTextContents();
       expect(new Set(names).size).toBe(6);
-      await expect(page.locator(".street-shop .shelf-scroll")).toHaveCount(12);
+      // Each shop shows one shelf on the street; the rest is on the shop's own page.
+      await expect(page.locator(".street-shop .shelf-scroll")).toHaveCount(6);
+      await expect(
+        page.getByRole("button", { name: "一冊からたどる", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "書店一覧", exact: true }),
+      ).toHaveCount(0);
       await noOverflow(page, "1440px street");
       await page.screenshot({
         path: path.join(output, "street-desktop.png"),
@@ -294,26 +301,17 @@ try {
     },
   );
   await check(
-    "Book browsing and the original directory remain accessible",
+    "Each shop card links to the shop's own page for the full view",
     async () => {
       await go(page);
-      await page
-        .getByRole("button", { name: "一冊からたどる", exact: true })
-        .click();
-      await expect(page.locator(".street-book-grid article")).toHaveCount(24);
-      await page
-        .getByRole("textbox", { name: "本や書店を検索", exact: true })
-        .fill("レム");
-      await expect(page.locator(".street-book-grid article")).toHaveCount(1);
-      await page.locator(".street-book-grid article a").click();
-      await expect(page).toHaveURL(/books\/solaris/);
+      const card = shop(page, "軌道書房");
+      await expect(card.locator(".street-shop-footer")).toContainText(
+        "ほかに1段の棚があります",
+      );
+      await card.getByRole("link", { name: "この書店へ" }).click();
+      await expect(page).toHaveURL(/shops\/shop-orbit/);
+      await expect(page.locator(".store-shelf-section")).toHaveCount(2);
       await go(page);
-      await page.getByRole("button", { name: "書店一覧", exact: true }).click();
-      await expect(page.locator(".shop-card")).toHaveCount(6);
-      await page
-        .getByRole("button", { name: "街の散歩に戻る", exact: true })
-        .click();
-      await expect(page.locator(".street-shop")).toHaveCount(6);
     },
   );
   await check(
@@ -401,27 +399,35 @@ try {
         ).toBeLessThan(700);
         const shelf = shop(phone, "雨と翻訳").locator(".shelf-scroll").first();
         await shelf.scrollIntoViewIfNeeded();
+        // Street cards are compact: a short shelf may fit the screen, a long one scrolls.
         expect(
+          await shelf.evaluate((element) => element.clientWidth),
+        ).toBeLessThanOrEqual(width);
+        if (
           await shelf.evaluate(
             (element) => element.scrollWidth > element.clientWidth,
-          ),
-        ).toBe(true);
-        const shelfRegion = shop(phone, "雨と翻訳")
-          .locator(".street-shelf")
-          .first();
-        await shelfRegion.getByRole("button", { name: /の右側を見る$/ }).tap();
-        await expect
-          .poll(() => shelf.evaluate((element) => element.scrollLeft))
-          .toBeGreaterThan(0);
+          )
+        ) {
+          await shop(phone, "雨と翻訳")
+            .locator(".street-shelf")
+            .first()
+            .getByRole("button", { name: /の右側を見る$/ })
+            .tap();
+          await expect
+            .poll(() => shelf.evaluate((element) => element.scrollLeft))
+            .toBeGreaterThan(0);
+        }
         const trigger = shelf.locator(".shelf-book-button").last();
-        await trigger.scrollIntoViewIfNeeded();
-        await trigger.focus();
+        // Center it so the fixed bottom bar and compose button never cover the tap.
+        await trigger.evaluate((element) =>
+          element.scrollIntoView({ block: "center", inline: "nearest" }),
+        );
+        await trigger.focus({ preventScroll: true });
         const before = {
           vertical: await phone.evaluate(() => scrollY),
           horizontal: await shelf.evaluate((element) => element.scrollLeft),
         };
         expect(before.vertical).toBeGreaterThan(0);
-        expect(before.horizontal).toBeGreaterThan(0);
         await trigger.tap();
         await expectBook(phone, "ソラリス");
         await noOverflow(phone, `${width}px foreground`);
@@ -452,6 +458,17 @@ try {
           fullPage: false,
           animations: "disabled",
         });
+        // The shop's own page keeps full-size shelves that scroll sideways.
+        await go(phone, "/shops/shop-rain/");
+        const full = phone.locator(".shelf-scroll").first();
+        await full.scrollIntoViewIfNeeded();
+        expect(
+          await full.evaluate(
+            (element) => element.scrollWidth > element.clientWidth,
+          ),
+        ).toBe(true);
+        await noOverflow(phone, `${width}px shop`);
+        await go(phone);
       },
     );
     await check(

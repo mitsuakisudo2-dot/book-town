@@ -1172,3 +1172,99 @@
     font-size: 25px;
   }
 }
+
+/* Compact shop cards on the home street: one shelf each; the full shop is one tap away. */
+.street-shop.is-compact {
+  margin-bottom: 18px;
+}
+.street-shop.is-compact .street-shop-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 12px 18px 10px;
+  border-top-width: 4px;
+}
+.street-shop.is-compact .street-shop-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.street-shop.is-compact .street-shop-title > a {
+  gap: 8px;
+}
+.street-shop.is-compact .street-shop-title h2 {
+  font-size: 19px;
+  letter-spacing: 1px;
+  line-height: 1.5;
+}
+.street-own-tag {
+  font-size: 10px;
+  border: 1px solid var(--theme-light);
+  padding: 1px 7px;
+  border-radius: 2px;
+  color: #6d7766;
+  white-space: nowrap;
+}
+.street-shop.is-compact .street-shop-owner {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.street-shop.is-compact .street-shop-owner > a:first-child {
+  min-height: 32px;
+  font-size: 11px;
+}
+.street-shop.is-compact .street-follow {
+  min-height: 30px;
+  padding: 3px 10px;
+}
+.street-shop.is-compact .street-shop-shelves {
+  padding: 6px 14px 2px;
+}
+.street-shop.is-compact .street-shelf {
+  margin-bottom: 8px;
+}
+.street-shop.is-compact .street-shelf > header {
+  min-height: 30px;
+  margin-bottom: 3px;
+}
+.street-shop.is-compact .street-shelf h3 {
+  font-size: 12px;
+}
+.street-shop.is-compact .street-shelf-controls button {
+  width: 28px;
+  height: 28px;
+}
+.street-shop.is-compact .street-shelf .shelf-books-row {
+  min-height: 132px;
+  padding: 12px 18px 0;
+  gap: 4px;
+  min-width: 0;
+}
+.street-shop.is-compact .street-shelf .shelf-book {
+  height: calc(var(--book-height) * 0.6);
+}
+.street-shop.is-compact .street-shelf .shelf-book.face {
+  width: 74px;
+  margin-right: 8px;
+  margin-left: 4px;
+}
+.street-shop.is-compact .street-shelf .shelf-book.spine {
+  width: max(22px, calc(var(--book-thickness) * 0.75));
+}
+.street-shop.is-compact .street-shelf .spine-title {
+  font-size: 10px;
+  top: 12px;
+  max-height: calc(100% - 34px);
+}
+.street-shop.is-compact .street-shelf .jacket-title {
+  font-size: 12px;
+}
+.street-shop.is-compact .street-shelf .shelf-plank {
+  height: 12px;
+}
+.street-shop.is-compact .street-shop-footer {
+  padding: 6px 18px;
+}

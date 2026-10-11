@@ -2,9 +2,27 @@
 
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
-import type { TownActions, TownState } from "../lib/types";
+import {
+  COMPOSE_ICONS,
+  type ComposeIcon,
+  type TownActions,
+  type TownState,
+} from "../lib/types";
+import { readerPosts } from "../lib/social";
+import { formatDuration, readingTotals } from "../lib/reading";
+import { BarcodeRegister } from "./BarcodeRegister";
+import { linkLabel, normalizeLink, PROFILE_LINK_LIMIT } from "../lib/links";
+import { useClock } from "./useClock";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
+import { ProfilePosts } from "./Social";
+
+const composeIconNames: Record<ComposeIcon, string> = {
+  pen: "万年筆",
+  typewriter: "タイプライター",
+  quill: "羽根ペン",
+};
 import "./profile.css";
+import "./reading.css";
 
 interface ProfileViewProps {
   state: TownState;
@@ -26,13 +44,19 @@ export function ProfileView({
   const shop = isSelf
     ? state.ownShop
     : state.shops.find((place) => place.ownerId === readerId);
-  const [collection, setCollection] = useState<"wishlist" | "favorites">(
-    "wishlist",
-  );
+  const [collection, setCollection] = useState<
+    "wishlist" | "favorites" | "library"
+  >("wishlist");
+  const [sheet, setSheet] = useState<
+    "following" | "followers" | "settings" | "register" | null
+  >(null);
+  const clock = useClock(60_000);
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingNine, setEditingNine] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftBio, setDraftBio] = useState("");
+  const [draftLinks, setDraftLinks] = useState<string[]>([]);
+  const [linkError, setLinkError] = useState("");
   const [draftNine, setDraftNine] = useState<string[]>([]);
   const [draftNotes, setDraftNotes] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
@@ -67,11 +91,19 @@ export function ProfileView({
     return id ? state.books.find((book) => book.id === id) : undefined;
   });
   const following = Boolean(shop && state.following.includes(shop.id));
+  const followedShops = state.shops.filter((place) =>
+    state.following.includes(place.id),
+  );
+  const followerCount = shop ? shop.followers + Number(following) : 0;
+  const postCount = readerPosts(state, reader.id).length;
+  const readingTime = clock ? readingTotals(state, clock.now).total : null;
 
   function beginProfileEdit() {
     if (!reader) return;
     setDraftName(reader.name);
     setDraftBio(reader.bio);
+    setDraftLinks(reader.links?.length ? reader.links : [""]);
+    setLinkError("");
     setEditingProfile(true);
   }
 
@@ -79,7 +111,15 @@ export function ProfileView({
     event.preventDefault();
     const name = draftName.trim();
     if (!name) return;
-    actions.updateProfile(name, draftBio.trim());
+    const filled = draftLinks.map((link) => link.trim()).filter(Boolean);
+    const links = filled.map(normalizeLink);
+    if (links.some((link) => !link)) {
+      setLinkError(
+        "URLとして読めないものがあります。https:// から始まるWebページのアドレスを入れてください。",
+      );
+      return;
+    }
+    actions.updateProfile(name, draftBio.trim(), links as string[]);
     setEditingProfile(false);
     notify("プロフィールを保存しました");
   }
@@ -132,11 +172,72 @@ export function ProfileView({
           <p className="profile-bio">
             {reader.bio || "読書家の名刺は、好きな本から。"}
           </p>
+          {reader.links && reader.links.length > 0 && (
+            <ul className="profile-links" aria-label="リンク">
+              {reader.links.map((url) => (
+                <li key={url}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow"
+                    title={url}
+                  >
+                    <Icon name="link" size={14} />
+                    {linkLabel(url)}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="profile-stats">
+            <span>
+              <b>{postCount}</b> 投稿
+            </span>
+            {isSelf ? (
+              <button type="button" onClick={() => setSheet("following")}>
+                <b>{state.following.length}</b> フォロー
+              </button>
+            ) : null}
+            {isSelf ? (
+              <button type="button" onClick={() => setSheet("followers")}>
+                <b>{followerCount}</b> フォロワー
+              </button>
+            ) : (
+              <span>
+                <b>{followerCount}</b> フォロワー
+              </span>
+            )}
+            {isSelf && (
+              <Link href="/reading/">
+                <b>
+                  {readingTime === null ? "—" : formatDuration(readingTime)}
+                </b>{" "}
+                読書時間
+              </Link>
+            )}
+          </div>
           <div className="profile-reader-actions">
             {isSelf ? (
-              <button className="button secondary" onClick={beginProfileEdit}>
-                <Icon name="edit" /> プロフィールを編集
-              </button>
+              <>
+                <button className="button secondary" onClick={beginProfileEdit}>
+                  <Icon name="edit" /> プロフィールを編集
+                </button>
+                <Link className="button secondary" href="/my-shop/">
+                  <Icon name="store" /> 書店を編集
+                </Link>
+                <button
+                  className="button secondary"
+                  onClick={() => setSheet("register")}
+                >
+                  <Icon name="barcode" /> 本を登録
+                </button>
+                <button
+                  className="button secondary"
+                  onClick={() => setSheet("settings")}
+                >
+                  <Icon name="settings" /> 設定
+                </button>
+              </>
             ) : (
               shop && (
                 <button
@@ -271,11 +372,20 @@ export function ProfileView({
               <Icon name="star" size={17} /> お気に入り{" "}
               <span>{state.favorites.length}</span>
             </button>
+            <button
+              aria-pressed={collection === "library"}
+              onClick={() => setCollection("library")}
+            >
+              <Icon name="barcode" size={17} /> 登録した本{" "}
+              <span>{state.library.length}</span>
+            </button>
           </div>
           <p className="profile-section-description">
             {collection === "wishlist"
               ? "気になった一冊を、次の読書の楽しみに。"
-              : "何度でも戻りたい一冊を、ここに。"}
+              : collection === "favorites"
+                ? "何度でも戻りたい一冊を、ここに。"
+                : "バーコードや手入力で登録した、あなたの本。"}
           </p>
           {state[collection].length ? (
             <div className="profile-collection-grid">
@@ -295,9 +405,11 @@ export function ProfileView({
                       onClick={() =>
                         collection === "wishlist"
                           ? actions.toggleWish(id)
-                          : actions.toggleFavorite(id)
+                          : collection === "favorites"
+                            ? actions.toggleFavorite(id)
+                            : actions.toggleLibrary(id)
                       }
-                      aria-label={`${book.title}を${collection === "wishlist" ? "読みたい" : "お気に入り"}から外す`}
+                      aria-label={`${book.title}を${collection === "wishlist" ? "読みたい" : collection === "favorites" ? "お気に入り" : "登録した本"}から外す`}
                     >
                       <Icon name="close" size={14} /> 外す
                     </button>
@@ -310,11 +422,19 @@ export function ProfileView({
               <p>
                 {collection === "wishlist"
                   ? "読みたい本は、まだありません。"
-                  : "お気に入りの本は、まだありません。"}
+                  : collection === "favorites"
+                    ? "お気に入りの本は、まだありません。"
+                    : "登録した本は、まだありません。"}
               </p>
-              <Link href="/">
-                本の街で一冊に出会う <Icon name="arrow" size={16} />
-              </Link>
+              {collection === "library" ? (
+                <button type="button" onClick={() => setSheet("register")}>
+                  バーコードで本を登録 <Icon name="arrow" size={16} />
+                </button>
+              ) : (
+                <Link href="/">
+                  本の街で一冊に出会う <Icon name="arrow" size={16} />
+                </Link>
+              )}
             </div>
           )}
         </section>
@@ -411,6 +531,95 @@ export function ProfileView({
         )}
       </section>
 
+      <ProfilePosts
+        state={state}
+        actions={actions}
+        notify={notify}
+        readerId={reader.id}
+      />
+
+      {sheet === "following" && (
+        <Modal title="フォロー" onClose={() => setSheet(null)}>
+          {followedShops.length ? (
+            <ul className="people-list">
+              {followedShops.map((place) => {
+                const owner = state.readers.find(
+                  (person) => person.id === place.ownerId,
+                );
+                return owner ? (
+                  <li key={place.id}>
+                    <Link
+                      href={`/profiles/${owner.id}/`}
+                      onClick={() => setSheet(null)}
+                    >
+                      <ReaderAvatar reader={owner} size={36} />
+                      <span>
+                        <b>{owner.name}</b>
+                        <small>{place.name}</small>
+                      </span>
+                    </Link>
+                    <button
+                      className="button secondary"
+                      onClick={() => {
+                        actions.toggleFollow(place.id);
+                        notify("フォローを解除しました");
+                      }}
+                    >
+                      フォロー解除
+                    </button>
+                  </li>
+                ) : null;
+              })}
+            </ul>
+          ) : (
+            <p className="muted">
+              まだ誰もフォローしていません。気になる読書家のプロフィールや書店から、フォローできます。
+            </p>
+          )}
+        </Modal>
+      )}
+      {sheet === "followers" && (
+        <Modal title="フォロワー" onClose={() => setSheet(null)}>
+          <p className="muted">
+            まだフォロワーはいません。この試作は、あなたのブラウザの中だけで動いているため、他の人からのフォローは届きません。
+          </p>
+        </Modal>
+      )}
+      {sheet === "settings" && (
+        <Modal title="設定" onClose={() => setSheet(null)}>
+          <fieldset className="icon-choices">
+            <legend>投稿ボタンのアイコン</legend>
+            {COMPOSE_ICONS.map((icon) => (
+              <label key={icon}>
+                <input
+                  type="radio"
+                  name="compose-icon"
+                  checked={state.settings.composeIcon === icon}
+                  onChange={() => {
+                    actions.setComposeIcon(icon);
+                    notify(`投稿ボタンを${composeIconNames[icon]}にしました`);
+                  }}
+                />
+                <span className="icon-choice-face">
+                  <Icon name={icon} size={24} />
+                </span>
+                {composeIconNames[icon]}
+              </label>
+            ))}
+          </fieldset>
+        </Modal>
+      )}
+      {sheet === "register" && (
+        <BarcodeRegister
+          state={state}
+          actions={actions}
+          notify={notify}
+          onClose={() => {
+            setSheet(null);
+            setCollection("library");
+          }}
+        />
+      )}
       {editingProfile && (
         <Modal
           title="読書家のプロフィール"
@@ -436,6 +645,63 @@ export function ProfileView({
               onChange={(event) => setDraftBio(event.target.value)}
               placeholder="好きな本や、いま気になっていること。"
             />
+            <fieldset className="profile-link-fields">
+              <legend>リンク（note・YouTube・公式サイトなど）</legend>
+              {draftLinks.map((link, index) => (
+                <div key={index} className="profile-link-row">
+                  <label className="sr-only" htmlFor={`reader-link-${index}`}>
+                    リンク{index + 1}
+                  </label>
+                  <input
+                    id={`reader-link-${index}`}
+                    type="text"
+                    inputMode="url"
+                    autoComplete="url"
+                    maxLength={300}
+                    placeholder="https://note.com/..."
+                    value={link}
+                    onChange={(event) => {
+                      setLinkError("");
+                      setDraftLinks(
+                        draftLinks.map((entry, position) =>
+                          position === index ? event.target.value : entry,
+                        ),
+                      );
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="profile-link-remove"
+                    aria-label={`リンク${index + 1}を削除`}
+                    onClick={() =>
+                      setDraftLinks(
+                        draftLinks.length > 1
+                          ? draftLinks.filter(
+                              (_, position) => position !== index,
+                            )
+                          : [""],
+                      )
+                    }
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+              ))}
+              {draftLinks.length < PROFILE_LINK_LIMIT && (
+                <button
+                  type="button"
+                  className="profile-link-add"
+                  onClick={() => setDraftLinks([...draftLinks, ""])}
+                >
+                  <Icon name="plus" size={14} /> リンクを追加
+                </button>
+              )}
+              {linkError && (
+                <p className="profile-link-error" role="alert">
+                  {linkError}
+                </p>
+              )}
+            </fieldset>
             <p className="profile-form-hint">
               この名刺は、街を訪れる読書家に公開されます。
             </p>

@@ -24,6 +24,8 @@ export interface Book {
   height: number;
   thickness: number;
   pattern: number;
+  /** Books the viewer registered (by barcode or by hand) carry their ISBN when known. */
+  isbn?: string;
 }
 
 export interface Reader {
@@ -33,6 +35,8 @@ export interface Reader {
   color: string;
   lifeNine: string[];
   nineNotes: Record<string, string>;
+  /** Web pages the reader shares on their profile (note, YouTube, an official site…). */
+  links?: string[];
 }
 
 export interface ShelfItem {
@@ -62,6 +66,71 @@ export interface Shop {
   demo: boolean;
 }
 
+export const POST_MAX_LENGTH = 1000;
+
+/** One kind of post. A top-level post with a book is also a review on that book's page. */
+export interface Post {
+  id: string;
+  authorId: string;
+  body: string;
+  bookId: string | null;
+  /** Spoiler posts never reach the timeline; they wait behind the book page's door. */
+  spoiler: boolean;
+  /** Replies point to a top-level post. Threads are one level deep. */
+  parentId: string | null;
+  createdAt: string;
+  /** Reactions from other readers in the demo data. The viewer's own are stored separately. */
+  likes: number;
+  wants: number;
+  /**
+   * Written while reading. "together" memos are ordinary public posts with a reading badge;
+   * "solo" memos are private notes only the writer sees.
+   */
+  readingMode: ReadingMode | null;
+}
+
+export interface PostDraft {
+  body: string;
+  bookId?: string | null;
+  spoiler?: boolean;
+  parentId?: string | null;
+  /** Attach the post to the active reading session, which decides its book and visibility. */
+  fromReading?: boolean;
+}
+
+export const READING_MODES = ["solo", "together"] as const;
+export type ReadingMode = (typeof READING_MODES)[number];
+
+export interface ReadingSession {
+  id: string;
+  /** Null when the reader started without choosing a book. */
+  bookId: string | null;
+  mode: ReadingMode;
+  startedAt: string;
+  /** Null while the session is running. Only one session runs at a time. */
+  endedAt: string | null;
+}
+
+/** A demo reader who is reading together right now; minutes are counted back from the page load. */
+export interface ReadingNow {
+  readerId: string;
+  bookId: string;
+  minutesAgo: number;
+}
+
+export const COMPOSE_ICONS = ["pen", "typewriter", "quill"] as const;
+export type ComposeIcon = (typeof COMPOSE_ICONS)[number];
+
+export interface Settings {
+  composeIcon: ComposeIcon;
+}
+
+export interface NewBook {
+  title: string;
+  author: string;
+  isbn?: string;
+}
+
 export interface TownState {
   books: Book[];
   readers: Reader[];
@@ -72,6 +141,18 @@ export interface TownState {
   wishlist: string[];
   favorites: string[];
   popReactions: Record<string, PopReaction[]>;
+  posts: Post[];
+  likedPosts: string[];
+  /** Posts that made the viewer want to read their book; the post records who inspired it. */
+  wantedPosts: string[];
+  spoilerReports: string[];
+  readingNow: ReadingNow[];
+  readingSessions: ReadingSession[];
+  finishedBooks: string[];
+  /** Books the viewer registered as their own, newest last. */
+  library: string[];
+  settings: Settings;
+  seenNotifications: string[];
 }
 
 export interface TownActions {
@@ -99,8 +180,19 @@ export interface TownActions {
     itemId: string,
     reaction: PopReaction,
   ): void;
-  updateProfile(name: string, bio: string): void;
+  updateProfile(name: string, bio: string, links?: string[]): void;
   updateNine(ids: string[], notes: Record<string, string>): void;
+  createPost(draft: PostDraft): string | null;
+  deletePost(postId: string): void;
+  toggleLike(postId: string): void;
+  toggleWant(postId: string): void;
+  toggleSpoilerReport(postId: string): void;
+  startReading(bookId: string | null, mode: ReadingMode): string | null;
+  endReading(finished: boolean): void;
+  addBook(book: NewBook): string | null;
+  toggleLibrary(bookId: string): void;
+  setComposeIcon(icon: ComposeIcon): void;
+  markNotificationsSeen(ids: string[]): void;
 }
 
 export type AppActions = TownActions;

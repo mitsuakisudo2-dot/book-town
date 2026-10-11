@@ -3,14 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTownStore, usePersistenceStatus } from "../lib/store";
-import type {
-  TownState,
-  TownActions,
-  Book,
-  Shop,
-  ShelfItem,
-  Shelf,
-} from "../lib/types";
+import type { TownState, TownActions, ShelfItem, Shelf } from "../lib/types";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
 import { ShopEditor } from "./ShopEditor";
@@ -18,23 +11,57 @@ import { ProfileView } from "./ProfileView";
 import { StreetView } from "./StreetView";
 import { BookInHand } from "./BookInHand";
 import { BookActions } from "./BookActions";
+import { BookReviews } from "./Social";
+import { HomeView } from "./HomeView";
+import { SearchView } from "./SearchView";
+import { ReadingView } from "./ReadingView";
+import { NotificationsView } from "./NotificationsView";
+import { activeSession } from "../lib/reading";
+import { unreadCount } from "../lib/notifications";
 
-type View = "town" | "shop" | "editor" | "book" | "profile" | "wishlist";
+type View =
+  | "town"
+  | "timeline"
+  | "search"
+  | "reading"
+  | "notifications"
+  | "shop"
+  | "editor"
+  | "book"
+  | "profile"
+  | "wishlist";
 type Shared = {
   state: TownState;
   actions: TownActions;
   notify: (message: string) => void;
 };
-const links = [
-  { href: "/", icon: "store", label: "本の街", view: "town" },
-  { href: "/my-shop/", icon: "edit", label: "わたしの書店", view: "editor" },
-  {
-    href: "/profiles/me/",
-    icon: "user",
-    label: "プロフィール",
-    view: "profile",
-  },
-];
+type Section = "home" | "search" | "reading" | "profile";
+const links: { href: string; icon: string; label: string; section: Section }[] =
+  [
+    { href: "/", icon: "home", label: "ホーム", section: "home" },
+    { href: "/search/", icon: "search", label: "検索", section: "search" },
+    {
+      href: "/reading/",
+      icon: "reading",
+      label: "読書を開始",
+      section: "reading",
+    },
+    {
+      href: "/profiles/me/",
+      icon: "user",
+      label: "プロフィール",
+      section: "profile",
+    },
+  ];
+/** Which item of the main navigation a view belongs to. */
+function sectionOf(view: View, selectedId?: string): Section | null {
+  if (view === "town" || view === "timeline" || view === "shop") return "home";
+  if (view === "search") return "search";
+  if (view === "reading") return "reading";
+  if (view === "editor" || view === "wishlist") return "profile";
+  if (view === "profile" && (selectedId ?? "me") === "me") return "profile";
+  return null;
+}
 export default function TownApp({
   view,
   selectedId,
@@ -48,7 +75,6 @@ export default function TownApp({
   const [toast, setToast] = useState("");
   const [search, setSearch] = useState("");
   const [about, setAbout] = useState(false);
-  const [directory, setDirectory] = useState(false);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 3500);
@@ -64,6 +90,9 @@ export default function TownApp({
     return () => window.removeEventListener("hashchange", load);
   }, [view]);
   const shared = { state, actions, notify: setToast };
+  const section = sectionOf(view, selectedId);
+  const reading = Boolean(activeSession(state));
+  const unread = unreadCount(state);
   return (
     <div className="town-shell">
       <aside className="town-sidebar">
@@ -79,17 +108,16 @@ export default function TownApp({
         <nav aria-label="メインナビゲーション">
           {links.map((l) => (
             <Link
-              key={l.view}
+              key={l.section}
               href={l.href}
-              className={
-                "side-link " +
-                (view === l.view || (view === "shop" && l.view === "town")
-                  ? "active"
-                  : "")
-              }
+              className={"side-link " + (section === l.section ? "active" : "")}
+              aria-current={section === l.section ? "page" : undefined}
             >
               <Icon name={l.icon} size={21} />
-              {l.label}
+              {l.section === "reading" && reading ? "読書中" : l.label}
+              {l.section === "reading" && reading && (
+                <i className="nav-live" aria-hidden="true" />
+              )}
             </Link>
           ))}
         </nav>
@@ -144,7 +172,25 @@ export default function TownApp({
               デモの街
               <Icon name="leaf" size={12} />
             </button>
-            <Link href="/profiles/me/" aria-label="自分のプロフィール">
+            <Link
+              href="/notifications/"
+              className={
+                "top-bell" + (view === "notifications" ? " active" : "")
+              }
+              aria-label={unread ? `お知らせ（未読${unread}件）` : "お知らせ"}
+            >
+              <Icon name="bell" size={21} />
+              {unread > 0 && (
+                <span className="bell-badge" aria-hidden="true">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              )}
+            </Link>
+            <Link
+              href="/profiles/me/"
+              className="top-avatar"
+              aria-label="自分のプロフィール"
+            >
               <ReaderAvatar reader={state.me} size={31} />
             </Link>
           </div>
@@ -160,25 +206,19 @@ export default function TownApp({
         </div>
         <main className={"town-main view-" + view} key={view + selectedId}>
           {view === "town" ? (
-            directory ? (
-              <>
-                <button
-                  className="street-return"
-                  onClick={() => setDirectory(false)}
-                >
-                  <Icon name="back" size={16} />
-                  街の散歩に戻る
-                </button>
-                <TownHome {...shared} search={search} setSearch={setSearch} />
-              </>
-            ) : (
-              <StreetView
-                {...shared}
-                search={search}
-                setSearch={setSearch}
-                onDirectory={() => setDirectory(true)}
-              />
-            )
+            <HomeView {...shared} tab="shelves">
+              <StreetView {...shared} search={search} setSearch={setSearch} />
+            </HomeView>
+          ) : view === "timeline" ? (
+            <HomeView {...shared} tab="timeline">
+              {null}
+            </HomeView>
+          ) : view === "search" ? (
+            <SearchView {...shared} />
+          ) : view === "reading" ? (
+            <ReadingView {...shared} />
+          ) : view === "notifications" ? (
+            <NotificationsView {...shared} />
           ) : view === "shop" ? (
             <ShopView {...shared} shopId={selectedId || ""} />
           ) : view === "book" ? (
@@ -203,11 +243,18 @@ export default function TownApp({
         {links.map((l) => (
           <Link
             href={l.href}
-            key={l.view}
-            className={view === l.view ? "active" : ""}
+            key={l.section}
+            className={
+              (section === l.section ? "active" : "") +
+              (l.section === "reading" ? " nav-reading" : "") +
+              (l.section === "reading" && reading ? " is-live" : "")
+            }
+            aria-current={section === l.section ? "page" : undefined}
           >
             <Icon name={l.icon} size={22} />
-            <span>{l.view === "editor" ? "自分の書店" : l.label}</span>
+            <span>
+              {l.section === "reading" && reading ? "読書中" : l.label}
+            </span>
           </Link>
         ))}
       </nav>
@@ -236,327 +283,6 @@ export default function TownApp({
         </Modal>
       )}
     </div>
-  );
-}
-function TownHome({
-  state,
-  actions,
-  notify,
-  search,
-  setSearch,
-}: Shared & { search: string; setSearch: (s: string) => void }) {
-  const [tab, setTab] = useState("shops");
-  const [genre, setGenre] = useState("すべて");
-  const [offset, setOffset] = useState(0);
-  const [followingOnly, setFollowingOnly] = useState(false);
-  const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
-  const term = search.trim().toLocaleLowerCase();
-  const matching = shops.filter((s) => {
-    const stock = s.shelves
-      .filter((sh) => sh.isPublic)
-      .flatMap((sh) =>
-        sh.items.map((i) => state.books.find((b) => b.id === i.bookId)),
-      )
-      .filter((b): b is Book => Boolean(b));
-    return (
-      (!followingOnly || state.following.includes(s.id)) &&
-      (genre === "すべて" || stock.some((b) => b.genre === genre)) &&
-      (!term ||
-        (
-          s.name +
-          s.description +
-          (s.ownerId === state.me.id
-            ? state.me.name
-            : (state.readers.find((r) => r.id === s.ownerId)?.name ?? "")) +
-          stock.map((b) => b.title + b.author).join("")
-        )
-          .toLocaleLowerCase()
-          .includes(term))
-    );
-  });
-  const ordered = [
-    ...matching.slice(offset % Math.max(matching.length, 1)),
-    ...matching.slice(0, offset % Math.max(matching.length, 1)),
-  ];
-  const books = state.books.filter(
-    (b) =>
-      (!followingOnly ||
-        shops.some(
-          (s) =>
-            state.following.includes(s.id) &&
-            s.shelves.some(
-              (sh) => sh.isPublic && sh.items.some((i) => i.bookId === b.id),
-            ),
-        )) &&
-      (genre === "すべて" || b.genre === genre) &&
-      (!term || (b.title + b.author).toLocaleLowerCase().includes(term)),
-  );
-  return (
-    <>
-      <div className="page-intro-line">
-        <span className="eyebrow">WELCOME TO YOUR BOOK TOWN</span>
-        <span className="intro-season">
-          <Icon name="leaf" size={15} />
-          今日は、どの路地へ。
-        </span>
-      </div>
-      <section className="town-hero">
-        <div className="town-hero-copy">
-          <span className="hero-label">
-            <i />
-            自由にめぐる、読書家の街。
-          </span>
-          <h1>
-            いつもの一冊から、
-            <br />
-            知らない街へ。
-          </h1>
-          <p>
-            棚を眺めて、本と出会う。
-            <br />
-            その一冊から、誰かの「好き」を知る。
-          </p>
-          <Link
-            className="hero-stroll"
-            href={"/shops/" + state.shops[offset % state.shops.length].id + "/"}
-          >
-            気ままに一軒、のぞいてみる
-            <Icon name="arrow" size={17} />
-          </Link>
-        </div>
-        <TownDrawing />
-        <span className="hero-bottom-note">
-          あなたの愛した一冊が、誰かの愛する一冊になる。
-        </span>
-      </section>
-      <div className="town-discover-heading">
-        <div>
-          <span className="eyebrow">SMALL SHOPS, NEW STORIES</span>
-          <h2>本の街を、歩こう。</h2>
-          <p>大きな店も、小さな店も。ひとつずつ、違う景色。</p>
-        </div>
-        <button className="text-button" onClick={() => setOffset(offset + 1)}>
-          <Icon name="shuffle" size={17} />
-          路地を変えてみる
-        </button>
-      </div>
-      <div className="town-tabs" role="tablist" aria-label="発見の方法">
-        <button
-          role="tab"
-          aria-selected={tab === "shops"}
-          className={tab === "shops" ? "selected" : ""}
-          onClick={() => setTab("shops")}
-        >
-          書店から出会う
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === "books"}
-          className={tab === "books" ? "selected" : ""}
-          onClick={() => setTab("books")}
-        >
-          一冊からたどる
-        </button>
-        <button
-          className={"following-filter " + (followingOnly ? "selected" : "")}
-          aria-pressed={followingOnly}
-          onClick={() => setFollowingOnly(!followingOnly)}
-        >
-          フォロー中
-        </button>
-      </div>
-      <div className="town-filter-row">
-        <div className="genre-pills">
-          {["すべて", ...new Set(state.books.map((b) => b.genre))].map((g) => (
-            <button
-              key={g}
-              className={genre === g ? "selected" : ""}
-              onClick={() => setGenre(g)}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
-        <span className="browse-caption">
-          人気順に並ばない、気ままな出会い。
-        </span>
-      </div>
-      {search && (
-        <div className="search-result-caption">
-          「{search}」からつながる{tab === "shops" ? "書店" : "本"}
-          <button onClick={() => setSearch("")}>
-            <Icon name="close" size={14} />
-            クリア
-          </button>
-        </div>
-      )}
-      {tab === "shops" ? (
-        <div className="shop-grid">
-          {ordered.map((s) => (
-            <ShopCard key={s.id} shop={s} {...{ state, actions, notify }} />
-          ))}
-          {!ordered.length && (
-            <div className="empty-state">
-              <Icon name="search" size={30} />
-              <h3>この路地には、まだ見つかりませんでした。</h3>
-              <p>別の言葉やジャンルで、もう少し歩いてみましょう。</p>
-              <button
-                className="button secondary"
-                onClick={() => {
-                  setSearch("");
-                  setGenre("すべて");
-                  setFollowingOnly(false);
-                }}
-              >
-                絞り込みを戻す
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="catalog-grid">
-          {books.map((b) => (
-            <article className="catalog-book" key={b.id}>
-              <Link href={"/books/" + b.id + "/"}>
-                <BookJacket book={b} />
-                <h3>{b.title}</h3>
-                <p>{b.author}</p>
-              </Link>
-              <span>{b.genre}</span>
-              <button
-                className={
-                  "text-button " +
-                  (state.wishlist.includes(b.id) ? "saved" : "")
-                }
-                onClick={() => {
-                  actions.toggleWish(b.id);
-                  notify(
-                    state.wishlist.includes(b.id)
-                      ? "読みたいリストから外しました"
-                      : "読みたいリストに加えました",
-                  );
-                }}
-              >
-                <Icon
-                  name={state.wishlist.includes(b.id) ? "check" : "plus"}
-                  size={14}
-                />
-                {state.wishlist.includes(b.id)
-                  ? "読みたいに登録済み"
-                  : "読みたい"}
-              </button>
-            </article>
-          ))}
-          {!books.length && (
-            <div className="empty-state">
-              この条件の本は見つかりませんでした。
-            </div>
-          )}
-        </div>
-      )}
-      <div className="town-end">
-        <Icon name="leaf" size={23} />
-        <p>見つけた一冊の向こうにも、誰かがいる。</p>
-        <Link href="/my-shop/" className="text-button">
-          あなたの「好き」も、並べてみませんか。
-          <Icon name="arrow" size={16} />
-        </Link>
-      </div>
-    </>
-  );
-}
-function ShopCard({ shop, state, actions, notify }: Shared & { shop: Shop }) {
-  const owner =
-    shop.ownerId === "me"
-      ? state.me
-      : state.readers.find((r) => r.id === shop.ownerId);
-  const publicShelves = shop.shelves.filter((s) => s.isPublic);
-  const smallBooks = publicShelves
-    .flatMap((s) => s.items)
-    .slice(0, 10)
-    .map((i) => state.books.find((b) => b.id === i.bookId))
-    .filter((b): b is Book => Boolean(b));
-  const followed = state.following.includes(shop.id);
-  return (
-    <article className="shop-card">
-      <Link
-        href={"/shops/" + shop.id + "/"}
-        className={"shop-front theme-" + shop.theme}
-        aria-label={shop.name + "に入る"}
-      >
-        <div className="shop-front-roof" />
-        <div className="shop-front-sign">
-          <Icon name="store" size={19} />
-          <h3>{shop.name}</h3>
-          <span>{shop.tagline}</span>
-        </div>
-        <div className="shop-window">
-          <div className="tiny-books">
-            {smallBooks.map((b, i) => (
-              <i
-                key={b.id + i}
-                style={{
-                  background: b.color,
-                  height: 36 + (b.height % 19),
-                  width: 11 + (b.thickness % 5),
-                  color: b.ink,
-                }}
-              >
-                <span>{b.title}</span>
-              </i>
-            ))}
-          </div>
-          <div className="tiny-shelf" />
-        </div>
-        <span className="enter-shop">
-          のぞいてみる
-          <Icon name="arrow" size={15} />
-        </span>
-      </Link>
-      <div className="shop-card-info">
-        <div className="shop-owner-line">
-          {owner && (
-            <Link href={"/profiles/" + owner.id + "/"}>
-              <ReaderAvatar reader={owner} size={27} />
-              <span>
-                店主 <b>{owner.name}</b>
-              </span>
-            </Link>
-          )}
-          <small className="demo-tag">
-            {shop.demo ? "デモ書店" : "あなたの書店"}
-          </small>
-        </div>
-        <p>{shop.description}</p>
-        <div className="shop-card-bottom">
-          <span>
-            <Icon name="book" size={13} />
-            {publicShelves.length}つの棚
-            <em> · {shop.followers + Number(followed)}人がフォロー</em>
-          </span>
-          {shop.ownerId !== "me" && (
-            <button
-              className={"follow-button " + (followed ? "followed" : "")}
-              aria-label={
-                shop.name + (followed ? "のフォローを解除" : "をフォロー")
-              }
-              aria-pressed={followed}
-              onClick={() => {
-                actions.toggleFollow(shop.id);
-                notify(
-                  followed
-                    ? "フォローを解除しました"
-                    : shop.name + "をフォローしました",
-                );
-              }}
-            >
-              <Icon name={followed ? "check" : "plus"} size={15} />
-              {followed ? "フォロー中" : "フォロー"}
-            </button>
-          )}
-        </div>
-      </div>
-    </article>
   );
 }
 function ShopView({
@@ -775,6 +501,12 @@ function BookView({
           </span>
         </div>
       </section>
+      <BookReviews
+        book={book}
+        state={state}
+        actions={actions}
+        notify={notify}
+      />
       <div className="book-path-heading">
         <span className="eyebrow">FOLLOW THE BOOK, MEET THE READER</span>
         <h2>この本を並べている書店</h2>
@@ -875,126 +607,5 @@ function Wishlist({ state, actions, notify }: Shared) {
         </div>
       )}
     </>
-  );
-}
-function TownDrawing() {
-  return (
-    <div className="town-drawing" aria-hidden="true">
-      <svg viewBox="0 0 430 260">
-        <ellipse
-          cx="220"
-          cy="237"
-          rx="186"
-          ry="10"
-          fill="#d8d5be"
-          opacity=".65"
-        />
-        <path
-          d="M56 236V102l8-2v136m-4-135V64"
-          stroke="#72806b"
-          strokeWidth="2"
-        />
-        <path
-          d="M60 62c-12 0-12 22 0 22s12-22 0-22Z"
-          fill="#e4d3a2"
-          stroke="#79806e"
-          strokeWidth="2"
-        />
-        <path d="M28 236h379" stroke="#babca8" strokeWidth="2" />
-        <rect x="87" y="84" width="119" height="152" rx="2" fill="#e2d9bf" />
-        <rect x="102" y="115" width="87" height="31" fill="#425d48" />
-        <text
-          x="145"
-          y="134"
-          fill="#e5e5d2"
-          fontSize="10"
-          fontFamily="serif"
-          textAnchor="middle"
-          letterSpacing="3"
-        >
-          本と、ひと。
-        </text>
-        <path d="M87 84h119l-11-13H97Z" fill="#b5b393" />
-        <rect x="100" y="159" width="63" height="58" fill="#c9c7ae" />
-        <rect x="169" y="154" width="24" height="82" fill="#6a7b60" />
-        <rect x="103" y="169" width="59" height="39" fill="#52634c" />
-        <path d="M105 193h55M105 207h55" stroke="#b89b70" strokeWidth="3" />
-        {[0, 1, 2, 3, 4, 5, 6, 7].map((n) => (
-          <rect
-            key={n}
-            x={109 + n * 6}
-            y={176 + (n % 3) * 3}
-            width="4"
-            height={15 - (n % 3) * 3}
-            fill={["#dfd4b1", "#819783", "#af7960"][n % 3]}
-          />
-        ))}
-        <path d="M91 147h111l-5 14H94Z" fill="#f4eedc" />
-        {[0, 1, 2, 3, 4].map((n) => (
-          <path
-            key={n}
-            d={`M${93 + n * 23} 147h12l-1 14h-13z`}
-            fill="#5c7455"
-          />
-        ))}
-        <rect x="208" y="43" width="141" height="193" rx="2" fill="#d8dfcf" />
-        <path d="M201 43h153l-12-17H220Z" fill="#889a80" />
-        <rect x="222" y="63" width="33" height="30" fill="#f2eada" />
-        <rect x="266" y="63" width="33" height="30" fill="#f2eada" />
-        <rect x="309" y="63" width="26" height="30" fill="#f2eada" />
-        <path
-          d="M237 64v29m45-29v29m40-29v29"
-          stroke="#a5b39a"
-          strokeWidth="2"
-        />
-        <rect x="220" y="112" width="117" height="28" fill="#536f5a" />
-        <text
-          x="278"
-          y="130"
-          fill="#eee8cc"
-          fontSize="11"
-          textAnchor="middle"
-          fontFamily="serif"
-          letterSpacing="2"
-        >
-          BOOK TOWN
-        </text>
-        <rect x="221" y="155" width="72" height="66" fill="#80947c" />
-        <rect x="303" y="154" width="29" height="82" fill="#657e64" />
-        <path d="M222 183h71m-71 23h71" stroke="#bd9b6d" strokeWidth="4" />
-        {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-          <rect
-            key={n}
-            x={227 + n * 7}
-            y={165 + (n % 3) * 2}
-            width="5"
-            height={16 - (n % 3) * 2}
-            fill={["#e7d2a0", "#a8bfa0", "#b77f65", "#e4ded0"][n % 4]}
-          />
-        ))}
-        <path d="M213 143h129l-5 17H218Z" fill="#efe9d7" />
-        {[0, 1, 2, 3, 4].map((n) => (
-          <path
-            key={n}
-            d={`M${214 + n * 26} 143h13l2 17h-14z`}
-            fill="#607d63"
-          />
-        ))}
-        <rect x="354" y="170" width="40" height="66" fill="#ded3bc" />
-        <path d="M358 170h33l-4-8h-25Z" fill="#ab9878" />
-        <rect x="360" y="178" width="29" height="44" fill="#506345" />
-        <text x="375" y="194" fontSize="6" textAnchor="middle" fill="#eae2cd">
-          OPEN
-        </text>
-        <path d="M369 207h12m-12 4h12m-12 4h8" stroke="#c5caac" />
-        <path
-          d="M44 238v-31m-1 19c-15-4-15-17-7-20 11 4 12 11 7 20m1-6c15-1 19-12 12-18-9 0-16 9-12 18"
-          fill="#7f9472"
-        />
-        <path d="M20 215h28l-4 22H25Z" fill="#b09a78" />
-        <path d="M322 236h34" stroke="#78906d" strokeWidth="2" />
-      </svg>
-      <span>A LITTLE TOWN, A WORLD OF BOOKS.</span>
-    </div>
   );
 }
