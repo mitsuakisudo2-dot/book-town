@@ -48,8 +48,10 @@ export function BookInHand({
     itemId,
   });
   // Keep pagination scoped to the currently opened shelf item.
-  // A different book/selected shelf automatically starts from its first POP.
-  const [popPage, setPopPage] = useState<{ key: string; index: number } | null>(null);
+  // Reset this when navigating, including when returning to a previously opened book.
+  const [popPage, setPopPage] = useState<{ key: string; index: number } | null>(
+    null,
+  );
   const shop =
     [...state.shops, ...(state.ownShop ? [state.ownShop] : [])].find(
       (entry) => entry.id === context.shopId,
@@ -166,6 +168,10 @@ export function BookInHand({
   function move(direction: -1 | 1) {
     const next = availableItems[index + direction];
     if (!next) return;
+    setPopPage(null);
+    // The keyed book body is replaced; keep keyboard focus inside the dialog.
+    if (contentRef.current?.contains(document.activeElement))
+      closeButtonRef.current?.focus({ preventScroll: true });
     setContext({ shopId: shop.id, shelfId: shelf.id, itemId: next.id });
     contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
   }
@@ -258,6 +264,9 @@ export function BookInHand({
         gesture.total = 0;
         gesture.moved = now;
         if (next) {
+          setPopPage(null);
+          if (content.contains(document.activeElement))
+            closeButtonRef.current?.focus({ preventScroll: true });
           setContext({ shopId: shop.id, shelfId: shelf.id, itemId: next.id });
           content.scrollTo({ top: 0, behavior: "instant" });
         }
@@ -295,7 +304,7 @@ export function BookInHand({
         if (
           (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
           !(event.target as HTMLElement).closest(
-            "[data-book-rail],[data-pop-navigation],input,textarea,select",
+            "[data-book-rail],input,textarea,select",
           )
         ) {
           event.preventDefault();
@@ -369,27 +378,24 @@ export function BookInHand({
             <p>{book.summary}</p>
           </section>
 
-          <section className="bh-pop owner-pop" aria-label="この本に寄せられたPOP">
+          <section
+            className="bh-pop owner-pop"
+            aria-label="この本に寄せられたPOP"
+          >
             <div className="bh-pop-label">
               <span>この棚に並べた人の言葉</span>
               {activePop.shop.demo && <small>デモ</small>}
             </div>
-            <div className="bh-pop-message" aria-live="polite" aria-atomic="true">
-              {activePop.item.pop ? (
-                <p className="bh-pop-text">{activePop.item.pop}</p>
-              ) : (
-                <p className="bh-pop-empty">
-                  この本のPOPは、まだ書かれていません。
-                </p>
-              )}
-            </div>
-            {popCandidates.length > 1 && (
-              <div
-                className="bh-pop-pager"
-                data-pop-navigation
-                role="group"
-                aria-label="この本へのPOPを切り替える"
-              >
+            <div
+              className={`bh-pop-pager${popCandidates.length > 1 ? " has-pages" : ""}`}
+              role={popCandidates.length > 1 ? "group" : undefined}
+              aria-label={
+                popCandidates.length > 1
+                  ? "この本へのPOPを切り替える"
+                  : undefined
+              }
+            >
+              {popCandidates.length > 1 && (
                 <button
                   type="button"
                   className="bh-pop-page-button"
@@ -401,9 +407,21 @@ export function BookInHand({
                 >
                   <Icon name="back" size={17} />
                 </button>
-                <span className="bh-pop-page-count" aria-live="polite" aria-atomic="true">
-                  {popIndex + 1} / {popCandidates.length}
-                </span>
+              )}
+              <div
+                className="bh-pop-message"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {activePop.item.pop.trim() ? (
+                  <p className="bh-pop-text">{activePop.item.pop}</p>
+                ) : (
+                  <p className="bh-pop-empty">
+                    この本のPOPは、まだ書かれていません。
+                  </p>
+                )}
+              </div>
+              {popCandidates.length > 1 && (
                 <button
                   type="button"
                   className="bh-pop-page-button"
@@ -415,8 +433,17 @@ export function BookInHand({
                 >
                   <Icon name="arrow" size={17} />
                 </button>
-              </div>
-            )}
+              )}
+              {popCandidates.length > 1 && (
+                <span
+                  className="bh-pop-page-count"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {popIndex + 1} / {popCandidates.length}
+                </span>
+              )}
+            </div>
             <div
               className="bh-pop-reactions"
               role="group"
@@ -490,6 +517,7 @@ export function BookInHand({
             bookId={book.id}
             state={state}
             onSelect={(targetShop, targetShelf, targetItem) => {
+              setPopPage(null);
               setContext({
                 shopId: targetShop.id,
                 shelfId: targetShelf.id,

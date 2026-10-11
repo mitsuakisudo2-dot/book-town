@@ -167,11 +167,20 @@
   letter-spacing: normal;
 }
 .bh-pop-pager {
-  display: flex;
-  justify-content: flex-end;
+  margin: 16px 0 19px;
+}
+.bh-pop-pager.has-pages {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center;
   gap: 12px;
-  margin: 0 0 16px;
+}
+.bh-pop-pager .bh-pop-text,
+.bh-pop-pager .bh-pop-empty {
+  margin: 0;
+}
+.bh-pop-message {
+  min-width: 0;
 }
 .bh-pop-page-button {
   display: inline-flex;
@@ -198,6 +207,7 @@
   cursor: default;
 }
 .bh-pop-page-count {
+  grid-column: 2;
   min-width: 46px;
   text-align: center;
   font-size: 11px;
@@ -426,6 +436,22 @@
   .bh-pop .bh-pop-text {
     font-size: 17px;
     margin-block: 14px;
+  }
+  .bh-pop-pager.has-pages {
+    gap: 10px;
+  }
+  .bh-pop-pager.has-pages .bh-pop-message {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .bh-pop-page-button {
+    grid-row: 1;
+  }
+  .bh-pop-page-button:last-of-type {
+    grid-column: 3;
+  }
+  .bh-pop-page-count {
+    grid-row: 1;
   }
   .bh-pop-signature {
     gap: 4px 12px;

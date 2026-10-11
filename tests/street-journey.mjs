@@ -209,14 +209,32 @@ try {
       const dialog = page.locator(".bh-dialog");
       const pop = dialog.locator(".owner-pop");
       const firstPop = await pop.locator(".bh-pop-text").innerText();
+      const firstReaction = await pop
+        .getByRole("button", { name: "いいね", exact: true })
+        .getAttribute("aria-pressed");
       await expectBook(page, "ソラリス");
+      await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 4");
       await expect(pop.getByRole("button", { name: "前のPOP" })).toBeDisabled();
       await expect(pop.getByRole("button", { name: "次のPOP" })).toBeEnabled();
       await expect(pop.locator(".bh-shop-link")).toHaveText("軌道書房");
+      await expect(pop.locator(".bh-owner-link")).toHaveAttribute(
+        "href",
+        "/profiles/r-nagi/",
+      );
 
       await pop.getByRole("button", { name: "次のPOP" }).click();
       await expect(pop.locator(".bh-pop-text")).not.toHaveText(firstPop);
       await expect(pop.locator(".bh-shop-link")).not.toHaveText("軌道書房");
+      await expect(pop.locator(".bh-shop-link")).toHaveText("雨と翻訳");
+      await expect(pop.locator(".bh-shop-link")).toHaveAttribute(
+        "href",
+        /^\/shops\/shop-rain\/#shelf-/,
+      );
+      await expect(pop.locator(".bh-owner-link")).toHaveAttribute(
+        "href",
+        "/profiles/r-sumire/",
+      );
+      await expect(pop.locator(".bh-owner-link")).toContainText("すみれ");
       await expectBook(page, "ソラリス");
       await expect(pop.locator(".bh-pop-page-count")).toContainText("2 /");
       await expect(pop.getByRole("button", { name: "前のPOP" })).toBeEnabled();
@@ -232,6 +250,95 @@ try {
       await pop.getByRole("button", { name: "前のPOP" }).click();
       await expect(pop.locator(".bh-pop-text")).toHaveText(firstPop);
       await expect(pop.locator(".bh-shop-link")).toHaveText("軌道書房");
+      await expect(reaction).toHaveAttribute("aria-pressed", firstReaction);
+      await pop.getByRole("button", { name: "次のPOP" }).click();
+      await expect(reaction).toHaveAttribute(
+        "aria-pressed",
+        before === "true" ? "false" : "true",
+      );
+      const savedReactions = await page.evaluate(() => {
+        const state = JSON.parse(localStorage.getItem("book-town-v1")).data;
+        return ["shop-orbit", "shop-rain"].map((shopId) => {
+          return Object.entries(state.popReactions)
+            .filter(([key]) => JSON.parse(key)[0] === shopId)
+            .map(([key, reactions]) => ({ key, reactions }));
+        });
+      });
+      expect(savedReactions[0]).toEqual([]);
+      expect(savedReactions[1]).toEqual([
+        {
+          key: JSON.stringify(["shop-rain", "rain-cities", "r5"]),
+          reactions: ["like"],
+        },
+      ]);
+      for (const name of ["問いの余白", "小さな灯り"]) {
+        await pop.getByRole("button", { name: "次のPOP" }).click();
+        await expect(pop.locator(".bh-shop-link")).toHaveText(name);
+        await expectBook(page, "ソラリス");
+      }
+      await expect(pop.locator(".bh-pop-page-count")).toHaveText("4 / 4");
+      await expect(pop.getByRole("button", { name: "次のPOP" })).toBeDisabled();
+      await page.reload();
+      await shelf
+        .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
+        .click();
+      await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 4");
+      await pop.getByRole("button", { name: "次のPOP" }).click();
+      await expect(reaction).toHaveAttribute(
+        "aria-pressed",
+        before === "true" ? "false" : "true",
+      );
+      await page.keyboard.press("Escape");
+    },
+  );
+  await check(
+    "Book buttons, arrow keys, wheel and discovery always reset POP to the source",
+    async () => {
+      await shop(page, "軌道書房")
+        .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
+        .click();
+      const dialog = page.locator(".bh-dialog");
+      const pop = dialog.locator(".owner-pop");
+      const expectSource = async () => {
+        await expectBook(page, "ソラリス");
+        await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 4");
+        await expect(pop.locator(".bh-shop-link")).toHaveText("軌道書房");
+      };
+      await pop.getByRole("button", { name: "次のPOP" }).click();
+      await dialog.getByRole("button", { name: "次の本", exact: true }).click();
+      await expectBook(page, "闇の左手");
+      await expect(pop.getByRole("button", { name: /のPOP$/ })).toHaveCount(0);
+      await dialog.getByRole("button", { name: "前の本", exact: true }).click();
+      await expectSource();
+
+      await pop.getByRole("button", { name: "次のPOP" }).click();
+      await pop.getByRole("button", { name: "次のPOP" }).press("ArrowRight");
+      await expectBook(page, "闇の左手");
+      await page.keyboard.press("ArrowLeft");
+      await expectSource();
+
+      await pop.getByRole("button", { name: "次のPOP" }).click();
+      await dialog.locator(".bh-summary").hover();
+      await page.mouse.wheel(100, 0);
+      await expectBook(page, "闇の左手");
+      await dialog.getByRole("button", { name: "前の本", exact: true }).click();
+      await expectSource();
+
+      await pop.getByRole("button", { name: "次のPOP" }).click();
+      await dialog
+        .getByRole("button", {
+          name: "闇の左手をこの場で手に取る",
+          exact: true,
+        })
+        .click();
+      await expectBook(page, "闇の左手");
+      await dialog
+        .getByRole("button", {
+          name: "ソラリスをこの場で手に取る",
+          exact: true,
+        })
+        .click();
+      await expectSource();
       await page.keyboard.press("Escape");
     },
   );
@@ -375,6 +482,12 @@ try {
                   display: "face",
                   pop: "公開QAの紹介文",
                 },
+                {
+                  id: "qa-empty-item",
+                  bookId: "solaris",
+                  display: "spine",
+                  pop: "   ",
+                },
               ],
             },
             {
@@ -399,12 +512,46 @@ try {
       const own = shop(page, "公開展示QA書店");
       await expect(own.locator(".shelf-scroll")).toHaveCount(1);
       await expect(own).toContainText("公開QA棚");
-      await expect(own).not.toContainText("ソラリス");
+      await expect(own).not.toContainText("秘密QAの紹介文_非公開");
       await expect(page.locator("main")).not.toContainText("秘密QA");
       await page
         .getByRole("textbox", { name: "本や書店を検索", exact: true })
         .fill("秘密QA棚_非公開");
       await expect(page.locator(".street-shop")).toHaveCount(0);
+      await page
+        .getByRole("textbox", { name: "本や書店を検索", exact: true })
+        .fill("");
+      await shop(page, "軌道書房")
+        .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
+        .click();
+      const pop = page.locator(".owner-pop");
+      await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 4");
+      for (let n = 0; n < 4; n++) {
+        await expect(pop).not.toContainText("秘密QA");
+        if (n < 3) await pop.getByRole("button", { name: "次のPOP" }).click();
+      }
+      await page.keyboard.press("Escape");
+      await page.evaluate(() => {
+        const envelope = JSON.parse(localStorage.getItem("book-town-v1"));
+        envelope.data.ownShop.shelves[0].items[1].pop = "公開QAのソラリスPOP";
+        localStorage.setItem("book-town-v1", JSON.stringify(envelope));
+      });
+      await page.reload();
+      await shop(page, "軌道書房")
+        .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
+        .click();
+      await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 5");
+      for (let n = 0; n < 4; n++)
+        await pop.getByRole("button", { name: "次のPOP" }).click();
+      await expect(pop.locator(".bh-pop-text")).toHaveText(
+        "公開QAのソラリスPOP",
+      );
+      await expect(pop.locator(".bh-owner-link")).toHaveAttribute(
+        "href",
+        "/profiles/me/",
+      );
+      await expect(pop.locator(".bh-shop-link")).toHaveText("公開展示QA書店");
+      await page.keyboard.press("Escape");
     },
   );
   await desktop.close();
@@ -503,6 +650,40 @@ try {
         ).toBe(true);
         await noOverflow(phone, `${width}px shop`);
         await go(phone);
+      },
+    );
+    await check(
+      `${width}px POP arrows are touch sized and switch only POP`,
+      async () => {
+        await go(phone);
+        await shop(phone, "軌道書房")
+          .getByRole("button", {
+            name: "ソラリス · 面陳 · POPあり",
+            exact: true,
+          })
+          .tap();
+        const pop = phone.locator(".owner-pop");
+        const buttons = pop.getByRole("button", { name: /のPOP$/ });
+        for (const button of await buttons.all()) {
+          const rect = await button.boundingBox();
+          expect(rect.width).toBeGreaterThanOrEqual(44);
+          expect(rect.height).toBeGreaterThanOrEqual(44);
+        }
+        await pop.getByRole("button", { name: "次のPOP" }).tap();
+        await expectBook(phone, "ソラリス");
+        await expect(pop.locator(".bh-pop-page-count")).toHaveText("2 / 4");
+        await expect(pop.locator(".bh-shop-link")).toHaveText("雨と翻訳");
+        await noOverflow(phone, `${width}px POP pager`);
+        await pop.screenshot({
+          path: path.join(output, `pop-pager-${width}.png`),
+          animations: "disabled",
+        });
+        await touchGesture(phone, -110, 0);
+        await expectBook(phone, "闇の左手");
+        await touchGesture(phone, 110, 0);
+        await expectBook(phone, "ソラリス");
+        await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 4");
+        await phone.keyboard.press("Escape");
       },
     );
     await check(
