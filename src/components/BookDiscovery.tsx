@@ -153,7 +153,14 @@ export function BookDiscovery({
               <div className="bh-shop-card-heading">
                 <div>
                   <small>{other.demo ? "デモ書店" : "あなたの書店"}</small>
-                  <h4>{other.name}</h4>
+                  <h4>
+                    <Link
+                      href={`/shops/${other.id}/#shelf-${shelf.id}`}
+                      onNavigate={onLeave}
+                    >
+                      {other.name}
+                    </Link>
+                  </h4>
                   <p>{shelf.name}</p>
                 </div>
                 <Link

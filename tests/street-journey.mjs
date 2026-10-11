@@ -69,45 +69,48 @@ async function expectBook(page, title) {
 
 // Synthetic touch checks exercise intent detection; real-device gesture arbitration
 // remains a separate manual check and is not claimed by this browser suite.
-async function touchGesture(page, dx, dy) {
-  await page.locator(".bh-content").evaluate(
-    (element, delta) => {
-      const start = {
-        identifier: 1,
-        target: element,
-        clientX: 190,
-        clientY: 280,
-      };
-      const first = new Touch(start);
-      element.dispatchEvent(
-        new TouchEvent("touchstart", {
-          bubbles: true,
-          touches: [first],
-          changedTouches: [first],
-        }),
-      );
-      const last = new Touch({
-        ...start,
-        clientX: start.clientX + delta.dx,
-        clientY: start.clientY + delta.dy,
-      });
-      element.dispatchEvent(
-        new TouchEvent("touchmove", {
-          bubbles: true,
-          touches: [last],
-          changedTouches: [last],
-        }),
-      );
-      element.dispatchEvent(
-        new TouchEvent("touchend", {
-          bubbles: true,
-          touches: [],
-          changedTouches: [last],
-        }),
-      );
-    },
-    { dx, dy },
-  );
+async function touchGesture(page, dx, dy, selector = ".bh-content") {
+  await page
+    .locator(selector)
+    .first()
+    .evaluate(
+      (element, delta) => {
+        const start = {
+          identifier: 1,
+          target: element,
+          clientX: 190,
+          clientY: 280,
+        };
+        const first = new Touch(start);
+        element.dispatchEvent(
+          new TouchEvent("touchstart", {
+            bubbles: true,
+            touches: [first],
+            changedTouches: [first],
+          }),
+        );
+        const last = new Touch({
+          ...start,
+          clientX: start.clientX + delta.dx,
+          clientY: start.clientY + delta.dy,
+        });
+        element.dispatchEvent(
+          new TouchEvent("touchmove", {
+            bubbles: true,
+            touches: [last],
+            changedTouches: [last],
+          }),
+        );
+        element.dispatchEvent(
+          new TouchEvent("touchend", {
+            bubbles: true,
+            touches: [],
+            changedTouches: [last],
+          }),
+        );
+      },
+      { dx, dy },
+    );
 }
 
 try {
@@ -372,6 +375,44 @@ try {
     },
   );
   await check(
+    "Book titles and bookstore names open their detail pages",
+    async () => {
+      await shop(page, "軌道書房")
+        .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
+        .click();
+      const dialog = page.locator(".bh-dialog");
+      const title = dialog.locator(".bh-book-heading h2 a");
+      await expect(title).toHaveAttribute("href", "/books/solaris/");
+      await title.click();
+      await expect(page).toHaveURL(/books\/solaris\/$/);
+      await expect(
+        page.getByRole("heading", { name: "ソラリス", exact: true }),
+      ).toBeVisible();
+      await go(page);
+      await shop(page, "軌道書房")
+        .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
+        .click();
+      const card = dialog.locator(".bh-shop-card").first();
+      const shopLink = card.locator("h4 a");
+      const visit = card.getByRole("link", { name: "この書店へ" });
+      await expect(shopLink).toHaveAttribute(
+        "href",
+        await visit.getAttribute("href"),
+      );
+      const heading = await card.locator(".bh-shop-card-heading").boundingBox();
+      const button = await visit.boundingBox();
+      expect(
+        Math.abs(heading.x + heading.width - button.x - button.width),
+      ).toBeLessThan(2);
+      await shopLink.click();
+      await expect(page).toHaveURL(/shops\/shop-rain\/#shelf-/);
+      await expect(
+        page.getByRole("heading", { name: "雨と翻訳", exact: true }),
+      ).toBeVisible();
+      await go(page);
+    },
+  );
+  await check(
     "Wishlist toggles in foreground and survives reload",
     async () => {
       const trigger = shop(page, "軌道書房")
@@ -554,9 +595,35 @@ try {
       await page.keyboard.press("Escape");
     },
   );
+  await check(
+    "Store browsing includes my public shop and skips it when every shelf is private",
+    async () => {
+      await go(page, "/shops/shop-lamplight/");
+      await expect(
+        page.getByRole("link", {
+          name: "次の書店：公開展示QA書店",
+          exact: true,
+        }),
+      ).toHaveAttribute("href", "/shops/mine/");
+      await page.evaluate(() => {
+        const envelope = JSON.parse(localStorage.getItem("book-town-v1"));
+        envelope.data.ownShop.shelves.forEach((shelf) => {
+          shelf.isPublic = false;
+        });
+        localStorage.setItem("book-town-v1", JSON.stringify(envelope));
+      });
+      await page.reload();
+      await expect(
+        page.getByRole("link", { name: "次の書店：軌道書房", exact: true }),
+      ).toHaveAttribute("href", "/shops/shop-orbit/");
+      await expect(page.locator(".shop-journey-home small")).toContainText(
+        "6 / 6",
+      );
+    },
+  );
   await desktop.close();
 
-  for (const width of [390, 320]) {
+  for (const width of [549, 390, 320]) {
     const mobile = await browser.newContext({
       viewport: { width, height: 844 },
       isMobile: true,
@@ -668,11 +735,33 @@ try {
           const rect = await button.boundingBox();
           expect(rect.width).toBeGreaterThanOrEqual(44);
           expect(rect.height).toBeGreaterThanOrEqual(44);
+          const note = await pop.boundingBox();
+          expect(
+            Math.abs(rect.y + rect.height / 2 - note.y - note.height / 2),
+          ).toBeLessThan(2);
+          expect(rect.x).toBeGreaterThanOrEqual(10);
+          expect(rect.x + rect.width).toBeLessThanOrEqual(width - 10);
         }
         await pop.getByRole("button", { name: "次のPOP" }).tap();
         await expectBook(phone, "ソラリス");
         await expect(pop.locator(".bh-pop-page-count")).toHaveText("2 / 4");
         await expect(pop.locator(".bh-shop-link")).toHaveText("雨と翻訳");
+        await touchGesture(phone, -110, 0, ".bh-pop-message");
+        await expectBook(phone, "ソラリス");
+        await expect(pop.locator(".bh-pop-page-count")).toHaveText("3 / 4");
+        await expect(pop.locator(".bh-shop-link")).toHaveText("問いの余白");
+        await touchGesture(phone, 110, 0, ".bh-pop-message");
+        await expect(pop.locator(".bh-pop-page-count")).toHaveText("2 / 4");
+        await touchGesture(phone, -8, -110, ".bh-pop-message");
+        await expect(pop.locator(".bh-pop-page-count")).toHaveText("2 / 4");
+        await touchGesture(
+          phone,
+          -110,
+          0,
+          ".bh-pop-reactions button:first-child",
+        );
+        await expect(pop.locator(".bh-pop-page-count")).toHaveText("2 / 4");
+        await expectBook(phone, "ソラリス");
         await noOverflow(phone, `${width}px POP pager`);
         await pop.screenshot({
           path: path.join(output, `pop-pager-${width}.png`),
@@ -684,6 +773,59 @@ try {
         await expectBook(phone, "ソラリス");
         await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 4");
         await phone.keyboard.press("Escape");
+      },
+    );
+    await check(
+      `${width}px store opens on its shelves and swipes between public stores`,
+      async () => {
+        await go(phone, "/shops/shop-orbit/");
+        const shelf = phone
+          .locator(".store-shelf-section .shelf-scroll")
+          .first();
+        const rect = await shelf.boundingBox();
+        expect(rect.y + rect.height).toBeLessThan(760);
+        await noOverflow(phone, `${width}px store entrance`);
+        await phone.screenshot({
+          path: path.join(output, `store-entrance-${width}.png`),
+          animations: "disabled",
+        });
+        await touchGesture(phone, -12, -110, ".shop-hero h1");
+        await expect(phone).toHaveURL(/shops\/shop-orbit\/$/);
+        await touchGesture(
+          phone,
+          -110,
+          0,
+          ".store-shelf-section .shelf-scroll",
+        );
+        await expect(phone).toHaveURL(/shops\/shop-orbit\/$/);
+        await touchGesture(phone, -110, 0, ".shop-hero button");
+        await expect(phone).toHaveURL(/shops\/shop-orbit\/$/);
+        await touchGesture(phone, -110, 0, ".shop-hero h1");
+        await expect(phone).toHaveURL(/shops\/shop-rain\/$/);
+        await expect(
+          phone.getByRole("heading", { name: "雨と翻訳", exact: true }),
+        ).toBeVisible();
+        expect(await phone.evaluate(() => scrollY)).toBe(0);
+        await touchGesture(phone, 110, 0, ".store-shelf-label h3");
+        await expect(phone).toHaveURL(/shops\/shop-orbit\/$/);
+        await touchGesture(phone, 110, 0, ".shop-hero h1");
+        await expect(phone).toHaveURL(/shops\/shop-lamplight\/$/);
+        await phone
+          .getByRole("link", { name: "次の書店：軌道書房", exact: true })
+          .tap();
+        await expect(phone).toHaveURL(/shops\/shop-orbit\/$/);
+        await shelf
+          .getByRole("button", {
+            name: "ソラリス · 面陳 · POPあり",
+            exact: true,
+          })
+          .tap();
+        await touchGesture(phone, -110, 0, ".bh-pop-message");
+        await expectBook(phone, "ソラリス");
+        await expect(phone.locator(".bh-pop-page-count")).toHaveText("2 / 4");
+        await expect(phone).toHaveURL(/shops\/shop-orbit\/$/);
+        await phone.keyboard.press("Escape");
+        await go(phone);
       },
     );
     await check(

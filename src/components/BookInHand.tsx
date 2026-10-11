@@ -13,6 +13,7 @@ import {
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookDiscovery } from "./BookDiscovery";
+import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./book-in-hand.css";
 
 type BookInHandProps = {
@@ -122,6 +123,20 @@ export function BookInHand({
     ? popReactionKey(activePop.shop.id, activePop.shelf.id, activePop.item.id)
     : "";
   const popReactions = state.popReactions[activeReactionKey] ?? [];
+  function movePop(direction: -1 | 1) {
+    setPopPage({
+      key: reactionKey,
+      index: Math.max(
+        0,
+        Math.min(popIndex + direction, popCandidates.length - 1),
+      ),
+    });
+  }
+  const popSwipe = useHorizontalSwipe({
+    onSwipe: movePop,
+    enabled: popCandidates.length > 1,
+    contain: true,
+  });
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -186,7 +201,7 @@ export function BookInHand({
     if (
       event.touches.length !== 1 ||
       (event.target as HTMLElement).closest(
-        "button,a,input,textarea,select,summary,[data-book-rail]",
+        "button,a,input,textarea,select,summary,[data-book-rail],.bh-pop",
       )
     ) {
       touchRef.current = null;
@@ -239,7 +254,8 @@ export function BookInHand({
     const content = contentRef.current;
     if (!content) return;
     const wheel = (event: WheelEvent) => {
-      if ((event.target as HTMLElement).closest("[data-book-rail]")) return;
+      if ((event.target as HTMLElement).closest("[data-book-rail],.bh-pop"))
+        return;
       const horizontal =
         event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX;
       if (
@@ -366,7 +382,11 @@ export function BookInHand({
             </Link>
             <div className="bh-book-heading">
               <span className="bh-genre">{book.genre}</span>
-              <h2 id={titleId}>{book.title}</h2>
+              <h2 id={titleId}>
+                <Link href={`/books/${book.id}/`} onNavigate={leaveForPage}>
+                  {book.title}
+                </Link>
+              </h2>
               <p className="bh-author">{book.author}</p>
               <BookPrice book={book} />
               <BookPurchase book={book} />
@@ -379,8 +399,9 @@ export function BookInHand({
           </section>
 
           <section
-            className="bh-pop owner-pop"
+            className={`bh-pop owner-pop${popCandidates.length > 1 ? " has-pages" : ""}`}
             aria-label="この本に寄せられたPOP"
+            {...popSwipe}
           >
             <div className="bh-pop-label">
               <span>この棚に並べた人の言葉</span>
@@ -401,9 +422,7 @@ export function BookInHand({
                   className="bh-pop-page-button"
                   aria-label="前のPOP"
                   disabled={popIndex === 0}
-                  onClick={() =>
-                    setPopPage({ key: reactionKey, index: popIndex - 1 })
-                  }
+                  onClick={() => movePop(-1)}
                 >
                   <Icon name="back" size={17} />
                 </button>
@@ -427,9 +446,7 @@ export function BookInHand({
                   className="bh-pop-page-button"
                   aria-label="次のPOP"
                   disabled={popIndex === popCandidates.length - 1}
-                  onClick={() =>
-                    setPopPage({ key: reactionKey, index: popIndex + 1 })
-                  }
+                  onClick={() => movePop(1)}
                 >
                   <Icon name="arrow" size={17} />
                 </button>

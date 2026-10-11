@@ -18,6 +18,8 @@ import { ReadingView } from "./ReadingView";
 import { NotificationsView } from "./NotificationsView";
 import { activeSession } from "../lib/reading";
 import { unreadCount } from "../lib/notifications";
+import { useHorizontalSwipe } from "./useHorizontalSwipe";
+import "./shop-journey.css";
 
 type View =
   | "town"
@@ -291,6 +293,7 @@ function ShopView({
   notify,
   shopId,
 }: Shared & { shopId: string }) {
+  const router = useRouter();
   const shop =
     shopId === "mine"
       ? state.ownShop
@@ -299,6 +302,27 @@ function ShopView({
     item: ShelfItem;
     shelf: Shelf;
   } | null>(null);
+  const publicShops = [
+    ...state.shops,
+    ...(state.ownShop ? [state.ownShop] : []),
+  ].filter((entry) => entry.shelves.some((shelf) => shelf.isPublic));
+  const shopIndex = publicShops.findIndex((entry) => entry.id === shop?.id);
+  const canBrowse = shopIndex >= 0 && publicShops.length > 1;
+  const previousShop = canBrowse
+    ? publicShops[(shopIndex - 1 + publicShops.length) % publicShops.length]
+    : null;
+  const nextShop = canBrowse
+    ? publicShops[(shopIndex + 1) % publicShops.length]
+    : null;
+  const shopSwipe = useHorizontalSwipe({
+    enabled: canBrowse && !selected,
+    exclude:
+      'button,a,input,textarea,select,summary,dialog,[role="dialog"],.shelf-scroll,.shop-shelf-index,[data-book-rail]',
+    onSwipe(direction) {
+      const destination = direction < 0 ? previousShop : nextShop;
+      if (destination) router.push(`/shops/${destination.id}/`);
+    },
+  });
   if (!shop)
     return (
       <div className="empty-state">
@@ -318,17 +342,39 @@ function ShopView({
   const shelves = shop.shelves.filter((s) => s.isPublic);
   const followed = state.following.includes(shop.id);
   return (
-    <>
-      <Link href="/" className="back-link">
-        <Icon name="back" size={16} />
-        本の街へ戻る
-      </Link>
+    <div className="shop-journey" {...shopSwipe}>
+      <nav className="shop-journey-nav" aria-label="書店をめぐる">
+        {previousShop && (
+          <Link
+            href={`/shops/${previousShop.id}/`}
+            aria-label={`前の書店：${previousShop.name}`}
+          >
+            <Icon name="back" size={17} />
+            前の書店
+          </Link>
+        )}
+        <Link href="/" className="shop-journey-home">
+          本の街へ
+          {canBrowse && (
+            <small>
+              {shopIndex + 1} / {publicShops.length} · 左右にスワイプ
+            </small>
+          )}
+        </Link>
+        {nextShop && (
+          <Link
+            href={`/shops/${nextShop.id}/`}
+            aria-label={`次の書店：${nextShop.name}`}
+          >
+            次の書店
+            <Icon name="arrow" size={17} />
+          </Link>
+        )}
+      </nav>
       <section className={"shop-hero theme-" + shop.theme}>
         <div className="shop-hero-rule" />
-        <span className="eyebrow">A SMALL BOOKSHOP, A PERSONAL WORLD</span>
         <h1>{shop.name}</h1>
         <p className="shop-tagline">{shop.tagline}</p>
-        <p className="shop-introduction">{shop.description}</p>
         <div className="shop-hero-bottom">
           {owner && (
             <Link
@@ -345,10 +391,6 @@ function ShopView({
               </span>
             </Link>
           )}
-          <span className="shop-social-note">
-            {shop.demo ? "デモ書店 · " : ""}
-            {shop.followers + Number(followed)}人がフォロー
-          </span>
           {shop.ownerId === "me" ? (
             <Link href="/my-shop/" className="button secondary">
               <Icon name="edit" size={15} />
@@ -373,16 +415,10 @@ function ShopView({
           )}
         </div>
       </section>
-      <div className="interior-heading">
-        <div>
-          <span className="eyebrow">TAKE YOUR TIME, LOOK AROUND</span>
-          <h2>棚の前で、ひと休み。</h2>
-        </div>
-        <span>
-          <Icon name="book" size={15} />
-          本を選ぶと、店主のPOPが読めます
-        </span>
-      </div>
+      <p className="shop-shelf-hint">
+        <Icon name="book" size={15} />
+        本を選ぶと、店主のPOPが読めます
+      </p>
       <div className="shop-shelf-index">
         {shelves.map((s) => (
           <a key={s.id} href={"#shelf-" + s.id}>
@@ -427,6 +463,14 @@ function ShopView({
           )}
         </div>
       )}
+      <section className="shop-about" aria-label="書店の紹介">
+        <h2>この書店について</h2>
+        <p className="shop-introduction">{shop.description}</p>
+        <p className="shop-social-note">
+          {shop.demo ? "デモ書店 · " : ""}
+          {shop.followers + Number(followed)}人がフォロー
+        </p>
+      </section>
       {owner && (
         <div className="shop-owner-footer">
           <ReaderAvatar reader={owner} size={45} />
@@ -452,7 +496,7 @@ function ShopView({
           onClose={() => setSelected(null)}
         />
       )}
-    </>
+    </div>
   );
 }
 function BookView({

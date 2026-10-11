@@ -115,6 +115,11 @@
   font-weight: 500;
   overflow-wrap: anywhere;
 }
+.bh-book-heading h2 a:hover,
+.bh-shop-card-heading h4 a:hover {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
 .bh-author {
   color: var(--bh-subtle);
   font-size: 13px;
@@ -125,6 +130,7 @@
   border: 1px solid #e2dbc8;
   background: #f5f0df;
   box-shadow: 1px 3px 0 #e5e0d14f;
+  touch-action: pan-y;
 }
 .bh-pop::before {
   content: "";
@@ -169,12 +175,6 @@
 .bh-pop-pager {
   margin: 16px 0 19px;
 }
-.bh-pop-pager.has-pages {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
-  align-items: center;
-  gap: 12px;
-}
 .bh-pop-pager .bh-pop-text,
 .bh-pop-pager .bh-pop-empty {
   margin: 0;
@@ -183,6 +183,10 @@
   min-width: 0;
 }
 .bh-pop-page-button {
+  position: absolute;
+  top: 50%;
+  left: -22px;
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -193,6 +197,10 @@
   background: #fbf8ed;
   color: #365242;
   cursor: pointer;
+}
+.bh-pop-page-button:last-of-type {
+  left: auto;
+  right: -22px;
 }
 .bh-pop-page-button:hover:not(:disabled) {
   background: #e3ebda;
@@ -207,7 +215,8 @@
   cursor: default;
 }
 .bh-pop-page-count {
-  grid-column: 2;
+  display: block;
+  margin-top: 10px;
   min-width: 46px;
   text-align: center;
   font-size: 11px;
@@ -433,25 +442,13 @@
   .bh-pop.owner-pop {
     padding: 18px 18px 14px;
   }
+  .bh-pop.owner-pop.has-pages {
+    margin-inline: 4px;
+    padding-inline: 24px;
+  }
   .bh-pop .bh-pop-text {
     font-size: 17px;
     margin-block: 14px;
-  }
-  .bh-pop-pager.has-pages {
-    gap: 10px;
-  }
-  .bh-pop-pager.has-pages .bh-pop-message {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-  .bh-pop-page-button {
-    grid-row: 1;
-  }
-  .bh-pop-page-button:last-of-type {
-    grid-column: 3;
-  }
-  .bh-pop-page-count {
-    grid-row: 1;
   }
   .bh-pop-signature {
     gap: 4px 12px;
@@ -480,6 +477,10 @@
   }
   .bh-pop.owner-pop {
     padding-inline: 14px;
+  }
+  .bh-pop.owner-pop.has-pages {
+    margin-inline: 9px;
+    padding-inline: 22px;
   }
   .bh-pop .bh-pop-text {
     font-size: 16px;
@@ -713,9 +714,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px 20px;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 14px;
+}
+.bh-shop-card-heading > div {
+  flex: 1 1 130px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .bh-shop-card-heading small {
   color: #858472;
@@ -742,6 +748,8 @@
   padding: 10px;
   border: 1px solid #cbd2bf;
   border-radius: 5px;
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 .bh-shop-card .shelf-scroll {
   overflow: visible;
