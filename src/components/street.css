@@ -1268,3 +1268,14 @@
 .street-shop.is-compact .street-shop-footer {
   padding: 6px 18px;
 }
+
+/* The genre chips are gone; the follow filter sits alone at the end of the row. */
+.street-filters {
+  display: flex;
+  justify-content: flex-end;
+  margin: 10px 0 14px;
+}
+.street-follow-filter {
+  border-left: 0;
+  padding-left: 0;
+}
