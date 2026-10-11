@@ -47,6 +47,9 @@ export function BookInHand({
     shelfId: sourceShelf.id,
     itemId,
   });
+  // Keep pagination scoped to the currently opened shelf item.
+  // A different book/selected shelf automatically starts from its first POP.
+  const [popPage, setPopPage] = useState<{ key: string; index: number } | null>(null);
   const shop =
     [...state.shops, ...(state.ownShop ? [state.ownShop] : [])].find(
       (entry) => entry.id === context.shopId,
@@ -73,12 +76,50 @@ export function BookInHand({
   );
   const item = availableItems[index];
   const book = state.books.find((entry) => entry.id === item?.bookId);
-  const owner =
-    shop.ownerId === state.me.id
-      ? state.me
-      : state.readers.find((reader) => reader.id === shop.ownerId);
   const reactionKey = item ? popReactionKey(shop.id, shelf.id, item.id) : "";
-  const reactions = state.popReactions[reactionKey] ?? [];
+  // The book remains open while this list flips through words written
+  // about that same edition by other public shelves.
+  const popCandidates = item
+    ? [
+        { shop, shelf, item },
+        ...[...state.shops, ...(state.ownShop ? [state.ownShop] : [])].flatMap(
+          (otherShop) =>
+            otherShop.shelves
+              .filter((otherShelf) => otherShelf.isPublic)
+              .flatMap((otherShelf) =>
+                otherShelf.items
+                  .filter(
+                    (otherItem) =>
+                      otherItem.bookId === item.bookId &&
+                      otherItem.pop.trim().length > 0 &&
+                      !(
+                        otherShop.id === shop.id &&
+                        otherShelf.id === shelf.id &&
+                        otherItem.id === item.id
+                      ),
+                  )
+                  .map((otherItem) => ({
+                    shop: otherShop,
+                    shelf: otherShelf,
+                    item: otherItem,
+                  })),
+              ),
+        ),
+      ]
+    : [];
+  const popIndex =
+    popPage?.key === reactionKey
+      ? Math.min(popPage.index, popCandidates.length - 1)
+      : 0;
+  const activePop = popCandidates[popIndex];
+  const popOwner =
+    activePop?.shop.ownerId === state.me.id
+      ? state.me
+      : state.readers.find((reader) => reader.id === activePop?.shop.ownerId);
+  const activeReactionKey = activePop
+    ? popReactionKey(activePop.shop.id, activePop.shelf.id, activePop.item.id)
+    : "";
+  const popReactions = state.popReactions[activeReactionKey] ?? [];
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -254,7 +295,7 @@ export function BookInHand({
         if (
           (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
           !(event.target as HTMLElement).closest(
-            "[data-book-rail],input,textarea,select",
+            "[data-book-rail],[data-pop-navigation],input,textarea,select",
           )
         ) {
           event.preventDefault();
@@ -328,17 +369,53 @@ export function BookInHand({
             <p>{book.summary}</p>
           </section>
 
-          <section className="bh-pop owner-pop" aria-label="この棚の店主のPOP">
+          <section className="bh-pop owner-pop" aria-label="この本に寄せられたPOP">
             <div className="bh-pop-label">
               <span>この棚に並べた人の言葉</span>
-              {shop.demo && <small>デモ</small>}
+              {activePop.shop.demo && <small>デモ</small>}
             </div>
-            {item.pop ? (
-              <p className="bh-pop-text">{item.pop}</p>
-            ) : (
-              <p className="bh-pop-empty">
-                この本のPOPは、まだ書かれていません。
-              </p>
+            <div className="bh-pop-message" aria-live="polite" aria-atomic="true">
+              {activePop.item.pop ? (
+                <p className="bh-pop-text">{activePop.item.pop}</p>
+              ) : (
+                <p className="bh-pop-empty">
+                  この本のPOPは、まだ書かれていません。
+                </p>
+              )}
+            </div>
+            {popCandidates.length > 1 && (
+              <div
+                className="bh-pop-pager"
+                data-pop-navigation
+                role="group"
+                aria-label="この本へのPOPを切り替える"
+              >
+                <button
+                  type="button"
+                  className="bh-pop-page-button"
+                  aria-label="前のPOP"
+                  disabled={popIndex === 0}
+                  onClick={() =>
+                    setPopPage({ key: reactionKey, index: popIndex - 1 })
+                  }
+                >
+                  <Icon name="back" size={17} />
+                </button>
+                <span className="bh-pop-page-count" aria-live="polite" aria-atomic="true">
+                  {popIndex + 1} / {popCandidates.length}
+                </span>
+                <button
+                  type="button"
+                  className="bh-pop-page-button"
+                  aria-label="次のPOP"
+                  disabled={popIndex === popCandidates.length - 1}
+                  onClick={() =>
+                    setPopPage({ key: reactionKey, index: popIndex + 1 })
+                  }
+                >
+                  <Icon name="arrow" size={17} />
+                </button>
+              </div>
             )}
             <div
               className="bh-pop-reactions"
@@ -349,12 +426,12 @@ export function BookInHand({
                 <button
                   key={reaction}
                   type="button"
-                  aria-pressed={reactions.includes(reaction)}
+                  aria-pressed={popReactions.includes(reaction)}
                   onClick={() =>
                     actions.togglePopReaction(
-                      shop.id,
-                      shelf.id,
-                      item.id,
+                      activePop.shop.id,
+                      activePop.shelf.id,
+                      activePop.item.id,
                       reaction,
                     )
                   }
@@ -378,26 +455,26 @@ export function BookInHand({
               ))}
             </div>
             <div className="bh-pop-signature">
-              {owner && (
+              {popOwner && (
                 <Link
-                  href={`/profiles/${owner.id}/`}
+                  href={`/profiles/${popOwner.id}/`}
                   className="bh-owner-link"
                   onNavigate={leaveForPage}
                 >
-                  <ReaderAvatar reader={owner} size={31} />
+                  <ReaderAvatar reader={popOwner} size={31} />
                   <span>
-                    {owner.name}
+                    {popOwner.name}
                     <small>店主のプロフィールへ</small>
                   </span>
                   <Icon name="chevron" size={15} />
                 </Link>
               )}
               <Link
-                href={`/shops/${shop.id}/#shelf-${shelf.id}`}
+                href={`/shops/${activePop.shop.id}/#shelf-${activePop.shelf.id}`}
                 className="bh-shop-link"
                 onNavigate={leaveForPage}
               >
-                {shop.name}
+                {activePop.shop.name}
               </Link>
             </div>
           </section>
