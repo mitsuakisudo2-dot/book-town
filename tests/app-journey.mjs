@@ -110,27 +110,33 @@ try {
     }),
   );
 
-  await check("bottom bar reads home, search, reading, profile", async () => {
-    await go("/");
-    const nav = page.getByRole("navigation", {
-      name: "スマートフォンナビゲーション",
-    });
-    await expect(nav.getByRole("link")).toHaveText([
-      "ホーム",
-      "検索",
-      "読書を開始",
-      "プロフィール",
-    ]);
-    await expect(nav.getByRole("link", { name: "ホーム" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    await expect(
-      page.getByRole("navigation", { name: "ホームの表示" }).getByRole("link"),
-    ).toHaveText(["書店", "タイムライン"]);
-    await expect(page.getByRole("link", { name: "お知らせ" })).toBeVisible();
-    await noOverflow("home");
-  });
+  await check(
+    "bottom bar reads home, search, walk, reading, profile",
+    async () => {
+      await go("/");
+      const nav = page.getByRole("navigation", {
+        name: "スマートフォンナビゲーション",
+      });
+      await expect(nav.getByRole("link")).toHaveText([
+        "ホーム",
+        "検索",
+        "書店めぐり",
+        "読書を開始",
+        "プロフィール",
+      ]);
+      await expect(nav.getByRole("link", { name: "ホーム" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      await expect(
+        page
+          .getByRole("navigation", { name: "ホームの表示" })
+          .getByRole("link"),
+      ).toHaveText(["書店", "タイムライン"]);
+      await expect(page.getByRole("link", { name: "お知らせ" })).toBeVisible();
+      await noOverflow("home");
+    },
+  );
 
   await check(
     "swipes on a shelf stay on the shelf; other swipes switch home",

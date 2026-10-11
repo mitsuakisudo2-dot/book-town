@@ -22,9 +22,11 @@ import { bookPath } from "../lib/books";
 import "./usability.css";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
+import { WalkView } from "./WalkView";
 
 type View =
   | "town"
+  | "walk"
   | "timeline"
   | "search"
   | "reading"
@@ -39,11 +41,12 @@ type Shared = {
   actions: TownActions;
   notify: (message: string) => void;
 };
-type Section = "home" | "search" | "reading" | "profile";
+type Section = "home" | "search" | "walk" | "reading" | "profile";
 const links: { href: string; icon: string; label: string; section: Section }[] =
   [
     { href: "/", icon: "home", label: "ホーム", section: "home" },
     { href: "/search/", icon: "search", label: "検索", section: "search" },
+    { href: "/walk/", icon: "store", label: "書店めぐり", section: "walk" },
     {
       href: "/reading/",
       icon: "reading",
@@ -59,6 +62,7 @@ const links: { href: string; icon: string; label: string; section: Section }[] =
   ];
 /** Which item of the main navigation a view belongs to. */
 function sectionOf(view: View, selectedId?: string): Section | null {
+  if (view === "walk") return "walk";
   if (view === "town" || view === "timeline" || view === "shop") return "home";
   if (view === "search") return "search";
   if (view === "reading") return "reading";
@@ -98,7 +102,7 @@ export default function TownApp({
   const reading = Boolean(activeSession(state));
   const unread = unreadCount(state);
   return (
-    <div className="town-shell">
+    <div className={"town-shell" + (view === "walk" ? " is-walk" : "")}>
       <aside className="town-sidebar">
         <Link className="brand" href="/">
           <span className="brand-mark">
@@ -209,7 +213,9 @@ export default function TownApp({
             : "保存データを読み込めなかったため、デモの初期状態に戻しました。"}
         </div>
         <main className={"town-main view-" + view} key={view + selectedId}>
-          {view === "town" ? (
+          {view === "walk" ? (
+            <WalkView {...shared} />
+          ) : view === "town" ? (
             <HomeView {...shared} tab="shelves">
               <StreetView {...shared} search={search} setSearch={setSearch} />
             </HomeView>
@@ -250,6 +256,7 @@ export default function TownApp({
             key={l.section}
             className={
               (section === l.section ? "active" : "") +
+              (l.section === "walk" ? " nav-walk" : "") +
               (l.section === "reading" ? " nav-reading" : "") +
               (l.section === "reading" && reading ? " is-live" : "")
             }

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import type { Book, Reader } from "../lib/types";
+import Image from "next/image";
 const shapes: Record<string, ReactNode> = {
   book: (
     <>
@@ -215,6 +216,20 @@ export function BookJacket({
       onClick={onClick}
       aria-label={book.title + "の詳細"}
     >
+      {book.coverUrl ? (
+        <Image
+          className="jacket-image"
+          src={book.coverUrl}
+          alt={book.title}
+          loading="lazy"
+          fill
+          sizes="160px"
+          unoptimized
+          onError={(event) => {
+            event.currentTarget.hidden = true;
+          }}
+        />
+      ) : null}
       {content}
     </button>
   ) : (
@@ -224,6 +239,20 @@ export function BookJacket({
       role="img"
       aria-label={book.title + "のオリジナル仮表紙"}
     >
+      {book.coverUrl ? (
+        <Image
+          className="jacket-image"
+          src={book.coverUrl}
+          alt={book.title}
+          loading="lazy"
+          fill
+          sizes="160px"
+          unoptimized
+          onError={(event) => {
+            event.currentTarget.hidden = true;
+          }}
+        />
+      ) : null}
       {content}
     </div>
   );

@@ -15,6 +15,8 @@ export type ShopTheme = "sage" | "ink" | "ochre" | "rose";
 
 export interface Book {
   id: string;
+  /** Optional licensed cover or local preview URL; spines remain generated. */
+  coverUrl?: string;
   title: string;
   author: string;
   genre: string;
