@@ -166,6 +166,44 @@
   color: var(--bh-subtle);
   letter-spacing: normal;
 }
+.bh-pop-pager {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.bh-pop-page-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid #d2ccbb;
+  border-radius: 50%;
+  background: #fbf8ed;
+  color: #365242;
+  cursor: pointer;
+}
+.bh-pop-page-button:hover:not(:disabled) {
+  background: #e3ebda;
+  border-color: #a6b995;
+}
+.bh-pop-page-button:focus-visible {
+  outline: 2px solid #365242;
+  outline-offset: 3px;
+}
+.bh-pop-page-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.bh-pop-page-count {
+  min-width: 46px;
+  text-align: center;
+  font-size: 11px;
+  color: #706c5d;
+  font-variant-numeric: tabular-nums;
+}
 .bh-pop-signature {
   display: flex;
   align-items: center;
