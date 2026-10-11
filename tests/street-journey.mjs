@@ -200,6 +200,42 @@ try {
     },
   );
   await check(
+    "POP pager shows other readers' words without switching books",
+    async () => {
+      const shelf = shop(page, "軌道書房").locator(".shelf-scroll").first();
+      await shelf
+        .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
+        .click();
+      const dialog = page.locator(".bh-dialog");
+      const pop = dialog.locator(".owner-pop");
+      const firstPop = await pop.locator(".bh-pop-text").innerText();
+      await expectBook(page, "ソラリス");
+      await expect(pop.getByRole("button", { name: "前のPOP" })).toBeDisabled();
+      await expect(pop.getByRole("button", { name: "次のPOP" })).toBeEnabled();
+      await expect(pop.locator(".bh-shop-link")).toHaveText("軌道書房");
+
+      await pop.getByRole("button", { name: "次のPOP" }).click();
+      await expect(pop.locator(".bh-pop-text")).not.toHaveText(firstPop);
+      await expect(pop.locator(".bh-shop-link")).not.toHaveText("軌道書房");
+      await expectBook(page, "ソラリス");
+      await expect(pop.locator(".bh-pop-page-count")).toContainText("2 /");
+      await expect(pop.getByRole("button", { name: "前のPOP" })).toBeEnabled();
+
+      // The reaction belongs to the currently displayed POP, not the first.
+      const reaction = pop.getByRole("button", { name: "いいね", exact: true });
+      const before = await reaction.getAttribute("aria-pressed");
+      await reaction.click();
+      await expect(reaction).toHaveAttribute(
+        "aria-pressed",
+        before === "true" ? "false" : "true",
+      );
+      await pop.getByRole("button", { name: "前のPOP" }).click();
+      await expect(pop.locator(".bh-pop-text")).toHaveText(firstPop);
+      await expect(pop.locator(".bh-shop-link")).toHaveText("軌道書房");
+      await page.keyboard.press("Escape");
+    },
+  );
+  await check(
     "Native dialog traps keyboard focus and restores the source book",
     async () => {
       const trigger = shop(page, "軌道書房")
