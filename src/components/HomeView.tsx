@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TownActions, TownState } from "../lib/types";
 import { ComposeFab, TimelineView } from "./Social";
+import { Icon } from "./ui";
 
 type Shared = {
   state: TownState;
@@ -100,6 +101,13 @@ export function HomeView({
           タイムライン
         </Link>
       </nav>
+      <div className="home-saved-books">
+        <Link href="/reading-list/">
+          <Icon name="bookmark" size={16} />
+          読みたい本<span>{shared.state.wishlist.length}</span>
+          <Icon name="arrow" size={14} />
+        </Link>
+      </div>
       {tab === "timeline" ? <TimelineView {...shared} /> : children}
       <ComposeFab
         {...shared}

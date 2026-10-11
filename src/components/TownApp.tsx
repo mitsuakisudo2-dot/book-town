@@ -18,6 +18,8 @@ import { ReadingView } from "./ReadingView";
 import { NotificationsView } from "./NotificationsView";
 import { activeSession } from "../lib/reading";
 import { unreadCount } from "../lib/notifications";
+import { bookPath } from "../lib/books";
+import "./usability.css";
 
 type View =
   | "town"
@@ -461,9 +463,20 @@ function BookView({
   notify,
   bookId,
 }: Shared & { bookId: string }) {
+  const persistence = usePersistenceStatus();
   const book = state.books.find((b) => b.id === bookId);
   if (!book)
-    return <div className="empty-state">この本は見つかりませんでした。</div>;
+    return persistence === "loading" ? (
+      <p role="status">本を開いています…</p>
+    ) : (
+      <div className="empty-state">
+        <h1>この本は見つかりませんでした。</h1>
+        <p>登録した本は、登録したときと同じブラウザで開いてください。</p>
+        <Link href="/profiles/me/" className="button secondary">
+          保存した本を見る
+        </Link>
+      </div>
+    );
   const matches = [
     ...state.shops,
     ...(state.ownShop ? [state.ownShop] : []),
@@ -576,7 +589,7 @@ function Wishlist({ state, actions, notify }: Shared) {
         <div className="catalog-grid wishlist-grid">
           {books.map((b) => (
             <article className="catalog-book" key={b.id}>
-              <Link href={"/books/" + b.id + "/"}>
+              <Link href={bookPath(b.id)}>
                 <BookJacket book={b} />
                 <h3>{b.title}</h3>
                 <p>{b.author}</p>

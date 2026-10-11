@@ -1,0 +1,182 @@
+/* Comfortable reading and touch targets; keep decorative book-cover lettering intact. */
+.town-shell {
+  --muted: #66715d;
+}
+.town-shell .post-text,
+.town-shell .composer-text,
+.town-shell .bh-pop .bh-pop-text {
+  font-size: 16px;
+  line-height: 1.85;
+}
+.town-shell .page-subtitle,
+.town-shell .street-intro p,
+.town-shell .reading-optional,
+.town-shell .reading-mode small,
+.town-shell .reading-muted,
+.town-shell .social-note,
+.town-shell .empty-state p {
+  font-size: 14px;
+  color: #626e59;
+}
+.town-shell .book-page-hero .book-summary,
+.town-shell .book-page-author,
+.town-shell .book-path-heading p {
+  font-size: 14px;
+  color: #626e59;
+  line-height: 1.85;
+}
+.town-shell .book-page-hero .jacket-disclaimer {
+  font-size: 12px;
+  color: #626e59;
+  line-height: 1.8;
+}
+.town-shell .search-box input {
+  font-size: 16px;
+}
+.town-shell .reading-mode.is-together small {
+  color: #f0f5eb;
+}
+.town-shell .post-author,
+.town-shell .post-book b {
+  font-size: 15px;
+}
+.town-shell .post-handle,
+.town-shell .post-head time,
+.town-shell .post-book small,
+.town-shell .composer-count,
+.town-shell .composer-tag-hint,
+.town-shell .picker-chosen small,
+.town-shell .reading-tag,
+.town-shell .demo-tag,
+.town-shell .street-shop-footer {
+  font-size: 12px;
+  color: #626e59;
+}
+.town-shell .home-tabs a {
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: #536448;
+}
+.town-shell .post-actions button,
+.town-shell .composer-book,
+.town-shell .composer-spoiler,
+.town-shell .spoiler-cover button,
+.town-shell .street-follow,
+.town-shell .street-follow-filter {
+  min-height: 44px;
+  font-size: 13px;
+  color: #536448;
+}
+.town-shell .post-actions .is-active {
+  color: #8a4232;
+}
+.town-shell .post-actions .report-button {
+  font-size: 12px;
+  color: #75604e;
+}
+.town-shell .composer-spoiler.is-disabled {
+  color: #89917f;
+}
+.town-shell .field,
+.town-shell .picker-search input {
+  font-size: 16px;
+}
+.town-shell .compose-fab {
+  align-content: center;
+  gap: 3px;
+}
+.town-shell .compose-fab span {
+  font-size: 11px;
+  line-height: 1;
+}
+.draft-status {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #626e59;
+}
+.draft-status[role="status"] {
+  color: #8a4232;
+}
+.home-saved-books {
+  display: flex;
+  justify-content: flex-end;
+  margin: -12px 0 18px;
+}
+.home-saved-books a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 7px;
+  font-size: 13px;
+  color: #536448;
+}
+.home-saved-books a span {
+  border-radius: 20px;
+  padding: 1px 8px;
+  background: #e8ebdf;
+  font-variant-numeric: tabular-nums;
+}
+.timeline-filters {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.timeline-filters button {
+  min-height: 44px;
+  padding: 8px 18px;
+  border: 1px solid #d1d8c7;
+  border-radius: 999px;
+  font-size: 14px;
+  color: #536448;
+  background: #fffdf7;
+}
+.timeline-filters button[aria-pressed="true"] {
+  background: #e3ebdb;
+  border-color: #809273;
+  color: #364e32;
+  font-weight: 600;
+}
+.timeline-filter-note {
+  font-size: 13px;
+  line-height: 1.8;
+  color: #626e59;
+  margin: -6px 0 16px;
+}
+@media (max-width: 760px) {
+  .town-shell .town-topbar {
+    grid-template-rows: 40px;
+    height: 64px;
+    padding: 11px 16px;
+    row-gap: 0;
+  }
+  .town-shell .home-tabs {
+    top: 65px;
+  }
+  .town-shell .home-saved-books {
+    margin: -4px 0 12px;
+  }
+  .town-shell .town-bottom-nav a {
+    font-size: 12px;
+    color: #626e59;
+  }
+  .town-shell .town-bottom-nav span {
+    font-size: 12px;
+  }
+  .town-shell .social-page > .eyebrow {
+    display: none;
+  }
+  .town-shell .social-page .page-subtitle {
+    margin-bottom: 16px;
+  }
+}
+@media (max-width: 420px) {
+  .town-shell .book-page-hero > .book-jacket {
+    width: 92px;
+  }
+  .town-shell .book-page-hero {
+    gap: 18px;
+  }
+}
