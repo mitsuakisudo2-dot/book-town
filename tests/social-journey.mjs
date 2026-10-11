@@ -26,6 +26,12 @@ async function go(route) {
   await page.goto(`${baseURL}${route}`);
   await expect(page.locator("main")).toBeVisible();
   await page.waitForFunction(() => localStorage.getItem("book-town-v1"));
+  // Saved data can exist before this page hydrates; wait until React owns the page.
+  await page.waitForFunction(() =>
+    Object.keys(document.querySelector("main") ?? {}).some((key) =>
+      key.startsWith("__reactFiber"),
+    ),
+  );
 }
 async function noOverflow(label) {
   const size = await page.evaluate(() => ({
@@ -100,6 +106,7 @@ try {
         await expect(page.getByText("あの終わり方でなければ")).toHaveCount(0);
         await noOverflow(`${label} timeline`);
         await page.screenshot({
+          caret: "initial",
           path: path.join(output, `timeline-${viewport.width}.png`),
           fullPage: true,
         });
@@ -258,6 +265,7 @@ try {
       await go("/books/solaris/");
       await noOverflow(`${label} book`);
       await page.screenshot({
+        caret: "initial",
         path: path.join(output, `book-reviews-${viewport.width}.png`),
         fullPage: true,
       });

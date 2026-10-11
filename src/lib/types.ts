@@ -26,10 +26,14 @@ export interface Book {
   pattern: number;
   /** Books the viewer registered (by barcode or by hand) carry their ISBN when known. */
   isbn?: string;
+  /** List price in yen, tax included. Demo prices are placeholders, labeled as such. */
+  price?: number;
 }
 
 export interface Reader {
   id: string;
+  /** The reader's public ID, shown as @handle. Lowercase letters, digits and _. */
+  handle: string;
   name: string;
   bio: string;
   color: string;
@@ -129,6 +133,7 @@ export interface NewBook {
   title: string;
   author: string;
   isbn?: string;
+  price?: number;
 }
 
 export interface TownState {
@@ -166,7 +171,13 @@ export interface TownActions {
     patch: { name?: string; isPublic?: boolean },
   ): void;
   removeShelf(shelfId: string): void;
-  addShelfBook(shelfId: string, bookId: string, display: BookDisplay): boolean;
+  addShelfBook(
+    shelfId: string,
+    bookId: string,
+    display: BookDisplay,
+    /** Puts a book that was just taken off back with its POP, at its old place. */
+    restore?: { pop: string; index: number },
+  ): boolean;
   removeShelfBook(shelfId: string, itemId: string): void;
   moveShelfBook(shelfId: string, itemId: string, toIndex: number): void;
   changeDisplay(shelfId: string, itemId: string, display: BookDisplay): boolean;
@@ -180,7 +191,12 @@ export interface TownActions {
     itemId: string,
     reaction: PopReaction,
   ): void;
-  updateProfile(name: string, bio: string, links?: string[]): void;
+  updateProfile(
+    name: string,
+    bio: string,
+    links?: string[],
+    handle?: string,
+  ): boolean;
   updateNine(ids: string[], notes: Record<string, string>): void;
   createPost(draft: PostDraft): string | null;
   deletePost(postId: string): void;

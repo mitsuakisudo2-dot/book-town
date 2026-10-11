@@ -607,3 +607,62 @@
     display: none;
   }
 }
+
+/* IDs, tags and the review preview */
+.post-handle {
+  font-size: 11px;
+  color: #98a38c;
+}
+.post-tag {
+  color: #3d6b52;
+  font-weight: 500;
+}
+.post-tag:hover {
+  text-decoration: underline;
+}
+.composer-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.composer-tag-label {
+  font-size: 11px;
+  color: #8a947d;
+}
+.composer-tag-hint {
+  font-size: 10px;
+  color: #a5ad97;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px dashed #c9d3bd;
+  color: #5f7a62;
+  background: transparent;
+}
+button.tag-chip:hover {
+  background: #eef1e6;
+}
+.tag-chip.is-set {
+  border-style: solid;
+  border-color: #b7c9ac;
+  background: #e5ede0;
+  color: #2f5a42;
+}
+.reviews-more {
+  justify-self: center;
+  font-size: 12px;
+  color: #365242;
+  padding: 9px 18px;
+  border: 1px solid #d4ddc8;
+  border-radius: 999px;
+  background: #fffdf7;
+}
+.reviews-more:hover {
+  background: #eef1e6;
+}

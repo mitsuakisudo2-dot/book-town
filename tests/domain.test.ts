@@ -24,6 +24,7 @@ import {
 } from "../src/lib/reading";
 import { notificationsFor, unreadCount } from "../src/lib/notifications";
 import { normalizeIsbn } from "../src/lib/books";
+import { extractTags, popularTags, postsWithTag } from "../src/lib/tags";
 import { popReactionKey, shelfUsed, type TownState } from "../src/lib/types";
 
 let passed = 0;
@@ -780,6 +781,118 @@ check("profile links keep only web pages, up to five", () => {
   assert.equal(loaded.status, "saved");
   assert.equal(loaded.state.me.name, "新しい名前");
   assert.deepEqual(loaded.state.me.links, ["https://example.org/"]);
+});
+
+check(
+  "every reader has a unique ID; the viewer's ID is validated and kept",
+  () => {
+    const handles = [seedState.me, ...seedState.readers].map((r) => r.handle);
+    assert.equal(new Set(handles).size, handles.length);
+    const fresh = createTownStore(createMemoryRepository());
+    assert.equal(
+      fresh.actions.updateProfile("あなた", "", undefined, "NAGI"),
+      false,
+    );
+    assert.equal(
+      fresh.actions.updateProfile("あなた", "", undefined, "a!"),
+      false,
+    );
+    assert.equal(fresh.getSnapshot().me.handle, "reader");
+    assert.equal(
+      fresh.actions.updateProfile("あなた", "", undefined, "@Book_Lover"),
+      true,
+    );
+    assert.equal(fresh.getSnapshot().me.handle, "book_lover");
+    const envelope = JSON.parse(serializeTown(fresh.getSnapshot()));
+    assert.equal(
+      deserializeTown(JSON.stringify(envelope)).state.me.handle,
+      "book_lover",
+    );
+    envelope.data.me.handle = "sumire";
+    assert.equal(
+      deserializeTown(JSON.stringify(envelope)).state.me.handle,
+      "reader",
+    );
+    delete envelope.data.me.handle;
+    const legacy = deserializeTown(JSON.stringify(envelope));
+    assert.equal(legacy.status, "saved");
+    assert.equal(legacy.state.me.handle, "reader");
+  },
+);
+
+check("tags are read from post text and gathered across public posts", () => {
+  assert.deepEqual(extractTags("朝 #朝読書 と #SF、mail#x #再読 ＃再読"), [
+    "朝読書",
+    "sf",
+    "再読",
+  ]);
+  const fresh = createTownStore(createMemoryRepository());
+  fresh.actions.startReading(null, "solo");
+  fresh.actions.createPost({ body: "ひみつ #積読", fromReading: true });
+  fresh.actions.endReading(false);
+  const shared = fresh.actions.createPost({ body: "今日も #積読 が増えた" });
+  const state = fresh.getSnapshot();
+  const tagged = postsWithTag(state, "積読").map((post) => post.id);
+  assert.ok(tagged.includes(shared as string));
+  assert.ok(tagged.includes("p-5"));
+  // Private reading notes never surface through tags.
+  assert.ok(
+    postsWithTag(state, "積読").every((post) => post.readingMode !== "solo"),
+  );
+  assert.equal(
+    popularTags(state).find((entry) => entry.tag === "積読")?.count,
+    2,
+  );
+});
+
+check(
+  "demo books carry a price; registered prices are kept and checked",
+  () => {
+    assert.ok(seedState.books.every((book) => typeof book.price === "number"));
+    const repo = createMemoryRepository();
+    const fresh = createTownStore(repo);
+    const priced = fresh.actions.addBook({
+      title: "値段のある本",
+      author: "",
+      price: 1980,
+    });
+    const odd = fresh.actions.addBook({
+      title: "変な値段",
+      author: "",
+      price: -5,
+    });
+    assert.ok(priced && odd);
+    const loaded = repo.load().state;
+    assert.equal(loaded.books.find((book) => book.id === priced)?.price, 1980);
+    assert.equal(
+      loaded.books.find((book) => book.id === odd)?.price,
+      undefined,
+    );
+  },
+);
+
+check("a book taken off can be put back with its POP at its old place", () => {
+  const fresh = createTownStore(createMemoryRepository());
+  fresh.actions.createShop("棚", "", "sage");
+  const id = "mine-shelf-1";
+  for (const book of ["solaris", "momo", "walden"])
+    fresh.actions.addShelfBook(id, book, "spine");
+  const shelf = () => ownShop(fresh.getSnapshot()).shelves[0];
+  const momo = shelf().items[1];
+  fresh.actions.updatePop(id, momo.id, "灰色の男たちに気をつけて");
+  fresh.actions.removeShelfBook(id, momo.id);
+  assert.ok(
+    fresh.actions.addShelfBook(id, "momo", "face", {
+      pop: "灰色の男たちに気をつけて",
+      index: 1,
+    }),
+  );
+  assert.deepEqual(
+    shelf().items.map((item) => item.bookId),
+    ["solaris", "momo", "walden"],
+  );
+  assert.equal(shelf().items[1].pop, "灰色の男たちに気をつけて");
+  assert.equal(shelf().items[1].display, "face");
 });
 
 console.log(`${passed} domain checks passed.`);

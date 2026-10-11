@@ -79,5 +79,9 @@ export function createRegisteredBook(id: string, book: NewBook): Book {
     thickness: 30 + ((seed >> 5) % 12),
     pattern: (seed >> 9) % 6,
     ...(book.isbn ? { isbn: book.isbn } : {}),
+    ...(book.price ? { price: book.price } : {}),
   };
 }
+
+export const formatPrice = (price: number): string =>
+  "¥" + price.toLocaleString("ja-JP");

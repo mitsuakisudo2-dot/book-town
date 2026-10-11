@@ -11,7 +11,7 @@ import {
   type TownState,
 } from "../lib/types";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
-import { BookActions } from "./BookActions";
+import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookDiscovery } from "./BookDiscovery";
 import "./book-in-hand.css";
 
@@ -306,13 +306,20 @@ export function BookInHand({
       >
         <div className="bh-book-body" key={reactionKey}>
           <div className="bh-book-intro">
-            <div className="bh-cover">
+            <Link
+              className="bh-cover"
+              href={`/books/${book.id}/`}
+              onNavigate={leaveForPage}
+              aria-label={`${book.title}の作品ページへ`}
+            >
               <BookJacket book={book} />
-            </div>
+            </Link>
             <div className="bh-book-heading">
               <span className="bh-genre">{book.genre}</span>
               <h2 id={titleId}>{book.title}</h2>
               <p className="bh-author">{book.author}</p>
+              <BookPrice book={book} />
+              <BookPurchase book={book} />
             </div>
           </div>
 
@@ -414,6 +421,7 @@ export function BookInHand({
               contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
               closeButtonRef.current?.focus({ preventScroll: true });
             }}
+            onLeave={leaveForPage}
           />
           <Link
             className="bh-work-page"
@@ -423,7 +431,7 @@ export function BookInHand({
             作品のページを開く <Icon name="arrow" size={16} />
           </Link>
           <span className="bh-cover-note">
-            表紙はデモ用のオリジナルデザインです。リアクションはこのブラウザに保存されます。
+            {bookNote(book)}リアクションはこのブラウザに保存されます。
           </span>
         </div>
       </div>

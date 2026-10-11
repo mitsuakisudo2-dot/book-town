@@ -30,7 +30,6 @@ export function StreetView({
   search,
   setSearch,
 }: Props) {
-  const [genre, setGenre] = useState("すべて");
   const [followingOnly, setFollowingOnly] = useState(false);
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<{
@@ -52,7 +51,6 @@ export function StreetView({
         : state.readers.find((r) => r.id === shop.ownerId);
     return (
       (!followingOnly || state.following.includes(shop.id)) &&
-      (genre === "すべて" || stock.some((b) => b.genre === genre)) &&
       (!term ||
         (
           shop.name +
@@ -68,7 +66,6 @@ export function StreetView({
   const ordered = [...matching.slice(pivot), ...matching.slice(0, pivot)];
   const reset = () => {
     setSearch("");
-    setGenre("すべて");
     setFollowingOnly(false);
   };
   const discovery = state.shops
@@ -111,17 +108,6 @@ export function StreetView({
       </header>
 
       <div className="street-filters">
-        <div className="street-genres" aria-label="本のジャンル">
-          {["すべて", ...new Set(state.books.map((b) => b.genre))].map((g) => (
-            <button
-              key={g}
-              aria-pressed={genre === g}
-              onClick={() => setGenre(g)}
-            >
-              {g === "すべて" ? "気の向くまま" : g}
-            </button>
-          ))}
-        </div>
         <button
           className="street-follow-filter"
           aria-pressed={followingOnly}
@@ -160,9 +146,9 @@ export function StreetView({
                 : state.readers.find((r) => r.id === shop.ownerId);
             const shelves = shop.shelves.filter((s) => s.isPublic);
             const followed = state.following.includes(shop.id);
-            // The street shows one shelf per shop; the whole shop is one tap away.
-            const [first] = shelves;
-            const more = shelves.length - 1;
+            // The street shows two shelves per shop; the whole shop is one tap away.
+            const shown = shelves.slice(0, 2);
+            const more = shelves.length - shown.length;
             return (
               <article
                 className={"street-shop is-compact theme-" + shop.theme}
@@ -220,16 +206,16 @@ export function StreetView({
                   </div>
                 </header>
                 <div className="street-shop-shelves">
-                  {first ? (
+                  {shown.map((shelf, shelfIndex) => (
                     <StreetShelf
-                      shelf={first}
+                      key={shelf.id}
+                      shelf={shelf}
                       books={state.books}
-                      index={0}
-                      onSelect={(item) =>
-                        setSelected({ shop, shelf: first, item })
-                      }
+                      index={shelfIndex}
+                      onSelect={(item) => setSelected({ shop, shelf, item })}
                     />
-                  ) : (
+                  ))}
+                  {!shown.length && (
                     <div className="street-empty-shelf">
                       <Icon name="book" size={26} />
                       <p>このお店の棚は、これから育ちます。</p>

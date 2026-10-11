@@ -1,11 +1,13 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import type { Book, Shop, TownActions, TownState } from "../lib/types";
 import { findReader } from "../lib/social";
 import { matchBooks } from "./BookPicker";
-import { BookJacket, Icon } from "./ui";
+import { postsWithTag, popularTags, takeRequestedSearch } from "../lib/tags";
+import { PostCard } from "./Social";
+import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./reading.css";
 
 type Shared = {
@@ -53,10 +55,22 @@ function publicStock(state: TownState, shop: Shop): Book[] {
     .filter((book): book is Book => Boolean(book));
 }
 
-export function SearchView({ state }: Shared) {
+export function SearchView({ state, actions, notify }: Shared) {
   const id = useId();
-  const [query, setQuery] = useState("");
+  // A tapped #tag hands its search over; a shared ?q= link works on a fresh load.
+  const [query, setQuery] = useState(() => takeRequestedSearch() ?? "");
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("q");
+    if (!fromUrl) return;
+    const timer = setTimeout(
+      () => setQuery((current) => current || fromUrl),
+      0,
+    );
+    return () => clearTimeout(timer);
+  }, []);
   const term = query.trim().toLocaleLowerCase();
+  const tagTerm = /^[#＃]/.test(term) ? term.slice(1) : null;
+  const personTerm = term.replace(/^@/, "");
   const signals = bookSignals(state);
   const signal = (bookId: string) =>
     signals.get(bookId) ?? { shelves: 0, talk: 0, reviews: 0, wants: 0 };
@@ -80,25 +94,36 @@ export function SearchView({ state }: Shared) {
     (book) => signal(book.id).shelves <= 1 && signal(book.id).reviews === 0,
   );
 
-  const bookResults = term ? matchBooks(state.books, term) : [];
-  const shopResults = term
-    ? shops.filter((shop) => {
-        const owner =
-          shop.ownerId === state.me.id
-            ? state.me.name
-            : (findReader(state, shop.ownerId)?.name ?? "");
-        return (
-          shop.name +
-          shop.description +
-          owner +
-          publicStock(state, shop)
-            .map((book) => book.title + book.author)
-            .join("")
+  const bookResults = term && !tagTerm ? matchBooks(state.books, term) : [];
+  const tagResults = tagTerm ? postsWithTag(state, tagTerm) : [];
+  const people =
+    term && !tagTerm
+      ? [state.me, ...state.readers].filter((reader) =>
+          `${reader.name} ${reader.handle} ${reader.bio}`
+            .toLocaleLowerCase()
+            .includes(personTerm),
         )
-          .toLocaleLowerCase()
-          .includes(term);
-      })
-    : [];
+      : [];
+  const tags = popularTags(state);
+  const shopResults =
+    term && !tagTerm
+      ? shops.filter((shop) => {
+          const owner =
+            shop.ownerId === state.me.id
+              ? state.me.name
+              : (findReader(state, shop.ownerId)?.name ?? "");
+          return (
+            shop.name +
+            shop.description +
+            owner +
+            publicStock(state, shop)
+              .map((book) => book.title + book.author)
+              .join("")
+          )
+            .toLocaleLowerCase()
+            .includes(term);
+        })
+      : [];
 
   const bookRow = (book: Book, meta: string) => (
     <li key={book.id}>
@@ -128,7 +153,7 @@ export function SearchView({ state }: Shared) {
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="タイトル・著者・ジャンル・書店名"
+          placeholder="タイトル・著者・書店名・#タグ・@ID"
           autoComplete="off"
         />
       </label>
@@ -147,8 +172,56 @@ export function SearchView({ state }: Shared) {
         ))}
       </div>
 
-      {term ? (
+      {tagTerm !== null ? (
         <div className="search-results" role="status">
+          <section aria-labelledby="search-tag-title">
+            <h2 id="search-tag-title">
+              #{tagTerm} の投稿 <span>{tagResults.length}</span>
+            </h2>
+            {tagResults.length ? (
+              <div className="post-feed">
+                {tagResults.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    state={state}
+                    actions={actions}
+                    notify={notify}
+                    post={post}
+                    showBook
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="search-empty">このタグの投稿は、まだありません。</p>
+            )}
+          </section>
+        </div>
+      ) : term ? (
+        <div className="search-results" role="status">
+          {people.length > 0 && (
+            <section aria-labelledby="search-people-title">
+              <h2 id="search-people-title">
+                読書家 <span>{people.length}</span>
+              </h2>
+              <ul className="search-list">
+                {people.map((reader) => (
+                  <li key={reader.id}>
+                    <Link
+                      href={"/profiles/" + reader.id + "/"}
+                      className="search-shop"
+                    >
+                      <ReaderAvatar reader={reader} size={32} />
+                      <span>
+                        <b>{reader.name}</b>
+                        <small>@{reader.handle}</small>
+                      </span>
+                      <Icon name="chevron" size={15} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <section aria-labelledby="search-books-title">
             <h2 id="search-books-title">
               本 <span>{bookResults.length}</span>
@@ -202,6 +275,24 @@ export function SearchView({ state }: Shared) {
         </div>
       ) : (
         <div className="search-discover">
+          {tags.length > 0 && (
+            <section aria-labelledby="search-tags-title">
+              <h2 id="search-tags-title">よく使われているタグ</h2>
+              <div className="search-tags">
+                {tags.map(({ tag, count }) => (
+                  <button
+                    type="button"
+                    key={tag}
+                    className="tag-chip is-set"
+                    onClick={() => setQuery("#" + tag)}
+                  >
+                    #{tag}
+                    <small>{count}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
           <section aria-labelledby="search-talked-title">
             <h2 id="search-talked-title">話題の本</h2>
             <p>いま投稿やレビューで語られている本。</p>

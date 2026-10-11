@@ -618,3 +618,64 @@
   background: #f4f6ee;
   color: #7f9173;
 }
+.reading-confirm {
+  display: grid;
+  gap: 14px;
+  text-align: center;
+  padding-top: 4px;
+}
+.reading-confirm-phrase {
+  font-family: var(--serif);
+  font-size: 19px;
+  line-height: 1.8;
+  color: #2f4a3a;
+  text-wrap: balance;
+}
+.reading-confirm-detail {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #7f8b74;
+}
+.reading-confirm-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+.search-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+.search-tags .tag-chip {
+  gap: 5px;
+  font-size: 12px;
+  padding: 4px 11px;
+}
+.search-tags .tag-chip small {
+  font-size: 10px;
+  color: #7f9173;
+}
+.profile-handle {
+  font-size: 13px;
+  color: #8a947d;
+  margin-top: -4px;
+  font-variant-numeric: tabular-nums;
+}
+.profile-handle-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.profile-handle-field > span {
+  font-size: 15px;
+  color: #8a947d;
+}
+.profile-handle-field input {
+  flex: 1;
+}

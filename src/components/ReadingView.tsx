@@ -22,8 +22,8 @@ import {
 } from "../lib/reading";
 import { findReader, formatPostTime } from "../lib/social";
 import { BookPicker } from "./BookPicker";
-import { PostCard } from "./Social";
-import { BookJacket, Icon, ReaderAvatar } from "./ui";
+import { PostCard, PostComposer } from "./Social";
+import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { useClock } from "./useClock";
 import "./reading.css";
 
@@ -38,16 +38,67 @@ const modeLabel: Record<ReadingMode, string> = {
   together: "みんなで読む",
 };
 
+// A small greeting picked at random each time, before opening and before closing a book.
+const START_PHRASES = [
+  "コーヒーのご用意はできましたか？",
+  "お茶、いれましたか？",
+  "スマホの通知は、少しお休みにしますか？",
+  "お気に入りの椅子に、座れましたか？",
+  "部屋の明かりは、ちょうどいいですか？",
+  "深呼吸をひとつ、どうぞ。",
+  "ブランケットは、手の届くところに？",
+  "今日の一ページ目へ、ようこそ。",
+];
+const END_PHRASES = [
+  "しおりは、ちゃんと挟めましたか？",
+  "最後に読んだ一文、覚えていますか？",
+  "冷めたコーヒー、飲み干しましたか？",
+  "本を閉じる前に、ひとこと残しますか？",
+  "今日はここまで。また続きで会いましょう。",
+];
+const FINISH_PHRASES = [
+  "最後のページまで、おつかれさまでした。",
+  "読み終えた気持ちを、少しだけ言葉にしてみませんか？",
+  "この本は、あなたの棚に並びそうですか？",
+  "余韻は、もう少し味わいますか？",
+];
+const pick = (phrases: string[]) =>
+  phrases[Math.floor(Math.random() * phrases.length)];
+
 export function ReadingView(props: Shared) {
   const clock = useClock();
   const active = activeSession(props.state);
   const book = active?.bookId
     ? props.state.books.find((entry) => entry.id === active.bookId)
     : undefined;
-  return active ? (
-    <ReadingRoom {...props} book={book} clock={clock} />
-  ) : (
-    <StartReading {...props} clock={clock} />
+  // After closing the book, "感想を書く" opens a composer for the book just read.
+  const [review, setReview] = useState<{ book?: Book } | null>(null);
+  return (
+    <>
+      {active ? (
+        <ReadingRoom
+          {...props}
+          book={book}
+          clock={clock}
+          onReview={(read) => setReview({ book: read })}
+        />
+      ) : (
+        <StartReading {...props} clock={clock} />
+      )}
+      {review && (
+        <Modal
+          title={review.book ? `『${review.book.title}』の感想` : "感想を書く"}
+          onClose={() => setReview(null)}
+        >
+          <PostComposer
+            {...props}
+            fixedBook={review.book}
+            autoFocus
+            onDone={() => setReview(null)}
+          />
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -165,7 +216,15 @@ function StartReading({
   );
   const totals = readingTotals(state, clock?.now ?? 0);
   const sessions = [...state.readingSessions].reverse().slice(0, 5);
+  const [confirm, setConfirm] = useState<{
+    mode: ReadingMode;
+    phrase: string;
+  } | null>(null);
+  const chosen = bookId
+    ? state.books.find((entry) => entry.id === bookId)
+    : undefined;
   function start(mode: ReadingMode) {
+    setConfirm(null);
     if (!actions.startReading(bookId, mode)) return;
     notify(
       mode === "solo"
@@ -201,7 +260,9 @@ function StartReading({
           <button
             type="button"
             className="reading-mode"
-            onClick={() => start("solo")}
+            onClick={() =>
+              setConfirm({ mode: "solo", phrase: pick(START_PHRASES) })
+            }
           >
             <Icon name="lock" size={20} />
             <b>一人で読む</b>
@@ -212,7 +273,9 @@ function StartReading({
           <button
             type="button"
             className="reading-mode is-together"
-            onClick={() => start("together")}
+            onClick={() =>
+              setConfirm({ mode: "together", phrase: pick(START_PHRASES) })
+            }
           >
             <Icon name="users" size={20} />
             <b>みんなで読む</b>
@@ -260,6 +323,37 @@ function StartReading({
           <p className="reading-muted">まだ記録はありません。</p>
         )}
       </section>
+      {confirm && (
+        <Modal title="読書をはじめますか？" onClose={() => setConfirm(null)}>
+          <div className="reading-confirm">
+            <p className="reading-confirm-phrase">{confirm.phrase}</p>
+            <p className="reading-confirm-detail">
+              <Icon
+                name={confirm.mode === "together" ? "users" : "lock"}
+                size={14}
+              />
+              {modeLabel[confirm.mode]}・
+              {chosen ? `『${chosen.title}』` : "本を選ばずに"}
+            </p>
+            <div className="reading-confirm-actions">
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setConfirm(null)}
+              >
+                もう少し準備する
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={() => start(confirm.mode)}
+              >
+                はじめる
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -270,11 +364,20 @@ function ReadingRoom({
   notify,
   book,
   clock,
-}: Shared & { book?: Book; clock: ReturnType<typeof useClock> }) {
+  onReview,
+}: Shared & {
+  book?: Book;
+  clock: ReturnType<typeof useClock>;
+  onReview: (book?: Book) => void;
+}) {
   const id = useId();
   const session = activeSession(state);
   const [memo, setMemo] = useState("");
   const [spoiler, setSpoiler] = useState(false);
+  const [ending, setEnding] = useState<{
+    finished: boolean;
+    phrase: string;
+  } | null>(null);
   if (!session) return null;
   const seconds = clock ? sessionSeconds(session, clock.now) : null;
   const bookTotal =
@@ -329,10 +432,9 @@ function ReadingRoom({
             <button
               type="button"
               className="button secondary"
-              onClick={() => {
-                actions.endReading(false);
-                notify("読書を終えました。時間を記録しました");
-              }}
+              onClick={() =>
+                setEnding({ finished: false, phrase: pick(END_PHRASES) })
+              }
             >
               読書を終える
             </button>
@@ -340,10 +442,9 @@ function ReadingRoom({
               <button
                 type="button"
                 className="button"
-                onClick={() => {
-                  actions.endReading(true);
-                  notify(`『${book.title}』を読み終えました`);
-                }}
+                onClick={() =>
+                  setEnding({ finished: true, phrase: pick(FINISH_PHRASES) })
+                }
               >
                 <Icon name="check" size={16} />
                 読み終えた！
@@ -392,6 +493,55 @@ function ReadingRoom({
 
       <ReadersNow state={state} clock={clock} bookId={book?.id} />
       <ReadingFeed state={state} actions={actions} notify={notify} />
+      {ending && (
+        <Modal
+          title={ending.finished ? "読み終えましたか？" : "読書を終えますか？"}
+          onClose={() => setEnding(null)}
+        >
+          <div className="reading-confirm">
+            <p className="reading-confirm-phrase">{ending.phrase}</p>
+            <p className="reading-confirm-detail">
+              <Icon name="clock" size={14} />
+              今回の読書 {seconds === null ? "—" : formatDuration(seconds)}
+              {book && `・『${book.title}』`}
+            </p>
+            <div className="reading-confirm-actions">
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setEnding(null)}
+              >
+                もう少し読む
+              </button>
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => {
+                  actions.endReading(ending.finished);
+                  onReview(book);
+                }}
+              >
+                <Icon name="pen" size={15} />
+                感想を書く
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  actions.endReading(ending.finished);
+                  notify(
+                    ending.finished && book
+                      ? `『${book.title}』を読み終えました`
+                      : "読書を終えました。時間を記録しました",
+                  );
+                }}
+              >
+                {ending.finished ? "読み終えた" : "本を閉じる"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -130,8 +130,8 @@ try {
       ).toBeVisible();
       const names = await page.locator(".street-shop-title").allTextContents();
       expect(new Set(names).size).toBe(6);
-      // Each shop shows one shelf on the street; the rest is on the shop's own page.
-      await expect(page.locator(".street-shop .shelf-scroll")).toHaveCount(6);
+      // Each shop shows two shelves on the street; the rest is on the shop's own page.
+      await expect(page.locator(".street-shop .shelf-scroll")).toHaveCount(12);
       await expect(
         page.getByRole("button", { name: "一冊からたどる", exact: true }),
       ).toHaveCount(0);
@@ -305,9 +305,7 @@ try {
     async () => {
       await go(page);
       const card = shop(page, "軌道書房");
-      await expect(card.locator(".street-shop-footer")).toContainText(
-        "ほかに1段の棚があります",
-      );
+      await expect(card.locator(".shelf-scroll")).toHaveCount(2);
       await card.getByRole("link", { name: "この書店へ" }).click();
       await expect(page).toHaveURL(/shops\/shop-orbit/);
       await expect(page.locator(".store-shelf-section")).toHaveCount(2);

@@ -62,12 +62,27 @@ async function noOverflow(page, name) {
     size.width + 1,
   );
 }
+const unplaced = (dialog) =>
+  dialog.locator(
+    '.editor-book-choice:not([disabled]):not([aria-pressed="true"])',
+  );
 async function addFirstBook(page, shelf) {
-  await shelf.getByRole("button", { name: "本を並べる", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  const choice = dialog.locator(".editor-book-choice:not([disabled])").first();
-  const title = await choice.locator(".editor-book-choice-title").textContent();
+  await shelf.getByRole("button", { name: "本棚を編集", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "本棚を編集" });
+  const title = await unplaced(dialog)
+    .first()
+    .locator(".editor-book-choice-title")
+    .textContent();
+  // Keep hold of this book: once placed it leaves the unplaced list.
+  const choice = dialog.locator(".editor-book-choice").filter({
+    has: page.locator(".editor-book-choice-title").getByText(title, {
+      exact: true,
+    }),
+  });
   await choice.click();
+  // The picker stays open for more books until 完了.
+  await expect(choice).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: "完了", exact: true }).click();
   await expect(dialog).not.toBeVisible();
   return title;
 }
@@ -291,7 +306,51 @@ try {
     "Capacity rejects face conversion and additions; removal frees space",
     async () => {
       const shelf = page.locator(".editor-shelf-panel").first();
-      for (let n = 3; n < 19; n++) await addFirstBook(page, shelf);
+      const openEditor = async () => {
+        await shelf
+          .getByRole("button", { name: "本棚を編集", exact: true })
+          .click();
+        return page.getByRole("dialog", { name: "本棚を編集" });
+      };
+      // One visit places many books in a row; a book just placed can be taken back.
+      const picker = await openEditor();
+      for (let n = 3; n < 19; n++) await unplaced(picker).first().click();
+      const tally = picker.locator(".editor-picker-footer [role=status]");
+      await expect(tally).toContainText("16冊並べました");
+      await picker
+        .locator(".editor-book-choice")
+        .filter({ hasText: "並べました・押すと外す" })
+        .last()
+        .click();
+      await expect(tally).toContainText("15冊並べました");
+      await unplaced(picker).first().click();
+      await expect(tally).toContainText("16冊並べました");
+      // A book already on the shelf comes off with a tap, and back with its POP and place.
+      const before = (await stored(page)).ownShop.shelves[0].items;
+      const withPop = before.find((item) => item.pop);
+      await picker
+        .locator(".editor-book-choice")
+        .filter({ hasText: "POPあり・押すと外す" })
+        .click();
+      await expect(tally).toContainText("1冊外しました");
+      expect(
+        (await stored(page)).ownShop.shelves[0].items.some(
+          (item) => item.bookId === withPop.bookId,
+        ),
+      ).toBe(false);
+      await picker
+        .locator(".editor-book-choice")
+        .filter({ hasText: "外しました・押すと戻す" })
+        .click();
+      await expect(tally).not.toContainText("外しました");
+      const restored = (await stored(page)).ownShop.shelves[0].items;
+      const index = (items) =>
+        items.findIndex((item) => item.bookId === withPop.bookId);
+      expect(index(restored)).toBe(index(before));
+      expect(restored[index(restored)].pop).toBe(withPop.pop);
+      expect(restored[index(restored)].display).toBe(withPop.display);
+      await picker.getByRole("button", { name: "完了", exact: true }).click();
+      await expect(picker).not.toBeVisible();
       await expect(shelf.getByRole("meter")).toHaveAttribute(
         "aria-valuenow",
         "19",
@@ -302,27 +361,22 @@ try {
           .locator(".editor-selected-book")
           .getByRole("button", { name: /^面陳/ }),
       ).toBeDisabled();
-      await shelf
-        .getByRole("button", { name: "本を並べる", exact: true })
-        .click();
-      const dialog = page.getByRole("dialog");
+      const dialog = await openEditor();
       await dialog.getByRole("button", { name: /^面陳/ }).click();
       await expect(dialog.locator(".editor-capacity-warning")).toBeVisible();
-      await expect(
-        dialog.locator(".editor-book-choice:not([disabled])"),
-      ).toHaveCount(0);
+      await expect(unplaced(dialog)).toHaveCount(0);
       await dialog.getByRole("button", { name: /^背表紙/ }).click();
-      await dialog
-        .locator(".editor-book-choice:not([disabled])")
-        .first()
-        .click();
+      await unplaced(dialog).first().click();
+      // The shelf is full: nothing more can be placed, but books on it can still come off.
+      await expect(unplaced(dialog)).toHaveCount(0);
+      await dialog.getByRole("button", { name: "完了", exact: true }).click();
       await expect(shelf.getByRole("meter")).toHaveAttribute(
         "aria-valuenow",
         "20",
       );
       await expect(
-        shelf.getByRole("button", { name: "本を並べる", exact: true }),
-      ).toBeDisabled();
+        shelf.getByRole("button", { name: "本棚を編集", exact: true }),
+      ).toBeEnabled();
       expect((await stored(page)).ownShop.shelves[0].items).toHaveLength(20);
       await shelf.locator(".shelf-book-button").first().click();
       await shelf.getByRole("button", { name: "この本を棚から外す" }).click();
@@ -330,9 +384,6 @@ try {
         "aria-valuenow",
         "19",
       );
-      await expect(
-        shelf.getByRole("button", { name: "本を並べる", exact: true }),
-      ).toBeEnabled();
     },
   );
   await check(

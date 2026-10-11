@@ -1,7 +1,63 @@
 "use client";
 
 import type { Book, TownActions, TownState } from "../lib/types";
+import { formatPrice, REGISTERED_GENRE } from "../lib/books";
 import { Icon } from "./ui";
+
+/** 定価, tax included. Books without a known price show nothing. */
+export function BookPrice({
+  book,
+  compact = false,
+}: {
+  book: Book;
+  compact?: boolean;
+}) {
+  if (!book.price) return null;
+  return compact ? (
+    <span className="book-price is-compact">{formatPrice(book.price)}</span>
+  ) : (
+    <p className="book-price">
+      定価 <b>{formatPrice(book.price)}</b>
+      <small>（税込）</small>
+    </p>
+  );
+}
+
+/** Shop links sit beside the title and price, one tap from the book. */
+export function BookPurchase({ book }: { book: Book }) {
+  const query = encodeURIComponent(`${book.title} ${book.author}`);
+  return (
+    <div className="book-purchase" role="group" aria-label="購入する">
+      <a
+        href={`https://www.amazon.co.jp/s?k=${query}&i=stripbooks`}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Amazonで探す（新しいタブで開きます）"
+      >
+        Amazon<span aria-hidden="true">↗</span>
+      </a>
+      <a
+        href={`https://books.rakuten.co.jp/search?sitem=${query}&g=001`}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="楽天ブックスで探す（新しいタブで開きます）"
+      >
+        楽天ブックス<span aria-hidden="true">↗</span>
+      </a>
+    </div>
+  );
+}
+
+/** The fine print for the jacket, the price and the shop links. */
+export function bookNote(book: Book): string {
+  return [
+    "表紙はデモ用のオリジナルデザインです。",
+    book.price && book.genre !== REGISTERED_GENRE
+      ? "定価はデモ用の仮の値です。"
+      : "",
+    "購入ボタンはタイトル・著者で外部書店を検索します。版や在庫は購入先でご確認ください。",
+  ].join("");
+}
 
 export function BookActions({
   book,
@@ -16,7 +72,6 @@ export function BookActions({
 }) {
   const wished = state.wishlist.includes(book.id);
   const favorite = state.favorites.includes(book.id);
-  const query = encodeURIComponent(`${book.title} ${book.author}`);
   return (
     <div className="bh-actions">
       <div className="bh-save-row">
@@ -53,31 +108,6 @@ export function BookActions({
           {favorite ? "お気に入りに登録済み" : "お気に入り"}
         </button>
       </div>
-      <p className="bh-private-hint">
-        読みたい本とお気に入りは、あなたのプロフィールに
-      </p>
-      <details className="bh-purchase">
-        <summary>
-          <Icon name="store" size={17} /> 購入する <span>外部書店で探す ↗</span>
-        </summary>
-        <div className="bh-purchase-links">
-          <a
-            href={`https://www.amazon.co.jp/s?k=${query}&i=stripbooks`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Amazonで探す ↗
-          </a>
-          <a
-            href={`https://books.rakuten.co.jp/search?sitem=${query}&g=001`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            楽天ブックスで探す ↗
-          </a>
-        </div>
-        <p>タイトル・著者で検索します。版や在庫は購入先でご確認ください。</p>
-      </details>
     </div>
   );
 }

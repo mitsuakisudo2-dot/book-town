@@ -81,8 +81,23 @@
   width: 143px;
   flex: 0 0 auto;
 }
+.bh-cover {
+  display: block;
+  border-radius: 4px;
+}
 .bh-cover .book-jacket {
   box-shadow: 5px 8px 12px #2533291c;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+.bh-cover:hover .book-jacket {
+  transform: translateY(-2px);
+  box-shadow: 6px 11px 16px #25332926;
+}
+.bh-cover:focus-visible {
+  outline: 2px solid #8fac80;
+  outline-offset: 4px;
 }
 .bh-book-heading {
   min-width: 0;
@@ -188,7 +203,7 @@
   overflow-wrap: anywhere;
 }
 .bh-actions {
-  margin: 25px 0 15px;
+  margin: 18px 0 10px;
   text-align: center;
 }
 .bh-save {
@@ -496,42 +511,59 @@
 .bh-favorite.is-active svg {
   fill: #cbbf87;
 }
-.bh-purchase {
-  text-align: left;
-  margin-top: 18px;
-  border-block: 1px solid #e4dfd2;
-}
-.bh-purchase summary {
+.book-purchase {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  min-height: 48px;
-  font-size: 12px;
-  color: #365242;
-}
-.bh-purchase summary span {
-  margin-left: auto;
-  font-size: 10px;
-  color: #7c7f71;
-}
-.bh-purchase-links {
-  display: flex;
-  gap: 10px;
   flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
 }
-.bh-purchase-links a {
-  min-height: 44px;
-  padding: 12px 14px;
-  border: 1px solid #dedbce;
-  border-radius: 4px;
+.book-purchase a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 34px;
+  padding: 5px 9px;
+  border: 1px solid #cfd8c4;
+  border-radius: 999px;
+  background: #fffdf7;
+  color: #2f4a3a;
   font-size: 12px;
+  white-space: nowrap;
 }
-.bh-purchase p {
-  color: #7b7d6f;
+.book-purchase a:hover {
+  border-color: #9fb491;
+  background: #f1f5ea;
+}
+.book-purchase a:focus-visible {
+  outline: 2px solid #8fac80;
+  outline-offset: 2px;
+}
+.book-purchase a > span {
+  font-size: 11px;
+  color: #6f8162;
+}
+.book-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6f7a66;
+}
+.book-price b {
+  font-size: 16px;
+  color: #2f4a3a;
+  font-variant-numeric: tabular-nums;
+}
+.book-price small {
   font-size: 10px;
-  line-height: 1.9;
-  margin: 12px 0 18px;
+}
+.book-price.is-compact {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #3f5f4c;
+  font-variant-numeric: tabular-nums;
 }
 .bh-discovery {
   margin-top: 30px;
@@ -615,8 +647,9 @@
 }
 .bh-shop-card-heading {
   display: flex;
-  gap: 16px;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  justify-content: flex-start;
   align-items: center;
   margin-bottom: 14px;
 }
