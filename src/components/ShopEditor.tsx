@@ -240,8 +240,16 @@ function AddBookPicker({
 } & Pick<ShopEditorProps, "actions" | "notify">) {
   const [search, setSearch] = useState("");
   const [display, setDisplay] = useState<ShelfItem["display"]>("spine");
-  // Books placed while this picker is open; only these can be taken back here.
+  // What this visit changed, for the running tally at the bottom.
   const [addedHere, setAddedHere] = useState<string[]>([]);
+  // Books taken off here keep their display, POP and place, so a second tap puts them back.
+  const [removedHere, setRemovedHere] = useState<
+    Record<
+      string,
+      { display: ShelfItem["display"]; pop: string; index: number }
+    >
+  >({});
+  const removedCount = Object.keys(removedHere).length;
   const remaining = shelf.capacity - shelfUsed(shelf);
   const cost = display === "face" ? 3 : 1;
   const query = search.trim().toLocaleLowerCase();
@@ -251,7 +259,7 @@ function AddBookPicker({
       .includes(query),
   );
   return (
-    <Modal title="本棚に並べる本を選ぶ" onClose={onClose} wide>
+    <Modal title="本棚を編集" onClose={onClose} wide>
       <div className="editor-book-picker">
         <p className="editor-picker-context">
           「{shelf.name}」には、あと <strong>{remaining} スペース</strong>{" "}
@@ -300,22 +308,50 @@ function AddBookPicker({
         <div className="editor-picker-grid">
           {filtered.map((book) => {
             const placed = shelf.items.find((item) => item.bookId === book.id);
-            const mine = Boolean(placed) && addedHere.includes(book.id);
-            const already = Boolean(placed) && !mine;
+            const justAdded = addedHere.includes(book.id);
+            const taken = removedHere[book.id];
+            const needed = taken ? (taken.display === "face" ? 3 : 1) : cost;
             return (
               <button
-                className={"editor-book-choice" + (mine ? " is-added" : "")}
+                className={"editor-book-choice" + (placed ? " is-added" : "")}
                 key={book.id}
                 type="button"
-                aria-pressed={mine}
-                disabled={already || (!placed && cost > remaining)}
+                aria-pressed={Boolean(placed)}
+                disabled={!placed && needed > remaining}
                 onClick={() => {
-                  if (placed && mine) {
+                  if (placed) {
                     actions.removeShelfBook(shelf.id, placed.id);
-                    setAddedHere(addedHere.filter((id) => id !== book.id));
-                    notify(`「${book.title}」を棚から外しました。`);
+                    if (justAdded)
+                      setAddedHere(addedHere.filter((id) => id !== book.id));
+                    else
+                      setRemovedHere({
+                        ...removedHere,
+                        [book.id]: {
+                          display: placed.display,
+                          pop: placed.pop,
+                          index: shelf.items.indexOf(placed),
+                        },
+                      });
+                    notify(
+                      placed.pop.trim() && !justAdded
+                        ? `「${book.title}」を外しました。もう一度押すとPOPごと戻せます。`
+                        : `「${book.title}」を棚から外しました。`,
+                    );
+                  } else if (taken) {
+                    if (
+                      actions.addShelfBook(shelf.id, book.id, taken.display, {
+                        pop: taken.pop,
+                        index: taken.index,
+                      })
+                    ) {
+                      const rest = { ...removedHere };
+                      delete rest[book.id];
+                      setRemovedHere(rest);
+                      notify(`「${book.title}」を元の場所に戻しました。`);
+                    } else
+                      notify("棚の空きスペースが足りず、戻せませんでした。");
                   } else if (actions.addShelfBook(shelf.id, book.id, display)) {
-                    // The picker stays open so several books can be placed in a row.
+                    // The editor stays open so several books can be placed in a row.
                     setAddedHere([...addedHere, book.id]);
                     notify(`「${book.title}」を本棚に並べました。`);
                   } else {
@@ -329,15 +365,20 @@ function AddBookPicker({
                 <span className="editor-book-choice-title">{book.title}</span>
                 <span className="editor-book-choice-author">{book.author}</span>
                 <span className="editor-book-choice-add">
-                  {mine ? (
+                  {placed ? (
                     <>
                       <Icon name="check" size={14} />
-                      並べました・押すと外す
+                      {justAdded
+                        ? "並べました"
+                        : placed.pop.trim()
+                          ? "POPあり"
+                          : "棚にあります"}
+                      ・押すと外す
                     </>
-                  ) : already ? (
+                  ) : taken ? (
                     <>
-                      <Icon name="check" size={14} />
-                      この棚にあります
+                      <Icon name="back" size={14} />
+                      外しました・押すと戻す
                     </>
                   ) : (
                     <>
@@ -365,9 +406,15 @@ function AddBookPicker({
         )}
         <div className="editor-picker-footer">
           <span role="status">
-            {addedHere.length
-              ? `この画面で${addedHere.length}冊並べました`
-              : "続けて何冊でも選べます"}
+            {addedHere.length || removedCount
+              ? "この画面で" +
+                [
+                  addedHere.length ? `${addedHere.length}冊並べました` : "",
+                  removedCount ? `${removedCount}冊外しました` : "",
+                ]
+                  .filter(Boolean)
+                  .join("・")
+              : "押すたびに、並べる・外すを切り替えられます"}
           </span>
           <button type="button" className="button" onClick={onClose}>
             完了
@@ -500,10 +547,9 @@ function ShelfEditingPanel({
           type="button"
           className="editor-button secondary"
           onClick={onAdd}
-          disabled={remaining < 1}
         >
-          <Icon name="plus" size={17} />
-          本を並べる
+          <Icon name="edit" size={17} />
+          本棚を編集
         </button>
       </div>
       {selected && selectedBook && (

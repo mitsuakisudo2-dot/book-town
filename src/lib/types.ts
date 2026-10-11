@@ -171,7 +171,13 @@ export interface TownActions {
     patch: { name?: string; isPublic?: boolean },
   ): void;
   removeShelf(shelfId: string): void;
-  addShelfBook(shelfId: string, bookId: string, display: BookDisplay): boolean;
+  addShelfBook(
+    shelfId: string,
+    bookId: string,
+    display: BookDisplay,
+    /** Puts a book that was just taken off back with its POP, at its old place. */
+    restore?: { pop: string; index: number },
+  ): boolean;
   removeShelfBook(shelfId: string, itemId: string): void;
   moveShelfBook(shelfId: string, itemId: string, toIndex: number): void;
   changeDisplay(shelfId: string, itemId: string, display: BookDisplay): boolean;

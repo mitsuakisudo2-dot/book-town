@@ -194,7 +194,7 @@ export function createTownStore(
         shelves: state.ownShop.shelves.filter((entry) => entry.id !== shelfId),
       });
     },
-    addShelfBook(shelfId, bookId, display) {
+    addShelfBook(shelfId, bookId, display, restore) {
       initialize();
       const shop = state.ownShop;
       const shelf = shop?.shelves.find((entry) => entry.id === shelfId);
@@ -211,10 +211,20 @@ export function createTownStore(
         "mine-item-",
         shop.shelves.flatMap((entry) => entry.items.map((item) => item.id)),
       );
-      editShelf(shelfId, (entry) => ({
-        ...entry,
-        items: [...entry.items, { id, bookId, display, pop: "" }],
-      }));
+      editShelf(shelfId, (entry) => {
+        const items = [...entry.items];
+        const at =
+          restore && Number.isFinite(restore.index)
+            ? Math.min(items.length, Math.max(0, Math.trunc(restore.index)))
+            : items.length;
+        items.splice(at, 0, {
+          id,
+          bookId,
+          display,
+          pop: restore ? clean(restore.pop) : "",
+        });
+        return { ...entry, items };
+      });
       return true;
     },
     removeShelfBook(shelfId, itemId) {

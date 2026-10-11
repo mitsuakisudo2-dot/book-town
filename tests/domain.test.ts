@@ -871,4 +871,28 @@ check(
   },
 );
 
+check("a book taken off can be put back with its POP at its old place", () => {
+  const fresh = createTownStore(createMemoryRepository());
+  fresh.actions.createShop("棚", "", "sage");
+  const id = "mine-shelf-1";
+  for (const book of ["solaris", "momo", "walden"])
+    fresh.actions.addShelfBook(id, book, "spine");
+  const shelf = () => ownShop(fresh.getSnapshot()).shelves[0];
+  const momo = shelf().items[1];
+  fresh.actions.updatePop(id, momo.id, "灰色の男たちに気をつけて");
+  fresh.actions.removeShelfBook(id, momo.id);
+  assert.ok(
+    fresh.actions.addShelfBook(id, "momo", "face", {
+      pop: "灰色の男たちに気をつけて",
+      index: 1,
+    }),
+  );
+  assert.deepEqual(
+    shelf().items.map((item) => item.bookId),
+    ["solaris", "momo", "walden"],
+  );
+  assert.equal(shelf().items[1].pop, "灰色の男たちに気をつけて");
+  assert.equal(shelf().items[1].display, "face");
+});
+
 console.log(`${passed} domain checks passed.`);

@@ -146,9 +146,9 @@ export function StreetView({
                 : state.readers.find((r) => r.id === shop.ownerId);
             const shelves = shop.shelves.filter((s) => s.isPublic);
             const followed = state.following.includes(shop.id);
-            // The street shows one shelf per shop; the whole shop is one tap away.
-            const [first] = shelves;
-            const more = shelves.length - 1;
+            // The street shows two shelves per shop; the whole shop is one tap away.
+            const shown = shelves.slice(0, 2);
+            const more = shelves.length - shown.length;
             return (
               <article
                 className={"street-shop is-compact theme-" + shop.theme}
@@ -206,16 +206,16 @@ export function StreetView({
                   </div>
                 </header>
                 <div className="street-shop-shelves">
-                  {first ? (
+                  {shown.map((shelf, shelfIndex) => (
                     <StreetShelf
-                      shelf={first}
+                      key={shelf.id}
+                      shelf={shelf}
                       books={state.books}
-                      index={0}
-                      onSelect={(item) =>
-                        setSelected({ shop, shelf: first, item })
-                      }
+                      index={shelfIndex}
+                      onSelect={(item) => setSelected({ shop, shelf, item })}
                     />
-                  ) : (
+                  ))}
+                  {!shown.length && (
                     <div className="street-empty-shelf">
                       <Icon name="book" size={26} />
                       <p>このお店の棚は、これから育ちます。</p>

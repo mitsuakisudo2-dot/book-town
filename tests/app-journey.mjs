@@ -245,7 +245,7 @@ try {
       await go("/reading/");
       await page.waitForTimeout(1200);
       await page.getByRole("button", { name: "読書を終える" }).click();
-      await confirmIn("読書を終えますか？", "終える");
+      await confirmIn("読書を終えますか？", "本を閉じる");
       await expect(
         page.getByRole("heading", { name: "読書を開始" }),
       ).toBeVisible();
@@ -368,7 +368,7 @@ try {
       "本を決めずに、ぱらぱらと。",
     );
     await page.getByRole("button", { name: "読書を終える" }).click();
-    await confirmIn("読書を終えますか？", "終える");
+    await confirmIn("読書を終えますか？", "本を閉じる");
     await expect(page.locator(".reading-log")).toContainText("本を選ばずに");
   });
 
@@ -497,6 +497,35 @@ try {
       await more.click();
       await expect(more).toHaveCount(0);
       expect(await reviews.count()).toBeGreaterThan(3);
+    },
+  );
+
+  await check(
+    "closing the book can lead straight to writing a review",
+    async () => {
+      await go("/reading/");
+      await page.getByRole("searchbox", { name: "読む本を探す" }).fill("モモ");
+      await page.getByRole("button", { name: /^モモ/ }).click();
+      await page.getByRole("button", { name: /一人で読む/ }).click();
+      await confirmIn("読書をはじめますか？", "はじめる");
+      await page.getByRole("button", { name: "読書を終える" }).click();
+      await page
+        .getByRole("dialog", { name: "読書を終えますか？" })
+        .getByRole("button", { name: "感想を書く" })
+        .click();
+      const review = page.getByRole("dialog", { name: "『モモ』の感想" });
+      await review
+        .locator("textarea")
+        .fill("時間どろぼうの話を、時間をかけて読んだ。");
+      await review.getByRole("button", { name: "投稿する" }).click();
+      await expect(review).toHaveCount(0);
+      await expect(
+        page.getByRole("heading", { name: "読書を開始" }),
+      ).toBeVisible();
+      await go("/books/momo/");
+      await expect(page.locator(".book-reviews")).toContainText(
+        "時間どろぼうの話を、時間をかけて読んだ。",
+      );
     },
   );
 

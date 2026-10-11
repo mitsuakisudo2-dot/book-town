@@ -22,7 +22,7 @@ import {
 } from "../lib/reading";
 import { findReader, formatPostTime } from "../lib/social";
 import { BookPicker } from "./BookPicker";
-import { PostCard } from "./Social";
+import { PostCard, PostComposer } from "./Social";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { useClock } from "./useClock";
 import "./reading.css";
@@ -71,10 +71,34 @@ export function ReadingView(props: Shared) {
   const book = active?.bookId
     ? props.state.books.find((entry) => entry.id === active.bookId)
     : undefined;
-  return active ? (
-    <ReadingRoom {...props} book={book} clock={clock} />
-  ) : (
-    <StartReading {...props} clock={clock} />
+  // After closing the book, "感想を書く" opens a composer for the book just read.
+  const [review, setReview] = useState<{ book?: Book } | null>(null);
+  return (
+    <>
+      {active ? (
+        <ReadingRoom
+          {...props}
+          book={book}
+          clock={clock}
+          onReview={(read) => setReview({ book: read })}
+        />
+      ) : (
+        <StartReading {...props} clock={clock} />
+      )}
+      {review && (
+        <Modal
+          title={review.book ? `『${review.book.title}』の感想` : "感想を書く"}
+          onClose={() => setReview(null)}
+        >
+          <PostComposer
+            {...props}
+            fixedBook={review.book}
+            autoFocus
+            onDone={() => setReview(null)}
+          />
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -340,7 +364,12 @@ function ReadingRoom({
   notify,
   book,
   clock,
-}: Shared & { book?: Book; clock: ReturnType<typeof useClock> }) {
+  onReview,
+}: Shared & {
+  book?: Book;
+  clock: ReturnType<typeof useClock>;
+  onReview: (book?: Book) => void;
+}) {
   const id = useId();
   const session = activeSession(state);
   const [memo, setMemo] = useState("");
@@ -486,6 +515,17 @@ function ReadingRoom({
               </button>
               <button
                 type="button"
+                className="button secondary"
+                onClick={() => {
+                  actions.endReading(ending.finished);
+                  onReview(book);
+                }}
+              >
+                <Icon name="pen" size={15} />
+                感想を書く
+              </button>
+              <button
+                type="button"
                 className="button"
                 onClick={() => {
                   actions.endReading(ending.finished);
@@ -496,7 +536,7 @@ function ReadingRoom({
                   );
                 }}
               >
-                {ending.finished ? "読み終えた" : "終える"}
+                {ending.finished ? "読み終えた" : "本を閉じる"}
               </button>
             </div>
           </div>
