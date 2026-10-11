@@ -735,10 +735,14 @@ try {
           const rect = await button.boundingBox();
           expect(rect.width).toBeGreaterThanOrEqual(44);
           expect(rect.height).toBeGreaterThanOrEqual(44);
-          const note = await pop.boundingBox();
-          expect(
-            Math.abs(rect.y + rect.height / 2 - note.y - note.height / 2),
-          ).toBeLessThan(2);
+          const centerDelta = await button.evaluate((element) => {
+            const arrow = element.getBoundingClientRect();
+            const note = element.closest(".owner-pop").getBoundingClientRect();
+            return Math.abs(
+              arrow.y + arrow.height / 2 - note.y - note.height / 2,
+            );
+          });
+          expect(centerDelta).toBeLessThan(1);
           expect(rect.x).toBeGreaterThanOrEqual(10);
           expect(rect.x + rect.width).toBeLessThanOrEqual(width - 10);
         }
@@ -799,6 +803,8 @@ try {
         );
         await expect(phone).toHaveURL(/shops\/shop-orbit\/$/);
         await touchGesture(phone, -110, 0, ".shop-hero button");
+        await expect(phone).toHaveURL(/shops\/shop-orbit\/$/);
+        await touchGesture(phone, -110, 0, ".shop-shelf-index");
         await expect(phone).toHaveURL(/shops\/shop-orbit\/$/);
         await touchGesture(phone, -110, 0, ".shop-hero h1");
         await expect(phone).toHaveURL(/shops\/shop-rain\/$/);

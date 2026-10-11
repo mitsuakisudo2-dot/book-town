@@ -66,9 +66,15 @@
 }
 .shop-journey .shop-shelf-index {
   margin-bottom: 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
 }
 .shop-journey .shop-shelf-index a {
   min-height: 44px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .shop-journey .store-shelf-section {
   margin-top: 16px;
