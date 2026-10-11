@@ -97,6 +97,7 @@ export function BookDiscovery({
   /** Called when a link leaves the open book for another page. */
   onLeave?: () => void;
 }) {
+  const [expandedBookId, setExpandedBookId] = useState<string | null>(null);
   // Shelves express a selection, not a reading status. Never imply these books were read.
   const seen = new Set([bookId]);
   const choices = shop.shelves
@@ -143,42 +144,69 @@ export function BookDiscovery({
           ))}
         </BookRail>
       )}
-      <BookRail title="この本を並べるほかの書店" kind="shops">
+      <section
+        className="bh-discovery bh-discovery-shops"
+        aria-label="この本を並べるほかの書店"
+      >
+        <div className="bh-section-heading">
+          <h3>この本を並べるほかの書店</h3>
+        </div>
         {otherShelves.length ? (
-          otherShelves.map(({ shop: other, shelf, item }) => (
-            <article
-              className={`bh-shop-card theme-${other.theme}`}
-              key={`${other.id}-${shelf.id}`}
-            >
-              <div className="bh-shop-card-heading">
-                <div>
-                  <small>{other.demo ? "デモ書店" : "あなたの書店"}</small>
-                  <h4>{other.name}</h4>
-                  <p>{shelf.name}</p>
-                </div>
-                <Link
-                  className="bh-shop-pop-button"
-                  href={`/shops/${other.id}/#shelf-${shelf.id}`}
-                  onNavigate={onLeave}
+          <div className="bh-shop-list">
+            {otherShelves
+              .slice(0, expandedBookId === bookId ? undefined : 3)
+              .map(({ shop: other, shelf, item }) => (
+                <article
+                  className={`bh-shop-card theme-${other.theme}`}
+                  key={`${other.id}-${shelf.id}`}
                 >
-                  この書店へ <Icon name="arrow" size={16} />
-                </Link>
-              </div>
-              <WoodenShelf
-                shelf={shelf}
-                books={state.books}
-                selectedId={item.id}
-                onSelect={(selected) => onSelect(other, shelf, selected)}
-              />
-              <blockquote>{item.pop || "この棚のPOPは、これから。"}</blockquote>
-            </article>
-          ))
+                  <div className="bh-shop-card-heading">
+                    <div>
+                      <small>{other.demo ? "デモ書店" : "あなたの書店"}</small>
+                      <h4>{other.name}</h4>
+                      <p>{shelf.name}</p>
+                    </div>
+                    <Link
+                      className="bh-shop-pop-button"
+                      href={`/shops/${other.id}/#shelf-${shelf.id}`}
+                      onNavigate={onLeave}
+                    >
+                      この書店へ <Icon name="arrow" size={16} />
+                    </Link>
+                  </div>
+                  <div data-book-rail>
+                    <WoodenShelf
+                      shelf={shelf}
+                      books={state.books}
+                      selectedId={item.id}
+                      onSelect={(selected) => onSelect(other, shelf, selected)}
+                    />
+                  </div>
+                  <blockquote>
+                    {item.pop || "この棚のPOPは、これから。"}
+                  </blockquote>
+                </article>
+              ))}
+          </div>
         ) : (
           <p className="bh-discovery-empty">
             いま、この本を並べているほかの書店はありません。
           </p>
         )}
-      </BookRail>
+        {otherShelves.length > 3 && (
+          <button
+            className="bh-shops-more"
+            aria-expanded={expandedBookId === bookId}
+            onClick={() =>
+              setExpandedBookId(expandedBookId === bookId ? null : bookId)
+            }
+          >
+            {expandedBookId === bookId
+              ? "3件に戻す"
+              : `ほかの書店も見る（残り${otherShelves.length - 3}件）`}
+          </button>
+        )}
+      </section>
     </>
   );
 }

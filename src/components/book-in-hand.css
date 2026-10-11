@@ -637,9 +637,17 @@
   color: #6e7e62;
   font-size: 9px;
 }
+.bh-shop-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
 .bh-shop-card {
-  flex: 0 0 640px;
   width: 640px;
+  max-width: 100%;
+  zoom: 0.85;
   padding: 20px;
   border: 1px solid #dfdfd1;
   border-radius: 6px;
@@ -680,10 +688,12 @@
   border-radius: 5px;
 }
 .bh-shop-card .shelf-scroll {
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 .bh-shop-card .shelf-back {
-  min-width: 0;
+  width: max-content;
+  min-width: 100%;
 }
 .bh-shop-card .shelf-books-row {
   min-width: 0;
@@ -696,6 +706,16 @@
   color: #59614e;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+.bh-shops-more {
+  display: block;
+  min-height: 44px;
+  margin-top: 14px;
+  padding: 8px 12px;
+  border: 1px solid #cbd2bf;
+  border-radius: 5px;
+  color: #365242;
+  font-size: 12px;
 }
 .bh-discovery-empty {
   color: #767c6b;
