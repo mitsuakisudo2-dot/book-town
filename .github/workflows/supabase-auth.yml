@@ -1,0 +1,53 @@
+name: Supabase auth settings
+
+# Keeps the hosted project's sign-in settings in line with
+# supabase/hosted-auth.json; scripts/supabase-auth.mjs says what is set. A pull
+# request that touches them gets a check of what would change, and main
+# applies it. Needs SUPABASE_ACCESS_TOKEN (Auth Config and Project Settings,
+# Read-write) and SUPABASE_PROJECT_ID; RESEND_API_KEY turns on the email
+# settings. Without them the run is skipped with a warning.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - supabase/hosted-auth.json
+      - supabase/templates/**
+      - scripts/supabase-auth.mjs
+      - .github/workflows/supabase-auth.yml
+  pull_request:
+    paths:
+      - supabase/hosted-auth.json
+      - supabase/templates/**
+      - scripts/supabase-auth.mjs
+      - .github/workflows/supabase-auth.yml
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: check shows what would change; apply changes it
+        type: choice
+        options: [check, apply]
+        default: check
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-auth-${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  settings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Bring the sign-in settings in line
+        run: node scripts/supabase-auth.mjs "$MODE"
+        env:
+          MODE: ${{ github.event_name == 'push' && 'apply' || github.event_name == 'pull_request' && 'check' || inputs.mode }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}

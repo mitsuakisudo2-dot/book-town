@@ -1,0 +1,18 @@
+{
+  "code": {
+    "length": 6,
+    "expiresInSeconds": 600
+  },
+  "email": {
+    "smtpHost": "smtp.resend.com",
+    "smtpPort": 465,
+    "smtpUser": "resend",
+    "sender": "onboarding@resend.dev",
+    "senderName": "Book Town",
+    "perHour": 30
+  },
+  "magicLink": {
+    "subject": "Book Town のログインコード",
+    "template": "templates/magic_link.html"
+  }
+}

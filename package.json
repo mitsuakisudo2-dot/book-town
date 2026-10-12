@@ -23,7 +23,8 @@
     "format": "prettier --write src tests *.json *.ts *.mjs README.md",
     "test:feedback": "node tests/feedback-journey.mjs",
     "test:social": "node tests/social-journey.mjs",
-    "test:app": "node tests/app-journey.mjs"
+    "test:app": "node tests/app-journey.mjs",
+    "test:settings": "tsx tests/hosted-settings.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
