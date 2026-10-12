@@ -1,0 +1,225 @@
+// Brings the hosted Supabase project's sign-in settings in line with
+// supabase/hosted-auth.json: how long the login code lasts and, once a Resend
+// key is stored, who sends the login email, how many it may send an hour, and
+// the email itself (supabase/templates/magic_link.html, the same file the local
+// Supabase uses). .github/workflows/supabase-auth.yml runs it.
+//
+//   node scripts/supabase-auth.mjs check   prints what would change
+//   node scripts/supabase-auth.mjs apply   changes it, then reads it back
+//
+// The repository is public, and so are its Actions logs: only the settings in
+// SHOWN are ever printed, and never the SMTP password.
+
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+// Tests point this at a stand-in.
+const API = process.env.SUPABASE_API_URL ?? "https://api.supabase.com/v1";
+const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+/** Settings whose values may appear in the public log. */
+const SHOWN = new Set([
+  "mailer_otp_length",
+  "mailer_otp_exp",
+  "smtp_host",
+  "smtp_port",
+  "smtp_user",
+  "smtp_admin_email",
+  "smtp_sender_name",
+  "smtp_max_frequency",
+  "rate_limit_email_sent",
+  "mailer_subjects_magic_link",
+  "mailer_templates_magic_link_content",
+  "site_url",
+  "uri_allow_list",
+  "disable_signup",
+  "external_email_enabled",
+]);
+
+/** Shown for reference; this script leaves them as they are. */
+const UNMANAGED = [
+  "site_url",
+  "uri_allow_list",
+  "disable_signup",
+  "external_email_enabled",
+  "smtp_max_frequency",
+];
+
+/**
+ * The auth settings this repository asks for. Without a Resend key the
+ * built-in email stays, and Supabase allows neither a new email nor a higher
+ * limit with it.
+ *
+ * @returns {Record<string, string | number>}
+ */
+export function desiredAuth(settings, { template, resendKey }) {
+  const wanted = {
+    mailer_otp_length: settings.code.length,
+    mailer_otp_exp: settings.code.expiresInSeconds,
+  };
+  if (!resendKey) return wanted;
+  return {
+    ...wanted,
+    smtp_host: settings.email.smtpHost,
+    smtp_port: String(settings.email.smtpPort),
+    smtp_user: settings.email.smtpUser,
+    smtp_admin_email: settings.email.sender,
+    smtp_sender_name: settings.email.senderName,
+    rate_limit_email_sent: settings.email.perHour,
+    mailer_subjects_magic_link: settings.magicLink.subject,
+    mailer_templates_magic_link_content: template,
+  };
+}
+
+// The API returns some numbers as strings and the other way round.
+const same = (a, b) =>
+  a === b || (a != null && b != null && String(a) === String(b));
+
+/** The settings that differ between the project and what is wanted. */
+export function authChanges(current, wanted, resendKey) {
+  const changed = Object.keys(wanted).filter(
+    (key) => !same(current[key], wanted[key]),
+  );
+  // The password may come back hidden. Send it unless it is known to match,
+  // so that a replaced key reaches the project too.
+  if (resendKey && current.smtp_pass !== resendKey) changed.push("smtp_pass");
+  return changed;
+}
+
+const sha256 = (text) => createHash("sha256").update(text).digest("hex");
+
+/** A setting's value as the public log may show it. */
+export function shown(key, value) {
+  if (!SHOWN.has(key)) return "(hidden)";
+  if (value == null || value === "") return "(not set)";
+  if (key === "mailer_templates_magic_link_content")
+    return `${value.length} characters, sha256 ${sha256(value).slice(0, 12)}`;
+  return JSON.stringify(value);
+}
+
+/** Takes anything that looks like a key out of text the API sent back. */
+export function redact(text, secrets) {
+  let out = text;
+  for (const secret of secrets) if (secret) out = out.split(secret).join("***");
+  return out.replace(/\b(re|sbp|vcp)_[A-Za-z0-9_-]{8,}/g, "***");
+}
+
+class ApiError extends Error {
+  constructor(status, text) {
+    super(`Supabase answered ${status}: ${text}`);
+    this.status = status;
+  }
+}
+
+async function main(mode) {
+  if (mode !== "check" && mode !== "apply") {
+    console.error("Usage: node scripts/supabase-auth.mjs check|apply");
+    process.exit(2);
+  }
+  const token = process.env.SUPABASE_ACCESS_TOKEN;
+  const project = process.env.SUPABASE_PROJECT_ID;
+  const resendKey = process.env.RESEND_API_KEY || "";
+  if (!token || !project) {
+    console.log(
+      "::warning::SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_ID is not set, so the settings were not checked.",
+    );
+    return;
+  }
+  if (!resendKey)
+    console.log(
+      "::warning::RESEND_API_KEY is not set: the built-in email stays, with its limit of 2 emails an hour and its own text.",
+    );
+
+  const settings = JSON.parse(
+    await readFile(path.join(root, "supabase/hosted-auth.json"), "utf8"),
+  );
+  const template = await readFile(
+    path.join(root, "supabase", settings.magicLink.template),
+    "utf8",
+  );
+  const wanted = desiredAuth(settings, { template, resendKey });
+
+  const request = async (method, body) => {
+    const response = await fetch(`${API}/projects/${project}/config/auth`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: body && JSON.stringify(body),
+    });
+    const text = await response.text();
+    if (!response.ok)
+      throw new ApiError(response.status, redact(text, [token, resendKey]));
+    return JSON.parse(text);
+  };
+
+  let current;
+  try {
+    current = await request("GET");
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) {
+      const message =
+        "The access token cannot read the auth settings. It needs Auth Config and Project Settings (Read-write) on this project.";
+      // A pull request only looks, so a token that is not replaced yet
+      // should not turn it red.
+      if (mode === "check") {
+        console.log("::warning::" + message);
+        return;
+      }
+      console.log("::error::" + message);
+    }
+    throw error;
+  }
+
+  const changed = authChanges(current, wanted, resendKey);
+  console.log("Sign-in settings on the hosted project:");
+  for (const key of Object.keys(wanted))
+    console.log(
+      changed.includes(key)
+        ? `  ${key}: ${shown(key, current[key])} -> ${shown(key, wanted[key])}`
+        : `  ${key}: ${shown(key, current[key])} (as wanted)`,
+    );
+  if (changed.includes("smtp_pass"))
+    console.log("  smtp_pass: set from RESEND_API_KEY (not shown)");
+  console.log("Left as they are:");
+  for (const key of UNMANAGED)
+    console.log(`  ${key}: ${shown(key, current[key])}`);
+
+  if (!changed.length) {
+    console.log("Nothing to change.");
+    return;
+  }
+  if (mode === "check") {
+    console.log(
+      `${changed.length} setting(s) would change once this is on main.`,
+    );
+    return;
+  }
+
+  const patch = Object.fromEntries(
+    changed.map((key) => [key, key === "smtp_pass" ? resendKey : wanted[key]]),
+  );
+  try {
+    await request("PATCH", patch);
+  } catch (error) {
+    if (error.status === 401 || error.status === 403)
+      console.log(
+        "::error::The access token cannot change the auth settings. It needs Auth Config and Project Settings (Read-write) on this project.",
+      );
+    throw error;
+  }
+  const after = await request("GET");
+  const missed = authChanges(after, wanted, "");
+  if (missed.length)
+    throw new Error("These settings did not take: " + missed.join(", "));
+  console.log(`Changed ${changed.length} setting(s).`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  main(process.argv[2]).catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });

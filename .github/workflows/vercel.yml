@@ -1,0 +1,43 @@
+name: Vercel
+
+# Looks after the Vercel project with the VERCEL_TOKEN repository secret:
+# recent deployments of a branch with the end of a failed build's log, or a new
+# build of a branch when Vercel stopped before building. scripts/vercel.mjs
+# does the work. Pull requests that change it run a status check.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: status lists recent deployments; deploy builds the branch again
+        type: choice
+        options: [status, deploy]
+        default: status
+      branch:
+        description: Branch to look at or build (main goes to production)
+        type: string
+        default: main
+  pull_request:
+    paths:
+      - scripts/vercel.mjs
+      - .github/workflows/vercel.yml
+
+permissions:
+  contents: read
+
+jobs:
+  vercel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ask Vercel
+        run: node scripts/vercel.mjs "$ACTION" "$BRANCH"
+        env:
+          ACTION: ${{ inputs.action || 'status' }}
+          BRANCH: ${{ inputs.branch || github.head_ref }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM: booktown1
+          VERCEL_PROJECT: book-town-851k

@@ -28,6 +28,7 @@ jobs:
       - run: pnpm test:db
       - run: pnpm test:account
       - run: pnpm test:town-sync
+      - run: pnpm test:settings
       - run: pnpm build
 
   # Signs in against a stand-in for Supabase in a real browser.
