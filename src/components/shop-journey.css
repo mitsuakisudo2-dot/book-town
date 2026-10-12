@@ -7,7 +7,7 @@
   font-size: 12px;
   color: #365242;
 }
-.shop-journey-nav a {
+.shop-journey-nav :is(a, button) {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -26,7 +26,7 @@
   color: #696d62;
   font-size: 10px;
 }
-.shop-journey-nav a:hover {
+.shop-journey-nav :is(a, button):hover {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
@@ -113,7 +113,7 @@
     margin-bottom: 10px;
     font-size: 11px;
   }
-  .shop-journey-nav a {
+  .shop-journey-nav :is(a, button) {
     gap: 4px;
   }
   .shop-journey-home small {

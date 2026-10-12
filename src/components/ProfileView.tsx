@@ -29,6 +29,7 @@ import "./reading.css";
 import { isDatabaseId, profilePath, shopPath } from "../lib/paths";
 import { ReportButton } from "./Report";
 import { RecordShelf } from "./ReadingRecords";
+import { BackLink } from "./BackLink";
 
 interface ProfileViewProps {
   state: TownState;
@@ -173,11 +174,7 @@ export function ProfileView({
   return (
     <div className="profile-view">
       {/* One's own profile is a place of its own in the navigation. */}
-      {!isSelf && (
-        <Link className="profile-back" href="/">
-          <Icon name="back" /> 本の街へ
-        </Link>
-      )}
+      {!isSelf && <BackLink className="profile-back" />}
 
       <section className="profile-reader" aria-labelledby="profile-name">
         <div className="profile-reader-avatar">

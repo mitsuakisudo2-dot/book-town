@@ -496,6 +496,28 @@ try {
     },
   );
   const storageState = await context.storageState();
+  await check(
+    "a page opened directly leads to the town; one walked into goes back",
+    async () => {
+      await go(page, "/shops/shop-orbit/");
+      await expect(page).toHaveTitle(/ \| Book Town$/);
+      const nav = page.locator(".shop-journey-nav");
+      await expect(nav.getByRole("link", { name: /本の街へ/ })).toBeVisible();
+      // Walking along the row takes the shop's place, so going back still
+      // leaves the row rather than stepping through each shop.
+      const shopURL = page.url();
+      await nav.getByRole("link", { name: /^次の書店/ }).click();
+      await expect(page).not.toHaveURL(shopURL);
+      await expect(nav.getByRole("link", { name: /本の街へ/ })).toBeVisible();
+      const rowURL = page.url();
+      await page.locator(".owner-profile-link").first().click();
+      await expect(page).toHaveURL(/\/profiles\//);
+      await expect(page.locator(".profile-back")).toHaveText(/戻る/);
+      await page.locator(".profile-back").click();
+      await expect(page).toHaveURL(rowURL);
+      await expect(nav.getByRole("link", { name: /本の街へ/ })).toBeVisible();
+    },
+  );
   const mobile = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 1,
