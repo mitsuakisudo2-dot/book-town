@@ -459,6 +459,20 @@ async function main() {
         akiTown.shopMessages.map((message) => [message.readerId, message.text]),
         [[ben.id, "また来ます"]],
       );
+      // Aki hears that one reader stopped by this week, not who.
+      assert.equal(akiTown.ownShop?.weekVisitors?.count, 1);
+      assert.ok(
+        notificationsFor(akiTown).some(
+          (notice) =>
+            notice.text === "この1週間で、1人があなたの本屋に立ち寄りました",
+        ),
+      );
+      assert.equal(
+        (await townOf(ben))
+          .getSnapshot()
+          .shops.find((shop) => shop.id === akiShopId)?.weekVisitors,
+        undefined,
+      );
       assert.ok(
         notificationsFor(akiTown).some((notice) =>
           notice.text.includes("ひとことを残しました"),
@@ -480,6 +494,10 @@ async function main() {
       assert.deepEqual(cleared.visits, {});
       assert.deepEqual(cleared.placementReactions, {});
       assert.deepEqual((await townOf(aki)).getSnapshot().shopMessages, []);
+      assert.equal(
+        (await townOf(aki)).getSnapshot().ownShop?.weekVisitors,
+        undefined,
+      );
     },
   );
 

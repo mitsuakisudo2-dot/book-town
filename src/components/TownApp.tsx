@@ -554,9 +554,17 @@ function ShopView({
           <p className="shop-social-note">
             見本の書店 · {shop.followers + Number(followed)}人がフォロー
           </p>
-        ) : shop.ownerId === ME_ID && shop.followers > 0 ? (
+        ) : shop.ownerId === ME_ID &&
+          (shop.followers > 0 || shop.weekVisitors) ? (
           <p className="shop-social-note">
-            {shop.followers}人がフォロー · この数はあなたにだけ見えています
+            {[
+              shop.followers > 0 && `${shop.followers}人がフォロー`,
+              shop.weekVisitors &&
+                `この1週間に${shop.weekVisitors.count}人が立ち寄り`,
+              "この数はあなたにだけ見えています",
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         ) : null}
         {shop.ownerId !== ME_ID && (

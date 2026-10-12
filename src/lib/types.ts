@@ -72,6 +72,11 @@ export interface Shop {
   theme: ShopTheme;
   tagline: string;
   followers: number;
+  /**
+   * How many readers stopped by in the 7 days before `at`. Only the owner's own
+   * shop has it, with an account, and only when someone came.
+   */
+  weekVisitors?: { count: number; at: string };
   shelves: Shelf[];
   demo: boolean;
 }

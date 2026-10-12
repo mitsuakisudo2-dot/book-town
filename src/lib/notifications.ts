@@ -1,8 +1,8 @@
 import { activeSession, readersNow } from "./reading";
 import { bookPath } from "./books";
 import { findReader, isSpoilerFor } from "./social";
-import { ME_ID, type TownState } from "./types";
-import { profilePath } from "./paths";
+import { ME_ID, OWN_SHOP_ID, type TownState } from "./types";
+import { profilePath, shopPath } from "./paths";
 
 export interface Notice {
   id: string;
@@ -12,14 +12,21 @@ export interface Notice {
   href: string;
 }
 
+/** The Monday (Japan time) of the week a moment falls in, as YYYY-MM-DD. */
+export function weekOf(at: string): string {
+  const japan = new Date(Date.parse(at) + 9 * 3_600_000);
+  japan.setUTCDate(japan.getUTCDate() - ((japan.getUTCDay() + 6) % 7));
+  return japan.toISOString().slice(0, 10);
+}
+
 const quote = (body: string) =>
   "「" + (body.length > 40 ? body.slice(0, 40) + "…" : body) + "」";
 
 /**
  * Notices are derived from what is actually in this browser's town: replies and reactions
  * to the viewer's posts, posts by followed readers, reviews of books on the wishlist,
- * words left at the viewer's shop, readers who finished a book the viewer finished,
- * and readers reading the same book together.
+ * words left at the viewer's shop, how many stopped by it this week, readers
+ * who finished a book the viewer finished, and readers reading the same book together.
  * Nothing is invented to fill the list.
  */
 export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
@@ -112,6 +119,16 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
           : `${name(record.readerId)}さんも『${title(record.bookId)}』を読み終えました`,
         href: bookPath(record.bookId),
       });
+  // 立ち寄り便り: one notice a week, only when someone came, never who.
+  const visitors = state.ownShop?.weekVisitors;
+  if (visitors && visitors.count > 0)
+    notices.push({
+      id: "visitors:" + weekOf(visitors.at),
+      readerId: ME_ID,
+      createdAt: visitors.at,
+      text: `この1週間で、${visitors.count}人があなたの本屋に立ち寄りました`,
+      href: shopPath(OWN_SHOP_ID),
+    });
   const active = activeSession(state);
   if (active?.mode === "together" && active.bookId)
     for (const entry of readersNow(state, openedAt))

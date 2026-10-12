@@ -74,6 +74,8 @@ export interface RemoteRows {
   >[];
   /** Only owners can count their followers; nobody else sees the number. */
   ownShopFollowers: number;
+  /** Readers who stopped by the person's own shop in the 7 days before `at`. */
+  ownShopVisitors: { count: number; at: string } | null;
   follows: Pick<Tables<"shop_follows">, "shop_id">[];
   marks: Tables<"book_marks">[];
   posts: Tables<"posts">[];
@@ -289,7 +291,12 @@ export function townFromRows(
   });
   const ownRow = rows.shops.find((row) => row.owner_id === userId);
   const ownShop = ownRow
-    ? shopFrom(ownRow, rows.ownShelves, rows.ownShopFollowers)
+    ? {
+        ...shopFrom(ownRow, rows.ownShelves, rows.ownShopFollowers),
+        ...(rows.ownShopVisitors && rows.ownShopVisitors.count > 0
+          ? { weekVisitors: rows.ownShopVisitors }
+          : {}),
+      }
     : null;
   const shops = rows.shops
     .filter(

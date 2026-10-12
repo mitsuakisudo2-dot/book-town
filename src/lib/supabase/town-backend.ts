@@ -124,9 +124,10 @@ export async function loadTown(
   let ownShelves: Json = [];
   let ownSceneBooks: Json = [];
   let ownShopFollowers = 0;
+  let ownShopVisitors: RemoteRows["ownShopVisitors"] = null;
   let shopMessages: RemoteRows["shopMessages"] = [];
   if (own) {
-    const [privateRows, followers, messages] = await Promise.all([
+    const [privateRows, followers, messages, visitors] = await Promise.all([
       all(
         client
           .from("shop_private")
@@ -149,10 +150,16 @@ export async function loadTown(
           .order("updated_at", { ascending: false })
           .limit(LIMIT),
       ),
+      // A nice-to-know: the town still opens if this cannot be read.
+      client.rpc("shop_visitors", { days: 7 }).then(
+        (outcome) => (outcome.error ? 0 : (outcome.data ?? 0)),
+        () => 0,
+      ),
     ]);
     ownShelves = privateRows[0]?.shelves ?? [];
     ownSceneBooks = privateRows[0]?.scene_books ?? [];
     ownShopFollowers = followers.count ?? 0;
+    ownShopVisitors = { count: visitors, at: new Date().toISOString() };
     shopMessages = messages;
   }
 
@@ -163,6 +170,7 @@ export async function loadTown(
     ownShelves,
     ownSceneBooks,
     ownShopFollowers,
+    ownShopVisitors,
     shopMessages,
     follows,
     marks,
@@ -227,6 +235,7 @@ export async function loadPublicTown(client: Client): Promise<TownState> {
     ownShelves: [],
     ownSceneBooks: [],
     ownShopFollowers: 0,
+    ownShopVisitors: null,
     shopMessages: [],
     follows: [],
     marks: [],
