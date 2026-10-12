@@ -268,6 +268,45 @@ try {
     await shot("5-town");
   });
 
+  await check("a new reader's empty town shows no zeros", async () => {
+    // Nothing has happened yet, so nothing is counted.
+    await expect(page.locator(".profile-stats")).toHaveCount(0);
+    await page.goto(base + "/reading/");
+    await expect(
+      page.getByRole("heading", {
+        name: "いまは、まだ誰も読みはじめていません",
+      }),
+    ).toBeVisible();
+    await shot("6-reading-quiet");
+    await page.goto(base + "/notifications/");
+    await expect(
+      page.getByRole("heading", { name: "まだ静かです" }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "本屋を開く" })).toBeVisible();
+    await shot("7-notices-quiet");
+    await page.goto(base + "/search/");
+    await expect(page.getByRole("heading", { name: "検索" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "話題の本" })).toHaveCount(
+      0,
+    );
+    for (const path of [
+      "/",
+      "/reading/",
+      "/notifications/",
+      "/search/",
+      "/profiles/me/",
+      "/my-shop/",
+      "/reading-list/",
+      "/timeline/",
+    ]) {
+      await page.goto(base + path);
+      await expect(page.locator("main.town-main")).toBeVisible();
+      await expect(page.locator("main")).not.toContainText(
+        /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+      );
+    }
+  });
+
   await check(
     "the session survives a reload, and signing out ends it",
     async () => {

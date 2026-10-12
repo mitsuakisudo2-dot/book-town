@@ -64,10 +64,20 @@ export function NotificationsView({ state, actions }: Shared) {
       ) : (
         <div className="empty-state">
           <Icon name="bell" size={34} />
-          <h2>お知らせは、まだありません。</h2>
+          <h2>まだ静かです</h2>
           <p>
-            投稿への返信、フォローしている人の投稿、読みたい本への感想が、ここに届きます。
+            同じ本を読み終えた人、あなたの本屋に残されたひとこと、投稿への返信が、ここに届きます。
           </p>
+          <div className="empty-state-actions">
+            {!state.ownShop && (
+              <Link className="button primary" href="/my-shop/">
+                本屋を開く
+              </Link>
+            )}
+            <Link className="button secondary" href="/walk/">
+              書店めぐりに出かける
+            </Link>
+          </div>
         </div>
       )}
       <p className="search-note">

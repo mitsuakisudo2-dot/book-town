@@ -97,3 +97,35 @@ export function talkersOf(state: TownState, bookId: string): Reader[] {
       return reader ? [reader] : [];
     });
 }
+
+/** Every record the viewer may see, newest first. */
+const visibleRecords = (state: TownState) =>
+  state.readingRecords
+    .filter((record) => record.isPublic || record.readerId === ME_ID)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+
+const uniqueBooks = (records: ReadingRecord[], state: TownState) =>
+  [...new Set(records.map((record) => record.bookId))].filter((bookId) =>
+    state.books.some((book) => book.id === bookId),
+  );
+
+/** Books finished lately in the town, newest first, each once. */
+export function recentlyFinished(state: TownState, limit = 6): string[] {
+  return uniqueBooks(visibleRecords(state), state).slice(0, limit);
+}
+
+/** The feelings someone in the town has kept, in the order they are offered. */
+export function feelingsInTown(state: TownState): Feeling[] {
+  const kept = new Set(
+    visibleRecords(state).flatMap((record) => record.feelings),
+  );
+  return FEELINGS.filter((feeling) => kept.has(feeling));
+}
+
+/** Books finished with a feeling, the most recently felt first. */
+export function booksFelt(state: TownState, feeling: Feeling): string[] {
+  return uniqueBooks(
+    visibleRecords(state).filter((record) => record.feelings.includes(feeling)),
+    state,
+  );
+}
