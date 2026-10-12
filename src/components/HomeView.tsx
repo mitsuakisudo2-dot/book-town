@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TownActions, TownState } from "../lib/types";
 import { ComposeFab, TimelineView } from "./Social";
-import { Icon } from "./ui";
+import { BookJacket, Icon } from "./ui";
+import { bookToContinue } from "../lib/reading";
 
 type Shared = {
   state: TownState;
@@ -112,6 +113,7 @@ export function HomeView({
           </Link>
         </div>
       )}
+      <ContinueReading state={shared.state} />
       {tab === "timeline" ? <TimelineView {...shared} /> : children}
       <ComposeFab
         {...shared}
@@ -120,5 +122,34 @@ export function HomeView({
         }}
       />
     </div>
+  );
+}
+
+/** The book left unfinished, a tap away from its next reading. */
+function ContinueReading({ state }: { state: TownState }) {
+  const next = bookToContinue(state);
+  const book = next && state.books.find((entry) => entry.id === next.bookId);
+  if (!next || !book) return null;
+  return (
+    <Link
+      href="/reading/"
+      className="home-continue"
+      aria-label={`『${book.title}』の続きを読む`}
+    >
+      <BookJacket book={book} className="home-continue-jacket" />
+      <span className="home-continue-text">
+        <small>読みかけの本</small>
+        <b>{book.title}</b>
+        {next.lastWords && (
+          <span className="home-continue-words">
+            前回のひとこと「{next.lastWords}」
+          </span>
+        )}
+      </span>
+      <span className="home-continue-go">
+        <Icon name="reading" size={16} />
+        続きを読む
+      </span>
+    </Link>
   );
 }

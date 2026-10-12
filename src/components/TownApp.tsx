@@ -246,14 +246,13 @@ export default function TownApp({
               className={
                 "top-bell" + (view === "notifications" ? " active" : "")
               }
-              aria-label={unread ? `お知らせ（未読${unread}件）` : "お知らせ"}
+              aria-label={
+                unread ? "お知らせ（新しいお知らせがあります）" : "お知らせ"
+              }
             >
               <Icon name="bell" size={21} />
-              {unread > 0 && (
-                <span className="bell-badge" aria-hidden="true">
-                  {unread > 9 ? "9+" : unread}
-                </span>
-              )}
+              {/* A small light, not a count that piles up and hurries. */}
+              {unread > 0 && <span className="bell-light" aria-hidden="true" />}
             </Link>
             {!visitor && (
               <Link

@@ -247,8 +247,10 @@ try {
 
   await check("notifications show readers reading the same book", async () => {
     await go("/timeline/");
+    // While a book is open, home does not offer to continue it.
+    await expect(page.locator(".home-continue")).toHaveCount(0);
     await expect(
-      page.getByRole("link", { name: /お知らせ（未読\d+件）/ }),
+      page.getByRole("link", { name: "お知らせ（新しいお知らせがあります）" }),
     ).toBeVisible();
     await page.getByRole("link", { name: /お知らせ/ }).click();
     await expect(
@@ -284,6 +286,15 @@ try {
       expect(data.readingSessions).toHaveLength(1);
       expect(data.readingSessions[0].endedAt).not.toBeNull();
       await expect(page.locator(".reading-log li")).toHaveCount(1);
+      // Home keeps the unfinished book a tap away, with the last line written.
+      await go("/");
+      const next = page.getByRole("link", {
+        name: "『ソラリス』の続きを読む",
+      });
+      await expect(next).toContainText("ちょうど第二章。");
+      await next.click();
+      await expect(page).toHaveURL(/\/reading\/$/);
+      await expect(page.locator(".picker-chosen")).toContainText("ソラリス");
     },
   );
 
