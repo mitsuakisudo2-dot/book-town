@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -337,12 +338,7 @@ export default function TownApp({
           </Link>
         ))}
       </nav>
-      {toast && (
-        <div className="toast" role="status">
-          <Icon name="check" size={17} />
-          {toast}
-        </div>
-      )}
+      {toast && <Toast message={toast} />}
       {about && (
         <Modal title="Book Townへようこそ" onClose={() => setAbout(false)}>
           <p className="modal-lead">読書家の小さな書店が集まる、本の街。</p>
@@ -661,6 +657,20 @@ function ShopView({
       )}
     </div>
   );
+}
+/**
+ * A book opened in hand sits in the browser's top layer, above everything else on the
+ * page. While one is open the toast is placed inside it, so it is seen and read aloud.
+ */
+function Toast({ message }: { message: string }) {
+  const toast = (
+    <div className="toast" role="status">
+      <Icon name="check" size={17} />
+      {message}
+    </div>
+  );
+  const openDialog = document.querySelector("dialog[open]");
+  return openDialog ? createPortal(toast, openDialog) : toast;
 }
 /** Up to three of a shelf's POPs, in shelf order: the owner's words beside the shelf. */
 function shelfPops(shelf: Shelf, books: Book[]) {

@@ -2922,3 +2922,19 @@ div.book-jacket:hover {
 .town-shell .top-actions button.demo-pill:hover {
   border-color: #809273;
 }
+/* Over a sheet (posting, the shelf editor), the toast drops from the top so it never
+   covers the sheet's own buttons. Inside an open book it stands above the bottom band. */
+.toast {
+  /* Centred with left: 50%, so size to the message rather than the half that remains. */
+  width: max-content;
+}
+body:has(.modal-backdrop) .toast {
+  top: 18px;
+  bottom: auto;
+  left: 50%;
+}
+dialog .toast {
+  top: auto;
+  bottom: 112px;
+  left: 50%;
+}
