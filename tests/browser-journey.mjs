@@ -158,6 +158,20 @@ try {
       await orbit.getByRole("link", { name: /^紹介と/ }).click();
       // Demo shops have three public shelves, one per tier of the walk.
       await expect(page.locator(".store-shelf-section")).toHaveCount(3);
+      await expect(
+        page.locator(".shop-hero").getByRole("link", { name: "店内に入る" }),
+      ).toHaveAttribute("href", "/walk/#shop-orbit");
+      // Beside each shelf, the owner's POPs; one opens its book in hand.
+      const firstPop = page.locator(".store-shelf-pops button").first();
+      const words = await firstPop
+        .locator(".store-shelf-pop-words")
+        .textContent();
+      await firstPop.click();
+      await expect(
+        page.getByRole("dialog").locator(".owner-pop"),
+      ).toContainText(words.slice(0, 12));
+      await page.getByRole("button", { name: "本を閉じて棚に戻る" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
       await page
         .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
         .click();
