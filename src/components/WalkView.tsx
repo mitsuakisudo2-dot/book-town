@@ -238,6 +238,15 @@ export function WalkView({
       else stage.current?.focus({ preventScroll: true });
     });
   }
+  // Going past the last shop starts another round; say so once, quietly.
+  const lastIndex = useRef<number | null>(null);
+  useEffect(() => {
+    const index = session && !session.ended ? session.index : null;
+    const length = session?.ids.length ?? 0;
+    if (lastIndex.current === length - 1 && index === 0 && length > 1)
+      notify("街をひと回りしました。もう一周、どうぞ。");
+    lastIndex.current = index;
+  }, [session, notify]);
   function step(direction: -1 | 1) {
     if (overlay) return;
     update((previous) => stepWalk(previous, direction));
@@ -668,30 +677,17 @@ export function WalkView({
           ) : (
             <div className="walk-end">
               <Icon name="store" size={40} />
-              <h1>
-                {shops.length
-                  ? "今日めぐれる書店はここまで"
-                  : "公開されている書店がありません"}
-              </h1>
-              <p>気になった一冊を、手に取る時間へ。</p>
-              {shops.length > 0 && (
-                <button
-                  className="button"
-                  onClick={() =>
-                    update((previous) =>
-                      startWalk(
-                        previous,
-                        shops.map((s) => s.id),
-                        undefined,
-                        undefined,
-                        true,
-                      ),
-                    )
-                  }
-                >
-                  最初からめぐる
-                  <Icon name="arrow" />
-                </button>
+              {shops.length ? (
+                <p>書店の灯りをともしています</p>
+              ) : (
+                <>
+                  <h1>まだ、灯りのついた書店がありません</h1>
+                  <p>最初の一軒を開くと、ここから街の人が訪ねてこられます。</p>
+                  <Link className="button" href="/my-shop/">
+                    {state.ownShop ? "自分の書店を整える" : "本屋を開く"}
+                    <Icon name="arrow" />
+                  </Link>
+                </>
               )}
               <Link href="/reading/">読書を開始する</Link>
             </div>

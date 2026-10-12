@@ -267,16 +267,18 @@ try {
       expect(saved.message).toBe("また訪れたい本屋でした");
     },
   );
-  await check("finite end and explicit restart", async () => {
+  await check("past the last shop, the walk goes round again", async () => {
     await go("/walk/#shop-lamplight");
+    const total = (await page.locator(".walk-progress").textContent())
+      .split("/")[1]
+      .trim();
+    await expect(page.locator(".walk-progress")).toContainText(
+      total + " / " + total,
+    );
     await page.getByRole("button", { name: "次の書店", exact: true }).click();
-    await expect(
-      page.getByRole("heading", { name: "今日めぐれる書店はここまで" }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "最初からめぐる", exact: false })
-      .click();
     await expect(page.locator(".walk-progress")).toContainText("1 /");
+    await expect(page.getByText("街をひと回りしました")).toBeVisible();
+    await expect(page.locator(".walk-end")).toHaveCount(0);
   });
   await check("PC sidebar keyboard navigation and reduced motion", async () => {
     await page.setViewportSize({ width: 1395, height: 884 });

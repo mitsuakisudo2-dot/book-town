@@ -44,45 +44,50 @@ export function startWalk(
     };
   if (!restart && state.session && !state.session.ended) {
     const remaining = state.session.ids.filter((id) => ids.includes(id));
-    const previous = state.session.ids[state.session.index];
-    let index = remaining.indexOf(previous);
-    if (index < 0) {
-      const following = state.session.ids
-        .slice(state.session.index)
-        .find((id) => remaining.includes(id));
-      index = following ? remaining.indexOf(following) : remaining.length;
+    if (remaining.length) {
+      const previous = state.session.ids[state.session.index];
+      let index = remaining.indexOf(previous);
+      if (index < 0) {
+        const following = state.session.ids
+          .slice(state.session.index)
+          .find((id) => remaining.includes(id));
+        index = following ? remaining.indexOf(following) : 0;
+      }
+      return {
+        ...state,
+        lastStoreId: remaining[index],
+        session: { ...state.session, ids: remaining, index, ended: false },
+      };
     }
-    const ended = state.session.ended || index >= remaining.length;
-    return {
-      ...state,
-      lastStoreId: ended ? null : remaining[index],
-      session: { ...state.session, ids: remaining, index, ended },
-    };
   }
-  const unvisited = ids.filter((id) => !state.visits[id]);
+  // Shops not yet visited come first, then the ones visited longest ago.
+  // The walk has no end: once every shop is visited, it simply goes round.
+  const visitedAt = (id: string) => Date.parse(state.visits[id] ?? "") || 0;
   const ordered = restart
     ? ids
-    : [...unvisited, ...ids.filter((id) => state.visits[id])];
-  const ended = !ordered.length || (!restart && !unvisited.length);
+    : [...ids].sort((a, b) => visitedAt(a) - visitedAt(b));
+  const ended = !ordered.length;
   return {
     ...state,
     lastStoreId: ended ? null : ordered[0],
     session: {
       ids: ordered,
-      index: ended ? ordered.length : 0,
+      index: 0,
       ended,
       startedAt: now,
     },
   };
 }
+/** Past the last shop the walk goes round again; before the first it stays. */
 export function stepWalk(state: WalkState, direction: -1 | 1): WalkState {
   const s = state.session;
-  if (!s) return state;
-  const index = Math.max(0, Math.min(s.ids.length, s.index + direction));
+  if (!s || !s.ids.length) return state;
+  const next = s.index + direction;
+  const index = next >= s.ids.length ? 0 : Math.max(0, next);
   return {
     ...state,
-    lastStoreId: s.ids[index] ?? null,
-    session: { ...s, index, ended: index === s.ids.length },
+    lastStoreId: s.ids[index],
+    session: { ...s, index, ended: false },
   };
 }
 export function visitStore(

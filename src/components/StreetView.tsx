@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ME_ID,
@@ -17,6 +17,27 @@ import { BookInHand } from "./BookInHand";
 import "./street.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { useTownBackend } from "../lib/store";
+
+/** The most rounds of the street kept on the page at once. */
+const MAX_ROUNDS = 30;
+
+/** The same shops in another order for each round, never starting where the last one ended. */
+function roundOrder<T>(list: T[], seed: number, after?: T): T[] {
+  let state = seed >>> 0;
+  const random = () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const next = [...list];
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  if (next.length > 1 && next[0] === after) next.push(next.shift()!);
+  return next;
+}
 
 type Props = {
   state: TownState;
@@ -68,6 +89,31 @@ export function StreetView({
   });
   const pivot = offset % Math.max(1, matching.length);
   const ordered = [...matching.slice(pivot), ...matching.slice(0, pivot)];
+  // The street has no end: past the last shop, another round of the same
+  // town begins in a new order. A search or a short list stays one round.
+  const endless = !term && matching.length >= 3;
+  const [rounds, setRounds] = useState(1);
+  const shownRounds = endless ? rounds : 1;
+  const roundsOf: Shop[][] = [ordered];
+  for (let round = 1; round < shownRounds; round++)
+    roundsOf.push(
+      roundOrder(matching, offset * 97 + round, roundsOf[round - 1].at(-1)),
+    );
+  const further = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const target = further.current;
+    if (!endless || !target || typeof IntersectionObserver === "undefined")
+      return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting))
+          setRounds((count) => Math.min(count + 1, MAX_ROUNDS));
+      },
+      { rootMargin: "0px 0px 800px 0px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [endless, rounds]);
   const reset = () => {
     setSearch("");
     setFollowingOnly(false);
@@ -143,106 +189,121 @@ export function StreetView({
               路地を変えてみる
             </button>
           </div>
-          {ordered.map((shop) => {
-            const owner =
-              shop.ownerId === "me"
-                ? state.me
-                : state.readers.find((r) => r.id === shop.ownerId);
-            const shelves = shop.shelves.filter((s) => s.isPublic);
-            const followed = state.following.includes(shop.id);
-            // The street shows two shelves per shop; the whole shop is one tap away.
-            const shown = shelves.slice(0, 2);
-            const more = shelves.length - shown.length;
-            return (
-              <article
-                className={"street-shop is-compact theme-" + shop.theme}
-                key={shop.id}
-                id={"street-" + shop.id}
-              >
-                <header className="street-shop-header">
-                  <div className="street-shop-title">
-                    <Link
-                      href={shopPath(shop.id)}
-                      aria-label={shop.name + "に入る"}
-                    >
-                      <h2>{shop.name}</h2>
-                      <Icon name="arrow" size={18} />
-                    </Link>
-                    {shop.ownerId === ME_ID && (
-                      <small className="street-own-tag">あなたの書店</small>
-                    )}
-                    {shop.demo && savedIn !== "local" && (
-                      <small className="street-own-tag">見本</small>
-                    )}
-                  </div>
-                  <div className="street-shop-owner">
-                    {owner && (
-                      <Link href={profilePath(owner.id)}>
-                        <ReaderAvatar reader={owner} size={28} />
-                        <span>
-                          <small>店主</small> {owner.name}
-                        </span>
-                      </Link>
-                    )}
-                    {shop.ownerId === "me" ? (
-                      <Link href="/my-shop/" className="street-follow">
-                        <Icon name="edit" size={14} />
-                        棚を整える
-                      </Link>
-                    ) : (
-                      <button
-                        className="street-follow"
-                        aria-pressed={followed}
-                        aria-label={
-                          shop.name +
-                          (followed ? "のフォローを解除" : "をフォロー")
-                        }
-                        onClick={() => {
-                          actions.toggleFollow(shop.id);
-                          notify(
-                            followed
-                              ? "フォローを解除しました"
-                              : shop.name + "をフォローしました",
-                          );
-                        }}
-                      >
-                        <Icon name={followed ? "check" : "plus"} size={14} />
-                        {followed ? "フォロー済み" : "フォロー"}
-                      </button>
-                    )}
-                  </div>
-                </header>
-                <div className="street-shop-shelves">
-                  {shown.map((shelf, shelfIndex) => (
-                    <StreetShelf
-                      key={shelf.id}
-                      shelf={shelf}
-                      books={state.books}
-                      index={shelfIndex}
-                      onSelect={(item) => setSelected({ shop, shelf, item })}
-                    />
-                  ))}
-                  {!shown.length && (
-                    <div className="street-empty-shelf">
-                      <Icon name="book" size={26} />
-                      <p>このお店の棚は、これから育ちます。</p>
-                    </div>
-                  )}
+          {roundsOf.map((round, roundIndex) => (
+            <Fragment key={roundIndex}>
+              {roundIndex > 0 && (
+                <div className="street-round" role="separator">
+                  <Icon name="leaf" size={16} />
+                  <span>路地は、まだ続きます</span>
                 </div>
-                <footer className="street-shop-footer">
-                  <span>
-                    {more > 0
-                      ? `ほかに${more}段の棚があります`
-                      : "本をタップして、店主の言葉を読む"}
-                  </span>
-                  <Link href={shopPath(shop.id)}>
-                    この書店へ
-                    <Icon name="arrow" size={15} />
-                  </Link>
-                </footer>
-              </article>
-            );
-          })}
+              )}
+              {round.map((shop) => {
+                const owner =
+                  shop.ownerId === "me"
+                    ? state.me
+                    : state.readers.find((r) => r.id === shop.ownerId);
+                const shelves = shop.shelves.filter((s) => s.isPublic);
+                const followed = state.following.includes(shop.id);
+                // The street shows two shelves per shop; the whole shop is one tap away.
+                const shown = shelves.slice(0, 2);
+                const more = shelves.length - shown.length;
+                return (
+                  <article
+                    className={"street-shop is-compact theme-" + shop.theme}
+                    key={roundIndex + "-" + shop.id}
+                    id={roundIndex ? undefined : "street-" + shop.id}
+                  >
+                    <header className="street-shop-header">
+                      <div className="street-shop-title">
+                        <Link
+                          href={shopPath(shop.id)}
+                          aria-label={shop.name + "に入る"}
+                        >
+                          <h2>{shop.name}</h2>
+                          <Icon name="arrow" size={18} />
+                        </Link>
+                        {shop.ownerId === ME_ID && (
+                          <small className="street-own-tag">あなたの書店</small>
+                        )}
+                        {shop.demo && savedIn !== "local" && (
+                          <small className="street-own-tag">見本</small>
+                        )}
+                      </div>
+                      <div className="street-shop-owner">
+                        {owner && (
+                          <Link href={profilePath(owner.id)}>
+                            <ReaderAvatar reader={owner} size={28} />
+                            <span>
+                              <small>店主</small> {owner.name}
+                            </span>
+                          </Link>
+                        )}
+                        {shop.ownerId === "me" ? (
+                          <Link href="/my-shop/" className="street-follow">
+                            <Icon name="edit" size={14} />
+                            棚を整える
+                          </Link>
+                        ) : (
+                          <button
+                            className="street-follow"
+                            aria-pressed={followed}
+                            aria-label={
+                              shop.name +
+                              (followed ? "のフォローを解除" : "をフォロー")
+                            }
+                            onClick={() => {
+                              actions.toggleFollow(shop.id);
+                              notify(
+                                followed
+                                  ? "フォローを解除しました"
+                                  : shop.name + "をフォローしました",
+                              );
+                            }}
+                          >
+                            <Icon
+                              name={followed ? "check" : "plus"}
+                              size={14}
+                            />
+                            {followed ? "フォロー済み" : "フォロー"}
+                          </button>
+                        )}
+                      </div>
+                    </header>
+                    <div className="street-shop-shelves">
+                      {shown.map((shelf, shelfIndex) => (
+                        <StreetShelf
+                          key={shelf.id}
+                          shelf={shelf}
+                          books={state.books}
+                          index={shelfIndex}
+                          onSelect={(item) =>
+                            setSelected({ shop, shelf, item })
+                          }
+                        />
+                      ))}
+                      {!shown.length && (
+                        <div className="street-empty-shelf">
+                          <Icon name="book" size={26} />
+                          <p>このお店の棚は、これから育ちます。</p>
+                        </div>
+                      )}
+                    </div>
+                    <footer className="street-shop-footer">
+                      <span>
+                        {more > 0
+                          ? `ほかに${more}段の棚があります`
+                          : "本をタップして、店主の言葉を読む"}
+                      </span>
+                      <Link href={shopPath(shop.id)}>
+                        この書店へ
+                        <Icon name="arrow" size={15} />
+                      </Link>
+                    </footer>
+                  </article>
+                );
+              })}
+            </Fragment>
+          ))}
           {!ordered.length && (
             <div className="street-empty">
               <Icon name="search" size={28} />
@@ -266,13 +327,28 @@ export function StreetView({
           <section className="street-end">
             <span className="street-end-line" />
             <Icon name="leaf" size={27} />
-            <h2>今日の路地は、ここまで。</h2>
-            <p>
-              いま見られる書店は、ここまでです。
-              <br />
-              気になった棚に戻ったり、あなたの一冊を並べたり。
-            </p>
-            <div>
+            {endless ? (
+              <>
+                <h2>この先も、路地は続きます。</h2>
+                <p>
+                  ひと休みしたら、気になった棚に戻ったり、あなたの一冊を並べたり。
+                </p>
+              </>
+            ) : (
+              <>
+                <h2>
+                  {term
+                    ? "見つかった書店は、ここまで。"
+                    : "この先は、まだ空き地です。"}
+                </h2>
+                <p>
+                  {term
+                    ? "言葉を変えると、別の路地につながります。"
+                    : "あなたの一冊を並べると、路地が少し長くなります。"}
+                </p>
+              </>
+            )}
+            <div ref={further}>
               <button
                 onClick={() =>
                   window.scrollTo({

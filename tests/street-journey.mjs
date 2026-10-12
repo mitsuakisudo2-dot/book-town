@@ -477,12 +477,16 @@ try {
       await expect(page.locator(".street-shop")).toHaveCount(6);
       const names = await page.locator(".street-shop-title").allTextContents();
       expect(new Set(names).size).toBe(6);
-      await page.locator(".street-shop").last().scrollIntoViewIfNeeded();
+      // The street has no end: scrolling on brings another round of shops.
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await expect(page.locator(".street-shop")).toHaveCount(6);
-      await expect(page.locator(".street-end")).toContainText(
-        "今日の路地は、ここまで。",
-      );
+      await expect(page.locator(".street-round")).toHaveCount(1);
+      await expect(page.locator(".street-shop")).toHaveCount(12);
+      const next = await page
+        .locator(".street-shop-title")
+        .nth(6)
+        .textContent();
+      expect(next).not.toBe(names[5]);
+      expect(await page.locator("[id^=street-shop-]").count()).toBe(6);
       await expect(page.locator(".street-end")).toContainText("架空のデモ");
     },
   );
