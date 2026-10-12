@@ -309,13 +309,9 @@ try {
       await dialog().getByLabel("棚に加える本を探す").fill("モモ");
       await dialog().locator(".scene-search-results button").first().click();
       await expect(dialog().locator("#scene-book-form")).toContainText("モモ");
-      // Both public books of the shelf share row-0; move モモ to the front.
-      const left = dialog().getByRole("button", {
-        name: "← 左へ",
-        exact: true,
-      });
-      for (let i = 0; i < 6 && (await left.isEnabled()); i++)
-        await left.click();
+      await dialog()
+        .getByRole("button", { name: "← 左へ", exact: true })
+        .click();
       await dialog()
         .getByLabel("この本のPOP")
         .fill("急がなくてもいい。コーヒーを一杯。");

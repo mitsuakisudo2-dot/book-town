@@ -1,6 +1,6 @@
 import type { Book } from "./types";
-/** Original demo jacket illustrations, shared as a single cached 2x4 atlas. */
-export function bookArt(book: Book) {
+/** The atlas panel a book prefers; a screen may pass another to avoid repeats. */
+export function artPanel(book: Book): number {
   const selected: Record<string, number> = {
     solaris: 0,
     "left-hand": 1,
@@ -17,10 +17,18 @@ export function bookArt(book: Book) {
     "galaxy-railroad": 5,
     "traveling-tree": 6,
     "secret-garden": 4,
+    "ten-nights": 3,
+    "stone-history": 7,
   };
-  const index =
+  return (
     selected[book.id] ??
-    [...book.id].reduce((n, c) => n + c.charCodeAt(0), 0) % 8;
+    [...book.id].reduce((n, c) => n + c.charCodeAt(0), 0) % ART_PANELS
+  );
+}
+export const ART_PANELS = 8;
+/** Original demo jacket illustrations, shared as a single cached 2x4 atlas. */
+export function bookArt(book: Book, panel?: number) {
+  const index = panel ?? artPanel(book);
   return {
     x: index % 2 ? "100%" : "0%",
     y: ["0%", "33.333333%", "66.666667%", "100%"][Math.floor(index / 2)],

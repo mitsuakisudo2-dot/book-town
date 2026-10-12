@@ -2,6 +2,7 @@ import type { Book, Shop, TownState } from "./types";
 import {
   addBookPlacement,
   placementSize,
+  SPINE_GAP,
   bookPop,
   furnitureBooks,
   objectById,
@@ -62,8 +63,8 @@ export function publicScenePops(scenes: StoreScene[]) {
 export const SHELF_GUTTER = 0.2058;
 /** Reference-store geometry (canvas units: x of width, y/h of height). */
 export const WALK_LAYOUT = {
-  sign: rect(0.207, 0.038, 0.676, 0.112, -2.5),
-  furniture: rect(0.008, 0.205, 0.972, 0.6207),
+  sign: rect(0.207, 0.018, 0.676, 0.112, -2.5),
+  furniture: rect(0.008, 0.185, 0.972, 0.6207),
   // Shelf-local tiers: top rail, then three tiers whose boards sit between them.
   tiers: [
     { y: 0.016916, h: 0.26905, w: 0.76749, bookHeight: 0.146 },
@@ -74,7 +75,7 @@ export const WALK_LAYOUT = {
   ownerPop: rect(0.6, 0.842, 0.27, 0.118, 3),
   stamp: rect(0.81, 0.85, 0.05, 0.028, 10),
   // The like / POP / save / share rail stands beside the 2nd and 3rd tiers.
-  controls: rect(0.918, 0.5, 0.082, 0.265),
+  controls: rect(0.918, 0.48, 0.082, 0.265),
 };
 const FACES_PER_TIER: Record<number, number[]> = {
   1: [2, 2, 2],
@@ -147,7 +148,12 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
   );
   const split = variant === 3;
   const shelves = shop.shelves.filter((s) => s.isPublic);
-  const byShelf = shelves.length <= L.tiers.length;
+  // Demo shops map each public shelf to its own tier. An owner's shop does
+  // that only when it has exactly one shelf per tier; otherwise its books are
+  // spread over the tiers so none are hidden.
+  const byShelf = shop.demo
+    ? shelves.length <= L.tiers.length
+    : shelves.length === L.tiers.length;
   const faces = FACES_PER_TIER[variant] ?? [3, 2, 3];
   L.tiers.forEach((t, i) => {
     const shelf = byShelf
@@ -306,8 +312,19 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       for (let n = 0; n < quota; n++) {
         const id = "demo-placement:" + shop.id + ":" + rowId + ":" + n;
         const display = rowId === "table-row" ? "face" : "spine";
+        const row = objectById(scene, rowId)!,
+          rowW = row.rect.w * objectById(scene, row.parentId!)!.rect.w,
+          end = Math.max(
+            0,
+            ...scene.objects
+              .filter((o) => o.kind === "book" && o.parentId === rowId)
+              .map((o) => o.rect.x + o.rect.w),
+          ),
+          free = (1 - end) * rowW - Math.min(row.gap ?? 0.004, SPINE_GAP);
         // The first title in the queue that still fits; nothing is left unplaced.
         const k = queue.findIndex((book) => {
+          if (placementSize(book, display, row.bookHeight).w > free + 1e-8)
+            return false;
           if (place(book, rowId, id, display, 100 + n)) return true;
           scene.objects = scene.objects.filter((o) => o.id !== id);
           return false;

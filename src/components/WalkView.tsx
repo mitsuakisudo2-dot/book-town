@@ -243,6 +243,14 @@ export function WalkView({
       )
         return;
       e.preventDefault();
+      // An overflowing chip row scrolls sideways instead of turning the store.
+      const chips = (e.target as HTMLElement).closest<HTMLElement>(
+        ".walk-chips",
+      );
+      if (chips && chips.scrollWidth > chips.clientWidth) {
+        chips.scrollLeft += e.deltaY;
+        return;
+      }
       const gesture = wheel.current;
       if (e.timeStamp - gesture.last > 220) {
         gesture.locked = false;
@@ -535,7 +543,9 @@ export function WalkView({
                     <button
                       key={chip?.text ?? ""}
                       aria-pressed={focusText === (chip?.text ?? null)}
-                      aria-label={chip ? chip.text : undefined}
+                      aria-label={
+                        chip ? chip.label + "（" + chip.text + "）" : undefined
+                      }
                       onClick={() =>
                         setFocusRow(
                           chip && currentId

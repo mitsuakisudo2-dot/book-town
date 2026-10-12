@@ -223,8 +223,7 @@ check("explicit reordering inserts at the intended left-to-right index", () => {
       .filter((o) => o.kind === "book" && o.parentId === "row-0")
       .sort((a, b) => a.order! - b.order!)
       .map((o) => o.id),
-    // Rows map to shelves, so both public items of the shelf share row-0.
-    ["extra-2", "placement:mine:a", "placement:mine:b", "extra-1"],
+    ["extra-2", "placement:mine:a", "extra-1"],
   );
   assert.deepEqual(validateScene(next), []);
 });

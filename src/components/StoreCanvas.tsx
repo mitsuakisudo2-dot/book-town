@@ -9,6 +9,7 @@ import {
   type StoreScene,
 } from "../lib/store-scene";
 import { popExcerpt, tierCardOwners } from "../lib/store-scene-adapter";
+import { ART_PANELS, artPanel } from "../lib/book-art";
 import type { Book } from "../lib/types";
 
 const THEME = "/themes/woodshop/";
@@ -182,14 +183,16 @@ function SignArt() {
       viewBox="0 0 220 70"
       fill="none"
       stroke="currentColor"
-      strokeWidth="3"
+      strokeWidth="5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M0 63c30-4 58-14 66-35 6 8 12 12 20 14l20-40c8 18 20 32 36 40 6-8 12-13 18-20 10 14 24 24 44 30" />
-      <path d="M66 28l-6 14M72 32l-4 9M106 2l-8 22M112 14l-7 18M118 24l-5 14M140 40l-10-6M180 22l-5 9M186 28l-4 8" />
-      <path d="M150 63c18-2 40-2 62 0" />
+      <path d="M2 66C24 62 40 50 58 32L64 28 72 36 84 30 104 14 128 2 142 16 156 30 170 24 190 40 218 60" />
+      <path d="M84 30C96 44 104 54 120 62" />
+      <path d="M142 16C150 32 158 44 176 56" />
+      <path d="M128 8 120 26M132 12 126 30M138 18 134 32M64 32 60 44M170 28 166 38M176 32 172 42" />
+      <path d="M110 66C140 63 180 63 218 66" />
     </svg>
   );
 }
@@ -205,8 +208,24 @@ const SPINE_TONES: Array<[string, string] | null> = [
 ];
 const shortAuthor = (author: string) =>
   author.split("・").pop()?.trim() || author;
-export function StoreBook({ book, display }: { book: Book; display?: string }) {
-  if (display === "face") return <BookJacket book={book} illustrated />;
+export function StoreBook({
+  book,
+  display,
+  artIndex,
+}: {
+  book: Book;
+  display?: string;
+  artIndex?: number;
+}) {
+  if (display === "face")
+    return (
+      <BookJacket
+        book={book}
+        illustrated
+        author={shortAuthor(book.author)}
+        artIndex={artIndex}
+      />
+    );
   const tone = SPINE_TONES[
     [...book.id].reduce((sum, c) => sum + c.charCodeAt(0), 0) %
       SPINE_TONES.length
@@ -214,7 +233,7 @@ export function StoreBook({ book, display }: { book: Book; display?: string }) {
   const author = shortAuthor(book.author);
   return (
     <span
-      className={"walk-spine is-pattern-" + (book.pattern % 3)}
+      className={"walk-spine is-pattern-" + (Math.abs(book.pattern) % 3)}
       style={
         {
           background: tone[0],
@@ -278,6 +297,42 @@ export function StoreCanvas({
   const hasTable = scene.objects.some(
     (o) => o.kind === "furniture" && o.furnitureType === "table",
   );
+  // Face-outs on one screen get different paintings where the atlas allows.
+  const artFor = new Map<string, number>();
+  {
+    const used = new Set<number>();
+    let previous = -1;
+    for (const p of scene.objects
+      .filter((o) => o.kind === "furniture")
+      .sort((a, b) => a.rect.y - b.rect.y)
+      .flatMap((f) =>
+        scene.objects
+          .filter((r) => r.kind === "row" && r.parentId === f.id)
+          .sort((a, b) => a.rect.y - b.rect.y),
+      )
+      .flatMap((row) =>
+        scene.objects
+          .filter(
+            (o) =>
+              o.kind === "book" &&
+              o.parentId === row.id &&
+              o.display === "face",
+          )
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+      )) {
+      const book = books.find((b) => b.id === p.bookId);
+      if (!book) continue;
+      const preferred = artPanel(book);
+      let panel = preferred;
+      for (let k = 0; k < ART_PANELS && used.has(panel); k++)
+        panel = (preferred + k + 1) % ART_PANELS;
+      if (used.has(panel) && panel === previous)
+        panel = (panel + 1) % ART_PANELS;
+      used.add(panel);
+      artFor.set(p.id, panel);
+      previous = panel;
+    }
+  }
   const bounds = (o: SceneObject) => {
     const polygon = worldPolygon(scene, o);
     return polygon ? boundsOf(polygon) : null;
@@ -356,7 +411,11 @@ export function StoreCanvas({
             else onBook(o);
           }}
         >
-          <StoreBook book={book} display={o.display} />
+          <StoreBook
+            book={book}
+            display={o.display}
+            artIndex={artFor.get(o.id)}
+          />
         </button>
         {shown && pop && (
           <button
@@ -442,7 +501,11 @@ export function StoreCanvas({
               } as CSSProperties
             }
             onClick={() => onZoom(o.id)}
-            aria-label={o.text + "の段を近くで見る"}
+            aria-label={
+              (o.boardTitle ? o.boardTitle + "、" : "") +
+              o.text +
+              "の段を近くで見る"
+            }
           >
             <span className="walk-board-title">{title}</span>
             {o.boardTitle && RULE_DOODLES.has(o.doodle ?? "") && (
@@ -452,7 +515,9 @@ export function StoreCanvas({
               </span>
             )}
             {o.boardTitle && <span className="walk-board-body">{o.text}</span>}
-            <CornerArt name={o.doodle} />
+            {(!o.boardTitle || [...title].length <= 5) && (
+              <CornerArt name={o.doodle} />
+            )}
           </button>
         ) : gutter ? (
           <span
@@ -631,8 +696,18 @@ export function StoreCanvas({
       </button>
     );
   }
+  // The blurred foreground fills the floor of the current layout only; older
+  // saved stores use that area for furniture.
+  const mainShelf = scene.objects.find((o) => o.id === "main-shelf");
   const shelfScene =
-    woodshop && scene.objects.some((o) => o.id === "main-shelf");
+    woodshop && !!mainShelf && mainShelf.rect.y + mainShelf.rect.h <= 0.83;
+  const rightFloorFree = !scene.objects.some(
+    (o) =>
+      o.kind === "furniture" &&
+      o.id !== "main-shelf" &&
+      o.rect.x + o.rect.w > 0.56 &&
+      o.rect.y + o.rect.h > 0.83,
+  );
   return (
     <div
       className="walk-store-objects"
@@ -658,13 +733,15 @@ export function StoreCanvas({
               aria-hidden="true"
             />
           )}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="walk-fg walk-fg-right"
-            src={THEME + "fg-right-v1.webp"}
-            alt=""
-            aria-hidden="true"
-          />
+          {rightFloorFree && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              className="walk-fg walk-fg-right"
+              src={THEME + "fg-right-v1.webp"}
+              alt=""
+              aria-hidden="true"
+            />
+          )}
         </>
       )}
     </div>

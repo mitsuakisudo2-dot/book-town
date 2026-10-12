@@ -206,13 +206,19 @@ export function BookJacket({
   className = "",
   onClick,
   illustrated = false,
+  author = book.author,
+  artIndex,
 }: {
   book: Book;
   className?: string;
   onClick?: () => void;
   illustrated?: boolean;
+  /** Shown on the jacket; a shelf may pass a short form of the name. */
+  author?: string;
+  /** Atlas panel chosen by the screen, so neighbouring covers differ. */
+  artIndex?: number;
 }) {
-  const art = illustrated ? bookArt(book) : null;
+  const art = illustrated ? bookArt(book, artIndex) : null;
   className += illustrated ? " is-illustrated" : "";
   const style = {
     background: book.color,
@@ -237,7 +243,7 @@ export function BookJacket({
       )}
       <span className="jacket-series">BOOK TOWN EDITIONS</span>
       <span className="jacket-title">{book.title}</span>
-      <span className="jacket-author">{book.author}</span>
+      <span className="jacket-author">{author}</span>
       <span className="jacket-imprint">本の街 文庫</span>
     </>
   );

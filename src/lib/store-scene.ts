@@ -102,7 +102,7 @@ export function placementWidth(book: Book, display: BookDisplay, h: number) {
   return (
     ((h * 16) / 9) *
     (display === "face"
-      ? FACE_ASPECTS[book.pattern % FACE_ASPECTS.length]
+      ? FACE_ASPECTS[Math.abs(book.pattern) % FACE_ASPECTS.length]
       : Math.max(0.135, book.thickness / 210))
   );
 }

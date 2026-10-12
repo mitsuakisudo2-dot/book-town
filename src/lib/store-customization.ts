@@ -11,6 +11,7 @@ import {
   bookPop,
   furnitureBooks,
   objectById,
+  placementSize,
   placementWidth,
   SHELF_DOODLES,
   relayoutRow,
@@ -214,6 +215,12 @@ export function applyStoreTemplate(
             )
           ].id;
     p.order = i ?? p.order;
+    // Books keep the size rule of the furniture they move onto, so a scene
+    // saved before a size change still fits its new rows.
+    const dest = rows.find((r) => r.id === p.parentId),
+      book = books.find((b) => b.id === p.bookId);
+    if (dest && book)
+      p.preferredSize = placementSize(book, p.display!, dest.bookHeight);
     base.objects.push(p);
     const pop = bookPop(scene, p.id);
     if (pop) base.objects.push(structuredClone(pop));
@@ -248,7 +255,8 @@ export function setRowBoard(
     if (title.trim()) row.boardTitle = title;
     else delete row.boardTitle;
   }
-  if (patch.doodle !== undefined) {
+  if (patch.doodle === "") delete row.doodle;
+  else if (patch.doodle !== undefined) {
     if (!(SHELF_DOODLES as readonly string[]).includes(patch.doodle))
       throw new Error("Unknown doodle");
     row.doodle = patch.doodle;

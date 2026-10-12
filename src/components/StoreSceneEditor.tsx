@@ -227,13 +227,14 @@ export function StoreSceneEditor({
               <label>
                 黒板の絵
                 <select
-                  value={row.doodle ?? "travel"}
+                  value={row.doodle ?? ""}
                   onChange={(e) =>
                     edit((s) =>
                       setRowBoard(s, row.id, { doodle: e.target.value }),
                     )
                   }
                 >
+                  <option value="">なし</option>
                   <option value="travel">旅</option>
                   <option value="daily">日常</option>
                   <option value="forest">森</option>

@@ -88,18 +88,65 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: blur(var(--walk-blur)) brightness(calc(1 - var(--walk-darkness)));
+  filter: blur(var(--walk-blur)) brightness(calc(1.16 - var(--walk-darkness)))
+    saturate(1.08);
+}
+.walk-room:before {
+  /* A few bright out-of-focus lights at the window side and the left lanterns. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(
+      circle at 93% 14%,
+      rgba(255, 214, 150, 0.75) 0 1.3%,
+      rgba(255, 190, 110, 0.25) 2%,
+      transparent 2.8%
+    ),
+    radial-gradient(
+      circle at 85% 21%,
+      rgba(255, 200, 130, 0.5) 0 1.8%,
+      transparent 2.9%
+    ),
+    radial-gradient(
+      circle at 96% 30%,
+      rgba(255, 205, 140, 0.55) 0 1.5%,
+      transparent 2.6%
+    ),
+    radial-gradient(
+      circle at 88% 38%,
+      rgba(255, 190, 110, 0.4) 0 2.2%,
+      transparent 3.3%
+    ),
+    radial-gradient(
+      circle at 97% 47%,
+      rgba(255, 214, 150, 0.5) 0 1.2%,
+      transparent 2.2%
+    ),
+    radial-gradient(
+      circle at 4% 24%,
+      rgba(255, 200, 130, 0.45) 0 1.4%,
+      transparent 2.4%
+    ),
+    radial-gradient(
+      circle at 3% 42%,
+      rgba(255, 190, 110, 0.35) 0 1.8%,
+      transparent 2.8%
+    );
 }
 .walk-room:after {
   content: "";
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(10, 4, 1, 0.55) 0, rgba(10, 4, 1, 0) 14%),
+    linear-gradient(180deg, rgba(10, 4, 1, 0.5) 0, rgba(10, 4, 1, 0) 12%),
     radial-gradient(
       ellipse 120% 90% at 50% 45%,
-      transparent 62%,
-      rgba(8, 3, 1, 0.45) 100%
+      transparent 66%,
+      rgba(8, 3, 1, 0.3) 100%
     );
 }
 .walk-stage {
@@ -193,7 +240,7 @@
   position: absolute;
   left: calc(var(--walk-avatar) + 10px);
   top: 34px;
-  right: 0;
+  width: 46vw;
   margin: 0;
   font-family: var(--serif);
   font-size: clamp(7.5px, 2.05vw, 9px);
@@ -201,7 +248,9 @@
   letter-spacing: 0.08em;
   color: #efe8de;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
+  word-break: auto-phrase;
+  text-wrap: pretty;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -322,6 +371,8 @@
   overflow-x: auto;
   scrollbar-width: none;
   touch-action: pan-x;
+  -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
+  mask-image: linear-gradient(90deg, #000 92%, transparent);
 }
 .walk-chips::-webkit-scrollbar {
   display: none;
@@ -362,6 +413,9 @@
   box-shadow: 0 calc(var(--walk-u) * 0.4) calc(var(--walk-u) * 1.2)
     rgba(0, 0, 0, 0.35);
 }
+.walk-chips button:focus-visible {
+  outline-offset: -3px;
+}
 .walk-object {
   position: absolute;
   transform-origin: 50% 50%;
@@ -391,16 +445,17 @@
   height: 237.5%;
   z-index: 2;
   pointer-events: none;
+  filter: brightness(0.8) saturate(0.9);
 }
 .walk-sign-board {
   position: absolute;
-  inset: 0;
+  inset: 0 0 0 -5%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: calc(var(--walk-u) * 1.1);
-  padding: 0 17% 0 6%;
+  padding: 0 17% 0 10%;
   border-radius: calc(var(--walk-u) * 0.35);
   transform: perspective(calc(var(--walk-u) * 120)) rotateY(-16deg);
   background:
@@ -440,8 +495,8 @@
   font-family: var(--walk-brush);
   font-weight: 700;
   font-size: min(
-    calc(var(--walk-u) * 9),
-    calc(var(--walk-u) * 65.3 / var(--n, 8))
+    calc(var(--walk-u) * 8.5),
+    calc(var(--walk-u) * 52 / var(--n, 8))
   );
   line-height: 1;
   letter-spacing: -0.02em;
@@ -461,6 +516,10 @@
   font-size: calc(var(--walk-u) * 2.5);
   letter-spacing: 0.12em;
   color: #2a1206;
+  max-width: 66%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .walk-sign-art {
   position: absolute;
@@ -475,6 +534,11 @@
 .walk-furniture.is-shelf {
   background-color: #2a1206;
   background-image:
+    radial-gradient(
+      ellipse 70% 55% at 50% 35%,
+      transparent 45%,
+      rgba(25, 8, 1, 0.42) 100%
+    ),
     linear-gradient(180deg, rgba(255, 190, 110, 0.1), transparent 30%),
     linear-gradient(
       90deg,
@@ -487,9 +551,11 @@
   background-size:
     auto,
     auto,
+    auto,
     100% auto;
-  background-repeat: no-repeat, no-repeat, repeat-y;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat-y;
   background-position:
+    0 0,
     0 0,
     0 0,
     center top;
@@ -509,49 +575,25 @@
     linear-gradient(#c69365 0 12%, #863d15 30%, #5a2509 100%),
     url("/themes/woodshop/wood-v2.webp") center / cover;
   background-blend-mode: multiply;
-  box-shadow: 0 3px 4px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 calc(var(--walk-u) * 1.2) calc(var(--walk-u) * 3)
+    rgba(12, 4, 1, 0.85);
 }
-.walk-furniture.is-shelf:after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 30;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 70% 55% at 50% 35%,
-    transparent 45%,
-    rgba(25, 8, 1, 0.42) 100%
-  );
-  mix-blend-mode: multiply;
-  /* Leave the chalkboard column lit so the chalk stays bright. */
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    transparent 0,
-    transparent 20.5%,
-    #000 23%
-  );
-  mask-image: linear-gradient(
-    90deg,
-    transparent 0,
-    transparent 20.5%,
-    #000 23%
-  );
-}
+
 .walk-case-post {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 1.2%;
-  z-index: 24;
-  background: #3a1a08;
+  z-index: 1;
+  background: linear-gradient(90deg, #2a1206, #4a230c 50%, #2a1206);
 }
 .walk-case-post.is-left {
   left: 0;
-  box-shadow: inset -1px 0 rgba(255, 190, 120, 0.25);
+  box-shadow: none;
 }
 .walk-case-post.is-right {
   right: 0;
-  box-shadow: inset 1px 0 rgba(255, 190, 120, 0.25);
+  box-shadow: none;
 }
 .walk-furniture.is-shelf .walk-wood-edge {
   position: absolute;
@@ -568,18 +610,11 @@
 .walk-row {
   overflow: visible;
   border: 0;
-  background:
-    linear-gradient(
-      180deg,
-      rgba(12, 4, 1, 0.88) 0,
-      rgba(12, 4, 1, 0.45) 14%,
-      rgba(12, 4, 1, 0) 38%
-    ),
-    radial-gradient(
-      ellipse 55% 75% at 48% 100%,
-      rgba(255, 170, 90, 0.13),
-      transparent 70%
-    );
+  background: radial-gradient(
+    ellipse 55% 75% at 48% 100%,
+    rgba(255, 170, 90, 0.13),
+    transparent 70%
+  );
   transition: filter 0.25s ease;
 }
 .walk-row.is-dimmed {
@@ -593,7 +628,7 @@
   position: absolute;
   top: 100%;
   z-index: 7;
-  --board: #823c17;
+  --board: #e08a40;
   --grain-y: 30%;
   background-color: var(--board);
   background-image:
@@ -615,7 +650,7 @@
       transparent 86%,
       rgba(18, 6, 1, 0.7)
     ),
-    linear-gradient(180deg, transparent 55%, rgba(25, 8, 1, 0.5)),
+    linear-gradient(180deg, transparent 72%, rgba(25, 8, 1, 0.32)),
     url("/themes/woodshop/wood-v2.webp");
   background-size:
     auto,
@@ -632,12 +667,28 @@
   background-blend-mode: normal, normal, normal, normal, multiply;
   box-shadow: 0 var(--walk-u) calc(var(--walk-u) * 1.6) rgba(18, 6, 1, 0.85);
 }
+.walk-shelf-lip:before {
+  /* The board's shadow falls across the whole width of the case. */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: calc(var(--walk-u) * 4.5);
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(12, 4, 1, 0.85),
+    rgba(12, 4, 1, 0.4) 40%,
+    rgba(12, 4, 1, 0)
+  );
+}
 .walk-shelf-lip.is-board-1 {
-  --board: #703110;
+  --board: #c87634;
   --grain-y: 55%;
 }
 .walk-shelf-lip.is-board-2 {
-  --board: #6d3112;
+  --board: #b86c2f;
   --grain-y: 75%;
 }
 .walk-shelf-lip:after {
@@ -668,6 +719,7 @@
   text-align: left;
   color: #ece5dc;
   overflow: hidden;
+  min-height: calc(var(--walk-u) * 26);
   background-color: #211612;
   background-image:
     radial-gradient(
@@ -692,6 +744,9 @@
     calc(var(--walk-u) * 0.4) var(--walk-u) calc(var(--walk-u) * 1.8)
       rgba(0, 0, 0, 0.75);
 }
+.walk-row-board > * {
+  flex-shrink: 0;
+}
 .walk-row-board:before {
   content: "";
   position: absolute;
@@ -700,20 +755,20 @@
   background:
     radial-gradient(
       circle at 7% 4%,
-      #d8b37a 0,
-      #6b4a28 calc(var(--walk-u) * 0.4),
+      #9a7a58 0,
+      #3a2414 calc(var(--walk-u) * 0.35),
       transparent calc(var(--walk-u) * 0.45)
     ),
     radial-gradient(
       circle at 49% 3.5%,
-      #d8b37a 0,
-      #6b4a28 calc(var(--walk-u) * 0.4),
+      #9a7a58 0,
+      #3a2414 calc(var(--walk-u) * 0.35),
       transparent calc(var(--walk-u) * 0.45)
     ),
     radial-gradient(
       circle at 91% 4%,
-      #d8b37a 0,
-      #6b4a28 calc(var(--walk-u) * 0.4),
+      #9a7a58 0,
+      #3a2414 calc(var(--walk-u) * 0.35),
       transparent calc(var(--walk-u) * 0.45)
     );
 }
@@ -738,7 +793,7 @@
   );
   line-height: 1.15;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -768,10 +823,11 @@
   font-size: calc(var(--walk-u) * 1.95);
   line-height: 1.62;
   letter-spacing: 0.02em;
-  word-break: auto-phrase;
+  word-break: normal;
+  overflow-wrap: anywhere;
   text-wrap: balance;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -796,6 +852,7 @@
   right: 0.6%;
   bottom: 0;
   object-position: bottom;
+  filter: brightness(1.35) saturate(1.1);
 }
 .walk-row-decor {
   position: absolute;
@@ -851,11 +908,12 @@
 .walk-book {
   /* Text on spines and POP cards grows with the book, not the screen. */
   container-type: size;
+  --art-filter: sepia(0.22) saturate(1.12) brightness(0.97);
 }
 .walk-book.is-face {
   box-shadow:
-    calc(var(--walk-u) * 0.6) calc(var(--walk-u) * 0.3)
-      calc(var(--walk-u) * 1.2) rgba(10, 4, 1, 0.72),
+    calc(var(--walk-u) * 0.6) calc(var(--walk-u) * -0.3)
+      calc(var(--walk-u) * 0.9) rgba(10, 4, 1, 0.72),
     calc(var(--walk-u) * 0.15) 0 calc(var(--walk-u) * 0.3) rgba(10, 4, 1, 0.55);
 }
 .walk-book.is-spine {
@@ -867,7 +925,7 @@
   position: absolute;
   left: 4%;
   right: -2%;
-  bottom: calc(var(--walk-u) * -0.4);
+  bottom: 0;
   height: calc(var(--walk-u) * 0.9);
   z-index: -1;
   background: radial-gradient(
@@ -908,6 +966,9 @@
   outline-offset: 3px;
   z-index: auto;
 }
+.walk-book:has(> .walk-book-target:focus-visible) {
+  z-index: 10 !important;
+}
 .walk-book .book-jacket {
   width: 100%;
   height: 100%;
@@ -934,8 +995,8 @@
   padding: 0;
   font-family: var(--walk-mincho);
   font-weight: 600;
-  font-size: 14cqw;
-  line-height: 1.34;
+  font-size: 16cqw;
+  line-height: 1.32;
   letter-spacing: 0.06em;
   text-align: center;
   text-wrap: balance;
@@ -948,8 +1009,9 @@
   padding: 0;
   font-family: var(--walk-mincho);
   font-weight: 600;
-  font-size: 7cqw;
-  letter-spacing: 0.25em;
+  font-size: max(4.5px, 7.5cqw);
+  white-space: nowrap;
+  letter-spacing: 0.14em;
   opacity: 0.9;
   text-shadow: 0 1px 3px var(--art-shadow);
 }
@@ -959,9 +1021,9 @@
   bottom: 0;
   right: 0;
   left: auto;
-  width: 3.2%;
+  width: 2.2%;
   z-index: 2;
-  background: repeating-linear-gradient(180deg, #f2dcc0 0 1px, #dbb18b 1px 2px);
+  background: linear-gradient(90deg, #d9bc96, #f1dcbc 45%, #b8956e);
   box-shadow: inset -1px 0 rgba(0, 0, 0, 0.25);
 }
 .walk-book .book-jacket.is-illustrated:after {
@@ -1005,9 +1067,11 @@
       rgba(0, 0, 0, 0.18) 90.4% 91%,
       transparent 91%
     ),
-    url("/themes/woodshop/grain-paper-v1.webp") !important;
-  background-size: auto, auto, auto, calc(var(--walk-u) * 10) !important;
-  background-blend-mode: normal, normal, normal, soft-light !important;
+    url("/themes/woodshop/grain-paper-v1.webp"),
+    linear-gradient(#f2c9a2, #f2c9a2) !important;
+  background-size: auto, auto, auto, calc(var(--walk-u) * 10), auto !important;
+  background-blend-mode:
+    normal, normal, normal, soft-light, multiply !important;
 }
 .walk-spine > span {
   writing-mode: vertical-rl;
@@ -1015,7 +1079,7 @@
   white-space: nowrap;
   font-family: var(--walk-mincho);
   font-weight: 600;
-  font-size: min(56cqw, calc(62cqh / var(--n, 6)));
+  font-size: min(48cqw, calc(var(--walk-u) * 1.75), calc(62cqh / var(--n, 6)));
   letter-spacing: 0.02em;
   line-height: 1.1;
 }
@@ -1097,13 +1161,17 @@
   height: auto;
   padding: calc(var(--walk-u) * 1.5) calc(var(--walk-u) * 1.8) var(--walk-u)
     calc(var(--walk-u) * 2.1);
-  font-size: calc(var(--walk-u) * 1.8);
+  font-size: max(6px, calc(var(--walk-u) * 1.55));
   line-height: 1.6;
   letter-spacing: -0.04em;
 }
+.walk-book-pop.is-tier .walk-pop-excerpt {
+  word-break: auto-phrase;
+}
 .walk-book-pop.is-cover {
   left: -2%;
-  top: 70%;
+  top: auto;
+  bottom: 0;
   width: 104%;
   height: auto;
   padding: calc(var(--walk-u) * 1.2) calc(var(--walk-u) * 1.4)
@@ -1216,11 +1284,12 @@
 .walk-stamp {
   display: grid;
   place-items: center;
-  padding: 8%;
+  box-sizing: border-box;
+  padding: calc(var(--walk-u) * 0.55);
   color: #8a3b2a;
   opacity: 0.72;
   mix-blend-mode: multiply;
-  border: 1px solid currentColor;
+  border: 1.5px solid currentColor;
   border-radius: 50%;
 }
 .walk-stamp svg {
@@ -1239,12 +1308,28 @@
   top: 77.5%;
   width: 62%;
   height: 22.5%;
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0, #000 10%),
+    linear-gradient(0deg, transparent 0, #000 14%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0, #000 10%),
+    linear-gradient(0deg, transparent 0, #000 14%);
+  mask-composite: intersect;
 }
 .walk-fg-right {
   left: 56%;
   top: 83%;
   width: 44%;
   height: 17%;
+  -webkit-mask-image:
+    linear-gradient(270deg, transparent 0, #000 12%),
+    linear-gradient(0deg, transparent 0, #000 18%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(270deg, transparent 0, #000 12%),
+    linear-gradient(0deg, transparent 0, #000 18%);
+  mask-composite: intersect;
 }
 
 /* Shop controls: a rail beside the tiers (or a row on the floor in older stores). */
@@ -1307,14 +1392,25 @@
 .walk-actions.is-rail {
   flex-direction: column;
   justify-content: space-between;
+  translate: calc(var(--walk-u) * -1) 0;
 }
 .walk-actions.is-rail button {
   flex: none;
-  width: 44px;
+  position: relative;
+  width: 100%;
   height: calc(var(--walk-u) * 11.7);
   min-height: 0;
   gap: calc(var(--walk-u) * 1.2);
   color: #fcf8f7;
+}
+.walk-actions.is-rail button:after {
+  /* The tap area grows outward, never over the books. */
+  content: "";
+  position: absolute;
+  inset: 0 -12px 0 0;
+}
+.walk-actions.is-rail button:focus-visible {
+  outline-offset: -2px;
 }
 .walk-actions.is-rail button > span {
   width: auto;
@@ -1368,6 +1464,8 @@
   font-size: 24px;
   line-height: 1.8;
   color: #f1dfbd;
+  word-break: auto-phrase;
+  text-wrap: balance;
 }
 .walk-end p {
   font-size: 12px;
@@ -1571,6 +1669,7 @@
   }
   .walk-owner-bio {
     position: static;
+    width: auto;
     margin-top: 14px;
     font-size: 13px;
     line-height: 1.9;
@@ -1669,4 +1768,8 @@
     height: calc(74px + env(safe-area-inset-bottom));
     padding-bottom: calc(7px + env(safe-area-inset-bottom));
   }
+}
+.walk-furniture.is-table .walk-row-label {
+  top: auto;
+  bottom: 100%;
 }
