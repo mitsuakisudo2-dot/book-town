@@ -412,6 +412,7 @@ export function PostComposer({
             label={isReply ? "おすすめの本を探す" : "添える本を探す"}
             suggestions={suggestions}
             suggestionLabel="読んでいる本・読みたい本・登録した本"
+            autoFocus={picking}
           />
         )}
         <div className="composer-tools">
@@ -443,11 +444,17 @@ export function PostComposer({
             {isReply ? "返信する" : "投稿する"}
           </button>
         </div>
-        <p className="draft-status" role={saved ? undefined : "status"}>
-          {saved
-            ? "下書きはこのブラウザに保存。閉じても続きから書けます。"
-            : "下書きを保存できません。ページを再読み込みすると失われます。"}
-        </p>
+        {!saved ? (
+          <p className="draft-status" role="status">
+            下書きを保存できません。ページを再読み込みすると失われます。
+          </p>
+        ) : (
+          (body.trim() || bookId) && (
+            <p className="draft-status">
+              下書きはこのブラウザに保存しています。
+            </p>
+          )
+        )}
         {!isReply && spoiler && canSpoil && (
           <p className="composer-hint">
             タイムラインでは隠して表示し、「表示する」を押した人だけが読めます。作品ページでは「ネタバレあり」の扉の向こうに置きます。

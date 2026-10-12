@@ -36,7 +36,7 @@ import "./usability.css";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
 import { WalkView } from "./WalkView";
-import { profilePath, shopPath } from "../lib/paths";
+import { profilePath, shopPath, walkPath } from "../lib/paths";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { ReportButton, ReportDialog } from "./Report";
 import { BookFeelings } from "./ReadingRecords";
@@ -664,13 +664,15 @@ function BookView({
       <BackLink className="back-link" />
       <section className="book-page-hero">
         <BookJacket book={book} />
-        <div>
+        <div className="book-hero-head">
           <span className="eyebrow">ONE BOOK, MANY WORLDS</span>
           <span className="genre-tag">{book.genre}</span>
           <h1>{book.title}</h1>
           <p className="book-page-author">{book.author}</p>
           <BookPrice book={book} />
           <BookPurchase book={book} />
+        </div>
+        <div className="book-hero-body">
           <p className="book-summary">{book.summary}</p>
           <BookActions
             book={book}
@@ -720,11 +722,10 @@ function BookView({
               {item.pop || "この棚では、本そのものが語りかけます。"}
             </blockquote>
             <div className="stockist-bottom">
-              <span>
-                {item.display === "face"
-                  ? "表紙を向けて、大切な一冊に。"
-                  : "背表紙を並べて、隣の一冊と。"}
-              </span>
+              <Link href={walkPath(shop.id)} className="text-button">
+                <Icon name="store" size={15} />
+                店内に入る
+              </Link>
               <Link href={shopPath(shop.id, shelf.id)} className="text-button">
                 この棚を見に行く
                 <Icon name="arrow" size={16} />

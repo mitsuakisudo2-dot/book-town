@@ -180,3 +180,52 @@
     gap: 18px;
   }
 }
+
+/* The book page: a cover of a readable size beside its title; on a phone the
+   summary and the buttons take the full width under them. */
+.town-shell .book-page-hero {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 640px);
+  grid-template-areas:
+    "jacket head"
+    "jacket body";
+  column-gap: 43px;
+  row-gap: 0;
+  align-items: start;
+}
+.town-shell .book-page-hero > .book-jacket {
+  grid-area: jacket;
+  width: 220px;
+  align-self: center;
+}
+.town-shell .book-page-hero > .book-hero-head {
+  grid-area: head;
+  align-self: end;
+}
+.town-shell .book-page-hero > .book-hero-body {
+  grid-area: body;
+}
+@media (max-width: 640px) {
+  .town-shell .book-page-hero {
+    grid-template-columns: 104px minmax(0, 1fr);
+    grid-template-areas:
+      "jacket head"
+      "body body";
+    column-gap: 18px;
+    row-gap: 2px;
+  }
+  .town-shell .book-page-hero > .book-jacket {
+    width: 104px;
+    align-self: start;
+  }
+  .town-shell .book-page-hero > .book-hero-head {
+    align-self: center;
+  }
+}
+.town-shell .stockist-bottom .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 40px;
+  font-size: 12px;
+}

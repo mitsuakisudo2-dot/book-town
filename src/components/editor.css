@@ -1198,3 +1198,25 @@
     animation: none;
   }
 }
+
+/* A book already on the shelf carries a check on its corner, seen at a glance. */
+.editor-book-choice {
+  position: relative;
+}
+.editor-book-choice.is-added::before {
+  content: "✓";
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #2f5a42;
+  color: #fffdf6;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 1px 3px #0003;
+}

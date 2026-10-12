@@ -65,6 +65,8 @@ async function compose(text, { book, spoiler = false } = {}) {
   await dialog.locator("textarea").fill(text);
   if (book) {
     await dialog.getByRole("button", { name: "本を添える" }).click();
+    // Typing goes to the book search, not into the post.
+    await expect(dialog.getByRole("searchbox")).toBeFocused();
     await pickBook(dialog, book);
   }
   if (spoiler) await dialog.getByLabel("ネタバレあり").check();

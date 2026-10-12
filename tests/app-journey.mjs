@@ -624,6 +624,13 @@ try {
     async () => {
       await go("/walk/#mine");
       await expect(page.locator(".walk-sign")).toContainText("雨音書店");
+      // One's own shop is tended, not liked or kept for later.
+      await expect(
+        page.getByRole("link", { name: "自分の店を整える" }),
+      ).toHaveAttribute("href", "/my-shop/");
+      await expect(
+        page.getByRole("button", { name: "この店が好き" }),
+      ).toHaveCount(0);
       await expect(page.locator('[data-row="row-0"] .walk-book')).toHaveCount(
         5,
       );
