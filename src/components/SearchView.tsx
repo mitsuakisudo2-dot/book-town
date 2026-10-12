@@ -341,9 +341,9 @@ export function SearchView({ state, actions, notify }: Shared) {
           )}
           {tags.length > 0 && (
             <section aria-labelledby="search-tags-title">
-              <h2 id="search-tags-title">よく使われているタグ</h2>
+              <h2 id="search-tags-title">タグから探す</h2>
               <div className="search-tags">
-                {tags.map(({ tag, count }) => (
+                {tags.map(({ tag }) => (
                   <button
                     type="button"
                     key={tag}
@@ -351,7 +351,6 @@ export function SearchView({ state, actions, notify }: Shared) {
                     onClick={() => setQuery("#" + tag)}
                   >
                     #{tag}
-                    <small>{count}</small>
                   </button>
                 ))}
               </div>

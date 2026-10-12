@@ -567,6 +567,15 @@ try {
     },
   );
   await mobile.close();
+  await check("a link to a shop that is gone says it is closed", async () => {
+    await page.goto(`${baseURL}/shop/?id=gone-shop`);
+    await expect(
+      page.getByRole("heading", { name: "この書店は、いまは閉まっています。" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /ほかの書店をめぐる/ }),
+    ).toHaveAttribute("href", "/walk/");
+  });
   await check(
     "No hydration failures, browser exceptions or console errors",
     async () => {
