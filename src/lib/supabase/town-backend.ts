@@ -9,69 +9,22 @@ import {
   type RemoteRows,
   type Write,
 } from "../town-remote";
-import {
-  counterId,
-  type RecordKind,
-  type TownBackend,
-  type TownBackendListener,
-} from "../town-backend";
-import type { PersistenceStatus, TownState } from "../types";
+import { counterId, type RecordKind, type TownBackend } from "../town-backend";
+import type { TownState } from "../types";
 import type { Database, Json } from "./database.generated";
+import {
+  all,
+  backgroundSync,
+  chunks,
+  settled,
+  shouldRetry,
+  TownSyncError,
+  type SyncOptions,
+} from "./sync";
 
 type Client = SupabaseClient<Database>;
 
-/** What a Supabase request hands back, as far as saving needs to know. */
-interface Outcome<T> {
-  data: T | null;
-  error: { message: string; code?: string } | null;
-  status: number;
-  count?: number | null;
-}
-
-/** A request that failed: worth retrying (offline, server busy) or refused for good. */
-export class TownSyncError extends Error {
-  constructor(
-    message: string,
-    readonly retry: boolean,
-  ) {
-    super(message);
-  }
-}
-
-/**
- * Network trouble, a busy server and an expired login get another try. Anything
- * else is the database saying no (a rule, a limit, a taken ID) and would only
- * fail again.
- */
-export function shouldRetry(status: number, code = ""): boolean {
-  return (
-    status === 0 ||
-    status === 401 ||
-    status === 408 ||
-    status === 429 ||
-    status >= 500 ||
-    /^PGRST(00\d|30\d)$/.test(code)
-  );
-}
-
-async function settled<T>(
-  request: PromiseLike<Outcome<T>>,
-): Promise<Outcome<T>> {
-  const outcome = await request;
-  if (outcome.error)
-    throw new TownSyncError(
-      outcome.error.message,
-      shouldRetry(outcome.status, outcome.error.code),
-    );
-  return outcome;
-}
-const all = async <T>(request: PromiseLike<Outcome<T[]>>): Promise<T[]> =>
-  (await settled(request)).data ?? [];
-
-const chunks = <T>(list: T[], size: number): T[][] =>
-  Array.from({ length: Math.ceil(list.length / size) }, (_, index) =>
-    list.slice(index * size, index * size + size),
-  );
+export { TownSyncError, shouldRetry };
 
 // Supabase returns at most 1000 rows a request. That covers everyone while
 // Booktown is invite-only; paging comes with more readers.
@@ -105,7 +58,7 @@ export async function loadTown(
       client
         .from("shops")
         .select(
-          "id, owner_id, name, description, tagline, theme, is_open, public_shelves",
+          "id, owner_id, name, description, tagline, theme, is_open, public_shelves, public_scene_books",
         )
         .limit(LIMIT),
     ),
@@ -143,19 +96,38 @@ export async function loadTown(
 
   const own = shops.find((shop) => shop.owner_id === userId);
   let ownShelves: Json = [];
+  let ownSceneBooks: Json = [];
   let ownShopFollowers = 0;
+  let shopMessages: RemoteRows["shopMessages"] = [];
   if (own) {
-    const [privateRows, followers] = await Promise.all([
-      all(client.from("shop_private").select("shelves").eq("shop_id", own.id)),
+    const [privateRows, followers, messages] = await Promise.all([
+      all(
+        client
+          .from("shop_private")
+          .select("shelves, scene_books")
+          .eq("shop_id", own.id),
+      ),
       settled(
         client
           .from("shop_follows")
           .select("shop_id", { count: "exact", head: true })
           .eq("shop_id", own.id),
       ),
+      all(
+        client
+          .from("shop_reactions")
+          .select("user_id, message, updated_at")
+          .eq("shop_id", own.id)
+          .neq("user_id", userId)
+          .neq("message", "")
+          .order("updated_at", { ascending: false })
+          .limit(LIMIT),
+      ),
     ]);
     ownShelves = privateRows[0]?.shelves ?? [];
+    ownSceneBooks = privateRows[0]?.scene_books ?? [];
     ownShopFollowers = followers.count ?? 0;
+    shopMessages = messages;
   }
 
   const rows: Omit<RemoteRows, "books"> = {
@@ -163,7 +135,9 @@ export async function loadTown(
     nine,
     shops,
     ownShelves,
+    ownSceneBooks,
     ownShopFollowers,
+    shopMessages,
     follows,
     marks,
     posts,
@@ -315,11 +289,7 @@ function writeSeen(userId: string, seen: string[]) {
   }
 }
 
-export interface AccountBackendOptions {
-  /** Waits before writing, so a burst of changes goes out together. */
-  delay?: number;
-  /** Waits between tries while the network is down: 2s, 5s, 15s, then 30s. */
-  retryDelays?: number[];
+export interface AccountBackendOptions extends SyncOptions {
   storage?: boolean;
 }
 
@@ -334,85 +304,11 @@ export function accountTownBackend(
   userId: string,
   options: AccountBackendOptions = {},
 ): TownBackend {
-  const delay = options.delay ?? 400;
-  const retryDelays = options.retryDelays ?? [2000, 5000, 15000, 30000];
   const storage = options.storage ?? typeof window !== "undefined";
   let ids: RemoteIds | null = null;
-  let synced: TownState | null = null;
-  let latest: TownState | null = null;
-  let listener: TownBackendListener | null = null;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let writing = false;
-  let failures = 0;
-  let closed = false;
-
-  const report = (status: PersistenceStatus) => {
-    if (!closed) listener?.status(status);
-  };
-  const pending = () => latest !== null && latest !== synced;
-
-  const schedule = (wait: number) => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = null;
-      void flush();
-    }, wait);
-  };
-
-  async function reload(status: PersistenceStatus) {
-    const fresh = await load();
-    if (closed) return;
-    latest = fresh.state;
-    listener?.replace(fresh.state, status);
-  }
-
-  async function flush() {
-    if (closed || writing || !ids || !synced || !latest) return;
-    if (!pending()) return report("saved");
-    writing = true;
-    const base = synced;
-    const target = latest;
-    try {
-      for (const write of planWrites(base, target, ids))
-        await applyWrite(client, write, ids);
-      synced = target;
-      failures = 0;
-      if (storage && target.seenNotifications !== base.seenNotifications)
-        writeSeen(userId, target.seenNotifications);
-      report(pending() ? "saving" : "saved");
-    } catch (error) {
-      if (error instanceof TownSyncError && error.retry) {
-        report("unavailable");
-        schedule(retryDelays[Math.min(failures, retryDelays.length - 1)]);
-        failures += 1;
-        return;
-      }
-      // The database refused: show the town as it really is.
-      failures = 0;
-      try {
-        await reload("recovered");
-      } catch {
-        report("unavailable");
-        schedule(retryDelays[0]);
-      }
-      return;
-    } finally {
-      writing = false;
-    }
-    if (pending()) schedule(delay);
-  }
-
-  const online = () => {
-    if (pending()) schedule(0);
-  };
-  const leaving = (event: BeforeUnloadEvent) => {
-    // Ask before closing the page while changes are still on their way.
-    if (pending()) event.preventDefault();
-  };
-
-  async function load() {
-    for (let attempt = 0; ; attempt++) {
-      try {
+  const sync = backgroundSync<TownState>(
+    {
+      async read() {
         const loaded = await loadTown(
           client,
           userId,
@@ -420,26 +316,18 @@ export function accountTownBackend(
           () => ids?.shopId ?? crypto.randomUUID(),
         );
         ids = loaded.ids;
-        synced = loaded.state;
-        return { state: loaded.state, status: "saved" as const };
-      } catch (error) {
-        if (closed || !(error instanceof TownSyncError && error.retry))
-          throw error;
-        report("unavailable");
-        await new Promise((resume) =>
-          setTimeout(
-            resume,
-            retryDelays[Math.min(attempt, retryDelays.length - 1)],
-          ),
-        );
-      }
-    }
-  }
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("online", online);
-    window.addEventListener("beforeunload", leaving);
-  }
+        return loaded.state;
+      },
+      async write(base, target) {
+        if (!ids) throw new TownSyncError("The town is not loaded yet", true);
+        for (const write of planWrites(base, target, ids))
+          await applyWrite(client, write, ids);
+        if (storage && target.seenNotifications !== base.seenNotifications)
+          writeSeen(userId, target.seenNotifications);
+      },
+    },
+    options,
+  );
 
   return {
     kind: "account",
@@ -449,28 +337,10 @@ export function accountTownBackend(
         ? counterId(kind, existing, isbn)
         : crypto.randomUUID();
     },
-    load,
-    save(state) {
-      if (!synced) return "loading";
-      latest = state;
-      if (!pending()) return "saved";
-      if (!writing) schedule(delay);
-      return "saving";
-    },
-    watch(next) {
-      listener = next;
-      return () => {
-        if (listener === next) listener = null;
-      };
-    },
-    close() {
-      closed = true;
-      if (timer) clearTimeout(timer);
-      if (typeof window !== "undefined") {
-        window.removeEventListener("online", online);
-        window.removeEventListener("beforeunload", leaving);
-      }
-    },
+    load: async () => ({ state: await sync.load(), status: "saved" as const }),
+    save: sync.save,
+    watch: sync.watch,
+    close: sync.close,
   };
 }
 

@@ -536,14 +536,16 @@ export function StoreSceneEditor({
         </div>
         <div className="scene-editor-footer">
           <p className="scene-hint">
-            このブラウザに保存します。これまでの本棚の内容は残ります。
+            {saved.kind === "account"
+              ? "あなたのアカウントに保存します。公開した棚だけが、書店めぐりで誰でも眺められます。これまでの本棚の内容は残ります。"
+              : "このブラウザに保存します。これまでの本棚の内容は残ります。"}
           </p>
           {error && (
             <p className="scene-error" role="alert">
               {error}
             </p>
           )}
-          {saved.status === "recovered" && (
+          {saved.kind === "local" && saved.status === "recovered" && (
             <p className="scene-error" role="alert">
               保存データを読み込めないため上書きできません。元のデータは保持しています。
             </p>
@@ -559,7 +561,10 @@ export function StoreSceneEditor({
             <button
               type="button"
               className="editor-button primary"
-              disabled={!saved.ready || saved.status === "recovered"}
+              disabled={
+                !saved.ready ||
+                (saved.kind === "local" && saved.status === "recovered")
+              }
               onClick={() => {
                 const result = saved.saveScene(draft, state);
                 if (!result.ok) {

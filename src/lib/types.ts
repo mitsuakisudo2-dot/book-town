@@ -86,6 +86,7 @@ export const POP_MAX_LENGTH = 1000;
 export const READER_NAME_MAX_LENGTH = 80;
 export const BIO_MAX_LENGTH = 2000;
 export const NINE_NOTE_MAX_LENGTH = 500;
+export const SHOP_MESSAGE_MAX_LENGTH = 2000;
 
 /** One kind of post. A top-level post with a book is also a review on that book's page. */
 export interface Post {
@@ -173,6 +174,15 @@ export interface TownState {
   library: string[];
   settings: Settings;
   seenNotifications: string[];
+  /** Words other readers left at the viewer's shop. Only an account receives them. */
+  shopMessages: ShopMessage[];
+}
+
+export interface ShopMessage {
+  readerId: string;
+  text: string;
+  /** When the reader last wrote it. */
+  at: string;
 }
 
 export interface TownActions {

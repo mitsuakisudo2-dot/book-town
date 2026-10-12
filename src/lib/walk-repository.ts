@@ -1,4 +1,4 @@
-import { emptyWalk, type WalkState } from "./walk-state";
+import { emptyWalk, type WalkSession, type WalkState } from "./walk-state";
 import { sceneFromJson, sceneToJson, type StoreScene } from "./store-scene";
 import { validShop } from "./repository";
 import type { SceneBackup } from "./store-customization";
@@ -13,6 +13,20 @@ const record = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const date = (v: unknown) =>
   typeof v === "string" && Number.isFinite(Date.parse(v));
+function validSession(session: unknown): session is WalkSession {
+  return (
+    record(session) &&
+    Array.isArray(session.ids) &&
+    session.ids.every((id) => typeof id === "string") &&
+    new Set(session.ids).size === session.ids.length &&
+    Number.isInteger(session.index) &&
+    (session.index as number) >= 0 &&
+    (session.index as number) <= session.ids.length &&
+    typeof session.ended === "boolean" &&
+    session.ended === ((session.index as number) === session.ids.length) &&
+    date(session.startedAt)
+  );
+}
 export function decodeWalk(raw: string | null): {
   data: WalkEnvelope;
   status: "ready" | "recovered";
@@ -45,22 +59,7 @@ export function decodeWalk(raw: string | null): {
       (s.lastStoreId !== null && typeof s.lastStoreId !== "string")
     )
       return fallback;
-    if (s.session !== null) {
-      const session = s.session;
-      if (
-        !record(session) ||
-        !Array.isArray(session.ids) ||
-        !session.ids.every((id) => typeof id === "string") ||
-        new Set(session.ids).size !== session.ids.length ||
-        !Number.isInteger(session.index) ||
-        (session.index as number) < 0 ||
-        (session.index as number) > session.ids.length ||
-        typeof session.ended !== "boolean" ||
-        session.ended !== ((session.index as number) === session.ids.length) ||
-        !date(session.startedAt)
-      )
-        return fallback;
-    }
+    if (s.session !== null && !validSession(s.session)) return fallback;
     if (
       !Object.values(s.reactions).every(
         (r) =>
@@ -160,5 +159,53 @@ export function saveWalk(
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * With an account, the walk's records live in the database; only where this
+ * device stopped walking stays here, per account.
+ */
+export const POSITION_KEY = "book-town-walk-position-v1:";
+export type WalkPosition = Pick<WalkState, "lastStoreId" | "session">;
+export const noPosition = (): WalkPosition => ({
+  lastStoreId: null,
+  session: null,
+});
+export function decodePosition(raw: string | null): WalkPosition {
+  try {
+    const value: unknown = JSON.parse(raw ?? "null");
+    if (
+      !record(value) ||
+      (value.lastStoreId !== null && typeof value.lastStoreId !== "string") ||
+      (value.session !== null && !validSession(value.session))
+    )
+      return noPosition();
+    return {
+      lastStoreId: value.lastStoreId as string | null,
+      session: value.session as WalkSession | null,
+    };
+  } catch {
+    return noPosition();
+  }
+}
+export function loadPosition(userId: string): WalkPosition {
+  try {
+    return decodePosition(window.localStorage.getItem(POSITION_KEY + userId));
+  } catch {
+    return noPosition();
+  }
+}
+export function savePosition(userId: string, position: WalkPosition) {
+  try {
+    window.localStorage.setItem(
+      POSITION_KEY + userId,
+      JSON.stringify({
+        lastStoreId: position.lastStoreId,
+        session: position.session,
+      }),
+    );
+  } catch {
+    // Where the walk stopped is a convenience; losing it loses nothing else.
   }
 }

@@ -502,6 +502,88 @@ async function main() {
     },
   );
 
+  await check(
+    "the database copies the public part of the store scene",
+    async () => {
+      const scene = {
+        schemaVersion: 1,
+        storeId: "mine",
+        objects: [
+          { id: "shelf", kind: "furniture", parentId: null },
+          { id: "row-open", kind: "row", parentId: "shelf", isPublic: true },
+          { id: "row-closed", kind: "row", parentId: "shelf" },
+          { id: "b1", kind: "book", bookId: "book-1", parentId: "row-open" },
+          { id: "pop:b1", kind: "bookPop", parentId: "b1", text: "旅に" },
+          {
+            id: "b2",
+            kind: "book",
+            bookId: "book-2",
+            parentId: "row-open",
+            isPublic: false,
+          },
+          { id: "pop:b2", kind: "bookPop", parentId: "b2", text: "秘密" },
+          { id: "b3", kind: "book", bookId: "book-3", parentId: "row-closed" },
+          { id: "b4", kind: "book", bookId: "book-4", parentId: null },
+          { id: "note", kind: "label", parentId: null, placed: false },
+          { id: "sign", kind: "sign", parentId: null, text: "夜の本屋" },
+        ],
+      };
+      const publicScene = async () =>
+        (
+          await as<{
+            public_scene: { storeId: string; objects: { id: string }[] } | null;
+          }>(CHI, "select public_scene from shops where id = $1", [akiShop.id])
+        )[0].public_scene;
+      await as(AKI, "update shop_private set scene = $2 where shop_id = $1", [
+        akiShop.id,
+        JSON.stringify(scene),
+      ]);
+      const copy = await publicScene();
+      assert.equal(copy?.storeId, akiShop.id);
+      // Each side lists the books it shows, so the town can load just those.
+      assert.deepEqual(
+        (
+          await as<{ public_scene_books: string[] }>(
+            CHI,
+            "select public_scene_books from shops where id = $1",
+            [akiShop.id],
+          )
+        )[0].public_scene_books,
+        ["book-1"],
+      );
+      assert.deepEqual(
+        (
+          await as<{ scene_books: string[] }>(
+            AKI,
+            "select scene_books from shop_private where shop_id = $1",
+            [akiShop.id],
+          )
+        )[0].scene_books,
+        ["book-1", "book-2", "book-3", "book-4"],
+      );
+      assert.deepEqual(
+        copy?.objects.map((o) => o.id),
+        ["shelf", "row-open", "b1", "pop:b1", "sign"],
+      );
+      // The whole scene stays with the owner.
+      assert.equal(
+        (
+          await as<{ scene: { objects: unknown[] } }>(
+            AKI,
+            "select scene from shop_private where shop_id = $1",
+            [akiShop.id],
+          )
+        )[0].scene.objects.length,
+        scene.objects.length,
+      );
+      assert.equal((await as(CHI, "select scene from shop_private")).length, 0);
+      await as(AKI, "update shop_private set scene = null where shop_id = $1", [
+        akiShop.id,
+      ]);
+      assert.equal(await publicScene(), null);
+    },
+  );
+
   await check("books typed in by hand belong to their writer", async () => {
     await refused(
       BEN,
@@ -765,6 +847,29 @@ async function main() {
     );
   });
 
+  await check("walk visits are private", async () => {
+    await as(
+      BEN,
+      "insert into shop_visits (user_id, shop_id, visited_at) values ($1, $2, '2026-10-12T10:00:00Z')",
+      [BEN, akiShop.id],
+    );
+    assert.equal((await as(BEN, "select * from shop_visits")).length, 1);
+    assert.equal((await as(AKI, "select * from shop_visits")).length, 0);
+    await refused(
+      CHI,
+      "insert into shop_visits (user_id, shop_id) values ($1, $2)",
+      [BEN, akiShop.id],
+      /row-level security/,
+    );
+    // A closed shop cannot be visited by anyone but its owner.
+    await refused(
+      CHI,
+      "insert into shop_visits (user_id, shop_id) values ($1, $2)",
+      [CHI, benShop.id],
+      /row-level security/,
+    );
+  });
+
   await check("book lists are private", async () => {
     await as(
       CHI,
@@ -843,9 +948,31 @@ async function main() {
         [CHI, AKI],
       );
       await as(
+        CHI,
+        "insert into shop_reactions (user_id, shop_id, message) values ($1, $2, 'また来ます')",
+        [CHI, akiShop.id],
+      );
+      const words = async () =>
+        (
+          await as(AKI, "select * from shop_reactions where user_id = $1", [
+            CHI,
+          ])
+        ).length;
+      assert.equal(await words(), 1);
+      await as(
         AKI,
         "insert into blocks (blocker_id, blocked_id) values ($1, $2)",
         [AKI, CHI],
+      );
+      // The owner no longer reads what a blocked reader left; the reader still can.
+      assert.equal(await words(), 0);
+      assert.equal(
+        (
+          await as(CHI, "select * from shop_reactions where user_id = $1", [
+            CHI,
+          ])
+        ).length,
+        1,
       );
       const follows = await db.query<{ n: number }>(
         `select (select count(*) from shop_follows where follower_id = '${CHI}')
@@ -917,6 +1044,7 @@ async function main() {
           .length,
         1,
       );
+      assert.equal(await words(), 1);
     },
   );
 
@@ -962,6 +1090,7 @@ async function main() {
       "post_reactions",
       "shop_follows",
       "saved_shops",
+      "shop_visits",
     ]) {
       const left = await db.query<{ n: number }>(
         `select count(*)::int as n from ${table} where ${

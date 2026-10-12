@@ -553,6 +553,7 @@ export type Database = {
       shop_private: {
         Row: {
           scene: Json | null;
+          scene_books: NonNullable<Json>;
           shelves: NonNullable<Json>;
           shop_id: string;
           updated_at: string;
@@ -560,12 +561,14 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           scene?: Json | null;
+          scene_books?: never;
           shelves?: NonNullable<Json>;
           shop_id: string;
           updated_at?: string;
         };
         Update: {
           scene?: Json | null;
+          scene_books?: never;
           shelves?: NonNullable<Json>;
           shop_id?: string;
           updated_at?: string;
@@ -620,6 +623,40 @@ export type Database = {
           },
         ];
       };
+      shop_visits: {
+        Row: {
+          shop_id: string;
+          user_id: string;
+          visited_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          shop_id: string;
+          user_id: string;
+          visited_at?: string;
+        };
+        Update: {
+          shop_id?: string;
+          user_id?: string;
+          visited_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "shop_visits_shop_id_fkey";
+            columns: ["shop_id"];
+            isOneToOne: false;
+            referencedRelation: "shops";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "shop_visits_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       shops: {
         Row: {
           created_at: string;
@@ -629,6 +666,7 @@ export type Database = {
           name: string;
           owner_id: string;
           public_scene: Json | null;
+          public_scene_books: NonNullable<Json>;
           public_shelves: NonNullable<Json>;
           tagline: string;
           theme: string;
@@ -643,6 +681,7 @@ export type Database = {
           name: string;
           owner_id: string;
           public_scene?: Json | null;
+          public_scene_books?: never;
           public_shelves?: NonNullable<Json>;
           tagline?: string;
           theme?: string;
@@ -656,6 +695,7 @@ export type Database = {
           name?: string;
           owner_id?: string;
           public_scene?: Json | null;
+          public_scene_books?: never;
           public_shelves?: NonNullable<Json>;
           tagline?: string;
           theme?: string;
@@ -712,6 +752,7 @@ export type Database = {
     Functions: {
       is_blocked_with: { Args: { other: string }; Returns: boolean };
       isbn13_valid: { Args: { isbn: string }; Returns: boolean };
+      public_scene_of: { Args: { scene: Json; shop: string }; Returns: Json };
       replace_profile_nine: {
         Args: { book_ids: string[]; notes: string[] };
         Returns: undefined;

@@ -264,6 +264,57 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+.editor-messages {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px;
+  margin: 20px 0;
+  scroll-margin-top: 80px;
+}
+.editor-messages h2 {
+  font-family: var(--serif);
+  font-size: 19px;
+  margin: 0 0 7px;
+}
+.editor-messages > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 0 0 12px;
+}
+.editor-messages ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.editor-messages li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.editor-messages li a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+.editor-messages time {
+  color: var(--muted);
+  font-size: 12px;
+}
+.editor-messages li p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 650px) {
   .scene-editor {
     padding: 14px;

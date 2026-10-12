@@ -18,7 +18,9 @@ import {
 import { shelfUsed, usePersistenceStatus, useTownBackend } from "../lib/store";
 import { shelfSaveMessage } from "../lib/persistence";
 import { bookPath } from "../lib/books";
-import { BookJacket, Icon, Modal } from "./ui";
+import { profilePath } from "../lib/paths";
+import { findReader } from "../lib/social";
+import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
 import { StoreSceneEditor } from "./StoreSceneEditor";
 import { useWalkStore } from "../lib/walk-store";
@@ -708,6 +710,40 @@ function ShelfEditingPanel({
   );
 }
 
+/** Words readers left at the shop on the walk. Only the owner and the writer read them. */
+function ShopMessages({ state }: { state: TownState }) {
+  if (!state.shopMessages.length) return null;
+  return (
+    <section
+      className="editor-messages"
+      id="messages"
+      aria-labelledby="shop-messages-heading"
+    >
+      <h2 id="shop-messages-heading">届いたひとこと</h2>
+      <p>
+        書店めぐりで立ち寄った人が残した言葉です。読めるのは、あなたと書いた人だけです。
+      </p>
+      <ul>
+        {state.shopMessages.map((message) => {
+          const reader = findReader(state, message.readerId);
+          return (
+            <li key={message.readerId}>
+              <Link href={profilePath(message.readerId)}>
+                {reader && <ReaderAvatar reader={reader} size={32} />}
+                <b>{reader?.name ?? "読書家"}</b>
+              </Link>
+              <time dateTime={message.at}>
+                {new Date(message.at).toLocaleDateString("ja-JP")}
+              </time>
+              <p>{message.text}</p>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   const walk = useWalkStore();
   const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
@@ -768,6 +804,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           )}
         </div>
       </section>
+      <ShopMessages state={state} />
       {sceneEditorOpen && (
         <StoreSceneEditor
           state={state}

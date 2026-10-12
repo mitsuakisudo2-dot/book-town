@@ -51,6 +51,7 @@ export type ShopRow = Pick<
   | "theme"
   | "is_open"
   | "public_shelves"
+  | "public_scene_books"
 >;
 
 export interface RemoteRows {
@@ -61,6 +62,13 @@ export interface RemoteRows {
   shops: ShopRow[];
   /** Every shelf of the person's own shop, private ones included. */
   ownShelves: unknown;
+  /** The books in the person's own store scene, private ones included. */
+  ownSceneBooks: unknown;
+  /** Words others left at the person's shop (the database hides blocked readers'). */
+  shopMessages: Pick<
+    Tables<"shop_reactions">,
+    "user_id" | "message" | "updated_at"
+  >[];
   /** Only owners can count their followers; nobody else sees the number. */
   ownShopFollowers: number;
   follows: Pick<Tables<"shop_follows">, "shop_id">[];
@@ -415,6 +423,14 @@ export function townFromRows(
         : "pen",
     },
     seenNotifications: rows.seenNotifications.slice(-500),
+    shopMessages: rows.shopMessages
+      .filter((row) => row.message.trim() && known.has(row.user_id))
+      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
+      .map((row) => ({
+        readerId: row.user_id,
+        text: row.message,
+        at: row.updated_at,
+      })),
   };
 }
 
@@ -429,8 +445,16 @@ export function referencedBookIds(rows: Omit<RemoteRows, "books">): string[] {
           if (record(item) && typeof item.bookId === "string")
             ids.add(item.bookId);
   };
+  const listed = (value: unknown) => {
+    if (Array.isArray(value))
+      for (const id of value) if (typeof id === "string") ids.add(id);
+  };
   shelves(rows.ownShelves);
-  rows.shops.forEach((shop) => shelves(shop.public_shelves));
+  listed(rows.ownSceneBooks);
+  rows.shops.forEach((shop) => {
+    shelves(shop.public_shelves);
+    listed(shop.public_scene_books);
+  });
   rows.nine.forEach((row) => ids.add(row.book_id));
   rows.marks.forEach((row) => ids.add(row.book_id));
   rows.posts.forEach((row) => row.book_id && ids.add(row.book_id));
@@ -708,6 +732,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     library: [],
     settings: { composeIcon: "pen" },
     seenNotifications: [],
+    shopMessages: [],
   };
 }
 

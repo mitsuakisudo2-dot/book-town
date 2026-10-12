@@ -18,7 +18,8 @@ const quote = (body: string) =>
 /**
  * Notices are derived from what is actually in this browser's town: replies and reactions
  * to the viewer's posts, posts by followed readers, reviews of books on the wishlist,
- * and readers reading the same book together. Nothing is invented to fill the list.
+ * words left at the viewer's shop, and readers reading the same book together.
+ * Nothing is invented to fill the list.
  */
 export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
   const notices: Notice[] = [];
@@ -80,6 +81,14 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         href: bookPath(post.bookId),
       });
   }
+  for (const message of state.shopMessages)
+    notices.push({
+      id: `message:${message.readerId}:${message.at}`,
+      readerId: message.readerId,
+      createdAt: message.at,
+      text: `${name(message.readerId)}さんが、あなたの本屋にひとことを残しました ${quote(message.text)}`,
+      href: "/my-shop/#messages",
+    });
   const active = activeSession(state);
   if (active?.mode === "together" && active.bookId)
     for (const entry of readersNow(state, openedAt))
