@@ -232,7 +232,8 @@ try {
         .fill("ちょうど第二章。");
       await page.getByRole("button", { name: "つぶやく" }).click();
       const memo = page
-        .locator(".reading-memos article.post-card")
+        .getByRole("region", { name: "今回書いたこと" })
+        .locator("article.post-card")
         .filter({ hasText: "ちょうど第二章。" });
       await expect(memo).toBeVisible();
       await memo.getByRole("button", { name: /いいね/ }).click();
@@ -268,6 +269,13 @@ try {
       await expect(
         page.getByRole("heading", { name: "読書を開始" }),
       ).toBeVisible();
+      // Closing the book leaves this sitting's time, the book and a line written.
+      const closed = page.getByRole("status", { name: "今日の読書" });
+      await expect(closed).toContainText("今日の読書");
+      await expect(closed).toContainText("『ソラリス』");
+      await expect(closed).toContainText("ちょうど第二章。");
+      await closed.getByRole("button", { name: "閉じる" }).click();
+      await expect(closed).toHaveCount(0);
       await expect(page.locator(".picker-chosen")).toContainText("ソラリス");
       await expect(
         page.getByText("いま読んでいる本を選んでいます。"),
@@ -284,9 +292,16 @@ try {
     async () => {
       await page.getByRole("button", { name: /一人で読む/ }).click();
       await confirmIn("読書をはじめますか？", "はじめる");
+      // Reading alone, the town's readers and words wait behind a fold.
+      const others = page.getByRole("heading", {
+        name: /同じ本を、いま2人が読んでいます/,
+      });
+      await expect(others).toBeHidden();
       await expect(
-        page.getByRole("heading", { name: /同じ本を、いま2人が読んでいます/ }),
-      ).toBeVisible();
+        page.getByRole("heading", { name: "みんなの読書中のつぶやき" }),
+      ).toBeHidden();
+      await page.getByText("ひと休みに、街の読書をのぞく").click();
+      await expect(others).toBeVisible();
       await page
         .getByLabel("読書メモ（自分だけ）")
         .fill("ここは自分だけのメモ。");
@@ -383,9 +398,9 @@ try {
       .getByRole("textbox", { name: "読書メモ（自分だけ）" })
       .fill("本を決めずに、ぱらぱらと。");
     await page.getByRole("button", { name: "メモする" }).click();
-    await expect(page.locator(".reading-memos")).toContainText(
-      "本を決めずに、ぱらぱらと。",
-    );
+    await expect(
+      page.getByRole("region", { name: "今回書いたこと" }),
+    ).toContainText("本を決めずに、ぱらぱらと。");
     await page.getByRole("button", { name: "読書を終える" }).click();
     await confirmIn("読書を終えますか？", "本を閉じる");
     await expect(page.locator(".reading-log")).toContainText("本を選ばずに");
