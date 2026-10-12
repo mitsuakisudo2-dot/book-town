@@ -15,6 +15,8 @@ const browser = await chromium.launch({
 const passed = [],
   errors = [];
 let page;
+// Set once a shop's shelf was wider than its card somewhere in the run.
+let scrolledShopShelf = false;
 async function check(name, run) {
   await run();
   passed.push(name);
@@ -174,30 +176,28 @@ try {
         await expect(
           dialog().locator(".bh-discovery-books .bh-choice-book"),
         ).not.toHaveCount(0);
-        const rail = dialog().locator(".bh-discovery-shops [data-book-rail]");
-        expect(
-          await rail.evaluate((el) => el.scrollWidth > el.clientWidth),
-        ).toBe(true);
         const beforeURL = page.url();
-        await dialog()
-          .getByRole("button", {
-            name: "この本を並べるほかの書店の右側を見る",
-            exact: true,
-          })
-          .click();
-        await expect
-          .poll(() => rail.evaluate((el) => el.scrollLeft))
-          .toBeGreaterThan(0);
-        await expectTitle("ソラリス");
-        await rail.focus();
-        await page.keyboard.press("ArrowRight");
-        await expectTitle("ソラリス");
         const rain = dialog()
           .locator(".bh-shop-card")
           .filter({
             has: page.getByRole("heading", { name: "雨と翻訳", exact: true }),
           })
           .first();
+        // Each other shop is a card holding its own shelf. A shelf wider than
+        // its card scrolls inside the card and never changes the book in hand.
+        const shelf = rain.locator("[data-book-rail] .shelf-scroll");
+        if (await shelf.evaluate((el) => el.scrollWidth > el.clientWidth)) {
+          await shelf.hover();
+          await page.mouse.wheel(120, 0);
+          await expect
+            .poll(() => shelf.evaluate((el) => el.scrollLeft))
+            .toBeGreaterThan(0);
+          scrolledShopShelf = true;
+        }
+        await expectTitle("ソラリス");
+        await rain.locator(".shelf-book-button").first().focus();
+        await page.keyboard.press("ArrowRight");
+        await expectTitle("ソラリス");
         // The card's link goes to the shop; its shelf still opens the POP in place.
         await expect(
           rain.getByRole("link", { name: "この書店へ", exact: true }),
@@ -377,6 +377,8 @@ try {
     );
     await context.close();
   }
+  // The narrowest screen must have exercised scrolling a shop's shelf.
+  expect(scrolledShopShelf).toBe(true);
   expect(errors).toEqual([]);
   console.log(`${passed.length} feedback browser checks passed.`);
   await writeFile(

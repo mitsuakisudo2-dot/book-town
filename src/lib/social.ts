@@ -17,6 +17,18 @@ export const timelinePosts = (state: TownState): Post[] =>
     .filter((post) => post.parentId === null && isPublic(post))
     .sort(newestFirst);
 
+/** Following currently means following a shop; its owner's public posts come along. */
+export function followedTimelinePosts(state: TownState): Post[] {
+  const owners = new Set(
+    state.shops
+      .filter((shop) => state.following.includes(shop.id))
+      .map((shop) => shop.ownerId),
+  );
+  return timelinePosts(state).filter(
+    (post) => post.authorId === ME_ID || owners.has(post.authorId),
+  );
+}
+
 /** Reviews are top-level posts with this book; spoilers are kept apart, behind the door. */
 export function bookReviews(state: TownState, bookId: string) {
   const reviews = state.posts

@@ -13,17 +13,42 @@ import {
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookDiscovery } from "./BookDiscovery";
+import { bookPath } from "../lib/books";
+import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./book-in-hand.css";
+import type { ReadEntry } from "../lib/store-scene-adapter";
+import { StoreStamp } from "./StoreCanvas";
+
+export interface SceneReading {
+  entries: ReadEntry[];
+  allPops: ReadEntry[];
+  initialId: string;
+  reactions: Record<string, string[]>;
+  toggleReaction: (key: string, reaction: string) => void;
+}
+const entryKey = (entry: ReadEntry) =>
+  entry.legacy
+    ? popReactionKey(entry.shopId, entry.legacy.shelfId, entry.legacy.itemId)
+    : JSON.stringify(["scene", entry.shopId, entry.id]);
+const legacyEntries = (shop: Shop, shelf: Shelf): ReadEntry[] =>
+  shelf.items.map((item) => ({
+    id: item.id,
+    bookId: item.bookId,
+    pop: item.pop,
+    shopId: shop.id,
+    label: shelf.name,
+    legacy: { shelfId: shelf.id, itemId: item.id },
+  }));
 
 type BookInHandProps = {
-  shop: Shop;
-  shelf: Shelf;
-  itemId: string;
   state: TownState;
   actions: TownActions;
   onClose: () => void;
   notify: (message: string) => void;
-};
+} & (
+  | { shop: Shop; shelf: Shelf; itemId: string; reading?: never }
+  | { shop?: never; shelf?: never; itemId?: never; reading: SceneReading }
+);
 
 type TouchStart = {
   id: number;
@@ -41,18 +66,27 @@ export function BookInHand({
   actions,
   onClose,
   notify,
+  reading,
 }: BookInHandProps) {
+  const [sceneMode, setSceneMode] = useState(Boolean(reading));
   const [context, setContext] = useState({
-    shopId: sourceShop.id,
-    shelfId: sourceShelf.id,
-    itemId,
+    shopId: sourceShop?.id ?? reading?.entries[0]?.shopId ?? "",
+    shelfId: sourceShelf?.id ?? "",
+    itemId: itemId ?? reading?.initialId ?? "",
   });
-  const shop =
+  // Keep pagination scoped to the currently opened shelf item.
+  // Reset this when navigating, including when returning to a previously opened book.
+  const [popPage, setPopPage] = useState<{ key: string; index: number } | null>(
+    null,
+  );
+  const catalog = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
+  const legacyShop =
     [...state.shops, ...(state.ownShop ? [state.ownShop] : [])].find(
       (entry) => entry.id === context.shopId,
     ) ?? sourceShop;
   const shelf =
-    shop.shelves.find((entry) => entry.id === context.shelfId) ?? sourceShelf;
+    legacyShop?.shelves.find((entry) => entry.id === context.shelfId) ??
+    sourceShelf;
   const selectedId = context.itemId;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -64,21 +98,69 @@ export function BookInHand({
   const shelfLabelId = useId();
 
   // The shelf is the source of ordering; neither recommendations nor book IDs sort it.
-  const availableItems = shelf.items.filter((item) =>
-    state.books.some((book) => book.id === item.bookId),
-  );
+  const availableItems = (
+    sceneMode && reading
+      ? reading.entries
+      : legacyShop && shelf
+        ? legacyEntries(legacyShop, shelf)
+        : []
+  ).filter((item) => state.books.some((book) => book.id === item.bookId));
   const index = Math.max(
     0,
     availableItems.findIndex((item) => item.id === selectedId),
   );
   const item = availableItems[index];
+  const shop = catalog.find((s) => s.id === item?.shopId) ?? legacyShop;
   const book = state.books.find((entry) => entry.id === item?.bookId);
-  const owner =
-    shop.ownerId === state.me.id
+  const reactionKey = item ? entryKey(item) : "";
+  // The book remains open while this list flips through words written
+  // about that same edition by other public shelves.
+  const popCandidates = item
+    ? [
+        item,
+        ...(sceneMode && reading
+          ? reading.allPops
+          : catalog.flatMap((s) =>
+              s.shelves
+                .filter((row) => row.isPublic)
+                .flatMap((row) => legacyEntries(s, row)),
+            )
+        ).filter(
+          (other) =>
+            other.bookId === item.bookId &&
+            other.pop.trim() &&
+            entryKey(other) !== reactionKey,
+        ),
+      ]
+    : [];
+  const popIndex =
+    popPage?.key === reactionKey
+      ? Math.min(popPage.index, popCandidates.length - 1)
+      : 0;
+  const activePop = popCandidates[popIndex];
+  const activeShop = catalog.find((s) => s.id === activePop?.shopId);
+  const popOwner =
+    activeShop?.ownerId === state.me.id
       ? state.me
-      : state.readers.find((reader) => reader.id === shop.ownerId);
-  const reactionKey = item ? popReactionKey(shop.id, shelf.id, item.id) : "";
-  const reactions = state.popReactions[reactionKey] ?? [];
+      : state.readers.find((reader) => reader.id === activeShop?.ownerId);
+  const activeReactionKey = activePop ? entryKey(activePop) : "";
+  const popReactions = activePop?.legacy
+    ? (state.popReactions[activeReactionKey] ?? [])
+    : (reading?.reactions[activeReactionKey] ?? []);
+  function movePop(direction: -1 | 1) {
+    setPopPage({
+      key: reactionKey,
+      index: Math.max(
+        0,
+        Math.min(popIndex + direction, popCandidates.length - 1),
+      ),
+    });
+  }
+  const popSwipe = useHorizontalSwipe({
+    onSwipe: movePop,
+    enabled: popCandidates.length > 1,
+    contain: true,
+  });
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -125,7 +207,11 @@ export function BookInHand({
   function move(direction: -1 | 1) {
     const next = availableItems[index + direction];
     if (!next) return;
-    setContext({ shopId: shop.id, shelfId: shelf.id, itemId: next.id });
+    setPopPage(null);
+    // The keyed book body is replaced; keep keyboard focus inside the dialog.
+    if (contentRef.current?.contains(document.activeElement))
+      closeButtonRef.current?.focus({ preventScroll: true });
+    setContext({ ...context, itemId: next.id });
     contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
   }
 
@@ -139,7 +225,7 @@ export function BookInHand({
     if (
       event.touches.length !== 1 ||
       (event.target as HTMLElement).closest(
-        "button,a,input,textarea,select,summary,[data-book-rail]",
+        "button,a,input,textarea,select,summary,[data-book-rail],.bh-pop",
       )
     ) {
       touchRef.current = null;
@@ -192,7 +278,8 @@ export function BookInHand({
     const content = contentRef.current;
     if (!content) return;
     const wheel = (event: WheelEvent) => {
-      if ((event.target as HTMLElement).closest("[data-book-rail]")) return;
+      if ((event.target as HTMLElement).closest("[data-book-rail],.bh-pop"))
+        return;
       const horizontal =
         event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX;
       if (
@@ -217,21 +304,24 @@ export function BookInHand({
         gesture.total = 0;
         gesture.moved = now;
         if (next) {
-          setContext({ shopId: shop.id, shelfId: shelf.id, itemId: next.id });
+          setPopPage(null);
+          if (content.contains(document.activeElement))
+            closeButtonRef.current?.focus({ preventScroll: true });
+          setContext({ ...context, itemId: next.id });
           content.scrollTo({ top: 0, behavior: "instant" });
         }
       }
     };
     content.addEventListener("wheel", wheel, { passive: false });
     return () => content.removeEventListener("wheel", wheel);
-  }, [shop.id, shelf.id, availableItems, index]);
+  }, [context, availableItems, index]);
 
-  if (!book || !item) return null;
+  if (!book || !item || !shop || !activeShop) return null;
 
   return (
     <dialog
       ref={dialogRef}
-      className="bh-dialog"
+      className={"bh-dialog" + (sceneMode ? " is-store-scene" : "")}
       aria-labelledby={titleId}
       aria-describedby={shelfLabelId}
       onCancel={(event) => {
@@ -281,7 +371,7 @@ export function BookInHand({
       <div className="bh-topbar">
         <span id={shelfLabelId} className="bh-shelf-caption">
           <Icon name="book" size={17} />
-          <span>{shelf.name}</span>
+          <span>{item.label}</span>
         </span>
         <button
           type="button"
@@ -308,15 +398,19 @@ export function BookInHand({
           <div className="bh-book-intro">
             <Link
               className="bh-cover"
-              href={`/books/${book.id}/`}
+              href={bookPath(book.id)}
               onNavigate={leaveForPage}
               aria-label={`${book.title}の作品ページへ`}
             >
-              <BookJacket book={book} />
+              <BookJacket book={book} illustrated={sceneMode} />
             </Link>
             <div className="bh-book-heading">
               <span className="bh-genre">{book.genre}</span>
-              <h2 id={titleId}>{book.title}</h2>
+              <h2 id={titleId}>
+                <Link href={bookPath(book.id)} onNavigate={leaveForPage}>
+                  {book.title}
+                </Link>
+              </h2>
               <p className="bh-author">{book.author}</p>
               <BookPrice book={book} />
               <BookPurchase book={book} />
@@ -328,18 +422,74 @@ export function BookInHand({
             <p>{book.summary}</p>
           </section>
 
-          <section className="bh-pop owner-pop" aria-label="この棚の店主のPOP">
+          <section
+            className={`bh-pop owner-pop${popCandidates.length > 1 ? " has-pages" : ""}`}
+            aria-label="この本に寄せられたPOP"
+            {...popSwipe}
+          >
             <div className="bh-pop-label">
               <span>この棚に並べた人の言葉</span>
-              {shop.demo && <small>デモ</small>}
+              {activeShop.demo && <small>デモ</small>}
             </div>
-            {item.pop ? (
-              <p className="bh-pop-text">{item.pop}</p>
-            ) : (
-              <p className="bh-pop-empty">
-                この本のPOPは、まだ書かれていません。
-              </p>
-            )}
+            <div
+              className={`bh-pop-pager${popCandidates.length > 1 ? " has-pages" : ""}`}
+              role={popCandidates.length > 1 ? "group" : undefined}
+              aria-label={
+                popCandidates.length > 1
+                  ? "この本へのPOPを切り替える"
+                  : undefined
+              }
+            >
+              {popCandidates.length > 1 && (
+                <button
+                  type="button"
+                  className="bh-pop-page-button"
+                  aria-label="前のPOP"
+                  disabled={popIndex === 0}
+                  onClick={() => movePop(-1)}
+                >
+                  <Icon name="back" size={17} />
+                </button>
+              )}
+              <div
+                className="bh-pop-message"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {activePop.pop.trim() ? (
+                  <p className="bh-pop-text">{activePop.pop}</p>
+                ) : (
+                  <p className="bh-pop-empty">
+                    この本のPOPは、まだ書かれていません。
+                  </p>
+                )}
+                {activePop.stamp && (
+                  <span className="bh-pop-stamp">
+                    <StoreStamp name={activePop.stamp} />
+                  </span>
+                )}
+              </div>
+              {popCandidates.length > 1 && (
+                <button
+                  type="button"
+                  className="bh-pop-page-button"
+                  aria-label="次のPOP"
+                  disabled={popIndex === popCandidates.length - 1}
+                  onClick={() => movePop(1)}
+                >
+                  <Icon name="arrow" size={17} />
+                </button>
+              )}
+              {popCandidates.length > 1 && (
+                <span
+                  className="bh-pop-page-count"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {popIndex + 1} / {popCandidates.length}
+                </span>
+              )}
+            </div>
             <div
               className="bh-pop-reactions"
               role="group"
@@ -349,14 +499,16 @@ export function BookInHand({
                 <button
                   key={reaction}
                   type="button"
-                  aria-pressed={reactions.includes(reaction)}
+                  aria-pressed={popReactions.includes(reaction)}
                   onClick={() =>
-                    actions.togglePopReaction(
-                      shop.id,
-                      shelf.id,
-                      item.id,
-                      reaction,
-                    )
+                    activePop.legacy
+                      ? actions.togglePopReaction(
+                          activePop.shopId,
+                          activePop.legacy.shelfId,
+                          activePop.legacy.itemId,
+                          reaction,
+                        )
+                      : reading?.toggleReaction(activeReactionKey, reaction)
                   }
                 >
                   <Icon
@@ -378,26 +530,30 @@ export function BookInHand({
               ))}
             </div>
             <div className="bh-pop-signature">
-              {owner && (
+              {popOwner && (
                 <Link
-                  href={`/profiles/${owner.id}/`}
+                  href={`/profiles/${popOwner.id}/`}
                   className="bh-owner-link"
                   onNavigate={leaveForPage}
                 >
-                  <ReaderAvatar reader={owner} size={31} />
+                  <ReaderAvatar reader={popOwner} size={31} />
                   <span>
-                    {owner.name}
+                    {popOwner.name}
                     <small>店主のプロフィールへ</small>
                   </span>
                   <Icon name="chevron" size={15} />
                 </Link>
               )}
               <Link
-                href={`/shops/${shop.id}/#shelf-${shelf.id}`}
+                href={
+                  activePop.legacy
+                    ? `/shops/${activePop.shopId}/#shelf-${activePop.legacy.shelfId}`
+                    : `/walk/#${encodeURIComponent(activePop.shopId)}`
+                }
                 className="bh-shop-link"
                 onNavigate={leaveForPage}
               >
-                {shop.name}
+                {activeShop.name}
               </Link>
             </div>
           </section>
@@ -413,6 +569,8 @@ export function BookInHand({
             bookId={book.id}
             state={state}
             onSelect={(targetShop, targetShelf, targetItem) => {
+              setSceneMode(false);
+              setPopPage(null);
               setContext({
                 shopId: targetShop.id,
                 shelfId: targetShelf.id,
@@ -425,7 +583,7 @@ export function BookInHand({
           />
           <Link
             className="bh-work-page"
-            href={`/books/${book.id}/`}
+            href={bookPath(book.id)}
             onNavigate={leaveForPage}
           >
             作品のページを開く <Icon name="arrow" size={16} />

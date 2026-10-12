@@ -8,6 +8,7 @@ import {
 import { createTownStore } from "../src/lib/store";
 import {
   bookReviews,
+  followedTimelinePosts,
   isSpoilerFor,
   likeCount,
   repliesOf,
@@ -23,8 +24,13 @@ import {
   readingTotals,
 } from "../src/lib/reading";
 import { notificationsFor, unreadCount } from "../src/lib/notifications";
-import { normalizeIsbn } from "../src/lib/books";
+import { normalizeIsbn, bookPath } from "../src/lib/books";
 import { extractTags, popularTags, postsWithTag } from "../src/lib/tags";
+import {
+  createPostDraftStore,
+  EMPTY_POST_DRAFT,
+  POST_DRAFT_KEY,
+} from "../src/lib/post-draft";
 import { popReactionKey, shelfUsed, type TownState } from "../src/lib/types";
 
 let passed = 0;
@@ -894,5 +900,141 @@ check("a book taken off can be put back with its POP at its old place", () => {
   assert.equal(shelf().items[1].pop, "灰色の男たちに気をつけて");
   assert.equal(shelf().items[1].display, "face");
 });
+
+check(
+  "following feed includes followed shop owners and self, but no private notes or replies",
+  () => {
+    const fresh = createTownStore(createMemoryRepository());
+    fresh.initialize();
+    const state = fresh.getSnapshot();
+    const owner = state.shops[0].ownerId;
+    const sample = { ...state.posts[0], parentId: null, readingMode: null };
+    const posts = followedTimelinePosts({
+      ...state,
+      following: [state.shops[0].id],
+      posts: [
+        {
+          ...sample,
+          id: "followed-public",
+          authorId: owner,
+          createdAt: "2026-10-10T10:00:00Z",
+        },
+        {
+          ...sample,
+          id: "my-public",
+          authorId: "me",
+          createdAt: "2026-10-10T11:00:00Z",
+        },
+        { ...sample, id: "other-reader", authorId: "not-followed" },
+        { ...sample, id: "private", authorId: owner, readingMode: "solo" },
+        {
+          ...sample,
+          id: "reply",
+          authorId: owner,
+          parentId: "followed-public",
+        },
+      ],
+    });
+    assert.deepEqual(
+      posts.map((post) => post.id),
+      ["my-public", "followed-public"],
+    );
+  },
+);
+
+check(
+  "drafts survive reopening, keep review/reply contexts apart and clear only the submitted draft",
+  () => {
+    const values = new Map<string, string>([
+      ["book-town-v1", "existing town data"],
+    ]);
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+      removeItem: (key: string) => {
+        values.delete(key);
+      },
+    };
+    const drafts = createPostDraftStore(() => storage);
+    drafts.update("new-post", {
+      body: "書きかけ #読書",
+      bookId: "momo",
+      spoiler: true,
+    });
+    drafts.update("review:solaris", { body: "レビューの下書き" });
+    drafts.update("reply:sample", { body: "返信の下書き" });
+    const reopened = createPostDraftStore(() => storage);
+    reopened.initialize();
+    assert.deepEqual(reopened.getSnapshot().drafts["new-post"], {
+      body: "書きかけ #読書",
+      bookId: "momo",
+      spoiler: true,
+    });
+    reopened.update("new-post", EMPTY_POST_DRAFT);
+    assert.equal(reopened.getSnapshot().drafts["new-post"], undefined);
+    assert.equal(
+      reopened.getSnapshot().drafts["review:solaris"].body,
+      "レビューの下書き",
+    );
+    assert.equal(
+      reopened.getSnapshot().drafts["reply:sample"].body,
+      "返信の下書き",
+    );
+    assert.equal(values.get("book-town-v1"), "existing town data");
+  },
+);
+
+check(
+  "broken or unavailable draft storage never breaks composing, and saving failures retain the draft in memory",
+  () => {
+    const malformed = createPostDraftStore(() => ({
+      getItem: () => "{",
+      setItem: () => {},
+      removeItem: () => {},
+    }));
+    malformed.initialize();
+    assert.deepEqual(malformed.getSnapshot().drafts, {});
+    const blocked = createPostDraftStore(() => {
+      throw new Error("storage disabled");
+    });
+    blocked.update("new-post", { body: "まだ失いたくない言葉" });
+    assert.equal(blocked.getSnapshot().saved, false);
+    assert.equal(
+      blocked.getSnapshot().drafts["new-post"].body,
+      "まだ失いたくない言葉",
+    );
+    const invalid = createPostDraftStore(() => ({
+      getItem: (key: string) =>
+        key === POST_DRAFT_KEY
+          ? JSON.stringify({
+              version: 1,
+              drafts: {
+                "new-post": { body: 99, bookId: null, spoiler: false },
+                "review:momo": { body: "有効", bookId: null, spoiler: false },
+              },
+            })
+          : null,
+      setItem: () => {},
+      removeItem: () => {},
+    }));
+    invalid.initialize();
+    assert.equal(invalid.getSnapshot().drafts["new-post"], undefined);
+    assert.equal(invalid.getSnapshot().drafts["review:momo"].body, "有効");
+  },
+);
+
+check(
+  "registered book links use an exported route, including ISBN books; existing demo URLs stay stable",
+  () => {
+    assert.equal(bookPath("my-book-1"), "/books/registered/?id=my-book-1");
+    assert.equal(
+      bookPath("isbn-9784101092058"),
+      "/books/registered/?id=isbn-9784101092058",
+    );
+    assert.equal(bookPath("solaris"), "/books/solaris/");
+  },
+);
 
 console.log(`${passed} domain checks passed.`);

@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import type { Book, Reader } from "../lib/types";
+import Image from "next/image";
+import { bookArt } from "../lib/book-art";
+import "./illustrated-jackets.css";
 const shapes: Record<string, ReactNode> = {
   book: (
     <>
@@ -155,6 +158,24 @@ const shapes: Record<string, ReactNode> = {
     </>
   ),
   bookmark: <path d="M6 3h12v18l-6-4-6 4z" />,
+  mail: (
+    <>
+      <rect x="3" y="5.5" width="18" height="13" rx="2" />
+      <path d="m4 7 8 6 8-6" />
+    </>
+  ),
+  follow: (
+    <>
+      <circle cx="10" cy="8" r="4" />
+      <path d="M3 21v-1a7 7 0 0 1 11-5.7M19 14v6m-3-3h6" />
+    </>
+  ),
+  share: (
+    <>
+      <path d="M14 4h6v6M20 4l-9 9" />
+      <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </>
+  ),
   more: (
     <>
       <circle cx="5" cy="12" r="1" />
@@ -184,27 +205,45 @@ export function BookJacket({
   book,
   className = "",
   onClick,
+  illustrated = false,
+  author = book.author,
+  artIndex,
 }: {
   book: Book;
   className?: string;
   onClick?: () => void;
+  illustrated?: boolean;
+  /** Shown on the jacket; a shelf may pass a short form of the name. */
+  author?: string;
+  /** Atlas panel chosen by the screen, so neighbouring covers differ. */
+  artIndex?: number;
 }) {
+  const art = illustrated ? bookArt(book, artIndex) : null;
+  className += illustrated ? " is-illustrated" : "";
   const style = {
     background: book.color,
-    color: book.ink,
+    color: art?.ink ?? book.ink,
     "--jacket-ink": book.ink,
+    "--art-x": art?.x,
+    "--art-y": art?.y,
+    "--art-shade": art?.light ? "#f6f0dc50" : "#101e3580",
+    "--art-shadow": art?.light ? "#f5ecce" : "#10252d",
   } as CSSProperties;
   const content = (
     <>
       <span className="jacket-edge" />
-      <span className={`jacket-art pattern-${book.pattern % 6}`}>
-        <i />
-        <i />
-        <i />
-      </span>
+      {illustrated ? (
+        <span className="jacket-illustration" />
+      ) : (
+        <span className={`jacket-art pattern-${book.pattern % 6}`}>
+          <i />
+          <i />
+          <i />
+        </span>
+      )}
       <span className="jacket-series">BOOK TOWN EDITIONS</span>
       <span className="jacket-title">{book.title}</span>
-      <span className="jacket-author">{book.author}</span>
+      <span className="jacket-author">{author}</span>
       <span className="jacket-imprint">本の街 文庫</span>
     </>
   );
@@ -215,6 +254,20 @@ export function BookJacket({
       onClick={onClick}
       aria-label={book.title + "の詳細"}
     >
+      {book.coverUrl ? (
+        <Image
+          className="jacket-image"
+          src={book.coverUrl}
+          alt={book.title}
+          loading="lazy"
+          fill
+          sizes="160px"
+          unoptimized
+          onError={(event) => {
+            event.currentTarget.hidden = true;
+          }}
+        />
+      ) : null}
       {content}
     </button>
   ) : (
@@ -224,6 +277,20 @@ export function BookJacket({
       role="img"
       aria-label={book.title + "のオリジナル仮表紙"}
     >
+      {book.coverUrl ? (
+        <Image
+          className="jacket-image"
+          src={book.coverUrl}
+          alt={book.title}
+          loading="lazy"
+          fill
+          sizes="160px"
+          unoptimized
+          onError={(event) => {
+            event.currentTarget.hidden = true;
+          }}
+        />
+      ) : null}
       {content}
     </div>
   );

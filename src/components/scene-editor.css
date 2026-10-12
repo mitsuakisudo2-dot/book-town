@@ -1,0 +1,300 @@
+.scene-editor {
+  padding: 20px;
+  --walk-blur: 0px;
+}
+.modal.wide:has(> .scene-editor) {
+  width: min(940px, calc(100vw - 32px));
+}
+.scene-editor-intro {
+  font-size: 13px;
+  line-height: 1.9;
+  margin-bottom: 20px;
+  color: var(--muted);
+}
+.scene-editor-columns {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.8fr) minmax(0, 1.2fr);
+  gap: 24px;
+  align-items: start;
+}
+.scene-preview {
+  position: sticky;
+  top: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #2c1d12;
+  color: #ead9b9;
+}
+.scene-preview .walk-artboard {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  background:
+    linear-gradient(#1c11072a, #1a0e0466),
+    url("/themes/woodshop/room.webp") center/cover;
+  animation: none;
+}
+.scene-preview > p {
+  font-size: 11px;
+  line-height: 1.7;
+  text-align: center;
+  padding: 12px 5px;
+  margin: 0;
+}
+.scene-controls {
+  min-width: 0;
+}
+.scene-section {
+  border: 0;
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+  margin: 0 0 14px;
+  min-width: 0;
+}
+.scene-section legend {
+  font-family: var(--serif);
+  font-size: 16px;
+  padding-right: 10px;
+}
+.scene-section label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.scene-section input:not([type="checkbox"]),
+.scene-section textarea,
+.scene-section select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  padding: 10px;
+}
+.scene-section textarea {
+  resize: vertical;
+  line-height: 1.8;
+}
+.scene-section label.scene-check {
+  flex-direction: row;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+}
+.scene-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--green);
+}
+.scene-template-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.scene-template-options button {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  gap: 5px;
+  min-height: 44px;
+}
+.scene-template-options button[aria-pressed="true"] {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green);
+}
+.scene-template-options b {
+  font-size: 11px;
+  font-weight: 500;
+}
+.scene-template-options small {
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.scene-template-swatch {
+  display: flex;
+  gap: 4px;
+  align-items: end;
+  width: 100%;
+  height: 40px;
+  border-bottom: 5px solid var(--template-wood);
+  background: var(--template-wood);
+  padding: 4px 7px 0;
+}
+.scene-template-swatch i {
+  height: 24px;
+  width: 9px;
+  background: #e7d7bd;
+  box-shadow: inset 1px 0 #9b897960;
+}
+.scene-template-swatch i:nth-child(2) {
+  width: 17px;
+  height: 30px;
+  background: #8c9b91;
+}
+.scene-template-swatch i:nth-child(3) {
+  background: #adb1c5;
+  height: 27px;
+}
+.scene-placement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.scene-placement-list button,
+.scene-search-results button {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.scene-placement-list button[aria-pressed="true"] {
+  background: #c3bd9b30;
+  border-color: var(--green);
+}
+.scene-placement-list small {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--muted);
+}
+.scene-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 225px;
+  overflow: auto;
+}
+.scene-search-results small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 3px;
+}
+.scene-hint {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+.scene-order-buttons {
+  display: flex;
+  gap: 10px;
+}
+.scene-order-buttons button,
+.scene-take-off {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 12px;
+}
+.scene-order-buttons button:disabled,
+.scene-take-off:disabled {
+  opacity: 0.4;
+}
+.scene-stamp-preview {
+  display: block;
+  width: 36px;
+  height: 36px;
+  color: #80572e;
+}
+.scene-stamp-preview svg {
+  width: 100%;
+  height: 100%;
+}
+.scene-editor-footer {
+  position: sticky;
+  bottom: -20px;
+  background: var(--paper);
+  padding: 15px 0 8px;
+  border-top: 1px solid var(--line);
+  z-index: 12;
+}
+.scene-editor-footer > div {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.scene-error {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #a34534;
+  margin-bottom: 10px;
+}
+.editor-immersive-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px;
+  margin: 20px 0;
+  background: linear-gradient(120deg, #e5d4b730, #d1c7ac18);
+}
+.editor-immersive-entry h2 {
+  font-family: var(--serif);
+  font-size: 19px;
+  margin: 0 0 7px;
+}
+.editor-immersive-entry p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 0;
+}
+.editor-immersive-entry > div:last-child {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+@media (max-width: 650px) {
+  .scene-editor {
+    padding: 14px;
+  }
+  .scene-editor-columns {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .scene-preview {
+    position: relative;
+    max-width: 260px;
+    justify-self: center;
+    width: 100%;
+  }
+  .scene-editor-footer {
+    bottom: -14px;
+  }
+  .scene-template-options small {
+    display: none;
+  }
+  .editor-immersive-entry {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 18px;
+  }
+  .scene-editor-footer .editor-button {
+    padding: 10px 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scene-editor * {
+    scroll-behavior: auto !important;
+  }
+}

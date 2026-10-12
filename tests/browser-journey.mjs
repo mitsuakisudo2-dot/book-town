@@ -137,7 +137,8 @@ try {
     "Book -> several different POPs -> exact shelf -> reader profile",
     async () => {
       await page.getByRole("link", { name: "軌道書房に入る" }).click();
-      await expect(page.locator(".store-shelf-section")).toHaveCount(2);
+      // Demo shops have three public shelves, one per tier of the walk.
+      await expect(page.locator(".store-shelf-section")).toHaveCount(3);
       await page
         .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
         .click();
@@ -169,7 +170,8 @@ try {
         page.getByRole("heading", { name: "すみれ", exact: true }),
       ).toBeVisible();
       await expect(page.locator(".profile-nine-grid > div")).toHaveCount(9);
-      await expect(page.locator(".profile-shelf-link")).toHaveCount(2);
+      // One link per public shelf; demo shops have three.
+      await expect(page.locator(".profile-shelf-link")).toHaveCount(3);
       await page.locator(".profile-shelf-link").first().click();
       await expect(page).toHaveURL(/#shelf-rain-cities$/);
       expect((await stored(page)).wishlist).toContain("solaris");

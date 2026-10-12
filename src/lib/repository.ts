@@ -95,7 +95,10 @@ function validReader(value: unknown, bookIds: Set<string>): value is Reader {
   );
 }
 
-function validShop(value: unknown, bookIds: Set<string>): value is Shop | null {
+export function validShop(
+  value: unknown,
+  bookIds: Set<string>,
+): value is Shop | null {
   if (value === null) return true;
   if (
     !object(value) ||

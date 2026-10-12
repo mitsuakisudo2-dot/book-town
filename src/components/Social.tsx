@@ -13,6 +13,7 @@ import {
 import {
   bookReviews,
   findReader,
+  followedTimelinePosts,
   formatPostTime,
   isSpoilerFor,
   likeCount,
@@ -23,6 +24,8 @@ import {
   wantSources,
 } from "../lib/social";
 import { currentBookId } from "../lib/reading";
+import { bookPath } from "../lib/books";
+import { EMPTY_POST_DRAFT, usePostDraft } from "../lib/post-draft";
 import {
   extractTags,
   popularTags,
@@ -40,7 +43,10 @@ type Shared = {
 };
 
 export function TimelineView(props: Shared) {
-  const posts = timelinePosts(props.state);
+  const [followingOnly, setFollowingOnly] = useState(false);
+  const posts = followingOnly
+    ? followedTimelinePosts(props.state)
+    : timelinePosts(props.state);
   return (
     <div className="social-page">
       <span className="eyebrow">READERS, IN THEIR OWN WORDS</span>
@@ -48,14 +54,53 @@ export function TimelineView(props: Shared) {
       <p className="page-subtitle">
         本のことも、そうでないことも。気になった人の好きな本へ。
       </p>
+      <div
+        className="timeline-filters"
+        role="group"
+        aria-label="投稿の表示範囲"
+      >
+        <button
+          type="button"
+          aria-pressed={!followingOnly}
+          onClick={() => setFollowingOnly(false)}
+        >
+          すべて
+        </button>
+        <button
+          type="button"
+          aria-pressed={followingOnly}
+          onClick={() => setFollowingOnly(true)}
+        >
+          フォロー中
+        </button>
+      </div>
+      {followingOnly && (
+        <p className="timeline-filter-note">
+          フォローしている書店の店主と、あなたの投稿。
+        </p>
+      )}
       <div className="post-feed" aria-label="タイムラインの投稿">
         {posts.map((post) => (
           <PostCard key={post.id} {...props} post={post} showBook />
         ))}
         {!posts.length && (
           <div className="empty-state">
-            <h2>まだ、誰の声もありません。</h2>
-            <p>右下のボタンから、最初のひとことを。</p>
+            <h2>
+              {followingOnly
+                ? "気になる人の言葉を、ここに。"
+                : "まだ、誰の声もありません。"}
+            </h2>
+            <p>
+              {followingOnly
+                ? "書店をフォローすると、店主の投稿をまとめて読めます。"
+                : "右下の「投稿」から、最初のひとことを。"}
+            </p>
+            {followingOnly && (
+              <Link href="/" className="button secondary">
+                書店を探す
+                <Icon name="arrow" size={16} />
+              </Link>
+            )}
           </div>
         )}
       </div>
@@ -186,10 +231,18 @@ export function PostComposer({
   autoFocus?: boolean;
 }) {
   const id = useId();
-  const [body, setBody] = useState("");
-  const [bookId, setBookId] = useState<string | null>(null);
+  const {
+    draft: { body, bookId, spoiler },
+    saved,
+    update,
+  } = usePostDraft(
+    parent
+      ? "reply:" + parent.id
+      : fixedBook
+        ? "review:" + fixedBook.id
+        : "new-post",
+  );
   const [picking, setPicking] = useState(false);
-  const [spoiler, setSpoiler] = useState(false);
   const tags = extractTags(body);
   const tagSuggestions = popularTags(state, 8)
     .map((entry) => entry.tag)
@@ -214,10 +267,8 @@ export function PostComposer({
       parentId: parent?.id ?? null,
     });
     if (!created) return;
-    setBody("");
-    setBookId(null);
+    update(EMPTY_POST_DRAFT);
     setPicking(false);
-    setSpoiler(false);
     notify(
       isReply
         ? "返信しました"
@@ -257,7 +308,7 @@ export function PostComposer({
                 : "本のことでも、そうでないことでも"
           }
           value={body}
-          onChange={(event) => setBody(event.target.value)}
+          onChange={(event) => update({ body: event.target.value })}
         />
         {!isReply && (
           <div className="composer-tags">
@@ -274,9 +325,11 @@ export function PostComposer({
                 className="tag-chip"
                 aria-label={`タグ「${tag}」を付ける`}
                 onClick={() =>
-                  setBody((current) =>
-                    (current.trimEnd() + " #" + tag + " ").trimStart(),
-                  )
+                  update({
+                    body: (body.trimEnd() + " #" + tag + " ")
+                      .trimStart()
+                      .slice(0, POST_MAX_LENGTH),
+                  })
                 }
               >
                 ＋#{tag}
@@ -294,10 +347,12 @@ export function PostComposer({
             books={state.books}
             value={bookId}
             onChange={(next) => {
-              setBookId(next);
+              update({
+                bookId: next,
+                ...(!next && !isReply ? { spoiler: false } : {}),
+              });
               if (!next) {
                 setPicking(false);
-                if (!isReply) setSpoiler(false);
               }
             }}
             label={isReply ? "おすすめの本を探す" : "添える本を探す"}
@@ -323,7 +378,7 @@ export function PostComposer({
               type="checkbox"
               checked={canSpoil && spoiler}
               disabled={!canSpoil}
-              onChange={(event) => setSpoiler(event.target.checked)}
+              onChange={(event) => update({ spoiler: event.target.checked })}
             />
             ネタバレあり
           </label>
@@ -334,6 +389,11 @@ export function PostComposer({
             {isReply ? "返信する" : "投稿する"}
           </button>
         </div>
+        <p className="draft-status" role={saved ? undefined : "status"}>
+          {saved
+            ? "下書きはこのブラウザに保存。閉じても続きから書けます。"
+            : "下書きを保存できません。ページを再読み込みすると失われます。"}
+        </p>
         {!isReply && spoiler && canSpoil && (
           <p className="composer-hint">
             タイムラインでは隠して表示し、「表示する」を押した人だけが読めます。作品ページでは「ネタバレあり」の扉の向こうに置きます。
@@ -350,6 +410,7 @@ export function ComposeFab({
   ...props
 }: Shared & { onPosted?: () => void }) {
   const [open, setOpen] = useState(false);
+  const { draft } = usePostDraft("new-post");
   const icon = props.state.settings.composeIcon;
   return (
     <>
@@ -359,7 +420,8 @@ export function ComposeFab({
         onClick={() => setOpen(true)}
         aria-label="投稿する"
       >
-        <Icon name={icon} size={26} />
+        <Icon name={icon} size={22} />
+        <span>{draft.body || draft.bookId ? "下書き" : "投稿"}</span>
       </button>
       {open && (
         <Modal title="投稿する" onClose={() => setOpen(false)}>
@@ -489,7 +551,7 @@ export function PostCard({
           <PostText body={post.body} />
         )}
         {book && (showBook || isReply) && (
-          <Link href={"/books/" + book.id + "/"} className="post-book">
+          <Link href={bookPath(book.id)} className="post-book">
             <BookJacket book={book} className="post-book-jacket" />
             <span>
               <b>{book.title}</b>

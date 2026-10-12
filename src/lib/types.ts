@@ -15,6 +15,8 @@ export type ShopTheme = "sage" | "ink" | "ochre" | "rose";
 
 export interface Book {
   id: string;
+  /** Optional licensed cover or local preview URL; spines remain generated. */
+  coverUrl?: string;
   title: string;
   author: string;
   genre: string;
@@ -50,12 +52,16 @@ export interface ShelfItem {
   pop: string;
 }
 
+export type ShelfDoodle =
+  "travel" | "daily" | "forest" | "stars" | "garden" | "city" | "lamp";
 export interface Shelf {
   id: string;
   name: string;
   capacity: number;
   items: ShelfItem[];
   isPublic: boolean;
+  /** Demo chalkboard copy for the immersive store; optional. */
+  board?: { title: string; doodle?: ShelfDoodle };
 }
 
 export interface Shop {

@@ -484,12 +484,18 @@ const item = (
   display: ShelfItem["display"],
   pop: string,
 ): ShelfItem => ({ id, bookId, display, pop });
-const shelf = (id: string, name: string, items: ShelfItem[]): Shelf => ({
+const shelf = (
+  id: string,
+  name: string,
+  items: ShelfItem[],
+  board?: Shelf["board"],
+): Shelf => ({
   id,
   name,
   capacity: 20,
   items,
   isPublic: true,
+  ...(board ? { board } : {}),
 });
 
 export const shops: Shop[] = [
@@ -504,54 +510,100 @@ export const shops: Shop[] = [
     followers: 24,
     demo: true,
     shelves: [
-      shelf("orbit-unknown", "わからないものと暮らす", [
-        item(
-          "o1",
-          "solaris",
-          "face",
-          "異星人の話を読むつもりが、自分の記憶に出会ってしまう。わからない相手を、わからないまま大切にできるだろうか。",
-        ),
-        item(
-          "o2",
-          "left-hand",
-          "spine",
-          "「当たり前」がほどけていく旅。寒さの描写まで、長く残っています。",
-        ),
-        item(
-          "o3",
-          "fictions",
-          "spine",
-          "小さな本の中に、無限の部屋。地図のない読書をどうぞ。",
-        ),
-        item(
-          "o4",
-          "galaxy-railroad",
-          "spine",
-          "星を見上げた帰り道に、もう一度。",
-        ),
-        item(
-          "o5",
-          "night-fog",
-          "spine",
-          "遠い星から戻ったあと、人間の足元を見つめるために。",
-        ),
-      ]),
-      shelf("orbit-society", "別の社会を想像する", [
-        item(
-          "o6",
-          "dispossessed",
-          "face",
-          "理想の社会にも、暮らす人がいる。その摩擦を飛ばさないところが好きです。",
-        ),
-        item("o7", "fahrenheit", "spine", "本を読む時間を、手放さずにいたい。"),
-        item(
-          "o8",
-          "utopia",
-          "spine",
-          "「よい社会」の話に、なぜ少し怖さを感じるんだろう。",
-        ),
-        item("o9", "momo", "spine", "時計より遠くへ、時間の旅に出る一冊。"),
-      ]),
+      shelf(
+        "orbit-unknown",
+        "わからないものと暮らす",
+        [
+          item(
+            "o1",
+            "solaris",
+            "face",
+            "異星人の話を読むつもりが、自分の記憶に出会ってしまう。わからない相手を、わからないまま大切にできるだろうか。",
+          ),
+          item(
+            "o2",
+            "left-hand",
+            "spine",
+            "「当たり前」がほどけていく旅。寒さの描写まで、長く残っています。",
+          ),
+          item(
+            "o3",
+            "fictions",
+            "spine",
+            "小さな本の中に、無限の部屋。地図のない読書をどうぞ。",
+          ),
+          item(
+            "o4",
+            "galaxy-railroad",
+            "spine",
+            "星を見上げた帰り道に、もう一度。",
+          ),
+          item(
+            "o5",
+            "night-fog",
+            "spine",
+            "遠い星から戻ったあと、人間の足元を見つめるために。",
+          ),
+        ],
+        { title: "星の本", doodle: "stars" },
+      ),
+      shelf(
+        "orbit-society",
+        "別の社会を想像する",
+        [
+          item(
+            "o6",
+            "dispossessed",
+            "face",
+            "理想の社会にも、暮らす人がいる。その摩擦を飛ばさないところが好きです。",
+          ),
+          item(
+            "o7",
+            "fahrenheit",
+            "spine",
+            "本を読む時間を、手放さずにいたい。",
+          ),
+          item(
+            "o8",
+            "utopia",
+            "spine",
+            "「よい社会」の話に、なぜ少し怖さを感じるんだろう。",
+          ),
+          item("o9", "momo", "spine", "時計より遠くへ、時間の旅に出る一冊。"),
+        ],
+        { title: "社会の本", doodle: "city" },
+      ),
+      shelf(
+        "orbit-deep-time",
+        "長い時間を旅する",
+        [
+          item(
+            "o10",
+            "stone-history",
+            "face",
+            "手のひらの石から、気の遠くなる時間が立ちのぼる。宇宙の話より遠くへ行けました。",
+          ),
+          item(
+            "o11",
+            "hundred-years",
+            "spine",
+            "百年を一気に眺めると、ひとつの惑星の歴史みたいに見えてきます。",
+          ),
+          item(
+            "o12",
+            "ten-nights",
+            "spine",
+            "夢の中の時間は、時計では測れない。",
+          ),
+          item(
+            "o13",
+            "invisible-cities",
+            "spine",
+            "どの都市も、遠い未来のどこかにありそうで。",
+          ),
+        ],
+        { title: "時の本", doodle: "forest" },
+      ),
     ],
   },
   {
@@ -565,64 +617,105 @@ export const shops: Shop[] = [
     followers: 11,
     demo: true,
     shelves: [
-      shelf("rain-cities", "どこにもない街の地図", [
-        item(
-          "r1",
-          "invisible-cities",
-          "face",
-          "一つずつ読んでも、順番を飛ばしても。今夜のあなたに似た街があるかもしれません。",
-        ),
-        item(
-          "r2",
-          "walking",
-          "spine",
-          "目的のない散歩も、ちゃんと一日の出来事です。",
-        ),
-        item(
-          "r3",
-          "book-of-disquiet",
-          "spine",
-          "眠れない夜に、まとまらない言葉の居場所を。",
-        ),
-        item(
-          "r4",
-          "hundred-years",
-          "spine",
-          "家族の時間と、町の時間。大きな流れに身を任せて読みました。",
-        ),
-        item(
-          "r5",
-          "solaris",
-          "spine",
-          "翻訳で読む、理解の届かなさ。異なる世界に触れる入口として。",
-        ),
-      ]),
-      shelf("rain-listening", "誰かの声を聴く", [
-        item(
-          "r6",
-          "lonely-hunter",
-          "face",
-          "誰かに話したい気持ちを、こんなにも丁寧に描く物語。",
-        ),
-        item(
-          "r7",
-          "old-man-sea",
-          "spine",
-          "短い言葉の間に、海の広さを感じます。",
-        ),
-        item(
-          "r8",
-          "momo",
-          "spine",
-          "うまく話せない日にも、聴いてくれる人がいたら。",
-        ),
-        item(
-          "r9",
-          "fictions",
-          "spine",
-          "言葉が作った世界を、どこまで信じられるでしょう。",
-        ),
-      ]),
+      shelf(
+        "rain-cities",
+        "どこにもない街の地図",
+        [
+          item(
+            "r1",
+            "invisible-cities",
+            "face",
+            "一つずつ読んでも、順番を飛ばしても。今夜のあなたに似た街があるかもしれません。",
+          ),
+          item(
+            "r2",
+            "walking",
+            "spine",
+            "目的のない散歩も、ちゃんと一日の出来事です。",
+          ),
+          item(
+            "r3",
+            "book-of-disquiet",
+            "spine",
+            "眠れない夜に、まとまらない言葉の居場所を。",
+          ),
+          item(
+            "r4",
+            "hundred-years",
+            "spine",
+            "家族の時間と、町の時間。大きな流れに身を任せて読みました。",
+          ),
+          item(
+            "r5",
+            "solaris",
+            "spine",
+            "翻訳で読む、理解の届かなさ。異なる世界に触れる入口として。",
+          ),
+        ],
+        { title: "街の本", doodle: "city" },
+      ),
+      shelf(
+        "rain-listening",
+        "誰かの声を聴く",
+        [
+          item(
+            "r6",
+            "lonely-hunter",
+            "face",
+            "誰かに話したい気持ちを、こんなにも丁寧に描く物語。",
+          ),
+          item(
+            "r7",
+            "old-man-sea",
+            "spine",
+            "短い言葉の間に、海の広さを感じます。",
+          ),
+          item(
+            "r8",
+            "momo",
+            "spine",
+            "うまく話せない日にも、聴いてくれる人がいたら。",
+          ),
+          item(
+            "r9",
+            "fictions",
+            "spine",
+            "言葉が作った世界を、どこまで信じられるでしょう。",
+          ),
+        ],
+        { title: "声の本", doodle: "daily" },
+      ),
+      shelf(
+        "rain-letters",
+        "遠い国の手紙のように",
+        [
+          item(
+            "r10",
+            "walden",
+            "face",
+            "湖のほとりの一年を、そっと訳してもらうような読書。雨音とよく合います。",
+          ),
+          item(
+            "r11",
+            "secret-garden",
+            "spine",
+            "閉ざされた庭がひらくまでの、季節の手ざわり。",
+          ),
+          item(
+            "r12",
+            "left-hand",
+            "spine",
+            "雪の惑星の長い旅。訳された言葉が、冷たく澄んでいます。",
+          ),
+          item(
+            "r13",
+            "night-fog",
+            "spine",
+            "遠い国の記録を、自分の言葉で受けとめたくなる。",
+          ),
+        ],
+        { title: "手紙の本", doodle: "travel" },
+      ),
     ],
   },
   {
@@ -636,44 +729,94 @@ export const shops: Shop[] = [
     followers: 7,
     demo: true,
     shelves: [
-      shelf("question-time", "生きる時間を考える", [
-        item(
-          "q1",
-          "night-fog",
-          "face",
-          "この本から簡単な結論は持ち帰れませんでした。だから今も、棚の目に入る場所に置いています。",
-        ),
-        item("q2", "momo", "spine", "自分の時間は、本当に自分のものだろうか。"),
-        item("q3", "laozi", "spine", "前に進むことばかり考えている日に。"),
-        item(
-          "q4",
-          "walden",
-          "spine",
-          "何を減らせば、自分の生活が見えてくるのか。",
-        ),
-        item(
-          "q5",
-          "silence",
-          "spine",
-          "選択を、他人の目だけで裁けるだろうか。",
-        ),
-      ]),
-      shelf("question-seeing", "ものの見方の入口", [
-        item(
-          "q6",
-          "ways-of-seeing",
-          "face",
-          "絵の見方の本だけれど、普段の視線まで変わってしまう。",
-        ),
-        item("q7", "poetics", "spine", "「なぜ面白い？」を考え始めたい人へ。"),
-        item("q8", "utopia", "spine", "理想を描く手つきにも、その時代がある。"),
-        item(
-          "q9",
-          "solaris",
-          "spine",
-          "SFの棚から借りてきた、他者をめぐる問い。",
-        ),
-      ]),
+      shelf(
+        "question-time",
+        "生きる時間を考える",
+        [
+          item(
+            "q1",
+            "night-fog",
+            "face",
+            "この本から簡単な結論は持ち帰れませんでした。だから今も、棚の目に入る場所に置いています。",
+          ),
+          item(
+            "q2",
+            "momo",
+            "spine",
+            "自分の時間は、本当に自分のものだろうか。",
+          ),
+          item("q3", "laozi", "spine", "前に進むことばかり考えている日に。"),
+          item(
+            "q4",
+            "walden",
+            "spine",
+            "何を減らせば、自分の生活が見えてくるのか。",
+          ),
+          item(
+            "q5",
+            "silence",
+            "spine",
+            "選択を、他人の目だけで裁けるだろうか。",
+          ),
+        ],
+        { title: "時間の本", doodle: "lamp" },
+      ),
+      shelf(
+        "question-seeing",
+        "ものの見方の入口",
+        [
+          item(
+            "q6",
+            "ways-of-seeing",
+            "face",
+            "絵の見方の本だけれど、普段の視線まで変わってしまう。",
+          ),
+          item(
+            "q7",
+            "poetics",
+            "spine",
+            "「なぜ面白い？」を考え始めたい人へ。",
+          ),
+          item(
+            "q8",
+            "utopia",
+            "spine",
+            "理想を描く手つきにも、その時代がある。",
+          ),
+          item(
+            "q9",
+            "solaris",
+            "spine",
+            "SFの棚から借りてきた、他者をめぐる問い。",
+          ),
+        ],
+        { title: "見方の本", doodle: "city" },
+      ),
+      shelf(
+        "question-doubt",
+        "読むことを疑ってみる",
+        [
+          item(
+            "q10",
+            "fictions",
+            "face",
+            "読んでいるこの本も、誰かの作り話かもしれない。疑う楽しさの入口です。",
+          ),
+          item(
+            "q11",
+            "fahrenheit",
+            "spine",
+            "考える時間を手放したら、何が残るだろう。",
+          ),
+          item(
+            "q12",
+            "book-of-disquiet",
+            "spine",
+            "答えの出ない日々を、そのまま書き留めていい。",
+          ),
+        ],
+        { title: "問いの本", doodle: "stars" },
+      ),
     ],
   },
   {
@@ -687,49 +830,100 @@ export const shops: Shop[] = [
     followers: 5,
     demo: true,
     shelves: [
-      shelf("window-breath", "ひと息つくための本", [
-        item(
-          "w1",
-          "momo",
-          "face",
-          "子どもの頃より、大人になってから必要になった一冊。急いでいるときほど、ゆっくりどうぞ。",
-        ),
-        item(
-          "w2",
-          "traveling-tree",
-          "spine",
-          "ここにいながら、遠い風を感じられる。",
-        ),
-        item(
-          "w3",
-          "walking",
-          "spine",
-          "読み終えたら、目的なしに一駅ぶん歩いてみたい。",
-        ),
-        item("w4", "laozi", "spine", "短い言葉を、一日ひとつ。"),
-        item("w5", "old-man-sea", "spine", "静かな集中の時間がほしいときに。"),
-      ]),
-      shelf("window-night", "夜、少しだけ遠くへ", [
-        item(
-          "w6",
-          "galaxy-railroad",
-          "face",
-          "夜空を見たあとに、帰ってきたくなる物語。",
-        ),
-        item(
-          "w7",
-          "ten-nights",
-          "spine",
-          "意味を探しすぎず、夢の景色を眺める。",
-        ),
-        item(
-          "w8",
-          "stone-history",
-          "spine",
-          "手のひらの石に、想像もしない時間がある。",
-        ),
-        item("w9", "secret-garden", "spine", "庭が動き出すときの、あの気配。"),
-      ]),
+      shelf(
+        "window-breath",
+        "ひと息つくための本",
+        [
+          item(
+            "w1",
+            "momo",
+            "face",
+            "子どもの頃より、大人になってから必要になった一冊。急いでいるときほど、ゆっくりどうぞ。",
+          ),
+          item(
+            "w2",
+            "traveling-tree",
+            "spine",
+            "ここにいながら、遠い風を感じられる。",
+          ),
+          item(
+            "w3",
+            "walking",
+            "spine",
+            "読み終えたら、目的なしに一駅ぶん歩いてみたい。",
+          ),
+          item("w4", "laozi", "spine", "短い言葉を、一日ひとつ。"),
+          item(
+            "w5",
+            "old-man-sea",
+            "spine",
+            "静かな集中の時間がほしいときに。",
+          ),
+        ],
+        { title: "ひと息", doodle: "daily" },
+      ),
+      shelf(
+        "window-night",
+        "夜、少しだけ遠くへ",
+        [
+          item(
+            "w6",
+            "galaxy-railroad",
+            "face",
+            "夜空を見たあとに、帰ってきたくなる物語。",
+          ),
+          item(
+            "w7",
+            "ten-nights",
+            "spine",
+            "意味を探しすぎず、夢の景色を眺める。",
+          ),
+          item(
+            "w8",
+            "stone-history",
+            "spine",
+            "手のひらの石に、想像もしない時間がある。",
+          ),
+          item(
+            "w9",
+            "secret-garden",
+            "spine",
+            "庭が動き出すときの、あの気配。",
+          ),
+        ],
+        { title: "夜の本", doodle: "stars" },
+      ),
+      shelf(
+        "window-outside",
+        "外を歩きたくなる",
+        [
+          item(
+            "w10",
+            "walden",
+            "face",
+            "森の小屋の一年を読むと、近所の公園まで遠回りしたくなります。",
+          ),
+          item(
+            "w11",
+            "invisible-cities",
+            "spine",
+            "知らない街の話を、窓辺でひとつずつ。",
+          ),
+          item(
+            "w12",
+            "ways-of-seeing",
+            "spine",
+            "見慣れた通りの看板まで、少し違って見える。",
+          ),
+          item(
+            "w13",
+            "lonely-hunter",
+            "spine",
+            "小さな町の人たちの声に、耳をすませる。",
+          ),
+        ],
+        { title: "散歩の本", doodle: "garden" },
+      ),
     ],
   },
   {
@@ -743,48 +937,94 @@ export const shops: Shop[] = [
     followers: 3,
     demo: true,
     shelves: [
-      shelf("frame-view", "見る、ということ", [
-        item(
-          "f1",
-          "ways-of-seeing",
-          "face",
-          "日々の広告まで、ゆっくり見直したくなりました。",
-        ),
-        item(
-          "f2",
-          "invisible-cities",
-          "spine",
-          "形のない街を、頭の中で描いてみる。",
-        ),
-        item(
-          "f3",
-          "poetics",
-          "spine",
-          "作品を楽しむことと、仕組みを考えることは、一緒にできる。",
-        ),
-        item("f4", "fictions", "spine", "本そのものを疑ってみる、愉快な入口。"),
-      ]),
-      shelf("frame-small", "小さな風景を拾う", [
-        item(
-          "f5",
-          "walking",
-          "face",
-          "通り過ぎるだけだったものに、目が留まる。",
-        ),
-        item("f6", "traveling-tree", "spine", "写真の外側の時間を、文章で。"),
-        item(
-          "f7",
-          "ten-nights",
-          "spine",
-          "たった一場面が、何年も残ることがある。",
-        ),
-        item(
-          "f8",
-          "secret-garden",
-          "spine",
-          "景色を手で変えていく、その喜び。",
-        ),
-      ]),
+      shelf(
+        "frame-view",
+        "見る、ということ",
+        [
+          item(
+            "f1",
+            "ways-of-seeing",
+            "face",
+            "日々の広告まで、ゆっくり見直したくなりました。",
+          ),
+          item(
+            "f2",
+            "invisible-cities",
+            "spine",
+            "形のない街を、頭の中で描いてみる。",
+          ),
+          item(
+            "f3",
+            "poetics",
+            "spine",
+            "作品を楽しむことと、仕組みを考えることは、一緒にできる。",
+          ),
+          item(
+            "f4",
+            "fictions",
+            "spine",
+            "本そのものを疑ってみる、愉快な入口。",
+          ),
+        ],
+        { title: "見る本", doodle: "city" },
+      ),
+      shelf(
+        "frame-small",
+        "小さな風景を拾う",
+        [
+          item(
+            "f5",
+            "walking",
+            "face",
+            "通り過ぎるだけだったものに、目が留まる。",
+          ),
+          item("f6", "traveling-tree", "spine", "写真の外側の時間を、文章で。"),
+          item(
+            "f7",
+            "ten-nights",
+            "spine",
+            "たった一場面が、何年も残ることがある。",
+          ),
+          item(
+            "f8",
+            "secret-garden",
+            "spine",
+            "景色を手で変えていく、その喜び。",
+          ),
+        ],
+        { title: "風景の本", doodle: "travel" },
+      ),
+      shelf(
+        "frame-color",
+        "色と光をたどる",
+        [
+          item(
+            "f9",
+            "galaxy-railroad",
+            "face",
+            "車窓に流れる光の色を、言葉だけでこんなに見せてくれる。",
+          ),
+          item(
+            "f10",
+            "stone-history",
+            "spine",
+            "石の模様に、ひとつの風景が眠っている。",
+          ),
+          item(
+            "f11",
+            "old-man-sea",
+            "spine",
+            "海の青さを、何度も思い浮かべながら読みました。",
+          ),
+          item(
+            "f12",
+            "momo",
+            "spine",
+            "時間の花の色を、ずっと想像しています。",
+          ),
+        ],
+        { title: "光の本", doodle: "stars" },
+      ),
     ],
   },
   {
@@ -798,48 +1038,89 @@ export const shops: Shop[] = [
     followers: 2,
     demo: true,
     shelves: [
-      shelf("lamp-voices", "伝えきれない気持ち", [
-        item(
-          "l1",
-          "lonely-hunter",
-          "face",
-          "誰もが、別の言葉で同じ寂しさを抱えているのかもしれない。",
-        ),
-        item(
-          "l2",
-          "silence",
-          "spine",
-          "言葉にできない選択のそばに、長く立っていたくなる。",
-        ),
-        item(
-          "l3",
-          "night-fog",
-          "spine",
-          "ひとりで読んでから、誰かと話したくなった本です。",
-        ),
-        item(
-          "l4",
-          "solaris",
-          "spine",
-          "相手を理解したい気持ちの、危うさと切実さ。",
-        ),
-      ]),
-      shelf("lamp-slow", "ゆっくり戻ってくる本", [
-        item(
-          "l5",
-          "book-of-disquiet",
-          "face",
-          "最初から最後へ急がず、気になる頁を開いています。",
-        ),
-        item(
-          "l6",
-          "old-man-sea",
-          "spine",
-          "たったひとりでいる時間が、こんなに豊かだなんて。",
-        ),
-        item("l7", "stone-history", "spine", "記憶は直線では戻ってこない。"),
-        item("l8", "walden", "spine", "日々の音を、もう一度よく聴くために。"),
-      ]),
+      shelf(
+        "lamp-voices",
+        "伝えきれない気持ち",
+        [
+          item(
+            "l1",
+            "lonely-hunter",
+            "face",
+            "誰もが、別の言葉で同じ寂しさを抱えているのかもしれない。",
+          ),
+          item(
+            "l2",
+            "silence",
+            "spine",
+            "言葉にできない選択のそばに、長く立っていたくなる。",
+          ),
+          item(
+            "l3",
+            "night-fog",
+            "spine",
+            "ひとりで読んでから、誰かと話したくなった本です。",
+          ),
+          item(
+            "l4",
+            "solaris",
+            "spine",
+            "相手を理解したい気持ちの、危うさと切実さ。",
+          ),
+        ],
+        { title: "声の本", doodle: "daily" },
+      ),
+      shelf(
+        "lamp-slow",
+        "ゆっくり戻ってくる本",
+        [
+          item(
+            "l5",
+            "book-of-disquiet",
+            "face",
+            "最初から最後へ急がず、気になる頁を開いています。",
+          ),
+          item(
+            "l6",
+            "old-man-sea",
+            "spine",
+            "たったひとりでいる時間が、こんなに豊かだなんて。",
+          ),
+          item("l7", "stone-history", "spine", "記憶は直線では戻ってこない。"),
+          item("l8", "walden", "spine", "日々の音を、もう一度よく聴くために。"),
+        ],
+        { title: "ゆっくり", doodle: "lamp" },
+      ),
+      shelf(
+        "lamp-night",
+        "眠れない夜のそばに",
+        [
+          item(
+            "l9",
+            "ten-nights",
+            "face",
+            "眠れない夜は、ひと晩にひとつだけ。短い夢が、灯りの代わりになります。",
+          ),
+          item(
+            "l10",
+            "galaxy-railroad",
+            "spine",
+            "夜の向こうへ走る汽車に、少しだけ乗せてもらう。",
+          ),
+          item(
+            "l11",
+            "laozi",
+            "spine",
+            "がんばらなくていい、と静かに言われる気がする。",
+          ),
+          item(
+            "l12",
+            "traveling-tree",
+            "spine",
+            "遠くの夜空の下にも、誰かの暮らしがある。",
+          ),
+        ],
+        { title: "夜の本", doodle: "forest" },
+      ),
     ],
   },
 ];

@@ -18,9 +18,15 @@ import { ReadingView } from "./ReadingView";
 import { NotificationsView } from "./NotificationsView";
 import { activeSession } from "../lib/reading";
 import { unreadCount } from "../lib/notifications";
+import { bookPath } from "../lib/books";
+import "./usability.css";
+import { useHorizontalSwipe } from "./useHorizontalSwipe";
+import "./shop-journey.css";
+import { WalkView } from "./WalkView";
 
 type View =
   | "town"
+  | "walk"
   | "timeline"
   | "search"
   | "reading"
@@ -35,11 +41,12 @@ type Shared = {
   actions: TownActions;
   notify: (message: string) => void;
 };
-type Section = "home" | "search" | "reading" | "profile";
+type Section = "home" | "search" | "walk" | "reading" | "profile";
 const links: { href: string; icon: string; label: string; section: Section }[] =
   [
     { href: "/", icon: "home", label: "ホーム", section: "home" },
     { href: "/search/", icon: "search", label: "検索", section: "search" },
+    { href: "/walk/", icon: "store", label: "書店めぐり", section: "walk" },
     {
       href: "/reading/",
       icon: "reading",
@@ -55,6 +62,7 @@ const links: { href: string; icon: string; label: string; section: Section }[] =
   ];
 /** Which item of the main navigation a view belongs to. */
 function sectionOf(view: View, selectedId?: string): Section | null {
+  if (view === "walk") return "walk";
   if (view === "town" || view === "timeline" || view === "shop") return "home";
   if (view === "search") return "search";
   if (view === "reading") return "reading";
@@ -94,7 +102,7 @@ export default function TownApp({
   const reading = Boolean(activeSession(state));
   const unread = unreadCount(state);
   return (
-    <div className="town-shell">
+    <div className={"town-shell" + (view === "walk" ? " is-walk" : "")}>
       <aside className="town-sidebar">
         <Link className="brand" href="/">
           <span className="brand-mark">
@@ -205,7 +213,9 @@ export default function TownApp({
             : "保存データを読み込めなかったため、デモの初期状態に戻しました。"}
         </div>
         <main className={"town-main view-" + view} key={view + selectedId}>
-          {view === "town" ? (
+          {view === "walk" ? (
+            <WalkView {...shared} />
+          ) : view === "town" ? (
             <HomeView {...shared} tab="shelves">
               <StreetView {...shared} search={search} setSearch={setSearch} />
             </HomeView>
@@ -246,6 +256,7 @@ export default function TownApp({
             key={l.section}
             className={
               (section === l.section ? "active" : "") +
+              (l.section === "walk" ? " nav-walk" : "") +
               (l.section === "reading" ? " nav-reading" : "") +
               (l.section === "reading" && reading ? " is-live" : "")
             }
@@ -291,6 +302,7 @@ function ShopView({
   notify,
   shopId,
 }: Shared & { shopId: string }) {
+  const router = useRouter();
   const shop =
     shopId === "mine"
       ? state.ownShop
@@ -299,6 +311,27 @@ function ShopView({
     item: ShelfItem;
     shelf: Shelf;
   } | null>(null);
+  const publicShops = [
+    ...state.shops,
+    ...(state.ownShop ? [state.ownShop] : []),
+  ].filter((entry) => entry.shelves.some((shelf) => shelf.isPublic));
+  const shopIndex = publicShops.findIndex((entry) => entry.id === shop?.id);
+  const canBrowse = shopIndex >= 0 && publicShops.length > 1;
+  const previousShop = canBrowse
+    ? publicShops[(shopIndex - 1 + publicShops.length) % publicShops.length]
+    : null;
+  const nextShop = canBrowse
+    ? publicShops[(shopIndex + 1) % publicShops.length]
+    : null;
+  const shopSwipe = useHorizontalSwipe({
+    enabled: canBrowse && !selected,
+    exclude:
+      'button,a,input,textarea,select,summary,dialog,[role="dialog"],.shelf-scroll,.shop-shelf-index,[data-book-rail]',
+    onSwipe(direction) {
+      const destination = direction < 0 ? previousShop : nextShop;
+      if (destination) router.push(`/shops/${destination.id}/`);
+    },
+  });
   if (!shop)
     return (
       <div className="empty-state">
@@ -318,17 +351,39 @@ function ShopView({
   const shelves = shop.shelves.filter((s) => s.isPublic);
   const followed = state.following.includes(shop.id);
   return (
-    <>
-      <Link href="/" className="back-link">
-        <Icon name="back" size={16} />
-        本の街へ戻る
-      </Link>
+    <div className="shop-journey" {...shopSwipe}>
+      <nav className="shop-journey-nav" aria-label="書店をめぐる">
+        {previousShop && (
+          <Link
+            href={`/shops/${previousShop.id}/`}
+            aria-label={`前の書店：${previousShop.name}`}
+          >
+            <Icon name="back" size={17} />
+            前の書店
+          </Link>
+        )}
+        <Link href="/" className="shop-journey-home">
+          本の街へ
+          {canBrowse && (
+            <small>
+              {shopIndex + 1} / {publicShops.length} · 左右にスワイプ
+            </small>
+          )}
+        </Link>
+        {nextShop && (
+          <Link
+            href={`/shops/${nextShop.id}/`}
+            aria-label={`次の書店：${nextShop.name}`}
+          >
+            次の書店
+            <Icon name="arrow" size={17} />
+          </Link>
+        )}
+      </nav>
       <section className={"shop-hero theme-" + shop.theme}>
         <div className="shop-hero-rule" />
-        <span className="eyebrow">A SMALL BOOKSHOP, A PERSONAL WORLD</span>
         <h1>{shop.name}</h1>
         <p className="shop-tagline">{shop.tagline}</p>
-        <p className="shop-introduction">{shop.description}</p>
         <div className="shop-hero-bottom">
           {owner && (
             <Link
@@ -345,10 +400,6 @@ function ShopView({
               </span>
             </Link>
           )}
-          <span className="shop-social-note">
-            {shop.demo ? "デモ書店 · " : ""}
-            {shop.followers + Number(followed)}人がフォロー
-          </span>
           {shop.ownerId === "me" ? (
             <Link href="/my-shop/" className="button secondary">
               <Icon name="edit" size={15} />
@@ -373,16 +424,10 @@ function ShopView({
           )}
         </div>
       </section>
-      <div className="interior-heading">
-        <div>
-          <span className="eyebrow">TAKE YOUR TIME, LOOK AROUND</span>
-          <h2>棚の前で、ひと休み。</h2>
-        </div>
-        <span>
-          <Icon name="book" size={15} />
-          本を選ぶと、店主のPOPが読めます
-        </span>
-      </div>
+      <p className="shop-shelf-hint">
+        <Icon name="book" size={15} />
+        本を選ぶと、店主のPOPが読めます
+      </p>
       <div className="shop-shelf-index">
         {shelves.map((s) => (
           <a key={s.id} href={"#shelf-" + s.id}>
@@ -427,6 +472,14 @@ function ShopView({
           )}
         </div>
       )}
+      <section className="shop-about" aria-label="書店の紹介">
+        <h2>この書店について</h2>
+        <p className="shop-introduction">{shop.description}</p>
+        <p className="shop-social-note">
+          {shop.demo ? "デモ書店 · " : ""}
+          {shop.followers + Number(followed)}人がフォロー
+        </p>
+      </section>
       {owner && (
         <div className="shop-owner-footer">
           <ReaderAvatar reader={owner} size={45} />
@@ -452,7 +505,7 @@ function ShopView({
           onClose={() => setSelected(null)}
         />
       )}
-    </>
+    </div>
   );
 }
 function BookView({
@@ -461,9 +514,20 @@ function BookView({
   notify,
   bookId,
 }: Shared & { bookId: string }) {
+  const persistence = usePersistenceStatus();
   const book = state.books.find((b) => b.id === bookId);
   if (!book)
-    return <div className="empty-state">この本は見つかりませんでした。</div>;
+    return persistence === "loading" ? (
+      <p role="status">本を開いています…</p>
+    ) : (
+      <div className="empty-state">
+        <h1>この本は見つかりませんでした。</h1>
+        <p>登録した本は、登録したときと同じブラウザで開いてください。</p>
+        <Link href="/profiles/me/" className="button secondary">
+          保存した本を見る
+        </Link>
+      </div>
+    );
   const matches = [
     ...state.shops,
     ...(state.ownShop ? [state.ownShop] : []),
@@ -576,7 +640,7 @@ function Wishlist({ state, actions, notify }: Shared) {
         <div className="catalog-grid wishlist-grid">
           {books.map((b) => (
             <article className="catalog-book" key={b.id}>
-              <Link href={"/books/" + b.id + "/"}>
+              <Link href={bookPath(b.id)}>
                 <BookJacket book={b} />
                 <h3>{b.title}</h3>
                 <p>{b.author}</p>
