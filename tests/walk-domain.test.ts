@@ -13,6 +13,7 @@ import {
   placeBook,
   rect,
   resizeFurniture,
+  safeBackgroundUrl,
   sceneFromJson,
   sceneToJson,
   setBookPop,
@@ -422,5 +423,23 @@ check("rotated furniture resize preserves physical book dimensions", () => {
     ) < 1e-8,
   );
   assert.deepEqual(validateScene(changed), []);
+});
+check("only the town's own theme pictures stand behind a shop", () => {
+  assert.equal(
+    safeBackgroundUrl("/themes/woodshop/room-bokeh-v1.webp"),
+    "/themes/woodshop/room-bokeh-v1.webp",
+  );
+  for (const url of [
+    undefined,
+    "",
+    "https://example.com/track.gif",
+    "//example.com/room.webp",
+    "/themes/../api/secret",
+    "/themes/woodshop/../../x.webp",
+    "javascript:alert(1)",
+    "data:image/svg+xml,<svg/>",
+    "/elsewhere/room.webp",
+  ])
+    assert.equal(safeBackgroundUrl(url), undefined, String(url));
 });
 console.log(passed + " walk domain checks passed");

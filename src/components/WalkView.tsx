@@ -19,6 +19,7 @@ import {
   boundsOf,
   furnitureBooks,
   objectById,
+  safeBackgroundUrl,
   worldPolygon,
 } from "../lib/store-scene";
 import {
@@ -431,7 +432,8 @@ export function WalkView({
         .map((n) =>
           scenes.find((s) => s.storeId === session.ids[session.index + n]),
         )
-        .filter(Boolean)
+        .map((s) => s && safeBackgroundUrl(s.background.url))
+        .filter((url, i, all): url is string => !!url && all.indexOf(url) === i)
     : [];
   const sceneStyle = {
     "--walk-light": scene?.theme.light ?? "#ffd293",
@@ -464,7 +466,9 @@ export function WalkView({
       <div className="walk-room" aria-hidden="true">
         {!backgroundFailed && (
           <Image
-            src={background?.url ?? "/themes/woodshop/room.webp"}
+            src={
+              safeBackgroundUrl(background?.url) ?? "/themes/woodshop/room.webp"
+            }
             alt=""
             fill
             sizes="100vw"
@@ -474,8 +478,8 @@ export function WalkView({
           />
         )}
       </div>
-      {adjacent.map((s) => (
-        <link key={s!.storeId} rel="prefetch" href={s!.background.url} />
+      {adjacent.map((url) => (
+        <link key={url} rel="prefetch" href={url} />
       ))}
       <header className="walk-top" inert={overlay !== null}>
         {ready && shop && scene && (
