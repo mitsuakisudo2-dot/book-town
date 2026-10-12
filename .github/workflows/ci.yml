@@ -51,3 +51,27 @@ jobs:
       - run: pnpm test:login
         env:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/login-qa
+
+  # Signs in against a real local Supabase: auth, the code email, the REST API
+  # and row level security, with the migrations and supabase/config.toml applied.
+  supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.120.0
+      - name: Start Supabase
+        run: supabase start -x studio,imgproxy,vector,logflare,supavisor,edge-runtime,realtime,storage-api,postgres-meta
+      - name: Sign in against it
+        run: |
+          set -a
+          eval "$(supabase status -o env)"
+          set +a
+          pnpm test:supabase
