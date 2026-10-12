@@ -1081,6 +1081,99 @@ async function main() {
     },
   );
 
+  await check(
+    "three reports or the operator hide a post from all but its author",
+    async () => {
+      const DAN = "00000000-0000-4000-8000-00000000000d";
+      await db.exec(`insert into auth.users (id) values ('${DAN}')`);
+      await as(
+        DAN,
+        "insert into profiles (id, handle, name) values ($1, 'dan', 'DAN')",
+        [DAN],
+      );
+      const seen = async (visitor: Visitor) =>
+        (await as(visitor, "select * from posts where id = $1", [akiChat.id]))
+          .length;
+      const report = (visitor: string) =>
+        as(
+          visitor,
+          "insert into reports (reporter_id, target_kind, target_id, reason) values ($1, 'post', $2, 'spam')",
+          [visitor, akiChat.id],
+        );
+      // Chi has reported it already; two reports are not enough.
+      await report(BEN);
+      assert.equal(await seen(null), 1);
+      await report(DAN);
+      assert.equal(await seen(null), 0);
+      assert.equal(await seen(BEN), 0);
+      assert.equal(await seen(AKI), 1);
+      // The operator looks and dismisses one: the post comes back.
+      await db.exec(
+        `update reports set status = 'dismissed' where reporter_id = '${DAN}'`,
+      );
+      assert.equal(await seen(null), 1);
+
+      await db.exec(
+        `insert into moderation_hides (target_kind, target_id) values ('post', '${akiChat.id}')`,
+      );
+      assert.equal(await seen(null), 0);
+      assert.equal(await seen(AKI), 1);
+      await db.exec("delete from moderation_hides");
+      assert.equal(await seen(CHI), 1);
+
+      // Nobody but the operator reads or writes the hides.
+      await refused(null, "select * from moderation_hides", [], /permission/);
+      await refused(
+        BEN,
+        "insert into moderation_hides (target_kind, target_id) values ('post', $1)",
+        [akiChat.id],
+        /permission/,
+      );
+      // Nor can a report be filed about yourself.
+      await refused(
+        DAN,
+        "insert into reports (reporter_id, target_kind, target_id, reason) values ($1, 'profile', $1, 'other')",
+        [DAN],
+        /row-level security/,
+      );
+    },
+  );
+
+  await check(
+    "a hidden shop or person is gone for others, not for themselves",
+    async () => {
+      const count = async (visitor: Visitor, sql: string) =>
+        (await as(visitor, sql, [AKI])).length;
+      const shops = "select * from shops where owner_id = $1";
+      const people = "select * from profiles where id = $1";
+      const posts = "select * from posts where author_id = $1";
+      const nine = "select * from profile_nine where profile_id = $1";
+      assert.ok((await count(null, shops)) > 0);
+      assert.ok((await count(null, nine)) > 0);
+
+      await db.exec(
+        `insert into moderation_hides (target_kind, target_id) values ('shop', '${akiShop.id}')`,
+      );
+      assert.equal(await count(null, shops), 0);
+      assert.equal(await count(CHI, shops), 0);
+      assert.equal(await count(AKI, shops), 1);
+      assert.equal(await count(null, people), 1);
+      await db.exec("delete from moderation_hides");
+
+      await db.exec(
+        `insert into moderation_hides (target_kind, target_id) values ('profile', '${AKI}')`,
+      );
+      for (const sql of [shops, people, posts, nine])
+        assert.equal(await count(CHI, sql), 0, sql);
+      assert.equal(await count(null, posts), 0);
+      assert.equal(await count(AKI, people), 1);
+      assert.equal(await count(AKI, shops), 1);
+      assert.ok((await count(AKI, posts)) > 0);
+      await db.exec("delete from moderation_hides");
+      assert.equal(await count(null, people), 1);
+    },
+  );
+
   await check("deleting an account removes everything it owned", async () => {
     await db.exec(`delete from auth.users where id = '${BEN}'`);
     for (const table of [

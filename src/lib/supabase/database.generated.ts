@@ -156,6 +156,28 @@ export type Database = {
           },
         ];
       };
+      moderation_hides: {
+        Row: {
+          created_at: string;
+          note: string;
+          target_id: string;
+          target_kind: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          note?: string;
+          target_id: string;
+          target_kind: string;
+        };
+        Update: {
+          created_at?: string;
+          note?: string;
+          target_id?: string;
+          target_kind?: string;
+        };
+        Relationships: [];
+      };
       pop_reactions: {
         Row: {
           created_at: string;

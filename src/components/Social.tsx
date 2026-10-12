@@ -36,6 +36,7 @@ import { BookPicker } from "./BookPicker";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
 import { isDatabaseId, profilePath } from "../lib/paths";
+import { ReportButton } from "./Report";
 
 type Shared = {
   state: TownState;
@@ -618,6 +619,15 @@ export function PostCard({
             >
               {reported ? "報告を取り消す" : "ネタバレでは？"}
             </button>
+          )}
+          {!mine && (
+            <ReportButton
+              target={{
+                kind: "post",
+                id: post.id,
+                name: author.name + "さんの投稿",
+              }}
+            />
           )}
           {mine && !confirmingDelete && (
             <button

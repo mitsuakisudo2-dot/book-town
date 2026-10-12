@@ -15,6 +15,7 @@ import {
   placementReactionKey,
   publicStoreScene,
 } from "../src/lib/store-customization";
+import { fileReport } from "../src/lib/supabase/reports";
 import { createWalkStore } from "../src/lib/walk-store";
 import type { Database } from "../src/lib/supabase/database.types";
 import { ME_ID, OWN_SHOP_ID, type PersistenceStatus } from "../src/lib/types";
@@ -549,6 +550,42 @@ async function main() {
         .from("shop_follows")
         .insert({ shop_id: akiShopId, follower_id: ben.id });
       assert.ok(follow.error);
+    },
+  );
+
+  await check(
+    "three reports hide a post from everyone but its writer, until dismissed",
+    async () => {
+      const carol = await reader("carol");
+      const dan = await reader("dan");
+      const row = await ben.client
+        .from("posts")
+        .insert({ author_id: ben.id, body: "この本、いまなら半額です" })
+        .select("id")
+        .single();
+      assert.ifError(row.error);
+      const target = { kind: "post" as const, id: row.data.id };
+      const seenBy = async (person: { id: string; client: Client }) =>
+        (await townOf(person))
+          .getSnapshot()
+          .posts.some((entry) => entry.id === target.id);
+      for (const person of [aki, carol, dan])
+        assert.equal(
+          await fileReport(person.client, person.id, target, "spam", ""),
+          "sent",
+        );
+      assert.equal(
+        await fileReport(aki.client, aki.id, target, "spam", "二度目"),
+        "already",
+      );
+      assert.equal(await seenBy(aki), false);
+      assert.equal(await seenBy(ben), true);
+      const dismissed = await admin
+        .from("reports")
+        .update({ status: "dismissed" })
+        .eq("target_id", target.id);
+      assert.ifError(dismissed.error);
+      assert.equal(await seenBy(aki), true);
     },
   );
 
