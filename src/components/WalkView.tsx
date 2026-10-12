@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { preload } from "react-dom";
-import { Icon, Modal, ReaderAvatar } from "./ui";
+import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { BookInHand } from "./BookInHand";
 import { DoodleIcon, StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { ShelfZoom } from "./ShelfZoom";
@@ -54,11 +54,20 @@ import { profilePath, shopPath } from "../lib/paths";
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
   | { kind: "zoom"; rowId: string; initialId?: string }
-  | { kind: "pop"; text: string; title: string; stamp?: string }
+  | {
+      kind: "pop";
+      text: string;
+      title: string;
+      stamp?: string;
+      /** A book's POP leads on to the book itself. */
+      placementId?: string;
+    }
   | { kind: "message" }
   | { kind: "history" }
   | { kind: "menu" }
   | null;
+const WALK_HINT_KEY = "book-town-walk-hint";
+
 export function WalkView({
   state,
   actions,
@@ -154,6 +163,27 @@ export function WalkView({
   const background = scene?.background;
   const focusText =
     focusRow && focusRow.storeId === currentId ? focusRow.text : null;
+  const popPlacement =
+    overlay?.kind === "pop" && overlay.placementId && scene
+      ? objectById(scene, overlay.placementId)
+      : undefined;
+  const popBook = state.books.find((b) => b.id === popPlacement?.bookId);
+  // Ways to begin a word to the owner, drawn from this shop's own shelf.
+  const leadBook = scene
+    ? state.books.find(
+        (b) =>
+          b.id ===
+          (scene.objects.find((o) => o.kind === "book" && o.display === "face")
+            ?.bookId ?? scene.objects.find((o) => o.kind === "book")?.bookId),
+      )
+    : undefined;
+  const starters = [
+    "POPを読んで、読みたくなりました。",
+    ...(leadBook
+      ? [`『${leadBook.title}』が並んでいて、うれしくなりました。`]
+      : []),
+    "また来ます。",
+  ];
   // One chip per shelf, top to bottom, labelled like its chalkboard.
   const shelfChips = scene
     ? scene.objects
@@ -248,8 +278,24 @@ export function WalkView({
       notify("街をひと回りしました。もう一周、どうぞ。");
     lastIndex.current = index;
   }, [session, notify]);
+  // The first time a reader walks, a quiet line says how to turn to the next shop.
+  const [firstHint, setFirstHint] = useState(false);
+  const canTurn = Boolean(session && !session.ended && session.ids.length > 1);
+  useEffect(() => {
+    if (!ready || !canTurn) return;
+    try {
+      if (localStorage.getItem(WALK_HINT_KEY)) return;
+      localStorage.setItem(WALK_HINT_KEY, "1");
+    } catch {
+      return;
+    }
+    setFirstHint(true);
+    const timer = window.setTimeout(() => setFirstHint(false), 3600);
+    return () => window.clearTimeout(timer);
+  }, [ready, canTurn]);
   function step(direction: -1 | 1) {
     if (overlay) return;
+    setFirstHint(false);
     update((previous) => stepWalk(previous, direction));
     requestAnimationFrame(() => stage.current?.focus({ preventScroll: true }));
   }
@@ -448,7 +494,7 @@ export function WalkView({
                 <button
                   aria-label={
                     delivers || visitor
-                      ? "店主にひとことを残す"
+                      ? "店主にひとことを伝える"
                       : "店主に伝える（送信されないデモ）"
                   }
                   onClick={() => {
@@ -457,7 +503,10 @@ export function WalkView({
                     open({ kind: "message" });
                   }}
                 >
-                  <Icon name="mail" size={16} />
+                  <i>
+                    <Icon name="mail" size={16} />
+                  </i>
+                  <small>伝える</small>
                 </button>
               )}
               {!ownShop && (
@@ -473,14 +522,20 @@ export function WalkView({
                     );
                   }}
                 >
-                  <Icon name={following ? "check" : "follow"} size={16} />
+                  <i>
+                    <Icon name={following ? "check" : "follow"} size={16} />
+                  </i>
+                  <small>{following ? "フォロー中" : "フォロー"}</small>
                 </button>
               )}
               <button
                 aria-label="その他のメニュー"
                 onClick={() => open({ kind: "menu" })}
               >
-                <Icon name="more" size={16} />
+                <i>
+                  <Icon name="more" size={16} />
+                </i>
+                <small>その他</small>
               </button>
             </div>
           </div>
@@ -614,6 +669,7 @@ export function WalkView({
                         "本") + "のPOP",
                     text: bookPop(scene, p.id)?.text ?? "",
                     stamp: bookPop(scene, p.id)?.stamp,
+                    placementId: p.id,
                   })
                 }
                 onLabel={(o) =>
@@ -627,6 +683,12 @@ export function WalkView({
                   })
                 }
               />
+              {firstHint && (
+                <p className="walk-first-hint" role="status">
+                  <i aria-hidden="true">↑</i>
+                  上にめくると、となりの本屋へ
+                </p>
+              )}
               <div
                 className={"walk-actions" + (rail ? " is-rail" : "")}
                 style={
@@ -761,6 +823,23 @@ export function WalkView({
             </span>
           )}
           {owner && <p className="muted">— {owner.name}</p>}
+          {popBook && (
+            <button
+              className="walk-pop-book"
+              onClick={() =>
+                setOverlay({ kind: "book", placementId: overlay.placementId! })
+              }
+            >
+              <BookJacket book={popBook} />
+              <span>
+                <b>{popBook.title}</b>
+                <small>{popBook.author}</small>
+                <em>
+                  この本を手に取る <Icon name="arrow" size={14} />
+                </em>
+              </span>
+            </button>
+          )}
         </Modal>
       )}
       {overlay?.kind === "message" && delivers && (
@@ -768,6 +847,10 @@ export function WalkView({
           <p className="note-box">
             店主に届きます。読めるのは、店主とあなただけです。消して届け直すと、店主からも見えなくなります。
           </p>
+          <MessageStarters
+            starters={starters}
+            onPick={(text) => setMessage(joinStarter(message, text))}
+          />
           <textarea
             className="field walk-message"
             aria-label="店主に伝えたい言葉"
@@ -796,9 +879,10 @@ export function WalkView({
       )}
       {overlay?.kind === "message" && !delivers && (
         <Modal title="店主に伝える" onClose={close}>
-          <p className="note-box">
-            送信されないデモです。書いた言葉は、このブラウザにだけ残ります。
-          </p>
+          <MessageStarters
+            starters={starters}
+            onPick={(text) => setMessage(joinStarter(message, text))}
+          />
           <textarea
             className="field walk-message"
             aria-label="店主に伝えたい言葉"
@@ -820,6 +904,9 @@ export function WalkView({
           >
             手元に保存する
           </button>
+          <p className="walk-message-note">
+            送信されないデモです。言葉はこのブラウザにだけ残ります。
+          </p>
         </Modal>
       )}
       {overlay?.kind === "menu" && shop && (
@@ -883,5 +970,28 @@ export function WalkView({
         </Modal>
       )}
     </section>
+  );
+}
+
+/** Appends a starter on its own line; a starter already written is not repeated. */
+function joinStarter(message: string, starter: string) {
+  if (message.includes(starter)) return message;
+  return message.trim() ? message.replace(/\s*$/, "\n") + starter : starter;
+}
+function MessageStarters({
+  starters,
+  onPick,
+}: {
+  starters: string[];
+  onPick: (text: string) => void;
+}) {
+  return (
+    <div className="walk-starters" role="group" aria-label="書き出しの例">
+      {starters.map((text) => (
+        <button key={text} type="button" onClick={() => onPick(text)}>
+          {text}
+        </button>
+      ))}
+    </div>
   );
 }

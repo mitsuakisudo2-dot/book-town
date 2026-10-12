@@ -240,15 +240,17 @@
   position: absolute;
   left: calc(var(--walk-avatar) + 10px);
   top: 34px;
-  width: 46vw;
+  /* Ends before the pendant lamp, which hangs from 44% of the store. */
+  width: calc(44vw - var(--walk-avatar) - 28px);
   margin: 0;
   font-family: var(--serif);
-  font-size: clamp(7.5px, 2.05vw, 9px);
+  font-weight: 500;
+  font-size: 11px;
   line-height: 1.45;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   color: #efe8de;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   word-break: auto-phrase;
   text-wrap: pretty;
   -webkit-box-orient: vertical;
@@ -261,7 +263,7 @@
   gap: 8px;
   animation: walk-fade 0.26s ease-out;
 }
-.walk-header-tools button,
+.walk-header-tools button i,
 .walk-journey-controls button {
   position: relative;
   width: clamp(26px, 7.4vw, 32px);
@@ -275,6 +277,27 @@
   border: 1px solid rgba(255, 225, 200, 0.3);
   backdrop-filter: blur(6px);
 }
+/* Each circle says what it does underneath, like the rail beside the shelf. */
+.walk-header-tools button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: clamp(30px, 8.6vw, 38px);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+}
+.walk-header-tools button small {
+  font-family: "Noto Sans JP", sans-serif;
+  font-size: 8.5px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: #efe5d6;
+}
 .walk-header-tools button:after,
 .walk-journey-controls button:after {
   content: "";
@@ -285,7 +308,7 @@
   width: 14px;
   height: 14px;
 }
-.walk-header-tools button[aria-pressed="true"] {
+.walk-header-tools button[aria-pressed="true"] i {
   color: #3a2616;
   background: #fbf1dd;
 }
@@ -330,6 +353,53 @@
   font-size: 11px;
   color: #dccbac;
   letter-spacing: 0.08em;
+}
+
+/* Shown once, on the first walk: how to turn to the next shop. */
+.walk-first-hint {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  top: 78.5%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 15px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: #fbf1dd;
+  background: rgba(20, 8, 2, 0.74);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: walk-first-hint 3.6s ease both;
+}
+.walk-first-hint i {
+  font-style: normal;
+  animation: walk-first-hint-arrow 0.9s ease-in-out 3;
+}
+@keyframes walk-first-hint {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  10%,
+  85% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 0);
+  }
+}
+@keyframes walk-first-hint-arrow {
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 /* The pendant lamp over the signboard. */
@@ -1594,7 +1664,73 @@
 }
 .walk-message {
   height: 170px;
-  margin: 18px 0;
+  margin: 12px 0 18px;
+}
+/* Ways to begin: tap to write them in, then change them freely. */
+.walk-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+.walk-starters button {
+  padding: 6px 11px;
+  border: 1px solid #d9c7a6;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  color: #5b4126;
+  background: #fbf4e6;
+}
+.walk-message-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: #8a7660;
+}
+/* A book's POP ends with the book, one tap from taking it in hand. */
+.walk-pop-book {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid #e3d5bb;
+  border-radius: 10px;
+  text-align: left;
+  color: #3f2e1d;
+  background: #fbf6ec;
+}
+.walk-pop-book .book-jacket {
+  flex: none;
+  width: 46px;
+  height: 66px;
+  padding: 0;
+}
+.walk-pop-book span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.walk-pop-book b {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 14px;
+}
+.walk-pop-book small {
+  font-size: 11px;
+  color: #7d6a55;
+}
+.walk-pop-book em {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-style: normal;
+  font-size: 12px;
+  color: #6a4f2d;
 }
 .walk-history-list {
   padding: 12px 0;
@@ -1720,9 +1856,15 @@
     width: min(100%, 300px);
     gap: 10px;
   }
-  .walk-header-tools button {
+  .walk-header-tools button i {
     width: 42px;
     height: 42px;
+  }
+  .walk-header-tools button small {
+    font-size: 11px;
+  }
+  .walk-first-hint {
+    display: none;
   }
   .walk-header-tools button svg {
     width: 18px;
@@ -1769,7 +1911,9 @@
 @media (prefers-reduced-motion: reduce) {
   .walk-artboard,
   .walk-owner,
-  .walk-header-tools {
+  .walk-header-tools,
+  .walk-first-hint,
+  .walk-first-hint i {
     animation: none;
   }
   .walk-view * {
