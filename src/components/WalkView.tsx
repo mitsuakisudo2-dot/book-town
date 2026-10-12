@@ -40,6 +40,7 @@ import {
 } from "../lib/walk-state";
 import { useWalkStore } from "../lib/walk-store";
 import { requestAccount } from "../lib/visitor";
+import { ReportButton } from "./Report";
 import {
   SHOP_MESSAGE_MAX_LENGTH,
   type Shop,
@@ -836,6 +837,16 @@ export function WalkView({
               <Icon name="clock" />
               訪問履歴
             </button>
+            {!ownShop && (
+              <ReportButton
+                className="button secondary"
+                target={{ kind: "shop", id: shop.id, name: shop.name }}
+                onOpen={close}
+              >
+                <Icon name="flag" />
+                この書店を通報
+              </ReportButton>
+            )}
           </div>
         </Modal>
       )}

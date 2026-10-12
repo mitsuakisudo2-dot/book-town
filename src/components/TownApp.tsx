@@ -37,6 +37,7 @@ import "./shop-journey.css";
 import { WalkView } from "./WalkView";
 import { profilePath, shopPath } from "../lib/paths";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
+import { ReportButton, ReportDialog } from "./Report";
 import { accountRequested } from "../lib/visitor";
 
 type View =
@@ -367,6 +368,7 @@ export default function TownApp({
         </Modal>
       )}
       <AccountInvite />
+      <ReportDialog />
     </div>
   );
 }
@@ -556,6 +558,15 @@ function ShopView({
             {shop.followers}人がフォロー · この数はあなたにだけ見えています
           </p>
         ) : null}
+        {shop.ownerId !== ME_ID && (
+          <ReportButton
+            className="report-link"
+            target={{ kind: "shop", id: shop.id, name: shop.name }}
+          >
+            <Icon name="flag" size={13} />
+            この書店を通報
+          </ReportButton>
+        )}
       </section>
       {owner && (
         <div className="shop-owner-footer">

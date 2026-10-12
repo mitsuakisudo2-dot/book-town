@@ -1,0 +1,60 @@
+/* The report dialog: a short list of reasons, an optional note. */
+.report-reasons {
+  border: 0;
+  padding: 0;
+  margin: 0 0 18px;
+  display: grid;
+  gap: 8px;
+}
+.report-reasons legend {
+  font-size: 12px;
+  color: #6f7f63;
+  margin-bottom: 10px;
+}
+.report-reasons label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #50604a;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.report-reasons label:has(input:checked) {
+  border-color: var(--green);
+  background: #eef2e8;
+  color: var(--green);
+}
+.report-reasons input {
+  accent-color: var(--green);
+  margin: 0;
+}
+.report-form .report-note {
+  font-size: 11px;
+  line-height: 1.9;
+  margin-bottom: 14px;
+}
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.report-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #9aa58f;
+  background: none;
+  border: 0;
+  padding: 6px 0;
+  cursor: pointer;
+}
+.report-link:hover,
+.report-link:focus-visible {
+  color: #6f7f63;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

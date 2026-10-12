@@ -27,6 +27,7 @@ const composeIconNames: Record<ComposeIcon, string> = {
 import "./profile.css";
 import "./reading.css";
 import { isDatabaseId, profilePath, shopPath } from "../lib/paths";
+import { ReportButton } from "./Report";
 
 interface ProfileViewProps {
   state: TownState;
@@ -282,6 +283,19 @@ export function ProfileView({
                 {isSelf ? "自分の書店を見る" : "この人の書店へ"}
                 <Icon name="arrow" />
               </Link>
+            )}
+            {!isSelf && (
+              <ReportButton
+                className="report-link"
+                target={{
+                  kind: "profile",
+                  id: reader.id,
+                  name: reader.name + "さん",
+                }}
+              >
+                <Icon name="flag" size={13} />
+                通報
+              </ReportButton>
             )}
           </div>
         </div>
