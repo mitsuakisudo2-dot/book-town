@@ -92,8 +92,10 @@ export function StreetView({
   // The street has no end: past the last shop, another round of the same
   // town begins in a new order. A search or a short list stays one round.
   const endless = !term && matching.length >= 3;
-  const [rounds, setRounds] = useState(1);
-  const shownRounds = endless ? rounds : 1;
+  // Changing the filter or the order starts the street again from one round.
+  const walkKey = [followingOnly, offset].join(":");
+  const [rounds, setRounds] = useState({ key: walkKey, count: 1 });
+  const shownRounds = endless && rounds.key === walkKey ? rounds.count : 1;
   const roundsOf: Shop[][] = [ordered];
   for (let round = 1; round < shownRounds; round++)
     roundsOf.push(
@@ -107,13 +109,19 @@ export function StreetView({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting))
-          setRounds((count) => Math.min(count + 1, MAX_ROUNDS));
+          setRounds((current) => ({
+            key: walkKey,
+            count:
+              current.key === walkKey
+                ? Math.min(current.count + 1, MAX_ROUNDS)
+                : 2,
+          }));
       },
       { rootMargin: "0px 0px 800px 0px" },
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [endless, rounds]);
+  }, [endless, shownRounds, walkKey]);
   const reset = () => {
     setSearch("");
     setFollowingOnly(false);
