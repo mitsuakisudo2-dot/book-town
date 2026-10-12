@@ -124,6 +124,12 @@ export const bookPop = (scene: StoreScene, id: string) =>
   scene.objects.find((o) => o.kind === "bookPop" && o.parentId === id);
 export const unplacedBooks = (scene: StoreScene) =>
   scene.objects.filter((o) => o.kind === "book" && o.parentId === null);
+/** Only the town's own theme pictures stand behind a shop. A scene saved from
+ * elsewhere could name any address, and every passer-by's browser would fetch it. */
+export const safeBackgroundUrl = (url: string | undefined) =>
+  url && /^\/themes\/[\w-]+\/[\w.-]+$/.test(url) && !url.includes("..")
+    ? url
+    : undefined;
 export function furnitureBooks(scene: StoreScene, furnitureId: string) {
   return scene.objects
     .filter((o) => o.kind === "row" && o.parentId === furnitureId)
