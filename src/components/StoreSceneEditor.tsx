@@ -92,7 +92,7 @@ export function StoreSceneEditor({
     "--walk-darkness": draft.background.darkness,
   } as CSSProperties;
   return (
-    <Modal title="店内をつくる" wide onClose={onClose}>
+    <Modal title="店内を飾りつける" wide onClose={onClose}>
       <div className="scene-editor" style={style}>
         <p className="scene-editor-intro">
           本を選び、言葉を添えて、あなたの一軒に。保存すると「書店めぐり」に反映されます。
