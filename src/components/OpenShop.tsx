@@ -17,6 +17,7 @@ import { recentlyFinished } from "../lib/records";
 import { BookPicker } from "./BookPicker";
 import { BookJacket, Icon } from "./ui";
 import "./open-shop.css";
+import { noteShopOpened } from "../lib/just-opened";
 
 type Shared = {
   state: TownState;
@@ -247,6 +248,7 @@ export function OpenShop({
         index === 0 && pop.trim() ? { pop: pop.trim(), index: 0 } : undefined,
       ),
     );
+    noteShopOpened();
     setOpened({
       name: shopName,
       words: OPENED[Math.floor(Math.random() * OPENED.length)],

@@ -1298,3 +1298,160 @@
   border-left: 0;
   padding-left: 0;
 }
+
+/* Each shop shows its face on the street: the owner's words come first. */
+.street-filters {
+  justify-content: flex-start;
+  gap: 8px;
+}
+.street-filters button {
+  min-height: 40px;
+  padding: 6px 16px;
+  border: 1px solid #d1d8c7;
+  border-radius: 999px;
+  font-size: 13px;
+  color: #536448;
+  background: #fffdf7;
+}
+.street-filters button[aria-pressed="true"] {
+  background: #e3ebdb;
+  border-color: #809273;
+  color: #364e32;
+  font-weight: 600;
+}
+.street-route-label small[role="status"] {
+  transition: color 0.3s;
+}
+.street-shop.is-arriving {
+  animation: street-arrive 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.street-shop.is-arriving:nth-of-type(2) {
+  animation-delay: 0.06s;
+}
+.street-shop.is-arriving:nth-of-type(3) {
+  animation-delay: 0.12s;
+}
+@keyframes street-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.street-shop.is-compact .street-shop-tagline {
+  flex-basis: 100%;
+  font-family: "Kaisei HarunoUmi", var(--serif);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--theme-deep);
+  margin-top: -2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.street-shop-voice {
+  display: block;
+  width: calc(100% - 36px);
+  margin: 12px 18px 4px;
+  padding: 11px 16px 9px;
+  text-align: left;
+  background: #fffaf0;
+  border: 1px solid #eadfc4;
+  border-radius: 3px;
+  box-shadow: 2px 3px 0 #e9e1cc80;
+  transform: rotate(-0.6deg);
+  color: #3a2e22;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+.street-shop-voice:hover {
+  transform: rotate(0deg) translateY(-1px);
+  box-shadow: 3px 5px 0 #e9e1cc;
+}
+.street-shop-voice-words {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-family: "Kaisei HarunoUmi", var(--serif);
+  font-size: 15px;
+  line-height: 1.75;
+}
+.street-shop-voice small {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #7b7262;
+}
+.street-new-own {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  background: #f6ead2;
+  color: #7a5114;
+  font-size: 13px;
+  font-weight: 600;
+}
+.street-shop.is-compact .street-shop-footer {
+  gap: 4px 12px;
+}
+.street-shop.is-compact .street-shop-footer > a {
+  font-size: 12px;
+  min-height: 40px;
+}
+.street-shop.is-compact .street-shop-footer > a:first-child {
+  color: #6c7766;
+  text-decoration: underline;
+  text-decoration-color: #c9cdbf;
+  text-underline-offset: 3px;
+}
+.street-shop.is-compact .street-shop-footer > .street-enter {
+  margin-left: auto;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: var(--theme-deep);
+  color: #fffdf6;
+  font-weight: 600;
+}
+.street-empty .button {
+  display: inline-flex;
+}
+@media (max-width: 760px) {
+  .street-intro h1 {
+    font-size: 23px;
+    line-height: 1.55;
+  }
+  .street-intro {
+    padding-bottom: 10px;
+  }
+  .street-filters {
+    margin: 4px 0 8px;
+  }
+  .street-filters button {
+    min-height: 40px;
+    padding: 4px 14px;
+    font-size: 12px;
+  }
+  .street-shop-voice {
+    width: calc(100% - 28px);
+    margin: 10px 14px 2px;
+    padding: 9px 13px 8px;
+  }
+  .street-shop-voice-words {
+    font-size: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .street-shop.is-arriving {
+    animation: none;
+  }
+  .street-shop-voice,
+  .street-shop-voice:hover {
+    transform: none;
+  }
+}

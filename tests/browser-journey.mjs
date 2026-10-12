@@ -128,16 +128,22 @@ try {
         .getByRole("button", { name: "フォロー中", exact: true })
         .click();
       await expect(page.locator(".street-shop")).toHaveCount(1);
-      await page
-        .getByRole("button", { name: "フォロー中", exact: true })
-        .click();
+      await page.getByRole("button", { name: "すべて", exact: true }).click();
     },
   );
   await check(
     "Book -> several different POPs -> exact shelf -> reader profile",
     async () => {
       // The street goes on in rounds, so a shop can appear more than once.
-      await page.getByRole("link", { name: "軌道書房に入る" }).first().click();
+      // Its name leads into the walk; the footer opens its own page.
+      const orbit = page
+        .locator(".street-shop")
+        .filter({ has: page.getByRole("link", { name: "軌道書房に入る" }) })
+        .first();
+      await expect(
+        orbit.getByRole("link", { name: "軌道書房に入る" }),
+      ).toHaveAttribute("href", "/walk/#shop-orbit");
+      await orbit.getByRole("link", { name: /^紹介と/ }).click();
       // Demo shops have three public shelves, one per tier of the walk.
       await expect(page.locator(".store-shelf-section")).toHaveCount(3);
       await page

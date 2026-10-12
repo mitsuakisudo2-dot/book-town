@@ -448,9 +448,7 @@ try {
         .click();
       await expect(page.locator(".street-shop")).toHaveCount(1);
       await expect(shop(page, "軌道書房")).toBeVisible();
-      await page
-        .getByRole("button", { name: "フォロー中", exact: true })
-        .click();
+      await page.getByRole("button", { name: "すべて", exact: true }).click();
       const query = page.getByRole("textbox", {
         name: "本や書店を検索",
         exact: true,
@@ -474,6 +472,10 @@ try {
       expect(
         await page.locator(".street-shop-title").first().textContent(),
       ).not.toBe(original);
+      // The change is said, not only shown.
+      await expect(page.locator(".street-route-label")).toContainText(
+        "別の路地に入りました",
+      );
       await expect(page.locator(".street-shop")).toHaveCount(6);
       const names = await page.locator(".street-shop-title").allTextContents();
       expect(new Set(names).size).toBe(6);
@@ -491,12 +493,23 @@ try {
     },
   );
   await check(
-    "Each shop card links to the shop's own page for the full view",
+    "Each shop card speaks first, walks in, and links to its own page",
     async () => {
       await go(page);
       const card = shop(page, "軌道書房");
       await expect(card.locator(".shelf-scroll")).toHaveCount(2);
-      await card.getByRole("link", { name: "この書店へ" }).click();
+      // The owner's words come first, and open the book they were written for.
+      await expect(card.locator(".street-shop-voice")).toContainText(
+        "店主 凪のPOP",
+      );
+      await card.locator(".street-shop-voice").click();
+      await expect(page.getByRole("dialog")).toContainText("ソラリス");
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(
+        card.getByRole("link", { name: "店内に入る" }),
+      ).toHaveAttribute("href", "/walk/#shop-orbit");
+      await card.getByRole("link", { name: /^紹介と/ }).click();
       await expect(page).toHaveURL(/shops\/shop-orbit/);
       // Demo shops have three public shelves, one per tier of the walk.
       await expect(page.locator(".store-shelf-section")).toHaveCount(3);
