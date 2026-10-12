@@ -1061,3 +1061,29 @@
     margin: 35px 0;
   }
 }
+/* Registering a book and the settings stay at hand without competing with the shop. */
+.profile-minor-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.profile-minor-actions .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #536448;
+}
+.profile-minor-actions .text-button:hover {
+  background: #eef2e8;
+}
+@media (max-width: 600px) {
+  /* Buttons that wrap fill their row, so a stacked pair lines up. */
+  .profile-reader-actions .button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}

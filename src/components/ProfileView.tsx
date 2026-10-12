@@ -243,24 +243,29 @@ export function ProfileView({
           <div className="profile-reader-actions">
             {isSelf ? (
               <>
+                {/* One main step (the shop); the rest stay small beside it. */}
+                <Link className="button primary" href="/my-shop/">
+                  <Icon name="store" /> {shop ? "書店を整える" : "書店をひらく"}
+                </Link>
                 <button className="button secondary" onClick={beginProfileEdit}>
                   <Icon name="edit" /> プロフィールを編集
                 </button>
-                <Link className="button secondary" href="/my-shop/">
-                  <Icon name="store" /> 書店を編集
-                </Link>
-                <button
-                  className="button secondary"
-                  onClick={() => setSheet("register")}
-                >
-                  <Icon name="barcode" /> 本を登録
-                </button>
-                <button
-                  className="button secondary"
-                  onClick={() => setSheet("settings")}
-                >
-                  <Icon name="settings" /> 設定
-                </button>
+                <span className="profile-minor-actions">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setSheet("register")}
+                  >
+                    <Icon name="barcode" size={15} /> 本を登録
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setSheet("settings")}
+                  >
+                    <Icon name="settings" size={15} /> 設定
+                  </button>
+                </span>
               </>
             ) : (
               shop && (

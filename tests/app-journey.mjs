@@ -333,6 +333,12 @@ try {
   await check("the compose button icon follows the setting", async () => {
     await go("/profiles/me/");
     await expect(page.locator(".profile-stats")).toContainText("読書時間");
+    // Before a shop opens, the profile's main step is opening one.
+    await expect(
+      page
+        .locator(".profile-reader-actions")
+        .getByRole("link", { name: "書店をひらく" }),
+    ).toHaveAttribute("href", "/my-shop/");
     await page.getByRole("button", { name: "設定" }).click();
     await page
       .getByRole("dialog", { name: "設定" })
@@ -627,6 +633,12 @@ try {
         "一頁ぶん、遠回り。",
       );
       await expect(page.locator(".street-new-own")).toHaveCount(1);
+      await go("/profiles/me/");
+      await expect(
+        page
+          .locator(".profile-reader-actions")
+          .getByRole("link", { name: "書店を整える" }),
+      ).toHaveAttribute("href", "/my-shop/");
     },
   );
 
