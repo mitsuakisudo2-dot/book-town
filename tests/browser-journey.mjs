@@ -94,6 +94,18 @@ const page = await context.newPage();
 watch(page);
 try {
   await check(
+    "an empty wishlist offers a few owners' POPs to start from",
+    async () => {
+      await go(page, "/reading-list/");
+      const start = page.getByRole("region", {
+        name: "店主のPOPから、気になる一冊を",
+      });
+      await expect(start.getByRole("link")).toHaveCount(3);
+      await start.getByRole("link").first().click();
+      await expect(page).toHaveURL(/\/books\//);
+    },
+  );
+  await check(
     "Desktop town discovery and original bookstore signs",
     async () => {
       await go(page, "/");

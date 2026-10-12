@@ -747,6 +747,22 @@ function BookView({
 }
 function Wishlist({ state, actions, notify }: Shared) {
   const books = state.books.filter((b) => state.wishlist.includes(b.id));
+  // An empty list still has somewhere to start: one POP from each of a few shops.
+  const invitations = state.shops
+    .flatMap((shop) => {
+      const owner = state.readers.find((r) => r.id === shop.ownerId);
+      const item = shop.shelves
+        .filter((shelf) => shelf.isPublic)
+        .flatMap((shelf) => shelf.items)
+        .find(
+          (entry) =>
+            entry.pop.trim() &&
+            state.books.some((book) => book.id === entry.bookId),
+        );
+      const book = item && state.books.find((b) => b.id === item.bookId);
+      return owner && item && book ? [{ shop, owner, item, book }] : [];
+    })
+    .slice(0, 3);
   return (
     <>
       <span className="eyebrow">BOOKS TO COME BACK TO</span>
@@ -785,6 +801,30 @@ function Wishlist({ state, actions, notify }: Shared) {
             <Icon name="arrow" size={16} />
           </Link>
         </div>
+      )}
+      {!books.length && invitations.length > 0 && (
+        <section
+          className="wishlist-invitations"
+          aria-labelledby="wishlist-invitations-title"
+        >
+          <h2 id="wishlist-invitations-title">店主のPOPから、気になる一冊を</h2>
+          <ul>
+            {invitations.map(({ shop, owner, item, book }) => (
+              <li key={shop.id}>
+                <Link href={bookPath(book.id)}>
+                  <BookJacket book={book} />
+                  <span>
+                    <b>{book.title}</b>
+                    <q>{item.pop.trim()}</q>
+                    <small>
+                      {shop.name}・店主 {owner.name}のPOP
+                    </small>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </>
   );
