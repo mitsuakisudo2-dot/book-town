@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import {
   COMPOSE_ICONS,
+  ownTagline,
   type ComposeIcon,
   type TownActions,
   type TownState,
@@ -30,6 +31,7 @@ import { isDatabaseId, profilePath, shopPath } from "../lib/paths";
 import { ReportButton } from "./Report";
 import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
+import { SavedShops } from "./SavedShops";
 
 interface ProfileViewProps {
   state: TownState;
@@ -482,6 +484,8 @@ export function ProfileView({
         </section>
       )}
 
+      {isSelf && <SavedShops state={state} />}
+
       <section
         className="profile-shop-section"
         aria-labelledby="profile-shop-title"
@@ -504,10 +508,9 @@ export function ProfileView({
                 <Icon name="store" />
               </div>
               <div>
-                <p className="profile-shop-tagline">
-                  {shop.tagline ||
-                    "あなたの愛した一冊が、誰かの愛する一冊になる。"}
-                </p>
+                {ownTagline(shop) && (
+                  <p className="profile-shop-tagline">{ownTagline(shop)}</p>
+                )}
                 <h3>{shop.name}</h3>
                 <p className="profile-shop-description">{shop.description}</p>
               </div>
