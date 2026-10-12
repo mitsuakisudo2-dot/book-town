@@ -57,6 +57,21 @@ async function swipe(dx, dy) {
 }
 try {
   await go();
+  await check(
+    "the first walk says once how to turn, and the circles say what they do",
+    async () => {
+      await expect(page.locator(".walk-first-hint")).toContainText(
+        "上にめくると、となりの本屋へ",
+      );
+      const tools = page.locator(".walk-header-tools");
+      await expect(tools).toContainText("伝える");
+      await expect(tools).toContainText("フォロー");
+      await expect(tools).toContainText("その他");
+      await go();
+      await expect(page.locator(".walk-owner")).toBeVisible();
+      await expect(page.locator(".walk-first-hint")).toHaveCount(0);
+    },
+  );
   await check("five mobile destinations with walk in center", async () => {
     const links = page.locator(".town-bottom-nav a");
     await expect(links).toHaveCount(5);
@@ -146,7 +161,10 @@ try {
     await expect(page.locator(".walk-full-pop")).toContainText("異星人の話");
     await page.keyboard.press("ArrowDown");
     await expect(page.locator(".walk-progress")).toContainText("1 /");
-    await page.keyboard.press("Escape");
+    // The POP leads on to its book.
+    await page.getByRole("button", { name: /この本を手に取る/ }).click();
+    await expect(page.locator(".bh-book-heading h2")).toContainText("ソラリス");
+    await page.locator(".bh-dialog").press("Escape");
   });
   await check(
     "row magnifier opens shelf magnification and book closes back to it",
@@ -253,6 +271,13 @@ try {
       await expect(
         page.getByText("送信されないデモです。", { exact: false }),
       ).toBeVisible();
+      const box = page.getByRole("textbox", { name: "店主に伝えたい言葉" });
+      const starters = page.getByRole("group", { name: "書き出しの例" });
+      await starters.getByRole("button", { name: /^POPを読んで/ }).click();
+      await starters.getByRole("button", { name: "また来ます。" }).click();
+      await expect(box).toHaveValue(
+        "POPを読んで、読みたくなりました。\nまた来ます。",
+      );
       await page
         .getByRole("textbox", { name: "店主に伝えたい言葉" })
         .fill("また訪れたい本屋でした");
