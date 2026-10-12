@@ -27,6 +27,7 @@ jobs:
       - run: pnpm test:customization-domain
       - run: pnpm test:db
       - run: pnpm test:account
+      - run: pnpm test:town-sync
       - run: pnpm build
 
   # Signs in against a stand-in for Supabase in a real browser.
@@ -52,8 +53,9 @@ jobs:
         env:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/login-qa
 
-  # Signs in against a real local Supabase: auth, the code email, the REST API
-  # and row level security, with the migrations and supabase/config.toml applied.
+  # Signs in and saves a town against a real local Supabase: auth, the code
+  # email, the REST API and row level security, with the migrations and
+  # supabase/config.toml applied.
   supabase:
     runs-on: ubuntu-latest
     steps:
@@ -69,9 +71,14 @@ jobs:
           version: 2.120.0
       - name: Start Supabase
         run: supabase start -x studio,imgproxy,vector,logflare,supavisor,edge-runtime,realtime,storage-api,postgres-meta
-      - name: Sign in against it
+      - name: Sign in and use the town against it
         run: |
           set -a
           eval "$(supabase status -o env)"
           set +a
           pnpm test:supabase
+      - name: The app's database types match the migrations
+        run: |
+          types=src/lib/supabase/database.generated.ts
+          { head -3 "$types"; supabase gen types typescript --local; } |
+            pnpm exec prettier --stdin-filepath "$types" | diff - "$types"

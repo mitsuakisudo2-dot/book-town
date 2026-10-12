@@ -45,6 +45,7 @@ const session = () => {
 let profile = null;
 const inserted = [];
 const codeRequests = [];
+const townReads = [];
 
 // Uses Playwright's own Chromium unless BOOK_TOWN_CHROME names another browser.
 const browser = await chromium.launch({
@@ -108,6 +109,11 @@ await context.route(supabase + "/**", async (route) => {
       };
       return json(201, profile);
     }
+  }
+  // The rest of the signed-in town: a new reader has nothing yet.
+  if (url.pathname.startsWith("/rest/v1/") && request.method() === "GET") {
+    townReads.push(url.pathname);
+    return json(200, []);
   }
   return json(404, { message: "not mocked: " + url.pathname });
 });
@@ -216,14 +222,18 @@ try {
     await shot("4-signed-in");
   });
 
-  await check("the town shows the new name and no sign-in link", async () => {
+  await check("the town is read from the account, not the demo", async () => {
     await page.getByRole("link", { name: "本の街へ" }).click();
     await expect(page.locator(".town-topbar")).toBeVisible();
     await expect(page.getByRole("link", { name: "ログイン" })).toHaveCount(0);
-    const me = await page.evaluate(
-      () => JSON.parse(localStorage.getItem("book-town-v1")).data.me,
-    );
-    expect([me.name, me.handle]).toEqual(["アキ", "aki_books"]);
+    await expect(page.getByRole("button", { name: /本の街/ })).toBeVisible();
+    expect(townReads).toContain("/rest/v1/shops");
+    await page.goto(base + "/profiles/me/");
+    await expect(page.getByRole("heading", { name: "アキ" })).toBeVisible();
+    await expect(page.getByText("@aki_books")).toBeVisible();
+    await expect(page.getByText("デモの読書家")).toHaveCount(0);
+    await expect(page.locator(".persistence-warning")).toBeHidden();
+    await shot("5-town");
   });
 
   await check(

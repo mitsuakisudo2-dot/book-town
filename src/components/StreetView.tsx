@@ -2,18 +2,21 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import type {
-  Book,
-  Shelf,
-  ShelfItem,
-  Shop,
-  TownActions,
-  TownState,
+import {
+  ME_ID,
+  type Book,
+  type Shelf,
+  type ShelfItem,
+  type Shop,
+  type TownActions,
+  type TownState,
 } from "../lib/types";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
 import { BookInHand } from "./BookInHand";
 import "./street.css";
+import { profilePath, shopPath } from "../lib/paths";
+import { useTownBackend } from "../lib/store";
 
 type Props = {
   state: TownState;
@@ -30,6 +33,7 @@ export function StreetView({
   search,
   setSearch,
 }: Props) {
+  const savedIn = useTownBackend();
   const [followingOnly, setFollowingOnly] = useState(false);
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<{
@@ -158,19 +162,19 @@ export function StreetView({
                 <header className="street-shop-header">
                   <div className="street-shop-title">
                     <Link
-                      href={`/shops/${shop.id}/`}
+                      href={shopPath(shop.id)}
                       aria-label={shop.name + "に入る"}
                     >
                       <h2>{shop.name}</h2>
                       <Icon name="arrow" size={18} />
                     </Link>
-                    {!shop.demo && (
+                    {shop.ownerId === ME_ID && (
                       <small className="street-own-tag">あなたの書店</small>
                     )}
                   </div>
                   <div className="street-shop-owner">
                     {owner && (
-                      <Link href={`/profiles/${owner.id}/`}>
+                      <Link href={profilePath(owner.id)}>
                         <ReaderAvatar reader={owner} size={28} />
                         <span>
                           <small>店主</small> {owner.name}
@@ -228,7 +232,7 @@ export function StreetView({
                       ? `ほかに${more}段の棚があります`
                       : "本をタップして、店主の言葉を読む"}
                   </span>
-                  <Link href={`/shops/${shop.id}/`}>
+                  <Link href={shopPath(shop.id)}>
                     この書店へ
                     <Icon name="arrow" size={15} />
                   </Link>
@@ -286,7 +290,9 @@ export function StreetView({
                 <Icon name="plus" size={15} />
               </Link>
             </div>
-            <small>登場する店主と書店は架空のデモです。</small>
+            {savedIn === "local" && (
+              <small>登場する店主と書店は架空のデモです。</small>
+            )}
           </section>
         </div>
         <aside className="street-aside">

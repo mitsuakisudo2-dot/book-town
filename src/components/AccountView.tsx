@@ -11,8 +11,6 @@ import {
   normalizeEmail,
 } from "../lib/account";
 import { accountActions, useAccountState } from "../lib/account-session";
-import { normalizeHandle } from "../lib/handles";
-import { useTownStore } from "../lib/store";
 import { Icon } from "./ui";
 import "./profile.css";
 import "./reading.css";
@@ -176,7 +174,6 @@ function SignIn() {
 }
 
 function FirstProfile() {
-  const { state, actions } = useTownStore();
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [ageConfirmed, setAgeConfirmed] = useState(false);
@@ -193,19 +190,7 @@ function FirstProfile() {
       ageConfirmed,
     });
     setBusy(false);
-    if (!result.ok) return setError(result.message);
-    // Until the shops and posts move to the database, the demo town shows the
-    // same name (and ID, unless a demo reader already uses it).
-    const nextHandle = normalizeHandle(handle);
-    if (
-      !actions.updateProfile(
-        name.trim(),
-        state.me.bio,
-        state.me.links,
-        nextHandle,
-      )
-    )
-      actions.updateProfile(name.trim(), state.me.bio, state.me.links);
+    if (!result.ok) setError(result.message);
   }
 
   return (

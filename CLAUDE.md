@@ -4,7 +4,7 @@ Booktown（旧仮称「余白」）は「本を通じて、人と出会うSNS」
 
 - **最新のコードは `main` です。** 新しい作業は `main` から新しいブランチを切って始めてください。
 - 2026-10-12、ブランチ `claude/book-town-sns-features-3ij9a9` を `main` にまとめました。書店めぐり Phase 1・2（旧PR #6・#7）、使い勝手の改善（旧PR #3）、POPの切り替え（旧PR #5）はすべてここに含まれています。`feat/woodshop-phase2-20261012` などの古いブランチから続けないでください。
-- 保存は今のところブラウザ内（localStorage、`src/lib/repository.ts` の `TownRepository`）だけです。ログインと本物のユーザーはまだありません。
+- 保存先は2つあります。ログインしていなければデモの街をブラウザ内（localStorage、`src/lib/repository.ts`）に、ログインしていればその人の街を Supabase に保存します（`src/lib/town-session.ts` が切り替え、`src/lib/supabase/town-backend.ts` が保存）。店内の飾り付けと本屋めぐりの記録は、まだブラウザ内だけです。
 - データベースは Supabase です。設計と公開範囲は [docs/09_段階2_ログインと保存.md](docs/09_段階2_ログインと保存.md) にあります。`supabase/migrations/` は `main` に入ると自動で本番に適用されるので、適用済みのファイルは書き換えず、新しいファイルで足してください。新しい表には必ず RLS と権限を書き、`pnpm test:db` の確認を足してください。
 - 次の開発は、ログインと保存の土台、本の検索、本屋の公開ページ、読書記録と交流、最初の店主の招待、の順で進める計画です。どこまで実装するかはユーザーの依頼で決めます。
 - 書店めぐりの設計、保存データ、検証方法は [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md) にあります。ただし、そこに書かれたブランチとPRの状態は古くなっています。

@@ -2,15 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type {
-  Book,
-  Shelf,
-  ShelfItem,
-  Shop,
-  TownState,
-  TownActions,
+import {
+  POP_MAX_LENGTH,
+  SHELF_NAME_MAX_LENGTH,
+  SHOP_DESCRIPTION_MAX_LENGTH,
+  SHOP_NAME_MAX_LENGTH,
+  SHOP_TAGLINE_MAX_LENGTH,
+  type Book,
+  type Shelf,
+  type ShelfItem,
+  type Shop,
+  type TownState,
+  type TownActions,
 } from "../lib/types";
-import { shelfUsed, usePersistenceStatus } from "../lib/store";
+import { shelfUsed, usePersistenceStatus, useTownBackend } from "../lib/store";
+import { shelfSaveMessage } from "../lib/persistence";
 import { bookPath } from "../lib/books";
 import { BookJacket, Icon, Modal } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
@@ -113,6 +119,7 @@ function CreateShop({
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
+            maxLength={SHOP_NAME_MAX_LENGTH}
             placeholder="例：雨の日の小さな書店"
             required
             autoComplete="off"
@@ -123,6 +130,7 @@ function CreateShop({
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
+            maxLength={SHOP_DESCRIPTION_MAX_LENGTH}
             rows={4}
             placeholder="どんな本を並べたいですか？ 今の気分のままで。"
           />
@@ -191,6 +199,7 @@ function ShopSettings({
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
+              maxLength={SHOP_NAME_MAX_LENGTH}
               required
             />
           </label>
@@ -199,6 +208,7 @@ function ShopSettings({
             <input
               value={tagline}
               onChange={(event) => setTagline(event.target.value)}
+              maxLength={SHOP_TAGLINE_MAX_LENGTH}
               placeholder="この書店を表す、ひとこと。"
             />
           </label>
@@ -207,6 +217,7 @@ function ShopSettings({
             <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
+              maxLength={SHOP_DESCRIPTION_MAX_LENGTH}
               rows={3}
               placeholder="訪れた読者に、あなたの書店を紹介しましょう。"
             />
@@ -467,6 +478,7 @@ function ShelfEditingPanel({
             <input
               value={shelfName}
               onChange={(event) => setShelfName(event.target.value)}
+              maxLength={SHELF_NAME_MAX_LENGTH}
               onBlur={() => {
                 const nextName = shelfName.trim() || shelf.name;
                 setShelfName(nextName);
@@ -659,6 +671,7 @@ function ShelfEditingPanel({
             この本へのPOP <span className="editor-optional">任意</span>
             <textarea
               value={selected.pop}
+              maxLength={POP_MAX_LENGTH}
               rows={3}
               onChange={(event) =>
                 actions.updatePop(shelf.id, selected.id, event.target.value)
@@ -699,19 +712,14 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   const walk = useWalkStore();
   const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
   const persistenceStatus = usePersistenceStatus();
+  const savedIn = useTownBackend();
   const [addShelfOpen, setAddShelfOpen] = useState(false);
   const [newShelfName, setNewShelfName] = useState("");
   const [addBookShelfId, setAddBookShelfId] = useState<string | null>(null);
   const [removeShelfId, setRemoveShelfId] = useState<string | null>(null);
   const shop = state.ownShop;
   const ownScene = walk.scenes.find((s) => s.storeId === shop?.id);
-  const persistenceMessage = {
-    saved: "本棚の変更は、このブラウザに保存済みです。",
-    loading: "このブラウザの保存データを読み込んでいます。",
-    unavailable:
-      "ブラウザに保存できません。変更はリロードすると失われる場合があります。",
-    recovered: "保存データを読み込めなかったため、初期状態に戻しました。",
-  }[persistenceStatus];
+  const persistenceMessage = shelfSaveMessage(savedIn, persistenceStatus);
   const addBookShelf = shop?.shelves.find(
     (shelf) => shelf.id === addBookShelfId,
   );
@@ -861,6 +869,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
                 autoFocus
                 value={newShelfName}
                 onChange={(event) => setNewShelfName(event.target.value)}
+                maxLength={SHELF_NAME_MAX_LENGTH}
                 placeholder="例：雨の音と一緒に読みたい"
                 required
               />

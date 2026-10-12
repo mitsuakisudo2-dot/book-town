@@ -2,9 +2,20 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTownStore, usePersistenceStatus } from "../lib/store";
+import {
+  useTownStore,
+  usePersistenceStatus,
+  useTownBackend,
+} from "../lib/store";
+import { saveWarning } from "../lib/persistence";
 import { useAccountState } from "../lib/account-session";
-import type { TownState, TownActions, ShelfItem, Shelf } from "../lib/types";
+import {
+  ME_ID,
+  type TownState,
+  type TownActions,
+  type ShelfItem,
+  type Shelf,
+} from "../lib/types";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
 import { ShopEditor } from "./ShopEditor";
@@ -24,6 +35,7 @@ import "./usability.css";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
 import { WalkView } from "./WalkView";
+import { profilePath, shopPath } from "../lib/paths";
 
 type View =
   | "town"
@@ -80,6 +92,8 @@ export default function TownApp({
 }) {
   const { state, actions } = useTownStore();
   const persistence = usePersistenceStatus();
+  const savedIn = useTownBackend();
+  const warning = saveWarning(savedIn, persistence);
   const account = useAccountState();
   const router = useRouter();
   const [toast, setToast] = useState("");
@@ -179,7 +193,7 @@ export default function TownApp({
           </form>
           <div className="top-actions">
             <button className="demo-pill" onClick={() => setAbout(true)}>
-              デモの街
+              {savedIn === "local" ? "デモの街" : "本の街"}
               <Icon name="leaf" size={12} />
             </button>
             {account.status === "signed-out" && (
@@ -210,14 +224,8 @@ export default function TownApp({
             </Link>
           </div>
         </header>
-        <div
-          className="persistence-warning"
-          role="status"
-          hidden={persistence !== "unavailable" && persistence !== "recovered"}
-        >
-          {persistence === "unavailable"
-            ? "このブラウザに保存できません。ブラウザの保存設定を確認してください。今の操作はページを閉じると失われます。"
-            : "保存データを読み込めなかったため、デモの初期状態に戻しました。"}
+        <div className="persistence-warning" role="status" hidden={!warning}>
+          {warning}
         </div>
         <main className={"town-main view-" + view} key={view + selectedId}>
           {view === "walk" ? (
@@ -285,12 +293,25 @@ export default function TownApp({
       {about && (
         <Modal title="Book Townへようこそ" onClose={() => setAbout(false)}>
           <p className="modal-lead">読書家の小さな書店が集まる、本の街。</p>
-          <p className="muted">
-            店主と書店は架空のデモデータです。本の表紙・背表紙はオリジナルの仮デザインを使っています。
-          </p>
-          <div className="note-box">
-            あなたの書店や読みたいリストは、このブラウザのlocalStorageに保存されます。他の端末や読書家には共有されません。
-          </div>
+          {savedIn === "local" ? (
+            <>
+              <p className="muted">
+                店主と書店は架空のデモデータです。本の表紙・背表紙はオリジナルの仮デザインを使っています。
+              </p>
+              <div className="note-box">
+                あなたの書店や読みたいリストは、このブラウザのlocalStorageに保存されます。他の端末や読書家には共有されません。
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="muted">
+                本の表紙・背表紙はオリジナルの仮デザインを使っています。
+              </p>
+              <div className="note-box">
+                あなたの書店や投稿は、ログインしたアカウントに保存されます。非公開の棚と読みたいリストは、あなたにしか見えません。
+              </div>
+            </>
+          )}
           <p className="muted">
             決まった巡り方はありません。棚を眺めたり、同じ本をたどったり、あなたのペースでどうぞ。
           </p>
@@ -336,7 +357,7 @@ function ShopView({
       'button,a,input,textarea,select,summary,dialog,[role="dialog"],.shelf-scroll,.shop-shelf-index,[data-book-rail]',
     onSwipe(direction) {
       const destination = direction < 0 ? previousShop : nextShop;
-      if (destination) router.push(`/shops/${destination.id}/`);
+      if (destination) router.push(shopPath(destination.id));
     },
   });
   if (!shop)
@@ -362,7 +383,7 @@ function ShopView({
       <nav className="shop-journey-nav" aria-label="書店をめぐる">
         {previousShop && (
           <Link
-            href={`/shops/${previousShop.id}/`}
+            href={shopPath(previousShop.id)}
             aria-label={`前の書店：${previousShop.name}`}
           >
             <Icon name="back" size={17} />
@@ -379,7 +400,7 @@ function ShopView({
         </Link>
         {nextShop && (
           <Link
-            href={`/shops/${nextShop.id}/`}
+            href={shopPath(nextShop.id)}
             aria-label={`次の書店：${nextShop.name}`}
           >
             次の書店
@@ -393,10 +414,7 @@ function ShopView({
         <p className="shop-tagline">{shop.tagline}</p>
         <div className="shop-hero-bottom">
           {owner && (
-            <Link
-              href={"/profiles/" + owner.id + "/"}
-              className="owner-profile-link"
-            >
+            <Link href={profilePath(owner.id)} className="owner-profile-link">
               <ReaderAvatar reader={owner} size={35} />
               <span>
                 店主 <b>{owner.name}</b>
@@ -482,10 +500,16 @@ function ShopView({
       <section className="shop-about" aria-label="書店の紹介">
         <h2>この書店について</h2>
         <p className="shop-introduction">{shop.description}</p>
-        <p className="shop-social-note">
-          {shop.demo ? "デモ書店 · " : ""}
-          {shop.followers + Number(followed)}人がフォロー
-        </p>
+        {/* Only owners see how many follow them; the demo shows its own numbers. */}
+        {shop.demo ? (
+          <p className="shop-social-note">
+            デモ書店 · {shop.followers + Number(followed)}人がフォロー
+          </p>
+        ) : shop.ownerId === ME_ID ? (
+          <p className="shop-social-note">
+            {shop.followers}人がフォロー · この数はあなたにだけ見えています
+          </p>
+        ) : null}
       </section>
       {owner && (
         <div className="shop-owner-footer">
@@ -494,7 +518,7 @@ function ShopView({
             <b>{owner.name}の、好きの輪郭。</b>
             <p>人生の9冊から、店主をもう少し知ってみる。</p>
           </div>
-          <Link href={"/profiles/" + owner.id + "/"} className="text-button">
+          <Link href={profilePath(owner.id)} className="text-button">
             プロフィールへ
             <Icon name="arrow" size={16} />
           </Link>
@@ -590,17 +614,14 @@ function BookView({
             key={shop.id + shelf.id + item.id}
           >
             <div className="stockist-title">
-              <Link href={"/shops/" + shop.id + "/#shelf-" + shelf.id}>
+              <Link href={shopPath(shop.id, shelf.id)}>
                 <Icon name="store" size={21} />
                 <h3>{shop.name}</h3>
                 <Icon name="arrow" size={16} />
               </Link>
               {shop.demo && <small className="demo-tag">デモ書店</small>}
             </div>
-            <Link
-              href={"/shops/" + shop.id + "/#shelf-" + shelf.id}
-              className="stockist-shelf"
-            >
+            <Link href={shopPath(shop.id, shelf.id)} className="stockist-shelf">
               <Icon name="book" size={14} />「{shelf.name}」の棚
               <Icon name="chevron" size={13} />
             </Link>
@@ -613,10 +634,7 @@ function BookView({
                   ? "表紙を向けて、大切な一冊に。"
                   : "背表紙を並べて、隣の一冊と。"}
               </span>
-              <Link
-                href={"/shops/" + shop.id + "/#shelf-" + shelf.id}
-                className="text-button"
-              >
+              <Link href={shopPath(shop.id, shelf.id)} className="text-button">
                 この棚を見に行く
                 <Icon name="arrow" size={16} />
               </Link>

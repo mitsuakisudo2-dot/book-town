@@ -35,6 +35,7 @@ import {
 import { BookPicker } from "./BookPicker";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
+import { isDatabaseId, profilePath } from "../lib/paths";
 
 type Shared = {
   state: TownState;
@@ -493,7 +494,7 @@ export function PostCard({
   const likes = likeCount(state, post);
   const wants = wantCount(state, post);
   if (!author) return null;
-  const profile = "/profiles/" + author.id + "/";
+  const profile = profilePath(author.id);
   return (
     <article
       className={"post-card" + (isReply ? " is-reply" : "")}
@@ -513,7 +514,9 @@ export function PostCard({
             {author.name}
           </Link>
           <span className="post-handle">@{author.handle}</span>
-          {!mine && <small className="demo-tag">デモの読書家</small>}
+          {!mine && !isDatabaseId(author.id) && (
+            <small className="demo-tag">デモの読書家</small>
+          )}
           <time dateTime={post.createdAt}>
             {formatPostTime(post.createdAt)}
           </time>

@@ -41,6 +41,7 @@ import {
 import { useWalkStore } from "../lib/walk-store";
 import type { Shop, TownActions, TownState } from "../lib/types";
 import "./walk.css";
+import { profilePath, shopPath } from "../lib/paths";
 
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
@@ -409,7 +410,7 @@ export function WalkView({
         {ready && shop && scene && (
           <div className="walk-identity" key={currentId}>
             <div className="walk-owner">
-              <Link href={"/profiles/" + shop.ownerId + "/"}>
+              <Link href={profilePath(shop.ownerId)}>
                 {owner && <ReaderAvatar reader={owner} size={40} />}
                 <span>
                   <b>{owner?.name ?? shop.name}</b>
@@ -771,7 +772,7 @@ export function WalkView({
           <div className="walk-menu">
             <Link
               className="button secondary"
-              href={ownShop ? "/my-shop/" : "/shops/" + shop.id + "/"}
+              href={ownShop ? "/my-shop/" : shopPath(shop.id)}
             >
               <Icon name="store" />
               書店のページを見る
