@@ -420,14 +420,25 @@ function ShopView({
     },
   });
   if (!shop)
-    return (
+    return shopId === "mine" ? (
       <div className="empty-state">
         <Icon name="store" size={34} />
         <h1>あなたの小さな書店を、ここに。</h1>
         <p>店名と紹介を書いて、好きな本を並べてみましょう。</p>
         <Link href="/my-shop/" className="button">
-          書店をつくる
+          書店をひらく
           <Icon name="plus" size={17} />
+        </Link>
+      </div>
+    ) : (
+      // A link to a shop that has closed, or was never there.
+      <div className="empty-state">
+        <Icon name="store" size={34} />
+        <h1>この書店は、いまは閉まっています。</h1>
+        <p>ほかの書店の灯りは、今日もついています。</p>
+        <Link href="/walk/" className="button">
+          ほかの書店をめぐる
+          <Icon name="arrow" size={17} />
         </Link>
       </div>
     );
@@ -562,11 +573,9 @@ function ShopView({
       <section className="shop-about" aria-label="書店の紹介">
         <h2>この書店について</h2>
         <p className="shop-introduction">{shop.description}</p>
-        {/* Only owners see how many follow them; the demo shows its own numbers. */}
+        {/* Only owners see how many follow them, in the demo as well. */}
         {shop.demo ? (
-          <p className="shop-social-note">
-            見本の書店 · {shop.followers + Number(followed)}人がフォロー
-          </p>
+          <p className="shop-social-note">見本の書店</p>
         ) : shop.ownerId === ME_ID &&
           (shop.followers > 0 || shop.weekVisitors) ? (
           <p className="shop-social-note">

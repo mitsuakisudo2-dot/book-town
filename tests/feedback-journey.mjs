@@ -75,7 +75,7 @@ try {
         expect(order.summary).toBeLessThan(order.pop);
         await expect(dialog().locator(".bh-details")).toHaveCount(0);
         await reaction("いいね").click();
-        await reaction("読む！").click();
+        await reaction("読みたくなった").click();
         await reaction("私も好き！").click();
         await expect(reaction("いいね")).toHaveAttribute(
           "aria-pressed",

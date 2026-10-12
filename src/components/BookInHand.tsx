@@ -429,7 +429,9 @@ export function BookInHand({
             {...popSwipe}
           >
             <div className="bh-pop-label">
-              <span>この棚に並べた人の言葉</span>
+              <span>
+                {popOwner ? `店主 ${popOwner.name} のPOP` : "店主のPOP"}
+              </span>
               {activeShop.demo && <small>見本</small>}
             </div>
             <div
@@ -525,7 +527,7 @@ export function BookInHand({
                   {reaction === "like"
                     ? "いいね"
                     : reaction === "read"
-                      ? "読む！"
+                      ? "読みたくなった"
                       : "私も好き！"}
                 </button>
               ))}
