@@ -764,3 +764,13 @@ button.tag-chip:hover {
     0 0 0 2px var(--paper, #f7f4ee),
     0 0 8px 2px #e9b75a99;
 }
+/* The post just written glows once where it lands, then settles into the page. */
+@keyframes post-arrive {
+  from {
+    background-color: #f7edd2;
+    box-shadow: 0 0 0 4px #efe1b9;
+  }
+}
+.post-card.is-arriving {
+  animation: post-arrive 2.6s ease-out;
+}

@@ -118,11 +118,19 @@ try {
     await check(
       `${label} a post with a book reaches the timeline and the book page`,
       async () => {
+        // Posted from home, it lands on the timeline with its toast.
+        await go("/");
         await compose("灰色の男たちが怖かった。時間の使い方を考え直した。", {
           book: "モモ",
         });
+        await expect(page).toHaveURL(/\/timeline\/$/);
+        await expect(page.locator(".toast")).toHaveText(
+          "タイムラインと作品ページに投稿しました",
+        );
         const mine = card("あなた", "灰色の男たち");
         await expect(mine).toBeVisible();
+        // The post just written glows once where it lands.
+        await expect(mine).toHaveClass(/is-arriving/);
         await expect(mine.getByRole("link", { name: /モモ/ })).toBeVisible();
         await expect(
           page.locator("main article.post-card").first(),

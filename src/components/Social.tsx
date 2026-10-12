@@ -39,6 +39,7 @@ import "./social.css";
 import { isDatabaseId, profilePath } from "../lib/paths";
 import { ReportButton } from "./Report";
 import { useTownBackend } from "../lib/store";
+import { notePosted, postedJustNow } from "../lib/just-posted";
 
 type Shared = {
   state: TownState;
@@ -321,6 +322,7 @@ export function PostComposer({
       parentId: parent?.id ?? null,
     });
     if (!created) return;
+    notePosted(created);
     update(EMPTY_POST_DRAFT);
     setPicking(false);
     notify(
@@ -554,6 +556,7 @@ export function PostCard({
   const likes = likeCount(state, post);
   const wants = wantCount(state, post);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [arriving] = useState(() => postedJustNow(post.id));
   const savedIn = useTownBackend();
   const spoilerable = !mine && !post.spoiler && Boolean(book || post.parentId);
   const reportable =
@@ -564,7 +567,11 @@ export function PostCard({
   const profile = profilePath(author.id);
   return (
     <article
-      className={"post-card" + (isReply ? " is-reply" : "")}
+      className={
+        "post-card" +
+        (isReply ? " is-reply" : "") +
+        (arriving ? " is-arriving" : "")
+      }
       aria-label={author.name + "の" + (isReply ? "返信" : "投稿")}
     >
       <Link

@@ -42,6 +42,7 @@ import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { ReportButton, ReportDialog } from "./Report";
 import { BookFeelings } from "./ReadingRecords";
 import { accountRequested } from "../lib/visitor";
+import { carriedToast, noteToast } from "../lib/carried-toast";
 import { BackLink } from "./BackLink";
 import { notePageShown, noteReplacing } from "../lib/in-town";
 
@@ -106,7 +107,7 @@ export default function TownApp({
   const warning = saveWarning(savedIn, persistence);
   const account = useAccountState();
   const router = useRouter();
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState(carriedToast);
   const [search, setSearch] = useState("");
   const [about, setAbout] = useState(false);
   useEffect(() => notePageShown(), [view, selectedId]);
@@ -127,7 +128,9 @@ export default function TownApp({
   // When a visitor's change became an invitation to sign in, nothing was done,
   // so the message saying it was done stays quiet.
   const notify = useCallback((message: string) => {
-    if (!accountRequested()) setToast(message);
+    if (accountRequested()) return;
+    noteToast(message);
+    setToast(message);
   }, []);
   const shared = { state, actions, notify };
   const section = sectionOf(view, selectedId);
