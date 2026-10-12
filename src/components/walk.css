@@ -1455,7 +1455,7 @@
   justify-content: space-around;
   align-items: center;
 }
-.walk-actions button {
+.walk-actions :is(button, a) {
   flex: 1;
   min-width: 0;
   min-height: 44px;
@@ -1470,10 +1470,10 @@
   border: 0;
   border-radius: 0;
 }
-.walk-actions button:disabled {
+.walk-actions :is(button, a):disabled {
   opacity: 0.45;
 }
-.walk-actions button > span {
+.walk-actions :is(button, a) > span {
   width: clamp(26px, 9cqw, 48px);
   height: clamp(26px, 9cqw, 48px);
   display: grid;
@@ -1484,20 +1484,20 @@
   backdrop-filter: blur(6px);
   box-shadow: 0 3px 8px #0007;
 }
-.walk-actions button > span svg {
+.walk-actions :is(button, a) > span svg {
   width: 56%;
   height: 56%;
 }
-.walk-actions button small {
+.walk-actions :is(button, a) small {
   font-size: clamp(7px, 2.4cqw, 11px);
   text-shadow: 0 1px 3px #000;
 }
-.walk-actions button[aria-pressed="true"] > span {
+.walk-actions :is(button, a)[aria-pressed="true"] > span {
   color: #b5452f;
   background: #fbf1dd;
   border-color: #fbf1dd;
 }
-.walk-actions button[aria-pressed="true"] svg {
+.walk-actions :is(button, a)[aria-pressed="true"] svg {
   fill: currentColor;
 }
 .walk-actions.is-rail {
@@ -1505,7 +1505,7 @@
   justify-content: space-between;
   translate: calc(var(--walk-u) * -1) 0;
 }
-.walk-actions.is-rail button {
+.walk-actions.is-rail :is(button, a) {
   flex: none;
   position: relative;
   width: 100%;
@@ -1514,16 +1514,16 @@
   gap: calc(var(--walk-u) * 1.2);
   color: #fcf8f7;
 }
-.walk-actions.is-rail button:after {
+.walk-actions.is-rail :is(button, a):after {
   /* The tap area grows outward, never over the books. */
   content: "";
   position: absolute;
   inset: 0 -12px 0 0;
 }
-.walk-actions.is-rail button:focus-visible {
+.walk-actions.is-rail :is(button, a):focus-visible {
   outline-offset: -2px;
 }
-.walk-actions.is-rail button > span {
+.walk-actions.is-rail :is(button, a) > span {
   width: auto;
   height: auto;
   background: none;
@@ -1531,20 +1531,20 @@
   box-shadow: none;
   backdrop-filter: none;
 }
-.walk-actions.is-rail button > span svg {
+.walk-actions.is-rail :is(button, a) > span svg {
   width: calc(var(--walk-u) * 4.7);
   height: calc(var(--walk-u) * 4.7);
   stroke-width: 1.7;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.75));
 }
-.walk-actions.is-rail button small {
+.walk-actions.is-rail :is(button, a) small {
   font-family: "Noto Sans JP", sans-serif;
   font-size: calc(var(--walk-u) * 2.3);
   line-height: 1;
   color: #fff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
-.walk-actions.is-rail button[aria-pressed="true"] > span {
+.walk-actions.is-rail :is(button, a)[aria-pressed="true"] > span {
   color: #fff;
   background: none;
 }
