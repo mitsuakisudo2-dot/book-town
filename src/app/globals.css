@@ -2883,3 +2883,11 @@ div.book-jacket:hover {
     color: #6c7d60;
   }
 }
+
+/* Japanese headings break between phrases, not inside a word, and balance
+   their lines so a last character never stands alone. */
+:is(h1, h2, h3, .reading-confirm-phrase) {
+  text-wrap: balance;
+  word-break: auto-phrase;
+  overflow-wrap: break-word;
+}

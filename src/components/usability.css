@@ -230,6 +230,24 @@
   font-size: 12px;
 }
 
+/* Narrow phones: the five labels keep to one line and inside the screen. */
+@media (max-width: 380px) {
+  .town-shell .town-bottom-nav a {
+    min-width: 0;
+  }
+  .town-shell .town-bottom-nav span {
+    font-size: 10.5px;
+    letter-spacing: -0.03em;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 340px) {
+  .town-shell .town-bottom-nav span {
+    font-size: 9.5px;
+    letter-spacing: -0.05em;
+  }
+}
+
 /* A book left unfinished waits at the top of home, one tap from reading. */
 .home-continue {
   display: flex;
