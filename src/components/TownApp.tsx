@@ -510,7 +510,7 @@ function ShopView({
           {shop.ownerId === "me" ? (
             <Link href="/my-shop/" className="button secondary">
               <Icon name="edit" size={15} />
-              書店を編集
+              書店を整える
             </Link>
           ) : (
             <button
