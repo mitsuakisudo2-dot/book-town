@@ -167,7 +167,11 @@ try {
         await expect(want).toHaveAttribute("aria-pressed", "false");
         await want.click();
         await expect(want).toHaveAttribute("aria-pressed", "true");
-        await expect(want).toContainText("6");
+        // How many readers wanted it is the writer's to know, not ours.
+        await expect(want).toHaveText("読みたくなった");
+        await expect(post.getByRole("button", { name: /いいね/ })).toHaveText(
+          "いいね",
+        );
         await go("/books/invisible-cities/");
         await expect(
           page.getByText("すみれさんの感想で、読みたくなった本です。"),
@@ -217,6 +221,11 @@ try {
       async () => {
         await go("/timeline/");
         const post = card("栞", "美術館の帰りに");
+        // Reporting waits behind "…", out of sight of whoever is writing.
+        await expect(
+          post.getByRole("button", { name: "ネタバレでは？" }),
+        ).toHaveCount(0);
+        await post.getByRole("button", { name: "その他の操作" }).click();
         await post.getByRole("button", { name: "ネタバレでは？" }).click();
         await expect(card("栞", "美術館の帰りに")).toHaveCount(0);
         const reported = card("栞", "ネタバレの可能性を報告済み");
@@ -270,6 +279,28 @@ try {
         fullPage: true,
       });
     });
+    await check(
+      `${label} following nobody yet, the timeline suggests owners with POPs`,
+      async () => {
+        await go("/timeline/");
+        await page
+          .getByRole("group", { name: "投稿の表示範囲" })
+          .getByRole("button", { name: "フォロー中" })
+          .click();
+        const suggestions = page.getByRole("region", {
+          name: "フォローすると、その店主の投稿がここに届きます",
+        });
+        await expect(suggestions.getByRole("listitem")).toHaveCount(3);
+        await expect(suggestions).toContainText("POP：");
+        await expect(suggestions).not.toContainText(/\d+人/);
+        await suggestions
+          .getByRole("button", { name: "フォロー" })
+          .first()
+          .click();
+        await expect(suggestions).toHaveCount(0);
+        await expect(page.locator(".post-card").first()).toBeVisible();
+      },
+    );
     await context.close();
   }
   await check(
