@@ -559,7 +559,7 @@ export function StreetView({
               まだ読めていない日も、あなたのペースで。
             </p>
             <span>
-              {state.ownShop ? "わたしの書店へ" : "書店をつくる"}
+              {state.ownShop ? "わたしの書店へ" : "書店をひらく"}
               <Icon name="arrow" size={15} />
             </span>
           </Link>

@@ -721,16 +721,26 @@ export function WalkView({
                     : undefined
                 }
               >
-                <button
-                  aria-label="この店が好き"
-                  aria-pressed={reaction.liked}
-                  onClick={() => editReaction({ liked: !reaction.liked })}
-                >
-                  <span>
-                    <Icon name="heart" />
-                  </span>
-                  <small>好き</small>
-                </button>
+                {ownShop ? (
+                  // One's own shop is tended, not liked or kept for later.
+                  <Link href="/my-shop/" aria-label="自分の店を整える">
+                    <span>
+                      <Icon name="edit" />
+                    </span>
+                    <small>整える</small>
+                  </Link>
+                ) : (
+                  <button
+                    aria-label="この店が好き"
+                    aria-pressed={reaction.liked}
+                    onClick={() => editReaction({ liked: !reaction.liked })}
+                  >
+                    <span>
+                      <Icon name="heart" />
+                    </span>
+                    <small>好き</small>
+                  </button>
+                )}
                 <button
                   aria-label="この店のPOPを読む"
                   disabled={!firstPop}
@@ -743,16 +753,18 @@ export function WalkView({
                   </span>
                   <small>POP</small>
                 </button>
-                <button
-                  aria-label="書店を保存"
-                  aria-pressed={reaction.saved}
-                  onClick={() => editReaction({ saved: !reaction.saved })}
-                >
-                  <span>
-                    <Icon name="bookmark" />
-                  </span>
-                  <small>保存</small>
-                </button>
+                {!ownShop && (
+                  <button
+                    aria-label="書店を保存"
+                    aria-pressed={reaction.saved}
+                    onClick={() => editReaction({ saved: !reaction.saved })}
+                  >
+                    <span>
+                      <Icon name="bookmark" />
+                    </span>
+                    <small>保存</small>
+                  </button>
+                )}
                 <button aria-label="この書店を共有" onClick={share}>
                   <span>
                     <Icon name="share" />

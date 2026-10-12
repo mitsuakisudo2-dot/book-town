@@ -22,6 +22,7 @@ export function BookPicker({
   label,
   suggestions = [],
   suggestionLabel = "最近の本",
+  autoFocus = false,
 }: {
   books: Book[];
   value: string | null;
@@ -30,6 +31,8 @@ export function BookPicker({
   /** Shown before the reader types, e.g. the book being read or the wishlist. */
   suggestions?: string[];
   suggestionLabel?: string;
+  /** For a picker opened by a button: the reader is about to type a title. */
+  autoFocus?: boolean;
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
@@ -67,8 +70,9 @@ export function BookPicker({
           id={id}
           type="search"
           value={query}
-          placeholder={label + "（タイトル・著者・ISBN）"}
+          placeholder="題名・著者・ISBNで探す"
           autoComplete="off"
+          autoFocus={autoFocus}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && results[0]) {
