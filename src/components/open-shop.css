@@ -1,0 +1,404 @@
+/* 3分で開店: choosing a kind of shop, its books and its sign. */
+.open-shop {
+  max-width: 760px;
+  margin: 8px auto 40px;
+  padding: 40px 38px 44px;
+  border: 1px solid #e1dfd0;
+  border-radius: 12px;
+  background: #fbf8ef;
+  color: #374e3e;
+}
+.open-shop h1 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(22px, 3vw, 28px);
+  line-height: 1.6;
+  margin: 10px 0 8px;
+}
+.open-lead {
+  font-size: 12px;
+  line-height: 2;
+  color: #7f8572;
+  margin-bottom: 26px;
+}
+.open-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  margin-bottom: 18px;
+}
+
+/* The three kinds */
+.open-kinds {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.open-kind {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  text-align: left;
+  padding: 22px 18px 20px;
+  border-radius: 10px;
+  border: 1px solid #dcdcc9;
+  background: #fffdf7;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    transform 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.open-kind:hover,
+.open-kind:focus-visible {
+  transform: translateY(-3px);
+  border-color: #a9bc9c;
+  box-shadow: 0 10px 22px #334d3214;
+}
+.open-kind b {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 500;
+}
+.open-kind small {
+  font-size: 11px;
+  line-height: 1.9;
+  color: #7f8572;
+}
+.open-kind-shelf {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 58px;
+  padding: 0 6px;
+  margin-bottom: 8px;
+  border-bottom: 5px solid #b99a74;
+  border-radius: 0 0 2px 2px;
+}
+.open-kind-shelf i {
+  width: 9px;
+  border-radius: 2px 2px 0 0;
+  background: #6d8a6b;
+}
+.open-kind-shelf i:nth-child(1) {
+  height: 44px;
+  background: #57735a;
+}
+.open-kind-shelf i:nth-child(2) {
+  height: 38px;
+  background: #a2795a;
+}
+.open-kind-shelf i:nth-child(3) {
+  height: 48px;
+  background: #3f5a6e;
+}
+.open-kind-shelf i:nth-child(4) {
+  height: 35px;
+  background: #b8a274;
+}
+.open-kind-shelf i:nth-child(5) {
+  height: 46px;
+  background: #8e5f60;
+}
+.open-kind-shelf i:nth-child(6) {
+  height: 40px;
+}
+.open-kind-shelf i:nth-child(7) {
+  height: 50px;
+  background: #4a6075;
+}
+.open-kind-shelf i:nth-child(8) {
+  height: 37px;
+  background: #a77941;
+}
+.open-kind-shelf i:nth-child(9) {
+  height: 43px;
+  background: #5f6f52;
+}
+.open-kind.is-one .open-kind-shelf i {
+  width: 34px;
+  height: 50px;
+  border-radius: 2px;
+  background: linear-gradient(160deg, #6e8c74, #3f5a4a);
+  box-shadow: 2px 2px 0 #00000018;
+}
+.open-free {
+  display: block;
+  margin: 22px auto 0;
+  font-size: 12px;
+}
+
+/* Picking books */
+.open-shelf {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-height: 104px;
+  padding: 12px 14px 0;
+  border-bottom: 9px solid #b99a74;
+  border-radius: 6px 6px 3px 3px;
+  background: linear-gradient(#f1ecdc, #e9e2cc);
+  overflow-x: auto;
+  margin-bottom: 24px;
+}
+.open-shelf-book {
+  position: relative;
+  flex: 0 0 56px;
+  animation: open-slide-in 0.35s ease-out;
+}
+.open-shelf-book button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid #d7d5c4;
+  background: #fffdf7;
+  color: #6b7563;
+  cursor: pointer;
+}
+.open-shelf-slot {
+  flex: 0 0 56px;
+  height: 82px;
+  border: 1px dashed #c9c2a8;
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+}
+@keyframes open-slide-in {
+  from {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+}
+.open-subtitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6f7f63;
+  margin: 0 0 10px;
+}
+.open-candidates {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 12px;
+}
+.open-candidates button {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.open-candidates button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.open-candidates small {
+  font-size: 10px;
+  line-height: 1.5;
+  color: #5d6a56;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.open-pop-label {
+  margin-top: 22px;
+}
+.open-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 26px;
+}
+
+/* The sign */
+.open-sign {
+  margin: 18px 0 26px;
+  padding: 26px 22px;
+  border-radius: 8px;
+  text-align: center;
+  background: var(--theme-deep);
+  color: #f7f3e8;
+  box-shadow:
+    inset 0 0 0 4px #ffffff1c,
+    0 10px 24px #2e3a2e22;
+}
+.open-sign b {
+  display: block;
+  font-family: var(--serif);
+  font-size: clamp(22px, 4vw, 30px);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.open-sign b.is-example {
+  opacity: 0.55;
+}
+.open-sign small {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.8;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+.open-sign-form input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 7px;
+  padding: 12px 13px;
+  border: 1px solid #dbddd1;
+  border-radius: 5px;
+  background: #fffdf8;
+  color: #2c4135;
+  font: inherit;
+}
+.open-sign-form input:focus-visible {
+  outline: 2px solid #8fac80;
+  outline-offset: 1px;
+}
+.open-name .editor-button {
+  margin-top: 7px;
+}
+.open-name {
+  display: flex;
+  gap: 8px;
+}
+.open-name input {
+  flex: 1;
+  min-width: 0;
+}
+.open-name .editor-button {
+  flex-shrink: 0;
+}
+.open-sign-form .editor-label {
+  display: block;
+  margin-top: 18px;
+}
+.open-submit {
+  margin-top: 26px;
+  width: 100%;
+  justify-content: center;
+}
+
+/* Opened */
+.open-done {
+  text-align: center;
+}
+.open-storefront {
+  width: min(320px, 100%);
+  margin: 0 auto 26px;
+}
+.open-storefront-sign {
+  font-family: var(--serif);
+  font-size: 17px;
+  letter-spacing: 0.08em;
+  padding: 10px 12px;
+  border-radius: 6px 6px 0 0;
+  background: var(--theme-deep);
+  color: #f7f3e8;
+  overflow-wrap: anywhere;
+}
+.open-storefront-window {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 5px;
+  min-height: 120px;
+  padding: 16px 14px 10px;
+  border: 6px solid #8a6d4f;
+  border-top: 0;
+  background: radial-gradient(circle at 50% 0%, #fff6d8, #f2e2b4 70%);
+  overflow: hidden;
+  animation: open-lights 1.4s ease-out both;
+}
+.open-window-book {
+  width: 34px;
+  animation: open-slide-in 0.4s ease-out both;
+}
+.open-shutter {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: repeating-linear-gradient(#8f9488 0 6px, #7d8277 6px 8px);
+  animation: open-shutter-up 1.2s cubic-bezier(0.6, 0, 0.3, 1) 0.2s forwards;
+}
+@keyframes open-shutter-up {
+  to {
+    transform: translateY(-101%);
+  }
+}
+@keyframes open-lights {
+  from {
+    filter: brightness(0.55);
+  }
+}
+.open-done h1 {
+  margin-top: 4px;
+}
+.open-done p {
+  font-size: 13px;
+  line-height: 2;
+  color: #5f6a58;
+}
+.open-next {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+@media (max-width: 700px) {
+  .open-shop {
+    padding: 28px 18px 32px;
+    margin-top: 0;
+  }
+  .open-kinds {
+    grid-template-columns: 1fr;
+  }
+  .open-kind {
+    grid-template-columns: 104px 1fr;
+    align-items: center;
+    column-gap: 14px;
+  }
+  .open-kind-shelf {
+    grid-row: span 2;
+    margin: 0;
+  }
+  .open-kind-shelf i {
+    width: 7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .open-kind,
+  .open-shelf-book,
+  .open-window-book,
+  .open-storefront-window {
+    animation: none;
+    transition: none;
+  }
+  .open-shutter {
+    animation: open-shutter-fade 0.4s forwards;
+  }
+  @keyframes open-shutter-fade {
+    to {
+      opacity: 0;
+    }
+  }
+}

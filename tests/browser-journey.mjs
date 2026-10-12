@@ -136,7 +136,8 @@ try {
   await check(
     "Book -> several different POPs -> exact shelf -> reader profile",
     async () => {
-      await page.getByRole("link", { name: "軌道書房に入る" }).click();
+      // The street goes on in rounds, so a shop can appear more than once.
+      await page.getByRole("link", { name: "軌道書房に入る" }).first().click();
       // Demo shops have three public shelves, one per tier of the walk.
       await expect(page.locator(".store-shelf-section")).toHaveCount(3);
       await page
@@ -181,14 +182,13 @@ try {
     "Create bookstore, change sign and theme, name shelves",
     async () => {
       await go(page, "/my-shop/");
+      await page.getByRole("button", { name: "空の棚から始める" }).click();
       await page.getByLabel("書店の名前").fill("夜の寄り道書房");
-      await page
-        .getByLabel("書店の紹介")
-        .fill("静かな夜に、違う世界へ寄り道するための棚。");
       await page.getByRole("button", { name: "藍色", exact: true }).click();
       await page
         .getByRole("button", { name: "書店をひらく", exact: true })
         .click();
+      await page.getByRole("button", { name: "棚を整える" }).click();
       await expect(page.locator(".editor-shelf-panel")).toHaveCount(1);
       const settings = page.locator(".editor-settings");
       await settings.locator("summary").click();

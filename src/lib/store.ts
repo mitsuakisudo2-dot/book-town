@@ -48,6 +48,8 @@ import {
   type TownState,
 } from "./types";
 
+/** The shelf every new shop opens with. */
+export const FIRST_SHELF_ID = "mine-shelf-1";
 export { displayCost, shelfUsed } from "./types";
 
 const themes: ShopTheme[] = ["sage", "ink", "ochre", "rose"];
@@ -219,7 +221,7 @@ export function createTownStore(
         demo: false,
         shelves: [
           {
-            id: "mine-shelf-1",
+            id: FIRST_SHELF_ID,
             name: "はじめの本棚",
             capacity: 20,
             items: [],

@@ -58,8 +58,10 @@ async function selectSolaris() {
 }
 try {
   await page.goto(base + "/my-shop/");
+  await page.getByRole("button", { name: "空の棚から始める" }).click();
   await page.getByLabel("書店の名前").fill("私の静かな本屋");
   await page.getByRole("button", { name: "書店をひらく", exact: true }).click();
+  await page.getByRole("button", { name: "棚を整える" }).click();
   await expect(page.locator(".shop-editor")).toBeVisible();
   await check(
     "empty saved store explains how to open it instead of opening a different shop",

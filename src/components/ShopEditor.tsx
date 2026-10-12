@@ -25,6 +25,7 @@ import { WoodenShelf } from "./WoodenShelf";
 import { StoreSceneEditor } from "./StoreSceneEditor";
 import { useWalkStore } from "../lib/walk-store";
 import { hasPublicSceneBooks } from "../lib/store-customization";
+import { OpenShop, ThemePicker } from "./OpenShop";
 import "./editor.css";
 
 type ShopEditorProps = {
@@ -32,129 +33,6 @@ type ShopEditorProps = {
   actions: TownActions;
   notify: (message: string) => void;
 };
-
-const THEMES: { value: Shop["theme"]; label: string; color: string }[] = [
-  { value: "sage", label: "深緑", color: "#405b4b" },
-  { value: "ink", label: "藍色", color: "#35485e" },
-  { value: "ochre", label: "黄土", color: "#a77941" },
-  { value: "rose", label: "あずき", color: "#8e5f60" },
-];
-
-function ThemePicker({
-  value,
-  onChange,
-}: {
-  value: Shop["theme"];
-  onChange: (theme: Shop["theme"]) => void;
-}) {
-  return (
-    <div
-      className="editor-theme-picker"
-      role="group"
-      aria-label="書店のテーマカラー"
-    >
-      {THEMES.map((theme) => (
-        <button
-          key={theme.value}
-          type="button"
-          className={`editor-theme-option ${value === theme.value ? "is-selected" : ""}`}
-          aria-pressed={value === theme.value}
-          onClick={() => onChange(theme.value)}
-        >
-          <span
-            className="editor-theme-dot"
-            style={{ background: theme.color }}
-          >
-            {value === theme.value && <Icon name="check" size={15} />}
-          </span>
-          {theme.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function CreateShop({
-  actions,
-  notify,
-}: Pick<ShopEditorProps, "actions" | "notify">) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [theme, setTheme] = useState<Shop["theme"]>("sage");
-  return (
-    <section className="editor-create">
-      <div className="editor-create-intro">
-        <span className="editor-kicker">YOUR LITTLE BOOKSHOP</span>
-        <h1>
-          あなたの愛した一冊が、
-          <br />
-          誰かの愛する一冊になる。
-        </h1>
-        <p>
-          棚に名前をつけて、本を並べる。
-          <br />
-          あなたの感性で、小さな書店をひらきましょう。
-        </p>
-        <div className="editor-doorway" aria-hidden="true">
-          <div className="editor-doorway-sign">OPEN SOON</div>
-          <span className="editor-doorway-book one" />
-          <span className="editor-doorway-book two" />
-          <span className="editor-doorway-book three" />
-          <span className="editor-doorway-book four" />
-          <span className="editor-doorway-book five" />
-          <div className="editor-doorway-wood" />
-        </div>
-      </div>
-      <form
-        className="editor-create-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!name.trim()) return;
-          actions.createShop(name.trim(), description.trim(), theme);
-          notify("あなたの書店ができました。本を並べてみましょう。");
-        }}
-      >
-        <span className="editor-kicker">まずは、看板から。</span>
-        <h2>書店をつくる</h2>
-        <label className="editor-label">
-          書店の名前 <span className="editor-required">必須</span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            maxLength={SHOP_NAME_MAX_LENGTH}
-            placeholder="例：雨の日の小さな書店"
-            required
-            autoComplete="off"
-          />
-        </label>
-        <label className="editor-label">
-          書店の紹介 <span className="editor-optional">任意</span>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            maxLength={SHOP_DESCRIPTION_MAX_LENGTH}
-            rows={4}
-            placeholder="どんな本を並べたいですか？ 今の気分のままで。"
-          />
-        </label>
-        <div className="editor-label">
-          看板の色 <ThemePicker value={theme} onChange={setTheme} />
-        </div>
-        <button
-          className="editor-button primary editor-create-submit"
-          type="submit"
-          disabled={!name.trim()}
-        >
-          <Icon name="store" size={18} />
-          書店をひらく
-        </button>
-        <p className="editor-field-note">
-          名前も本棚も、あとから自由に変えられます。
-        </p>
-      </form>
-    </section>
-  );
-}
 
 function ShopSettings({
   shop,
@@ -753,6 +631,8 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   const [newShelfName, setNewShelfName] = useState("");
   const [addBookShelfId, setAddBookShelfId] = useState<string | null>(null);
   const [removeShelfId, setRemoveShelfId] = useState<string | null>(null);
+  // Keeps the opening flow on screen after the shop exists, for its last step.
+  const [opening, setOpening] = useState(false);
   const shop = state.ownShop;
   const ownScene = walk.scenes.find((s) => s.storeId === shop?.id);
   const persistenceMessage = shelfSaveMessage(savedIn, persistenceStatus);
@@ -760,7 +640,16 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     (shelf) => shelf.id === addBookShelfId,
   );
   const removeShelf = shop?.shelves.find((shelf) => shelf.id === removeShelfId);
-  if (!shop) return <CreateShop actions={actions} notify={notify} />;
+  if (!shop || opening)
+    return (
+      <OpenShop
+        state={state}
+        actions={actions}
+        notify={notify}
+        onOpen={() => setOpening(true)}
+        onDone={() => setOpening(false)}
+      />
+    );
   return (
     <div className="shop-editor">
       <header className="editor-page-heading">
