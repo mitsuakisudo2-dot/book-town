@@ -42,6 +42,7 @@ const profile = (id: string, handle: string): Tables<"profiles"> => ({
   color: "#768281",
   links: [],
   compose_icon: "pen",
+  reading_visibility: "private",
   created_at: at,
   updated_at: at,
 });
@@ -117,6 +118,7 @@ function rows(extra: Partial<RemoteRows> = {}): RemoteRows {
     spoilerReports: [],
     popReactions: [],
     sessions: [],
+    records: [],
     seenNotifications: [],
     ...extra,
   };
@@ -532,6 +534,158 @@ async function main() {
       });
     },
   );
+
+  const entry = (
+    id: string,
+    userId: string,
+    extra: Partial<Tables<"reading_entries">> = {},
+  ): Tables<"reading_entries"> => ({
+    id,
+    user_id: userId,
+    book_id: BOOK,
+    kind: "finished",
+    body: "",
+    feelings: ["quiet"],
+    spoiler: false,
+    is_public: true,
+    created_at: at,
+    updated_at: at,
+    ...extra,
+  });
+
+  await check(
+    "reading records: own ones always, others' only in public",
+    () => {
+      const town = townFromRows(
+        rows({
+          profiles: [
+            { ...profile(AKI, "aki"), reading_visibility: "public" },
+            profile(BEN, "ben"),
+          ],
+          records: [
+            entry("00000000-0000-4000-8000-0000000000c1", AKI, {
+              is_public: false,
+              body: "  夜が長かった。 ",
+              feelings: ["talk", "cried"],
+            }),
+            entry("00000000-0000-4000-8000-0000000000c2", BEN, {
+              created_at: "2026-10-12T08:00:00Z",
+            }),
+            // Someone else's private record never reaches the screen.
+            entry("00000000-0000-4000-8000-0000000000c3", BEN, {
+              is_public: false,
+            }),
+            // Nor does a record of a book the town cannot show,
+            entry("00000000-0000-4000-8000-0000000000c4", BEN, {
+              book_id: "00000000-0000-4000-8000-000000000bff",
+            }),
+            // by someone it does not know,
+            entry(
+              "00000000-0000-4000-8000-0000000000c5",
+              "00000000-0000-4000-8000-00000000000c",
+            ),
+            // or of a kind the screens do not read yet.
+            entry("00000000-0000-4000-8000-0000000000c6", BEN, {
+              kind: "opened",
+            }),
+          ],
+        }),
+        ids,
+      );
+      assert.deepEqual(
+        town.readingRecords.map((record) => [record.id, record.readerId]),
+        [
+          ["00000000-0000-4000-8000-0000000000c2", BEN],
+          ["00000000-0000-4000-8000-0000000000c1", ME_ID],
+        ],
+      );
+      const own = town.readingRecords[1];
+      assert.equal(own.note, "夜が長かった。");
+      assert.deepEqual(own.feelings, ["cried", "talk"]);
+      assert.equal(own.isPublic, false);
+      assert.equal(town.settings.readingPublic, true);
+      assert.equal(townFromRows(rows(), ids).settings.readingPublic, false);
+      assert.deepEqual(
+        referencedBookIds(
+          rows({
+            records: [
+              entry("00000000-0000-4000-8000-0000000000c7", BEN, {
+                book_id: OTHER_BOOK,
+              }),
+            ],
+          }),
+        ),
+        [OTHER_BOOK],
+      );
+    },
+  );
+
+  await check("own reading records are added, rewritten and removed", () => {
+    const before = base();
+    const record = {
+      id: "00000000-0000-4000-8000-0000000000c8",
+      readerId: ME_ID,
+      bookId: BOOK,
+      feelings: ["warm" as const],
+      note: "",
+      spoiler: false,
+      isPublic: true,
+      createdAt: at,
+    };
+    const others = {
+      ...record,
+      id: "00000000-0000-4000-8000-0000000000c9",
+      readerId: BEN,
+    };
+    const added: TownState = {
+      ...before,
+      readingRecords: [record, others],
+      settings: { ...before.settings, readingPublic: true },
+    };
+    const writes = planWrites(before, added, ids);
+    assert.deepEqual(kinds(writes), ["profile", "records"]);
+    assert.deepEqual((writes[0] as Extract<Write, { kind: "profile" }>).patch, {
+      reading_visibility: "public",
+    });
+    // Someone else's record on screen is never written, and the database
+    // dates the new one itself.
+    assert.deepEqual((writes[1] as Extract<Write, { kind: "records" }>).rows, [
+      {
+        id: record.id,
+        user_id: AKI,
+        book_id: BOOK,
+        kind: "finished",
+        body: "",
+        feelings: ["warm"],
+        spoiler: false,
+        is_public: true,
+      },
+    ]);
+
+    const rewritten: TownState = {
+      ...added,
+      readingRecords: [
+        { ...record, note: "また読む", isPublic: false },
+        { ...others, note: "変わった" },
+      ],
+    };
+    assert.deepEqual(planWrites(added, rewritten, ids), [
+      {
+        kind: "update-record",
+        id: record.id,
+        patch: {
+          body: "また読む",
+          feelings: ["warm"],
+          spoiler: false,
+          is_public: false,
+        },
+      },
+    ]);
+    assert.deepEqual(
+      planWrites(added, { ...added, readingRecords: [others] }, ids),
+      [{ kind: "delete-records", ids: [record.id] }],
+    );
+  });
 
   await check("the empty town is the person's, with nothing in it", () => {
     const town = emptyTown({ handle: "aki" });

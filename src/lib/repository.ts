@@ -1,5 +1,6 @@
 import { createInitialState } from "./data";
 import { cleanLinks } from "./links";
+import { cleanRecord } from "./records";
 import { DEFAULT_HANDLE, handleProblem } from "./handles";
 import { createRegisteredBook, normalizeIsbn, REGISTERED_GENRE } from "./books";
 import {
@@ -18,6 +19,7 @@ import {
   type Post,
   type Reader,
   type ReadingMode,
+  type ReadingRecord,
   type ReadingSession,
   type Shop,
   type TownState,
@@ -51,6 +53,7 @@ type PersonalData = Pick<
   | "readingSessions"
   | "finishedBooks"
   | "library"
+  | "readingRecords"
   | "settings"
   | "seenNotifications"
 > & {
@@ -236,6 +239,37 @@ function restoreSessions(
   );
 }
 
+/** Keeps each valid record of the viewer's own, about a book this town knows. */
+function restoreRecords(value: unknown, bookIds: Set<string>): ReadingRecord[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
+  return value.flatMap((entry): ReadingRecord[] => {
+    if (
+      !object(entry) ||
+      !text(entry.id, 200) ||
+      !/^me-record-\d+$/.test(entry.id) ||
+      ids.has(entry.id) ||
+      !text(entry.bookId, 200) ||
+      !bookIds.has(entry.bookId) ||
+      !text(entry.createdAt, 40) ||
+      Number.isNaN(Date.parse(entry.createdAt))
+    )
+      return [];
+    const fields = cleanRecord(entry as Partial<ReadingRecord>);
+    if (!fields) return [];
+    ids.add(entry.id);
+    return [
+      {
+        id: entry.id,
+        readerId: ME_ID,
+        bookId: entry.bookId,
+        ...fields,
+        createdAt: entry.createdAt,
+      },
+    ];
+  });
+}
+
 /** Keeps each valid post of the viewer's own; replies need a surviving top-level parent. */
 function restorePosts(
   value: unknown,
@@ -399,12 +433,20 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
         readingSessions: restoreSessions(data.readingSessions, bookIds),
         finishedBooks: knownBooks(data.finishedBooks),
         library: knownBooks(data.library),
+        readingRecords: [
+          ...initial.readingRecords,
+          ...restoreRecords(data.readingRecords, bookIds),
+        ],
         settings: {
           composeIcon: COMPOSE_ICONS.includes(
             settings.composeIcon as ComposeIcon,
           )
             ? (settings.composeIcon as ComposeIcon)
             : initial.settings.composeIcon,
+          readingPublic:
+            typeof settings.readingPublic === "boolean"
+              ? settings.readingPublic
+              : initial.settings.readingPublic,
         },
         seenNotifications: Array.isArray(data.seenNotifications)
           ? [...new Set(data.seenNotifications)]
@@ -436,6 +478,9 @@ export function serializeTown(state: TownState): string {
       readingSessions: state.readingSessions,
       finishedBooks: state.finishedBooks,
       library: state.library,
+      readingRecords: state.readingRecords.filter(
+        (record) => record.readerId === ME_ID,
+      ),
       settings: state.settings,
       seenNotifications: state.seenNotifications,
       addedBooks: state.books

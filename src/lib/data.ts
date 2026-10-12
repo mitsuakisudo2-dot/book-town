@@ -4,6 +4,7 @@ import {
   type Post,
   type Reader,
   type ReadingNow,
+  type ReadingRecord,
   type Shelf,
   type ShelfItem,
   type Shop,
@@ -1296,6 +1297,70 @@ export const readingNow: ReadingNow[] = [
   { readerId: "r-sumire", bookId: "invisible-cities", minutesAgo: 6 },
 ];
 
+// What demo readers felt when they finished a book. Fictional, like the readers.
+export const readingRecords: ReadingRecord[] = [
+  {
+    id: "record-nagi-solaris",
+    readerId: "r-nagi",
+    bookId: "solaris",
+    feelings: ["quiet", "again", "talk"],
+    note: "海の描写を読むたび、わからないものと暮らす練習をしている気がする。",
+    spoiler: false,
+    isPublic: true,
+    createdAt: "2026-10-02T22:10:00Z",
+  },
+  {
+    id: "record-haru-solaris",
+    readerId: "r-haru",
+    bookId: "solaris",
+    feelings: ["sleepless", "shaken", "talk"],
+    note: "",
+    spoiler: false,
+    isPublic: true,
+    createdAt: "2026-10-05T01:40:00Z",
+  },
+  {
+    id: "record-sumire-cities",
+    readerId: "r-sumire",
+    bookId: "invisible-cities",
+    feelings: ["lingering", "again"],
+    note: "どの都市も、どこかで見たことがある。",
+    spoiler: false,
+    isPublic: true,
+    createdAt: "2026-10-06T12:00:00Z",
+  },
+  {
+    id: "record-sou-silence",
+    readerId: "r-sou",
+    bookId: "silence",
+    feelings: ["cried", "shaken", "recommend"],
+    note: "",
+    spoiler: false,
+    isPublic: true,
+    createdAt: "2026-10-08T21:30:00Z",
+  },
+  {
+    id: "record-tou-galaxy",
+    readerId: "r-tou",
+    bookId: "galaxy-railroad",
+    feelings: ["warm", "cried", "again"],
+    note: "子どものころと、読み終えたあとの気持ちが違った。",
+    spoiler: false,
+    isPublic: true,
+    createdAt: "2026-10-09T23:05:00Z",
+  },
+  {
+    id: "record-shiori-momo",
+    readerId: "r-shiori",
+    bookId: "momo",
+    feelings: ["warm", "recommend", "talk"],
+    note: "",
+    spoiler: false,
+    isPublic: true,
+    createdAt: "2026-10-10T09:15:00Z",
+  },
+];
+
 export function createInitialState(): TownState {
   return structuredClone({
     books,
@@ -1323,7 +1388,8 @@ export function createInitialState(): TownState {
     readingSessions: [],
     finishedBooks: [],
     library: [],
-    settings: { composeIcon: "pen" },
+    readingRecords,
+    settings: { composeIcon: "pen", readingPublic: true },
     seenNotifications: [],
     shopMessages: [],
   });
@@ -1334,4 +1400,5 @@ export const demoBooks = books;
 export const demoReaders = readers;
 export const demoShops = shops;
 export const demoPosts = posts;
+export const demoReadingRecords = readingRecords;
 export const seedState = createInitialState();

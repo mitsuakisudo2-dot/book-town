@@ -177,6 +177,7 @@ function FirstProfile() {
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [readingPublic, setReadingPublic] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -188,6 +189,7 @@ function FirstProfile() {
       handle,
       name,
       ageConfirmed,
+      readingPublic,
     });
     setBusy(false);
     if (!result.ok) setError(result.message);
@@ -236,6 +238,33 @@ function FirstProfile() {
           />
           {MINIMUM_AGE}歳以上です
         </label>
+        <fieldset className="account-choice">
+          <legend>読み終えた本の記録</legend>
+          <label>
+            <input
+              type="radio"
+              name="reading-visibility"
+              checked={readingPublic}
+              onChange={() => setReadingPublic(true)}
+            />
+            <span>
+              <b>公開する</b>
+              同じ本を読んだ人と出会えます。1冊ずつ自分だけにもできます。
+            </span>
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="reading-visibility"
+              checked={!readingPublic}
+              onChange={() => setReadingPublic(false)}
+            />
+            <span>
+              <b>自分だけ</b>
+              記録はあなたにだけ見えます。あとから変えられます。
+            </span>
+          </label>
+        </fieldset>
         <ErrorLine message={error} />
         <button className="button primary" disabled={busy}>
           {busy ? "準備しています…" : "はじめる"}

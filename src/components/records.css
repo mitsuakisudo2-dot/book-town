@@ -1,0 +1,292 @@
+/* 読後の気持ち: recording how a book felt, and showing it back as words. */
+.record-book {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.record-book .book-jacket {
+  width: 46px;
+  flex-shrink: 0;
+}
+.record-book b {
+  display: block;
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+.record-book small {
+  font-size: 11px;
+  color: #8a947d;
+}
+
+.feeling-picker {
+  border: 0;
+  padding: 0;
+  margin: 0 0 18px;
+}
+.feeling-picker legend {
+  font-size: 12px;
+  color: #6f7f63;
+  margin-bottom: 10px;
+}
+.feeling-picker > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.feeling-chip {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid #d5dccb;
+  background: #fffdf7;
+  color: #4f6249;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.feeling-chip:hover {
+  border-color: #a9bc9c;
+}
+.feeling-chip[aria-pressed="true"] {
+  background: var(--green);
+  border-color: var(--green);
+  color: #f7f4ee;
+}
+.feeling-chip:focus-visible {
+  outline: 2px solid #8fac80;
+  outline-offset: 2px;
+}
+
+.record-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 16px;
+  font-size: 12px;
+  color: #6f7f63;
+}
+.record-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.record-count {
+  margin-left: auto;
+  font-size: 10px;
+  color: #a5ad97;
+}
+.record-visibility {
+  border: 0;
+  padding: 0;
+  margin: 0 0 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.record-visibility legend {
+  font-size: 12px;
+  color: #6f7f63;
+  margin-bottom: 8px;
+}
+.record-visibility label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  padding: 8px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.record-visibility label:has(input:checked) {
+  border-color: var(--green);
+  background: #eef2e8;
+  color: var(--green);
+}
+.record-visibility input {
+  accent-color: var(--green);
+  margin: 0;
+}
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.record-delete {
+  margin-left: auto;
+  font-size: 11px;
+  color: #a3735f;
+}
+
+/* The book page */
+.book-feelings {
+  margin: 42px 0;
+  padding: 28px 26px;
+  border-radius: 10px;
+  background: #fffdf7;
+  border: 1px solid var(--line);
+}
+.book-feelings h2 {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  margin: 6px 0 16px;
+}
+.book-feelings-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  font-family: var(--serif);
+  font-size: 19px;
+  line-height: 1.7;
+  color: var(--green);
+  margin-bottom: 18px;
+}
+.book-feelings-words span + span::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #b9c6ad;
+  margin: 0 20px 0 -12px;
+  vertical-align: middle;
+}
+.book-feelings-empty {
+  font-size: 12px;
+  line-height: 2;
+  color: #7d8a73;
+  margin-bottom: 16px;
+}
+.book-talkers h3 {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6f7f63;
+  margin-bottom: 10px;
+}
+.book-talkers ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.book-talkers a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #3f4d3b;
+}
+.book-feelings-own {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: #5f7a62;
+}
+.book-feelings-own p {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The profile */
+.record-shelf {
+  margin-top: 46px;
+}
+.record-shelf ul {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.record-card {
+  display: flex;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: #fffdf7;
+}
+.record-card-book {
+  width: 56px;
+  flex-shrink: 0;
+}
+.record-card > div {
+  min-width: 0;
+  flex: 1;
+}
+.record-card-title {
+  display: block;
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.record-card-feelings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+.record-card-feelings span {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e8eee1;
+  color: #3f5c45;
+}
+.record-card-note {
+  font-size: 12px;
+  line-height: 1.9;
+  color: #4d5948;
+  overflow-wrap: anywhere;
+}
+.record-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 10px;
+  color: #9aa58f;
+}
+.record-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.record-card-meta .text-button {
+  font-size: 11px;
+}
+
+@media (max-width: 600px) {
+  .book-feelings {
+    padding: 22px 18px;
+  }
+  .book-feelings-words {
+    font-size: 17px;
+  }
+  .record-shelf ul {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feeling-chip {
+    transition: none;
+  }
+}

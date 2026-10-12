@@ -1,5 +1,6 @@
 import { createRegisteredBook, REGISTERED_GENRE } from "./books";
 import { cleanLinks } from "./links";
+import { cleanRecord } from "./records";
 import {
   COMPOSE_ICONS,
   ME_ID,
@@ -10,11 +11,13 @@ import {
   shelfUsed,
   type Book,
   type ComposeIcon,
+  type Feeling,
   type PopReaction,
   type Post,
   type Reader,
   type ReadingMode,
   type ReadingNow,
+  type ReadingRecord,
   type ReadingSession,
   type Shelf,
   type ShelfDoodle,
@@ -80,6 +83,8 @@ export interface RemoteRows {
   popReactions: Tables<"pop_reactions">[];
   /** The person's own reading, and others' reading together right now. */
   sessions: Tables<"reading_sessions">[];
+  /** The person's own reading records, and others' public ones. */
+  records: Tables<"reading_entries">[];
   seenNotifications: string[];
 }
 
@@ -426,12 +431,40 @@ export function townFromRows(
       .filter((id) => postIds.has(id)),
     readingNow,
     readingSessions,
+    readingRecords: rows.records
+      .filter(
+        (row) =>
+          row.kind === "finished" &&
+          bookIds.has(row.book_id) &&
+          (row.user_id === userId || (row.is_public && known.has(row.user_id))),
+      )
+      .flatMap((row): ReadingRecord[] => {
+        const fields = cleanRecord({
+          feelings: row.feelings as Feeling[],
+          note: row.body,
+          spoiler: row.spoiler,
+          isPublic: row.is_public,
+        });
+        return fields
+          ? [
+              {
+                id: row.id,
+                readerId: readerId(row.user_id),
+                bookId: row.book_id,
+                ...fields,
+                createdAt: row.created_at,
+              },
+            ]
+          : [];
+      })
+      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
     settings: {
       composeIcon: COMPOSE_ICONS.includes(
         ownProfile?.compose_icon as ComposeIcon,
       )
         ? (ownProfile?.compose_icon as ComposeIcon)
         : "pen",
+      readingPublic: ownProfile?.reading_visibility === "public",
     },
     seenNotifications: rows.seenNotifications.slice(-500),
     shopMessages: rows.shopMessages
@@ -470,6 +503,7 @@ export function referencedBookIds(rows: Omit<RemoteRows, "books">): string[] {
   rows.marks.forEach((row) => ids.add(row.book_id));
   rows.posts.forEach((row) => row.book_id && ids.add(row.book_id));
   rows.sessions.forEach((row) => row.book_id && ids.add(row.book_id));
+  rows.records.forEach((row) => ids.add(row.book_id));
   return [...ids];
 }
 
@@ -485,7 +519,13 @@ export type Write =
       patch: Partial<
         Pick<
           Tables<"profiles">,
-          "handle" | "name" | "bio" | "links" | "color" | "compose_icon"
+          | "handle"
+          | "name"
+          | "bio"
+          | "links"
+          | "color"
+          | "compose_icon"
+          | "reading_visibility"
         >
       >;
     }
@@ -502,6 +542,16 @@ export type Write =
   | { kind: "posts"; rows: TablesInsert<"posts">[] }
   | { kind: "end-sessions"; rows: { id: string; ended_at: string }[] }
   | { kind: "sessions"; rows: TablesInsert<"reading_sessions">[] }
+  | { kind: "delete-records"; ids: string[] }
+  | { kind: "records"; rows: TablesInsert<"reading_entries">[] }
+  | {
+      kind: "update-record";
+      id: string;
+      patch: Pick<
+        Tables<"reading_entries">,
+        "body" | "feelings" | "spoiler" | "is_public"
+      >;
+    }
   | { kind: "remove"; table: RelationTable; rows: Pair[] }
   | { kind: "add"; table: RelationTable; rows: Pair[] };
 
@@ -601,6 +651,10 @@ export function planWrites(
     profile.links = next.me.links ?? [];
   if (next.settings.composeIcon !== base.settings.composeIcon)
     profile.compose_icon = next.settings.composeIcon;
+  if (next.settings.readingPublic !== base.settings.readingPublic)
+    profile.reading_visibility = next.settings.readingPublic
+      ? "public"
+      : "private";
   if (Object.keys(profile).length)
     writes.push({ kind: "profile", patch: profile });
 
@@ -698,6 +752,49 @@ export function planWrites(
       })),
     });
 
+  const mine = (state: TownState) =>
+    new Map(
+      state.readingRecords
+        .filter((record) => record.readerId === ME_ID)
+        .map((record) => [record.id, record]),
+    );
+  const baseRecords = mine(base);
+  const nextRecords = mine(next);
+  const droppedRecords = [...baseRecords.keys()].filter(
+    (id) => !nextRecords.has(id),
+  );
+  if (droppedRecords.length)
+    writes.push({ kind: "delete-records", ids: droppedRecords });
+  const fields = (record: ReadingRecord) => ({
+    body: record.note,
+    feelings: record.feelings,
+    spoiler: record.spoiler,
+    is_public: record.isPublic,
+  });
+  const newRecords = [...nextRecords.values()].filter(
+    (record) => !baseRecords.has(record.id),
+  );
+  if (newRecords.length)
+    writes.push({
+      kind: "records",
+      rows: newRecords.map((record) => ({
+        id: record.id,
+        user_id: user,
+        book_id: record.bookId,
+        kind: "finished",
+        ...fields(record),
+      })),
+    });
+  for (const record of nextRecords.values()) {
+    const before = baseRecords.get(record.id);
+    if (before && !sameJson(fields(before), fields(record)))
+      writes.push({
+        kind: "update-record",
+        id: record.id,
+        patch: fields(record),
+      });
+  }
+
   const from = relations(base, ids);
   const to = relations(next, ids);
   for (const table of Object.keys(to) as RelationTable[]) {
@@ -744,7 +841,8 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     readingSessions: [],
     finishedBooks: [],
     library: [],
-    settings: { composeIcon: "pen" },
+    readingRecords: [],
+    settings: { composeIcon: "pen", readingPublic: false },
     seenNotifications: [],
     shopMessages: [],
   };

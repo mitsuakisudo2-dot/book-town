@@ -23,6 +23,7 @@ import {
 import { findReader, formatPostTime } from "../lib/social";
 import { BookPicker } from "./BookPicker";
 import { PostCard, PostComposer } from "./Social";
+import { RecordSheet } from "./ReadingRecords";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { useClock } from "./useClock";
 import "./reading.css";
@@ -74,6 +75,8 @@ export function ReadingView(props: Shared) {
     : undefined;
   // After closing the book, "感想を書く" opens a composer for the book just read.
   const [review, setReview] = useState<{ book?: Book } | null>(null);
+  // Finishing a book goes on to how it felt.
+  const [finished, setFinished] = useState<Book | null>(null);
   return (
     <>
       {active ? (
@@ -82,9 +85,17 @@ export function ReadingView(props: Shared) {
           book={book}
           clock={clock}
           onReview={(read) => setReview({ book: read })}
+          onFinished={setFinished}
         />
       ) : (
         <StartReading {...props} clock={clock} />
+      )}
+      {finished && (
+        <RecordSheet
+          {...props}
+          book={finished}
+          onClose={() => setFinished(null)}
+        />
       )}
       {review && (
         <Modal
@@ -366,10 +377,12 @@ function ReadingRoom({
   book,
   clock,
   onReview,
+  onFinished,
 }: Shared & {
   book?: Book;
   clock: ReturnType<typeof useClock>;
   onReview: (book?: Book) => void;
+  onFinished: (book: Book) => void;
 }) {
   const id = useId();
   const session = activeSession(state);
@@ -530,11 +543,10 @@ function ReadingRoom({
                 className="button"
                 onClick={() => {
                   actions.endReading(ending.finished);
-                  notify(
-                    ending.finished && book
-                      ? `『${book.title}』を読み終えました`
-                      : "読書を終えました。時間を記録しました",
-                  );
+                  // Finishing a book asks how it felt; the record says the rest.
+                  if (ending.finished && book) onFinished(book);
+                  else notify("読書を終えました。時間を記録しました");
+                  setEnding(null);
                 }}
               >
                 {ending.finished ? "読み終えた" : "本を閉じる"}

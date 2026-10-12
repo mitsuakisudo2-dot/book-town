@@ -75,6 +75,7 @@ export async function loadTown(
     popReactions,
     ownSessions,
     together,
+    records,
   ] = await Promise.all([
     all(client.from("profiles").select("*").limit(LIMIT)),
     all(client.from("profile_nine").select("*").limit(LIMIT)),
@@ -107,6 +108,14 @@ export async function loadTown(
         .eq("mode", "together")
         .is("ended_at", null)
         .neq("user_id", userId)
+        .limit(LIMIT),
+    ),
+    // The person's own records, and others' public ones.
+    all(
+      client
+        .from("reading_entries")
+        .select("*")
+        .order("created_at", { ascending: false })
         .limit(LIMIT),
     ),
   ]);
@@ -162,6 +171,7 @@ export async function loadTown(
     spoilerReports,
     popReactions,
     sessions: [...ownSessions, ...together],
+    records,
     seenNotifications,
   };
   const ids: RemoteIds = { userId, shopId: own?.id ?? newShopId() };
@@ -177,7 +187,7 @@ export async function loadTown(
  * database decides what is public (supabase/migrations); this only asks.
  */
 export async function loadPublicTown(client: Client): Promise<TownState> {
-  const [profiles, nine, shops, posts, together] = await Promise.all([
+  const [profiles, nine, shops, posts, together, records] = await Promise.all([
     all(client.from("profiles").select("*").limit(LIMIT)),
     all(client.from("profile_nine").select("*").limit(LIMIT)),
     all(
@@ -202,6 +212,13 @@ export async function loadPublicTown(client: Client): Promise<TownState> {
         .is("ended_at", null)
         .limit(LIMIT),
     ),
+    all(
+      client
+        .from("reading_entries")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(LIMIT),
+    ),
   ]);
   const rows: Omit<RemoteRows, "books"> = {
     profiles,
@@ -218,6 +235,7 @@ export async function loadPublicTown(client: Client): Promise<TownState> {
     spoilerReports: [],
     popReactions: [],
     sessions: together,
+    records,
     seenNotifications: [],
   };
   return townFromRows(
@@ -327,6 +345,31 @@ export async function applyWrite(
         client
           .from("reading_sessions")
           .upsert(write.rows, { onConflict: "id", ...ignore }),
+      );
+      return;
+    case "delete-records":
+      await settled(
+        client
+          .from("reading_entries")
+          .delete()
+          .eq("user_id", ids.userId)
+          .in("id", write.ids),
+      );
+      return;
+    case "records":
+      await settled(
+        client
+          .from("reading_entries")
+          .upsert(write.rows, { onConflict: "id", ...ignore }),
+      );
+      return;
+    case "update-record":
+      await settled(
+        client
+          .from("reading_entries")
+          .update(write.patch)
+          .eq("id", write.id)
+          .eq("user_id", ids.userId),
       );
       return;
     case "remove":
