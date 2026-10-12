@@ -55,7 +55,14 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, #120b0860, transparent 35%, #160d0860);
+  background:
+    radial-gradient(ellipse 70% 40% at 50% 6%, #ffbf6a2e, transparent 70%),
+    radial-gradient(
+      ellipse 110% 85% at 50% 42%,
+      transparent 55%,
+      #0b0503b8 100%
+    ),
+    linear-gradient(90deg, #120b0850, transparent 35%, #160d0850);
 }
 .walk-stage {
   height: 100%;
@@ -83,98 +90,233 @@
 }
 .walk-owner {
   position: absolute;
-  left: 6%;
-  top: 4%;
+  left: 5%;
+  top: 2.2%;
   z-index: 10;
-  width: 65%;
-  font-size: 13px;
+  width: 64%;
+  font-size: clamp(11px, 3.6cqw, 15px);
+  text-shadow: 0 1px 3px #0009;
 }
 .walk-owner a {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: #fff4de;
+  gap: 2.6cqw;
+  color: #fff6e4;
+}
+.walk-owner .reader-avatar {
+  width: 10cqw !important;
+  height: 10cqw !important;
+  font-size: 3.6cqw !important;
+  flex: none;
+  box-shadow:
+    0 0 0 1.5px #f6e2bd90,
+    0 2px 6px #0008;
 }
 .walk-owner span {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 .walk-owner small {
-  font-size: 9px;
-  color: #d7c5a9;
+  font-size: clamp(8px, 2.6cqw, 11px);
+  color: #e0cfb2;
   letter-spacing: 0.04em;
 }
-.walk-progress {
-  position: absolute;
-  right: 6%;
-  top: 4.2%;
-  z-index: 10;
-  font-size: 11px;
-  text-align: right;
-  letter-spacing: 0.1em;
+.walk-owner-bio {
+  margin: 1.4cqw 0 0;
+  font-size: clamp(8px, 2.55cqw, 11px);
+  line-height: 1.55;
+  color: #f0e2c8;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.walk-progress small {
-  display: block;
-  font-size: 8px;
-  margin-top: 3px;
-  letter-spacing: 0;
-  color: #dbccb6;
+.walk-header-tools {
+  position: absolute;
+  right: 4%;
+  top: 2.2%;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1.6cqw;
+}
+.walk-header-tools > div {
+  display: flex;
+  gap: 2cqw;
+}
+.walk-header-tools button {
+  position: relative;
+  width: 9.4cqw;
+  height: 9.4cqw;
+  min-width: 32px;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  color: #fff4de;
+  background: #1c120b8c;
+  border: 1px solid #f3dcb045;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 6px #0007;
+}
+.walk-header-tools button:after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+.walk-header-tools button[aria-pressed="true"] {
+  color: #3a2616;
+  background: #fbf1dd;
+}
+.walk-progress {
+  font-size: clamp(8px, 2.5cqw, 11px);
+  letter-spacing: 0.14em;
+  color: #e6d6b9;
+  text-shadow: 0 1px 2px #000a;
+}
+.walk-lamp-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 62% 16% at 48% 18%, #ffcf8a50, transparent 72%),
+    radial-gradient(ellipse 85% 34% at 45% 42%, #ffb86a1c, transparent 72%);
+  mix-blend-mode: screen;
+}
+.walk-chips {
+  position: absolute;
+  left: 4.5%;
+  right: 4%;
+  z-index: 9;
+  height: 6.6cqw;
+  display: flex;
+  align-items: center;
+  gap: 1.8cqw;
+  padding: 0 1px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+.walk-chips::-webkit-scrollbar {
+  display: none;
+}
+.walk-chips button {
+  flex: none;
+  position: relative;
+  height: 6.2cqw;
+  min-height: 20px;
+  padding: 0 3.4cqw;
+  border-radius: 999px;
+  font-size: clamp(8px, 2.75cqw, 12px);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: #f6e8cc;
+  background: #1d130c99;
+  border: 1px solid #f0d6a650;
+  backdrop-filter: blur(4px);
+}
+.walk-chips button:after {
+  content: "";
+  position: absolute;
+  inset: -8px -1cqw;
+}
+.walk-chips button[aria-pressed="true"] {
+  color: #3a2616;
+  background: #fcf4e4;
+  border-color: #fcf4e4;
+  box-shadow: 0 2px 6px #0007;
 }
 .walk-object {
   position: absolute;
   transform-origin: 50% 50%;
 }
 .walk-sign {
-  border: 1px solid #663215;
-  border-radius: 2px;
-  color: #211309;
-  font-family: "Yohaku Hand", var(--serif);
-  font-size: clamp(18px, 6cqw, 32px);
-  letter-spacing: 0.14em;
-  text-shadow: 0 1px #f7c07880;
-  box-shadow:
-    0 4px 7px #0e0806b0,
-    inset 0 1px #ffdf9480;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6cqw;
+  border: 1px solid #5b2f14;
+  border-radius: 5px;
+  color: #26150a;
+  padding: 1.5% 4%;
+  overflow: visible;
   background:
-    linear-gradient(100deg, #dca5634a, #ffc77570, #d797444a),
+    linear-gradient(180deg, #ffdca02e, transparent 45%, #3b1d0a38),
+    linear-gradient(100deg, #c98c4f5c, #f6b86e70, #c486465c),
     url("/themes/woodshop/wood-v2.webp") center/cover;
-  padding: 4% 3%;
-  font-weight: 500;
-  line-height: 1.3;
-  overflow: hidden;
+  box-shadow:
+    0 10px 16px #0b0503b0,
+    inset 0 1px #ffe2a8a0,
+    inset 0 -3px 6px #3b1b0870,
+    inset 0 0 0 3px #7a4520a0,
+    inset 0 0 0 4px #e3ad6a50;
 }
 .walk-sign:before,
 .walk-sign:after {
   content: "";
   position: absolute;
-  top: 7%;
-  width: 4px;
-  height: 4px;
+  top: 12%;
+  width: 1.3cqw;
+  height: 1.3cqw;
   border-radius: 50%;
-  background: #342519;
-  box-shadow: 0 1px 1px #ffe7ac80;
+  background: radial-gradient(circle at 35% 30%, #c9a46a, #3a2614 70%);
+  box-shadow: 0 1px 1px #ffe7ac70;
 }
 .walk-sign:before {
-  left: 3%;
+  left: 2.6%;
 }
 .walk-sign:after {
-  right: 3%;
+  right: 2.6%;
+}
+.walk-sign-name {
+  position: relative;
+  z-index: 1;
+  font-family: "Yohaku Hand", var(--serif);
+  font-size: clamp(18px, 7cqw, 36px);
+  letter-spacing: 0.16em;
+  line-height: 1.15;
+  text-shadow:
+    0 1px 0 #ffd99a90,
+    0 -1px 0 #3a1c0a40;
+  white-space: nowrap;
+}
+.walk-sign-tagline {
+  position: relative;
+  z-index: 1;
+  font-family: var(--serif);
+  font-size: clamp(8px, 2.6cqw, 13px);
+  letter-spacing: 0.22em;
+  color: #3d2312;
+  text-shadow: 0 1px 0 #ffd99a70;
+}
+.walk-sign-art {
+  position: absolute;
+  right: 3.5%;
+  bottom: 12%;
+  width: 14%;
+  color: #4a2a12;
+  opacity: 0.45;
 }
 .walk-furniture {
   border: 0;
+  --walk-frame: color-mix(in srgb, var(--walk-wood) 72%, #d39456);
   box-shadow:
-    inset 7px 0 var(--walk-wood),
-    inset -7px 0 var(--walk-wood),
+    inset 7px 0 var(--walk-frame),
+    inset -7px 0 var(--walk-frame),
     inset 8px 0 6px #130a0770,
     inset -8px 0 7px #130a0780,
-    0 10px 12px #0b0508a0;
+    0 14px 18px #0b0508b0;
   background:
+    radial-gradient(ellipse 80% 30% at 50% 0, #ffc77a26, transparent 75%),
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--walk-wood) 50%, #100903b5),
-      color-mix(in srgb, var(--walk-wood) 35%, #100a0688) 50%,
-      color-mix(in srgb, var(--walk-wood) 50%, #100903b5)
+      color-mix(in srgb, var(--walk-wood) 55%, #100903a8),
+      color-mix(in srgb, var(--walk-wood) 45%, #100a0670) 50%,
+      color-mix(in srgb, var(--walk-wood) 55%, #100903a8)
     ),
     url("/themes/woodshop/wood-v2.webp") center/cover;
 }
@@ -187,7 +329,7 @@
   height: 10px;
   background:
     linear-gradient(
-      color-mix(in srgb, var(--walk-wood) 45%, #ffd99a30),
+      color-mix(in srgb, var(--walk-frame) 45%, #ffd99a40),
       #29130860
     ),
     url("/themes/woodshop/wood-v2.webp") center 32% / cover;
@@ -213,6 +355,76 @@
   border: 0;
   box-shadow: inset 0 -5px #6a3a1d;
   background: linear-gradient(#160f0b80, transparent 45%);
+  transition: filter 0.25s ease;
+}
+.walk-row.is-dimmed {
+  filter: brightness(0.42) saturate(0.7);
+}
+.walk-store-objects:has(.is-dimmed) .walk-row:not(.is-dimmed) {
+  filter: brightness(1.08);
+}
+.walk-row-label.is-board {
+  left: auto;
+  top: 5%;
+  height: 86%;
+  max-width: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6% 4% 9%;
+  color: #f3efe4;
+  font-size: clamp(7px, 2.5cqw, 12px);
+  line-height: 1.55;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-shadow: 0 0 1px #ffffff90;
+  background:
+    radial-gradient(ellipse at 35% 25%, #ffffff12, transparent 60%),
+    radial-gradient(ellipse at 50% 45%, #3c4a43, #1d2521 85%);
+  border: 0;
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 2.5px color-mix(in srgb, var(--walk-wood) 65%, #c8894e),
+    0 0 0 3.5px #3b200f,
+    2px 5px 7px #000a,
+    inset 0 0 8px #000a;
+  transform: rotate(-1.2deg);
+}
+.walk-row:nth-child(even) .walk-row-label.is-board {
+  transform: rotate(1deg);
+}
+.walk-row-label.is-board span {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+.walk-row-label.is-board:after {
+  content: "";
+  position: absolute;
+  left: 24%;
+  right: 24%;
+  bottom: 11%;
+  height: 1.5px;
+  border-radius: 2px;
+  background: #f3efe4a0;
+  transform: rotate(-2deg);
+}
+.walk-row-decor {
+  position: absolute;
+  bottom: 2px;
+  height: 78%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none;
+}
+.walk-row-decor svg {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  filter: drop-shadow(2px 3px 2px #0009);
 }
 .walk-shelf-lip {
   pointer-events: none;
@@ -364,28 +576,52 @@
 }
 .walk-book-pop {
   position: absolute;
-  bottom: 1%;
-  left: 2%;
-  width: 96%;
-  height: 35%;
+  bottom: 0;
+  left: 4%;
+  width: 92%;
+  height: 52%;
   z-index: 6;
   transform: rotate(-1deg);
-  background: var(--walk-paper);
-  box-shadow: 0 2px 3px #1b100970;
-  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: linear-gradient(#fffaf0, var(--walk-paper));
+  box-shadow:
+    0 3px 5px #1b1009a0,
+    0 0 0 0.5px #b9a27a;
+  line-height: 1.38;
   font-family: "Yohaku Hand", var(--serif);
-  font-size: clamp(6px, 1.9cqw, 10px);
+  font-size: clamp(6px, 1.95cqw, 10px);
   color: #372318;
-  padding: 3px 4px;
-  overflow: hidden;
+  padding: 7% 6% 10%;
   text-align: left;
-  border: 1px solid #baa47c;
+  border: 0;
+  border-radius: 1px;
+}
+.walk-book-pop:not(.is-tab):after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 34%;
+  width: 32%;
+  height: 5px;
+  background: #efe3c8c0;
+  box-shadow: 0 1px 1px #0003;
+  transform: rotate(-4deg);
 }
 .walk-pop-excerpt {
+  flex: none;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.walk-pop-sign {
+  align-self: flex-end;
+  font-size: 0.82em;
+  line-height: 1;
+  color: #6a4a2e;
+  white-space: nowrap;
 }
 .walk-pop-stamp {
   position: absolute;
@@ -416,15 +652,54 @@
   text-align: center;
 }
 .walk-ownerPop {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  overflow: visible;
   color: #3c2615;
-  background: linear-gradient(110deg, #f5e5c7, #cdb28c);
+  background: linear-gradient(#fffaf0, var(--walk-paper));
   font-family: "Yohaku Hand", var(--serif);
-  font-size: clamp(9px, 2.5cqw, 14px);
-  line-height: 1.6;
-  padding: 4% 5%;
-  box-shadow: 0 3px 6px #12080690;
-  overflow: hidden;
+  font-size: clamp(8px, 2.45cqw, 13px);
+  line-height: 1.45;
+  padding: 1.8% 5%;
+  border-radius: 3px;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--walk-wood) 70%, #c98a50),
+    0 0 0 4px #2a170b,
+    0 12px 14px #0a0503c0;
   text-align: left;
+}
+.walk-ownerPop:before,
+.walk-ownerPop:after {
+  content: "";
+  position: absolute;
+  top: calc(100% + 4px);
+  width: 4px;
+  height: 2.4cqw;
+  background: color-mix(in srgb, var(--walk-wood) 70%, #3a1d0b);
+  box-shadow: 0 3px 3px #0008;
+}
+.walk-ownerPop:before {
+  left: 10%;
+  transform: rotate(6deg);
+}
+.walk-ownerPop:after {
+  right: 10%;
+  transform: rotate(-6deg);
+}
+.walk-floor-pop-text {
+  flex: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.walk-ownerPop small {
+  align-self: flex-end;
+  font-size: 0.85em;
+  line-height: 1;
+  color: #6a4a2e;
 }
 .walk-stamp {
   color: #dbc399;
@@ -437,34 +712,57 @@
 .walk-actions {
   position: absolute;
   right: 0;
-  top: 36%;
+  top: 38%;
   width: 17%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 2.4cqw;
   z-index: auto;
 }
 .walk-actions button {
-  width: 44px;
-  height: 49px;
+  width: 52px;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 3px;
-  color: #f7e8cc;
-  background: #21160e80;
-  border: 1px solid #ead5aa30;
+  padding: 0;
+  color: #fbf0da;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+.walk-actions button > span {
+  width: 11cqw;
+  height: 11cqw;
+  min-width: 36px;
+  min-height: 36px;
+  max-width: 46px;
+  max-height: 46px;
+  display: grid;
+  place-items: center;
   border-radius: 50%;
+  background: #1b120b8c;
+  border: 1px solid #f3dcb045;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 3px 8px #0007;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 .walk-actions button small {
-  font-size: 8px;
+  font-size: clamp(8px, 2.4cqw, 10px);
+  text-shadow: 0 1px 3px #000;
 }
-.walk-actions button[aria-pressed="true"] {
-  color: #ffdf91;
-  background: #774b2780;
-  border-color: #d4a96a;
+.walk-actions button[aria-pressed="true"] > span {
+  color: #b5452f;
+  background: #fbf1dd;
+  border-color: #fbf1dd;
+}
+.walk-actions button[aria-pressed="true"] svg {
+  fill: currentColor;
 }
 .walk-journey-controls {
   position: absolute;
@@ -490,17 +788,18 @@
 .walk-journey-controls button:disabled {
   opacity: 0.3;
 }
-.walk-history {
-  position: absolute;
-  right: 12px;
-  bottom: 8px;
-  font-size: 9px;
-  color: #d6c4a7;
-  z-index: 20;
-  min-height: 44px;
-  background: #26190e60;
-  padding: 4px 10px;
-  border-radius: 15px;
+/* Dialogs opened from the store keep the app's ink, not the lamp-lit text. */
+.walk-view .modal {
+  color: var(--ink);
+}
+.walk-menu {
+  display: grid;
+  gap: 10px;
+  padding: 8px 0 4px;
+}
+.walk-menu .button {
+  justify-content: flex-start;
+  gap: 10px;
 }
 .walk-end {
   position: absolute;
@@ -686,14 +985,9 @@
   .town-bottom-nav span {
     font-size: 9px;
   }
-  .walk-history {
-    bottom: 0;
-    font-size: 8px;
-    min-height: 44px;
-  }
   .walk-journey-controls {
     left: 3%;
-    right: 20%;
+    right: 3%;
   }
   .walk-journey-controls span {
     font-size: 8px;

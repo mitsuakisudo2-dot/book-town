@@ -292,6 +292,9 @@ try {
   await check(
     "history clear resets position and preserves reactions",
     async () => {
+      await page
+        .getByRole("button", { name: "その他のメニュー", exact: true })
+        .click();
       await page.getByRole("button", { name: "訪問履歴", exact: true }).click();
       const before = await page.evaluate(
         () =>

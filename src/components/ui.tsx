@@ -158,6 +158,18 @@ const shapes: Record<string, ReactNode> = {
     </>
   ),
   bookmark: <path d="M6 3h12v18l-6-4-6 4z" />,
+  follow: (
+    <>
+      <circle cx="10" cy="8" r="4" />
+      <path d="M3 21v-1a7 7 0 0 1 11-5.7M19 14v6m-3-3h6" />
+    </>
+  ),
+  share: (
+    <>
+      <path d="M14 4h6v6M20 4l-9 9" />
+      <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </>
+  ),
   more: (
     <>
       <circle cx="5" cy="12" r="1" />

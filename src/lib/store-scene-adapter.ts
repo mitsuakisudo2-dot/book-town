@@ -57,6 +57,8 @@ export function publicScenePops(scenes: StoreScene[]) {
       .map((p) => sceneEntry(scene, p)),
   );
 }
+/** Rows starting this far into a shelf leave room for a sign beside them. */
+export const SHELF_GUTTER = 0.25;
 export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
   const lights = [
     "#ffd293",
@@ -81,7 +83,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       kind: "preset",
       url: "/themes/woodshop/room.webp",
       blur: 0,
-      darkness: 0.28,
+      darkness: 0.2,
     },
     forbidden: [
       rect(0, 0, 1, 0.12),
@@ -95,7 +97,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       id: "sign",
       kind: "sign",
       parentId: null,
-      rect: rect(0.055, 0.135, 0.73, 0.115, -1),
+      rect: rect(0.07, 0.132, 0.7, 0.094, -0.6),
       z: 2,
       text: shop.name,
     },
@@ -103,15 +105,16 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       id: "greeting",
       kind: "ownerPop",
       parentId: null,
-      rect: rect(0.08, 0.85, 0.55, 0.055, -3),
+      rect: rect(0.05, 0.846, 0.6, 0.075, -1.2),
       z: 5,
-      text: shop.tagline,
+      // The tagline hangs on the signboard; the floor POP carries the owner's own words.
+      text: shop.description || shop.tagline,
     },
     {
       id: "stamp",
       kind: "stamp",
       parentId: null,
-      rect: rect(0.685, 0.85, 0.095, 0.05, 8),
+      rect: rect(0.69, 0.858, 0.09, 0.05, 8),
       z: 5,
       stamp: variant % 2 ? "coffee" : "plane",
     },
@@ -121,7 +124,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
     id: "main-shelf",
     kind: "furniture",
     parentId: null,
-    rect: rect(0.035, 0.28, 0.77, split ? 0.42 : 0.555),
+    rect: rect(0.035, 0.278, 0.77, split ? 0.425 : 0.552),
     z: 1,
     furnitureType: "shelf",
   };
@@ -131,7 +134,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       id: "table",
       kind: "furniture",
       parentId: null,
-      rect: rect(0.1, 0.728, 0.69, 0.115),
+      rect: rect(0.1, 0.718, 0.69, 0.115),
       z: 2,
       furnitureType: "table",
     });
@@ -145,7 +148,13 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       id: "row-" + i,
       kind: "row",
       parentId: "main-shelf",
-      rect: rect(0.04, 0.02 + i / rowCount, 0.92, 0.92 / rowCount),
+      // The left gutter holds a chalkboard shelf sign or a small shop object.
+      rect: rect(
+        SHELF_GUTTER,
+        0.02 + i / rowCount,
+        0.96 - SHELF_GUTTER,
+        0.92 / rowCount,
+      ),
       z: 2,
       text:
         shelves[

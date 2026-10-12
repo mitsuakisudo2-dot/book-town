@@ -13,7 +13,7 @@ import { Icon, Modal, ReaderAvatar } from "./ui";
 import { BookInHand } from "./BookInHand";
 import { StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { ShelfZoom } from "./ShelfZoom";
-import { bookPop, objectById } from "../lib/store-scene";
+import { bookPop, objectById, worldPolygon } from "../lib/store-scene";
 import {
   publicScenePops,
   publicWalkShops,
@@ -41,6 +41,7 @@ type Overlay =
   | { kind: "pop"; text: string; title: string; stamp?: string }
   | { kind: "message" }
   | { kind: "history" }
+  | { kind: "menu" }
   | null;
 export function WalkView({
   state,
@@ -104,6 +105,10 @@ export function WalkView({
   const noClickUntil = useRef(0);
   const wheel = useRef({ last: 0, total: 0, locked: false });
   const [message, setMessage] = useState("");
+  const [focusRow, setFocusRow] = useState<{
+    storeId: string;
+    text: string;
+  } | null>(null);
   const [backgroundFailed, setBackgroundFailed] = useState(false);
   const session = walk.session;
   const currentId =
@@ -120,6 +125,24 @@ export function WalkView({
     message: "",
   };
   const background = scene?.background;
+  const focusText =
+    focusRow && focusRow.storeId === currentId ? focusRow.text : null;
+  // One chip per shelf name, top to bottom, to light up a single shelf.
+  const shelfNames = scene
+    ? [
+        ...new Set(
+          scene.objects
+            .filter((o) => o.kind === "row" && o.text)
+            .map((o) => ({ o, top: worldPolygon(scene, o)?.[0].y ?? 1 }))
+            .sort((a, b) => a.top - b.top)
+            .map(({ o }) => o.text!),
+        ),
+      ]
+    : [];
+  const sign = scene?.objects.find((o) => o.kind === "sign");
+  const chipsTop = sign ? sign.rect.y + sign.rect.h + 0.008 : 0.23;
+  const following = shop ? state.following.includes(shop.id) : false;
+  const ownShop = shop?.ownerId === state.me.id;
   useEffect(() => {
     if (!ready) return;
     const begin = () => {
@@ -213,7 +236,7 @@ export function WalkView({
       overlay ||
       e.button !== 0 ||
       (e.target as HTMLElement).closest(
-        "a,.walk-actions,.walk-journey-controls,.walk-owner",
+        "a,.walk-actions,.walk-journey-controls,.walk-owner,.walk-header-tools,.walk-chips",
       )
     )
       return;
@@ -378,7 +401,7 @@ export function WalkView({
             <>
               <div className="walk-owner">
                 <Link href={"/profiles/" + shop.ownerId + "/"}>
-                  {owner && <ReaderAvatar reader={owner} size={36} />}
+                  {owner && <ReaderAvatar reader={owner} size={40} />}
                   <span>
                     <b>{owner?.name ?? shop.name}</b>
                     <small>
@@ -387,14 +410,68 @@ export function WalkView({
                     </small>
                   </span>
                 </Link>
+                {owner?.bio && <p className="walk-owner-bio">{owner.bio}</p>}
               </div>
-              <span className="walk-progress" aria-live="polite">
-                {session!.index + 1} / {session!.ids.length}
-                <small>書店めぐり</small>
-              </span>
+              <div className="walk-header-tools">
+                <div>
+                  {!ownShop && (
+                    <button
+                      aria-label="この書店をフォロー"
+                      aria-pressed={following}
+                      onClick={() => {
+                        actions.toggleFollow(shop.id);
+                        notify(
+                          following
+                            ? "フォローを外しました"
+                            : shop.name + "をフォローしました",
+                        );
+                      }}
+                    >
+                      <Icon name={following ? "check" : "follow"} size={18} />
+                    </button>
+                  )}
+                  <button
+                    aria-label="その他のメニュー"
+                    onClick={() => open({ kind: "menu" })}
+                  >
+                    <Icon name="more" size={18} />
+                  </button>
+                </div>
+                <span className="walk-progress" aria-live="polite">
+                  {session!.index + 1} / {session!.ids.length}
+                </span>
+              </div>
+              <span className="walk-lamp-glow" aria-hidden="true" />
+              {shelfNames.length > 1 && (
+                <div
+                  className="walk-chips"
+                  role="group"
+                  aria-label="棚を選んで照らす"
+                  style={{ top: chipsTop * 100 + "%" }}
+                >
+                  {[null, ...shelfNames].map((text) => (
+                    <button
+                      key={text ?? ""}
+                      aria-pressed={focusText === text}
+                      onClick={() =>
+                        setFocusRow(
+                          text && currentId
+                            ? { storeId: currentId, text }
+                            : null,
+                        )
+                      }
+                    >
+                      {text ?? "すべて"}
+                    </button>
+                  ))}
+                </div>
+              )}
               <StoreCanvas
                 scene={scene}
                 books={state.books}
+                signature={owner?.name}
+                tagline={shop.tagline}
+                focusText={focusText}
                 onBook={(p) => open({ kind: "book", placementId: p.id })}
                 onZoom={(rowId) => open({ kind: "zoom", rowId })}
                 onPop={(p) =>
@@ -424,7 +501,9 @@ export function WalkView({
                   aria-pressed={reaction.liked}
                   onClick={() => editReaction({ liked: !reaction.liked })}
                 >
-                  <Icon name="heart" />
+                  <span>
+                    <Icon name="heart" />
+                  </span>
                   <small>好き</small>
                 </button>
                 <button
@@ -434,7 +513,9 @@ export function WalkView({
                     open({ kind: "message" });
                   }}
                 >
-                  <Icon name="chat" />
+                  <span>
+                    <Icon name="chat" />
+                  </span>
                   <small>伝える</small>
                 </button>
                 <button
@@ -442,11 +523,15 @@ export function WalkView({
                   aria-pressed={reaction.saved}
                   onClick={() => editReaction({ saved: !reaction.saved })}
                 >
-                  <Icon name="bookmark" />
+                  <span>
+                    <Icon name="bookmark" />
+                  </span>
                   <small>保存</small>
                 </button>
                 <button aria-label="この書店を共有" onClick={share}>
-                  <Icon name="link" />
+                  <span>
+                    <Icon name="share" />
+                  </span>
                   <small>共有</small>
                 </button>
               </div>
@@ -505,12 +590,6 @@ export function WalkView({
           </div>
         </div>
       </div>
-      <button
-        className="walk-history"
-        onClick={() => open({ kind: "history" })}
-      >
-        訪問履歴
-      </button>
       {saved.status === "unavailable" || saved.status === "recovered" ? (
         <p className="walk-save-warning" role="status">
           {saved.status === "recovered"
@@ -607,6 +686,26 @@ export function WalkView({
           >
             手元に保存する
           </button>
+        </Modal>
+      )}
+      {overlay?.kind === "menu" && shop && (
+        <Modal title={shop.name} onClose={close}>
+          <div className="walk-menu">
+            <Link
+              className="button secondary"
+              href={ownShop ? "/my-shop/" : "/shops/" + shop.id + "/"}
+            >
+              <Icon name="store" />
+              書店のページを見る
+            </Link>
+            <button
+              className="button secondary"
+              onClick={() => setOverlay({ kind: "history" })}
+            >
+              <Icon name="clock" />
+              訪問履歴
+            </button>
+          </div>
         </Modal>
       )}
       {overlay?.kind === "history" && (
