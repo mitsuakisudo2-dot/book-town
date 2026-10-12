@@ -310,7 +310,9 @@ try {
       await pop.getByRole("button", { name: "次のPOP" }).click();
       await dialog.getByRole("button", { name: "次の本", exact: true }).click();
       await expectBook(page, "闇の左手");
-      await expect(pop.getByRole("button", { name: /のPOP$/ })).toHaveCount(0);
+      // 闇の左手 is also on 雨と翻訳's shelf; its POP still starts at this shop.
+      await expect(pop.locator(".bh-pop-page-count")).toHaveText(/^1 \//);
+      await expect(pop.locator(".bh-shop-link")).toHaveText("軌道書房");
       await dialog.getByRole("button", { name: "前の本", exact: true }).click();
       await expectSource();
 
@@ -492,7 +494,8 @@ try {
       await expect(card.locator(".shelf-scroll")).toHaveCount(2);
       await card.getByRole("link", { name: "この書店へ" }).click();
       await expect(page).toHaveURL(/shops\/shop-orbit/);
-      await expect(page.locator(".store-shelf-section")).toHaveCount(2);
+      // Demo shops have three public shelves, one per tier of the walk.
+      await expect(page.locator(".store-shelf-section")).toHaveCount(3);
       await go(page);
     },
   );

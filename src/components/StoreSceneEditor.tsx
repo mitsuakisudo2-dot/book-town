@@ -7,6 +7,7 @@ import {
   insertPlacement,
   migrateShopScene,
   renameSceneObject,
+  setRowBoard,
   takePlacementOff,
   type TemplateId,
 } from "../lib/store-customization";
@@ -210,6 +211,38 @@ export function StoreSceneEditor({
                   }
                 />
               </label>
+              <label>
+                黒板の見出し
+                <input
+                  value={row.boardTitle ?? ""}
+                  maxLength={12}
+                  placeholder="旅の本"
+                  onChange={(e) =>
+                    edit((s) =>
+                      setRowBoard(s, row.id, { boardTitle: e.target.value }),
+                    )
+                  }
+                />
+              </label>
+              <label>
+                黒板の絵
+                <select
+                  value={row.doodle ?? "travel"}
+                  onChange={(e) =>
+                    edit((s) =>
+                      setRowBoard(s, row.id, { doodle: e.target.value }),
+                    )
+                  }
+                >
+                  <option value="travel">旅</option>
+                  <option value="daily">日常</option>
+                  <option value="forest">森</option>
+                  <option value="stars">星</option>
+                  <option value="garden">庭</option>
+                  <option value="city">街</option>
+                  <option value="lamp">灯り</option>
+                </select>
+              </label>
               <label className="scene-check">
                 <input
                   type="checkbox"
@@ -398,6 +431,7 @@ export function StoreSceneEditor({
                     maxLength={10000}
                     rows={4}
                     placeholder="この一冊を、誰かに手渡すなら。"
+                    aria-describedby="scene-pop-hint"
                     onChange={(e) =>
                       edit((s) =>
                         changePlacement(
@@ -410,6 +444,9 @@ export function StoreSceneEditor({
                     }
                   />
                 </label>
+                <p className="scene-hint" id="scene-pop-hint">
+                  棚には段ごとに1枚、いちばん右の面陳の本のPOPが立ちます。ほかのPOPは本を手に取ると読めます。
+                </p>
                 <label>
                   POPのスタンプ
                   <select

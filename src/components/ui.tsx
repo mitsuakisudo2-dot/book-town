@@ -158,6 +158,12 @@ const shapes: Record<string, ReactNode> = {
     </>
   ),
   bookmark: <path d="M6 3h12v18l-6-4-6 4z" />,
+  mail: (
+    <>
+      <rect x="3" y="5.5" width="18" height="13" rx="2" />
+      <path d="m4 7 8 6 8-6" />
+    </>
+  ),
   follow: (
     <>
       <circle cx="10" cy="8" r="4" />

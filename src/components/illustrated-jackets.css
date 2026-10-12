@@ -2,9 +2,23 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background-image: url("/themes/woodshop/jackets-v2.webp");
-  background-size: 200% 400%;
+  overflow: hidden;
+}
+/* One atlas panel at its own proportions, cropped at the sides, never squashed. */
+.book-jacket.is-illustrated .jacket-illustration:before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 100%;
+  aspect-ratio: var(--art-aspect, 1.124);
+  translate: -50% 0;
+  scale: var(--art-zoom, 1);
+  transform-origin: var(--art-origin, 50% 50%);
+  background-image: var(--art-atlas, url("/themes/woodshop/jackets-v2.webp"));
+  background-size: var(--art-size, 200% 400%);
   background-position: var(--art-x) var(--art-y);
+  filter: var(--art-filter, none);
 }
 .book-jacket.is-illustrated .jacket-illustration:after {
   content: "";

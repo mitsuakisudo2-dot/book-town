@@ -11,6 +11,8 @@ import {
   bookPop,
   furnitureBooks,
   objectById,
+  placementWidth,
+  SHELF_DOODLES,
   relayoutRow,
   setBookPop,
   validateScene,
@@ -29,7 +31,7 @@ export const STORE_TEMPLATES = [
     wood: "#6a371d",
     paper: "#f2dfb9",
     light: "#ffd293",
-    darkness: 0.16,
+    darkness: 0.04,
   },
   {
     id: "study",
@@ -39,7 +41,7 @@ export const STORE_TEMPLATES = [
     wood: "#38271e",
     paper: "#e7dfcb",
     light: "#dfd9bd",
-    darkness: 0.32,
+    darkness: 0.18,
   },
   {
     id: "window",
@@ -49,7 +51,7 @@ export const STORE_TEMPLATES = [
     wood: "#93633c",
     paper: "#f8eaca",
     light: "#ffe3af",
-    darkness: 0.08,
+    darkness: 0,
   },
 ] as const;
 export type TemplateId = (typeof STORE_TEMPLATES)[number]["id"];
@@ -175,6 +177,10 @@ export function applyStoreTemplate(
   rows.forEach((row, i) => {
     row.text = oldRows[i]?.text ?? row.text;
     row.isPublic = oldRows[i]?.isPublic ?? true;
+    // Chalkboard copy belongs to the shelf, not to the furniture style.
+    if (oldRows[i]?.boardTitle !== undefined)
+      row.boardTitle = oldRows[i].boardTitle;
+    if (oldRows[i]?.doodle !== undefined) row.doodle = oldRows[i].doodle;
   });
   for (const kind of ["sign", "ownerPop", "stamp"] as const) {
     const original = scene.objects.find((o) => o.kind === kind),
@@ -228,6 +234,27 @@ export function renameSceneObject(
   o.text = text.slice(0, o.kind === "row" ? 80 : 500);
   return next;
 }
+/** Chalkboard heading and drawing for one shelf row; empty title removes it. */
+export function setRowBoard(
+  scene: StoreScene,
+  rowId: string,
+  patch: { boardTitle?: string; doodle?: string },
+): StoreScene {
+  const next = structuredClone(scene),
+    row = objectById(next, rowId);
+  if (row?.kind !== "row") throw new Error("Unknown row");
+  if (patch.boardTitle !== undefined) {
+    const title = patch.boardTitle.slice(0, 12);
+    if (title.trim()) row.boardTitle = title;
+    else delete row.boardTitle;
+  }
+  if (patch.doodle !== undefined) {
+    if (!(SHELF_DOODLES as readonly string[]).includes(patch.doodle))
+      throw new Error("Unknown doodle");
+    row.doodle = patch.doodle;
+  }
+  return next;
+}
 export function changePlacement(
   scene: StoreScene,
   id: string,
@@ -249,11 +276,7 @@ export function changePlacement(
     p.display = patch.display;
     p.preferredSize = {
       h: p.preferredSize!.h,
-      w:
-        ((p.preferredSize!.h * 16) / 9) *
-        (patch.display === "face"
-          ? 0.64
-          : Math.max(0.08, book.thickness / 170)),
+      w: placementWidth(book, patch.display, p.preferredSize!.h),
     };
     if (p.parentId) next = relayoutRow(next, p.parentId);
   }

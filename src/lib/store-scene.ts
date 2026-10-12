@@ -35,6 +35,9 @@ export interface SceneObject {
   bookHeight?: number;
   gap?: number;
   mode?: "face" | "spine" | "mixed";
+  /** Optional chalkboard heading and line drawing for a row (shelf sign). */
+  boardTitle?: string;
+  doodle?: string;
   isPublic?: boolean;
   /** Compatibility identity; never changed when a placement is moved. */
   source?: { shopId: string; shelfId: string; itemId: string };
@@ -83,6 +86,38 @@ export const rect = (
   h: number,
   rotation = 0,
 ): Rect => ({ x, y, w, h, rotation });
+export const SHELF_DOODLES = [
+  "travel",
+  "daily",
+  "forest",
+  "stars",
+  "garden",
+  "city",
+  "lamp",
+] as const;
+/** Face-out proportions vary per book; the same book always keeps its shape. */
+export const FACE_ASPECTS = [0.72, 0.66, 0.74, 0.69];
+/** One physical size rule shared by placing, restyling and display changes. */
+export function placementWidth(book: Book, display: BookDisplay, h: number) {
+  return (
+    ((h * 16) / 9) *
+    (display === "face"
+      ? FACE_ASPECTS[book.pattern % FACE_ASPECTS.length]
+      : Math.max(0.135, book.thickness / 210))
+  );
+}
+export function placementSize(
+  book: Book,
+  display: BookDisplay,
+  bookHeight = 0.115,
+) {
+  const h =
+    bookHeight *
+    Math.min(1.06, Math.max(0.93, 0.4 + (0.6 * book.height) / 190));
+  return { w: placementWidth(book, display, h), h };
+}
+/** Spines stand shoulder to shoulder; the row gap separates face-outs. */
+export const SPINE_GAP = 0.0012;
 export const objectById = (scene: StoreScene, id: string) =>
   scene.objects.find((o) => o.id === id);
 export const bookPop = (scene: StoreScene, id: string) =>
@@ -264,6 +299,13 @@ export function validateScene(
       errors.push(o.id + ": invalid placement visibility");
     if (o.text !== undefined && typeof o.text !== "string")
       errors.push(o.id + ": invalid text");
+    if (
+      (o.boardTitle !== undefined &&
+        (typeof o.boardTitle !== "string" || o.boardTitle.length > 24)) ||
+      (o.doodle !== undefined &&
+        !(SHELF_DOODLES as readonly string[]).includes(o.doodle))
+    )
+      errors.push(o.id + ": invalid board");
     if (!kinds.includes(o.kind)) {
       errors.push(o.id + ": invalid kind");
       continue;
@@ -312,6 +354,7 @@ export function validateScene(
     )
       errors.push(o.id + ": outside canvas");
     if (
+      o.kind !== "furniture" &&
       scene.forbidden.some((r) =>
         overlaps(polygon, [
           { x: r.x, y: r.y },
@@ -356,22 +399,28 @@ export function relayoutRow(scene: StoreScene, rowId: string): StoreScene {
       h: Math.hypot(((area[3].x - area[0].x) * 9) / 16, area[3].y - area[0].y),
     },
     gap = row.gap ?? 0.004;
-  let x = gap;
+  let x = gap,
+    previous: SceneObject | undefined;
   for (const book of next.objects
     .filter((o) => o.kind === "book" && o.parentId === rowId)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
     const size = book.preferredSize!;
-    if (x + size.w > bounds.w + 1e-8 || size.h > bounds.h + 1e-8) {
+    const left =
+      previous?.display === "spine" && book.display === "spine"
+        ? x - gap + Math.min(gap, SPINE_GAP)
+        : x;
+    if (left + size.w > bounds.w + 1e-8 || size.h > bounds.h + 1e-8) {
       book.parentId = null;
       continue;
     }
     book.rect = rect(
-      x / bounds.w,
+      left / bounds.w,
       1 - size.h / bounds.h,
       size.w / bounds.w,
       size.h / bounds.h,
     );
-    x += size.w + gap;
+    x = left + size.w + gap;
+    previous = book;
   }
   return next;
 }
@@ -386,12 +435,7 @@ export function addBookPlacement(
   if (objectById(scene, id)) throw new Error("Duplicate placement");
   const row = rowId ? objectById(scene, rowId) : undefined;
   if (rowId && row?.kind !== "row") throw new Error("Unknown row");
-  const h =
-    (row?.bookHeight ?? 0.115) *
-    Math.min(1.05, Math.max(0.82, book.height / 175));
-  const w =
-    ((h * 16) / 9) *
-    (display === "face" ? 0.64 : Math.max(0.08, book.thickness / 170));
+  const { w, h } = placementSize(book, display, row?.bookHeight);
   const next = clone(scene);
   next.objects.push({
     id,
@@ -527,15 +571,7 @@ export function setRowStyle(
     const book = books.find((b) => b.id === p.bookId);
     if (!book) throw new Error("Unknown Book");
     if (row.mode && row.mode !== "mixed") p.display = row.mode;
-    const h =
-      (row.bookHeight ?? 0.115) *
-      Math.min(1.05, Math.max(0.82, book.height / 175));
-    p.preferredSize = {
-      h,
-      w:
-        ((h * 16) / 9) *
-        (p.display === "face" ? 0.64 : Math.max(0.08, book.thickness / 170)),
-    };
+    p.preferredSize = placementSize(book, p.display!, row.bookHeight);
   }
   return relayoutRow(next, rowId);
 }

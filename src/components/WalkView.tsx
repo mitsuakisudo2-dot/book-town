@@ -9,11 +9,18 @@ import {
 } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { preload } from "react-dom";
 import { Icon, Modal, ReaderAvatar } from "./ui";
 import { BookInHand } from "./BookInHand";
-import { StoreCanvas, StoreStamp } from "./StoreCanvas";
+import { DoodleIcon, StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { ShelfZoom } from "./ShelfZoom";
-import { bookPop, objectById, worldPolygon } from "../lib/store-scene";
+import {
+  bookPop,
+  boundsOf,
+  furnitureBooks,
+  objectById,
+  worldPolygon,
+} from "../lib/store-scene";
 import {
   publicScenePops,
   publicWalkShops,
@@ -56,6 +63,13 @@ export function WalkView({
   orderedStores?: Shop[];
   initialStoreId?: string;
 }) {
+  // The store's lettering faces: sign and chalk, POP pen, cover mincho.
+  for (const font of ["shop-sign-700", "shop-hand-500", "jacket-mincho-600"])
+    preload("/fonts/" + font + ".woff2", {
+      as: "font",
+      type: "font/woff2",
+      crossOrigin: "anonymous",
+    });
   const saved = useWalkStore(),
     walk = saved.state,
     update = saved.update,
@@ -127,20 +141,34 @@ export function WalkView({
   const background = scene?.background;
   const focusText =
     focusRow && focusRow.storeId === currentId ? focusRow.text : null;
-  // One chip per shelf name, top to bottom, to light up a single shelf.
-  const shelfNames = scene
-    ? [
-        ...new Set(
-          scene.objects
-            .filter((o) => o.kind === "row" && o.text)
-            .map((o) => ({ o, top: worldPolygon(scene, o)?.[0].y ?? 1 }))
-            .sort((a, b) => a.top - b.top)
-            .map(({ o }) => o.text!),
-        ),
-      ]
+  // One chip per shelf, top to bottom, labelled like its chalkboard.
+  const shelfChips = scene
+    ? scene.objects
+        .filter((o) => o.kind === "row" && o.text)
+        .map((o) => ({ o, top: worldPolygon(scene, o)?.[0].y ?? 1 }))
+        .sort((a, b) => a.top - b.top)
+        .map(({ o }) => ({
+          text: o.text!,
+          label: o.boardTitle ?? o.text!,
+          doodle: o.doodle,
+        }))
+        .filter((c, i, all) => all.findIndex((x) => x.text === c.text) === i)
     : [];
   const sign = scene?.objects.find((o) => o.kind === "sign");
-  const chipsTop = sign ? sign.rect.y + sign.rect.h + 0.008 : 0.23;
+  const signPolygon = scene && sign ? worldPolygon(scene, sign) : null;
+  const chipsTop = signPolygon
+    ? boundsOf(signPolygon).y + boundsOf(signPolygon).h + 0.006
+    : 0.23;
+  // The like / POP / save / share controls stand in the scene's reserved area.
+  const controls = scene?.forbidden[0];
+  const rail = controls ? (controls.h * 16) / 9 > 1.5 * controls.w : false;
+  const firstPop = scene
+    ? scene.objects
+        .filter((o) => o.kind === "furniture")
+        .sort((a, b) => a.rect.y - b.rect.y)
+        .flatMap((f) => furnitureBooks(scene, f.id))
+        .find((p) => bookPop(scene, p.id)?.text)
+    : undefined;
   const following = shop ? state.following.includes(shop.id) : false;
   const ownShop = shop?.ownerId === state.me.id;
   useEffect(() => {
@@ -386,6 +414,15 @@ export function WalkView({
               {owner?.bio && <p className="walk-owner-bio">{owner.bio}</p>}
             </div>
             <div className="walk-header-tools">
+              <button
+                aria-label="店主に伝える（送信されないデモ）"
+                onClick={() => {
+                  setMessage(reaction.message);
+                  open({ kind: "message" });
+                }}
+              >
+                <Icon name="mail" size={16} />
+              </button>
               {!ownShop && (
                 <button
                   aria-label="この書店をフォロー"
@@ -399,14 +436,14 @@ export function WalkView({
                     );
                   }}
                 >
-                  <Icon name={following ? "check" : "follow"} size={18} />
+                  <Icon name={following ? "check" : "follow"} size={16} />
                 </button>
               )}
               <button
                 aria-label="その他のメニュー"
                 onClick={() => open({ kind: "menu" })}
               >
-                <Icon name="more" size={18} />
+                <Icon name="more" size={16} />
               </button>
             </div>
           </div>
@@ -475,27 +512,40 @@ export function WalkView({
             </div>
           ) : shop && scene ? (
             <>
-              <span className="walk-lamp-glow" aria-hidden="true" />
-              {shelfNames.length > 1 && (
+              {scene.theme.id === "woodshop" && (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="walk-lamp"
+                    src="/themes/woodshop/lamp-pendant-v1.svg"
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span className="walk-lamp-light" aria-hidden="true" />
+                </>
+              )}
+              {shelfChips.length > 1 && (
                 <div
                   className="walk-chips"
                   role="group"
                   aria-label="棚を選んで照らす"
                   style={{ top: chipsTop * 100 + "%" }}
                 >
-                  {[null, ...shelfNames].map((text) => (
+                  {[null, ...shelfChips].map((chip) => (
                     <button
-                      key={text ?? ""}
-                      aria-pressed={focusText === text}
+                      key={chip?.text ?? ""}
+                      aria-pressed={focusText === (chip?.text ?? null)}
+                      aria-label={chip ? chip.text : undefined}
                       onClick={() =>
                         setFocusRow(
-                          text && currentId
-                            ? { storeId: currentId, text }
+                          chip && currentId
+                            ? { storeId: currentId, text: chip.text }
                             : null,
                         )
                       }
                     >
-                      {text ?? "すべて"}
+                      <DoodleIcon name={chip?.doodle ?? "leaf"} />
+                      {chip?.label ?? "すべて"}
                     </button>
                   ))}
                 </div>
@@ -529,7 +579,19 @@ export function WalkView({
                   })
                 }
               />
-              <div className="walk-actions">
+              <div
+                className={"walk-actions" + (rail ? " is-rail" : "")}
+                style={
+                  controls
+                    ? {
+                        left: controls.x * 100 + "%",
+                        top: controls.y * 100 + "%",
+                        width: controls.w * 100 + "%",
+                        height: controls.h * 100 + "%",
+                      }
+                    : undefined
+                }
+              >
                 <button
                   aria-label="この店が好き"
                   aria-pressed={reaction.liked}
@@ -541,16 +603,16 @@ export function WalkView({
                   <small>好き</small>
                 </button>
                 <button
-                  aria-label="店主に伝える（送信されないデモ）"
-                  onClick={() => {
-                    setMessage(reaction.message);
-                    open({ kind: "message" });
-                  }}
+                  aria-label="この店のPOPを読む"
+                  disabled={!firstPop}
+                  onClick={() =>
+                    firstPop && open({ kind: "book", placementId: firstPop.id })
+                  }
                 >
                   <span>
                     <Icon name="chat" />
                   </span>
-                  <small>伝える</small>
+                  <small>POP</small>
                 </button>
                 <button
                   aria-label="書店を保存"

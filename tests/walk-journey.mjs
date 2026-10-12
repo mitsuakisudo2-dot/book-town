@@ -116,7 +116,10 @@ try {
   await check(
     "book neighbors remain in furniture and POP reaction uses legacy identity",
     async () => {
-      await page.locator("[data-placement]").first().press("Enter");
+      // The tier's lead face-out stands last, so its POP card meets the spines.
+      await page
+        .locator('[data-placement="placement:shop-orbit:o1"]')
+        .press("Enter");
       await expect(page.locator(".bh-book-heading h2")).toContainText(
         "ソラリス",
       );

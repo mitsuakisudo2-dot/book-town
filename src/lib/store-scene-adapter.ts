@@ -1,6 +1,7 @@
 import type { Book, Shop, TownState } from "./types";
 import {
   addBookPlacement,
+  placementSize,
   bookPop,
   furnitureBooks,
   objectById,
@@ -57,8 +58,29 @@ export function publicScenePops(scenes: StoreScene[]) {
       .map((p) => sceneEntry(scene, p)),
   );
 }
-/** Rows starting this far into a shelf leave room for a sign beside them. */
-export const SHELF_GUTTER = 0.2;
+/** Rows starting this far into a shelf leave room for a chalkboard beside them. */
+export const SHELF_GUTTER = 0.2058;
+/** Reference-store geometry (canvas units: x of width, y/h of height). */
+export const WALK_LAYOUT = {
+  sign: rect(0.207, 0.038, 0.676, 0.112, -2.5),
+  furniture: rect(0.008, 0.205, 0.972, 0.6207),
+  // Shelf-local tiers: top rail, then three tiers whose boards sit between them.
+  tiers: [
+    { y: 0.016916, h: 0.26905, w: 0.76749, bookHeight: 0.146 },
+    { y: 0.32898, h: 0.30514, w: 0.72428, bookHeight: 0.149 },
+    { y: 0.67102, h: 0.27356, w: 0.72428, bookHeight: 0.139 },
+  ],
+  table: rect(0.035, 0.84, 0.53, 0.15),
+  ownerPop: rect(0.6, 0.842, 0.27, 0.118, 3),
+  stamp: rect(0.81, 0.85, 0.05, 0.028, 10),
+  // The like / POP / save / share rail stands beside the 2nd and 3rd tiers.
+  controls: rect(0.918, 0.5, 0.082, 0.265),
+};
+const FACES_PER_TIER: Record<number, number[]> = {
+  1: [2, 2, 2],
+  2: [99, 99, 99],
+};
+const DEFAULT_DOODLES = ["travel", "daily", "forest"];
 export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
   const lights = [
     "#ffd293",
@@ -69,6 +91,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
     "#f2ce83",
   ];
   variant = Math.max(0, variant);
+  const L = WALK_LAYOUT;
   let scene: StoreScene = {
     schemaVersion: 1,
     storeId: shop.id,
@@ -81,12 +104,11 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
     },
     background: {
       kind: "preset",
-      url: "/themes/woodshop/room.webp",
+      url: "/themes/woodshop/room-bokeh-v1.webp",
       blur: 0,
-      darkness: 0.2,
+      darkness: 0.04,
     },
-    // The shop's own controls stand on the floor; the shelf fills the rest.
-    forbidden: [rect(0.54, 0.895, 0.46, 0.105)],
+    forbidden: [{ ...L.controls }],
     objects: [],
   };
   scene.objects.push(
@@ -94,7 +116,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       id: "sign",
       kind: "sign",
       parentId: null,
-      rect: rect(0.1, 0.012, 0.8, 0.08, -0.5),
+      rect: { ...L.sign },
       z: 2,
       text: shop.name,
     },
@@ -102,134 +124,198 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       id: "greeting",
       kind: "ownerPop",
       parentId: null,
-      rect: rect(0.035, 0.904, 0.48, 0.072, -1),
+      rect: { ...L.ownerPop },
       z: 5,
-      // The tagline hangs on the signboard; the floor POP carries the owner's own words.
       text: shop.description || shop.tagline,
     },
     {
       id: "stamp",
       kind: "stamp",
       parentId: null,
-      rect: rect(0.912, 0.028, 0.068, 0.038, 8),
-      z: 5,
+      rect: { ...L.stamp },
+      z: 6,
       stamp: variant % 2 ? "coffee" : "plane",
+    },
+    {
+      id: "main-shelf",
+      kind: "furniture",
+      parentId: null,
+      rect: { ...L.furniture },
+      z: 1,
+      furnitureType: "shelf",
     },
   );
   const split = variant === 3;
-  const furniture: SceneObject = {
-    id: "main-shelf",
-    kind: "furniture",
-    parentId: null,
-    rect: rect(0.02, 0.147, 0.96, split ? 0.53 : 0.738),
-    z: 1,
-    furnitureType: "shelf",
-  };
-  scene.objects.push(furniture);
-  if (split)
-    scene.objects.push({
-      id: "table",
-      kind: "furniture",
-      parentId: null,
-      rect: rect(0.06, 0.69, 0.88, 0.195),
-      z: 2,
-      furnitureType: "table",
-    });
   const shelves = shop.shelves.filter((s) => s.isPublic);
-  const source = shelves.flatMap((shelf) =>
-    shelf.items.map((item) => ({ item, shelf })),
-  );
-  // Few, tall rows: each book is drawn large rather than adding more books.
-  const rowCount = split ? 2 : 3;
-  for (let i = 0; i < rowCount; i++)
+  const byShelf = shelves.length <= L.tiers.length;
+  const faces = FACES_PER_TIER[variant] ?? [3, 2, 3];
+  L.tiers.forEach((t, i) => {
+    const shelf = byShelf
+      ? shelves[i]
+      : shelves[
+          Math.min(
+            shelves.length - 1,
+            Math.floor((i * shelves.length) / L.tiers.length),
+          )
+        ];
     scene.objects.push({
       id: "row-" + i,
       kind: "row",
       parentId: "main-shelf",
-      // The left gutter holds a chalkboard shelf sign or a small shop object.
-      rect: rect(
-        SHELF_GUTTER,
-        0.02 + i / rowCount,
-        0.96 - SHELF_GUTTER,
-        0.92 / rowCount,
-      ),
+      rect: rect(SHELF_GUTTER, t.y, t.w, t.h),
       z: 2,
-      text:
-        shelves[
-          Math.min(
-            shelves.length - 1,
-            Math.floor((i * shelves.length) / rowCount),
-          )
-        ]?.name ?? "本のある場所",
-      bookHeight: 0.19,
-      gap: 0.008,
-      mode: variant === 1 ? "spine" : variant === 2 ? "face" : "mixed",
+      // Saved scenes round-trip through JSON, so absent fields stay absent.
+      ...(shelf
+        ? {
+            text: shelf.name,
+            doodle: (byShelf && shelf.board?.doodle) || DEFAULT_DOODLES[i],
+          }
+        : {}),
+      ...(byShelf && shelf?.board ? { boardTitle: shelf.board.title } : {}),
+      bookHeight: t.bookHeight,
+      gap: variant === 2 ? 0.01 : 0.012,
+      mode: variant === 2 ? "face" : "mixed",
       isPublic: true,
     });
-  if (split)
-    scene.objects.push({
-      id: "table-row",
-      kind: "row",
-      parentId: "table",
-      rect: rect(0.05, 0, 0.9, 0.86),
-      z: 3,
-      text: "今日、手に取りたい本",
-      bookHeight: 0.15,
-      gap: 0.008,
-      mode: "face",
-      isPublic: true,
-    });
-  const rows = scene.objects.filter((o) => o.kind === "row");
-  source.forEach(({ item, shelf }, i) => {
-    const row =
-      rows[
-        Math.min(
-          rows.length - 1,
-          Math.floor((i * rows.length) / Math.max(1, source.length)),
-        )
-      ];
-    const book = books.find((b) => b.id === item.bookId);
-    if (!book) return;
-    const display =
-      variant === 1
-        ? "spine"
-        : variant === 2 ||
-            row.id === "table-row" ||
-            (row.id === "row-0" && i < 3)
-          ? "face"
-          : item.display;
-    const id = "placement:" + shop.id + ":" + item.id;
-    scene = addBookPlacement(scene, book, row.id, id, display, i);
-    objectById(scene, id)!.source = {
-      shopId: shop.id,
-      shelfId: shelf.id,
-      itemId: item.id,
-    };
-    scene = setBookPop(scene, id, item.pop);
   });
-  // Existing demo shop only: additional catalog copies demonstrate a dense row.
-  // No readers, catalog books, activity or popularity is generated.
+  // The table row comes after the shelf rows so templates fill the shelf first.
+  if (split)
+    scene.objects.push(
+      {
+        id: "table",
+        kind: "furniture",
+        parentId: null,
+        rect: { ...L.table },
+        z: 3,
+        furnitureType: "table",
+      },
+      {
+        id: "table-row",
+        kind: "row",
+        parentId: "table",
+        rect: rect(0.05, 0, 0.9, 0.8),
+        z: 3,
+        text: "今日、手に取りたい本",
+        bookHeight: 0.105,
+        gap: 0.012,
+        mode: "face",
+        isPublic: true,
+      },
+    );
+  const place = (
+    book: Book,
+    rowId: string,
+    id: string,
+    display: "face" | "spine",
+    order: number,
+  ) => {
+    scene = addBookPlacement(scene, book, rowId, id, display, order);
+    return objectById(scene, id)!.parentId !== null;
+  };
+  // Own items: each public shelf keeps its own tier; its lead face-out stands
+  // last among the face-outs so the tier's POP card meets the spines.
+  const tierItems = L.tiers.map((_, i) =>
+    byShelf
+      ? (shelves[i]?.items ?? []).map((item) => ({ item, shelf: shelves[i] }))
+      : shelves
+          .flatMap((shelf) => shelf.items.map((item) => ({ item, shelf })))
+          .filter(
+            (_, j, all) =>
+              Math.min(
+                L.tiers.length - 1,
+                Math.floor((j * L.tiers.length) / all.length),
+              ) === i,
+          ),
+  );
+  const used = new Set<string>();
+  if (variant === 2)
+    // Face-out-only store: each tier shrinks just enough to show its whole shelf.
+    tierItems.forEach((entries, i) => {
+      const row = objectById(scene, "row-" + i)!;
+      const width = L.tiers[i].w * L.furniture.w;
+      for (const h of [0.146, 0.135, 0.125, 0.118, 0.112, 0.105, 0.098]) {
+        const total = entries.reduce((sum, e) => {
+          const b = books.find((x) => x.id === e.item.bookId);
+          return b ? sum + placementSize(b, "face", h).w + 0.01 : sum;
+        }, 0.01);
+        row.bookHeight = h;
+        if (total <= width) break;
+      }
+    });
+  tierItems.forEach((entries, i) => {
+    const own = entries.filter((e) =>
+      books.some((b) => b.id === e.item.bookId),
+    );
+    const lead = own.find((e) => e.item.display === "face") ?? own[0];
+    const rest = own.filter((e) => e !== lead);
+    // Demo shops show a fixed number of face-outs per tier; an owner's own
+    // face/spine choice is kept as it is.
+    const isFace = (e: (typeof own)[number], n: number) =>
+      variant === 2 ||
+      (shop.demo
+        ? n < Math.min(own.length, faces[i])
+        : e.item.display === "face");
+    const faceCount = shop.demo
+      ? Math.min(own.length, faces[i])
+      : own.filter((e) => e.item.display === "face").length;
+    const ordered = shop.demo
+      ? [
+          ...rest.slice(0, faceCount - 1),
+          ...(lead ? [lead] : []),
+          ...rest.slice(faceCount - 1),
+        ]
+      : [
+          ...rest.filter((e) => e.item.display === "face"),
+          ...(lead ? [lead] : []),
+          ...rest.filter((e) => e.item.display !== "face"),
+        ];
+    ordered.forEach((entry, n) => {
+      const { item, shelf } = entry;
+      const book = books.find((b) => b.id === item.bookId)!;
+      const id = "placement:" + shop.id + ":" + item.id;
+      place(book, "row-" + i, id, isFace(entry, n) ? "face" : "spine", n);
+      objectById(scene, id)!.source = {
+        shopId: shop.id,
+        shelfId: shelf.id,
+        itemId: item.id,
+      };
+      scene = setBookPop(scene, id, item.pop);
+      used.add(book.id);
+    });
+  });
+  // Demo shops only: catalog copies fill what the shop's own books leave open.
+  // Each title appears once per store; nothing about readers or popularity is generated.
   if (shop.demo && variant !== 2) {
     const genres = new Set(
-      source.map((s) => books.find((b) => b.id === s.item.bookId)?.genre),
+      tierItems
+        .flat()
+        .map((e) => books.find((b) => b.id === e.item.bookId)?.genre),
     );
-    const pool = books.filter((b) => genres.has(b.genre));
-    for (const row of rows) {
-      if (row.id === "table-row") continue;
-      for (let i = 0; pool.length && i < pool.length * 3; i++) {
-        const id = "demo-placement:" + shop.id + ":" + row.id + ":" + i;
-        scene = addBookPlacement(
-          scene,
-          pool[(i + variant * 3) % pool.length],
-          row.id,
-          id,
-          // Spines only fill what the shop's own face-out books leave open.
-          "spine",
-          100 + i,
-        );
-        if (!objectById(scene, id)!.parentId) break;
+    const pool = books.filter((b) => !used.has(b.id));
+    pool.sort(
+      (a, b) => Number(genres.has(b.genre)) - Number(genres.has(a.genre)),
+    );
+    const shift = (variant * 5) % Math.max(1, pool.length);
+    const queue = [...pool.slice(shift), ...pool.slice(0, shift)];
+    const rows = [
+      ...(split ? ["table-row"] : []),
+      ...L.tiers.map((_, i) => "row-" + i),
+    ];
+    rows.forEach((rowId, r) => {
+      const quota = Math.ceil(queue.length / (rows.length - r));
+      for (let n = 0; n < quota; n++) {
+        const id = "demo-placement:" + shop.id + ":" + rowId + ":" + n;
+        const display = rowId === "table-row" ? "face" : "spine";
+        // The first title in the queue that still fits; nothing is left unplaced.
+        const k = queue.findIndex((book) => {
+          if (place(book, rowId, id, display, 100 + n)) return true;
+          scene.objects = scene.objects.filter((o) => o.id !== id);
+          return false;
+        });
+        if (k < 0) break;
+        queue.splice(k, 1);
       }
-    }
+    });
   }
   return scene;
 }
@@ -244,4 +330,37 @@ export function publicWalkShops(
           row.items.some((p) => state.books.some((b) => b.id === p.bookId)),
       ),
   );
+}
+/** Whole sentences up to `max` characters; otherwise the full text, which CSS clamps. */
+export function popExcerpt(text: string, max: number): string {
+  const sentences = text.match(/[^。！？]+[。！？]?/g) ?? [];
+  let out = "";
+  for (const sentence of sentences) {
+    if ((out + sentence).length > max) break;
+    out += sentence;
+  }
+  return out || text;
+}
+/**
+ * One POP card stands on each tier: the rightmost face-out with POP text, or
+ * the first spine with POP text when the tier has no face-outs. Face-out-only
+ * rows show a card on every cover instead, so they have no tier owner.
+ */
+export function tierCardOwners(scene: StoreScene): Map<string, string> {
+  const owners = new Map<string, string>();
+  for (const row of scene.objects.filter((o) => o.kind === "row")) {
+    if (row.mode === "face") continue;
+    const withPop = scene.objects
+      .filter(
+        (o) =>
+          o.kind === "book" &&
+          o.parentId === row.id &&
+          bookPop(scene, o.id)?.text,
+      )
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const faces = withPop.filter((o) => o.display === "face");
+    const owner = faces[faces.length - 1] ?? withPop[0];
+    if (owner) owners.set(row.id, owner.id);
+  }
+  return owners;
 }

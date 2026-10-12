@@ -3,17 +3,21 @@ import { useId, useRef, type CSSProperties, type KeyboardEvent } from "react";
 import { BookJacket, Icon } from "./ui";
 import {
   bookPop,
-  objectById,
+  boundsOf,
+  worldPolygon,
   type SceneObject,
   type StoreScene,
 } from "../lib/store-scene";
+import { popExcerpt, tierCardOwners } from "../lib/store-scene-adapter";
 import type { Book } from "../lib/types";
 
+const THEME = "/themes/woodshop/";
+const pct = (n: number) => n * 100 + "%";
 const pose = (o: SceneObject): CSSProperties => ({
-  left: o.rect.x * 100 + "%",
-  top: o.rect.y * 100 + "%",
-  width: o.rect.w * 100 + "%",
-  height: o.rect.h * 100 + "%",
+  left: pct(o.rect.x),
+  top: pct(o.rect.y),
+  width: pct(o.rect.w),
+  height: pct(o.rect.h),
   transform: "rotate(" + o.rect.rotation + "deg)",
   zIndex: o.z,
   color: o.style?.color,
@@ -47,7 +51,80 @@ export function StoreStamp({ name }: { name?: string }) {
     );
   return <Icon name="leaf" />;
 }
-/** Small objects that keep a shelf gutter company when it has no new sign. */
+
+/** Chalk line drawings for shelf boards and the shelf chips. */
+const DOODLE_ICONS: Record<string, string> = {
+  travel:
+    "M3 16 20 14 30 4h4l-6 10h11l4-5h3l-2 7 2 7h-3l-4-5H28l6 10h-4L20 18 3 16Z",
+  daily:
+    "M13 12h17v6a8.5 8.5 0 0 1-17 0Zm17 2a3.5 3.5 0 0 1 0 7M9 26h25M18 3c-2 2 2 4 0 6M24 3c-2 2 2 4 0 6",
+  forest: "M24 2 15 15h5l-8 10h24l-8-10h5Zm0 23v4",
+  stars:
+    "M24 6a8 8 0 1 0 0.01 0ZM6 18c4 3 33-5 36-10 1-3-5-2-8-1M14 22c-6 2-9 1-8-4",
+  garden:
+    "M24 27V10M24 18c-5-1-9-5-9-10 5 0 9 4 9 10Zm0-4c4-1 8-4 8-9-5 0-8 4-8 9Z",
+  city: "M8 26V13l10-8 10 8v13ZM15 26v-7h6v7M28 26V16h10v10M31 20h4",
+  lamp: "M21 26V12h6v14ZM24 12V8M24 2c-3 3-2 6 0 6s3-3 0-6ZM16 27h16",
+  leaf: "M38 4C14 2 6 18 14 26c10 2 24-4 24-22ZM8 28 26 12",
+};
+export function DoodleIcon({ name }: { name?: string }) {
+  const d = DOODLE_ICONS[name ?? "leaf"] ?? DOODLE_ICONS.leaf;
+  return (
+    <svg
+      viewBox="0 0 48 30"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={d} />
+    </svg>
+  );
+}
+const CORNER_ART: Record<string, string> = {
+  travel:
+    "M26 8a14 14 0 1 0 .01 0ZM12 22h28M26 8c-7 8-7 20 0 28M26 8c7 8 7 20 0 28M14 15h24M14 29h24M26 36v6M18 44h16M6 6l3 3M44 5l-3 3M46 15h-4",
+  daily:
+    "M8 40h34v6H8ZM11 33h30v7H11ZM7 26h34v7H7ZM10 26v-3h26v3M14 36h20M12 43h22",
+  forest:
+    "M4 44h44M10 20 4 34h12ZM10 34v10M22 8l-8 18h16ZM22 26v18M34 14l-7 14h14ZM34 28v16M44 24l-5 10h10ZM44 34v10",
+  stars:
+    "M30 6a14 14 0 1 0 12 22A11 11 0 1 1 30 6ZM8 10l1.5 3.5L13 15l-3.5 1.5L8 20l-1.5-3.5L3 15l3.5-1.5ZM44 36l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1ZM14 38l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1Z",
+  garden:
+    "M14 30h24l-3 16H17ZM12 30h28M26 30V14M26 22c-6 0-10-4-10-10 6 0 10 4 10 10Zm0-4c5 0 9-4 9-10-5 0-9 4-9 10Z",
+  city: "M10 46V16M6 16h8l-4-6ZM10 22h3M20 46V28l8-6 8 6v18M36 46V32h10v14M25 34h6M25 40h6M40 38h3",
+  lamp: "M4 40c8-4 16-4 22 0 6-4 14-4 22 0V20c-8-4-16-4-22 0-6-4-14-4-22 0ZM26 20v20M10 26c4-1 8-1 11 1M10 32c4-1 8-1 11 1M31 27c3-2 7-2 11-1M31 33c3-2 7-2 11-1",
+};
+function CornerArt({ name }: { name?: string }) {
+  const d = CORNER_ART[name ?? ""];
+  if (!d) return null;
+  return (
+    <svg
+      className="walk-board-corner"
+      viewBox="0 0 52 48"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={d} />
+    </svg>
+  );
+}
+const RULE_DOODLES = new Set([
+  "travel",
+  "daily",
+  "stars",
+  "garden",
+  "city",
+  "lamp",
+]);
+
+/** Small objects that keep a shelf gutter company when it has no shelf of its own. */
 function ShelfDecor({ index }: { index: number }) {
   const glow = useId();
   const kind = index % 4;
@@ -64,24 +141,8 @@ function ShelfDecor({ index }: { index: number }) {
       </svg>
     );
   if (kind === 1)
-    return (
-      <svg viewBox="0 0 60 80" aria-hidden="true">
-        <circle cx="30" cy="36" r="19" fill="#4f767c" />
-        <path
-          d="M18 26c6-3 9 2 13 0s7 3 5 7-7 3-9 7-7 5-9 1 3-6 0-9Z M37 43c4-2 8 0 8 4s-5 6-8 4Z"
-          fill="#d6c08a"
-        />
-        <ellipse cx="25" cy="29" rx="7" ry="4" fill="#ffffff" opacity=".18" />
-        <path
-          d="M8 34a22 22 0 0 0 40 12"
-          stroke="#c39a51"
-          strokeWidth="2.4"
-          fill="none"
-        />
-        <path d="M30 57v12" stroke="#a37c3c" strokeWidth="3" />
-        <path d="M19 69h22l3 7H16Z" fill="#7a5530" />
-      </svg>
-    );
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={THEME + "globe-v1.svg"} alt="" />;
   if (kind === 2)
     return (
       <svg viewBox="0 0 60 80" aria-hidden="true">
@@ -113,45 +174,78 @@ function ShelfDecor({ index }: { index: number }) {
     </svg>
   );
 }
-/** Engraved line art for the shop signboard. */
+/** Ink mountains drawn on the shop signboard. */
 function SignArt() {
   return (
     <svg
       className="walk-sign-art"
-      viewBox="0 0 80 32"
+      viewBox="0 0 220 70"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="3"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M2 30 22 9l9 9 9-12 18 17 6-5 14 12" />
-      <path d="m19 12 3 3 3-2M38 9l2 3 3-1" />
-      <circle cx="61" cy="8" r="4" />
-      <path d="M2 30h76" />
+      <path d="M0 63c30-4 58-14 66-35 6 8 12 12 20 14l20-40c8 18 20 32 36 40 6-8 12-13 18-20 10 14 24 24 44 30" />
+      <path d="M66 28l-6 14M72 32l-4 9M106 2l-8 22M112 14l-7 18M118 24l-5 14M140 40l-10-6M180 22l-5 9M186 28l-4 8" />
+      <path d="M150 63c18-2 40-2 62 0" />
     </svg>
   );
 }
+const SPINE_TONES: Array<[string, string] | null> = [
+  ["#efe5d3", "#2a2420"],
+  ["#e3cfaa", "#2a2420"],
+  ["#d8c19c", "#2a2420"],
+  ["#b8c2cc", "#1f2a3a"],
+  null,
+  ["#2b3550", "#f3ead8"],
+  ["#e9dcc3", "#2a2420"],
+  ["#5f7a90", "#f3ead8"],
+];
+const shortAuthor = (author: string) =>
+  author.split("・").pop()?.trim() || author;
 export function StoreBook({ book, display }: { book: Book; display?: string }) {
-  return display === "face" ? (
-    <BookJacket book={book} illustrated />
-  ) : (
+  if (display === "face") return <BookJacket book={book} illustrated />;
+  const tone = SPINE_TONES[
+    [...book.id].reduce((sum, c) => sum + c.charCodeAt(0), 0) %
+      SPINE_TONES.length
+  ] ?? [book.color, book.ink];
+  const author = shortAuthor(book.author);
+  return (
     <span
-      className="walk-spine"
-      style={{
-        background:
-          book.pattern % 5 === 0
-            ? book.color
-            : ["#e2d3b9", "#efe4cd", "#cdb89b", "#ddc9ae"][book.pattern % 4],
-        color: book.pattern % 5 === 0 ? book.ink : "#392d20",
-      }}
+      className={"walk-spine is-pattern-" + (book.pattern % 3)}
+      style={
+        {
+          background: tone[0],
+          color: tone[1],
+          "--n": [...book.title].length,
+          "--m": [...author].length,
+          "--accent": book.color,
+        } as CSSProperties
+      }
     >
       <span>{book.title}</span>
-      <small>{book.author}</small>
+      <small>{author}</small>
+      <i className="walk-spine-mark" aria-hidden="true" />
     </span>
   );
 }
+const CARD_W = [0.262, 0.263, 0.292];
+const CARD_K = [0.1875, 0.27, 0.232];
+const CARD_ROT = [-2, -1.3, -2.5];
+const COVER_ROT = [1, 0, -1, -2, -2];
+/** The decorations that stand on a store's shelves, by row. */
+const ROW_DECOR: Array<
+  Array<{ src: string; box: [number, number, number, number] }>
+> = [
+  [
+    { src: "ivy-clump-v1.svg", box: [-27.9, 81.7, 12.5, 34.7] },
+    { src: "ivy-trail-v1.svg", box: [-3.5, 87.7, 13.1, 61.1] },
+  ],
+  [{ src: "daisy-vase-v1.svg", box: [-29.5, 79.1, 15.1, 64.9] }],
+  [{ src: "ivy-pot-v1.svg", box: [100.6, 86.3, 11.9, 25.3] }],
+];
 export function StoreCanvas({
   scene,
   books,
@@ -178,6 +272,16 @@ export function StoreCanvas({
 }) {
   const drag = useRef(false);
   const greeting = scene.objects.find((o) => o.kind === "ownerPop")?.text;
+  const woodshop = scene.theme.id === "woodshop";
+  const owners = tierCardOwners(scene);
+  const cardOwners = new Set(owners.values());
+  const hasTable = scene.objects.some(
+    (o) => o.kind === "furniture" && o.furnitureType === "table",
+  );
+  const bounds = (o: SceneObject) => {
+    const polygon = worldPolygon(scene, o);
+    return polygon ? boundsOf(polygon) : null;
+  };
   function focusNeighbor(
     event: KeyboardEvent<HTMLButtonElement>,
     book: SceneObject,
@@ -198,17 +302,239 @@ export function StoreCanvas({
         .getElementById("walk-book-" + next.id)
         ?.focus({ preventScroll: true });
   }
+  /** Card geometry in the lead book's own box, from canvas-unit rules. */
+  function tierCard(row: SceneObject, lead: SceneObject, index: number) {
+    const r = bounds(row),
+      b = bounds(lead);
+    if (!r || !b) return undefined;
+    const i = index % 3;
+    const right0 = Math.min(r.x + r.w, 0.918);
+    const left = Math.max(
+      Math.min(right0 - CARD_W[i], b.x + b.w - 0.01),
+      b.x + 0.2 * b.w,
+    );
+    const right = Math.min(left + CARD_W[i], right0);
+    const top = r.y + r.h - CARD_K[i] * b.h;
+    const pop = bookPop(scene, lead.id);
+    return {
+      left: pct((left - b.x) / b.w),
+      top: pct((top - b.y) / b.h),
+      width: pct((right - left) / b.w),
+      transform: "rotate(" + (pop?.rect.rotation || CARD_ROT[i]) + "deg)",
+    } as CSSProperties;
+  }
+  function renderBook(o: SceneObject, row: SceneObject, rowIndex: number) {
+    const book = books.find((b) => b.id === o.bookId);
+    if (!book) return null;
+    const pop = bookPop(scene, o.id);
+    const tier = cardOwners.has(o.id);
+    const cover = row.mode === "face" && o.display === "face";
+    const shown = Boolean(pop?.text) && (tier || cover);
+    return (
+      <div
+        key={o.id}
+        className={"walk-object walk-book is-" + o.display}
+        style={{ ...pose(o), zIndex: tier ? 8 : 3 }}
+      >
+        <button
+          id={"walk-book-" + o.id}
+          className="walk-book-target"
+          data-placement={o.id}
+          aria-label={
+            book.title +
+            "、" +
+            book.author +
+            "。手に取る" +
+            (pop?.text && !shown ? "。POPあり" : "")
+          }
+          onKeyDown={(e) => focusNeighbor(e, o)}
+          onClick={(e) => {
+            if (drag.current) return;
+            const box = e.currentTarget.getBoundingClientRect();
+            if (e.detail !== 0 && o.display === "spine" && box.width < 24)
+              onZoom(o.parentId!);
+            else onBook(o);
+          }}
+        >
+          <StoreBook book={book} display={o.display} />
+        </button>
+        {shown && pop && (
+          <button
+            className={
+              "walk-book-pop " +
+              (tier ? "is-tier is-tier-" + (rowIndex % 3) : "is-cover")
+            }
+            style={
+              tier
+                ? tierCard(row, o, rowIndex)
+                : {
+                    transform:
+                      "rotate(" +
+                      COVER_ROT[(o.order ?? 0) % COVER_ROT.length] +
+                      "deg)",
+                  }
+            }
+            onClick={() => onPop(o)}
+            aria-label={book.title + "のPOP全文を読む"}
+          >
+            <span className="walk-pop-excerpt">
+              {tier ? popExcerpt(pop.text ?? "", 28) : pop.text}
+            </span>
+            {signature && (
+              <small className="walk-pop-sign">— {signature}</small>
+            )}
+            {pop.stamp && (
+              <span className="walk-pop-stamp">
+                <StoreStamp name={pop.stamp} />
+              </span>
+            )}
+          </button>
+        )}
+      </div>
+    );
+  }
+  function renderRow(o: SceneObject, furniture: SceneObject | undefined) {
+    const siblings = scene.objects
+      .filter((r) => r.kind === "row" && r.parentId === o.parentId)
+      .sort((a, b) => a.rect.y - b.rect.y);
+    const index = siblings.findIndex((r) => r.id === o.id);
+    const shelf = furniture?.furnitureType === "shelf";
+    // Rows that leave a gutter get a chalkboard beside them; older saved
+    // stores keep the small tag over the books.
+    const gutter = shelf && o.rect.x >= 0.15;
+    const below = siblings[index + 1];
+    const boardH = shelf
+      ? Math.max(
+          0.006,
+          (below ? below.rect.y : 1 - 0.0169) - (o.rect.y + o.rect.h),
+        )
+      : 0;
+    const rowWorldH = o.rect.h * (furniture?.rect.h ?? 1);
+    const items = scene.objects
+      .filter((child) => child.parentId === o.id && child.kind === "book")
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const lastBook = items[items.length - 1];
+    const spare = lastBook
+      ? (1 - lastBook.rect.x - lastBook.rect.w) *
+        o.rect.w *
+        (furniture?.rect.w ?? 1)
+      : o.rect.w * (furniture?.rect.w ?? 1);
+    const title = o.boardTitle ?? o.text ?? "";
+    return (
+      <div
+        key={o.id}
+        className={
+          "walk-object walk-row" +
+          (focusText !== null && o.text !== focusText ? " is-dimmed" : "")
+        }
+        style={{ ...pose(o), zIndex: 20 - index }}
+        data-row={o.id}
+      >
+        {gutter && o.text ? (
+          <button
+            className="walk-row-board"
+            style={
+              {
+                right: pct(1 + 0.0082 / o.rect.w),
+                width: pct((o.rect.x - 0.0236) / o.rect.w),
+                height: pct(((o.bookHeight ?? 0.115) * 1.02) / rowWorldH),
+                "--n": [...title].length,
+              } as CSSProperties
+            }
+            onClick={() => onZoom(o.id)}
+            aria-label={o.text + "の段を近くで見る"}
+          >
+            <span className="walk-board-title">{title}</span>
+            {o.boardTitle && RULE_DOODLES.has(o.doodle ?? "") && (
+              <span className="walk-board-rule">
+                <i />
+                <DoodleIcon name={o.doodle} />
+              </span>
+            )}
+            {o.boardTitle && <span className="walk-board-body">{o.text}</span>}
+            <CornerArt name={o.doodle} />
+          </button>
+        ) : gutter ? (
+          <span
+            className="walk-row-decor"
+            style={{
+              width: pct((o.rect.x - 0.055) / o.rect.w),
+              right: pct(1 + 0.015 / o.rect.w),
+            }}
+          >
+            <ShelfDecor index={index + scene.storeId.length} />
+          </span>
+        ) : (
+          <>
+            <button
+              className="walk-row-label"
+              onClick={() => onLabel(o)}
+              aria-label={o.text + "、棚の案内"}
+            >
+              <span>{o.text}</span>
+            </button>
+            <button
+              className="walk-zoom-trigger"
+              onClick={() => onZoom(o.id)}
+              aria-label={o.text + "の段を近くで見る"}
+            >
+              <Icon name="search" size={12} />
+            </button>
+          </>
+        )}
+        {items.map((book) => renderBook(book, o, index))}
+        {shelf && (
+          <span
+            className={"walk-shelf-lip is-board-" + (index % 3)}
+            style={{
+              height: pct(boardH / o.rect.h),
+              // The board runs the full furniture width, under any sign.
+              left: pct(-(o.rect.x + 0.006) / o.rect.w),
+              right: pct(-(1.006 - o.rect.x - o.rect.w) / o.rect.w),
+            }}
+          />
+        )}
+        {woodshop &&
+          gutter &&
+          o.text &&
+          ROW_DECOR[index]?.map((d) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={d.src}
+              className="walk-decor"
+              src={THEME + d.src}
+              alt=""
+              aria-hidden="true"
+              style={{
+                left: d.box[0] + "%",
+                top: d.box[1] + "%",
+                width: d.box[2] + "%",
+                height: d.box[3] + "%",
+              }}
+            />
+          ))}
+        {woodshop && shelf && spare >= 0.085 && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            className="walk-decor walk-globe"
+            src={THEME + "globe-v1.svg"}
+            alt=""
+            aria-hidden="true"
+            style={{
+              width: pct(0.085 / (o.rect.w * (furniture?.rect.w ?? 1))),
+              height: pct(0.076 / rowWorldH),
+            }}
+          />
+        )}
+      </div>
+    );
+  }
   function render(o: SceneObject) {
     if (o.placed === false) return null;
-    const children = scene.objects
-      .filter((child) => child.parentId === o.id && child.kind !== "bookPop")
-      .sort(
-        (a, b) =>
-          a.rect.y - b.rect.y ||
-          a.rect.x - b.rect.x ||
-          (a.order ?? 0) - (b.order ?? 0),
-      );
-    if (o.kind === "furniture")
+    if (o.kind === "furniture") {
+      const rows = scene.objects
+        .filter((child) => child.parentId === o.id && child.kind === "row")
+        .sort((a, b) => a.rect.y - b.rect.y);
       return (
         <div
           key={o.id}
@@ -216,133 +542,14 @@ export function StoreCanvas({
           style={pose(o)}
           data-furniture={o.id}
         >
-          {children.map(render)}
+          {o.furnitureType === "shelf" && (
+            <>
+              <span className="walk-case-post is-left" />
+              <span className="walk-case-post is-right" />
+            </>
+          )}
+          {rows.map((row) => renderRow(row, o))}
           <span className="walk-wood-edge" />
-        </div>
-      );
-    if (o.kind === "row") {
-      const furniture = o.parentId ? objectById(scene, o.parentId) : undefined;
-      // Rows that leave a gutter (new default stores) get a sign beside them;
-      // older saved stores keep the small tag over the books.
-      const gutter =
-        furniture?.furnitureType === "shelf" && o.rect.x >= 0.15
-          ? o.rect.x - 0.055
-          : 0;
-      const siblings = scene.objects
-        .filter((r) => r.kind === "row" && r.parentId === o.parentId)
-        .sort((a, b) => a.rect.y - b.rect.y);
-      const index = siblings.findIndex((r) => r.id === o.id);
-      const continued = gutter > 0 && siblings[index - 1]?.text === o.text;
-      const side = {
-        width: (gutter / o.rect.w) * 100 + "%",
-        right: (1 + 0.015 / o.rect.w) * 100 + "%",
-      };
-      return (
-        <div
-          key={o.id}
-          className={
-            "walk-object walk-row" +
-            (focusText !== null && o.text !== focusText ? " is-dimmed" : "")
-          }
-          style={pose(o)}
-          data-row={o.id}
-        >
-          {continued ? (
-            <span className="walk-row-decor" style={side}>
-              <ShelfDecor index={index + scene.storeId.length} />
-            </span>
-          ) : (
-            <button
-              className={"walk-row-label" + (gutter ? " is-board" : "")}
-              style={gutter ? side : undefined}
-              onClick={() => onLabel(o)}
-              aria-label={o.text + "、棚の案内"}
-            >
-              <span>{o.text}</span>
-            </button>
-          )}
-          {children.map(render)}
-          <span
-            className="walk-shelf-lip"
-            style={{
-              // The shelf board runs the full furniture width, under any sign.
-              left: (-(o.rect.x + 0.006) / o.rect.w) * 100 + "%",
-              right: (-(1.006 - o.rect.x - o.rect.w) / o.rect.w) * 100 + "%",
-            }}
-          />
-          <button
-            className="walk-zoom-trigger"
-            onClick={() => onZoom(o.id)}
-            aria-label={o.text + "の段を近くで見る"}
-          >
-            <Icon name="search" size={12} />
-          </button>
-        </div>
-      );
-    }
-    if (o.kind === "book") {
-      const book = books.find((b) => b.id === o.bookId);
-      if (!book) return null;
-      const pop = bookPop(scene, o.id);
-      return (
-        <div
-          key={o.id}
-          className={"walk-object walk-book is-" + o.display}
-          style={pose(o)}
-        >
-          <button
-            id={"walk-book-" + o.id}
-            className="walk-book-target"
-            data-placement={o.id}
-            aria-label={book.title + "、" + book.author + "。手に取る"}
-            onKeyDown={(e) => focusNeighbor(e, o)}
-            onClick={(e) => {
-              if (drag.current) return;
-              const box = e.currentTarget.getBoundingClientRect();
-              if (e.detail !== 0 && o.display === "spine" && box.width < 24)
-                onZoom(o.parentId!);
-              else onBook(o);
-            }}
-          >
-            <StoreBook book={book} display={o.display} />
-          </button>
-          {pop?.text && (
-            <button
-              className={
-                "walk-book-pop " + (o.display === "face" ? "" : "is-tab")
-              }
-              style={
-                o.display === "face"
-                  ? {
-                      ...pose(pop),
-                      transform:
-                        "rotate(" +
-                        (pop.rect.rotation ||
-                          [-2, 1.5, -1, 2.2][(o.order ?? 0) % 4]) +
-                        "deg)",
-                    }
-                  : undefined
-              }
-              onClick={() => onPop(o)}
-              aria-label={book.title + "のPOP全文を読む"}
-            >
-              {o.display === "face" ? (
-                <>
-                  <span className="walk-pop-excerpt">{pop.text}</span>
-                  {signature && (
-                    <small className="walk-pop-sign">— {signature}</small>
-                  )}
-                  {pop.stamp && (
-                    <span className="walk-pop-stamp">
-                      <StoreStamp name={pop.stamp} />
-                    </span>
-                  )}
-                </>
-              ) : (
-                <span>POP</span>
-              )}
-            </button>
-          )}
         </div>
       );
     }
@@ -352,21 +559,53 @@ export function StoreCanvas({
           <StoreStamp name={o.stamp} />
         </span>
       );
-    if (o.kind === "sign")
+    if (o.kind === "sign") {
+      const name = o.text ?? "";
       return (
         <button
           key={o.id}
           className="walk-object walk-sign"
-          style={pose(o)}
+          style={{ ...pose(o), "--n": [...name].length } as CSSProperties}
           onClick={() => onLabel(o)}
         >
-          <span className="walk-sign-name">{o.text}</span>
-          {tagline && tagline !== greeting && (
-            <small className="walk-sign-tagline">{tagline}</small>
+          {woodshop && (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="walk-sign-chain"
+                src={THEME + "chain-v1.svg"}
+                alt=""
+                aria-hidden="true"
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="walk-sign-ivy"
+                src={THEME + "ivy-hang-v1.svg"}
+                alt=""
+                aria-hidden="true"
+              />
+            </>
           )}
-          <SignArt />
+          <span className="walk-sign-board">
+            <span className="walk-sign-name">
+              {name.split(/(の)/).map((part, i) =>
+                part === "の" ? (
+                  <span key={i} className="walk-sign-no">
+                    の
+                  </span>
+                ) : (
+                  part
+                ),
+              )}
+            </span>
+            {tagline && tagline !== greeting && (
+              <small className="walk-sign-tagline">{tagline}</small>
+            )}
+            <SignArt />
+          </span>
         </button>
       );
+    }
     if (o.kind === "ownerPop")
       return (
         <button
@@ -375,7 +614,9 @@ export function StoreCanvas({
           style={pose(o)}
           onClick={() => onLabel(o)}
         >
-          <span className="walk-floor-pop-text">{o.text}</span>
+          <span className="walk-floor-pop-text">
+            {popExcerpt(o.text ?? "", 30)}
+          </span>
           {signature && <small>— {signature}</small>}
         </button>
       );
@@ -390,6 +631,8 @@ export function StoreCanvas({
       </button>
     );
   }
+  const shelfScene =
+    woodshop && scene.objects.some((o) => o.id === "main-shelf");
   return (
     <div
       className="walk-store-objects"
@@ -404,6 +647,26 @@ export function StoreCanvas({
         .filter((o) => !o.parentId && o.kind !== "book")
         .sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x)
         .map(render)}
+      {shelfScene && (
+        <>
+          {!hasTable && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              className="walk-fg walk-fg-left"
+              src={THEME + "fg-left-v1.webp"}
+              alt=""
+              aria-hidden="true"
+            />
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="walk-fg walk-fg-right"
+            src={THEME + "fg-right-v1.webp"}
+            alt=""
+            aria-hidden="true"
+          />
+        </>
+      )}
     </div>
   );
 }
