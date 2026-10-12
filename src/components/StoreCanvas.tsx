@@ -1,10 +1,12 @@
 "use client";
+import Link from "next/link";
 import { useId, useRef, type CSSProperties, type KeyboardEvent } from "react";
 import { BookJacket, Icon } from "./ui";
 import {
   bookPop,
   boundsOf,
   worldPolygon,
+  type Rect,
   type SceneObject,
   type StoreScene,
 } from "../lib/store-scene";
@@ -175,6 +177,27 @@ function ShelfDecor({ index }: { index: number }) {
     </svg>
   );
 }
+/** What stands on a tier that holds no books yet: a few things, never a bare board. */
+const STILL_LIFE: Array<number | string> = [0, "daisy-vase-v1.svg", 2, 3, 1];
+function StillLife({ seed, left }: { seed: number; left: string }) {
+  return (
+    <span className="walk-row-still" style={{ left }} aria-hidden="true">
+      {[0, 1, 2].map((k) => {
+        const item = STILL_LIFE[(seed * 3 + k) % STILL_LIFE.length];
+        return (
+          <span key={k} className={item === 1 ? "is-globe" : undefined}>
+            {typeof item === "number" ? (
+              <ShelfDecor index={item} />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={THEME + item} alt="" />
+            )}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 /** Ink mountains drawn on the shop signboard. */
 function SignArt() {
   return (
@@ -265,6 +288,8 @@ const ROW_DECOR: Array<
   [{ src: "daisy-vase-v1.svg", box: [-29.5, 79.1, 15.1, 64.9] }],
   [{ src: "ivy-pot-v1.svg", box: [100.6, 86.3, 11.9, 25.3] }],
 ];
+const overlaps = (a: Rect, b: Rect) =>
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 export function StoreCanvas({
   scene,
   books,
@@ -275,6 +300,7 @@ export function StoreCanvas({
   signature,
   tagline,
   focusText = null,
+  greetingHref,
 }: {
   scene: StoreScene;
   books: Book[];
@@ -288,9 +314,14 @@ export function StoreCanvas({
   tagline?: string;
   /** When set, rows with another shelf name step back into the shadow. */
   focusText?: string | null;
+  /** The owner's own visit: an empty floor POP invites them to write one. */
+  greetingHref?: string;
 }) {
   const drag = useRef(false);
-  const greeting = scene.objects.find((o) => o.kind === "ownerPop")?.text;
+  const greetingPop = scene.objects.find((o) => o.kind === "ownerPop");
+  const greeting = greetingPop?.text;
+  // With no words of the owner's, the stamp on the floor POP steps out too.
+  const noGreeting = !greeting?.trim();
   const woodshop = scene.theme.id === "woodshop";
   const owners = tierCardOwners(scene);
   const cardOwners = new Set(owners.values());
@@ -461,6 +492,10 @@ export function StoreCanvas({
     // Rows that leave a gutter get a chalkboard beside them; older saved
     // stores keep the small tag over the books.
     const gutter = shelf && o.rect.x >= 0.15;
+    // A tier that continues the shelf above shares its chalkboard.
+    const continued =
+      !o.boardTitle && index > 0 && siblings[index - 1].text === o.text;
+    const board = gutter && !!o.text && !continued;
     const below = siblings[index + 1];
     const boardH = shelf
       ? Math.max(
@@ -479,6 +514,7 @@ export function StoreCanvas({
         (furniture?.rect.w ?? 1)
       : o.rect.w * (furniture?.rect.w ?? 1);
     const title = o.boardTitle ?? o.text ?? "";
+    const still = woodshop && gutter && !o.text && items.length === 0;
     return (
       <div
         key={o.id}
@@ -489,7 +525,7 @@ export function StoreCanvas({
         style={{ ...pose(o), zIndex: 20 - index }}
         data-row={o.id}
       >
-        {gutter && o.text ? (
+        {board ? (
           <button
             className="walk-row-board"
             style={
@@ -519,6 +555,11 @@ export function StoreCanvas({
               <CornerArt name={o.doodle} />
             )}
           </button>
+        ) : still ? (
+          <StillLife
+            seed={index + scene.storeId.length}
+            left={pct(-(o.rect.x - 0.03) / o.rect.w)}
+          />
         ) : gutter ? (
           <span
             className="walk-row-decor"
@@ -560,8 +601,7 @@ export function StoreCanvas({
           />
         )}
         {woodshop &&
-          gutter &&
-          o.text &&
+          board &&
           ROW_DECOR[index]?.map((d) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -578,7 +618,7 @@ export function StoreCanvas({
               }}
             />
           ))}
-        {woodshop && shelf && spare >= 0.085 && (
+        {woodshop && shelf && !still && spare >= 0.085 && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             className="walk-decor walk-globe"
@@ -618,6 +658,13 @@ export function StoreCanvas({
         </div>
       );
     }
+    if (
+      o.kind === "stamp" &&
+      noGreeting &&
+      greetingPop &&
+      overlaps(o.rect, greetingPop.rect)
+    )
+      return null;
     if (o.kind === "stamp")
       return (
         <span key={o.id} className="walk-object walk-stamp" style={pose(o)}>
@@ -671,6 +718,18 @@ export function StoreCanvas({
         </button>
       );
     }
+    if (o.kind === "ownerPop" && !o.text?.trim())
+      return greetingHref ? (
+        <Link
+          key={o.id}
+          href={greetingHref}
+          className="walk-object walk-ownerPop is-invite"
+          style={pose(o)}
+        >
+          <span className="walk-floor-pop-text">ひとことを書く</span>
+          <small>あなたにだけ見えています</small>
+        </Link>
+      ) : null;
     if (o.kind === "ownerPop")
       return (
         <button

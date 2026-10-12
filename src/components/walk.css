@@ -854,6 +854,31 @@
   object-position: bottom;
   filter: brightness(1.35) saturate(1.1);
 }
+.walk-row-still {
+  position: absolute;
+  z-index: 2;
+  right: 5%;
+  bottom: 2px;
+  height: 70%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  pointer-events: none;
+}
+.walk-row-still > span {
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+.walk-row-still > .is-globe {
+  height: 78%;
+}
+.walk-row-still svg,
+.walk-row-still img {
+  height: 100%;
+  width: auto;
+  filter: drop-shadow(2px 3px 2px #0009);
+}
 .walk-row-decor {
   position: absolute;
   bottom: 2px;
@@ -1267,6 +1292,22 @@
   height: calc(var(--walk-u) * 1.8);
   background: #68300f;
   box-shadow: inset 0 1px rgba(255, 190, 120, 0.35);
+}
+/* The owner's own visit, before they have written anything. */
+.walk-ownerPop.is-invite {
+  align-items: center;
+  text-align: center;
+  text-decoration: none;
+  background: rgba(246, 220, 185, 0.62);
+  border: 1.5px dashed rgba(82, 51, 34, 0.6);
+  box-shadow: 0 calc(var(--walk-u) * 1.4) calc(var(--walk-u) * 2.4)
+    rgba(10, 4, 1, 0.45);
+}
+.walk-ownerPop.is-invite small {
+  align-self: center;
+  white-space: nowrap;
+  font-size: 0.62em;
+  opacity: 0.75;
 }
 .walk-floor-pop-text {
   flex: none;

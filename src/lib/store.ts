@@ -216,7 +216,7 @@ export function createTownStore(
         name: clean(name.trim(), SHOP_NAME_MAX_LENGTH),
         description: clean(description, SHOP_DESCRIPTION_MAX_LENGTH),
         theme,
-        tagline: "あなたの愛した一冊が、誰かの愛する一冊になる。",
+        tagline: "",
         followers: 0,
         demo: false,
         shelves: [
