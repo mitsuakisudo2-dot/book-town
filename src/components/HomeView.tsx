@@ -104,7 +104,10 @@ export function HomeView({
       <div className="home-saved-books">
         <Link href="/reading-list/">
           <Icon name="bookmark" size={16} />
-          読みたい本<span>{shared.state.wishlist.length}</span>
+          読みたい本
+          {shared.state.wishlist.length > 0 && (
+            <span>{shared.state.wishlist.length}</span>
+          )}
           <Icon name="arrow" size={14} />
         </Link>
       </div>

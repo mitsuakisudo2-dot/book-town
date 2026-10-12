@@ -28,6 +28,8 @@ import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { useClock } from "./useClock";
 import "./reading.css";
 import { isDatabaseId, profilePath } from "../lib/paths";
+import { bookPath } from "../lib/books";
+import { recentlyFinished } from "../lib/records";
 
 type Shared = {
   state: TownState;
@@ -132,7 +134,9 @@ function ReadingFeed({ state, actions, notify }: Shared) {
           />
         ))}
         {!posts.length && (
-          <p className="reading-muted">まだつぶやきはありません。</p>
+          <p className="reading-muted">
+            最初のつぶやきは、あなたのものかもしれません。
+          </p>
         )}
       </div>
     </section>
@@ -156,6 +160,37 @@ function ReadersNow({
 }) {
   const all = readersNow(state, clock?.openedAt ?? 0);
   const readers = bookId ? all.filter((entry) => entry.bookId === bookId) : all;
+  // An empty room for one book says nothing; the room for the whole town
+  // shows what was read lately instead of a zero.
+  if (!readers.length && bookId) return null;
+  if (!readers.length) {
+    const finished = recentlyFinished(state)
+      .map((id) => state.books.find((book) => book.id === id))
+      .filter((book): book is Book => Boolean(book));
+    return (
+      <section
+        className="readers-now is-quiet"
+        aria-labelledby="readers-now-all"
+      >
+        <h2 id="readers-now-all">いまは、まだ誰も読みはじめていません</h2>
+        <p className="reading-muted">あなたが今日の一人目かもしれません。</p>
+        {finished.length > 0 && (
+          <div className="readers-now-finished">
+            <h3>最近、街で読み終えられた本</h3>
+            <ul>
+              {finished.map((book) => (
+                <li key={book.id}>
+                  <Link href={bookPath(book.id)} title={book.title}>
+                    <BookJacket book={book} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+    );
+  }
   return (
     <section
       className="readers-now"
@@ -167,39 +202,33 @@ function ReadersNow({
           ? `同じ本を、いま${readers.length}人が読んでいます`
           : `いま${readers.length}人が、みんなで読んでいます`}
       </h2>
-      {readers.length ? (
-        <ul>
-          {readers.map((entry) => {
-            const reader = findReader(state, entry.readerId);
-            const book = state.books.find((item) => item.id === entry.bookId);
-            if (!reader) return null;
-            return (
-              <li key={entry.readerId}>
-                <Link href={profilePath(reader.id)}>
-                  <ReaderAvatar reader={reader} size={34} />
-                  <span>
-                    <b>
-                      {reader.id === ME_ID ? "あなた" : reader.name}
-                      {reader.id !== ME_ID && !isDatabaseId(reader.id) && (
-                        <small className="demo-tag">見本の読書家</small>
-                      )}
-                    </b>
-                    <small>
-                      {!bookId &&
-                        (book ? <>『{book.title}』・</> : <>本を選ばずに・</>)}
-                      {minutesSince(entry.startedAt, clock?.now)}
-                    </small>
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="reading-muted">
-          いまこの本を「みんなで読む」にしている人はいません。
-        </p>
-      )}
+      <ul>
+        {readers.map((entry) => {
+          const reader = findReader(state, entry.readerId);
+          const book = state.books.find((item) => item.id === entry.bookId);
+          if (!reader) return null;
+          return (
+            <li key={entry.readerId}>
+              <Link href={profilePath(reader.id)}>
+                <ReaderAvatar reader={reader} size={34} />
+                <span>
+                  <b>
+                    {reader.id === ME_ID ? "あなた" : reader.name}
+                    {reader.id !== ME_ID && !isDatabaseId(reader.id) && (
+                      <small className="demo-tag">見本の読書家</small>
+                    )}
+                  </b>
+                  <small>
+                    {!bookId &&
+                      (book ? <>『{book.title}』・</> : <>本を選ばずに・</>)}
+                    {minutesSince(entry.startedAt, clock?.now)}
+                  </small>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
@@ -301,11 +330,13 @@ function StartReading({
       <ReadingFeed state={state} actions={actions} notify={notify} />
       <section className="reading-log" aria-labelledby="reading-log-title">
         <h2 id="reading-log-title">読書の記録</h2>
-        <p className="reading-total">
-          <Icon name="clock" size={17} />
-          これまでの読書時間 <b>{formatDuration(totals.total)}</b>
-          <small>・{state.readingSessions.length}回</small>
-        </p>
+        {sessions.length > 0 && (
+          <p className="reading-total">
+            <Icon name="clock" size={17} />
+            これまでの読書時間 <b>{formatDuration(totals.total)}</b>
+            <small>・{state.readingSessions.length}回</small>
+          </p>
+        )}
         {sessions.length ? (
           <ul>
             {sessions.map((session) => {
@@ -332,7 +363,9 @@ function StartReading({
             })}
           </ul>
         ) : (
-          <p className="reading-muted">まだ記録はありません。</p>
+          <p className="reading-muted">
+            読みはじめると、ここに日付と読んだ時間が残ります。
+          </p>
         )}
       </section>
       {confirm && (

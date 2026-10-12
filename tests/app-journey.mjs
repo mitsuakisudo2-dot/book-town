@@ -159,18 +159,31 @@ try {
   );
 
   await check(
-    "search finds books and shops, with talked-about, popular and quiet books",
+    "search finds books and shops, by feeling, talk, shelves and quiet corners",
     async () => {
       await go("/search/");
       await expect(
         page.getByRole("heading", { name: "話題の本" }),
       ).toBeVisible();
       await expect(
-        page.getByRole("heading", { name: "人気の本" }),
+        page.getByRole("heading", { name: "多くの棚に並ぶ本" }),
       ).toBeVisible();
       await expect(
         page.getByRole("heading", { name: "棚の隅の本" }),
       ).toBeVisible();
+      // Feelings readers kept lead to the books they felt them with.
+      const feelings = page.getByRole("group", { name: "気持ち" });
+      await feelings.getByRole("button", { name: "誰かと話したい" }).click();
+      const felt = page.locator(
+        "[aria-labelledby=search-feelings-title] .search-book",
+      );
+      await expect(felt.filter({ hasText: "ソラリス" })).toHaveCount(1);
+      await expect(felt.filter({ hasText: "モモ" })).toContainText(
+        "ほか4軒の棚に",
+      );
+      await expect(page.getByText(/0件|0人|0軒/)).toHaveCount(0);
+      await feelings.getByRole("button", { name: "誰かと話したい" }).click();
+      await expect(felt).toHaveCount(0);
       const box = page.getByRole("searchbox", { name: "本と書店を検索" });
       await box.fill("ル＝グウィン");
       await expect(page.locator(".search-results .search-book")).toHaveCount(2);

@@ -244,6 +244,38 @@
   font-size: 9px;
   font-weight: 400;
 }
+/* Nobody is reading yet: what the town finished lately, as covers. */
+.readers-now.is-quiet .reading-muted {
+  margin-top: 4px;
+}
+.readers-now-finished h3 {
+  font-size: 11px;
+  font-weight: 500;
+  color: #7d8a73;
+  margin: 18px 0 0;
+}
+.readers-now .readers-now-finished ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.readers-now .readers-now-finished li {
+  padding: 0;
+  background: none;
+  width: 54px;
+}
+.readers-now-finished a {
+  display: block;
+  transition: transform 0.2s;
+}
+.readers-now-finished a:hover {
+  transform: translateY(-3px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .readers-now-finished a {
+    transition: none;
+  }
+}
 .people-list li {
   display: flex;
   align-items: center;

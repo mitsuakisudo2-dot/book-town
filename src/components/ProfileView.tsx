@@ -209,34 +209,40 @@ export function ProfileView({
               ))}
             </ul>
           )}
-          <div className="profile-stats">
-            <span>
-              <b>{postCount}</b> 投稿
-            </span>
-            {isSelf ? (
-              <button type="button" onClick={() => setSheet("following")}>
-                <b>{state.following.length}</b> フォロー
-              </button>
-            ) : null}
-            {isSelf ? (
-              <button type="button" onClick={() => setSheet("followers")}>
-                <b>{followerCount}</b> フォロワー
-              </button>
-            ) : // Nobody counts a real reader's followers but the reader.
-            isDatabaseId(reader.id) ? null : (
-              <span>
-                <b>{followerCount}</b> フォロワー
-              </span>
-            )}
-            {isSelf && (
-              <Link href="/reading/">
-                <b>
-                  {readingTime === null ? "—" : formatDuration(readingTime)}
-                </b>{" "}
-                読書時間
-              </Link>
-            )}
-          </div>
+          {/* Only what has happened is counted: an empty count is left out. */}
+          {(postCount > 0 ||
+            (isSelf && state.following.length > 0) ||
+            (followerCount > 0 && (isSelf || !isDatabaseId(reader.id))) ||
+            (isSelf && Boolean(readingTime))) && (
+            <div className="profile-stats">
+              {postCount > 0 && (
+                <span>
+                  <b>{postCount}</b> 投稿
+                </span>
+              )}
+              {isSelf && state.following.length > 0 && (
+                <button type="button" onClick={() => setSheet("following")}>
+                  <b>{state.following.length}</b> フォロー
+                </button>
+              )}
+              {followerCount > 0 &&
+                (isSelf ? (
+                  <button type="button" onClick={() => setSheet("followers")}>
+                    <b>{followerCount}</b> フォロワー
+                  </button>
+                ) : // Nobody counts a real reader's followers but the reader.
+                isDatabaseId(reader.id) ? null : (
+                  <span>
+                    <b>{followerCount}</b> フォロワー
+                  </span>
+                ))}
+              {isSelf && Boolean(readingTime) && (
+                <Link href="/reading/">
+                  <b>{formatDuration(readingTime ?? 0)}</b> 読書時間
+                </Link>
+              )}
+            </div>
+          )}
           <div className="profile-reader-actions">
             {isSelf ? (
               <>
@@ -514,41 +520,48 @@ export function ProfileView({
                 書店に入る <Icon name="arrow" />
               </span>
             </Link>
-            <div className="profile-public-shelves">
-              <h3>
-                <Icon name="book" /> 公開している本棚
-              </h3>
-              {publicShelves.length ? (
-                <div className="profile-shelf-links">
-                  {publicShelves.map((shelf) => (
-                    <Link
-                      href={shopPath(shop.id, shelf.id)}
-                      className="profile-shelf-link"
-                      key={shelf.id}
-                    >
-                      <div>
-                        <span className="profile-shelf-name">{shelf.name}</span>
-                        <span className="profile-shelf-preview">
-                          {shelf.items
-                            .slice(0, 3)
-                            .map(
-                              (item) =>
-                                state.books.find(
-                                  (book) => book.id === item.bookId,
-                                )?.title,
-                            )
-                            .filter(Boolean)
-                            .join(" · ") || "空の棚にも、これからの出会いが。"}
-                        </span>
-                      </div>
-                      <Icon name="arrow" />
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <p className="profile-muted">公開中の本棚はまだありません。</p>
-              )}
-            </div>
+            {(isSelf || publicShelves.length > 0) && (
+              <div className="profile-public-shelves">
+                <h3>
+                  <Icon name="book" /> 公開している本棚
+                </h3>
+                {publicShelves.length ? (
+                  <div className="profile-shelf-links">
+                    {publicShelves.map((shelf) => (
+                      <Link
+                        href={shopPath(shop.id, shelf.id)}
+                        className="profile-shelf-link"
+                        key={shelf.id}
+                      >
+                        <div>
+                          <span className="profile-shelf-name">
+                            {shelf.name}
+                          </span>
+                          <span className="profile-shelf-preview">
+                            {shelf.items
+                              .slice(0, 3)
+                              .map(
+                                (item) =>
+                                  state.books.find(
+                                    (book) => book.id === item.bookId,
+                                  )?.title,
+                              )
+                              .filter(Boolean)
+                              .join(" · ") ||
+                              "空の棚にも、これからの出会いが。"}
+                          </span>
+                        </div>
+                        <Icon name="arrow" />
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="profile-muted">
+                    棚を「公開」にすると、ここに並び、街の人が見に来られます。
+                  </p>
+                )}
+              </div>
+            )}
             {isSelf && (
               <Link className="button secondary" href="/my-shop">
                 <Icon name="edit" /> 書店と本棚を編集する

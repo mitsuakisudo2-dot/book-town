@@ -1166,6 +1166,12 @@ div.book-jacket:hover {
   font-size: 12px;
   margin-bottom: 20px;
 }
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
 .not-found {
   padding: 100px 30px;
   text-align: center;

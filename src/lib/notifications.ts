@@ -18,7 +18,8 @@ const quote = (body: string) =>
 /**
  * Notices are derived from what is actually in this browser's town: replies and reactions
  * to the viewer's posts, posts by followed readers, reviews of books on the wishlist,
- * words left at the viewer's shop, and readers reading the same book together.
+ * words left at the viewer's shop, readers who finished a book the viewer finished,
+ * and readers reading the same book together.
  * Nothing is invented to fill the list.
  */
 export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
@@ -89,6 +90,28 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
       text: `${name(message.readerId)}さんが、あなたの本屋にひとことを残しました ${quote(message.text)}`,
       href: "/my-shop/#messages",
     });
+  // Someone else finished a book the viewer finished too: a reader to meet.
+  const finished = new Set([
+    ...state.finishedBooks,
+    ...state.readingRecords
+      .filter((record) => record.readerId === ME_ID)
+      .map((record) => record.bookId),
+  ]);
+  for (const record of state.readingRecords)
+    if (
+      record.readerId !== ME_ID &&
+      record.isPublic &&
+      finished.has(record.bookId)
+    )
+      notices.push({
+        id: "finished:" + record.id,
+        readerId: record.readerId,
+        createdAt: record.createdAt,
+        text: record.feelings.includes("talk")
+          ? `${name(record.readerId)}さんも『${title(record.bookId)}』を読み終えて、誰かと話したいそうです`
+          : `${name(record.readerId)}さんも『${title(record.bookId)}』を読み終えました`,
+        href: bookPath(record.bookId),
+      });
   const active = activeSession(state);
   if (active?.mode === "together" && active.bookId)
     for (const entry of readersNow(state, openedAt))
