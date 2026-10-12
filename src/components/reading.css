@@ -179,14 +179,7 @@
   line-height: 1.7;
   color: #7f8b74;
 }
-.reading-mode.is-together {
-  background: var(--green);
-  border-color: var(--green);
-  color: #fffdf3;
-}
-.reading-mode.is-together small {
-  color: #d3e0cc;
-}
+/* Neither way of reading is the recommended one; they look alike. */
 .reading-mode:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -661,6 +654,7 @@
   font-size: 19px;
   line-height: 1.8;
   color: #2f4a3a;
+  word-break: auto-phrase;
   text-wrap: balance;
 }
 .reading-confirm-detail {
@@ -710,4 +704,101 @@
 }
 .profile-handle-field input {
   flex: 1;
+}
+
+/* While reading: everyone else's words wait behind a fold. */
+.reading-peek {
+  margin-top: 22px;
+  border-top: 1px solid var(--line);
+}
+.reading-peek > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 2px;
+  font-size: 13px;
+  color: #6f7c64;
+  cursor: pointer;
+  list-style: none;
+}
+.reading-peek > summary::-webkit-details-marker {
+  display: none;
+}
+.reading-peek > summary svg {
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+.reading-peek[open] > summary svg {
+  transform: rotate(-90deg);
+}
+.reading-mine {
+  margin-top: 14px;
+}
+
+/* Just after closing the book. */
+.reading-closed {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  max-width: 720px;
+  margin: 0 auto 8px;
+  padding: 18px 20px;
+  border: 1px solid #dfe5d2;
+  border-radius: 10px;
+  background: #f7f8f0;
+  animation: reading-closed-in 0.35s ease-out;
+}
+.reading-closed-jacket {
+  flex: none;
+  width: 58px;
+  height: 84px;
+  padding: 0;
+}
+.reading-closed-time {
+  margin: 0;
+  font-size: 13px;
+  color: #6f7c64;
+}
+.reading-closed-time b {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.reading-closed-title {
+  margin: 4px 0 0;
+  font-family: var(--serif);
+  font-size: 14px;
+  color: var(--ink);
+}
+.reading-closed-memo {
+  margin: 10px 0 0;
+  padding-left: 12px;
+  border-left: 2px solid #cfd8bf;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #55604b;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.reading-closed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 14px;
+}
+@keyframes reading-closed-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reading-closed {
+    animation: none;
+  }
 }
