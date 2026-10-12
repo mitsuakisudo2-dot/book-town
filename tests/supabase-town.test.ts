@@ -487,6 +487,21 @@ async function main() {
     async () => {
       let invited = 0;
       const onVisitor = () => (invited += 1);
+      const said = async (body: string, solo = false) => {
+        const row = await aki.client
+          .from("posts")
+          .insert({
+            author_id: aki.id,
+            body,
+            reading_mode: solo ? "solo" : null,
+          })
+          .select("id")
+          .single();
+        assert.ifError(row.error);
+        return row.data.id;
+      };
+      const open = await said("見学の人にも見える言葉");
+      const note = await said("自分だけのメモ", true);
       const visitor = newClient();
       const store = createTownStore(visitorTownBackend(visitor), undefined, {
         onVisitor,
@@ -502,7 +517,8 @@ async function main() {
         shop?.shelves.map((shelf) => shelf.name),
         ["はじめの本棚"],
       );
-      assert.ok(town.posts.some((entry) => entry.id === postId));
+      assert.ok(town.posts.some((entry) => entry.id === open));
+      assert.ok(!town.posts.some((entry) => entry.id === note));
       assert.ok(town.shops.some((entry) => entry.demo));
       assert.deepEqual(town.library, []);
       assert.deepEqual(town.wishlist, []);
