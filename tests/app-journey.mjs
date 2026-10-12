@@ -549,6 +549,51 @@ try {
   );
 
   await check(
+    "a shop opens in three minutes: the nine, a sign, the lights",
+    async () => {
+      await go("/my-shop/");
+      await page.getByRole("button", { name: /人生の9冊の本屋/ }).click();
+      // The life nine already on the profile stand on the shelf.
+      await expect(page.locator(".open-shelf-book")).toHaveCount(4);
+      await expect(page.getByText("あと5冊まで並べられます。")).toBeVisible();
+      await page
+        .getByRole("searchbox", { name: "棚に並べる本" })
+        .fill("見えない都市");
+      await page
+        .getByRole("list", { name: "棚に並べる本の候補" })
+        .getByRole("button", { name: /見えない都市/ })
+        .click();
+      await expect(page.locator(".open-shelf-book")).toHaveCount(5);
+      await page.getByRole("button", { name: "看板を決める" }).click();
+      await page.getByRole("button", { name: "名前の例" }).click();
+      await expect(page.getByLabel("書店の名前")).toHaveValue("雨音書店");
+      await page.getByLabel("ひとこと").fill("一頁ぶん、遠回り。");
+      await page.getByRole("button", { name: "藍色", exact: true }).click();
+      await page
+        .getByRole("button", { name: "書店をひらく", exact: true })
+        .click();
+      await expect(page.getByRole("status")).toContainText(
+        "「雨音書店」が開店しました",
+      );
+      const shop = (await stored()).ownShop;
+      expect(shop.name).toBe("雨音書店");
+      expect(shop.tagline).toBe("一頁ぶん、遠回り。");
+      expect(shop.theme).toBe("ink");
+      expect(shop.shelves[0].name).toBe("人生の9冊");
+      expect(shop.shelves[0].isPublic).toBe(true);
+      expect(shop.shelves[0].items.map((item) => item.display)).toEqual([
+        "face",
+        "spine",
+        "spine",
+        "spine",
+        "spine",
+      ]);
+      await page.getByRole("button", { name: "棚を整える" }).click();
+      await expect(page.locator(".editor-shelf-panel")).toHaveCount(1);
+    },
+  );
+
+  await check(
     "No hydration errors, uncaught exceptions or console errors",
     async () => {
       expect(errors).toEqual([]);

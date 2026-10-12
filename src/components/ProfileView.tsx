@@ -578,7 +578,7 @@ export function ProfileView({
             </p>
             {isSelf && (
               <Link className="button primary" href="/my-shop">
-                自分の書店をつくる <Icon name="arrow" />
+                3分で本屋を開く <Icon name="arrow" />
               </Link>
             )}
           </div>

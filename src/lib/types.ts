@@ -264,7 +264,7 @@ export interface TownActions {
     shelfId: string,
     bookId: string,
     display: BookDisplay,
-    /** Puts a book that was just taken off back with its POP, at its old place. */
+    /** Places the book with a POP at a given place: putting back a book just taken off, or a new shop's first book. */
     restore?: { pop: string; index: number },
   ): boolean;
   removeShelfBook(shelfId: string, itemId: string): void;
