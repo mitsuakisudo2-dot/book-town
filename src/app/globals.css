@@ -286,6 +286,12 @@ input[type="checkbox"] {
   gap: 6px;
   align-items: center;
 }
+.top-actions > a.top-login {
+  display: flex;
+  margin-left: 6px;
+  color: var(--green);
+  border-color: #c9d3bf;
+}
 .town-main {
   padding: 36px 43px 35px;
   max-width: 1270px;

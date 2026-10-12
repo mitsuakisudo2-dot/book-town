@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTownStore, usePersistenceStatus } from "../lib/store";
+import { useAccountState } from "../lib/account-session";
 import type { TownState, TownActions, ShelfItem, Shelf } from "../lib/types";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
@@ -79,6 +80,7 @@ export default function TownApp({
 }) {
   const { state, actions } = useTownStore();
   const persistence = usePersistenceStatus();
+  const account = useAccountState();
   const router = useRouter();
   const [toast, setToast] = useState("");
   const [search, setSearch] = useState("");
@@ -180,6 +182,11 @@ export default function TownApp({
               デモの街
               <Icon name="leaf" size={12} />
             </button>
+            {account.status === "signed-out" && (
+              <Link className="demo-pill top-login" href="/login/">
+                ログイン
+              </Link>
+            )}
             <Link
               href="/notifications/"
               className={

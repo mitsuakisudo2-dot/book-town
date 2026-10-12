@@ -1,0 +1,322 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  createAccountStore,
+  failureMessages,
+  normalizeCode,
+  profileDraftProblem,
+  type AccountBackend,
+  type AccountFailure,
+  type AccountUser,
+} from "../src/lib/account";
+import { RESERVED_HANDLES } from "../src/lib/handles";
+import { authFailure } from "../src/lib/supabase/account-backend";
+import type { ProfileRow } from "../src/lib/supabase/database.types";
+
+// Checks the sign-in and first-profile flow against a stand-in for Supabase.
+// Everything runs inside main() because tsx compiles this file as CommonJS.
+
+const AKI: AccountUser = { id: "user-aki", email: "aki@example.jp" };
+
+const profileOf = (id: string, handle: string, name: string): ProfileRow => ({
+  id,
+  handle,
+  name,
+  bio: "",
+  color: "#768281",
+  links: [],
+  compose_icon: "pen",
+  created_at: "2026-10-12T00:00:00Z",
+  updated_at: "2026-10-12T00:00:00Z",
+});
+
+/** A pretend Supabase with one invited email and adjustable failures. */
+function fakeBackend() {
+  let listener: (user: AccountUser | null) => void = () => {};
+  const profiles = new Map<string, ProfileRow>();
+  const calls = { sendCode: 0, verifyCode: 0, loadProfile: 0 };
+  const control = {
+    calls,
+    profiles,
+    invited: new Set([AKI.email]),
+    loadFails: false,
+    /** Resolves profile reads only when release() is called. */
+    holdLoads: false,
+    held: [] as (() => void)[],
+    emit: (user: AccountUser | null) => listener(user),
+    release() {
+      control.held.splice(0).forEach((resume) => resume());
+    },
+  };
+  const backend: AccountBackend = {
+    onUserChange(next) {
+      listener = next;
+      next(null);
+      return () => {};
+    },
+    async sendCode(email) {
+      calls.sendCode += 1;
+      return control.invited.has(email) ? null : "not-invited";
+    },
+    async verifyCode(email, code) {
+      calls.verifyCode += 1;
+      if (code !== "123456") return "invalid-code";
+      listener(email === AKI.email ? AKI : null);
+      return null;
+    },
+    async signOut() {
+      listener(null);
+    },
+    async loadProfile(userId) {
+      calls.loadProfile += 1;
+      if (control.holdLoads)
+        await new Promise<void>((resume) => control.held.push(resume));
+      if (control.loadFails) throw new Error("offline");
+      return profiles.get(userId) ?? null;
+    },
+    async createProfile(row) {
+      if ([...profiles.values()].some((p) => p.handle === row.handle))
+        return { failure: "handle-taken" as AccountFailure };
+      const profile = profileOf(row.id, row.handle, row.name);
+      profiles.set(row.id, profile);
+      return { profile };
+    },
+  };
+  return { backend, control };
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+async function main() {
+  let passed = 0;
+  async function check(name: string, run: () => Promise<void> | void) {
+    await run();
+    passed += 1;
+    console.log("PASS " + name);
+  }
+
+  await check("without a Supabase project the app stays the demo", () => {
+    const store = createAccountStore(() => null, false);
+    assert.deepEqual(store.getSnapshot(), { status: "demo" });
+    store.subscribe(() => {});
+    assert.deepEqual(store.getSnapshot(), { status: "demo" });
+  });
+
+  await check(
+    "an invited email gets a code; others are told why not",
+    async () => {
+      const { backend, control } = fakeBackend();
+      const store = createAccountStore(() => backend, true);
+      assert.deepEqual(store.getServerSnapshot(), { status: "loading" });
+      store.subscribe(() => {});
+      await settle();
+      assert.equal(store.getSnapshot().status, "signed-out");
+      assert.deepEqual(await store.actions.sendCode(" Aki@Example.jp "), {
+        ok: true,
+      });
+      assert.deepEqual(await store.actions.sendCode("someone@example.jp"), {
+        ok: false,
+        message: failureMessages["not-invited"],
+      });
+      assert.deepEqual(await store.actions.sendCode("not an email"), {
+        ok: false,
+        message: failureMessages["invalid-email"],
+      });
+      assert.equal(control.calls.sendCode, 2);
+    },
+  );
+
+  await check(
+    "codes are six digits, and spaces in a pasted code are fine",
+    async () => {
+      assert.equal(normalizeCode("123 456"), "123456");
+      assert.equal(normalizeCode("12-34-56-78"), "123456");
+      const { backend, control } = fakeBackend();
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      assert.equal(
+        (await store.actions.verifyCode(AKI.email, "12345")).ok,
+        false,
+      );
+      assert.equal(control.calls.verifyCode, 0);
+      assert.deepEqual(await store.actions.verifyCode(AKI.email, "999999"), {
+        ok: false,
+        message: failureMessages["invalid-code"],
+      });
+      assert.deepEqual(await store.actions.verifyCode(AKI.email, "123 456"), {
+        ok: true,
+      });
+    },
+  );
+
+  await check(
+    "a first sign-in asks for an ID, a name and the age",
+    async () => {
+      const { backend } = fakeBackend();
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      await store.actions.verifyCode(AKI.email, "123456");
+      await settle();
+      assert.deepEqual(store.getSnapshot(), {
+        status: "needs-profile",
+        user: AKI,
+      });
+      const draft = {
+        handle: "@Aki_Books",
+        name: " アキ ",
+        ageConfirmed: true,
+      };
+      assert.equal(profileDraftProblem(draft), null);
+      assert.match(
+        profileDraftProblem({ ...draft, handle: "ab" }) ?? "",
+        /3〜20文字/,
+      );
+      assert.match(
+        profileDraftProblem({ ...draft, handle: "booktown" }) ?? "",
+        /使えません/,
+      );
+      assert.match(
+        profileDraftProblem({ ...draft, name: "  " }) ?? "",
+        /名前|ユーザー名/,
+      );
+      assert.match(
+        profileDraftProblem({ ...draft, ageConfirmed: false }) ?? "",
+        /13歳以上/,
+      );
+      assert.equal(
+        (await store.actions.createProfile({ ...draft, ageConfirmed: false }))
+          .ok,
+        false,
+      );
+      assert.deepEqual(await store.actions.createProfile(draft), { ok: true });
+      const state = store.getSnapshot();
+      assert.equal(state.status, "signed-in");
+      if (state.status === "signed-in") {
+        assert.equal(state.profile.handle, "aki_books");
+        assert.equal(state.profile.name, "アキ");
+      }
+    },
+  );
+
+  await check(
+    "a taken ID is explained and the reader can choose again",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set("user-ben", profileOf("user-ben", "aki", "ベン"));
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      const taken = await store.actions.createProfile({
+        handle: "aki",
+        name: "アキ",
+        ageConfirmed: true,
+      });
+      assert.deepEqual(taken, {
+        ok: false,
+        message: failureMessages["handle-taken"],
+      });
+      assert.equal(store.getSnapshot().status, "needs-profile");
+    },
+  );
+
+  await check("a returning reader goes straight to their profile", async () => {
+    const { backend, control } = fakeBackend();
+    control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+    const store = createAccountStore(() => backend, true);
+    store.subscribe(() => {});
+    control.emit(AKI);
+    await settle();
+    assert.equal(store.getSnapshot().status, "signed-in");
+    // Token refreshes repeat the same user without reading the profile again.
+    control.emit(AKI);
+    await settle();
+    assert.equal(control.calls.loadProfile, 1);
+    await store.actions.signOut();
+    assert.equal(store.getSnapshot().status, "signed-out");
+  });
+
+  await check("an unreadable profile can be retried", async () => {
+    const { backend, control } = fakeBackend();
+    control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+    control.loadFails = true;
+    const store = createAccountStore(() => backend, true);
+    store.subscribe(() => {});
+    control.emit(AKI);
+    await settle();
+    assert.deepEqual(store.getSnapshot(), { status: "unavailable", user: AKI });
+    control.loadFails = false;
+    await store.actions.retry();
+    assert.equal(store.getSnapshot().status, "signed-in");
+  });
+
+  await check(
+    "signing out wins over a profile read still on its way",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      control.holdLoads = true;
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      control.emit(null);
+      await settle();
+      control.release();
+      await settle();
+      assert.equal(store.getSnapshot().status, "signed-out");
+    },
+  );
+
+  await check("Supabase errors become the messages the screen shows", () => {
+    assert.equal(
+      authFailure({ code: "otp_disabled", status: 422 }),
+      "not-invited",
+    );
+    assert.equal(
+      authFailure({ code: "signup_disabled", status: 422 }),
+      "not-invited",
+    );
+    assert.equal(
+      authFailure({ code: "otp_expired", status: 403 }),
+      "invalid-code",
+    );
+    assert.equal(
+      authFailure({ code: "email_address_not_authorized", status: 400 }),
+      "not-invited",
+    );
+    assert.equal(
+      authFailure({ code: "over_email_send_rate_limit", status: 429 }),
+      "rate-limited",
+    );
+    assert.equal(
+      authFailure({ code: "email_address_invalid", status: 400 }),
+      "invalid-email",
+    );
+    assert.equal(authFailure({ code: undefined, status: 0 }), "network");
+  });
+
+  await check("the app and the database reserve the same IDs", () => {
+    const sql = readFileSync(
+      join(
+        __dirname,
+        "..",
+        "supabase",
+        "migrations",
+        "20261012000000_initial_schema.sql",
+      ),
+      "utf8",
+    );
+    const list = /handle not in \(([^)]*)\)/.exec(sql)?.[1] ?? "";
+    const reserved = [...list.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]);
+    assert.deepEqual([...reserved].sort(), [...RESERVED_HANDLES].sort());
+  });
+
+  console.log(passed + " account domain checks passed");
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
