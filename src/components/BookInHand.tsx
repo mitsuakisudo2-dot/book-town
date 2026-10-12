@@ -318,6 +318,7 @@ export function BookInHand({
   }, [context, availableItems, index]);
 
   if (!book || !item || !shop || !activeShop) return null;
+  const wished = state.wishlist.includes(book.id);
 
   return (
     <dialog
@@ -608,16 +609,35 @@ export function BookInHand({
           <Icon name="back" size={18} />
           <span>前の本</span>
         </button>
-        <span className="bh-position" aria-live="polite" aria-atomic="true">
-          <span aria-hidden="true">
-            {index + 1}
-            <i>/</i>
-            {availableItems.length}
+        {/* "読みたい" stays in reach here, however far the page has scrolled. */}
+        <span className="bh-nav-center">
+          <button
+            type="button"
+            className={"bh-nav-wish" + (wished ? " is-saved" : "")}
+            aria-pressed={wished}
+            onClick={() => {
+              actions.toggleWish(book.id);
+              notify(
+                wished
+                  ? "読みたいリストから外しました"
+                  : "読みたい本に入れました",
+              );
+            }}
+          >
+            <Icon name={wished ? "check" : "bookmark"} size={15} />
+            読みたい
+          </button>
+          <span className="bh-position" aria-live="polite" aria-atomic="true">
+            <span aria-hidden="true">
+              {index + 1}
+              <i>/</i>
+              {availableItems.length}
+              <small> · 左右にスワイプ</small>
+            </span>
+            <span className="bh-sr-only">
+              {availableItems.length}冊中{index + 1}冊目、{book.title}
+            </span>
           </span>
-          <span className="bh-sr-only">
-            {availableItems.length}冊中{index + 1}冊目、{book.title}
-          </span>
-          <small aria-hidden="true">左右にスワイプ · 棚の順に</small>
         </span>
         <button
           type="button"
