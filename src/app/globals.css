@@ -2891,3 +2891,34 @@ div.book-jacket:hover {
   word-break: auto-phrase;
   overflow-wrap: break-word;
 }
+
+/* The town's name in the top bar is a button: it reads as one, with a "?". */
+.town-shell .top-actions button.demo-pill {
+  min-height: 30px;
+  padding: 3px 5px 3px 10px;
+  border-radius: 999px;
+  border-color: #d1d8c7;
+  background: #fffdf7;
+  color: #536448;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.town-shell .top-actions button.demo-pill > svg {
+  display: none;
+}
+.town-shell .top-actions button.demo-pill::after {
+  content: "?";
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e3ebdb;
+  color: #364e32;
+  font-size: 11px;
+  font-weight: 700;
+}
+.town-shell .top-actions button.demo-pill:hover {
+  border-color: #809273;
+}
