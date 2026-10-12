@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { books, shops } from "../src/lib/data";
+import type { BookDisplay, Shop } from "../src/lib/types";
+
+const LEGACY_TAGLINE = "あなたの愛した一冊が、誰かの愛する一冊になる。";
 import {
   addBookPlacement,
   bookPop,
@@ -214,6 +217,86 @@ check("private shelf content never enters a walk or public POP lookup", () => {
     publicScenePops([view]).every(
       (p) => p.legacy?.shelfId !== shop.shelves[0].id,
     ),
+  );
+});
+check("a new owner's few books stand together on the top tier", () => {
+  const own = (shelves: Shop["shelves"], tagline = ""): Shop => ({
+    id: "mine",
+    ownerId: "me",
+    name: "雨音書店",
+    description: "",
+    tagline,
+    theme: "sage",
+    followers: 0,
+    demo: false,
+    shelves,
+  });
+  const shelf = (id: string, name: string, n: number, from = 0) => ({
+    id,
+    name,
+    capacity: 20,
+    isPublic: true,
+    items: books.slice(from, from + n).map((b, i) => ({
+      id: id + "-" + i,
+      bookId: b.id,
+      display: "spine" as BookDisplay,
+      pop: "",
+    })),
+  });
+  const view = woodScene(
+    own([shelf("first", "はじめの本棚", 3)], LEGACY_TAGLINE),
+    books,
+  );
+  const tierOf = (id: string) => objectById(view, id)!.parentId;
+  const ids = ["first-0", "first-1", "first-2"].map(
+    (item) => "placement:mine:" + item,
+  );
+  assert.deepEqual(ids.map(tierOf), ["row-0", "row-0", "row-0"]);
+  // No face-out was chosen, so the first two show their covers.
+  assert.deepEqual(ids.map((id) => objectById(view, id)!.display).sort(), [
+    "face",
+    "face",
+    "spine",
+  ]);
+  // Only the tier with books carries the shelf's name and chalkboard.
+  assert.deepEqual(
+    view.objects.filter((o) => o.kind === "row").map((o) => o.text ?? null),
+    ["はじめの本棚", null, null],
+  );
+  // The old default slogan is not shown as the owner's words.
+  assert.equal(objectById(view, "greeting")!.text, "");
+  assert.deepEqual(validateScene(view, new Set(books.map((b) => b.id))), []);
+
+  // A full shelf flows on to the next tier, which shares its chalkboard.
+  const full = woodScene(own([shelf("first", "はじめの本棚", 20)]), books);
+  const rows = full.objects.filter((o) => o.kind === "row");
+  const onRow = (row: string) =>
+    full.objects.filter((o) => o.kind === "book" && o.parentId === row).length;
+  assert.ok(onRow("row-0") > 3 && onRow("row-1") > 0);
+  assert.equal(rows[1].text, "はじめの本棚");
+  // Books past what the tiers hold stay in the scene, unplaced; none is lost.
+  assert.equal(full.objects.filter((o) => o.kind === "book").length, 20);
+
+  // Two shelves each start on a tier of their own.
+  const two = woodScene(
+    own([shelf("a", "人生の9冊", 2), shelf("b", "今年の5冊", 2, 4)]),
+    books,
+  );
+  assert.equal(objectById(two, "placement:mine:a-1")!.parentId, "row-0");
+  assert.equal(objectById(two, "placement:mine:b-0")!.parentId, "row-1");
+  assert.deepEqual(
+    two.objects.filter((o) => o.kind === "row").map((o) => o.text ?? null),
+    ["人生の9冊", "今年の5冊", null],
+  );
+  // An owner's own face-out choice is kept as it is.
+  const chosen = shelf("first", "はじめの本棚", 3);
+  chosen.items[2].display = "face";
+  const kept = woodScene(own([chosen]), books);
+  assert.deepEqual(
+    chosen.items.map(
+      (item) => objectById(kept, "placement:mine:" + item.id)!.display,
+    ),
+    ["spine", "spine", "face"],
   );
 });
 check("explicit link beats resume and visited state", () => {

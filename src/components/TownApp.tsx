@@ -11,6 +11,7 @@ import { saveWarning } from "../lib/persistence";
 import { useAccountState } from "../lib/account-session";
 import {
   ME_ID,
+  ownTagline,
   type TownState,
   type TownActions,
   type ShelfItem,
@@ -460,7 +461,7 @@ function ShopView({
       <section className={"shop-hero theme-" + shop.theme}>
         <div className="shop-hero-rule" />
         <h1>{shop.name}</h1>
-        <p className="shop-tagline">{shop.tagline}</p>
+        {ownTagline(shop) && <p className="shop-tagline">{ownTagline(shop)}</p>}
         <div className="shop-hero-bottom">
           {owner && (
             <Link href={profilePath(owner.id)} className="owner-profile-link">

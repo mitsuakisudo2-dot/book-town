@@ -594,6 +594,32 @@ try {
   );
 
   await check(
+    "a new shop's few books stand together under one chalkboard",
+    async () => {
+      await go("/walk/#mine");
+      await expect(page.locator(".walk-sign")).toContainText("雨音書店");
+      await expect(page.locator('[data-row="row-0"] .walk-book')).toHaveCount(
+        5,
+      );
+      await expect(page.locator(".walk-row-board")).toHaveCount(1);
+      // The empty tiers hold a few things instead of bare boards.
+      await expect(page.locator(".walk-row-still")).toHaveCount(2);
+      await expect(page.locator(".walk-ownerPop")).toContainText(
+        "一頁ぶん、遠回り。",
+      );
+      // Without words of the owner's, the floor POP invites only the owner.
+      await go("/my-shop/");
+      await page.getByText("書店の看板と紹介").click();
+      await page.getByLabel("ひとこと").fill("");
+      await page.getByRole("button", { name: "変更を保存" }).click();
+      await go("/walk/#mine");
+      await page.getByRole("link", { name: /ひとことを書く/ }).click();
+      await expect(page).toHaveURL(/\/my-shop\/#shop-words$/);
+      await expect(page.getByLabel("ひとこと")).toBeFocused();
+    },
+  );
+
+  await check(
     "No hydration errors, uncaught exceptions or console errors",
     async () => {
       expect(errors).toEqual([]);

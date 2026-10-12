@@ -43,6 +43,7 @@ import { requestAccount } from "../lib/visitor";
 import { ReportButton } from "./Report";
 import {
   SHOP_MESSAGE_MAX_LENGTH,
+  ownTagline,
   type Shop,
   type TownActions,
   type TownState,
@@ -596,8 +597,13 @@ export function WalkView({
                 scene={scene}
                 books={state.books}
                 signature={owner?.name}
-                tagline={shop.tagline}
+                tagline={ownTagline(shop)}
                 focusText={focusText}
+                greetingHref={
+                  ownShop && !scene.ownerManaged
+                    ? "/my-shop/#shop-words"
+                    : undefined
+                }
                 onBook={(p) => open({ kind: "book", placementId: p.id })}
                 onZoom={(rowId) => open({ kind: "zoom", rowId })}
                 onPop={(p) =>

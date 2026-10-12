@@ -85,6 +85,11 @@ export const POST_MAX_LENGTH = 1000;
 /** The same limits as the database (supabase/migrations), so a save is never refused for length. */
 export const SHOP_NAME_MAX_LENGTH = 80;
 export const SHOP_TAGLINE_MAX_LENGTH = 500;
+/** Shops opened before 2026-10-13 got the service's slogan as their tagline. */
+const LEGACY_DEFAULT_TAGLINE = "あなたの愛した一冊が、誰かの愛する一冊になる。";
+/** The owner's own tagline; the old default slogan was never their words. */
+export const ownTagline = (shop: Pick<Shop, "tagline">) =>
+  shop.tagline === LEGACY_DEFAULT_TAGLINE ? "" : shop.tagline;
 export const SHOP_DESCRIPTION_MAX_LENGTH = 2000;
 export const SHELF_NAME_MAX_LENGTH = 80;
 export const POP_MAX_LENGTH = 1000;

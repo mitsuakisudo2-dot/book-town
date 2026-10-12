@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   POP_MAX_LENGTH,
@@ -8,6 +8,7 @@ import {
   SHOP_DESCRIPTION_MAX_LENGTH,
   SHOP_NAME_MAX_LENGTH,
   SHOP_TAGLINE_MAX_LENGTH,
+  ownTagline,
   type Book,
   type Shelf,
   type ShelfItem,
@@ -41,15 +42,25 @@ function ShopSettings({
 }: { shop: Shop } & Pick<ShopEditorProps, "actions" | "notify">) {
   const [name, setName] = useState(shop.name);
   const [description, setDescription] = useState(shop.description);
-  const [tagline, setTagline] = useState(shop.tagline);
+  const [tagline, setTagline] = useState(ownTagline(shop));
   const [theme, setTheme] = useState<Shop["theme"]>(shop.theme);
+  const settings = useRef<HTMLDetailsElement>(null);
+  // The walk's "write your words" card opens these settings at the field.
+  useEffect(() => {
+    if (location.hash !== "#shop-words" || !settings.current) return;
+    settings.current.open = true;
+    settings.current.scrollIntoView({ block: "center" });
+    settings.current
+      .querySelector<HTMLInputElement>("input[name=tagline]")
+      ?.focus({ preventScroll: true });
+  }, []);
   const dirty =
     name !== shop.name ||
     description !== shop.description ||
-    tagline !== shop.tagline ||
+    tagline !== ownTagline(shop) ||
     theme !== shop.theme;
   return (
-    <details className="editor-settings">
+    <details className="editor-settings" id="shop-words" ref={settings}>
       <summary>
         <span>
           <Icon name="edit" size={17} />
@@ -86,6 +97,7 @@ function ShopSettings({
           <label className="editor-label">
             ひとこと
             <input
+              name="tagline"
               value={tagline}
               onChange={(event) => setTagline(event.target.value)}
               maxLength={SHOP_TAGLINE_MAX_LENGTH}
