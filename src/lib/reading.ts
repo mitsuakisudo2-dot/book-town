@@ -1,4 +1,5 @@
 import { ME_ID, type Post, type ReadingSession, type TownState } from "./types";
+import { uncoverHidden } from "./hidden-words";
 
 export const activeSession = (state: TownState): ReadingSession | undefined =>
   state.readingSessions.find((session) => session.endedAt === null);
@@ -119,5 +120,5 @@ export function bookToContinue(
         post.body.trim(),
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
-  return { bookId, lastWords: last?.body.trim() ?? null };
+  return { bookId, lastWords: last ? uncoverHidden(last.body).trim() : null };
 }

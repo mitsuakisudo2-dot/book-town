@@ -1,11 +1,16 @@
 import type { Post, TownState } from "./types";
+import { coverHidden } from "./hidden-words";
 
 // A tag is # (or the full-width ＃) followed by letters, digits, _ or Japanese marks.
 const TAG = /[#＃]([\p{L}\p{N}_ー・々〆]{1,30})/gu;
 const BOUNDARY = /[\p{L}\p{N}_]/u;
 
-/** Tags written in a post, without the #, in the order written. Latin letters are lowercased. */
-export function extractTags(body: string): string[] {
+/**
+ * Tags written in a post, without the #, in the order written. Latin letters are
+ * lowercased. A tag inside covered words stays covered and is not a tag.
+ */
+export function extractTags(post: string): string[] {
+  const body = coverHidden(post);
   const tags: string[] = [];
   for (const match of body.matchAll(TAG)) {
     const before = body[(match.index ?? 0) - 1];

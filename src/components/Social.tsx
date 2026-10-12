@@ -1,6 +1,13 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import {
+  Fragment,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from "react";
 import Link from "next/link";
 import {
   ME_ID,
@@ -40,6 +47,7 @@ import { isDatabaseId, profilePath } from "../lib/paths";
 import { ReportButton } from "./Report";
 import { useTownBackend } from "../lib/store";
 import { notePosted, postedJustNow } from "../lib/just-posted";
+import { coverSelection, splitHidden } from "../lib/hidden-words";
 
 type Shared = {
   state: TownState;
@@ -298,6 +306,7 @@ export function PostComposer({
         : "new-post",
   );
   const [picking, setPicking] = useState(false);
+  const field = useRef<HTMLTextAreaElement>(null);
   const tags = extractTags(body);
   const tagSuggestions = popularTags(state, 8)
     .map((entry) => entry.tag)
@@ -351,6 +360,7 @@ export function PostComposer({
               : "いま、どんな本のことを考えていますか"}
         </label>
         <textarea
+          ref={field}
           id={id + "-body"}
           className="field composer-text"
           rows={isReply ? 2 : 4}
@@ -439,6 +449,12 @@ export function PostComposer({
             />
             ネタバレあり
           </label>
+          <HideWordsButton
+            field={field}
+            body={body}
+            onChange={(next) => update({ body: next })}
+            notify={notify}
+          />
           <span className="composer-count" aria-hidden="true">
             {body.length}/{POST_MAX_LENGTH}
           </span>
@@ -462,6 +478,7 @@ export function PostComposer({
             タイムラインでは隠して表示し、「表示する」を押した人だけが読めます。作品ページでは「ネタバレあり」の扉の向こうに置きます。
           </p>
         )}
+        <HiddenWordsHint body={body} />
       </div>
     </form>
   );
@@ -502,22 +519,106 @@ export function ComposeFab({
   );
 }
 
-/** Post text with each #tag as a link to the posts that share it. */
+/**
+ * Covers the selected words of a draft, so a review can keep one spoiling line
+ * out of sight without hiding all of itself. With nothing selected it leaves a
+ * covered place to write in.
+ */
+export function HideWordsButton({
+  field,
+  body,
+  onChange,
+  notify,
+}: {
+  field: RefObject<HTMLTextAreaElement | null>;
+  body: string;
+  onChange: (body: string) => void;
+  notify: (message: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="composer-hide"
+      // Keep the words chosen in the text box chosen while the button is pressed.
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => {
+        const text = field.current;
+        const covered = coverSelection(
+          body,
+          text?.selectionStart ?? body.length,
+          text?.selectionEnd ?? body.length,
+          POST_MAX_LENGTH,
+        );
+        if (!covered) {
+          notify("文字数の上限に近いため、隠す印を付けられませんでした");
+          return;
+        }
+        onChange(covered.body);
+        requestAnimationFrame(() => {
+          text?.focus();
+          text?.setSelectionRange(covered.start, covered.end);
+        });
+      }}
+    >
+      <Icon name="eye" size={15} />
+      一部を隠す
+    </button>
+  );
+}
+
+/** Says what the marks do once a draft has some. */
+export function HiddenWordsHint({ body }: { body: string }) {
+  if (!splitHidden(body).some((part) => part.hidden)) return null;
+  return (
+    <p className="composer-hint">
+      「||」で囲んだ言葉は塗りつぶして表示し、押した人だけが読めます。
+    </p>
+  );
+}
+
+/** Covered words in a post: closed until the reader chooses to look. */
+function HiddenWords({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  if (open) return <mark className="hidden-words is-open">{text}</mark>;
+  return (
+    <button
+      type="button"
+      className="hidden-words"
+      aria-label="隠された言葉（ネタバレ）を読む"
+      onClick={() => setOpen(true)}
+    >
+      ネタバレ
+    </button>
+  );
+}
+
+/**
+ * Post text with each #tag as a link to the posts that share it, and the
+ * words the writer covered closed until tapped.
+ */
 export function PostText({ body }: { body: string }) {
   return (
     <p className="post-text">
-      {splitTags(body).map((part, index) =>
-        part.tag ? (
-          <Link
-            key={index}
-            className="post-tag"
-            href={"/search/?q=" + encodeURIComponent("#" + part.tag)}
-            onClick={() => requestSearch("#" + part.tag)}
-          >
-            {part.text}
-          </Link>
+      {splitHidden(body).map((part, index) =>
+        part.hidden ? (
+          <HiddenWords key={index} text={part.text} />
         ) : (
-          part.text
+          <Fragment key={index}>
+            {splitTags(part.text).map((piece, at) =>
+              piece.tag ? (
+                <Link
+                  key={at}
+                  className="post-tag"
+                  href={"/search/?q=" + encodeURIComponent("#" + piece.tag)}
+                  onClick={() => requestSearch("#" + piece.tag)}
+                >
+                  {piece.text}
+                </Link>
+              ) : (
+                piece.text
+              ),
+            )}
+          </Fragment>
         ),
       )}
     </p>
