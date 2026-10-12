@@ -562,6 +562,25 @@
   font-size: 12px;
   margin-top: 22px;
 }
+/* Between two rounds of the street: a resting place, not an end. */
+.street-round {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 8px 0 26px;
+  font-family: var(--serif);
+  font-size: 13px;
+  color: #7c8a6b;
+}
+.street-round::before,
+.street-round::after {
+  content: "";
+  flex: 1;
+  max-width: 120px;
+  height: 1px;
+  background: #d3d8c6;
+}
 .street-end {
   padding: 9px 15px 30px;
   text-align: center;

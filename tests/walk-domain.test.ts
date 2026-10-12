@@ -245,18 +245,28 @@ check(
     assert.equal(resumed.lastStoreId, "c");
   },
 );
-check("finite end, previous, all visited and explicit restart", () => {
-  let walk = startWalk(emptyWalk(), ["a"]);
-  walk = stepWalk(walk, 1);
-  assert.equal(walk.session?.ended, true);
+check("the walk goes round, and starts again from the least recent", () => {
+  let walk = startWalk(emptyWalk(), ["a", "b"]);
   walk = stepWalk(walk, -1);
   assert.equal(walk.lastStoreId, "a");
-  walk = visitStore(emptyWalk(), "a");
-  assert.equal(startWalk(walk, ["a"]).session?.ended, true);
+  walk = stepWalk(stepWalk(walk, 1), 1);
+  assert.equal(walk.lastStoreId, "a");
+  assert.equal(walk.session?.ended, false);
+  // With every shop visited, a new walk begins at the one visited longest ago.
+  walk = visitStore(
+    visitStore(emptyWalk(), "b", "2026-10-01T00:00:00Z"),
+    "a",
+    "2026-10-02T00:00:00Z",
+  );
+  assert.deepEqual(startWalk(walk, ["a", "b"]).session?.ids, ["b", "a"]);
+  assert.equal(startWalk(walk, ["a", "b"]).session?.ended, false);
   assert.equal(
-    startWalk(walk, ["a"], undefined, undefined, true).lastStoreId,
+    startWalk(walk, ["a", "b"], undefined, undefined, true).lastStoreId,
     "a",
   );
+  // Only a town without shops has nowhere to walk.
+  assert.equal(startWalk(emptyWalk(), []).session?.ended, true);
+  assert.equal(stepWalk(startWalk(emptyWalk(), []), 1).lastStoreId, null);
 });
 check("history deletion keeps local reactions", () => {
   const walk = visitStore(emptyWalk(), "a");
