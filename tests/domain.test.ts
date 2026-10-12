@@ -9,7 +9,10 @@ import { createTownStore } from "../src/lib/store";
 import { counterId } from "../src/lib/town-backend";
 import {
   bookFeelings,
+  booksFelt,
+  feelingsInTown,
   ownRecordFor,
+  recentlyFinished,
   recordsOf,
   talkersOf,
 } from "../src/lib/records";
@@ -317,6 +320,59 @@ check("the book page shows feelings as words and who wants to talk", () => {
     recordsOf(state, "r-nagi").map((entry) => entry.bookId),
     ["solaris"],
   );
+});
+
+check("the town's finished books and feelings show without any zero", () => {
+  const town = createTownStore(createMemoryRepository());
+  const state = town.getSnapshot();
+  assert.deepEqual(recentlyFinished(state), [
+    "momo",
+    "galaxy-railroad",
+    "silence",
+    "invisible-cities",
+    "solaris",
+  ]);
+  // Only feelings someone kept are offered, in the usual order.
+  assert.deepEqual(feelingsInTown(state), [
+    "cried",
+    "quiet",
+    "sleepless",
+    "warm",
+    "shaken",
+    "again",
+    "recommend",
+    "talk",
+    "lingering",
+  ]);
+  assert.deepEqual(booksFelt(state, "talk"), ["momo", "solaris"]);
+  assert.deepEqual(booksFelt(state, "laughed"), []);
+
+  // Finishing a book others finished brings them as notices.
+  assert.ok(
+    !notificationsFor(state).some((notice) =>
+      notice.id.startsWith("finished:"),
+    ),
+  );
+  town.actions.recordReading({
+    bookId: "solaris",
+    feelings: [],
+    note: "",
+    spoiler: false,
+    isPublic: false,
+  });
+  const finished = notificationsFor(town.getSnapshot()).filter((notice) =>
+    notice.id.startsWith("finished:"),
+  );
+  assert.deepEqual(
+    finished.map((notice) => notice.readerId),
+    ["r-haru", "r-nagi"],
+  );
+  assert.match(
+    finished[0].text,
+    /ソラリス』を読み終えて、誰かと話したいそうです/,
+  );
+  // The viewer's own record counts for them, even when kept private.
+  assert.equal(recentlyFinished(town.getSnapshot())[0], "solaris");
 });
 
 check("a visitor is invited to sign in instead of changing the town", () => {

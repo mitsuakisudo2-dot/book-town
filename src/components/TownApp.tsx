@@ -554,7 +554,7 @@ function ShopView({
           <p className="shop-social-note">
             見本の書店 · {shop.followers + Number(followed)}人がフォロー
           </p>
-        ) : shop.ownerId === ME_ID ? (
+        ) : shop.ownerId === ME_ID && shop.followers > 0 ? (
           <p className="shop-social-note">
             {shop.followers}人がフォロー · この数はあなたにだけ見えています
           </p>

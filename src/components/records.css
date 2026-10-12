@@ -126,6 +126,14 @@
   color: #a3735f;
 }
 
+/* 気持ちから探す */
+.search-feelings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 12px 0 6px;
+}
+
 /* The book page */
 .book-feelings {
   margin: 42px 0;

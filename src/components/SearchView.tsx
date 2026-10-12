@@ -2,7 +2,15 @@
 
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import type { Book, Shop, TownActions, TownState } from "../lib/types";
+import {
+  FEELING_WORDS,
+  type Book,
+  type Feeling,
+  type Shop,
+  type TownActions,
+  type TownState,
+} from "../lib/types";
+import { booksFelt, feelingsInTown } from "../lib/records";
 import { findReader } from "../lib/social";
 import { bookPath } from "../lib/books";
 import { matchBooks } from "./BookPicker";
@@ -10,6 +18,7 @@ import { postsWithTag, popularTags, takeRequestedSearch } from "../lib/tags";
 import { PostCard } from "./Social";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./reading.css";
+import "./records.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { useTownBackend } from "../lib/store";
 
@@ -81,18 +90,44 @@ export function SearchView({ state, actions, notify }: Shared) {
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
   const genres = [...new Set(state.books.map((book) => book.genre))];
 
+  // Lists of what is talked about or shelved show only once there is enough
+  // of it to be worth a list: a town of three readers has no "popular" books.
   const talked = [...state.books]
     .filter((book) => signal(book.id).talk > 0)
     .sort((a, b) => signal(b.id).talk - signal(a.id).talk)
     .slice(0, 6);
+  const presence = (bookId: string) =>
+    signal(bookId).shelves * 3 + signal(bookId).wants;
   const popular = [...state.books]
-    .sort(
-      (a, b) =>
-        signal(b.id).shelves * 3 +
-        signal(b.id).wants -
-        (signal(a.id).shelves * 3 + signal(a.id).wants),
-    )
+    .filter((book) => presence(book.id) > 0)
+    .sort((a, b) => presence(b.id) - presence(a.id))
     .slice(0, 6);
+  const [feeling, setFeeling] = useState<Feeling | null>(null);
+  const feelings = feelingsInTown(state);
+  const felt = feeling
+    ? booksFelt(state, feeling).flatMap((bookId) =>
+        state.books.filter((book) => book.id === bookId),
+      )
+    : [];
+  const shelvedAt = (bookId: string) => {
+    const at = shops.filter((shop) =>
+      shop.shelves.some(
+        (shelf) =>
+          shelf.isPublic && shelf.items.some((item) => item.bookId === bookId),
+      ),
+    );
+    if (!at.length) return "";
+    return at.length === 1
+      ? `「${at[0].name}」の棚に`
+      : `「${at[0].name}」ほか${at.length - 1}軒の棚に`;
+  };
+  const presenceWords = (bookId: string) =>
+    [
+      signal(bookId).shelves > 0 && `${signal(bookId).shelves}軒の棚に`,
+      signal(bookId).wants > 0 && `読みたくなった ${signal(bookId).wants}人`,
+    ]
+      .filter(Boolean)
+      .join("・");
   // Books few people have shelved or talked about yet: the quiet corners of the town.
   const quiet = state.books.filter(
     (book) => signal(book.id).shelves <= 1 && signal(book.id).reviews === 0,
@@ -276,6 +311,34 @@ export function SearchView({ state, actions, notify }: Shared) {
         </div>
       ) : (
         <div className="search-discover">
+          {feelings.length > 0 && (
+            <section aria-labelledby="search-feelings-title">
+              <h2 id="search-feelings-title">気持ちから探す</h2>
+              <p>読み終えた人が残した気持ちから、次の一冊を。</p>
+              <div className="search-feelings" role="group" aria-label="気持ち">
+                {feelings.map((entry) => (
+                  <button
+                    type="button"
+                    key={entry}
+                    className="feeling-chip"
+                    aria-pressed={feeling === entry}
+                    onClick={() =>
+                      setFeeling((current) =>
+                        current === entry ? null : entry,
+                      )
+                    }
+                  >
+                    {FEELING_WORDS[entry]}
+                  </button>
+                ))}
+              </div>
+              {feeling && (
+                <ul className="search-list" aria-live="polite">
+                  {felt.map((book) => bookRow(book, shelvedAt(book.id)))}
+                </ul>
+              )}
+            </section>
+          )}
           {tags.length > 0 && (
             <section aria-labelledby="search-tags-title">
               <h2 id="search-tags-title">よく使われているタグ</h2>
@@ -294,33 +357,12 @@ export function SearchView({ state, actions, notify }: Shared) {
               </div>
             </section>
           )}
-          <section aria-labelledby="search-talked-title">
-            <h2 id="search-talked-title">話題の本</h2>
-            <p>いま投稿やレビューで語られている本。</p>
-            <ul className="search-list">
-              {talked.map((book) =>
-                bookRow(book, `投稿 ${signal(book.id).talk}件`),
-              )}
-            </ul>
-          </section>
-          <section aria-labelledby="search-popular-title">
-            <h2 id="search-popular-title">人気の本</h2>
-            <p>多くの棚に並び、読みたくなった人が多い本。</p>
-            <ul className="search-list">
-              {popular.map((book) =>
-                bookRow(
-                  book,
-                  `${signal(book.id).shelves}軒の棚に・読みたくなった ${signal(book.id).wants}人`,
-                ),
-              )}
-            </ul>
-          </section>
-          <section aria-labelledby="search-quiet-title">
-            <h2 id="search-quiet-title">棚の隅の本</h2>
-            <p>
-              まだあまり知られていない本。最初の感想を書くのは、あなたかも。
-            </p>
-            {quiet.length ? (
+          {quiet.length > 0 && (
+            <section aria-labelledby="search-quiet-title">
+              <h2 id="search-quiet-title">棚の隅の本</h2>
+              <p>
+                まだあまり知られていない本。最初の感想を書くのは、あなたかも。
+              </p>
               <ul className="search-list">
                 {quiet.map((book) =>
                   bookRow(
@@ -331,12 +373,28 @@ export function SearchView({ state, actions, notify }: Shared) {
                   ),
                 )}
               </ul>
-            ) : (
-              <p className="search-empty">
-                いまは、どの本も誰かに語られています。
-              </p>
-            )}
-          </section>
+            </section>
+          )}
+          {talked.length >= 3 && (
+            <section aria-labelledby="search-talked-title">
+              <h2 id="search-talked-title">話題の本</h2>
+              <p>いま投稿やレビューで語られている本。</p>
+              <ul className="search-list">
+                {talked.map((book) =>
+                  bookRow(book, `投稿 ${signal(book.id).talk}件`),
+                )}
+              </ul>
+            </section>
+          )}
+          {popular.length >= 3 && (
+            <section aria-labelledby="search-popular-title">
+              <h2 id="search-popular-title">多くの棚に並ぶ本</h2>
+              <p>いくつもの本屋が棚に置き、読みたくなった人がいる本。</p>
+              <ul className="search-list">
+                {popular.map((book) => bookRow(book, presenceWords(book.id)))}
+              </ul>
+            </section>
+          )}
           <p className="search-note">
             {savedIn === "local" ? "デモの街" : "この街"}
             の本と書店から探します。並び順は、この街の棚と投稿から数えています。

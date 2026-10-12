@@ -10,6 +10,7 @@ Booktown（旧仮称「余白」）は「本を通じて、人と出会うSNS」
 - 本番の Supabase のログイン設定（メールの送信元、文面、上限）と Vercel の操作は、GitHub Actions から行います（`supabase/hosted-auth.json`、`.github/workflows/supabase-auth.yml`、`.github/workflows/vercel.yml`）。鍵は GitHub のリポジトリシークレットにだけあり、Claude の作業環境からは Supabase と Vercel に直接つながりません。詳しくは docs/09 の「本番の設定」にあります。
 - 書店めぐりの設計、保存データ、検証方法は [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md) にあります。ただし、そこに書かれたブランチとPRの状態は古くなっています。
 - リポジトリの `AGENTS.md` と `docs/README.md` の設計資料を尊重し、Next.jsの関連ガイドをローカルの `node_modules/next/dist/docs/` で確認してからコードを変更してください。
+- **画面に「0」を出さないでください。** 人数や件数が0の欄は出さないか、行動の入口（本屋を開く、書店めぐりに出かける など）に置き換えます。人が少ない時期に、少なさを見せないためです。数は順位にせず、事実の言葉にします。ログインしたばかりの空の街で0が出ないことを、`tests/login-journey.mjs` の「a new reader's empty town shows no zeros」が確かめています。
 - 本棚が主役です。本・棚・POPを独立して操作できる構造を保ち、一般的なカード型の読書アプリに置き換えないでください。
 - 新しい店内Sceneと旧本棚は別保存です。移行や同期の変更では、旧データ、非公開設定、配置ごとのPOPと反応を失わないようにしてください。
 - PRを自動でマージしないでください。マージはユーザーの了承を得てから行います。
