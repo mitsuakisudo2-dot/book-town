@@ -427,6 +427,12 @@ try {
       await expect(save).toHaveAttribute("aria-pressed", "false");
       await save.click();
       await expect(save).toHaveAttribute("aria-pressed", "true");
+      // The bottom band's "読みたい" is the same list, always in reach.
+      await expect(
+        page
+          .locator(".bh-navigation")
+          .getByRole("button", { name: "読みたい", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
       await page.reload();
       await trigger.click();
       await expect(save).toHaveAttribute("aria-pressed", "true");
