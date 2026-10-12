@@ -843,3 +843,47 @@
     flex-basis: 100px;
   }
 }
+/* The bottom band keeps "読みたい" in reach, with the shelf position under it. */
+.bh-nav-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.bh-nav-wish {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 6px 16px;
+  border: 1px solid #365242;
+  border-radius: 999px;
+  background: #fffef8;
+  color: #365242;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bh-nav-wish:hover {
+  background: #eef2e8;
+}
+.bh-nav-wish.is-saved {
+  background: #e9eee2;
+  color: #365242;
+  border-color: #bfcdb7;
+}
+.bh-nav-wish.is-saved:hover {
+  background: #dce6d4;
+}
+.bh-nav-center .bh-position {
+  font-size: 10px;
+  color: var(--bh-subtle);
+  white-space: nowrap;
+}
+.bh-nav-center .bh-position i {
+  margin-inline: 4px;
+}
+.bh-nav-center .bh-position small {
+  display: inline;
+  margin: 0;
+}
