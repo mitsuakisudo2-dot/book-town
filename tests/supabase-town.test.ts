@@ -3,6 +3,13 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createTownStore } from "../src/lib/store";
 import { notificationsFor } from "../src/lib/notifications";
 import { accountTownBackend } from "../src/lib/supabase/town-backend";
+import { accountWalkBackend } from "../src/lib/supabase/walk-backend";
+import {
+  migrateShopScene,
+  placementReactionKey,
+  publicStoreScene,
+} from "../src/lib/store-customization";
+import { createWalkStore } from "../src/lib/walk-store";
 import type { Database } from "../src/lib/supabase/database.types";
 import { ME_ID, OWN_SHOP_ID, type PersistenceStatus } from "../src/lib/types";
 
@@ -76,6 +83,33 @@ async function townOf(person: { id: string; client: Client }) {
 }
 
 type Store = ReturnType<typeof createTownStore>;
+
+/** The walk store for this reader, as the app makes one after signing in. */
+async function walkOf(person: { id: string; client: Client }) {
+  const store = createWalkStore(
+    accountWalkBackend(person.client, person.id, {
+      delay: 0,
+      retryDelays: [50],
+      storage: false,
+    }),
+  );
+  store.initialize();
+  await walked(store);
+  return store;
+}
+
+/** Waits until the walk has nothing left to save. */
+async function walked(store: ReturnType<typeof createWalkStore>) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const { ready, status } = store.getSnapshot();
+    if (ready && status !== "saving" && status !== "unavailable") {
+      assert.equal(status, "saved");
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("The walk never finished saving.");
+}
 
 /** Waits until the store has nothing left to save, retries included. */
 async function settled(
@@ -348,6 +382,97 @@ async function main() {
         ),
         false,
       );
+    },
+  );
+
+  await check(
+    "the store scene is saved, and visitors see only its public part",
+    async () => {
+      const town = (await townOf(aki)).getSnapshot();
+      const walk = await walkOf(aki);
+      // The shop's shelves become a scene: the public book on a shelf, the
+      // private one kept aside.
+      const scene = migrateShopScene(town.ownShop!, town.books);
+      assert.equal(walk.saveScene(scene, town).ok, true);
+      await walked(walk);
+
+      const again = (await walkOf(aki)).getSnapshot();
+      assert.deepEqual(
+        again.scenes.find((entry) => entry.storeId === OWN_SHOP_ID),
+        scene,
+      );
+
+      const visitor = (await walkOf(ben)).getSnapshot();
+      const seen = visitor.scenes.find((entry) => entry.storeId === akiShopId);
+      assert.ok(seen, "Aki's scene is on Ben's walk");
+      assert.deepEqual(
+        seen.objects.map((object) => object.id),
+        publicStoreScene(scene).objects.map((object) => object.id),
+      );
+      assert.ok(
+        seen.objects.length < scene.objects.length,
+        "the private book stays with Aki",
+      );
+    },
+  );
+
+  await check(
+    "likes, saves, visits, POP reactions and words are kept, and the words reach the owner",
+    async () => {
+      const walk = await walkOf(ben);
+      const seen = walk
+        .getSnapshot()
+        .scenes.find((entry) => entry.storeId === akiShopId)!;
+      const placement = seen.objects.find((object) => object.kind === "book")!;
+      const pop = placementReactionKey(seen, placement);
+      const visitedAt = new Date().toISOString();
+      assert.equal(
+        walk.update((state) => ({
+          ...state,
+          reactions: {
+            [akiShopId]: { liked: true, saved: true, message: "また来ます" },
+          },
+          visits: { [akiShopId]: visitedAt },
+          placementReactions: { [pop]: ["love"] },
+        })),
+        true,
+      );
+      await walked(walk);
+
+      const again = (await walkOf(ben)).getSnapshot().state;
+      assert.deepEqual(again.reactions, {
+        [akiShopId]: { liked: true, saved: true, message: "また来ます" },
+      });
+      assert.deepEqual(Object.keys(again.visits), [akiShopId]);
+      assert.equal(Date.parse(again.visits[akiShopId]), Date.parse(visitedAt));
+      assert.deepEqual(again.placementReactions, { [pop]: ["love"] });
+
+      const akiTown = (await townOf(aki)).getSnapshot();
+      assert.deepEqual(
+        akiTown.shopMessages.map((message) => [message.readerId, message.text]),
+        [[ben.id, "また来ます"]],
+      );
+      assert.ok(
+        notificationsFor(akiTown).some((notice) =>
+          notice.text.includes("ひとことを残しました"),
+        ),
+      );
+
+      // Taking it all back.
+      walk.update((state) => ({
+        ...state,
+        reactions: {
+          [akiShopId]: { liked: false, saved: false, message: "" },
+        },
+        visits: {},
+        placementReactions: {},
+      }));
+      await walked(walk);
+      const cleared = (await walkOf(ben)).getSnapshot().state;
+      assert.deepEqual(cleared.reactions, {});
+      assert.deepEqual(cleared.visits, {});
+      assert.deepEqual(cleared.placementReactions, {});
+      assert.deepEqual((await townOf(aki)).getSnapshot().shopMessages, []);
     },
   );
 

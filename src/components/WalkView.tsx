@@ -39,7 +39,12 @@ import {
   type ShopReaction,
 } from "../lib/walk-state";
 import { useWalkStore } from "../lib/walk-store";
-import type { Shop, TownActions, TownState } from "../lib/types";
+import {
+  SHOP_MESSAGE_MAX_LENGTH,
+  type Shop,
+  type TownActions,
+  type TownState,
+} from "../lib/types";
 import "./walk.css";
 import { profilePath, shopPath } from "../lib/paths";
 
@@ -74,7 +79,9 @@ export function WalkView({
   const saved = useWalkStore(),
     walk = saved.state,
     update = saved.update,
-    ready = saved.ready;
+    ready = saved.ready,
+    // With an account, words left for an owner reach them.
+    delivers = saved.kind === "account";
   const shops = useMemo(() => {
     if (orderedStores) return orderedStores;
     const publicIds = new Set(
@@ -423,15 +430,21 @@ export function WalkView({
               {owner?.bio && <p className="walk-owner-bio">{owner.bio}</p>}
             </div>
             <div className="walk-header-tools">
-              <button
-                aria-label="店主に伝える（送信されないデモ）"
-                onClick={() => {
-                  setMessage(reaction.message);
-                  open({ kind: "message" });
-                }}
-              >
-                <Icon name="mail" size={16} />
-              </button>
+              {!(ownShop && delivers) && (
+                <button
+                  aria-label={
+                    delivers
+                      ? "店主にひとことを残す"
+                      : "店主に伝える（送信されないデモ）"
+                  }
+                  onClick={() => {
+                    setMessage(reaction.message);
+                    open({ kind: "message" });
+                  }}
+                >
+                  <Icon name="mail" size={16} />
+                </button>
+              )}
               {!ownShop && (
                 <button
                   aria-label="この書店をフォロー"
@@ -486,9 +499,13 @@ export function WalkView({
       </header>
       {saved.status === "unavailable" || saved.status === "recovered" ? (
         <p className="walk-save-warning" role="status">
-          {saved.status === "recovered"
-            ? "書店めぐりの保存を読み込めませんでした。元のデータは保持しています。"
-            : "書店めぐりを保存できません。この操作は再読み込みすると失われます。"}
+          {delivers
+            ? saved.status === "recovered"
+              ? "保存できない変更があったため、保存されている状態に戻しました。"
+              : "つながらないため、まだ保存できていません。つながりしだい保存します。"
+            : saved.status === "recovered"
+              ? "書店めぐりの保存を読み込めませんでした。元のデータは保持しています。"
+              : "書店めぐりを保存できません。この操作は再読み込みすると失われます。"}
         </p>
       ) : null}
       <div
@@ -739,7 +756,38 @@ export function WalkView({
           {owner && <p className="muted">— {owner.name}</p>}
         </Modal>
       )}
-      {overlay?.kind === "message" && (
+      {overlay?.kind === "message" && delivers && (
+        <Modal title="店主にひとことを残す" onClose={close}>
+          <p className="note-box">
+            店主に届きます。読めるのは、店主とあなただけです。消して届け直すと、店主からも見えなくなります。
+          </p>
+          <textarea
+            className="field walk-message"
+            aria-label="店主に伝えたい言葉"
+            value={message}
+            maxLength={SHOP_MESSAGE_MAX_LENGTH}
+            onChange={(e) => setMessage(e.target.value)}
+          />
+          <button
+            className="button"
+            onClick={() => {
+              const text = message.trim() ? message : "";
+              const persisted = editReaction({ message: text });
+              notify(
+                !persisted
+                  ? "届けられませんでした。言葉は再読み込みまで手元に残ります。"
+                  : text
+                    ? "ひとことを届けました。"
+                    : "ひとことを取り消しました。",
+              );
+              close();
+            }}
+          >
+            届ける
+          </button>
+        </Modal>
+      )}
+      {overlay?.kind === "message" && !delivers && (
         <Modal title="店主に伝える" onClose={close}>
           <p className="note-box">
             送信されないデモです。書いた言葉は、このブラウザにだけ残ります。
@@ -748,7 +796,7 @@ export function WalkView({
             className="field walk-message"
             aria-label="店主に伝えたい言葉"
             value={message}
-            maxLength={10000}
+            maxLength={SHOP_MESSAGE_MAX_LENGTH}
             onChange={(e) => setMessage(e.target.value)}
           />
           <button

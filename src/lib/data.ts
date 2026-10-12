@@ -1325,6 +1325,7 @@ export function createInitialState(): TownState {
     library: [],
     settings: { composeIcon: "pen" },
     seenNotifications: [],
+    shopMessages: [],
   });
 }
 

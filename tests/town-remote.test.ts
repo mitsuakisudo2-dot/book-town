@@ -78,6 +78,7 @@ const shop = (
   theme: "sage",
   is_open: true,
   public_shelves: [],
+  public_scene_books: [],
   ...extra,
 });
 
@@ -104,7 +105,9 @@ function rows(extra: Partial<RemoteRows> = {}): RemoteRows {
     books: [book(BOOK, AKI), book(OTHER_BOOK, BEN)],
     shops: [],
     ownShelves: [],
+    ownSceneBooks: [],
     ownShopFollowers: 0,
+    shopMessages: [],
     follows: [],
     marks: [],
     posts: [],
@@ -317,6 +320,39 @@ async function main() {
       ownShelves: [shelf("s1", true)],
     });
     assert.deepEqual(referenced.sort(), [BOOK, OTHER_BOOK].sort());
+    // Books standing only in a store scene are read too.
+    const inScenes = referencedBookIds({
+      ...rows(),
+      shops: [shop(BEN_SHOP, BEN, { public_scene_books: [OTHER_BOOK, 3] })],
+      ownSceneBooks: [BOOK],
+    });
+    assert.deepEqual(inScenes.sort(), [BOOK, OTHER_BOOK].sort());
+  });
+
+  await check("words left at the shop reach its owner, newest first", () => {
+    const town = townFromRows(
+      rows({
+        shopMessages: [
+          { user_id: BEN, message: "また来ます", updated_at: at },
+          {
+            user_id: BEN,
+            message: "   ",
+            updated_at: "2026-10-12T11:00:00+00:00",
+          },
+          // Someone the town does not know (no profile to show) is left out.
+          {
+            user_id: "00000000-0000-4000-8000-00000000000c",
+            message: "だれ？",
+            updated_at: at,
+          },
+        ],
+      }),
+      ids,
+    );
+    assert.deepEqual(town.shopMessages, [
+      { readerId: BEN, text: "また来ます", at },
+    ]);
+    assert.deepEqual(emptyTown().shopMessages, []);
   });
 
   const base = (): TownState =>
