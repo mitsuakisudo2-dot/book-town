@@ -427,6 +427,10 @@ try {
       await expect(save).toHaveAttribute("aria-pressed", "false");
       await save.click();
       await expect(save).toHaveAttribute("aria-pressed", "true");
+      // The book sits above the page, so its toast is shown inside it.
+      await expect(page.locator(".bh-dialog .toast")).toHaveText(
+        "読みたい本に入れました",
+      );
       // The bottom band's "読みたい" is the same list, always in reach.
       await expect(
         page
