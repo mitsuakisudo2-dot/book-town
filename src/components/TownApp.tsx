@@ -233,7 +233,13 @@ export default function TownApp({
             <kbd>↵</kbd>
           </form>
           <div className="top-actions">
-            <button className="demo-pill" onClick={() => setAbout(true)}>
+            <button
+              className="demo-pill"
+              onClick={() => setAbout(true)}
+              aria-label={
+                (savedIn === "local" ? "デモの街" : "本の街") + "について"
+              }
+            >
               {savedIn === "local" ? "デモの街" : "本の街"}
               <Icon name="leaf" size={12} />
             </button>
@@ -352,7 +358,7 @@ export default function TownApp({
                 店主と書店は架空のデモデータです。本の表紙・背表紙はオリジナルの仮デザインを使っています。
               </p>
               <div className="note-box">
-                あなたの書店や読みたいリストは、このブラウザのlocalStorageに保存されます。他の端末や読書家には共有されません。
+                あなたの書店や読みたい本は、このブラウザの中にだけ保存されます。ほかの端末や読書家には届きません。
               </div>
             </>
           ) : (
