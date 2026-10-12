@@ -296,6 +296,15 @@ async function main() {
       "invalid-email",
     );
     assert.equal(authFailure({ code: undefined, status: 0 }), "network");
+    // A wrong or secret key in the build is refused before anything else.
+    assert.equal(
+      authFailure({ code: undefined, status: 401 }),
+      "misconfigured",
+    );
+    assert.equal(
+      authFailure({ code: "unexpected_failure", status: 500 }),
+      "server",
+    );
   });
 
   await check("a link that did not work is recognized", () => {

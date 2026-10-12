@@ -32,7 +32,9 @@ export type AccountFailure =
   | "rate-limited"
   | "handle-taken"
   | "invalid-profile"
-  | "network";
+  | "network"
+  | "misconfigured"
+  | "server";
 
 export const failureMessages: Record<AccountFailure, string> = {
   "invalid-email": "メールアドレスの形を確かめてください。",
@@ -47,6 +49,10 @@ export const failureMessages: Record<AccountFailure, string> = {
   "invalid-profile": "入力した内容を確かめてください。",
   network:
     "つながりませんでした。通信の状態を確かめて、もう一度お試しください。",
+  misconfigured:
+    "サイトの設定に問題があり、いまはログインできません。運営にお知らせください。",
+  server:
+    "ログインの仕組みが応えませんでした。しばらくしてから、もう一度お試しください。",
 };
 
 export type AccountResult = { ok: true } | { ok: false; message: string };

@@ -26,7 +26,11 @@ export function authFailure(error: Pick<AuthError, "code" | "status">) {
     return "invalid-code" satisfies AccountFailure;
   if (code === "email_address_invalid" || code === "validation_failed")
     return "invalid-email" satisfies AccountFailure;
-  return "network" satisfies AccountFailure;
+  // The site's key was refused: the build was given a wrong or secret key.
+  if (error.status === 401) return "misconfigured" satisfies AccountFailure;
+  // No answer at all: offline, or the build points at a wrong address.
+  if (!error.status) return "network" satisfies AccountFailure;
+  return "server" satisfies AccountFailure;
 }
 
 export function supabaseAccountBackend(
