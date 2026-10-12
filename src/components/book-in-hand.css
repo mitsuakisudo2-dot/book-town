@@ -1,3 +1,19 @@
+.bh-dialog.is-store-scene .bh-pop-text {
+  font-family: "Yohaku Hand", var(--serif);
+  font-size: 17px;
+  line-height: 1.9;
+}
+.bh-pop-stamp {
+  display: block;
+  width: 32px;
+  height: 32px;
+  color: #9d733f;
+  margin: 12px 0 0 auto;
+}
+.bh-pop-stamp svg {
+  width: 100%;
+  height: 100%;
+}
 .bh-dialog {
   --bh-text: #30382f;
   --bh-subtle: #696d62;

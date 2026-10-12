@@ -14,6 +14,9 @@ import { shelfUsed, usePersistenceStatus } from "../lib/store";
 import { bookPath } from "../lib/books";
 import { BookJacket, Icon, Modal } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
+import { StoreSceneEditor } from "./StoreSceneEditor";
+import { useWalkStore } from "../lib/walk-store";
+import { hasPublicSceneBooks } from "../lib/store-customization";
 import "./editor.css";
 
 type ShopEditorProps = {
@@ -693,12 +696,15 @@ function ShelfEditingPanel({
 }
 
 export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
+  const walk = useWalkStore();
+  const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
   const persistenceStatus = usePersistenceStatus();
   const [addShelfOpen, setAddShelfOpen] = useState(false);
   const [newShelfName, setNewShelfName] = useState("");
   const [addBookShelfId, setAddBookShelfId] = useState<string | null>(null);
   const [removeShelfId, setRemoveShelfId] = useState<string | null>(null);
   const shop = state.ownShop;
+  const ownScene = walk.scenes.find((s) => s.storeId === shop?.id);
   const persistenceMessage = {
     saved: "本棚の変更は、このブラウザに保存済みです。",
     loading: "このブラウザの保存データを読み込んでいます。",
@@ -726,6 +732,41 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           お店を眺める
         </Link>
       </header>
+      <section className="editor-immersive-entry">
+        <div>
+          <h2>灯りのともる、自分の本屋</h2>
+          <p>
+            木の棚、店の看板、手書きのPOP。書店めぐりに並ぶ一軒をつくれます。
+          </p>
+          {ownScene && <p>店内と下の本棚は、それぞれ別に保存されます。</p>}
+          {ownScene && !hasPublicSceneBooks(ownScene, state.books) && (
+            <p>公開する本を棚に並べると、書店めぐりで眺められます。</p>
+          )}
+        </div>
+        <div>
+          <button
+            type="button"
+            className="editor-button primary"
+            disabled={!walk.ready}
+            onClick={() => setSceneEditorOpen(true)}
+          >
+            <Icon name="shelf" size={17} />
+            店内をつくる
+          </button>
+          {ownScene && hasPublicSceneBooks(ownScene, state.books) && (
+            <Link className="editor-button secondary" href="/walk/#mine">
+              店内を眺める
+            </Link>
+          )}
+        </div>
+      </section>
+      {sceneEditorOpen && (
+        <StoreSceneEditor
+          state={state}
+          onClose={() => setSceneEditorOpen(false)}
+          notify={notify}
+        />
+      )}
       <ShopSettings
         key={shop.id}
         shop={shop}

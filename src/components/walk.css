@@ -1,3 +1,21 @@
+@font-face {
+  font-family: "Yohaku Hand";
+  src: url("/fonts/yomogi.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+.walk-full-stamp {
+  display: block;
+  width: 48px;
+  height: 48px;
+  color: #916435;
+  margin: 0 30px 20px auto;
+}
+.walk-full-stamp svg {
+  width: 100%;
+  height: 100%;
+}
 .is-walk .town-topbar,
 .is-walk .town-footer {
   display: none;
@@ -111,7 +129,7 @@
   border: 1px solid #663215;
   border-radius: 2px;
   color: #211309;
-  font-family: var(--serif);
+  font-family: "Yohaku Hand", var(--serif);
   font-size: clamp(18px, 6cqw, 32px);
   letter-spacing: 0.14em;
   text-shadow: 0 1px #f7c07880;
@@ -119,12 +137,29 @@
     0 4px 7px #0e0806b0,
     inset 0 1px #ffdf9480;
   background:
-    repeating-linear-gradient(1deg, transparent 0 3px, #3a1d0920 4px 5px),
-    linear-gradient(100deg, #a96831, #dba76b 45%, #bc8347);
+    linear-gradient(100deg, #dca5634a, #ffc77570, #d797444a),
+    url("/themes/woodshop/wood-v2.webp") center/cover;
   padding: 4% 3%;
   font-weight: 500;
   line-height: 1.3;
   overflow: hidden;
+}
+.walk-sign:before,
+.walk-sign:after {
+  content: "";
+  position: absolute;
+  top: 7%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #342519;
+  box-shadow: 0 1px 1px #ffe7ac80;
+}
+.walk-sign:before {
+  left: 3%;
+}
+.walk-sign:after {
+  right: 3%;
 }
 .walk-furniture {
   border: 0;
@@ -135,13 +170,13 @@
     inset -8px 0 7px #130a0780,
     0 10px 12px #0b0508a0;
   background:
-    repeating-linear-gradient(
+    linear-gradient(
       90deg,
-      transparent 0 22%,
-      #170b0770 23%,
-      transparent 24%
+      color-mix(in srgb, var(--walk-wood) 50%, #100903b5),
+      color-mix(in srgb, var(--walk-wood) 35%, #100a0688) 50%,
+      color-mix(in srgb, var(--walk-wood) 50%, #100903b5)
     ),
-    linear-gradient(100deg, #392316, #603c24 50%, #382014);
+    url("/themes/woodshop/wood-v2.webp") center/cover;
 }
 .walk-furniture:before {
   content: "";
@@ -150,7 +185,12 @@
   right: -10px;
   top: -5px;
   height: 10px;
-  background: linear-gradient(#9c6839, #593519);
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--walk-wood) 45%, #ffd99a30),
+      #29130860
+    ),
+    url("/themes/woodshop/wood-v2.webp") center 32% / cover;
   border-top: 2px solid #cca065;
   box-shadow: 0 4px 3px #0008;
 }
@@ -160,7 +200,12 @@
   right: -10px;
   bottom: -7px;
   height: 12px;
-  background: repeating-linear-gradient(1deg, #b58048 0 1px, #6c3f1f 3px 6px);
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--walk-wood) 45%, #e8b77920),
+      #21100588
+    ),
+    url("/themes/woodshop/wood-v2.webp") center/100% auto;
   box-shadow: 0 4px 5px #0008;
 }
 .walk-row {
@@ -177,7 +222,12 @@
   bottom: -6px;
   height: 9px;
   z-index: 7;
-  background: repeating-linear-gradient(1deg, #be8a4d 0 1px, #6c3a18 3px 5px);
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--walk-wood) 45%, #f7c27638),
+      #1d0c0555
+    ),
+    url("/themes/woodshop/wood-v2.webp") center 68%/100% auto;
   box-shadow: 0 4px 3px #070302b0;
   border-top: 1px solid #e5bb7280;
 }
@@ -187,7 +237,7 @@
   left: 0;
   top: 0;
   max-width: 80%;
-  font-family: var(--serif);
+  font-family: "Yohaku Hand", var(--serif);
   font-size: clamp(7px, 2.1cqw, 11px);
   color: #eed7b0;
   text-align: left;
@@ -263,6 +313,15 @@
 .walk-book .jacket-art {
   opacity: 0.85;
 }
+.walk-book .book-jacket.is-illustrated .jacket-title {
+  font-size: 16cqw;
+  padding: 0;
+  line-height: 1.65;
+}
+.walk-book .book-jacket.is-illustrated .jacket-author {
+  font-size: 6.5cqw;
+  padding: 0;
+}
 .walk-spine {
   position: relative;
   display: flex;
@@ -314,13 +373,41 @@
   background: var(--walk-paper);
   box-shadow: 0 2px 3px #1b100970;
   line-height: 1.5;
-  font-family: var(--serif);
-  font-size: clamp(5px, 1.65cqw, 9px);
+  font-family: "Yohaku Hand", var(--serif);
+  font-size: clamp(6px, 1.9cqw, 10px);
   color: #372318;
   padding: 3px 4px;
   overflow: hidden;
   text-align: left;
   border: 1px solid #baa47c;
+}
+.walk-pop-excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.walk-pop-stamp {
+  position: absolute;
+  right: 2%;
+  bottom: 3%;
+  width: 14%;
+  opacity: 0.65;
+}
+.walk-pop-stamp svg {
+  width: 100%;
+  height: 100%;
+}
+.walk-book-pop:before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    5deg,
+    transparent 0 3px,
+    #5c391406 4px 5px
+  );
 }
 .walk-book-pop.is-tab {
   height: 12%;
@@ -331,7 +418,7 @@
 .walk-ownerPop {
   color: #3c2615;
   background: linear-gradient(110deg, #f5e5c7, #cdb28c);
-  font-family: var(--serif);
+  font-family: "Yohaku Hand", var(--serif);
   font-size: clamp(9px, 2.5cqw, 14px);
   line-height: 1.6;
   padding: 4% 5%;
@@ -452,7 +539,7 @@
 }
 .walk-full-pop {
   white-space: pre-wrap;
-  font-family: var(--serif);
+  font-family: "Yohaku Hand", var(--serif);
   font-size: 18px;
   line-height: 2.2;
   padding: 20px;
@@ -466,7 +553,9 @@
   gap: 10px;
   padding: 26px 12px 16px;
   height: 260px;
-  background: linear-gradient(#2a1c13, #614326);
+  background:
+    linear-gradient(#1b100c9c, #26130ca0),
+    url("/themes/woodshop/wood-v2.webp") center/cover;
   border-bottom: 12px solid #925e30;
   box-shadow: inset 0 12px 15px #08050470;
 }

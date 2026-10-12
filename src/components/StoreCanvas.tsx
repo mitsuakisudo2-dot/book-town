@@ -44,11 +44,17 @@ export function StoreStamp({ name }: { name?: string }) {
 }
 export function StoreBook({ book, display }: { book: Book; display?: string }) {
   return display === "face" ? (
-    <BookJacket book={book} />
+    <BookJacket book={book} illustrated />
   ) : (
     <span
       className="walk-spine"
-      style={{ background: book.color, color: book.ink }}
+      style={{
+        background:
+          book.pattern % 5 === 0
+            ? book.color
+            : ["#e2d3b9", "#efe4cd", "#cdb89b", "#ddc9ae"][book.pattern % 4],
+        color: book.pattern % 5 === 0 ? book.ink : "#392d20",
+      }}
     >
       <span>{book.title}</span>
       <small>{book.author}</small>
@@ -174,7 +180,18 @@ export function StoreCanvas({
               onClick={() => onPop(o)}
               aria-label={book.title + "のPOP全文を読む"}
             >
-              {o.display === "face" ? pop.text : <span>POP</span>}
+              {o.display === "face" ? (
+                <>
+                  <span className="walk-pop-excerpt">{pop.text}</span>
+                  {pop.stamp && (
+                    <span className="walk-pop-stamp">
+                      <StoreStamp name={pop.stamp} />
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span>POP</span>
+              )}
             </button>
           )}
         </div>

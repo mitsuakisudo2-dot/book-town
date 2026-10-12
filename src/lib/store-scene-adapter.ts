@@ -6,6 +6,7 @@ import {
   objectById,
   rect,
   setBookPop,
+  worldPolygon,
   type SceneObject,
   type StoreScene,
 } from "./store-scene";
@@ -14,6 +15,7 @@ export interface ReadEntry {
   id: string;
   bookId: string;
   pop: string;
+  stamp?: string;
   shopId: string;
   label: string;
   legacy?: { shelfId: string; itemId: string };
@@ -29,11 +31,13 @@ export function sceneEntry(
     id: placement.id,
     bookId: placement.bookId!,
     pop: bookPop(scene, placement.id)?.text ?? "",
+    stamp: bookPop(scene, placement.id)?.stamp,
     shopId: scene.storeId,
     label: row?.text ?? "この店の本",
-    legacy: placement.source
-      ? { shelfId: placement.source.shelfId, itemId: placement.source.itemId }
-      : undefined,
+    legacy:
+      placement.source && !scene.ownerManaged
+        ? { shelfId: placement.source.shelfId, itemId: placement.source.itemId }
+        : undefined,
   };
 }
 export function readingEntries(scene: StoreScene, furnitureId: string) {
@@ -46,7 +50,9 @@ export function publicScenePops(scenes: StoreScene[]) {
         (o) =>
           o.kind === "book" &&
           o.parentId &&
-          objectById(scene, o.parentId)?.isPublic !== false,
+          o.isPublic !== false &&
+          objectById(scene, o.parentId)?.isPublic === true &&
+          worldPolygon(scene, o),
       )
       .map((p) => sceneEntry(scene, p)),
   );
@@ -210,7 +216,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
           pool[(i + variant * 3) % pool.length],
           row.id,
           id,
-          "spine",
+          row.id === "row-0" && variant !== 1 ? "face" : "spine",
           100 + i,
         );
         if (!objectById(scene, id)!.parentId) break;

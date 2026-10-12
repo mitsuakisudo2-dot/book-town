@@ -17,6 +17,7 @@ import { bookPath } from "../lib/books";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./book-in-hand.css";
 import type { ReadEntry } from "../lib/store-scene-adapter";
+import { StoreStamp } from "./StoreCanvas";
 
 export interface SceneReading {
   entries: ReadEntry[];
@@ -320,7 +321,7 @@ export function BookInHand({
   return (
     <dialog
       ref={dialogRef}
-      className="bh-dialog"
+      className={"bh-dialog" + (sceneMode ? " is-store-scene" : "")}
       aria-labelledby={titleId}
       aria-describedby={shelfLabelId}
       onCancel={(event) => {
@@ -401,7 +402,7 @@ export function BookInHand({
               onNavigate={leaveForPage}
               aria-label={`${book.title}の作品ページへ`}
             >
-              <BookJacket book={book} />
+              <BookJacket book={book} illustrated={sceneMode} />
             </Link>
             <div className="bh-book-heading">
               <span className="bh-genre">{book.genre}</span>
@@ -461,6 +462,11 @@ export function BookInHand({
                   <p className="bh-pop-empty">
                     この本のPOPは、まだ書かれていません。
                   </p>
+                )}
+                {activePop.stamp && (
+                  <span className="bh-pop-stamp">
+                    <StoreStamp name={activePop.stamp} />
+                  </span>
                 )}
               </div>
               {popCandidates.length > 1 && (

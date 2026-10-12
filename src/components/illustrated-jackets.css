@@ -1,0 +1,45 @@
+.book-jacket.is-illustrated .jacket-illustration {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: url("/themes/woodshop/jackets-v2.webp");
+  background-size: 200% 400%;
+  background-position: var(--art-x) var(--art-y);
+}
+.book-jacket.is-illustrated .jacket-illustration:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(var(--art-shade), transparent 72%, #151b2638);
+}
+.book-jacket.is-illustrated .jacket-series {
+  top: 6%;
+  font-size: 4.1cqw;
+  letter-spacing: 0.16em;
+  opacity: 0.7;
+}
+.book-jacket.is-illustrated .jacket-title {
+  top: 16%;
+  font-size: 16cqw;
+  left: 10%;
+  right: 8%;
+  line-height: 1.65;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-shadow: 0 1px 5px var(--art-shadow);
+}
+.book-jacket.is-illustrated .jacket-author {
+  top: auto;
+  bottom: 18%;
+  font-size: 6.5cqw;
+  text-shadow: 0 1px 4px var(--art-shadow);
+}
+.book-jacket.is-illustrated .jacket-imprint {
+  bottom: 7%;
+  font-size: 4cqw;
+}
+.book-jacket.is-illustrated {
+  box-shadow:
+    3px 0 5px #180b0a50,
+    inset -2px 0 #f5dfb330;
+}

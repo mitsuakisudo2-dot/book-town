@@ -2,6 +2,8 @@
 import { useEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import type { Book, Reader } from "../lib/types";
 import Image from "next/image";
+import { bookArt } from "../lib/book-art";
+import "./illustrated-jackets.css";
 const shapes: Record<string, ReactNode> = {
   book: (
     <>
@@ -185,24 +187,36 @@ export function BookJacket({
   book,
   className = "",
   onClick,
+  illustrated = false,
 }: {
   book: Book;
   className?: string;
   onClick?: () => void;
+  illustrated?: boolean;
 }) {
+  const art = illustrated ? bookArt(book) : null;
+  className += illustrated ? " is-illustrated" : "";
   const style = {
     background: book.color,
-    color: book.ink,
+    color: art?.ink ?? book.ink,
     "--jacket-ink": book.ink,
+    "--art-x": art?.x,
+    "--art-y": art?.y,
+    "--art-shade": art?.light ? "#f6f0dc50" : "#101e3580",
+    "--art-shadow": art?.light ? "#f5ecce" : "#10252d",
   } as CSSProperties;
   const content = (
     <>
       <span className="jacket-edge" />
-      <span className={`jacket-art pattern-${book.pattern % 6}`}>
-        <i />
-        <i />
-        <i />
-      </span>
+      {illustrated ? (
+        <span className="jacket-illustration" />
+      ) : (
+        <span className={`jacket-art pattern-${book.pattern % 6}`}>
+          <i />
+          <i />
+          <i />
+        </span>
+      )}
       <span className="jacket-series">BOOK TOWN EDITIONS</span>
       <span className="jacket-title">{book.title}</span>
       <span className="jacket-author">{book.author}</span>

@@ -11,15 +11,18 @@ import Link from "next/link";
 import Image from "next/image";
 import { Icon, Modal, ReaderAvatar } from "./ui";
 import { BookInHand } from "./BookInHand";
-import { StoreCanvas } from "./StoreCanvas";
+import { StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { ShelfZoom } from "./ShelfZoom";
 import { bookPop, objectById } from "../lib/store-scene";
 import {
   publicScenePops,
   publicWalkShops,
   readingEntries,
-  woodScene,
 } from "../lib/store-scene-adapter";
+import {
+  hasPublicSceneBooks,
+  resolveStoreScene,
+} from "../lib/store-customization";
 import {
   clearVisits,
   startWalk,
@@ -35,7 +38,7 @@ import "./walk.css";
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
   | { kind: "zoom"; rowId: string; initialId?: string }
-  | { kind: "pop"; text: string; title: string }
+  | { kind: "pop"; text: string; title: string; stamp?: string }
   | { kind: "message" }
   | { kind: "history" }
   | null;
@@ -56,27 +59,36 @@ export function WalkView({
     walk = saved.state,
     update = saved.update,
     ready = saved.ready;
-  const shops = useMemo(
-    () =>
-      orderedStores ??
+  const shops = useMemo(() => {
+    if (orderedStores) return orderedStores;
+    const publicIds = new Set(
       publicWalkShops({
         books: state.books,
         shops: state.shops,
         ownShop: state.ownShop,
-      }),
-    [orderedStores, state.books, state.shops, state.ownShop],
-  );
+      }).map((s) => s.id),
+    );
+    return [...state.shops, ...(state.ownShop ? [state.ownShop] : [])].filter(
+      (shop) => {
+        const override = saved.scenes.find((s) => s.storeId === shop.id);
+        return override
+          ? hasPublicSceneBooks(override, state.books)
+          : publicIds.has(shop.id);
+      },
+    );
+  }, [orderedStores, state.books, state.shops, state.ownShop, saved.scenes]);
   const ids = useMemo(() => shops.map((s) => s.id), [shops]);
   const scenes = useMemo(
     () =>
       shops.map((s) =>
-        woodScene(
+        resolveStoreScene(
           s,
           state.books,
           state.shops.findIndex((shop) => shop.id === s.id),
+          saved.scenes,
         ),
       ),
-    [shops, state.books, state.shops],
+    [shops, state.books, state.shops, saved.scenes],
   );
   const pops = useMemo(() => publicScenePops(scenes), [scenes]);
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -392,6 +404,7 @@ export function WalkView({
                       (state.books.find((b) => b.id === p.bookId)?.title ??
                         "本") + "のPOP",
                     text: bookPop(scene, p.id)?.text ?? "",
+                    stamp: bookPop(scene, p.id)?.stamp,
                   })
                 }
                 onLabel={(o) =>
@@ -560,6 +573,11 @@ export function WalkView({
       {overlay?.kind === "pop" && (
         <Modal title={overlay.title} onClose={close}>
           <p className="walk-full-pop">{overlay.text}</p>
+          {overlay.stamp && (
+            <span className="walk-full-stamp">
+              <StoreStamp name={overlay.stamp} />
+            </span>
+          )}
           {owner && <p className="muted">— {owner.name}</p>}
         </Modal>
       )}

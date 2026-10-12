@@ -284,9 +284,10 @@ check(
   () => {
     const walk = startWalk(emptyWalk(), ["a"]);
     assert.deepEqual(decodeWalk(encodeWalk(walk, [scene])).data, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       walkState: walk,
       sceneOverrides: [scene],
+      legacyBackups: [],
     });
     assert.equal(decodeWalk("{broken").status, "recovered");
     assert.equal(decodeWalk('{"schemaVersion":2}').status, "recovered");

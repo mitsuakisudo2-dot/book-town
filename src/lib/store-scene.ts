@@ -49,6 +49,9 @@ export interface StoreTheme {
 export interface StoreScene {
   schemaVersion: 1;
   storeId: string;
+  /** A managed scene is the source of truth for the immersive store only. */
+  ownerManaged?: boolean;
+  templateId?: string;
   theme: StoreTheme;
   background: {
     kind: "preset" | "uploaded";
@@ -215,6 +218,13 @@ export function validateScene(
     !scene.background
   )
     return ["invalid scene envelope"];
+  if (
+    scene.ownerManaged !== undefined &&
+    typeof scene.ownerManaged !== "boolean"
+  )
+    errors.push("invalid managed state");
+  if (scene.templateId !== undefined && typeof scene.templateId !== "string")
+    errors.push("invalid template");
   const validRect = (r: Rect) =>
     r &&
     [r.x, r.y, r.w, r.h, r.rotation].every(Number.isFinite) &&
@@ -248,6 +258,12 @@ export function validateScene(
       continue;
     }
     ids.add(o.id);
+    if (o.isPublic !== undefined && typeof o.isPublic !== "boolean")
+      errors.push(o.id + ": invalid visibility");
+    if (o.placed !== undefined && typeof o.placed !== "boolean")
+      errors.push(o.id + ": invalid placement visibility");
+    if (o.text !== undefined && typeof o.text !== "string")
+      errors.push(o.id + ": invalid text");
     if (!kinds.includes(o.kind)) {
       errors.push(o.id + ": invalid kind");
       continue;
