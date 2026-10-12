@@ -45,7 +45,12 @@ import {
   EMPTY_POST_DRAFT,
   POST_DRAFT_KEY,
 } from "../src/lib/post-draft";
-import { popReactionKey, shelfUsed, type TownState } from "../src/lib/types";
+import {
+  ME_ID,
+  popReactionKey,
+  shelfUsed,
+  type TownState,
+} from "../src/lib/types";
 
 let passed = 0;
 function check(name: string, run: () => void) {
@@ -1279,5 +1284,90 @@ check(
     assert.equal(bookPath("solaris"), "/books/solaris/");
   },
 );
+
+check(
+  "a post folded by readers is covered for everyone, and its writer can mark it",
+  () => {
+    const town = createTownStore(createMemoryRepository());
+    const review = town.actions.createPost({
+      body: "最後の場面で泣いた。",
+      bookId: "solaris",
+    }) as string;
+    const chat = town.actions.createPost({ body: "今日は雨。" }) as string;
+    const fold = (state: TownState, ids: string[]): TownState => ({
+      ...state,
+      posts: state.posts.map((post) =>
+        ids.includes(post.id) ? { ...post, folded: true } : post,
+      ),
+    });
+    const others = town
+      .getSnapshot()
+      .posts.find((post) => post.authorId !== ME_ID && !post.spoiler)!;
+    const state = fold(town.getSnapshot(), [review, chat, others.id]);
+    // Folded posts go behind the door like marked ones.
+    assert.ok(!isSpoilerFor(town.getSnapshot(), others));
+    assert.ok(
+      isSpoilerFor(
+        state,
+        state.posts.find((post) => post.id === others.id)!,
+      ),
+    );
+    assert.ok(
+      bookReviews(state, "solaris").spoilers.some((post) => post.id === review),
+    );
+    assert.ok(
+      !notificationsFor(state).some((notice) =>
+        notice.text.includes(others.body.slice(0, 10)),
+      ),
+    );
+    // The writer hears about it once, not who asked.
+    const notice = notificationsFor(state).find(
+      (entry) => entry.id === "folded:" + review,
+    );
+    assert.ok(notice?.text.includes("「最後の場面で泣いた。」"));
+    assert.ok(
+      notificationsFor(state).some((entry) => entry.id === "folded:" + chat),
+    );
+
+    // Marking works on the writer's own post with a book, and nowhere else.
+    const marking = createTownStore(createMemoryRepository(state));
+    marking.actions.markSpoiler(review);
+    marking.actions.markSpoiler(chat);
+    marking.actions.markSpoiler(others.id);
+    const marked = marking.getSnapshot();
+    const find = (id: string) => marked.posts.find((post) => post.id === id)!;
+    assert.equal(find(review).spoiler, true);
+    assert.equal(find(chat).spoiler, false);
+    assert.equal(find(others.id).spoiler, false);
+    assert.ok(
+      !notificationsFor(marked).some(
+        (entry) => entry.id === "folded:" + review,
+      ),
+    );
+  },
+);
+
+check("a spoiler reply is not quoted in the notice about it", () => {
+  const town = createTownStore(createMemoryRepository());
+  const review = town.actions.createPost({
+    body: "結末に驚いた。",
+    bookId: "solaris",
+  }) as string;
+  const state = town.getSnapshot();
+  const other = state.posts.find((post) => post.authorId !== ME_ID)!;
+  const reply = {
+    ...other,
+    id: "p-spoiler-reply",
+    parentId: review,
+    spoiler: true,
+    body: "海が生きていたとは",
+  };
+  const notice = notificationsFor({
+    ...state,
+    posts: [...state.posts, reply],
+  }).find((entry) => entry.id === "reply:p-spoiler-reply");
+  assert.ok(notice);
+  assert.ok(!notice.text.includes("海が生きていた"));
+});
 
 console.log(`${passed} domain checks passed.`);

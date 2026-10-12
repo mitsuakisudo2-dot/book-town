@@ -736,6 +736,24 @@ export function createTownStore(
         spoilerReports: toggled(state.spoilerReports, postId),
       });
     },
+    markSpoiler(postId) {
+      initialize();
+      const post = state.posts.find((entry) => entry.id === postId);
+      // A spoiler needs a book (or the post it answers) to wait behind.
+      if (
+        !post ||
+        post.authorId !== ME_ID ||
+        post.spoiler ||
+        (post.bookId === null && post.parentId === null)
+      )
+        return;
+      commit({
+        ...state,
+        posts: state.posts.map((entry) =>
+          entry.id === postId ? { ...entry, spoiler: true } : entry,
+        ),
+      });
+    },
   };
 
   // A visitor only looks: every change asks them to sign in instead.

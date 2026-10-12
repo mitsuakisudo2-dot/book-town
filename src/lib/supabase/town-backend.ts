@@ -340,6 +340,11 @@ export async function applyWrite(
           .upsert(write.rows, { onConflict: "id", ...ignore }),
       );
       return;
+    case "mark-spoilers":
+      await settled(
+        client.from("posts").update({ spoiler: true }).in("id", write.ids),
+      );
+      return;
     case "end-sessions":
       for (const row of write.rows)
         await settled(

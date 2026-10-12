@@ -15,10 +15,11 @@ import { requestAccount } from "../lib/visitor";
 import { Icon, Modal } from "./ui";
 import "./report.css";
 
+// A spoiler is asked about with 「ネタバレでは？」 instead, which folds a post
+// rather than hiding it.
 const REASONS: { value: ReportReason; label: string; postsOnly?: boolean }[] = [
   { value: "spam", label: "宣伝・スパム" },
   { value: "harassment", label: "嫌がらせ・攻撃的な言葉" },
-  { value: "spoiler", label: "目印のないネタバレ", postsOnly: true },
   { value: "inappropriate", label: "不適切な内容" },
   { value: "other", label: "その他" },
 ];

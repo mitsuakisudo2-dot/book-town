@@ -46,9 +46,26 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         id: "reply:" + post.id,
         readerId: post.authorId,
         createdAt: post.createdAt,
-        text: `${name(post.authorId)}さんがあなたの投稿に返信しました ${quote(post.body)}`,
+        // A spoiler reply is not quoted where it cannot be covered.
+        text:
+          `${name(post.authorId)}さんがあなたの投稿に返信しました` +
+          (isSpoilerFor(state, post) ? "" : " " + quote(post.body)),
         href: parent.bookId ? bookPath(parent.bookId) : "/profiles/me/",
       });
+  }
+  // Folded by readers' 「ネタバレでは？」: told once and gently, never by whom.
+  for (const post of state.posts) {
+    if (post.authorId !== ME_ID || !post.folded || post.spoiler) continue;
+    const bookId =
+      post.bookId ??
+      state.posts.find((entry) => entry.id === post.parentId)?.bookId;
+    notices.push({
+      id: "folded:" + post.id,
+      readerId: ME_ID,
+      createdAt: post.createdAt,
+      text: `ネタバレかもしれないという声があったので、あなたの投稿${quote(post.body)}をたたんで表示しています`,
+      href: post.parentId && bookId ? bookPath(bookId) : "/profiles/me/",
+    });
   }
   for (const post of mine.values())
     if (post.wants > 0)

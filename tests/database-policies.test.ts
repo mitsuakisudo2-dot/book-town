@@ -701,12 +701,12 @@ async function main() {
         await affects(BEN, "delete from posts where id = $1", [akiReview.id]),
         0,
       );
-      // Posts have no edit policy, so even the author's update changes nothing.
-      assert.equal(
-        await affects(AKI, "update posts set body = '書き換え' where id = $1", [
-          akiReview.id,
-        ]),
-        0,
+      // Words cannot change after posting, not even by their author.
+      await refused(
+        AKI,
+        "update posts set body = '書き換え' where id = $1",
+        [akiReview.id],
+        /permission/,
       );
     },
   );
@@ -787,6 +787,137 @@ async function main() {
       );
     },
   );
+
+  await check(
+    "three 「ネタバレでは？」 fold a post for everyone, and its writer can mark it",
+    async () => {
+      const EMI = "00000000-0000-4000-8000-00000000000e";
+      await db.exec(`insert into auth.users (id) values ('${EMI}')`);
+      await as(
+        EMI,
+        "insert into profiles (id, handle, name) values ($1, 'emi', 'EMI')",
+        [EMI],
+      );
+      const [post] = await as<{ id: string }>(
+        AKI,
+        "insert into posts (author_id, body, book_id) values ($1, '最後の場面で泣いた', $2) returning id",
+        [AKI, book.id],
+      );
+      const folded = async (visitor: Visitor) =>
+        (
+          await as<{ spoiler_folded: boolean }>(
+            visitor,
+            "select spoiler_folded from posts where id = $1",
+            [post.id],
+          )
+        )[0]?.spoiler_folded;
+      const ask = (visitor: string) =>
+        as(
+          visitor,
+          "insert into spoiler_reports (reporter_id, post_id) values ($1, $2)",
+          [visitor, post.id],
+        );
+      await ask(BEN);
+      await ask(CHI);
+      assert.equal(await folded(null), false);
+      await ask(EMI);
+      // Folded, not hidden: everyone still gets the post, and who asked stays theirs.
+      assert.equal(await folded(null), true);
+      assert.equal(await folded(AKI), true);
+      assert.equal(
+        (
+          await as(AKI, "select * from spoiler_reports where post_id = $1", [
+            post.id,
+          ])
+        ).length,
+        0,
+      );
+      // Taking a question back can unfold it.
+      await as(
+        CHI,
+        "delete from spoiler_reports where reporter_id = $1 and post_id = $2",
+        [CHI, post.id],
+      );
+      assert.equal(await folded(BEN), false);
+      await ask(CHI);
+      assert.equal(await folded(BEN), true);
+
+      // Nobody folds by hand, and a new post never starts folded.
+      await refused(
+        AKI,
+        "update posts set spoiler_folded = false where id = $1",
+        [post.id],
+        /permission/,
+      );
+      await refused(
+        AKI,
+        "insert into posts (author_id, body, spoiler_folded) values ($1, '最初から', true)",
+        [AKI],
+        /permission/,
+      );
+
+      // Its writer can add the spoiler mark afterwards; nobody else can, and
+      // the mark is not taken off.
+      assert.equal(
+        await affects(BEN, "update posts set spoiler = true where id = $1", [
+          post.id,
+        ]),
+        0,
+      );
+      assert.equal(
+        await affects(AKI, "update posts set spoiler = true where id = $1", [
+          post.id,
+        ]),
+        1,
+      );
+      await refused(
+        AKI,
+        "update posts set spoiler = false where id = $1",
+        [post.id],
+        /row-level security/,
+      );
+      // A post without a book has no door to wait behind.
+      await refused(
+        AKI,
+        "update posts set spoiler = true where id = $1",
+        [akiChat.id],
+        /check constraint/,
+      );
+      // Deleting a folded post takes its questions with it.
+      assert.equal(
+        await affects(AKI, "delete from posts where id = $1", [post.id]),
+        1,
+      );
+      assert.equal(
+        (
+          await db.query("select * from spoiler_reports where post_id = $1", [
+            post.id,
+          ])
+        ).rows.length,
+        0,
+      );
+    },
+  );
+
+  await check("a report of a spoiler never hides a post outright", async () => {
+    const [post] = await as<{ id: string }>(
+      AKI,
+      "insert into posts (author_id, body, book_id) values ($1, '終盤の話', $2) returning id",
+      [AKI, book.id],
+    );
+    for (const visitor of [BEN, CHI, "00000000-0000-4000-8000-00000000000e"])
+      await as(
+        visitor,
+        "insert into reports (reporter_id, target_kind, target_id, reason) values ($1, 'post', $2, 'spoiler')",
+        [visitor, post.id],
+      );
+    assert.equal(
+      (await as(null, "select id from posts where id = $1", [post.id])).length,
+      1,
+    );
+    await as(AKI, "delete from posts where id = $1", [post.id]);
+    await db.exec(`delete from reports where target_id = '${post.id}'`);
+  });
 
   await check("follows, shop reactions and saved shops", async () => {
     await as(

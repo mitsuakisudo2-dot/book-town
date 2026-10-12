@@ -95,6 +95,7 @@ const post = (
   body: "炎の色が忘れられない。",
   book_id: null,
   spoiler: false,
+  spoiler_folded: false,
   parent_id: null,
   reading_mode: null,
   created_at: at,
@@ -463,6 +464,59 @@ async function main() {
     const deleted = planWrites(next, before, ids);
     assert.deepEqual(kinds(deleted), ["delete-posts"]);
   });
+
+  await check(
+    "a post folded by readers comes in folded; marking it is written",
+    () => {
+      const town = townFromRows(
+        rows({
+          posts: [
+            post("00000000-0000-4000-8000-0000000000e1", BEN, {
+              spoiler_folded: true,
+            }),
+            // Once marked, it is simply a spoiler.
+            post("00000000-0000-4000-8000-0000000000e2", AKI, {
+              spoiler: true,
+              spoiler_folded: true,
+            }),
+            post("00000000-0000-4000-8000-0000000000e3", AKI),
+          ],
+        }),
+        ids,
+      );
+      assert.deepEqual(
+        town.posts.map((entry) => [entry.id.slice(-2), entry.folded]),
+        [
+          ["e1", true],
+          ["e2", undefined],
+          ["e3", undefined],
+        ],
+      );
+
+      const before = base();
+      const mine = {
+        id: "00000000-0000-4000-8000-0000000000f1",
+        authorId: ME_ID,
+        body: "最後の場面で泣いた。",
+        bookId: "00000000-0000-4000-8000-0000000000b1",
+        spoiler: false,
+        folded: true,
+        parentId: null,
+        createdAt: at,
+        likes: 0,
+        wants: 0,
+        readingMode: null,
+      };
+      const folded = { ...before, posts: [...before.posts, mine] };
+      const marked = {
+        ...folded,
+        posts: [...before.posts, { ...mine, spoiler: true }],
+      };
+      assert.deepEqual(planWrites(folded, marked, ids), [
+        { kind: "mark-spoilers", ids: [mine.id] },
+      ]);
+    },
+  );
 
   await check("follows and marks become rows of their own tables", () => {
     const before = base();
