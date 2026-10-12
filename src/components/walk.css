@@ -1256,7 +1256,7 @@
   height: auto;
   padding: calc(var(--walk-u) * 1.5) calc(var(--walk-u) * 1.8) var(--walk-u)
     calc(var(--walk-u) * 2.1);
-  font-size: max(6px, calc(var(--walk-u) * 1.55));
+  font-size: max(7px, calc(var(--walk-u) * 1.55));
   line-height: 1.6;
   letter-spacing: -0.04em;
 }
@@ -1997,4 +1997,19 @@
 .walk-furniture.is-table .walk-row-label {
   top: auto;
   bottom: 100%;
+}
+/* "つづき" on the left of the floor POP when its words are cut short. */
+.walk-ownerPop small.walk-floor-pop-foot {
+  align-self: stretch;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+}
+.walk-floor-pop-foot > span:last-child {
+  margin-left: auto;
+}
+.walk-floor-pop-more {
+  font-size: 0.85em;
+  border-bottom: 1px dotted rgba(82, 51, 34, 0.7);
+  opacity: 0.85;
 }
