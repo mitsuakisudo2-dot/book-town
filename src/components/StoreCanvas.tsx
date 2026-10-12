@@ -730,7 +730,11 @@ export function StoreCanvas({
           <small>あなたにだけ見えています</small>
         </Link>
       ) : null;
-    if (o.kind === "ownerPop")
+    if (o.kind === "ownerPop") {
+      const words = (o.text ?? "").trim();
+      const excerpt = popExcerpt(words, 30);
+      // Words cut short (or too long for three lines) say there is more to read.
+      const more = excerpt.length < words.length || words.length > 45;
       return (
         <button
           key={o.id}
@@ -738,12 +742,16 @@ export function StoreCanvas({
           style={pose(o)}
           onClick={() => onLabel(o)}
         >
-          <span className="walk-floor-pop-text">
-            {popExcerpt(o.text ?? "", 30)}
-          </span>
-          {signature && <small>— {signature}</small>}
+          <span className="walk-floor-pop-text">{excerpt}</span>
+          {(more || signature) && (
+            <small className="walk-floor-pop-foot">
+              {more && <span className="walk-floor-pop-more">つづき</span>}
+              {signature && <span>— {signature}</span>}
+            </small>
+          )}
         </button>
       );
+    }
     return (
       <button
         key={o.id}

@@ -663,6 +663,8 @@ try {
       await expect(page.locator(".walk-ownerPop")).toContainText(
         "一頁ぶん、遠回り。",
       );
+      // Short words are shown whole, with nothing more to read.
+      await expect(page.locator(".walk-floor-pop-more")).toHaveCount(0);
       // Without words of the owner's, the floor POP invites only the owner.
       await go("/my-shop/");
       await page.getByText("書店の看板と紹介").click();
