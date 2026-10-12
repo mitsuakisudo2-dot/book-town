@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { WalkBackend, WalkData } from "../walk-backend";
+import {
+  emptyWalkData,
+  type WalkBackend,
+  type WalkData,
+} from "../walk-backend";
 import {
   planWalkWrites,
+  sceneFromRow,
   walkFromRows,
   type WalkIds,
   type WalkRows,
@@ -196,5 +201,40 @@ export function accountWalkBackend(
     writable: () => true,
     watch: sync.watch,
     close: sync.close,
+  };
+}
+
+/**
+ * The walk for a visitor who is not signed in: the public part of every open
+ * shop's scene. Where they walk stays on this page; likes and words ask them
+ * to sign in first (walk-store.ts).
+ */
+export function visitorWalkBackend(client: Client): WalkBackend {
+  return {
+    kind: "visitor",
+    async load() {
+      try {
+        const rows = await all(
+          client
+            .from("shops")
+            .select("id, public_scene")
+            .eq("is_open", true)
+            .not("public_scene", "is", null)
+            .limit(LIMIT),
+        );
+        const scenes = rows.flatMap((row) => {
+          const scene = sceneFromRow(row.public_scene, row.id);
+          return scene ? [scene] : [];
+        });
+        return {
+          data: { ...emptyWalkData(), scenes },
+          status: "saved" as const,
+        };
+      } catch {
+        return { data: emptyWalkData(), status: "unavailable" as const };
+      }
+    },
+    save: () => "saved",
+    writable: () => true,
   };
 }

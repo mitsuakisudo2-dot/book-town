@@ -129,6 +129,34 @@ const shot = (name) =>
 
 try {
   await check(
+    "a signed-out visitor walks the 見本 town and is invited to sign in to follow",
+    async () => {
+      await page.goto(base + "/walk/");
+      await expect(page.getByText("見本の書店").first()).toBeVisible();
+      const follow = page.getByRole("button", { name: "この書店をフォロー" });
+      await follow.click();
+      const invite = page.getByRole("heading", {
+        name: "本の街の住人になりませんか",
+      });
+      await expect(invite).toBeVisible();
+      // Nothing was followed, so no message says it was.
+      await expect(page.getByText(/をフォローしました/)).toHaveCount(0);
+      await shot("0-invite");
+      await page.getByRole("button", { name: "このまま見る" }).click();
+      await expect(invite).toHaveCount(0);
+      await expect(follow).toHaveAttribute("aria-pressed", "false");
+      await page.goto(base + "/profiles/me/");
+      await expect(
+        page.getByRole("heading", {
+          name: "あなたのページは、ログインしてから。",
+        }),
+      ).toBeVisible();
+      expect(townReads).toContain("/rest/v1/shops");
+      townReads.length = 0;
+    },
+  );
+
+  await check(
     "a signed-out visitor finds the sign-in link on a phone",
     async () => {
       await page.goto(base + "/");
@@ -231,7 +259,7 @@ try {
     await page.goto(base + "/profiles/me/");
     await expect(page.getByRole("heading", { name: "アキ" })).toBeVisible();
     await expect(page.getByText("@aki_books")).toBeVisible();
-    await expect(page.getByText("デモの読書家")).toHaveCount(0);
+    await expect(page.getByText(/(デモ|見本)の読書家/)).toHaveCount(0);
     await expect(page.locator(".persistence-warning")).toBeHidden();
     await shot("5-town");
   });

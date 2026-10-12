@@ -6,7 +6,12 @@ export type RecordKind = "post" | "reading" | "book" | "shelf" | "item";
 
 /** What the town store saves through: this browser, or the person's account. */
 export interface TownBackend {
-  readonly kind: "local" | "account" | "unavailable";
+  /**
+   * Where the town comes from: the demo in this browser, the signed-in
+   * person's account, a read-only view for a visitor who is not signed in, or
+   * nothing (the account could not be read).
+   */
+  readonly kind: "local" | "account" | "visitor" | "unavailable";
   /** A new id for a record, unique among `existing`. */
   newId(kind: RecordKind, existing: string[], isbn?: string | null): string;
   /** The town to show; an account's town arrives later. */

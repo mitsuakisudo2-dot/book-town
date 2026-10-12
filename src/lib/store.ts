@@ -12,6 +12,7 @@ import {
 import { emptyTown } from "./town-remote";
 import { supabaseConfigured } from "./supabase/config";
 import { followAccount } from "./town-session";
+import { requestAccount } from "./visitor";
 import { createRegisteredBook, normalizeIsbn } from "./books";
 import { cleanLinks } from "./links";
 import { handleProblem, normalizeHandle } from "./handles";
@@ -66,7 +67,17 @@ export interface TownStoreOptions {
    * switches with switchTo(). Until then the town is empty and loading.
    */
   follow?: (switchTo: (backend: TownBackend) => void) => void;
+  /** Called when a visitor who is not signed in tries to change something. */
+  onVisitor?: () => void;
 }
+
+/** Actions a visitor's page runs by itself, which need no invitation. */
+const QUIET_ACTIONS = new Set<keyof TownActions>(["markNotificationsSeen"]);
+/** Actions that answer whether they did anything. */
+const ANSWERING_ACTIONS = new Set<keyof TownActions>([
+  "addShelfBook",
+  "changeDisplay",
+]);
 
 export function createTownStore(
   source: TownRepository | TownBackend = localTownRepository,
@@ -662,8 +673,22 @@ export function createTownStore(
     },
   };
 
+  // A visitor only looks: every change asks them to sign in instead.
+  const gated = Object.fromEntries(
+    (Object.keys(actions) as (keyof TownActions)[]).map((name) => [
+      name,
+      (...args: unknown[]) => {
+        initialize();
+        if (backend.kind !== "visitor")
+          return (actions[name] as (...a: unknown[]) => unknown)(...args);
+        if (!QUIET_ACTIONS.has(name)) options.onVisitor?.();
+        return ANSWERING_ACTIONS.has(name) ? false : null;
+      },
+    ]),
+  ) as unknown as TownActions;
+
   return {
-    actions,
+    actions: gated,
     initialize,
     /** Moves the town to another backend, e.g. after signing in or out. */
     use: (next: TownBackend) => {
@@ -690,7 +715,9 @@ export function createTownStore(
 export const townStore = createTownStore(
   localTownRepository,
   undefined,
-  supabaseConfigured ? { follow: followAccount } : {},
+  supabaseConfigured
+    ? { follow: followAccount, onVisitor: requestAccount }
+    : {},
 );
 export const townActions = townStore.actions;
 export const actions = townActions;

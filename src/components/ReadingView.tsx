@@ -170,7 +170,7 @@ function ReadersNow({
                     <b>
                       {reader.id === ME_ID ? "あなた" : reader.name}
                       {reader.id !== ME_ID && !isDatabaseId(reader.id) && (
-                        <small className="demo-tag">デモの読書家</small>
+                        <small className="demo-tag">見本の読書家</small>
                       )}
                     </b>
                     <small>

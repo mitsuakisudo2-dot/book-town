@@ -3,8 +3,14 @@ import { accountStore } from "./account-session";
 import { localTownRepository } from "./repository";
 import { getSupabase } from "./supabase/client";
 import type { Database } from "./supabase/database.generated";
-import { accountTownBackend } from "./supabase/town-backend";
-import { accountWalkBackend } from "./supabase/walk-backend";
+import {
+  accountTownBackend,
+  visitorTownBackend,
+} from "./supabase/town-backend";
+import {
+  accountWalkBackend,
+  visitorWalkBackend,
+} from "./supabase/walk-backend";
 import {
   localBackend,
   unavailableBackend,
@@ -20,13 +26,15 @@ import {
 interface Backends<B> {
   local(): B;
   unavailable(): B;
+  visitor(client: SupabaseClient<Database>): B;
   account(client: SupabaseClient<Database>, userId: string): B;
 }
 
 /**
  * Keeps a store on the right backend as the account changes: the signed-in
- * person's data in Supabase, or the demo in this browser when nobody is signed
- * in. Waits while the account is still being checked.
+ * person's data in Supabase, the public town to look at when nobody is signed
+ * in, or the demo in this browser when the site has no Supabase. Waits while
+ * the account is still being checked.
  */
 function followAccountWith<B>(
   switchTo: (backend: B) => void,
@@ -42,12 +50,15 @@ function followAccountWith<B>(
         ? "account:" + account.user.id
         : account.status === "unavailable"
           ? "unavailable"
-          : "local";
+          : client
+            ? "visitor"
+            : "local";
     if (key === current) return;
     current = key;
     if (account.status === "signed-in" && client)
       switchTo(backends.account(client, account.user.id));
     else if (account.status === "unavailable") switchTo(backends.unavailable());
+    else if (client) switchTo(backends.visitor(client));
     else switchTo(backends.local());
   };
   accountStore.subscribe(sync);
@@ -59,6 +70,7 @@ export function followAccount(switchTo: (backend: TownBackend) => void) {
   followAccountWith(switchTo, {
     local: () => localBackend(localTownRepository),
     unavailable: () => unavailableBackend(emptyTown()),
+    visitor: visitorTownBackend,
     account: (client, userId) => accountTownBackend(client, userId),
   });
 }
@@ -68,6 +80,7 @@ export function followAccountWalk(switchTo: (backend: WalkBackend) => void) {
   followAccountWith(switchTo, {
     local: localWalkBackend,
     unavailable: unavailableWalkBackend,
+    visitor: visitorWalkBackend,
     account: (client, userId) => accountWalkBackend(client, userId),
   });
 }

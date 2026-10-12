@@ -182,7 +182,7 @@ export function ProfileView({
           <p className="profile-eyebrow">
             READER IN BOOK TOWN{" "}
             {!isSelf && !isDatabaseId(reader.id) && (
-              <span className="profile-demo">デモの読書家</span>
+              <span className="profile-demo">見本の読書家</span>
             )}
           </p>
           <h1 id="profile-name">{reader.name}</h1>

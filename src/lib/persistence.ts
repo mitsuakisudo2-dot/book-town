@@ -31,6 +31,10 @@ export function saveWarning(
 ): string | null {
   if (where === "unavailable")
     return "アカウントを読み込めませんでした。通信の状態を確かめて、ページを読み込み直してください。";
+  if (where === "visitor")
+    return status === "unavailable"
+      ? "本の街の新しい様子を読み込めませんでした。いまは見本の書店だけを表示しています。"
+      : null;
   if (status === "unavailable")
     return where === "local"
       ? "このブラウザに保存できません。ブラウザの保存設定を確認してください。今の操作はページを閉じると失われます。"

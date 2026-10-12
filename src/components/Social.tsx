@@ -515,7 +515,7 @@ export function PostCard({
           </Link>
           <span className="post-handle">@{author.handle}</span>
           {!mine && !isDatabaseId(author.id) && (
-            <small className="demo-tag">デモの読書家</small>
+            <small className="demo-tag">見本の読書家</small>
           )}
           <time dateTime={post.createdAt}>
             {formatPostTime(post.createdAt)}

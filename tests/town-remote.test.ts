@@ -12,6 +12,8 @@ import {
   type ShopRow,
   type Write,
 } from "../src/lib/town-remote";
+import { demoPosts, demoShops } from "../src/lib/data";
+import { withSamples } from "../src/lib/samples";
 import {
   ME_ID,
   OWN_SHOP_ID,
@@ -537,6 +539,58 @@ async function main() {
     assert.equal(town.me.handle, "aki");
     assert.equal(town.ownShop, null);
     assert.deepEqual(town.shops, []);
+  });
+
+  await check("a visitor sees every open shop, and owns none", () => {
+    const town = townFromRows(
+      rows({
+        shops: [shop(AKI_SHOP, AKI), shop(BEN_SHOP, BEN, { is_open: false })],
+        posts: [post("00000000-0000-4000-8000-0000000000f1", AKI)],
+      }),
+      { userId: null, shopId: "" },
+    );
+    assert.equal(town.me.name, "ゲスト");
+    assert.equal(town.ownShop, null);
+    assert.deepEqual(
+      town.shops.map((entry) => [entry.id, entry.ownerId]),
+      [[AKI_SHOP, AKI]],
+    );
+    assert.deepEqual(
+      town.readers.map((reader) => reader.id),
+      [AKI, BEN],
+    );
+    assert.equal(town.posts[0].authorId, AKI);
+    // Nobody's book is the visitor's own, so none shows its own summary.
+    assert.ok(
+      town.books.every((entry) => entry.summary.startsWith("読書家が")),
+    );
+  });
+
+  await check("見本 joins the real town, and the real one wins", () => {
+    const real = townFromRows(
+      rows({
+        shops: [shop(BEN_SHOP, BEN), shop(demoShops[0].id, AKI)],
+      }),
+      { userId: null, shopId: "" },
+    );
+    const town = withSamples(real);
+    const ids = town.shops.map((entry) => entry.id);
+    assert.equal(new Set(ids).size, ids.length);
+    assert.equal(
+      town.shops.find((entry) => entry.id === demoShops[0].id)?.demo,
+      false,
+    );
+    assert.ok(town.shops.some((entry) => entry.demo));
+    assert.equal(town.posts.length, real.posts.length + demoPosts.length);
+    assert.deepEqual(
+      town.posts.map((entry) => entry.createdAt),
+      town.posts
+        .map((entry) => entry.createdAt)
+        .sort((a, b) => Date.parse(a) - Date.parse(b)),
+    );
+    // The samples are copies: changing the town never changes the demo data.
+    town.shops[town.shops.length - 1].name = "変えた";
+    assert.notEqual(demoShops.at(-1)?.name, "変えた");
   });
 
   console.log(passed + " town sync checks passed");

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -36,6 +36,8 @@ import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
 import { WalkView } from "./WalkView";
 import { profilePath, shopPath } from "../lib/paths";
+import { AccountInvite, VisitorPage } from "./VisitorInvite";
+import { accountRequested } from "../lib/visitor";
 
 type View =
   | "town"
@@ -113,8 +115,25 @@ export default function TownApp({
     window.addEventListener("hashchange", load);
     return () => window.removeEventListener("hashchange", load);
   }, [view]);
-  const shared = { state, actions, notify: setToast };
+  // When a visitor's change became an invitation to sign in, nothing was done,
+  // so the message saying it was done stays quiet.
+  const notify = useCallback((message: string) => {
+    if (!accountRequested()) setToast(message);
+  }, []);
+  const shared = { state, actions, notify };
   const section = sectionOf(view, selectedId);
+  // A visitor who is not signed in has no pages of their own yet.
+  const visitor = savedIn === "visitor";
+  const ownPage =
+    view === "editor"
+      ? "shop"
+      : view === "wishlist"
+        ? "wishlist"
+        : view === "notifications"
+          ? "notifications"
+          : view === "profile" && (selectedId || "me") === "me"
+            ? "profile"
+            : null;
   const reading = Boolean(activeSession(state));
   const unread = unreadCount(state);
   return (
@@ -159,14 +178,27 @@ export default function TownApp({
           </p>
           <small>本を愛する人を、孤独にしない。</small>
         </div>
-        <Link href="/profiles/me/" className="side-me">
-          <ReaderAvatar reader={state.me} size={36} />
-          <span>
-            <b>{state.me.name}</b>
-            <small>あなたのプロフィール</small>
-          </span>
-          <Icon name="chevron" size={15} />
-        </Link>
+        {visitor ? (
+          <Link href="/login/" className="side-me">
+            <span className="side-me-guest" aria-hidden="true">
+              <Icon name="user" size={18} />
+            </span>
+            <span>
+              <b>ログイン</b>
+              <small>見るだけなら、このままで</small>
+            </span>
+            <Icon name="chevron" size={15} />
+          </Link>
+        ) : (
+          <Link href="/profiles/me/" className="side-me">
+            <ReaderAvatar reader={state.me} size={36} />
+            <span>
+              <b>{state.me.name}</b>
+              <small>あなたのプロフィール</small>
+            </span>
+            <Icon name="chevron" size={15} />
+          </Link>
+        )}
       </aside>
       <div className="town-workspace">
         <header className="town-topbar">
@@ -215,20 +247,24 @@ export default function TownApp({
                 </span>
               )}
             </Link>
-            <Link
-              href="/profiles/me/"
-              className="top-avatar"
-              aria-label="自分のプロフィール"
-            >
-              <ReaderAvatar reader={state.me} size={31} />
-            </Link>
+            {!visitor && (
+              <Link
+                href="/profiles/me/"
+                className="top-avatar"
+                aria-label="自分のプロフィール"
+              >
+                <ReaderAvatar reader={state.me} size={31} />
+              </Link>
+            )}
           </div>
         </header>
         <div className="persistence-warning" role="status" hidden={!warning}>
           {warning}
         </div>
         <main className={"town-main view-" + view} key={view + selectedId}>
-          {view === "walk" ? (
+          {visitor && ownPage ? (
+            <VisitorPage page={ownPage} />
+          ) : view === "walk" ? (
             <WalkView {...shared} />
           ) : view === "town" ? (
             <HomeView {...shared} tab="shelves">
@@ -293,7 +329,16 @@ export default function TownApp({
       {about && (
         <Modal title="Book Townへようこそ" onClose={() => setAbout(false)}>
           <p className="modal-lead">読書家の小さな書店が集まる、本の街。</p>
-          {savedIn === "local" ? (
+          {savedIn === "visitor" ? (
+            <>
+              <p className="muted">
+                「見本」と書かれた書店と読書家は、街の雰囲気を伝えるための架空のデータです。本の表紙・背表紙はオリジナルの仮デザインを使っています。
+              </p>
+              <div className="note-box">
+                見るだけなら、ログインはいりません。本屋を開いたり、投稿したり、好きを届けたりするときに、ログインをお願いします。
+              </div>
+            </>
+          ) : savedIn === "local" ? (
             <>
               <p className="muted">
                 店主と書店は架空のデモデータです。本の表紙・背表紙はオリジナルの仮デザインを使っています。
@@ -321,6 +366,7 @@ export default function TownApp({
           </button>
         </Modal>
       )}
+      <AccountInvite />
     </div>
   );
 }
@@ -503,7 +549,7 @@ function ShopView({
         {/* Only owners see how many follow them; the demo shows its own numbers. */}
         {shop.demo ? (
           <p className="shop-social-note">
-            デモ書店 · {shop.followers + Number(followed)}人がフォロー
+            見本の書店 · {shop.followers + Number(followed)}人がフォロー
           </p>
         ) : shop.ownerId === ME_ID ? (
           <p className="shop-social-note">
@@ -619,7 +665,7 @@ function BookView({
                 <h3>{shop.name}</h3>
                 <Icon name="arrow" size={16} />
               </Link>
-              {shop.demo && <small className="demo-tag">デモ書店</small>}
+              {shop.demo && <small className="demo-tag">見本</small>}
             </div>
             <Link href={shopPath(shop.id, shelf.id)} className="stockist-shelf">
               <Icon name="book" size={14} />「{shelf.name}」の棚
