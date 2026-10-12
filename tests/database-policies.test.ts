@@ -11,7 +11,7 @@ async function main() {
   const db = new PGlite();
 
   // The parts of Supabase the migrations rely on: its roles, auth.users and auth.uid().
-  await db.exec(`
+  const supabase = `
     create role anon nologin;
     create role authenticated nologin;
     create schema auth;
@@ -21,11 +21,14 @@ async function main() {
     $$;
     grant usage on schema auth to anon, authenticated;
     grant usage on schema public to anon, authenticated;
-  `);
+  `;
+  await db.exec(supabase);
 
   const migrations = join(__dirname, "..", "supabase", "migrations");
-  for (const file of readdirSync(migrations).sort())
-    await db.exec(readFileSync(join(migrations, file), "utf8"));
+  const files = readdirSync(migrations).sort();
+  const migrate = (file: string) =>
+    readFileSync(join(migrations, file), "utf8");
+  for (const file of files) await db.exec(migrate(file));
 
   const AKI = "00000000-0000-4000-8000-00000000000a";
   const BEN = "00000000-0000-4000-8000-00000000000b";
@@ -981,6 +984,35 @@ async function main() {
     );
     assert.equal(orphan.rows[0].n, 1);
   });
+
+  await check(
+    "shops saved before the public copy existed get one when it arrives",
+    async () => {
+      const earlier = new PGlite();
+      await earlier.exec(supabase);
+      const copy = files.indexOf("20261013000000_shop_public_copy.sql");
+      for (const file of files.slice(0, copy))
+        await earlier.exec(migrate(file));
+      await earlier.exec(`
+        insert into auth.users (id) values ('${AKI}');
+        insert into profiles (id, handle, name) values ('${AKI}', 'aki', 'AKI');
+        insert into shops (id, owner_id, name)
+          values ('00000000-0000-4000-8000-0000000000f1', '${AKI}', '夜の本屋');
+        insert into shop_private (shop_id, shelves)
+          values ('00000000-0000-4000-8000-0000000000f1',
+            '[{"id":"s1","isPublic":true},{"id":"s2","isPublic":false}]');
+      `);
+      for (const file of files.slice(copy)) await earlier.exec(migrate(file));
+      const shop = await earlier.query<{ public_shelves: { id: string }[] }>(
+        "select public_shelves from shops",
+      );
+      assert.deepEqual(
+        shop.rows[0].public_shelves.map((shelf) => shelf.id),
+        ["s1"],
+      );
+      await earlier.close();
+    },
+  );
 
   console.log(passed + " database policy checks passed");
 }

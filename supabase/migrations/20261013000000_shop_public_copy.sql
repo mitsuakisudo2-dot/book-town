@@ -26,6 +26,10 @@ create trigger shop_private_copy_public_shelves
   after insert or update of shelves on public.shop_private
   for each row execute function public.copy_public_shelves();
 
+-- Shops saved before this file (from the preview of this change) get their
+-- public copy now. Naming the column in SET fires the trigger for every row.
+update public.shop_private set shelves = shelves;
+
 -- public_shelves and public_scene are written by the database only.
 -- (public_scene gets the same treatment when the store scene moves here.)
 revoke insert, update on public.shops from authenticated;
