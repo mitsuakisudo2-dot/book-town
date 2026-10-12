@@ -4,6 +4,8 @@
 
 読書の終わりを、交流の始まりに。あなたの愛した一冊が、誰かの愛する一冊になる。
 
+Claude / Codex向けの作業引き継ぎは [CLAUDE.md](CLAUDE.md) と [引き継ぎ資料・画面画像](docs/CLAUDE_HANDOFF.md) を参照してください。Phase 2の対象ブランチは `feat/woodshop-phase2-20261012` です。
+
 ## 起動
 
 Node.js 22.13以降（動作確認: 24.19）とpnpm 11を用意してください。
