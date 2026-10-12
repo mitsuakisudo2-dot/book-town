@@ -368,6 +368,76 @@ async function main() {
     },
   );
 
+  await check(
+    "after a push to main, production is built only when Vercel missed it",
+    async () => {
+      const SHA = "cd6118cc064fdea09546208810d9a168f9487570";
+      let listed: { meta: object; readyState: string }[] = [];
+      const api = await standIn(({ method, url }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (pathname === "/v7/deployments")
+          return {
+            body: {
+              deployments: listed.map((entry, index) => ({
+                uid: "dpl_" + index,
+                created: 0,
+                url: "c.vercel.app",
+                ...entry,
+              })),
+            },
+          };
+        if (method === "POST" && pathname === "/v13/deployments")
+          return {
+            body: { id: "dpl_9", url: "d.vercel.app", readyState: "READY" },
+          };
+        return { status: 404, body: {} };
+      });
+      const env = {
+        VERCEL_API_URL: api.url,
+        VERCEL_TOKEN: "vcp_token_for_tests",
+        VERCEL_TEAM: "booktown1",
+        VERCEL_PROJECT: "book-town-851k",
+        GITHUB_REPOSITORY: "mitsuakisudo2-dot/book-town",
+        DEPLOY_SHA: SHA,
+        ENSURE_WAIT_SECONDS: "0",
+        ENSURE_POLL_SECONDS: "0",
+      };
+      const posts = () => api.seen.filter((s) => s.method === "POST").length;
+
+      listed = [{ meta: { githubCommitSha: SHA }, readyState: "READY" }];
+      const built = await run("scripts/vercel.mjs", ["ensure", "main"], env);
+      assert.equal(built.code, 0, built.output);
+      assert.match(built.output, /Vercel built it/);
+      assert.equal(posts(), 0);
+
+      listed = [
+        { meta: { githubCommitSha: "0".repeat(40) }, readyState: "READY" },
+      ];
+      const missed = await run("scripts/vercel.mjs", ["ensure", "main"], env);
+      assert.equal(missed.code, 0, missed.output);
+      assert.match(missed.output, /did not start cd6118c/);
+      assert.equal(posts(), 1);
+
+      listed = [{ meta: { githubCommitSha: SHA }, readyState: "ERROR" }];
+      const stopped = await run("scripts/vercel.mjs", ["ensure", "main"], env);
+      assert.equal(stopped.code, 0, stopped.output);
+      assert.match(stopped.output, /Vercel stopped/);
+      assert.equal(posts(), 2);
+      const body = api.seen.filter((s) => s.method === "POST")[1].body ?? {};
+      assert.equal(body.target, "production");
+
+      const odd = await run("scripts/vercel.mjs", ["ensure", "main"], {
+        ...env,
+        DEPLOY_SHA: "$(x)",
+      });
+      assert.equal(odd.code, 1);
+      assert.equal(posts(), 2);
+      for (const output of [built.output, missed.output, stopped.output])
+        assert.ok(!output.includes("vcp_token_for_tests"));
+      await api.close();
+    },
+  );
+
   console.log(passed + " hosted settings checks passed");
 }
 
