@@ -3,6 +3,16 @@ import { demoShops } from "../../../lib/data";
 export function generateStaticParams() {
   return [...demoShops.map((s) => ({ id: s.id })), { id: "mine" }];
 }
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  if (id === "mine") return { title: "自分の本屋" };
+  const found = demoShops.find((s) => s.id === id);
+  return { title: found ? found.name : "本屋" };
+}
 export default async function Page({
   params,
 }: {

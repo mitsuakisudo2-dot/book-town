@@ -41,6 +41,8 @@ import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { ReportButton, ReportDialog } from "./Report";
 import { BookFeelings } from "./ReadingRecords";
 import { accountRequested } from "../lib/visitor";
+import { BackLink } from "./BackLink";
+import { notePageShown, noteReplacing } from "../lib/in-town";
 
 type View =
   | "town"
@@ -81,7 +83,9 @@ const links: { href: string; icon: string; label: string; section: Section }[] =
 /** Which item of the main navigation a view belongs to. */
 function sectionOf(view: View, selectedId?: string): Section | null {
   if (view === "walk") return "walk";
-  if (view === "town" || view === "timeline" || view === "shop") return "home";
+  // A shop's page is part of walking the shops, wherever it was opened from.
+  if (view === "shop") return "walk";
+  if (view === "town" || view === "timeline") return "home";
   if (view === "search") return "search";
   if (view === "reading") return "reading";
   if (view === "editor" || view === "wishlist") return "profile";
@@ -104,6 +108,7 @@ export default function TownApp({
   const [toast, setToast] = useState("");
   const [search, setSearch] = useState("");
   const [about, setAbout] = useState(false);
+  useEffect(() => notePageShown(), [view, selectedId]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 3500);
@@ -405,9 +410,13 @@ function ShopView({
     enabled: canBrowse && !selected,
     exclude:
       'button,a,input,textarea,select,summary,dialog,[role="dialog"],.shelf-scroll,.shop-shelf-index,[data-book-rail]',
+    // Walking along the row is one visit: going back leaves the row
+    // instead of stepping back through each shop.
     onSwipe(direction) {
       const destination = direction < 0 ? previousShop : nextShop;
-      if (destination) router.push(shopPath(destination.id));
+      if (!destination) return;
+      noteReplacing();
+      router.replace(shopPath(destination.id));
     },
   });
   if (!shop)
@@ -434,23 +443,26 @@ function ShopView({
         {previousShop && (
           <Link
             href={shopPath(previousShop.id)}
+            replace
+            onClick={noteReplacing}
             aria-label={`前の書店：${previousShop.name}`}
           >
             <Icon name="back" size={17} />
             前の書店
           </Link>
         )}
-        <Link href="/" className="shop-journey-home">
-          本の街へ
+        <BackLink className="shop-journey-home" icon={false}>
           {canBrowse && (
             <small>
               {shopIndex + 1} / {publicShops.length} · 左右にスワイプ
             </small>
           )}
-        </Link>
+        </BackLink>
         {nextShop && (
           <Link
             href={shopPath(nextShop.id)}
+            replace
+            onClick={noteReplacing}
             aria-label={`次の書店：${nextShop.name}`}
           >
             次の書店
@@ -640,10 +652,7 @@ function BookView({
   );
   return (
     <>
-      <Link href="/" className="back-link">
-        <Icon name="back" size={16} />
-        本の街へ
-      </Link>
+      <BackLink className="back-link" />
       <section className="book-page-hero">
         <BookJacket book={book} />
         <div>

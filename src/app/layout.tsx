@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "Book Town | 本を読みたくなるSNS",
+  title: {
+    default: "Book Town | 本を読みたくなるSNS",
+    template: "%s | Book Town",
+  },
   description:
     "読書の終わりを、交流の始まりに。あなたの愛した一冊が、誰かの愛する一冊になる。読書家の小さな書店が集まる、本の街。",
   icons: { icon: "/favicon.svg" },
