@@ -58,7 +58,7 @@ export function publicScenePops(scenes: StoreScene[]) {
   );
 }
 /** Rows starting this far into a shelf leave room for a sign beside them. */
-export const SHELF_GUTTER = 0.25;
+export const SHELF_GUTTER = 0.2;
 export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
   const lights = [
     "#ffd293",
@@ -85,11 +85,8 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       blur: 0,
       darkness: 0.2,
     },
-    forbidden: [
-      rect(0, 0, 1, 0.12),
-      rect(0.83, 0.25, 0.17, 0.67),
-      rect(0, 0.925, 1, 0.075),
-    ],
+    // The shop's own controls stand on the floor; the shelf fills the rest.
+    forbidden: [rect(0.54, 0.895, 0.46, 0.105)],
     objects: [],
   };
   scene.objects.push(
@@ -97,7 +94,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       id: "sign",
       kind: "sign",
       parentId: null,
-      rect: rect(0.07, 0.132, 0.7, 0.094, -0.6),
+      rect: rect(0.1, 0.012, 0.8, 0.08, -0.5),
       z: 2,
       text: shop.name,
     },
@@ -105,7 +102,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       id: "greeting",
       kind: "ownerPop",
       parentId: null,
-      rect: rect(0.05, 0.846, 0.6, 0.075, -1.2),
+      rect: rect(0.035, 0.904, 0.48, 0.072, -1),
       z: 5,
       // The tagline hangs on the signboard; the floor POP carries the owner's own words.
       text: shop.description || shop.tagline,
@@ -114,7 +111,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       id: "stamp",
       kind: "stamp",
       parentId: null,
-      rect: rect(0.69, 0.858, 0.09, 0.05, 8),
+      rect: rect(0.912, 0.028, 0.068, 0.038, 8),
       z: 5,
       stamp: variant % 2 ? "coffee" : "plane",
     },
@@ -124,7 +121,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
     id: "main-shelf",
     kind: "furniture",
     parentId: null,
-    rect: rect(0.035, 0.278, 0.77, split ? 0.425 : 0.552),
+    rect: rect(0.02, 0.147, 0.96, split ? 0.53 : 0.738),
     z: 1,
     furnitureType: "shelf",
   };
@@ -134,7 +131,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       id: "table",
       kind: "furniture",
       parentId: null,
-      rect: rect(0.1, 0.718, 0.69, 0.115),
+      rect: rect(0.06, 0.69, 0.88, 0.195),
       z: 2,
       furnitureType: "table",
     });
@@ -142,7 +139,8 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
   const source = shelves.flatMap((shelf) =>
     shelf.items.map((item) => ({ item, shelf })),
   );
-  const rowCount = split ? 3 : 4;
+  // Few, tall rows: each book is drawn large rather than adding more books.
+  const rowCount = split ? 2 : 3;
   for (let i = 0; i < rowCount; i++)
     scene.objects.push({
       id: "row-" + i,
@@ -163,7 +161,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
             Math.floor((i * shelves.length) / rowCount),
           )
         ]?.name ?? "本のある場所",
-      bookHeight: split ? 0.105 : 0.117,
+      bookHeight: 0.19,
       gap: 0.008,
       mode: variant === 1 ? "spine" : variant === 2 ? "face" : "mixed",
       isPublic: true,
@@ -176,7 +174,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       rect: rect(0.05, 0, 0.9, 0.86),
       z: 3,
       text: "今日、手に取りたい本",
-      bookHeight: 0.093,
+      bookHeight: 0.15,
       gap: 0.008,
       mode: "face",
       isPublic: true,
@@ -225,7 +223,8 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
           pool[(i + variant * 3) % pool.length],
           row.id,
           id,
-          row.id === "row-0" && variant !== 1 ? "face" : "spine",
+          // Spines only fill what the shop's own face-out books leave open.
+          "spine",
           100 + i,
         );
         if (!objectById(scene, id)!.parentId) break;

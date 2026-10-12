@@ -146,12 +146,14 @@ try {
     await page.keyboard.press("Escape");
   });
   await check(
-    "thin spine opens shelf magnification and book closes back to it",
+    "row magnifier opens shelf magnification and book closes back to it",
     async () => {
-      const spine = page
-        .locator(".walk-book.is-spine [data-placement]")
-        .first();
-      await spine.click();
+      // Spines are now wide enough to open directly; the magnifier still
+      // brings a whole row close.
+      await page
+        .getByRole("button", { name: /の段を近くで見る$/ })
+        .first()
+        .click();
       await expect(page.locator(".walk-close-shelf")).toBeVisible();
       await page.locator(".walk-close-book").first().click();
       await expect(page.locator(".bh-dialog")).toBeVisible();

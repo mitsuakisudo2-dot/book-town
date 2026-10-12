@@ -34,6 +34,8 @@
   position: relative;
   height: 100dvh;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: #24180f;
   color: #f6e9cf;
   isolation: isolate;
@@ -65,20 +67,20 @@
     linear-gradient(90deg, #120b0850, transparent 35%, #160d0850);
 }
 .walk-stage {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  /* The store is as large as the space under the header allows. */
+  container-type: size;
   display: flex;
   align-items: center;
   justify-content: center;
   touch-action: none;
   outline: none;
-  padding-top: env(safe-area-inset-top);
 }
 .walk-artboard {
   position: relative;
-  width: min(100%, calc(100dvh * 9 / 16));
-  height: auto;
+  width: min(100cqw, 100cqh * 9 / 16);
   aspect-ratio: 9/16;
-  max-height: 100%;
   container-type: inline-size;
   background: radial-gradient(ellipse at 50% 0, #ffc96c13, transparent 70%);
   animation: walk-arrive 0.26s ease-out;
@@ -88,25 +90,39 @@
   inset: 0;
   filter: drop-shadow(0 8px 5px #140a0860);
 }
-.walk-owner {
-  position: absolute;
-  left: 5%;
-  top: 2.2%;
-  z-index: 10;
-  width: 64%;
-  font-size: clamp(11px, 3.6cqw, 15px);
+.walk-top {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "owner tools"
+    "owner journey";
+  align-items: start;
+  gap: 6px 12px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 6px;
   text-shadow: 0 1px 3px #0009;
+}
+.walk-identity {
+  display: contents;
+}
+.walk-owner {
+  grid-area: owner;
+  min-width: 0;
+  font-size: 14px;
+  animation: walk-fade 0.26s ease-out;
 }
 .walk-owner a {
   display: flex;
   align-items: center;
-  gap: 2.6cqw;
+  gap: 10px;
   color: #fff6e4;
 }
 .walk-owner .reader-avatar {
-  width: 10cqw !important;
-  height: 10cqw !important;
-  font-size: 3.6cqw !important;
+  width: 36px !important;
+  height: 36px !important;
+  font-size: 13px !important;
   flex: none;
   box-shadow:
     0 0 0 1.5px #f6e2bd90,
@@ -116,16 +132,17 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+  min-width: 0;
 }
 .walk-owner small {
-  font-size: clamp(8px, 2.6cqw, 11px);
+  font-size: 10.5px;
   color: #e0cfb2;
   letter-spacing: 0.04em;
 }
 .walk-owner-bio {
-  margin: 1.4cqw 0 0;
-  font-size: clamp(8px, 2.55cqw, 11px);
-  line-height: 1.55;
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
   color: #f0e2c8;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -133,25 +150,17 @@
   overflow: hidden;
 }
 .walk-header-tools {
-  position: absolute;
-  right: 4%;
-  top: 2.2%;
-  z-index: 10;
+  grid-area: tools;
+  justify-self: end;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1.6cqw;
+  gap: 8px;
+  animation: walk-fade 0.26s ease-out;
 }
-.walk-header-tools > div {
-  display: flex;
-  gap: 2cqw;
-}
-.walk-header-tools button {
+.walk-header-tools button,
+.walk-journey-controls button {
   position: relative;
-  width: 9.4cqw;
-  height: 9.4cqw;
-  min-width: 32px;
-  min-height: 32px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -162,28 +171,65 @@
   backdrop-filter: blur(6px);
   box-shadow: 0 2px 6px #0007;
 }
-.walk-header-tools button:after {
+.walk-header-tools button:after,
+.walk-journey-controls button:after {
   content: "";
   position: absolute;
-  inset: -6px;
+  inset: -5px;
 }
 .walk-header-tools button[aria-pressed="true"] {
   color: #3a2616;
   background: #fbf1dd;
 }
-.walk-progress {
-  font-size: clamp(8px, 2.5cqw, 11px);
-  letter-spacing: 0.14em;
+.walk-journey-controls {
+  grid-area: journey;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.walk-journey-controls button {
+  width: 28px;
+  height: 28px;
+}
+.walk-journey-controls button:after {
+  inset: -8px;
+}
+.walk-journey-controls button:first-child svg {
+  transform: rotate(-90deg);
+}
+.walk-journey-controls button:nth-of-type(2) svg {
+  transform: rotate(90deg);
+}
+.walk-journey-controls button:disabled {
+  opacity: 0.35;
+}
+.walk-progress,
+.walk-progress-end {
+  min-width: 34px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.12em;
   color: #e6d6b9;
-  text-shadow: 0 1px 2px #000a;
+}
+@media (max-height: 720px) {
+  .walk-owner-bio {
+    -webkit-line-clamp: 1;
+  }
+}
+.walk-journey-hint {
+  display: none;
+  font-size: 11px;
+  color: #dccbac;
+  letter-spacing: 0.08em;
 }
 .walk-lamp-glow {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 62% 16% at 48% 18%, #ffcf8a50, transparent 72%),
-    radial-gradient(ellipse 85% 34% at 45% 42%, #ffb86a1c, transparent 72%);
+    radial-gradient(ellipse 66% 14% at 50% 5%, #ffcf8a50, transparent 72%),
+    radial-gradient(ellipse 90% 36% at 50% 30%, #ffb86a1c, transparent 72%);
   mix-blend-mode: screen;
 }
 .walk-chips {
@@ -371,12 +417,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6% 4% 9%;
+  padding: 10% 6% 16%;
   color: #f3efe4;
-  font-size: clamp(7px, 2.5cqw, 12px);
-  line-height: 1.55;
-  letter-spacing: 0.06em;
-  text-align: center;
+  font-size: clamp(9px, 3.3cqw, 16px);
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  text-align: start;
+  /* Tall, narrow boards are written top to bottom, like a hand-lettered shop sign. */
+  writing-mode: vertical-rl;
   text-shadow: 0 0 1px #ffffff90;
   background:
     radial-gradient(ellipse at 35% 25%, #ffffff12, transparent 60%),
@@ -394,18 +442,15 @@
   transform: rotate(1deg);
 }
 .walk-row-label.is-board span {
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
+  max-width: 100%;
   overflow: hidden;
-  word-break: break-all;
 }
 .walk-row-label.is-board:after {
   content: "";
   position: absolute;
-  left: 24%;
-  right: 24%;
-  bottom: 11%;
+  left: 26%;
+  right: 26%;
+  bottom: 8%;
   height: 1.5px;
   border-radius: 2px;
   background: #f3efe4a0;
@@ -463,19 +508,21 @@
 }
 .walk-zoom-trigger {
   position: absolute;
-  right: -7%;
-  top: -10%;
-  width: 44px;
-  height: 44px;
+  right: -17px;
+  top: 2px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  color: #e7d4ae;
+  color: #f1e2c4;
   z-index: 9;
-  background: transparent;
+  background: #1b120b70;
   border-radius: 50%;
 }
 .walk-book {
   box-shadow: 4px 0 4px #07030390;
+  /* Text on spines and POP cards grows with the book, not the screen. */
+  container-type: size;
 }
 .walk-book-target {
   display: block;
@@ -543,16 +590,19 @@
   gap: 5%;
   width: 100%;
   height: 100%;
-  padding: 8px 1px 3px;
+  padding: 8cqh 1px 3cqh;
   box-shadow:
     inset 2px 0 #ffffff40,
     inset -2px 0 #0005;
-  background-image: linear-gradient(
-    90deg,
-    #ffdab21a,
-    transparent,
-    #0003
-  ) !important;
+  background-image:
+    linear-gradient(
+      transparent 4.5cqh,
+      #00000022 4.5cqh 5.2cqh,
+      transparent 5.2cqh calc(100% - 5.2cqh),
+      #00000022 calc(100% - 5.2cqh) calc(100% - 4.5cqh),
+      transparent calc(100% - 4.5cqh)
+    ),
+    linear-gradient(90deg, #ffdab21a, transparent, #0003) !important;
   overflow: hidden;
 }
 .walk-spine > span {
@@ -560,16 +610,17 @@
   text-orientation: upright;
   white-space: nowrap;
   font-family: var(--serif);
-  font-size: clamp(5px, 2cqw, 11px);
+  font-size: min(58cqw, 9.6cqh);
+  font-weight: 500;
   letter-spacing: 0.04em;
   line-height: 1.2;
-  max-height: 80%;
+  max-height: 72%;
   overflow: hidden;
 }
 .walk-spine small {
   writing-mode: vertical-rl;
   white-space: nowrap;
-  font-size: 5px;
+  font-size: min(32cqw, 5.2cqh);
   max-height: 20%;
   overflow: hidden;
   opacity: 0.8;
@@ -579,7 +630,7 @@
   bottom: 0;
   left: 4%;
   width: 92%;
-  height: 52%;
+  height: 50%;
   z-index: 6;
   transform: rotate(-1deg);
   display: flex;
@@ -589,11 +640,11 @@
   box-shadow:
     0 3px 5px #1b1009a0,
     0 0 0 0.5px #b9a27a;
-  line-height: 1.38;
+  line-height: 1.35;
   font-family: "Yohaku Hand", var(--serif);
-  font-size: clamp(6px, 1.95cqw, 10px);
+  font-size: clamp(7px, 10cqw, 13px);
   color: #372318;
-  padding: 7% 6% 10%;
+  padding: 6% 6% 12%;
   text-align: left;
   border: 0;
   border-radius: 1px;
@@ -612,7 +663,7 @@
 .walk-pop-excerpt {
   flex: none;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -646,9 +697,12 @@
   );
 }
 .walk-book-pop.is-tab {
-  height: 12%;
+  height: 8%;
   padding: 0;
-  font-size: 4px;
+  justify-content: center;
+  font-family: var(--serif);
+  font-size: max(5px, 24cqw);
+  letter-spacing: 0.04em;
   text-align: center;
 }
 .walk-ownerPop {
@@ -710,24 +764,26 @@
   height: 100%;
 }
 .walk-actions {
+  /* Stands on the floor beside the owner's POP, clear of every shelf. */
   position: absolute;
-  right: 0;
-  top: 38%;
-  width: 17%;
+  left: 54.5%;
+  right: 1.5%;
+  top: 90.2%;
+  bottom: 0.4%;
   display: flex;
-  flex-direction: column;
+  justify-content: space-around;
   align-items: center;
-  gap: 2.4cqw;
-  z-index: auto;
+  z-index: 6;
 }
 .walk-actions button {
-  width: 52px;
-  min-height: 52px;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   padding: 0;
   color: #fbf0da;
   background: none;
@@ -735,12 +791,8 @@
   border-radius: 0;
 }
 .walk-actions button > span {
-  width: 11cqw;
-  height: 11cqw;
-  min-width: 36px;
-  min-height: 36px;
-  max-width: 46px;
-  max-height: 46px;
+  width: clamp(26px, 9cqw, 48px);
+  height: clamp(26px, 9cqw, 48px);
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -752,8 +804,12 @@
     background 0.2s,
     color 0.2s;
 }
+.walk-actions button > span svg {
+  width: 56%;
+  height: 56%;
+}
 .walk-actions button small {
-  font-size: clamp(8px, 2.4cqw, 10px);
+  font-size: clamp(7px, 2.4cqw, 11px);
   text-shadow: 0 1px 3px #000;
 }
 .walk-actions button[aria-pressed="true"] > span {
@@ -763,30 +819,6 @@
 }
 .walk-actions button[aria-pressed="true"] svg {
   fill: currentColor;
-}
-.walk-journey-controls {
-  position: absolute;
-  bottom: 0;
-  left: 5%;
-  right: 5%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 9px;
-  color: #e4cfac;
-  z-index: 15;
-  height: 44px;
-}
-.walk-journey-controls button {
-  min-width: 44px;
-  min-height: 44px;
-  font-size: 19px;
-  color: #eee1c6;
-  border-radius: 50%;
-  background: #22160d85;
-}
-.walk-journey-controls button:disabled {
-  opacity: 0.3;
 }
 /* Dialogs opened from the store keep the app's ink, not the lamp-lit text. */
 .walk-view .modal {
@@ -826,15 +858,18 @@
   text-decoration: underline;
 }
 .walk-save-warning {
-  position: absolute;
-  bottom: 45px;
-  left: 5%;
-  right: 5%;
+  /* In the flow above the store, so it never covers a shelf or a button. */
+  position: relative;
+  z-index: 4;
+  flex: none;
+  align-self: center;
+  width: calc(100% - 28px);
+  max-width: 520px;
+  margin: 0 0 6px;
   background: #fff3d9;
   color: #614327;
   padding: 8px;
   font-size: 11px;
-  z-index: 25;
 }
 .walk-full-pop {
   white-space: pre-wrap;
@@ -863,6 +898,7 @@
   min-width: 32px;
   max-width: 110px;
   flex: 1;
+  container-type: size;
   padding: 0;
   border-radius: 0;
   overflow: hidden;
@@ -937,6 +973,11 @@
   width: 28px;
   height: 28px;
 }
+@keyframes walk-fade {
+  from {
+    opacity: 0;
+  }
+}
 @keyframes walk-arrive {
   from {
     opacity: 0.65;
@@ -950,18 +991,6 @@
 @media (max-width: 760px) {
   .walk-view {
     height: calc(100dvh - 74px - env(safe-area-inset-bottom));
-  }
-  .walk-artboard {
-    width: min(
-      100%,
-      calc(
-        (
-            100dvh - 74px - env(safe-area-inset-bottom) -
-              env(safe-area-inset-top)
-          ) *
-          9 / 16
-      )
-    );
   }
   .is-walk .town-workspace {
     height: calc(100dvh - 74px - env(safe-area-inset-bottom));
@@ -985,16 +1014,86 @@
   .town-bottom-nav span {
     font-size: 9px;
   }
-  .walk-journey-controls {
-    left: 3%;
-    right: 3%;
+}
+/* Wide screens: the owner and the page turner sit beside the store. */
+@media (min-width: 1160px) and (min-aspect-ratio: 5/4) {
+  .walk-top {
+    position: absolute;
+    inset: 0;
+    display: block;
+    padding: 0;
+    pointer-events: none;
+    --walk-side: calc((100% - (100dvh - 32px) * 9 / 16) / 2);
   }
-  .walk-journey-controls span {
-    font-size: 8px;
+  .walk-identity {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: var(--walk-side);
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 18px;
+    padding: 0 36px;
+    pointer-events: auto;
+  }
+  .walk-owner {
+    width: min(100%, 300px);
+    font-size: 18px;
+  }
+  .walk-owner .reader-avatar {
+    width: 56px !important;
+    height: 56px !important;
+    font-size: 20px !important;
+  }
+  .walk-owner small {
+    font-size: 12px;
+  }
+  .walk-owner-bio {
+    margin-top: 14px;
+    font-size: 13px;
+    line-height: 1.9;
+    -webkit-line-clamp: 8;
+  }
+  .walk-header-tools {
+    width: min(100%, 300px);
+    gap: 10px;
+  }
+  .walk-header-tools button {
+    width: 42px;
+    height: 42px;
+  }
+  .walk-journey-controls {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: var(--walk-side);
+    transform: translateY(-50%);
+    flex-direction: column;
+    gap: 14px;
+    pointer-events: auto;
+  }
+  .walk-journey-controls button {
+    width: 46px;
+    height: 46px;
+  }
+  .walk-progress,
+  .walk-progress-end {
+    font-size: 13px;
+  }
+  .walk-journey-hint {
+    display: block;
+    writing-mode: vertical-rl;
+  }
+  .walk-stage {
+    padding: 16px 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .walk-artboard {
+  .walk-artboard,
+  .walk-owner,
+  .walk-header-tools {
     animation: none;
   }
   .walk-view * {

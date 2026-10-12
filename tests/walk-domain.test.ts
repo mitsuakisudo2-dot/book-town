@@ -190,10 +190,12 @@ check("all demo templates validate and differ through data", () => {
       s.storeId,
     ),
   );
-  assert.ok(
-    variants[1].objects.filter((o) => o.kind === "book" && o.parentId).length >
-      30,
-  );
+  // Books are drawn large, so the spine-only store is the densest rather than
+  // holding a fixed count.
+  const placed = (scene: (typeof variants)[number]) =>
+    scene.objects.filter((o) => o.kind === "book" && o.parentId).length;
+  assert.ok(placed(variants[1]) > 20);
+  assert.ok(variants.every((s) => placed(variants[1]) >= placed(s)));
   assert.ok(variants[3].objects.some((o) => o.furnitureType === "table"));
   assert.ok(
     variants[2].objects

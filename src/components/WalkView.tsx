@@ -369,6 +369,82 @@ export function WalkView({
       {adjacent.map((s) => (
         <link key={s!.storeId} rel="prefetch" href={s!.background.url} />
       ))}
+      <header className="walk-top" inert={overlay !== null}>
+        {ready && shop && scene && (
+          <div className="walk-identity" key={currentId}>
+            <div className="walk-owner">
+              <Link href={"/profiles/" + shop.ownerId + "/"}>
+                {owner && <ReaderAvatar reader={owner} size={40} />}
+                <span>
+                  <b>{owner?.name ?? shop.name}</b>
+                  <small>
+                    {owner ? "@" + owner.handle : "店主"}
+                    {shop.demo ? " · デモ書店" : ""}
+                  </small>
+                </span>
+              </Link>
+              {owner?.bio && <p className="walk-owner-bio">{owner.bio}</p>}
+            </div>
+            <div className="walk-header-tools">
+              {!ownShop && (
+                <button
+                  aria-label="この書店をフォロー"
+                  aria-pressed={following}
+                  onClick={() => {
+                    actions.toggleFollow(shop.id);
+                    notify(
+                      following
+                        ? "フォローを外しました"
+                        : shop.name + "をフォローしました",
+                    );
+                  }}
+                >
+                  <Icon name={following ? "check" : "follow"} size={18} />
+                </button>
+              )}
+              <button
+                aria-label="その他のメニュー"
+                onClick={() => open({ kind: "menu" })}
+              >
+                <Icon name="more" size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="walk-journey-controls">
+          <button
+            aria-label="前の書店"
+            disabled={!session || session.index === 0}
+            onClick={() => step(-1)}
+          >
+            <Icon name="chevron" size={16} />
+          </button>
+          {shop && session && !session.ended ? (
+            <span className="walk-progress" aria-live="polite">
+              {session.index + 1} / {session.ids.length}
+            </span>
+          ) : session?.ended ? (
+            <span className="walk-progress-end">また、いつでも。</span>
+          ) : null}
+          <button
+            aria-label="次の書店"
+            disabled={!session || session.ended}
+            onClick={() => step(1)}
+          >
+            <Icon name="chevron" size={16} />
+          </button>
+          <small className="walk-journey-hint">
+            上下にめくって、次の本屋へ
+          </small>
+        </div>
+      </header>
+      {saved.status === "unavailable" || saved.status === "recovered" ? (
+        <p className="walk-save-warning" role="status">
+          {saved.status === "recovered"
+            ? "書店めぐりの保存を読み込めませんでした。元のデータは保持しています。"
+            : "書店めぐりを保存できません。この操作は再読み込みすると失われます。"}
+        </p>
+      ) : null}
       <div
         className="walk-stage"
         ref={stage}
@@ -399,48 +475,6 @@ export function WalkView({
             </div>
           ) : shop && scene ? (
             <>
-              <div className="walk-owner">
-                <Link href={"/profiles/" + shop.ownerId + "/"}>
-                  {owner && <ReaderAvatar reader={owner} size={40} />}
-                  <span>
-                    <b>{owner?.name ?? shop.name}</b>
-                    <small>
-                      {owner ? "@" + owner.handle : "店主"}
-                      {shop.demo ? " · デモ書店" : ""}
-                    </small>
-                  </span>
-                </Link>
-                {owner?.bio && <p className="walk-owner-bio">{owner.bio}</p>}
-              </div>
-              <div className="walk-header-tools">
-                <div>
-                  {!ownShop && (
-                    <button
-                      aria-label="この書店をフォロー"
-                      aria-pressed={following}
-                      onClick={() => {
-                        actions.toggleFollow(shop.id);
-                        notify(
-                          following
-                            ? "フォローを外しました"
-                            : shop.name + "をフォローしました",
-                        );
-                      }}
-                    >
-                      <Icon name={following ? "check" : "follow"} size={18} />
-                    </button>
-                  )}
-                  <button
-                    aria-label="その他のメニュー"
-                    onClick={() => open({ kind: "menu" })}
-                  >
-                    <Icon name="more" size={18} />
-                  </button>
-                </div>
-                <span className="walk-progress" aria-live="polite">
-                  {session!.index + 1} / {session!.ids.length}
-                </span>
-              </div>
               <span className="walk-lamp-glow" aria-hidden="true" />
               {shelfNames.length > 1 && (
                 <div
@@ -567,36 +601,8 @@ export function WalkView({
               <Link href="/reading/">読書を開始する</Link>
             </div>
           )}
-          <div className="walk-journey-controls">
-            <button
-              aria-label="前の書店"
-              disabled={!session || session.index === 0}
-              onClick={() => step(-1)}
-            >
-              ↑
-            </button>
-            <span>
-              {session?.ended
-                ? "また、いつでも。"
-                : "上下にめくって、次の本屋へ"}
-            </span>
-            <button
-              aria-label="次の書店"
-              disabled={!session || session.ended}
-              onClick={() => step(1)}
-            >
-              ↓
-            </button>
-          </div>
         </div>
       </div>
-      {saved.status === "unavailable" || saved.status === "recovered" ? (
-        <p className="walk-save-warning" role="status">
-          {saved.status === "recovered"
-            ? "書店めぐりの保存を読み込めませんでした。元のデータは保持しています。"
-            : "書店めぐりを保存できません。この操作は再読み込みすると失われます。"}
-        </p>
-      ) : null}
       {overlay?.kind === "book" && selected && (
         <BookInHand
           state={state}
