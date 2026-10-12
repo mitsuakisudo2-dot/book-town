@@ -42,6 +42,7 @@ import { useWalkStore } from "../lib/walk-store";
 import { requestAccount } from "../lib/visitor";
 import { ReportButton } from "./Report";
 import {
+  OWN_SHOP_ID,
   SHOP_MESSAGE_MAX_LENGTH,
   ownTagline,
   type Shop,
@@ -129,6 +130,7 @@ export function WalkView({
   );
   const pops = useMemo(() => publicScenePops(scenes), [scenes]);
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const [ownMissing, setOwnMissing] = useState(false);
   const focus = useRef<HTMLElement | null>(null);
   const stage = useRef<HTMLDivElement>(null);
   const pointer = useRef<{
@@ -221,6 +223,8 @@ export function WalkView({
       try {
         requested = requested ?? decodeURIComponent(location.hash.slice(1));
       } catch {}
+      // Asked for one's own shop before it stands in the walk: say why.
+      setOwnMissing(requested === OWN_SHOP_ID && !ids.includes(OWN_SHOP_ID));
       update((previous) => startWalk(previous, ids, requested));
     };
     begin();
@@ -567,6 +571,21 @@ export function WalkView({
           </small>
         </div>
       </header>
+      {ownMissing && (
+        <p className="walk-own-missing" role="status">
+          <span>
+            {state.ownShop
+              ? "あなたの本屋は、まだ棚に本がないので書店めぐりに出ていません。一冊並べると、ここに灯りがともります。"
+              : "あなたの本屋は、まだありません。3分で開けます。"}
+          </span>
+          <Link href="/my-shop/">
+            {state.ownShop ? "本棚を整える" : "本屋を開く"}
+          </Link>
+          <button aria-label="閉じる" onClick={() => setOwnMissing(false)}>
+            <Icon name="close" size={14} />
+          </button>
+        </p>
+      )}
       {saved.status === "unavailable" || saved.status === "recovered" ? (
         <p className="walk-save-warning" role="status">
           {delivers

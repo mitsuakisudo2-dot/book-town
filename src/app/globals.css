@@ -1523,11 +1523,15 @@ div.book-jacket:hover {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
   color: #9d8662;
   font-size: 12px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  word-break: auto-phrase;
   flex: 1;
   justify-content: center;
-  padding-bottom: 20px;
+  padding: 0 8px 20px;
 }
 .shelf-bookend {
   height: 77px;

@@ -26,10 +26,12 @@ async function check(name, run) {
   console.log("PASS " + name);
 }
 const dialog = () =>
-  page.getByRole("dialog", { name: "店内をつくる", exact: true });
+  page.getByRole("dialog", { name: "店内を飾りつける", exact: true });
 async function open() {
   await page.goto(base + "/my-shop/");
-  await page.getByRole("button", { name: "店内をつくる", exact: true }).click();
+  await page
+    .getByRole("button", { name: "店内を飾りつける", exact: true })
+    .click();
   await expect(dialog()).toBeVisible();
 }
 async function save() {
@@ -67,17 +69,28 @@ try {
     "empty saved store explains how to open it instead of opening a different shop",
     async () => {
       await page
-        .getByRole("button", { name: "店内をつくる", exact: true })
+        .getByRole("button", { name: "店内を飾りつける", exact: true })
         .click();
       await save();
       await expect(
         page.getByRole("link", { name: "店内を眺める", exact: true }),
       ).toHaveCount(0);
       await expect(
-        page.getByText("公開する本を棚に並べると、書店めぐりで眺められます。", {
-          exact: true,
-        }),
+        page.getByText(
+          "公開する棚に本を並べると、書店めぐりに灯りがともります。",
+          { exact: true },
+        ),
       ).toBeVisible();
+      // In the walk, asking for one's own empty shop says why it is not there.
+      await page.goto(base + "/walk/#mine");
+      const missing = page.locator(".walk-own-missing");
+      await expect(missing).toContainText("まだ棚に本がないので");
+      await expect(
+        missing.getByRole("link", { name: "本棚を整える" }),
+      ).toHaveAttribute("href", "/my-shop/");
+      await missing.getByRole("button", { name: "閉じる" }).click();
+      await expect(missing).toHaveCount(0);
+      await page.goto(base + "/my-shop/");
     },
   );
   await page.evaluate(() => {
@@ -127,7 +140,7 @@ try {
     async () => {
       await page.goto(base + "/shops/shop-orbit/");
       await expect(
-        page.getByRole("button", { name: "店内をつくる", exact: true }),
+        page.getByRole("button", { name: "店内を飾りつける", exact: true }),
       ).toHaveCount(0);
       await open();
       await expect(
@@ -440,7 +453,7 @@ try {
       other.on("pageerror", (e) => errors.push(e.message));
       await other.goto(base + "/my-shop/");
       await other
-        .getByRole("button", { name: "店内をつくる", exact: true })
+        .getByRole("button", { name: "店内を飾りつける", exact: true })
         .click();
       await expect(
         other.getByRole("button", { name: "店内を保存", exact: true }),

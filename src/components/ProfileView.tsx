@@ -172,9 +172,12 @@ export function ProfileView({
 
   return (
     <div className="profile-view">
-      <Link className="profile-back" href="/">
-        <Icon name="back" /> 本の街へ
-      </Link>
+      {/* One's own profile is a place of its own in the navigation. */}
+      {!isSelf && (
+        <Link className="profile-back" href="/">
+          <Icon name="back" /> 本の街へ
+        </Link>
+      )}
 
       <section className="profile-reader" aria-labelledby="profile-name">
         <div className="profile-reader-avatar">
@@ -404,22 +407,22 @@ export function ProfileView({
               aria-pressed={collection === "wishlist"}
               onClick={() => setCollection("wishlist")}
             >
-              <Icon name="bookmark" size={17} /> 読みたい{" "}
-              <span>{state.wishlist.length}</span>
+              <Icon name="bookmark" size={17} /> 読みたい
+              <span>{state.wishlist.length || ""}</span>
             </button>
             <button
               aria-pressed={collection === "favorites"}
               onClick={() => setCollection("favorites")}
             >
-              <Icon name="star" size={17} /> お気に入り{" "}
-              <span>{state.favorites.length}</span>
+              <Icon name="star" size={17} /> お気に入り
+              <span>{state.favorites.length || ""}</span>
             </button>
             <button
               aria-pressed={collection === "library"}
               onClick={() => setCollection("library")}
             >
-              <Icon name="barcode" size={17} /> 登録した本{" "}
-              <span>{state.library.length}</span>
+              <Icon name="barcode" size={17} /> 登録
+              <span>{state.library.length || ""}</span>
             </button>
           </div>
           <p className="profile-section-description">
