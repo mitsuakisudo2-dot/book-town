@@ -752,3 +752,15 @@ button.tag-chip:hover {
 .reviews-more:hover {
   background: #eef1e6;
 }
+.bell-light {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e0a645;
+  box-shadow:
+    0 0 0 2px var(--paper, #f7f4ee),
+    0 0 8px 2px #e9b75a99;
+}

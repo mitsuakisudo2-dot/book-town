@@ -229,3 +229,71 @@
   min-height: 40px;
   font-size: 12px;
 }
+
+/* A book left unfinished waits at the top of home, one tap from reading. */
+.home-continue {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f6ead2;
+  border: 1px solid #ead7b0;
+  color: #3a2e22;
+}
+.home-continue-jacket {
+  width: 40px;
+  height: 58px;
+  flex: none;
+  box-shadow: 1px 2px 5px #0002;
+}
+.home-continue-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+.home-continue-text small {
+  font-size: 11px;
+  color: #8a6420;
+  letter-spacing: 0.5px;
+}
+.home-continue-text b {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-continue-words {
+  font-size: 12px;
+  color: #6b5a40;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-continue-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  padding: 8px 14px;
+  min-height: 40px;
+  border-radius: 999px;
+  background: #294b3e;
+  color: #f7f4ee;
+  font-size: 13px;
+  font-weight: 600;
+}
+@media (max-width: 420px) {
+  .home-continue {
+    gap: 11px;
+    padding: 10px 11px;
+  }
+  .home-continue-go {
+    padding: 8px 11px;
+    font-size: 12px;
+  }
+}
