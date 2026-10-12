@@ -19,3 +19,7 @@ export const profilePath = (id: string): string =>
   isDatabaseId(id)
     ? "/profile/?id=" + encodeURIComponent(id)
     : "/profiles/" + encodeURIComponent(id) + "/";
+
+/** The walk through the shops, starting inside one of them. */
+export const walkPath = (id: string): string =>
+  "/walk/#" + encodeURIComponent(id);

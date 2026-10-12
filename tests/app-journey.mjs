@@ -605,6 +605,17 @@ try {
       ]);
       await page.getByRole("button", { name: "棚を整える" }).click();
       await expect(page.locator(".editor-shelf-panel")).toHaveCount(1);
+      // For a day, the street opens with the new shop and says it joined.
+      await go("/");
+      const first = page.locator(".street-shop").first();
+      await expect(first.locator(".street-new-own")).toContainText(
+        "あなたの書店が、街に加わりました",
+      );
+      await expect(first.locator("h2")).toHaveText("雨音書店");
+      await expect(first.locator(".street-shop-tagline")).toHaveText(
+        "一頁ぶん、遠回り。",
+      );
+      await expect(page.locator(".street-new-own")).toHaveCount(1);
     },
   );
 
