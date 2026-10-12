@@ -6,6 +6,9 @@
 //                                             the latest one failed
 //   node scripts/vercel.mjs deploy <branch>   builds the branch again and waits;
 //                                             main goes to production
+//   node scripts/vercel.mjs ensure <branch>   after a push: waits for Vercel to
+//                                             start building DEPLOY_SHA, and
+//                                             builds it here when it does not
 //
 // Vercel sometimes stops a preview seconds after a push, before building; a
 // new build of the same branch is the fix. The logs are public, like the
@@ -17,6 +20,7 @@ import { pathToFileURL } from "node:url";
 const API = process.env.VERCEL_API_URL ?? "https://api.vercel.com";
 const LOG_LINES = 60;
 const WAIT_MINUTES = 20;
+const ACTIONS = new Set(["status", "deploy", "ensure"]);
 
 /** Branch names as git allows them, without anything a URL would misread. */
 export function validBranch(name) {
@@ -57,8 +61,10 @@ export function logLines(events) {
 const finished = (state) => ["READY", "ERROR", "CANCELED"].includes(state);
 
 async function main(action, branch) {
-  if ((action !== "status" && action !== "deploy") || !validBranch(branch)) {
-    console.error("Usage: node scripts/vercel.mjs status|deploy <branch>");
+  if (!ACTIONS.has(action) || !validBranch(branch)) {
+    console.error(
+      "Usage: node scripts/vercel.mjs status|deploy|ensure <branch>",
+    );
     process.exit(2);
   }
   const token = process.env.VERCEL_TOKEN;
@@ -117,6 +123,46 @@ async function main(action, branch) {
     if (latest && ["ERROR", "CANCELED"].includes(latest.readyState))
       await printLog(latest.uid);
     return;
+  }
+
+  if (action === "ensure") {
+    // Vercel's own GitHub connection sometimes misses a push to main, and
+    // production stays on the previous commit. Give it a moment first.
+    const sha = process.env.DEPLOY_SHA ?? "";
+    if (!/^[0-9a-f]{40}$/.test(sha))
+      throw new Error("DEPLOY_SHA is not a commit.");
+    const wait = Number(process.env.ENSURE_WAIT_SECONDS ?? 150) * 1000;
+    const poll = Number(process.env.ENSURE_POLL_SECONDS ?? 15) * 1000;
+    const until = Date.now() + wait;
+    for (;;) {
+      const { deployments } = await call("GET", "/v7/deployments", {
+        projectId: project,
+        branch,
+        limit: 10,
+      });
+      const own = deployments.find(
+        (deployment) => deployment.meta?.githubCommitSha === sha,
+      );
+      if (own?.readyState === "READY") {
+        console.log("Vercel built it: " + deploymentLine(own));
+        return;
+      }
+      if (own && finished(own.readyState)) {
+        console.log("Vercel stopped; building it here: " + deploymentLine(own));
+        break;
+      }
+      if (Date.now() >= until) {
+        if (own) {
+          console.log("Vercel is still building it: " + deploymentLine(own));
+          return;
+        }
+        console.log(
+          `Vercel did not start ${sha.slice(0, 7)}; building it here.`,
+        );
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, poll));
+    }
   }
 
   const created = await call(
