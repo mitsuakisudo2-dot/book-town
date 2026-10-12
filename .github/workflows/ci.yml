@@ -26,4 +26,52 @@ jobs:
       - run: pnpm test:walk-domain
       - run: pnpm test:customization-domain
       - run: pnpm test:db
+      - run: pnpm test:account
       - run: pnpm build
+
+  # Signs in against a stand-in for Supabase in a real browser.
+  login-journey:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://test-project.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_test
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - name: Serve the built site
+        run: python3 -m http.server 5173 --bind 127.0.0.1 --directory out &
+      - run: pnpm test:login
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/login-qa
+
+  # Signs in against a real local Supabase: auth, the code email, the REST API
+  # and row level security, with the migrations and supabase/config.toml applied.
+  supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.120.0
+      - name: Start Supabase
+        run: supabase start -x studio,imgproxy,vector,logflare,supavisor,edge-runtime,realtime,storage-api,postgres-meta
+      - name: Sign in against it
+        run: |
+          set -a
+          eval "$(supabase status -o env)"
+          set +a
+          pnpm test:supabase

@@ -3,6 +3,8 @@ name: Deploy database
 # Applies new files in supabase/migrations to the Supabase project once they reach
 # main. Needs three repository secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD
 # and SUPABASE_PROJECT_ID. Until they are set, the run is skipped with a warning.
+# The access token is kept for later Supabase deploys; migrations only need the
+# database password.
 
 on:
   push:
@@ -40,8 +42,22 @@ jobs:
         if: steps.secrets.outputs.ready == 'true'
         with:
           version: 2.120.0
+      # GitHub's runners have no IPv6, and the database's direct address is
+      # IPv6 only, so the migrations go through Supabase's IPv4 session pooler
+      # in the project's region (Tokyo). Its host name starts with aws-0 or
+      # aws-1 depending on when the project was made; the wrong one refuses
+      # the login before anything is applied.
       - name: Apply new migrations
         if: steps.secrets.outputs.ready == 'true'
+        env:
+          SUPABASE_REGION: ap-northeast-1
         run: |
-          supabase link --project-ref "$SUPABASE_PROJECT_ID"
-          supabase db push --yes
+          password=$(jq -rn --arg value "$SUPABASE_DB_PASSWORD" '$value | @uri')
+          echo "::add-mask::$password"
+          for cluster in aws-0 aws-1; do
+            url="postgresql://postgres.$SUPABASE_PROJECT_ID:$password@$cluster-$SUPABASE_REGION.pooler.supabase.com:5432/postgres"
+            if supabase db push --db-url "$url" --yes; then
+              exit 0
+            fi
+          done
+          exit 1
