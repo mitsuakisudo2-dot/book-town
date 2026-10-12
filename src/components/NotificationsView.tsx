@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { TownActions, TownState } from "../lib/types";
 import { notificationsFor } from "../lib/notifications";
+import { useTownBackend } from "../lib/store";
 import { findReader, formatPostTime } from "../lib/social";
 import { useClock } from "./useClock";
 import { Icon, ReaderAvatar } from "./ui";
@@ -17,6 +18,7 @@ type Shared = {
 
 export function NotificationsView({ state, actions }: Shared) {
   const clock = useClock(30_000);
+  const savedIn = useTownBackend();
   const notices = notificationsFor(state, clock?.openedAt ?? 0);
   // Notices that were unread when this page showed them keep their mark until it closes.
   const [fresh, setFresh] = useState<string[]>([]);
@@ -69,7 +71,9 @@ export function NotificationsView({ state, actions }: Shared) {
         </div>
       )}
       <p className="search-note">
-        お知らせはこのブラウザの中の出来事から作っています。デモの読書家の投稿は架空のデモデータです。
+        {savedIn === "local"
+          ? "お知らせはこのブラウザの中の出来事から作っています。デモの読書家の投稿は架空のデモデータです。"
+          : "お知らせは、この街の投稿と、あなたの投稿への反応から作っています。"}
       </p>
     </div>
   );

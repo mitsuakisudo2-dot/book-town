@@ -26,6 +26,7 @@ import { PostCard, PostComposer } from "./Social";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { useClock } from "./useClock";
 import "./reading.css";
+import { isDatabaseId, profilePath } from "../lib/paths";
 
 type Shared = {
   state: TownState;
@@ -163,12 +164,12 @@ function ReadersNow({
             if (!reader) return null;
             return (
               <li key={entry.readerId}>
-                <Link href={"/profiles/" + reader.id + "/"}>
+                <Link href={profilePath(reader.id)}>
                   <ReaderAvatar reader={reader} size={34} />
                   <span>
                     <b>
                       {reader.id === ME_ID ? "あなた" : reader.name}
-                      {reader.id !== ME_ID && (
+                      {reader.id !== ME_ID && !isDatabaseId(reader.id) && (
                         <small className="demo-tag">デモの読書家</small>
                       )}
                     </b>

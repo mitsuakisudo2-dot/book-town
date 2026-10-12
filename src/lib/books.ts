@@ -1,3 +1,4 @@
+import { isDatabaseId } from "./paths";
 import type { Book, NewBook } from "./types";
 
 const isbn13Valid = (digits: string) =>
@@ -64,9 +65,12 @@ function hash(text: string): number {
 
 export const REGISTERED_GENRE = "登録した本";
 
-/** Runtime registrations use one exported page; demo books retain their existing URLs. */
+/**
+ * Books registered at runtime and books from the database share one exported
+ * page; demo books retain their existing URLs.
+ */
 export function bookPath(id: string): string {
-  return /^(my-book-\d+|isbn-\d+)$/.test(id)
+  return /^(my-book-\d+|isbn-\d+)$/.test(id) || isDatabaseId(id)
     ? "/books/registered/?id=" + encodeURIComponent(id)
     : "/books/" + encodeURIComponent(id) + "/";
 }

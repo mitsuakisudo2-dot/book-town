@@ -3,6 +3,15 @@
 import { useSyncExternalStore } from "react";
 import { seedState } from "./data";
 import { localTownRepository, type TownRepository } from "./repository";
+import {
+  localBackend,
+  unavailableBackend,
+  type RecordKind,
+  type TownBackend,
+} from "./town-backend";
+import { emptyTown } from "./town-remote";
+import { supabaseConfigured } from "./supabase/config";
+import { followAccount } from "./town-session";
 import { createRegisteredBook, normalizeIsbn } from "./books";
 import { cleanLinks } from "./links";
 import { handleProblem, normalizeHandle } from "./handles";
@@ -11,6 +20,14 @@ import {
   ME_ID,
   POP_REACTIONS,
   POST_MAX_LENGTH,
+  BIO_MAX_LENGTH,
+  NINE_NOTE_MAX_LENGTH,
+  POP_MAX_LENGTH,
+  READER_NAME_MAX_LENGTH,
+  SHELF_NAME_MAX_LENGTH,
+  SHOP_DESCRIPTION_MAX_LENGTH,
+  SHOP_NAME_MAX_LENGTH,
+  SHOP_TAGLINE_MAX_LENGTH,
   READING_MODES,
   popReactionKey,
   OWN_SHOP_ID,
@@ -38,30 +55,98 @@ const clean = (value: string, max = 10000): string => value.slice(0, max);
 const toggled = (list: string[], id: string): string[] =>
   list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id];
 
+const isBackend = (
+  source: TownRepository | TownBackend,
+): source is TownBackend => "newId" in source;
+
+export interface TownStoreOptions {
+  /**
+   * Called once, on first use, instead of loading `source`: it decides which
+   * backend the town uses (the demo, or the signed-in person's account) and
+   * switches with switchTo(). Until then the town is empty and loading.
+   */
+  follow?: (switchTo: (backend: TownBackend) => void) => void;
+}
+
 export function createTownStore(
-  repository: TownRepository = localTownRepository,
+  source: TownRepository | TownBackend = localTownRepository,
   now: () => Date = () => new Date(),
+  options: TownStoreOptions = {},
 ) {
-  // This stable snapshot is used both by static rendering and the first hydration render.
-  let state: TownState = seedState;
+  // This stable snapshot is used both by static rendering and the first
+  // hydration render. A build with accounts starts empty, so a signed-in
+  // reader never sees the demo town flash by.
+  const initial = options.follow ? emptyTown() : seedState;
+  let backend: TownBackend = isBackend(source) ? source : localBackend(source);
+  let state: TownState = initial;
   let status: PersistenceStatus = "loading";
   let initialized = false;
+  // While an account's town is on its way, nothing can be changed or saved.
+  let loading = false;
+  let generation = 0;
+  let unwatch: (() => void) | null = null;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
+
+  function start(next: TownBackend) {
+    const mine = ++generation;
+    const previous = backend;
+    unwatch?.();
+    backend = next;
+    if (previous !== next) previous.close?.();
+    const current = () => mine === generation;
+    unwatch =
+      next.watch?.({
+        status(update) {
+          if (!current()) return;
+          status = update;
+          notify();
+        },
+        replace(update, updateStatus) {
+          if (!current()) return;
+          state = update;
+          status = updateStatus;
+          notify();
+        },
+      }) ?? null;
+    const result = next.load();
+    if ("then" in result) {
+      loading = true;
+      state = emptyTown();
+      status = "loading";
+      notify();
+      result.then(
+        (snapshot) => {
+          if (!current()) return;
+          loading = false;
+          state = snapshot.state;
+          status = snapshot.status;
+          notify();
+        },
+        () => {
+          // The account could not be read: show that, and keep nothing to save.
+          if (current()) start(unavailableBackend(emptyTown()));
+        },
+      );
+      return;
+    }
+    loading = false;
+    state = result.state;
+    status = result.status;
+    notify();
+  }
 
   function initialize() {
     if (initialized) return;
     initialized = true;
-    const snapshot = repository.load();
-    state = snapshot.state;
-    status = snapshot.status;
-    notify();
+    if (options.follow) options.follow(start);
+    else start(backend);
   }
 
   function commit(next: TownState) {
-    if (next === state) return;
+    if (next === state || loading) return;
     state = next;
-    status = repository.save(state);
+    status = backend.save(state);
     notify();
   }
 
@@ -103,14 +188,8 @@ export function createTownStore(
     });
   }
 
-  function nextId(prefix: string, ids: string[]): string {
-    const max = ids.reduce((highest, id) => {
-      if (!id.startsWith(prefix)) return highest;
-      const suffix = Number(id.slice(prefix.length));
-      return Number.isInteger(suffix) ? Math.max(highest, suffix) : highest;
-    }, 0);
-    return `${prefix}${max + 1}`;
-  }
+  const nextId = (kind: RecordKind, ids: string[], isbn?: string | null) =>
+    backend.newId(kind, ids, isbn);
 
   const actions: TownActions = {
     createShop(name, description, theme) {
@@ -119,8 +198,8 @@ export function createTownStore(
       withShop({
         id: OWN_SHOP_ID,
         ownerId: ME_ID,
-        name: clean(name.trim(), 120),
-        description: clean(description),
+        name: clean(name.trim(), SHOP_NAME_MAX_LENGTH),
+        description: clean(description, SHOP_DESCRIPTION_MAX_LENGTH),
         theme,
         tagline: "あなたの愛した一冊が、誰かの愛する一冊になる。",
         followers: 0,
@@ -142,10 +221,10 @@ export function createTownStore(
         return;
       withShop({
         ...state.ownShop,
-        name: clean(patch.name.trim(), 120),
-        description: clean(patch.description),
+        name: clean(patch.name.trim(), SHOP_NAME_MAX_LENGTH),
+        description: clean(patch.description, SHOP_DESCRIPTION_MAX_LENGTH),
         theme: patch.theme,
-        tagline: clean(patch.tagline, 500),
+        tagline: clean(patch.tagline, SHOP_TAGLINE_MAX_LENGTH),
       });
     },
     addShelf(name, capacity) {
@@ -158,10 +237,10 @@ export function createTownStore(
           ...shop.shelves,
           {
             id: nextId(
-              "mine-shelf-",
+              "shelf",
               shop.shelves.map((entry) => entry.id),
             ),
-            name: clean(name.trim(), 120),
+            name: clean(name.trim(), SHELF_NAME_MAX_LENGTH),
             capacity: normalizeCapacity(capacity),
             items: [],
             isPublic: true,
@@ -175,7 +254,7 @@ export function createTownStore(
       editShelf(shelfId, (shelf) => ({
         ...shelf,
         ...(patch.name !== undefined
-          ? { name: clean(patch.name.trim(), 120) }
+          ? { name: clean(patch.name.trim(), SHELF_NAME_MAX_LENGTH) }
           : {}),
         ...(typeof patch.isPublic === "boolean"
           ? { isPublic: patch.isPublic }
@@ -208,7 +287,7 @@ export function createTownStore(
       )
         return false;
       const id = nextId(
-        "mine-item-",
+        "item",
         shop.shelves.flatMap((entry) => entry.items.map((item) => item.id)),
       );
       editShelf(shelfId, (entry) => {
@@ -221,7 +300,7 @@ export function createTownStore(
           id,
           bookId,
           display,
-          pop: restore ? clean(restore.pop) : "",
+          pop: restore ? clean(restore.pop, POP_MAX_LENGTH) : "",
         });
         return { ...entry, items };
       });
@@ -283,7 +362,9 @@ export function createTownStore(
           ? {
               ...shelf,
               items: shelf.items.map((entry) =>
-                entry.id === itemId ? { ...entry, pop: clean(pop) } : entry,
+                entry.id === itemId
+                  ? { ...entry, pop: clean(pop, POP_MAX_LENGTH) }
+                  : entry,
               ),
             }
           : shelf,
@@ -354,8 +435,8 @@ export function createTownStore(
         me: {
           ...state.me,
           handle: nextHandle,
-          name: clean(name.trim(), 120),
-          bio: clean(bio),
+          name: clean(name.trim(), READER_NAME_MAX_LENGTH),
+          bio: clean(bio, BIO_MAX_LENGTH),
           links:
             links === undefined ? (state.me.links ?? []) : cleanLinks(links),
         },
@@ -370,7 +451,7 @@ export function createTownStore(
       const validNotes = Object.fromEntries(
         validIds
           .filter((id) => typeof notes[id] === "string")
-          .map((id) => [id, clean(notes[id], 1000)]),
+          .map((id) => [id, clean(notes[id], NINE_NOTE_MAX_LENGTH)]),
       );
       commit({
         ...state,
@@ -402,7 +483,7 @@ export function createTownStore(
         return null;
       const post: Post = {
         id: nextId(
-          "me-post-",
+          "post",
           state.posts.map((entry) => entry.id),
         ),
         authorId: ME_ID,
@@ -466,7 +547,7 @@ export function createTownStore(
       const time = now().toISOString();
       const session: ReadingSession = {
         id: nextId(
-          "me-reading-",
+          "reading",
           state.readingSessions.map((entry) => entry.id),
         ),
         bookId,
@@ -523,12 +604,11 @@ export function createTownStore(
           commit({ ...state, library: [...state.library, existing.id] });
         return existing.id;
       }
-      const id = isbn
-        ? "isbn-" + isbn
-        : nextId(
-            "my-book-",
-            state.books.map((book) => book.id),
-          );
+      const id = nextId(
+        "book",
+        state.books.map((book) => book.id),
+        isbn,
+      );
       const price =
         typeof input.price === "number" &&
         Number.isInteger(input.price) &&
@@ -585,8 +665,16 @@ export function createTownStore(
   return {
     actions,
     initialize,
+    /** Moves the town to another backend, e.g. after signing in or out. */
+    use: (next: TownBackend) => {
+      initialized = true;
+      start(next);
+    },
     getSnapshot: () => state,
-    getServerSnapshot: () => seedState,
+    getServerSnapshot: () => initial,
+    getBackendSnapshot: () => backend.kind,
+    getServerBackendSnapshot: (): TownBackend["kind"] =>
+      options.follow ? "account" : "local",
     getPersistenceSnapshot: () => status,
     getServerPersistenceSnapshot: (): PersistenceStatus => "loading",
     subscribe(listener: () => void) {
@@ -599,7 +687,11 @@ export function createTownStore(
   };
 }
 
-export const townStore = createTownStore();
+export const townStore = createTownStore(
+  localTownRepository,
+  undefined,
+  supabaseConfigured ? { follow: followAccount } : {},
+);
 export const townActions = townStore.actions;
 export const actions = townActions;
 export const getTownSnapshot = townStore.getSnapshot;
@@ -611,6 +703,15 @@ export function useTownStore(): { state: TownState; actions: TownActions } {
     townStore.getServerSnapshot,
   );
   return { state, actions: townActions };
+}
+
+/** Where the town is saved: this browser ("local") or an account. */
+export function useTownBackend(): TownBackend["kind"] {
+  return useSyncExternalStore(
+    townStore.subscribe,
+    townStore.getBackendSnapshot,
+    townStore.getServerBackendSnapshot,
+  );
 }
 
 export function usePersistenceStatus(): PersistenceStatus {

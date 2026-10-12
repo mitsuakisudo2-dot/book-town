@@ -18,6 +18,7 @@ import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./book-in-hand.css";
 import type { ReadEntry } from "../lib/store-scene-adapter";
 import { StoreStamp } from "./StoreCanvas";
+import { profilePath, shopPath } from "../lib/paths";
 
 export interface SceneReading {
   entries: ReadEntry[];
@@ -532,7 +533,7 @@ export function BookInHand({
             <div className="bh-pop-signature">
               {popOwner && (
                 <Link
-                  href={`/profiles/${popOwner.id}/`}
+                  href={profilePath(popOwner.id)}
                   className="bh-owner-link"
                   onNavigate={leaveForPage}
                 >
@@ -547,7 +548,7 @@ export function BookInHand({
               <Link
                 href={
                   activePop.legacy
-                    ? `/shops/${activePop.shopId}/#shelf-${activePop.legacy.shelfId}`
+                    ? shopPath(activePop.shopId, activePop.legacy.shelfId)
                     : `/walk/#${encodeURIComponent(activePop.shopId)}`
                 }
                 className="bh-shop-link"

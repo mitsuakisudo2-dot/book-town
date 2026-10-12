@@ -2,6 +2,7 @@ import { activeSession, readersNow } from "./reading";
 import { bookPath } from "./books";
 import { findReader, isSpoilerFor } from "./social";
 import { ME_ID, type TownState } from "./types";
+import { profilePath } from "./paths";
 
 export interface Notice {
   id: string;
@@ -68,7 +69,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         readerId: post.authorId,
         createdAt: post.createdAt,
         text: `フォロー中の${name(post.authorId)}さんが投稿しました ${quote(post.body)}`,
-        href: `/profiles/${post.authorId}/`,
+        href: profilePath(post.authorId),
       });
     else if (post.bookId && state.wishlist.includes(post.bookId))
       notices.push({

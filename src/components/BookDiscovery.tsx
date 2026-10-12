@@ -2,10 +2,17 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import type { Shelf, ShelfItem, Shop, TownState } from "../lib/types";
+import {
+  ME_ID,
+  type Shelf,
+  type ShelfItem,
+  type Shop,
+  type TownState,
+} from "../lib/types";
 import { BookJacket, Icon } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
 import { BookPrice } from "./BookActions";
+import { shopPath } from "../lib/paths";
 
 function BookRail({
   title,
@@ -162,10 +169,14 @@ export function BookDiscovery({
                 >
                   <div className="bh-shop-card-heading">
                     <div>
-                      <small>{other.demo ? "デモ書店" : "あなたの書店"}</small>
+                      {other.demo ? (
+                        <small>デモ書店</small>
+                      ) : other.ownerId === ME_ID ? (
+                        <small>あなたの書店</small>
+                      ) : null}
                       <h4>
                         <Link
-                          href={`/shops/${other.id}/#shelf-${shelf.id}`}
+                          href={shopPath(other.id, shelf.id)}
                           onNavigate={onLeave}
                         >
                           {other.name}
@@ -175,7 +186,7 @@ export function BookDiscovery({
                     </div>
                     <Link
                       className="bh-shop-pop-button"
-                      href={`/shops/${other.id}/#shelf-${shelf.id}`}
+                      href={shopPath(other.id, shelf.id)}
                       onNavigate={onLeave}
                     >
                       この書店へ <Icon name="arrow" size={16} />

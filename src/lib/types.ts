@@ -77,6 +77,15 @@ export interface Shop {
 }
 
 export const POST_MAX_LENGTH = 1000;
+/** The same limits as the database (supabase/migrations), so a save is never refused for length. */
+export const SHOP_NAME_MAX_LENGTH = 80;
+export const SHOP_TAGLINE_MAX_LENGTH = 500;
+export const SHOP_DESCRIPTION_MAX_LENGTH = 2000;
+export const SHELF_NAME_MAX_LENGTH = 80;
+export const POP_MAX_LENGTH = 1000;
+export const READER_NAME_MAX_LENGTH = 80;
+export const BIO_MAX_LENGTH = 2000;
+export const NINE_NOTE_MAX_LENGTH = 500;
 
 /** One kind of post. A top-level post with a book is also a review on that book's page. */
 export interface Post {
@@ -231,4 +240,5 @@ export const normalizeCapacity = (capacity?: number): number =>
     : DEFAULT_SHELF_CAPACITY;
 
 export type PersistenceStatus =
-  "loading" | "saved" | "unavailable" | "recovered";
+  /** Changes are on their way to the account. */
+  "loading" | "saving" | "saved" | "unavailable" | "recovered";

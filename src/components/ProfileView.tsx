@@ -8,6 +8,7 @@ import {
   type TownActions,
   type TownState,
 } from "../lib/types";
+import { useTownBackend } from "../lib/store";
 import { readerPosts } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
@@ -25,6 +26,7 @@ const composeIconNames: Record<ComposeIcon, string> = {
 };
 import "./profile.css";
 import "./reading.css";
+import { isDatabaseId, profilePath, shopPath } from "../lib/paths";
 
 interface ProfileViewProps {
   state: TownState;
@@ -40,6 +42,7 @@ export function ProfileView({
   notify,
 }: ProfileViewProps) {
   const isSelf = readerId === state.me.id;
+  const savedIn = useTownBackend();
   const reader = isSelf
     ? state.me
     : state.readers.find((person) => person.id === readerId);
@@ -178,7 +181,9 @@ export function ProfileView({
         <div className="profile-reader-text">
           <p className="profile-eyebrow">
             READER IN BOOK TOWN{" "}
-            {!isSelf && <span className="profile-demo">デモの読書家</span>}
+            {!isSelf && !isDatabaseId(reader.id) && (
+              <span className="profile-demo">デモの読書家</span>
+            )}
           </p>
           <h1 id="profile-name">{reader.name}</h1>
           <p className="profile-handle">@{reader.handle}</p>
@@ -215,7 +220,8 @@ export function ProfileView({
               <button type="button" onClick={() => setSheet("followers")}>
                 <b>{followerCount}</b> フォロワー
               </button>
-            ) : (
+            ) : // Nobody counts a real reader's followers but the reader.
+            isDatabaseId(reader.id) ? null : (
               <span>
                 <b>{followerCount}</b> フォロワー
               </span>
@@ -271,7 +277,7 @@ export function ProfileView({
               )
             )}
             {shop && (
-              <Link className="profile-text-link" href={`/shops/${shop.id}`}>
+              <Link className="profile-text-link" href={shopPath(shop.id)}>
                 <Icon name="store" />{" "}
                 {isSelf ? "自分の書店を見る" : "この人の書店へ"}
                 <Icon name="arrow" />
@@ -469,7 +475,7 @@ export function ProfileView({
           <>
             <Link
               className={`profile-shop-sign profile-shop-${shop.theme}`}
-              href={`/shops/${shop.id}`}
+              href={shopPath(shop.id)}
             >
               <div className="profile-shop-mark">
                 <Icon name="store" />
@@ -494,7 +500,7 @@ export function ProfileView({
                 <div className="profile-shelf-links">
                   {publicShelves.map((shelf) => (
                     <Link
-                      href={`/shops/${shop.id}#shelf-${shelf.id}`}
+                      href={shopPath(shop.id, shelf.id)}
                       className="profile-shelf-link"
                       key={shelf.id}
                     >
@@ -562,7 +568,7 @@ export function ProfileView({
                 return owner ? (
                   <li key={place.id}>
                     <Link
-                      href={`/profiles/${owner.id}/`}
+                      href={profilePath(owner.id)}
                       onClick={() => setSheet(null)}
                     >
                       <ReaderAvatar reader={owner} size={36} />
@@ -596,7 +602,11 @@ export function ProfileView({
       {sheet === "followers" && (
         <Modal title="フォロワー" onClose={() => setSheet(null)}>
           <p className="muted">
-            まだフォロワーはいません。この試作は、あなたのブラウザの中だけで動いているため、他の人からのフォローは届きません。
+            {savedIn === "local"
+              ? "まだフォロワーはいません。この試作は、あなたのブラウザの中だけで動いているため、他の人からのフォローは届きません。"
+              : shop
+                ? `あなたの書店を${followerCount}人がフォローしています。この数は、あなたにだけ見えています。`
+                : "書店を開くと、ほかの読書家にフォローしてもらえるようになります。"}
           </p>
         </Modal>
       )}

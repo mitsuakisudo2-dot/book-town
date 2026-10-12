@@ -107,10 +107,10 @@ async function main() {
   );
   const [akiShop] = await as<{ id: string }>(
     AKI,
-    `insert into shops (owner_id, name, is_open, public_shelves)
-     values ($1, '夜の本屋', true, '[{"id":"s1","name":"旅","isPublic":true}]') returning id`,
+    "insert into shops (owner_id, name, is_open) values ($1, '夜の本屋', true) returning id",
     [AKI],
   );
+  // The owner writes every shelf here; the database copies the public ones.
   await as(
     AKI,
     `insert into shop_private (shop_id, shelves) values ($1,
@@ -272,6 +272,75 @@ async function main() {
     },
   );
 
+  await check("the life nine is replaced in one step", async () => {
+    const [second] = await as<{ id: string }>(
+      AKI,
+      "insert into books (title, created_by) values ('砂の女', $1) returning id",
+      [AKI],
+    );
+    const nine = async (who: string) =>
+      (
+        await as<{ book_id: string; note: string }>(
+          null,
+          "select book_id, note from profile_nine where profile_id = $1 order by position",
+          [who],
+        )
+      ).map((row) => [row.book_id, row.note]);
+    await as(AKI, "select replace_profile_nine($1, $2)", [
+      [second.id, book.id],
+      ["二冊目", "一冊目"],
+    ]);
+    assert.deepEqual(await nine(AKI), [
+      [second.id, "二冊目"],
+      [book.id, "一冊目"],
+    ]);
+    // Swapping two books never trips the one-book-once rule halfway.
+    await as(AKI, "select replace_profile_nine($1, $2)", [
+      [book.id, second.id],
+      ["一冊目", ""],
+    ]);
+    assert.deepEqual(await nine(AKI), [
+      [book.id, "一冊目"],
+      [second.id, ""],
+    ]);
+    await refused(
+      AKI,
+      "select replace_profile_nine($1, $2)",
+      [Array(10).fill(book.id), Array(10).fill("")],
+      /up to nine/,
+    );
+    await refused(
+      AKI,
+      "select replace_profile_nine($1, $2)",
+      [[book.id], []],
+      /up to nine/,
+    );
+    await refused(
+      AKI,
+      "select replace_profile_nine($1, $2)",
+      [[book.id], ["x".repeat(501)]],
+      /check constraint/,
+    );
+    assert.deepEqual(await nine(AKI), [
+      [book.id, "一冊目"],
+      [second.id, ""],
+    ]);
+    await refused(
+      null,
+      "select replace_profile_nine($1, $2)",
+      [[book.id], [""]],
+      /permission denied/,
+    );
+    await as(BEN, "select replace_profile_nine($1, $2)", [
+      [second.id],
+      ["ベンの一冊"],
+    ]);
+    assert.deepEqual(await nine(BEN), [[second.id, "ベンの一冊"]]);
+    assert.equal((await nine(AKI)).length, 2);
+    await as(BEN, "select replace_profile_nine($1, $2)", [[], []]);
+    assert.deepEqual(await nine(BEN), []);
+  });
+
   await check("one shop per person for now", async () => {
     await refused(
       AKI,
@@ -334,18 +403,99 @@ async function main() {
         [CHI],
         /check constraint/,
       );
-      await refused(
-        AKI,
-        "update shops set public_scene = jsonb_build_object('pad', repeat('x', 600000)) where owner_id = $1",
-        [AKI],
+      // Only the database writes the public copies, so check their limits directly.
+      await assert.rejects(
+        db.query(
+          "update shops set public_scene = jsonb_build_object('pad', repeat('x', 600000)) where owner_id = $1",
+          [AKI],
+        ),
+        /check constraint/,
+      );
+      await assert.rejects(
+        db.query("update shops set public_shelves = '{}' where owner_id = $1", [
+          AKI,
+        ]),
         /check constraint/,
       );
       await refused(
         AKI,
-        "update shops set public_shelves = '{}' where owner_id = $1",
-        [AKI],
+        "update shop_private set shelves = jsonb_build_array(repeat('x', 300000)) where shop_id = $1",
+        [akiShop.id],
         /check constraint/,
       );
+    },
+  );
+
+  await check(
+    "the database copies the public shelves; owners cannot write them",
+    async () => {
+      const publicShelves = async () =>
+        (
+          await as<{ public_shelves: { id: string }[] }>(
+            CHI,
+            "select public_shelves from shops where id = $1",
+            [akiShop.id],
+          )
+        )[0].public_shelves.map((shelf) => shelf.id);
+      assert.deepEqual(await publicShelves(), ["s1"]);
+      await as(
+        AKI,
+        `update shop_private set shelves = '[
+          {"id":"s3","name":"新しい棚","isPublic":true},
+          {"id":"s2","name":"秘密の棚","isPublic":false},
+          "not a shelf",
+          {"id":"s1","name":"旅","isPublic":true},
+          {"id":"s4","name":"下書き","isPublic":"true"}
+        ]' where shop_id = $1`,
+        [akiShop.id],
+      );
+      assert.deepEqual(await publicShelves(), ["s3", "s1"]);
+      await refused(
+        AKI,
+        'update shops set public_shelves = \'[{"id":"s2","isPublic":true}]\' where id = $1',
+        [akiShop.id],
+        /permission denied/,
+      );
+      await refused(
+        AKI,
+        "update shops set public_scene = '{}' where id = $1",
+        [akiShop.id],
+        /permission denied/,
+      );
+      await refused(
+        CHI,
+        `insert into shops (owner_id, name, public_shelves)
+         values ($1, '偽の棚', '[{"id":"x","isPublic":true}]')`,
+        [CHI],
+        /permission denied/,
+      );
+      assert.equal(
+        await affects(
+          AKI,
+          "update shops set name = '夜の本屋', tagline = 'ようこそ', is_open = true where id = $1",
+          [akiShop.id],
+        ),
+        1,
+      );
+      // Nobody else's write reaches the copy either.
+      assert.equal(
+        await affects(
+          BEN,
+          `update shop_private set shelves = '[{"id":"x","isPublic":true}]' where shop_id = $1`,
+          [akiShop.id],
+        ),
+        0,
+      );
+      assert.deepEqual(await publicShelves(), ["s3", "s1"]);
+      await as(
+        AKI,
+        `update shop_private set shelves = '[
+          {"id":"s1","name":"旅","isPublic":true},
+          {"id":"s2","name":"秘密の棚","isPublic":false}
+        ]' where shop_id = $1`,
+        [akiShop.id],
+      );
+      assert.deepEqual(await publicShelves(), ["s1"]);
     },
   );
 
@@ -396,6 +546,16 @@ async function main() {
     "insert into posts (author_id, body) values ($1, '今日は雨') returning id",
     [AKI],
   );
+
+  await check("posts are dated by the database", async () => {
+    const [post] = await as<{ id: string; created_at: string }>(
+      AKI,
+      "insert into posts (author_id, body, created_at) values ($1, '未来から', '2099-01-01') returning id, created_at",
+      [AKI],
+    );
+    assert.ok(new Date(post.created_at).getFullYear() < 2099);
+    await as(AKI, "delete from posts where id = $1", [post.id]);
+  });
 
   await check("solo reading notes stay private", async () => {
     const mine = await as(AKI, "select id from posts where id = $1", [

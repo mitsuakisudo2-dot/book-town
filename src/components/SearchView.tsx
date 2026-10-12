@@ -10,6 +10,8 @@ import { postsWithTag, popularTags, takeRequestedSearch } from "../lib/tags";
 import { PostCard } from "./Social";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./reading.css";
+import { profilePath, shopPath } from "../lib/paths";
+import { useTownBackend } from "../lib/store";
 
 type Shared = {
   state: TownState;
@@ -58,6 +60,7 @@ function publicStock(state: TownState, shop: Shop): Book[] {
 
 export function SearchView({ state, actions, notify }: Shared) {
   const id = useId();
+  const savedIn = useTownBackend();
   // A tapped #tag hands its search over; a shared ?q= link works on a fresh load.
   const [query, setQuery] = useState(() => takeRequestedSearch() ?? "");
   useEffect(() => {
@@ -207,10 +210,7 @@ export function SearchView({ state, actions, notify }: Shared) {
               <ul className="search-list">
                 {people.map((reader) => (
                   <li key={reader.id}>
-                    <Link
-                      href={"/profiles/" + reader.id + "/"}
-                      className="search-shop"
-                    >
+                    <Link href={profilePath(reader.id)} className="search-shop">
                       <ReaderAvatar reader={reader} size={32} />
                       <span>
                         <b>{reader.name}</b>
@@ -251,7 +251,7 @@ export function SearchView({ state, actions, notify }: Shared) {
                 {shopResults.map((shop) => (
                   <li key={shop.id}>
                     <Link
-                      href={"/shops/" + shop.id + "/"}
+                      href={shopPath(shop.id)}
                       className={"search-shop theme-" + shop.theme}
                     >
                       <Icon name="store" size={20} />
@@ -338,7 +338,8 @@ export function SearchView({ state, actions, notify }: Shared) {
             )}
           </section>
           <p className="search-note">
-            デモの街の本と書店から探します。並び順は、この街の棚と投稿から数えています。
+            {savedIn === "local" ? "デモの街" : "この街"}
+            の本と書店から探します。並び順は、この街の棚と投稿から数えています。
           </p>
         </div>
       )}

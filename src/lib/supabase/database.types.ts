@@ -1,39 +1,15 @@
 /**
- * Types for the tables the app reads and writes, in the shape the Supabase
- * client expects, matching supabase/migrations. Tables are added here as the app
- * starts to use them. Rows are type aliases, not interfaces, so the client can
- * treat them as plain records.
+ * The database's types, generated from supabase/migrations into
+ * database.generated.ts, and the row shapes the app names often.
  */
-export type ProfileRow = {
-  id: string;
-  handle: string;
-  name: string;
-  bio: string;
-  color: string;
-  links: string[];
-  compose_icon: "pen" | "typewriter" | "quill";
-  created_at: string;
-  updated_at: string;
-};
+import type {
+  Database,
+  Tables,
+  TablesInsert,
+  TablesUpdate,
+} from "./database.generated";
 
-export type ProfileInsert = Pick<ProfileRow, "id" | "handle" | "name"> &
-  Partial<Pick<ProfileRow, "bio" | "color" | "links" | "compose_icon">>;
+export type { Database, Tables, TablesInsert, TablesUpdate };
 
-export type Database = {
-  public: {
-    Tables: {
-      profiles: {
-        Row: ProfileRow;
-        Insert: ProfileInsert;
-        Update: Partial<Omit<ProfileRow, "id" | "created_at" | "updated_at">>;
-        Relationships: [];
-      };
-    };
-    Views: { [_ in never]: never };
-    Functions: {
-      is_blocked_with: { Args: { other: string }; Returns: boolean };
-    };
-    Enums: { [_ in never]: never };
-    CompositeTypes: { [_ in never]: never };
-  };
-};
+export type ProfileRow = Tables<"profiles">;
+export type ProfileInsert = TablesInsert<"profiles">;
