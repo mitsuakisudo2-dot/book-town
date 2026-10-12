@@ -837,6 +837,7 @@ export type Database = {
         Args: { book_ids: string[]; notes: string[] };
         Returns: undefined;
       };
+      shop_visitors: { Args: { days: number }; Returns: number };
       valid_links: { Args: { links: string[] }; Returns: boolean };
     };
     Enums: {

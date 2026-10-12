@@ -110,6 +110,7 @@ function rows(extra: Partial<RemoteRows> = {}): RemoteRows {
     ownShelves: [],
     ownSceneBooks: [],
     ownShopFollowers: 0,
+    ownShopVisitors: null,
     shopMessages: [],
     follows: [],
     marks: [],
@@ -197,6 +198,23 @@ async function main() {
     assert.deepEqual(town.following, [BEN_SHOP]);
     assert.equal(town.shops[0].followers, 0);
   });
+
+  await check(
+    "the owner hears how many stopped by, only when someone did",
+    () => {
+      const visited = (count: number) =>
+        townFromRows(
+          rows({
+            shops: [shop(AKI_SHOP, AKI), shop(BEN_SHOP, BEN)],
+            ownShopVisitors: { count, at },
+          }),
+          ids,
+        );
+      assert.deepEqual(visited(2).ownShop?.weekVisitors, { count: 2, at });
+      assert.equal(visited(2).shops[0].weekVisitors, undefined);
+      assert.equal("weekVisitors" in (visited(0).ownShop ?? {}), false);
+    },
+  );
 
   await check("other people's books carry no summary of their own", () => {
     const town = townFromRows(rows(), ids);

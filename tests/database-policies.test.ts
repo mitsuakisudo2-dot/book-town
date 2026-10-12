@@ -870,6 +870,50 @@ async function main() {
     );
   });
 
+  await check(
+    "an owner learns how many stopped by this week, never who",
+    async () => {
+      const count = async (visitor: Visitor, days = 7) =>
+        (
+          await as<{ n: number }>(visitor, "select shop_visitors($1) as n", [
+            days,
+          ])
+        )[0].n;
+      // Ben came ten days ago, Chi yesterday; Aki's own visit is not counted.
+      await db.exec(
+        `update shop_visits set visited_at = now() - interval '10 days' where user_id = '${BEN}'`,
+      );
+      await as(
+        CHI,
+        "insert into shop_visits (user_id, shop_id, visited_at) values ($1, $2, now() - interval '1 day')",
+        [CHI, akiShop.id],
+      );
+      await as(
+        AKI,
+        "insert into shop_visits (user_id, shop_id) values ($1, $2)",
+        [AKI, akiShop.id],
+      );
+      assert.equal(await count(AKI), 1);
+      assert.equal(await count(AKI, 30), 2);
+      // Others hear nothing about Aki's shop, and visitors without an account
+      // cannot ask at all.
+      assert.equal(await count(BEN), 0);
+      assert.equal(await count(CHI), 0);
+      await refused(null, "select shop_visitors(7)", [], /permission/);
+      // Someone either of them blocked is not counted.
+      await as(
+        AKI,
+        "insert into blocks (blocker_id, blocked_id) values ($1, $2)",
+        [AKI, CHI],
+      );
+      assert.equal(await count(AKI), 0);
+      await as(AKI, "delete from blocks where blocker_id = $1", [AKI]);
+      await db.exec(
+        `delete from shop_visits where user_id in ('${CHI}', '${AKI}')`,
+      );
+    },
+  );
+
   await check("book lists are private", async () => {
     await as(
       CHI,

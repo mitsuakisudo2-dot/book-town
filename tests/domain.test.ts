@@ -33,7 +33,11 @@ import {
   readingFeed,
   readingTotals,
 } from "../src/lib/reading";
-import { notificationsFor, unreadCount } from "../src/lib/notifications";
+import {
+  notificationsFor,
+  unreadCount,
+  weekOf,
+} from "../src/lib/notifications";
 import { normalizeIsbn, bookPath } from "../src/lib/books";
 import { extractTags, popularTags, postsWithTag } from "../src/lib/tags";
 import {
@@ -950,6 +954,29 @@ check("notifications come only from what happened in this town", () => {
   assert.ok(unread > 0);
   fresh.actions.markNotificationsSeen(notices.map((notice) => notice.id));
   assert.equal(unreadCount(fresh.getSnapshot()), 0);
+});
+
+check("an owner hears once a week how many stopped by", () => {
+  const town = createTownStore(createMemoryRepository());
+  town.actions.createShop("夜の本屋", "", "sage");
+  const state = town.getSnapshot();
+  const visitors = (count: number, at: string): TownState => ({
+    ...state,
+    ownShop: { ...state.ownShop!, weekVisitors: { count, at } },
+  });
+  assert.ok(
+    !notificationsFor(state).some((notice) =>
+      notice.id.startsWith("visitors:"),
+    ),
+  );
+  const [notice] = notificationsFor(visitors(3, "2026-10-14T03:00:00Z")).filter(
+    (entry) => entry.id.startsWith("visitors:"),
+  );
+  assert.equal(notice.text, "この1週間で、3人があなたの本屋に立ち寄りました");
+  // The same week (Monday to Sunday, Japan time) keeps the same notice.
+  assert.equal(notice.id, "visitors:2026-10-12");
+  assert.equal(weekOf("2026-10-11T15:30:00Z"), "2026-10-12");
+  assert.equal(weekOf("2026-10-11T14:30:00Z"), "2026-10-05");
 });
 
 check("reading can start without a book", () => {
