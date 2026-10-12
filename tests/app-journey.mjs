@@ -337,7 +337,7 @@ try {
       await dialog.getByRole("button", { name: "登録する" }).click();
       await expect(dialog).toHaveCount(0);
       await expect(
-        page.getByRole("button", { name: /^登録した本/ }),
+        page.getByRole("button", { name: /^登録\s*\d*$/ }),
       ).toHaveAttribute("aria-pressed", "true");
       await expect(page.locator(".profile-saved-book")).toContainText("QAの本");
       await page.reload();

@@ -1600,6 +1600,46 @@
   padding: 8px;
   font-size: 11px;
 }
+.walk-own-missing {
+  position: relative;
+  z-index: 4;
+  flex: none;
+  align-self: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  width: calc(100% - 28px);
+  max-width: 520px;
+  margin: 0 0 6px;
+  padding: 10px 36px 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #f6ead6;
+  background: rgba(20, 8, 2, 0.72);
+  backdrop-filter: blur(6px);
+}
+.walk-own-missing a {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #3a2616;
+  background: #fbf1dd;
+}
+.walk-own-missing button {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: #f6ead6;
+  background: none;
+  border: 0;
+}
 .walk-full-pop {
   white-space: pre-wrap;
   font-family: "Yohaku Hand", var(--serif);

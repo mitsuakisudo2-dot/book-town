@@ -26,6 +26,7 @@ import { WoodenShelf } from "./WoodenShelf";
 import { StoreSceneEditor } from "./StoreSceneEditor";
 import { useWalkStore } from "../lib/walk-store";
 import { hasPublicSceneBooks } from "../lib/store-customization";
+import { publicWalkShops } from "../lib/store-scene-adapter";
 import { OpenShop, ThemePicker } from "./OpenShop";
 import "./editor.css";
 
@@ -647,6 +648,11 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   const [opening, setOpening] = useState(false);
   const shop = state.ownShop;
   const ownScene = walk.scenes.find((s) => s.storeId === shop?.id);
+  // Whether the shop stands in the walk now, decorated or as its shelves are.
+  const inWalk = ownScene
+    ? hasPublicSceneBooks(ownScene, state.books)
+    : publicWalkShops({ books: state.books, shops: [], ownShop: shop }).length >
+      0;
   const persistenceMessage = shelfSaveMessage(savedIn, persistenceStatus);
   const addBookShelf = shop?.shelves.find(
     (shelf) => shelf.id === addBookShelfId,
@@ -679,13 +685,15 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       </header>
       <section className="editor-immersive-entry">
         <div>
-          <h2>灯りのともる、自分の本屋</h2>
+          <h2>書店めぐりの店内</h2>
+          {/* Two places to arrange books; say in one line where each one shows. */}
           <p>
-            木の棚、店の看板、手書きのPOP。書店めぐりに並ぶ一軒をつくれます。
+            {ownScene
+              ? "店内は、飾りつけた形で書店めぐりに出ています。下の本棚に新しく並べた本は、飾りつけの「まだ並べていない本」から店内に置けます。"
+              : "下の本棚に並べた本が、そのまま書店めぐりの店内に並びます。飾りつけると、棚の形や看板、本の置き場所を自由に変えられます。"}
           </p>
-          {ownScene && <p>店内と下の本棚は、それぞれ別に保存されます。</p>}
-          {ownScene && !hasPublicSceneBooks(ownScene, state.books) && (
-            <p>公開する本を棚に並べると、書店めぐりで眺められます。</p>
+          {!inWalk && (
+            <p>公開する棚に本を並べると、書店めぐりに灯りがともります。</p>
           )}
         </div>
         <div>
@@ -696,9 +704,9 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             onClick={() => setSceneEditorOpen(true)}
           >
             <Icon name="shelf" size={17} />
-            店内をつくる
+            店内を飾りつける
           </button>
-          {ownScene && hasPublicSceneBooks(ownScene, state.books) && (
+          {inWalk && (
             <Link className="editor-button secondary" href="/walk/#mine">
               店内を眺める
             </Link>
