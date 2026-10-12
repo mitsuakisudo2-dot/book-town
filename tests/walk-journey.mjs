@@ -374,6 +374,10 @@ try {
       await page.setViewportSize({ width: 390, height: 640 });
       await go("/walk/#shop-window");
       await expect(page.locator('[data-furniture="table"]')).toBeVisible();
+      // The floor POP shows its first words and says there is more.
+      await expect(
+        page.locator(".walk-ownerPop .walk-floor-pop-more"),
+      ).toHaveText("つづき");
       const fit = await page.evaluate(() => {
         const stage = document
           .querySelector(".walk-artboard")
