@@ -79,6 +79,8 @@ export function ReadingView(props: Shared) {
   const [review, setReview] = useState<{ book?: Book } | null>(null);
   // Finishing a book goes on to how it felt.
   const [finished, setFinished] = useState<Book | null>(null);
+  // Closing the book leaves a small card of what this time was.
+  const [closed, setClosed] = useState<Closed | null>(null);
   return (
     <>
       {active ? (
@@ -88,9 +90,22 @@ export function ReadingView(props: Shared) {
           clock={clock}
           onReview={(read) => setReview({ book: read })}
           onFinished={setFinished}
+          onClosed={setClosed}
         />
       ) : (
-        <StartReading {...props} clock={clock} />
+        <>
+          {closed && (
+            <ClosedCard
+              closed={closed}
+              onReview={() => {
+                setReview({ book: closed.book });
+                setClosed(null);
+              }}
+              onDismiss={() => setClosed(null)}
+            />
+          )}
+          <StartReading {...props} clock={clock} />
+        </>
       )}
       {finished && (
         <RecordSheet
@@ -117,8 +132,15 @@ export function ReadingView(props: Shared) {
 }
 
 /** Everyone's reading-together posts, across every book; the viewer's private notes too. */
-function ReadingFeed({ state, actions, notify }: Shared) {
-  const posts = readingFeed(state).slice(0, 30);
+function ReadingFeed({
+  state,
+  actions,
+  notify,
+  excludeMine = false,
+}: Shared & { excludeMine?: boolean }) {
+  const posts = readingFeed(state)
+    .filter((post) => !excludeMine || post.authorId !== ME_ID)
+    .slice(0, 30);
   return (
     <section className="reading-memos" aria-labelledby="reading-feed-title">
       <h2 id="reading-feed-title">みんなの読書中のつぶやき</h2>
@@ -233,6 +255,47 @@ function ReadersNow({
   );
 }
 
+type Closed = { book?: Book; seconds: number; memo?: string };
+
+/** Just after closing the book: this sitting's time, the book, a line written. */
+function ClosedCard({
+  closed,
+  onReview,
+  onDismiss,
+}: {
+  closed: Closed;
+  onReview: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <section className="reading-closed" aria-label="今日の読書" role="status">
+      {closed.book && (
+        <BookJacket book={closed.book} className="reading-closed-jacket" />
+      )}
+      <div>
+        <p className="reading-closed-time">
+          今日の読書 <b>{formatDuration(Math.max(1, closed.seconds))}</b>
+        </p>
+        {closed.book && (
+          <p className="reading-closed-title">『{closed.book.title}』</p>
+        )}
+        {closed.memo && (
+          <blockquote className="reading-closed-memo">{closed.memo}</blockquote>
+        )}
+        <div className="reading-closed-actions">
+          <button type="button" className="button secondary" onClick={onReview}>
+            <Icon name="pen" size={15} />
+            感想を書く
+          </button>
+          <button type="button" className="text-button" onClick={onDismiss}>
+            閉じる
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function StartReading({
   state,
   actions,
@@ -313,7 +376,7 @@ function StartReading({
           </button>
           <button
             type="button"
-            className="reading-mode is-together"
+            className="reading-mode"
             onClick={() =>
               setConfirm({ mode: "together", phrase: pick(START_PHRASES) })
             }
@@ -411,11 +474,13 @@ function ReadingRoom({
   clock,
   onReview,
   onFinished,
+  onClosed,
 }: Shared & {
   book?: Book;
   clock: ReturnType<typeof useClock>;
   onReview: (book?: Book) => void;
   onFinished: (book: Book) => void;
+  onClosed: (closed: Closed) => void;
 }) {
   const id = useId();
   const session = activeSession(state);
@@ -432,6 +497,18 @@ function ReadingRoom({
       ? (readingTotals(state, clock.now).byBook.get(book.id) ?? 0)
       : null;
   const together = session.mode === "together";
+  // What the reader wrote during this sitting stays in view; everyone
+  // else's words wait behind a fold until a break.
+  const startedAt = Date.parse(session.startedAt);
+  const written = state.posts
+    .filter(
+      (post) =>
+        post.authorId === ME_ID &&
+        post.readingMode !== null &&
+        post.parentId === null &&
+        Date.parse(post.createdAt) >= startedAt,
+    )
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
@@ -538,8 +615,39 @@ function ReadingRoom({
         </div>
       </form>
 
-      <ReadersNow state={state} clock={clock} bookId={book?.id} />
-      <ReadingFeed state={state} actions={actions} notify={notify} />
+      {written.length > 0 && (
+        <section className="reading-mine" aria-label="今回書いたこと">
+          <div className="post-feed">
+            {written.map((post) => (
+              <PostCard
+                key={post.id}
+                state={state}
+                actions={actions}
+                notify={notify}
+                post={post}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      {together && <ReadersNow state={state} clock={clock} bookId={book?.id} />}
+      <details className="reading-peek">
+        <summary>
+          <Icon name="chevron" size={14} />
+          ひと休みに、
+          {together ? "みんなのつぶやき" : "街の読書"}
+          をのぞく
+        </summary>
+        {!together && (
+          <ReadersNow state={state} clock={clock} bookId={book?.id} />
+        )}
+        <ReadingFeed
+          state={state}
+          actions={actions}
+          notify={notify}
+          excludeMine
+        />
+      </details>
       {ending && (
         <Modal
           title={ending.finished ? "読み終えましたか？" : "読書を終えますか？"}
@@ -578,7 +686,12 @@ function ReadingRoom({
                   actions.endReading(ending.finished);
                   // Finishing a book asks how it felt; the record says the rest.
                   if (ending.finished && book) onFinished(book);
-                  else notify("読書を終えました。時間を記録しました");
+                  else
+                    onClosed({
+                      book,
+                      seconds: seconds ?? 0,
+                      memo: written.find((post) => post.body.trim())?.body,
+                    });
                   setEnding(null);
                 }}
               >
