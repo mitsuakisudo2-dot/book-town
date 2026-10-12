@@ -29,6 +29,27 @@ export function followedTimelinePosts(state: TownState): Post[] {
   );
 }
 
+/**
+ * Owners to follow first: shops with a POP to read, in the town's own order.
+ * Never ranked by followers or likes.
+ */
+export function ownersToFollow(state: TownState, limit = 3) {
+  return state.shops
+    .filter((shop) => !state.following.includes(shop.id))
+    .flatMap((shop) => {
+      const owner = findReader(state, shop.ownerId);
+      const item = shop.shelves
+        .filter((shelf) => shelf.isPublic)
+        .flatMap((shelf) => shelf.items)
+        .find((entry) => entry.pop.trim());
+      const book = state.books.find((entry) => entry.id === item?.bookId);
+      return owner && item && book && owner.id !== ME_ID
+        ? [{ shop, owner, pop: item.pop.trim(), book }]
+        : [];
+    })
+    .slice(0, limit);
+}
+
 /** Reviews are top-level posts with this book; spoilers are kept apart, behind the door. */
 export function bookReviews(state: TownState, bookId: string) {
   const reviews = state.posts

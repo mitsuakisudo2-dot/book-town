@@ -16,6 +16,7 @@ import {
   followedTimelinePosts,
   formatPostTime,
   isSpoilerFor,
+  ownersToFollow,
   likeCount,
   readerPosts,
   repliesOf,
@@ -37,6 +38,7 @@ import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
 import { isDatabaseId, profilePath } from "../lib/paths";
 import { ReportButton } from "./Report";
+import { useTownBackend } from "../lib/store";
 
 type Shared = {
   state: TownState;
@@ -81,6 +83,16 @@ export function TimelineView(props: Shared) {
           フォローしている書店の店主と、あなたの投稿。
         </p>
       )}
+      {followingOnly && !props.state.following.length && (
+        <FollowSuggestions {...props} />
+      )}
+      {posts.some(
+        (post) => post.authorId !== ME_ID && !isDatabaseId(post.authorId),
+      ) && (
+        <p className="timeline-demo-note">
+          「見本」と付いた読書家と言葉は、街の雰囲気を伝えるための見本です。
+        </p>
+      )}
       <div className="post-feed" aria-label="タイムラインの投稿">
         {posts.map((post) => (
           <PostCard key={post.id} {...props} post={post} showBook />
@@ -110,6 +122,46 @@ export function TimelineView(props: Shared) {
         ネタバレを含む投稿は隠しています。「表示する」を押すと読めます。
       </p>
     </div>
+  );
+}
+
+/** Following nobody yet: a few owners, each with words of their own to read. */
+function FollowSuggestions({ state, actions, notify }: Shared) {
+  const owners = ownersToFollow(state);
+  if (!owners.length) return null;
+  return (
+    <section className="follow-suggestions" aria-labelledby="follow-first">
+      <h2 id="follow-first">フォローすると、その店主の投稿がここに届きます</h2>
+      <ul>
+        {owners.map(({ shop, owner, pop, book }) => (
+          <li key={shop.id}>
+            <Link href={profilePath(owner.id)} className="follow-owner">
+              <ReaderAvatar reader={owner} size={36} />
+              <span>
+                <b>{shop.name}</b>
+                <small>
+                  {owner.name}
+                  {!isDatabaseId(owner.id) && " · 見本"}
+                </small>
+              </span>
+            </Link>
+            <p className="follow-pop">
+              『{book.title}』に添えたPOP：{pop}
+            </p>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => {
+                actions.toggleFollow(shop.id);
+                notify(shop.name + "をフォローしました");
+              }}
+            >
+              フォロー
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -494,6 +546,13 @@ export function PostCard({
   const wanted = state.wantedPosts.includes(post.id);
   const likes = likeCount(state, post);
   const wants = wantCount(state, post);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const savedIn = useTownBackend();
+  const spoilerable = !mine && !post.spoiler && Boolean(book || post.parentId);
+  const reportable =
+    !mine &&
+    isDatabaseId(post.id) &&
+    (savedIn === "account" || savedIn === "visitor");
   if (!author) return null;
   const profile = profilePath(author.id);
   return (
@@ -514,10 +573,10 @@ export function PostCard({
           <Link href={profile} className="post-author">
             {author.name}
           </Link>
-          <span className="post-handle">@{author.handle}</span>
-          {!mine && !isDatabaseId(author.id) && (
-            <small className="demo-tag">見本の読書家</small>
-          )}
+          <span className="post-handle">
+            @{author.handle}
+            {!mine && !isDatabaseId(author.id) && " · 見本"}
+          </span>
           <time dateTime={post.createdAt}>
             {formatPostTime(post.createdAt)}
           </time>
@@ -572,7 +631,9 @@ export function PostCard({
             onClick={() => actions.toggleLike(post.id)}
           >
             <Icon name="heart" size={16} />
-            いいね<span>{likes || ""}</span>
+            いいね
+            {/* How many is the writer's to know, not a ranking for others. */}
+            <span>{mine && likes ? likes : ""}</span>
           </button>
           {!isReply && post.readingMode !== "solo" && (
             <button
@@ -600,34 +661,33 @@ export function PostCard({
               }}
             >
               <Icon name={wanted ? "check" : "bookmark"} size={16} />
-              読みたくなった<span>{wants || ""}</span>
+              読みたくなった
             </button>
           )}
-          {!mine && !post.spoiler && (book || post.parentId) && (
+          {spoilerable && reported && (
             <button
               type="button"
               className="report-button"
-              aria-pressed={reported}
+              aria-pressed
               onClick={() => {
                 actions.toggleSpoilerReport(post.id);
-                notify(
-                  reported
-                    ? "ネタバレの報告を取り消しました"
-                    : "ネタバレの可能性を報告しました。あなたの画面では隠します",
-                );
+                notify("ネタバレの報告を取り消しました");
               }}
             >
-              {reported ? "報告を取り消す" : "ネタバレでは？"}
+              報告を取り消す
             </button>
           )}
-          {!mine && (
-            <ReportButton
-              target={{
-                kind: "post",
-                id: post.id,
-                name: author.name + "さんの投稿",
-              }}
-            />
+          {/* Reporting stays one tap away, out of sight of whoever is writing. */}
+          {((spoilerable && !reported) || reportable) && (
+            <button
+              type="button"
+              className="report-button post-more-toggle"
+              aria-label="その他の操作"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen(!moreOpen)}
+            >
+              <Icon name="more" size={16} />
+            </button>
           )}
           {mine && !confirmingDelete && (
             <button
@@ -639,6 +699,35 @@ export function PostCard({
             </button>
           )}
         </div>
+        {moreOpen && (
+          <div className="post-more" role="group" aria-label="その他の操作">
+            {spoilerable && !reported && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMoreOpen(false);
+                  actions.toggleSpoilerReport(post.id);
+                  notify(
+                    "ネタバレの可能性を報告しました。あなたの画面では隠します",
+                  );
+                }}
+              >
+                ネタバレでは？
+              </button>
+            )}
+            <ReportButton
+              className=""
+              onOpen={() => setMoreOpen(false)}
+              target={{
+                kind: "post",
+                id: post.id,
+                name: author.name + "さんの投稿",
+              }}
+            >
+              この投稿を通報
+            </ReportButton>
+          </div>
+        )}
         {mine && confirmingDelete && (
           <div className="delete-confirm" role="group" aria-label="投稿の削除">
             <span>
