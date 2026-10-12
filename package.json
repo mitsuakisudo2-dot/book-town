@@ -11,6 +11,7 @@
     "test:domain": "tsx tests/domain.test.ts",
     "test:walk-domain": "tsx tests/walk-domain.test.ts",
     "test:customization-domain": "tsx tests/customization-domain.test.ts",
+    "test:db": "tsx tests/database-policies.test.ts",
     "test:customization": "node tests/customization-journey.mjs",
     "test:walk": "node tests/walk-journey.mjs",
     "test:browser": "node tests/browser-journey.mjs",
@@ -29,6 +30,7 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "~0.3.16",
     "@playwright/test": "^1.56.0",
     "@tailwindcss/postcss": "^4.1.14",
     "@types/node": "^22.0.0",
