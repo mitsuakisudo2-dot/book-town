@@ -245,6 +245,9 @@
   .town-shell .town-bottom-nav span {
     font-size: 9.5px;
     letter-spacing: -0.05em;
+  }
+}
+
 /* A book left unfinished waits at the top of home, one tap from reading. */
 .home-continue {
   display: flex;
