@@ -1174,6 +1174,111 @@ async function main() {
     },
   );
 
+  await check(
+    "reading records stay with their reader unless they share them",
+    async () => {
+      // New people keep their records to themselves until they choose.
+      const [chi] = await as<{ reading_visibility: string }>(
+        CHI,
+        "select reading_visibility from profiles where id = $1",
+        [CHI],
+      );
+      assert.equal(chi.reading_visibility, "private");
+
+      const [shared] = await as<{ id: string; created_at: string }>(
+        AKI,
+        `insert into reading_entries (user_id, book_id, feelings, is_public, created_at)
+         values ($1, $2, '{quiet,talk}', true, '2099-01-01') returning id, created_at`,
+        [AKI, book.id],
+      );
+      assert.ok(new Date(shared.created_at).getFullYear() < 2099);
+      const [secret] = await as<{ id: string }>(
+        AKI,
+        "insert into reading_entries (user_id, book_id, body) values ($1, $2, '誰にも言わない') returning id",
+        [AKI, book.id],
+      );
+      const seen = async (visitor: Visitor) =>
+        (
+          await as<{ id: string }>(
+            visitor,
+            "select id from reading_entries where user_id = $1 order by created_at",
+            [AKI],
+          )
+        ).map((row) => row.id);
+      assert.deepEqual(await seen(AKI), [shared.id, secret.id]);
+      assert.deepEqual(await seen(CHI), [shared.id]);
+      assert.deepEqual(await seen(null), [shared.id]);
+
+      // Feelings come from the list; nobody writes as someone else, and a
+      // record stays about the same book and the same reader.
+      await refused(
+        AKI,
+        "insert into reading_entries (user_id, book_id, feelings) values ($1, $2, '{bored}')",
+        [AKI, book.id],
+        /check constraint/,
+      );
+      await refused(
+        CHI,
+        "insert into reading_entries (user_id, book_id) values ($1, $2)",
+        [AKI, book.id],
+        /row-level security/,
+      );
+      await refused(
+        AKI,
+        "update reading_entries set user_id = $1 where id = $2",
+        [CHI, shared.id],
+        /permission/,
+      );
+      await refused(
+        null,
+        "insert into reading_entries (user_id, book_id) values ($1, $2)",
+        [AKI, book.id],
+        /permission/,
+      );
+      assert.equal(
+        await affects(
+          CHI,
+          "update reading_entries set is_public = true where id = $1",
+          [secret.id],
+        ),
+        0,
+      );
+      assert.equal(
+        await affects(CHI, "delete from reading_entries where id = $1", [
+          shared.id,
+        ]),
+        0,
+      );
+      assert.equal(
+        await affects(
+          AKI,
+          "update reading_entries set is_public = true, body = '話したい' where id = $1",
+          [secret.id],
+        ),
+        1,
+      );
+      assert.equal((await seen(CHI)).length, 2);
+
+      // A block or a hidden profile takes the records away from others.
+      await as(
+        CHI,
+        "insert into blocks (blocker_id, blocked_id) values ($1, $2)",
+        [CHI, AKI],
+      );
+      assert.deepEqual(await seen(CHI), []);
+      await as(CHI, "delete from blocks where blocker_id = $1", [CHI]);
+      await db.exec(
+        `insert into moderation_hides (target_kind, target_id) values ('profile', '${AKI}')`,
+      );
+      assert.deepEqual(await seen(null), []);
+      assert.equal((await seen(AKI)).length, 2);
+      await db.exec("delete from moderation_hides");
+
+      await as(AKI, "delete from reading_entries where user_id = $1", [AKI]);
+      assert.deepEqual(await seen(AKI), []);
+    },
+  );
+
   await check("deleting an account removes everything it owned", async () => {
     await db.exec(`delete from auth.users where id = '${BEN}'`);
     for (const table of [

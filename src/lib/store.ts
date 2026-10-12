@@ -15,6 +15,7 @@ import { followAccount } from "./town-session";
 import { requestAccount } from "./visitor";
 import { createRegisteredBook, normalizeIsbn } from "./books";
 import { cleanLinks } from "./links";
+import { cleanRecord } from "./records";
 import { handleProblem, normalizeHandle } from "./handles";
 import {
   COMPOSE_ICONS,
@@ -38,6 +39,7 @@ import {
   type BookDisplay,
   type PersistenceStatus,
   type Post,
+  type ReadingRecord,
   type ReadingSession,
   type Shelf,
   type Shop,
@@ -650,6 +652,67 @@ export function createTownStore(
       if (!COMPOSE_ICONS.includes(icon) || state.settings.composeIcon === icon)
         return;
       commit({ ...state, settings: { ...state.settings, composeIcon: icon } });
+    },
+    recordReading(draft) {
+      initialize();
+      const record = cleanRecord(draft);
+      if (!record || !state.books.some((book) => book.id === draft.bookId))
+        return null;
+      const entry: ReadingRecord = {
+        id: nextId(
+          "record",
+          state.readingRecords.map((entry) => entry.id),
+        ),
+        readerId: ME_ID,
+        bookId: draft.bookId,
+        ...record,
+        createdAt: now().toISOString(),
+      };
+      commit({
+        ...state,
+        readingRecords: [...state.readingRecords, entry],
+        finishedBooks: state.finishedBooks.includes(draft.bookId)
+          ? state.finishedBooks
+          : [...state.finishedBooks, draft.bookId],
+      });
+      return entry.id;
+    },
+    updateRecord(recordId, patch) {
+      initialize();
+      const current = state.readingRecords.find(
+        (entry) => entry.id === recordId && entry.readerId === ME_ID,
+      );
+      const record = current && cleanRecord({ ...current, ...patch });
+      if (!current || !record) return;
+      commit({
+        ...state,
+        readingRecords: state.readingRecords.map((entry) =>
+          entry.id === recordId ? { ...entry, ...record } : entry,
+        ),
+      });
+    },
+    deleteRecord(recordId) {
+      initialize();
+      if (
+        !state.readingRecords.some(
+          (entry) => entry.id === recordId && entry.readerId === ME_ID,
+        )
+      )
+        return;
+      commit({
+        ...state,
+        readingRecords: state.readingRecords.filter(
+          (entry) => entry.id !== recordId,
+        ),
+      });
+    },
+    setReadingPublic(value) {
+      initialize();
+      if (state.settings.readingPublic === value) return;
+      commit({
+        ...state,
+        settings: { ...state.settings, readingPublic: value === true },
+      });
     },
     markNotificationsSeen(ids) {
       initialize();

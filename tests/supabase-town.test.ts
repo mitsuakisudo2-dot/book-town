@@ -554,6 +554,57 @@ async function main() {
   );
 
   await check(
+    "a reading record is kept, and only a public one reaches others",
+    async () => {
+      const store = await townOf(aki);
+      store.actions.setReadingPublic(true);
+      const shared = store.actions.recordReading({
+        bookId,
+        feelings: ["talk", "quiet"],
+        note: "誰かと話したい。",
+        spoiler: false,
+        isPublic: true,
+      });
+      const secret = store.actions.recordReading({
+        bookId,
+        feelings: ["cried"],
+        note: "",
+        spoiler: false,
+        isPublic: false,
+      });
+      assert.ok(shared && secret);
+      await settled(store);
+
+      const akiAgain = (await townOf(aki)).getSnapshot();
+      assert.equal(akiAgain.settings.readingPublic, true);
+      const own = akiAgain.readingRecords.filter(
+        (record) => record.readerId === ME_ID,
+      );
+      assert.deepEqual(
+        own.map((record) => record.id).sort(),
+        [shared, secret].sort(),
+      );
+      assert.deepEqual(own.find((record) => record.id === shared)?.feelings, [
+        "quiet",
+        "talk",
+      ]);
+
+      const fromBen = async () =>
+        (await townOf(ben))
+          .getSnapshot()
+          .readingRecords.filter((record) => record.readerId === aki.id)
+          .map((record) => record.id);
+      assert.deepEqual(await fromBen(), [shared]);
+
+      const akiStore = await townOf(aki);
+      akiStore.actions.updateRecord(secret, { isPublic: true });
+      akiStore.actions.deleteRecord(shared);
+      await settled(akiStore);
+      assert.deepEqual(await fromBen(), [secret]);
+    },
+  );
+
+  await check(
     "three reports hide a post from everyone but its writer, until dismissed",
     async () => {
       const carol = await reader("carol");

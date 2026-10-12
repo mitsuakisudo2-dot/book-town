@@ -28,6 +28,7 @@ const profileOf = (id: string, handle: string, name: string): ProfileRow => ({
   color: "#768281",
   links: [],
   compose_icon: "pen",
+  reading_visibility: "private",
   created_at: "2026-10-12T00:00:00Z",
   updated_at: "2026-10-12T00:00:00Z",
 });
@@ -79,7 +80,10 @@ function fakeBackend() {
     async createProfile(row) {
       if ([...profiles.values()].some((p) => p.handle === row.handle))
         return { failure: "handle-taken" as AccountFailure };
-      const profile = profileOf(row.id, row.handle, row.name);
+      const profile = {
+        ...profileOf(row.id, row.handle, row.name),
+        reading_visibility: row.reading_visibility ?? "private",
+      };
       profiles.set(row.id, profile);
       return { profile };
     },
@@ -167,6 +171,7 @@ async function main() {
         handle: "@Aki_Books",
         name: " アキ ",
         ageConfirmed: true,
+        readingPublic: true,
       };
       assert.equal(profileDraftProblem(draft), null);
       assert.match(
@@ -196,6 +201,7 @@ async function main() {
       if (state.status === "signed-in") {
         assert.equal(state.profile.handle, "aki_books");
         assert.equal(state.profile.name, "アキ");
+        assert.equal(state.profile.reading_visibility, "public");
       }
     },
   );
@@ -213,6 +219,7 @@ async function main() {
         handle: "aki",
         name: "アキ",
         ageConfirmed: true,
+        readingPublic: false,
       });
       assert.deepEqual(taken, {
         ok: false,

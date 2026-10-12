@@ -8,6 +8,12 @@ import {
 import { createTownStore } from "../src/lib/store";
 import { counterId } from "../src/lib/town-backend";
 import {
+  bookFeelings,
+  ownRecordFor,
+  recordsOf,
+  talkersOf,
+} from "../src/lib/records";
+import {
   bookReviews,
   followedTimelinePosts,
   isSpoilerFor,
@@ -191,6 +197,126 @@ check("write failures remain usable and report unavailable persistence", () => {
   failing.actions.toggleWish("momo");
   assert.deepEqual(failing.getSnapshot().wishlist, ["momo"]);
   assert.equal(failing.getPersistenceSnapshot(), "unavailable");
+});
+
+check("finishing a book keeps how it felt, in the offered order", () => {
+  const fresh = createTownStore(createMemoryRepository());
+  const id = fresh.actions.recordReading({
+    bookId: "momo",
+    feelings: ["talk", "cried", "cried"],
+    note: "  時間の花  ",
+    spoiler: true,
+    isPublic: true,
+  });
+  assert.ok(id);
+  const record = fresh
+    .getSnapshot()
+    .readingRecords.find((entry) => entry.id === id);
+  assert.deepEqual(record?.feelings, ["cried", "talk"]);
+  assert.equal(record?.note, "時間の花");
+  assert.equal(record?.readerId, "me");
+  assert.ok(fresh.getSnapshot().finishedBooks.includes("momo"));
+  // A spoiler needs words to hide; an unknown book or a long note is refused.
+  fresh.actions.updateRecord(id!, { note: "", isPublic: false });
+  const changed = fresh
+    .getSnapshot()
+    .readingRecords.find((entry) => entry.id === id);
+  assert.equal(changed?.spoiler, false);
+  assert.equal(changed?.isPublic, false);
+  assert.equal(
+    fresh.actions.recordReading({
+      bookId: "no-such-book",
+      feelings: [],
+      note: "",
+      spoiler: false,
+      isPublic: true,
+    }),
+    null,
+  );
+  assert.equal(
+    fresh.actions.recordReading({
+      bookId: "momo",
+      feelings: [],
+      note: "あ".repeat(256),
+      spoiler: false,
+      isPublic: true,
+    }),
+    null,
+  );
+  // Only the reader's own records can be changed or removed.
+  const demo = fresh
+    .getSnapshot()
+    .readingRecords.find((entry) => entry.readerId !== "me")!;
+  fresh.actions.deleteRecord(demo.id);
+  assert.ok(
+    fresh.getSnapshot().readingRecords.some((entry) => entry.id === demo.id),
+  );
+  fresh.actions.deleteRecord(id!);
+  assert.ok(
+    !fresh.getSnapshot().readingRecords.some((entry) => entry.id === id),
+  );
+});
+
+check(
+  "records and the visibility choice survive a reload, bad ones do not",
+  () => {
+    const repo = createMemoryRepository();
+    const first = createTownStore(repo);
+    first.actions.setReadingPublic(false);
+    const id = first.actions.recordReading({
+      bookId: "solaris",
+      feelings: ["quiet"],
+      note: "海",
+      spoiler: false,
+      isPublic: false,
+    });
+    const saved = JSON.parse(serializeTown(first.getSnapshot()));
+    assert.ok(
+      saved.data.readingRecords.every(
+        (entry: { readerId: string }) => entry.readerId === "me",
+      ),
+    );
+    saved.data.readingRecords.push(
+      { ...saved.data.readingRecords[0], id: "me-record-99", bookId: "nope" },
+      { ...saved.data.readingRecords[0], id: "record-nagi-solaris" },
+    );
+    const loaded = deserializeTown(JSON.stringify(saved));
+    const own = loaded.state.readingRecords.filter(
+      (entry) => entry.readerId === "me",
+    );
+    assert.deepEqual(
+      own.map((entry) => [entry.id, entry.feelings, entry.isPublic]),
+      [[id, ["quiet"], false]],
+    );
+    assert.equal(loaded.state.settings.readingPublic, false);
+  },
+);
+
+check("the book page shows feelings as words and who wants to talk", () => {
+  const town = createTownStore(createMemoryRepository());
+  town.actions.recordReading({
+    bookId: "solaris",
+    feelings: ["quiet", "talk"],
+    note: "",
+    spoiler: false,
+    isPublic: false,
+  });
+  const state = town.getSnapshot();
+  // Demo readers chose quiet, again, talk / sleepless, shaken, talk.
+  assert.deepEqual(bookFeelings(state, "solaris"), [
+    "talk",
+    "quiet",
+    "sleepless",
+  ]);
+  assert.deepEqual(
+    talkersOf(state, "solaris").map((reader) => reader.id),
+    ["r-haru", "r-nagi"],
+  );
+  assert.equal(ownRecordFor(state, "solaris")?.isPublic, false);
+  assert.deepEqual(
+    recordsOf(state, "r-nagi").map((entry) => entry.bookId),
+    ["solaris"],
+  );
 });
 
 check("a visitor is invited to sign in instead of changing the town", () => {

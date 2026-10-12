@@ -96,6 +96,8 @@ export interface ProfileDraft {
   name: string;
   /** The reader confirmed they are at least MINIMUM_AGE. */
   ageConfirmed: boolean;
+  /** Whether reading records start public; the reader can change it later. */
+  readingPublic: boolean;
 }
 
 /** Why a first profile cannot be created yet, or null when it can. */
@@ -211,6 +213,7 @@ export function createAccountStore(
         id: user.id,
         handle: normalizeHandle(draft.handle),
         name: draft.name.trim(),
+        reading_visibility: draft.readingPublic ? "public" : "private",
       });
       if ("failure" in result) return failed(result.failure);
       generation += 1;

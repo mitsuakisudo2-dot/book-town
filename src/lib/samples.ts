@@ -2,6 +2,7 @@ import {
   demoBooks,
   demoPosts,
   demoReaders,
+  demoReadingRecords,
   demoShops,
   readingNow as demoReadingNow,
 } from "./data";
@@ -34,5 +35,8 @@ export function withSamples(state: TownState): TownState {
       ...state.readingNow,
       ...demoReadingNow.filter((entry) => !reading.has(entry.readerId)),
     ],
+    readingRecords: add(state.readingRecords, demoReadingRecords).sort(
+      (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
+    ),
   };
 }

@@ -38,6 +38,7 @@ import { WalkView } from "./WalkView";
 import { profilePath, shopPath } from "../lib/paths";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { ReportButton, ReportDialog } from "./Report";
+import { BookFeelings } from "./ReadingRecords";
 import { accountRequested } from "../lib/visitor";
 
 type View =
@@ -653,6 +654,12 @@ function BookView({
           <span className="jacket-disclaimer">{bookNote(book)}</span>
         </div>
       </section>
+      <BookFeelings
+        book={book}
+        state={state}
+        actions={actions}
+        notify={notify}
+      />
       <BookReviews
         book={book}
         state={state}

@@ -143,7 +143,64 @@ export type ComposeIcon = (typeof COMPOSE_ICONS)[number];
 
 export interface Settings {
   composeIcon: ComposeIcon;
+  /** Whether new reading records start public; chosen when signing up. */
+  readingPublic: boolean;
 }
+
+/**
+ * 読後の気持ち, chosen instead of stars: any number, none is fine too. The
+ * words can be chosen again later; the ids are what is saved.
+ */
+export const FEELINGS = [
+  "cried",
+  "quiet",
+  "sleepless",
+  "warm",
+  "laughed",
+  "scared",
+  "shaken",
+  "again",
+  "recommend",
+  "talk",
+  "lingering",
+  "not_now",
+] as const;
+export type Feeling = (typeof FEELINGS)[number];
+export const FEELING_WORDS: Record<Feeling, string> = {
+  cried: "泣いた",
+  quiet: "静かになった",
+  sleepless: "眠れなくなった",
+  warm: "あたたかくなった",
+  laughed: "笑った",
+  scared: "こわかった",
+  shaken: "価値観が揺れた",
+  again: "もう一度読みたい",
+  recommend: "誰かに薦めたい",
+  talk: "誰かと話したい",
+  lingering: "よく分からない、でも残る",
+  not_now: "今の自分には合わなかった",
+};
+/** The same limit as reading_entries.body. */
+export const RECORD_NOTE_MAX_LENGTH = 255;
+
+/** A reader's record of finishing a book: how it felt, and a few words. */
+export interface ReadingRecord {
+  id: string;
+  readerId: string;
+  bookId: string;
+  feelings: Feeling[];
+  note: string;
+  /** The note gives the story away; others open it on purpose. */
+  spoiler: boolean;
+  /** Seen by others, or kept to the reader. */
+  isPublic: boolean;
+  createdAt: string;
+}
+
+export type RecordDraft = Pick<
+  ReadingRecord,
+  "bookId" | "feelings" | "note" | "spoiler" | "isPublic"
+>;
 
 export interface NewBook {
   title: string;
@@ -172,6 +229,8 @@ export interface TownState {
   finishedBooks: string[];
   /** Books the viewer registered as their own, newest last. */
   library: string[];
+  /** The viewer's own reading records, and others' public ones, oldest first. */
+  readingRecords: ReadingRecord[];
   settings: Settings;
   seenNotifications: string[];
   /** Words other readers left at the viewer's shop. Only an account receives them. */
@@ -233,6 +292,14 @@ export interface TownActions {
   addBook(book: NewBook): string | null;
   toggleLibrary(bookId: string): void;
   setComposeIcon(icon: ComposeIcon): void;
+  /** Finishing a book, with how it felt. Also marks the book as finished. */
+  recordReading(draft: RecordDraft): string | null;
+  updateRecord(
+    recordId: string,
+    patch: Partial<Omit<RecordDraft, "bookId">>,
+  ): void;
+  deleteRecord(recordId: string): void;
+  setReadingPublic(value: boolean): void;
   markNotificationsSeen(ids: string[]): void;
 }
 

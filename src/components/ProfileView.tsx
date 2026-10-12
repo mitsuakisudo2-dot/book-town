@@ -28,6 +28,7 @@ import "./profile.css";
 import "./reading.css";
 import { isDatabaseId, profilePath, shopPath } from "../lib/paths";
 import { ReportButton } from "./Report";
+import { RecordShelf } from "./ReadingRecords";
 
 interface ProfileViewProps {
   state: TownState;
@@ -372,6 +373,13 @@ export function ProfileView({
         </div>
       </section>
 
+      <RecordShelf
+        state={state}
+        actions={actions}
+        notify={notify}
+        readerId={readerId}
+      />
+
       {isSelf && (
         <section
           className="profile-collections"
@@ -626,6 +634,35 @@ export function ProfileView({
       )}
       {sheet === "settings" && (
         <Modal title="設定" onClose={() => setSheet(null)}>
+          <fieldset className="record-visibility">
+            <legend>
+              読み終えた本の記録（これから残す記録のはじめの公開範囲）
+            </legend>
+            <label>
+              <input
+                type="radio"
+                name="reading-public"
+                checked={state.settings.readingPublic}
+                onChange={() => {
+                  actions.setReadingPublic(true);
+                  notify("これからの記録は、はじめから公開になります");
+                }}
+              />
+              公開
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="reading-public"
+                checked={!state.settings.readingPublic}
+                onChange={() => {
+                  actions.setReadingPublic(false);
+                  notify("これからの記録は、はじめは自分だけになります");
+                }}
+              />
+              自分だけ
+            </label>
+          </fieldset>
           <fieldset className="icon-choices">
             <legend>投稿ボタンのアイコン</legend>
             {COMPOSE_ICONS.map((icon) => (

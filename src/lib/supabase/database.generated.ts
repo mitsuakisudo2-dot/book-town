@@ -392,6 +392,7 @@ export type Database = {
           id: string;
           links: string[];
           name: string;
+          reading_visibility: string;
           updated_at: string;
         };
         ComputedFields: never;
@@ -404,6 +405,7 @@ export type Database = {
           id: string;
           links?: string[];
           name: string;
+          reading_visibility?: string;
           updated_at?: string;
         };
         Update: {
@@ -415,9 +417,65 @@ export type Database = {
           id?: string;
           links?: string[];
           name?: string;
+          reading_visibility?: string;
           updated_at?: string;
         };
         Relationships: [];
+      };
+      reading_entries: {
+        Row: {
+          body: string;
+          book_id: string;
+          created_at: string;
+          feelings: string[];
+          id: string;
+          is_public: boolean;
+          kind: string;
+          spoiler: boolean;
+          updated_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          body?: string;
+          book_id: string;
+          created_at?: string;
+          feelings?: string[];
+          id?: string;
+          is_public?: boolean;
+          kind?: string;
+          spoiler?: boolean;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          body?: string;
+          book_id?: string;
+          created_at?: string;
+          feelings?: string[];
+          id?: string;
+          is_public?: boolean;
+          kind?: string;
+          spoiler?: boolean;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reading_entries_book_id_fkey";
+            columns: ["book_id"];
+            isOneToOne: false;
+            referencedRelation: "books";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reading_entries_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       reading_sessions: {
         Row: {

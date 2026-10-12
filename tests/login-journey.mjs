@@ -237,6 +237,9 @@ try {
 
   await check("the profile is created as the signed-in person", async () => {
     await page.getByLabel("13歳以上です").check();
+    // Records start public unless the reader keeps them to themselves.
+    await expect(page.getByRole("radio", { name: /^公開する/ })).toBeChecked();
+    await page.getByRole("radio", { name: /^自分だけ/ }).check();
     await page.getByRole("button", { name: "はじめる" }).click();
     await expect(
       page.getByRole("heading", { name: "ログインしています" }),
@@ -246,6 +249,7 @@ try {
       id: user.id,
       handle: "aki_books",
       name: "アキ",
+      reading_visibility: "private",
     });
     await shot("4-signed-in");
   });
