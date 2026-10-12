@@ -228,17 +228,12 @@ export function ProfileView({
                   <b>{state.following.length}</b> フォロー
                 </button>
               )}
-              {followerCount > 0 &&
-                (isSelf ? (
-                  <button type="button" onClick={() => setSheet("followers")}>
-                    <b>{followerCount}</b> フォロワー
-                  </button>
-                ) : // Nobody counts a real reader's followers but the reader.
-                isDatabaseId(reader.id) ? null : (
-                  <span>
-                    <b>{followerCount}</b> フォロワー
-                  </span>
-                ))}
+              {/* Nobody counts a reader's followers but the reader. */}
+              {followerCount > 0 && isSelf && (
+                <button type="button" onClick={() => setSheet("followers")}>
+                  <b>{followerCount}</b> フォロワー
+                </button>
+              )}
               {isSelf && Boolean(readingTime) && (
                 <Link href="/reading/">
                   <b>{formatDuration(readingTime ?? 0)}</b> 読書時間

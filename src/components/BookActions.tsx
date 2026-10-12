@@ -84,7 +84,7 @@ export function BookActions({
             notify(
               wished
                 ? "読みたいリストから外しました"
-                : "プロフィールの読みたいリストに保存しました",
+                : "読みたい本に入れました",
             );
           }}
         >

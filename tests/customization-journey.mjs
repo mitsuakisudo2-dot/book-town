@@ -242,7 +242,9 @@ try {
       await expect(
         page.getByRole("button", { name: "いいね", exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
-      await page.getByRole("button", { name: "読む！", exact: true }).click();
+      await page
+        .getByRole("button", { name: "読みたくなった", exact: true })
+        .click();
       expect(
         (await walkData()).walkState.placementReactions[
           JSON.stringify(["scene", "mine", "placement:mine:a"])
@@ -256,11 +258,11 @@ try {
         "遠い星の海で、言葉のない相手に出会う。",
       );
       await expect(
-        page.getByRole("button", { name: "読む！", exact: true }),
+        page.getByRole("button", { name: "読みたくなった", exact: true }),
       ).toHaveAttribute("aria-pressed", "false");
       await page.getByRole("button", { name: "前のPOP", exact: true }).click();
       await expect(
-        page.getByRole("button", { name: "読む！", exact: true }),
+        page.getByRole("button", { name: "読みたくなった", exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
       await page.locator(".bh-dialog").press("Escape");
     },
