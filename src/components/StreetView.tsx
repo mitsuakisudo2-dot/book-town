@@ -171,6 +171,9 @@ export function StreetView({
                     {shop.ownerId === ME_ID && (
                       <small className="street-own-tag">あなたの書店</small>
                     )}
+                    {shop.demo && savedIn !== "local" && (
+                      <small className="street-own-tag">見本</small>
+                    )}
                   </div>
                   <div className="street-shop-owner">
                     {owner && (
@@ -290,8 +293,14 @@ export function StreetView({
                 <Icon name="plus" size={15} />
               </Link>
             </div>
-            {savedIn === "local" && (
+            {savedIn === "local" ? (
               <small>登場する店主と書店は架空のデモです。</small>
+            ) : (
+              state.shops.some((entry) => entry.demo) && (
+                <small>
+                  「見本」の店主と書店は、街の雰囲気を伝える架空のものです。
+                </small>
+              )
             )}
           </section>
         </div>

@@ -15,6 +15,7 @@ import {
   type WalkData,
 } from "./walk-backend";
 import { followAccountWalk } from "./town-session";
+import { requestAccount } from "./visitor";
 import type { PersistenceStatus, TownState } from "./types";
 
 export interface WalkSnapshot extends WalkData {
@@ -27,6 +28,8 @@ export interface WalkSnapshot extends WalkData {
 export interface WalkStoreOptions {
   /** Picks the backend as the account changes, as the town store does. */
   follow?: (switchTo: (backend: WalkBackend) => void) => void;
+  /** Called when a visitor who is not signed in tries to leave something. */
+  onVisitor?: () => void;
 }
 
 export function createWalkStore(
@@ -113,6 +116,15 @@ export function createWalkStore(
     initialize();
     if (!snapshot.ready) return false;
     const next = change(snapshot.state);
+    // A visitor walks freely, but likes, saves and words need an account.
+    if (
+      backend.kind === "visitor" &&
+      (next.reactions !== snapshot.state.reactions ||
+        next.placementReactions !== snapshot.state.placementReactions)
+    ) {
+      options.onVisitor?.();
+      return false;
+    }
     if (next !== snapshot.state) {
       const status = backend.save({ ...data(), state: next });
       set({ state: next, status });
@@ -129,6 +141,10 @@ export function createWalkStore(
     town: TownState,
   ): { ok: boolean; error?: string } {
     initialize();
+    if (backend.kind === "visitor") {
+      options.onVisitor?.();
+      return { ok: false, error: "店内を飾るには、ログインしてください。" };
+    }
     if (!snapshot.ready || !backend.writable())
       return {
         ok: false,
@@ -192,7 +208,9 @@ export function createWalkStore(
 
 const walkStore = createWalkStore(
   localWalkBackend(),
-  supabaseConfigured ? { follow: followAccountWalk } : {},
+  supabaseConfigured
+    ? { follow: followAccountWalk, onVisitor: requestAccount }
+    : {},
 );
 
 export const updateWalk = walkStore.update;

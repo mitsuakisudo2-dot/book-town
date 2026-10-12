@@ -39,6 +39,7 @@ import {
   type ShopReaction,
 } from "../lib/walk-state";
 import { useWalkStore } from "../lib/walk-store";
+import { requestAccount } from "../lib/visitor";
 import {
   SHOP_MESSAGE_MAX_LENGTH,
   type Shop,
@@ -81,7 +82,9 @@ export function WalkView({
     update = saved.update,
     ready = saved.ready,
     // With an account, words left for an owner reach them.
-    delivers = saved.kind === "account";
+    delivers = saved.kind === "account",
+    // A visitor is asked to sign in before leaving words.
+    visitor = saved.kind === "visitor";
   const shops = useMemo(() => {
     if (orderedStores) return orderedStores;
     const publicIds = new Set(
@@ -423,7 +426,7 @@ export function WalkView({
                   <b>{owner?.name ?? shop.name}</b>
                   <small>
                     {owner ? "@" + owner.handle : "店主"}
-                    {shop.demo ? " · デモ書店" : ""}
+                    {shop.demo ? " · 見本の書店" : ""}
                   </small>
                 </span>
               </Link>
@@ -433,11 +436,12 @@ export function WalkView({
               {!(ownShop && delivers) && (
                 <button
                   aria-label={
-                    delivers
+                    delivers || visitor
                       ? "店主にひとことを残す"
                       : "店主に伝える（送信されないデモ）"
                   }
                   onClick={() => {
+                    if (visitor) return requestAccount();
                     setMessage(reaction.message);
                     open({ kind: "message" });
                   }}

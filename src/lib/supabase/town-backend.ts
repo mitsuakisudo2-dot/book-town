@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   emptyTown,
   planWrites,
+  visitorReader,
   referencedBookIds,
   townFromRows,
   type RelationTable,
@@ -10,6 +11,7 @@ import {
   type Write,
 } from "../town-remote";
 import { counterId, type RecordKind, type TownBackend } from "../town-backend";
+import { withSamples } from "../samples";
 import type { TownState } from "../types";
 import type { Database, Json } from "./database.generated";
 import {
@@ -31,6 +33,28 @@ export { TownSyncError, shouldRetry };
 const LIMIT = 1000;
 const POSTS = 500;
 const CATALOG = 300;
+
+const SHOP_COLUMNS =
+  "id, owner_id, name, description, tagline, theme, is_open, public_shelves, public_scene_books";
+
+/** The newest books, and every book the rows refer to. */
+async function booksFor(client: Client, rows: Omit<RemoteRows, "books">) {
+  const catalog = await all(
+    client
+      .from("books")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(CATALOG),
+  );
+  const have = new Set(catalog.map((book) => book.id));
+  const missing = referencedBookIds(rows).filter((id) => !have.has(id));
+  const more = await Promise.all(
+    chunks(missing, 100).map((ids) =>
+      all(client.from("books").select("*").in("id", ids)),
+    ),
+  );
+  return [...catalog, ...more.flat()];
+}
 
 /** Reads everything the signed-in person's town shows. */
 export async function loadTown(
@@ -54,14 +78,7 @@ export async function loadTown(
   ] = await Promise.all([
     all(client.from("profiles").select("*").limit(LIMIT)),
     all(client.from("profile_nine").select("*").limit(LIMIT)),
-    all(
-      client
-        .from("shops")
-        .select(
-          "id, owner_id, name, description, tagline, theme, is_open, public_shelves, public_scene_books",
-        )
-        .limit(LIMIT),
-    ),
+    all(client.from("shops").select(SHOP_COLUMNS).limit(LIMIT)),
     all(
       client.from("shop_follows").select("shop_id").eq("follower_id", userId),
     ),
@@ -147,24 +164,88 @@ export async function loadTown(
     sessions: [...ownSessions, ...together],
     seenNotifications,
   };
-  const catalog = await all(
-    client
-      .from("books")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(CATALOG),
-  );
-  const have = new Set(catalog.map((book) => book.id));
-  const missing = referencedBookIds(rows).filter((id) => !have.has(id));
-  const more = await Promise.all(
-    chunks(missing, 100).map((ids) =>
-      all(client.from("books").select("*").in("id", ids)),
-    ),
-  );
   const ids: RemoteIds = { userId, shopId: own?.id ?? newShopId() };
   return {
-    state: townFromRows({ ...rows, books: [...catalog, ...more.flat()] }, ids),
+    state: townFromRows({ ...rows, books: await booksFor(client, rows) }, ids),
     ids,
+  };
+}
+
+/**
+ * Reads what anyone may see without signing in: profiles, open shops, posts
+ * that are not private notes, and who is reading together right now. The
+ * database decides what is public (supabase/migrations); this only asks.
+ */
+export async function loadPublicTown(client: Client): Promise<TownState> {
+  const [profiles, nine, shops, posts, together] = await Promise.all([
+    all(client.from("profiles").select("*").limit(LIMIT)),
+    all(client.from("profile_nine").select("*").limit(LIMIT)),
+    all(
+      client
+        .from("shops")
+        .select(SHOP_COLUMNS)
+        .eq("is_open", true)
+        .limit(LIMIT),
+    ),
+    all(
+      client
+        .from("posts")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(POSTS),
+    ),
+    all(
+      client
+        .from("reading_sessions")
+        .select("*")
+        .eq("mode", "together")
+        .is("ended_at", null)
+        .limit(LIMIT),
+    ),
+  ]);
+  const rows: Omit<RemoteRows, "books"> = {
+    profiles,
+    nine,
+    shops,
+    ownShelves: [],
+    ownSceneBooks: [],
+    ownShopFollowers: 0,
+    shopMessages: [],
+    follows: [],
+    marks: [],
+    posts,
+    postReactions: [],
+    spoilerReports: [],
+    popReactions: [],
+    sessions: together,
+    seenNotifications: [],
+  };
+  return townFromRows(
+    { ...rows, books: await booksFor(client, rows) },
+    { userId: null, shopId: "" },
+  );
+}
+
+/**
+ * The town for someone who is not signed in: real shops and posts beside the
+ * 見本, to look at only. The store asks them to sign in before any change
+ * (store.ts), so nothing here is ever saved.
+ */
+export function visitorTownBackend(client: Client): TownBackend {
+  return {
+    kind: "visitor",
+    newId: counterId,
+    async load() {
+      try {
+        const state = withSamples(await loadPublicTown(client));
+        return { state, status: "saved" as const };
+      } catch {
+        // The 見本 still make a town to walk through.
+        const state = withSamples({ ...emptyTown(), me: visitorReader() });
+        return { state, status: "unavailable" as const };
+      }
+    },
+    save: () => "saved",
   };
 }
 

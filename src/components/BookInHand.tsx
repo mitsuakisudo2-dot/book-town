@@ -430,7 +430,7 @@ export function BookInHand({
           >
             <div className="bh-pop-label">
               <span>この棚に並べた人の言葉</span>
-              {activeShop.demo && <small>デモ</small>}
+              {activeShop.demo && <small>見本</small>}
             </div>
             <div
               className={`bh-pop-pager${popCandidates.length > 1 ? " has-pages" : ""}`}

@@ -170,7 +170,7 @@ export function BookDiscovery({
                   <div className="bh-shop-card-heading">
                     <div>
                       {other.demo ? (
-                        <small>デモ書店</small>
+                        <small>見本の書店</small>
                       ) : other.ownerId === ME_ID ? (
                         <small>あなたの書店</small>
                       ) : null}

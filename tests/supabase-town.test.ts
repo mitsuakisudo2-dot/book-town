@@ -2,8 +2,14 @@ import assert from "node:assert/strict";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createTownStore } from "../src/lib/store";
 import { notificationsFor } from "../src/lib/notifications";
-import { accountTownBackend } from "../src/lib/supabase/town-backend";
-import { accountWalkBackend } from "../src/lib/supabase/walk-backend";
+import {
+  accountTownBackend,
+  visitorTownBackend,
+} from "../src/lib/supabase/town-backend";
+import {
+  accountWalkBackend,
+  visitorWalkBackend,
+} from "../src/lib/supabase/walk-backend";
 import {
   migrateShopScene,
   placementReactionKey,
@@ -473,6 +479,76 @@ async function main() {
       assert.deepEqual(cleared.visits, {});
       assert.deepEqual(cleared.placementReactions, {});
       assert.deepEqual((await townOf(aki)).getSnapshot().shopMessages, []);
+    },
+  );
+
+  await check(
+    "a visitor reads the open shops and public posts, and changes nothing",
+    async () => {
+      let invited = 0;
+      const onVisitor = () => (invited += 1);
+      const said = async (body: string, solo = false) => {
+        const row = await aki.client
+          .from("posts")
+          .insert({
+            author_id: aki.id,
+            body,
+            reading_mode: solo ? "solo" : null,
+          })
+          .select("id")
+          .single();
+        assert.ifError(row.error);
+        return row.data.id;
+      };
+      const open = await said("見学の人にも見える言葉");
+      const note = await said("自分だけのメモ", true);
+      const visitor = newClient();
+      const store = createTownStore(visitorTownBackend(visitor), undefined, {
+        onVisitor,
+      });
+      store.initialize();
+      await settled(store);
+      const town = store.getSnapshot();
+      assert.equal(town.me.name, "ゲスト");
+      assert.equal(town.ownShop, null);
+      const shop = town.shops.find((entry) => entry.id === akiShopId);
+      assert.equal(shop?.demo, false);
+      assert.deepEqual(
+        shop?.shelves.map((shelf) => shelf.name),
+        ["はじめの本棚"],
+      );
+      assert.ok(town.posts.some((entry) => entry.id === open));
+      assert.ok(!town.posts.some((entry) => entry.id === note));
+      assert.ok(town.shops.some((entry) => entry.demo));
+      assert.deepEqual(town.library, []);
+      assert.deepEqual(town.wishlist, []);
+
+      store.actions.toggleFollow(akiShopId);
+      assert.deepEqual(store.getSnapshot().following, []);
+
+      const walk = createWalkStore(visitorWalkBackend(visitor), { onVisitor });
+      walk.initialize();
+      await walked(walk);
+      assert.ok(
+        walk.getSnapshot().scenes.some((entry) => entry.storeId === akiShopId),
+      );
+      assert.equal(
+        walk.update((state) => ({
+          ...state,
+          reactions: {
+            [akiShopId]: { liked: true, saved: false, message: "" },
+          },
+        })),
+        false,
+      );
+      assert.deepEqual(walk.getSnapshot().state.reactions, {});
+      assert.equal(invited, 2);
+
+      // The database itself refuses a visitor's writes, too.
+      const follow = await visitor
+        .from("shop_follows")
+        .insert({ shop_id: akiShopId, follower_id: ben.id });
+      assert.ok(follow.error);
     },
   );
 

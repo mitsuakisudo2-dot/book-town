@@ -32,7 +32,7 @@ export interface WalkBackendListener {
 
 /** What the walk saves through: this browser, or the person's account. */
 export interface WalkBackend {
-  readonly kind: "local" | "account" | "unavailable";
+  readonly kind: "local" | "account" | "visitor" | "unavailable";
   load(): WalkSnapshot | Promise<WalkSnapshot>;
   /** Called after every change with the whole walk. */
   save(data: WalkData): PersistenceStatus;

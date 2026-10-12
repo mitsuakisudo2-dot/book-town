@@ -6,6 +6,7 @@ import {
   serializeTown,
 } from "../src/lib/repository";
 import { createTownStore } from "../src/lib/store";
+import { counterId } from "../src/lib/town-backend";
 import {
   bookReviews,
   followedTimelinePosts,
@@ -190,6 +191,39 @@ check("write failures remain usable and report unavailable persistence", () => {
   failing.actions.toggleWish("momo");
   assert.deepEqual(failing.getSnapshot().wishlist, ["momo"]);
   assert.equal(failing.getPersistenceSnapshot(), "unavailable");
+});
+
+check("a visitor is invited to sign in instead of changing the town", () => {
+  let invited = 0;
+  const saved: TownState[] = [];
+  const visitor = createTownStore(
+    {
+      kind: "visitor",
+      newId: counterId,
+      load: () => ({ state: structuredClone(seedState), status: "saved" }),
+      save: (state) => {
+        saved.push(state);
+        return "saved";
+      },
+    },
+    undefined,
+    { onVisitor: () => (invited += 1) },
+  );
+  visitor.initialize();
+  const before = visitor.getSnapshot();
+  visitor.actions.toggleWish("momo");
+  visitor.actions.toggleFollow(seedState.shops[0].id);
+  assert.equal(visitor.actions.createPost(EMPTY_POST_DRAFT), null);
+  assert.equal(
+    visitor.actions.changeDisplay("any-shelf", "any-item", "face"),
+    false,
+  );
+  assert.equal(invited, 4);
+  assert.equal(visitor.getSnapshot(), before);
+  assert.deepEqual(saved, []);
+  // Opening the notifications page marks them seen by itself: no invitation.
+  visitor.actions.markNotificationsSeen(["any"]);
+  assert.equal(invited, 4);
 });
 
 check(

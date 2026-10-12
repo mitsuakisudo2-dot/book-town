@@ -108,14 +108,14 @@ const text = (value: unknown, limit: number): value is string =>
   typeof value === "string" && value.length <= limit;
 
 /** Books from the catalog get a drawn jacket, like the ones registered in the demo. */
-export function bookFromRow(row: Tables<"books">, userId: string): Book {
+export function bookFromRow(row: Tables<"books">, userId: string | null): Book {
   const book = createRegisteredBook(row.id, {
     title: row.title,
     author: row.author,
     ...(row.isbn ? { isbn: row.isbn } : {}),
     ...(row.price ? { price: row.price } : {}),
   });
-  return row.created_by === userId
+  return userId !== null && row.created_by === userId
     ? book
     : {
         ...book,
@@ -215,10 +215,19 @@ function parsePlacement(key: string): [string, string] | null {
   }
 }
 
+/**
+ * Who the town is read for: the signed-in person, or nobody (userId null) for
+ * a visitor who is only looking around.
+ */
+export interface TownViewer {
+  userId: string | null;
+  shopId: string;
+}
+
 /** Builds the town the signed-in person sees from what the database let them read. */
 export function townFromRows(
   rows: RemoteRows,
-  ids: RemoteIds,
+  ids: TownViewer,
   now = Date.now(),
 ): TownState {
   const { userId } = ids;
@@ -247,8 +256,10 @@ export function townFromRows(
     links: cleanLinks(row.links),
     ...nineOf(row.id),
   });
-  const ownProfile = rows.profiles.find((row) => row.id === userId);
-  if (!ownProfile) throw new Error("The signed-in person has no profile.");
+  const ownProfile =
+    userId === null ? null : rows.profiles.find((row) => row.id === userId);
+  if (userId !== null && !ownProfile)
+    throw new Error("The signed-in person has no profile.");
   const readers = rows.profiles
     .filter((row) => row.id !== userId)
     .map(readerFrom);
@@ -398,7 +409,7 @@ export function townFromRows(
     books,
     readers,
     shops,
-    me: readerFrom(ownProfile),
+    me: ownProfile ? readerFrom(ownProfile) : visitorReader(),
     ownShop,
     following: [
       ...new Set(
@@ -417,9 +428,9 @@ export function townFromRows(
     readingSessions,
     settings: {
       composeIcon: COMPOSE_ICONS.includes(
-        ownProfile.compose_icon as ComposeIcon,
+        ownProfile?.compose_icon as ComposeIcon,
       )
-        ? (ownProfile.compose_icon as ComposeIcon)
+        ? (ownProfile?.compose_icon as ComposeIcon)
         : "pen",
     },
     seenNotifications: rows.seenNotifications.slice(-500),
@@ -699,6 +710,9 @@ export function planWrites(
   }
   return writes;
 }
+
+/** Stands in for "me" while nobody is signed in. */
+export const visitorReader = (): Reader => emptyTown({ name: "ゲスト" }).me;
 
 /** The town while a signed-in person's data is on its way: nothing yet. */
 export function emptyTown(me: Partial<Reader> = {}): TownState {
