@@ -757,7 +757,17 @@ export function WalkView({
                   <button
                     aria-label="書店を保存"
                     aria-pressed={reaction.saved}
-                    onClick={() => editReaction({ saved: !reaction.saved })}
+                    onClick={() => {
+                      // Say where a kept shop can be found again.
+                      if (
+                        editReaction({ saved: !reaction.saved }) &&
+                        !reaction.saved &&
+                        shop
+                      )
+                        notify(
+                          `「${shop.name}」を保存しました。プロフィールの「あとで寄る書店」から戻れます。`,
+                        );
+                    }}
                   >
                     <span>
                       <Icon name="bookmark" />

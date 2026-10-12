@@ -1004,3 +1004,60 @@
     margin: 35px 0;
   }
 }
+
+/* Shops kept while walking, to come back to. */
+.profile-saved-shops {
+  margin: 50px 0;
+  padding-top: 30px;
+  border-top: 1px solid #e1dcd0;
+}
+.saved-shop-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+  padding: 0;
+  list-style: none;
+}
+.saved-shop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 14px;
+  border: 1px solid var(--theme-light, #d9d9cd);
+  border-top: 3px solid var(--theme, #6b845e);
+  border-radius: 5px;
+  background: linear-gradient(135deg, var(--theme-pale, #f1f3e9), #fffdf6);
+  color: var(--theme-deep, #435b3f);
+}
+.saved-shop > svg:first-child {
+  flex: none;
+  color: var(--theme, #6b845e);
+}
+.saved-shop > span {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+.saved-shop b {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 500;
+}
+.saved-shop small {
+  font-size: 12px;
+  color: #6a7365;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saved-shop > svg:last-child {
+  flex: none;
+  opacity: 0.6;
+}
+@media (max-width: 760px) {
+  .profile-saved-shops {
+    margin: 35px 0;
+  }
+}

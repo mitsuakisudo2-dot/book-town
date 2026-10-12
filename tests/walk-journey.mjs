@@ -237,6 +237,30 @@ try {
     },
   );
   await check(
+    "a kept shop waits on one's profile and leads back into the walk",
+    async () => {
+      const keep = page.getByRole("button", {
+        name: "書店を保存",
+        exact: true,
+      });
+      await keep.click();
+      await expect(keep).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        page.getByText(/あとで寄る書店」から戻れます/),
+      ).toBeVisible();
+      await page.goto(base + "/profiles/me/");
+      const kept = page.getByRole("region", { name: "あとで寄る書店" });
+      await expect(kept.getByRole("link")).toHaveCount(1);
+      await kept.getByRole("link").click();
+      await expect(page).toHaveURL(/\/walk\/#/);
+      await expect(page.locator(".walk-progress")).toContainText("2 /");
+      await expect(keep).toHaveAttribute("aria-pressed", "true");
+      // Unkept again, so the checks that follow start as before.
+      await keep.click();
+      await expect(keep).toHaveAttribute("aria-pressed", "false");
+    },
+  );
+  await check(
     "shared target beats resume and native demo placement opens",
     async () => {
       await go("/walk/#shop-rain");
