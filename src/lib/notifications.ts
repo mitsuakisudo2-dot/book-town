@@ -3,6 +3,7 @@ import { bookPath } from "./books";
 import { findReader, isSpoilerFor } from "./social";
 import { ME_ID, OWN_SHOP_ID, type TownState } from "./types";
 import { profilePath, shopPath } from "./paths";
+import { coverHidden } from "./hidden-words";
 
 export interface Notice {
   id: string;
@@ -19,8 +20,10 @@ export function weekOf(at: string): string {
   return japan.toISOString().slice(0, 10);
 }
 
-const quote = (body: string) =>
-  "「" + (body.length > 40 ? body.slice(0, 40) + "…" : body) + "」";
+const quote = (post: string) => {
+  const body = coverHidden(post);
+  return "「" + (body.length > 40 ? body.slice(0, 40) + "…" : body) + "」";
+};
 
 /**
  * Notices are derived from what is actually in this browser's town: replies and reactions
