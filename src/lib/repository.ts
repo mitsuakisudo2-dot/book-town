@@ -5,6 +5,7 @@ import { DEFAULT_HANDLE, handleProblem } from "./handles";
 import { createRegisteredBook, normalizeIsbn, REGISTERED_GENRE } from "./books";
 import {
   COMPOSE_ICONS,
+  LIKE_TAPS_MAX,
   ME_ID,
   POP_REACTIONS,
   POST_MAX_LENGTH,
@@ -48,6 +49,7 @@ type PersonalData = Pick<
   | "favorites"
   | "popReactions"
   | "likedPosts"
+  | "likeTaps"
   | "wantedPosts"
   | "spoilerReports"
   | "readingSessions"
@@ -396,6 +398,7 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
             return Boolean(post && allowed(post));
           })
         : [];
+    const likedPosts = postList(data.likedPosts, () => true);
     return {
       state: {
         ...initial,
@@ -421,7 +424,8 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
           : [],
         popReactions,
         posts,
-        likedPosts: postList(data.likedPosts, () => true),
+        likedPosts,
+        likeTaps: likeTapsFrom(data.likeTaps, likedPosts),
         wantedPosts: postList(
           data.wantedPosts,
           (post) => post.bookId !== null && post.authorId !== ME_ID,
@@ -473,6 +477,7 @@ export function serializeTown(state: TownState): string {
       popReactions: state.popReactions,
       posts: state.posts.filter((post) => post.authorId === ME_ID),
       likedPosts: state.likedPosts,
+      likeTaps: state.likeTaps,
       wantedPosts: state.wantedPosts,
       spoilerReports: state.spoilerReports,
       readingSessions: state.readingSessions,
@@ -524,6 +529,21 @@ export const localTownRepository: TownRepository = {
 };
 
 /** A replaceable test/development adapter; a Supabase adapter can implement the same boundary. */
+/** Saved like counts, kept only for liked posts and within the cap. */
+function likeTapsFrom(value: unknown, liked: string[]): Record<string, number> {
+  if (!object(value)) return {};
+  return Object.fromEntries(
+    liked.flatMap((id) => {
+      const taps = value[id];
+      return Number.isInteger(taps) &&
+        (taps as number) > 1 &&
+        (taps as number) <= LIKE_TAPS_MAX
+        ? [[id, taps as number]]
+        : [];
+    }),
+  );
+}
+
 export function createMemoryRepository(
   initial = createInitialState(),
 ): TownRepository {

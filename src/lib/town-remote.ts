@@ -1,6 +1,7 @@
 import { createRegisteredBook, REGISTERED_GENRE } from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
+import { tapsOf } from "./social";
 import {
   COMPOSE_ICONS,
   ME_ID,
@@ -334,6 +335,22 @@ export function townFromRows(
         createdAt: row.created_at,
         likes: mine ? reactionCount(row.id, "like") : 0,
         wants: mine ? reactionCount(row.id, "want") : 0,
+        ...(mine
+          ? {
+              likers: rows.postReactions
+                .filter(
+                  (reaction) =>
+                    reaction.post_id === row.id &&
+                    reaction.kind === "like" &&
+                    reaction.user_id !== userId,
+                )
+                .map((reaction) => ({
+                  readerId: readerId(reaction.user_id),
+                  taps: reaction.taps,
+                  at: reaction.created_at,
+                })),
+            }
+          : {}),
         readingMode: READING_MODES.includes(row.reading_mode as ReadingMode)
           ? (row.reading_mode as ReadingMode)
           : null,
@@ -433,6 +450,17 @@ export function townFromRows(
     popReactions,
     posts,
     likedPosts: reacted("like"),
+    likeTaps: Object.fromEntries(
+      rows.postReactions
+        .filter(
+          (row) =>
+            row.user_id === userId &&
+            row.kind === "like" &&
+            row.taps > 1 &&
+            postIds.has(row.post_id),
+        )
+        .map((row) => [row.post_id, row.taps]),
+    ),
     wantedPosts: reacted("want"),
     spoilerReports: rows.spoilerReports
       .map((row) => row.post_id)
@@ -549,6 +577,7 @@ export type Write =
   | { kind: "delete-posts"; ids: string[] }
   | { kind: "posts"; rows: TablesInsert<"posts">[] }
   | { kind: "mark-spoilers"; ids: string[] }
+  | { kind: "like-taps"; rows: { post_id: string; taps: number }[] }
   | { kind: "end-sessions"; rows: { id: string; ended_at: string }[] }
   | { kind: "sessions"; rows: TablesInsert<"reading_sessions">[] }
   | { kind: "delete-records"; ids: string[] }
@@ -824,6 +853,15 @@ export function planWrites(
     const fresh = difference(to[table], from[table]);
     if (fresh.length) writes.push({ kind: "add", table, rows: fresh });
   }
+  // Pressing a like again changes its count, once its row is there. A new
+  // row already starts at one press.
+  const pressed = next.likedPosts
+    .map((post_id) => ({ post_id, taps: tapsOf(next, post_id) }))
+    .filter((row) => {
+      const was = tapsOf(base, row.post_id);
+      return row.taps !== was && !(was === 0 && row.taps === 1);
+    });
+  if (pressed.length) writes.push({ kind: "like-taps", rows: pressed });
   return writes;
 }
 
@@ -854,6 +892,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     popReactions: {},
     posts: [],
     likedPosts: [],
+    likeTaps: {},
     wantedPosts: [],
     spoilerReports: [],
     readingNow: [],

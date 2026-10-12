@@ -79,6 +79,21 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         text: `あなたの感想で、${post.wants}人が『${title(post.bookId)}』を読みたくなりました`,
         href: post.bookId ? bookPath(post.bookId) : "/profiles/me/",
       });
+  // いいね: one notice per reader and post, with how many times they pressed.
+  for (const post of state.posts) {
+    if (post.authorId !== ME_ID) continue;
+    for (const liker of post.likers ?? []) {
+      const who = name(liker.readerId);
+      if (!who) continue;
+      notices.push({
+        id: `like:${post.id}:${liker.readerId}`,
+        readerId: liker.readerId,
+        createdAt: liker.at,
+        text: `${who}さんが、あなたの投稿に${liker.taps > 1 ? liker.taps + "回" : ""}いいねしました ${quote(post.body)}`,
+        href: post.bookId ? bookPath(post.bookId) : "/profiles/me/",
+      });
+    }
+  }
   const followed = new Set(
     state.shops
       .filter((shop) => state.following.includes(shop.id))

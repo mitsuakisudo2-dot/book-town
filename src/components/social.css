@@ -332,6 +332,31 @@ mark.hidden-words.is-open {
 .post-actions button.is-active {
   color: #a5543f;
 }
+.like-heart {
+  display: inline-flex;
+}
+.like-heart.is-popping {
+  animation: like-pop 0.42s ease-out;
+}
+@keyframes like-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.45) rotate(-8deg);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .like-heart.is-popping {
+    animation: none;
+  }
+}
+.post-actions .like-button.is-active svg {
+  fill: currentColor;
+}
 .post-actions .want-button.is-active {
   color: var(--green);
   font-weight: 600;
