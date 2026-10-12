@@ -132,3 +132,95 @@
     display: none;
   }
 }
+/* With "店内に入る" beside the follow button, only the first button pushes right. */
+.shop-journey .shop-hero-bottom .button + .button {
+  margin-left: 0;
+}
+/* A shelf beside its owner's POPs: the shelf is only as wide as its books. */
+.store-shelf-body {
+  display: grid;
+  gap: 14px;
+}
+.store-shelf-pops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.store-shelf-pops button {
+  display: block;
+  width: 100%;
+  padding: 11px 16px 9px;
+  text-align: left;
+  background: #fffaf0;
+  border: 1px solid #eadfc4;
+  border-radius: 3px;
+  box-shadow: 2px 3px 0 #e9e1cc80;
+  color: #3a2e22;
+  cursor: pointer;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+.store-shelf-pops li:nth-child(odd) button {
+  transform: rotate(-0.5deg);
+}
+.store-shelf-pops li:nth-child(even) button {
+  transform: rotate(0.4deg);
+}
+.store-shelf-pops button:hover {
+  transform: translateY(-1px);
+  box-shadow: 3px 5px 0 #e9e1cc;
+}
+.store-shelf-pop-words {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-family: "Kaisei HarunoUmi", var(--serif);
+  font-size: 14px;
+  line-height: 1.75;
+}
+.store-shelf-pops small {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #7b7262;
+}
+@media (min-width: 900px) {
+  .store-shelf-body:has(.store-shelf-pops) {
+    grid-template-columns: minmax(0, max-content) minmax(260px, 1fr);
+    align-items: start;
+  }
+  .store-shelf-body:has(.store-shelf-pops) .shelf-back {
+    min-width: 420px;
+  }
+  .store-shelf-pop-words {
+    -webkit-line-clamp: 2;
+  }
+}
+/* On a phone, one POP under the shelf; the rest are a tap away on the books. */
+@media (max-width: 899px) {
+  .store-shelf-pops li:nth-child(n + 2) {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .store-shelf-pops button,
+  .store-shelf-pops button:hover {
+    transform: none;
+  }
+}
+/* On a phone the owner takes the first row and the two buttons share the second. */
+@media (max-width: 600px) {
+  .shop-journey .shop-hero-bottom .owner-profile-link {
+    flex-basis: 100%;
+  }
+  .shop-journey .shop-hero-bottom .button {
+    flex: 1 1 0;
+    margin-left: 0;
+    justify-content: center;
+  }
+}

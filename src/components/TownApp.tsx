@@ -16,6 +16,7 @@ import {
   type TownActions,
   type ShelfItem,
   type Shelf,
+  type Book,
 } from "../lib/types";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
@@ -452,6 +453,7 @@ function ShopView({
       ? state.me
       : state.readers.find((r) => r.id === shop.ownerId);
   const shelves = shop.shelves.filter((s) => s.isPublic);
+  const hasBooks = shelves.some((s) => s.items.length > 0);
   const followed = state.following.includes(shop.id);
   return (
     <div className="shop-journey" {...shopSwipe}>
@@ -503,6 +505,12 @@ function ShopView({
               </span>
             </Link>
           )}
+          {hasBooks && (
+            <Link href={walkPath(shop.id)} className="button secondary">
+              <Icon name="store" size={16} />
+              店内に入る
+            </Link>
+          )}
           {shop.ownerId === "me" ? (
             <Link href="/my-shop/" className="button secondary">
               <Icon name="edit" size={15} />
@@ -539,31 +547,50 @@ function ShopView({
           </a>
         ))}
       </div>
-      {shelves.map((s, i) => (
-        <section
-          className="store-shelf-section"
-          id={"shelf-" + s.id}
-          key={s.id}
-        >
-          <div className="store-shelf-label">
-            <span>{String(i + 1).padStart(2, "0")}</span>
-            <h3>{s.name}</h3>
-            <small>{s.items.length}冊の選書</small>
-          </div>
-          <WoodenShelf
-            shelf={s}
-            books={state.books}
-            onSelect={(item) => setSelected({ item, shelf: s })}
-          />
-          <div className="shelf-under-note">
-            <span>店主の感性で、並べられた一冊たち。</span>
-            <small>
-              横にめくって、棚の奥へ
-              <Icon name="arrow" size={13} />
-            </small>
-          </div>
-        </section>
-      ))}
+      {shelves.map((s, i) => {
+        const pops = shelfPops(s, state.books);
+        return (
+          <section
+            className="store-shelf-section"
+            id={"shelf-" + s.id}
+            key={s.id}
+          >
+            <div className="store-shelf-label">
+              <span>{String(i + 1).padStart(2, "0")}</span>
+              <h3>{s.name}</h3>
+              <small>{s.items.length}冊の選書</small>
+            </div>
+            {/* The shelf keeps its own width; the owner's words fill the rest of the row. */}
+            <div className="store-shelf-body">
+              <WoodenShelf
+                shelf={s}
+                books={state.books}
+                onSelect={(item) => setSelected({ item, shelf: s })}
+              />
+              {pops.length > 0 && (
+                <ul
+                  className="store-shelf-pops"
+                  aria-label={`「${s.name}」の店主のPOP`}
+                >
+                  {pops.map(({ item, book }) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelected({ item, shelf: s })}
+                      >
+                        <span className="store-shelf-pop-words">
+                          {item.pop}
+                        </span>
+                        <small>『{book.title}』</small>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        );
+      })}
       {!shelves.length && (
         <div className="empty-state">
           <Icon name="book" size={30} />
@@ -631,6 +658,17 @@ function ShopView({
       )}
     </div>
   );
+}
+/** Up to three of a shelf's POPs, in shelf order: the owner's words beside the shelf. */
+function shelfPops(shelf: Shelf, books: Book[]) {
+  return shelf.items
+    .filter((item) => item.pop.trim())
+    .map((item) => ({
+      item,
+      book: books.find((book) => book.id === item.bookId),
+    }))
+    .filter((entry): entry is { item: ShelfItem; book: Book } => !!entry.book)
+    .slice(0, 3);
 }
 function BookView({
   state,
