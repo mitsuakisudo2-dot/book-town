@@ -8,3 +8,23 @@ Phase 2 generated with the built-in image generation tool, 2026-10-12. PNG origi
 - `wood-v2.webp`: one flat photograph-style material. Prompt: "Use case: production texture for a Japanese bookstore web interface. Create ONE flat front-on photograph of a single continuous wide old honey-brown oak board, completely filling the canvas edge to edge. Warm caramel and dark walnut horizontal flowing wood grain, small natural knots, slight scratches and worn edges, fine tactile pores. The exact rich warm wooden shelf and wooden sign texture of a cozy dim bookstore, gently illuminated by amber light. Neutral even illumination across the board so the texture can be reused at different scales behind real HTML text and DOM shelves. Absolutely no objects, no room, no books, no shelves depicted, no typography, no border, no lettering, no hardware, no seams, no watermark. This is a material swatch only, not an interface or background scene. Landscape composition, realistic high resolution photographic detail."
 
 `public/fonts/yomogi.woff2`: subset of Yomogi by the Yomogi Project Authors, renamed internally to Yohaku Hand. Source: https://github.com/google/fonts/tree/main/ofl/yomogi . Licensed under SIL OFL 1.1; unmodified license and copyright in `public/fonts/Yomogi-OFL.txt`. Subset covers ASCII, kana, punctuation and existing content; other glyphs use the system serif fallback.
+
+## Walk redesign after the reference mockup (2026-10-12)
+
+All files below are original. The user's reference mockups were only viewed and measured (sizes, colour statistics); no reference pixels were copied, traced or sampled into any asset. No image-generation tool was available, so everything is procedural or hand-authored vector code; generator scripts were kept outside the repository.
+
+- `room-bokeh-v1.webp`: defocused warm bookstore interior, 1080x1920. numpy/PIL renderer with depth layers (far room, back-wall shelving, dusk window, plant, Edison bulb, near-left bookcase with glass lanterns, floor), each blurred with a disc lens kernel so lights become bokeh discs, then warm grade, vignette and 1.5% grain. Default `scene.background` for woodScene; `room.webp` stays for scenes saved earlier.
+- `planks-dark-v1.webp`: procedural mahogany back panel, eight boards with ring/latewood grain, seamless in y.
+- `sign-plank-v1.webp`: procedural bleached honey-pine plank with grain, fissures, knots, chipped edges and weathered ends; the lamp hotspot is CSS on top.
+- `grain-paper-v1.webp`, `grain-chalk-v1.webp`: seamless 160px paper-fibre and dry-chalk tiles (chalk has alpha pits), used with soft-light and `background-clip: text`.
+- `lamp-pendant-v1.svg`: industrial dome pendant drawn as vector code (fitted dome profile, rolled lip, glass bulb, feTurbulence speckle).
+- `chain-v1.svg`: hanging chain with arched bridle and screw-eye, one front link and one edge-on link reused with `<use>`.
+- `ivy-hang-v1.svg`, `ivy-clump-v1.svg`, `ivy-trail-v1.svg`, `ivy-pot-v1.svg`: one hand-drawn three-lobed leaf outline placed in layered depth (blurred far leaves, lit front leaves) along Catmull-Rom vines.
+- `daisy-vase-v1.svg`, `globe-v1.svg`: seeded procedural daisies in a gradient-built glass bottle; an orthographic globe with rough hand-typed continents, graticule and a brass meridian.
+- `fg-left-v1.webp`, `fg-right-v1.webp`: pre-blurred foreground with alpha (glass candle holders, varnished table and a book stack; a Windsor chair back), drawn with Canvas 2D in headless Chromium.
+- Cover art: a 24-panel procedural atlas was attempted and rejected by review (it looked flatter than `jackets-v2.webp`), so walk face-outs keep the 8 v2 paintings, cropped at their own proportions instead of squashed.
+
+Fonts in `public/fonts/` (SIL OFL 1.1, subsets of ASCII, kana, punctuation and the app's own text; licences shipped next to them):
+- `shop-sign-700.woff2` = Kaisei HarunoUmi Bold, `shop-hand-500.woff2` = Kaisei HarunoUmi Medium (`KaiseiHarunoUmi-OFL.txt`), source https://github.com/google/fonts/tree/main/ofl/kaiseiharunoumi
+- `jacket-mincho-600.woff2` = Zen Old Mincho SemiBold (`ZenOldMincho-OFL.txt`), source https://github.com/google/fonts/tree/main/ofl/zenoldmincho
+- Characters outside the subsets fall back to the same families from Google Fonts (unicode-range slices), then to the serif.
