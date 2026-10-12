@@ -289,19 +289,19 @@
   left: 44.4%;
   width: 18.2%;
   top: -12.4%;
-  z-index: 3;
+  z-index: 4;
   pointer-events: none;
 }
 .walk-lamp-light {
   position: absolute;
   left: 30%;
-  top: -9%;
+  top: -20%;
   width: 42%;
-  height: 26%;
+  height: 40%;
   z-index: 3;
   pointer-events: none;
   background: radial-gradient(
-    ellipse 50% 45% at 50% 18%,
+    ellipse 50% 45% at 50% 38%,
     rgba(255, 214, 140, 0.55),
     rgba(255, 180, 90, 0.18) 45%,
     transparent 72%
@@ -385,7 +385,7 @@
 }
 .walk-sign-ivy {
   position: absolute;
-  left: -23.1%;
+  left: -17.5%;
   top: -127.7%;
   width: 25.15%;
   height: 237.5%;
@@ -440,7 +440,7 @@
   font-family: var(--walk-brush);
   font-weight: 700;
   font-size: min(
-    calc(var(--walk-u) * 7.5),
+    calc(var(--walk-u) * 9),
     calc(var(--walk-u) * 65.3 / var(--n, 8))
   );
   line-height: 1;
@@ -523,6 +523,19 @@
     rgba(25, 8, 1, 0.42) 100%
   );
   mix-blend-mode: multiply;
+  /* Leave the chalkboard column lit so the chalk stays bright. */
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 20.5%,
+    #000 23%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 20.5%,
+    #000 23%
+  );
 }
 .walk-case-post {
   position: absolute;
@@ -650,8 +663,8 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: calc(var(--walk-u) * 2.6) calc(var(--walk-u) * 2.2)
-    calc(var(--walk-u) * 2) calc(var(--walk-u) * 2.5);
+  padding: calc(var(--walk-u) * 2.6) calc(var(--walk-u) * 1.8)
+    calc(var(--walk-u) * 2) calc(var(--walk-u) * 2.2);
   text-align: left;
   color: #ece5dc;
   overflow: hidden;
@@ -721,7 +734,7 @@
   font-weight: 700;
   font-size: max(
     calc(var(--walk-u) * 2.6),
-    min(calc(var(--walk-u) * 4.2), calc(var(--walk-u) * 12.6 / var(--n, 3)))
+    min(calc(var(--walk-u) * 4), calc(var(--walk-u) * 11.8 / var(--n, 3)))
   );
   line-height: 1.15;
   display: -webkit-box;
@@ -921,8 +934,8 @@
   padding: 0;
   font-family: var(--walk-mincho);
   font-weight: 600;
-  font-size: 12.6cqw;
-  line-height: 1.38;
+  font-size: 14cqw;
+  line-height: 1.34;
   letter-spacing: 0.06em;
   text-align: center;
   text-wrap: balance;
