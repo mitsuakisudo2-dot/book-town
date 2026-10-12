@@ -98,3 +98,26 @@ export function formatTimer(seconds: number): string {
     ? `${hours}:${pad(minutes)}:${pad(rest)}`
     : `${pad(minutes)}:${pad(rest)}`;
 }
+
+/**
+ * A book left unfinished, to pick up again from the home screen, with the
+ * reader's last words about it. Nothing while a session runs (the reading
+ * page already holds it) or before anything was read.
+ */
+export function bookToContinue(
+  state: TownState,
+): { bookId: string; lastWords: string | null } | null {
+  if (activeSession(state)) return null;
+  const bookId = currentBookId(state);
+  if (!bookId) return null;
+  const last = state.posts
+    .filter(
+      (post) =>
+        post.authorId === ME_ID &&
+        post.bookId === bookId &&
+        post.readingMode !== null &&
+        post.body.trim(),
+    )
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+  return { bookId, lastWords: last?.body.trim() ?? null };
+}
