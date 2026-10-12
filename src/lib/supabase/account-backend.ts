@@ -44,7 +44,14 @@ export function supabaseAccountBackend(
     async sendCode(email) {
       const { error } = await client.auth.signInWithOtp({
         email,
-        options: { shouldCreateUser: false },
+        options: {
+          shouldCreateUser: false,
+          // Supabase uses this only when it is on the project's list of
+          // redirect URLs, and falls back to the Site URL otherwise.
+          ...(typeof window !== "undefined"
+            ? { emailRedirectTo: window.location.origin + "/login/" }
+            : {}),
+        },
       });
       return error ? authFailure(error) : null;
     },

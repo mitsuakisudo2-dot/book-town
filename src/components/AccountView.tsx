@@ -1,10 +1,12 @@
 "use client";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   CODE_LENGTH,
   MINIMUM_AGE,
   NAME_MAX_LENGTH,
+  failureMessages,
+  linkFailure,
   normalizeCode,
   normalizeEmail,
 } from "../lib/account";
@@ -65,6 +67,14 @@ function SignIn() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // A link from the email that did not work lands here with its reason.
+  useEffect(() => {
+    const failure = linkFailure(window.location.hash);
+    if (!failure) return;
+    setError(failureMessages[failure]);
+    history.replaceState(null, "", location.pathname + location.search);
+  }, []);
+
   async function send(event?: FormEvent) {
     event?.preventDefault();
     setBusy(true);
@@ -90,7 +100,7 @@ function SignIn() {
       <>
         <h1>本の街に入る</h1>
         <p className="account-lead">
-          招待を受けたメールアドレスを入れてください。6桁のコードを送ります。パスワードはいりません。
+          招待を受けたメールアドレスを入れてください。ログイン用のメールを送ります。パスワードはいりません。
         </p>
         <form className="profile-form" onSubmit={send}>
           <label htmlFor="account-email">メールアドレス</label>
@@ -118,10 +128,12 @@ function SignIn() {
 
   return (
     <>
-      <h1>コードを入れてください</h1>
+      <h1>メールを確かめてください</h1>
       <p className="account-lead">
-        <b>{sentTo}</b> に{CODE_LENGTH}
-        桁のコードを送りました。届かないときは、迷惑メールのフォルダも見てください。
+        <b>{sentTo}</b>{" "}
+        にメールを送りました。メールのリンクを開くと、そのままログインできます。
+        {CODE_LENGTH}
+        桁のコードが書かれていれば、ここに入れてもかまいません。届かないときは、迷惑メールのフォルダも見てください。
       </p>
       <form className="profile-form" onSubmit={verify}>
         <label htmlFor="account-code">{CODE_LENGTH}桁のコード</label>

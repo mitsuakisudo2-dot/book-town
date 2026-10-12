@@ -28,6 +28,7 @@ export type AccountFailure =
   | "invalid-email"
   | "not-invited"
   | "invalid-code"
+  | "invalid-link"
   | "rate-limited"
   | "handle-taken"
   | "invalid-profile"
@@ -39,6 +40,8 @@ export const failureMessages: Record<AccountFailure, string> = {
     "このメールアドレスは、まだ招待されていません。招待を受けたアドレスで入ってください。",
   "invalid-code":
     "コードが違うか、期限が切れています。もう一度コードを送ってください。",
+  "invalid-link":
+    "このログイン用のリンクは、期限が切れているか、すでに使われています。もう一度メールを送ってください。",
   "rate-limited": "少し時間をおいてから、もう一度お試しください。",
   "handle-taken": "このIDはほかの読書家が使っています。",
   "invalid-profile": "入力した内容を確かめてください。",
@@ -66,6 +69,17 @@ export const normalizeEmail = (raw: string): string => raw.trim().toLowerCase();
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const validEmail = (email: string): boolean =>
   email.length <= 254 && EMAIL_PATTERN.test(email);
+
+/**
+ * A sign-in link from the email that did not work comes back with the reason
+ * after the # in the address (an expired or already used link, for example).
+ */
+export function linkFailure(hash: string): AccountFailure | null {
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  return params.has("error") || params.has("error_code")
+    ? "invalid-link"
+    : null;
+}
 
 /** Keeps the digits of a pasted or typed code, so "123 456" also works. */
 export const normalizeCode = (raw: string): string =>

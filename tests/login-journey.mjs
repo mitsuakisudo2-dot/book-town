@@ -44,6 +44,7 @@ const session = () => {
 
 let profile = null;
 const inserted = [];
+const codeRequests = [];
 
 // Uses Playwright's own Chromium unless BOOK_TOWN_CHROME names another browser.
 const browser = await chromium.launch({
@@ -66,7 +67,8 @@ await context.route(supabase + "/**", async (route) => {
       body: JSON.stringify(body),
     });
   const body = request.postData() ? JSON.parse(request.postData()) : {};
-  if (url.pathname === "/auth/v1/otp")
+  if (url.pathname === "/auth/v1/otp") {
+    codeRequests.push(url);
     return body.email === INVITED
       ? json(200, {})
       : json(422, {
@@ -74,6 +76,7 @@ await context.route(supabase + "/**", async (route) => {
           error_code: "otp_disabled",
           msg: "Signups not allowed for otp",
         });
+  }
   if (url.pathname === "/auth/v1/verify")
     return body.token === "123456" && body.email === INVITED
       ? json(200, session())
@@ -119,16 +122,19 @@ const shot = (name) =>
   page.screenshot({ path: path.join(output, name + ".png"), fullPage: true });
 
 try {
-  await check("a signed-out visitor finds the sign-in link on a phone", async () => {
-    await page.goto(base + "/");
-    const link = page.getByRole("link", { name: "ログイン" });
-    await expect(link).toBeVisible();
-    await link.click();
-    await expect(
-      page.getByRole("heading", { name: "本の街に入る" }),
-    ).toBeVisible();
-    await shot("1-email");
-  });
+  await check(
+    "a signed-out visitor finds the sign-in link on a phone",
+    async () => {
+      await page.goto(base + "/");
+      const link = page.getByRole("link", { name: "ログイン" });
+      await expect(link).toBeVisible();
+      await link.click();
+      await expect(
+        page.getByRole("heading", { name: "本の街に入る" }),
+      ).toBeVisible();
+      await shot("1-email");
+    },
+  );
 
   await check("an email without an invitation is told so", async () => {
     await page.getByLabel("メールアドレス").fill("someone@example.jp");
@@ -138,21 +144,30 @@ try {
     );
   });
 
-  await check("an invited email gets a code, and a wrong code is refused", async () => {
-    await page.getByLabel("メールアドレス").fill(" Aki@Example.jp ");
-    await page.getByRole("button", { name: "コードを送る" }).click();
-    await expect(
-      page.getByRole("heading", { name: "コードを入れてください" }),
-    ).toBeVisible();
-    await expect(page.getByText(INVITED)).toBeVisible();
-    const login = page.getByRole("button", { name: "ログインする" });
-    await page.getByLabel("6桁のコード").fill("99999");
-    await expect(login).toBeDisabled();
-    await page.getByLabel("6桁のコード").fill("999 999");
-    await login.click();
-    await expect(page.locator("#account-error")).toContainText("期限が切れています");
-    await shot("2-code");
-  });
+  await check(
+    "an invited email gets a code, and a wrong code is refused",
+    async () => {
+      await page.getByLabel("メールアドレス").fill(" Aki@Example.jp ");
+      await page.getByRole("button", { name: "コードを送る" }).click();
+      await expect(
+        page.getByRole("heading", { name: "メールを確かめてください" }),
+      ).toBeVisible();
+      await expect(page.getByText(INVITED)).toBeVisible();
+      // The link in the email leads back to this site's sign-in page.
+      expect(codeRequests.at(-1).searchParams.get("redirect_to")).toBe(
+        new URL("/login/", base).href,
+      );
+      const login = page.getByRole("button", { name: "ログインする" });
+      await page.getByLabel("6桁のコード").fill("99999");
+      await expect(login).toBeDisabled();
+      await page.getByLabel("6桁のコード").fill("999 999");
+      await login.click();
+      await expect(page.locator("#account-error")).toContainText(
+        "期限が切れています",
+      );
+      await shot("2-code");
+    },
+  );
 
   await check("the right code leads to the first profile", async () => {
     await page.getByLabel("6桁のコード").fill("123456");
@@ -163,23 +178,28 @@ try {
     await shot("3-welcome");
   });
 
-  await check("the ID, the name and the age are checked before saving", async () => {
-    await page.getByLabel("ユーザー名").fill("アキ");
-    await page.getByLabel("ユーザーID").fill("booktown");
-    await page.getByLabel("13歳以上です").check();
-    await page.getByRole("button", { name: "はじめる" }).click();
-    await expect(page.locator("#account-error")).toContainText("このIDは使えません");
-    await page.getByLabel("ユーザーID").fill("taken");
-    await page.getByRole("button", { name: "はじめる" }).click();
-    await expect(page.locator("#account-error")).toContainText(
-      "ほかの読書家が使っています",
-    );
-    await page.getByLabel("ユーザーID").fill("aki_books");
-    await page.getByLabel("13歳以上です").uncheck();
-    await page.getByRole("button", { name: "はじめる" }).click();
-    await expect(page.locator("#account-error")).toContainText("13歳以上");
-    expect(inserted.map((row) => row.handle)).toEqual(["taken"]);
-  });
+  await check(
+    "the ID, the name and the age are checked before saving",
+    async () => {
+      await page.getByLabel("ユーザー名").fill("アキ");
+      await page.getByLabel("ユーザーID").fill("booktown");
+      await page.getByLabel("13歳以上です").check();
+      await page.getByRole("button", { name: "はじめる" }).click();
+      await expect(page.locator("#account-error")).toContainText(
+        "このIDは使えません",
+      );
+      await page.getByLabel("ユーザーID").fill("taken");
+      await page.getByRole("button", { name: "はじめる" }).click();
+      await expect(page.locator("#account-error")).toContainText(
+        "ほかの読書家が使っています",
+      );
+      await page.getByLabel("ユーザーID").fill("aki_books");
+      await page.getByLabel("13歳以上です").uncheck();
+      await page.getByRole("button", { name: "はじめる" }).click();
+      await expect(page.locator("#account-error")).toContainText("13歳以上");
+      expect(inserted.map((row) => row.handle)).toEqual(["taken"]);
+    },
+  );
 
   await check("the profile is created as the signed-in person", async () => {
     await page.getByLabel("13歳以上です").check();
@@ -206,16 +226,54 @@ try {
     expect([me.name, me.handle]).toEqual(["アキ", "aki_books"]);
   });
 
-  await check("the session survives a reload, and signing out ends it", async () => {
-    await page.goto(base + "/login/");
+  await check(
+    "the session survives a reload, and signing out ends it",
+    async () => {
+      await page.goto(base + "/login/");
+      await expect(
+        page.getByRole("heading", { name: "ログインしています" }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "ログアウト" }).click();
+      await expect(
+        page.getByRole("heading", { name: "本の街に入る" }),
+      ).toBeVisible();
+      await page.reload();
+      await expect(
+        page.getByRole("heading", { name: "本の街に入る" }),
+      ).toBeVisible();
+    },
+  );
+
+  await check("the link from the email signs in, too", async () => {
+    const link = session();
+    const params = new URLSearchParams({
+      access_token: link.access_token,
+      expires_at: String(link.expires_at),
+      expires_in: "3600",
+      refresh_token: link.refresh_token,
+      token_type: "bearer",
+      type: "magiclink",
+    });
+    // The link opens a fresh page, as it does from a mail app.
+    await page.goto("about:blank");
+    await page.goto(base + "/login/#" + params);
     await expect(
       page.getByRole("heading", { name: "ログインしています" }),
     ).toBeVisible();
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe("");
     await page.getByRole("button", { name: "ログアウト" }).click();
-    await expect(
-      page.getByRole("heading", { name: "本の街に入る" }),
-    ).toBeVisible();
-    await page.reload();
+  });
+
+  await check("a used or expired link says so", async () => {
+    await page.goto("about:blank");
+    await page.goto(
+      base +
+        "/login/#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired",
+    );
+    await expect(page.locator("#account-error")).toContainText(
+      "期限が切れているか、すでに使われています",
+    );
+    expect(await page.evaluate(() => location.hash)).toBe("");
     await expect(
       page.getByRole("heading", { name: "本の街に入る" }),
     ).toBeVisible();

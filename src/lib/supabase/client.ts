@@ -15,8 +15,9 @@ export function getSupabase(): SupabaseClient<Database> | null {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      // Sign-in uses a code typed from the email, never a link back to the site.
-      detectSessionInUrl: false,
+      // The email carries a code to type in and a link back to the site; the
+      // link's session arrives after the # in the address and is read here.
+      detectSessionInUrl: true,
     },
   });
   return client;

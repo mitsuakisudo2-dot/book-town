@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   createAccountStore,
   failureMessages,
+  linkFailure,
   normalizeCode,
   profileDraftProblem,
   type AccountBackend,
@@ -295,6 +296,18 @@ async function main() {
       "invalid-email",
     );
     assert.equal(authFailure({ code: undefined, status: 0 }), "network");
+  });
+
+  await check("a link that did not work is recognized", () => {
+    assert.equal(
+      linkFailure(
+        "#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired",
+      ),
+      "invalid-link",
+    );
+    assert.equal(linkFailure("#access_token=abc&type=magiclink"), null);
+    assert.equal(linkFailure(""), null);
+    assert.match(failureMessages["invalid-link"], /もう一度メールを送って/);
   });
 
   await check("the app and the database reserve the same IDs", () => {

@@ -64,6 +64,29 @@ async function mailedCode(email: string) {
   throw new Error("No code arrived for " + email);
 }
 
+/** The sign-in link in the newest email to this address. */
+async function mailedLink(email: string) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const search = await fetch(
+      `${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent("to:" + email)}`,
+    ).then((response) => response.json());
+    const id: string | undefined = search.messages?.[0]?.ID;
+    if (id && !linksRead.has(id)) {
+      const message = await fetch(`${MAILPIT_URL}/api/v1/message/${id}`).then(
+        (response) => response.json(),
+      );
+      const href = /href="([^"]+)"/.exec(message.HTML)?.[1];
+      if (href) {
+        linksRead.add(id);
+        return href.replaceAll("&amp;", "&");
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error("No link arrived for " + email);
+}
+const linksRead = new Set<string>();
+
 async function main() {
   let passed = 0;
   async function check(name: string, run: () => Promise<void>) {
@@ -153,6 +176,29 @@ async function main() {
       await otherBackend.createProfile({ id: chi.id, handle, name: "チー" }),
       { failure: "handle-taken" },
     );
+  });
+
+  await check("the link in the email signs in on this site only", async () => {
+    const linkFor = async (name: string, redirect: string) => {
+      const { email } = await invite(name);
+      const { error } = await browserClient().auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false, emailRedirectTo: redirect },
+      });
+      assert.ifError(error);
+      const href = await mailedLink(email);
+      const response = await fetch(href, { redirect: "manual" });
+      return response.headers.get("location") ?? "";
+    };
+    const back = await linkFor("dan", "http://127.0.0.1:5173/login/");
+    assert.match(back, /^http:\/\/127\.0\.0\.1:5173\/login\/#access_token=/);
+    // A site that is not on the project's list never receives the session.
+    const elsewhere = await linkFor(
+      "eve",
+      "https://booktown.example.com/login/",
+    );
+    assert.ok(!elsewhere.startsWith("https://booktown.example.com"));
+    assert.ok(elsewhere.startsWith("http://127.0.0.1:3000"));
   });
 
   await check("signing out ends the session", async () => {
