@@ -5,6 +5,7 @@ import {
   keptIds,
   keptText,
 } from "../src/lib/kept-draft";
+import { closingNotice } from "../src/lib/scan";
 import { SAVE_REFUSED } from "../src/lib/shop-draft";
 
 type Note = { text: string; ids: string[] };
@@ -125,9 +126,22 @@ const options = {
     "保存できませんでした。書きかけはそのまま残しています",
     "街を読み込んでいます。下書きはそのまま残しています",
     "プロフィールを保存できませんでした。書きかけは残しています。",
+    // The scanner's books kept on the device, not registered yet.
+    closingNotice({ added: 0, waiting: 1, later: 1 })!,
+    closingNotice({ added: 0, waiting: 0, later: 2 })!,
+    "まだ保存できません。読み込みが終わってから、もう一度押してください",
+    "『こころ』は端末に控えました。ページを読み込み直すと登録します",
+    "『こころ』は、読み込みが終わったら登録します",
   ])
     assert.equal(isKeptNotice(refused), true, refused);
-  for (const done of ["記録を書き直しました", "『こころ』を登録しました"])
+  for (const done of [
+    "記録を書き直しました",
+    "『こころ』を登録しました",
+    closingNotice({ added: 2, waiting: 1, later: 1 })!,
+    "控えていた3冊を登録しました",
+    "控えに戻しました",
+    "控えから外しました",
+  ])
     assert.equal(isKeptNotice(done), false, done);
 }
 
