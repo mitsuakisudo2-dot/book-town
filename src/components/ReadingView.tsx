@@ -161,6 +161,7 @@ export function ReadingView(props: Shared) {
         <Modal
           title={review.book ? `『${review.book.title}』の感想` : "感想を書く"}
           onClose={() => setReview(null)}
+          writing
         >
           {review.line && (
             <LineToAdd
@@ -172,7 +173,6 @@ export function ReadingView(props: Shared) {
           <PostComposer
             {...props}
             fixedBook={review.book}
-            autoFocus
             onDone={() => setReview(null)}
           />
         </Modal>

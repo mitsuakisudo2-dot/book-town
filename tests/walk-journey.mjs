@@ -345,6 +345,13 @@ try {
         page.getByText("送信されないデモです。", { exact: false }),
       ).toBeVisible();
       const box = page.getByRole("textbox", { name: "店主に伝えたい言葉" });
+      // On a touch screen the sheet opens without the keyboard over it.
+      await expect(
+        page
+          .getByRole("dialog", { name: "店主に伝える" })
+          .getByRole("button", { name: "閉じる" }),
+      ).toBeFocused();
+      await expect(box).not.toBeFocused();
       const starters = page.getByRole("group", { name: "書き出しの例" });
       await starters.getByRole("button", { name: /^POPを読んで/ }).click();
       await starters.getByRole("button", { name: "また来ます。" }).click();

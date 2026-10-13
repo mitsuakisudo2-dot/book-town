@@ -18,6 +18,7 @@ import {
   useGoogleCoversShown,
 } from "../lib/covers";
 import { useBackLayer } from "../lib/back-layer";
+import { focusesFieldOnOpen } from "../lib/coarse-pointer";
 import { imeKey } from "../lib/keys";
 import "./illustrated-jackets.css";
 const shapes: Record<string, ReactNode> = {
@@ -401,13 +402,20 @@ export function Modal({
   onClose,
   children,
   wide = false,
+  writing = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  /**
+   * A sheet mainly for writing. On a touch screen it opens without the
+   * keyboard over it: the focus starts on its first button, not its field.
+   */
+  writing?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const writingRef = useRef(writing);
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
@@ -451,8 +459,9 @@ export function Modal({
     const old = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     (
-      ref.current?.querySelector<HTMLElement>("input,textarea,select") ??
-      ref.current?.querySelector<HTMLElement>("button")
+      (focusesFieldOnOpen(writingRef.current)
+        ? ref.current?.querySelector<HTMLElement>("input,textarea,select")
+        : null) ?? ref.current?.querySelector<HTMLElement>("button")
     )?.focus();
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") {

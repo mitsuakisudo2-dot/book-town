@@ -888,6 +888,111 @@ try {
         await expect(page.locator(".post-card").first()).toBeVisible();
       },
     );
+    await check(
+      `${label} with a mouse, a sheet for writing opens with its field ready`,
+      async () => {
+        expect(
+          await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+        ).toBe(false);
+        await go("/timeline/");
+        await page.locator(".compose-fab").click();
+        const dialog = page.getByRole("dialog", { name: "投稿する" });
+        await expect(dialog.locator("textarea")).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+        await go("/books/utopia/");
+        await page
+          .getByRole("button", { name: "読み終えた気持ちを残す" })
+          .click();
+        const sheet = page.getByRole("dialog", { name: "読み終えた気持ち" });
+        await expect(
+          sheet.getByLabel("ひとこと（なくても大丈夫です）"),
+        ).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(sheet).toHaveCount(0);
+      },
+    );
+    await context.close();
+  }
+  {
+    // A phone, whose main pointer is a finger.
+    const context = await browser.newContext({
+      viewport: { width: 393, height: 793 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    page = settleBeforeNavigating(await context.newPage());
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    await check(
+      "393px phone: a sheet for writing opens without the keyboard and waits for a tap on its field",
+      async () => {
+        expect(
+          await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+        ).toBe(true);
+        const typing = () =>
+          page.evaluate(() =>
+            Boolean(
+              document.activeElement?.matches(
+                "input,textarea,select,[contenteditable]",
+              ),
+            ),
+          );
+        await go("/timeline/");
+        const fab = page.locator(".compose-fab");
+        await fab.tap();
+        const dialog = page.getByRole("dialog", { name: "投稿する" });
+        const text = dialog.locator("textarea");
+        const close = dialog.getByRole("button", { name: "閉じる" });
+        // The focus starts in the sheet, on its first button: no field
+        // has it, so no keyboard rises over the sheet.
+        await expect(close).toBeFocused();
+        await expect(text).not.toBeFocused();
+        expect(await typing()).toBe(false);
+        // The sheet still keeps the focus inside, both ways round.
+        for (const key of ["Shift+Tab", "Tab", "Tab", "Tab"]) {
+          await page.keyboard.press(key);
+          expect(
+            await dialog.evaluate((element) =>
+              element.contains(document.activeElement),
+            ),
+          ).toBe(true);
+        }
+        // Escape and 戻る still close it.
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+        await fab.tap();
+        await expect(close).toBeFocused();
+        await back();
+        await expect(dialog).toHaveCount(0);
+        // Writing starts with a tap on the field.
+        await fab.tap();
+        await expect(close).toBeFocused();
+        await text.tap();
+        await expect(text).toBeFocused();
+        await page.keyboard.type("指で書きはじめる");
+        await expect(text).toHaveValue("指で書きはじめる");
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+        // The feelings for a finished book wait for a tap the same way.
+        await go("/books/utopia/");
+        await page
+          .getByRole("button", { name: "読み終えた気持ちを残す" })
+          .tap();
+        const sheet = page.getByRole("dialog", { name: "読み終えた気持ち" });
+        const note = sheet.getByLabel("ひとこと（なくても大丈夫です）");
+        await expect(
+          sheet.getByRole("button", { name: "閉じる" }),
+        ).toBeFocused();
+        expect(await typing()).toBe(false);
+        await note.tap();
+        await expect(note).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(sheet).toHaveCount(0);
+      },
+    );
     await context.close();
   }
   await check(

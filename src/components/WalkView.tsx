@@ -944,7 +944,7 @@ export function WalkView({
         </Modal>
       )}
       {overlay?.kind === "message" && delivers && (
-        <Modal title="店主にひとことを残す" onClose={close}>
+        <Modal title="店主にひとことを残す" onClose={close} writing>
           <p className="note-box">
             店主に届きます。読めるのは、店主とあなただけです。消して届け直すと、店主からも見えなくなります。
           </p>
@@ -979,7 +979,7 @@ export function WalkView({
         </Modal>
       )}
       {overlay?.kind === "message" && !delivers && (
-        <Modal title="店主に伝える" onClose={close}>
+        <Modal title="店主に伝える" onClose={close} writing>
           <MessageStarters
             starters={starters}
             onPick={(text) => setMessage(joinStarter(message, text))}
