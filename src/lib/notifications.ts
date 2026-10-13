@@ -206,14 +206,18 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
     if (report.status === "open") continue;
     const done = report.status !== "checking";
     const day = monthDay(report.createdAt);
+    // What it was about comes first, so いただいた reads as the report we
+    // received, never as a poster or a cover someone gave us; and never
+    // 通報してくださった読書家, which reads as the reporter being checked.
+    const received = (day ? day + "に" : "") + "いただいた";
     notices.push({
       id: `report:${report.id}:${done ? "done" : "checking"}`,
       readerId: ME_ID,
       createdAt: report.statusAt,
       text:
         report.kind === "book"
-          ? `${day}にいただいた表紙の削除依頼を、運営が${done ? "確認しました" : "確認しています"}`
-          : `${day}にいただいた${REPORT_KIND_WORDS[report.kind]}についての通報を、運営が${
+          ? `表紙について${received}削除の依頼を、運営が${done ? "確認しました" : "確認しています"}`
+          : `${REPORT_KIND_WORDS[report.kind]}について${received}通報を、運営が${
               done
                 ? "確認しました。知らせてくださって、ありがとうございます"
                 : "確認しています"

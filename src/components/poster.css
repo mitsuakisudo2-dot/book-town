@@ -620,7 +620,7 @@ a.poster-cover:hover {
   gap: 4px 6px;
   margin-top: 6px;
   font-size: 10px;
-  color: #8d9a80;
+  color: #5f6a55;
 }
 .poster-thumb-badge {
   padding: 1px 8px;
@@ -650,7 +650,7 @@ a.poster-cover:hover {
   margin-top: 8px;
   padding: 4px 0;
   font-size: 11px;
-  color: #8d9a80;
+  color: #5f6a55;
 }
 .poster-open:hover {
   color: var(--green);

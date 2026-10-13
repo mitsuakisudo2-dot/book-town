@@ -830,8 +830,9 @@ input[type="checkbox"] {
 .icon-button:hover {
   background: #e9eedf;
 }
+/* Quiet, but readable on the paper (AA, 4.5:1 and more). */
 .muted {
-  color: #95a18a;
+  color: #5f6a55;
 }
 .field {
   border: 1px solid var(--line);

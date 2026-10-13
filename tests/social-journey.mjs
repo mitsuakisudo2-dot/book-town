@@ -2,6 +2,7 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { expectReadable } from "./journey-contrast.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -351,9 +352,9 @@ try {
             () => JSON.parse(localStorage.getItem("book-town-v1")).data,
           );
         await go("/timeline/");
-        // By default a marked post is folded, in its place.
+        // By default a marked post or poster is folded, in its place.
         await expect(page.locator(".social-note")).toContainText(
-          "3人以上が「ネタバレでは？」と言った投稿は、たたんでいます",
+          "ネタバレの印が付いた投稿とポスター、3人以上が「ネタバレでは？」と言った投稿は、たたんでいます",
         );
         await expect(page.locator("main .spoiler-cover").first()).toBeVisible();
         await go("/profiles/me/");
@@ -367,6 +368,10 @@ try {
         ).toBeChecked();
         await expect(display).toContainText(
           "書いた人がネタバレの印を付けたものは、はじめからたたんであります。",
+        );
+        await expectReadable(
+          display.locator(".spoiler-display-note"),
+          "spoiler display note",
         );
         // Records start private: 自分だけ is the first choice, and chosen.
         const records = settings.getByRole("group", {
@@ -389,7 +394,7 @@ try {
         expect((await stored()).settings.spoilerDisplay).toBe("leave_out");
         await go("/timeline/");
         await expect(page.locator(".social-note")).toHaveText(
-          "ネタバレの印が付いた投稿と、その可能性がある投稿は、設定により出していません。",
+          "ネタバレの印が付いた投稿とポスター、その可能性がある投稿は、設定により出していません。",
         );
         // Others' marked posts are left out; the reader's own never are.
         for (const title of ["闇の左手", "銀河鉄道の夜"])

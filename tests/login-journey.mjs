@@ -2,6 +2,7 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { expectReadable } from "./journey-contrast.mjs";
 
 // Signs in with an emailed code and creates the first profile, in a real browser
 // against a stand-in for Supabase. Serve the app with
@@ -740,6 +741,8 @@ try {
       await expect(dialog).toContainText(
         "この投稿は、あなたの画面ではたたんでおきます。",
       );
+      // What the reporter will be told, and that it folds, can be read.
+      await expectReadable(dialog.locator("p"), "report sent");
       expect(reportsSent.at(-1)).toEqual({
         reporter_id: user.id,
         target_kind: "post",
@@ -765,12 +768,12 @@ try {
       await page.goto(base + "/notifications/");
       await expect(
         page.getByText(
-          "10月12日にいただいた読書家についての通報を、運営が確認しています",
+          "読書家について10月12日にいただいた通報を、運営が確認しています",
         ),
       ).toBeVisible();
       await expect(
         page.getByText(
-          "10月11日にいただいた本屋についての通報を、運営が確認しました。知らせてくださって、ありがとうございます",
+          "本屋について10月11日にいただいた通報を、運営が確認しました。知らせてくださって、ありがとうございます",
         ),
       ).toBeVisible();
       // The writer of the held post is told too, never who or how many.
@@ -784,6 +787,7 @@ try {
         "10月11日 · 本屋 · 宣伝・スパム · 確認しました",
       ]);
       await expect(own.getByRole("link")).toHaveCount(0);
+      await expectReadable(own.getByRole("listitem"), "own reports");
       // Every read of reports asked only for what a reporter may read.
       expect(reportReadsRefused).toEqual([]);
       await shot("11-own-reports");
@@ -858,6 +862,10 @@ try {
         "通報があったため、運営が確かめるまで、みんなの画面ではたたんで表示しています。ポスターは消えていません。",
       );
       await noOverflow("timeline with a folded poster");
+      await expectReadable(
+        folded.getByRole("link", { name: "ポスターを開く" }),
+        "ポスターを開く",
+      );
       await posterCard("たたまれたわたしのポスター").scrollIntoViewIfNeeded();
       await page.screenshot({
         path: path.join(output, "16-poster-maker-card-390.png"),
@@ -927,6 +935,7 @@ try {
         "このポスターは、あなたの画面ではたたんでおきます。",
       );
       await expect(dialog).not.toContainText("この投稿は");
+      await expectReadable(dialog.locator("p"), "poster report sent");
       expect(reportsSent.at(-1)).toEqual({
         reporter_id: user.id,
         target_kind: "poster",

@@ -1938,7 +1938,7 @@ check(
       [
         [
           "report:report-1:checking",
-          "10月13日にいただいた投稿についての通報を、運営が確認しています",
+          "投稿について10月13日にいただいた通報を、運営が確認しています",
           "/notifications/#reports",
         ],
       ],
@@ -1949,7 +1949,7 @@ check(
       [
         [
           "report:report-1:done",
-          "10月13日にいただいた投稿についての通報を、運営が確認しました。知らせてくださって、ありがとうございます",
+          "投稿について10月13日にいただいた通報を、運営が確認しました。知らせてくださって、ありがとうございます",
         ],
       ],
     );
@@ -1957,20 +1957,27 @@ check(
     // it never reads as if the reporter were the one being checked.
     assert.equal(
       reports("checking", "shop")[0].text,
-      "10月13日にいただいた本屋についての通報を、運営が確認しています",
+      "本屋について10月13日にいただいた通報を、運営が確認しています",
     );
     assert.equal(
       reports("checking", "profile")[0].text,
-      "10月13日にいただいた読書家についての通報を、運営が確認しています",
+      "読書家について10月13日にいただいた通報を、運営が確認しています",
     );
-    for (const kind of ["post", "shop", "profile", "poster"] as const)
-      assert.doesNotMatch(
-        reports("checked", kind)[0].text,
-        /通報してくださった/,
-      );
+    assert.equal(
+      reports("checking", "poster")[0].text,
+      "ポスターについて10月13日にいただいた通報を、運営が確認しています",
+    );
+    // What was reported comes first: いただいた is the report, never a
+    // poster or a cover someone gave, nor a reader who reported.
+    for (const kind of ["post", "shop", "profile", "poster", "book"] as const)
+      for (const status of ["checking", "checked"] as const)
+        assert.doesNotMatch(
+          reports(status, kind)[0].text,
+          /いただいた(ポスター|投稿|本屋|読書家|表紙)|通報してくださった/,
+        );
     assert.equal(
       reports("checked", "book")[0].text,
-      "10月13日にいただいた表紙の削除依頼を、運営が確認しました",
+      "表紙について10月13日にいただいた削除の依頼を、運営が確認しました",
     );
     for (const notice of notificationsFor({
       ...state,

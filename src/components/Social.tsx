@@ -74,14 +74,17 @@ type Shared = {
   notify: Notify;
 };
 
-/** What the timeline says of spoilers, by the reader's 「ネタバレの表示」. */
+/**
+ * What the timeline says of spoilers, by the reader's 「ネタバレの表示」.
+ * Posters carry only their maker's mark (no 「ネタバレでは？」), and follow it.
+ */
 const SPOILER_NOTES: Record<SpoilerDisplay, string> = {
   show_all:
-    "ネタバレの印が付いた投稿は、たたんでいます。「表示する」を押すと読めます。",
+    "ネタバレの印が付いた投稿とポスターは、たたんでいます。「表示する」を押すと読めます。",
   fold_possible:
-    "ネタバレの印が付いた投稿と、3人以上が「ネタバレでは？」と言った投稿は、たたんでいます。「表示する」を押すと読めます。",
+    "ネタバレの印が付いた投稿とポスター、3人以上が「ネタバレでは？」と言った投稿は、たたんでいます。「表示する」を押すと読めます。",
   leave_out:
-    "ネタバレの印が付いた投稿と、その可能性がある投稿は、設定により出していません。",
+    "ネタバレの印が付いた投稿とポスター、その可能性がある投稿は、設定により出していません。",
 };
 
 type FeedEntry =
