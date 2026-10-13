@@ -1,0 +1,135 @@
+"use client";
+
+import {
+  createKeptDraftStore,
+  keptText,
+  type KeptDraftOptions,
+} from "./kept-draft";
+import { validateScene, type SceneKind, type StoreScene } from "./store-scene";
+import {
+  SHELF_NAME_MAX_LENGTH,
+  SHOP_DESCRIPTION_MAX_LENGTH,
+  SHOP_NAME_MAX_LENGTH,
+} from "./types";
+
+// The scene being decorated in 店内の飾りつけ (order, POPs, the greeting,
+// shelf labels, stamps) is kept in this browser while it is decorated, so
+// Escape, a tap outside, 戻る or a reload does not lose it. It is let go once
+// the scene is saved, or when the reader throws it away.
+
+export const SCENE_DRAFT_KEY = "book-town-scene-drafts-v1";
+
+export type KeptScene = {
+  scene: StoreScene;
+  /** The mark of the saved scene the work began from (sceneMark). */
+  from: string;
+};
+
+/**
+ * Whose work it is: one shop of the signed-in reader, or the demo's shop in
+ * this browser. Two accounts on one browser never see each other's work.
+ */
+export const sceneWorkKey = (readerId: string | null, shopId: string) =>
+  (readerId ? "reader:" + readerId : "demo") + "/" + shopId;
+
+/** The longest text each kind of object can hold, as the editor writes it. */
+const TEXT_LIMITS: Partial<Record<SceneKind, number>> = {
+  sign: SHOP_NAME_MAX_LENGTH,
+  row: SHELF_NAME_MAX_LENGTH,
+  // The greeting begins as the shop's description, longer than its field.
+  ownerPop: Math.max(500, SHOP_DESCRIPTION_MAX_LENGTH),
+  bookPop: 10000,
+};
+const STAMPS = ["", "plane", "coffee", "leaf"];
+const MOST_OBJECTS = 2000;
+
+/** Work read back from storage, if it is still a scene the editor makes. */
+export function readKeptScene(value: unknown): KeptScene | null {
+  if (!value || typeof value !== "object") return null;
+  const work = value as Partial<KeptScene>;
+  const scene = work.scene;
+  if (
+    typeof work.from !== "string" ||
+    !work.from ||
+    work.from.length > 40 ||
+    !scene ||
+    typeof scene !== "object" ||
+    scene.ownerManaged !== true ||
+    !Array.isArray(scene.objects) ||
+    scene.objects.length > MOST_OBJECTS
+  )
+    return null;
+  try {
+    // Its books are checked against the town when it is saved: the town may
+    // still be loading here.
+    if (validateScene(scene).length) return null;
+  } catch {
+    return null;
+  }
+  for (const o of scene.objects) {
+    if (
+      (o.text !== undefined && !keptText(o.text, TEXT_LIMITS[o.kind] ?? 500)) ||
+      (o.stamp !== undefined && !STAMPS.includes(o.stamp)) ||
+      (o.kind === "book" && typeof o.bookId !== "string")
+    )
+      return null;
+  }
+  return { scene: structuredClone(scene), from: work.from };
+}
+
+export const sceneDraftOptions: KeptDraftOptions<KeptScene> = {
+  storageKey: SCENE_DRAFT_KEY,
+  keyPattern: /^(demo|reader:[\w-]+)\/[^/]+$/,
+  read: readKeptScene,
+  // A scene can be long; a few readers' shops are all one browser holds.
+  limit: 4,
+};
+
+export const sceneDraftStore = createKeptDraftStore(sceneDraftOptions);
+
+/** The same value written the same way, whatever order its keys came in. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+  if (value && typeof value === "object")
+    return (
+      "{" +
+      Object.entries(value)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, entry]) => JSON.stringify(key) + ":" + canonical(entry))
+        .join(",") +
+      "}"
+    );
+  return JSON.stringify(value) ?? "null";
+}
+
+/**
+ * A short mark of a saved scene. Work keeps the mark of the scene it began
+ * from, so a scene saved since (on another device) is told apart. The mark
+ * reads what the scene holds, not the order of its keys: the database hands
+ * a scene back with its keys in an order of its own.
+ */
+export function sceneMark(scene: StoreScene | undefined): string {
+  if (!scene) return "none";
+  const value = canonical({ ...scene, storeId: "" });
+  // FNV-1a, enough to tell one version from the next.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/**
+ * How kept work stands against the scene saved now (by its mark): still to
+ * be saved ("fresh"), begun before another scene was saved over it
+ * ("stale"), or the very scene saved now ("saved", nothing left to keep).
+ */
+export function sceneWorkState(
+  work: KeptScene,
+  savedMark: string,
+): "fresh" | "stale" | "saved" {
+  if (sceneMark(work.scene) === savedMark) return "saved";
+  return work.from === savedMark ? "fresh" : "stale";
+}
