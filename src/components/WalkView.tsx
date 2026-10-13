@@ -52,6 +52,7 @@ import {
 } from "../lib/types";
 import "./walk.css";
 import { profilePath, shopPath } from "../lib/paths";
+import { replaceAddress } from "../lib/url-state";
 
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
@@ -232,6 +233,12 @@ export function WalkView({
     window.addEventListener("hashchange", begin);
     return () => window.removeEventListener("hashchange", begin);
   }, [ready, ids, initialStoreId, update]);
+  // The shop in view is written into the address, so coming back to the walk
+  // returns to it rather than to the shop the walk was entered from.
+  useEffect(() => {
+    if (!ready || !currentId) return;
+    replaceAddress({ hash: encodeURIComponent(currentId) });
+  }, [ready, currentId]);
   useEffect(() => {
     if (!currentId || overlay || walk.visits[currentId]) return;
     let remaining = 3000,
