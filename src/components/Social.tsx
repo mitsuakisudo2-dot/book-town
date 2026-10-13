@@ -10,6 +10,7 @@ import {
 } from "react";
 import Link from "next/link";
 import {
+  LIKE_TAPS_MAX,
   ME_ID,
   POST_MAX_LENGTH,
   type Book,
@@ -24,9 +25,10 @@ import {
   formatPostTime,
   isSpoilerFor,
   ownersToFollow,
-  likeCount,
+  likesReceived,
   readerPosts,
   repliesOf,
+  tapsOf,
   timelinePosts,
   wantCount,
   wantSources,
@@ -652,9 +654,10 @@ export function PostCard({
   const mine = post.authorId === ME_ID;
   const reported = state.spoilerReports.includes(post.id);
   const hidden = isSpoilerFor(state, post) && !revealed && !shown;
-  const liked = state.likedPosts.includes(post.id);
+  const taps = tapsOf(state, post.id);
+  const [pops, setPops] = useState(0);
+  const received = likesReceived(post);
   const wanted = state.wantedPosts.includes(post.id);
-  const likes = likeCount(state, post);
   const wants = wantCount(state, post);
   const [moreOpen, setMoreOpen] = useState(false);
   const [arriving] = useState(() => postedJustNow(post.id));
@@ -761,16 +764,36 @@ export function PostCard({
           </Link>
         )}
         <div className="post-actions">
+          {/* Pressed again, a like adds up (to LIKE_TAPS_MAX); taking it back is under …. */}
           <button
             type="button"
-            className={liked ? "is-active" : ""}
-            aria-pressed={liked}
-            onClick={() => actions.toggleLike(post.id)}
+            className={"like-button" + (taps ? " is-active" : "")}
+            aria-pressed={taps > 0}
+            onClick={() => {
+              if (actions.tapLike(post.id) === taps && taps)
+                notify(`いいねは${LIKE_TAPS_MAX}回まで重ねられます`);
+              else setPops(pops + 1);
+            }}
           >
-            <Icon name="heart" size={16} />
+            <span
+              key={pops}
+              className={"like-heart" + (pops ? " is-popping" : "")}
+            >
+              <Icon name="heart" size={16} />
+            </span>
             いいね
             {/* How many is the writer's to know, not a ranking for others. */}
-            <span>{mine && likes ? likes : ""}</span>
+            <span>
+              {mine
+                ? received.people
+                  ? received.taps > received.people
+                    ? `${received.people}人から${received.taps}回`
+                    : `${received.people}人`
+                  : ""
+                : taps > 1
+                  ? `${taps}回`
+                  : ""}
+            </span>
           </button>
           {!isReply && post.readingMode !== "solo" && (
             <button
@@ -815,7 +838,7 @@ export function PostCard({
             </button>
           )}
           {/* Reporting stays one tap away, out of sight of whoever is writing. */}
-          {((spoilerable && !reported) || reportable) && (
+          {(taps > 0 || (spoilerable && !reported) || reportable) && (
             <button
               type="button"
               className="report-button post-more-toggle"
@@ -838,6 +861,18 @@ export function PostCard({
         </div>
         {moreOpen && (
           <div className="post-more" role="group" aria-label="その他の操作">
+            {taps > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMoreOpen(false);
+                  actions.toggleLike(post.id);
+                  notify("いいねを取り消しました");
+                }}
+              >
+                いいねを取り消す
+              </button>
+            )}
             {spoilerable && !reported && (
               <button
                 type="button"
@@ -852,17 +887,19 @@ export function PostCard({
                 ネタバレでは？
               </button>
             )}
-            <ReportButton
-              className=""
-              onOpen={() => setMoreOpen(false)}
-              target={{
-                kind: "post",
-                id: post.id,
-                name: author.name + "さんの投稿",
-              }}
-            >
-              この投稿を通報
-            </ReportButton>
+            {!mine && (
+              <ReportButton
+                className=""
+                onOpen={() => setMoreOpen(false)}
+                target={{
+                  kind: "post",
+                  id: post.id,
+                  name: author.name + "さんの投稿",
+                }}
+              >
+                この投稿を通報
+              </ReportButton>
+            )}
           </div>
         )}
         {mine && confirmingDelete && (

@@ -223,6 +223,7 @@ export type Database = {
           created_at: string;
           kind: string;
           post_id: string;
+          taps: number;
           user_id: string;
         };
         ComputedFields: never;
@@ -230,12 +231,14 @@ export type Database = {
           created_at?: string;
           kind: string;
           post_id: string;
+          taps?: number;
           user_id: string;
         };
         Update: {
           created_at?: string;
           kind?: string;
           post_id?: string;
+          taps?: number;
           user_id?: string;
         };
         Relationships: [

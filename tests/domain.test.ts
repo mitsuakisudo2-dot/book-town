@@ -21,6 +21,8 @@ import {
   followedTimelinePosts,
   isSpoilerFor,
   likeCount,
+  likesReceived,
+  tapsOf,
   repliesOf,
   timelinePosts,
   wantCount,
@@ -53,6 +55,7 @@ import {
   POST_DRAFT_KEY,
 } from "../src/lib/post-draft";
 import {
+  LIKE_TAPS_MAX,
   ME_ID,
   popReactionKey,
   shelfUsed,
@@ -1435,6 +1438,72 @@ check("a writer can cover a few words without hiding the whole post", () => {
   assert.equal(
     bookToContinue(reader.getSnapshot())?.lastWords,
     "海は生きていた",
+  );
+});
+
+check(
+  "a like is pressed again up to ten times and taken back in one go",
+  () => {
+    const repo = createMemoryRepository();
+    const town = createTownStore(repo);
+    assert.equal(town.actions.tapLike("p-3"), 1);
+    assert.equal(town.actions.tapLike("p-3"), 2);
+    for (let press = 0; press < 20; press += 1) town.actions.tapLike("p-3");
+    let state = town.getSnapshot();
+    assert.equal(tapsOf(state, "p-3"), LIKE_TAPS_MAX);
+    assert.deepEqual(state.likedPosts, ["p-3"]);
+    assert.equal(town.actions.tapLike("p-3"), LIKE_TAPS_MAX);
+    // The count survives a reload; a tampered one does not.
+    assert.deepEqual(repo.load().state.likeTaps, { "p-3": LIKE_TAPS_MAX });
+    const stored = JSON.parse(serializeTown(state));
+    stored.data.likeTaps = { "p-3": 99, "p-1": 4 };
+    assert.deepEqual(
+      deserializeTown(JSON.stringify(stored)).state.likeTaps,
+      {},
+    );
+    town.actions.toggleLike("p-3");
+    state = town.getSnapshot();
+    assert.equal(tapsOf(state, "p-3"), 0);
+    assert.deepEqual(state.likeTaps, {});
+    assert.equal(town.actions.tapLike("missing"), 0);
+  },
+);
+
+check("the writer learns who liked their post and how many times", () => {
+  const town = createTownStore(createMemoryRepository());
+  const own = town.actions.createPost({
+    body: "再読して、また泣いた。",
+    bookId: "solaris",
+  }) as string;
+  const state = town.getSnapshot();
+  const [haru, nagi] = state.readers;
+  const withLikers: TownState = {
+    ...state,
+    posts: state.posts.map((post) =>
+      post.id === own
+        ? {
+            ...post,
+            likes: 2,
+            likers: [
+              { readerId: haru.id, taps: 7, at: "2026-10-13T01:00:00Z" },
+              { readerId: nagi.id, taps: 1, at: "2026-10-13T02:00:00Z" },
+            ],
+          }
+        : post,
+    ),
+  };
+  const post = withLikers.posts.find((entry) => entry.id === own)!;
+  assert.equal(post.authorId, ME_ID);
+  assert.deepEqual(likesReceived(post), { people: 2, taps: 8 });
+  const notices = notificationsFor(withLikers).filter((notice) =>
+    notice.id.startsWith("like:"),
+  );
+  assert.deepEqual(
+    notices.map((notice) => notice.text),
+    [
+      `${nagi.name}さんが、あなたの投稿にいいねしました 「再読して、また泣いた。」`,
+      `${haru.name}さんが、あなたの投稿に7回いいねしました 「再読して、また泣いた。」`,
+    ],
   );
 });
 

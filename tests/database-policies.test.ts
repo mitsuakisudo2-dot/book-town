@@ -847,6 +847,55 @@ async function main() {
   );
 
   await check(
+    "a like is pressed again up to ten times, and only by its reader",
+    async () => {
+      const taps = async (visitor: Visitor) =>
+        (
+          await as<{ taps: number }>(
+            visitor,
+            "select taps from post_reactions where user_id = $1 and post_id = $2 and kind = 'like'",
+            [BEN, akiReview.id],
+          )
+        )[0]?.taps;
+      assert.equal(await taps(BEN), 1);
+      const press = (visitor: string, count: number) =>
+        affects(
+          visitor,
+          "update post_reactions set taps = $3 where user_id = $1 and post_id = $2 and kind = 'like'",
+          [BEN, akiReview.id, count],
+        );
+      assert.equal(await press(BEN, 7), 1);
+      // The writer sees how many; nobody else does, nor changes it.
+      assert.equal(await taps(AKI), 7);
+      assert.equal(await taps(CHI), undefined);
+      assert.equal(await press(CHI, 10), 0);
+      assert.equal(await press(AKI, 10), 0);
+      assert.equal(await taps(BEN), 7);
+      await refused(
+        BEN,
+        "update post_reactions set taps = 11 where user_id = $1 and post_id = $2 and kind = 'like'",
+        [BEN, akiReview.id],
+        /check constraint/,
+      );
+      // 読みたくなった is pressed once.
+      await refused(
+        BEN,
+        "update post_reactions set taps = 2 where user_id = $1 and post_id = $2 and kind = 'want'",
+        [BEN, akiReview.id],
+        /check constraint/,
+      );
+      // Only the count changes, never whose or which post it is.
+      await refused(
+        BEN,
+        "update post_reactions set post_id = $2 where user_id = $1 and kind = 'like'",
+        [BEN, akiChat.id],
+        /permission/,
+      );
+      await press(BEN, 1);
+    },
+  );
+
+  await check(
     "spoiler reports go on other people's unmarked posts",
     async () => {
       await as(

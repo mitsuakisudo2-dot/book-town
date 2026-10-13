@@ -349,6 +349,17 @@ export async function applyWrite(
         client.from("posts").update({ spoiler: true }).in("id", write.ids),
       );
       return;
+    case "like-taps":
+      for (const row of write.rows)
+        await settled(
+          client
+            .from("post_reactions")
+            .update({ taps: row.taps })
+            .eq("user_id", ids.userId)
+            .eq("post_id", row.post_id)
+            .eq("kind", "like"),
+        );
+      return;
     case "end-sessions":
       for (const row of write.rows)
         await settled(
