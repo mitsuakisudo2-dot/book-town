@@ -58,10 +58,13 @@ export type ShopRow = Pick<
   | "public_scene_books"
 >;
 
+/** Who typed a book in is not readable, so a book row comes without it. */
+export type BookRow = Omit<Tables<"books">, "created_by">;
+
 export interface RemoteRows {
   profiles: Tables<"profiles">[];
   nine: Tables<"profile_nine">[];
-  books: Tables<"books">[];
+  books: BookRow[];
   /** Open shops, and the person's own shop whether it is open or not. */
   shops: ShopRow[];
   /** Every shelf of the person's own shop, private ones included. */
@@ -115,15 +118,18 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const text = (value: unknown, limit: number): value is string =>
   typeof value === "string" && value.length <= limit;
 
-/** Books from the catalog get a drawn jacket, like the ones registered in the demo. */
-export function bookFromRow(row: Tables<"books">, userId: string | null): Book {
+/**
+ * Books from the catalog get a drawn jacket, like the ones registered in the
+ * demo. `registered`: the book is among the reader's own registered books.
+ */
+export function bookFromRow(row: BookRow, registered: boolean): Book {
   const book = createRegisteredBook(row.id, {
     title: row.title,
     author: row.author,
     ...(row.isbn ? { isbn: row.isbn } : {}),
     ...(row.price ? { price: row.price } : {}),
   });
-  return userId !== null && row.created_by === userId
+  return registered
     ? book
     : {
         ...book,
@@ -239,7 +245,14 @@ export function townFromRows(
   now = Date.now(),
 ): TownState {
   const { userId } = ids;
-  const books = rows.books.map((row) => bookFromRow(row, userId));
+  const registered = new Set(
+    rows.marks
+      .filter((row) => row.kind === "library" && row.user_id === userId)
+      .map((row) => row.book_id),
+  );
+  const books = rows.books.map((row) =>
+    bookFromRow(row, registered.has(row.id)),
+  );
   const bookIds = new Set(books.map((book) => book.id));
   const readerId = (id: string) => (id === userId ? ME_ID : id);
 
