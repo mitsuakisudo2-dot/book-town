@@ -121,3 +121,10 @@
   font-weight: 500;
   color: #3f4d3b;
 }
+.account-journal-warning {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6b5a2c;
+}
