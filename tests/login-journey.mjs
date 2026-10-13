@@ -1,7 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { restingBox, settleBeforeNavigating } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
 
 // Signs in with an emailed code and creates the first profile, in a real browser
@@ -64,6 +64,14 @@ const inserted = [];
 const codeRequests = [];
 const townReads = [];
 const townWrites = [];
+// 注釈モード: whether the database counts the reader as staff, the notes it
+// holds, what was sent, and every request for them.
+let staff = false;
+const siteNotes = [];
+const annotateAsks = [];
+const notesSent = [];
+const notesTakenBack = [];
+const siteNoteRequests = [];
 
 // Uses Playwright's own Chromium unless BOOK_TOWN_CHROME names another browser.
 const browser = await chromium.launch({
@@ -134,6 +142,56 @@ await context.route(supabase + "/**", async (route) => {
         ...body,
       };
       return json(201, profile);
+    }
+  }
+  if (url.pathname === "/rest/v1/rpc/can_annotate") {
+    annotateAsks.push(staff);
+    return json(200, staff);
+  }
+  // Like the database: staff read and write only their own notes, and to
+  // anyone else the table is empty and closed.
+  if (url.pathname === "/rest/v1/site_notes") {
+    siteNoteRequests.push(request.method());
+    if (request.method() === "GET") {
+      const prefix = (url.searchParams.get("page") ?? "like.%")
+        .slice("like.".length)
+        .replace(/%$/, "")
+        .replace(/\\(.)/g, "$1");
+      return json(
+        200,
+        staff
+          ? siteNotes.filter(
+              (note) => !note.removed_at && note.page.startsWith(prefix),
+            )
+          : [],
+      );
+    }
+    if (!staff)
+      return json(403, {
+        code: "42501",
+        message:
+          'new row violates row-level security policy for table "site_notes"',
+      });
+    if (request.method() === "POST") {
+      notesSent.push(body);
+      const row = {
+        ...body,
+        id:
+          "b0c1d2e3-0000-4000-8000-0000000000" +
+          String(notesSent.length).padStart(2, "0"),
+        created_at: new Date().toISOString(),
+        removed_at: null,
+      };
+      siteNotes.push(row);
+      return json(201, row);
+    }
+    if (request.method() === "PATCH") {
+      const id = (url.searchParams.get("id") ?? "").replace(/^eq\./, "");
+      const row = siteNotes.find((note) => note.id === id);
+      notesTakenBack.push({ id, removed: !!body.removed_at });
+      if (!row) return json(200, []);
+      row.removed_at = body.removed_at ? new Date().toISOString() : null;
+      return json(200, [{ id }]);
     }
   }
   // Like the database, refuse any read of a report column the reporter is
@@ -251,6 +309,14 @@ const shotBoth = async (name) => {
   await shot(name + "-1280");
   await page.setViewportSize({ width: 390, height: 844 });
 };
+// A dialog closed by hand takes its step off the history a moment later
+// (src/lib/back-layer.ts). A second Escape waits for that, as a reader's
+// next key would: pressed while the browser is still stepping back, it
+// closes the book beneath, and the step arrived at opens the book again.
+const layersLeft = (count) =>
+  expect
+    .poll(() => page.evaluate(() => history.state?.booktownLayers?.length ?? 0))
+    .toBe(count);
 const noOverflow = async (label) => {
   const size = await page.evaluate(() => ({
     width: innerWidth,
@@ -287,6 +353,9 @@ try {
       ).toBeVisible();
       expect(townReads).toContain("/rest/v1/shops");
       townReads.length = 0;
+      // No one is signed in, so no one is asked whether they are staff.
+      expect(annotateAsks).toHaveLength(0);
+      await expect(page.locator("[data-site-notes]")).toHaveCount(0);
     },
   );
 
@@ -1194,6 +1263,7 @@ try {
       await expect(request).toHaveCount(0);
       await expect(inHand).toBeVisible();
       expect(await page.evaluate(() => window.bookAskedToClose)).toEqual([]);
+      await layersLeft(1);
       await page.keyboard.press("Escape");
       await expect(inHand).not.toBeVisible();
       // Google's cover of 星の本 was refused: Google is not asked for it, and
@@ -1210,6 +1280,388 @@ try {
       expect(coverAsks).not.toContain("google:" + REFUSED_ISBN);
       await shot("15-cover-refused");
       town = null;
+    },
+  );
+
+  // 注釈モード, for staff: a note left on a page, read back as a pin, taken
+  // back and returned; over a Modal and in a book in hand. Then a reader who
+  // is not staff, who is never shown any of it.
+  const annotate = page.getByRole("button", { name: "注釈", exact: true });
+  const notesMode = page.locator(".site-notes-mode");
+  const notesSheet = page.getByRole("form", { name: "注釈を残す" });
+  const notesField = page.getByLabel("注釈", { exact: true });
+  const toast = page.locator(".toast");
+  const solaris = new URL("/books/solaris/", base).href;
+  const overlaps = (a, b) =>
+    a.x < b.x + b.width &&
+    b.x < a.x + a.width &&
+    a.y < b.y + b.height &&
+    b.y < a.y + a.height;
+  // Loads a page and waits until it has heard whether the reader is staff
+  // and drawn what that means.
+  const loadAsked = async (address) => {
+    const answered = page.waitForResponse((response) =>
+      response.url().includes("/rest/v1/rpc/can_annotate"),
+    );
+    await page.goto(base + address);
+    await (await answered).finished();
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+  };
+  // What 注釈モード's tap was about: the back link, in words.
+  let backName = "";
+
+  await check(
+    "staff find the 注釈 button in a corner where it covers nothing",
+    async () => {
+      staff = true;
+      const clear = async (label) => {
+        await expect(annotate).toBeVisible();
+        const box = await annotate.boundingBox();
+        expect(box.width, label).toBeGreaterThanOrEqual(44);
+        expect(box.height, label).toBeGreaterThanOrEqual(44);
+        for (const other of [".town-bottom-nav", ".compose-fab"]) {
+          const there = page.locator(other).first();
+          if (!(await there.isVisible())) continue;
+          expect(
+            overlaps(box, await there.boundingBox()),
+            label + ": over " + other,
+          ).toBe(false);
+        }
+        await noOverflow(label);
+      };
+      await loadAsked("/");
+      expect(annotateAsks.at(-1)).toBe(true);
+      await clear("home");
+      await shot("21-notes-button");
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await clear("home, wide");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await loadAsked("/walk/");
+      await clear("walk");
+    },
+  );
+
+  await check(
+    "a tap in 注釈モード presses nothing beneath and opens a sheet about what is there",
+    async () => {
+      await loadAsked("/books/solaris/");
+      const back = page.locator(".back-link").first();
+      await expect(back).toBeVisible();
+      backName = (await back.innerText()).trim();
+      await page.evaluate(() => {
+        window.linkHit = [];
+        for (const type of ["pointerdown", "click"])
+          document.addEventListener(
+            type,
+            (event) => {
+              if (event.target.closest?.(".back-link"))
+                window.linkHit.push(type);
+            },
+            true,
+          );
+      });
+      const writes = townWrites.length;
+      await annotate.click();
+      await expect(
+        page.getByText("メモしたい場所をタップしてください"),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "やめる", exact: true }),
+      ).toBeFocused();
+      const at = await back.boundingBox();
+      await page.touchscreen.tap(at.x + at.width / 2, at.y + at.height / 2);
+      await expect(notesSheet).toBeVisible();
+      expect(await page.evaluate(() => window.linkHit)).toEqual([]);
+      expect(page.url()).toBe(solaris);
+      expect(townWrites.length).toBe(writes);
+      const where = notesSheet.locator(".site-notes-where p");
+      await expect(where).toContainText("「" + backName + "」");
+      await expect(notesField).toBeFocused();
+      // The sheet's buttons stay within what the screen shows: here all of
+      // it, then less of it, zoomed in (as above a keyboard).
+      const inSight = () =>
+        notesSheet.evaluate((form) => {
+          const view = visualViewport;
+          return [...form.querySelectorAll("button")].every((button) => {
+            const box = button.getBoundingClientRect();
+            return (
+              box.top >= view.offsetTop - 0.5 &&
+              box.bottom <= view.offsetTop + view.height + 0.5 &&
+              box.left >= view.offsetLeft - 0.5 &&
+              box.right <= view.offsetLeft + view.width + 0.5
+            );
+          });
+        });
+      expect(await inSight()).toBe(true);
+      const cdp = await context.newCDPSession(page);
+      await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1.5 });
+      await expect
+        .poll(() => page.evaluate(() => visualViewport.scale))
+        .toBe(1.5);
+      await expect.poll(inSight).toBe(true);
+      await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });
+      await expect
+        .poll(() => page.evaluate(() => visualViewport.scale))
+        .toBe(1);
+      await expect.poll(inSight).toBe(true);
+      await cdp.detach();
+      await notesField.fill("戻るの字が小さい");
+      // A tap beside the sheet only puts the keyboard away: the pin and the
+      // words stay where they are.
+      const pin = page.locator(".site-notes-pin.is-draft");
+      const pinAt = await pin.boundingBox();
+      const whereWas = await where.innerText();
+      const spare = await page.evaluate(() => {
+        for (let y = 120; y < innerHeight; y += 40)
+          if (
+            document
+              .elementFromPoint(195, y)
+              ?.classList.contains("site-notes-tint")
+          )
+            return y;
+        return null;
+      });
+      expect(spare).not.toBeNull();
+      await page.touchscreen.tap(195, spare);
+      await expect(notesField).not.toBeFocused();
+      await expect(notesField).toHaveValue("戻るの字が小さい");
+      await expect(where).toHaveText(whereWas);
+      expect(await pin.boundingBox()).toEqual(pinAt);
+      expect(await page.evaluate(() => window.linkHit)).toEqual([]);
+      await shot("22-notes-sheet");
+    },
+  );
+
+  await check(
+    "戻る keeps a note half written, and 残す leaves it as the one signed in",
+    async () => {
+      await page.goBack();
+      await expect(notesMode).toHaveCount(0);
+      expect(page.url()).toBe(solaris);
+      // Straight back to the words, at their pin.
+      await annotate.click();
+      await expect(notesSheet).toBeVisible();
+      await expect(notesSheet).toContainText("書きかけの注釈です");
+      await expect(notesField).toHaveValue("戻るの字が小さい");
+      await expect(notesField).toBeFocused();
+      const sent = notesSent.length;
+      await notesSheet
+        .getByRole("button", { name: "残す", exact: true })
+        .click();
+      await expect(toast).toContainText("注釈を残しました");
+      await expect(notesMode).toHaveCount(0);
+      expect(notesSent.length).toBe(sent + 1);
+      const note = notesSent.at(-1);
+      // Who left it is the database's to fill in.
+      expect(note).not.toHaveProperty("user_id");
+      expect(note).toMatchObject({
+        page: "/books/solaris/",
+        body: "戻るの字が小さい",
+        layer: null,
+        viewport_h: 844,
+      });
+      expect(note.target).toContain("「" + backName + "」");
+      expect(note.anchor).not.toBe("");
+      // Closed by hand, the mode takes its step back off.
+      await expect
+        .poll(() => page.evaluate(() => history.state?.booktownLayers ?? null))
+        .toBeNull();
+      expect(page.url()).toBe(solaris);
+    },
+  );
+
+  await check(
+    "a note comes back as a numbered pin, can be taken back and returned, and 戻る leaves in one step",
+    async () => {
+      await annotate.click();
+      const pin = page.getByRole("button", {
+        name: "注釈1「戻るの字が小さい」",
+      });
+      await expect(pin).toBeVisible();
+      const pinBox = await pin.boundingBox();
+      const backBox = await page.locator(".back-link").first().boundingBox();
+      const centre = (box) => [box.x + box.width / 2, box.y + box.height / 2];
+      const [pinX, pinY] = centre(pinBox);
+      const [backX, backY] = centre(backBox);
+      expect(Math.abs(pinX - backX)).toBeLessThan(2);
+      expect(Math.abs(pinY - backY)).toBeLessThan(2);
+      await shot("23-notes-pins");
+      await pin.click();
+      const card = page.locator(".site-notes-card");
+      await expect(card.getByRole("heading", { name: "注釈1" })).toBeVisible();
+      await expect(card).toContainText("戻るの字が小さい");
+      await expect(card).toContainText("に残しました");
+      await expect(card).toBeFocused();
+      await card.getByRole("button", { name: "取り下げる" }).click();
+      await expect(toast).toContainText("注釈を取り下げました");
+      // From the top while the mode is on, clear of its banner.
+      expect((await restingBox(toast)).y).toBeLessThan(60);
+      await expect(pin).toHaveCount(0);
+      const id = siteNotes.find((n) => n.body === "戻るの字が小さい").id;
+      expect(notesTakenBack.at(-1)).toEqual({ id, removed: true });
+      await toast.getByRole("button", { name: "元に戻す" }).click();
+      await expect(toast).toContainText("注釈を戻しました");
+      await expect(pin).toBeVisible();
+      expect(notesTakenBack.at(-1)).toEqual({ id, removed: false });
+      await page.goBack();
+      await expect(notesMode).toHaveCount(0);
+      expect(page.url()).toBe(solaris);
+      await page.goBack();
+      await expect(page).toHaveURL(/\/walk\//);
+    },
+  );
+
+  await check(
+    "a note thrown away can be brought back, and a pin by the edge widens nothing",
+    async () => {
+      await expect(annotate).toBeVisible();
+      await annotate.click();
+      await page.touchscreen.tap(380, 500);
+      await expect(notesSheet).toBeVisible();
+      await notesField.fill("右端の余白");
+      await notesSheet.getByRole("button", { name: "やめる" }).click();
+      await expect(notesMode).toHaveCount(0);
+      await expect(toast).toContainText("書きかけの注釈を消しました");
+      await toast.getByRole("button", { name: "元に戻す" }).click();
+      await expect(toast).toContainText("書きかけの注釈を戻しました");
+      await annotate.click();
+      await expect(notesField).toHaveValue("右端の余白");
+      await notesSheet
+        .getByRole("button", { name: "残す", exact: true })
+        .click();
+      await expect(toast).toContainText("注釈を残しました");
+      expect(notesSent.at(-1)).toMatchObject({ body: "右端の余白", x: 380 });
+      await annotate.click();
+      const pin = page.getByRole("button", { name: "注釈1「右端の余白」" });
+      await expect(pin).toBeVisible();
+      const box = await pin.boundingBox();
+      expect(box.x + box.width).toBeLessThanOrEqual(390);
+      await noOverflow("a pin by the edge");
+      // Escape leaves too, and gives the focus back to the button.
+      await page.keyboard.press("Escape");
+      await expect(notesMode).toHaveCount(0);
+      await expect(annotate).toBeFocused();
+    },
+  );
+
+  await check(
+    "over a Modal the note names it, and Escape leaves only the mode",
+    async () => {
+      await loadAsked("/");
+      await page.getByRole("button", { name: "本の街について" }).click();
+      const about = page.getByRole("dialog", { name: "Book Townへようこそ" });
+      await expect(about).toBeVisible();
+      await expect(annotate).toBeVisible();
+      const corner = await annotate.boundingBox();
+      for (const control of await about.getByRole("button").all())
+        expect(overlaps(corner, await control.boundingBox())).toBe(false);
+      await annotate.click();
+      const heading = about.getByRole("heading", {
+        name: "Book Townへようこそ",
+      });
+      const at = await heading.boundingBox();
+      await page.touchscreen.tap(at.x + 20, at.y + at.height / 2);
+      await expect(notesSheet).toContainText(
+        "見出し「Book Townへようこそ」　小窓「Book Townへようこそ」の中",
+      );
+      await notesField.fill("ようこその字が細い");
+      await notesSheet
+        .getByRole("button", { name: "残す", exact: true })
+        .click();
+      await expect(toast).toContainText("注釈を残しました");
+      expect(notesSent.at(-1)).toMatchObject({
+        page: "/",
+        target: "見出し「Book Townへようこそ」",
+        layer: "Book Townへようこそ",
+        body: "ようこその字が細い",
+      });
+      await expect(about).toBeVisible();
+      await annotate.click();
+      const pin = page.getByRole("button", {
+        name: "注釈1「ようこその字が細い」",
+      });
+      await expect(pin).toBeVisible();
+      // Taken back over the Modal, the toast keeps clear of the banner at
+      // the top, and 元に戻す brings the pin back.
+      await pin.click();
+      await page
+        .locator(".site-notes-card")
+        .getByRole("button", { name: "取り下げる" })
+        .click();
+      await expect(toast).toContainText("注釈を取り下げました");
+      const banner = page.locator(".site-notes-banner");
+      await expect(banner).toHaveAttribute("data-at", "top");
+      expect(overlaps(await restingBox(banner), await restingBox(toast))).toBe(
+        false,
+      );
+      await toast.getByRole("button", { name: "元に戻す" }).click();
+      await expect(pin).toBeVisible();
+      await shot("24-notes-modal");
+      await page.keyboard.press("Escape");
+      await expect(notesMode).toHaveCount(0);
+      await expect(about).toBeVisible();
+      await layersLeft(1);
+      await page.keyboard.press("Escape");
+      await expect(about).toHaveCount(0);
+    },
+  );
+
+  await check(
+    "in a book in hand the mode stays inside the book, and Escape leaves only the mode",
+    async () => {
+      await loadAsked("/shops/shop-orbit/");
+      await page.locator(".shelf-book-button").first().click();
+      const inHand = page.locator(".bh-dialog");
+      await expect(inHand).toBeVisible();
+      const inside = inHand.getByRole("button", { name: "注釈", exact: true });
+      await expect(inside).toBeVisible();
+      const box = await restingBox(inside);
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      await inside.click();
+      const title = inHand.locator("h2").first();
+      const name = (await title.innerText()).trim();
+      const at = await title.boundingBox();
+      await page.touchscreen.tap(at.x + 10, at.y + at.height / 2);
+      const sheet = inHand.getByRole("form", { name: "注釈を残す" });
+      await expect(sheet).toContainText("小窓「" + name + "」の中");
+      await inHand.getByLabel("注釈", { exact: true }).fill("題の行間が狭い");
+      await sheet.getByRole("button", { name: "残す", exact: true }).click();
+      await expect(toast).toContainText("注釈を残しました");
+      expect(notesSent.at(-1).page).toMatch(/^\/shops\/shop-orbit\//);
+      expect(notesSent.at(-1).layer).toBe(name);
+      await expect(inHand).toBeVisible();
+      await inside.click();
+      await expect(
+        inHand.getByRole("button", { name: "注釈1「題の行間が狭い」" }),
+      ).toBeVisible();
+      await shot("25-notes-book");
+      await page.keyboard.press("Escape");
+      await expect(notesMode).toHaveCount(0);
+      await expect(inHand).toBeVisible();
+      await layersLeft(1);
+      await page.keyboard.press("Escape");
+      await expect(inHand).not.toBeVisible();
+    },
+  );
+
+  await check(
+    "a reader who is not staff is never shown the button and reads no notes",
+    async () => {
+      staff = false;
+      const asks = annotateAsks.length;
+      const requests = siteNoteRequests.length;
+      await loadAsked("/books/solaris/");
+      await page.waitForLoadState("networkidle");
+      expect(annotateAsks.length).toBe(asks + 1);
+      await expect(annotate).toHaveCount(0);
+      await expect(page.locator("[data-site-notes]")).toHaveCount(0);
+      expect(siteNoteRequests.length).toBe(requests);
     },
   );
 
@@ -1237,11 +1689,14 @@ try {
       // Signing in is by invitation, so the link would only lead to a sign-in
       // a rights holder without an account cannot finish.
       town = filled();
+      const asks = annotateAsks.length;
       await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
       await expect(page.locator(".cover-credit")).toContainText("openBD");
       await expect(
         page.getByRole("button", { name: "表紙の削除依頼はこちら" }),
       ).toHaveCount(0);
+      // Nor asked whether they are staff.
+      expect(annotateAsks.length).toBe(asks);
       town = null;
     },
   );

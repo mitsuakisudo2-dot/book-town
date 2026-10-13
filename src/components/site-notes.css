@@ -1,0 +1,339 @@
+/* 注釈モード: the staff's way of leaving notes on the live site. Amber, unlike
+   the site's own green, so it never passes for part of the site. Loaded with
+   SiteNotes.tsx, so only staff ever receive these rules. */
+
+.site-notes-button {
+  position: fixed;
+  z-index: 90;
+  right: max(36px, env(safe-area-inset-right, 0px));
+  bottom: 100px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #d9b77a;
+  border-radius: 50%;
+  background: #fff8e6;
+  color: #7a4f14;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 3px 12px #5a3d0a26;
+}
+.site-notes-button:focus-visible,
+.site-notes-mode button:focus-visible,
+.site-notes-field:focus-visible,
+.site-notes-card:focus-visible {
+  outline: 3px solid #d39b2a;
+  outline-offset: 2px;
+}
+/* On a phone, bottom-left, mirroring the compose button at bottom-right and
+   above the bottom bar. */
+@media (max-width: 760px) {
+  .site-notes-button {
+    right: auto;
+    left: max(14px, env(safe-area-inset-left, 0px));
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+}
+/* Over a Modal, the top-left corner: a Modal is centred and keeps its own
+   buttons at its top-right and bottom. A book in hand on a wide screen
+   would have its 次の本 under the bottom-right corner. */
+body:has(.modal-backdrop) .site-notes-button {
+  top: max(4px, env(safe-area-inset-top, 0px));
+  left: 4px;
+  right: auto;
+  bottom: auto;
+}
+@media (min-width: 761px) {
+  dialog[open] .site-notes-button {
+    top: 4px;
+    left: 4px;
+    right: auto;
+    bottom: auto;
+  }
+}
+
+/* The tint takes every tap, so nothing beneath is pressed by mistake. A
+   swipe still scrolls the page. */
+.site-notes-tint {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #f5c44a1a;
+  box-shadow: inset 0 0 0 3px #d39b2a;
+  touch-action: manipulation;
+  cursor: crosshair;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.site-notes-mode button:not(.site-notes-pin) {
+  min-width: 44px;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Pins on the page scroll with it, inside a box exactly the page's size
+   that clips them, so a pin near an edge never makes the page wider. */
+.site-notes-page-pins {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 0;
+  overflow: clip;
+  pointer-events: none;
+  z-index: 101;
+}
+.site-notes-pin {
+  position: absolute;
+  z-index: 101;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid #c58a1f;
+  border-radius: 50%;
+  background: #fffdf7;
+  color: #6b430f;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: auto;
+  box-shadow: 0 2px 6px #5a3d0a40;
+  -webkit-tap-highlight-color: transparent;
+}
+/* 44px to tap, 28px to see. */
+.site-notes-pin::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+}
+.site-notes-pin.is-fixed {
+  position: fixed;
+}
+/* Only near its place: another screen size, a changed page, or hidden in a
+   shelf or a dialog scrolled away. */
+.site-notes-pin.is-approximate {
+  border-style: dashed;
+}
+.site-notes-pin.is-reading {
+  background: #fff1cc;
+}
+.site-notes-mode[data-phase="write"] .site-notes-pin {
+  pointer-events: none;
+}
+.site-notes-pin.is-draft {
+  background: #e0a43a;
+  border-color: #8a5a12;
+  animation: site-notes-pulse 1.6s ease-in-out infinite;
+}
+@keyframes site-notes-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 #e0a43a80;
+  }
+  50% {
+    box-shadow: 0 0 0 7px #e0a43a00;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-notes-pin.is-draft {
+    animation: none;
+  }
+}
+
+/* Where the button was, growing inward; the arrow moves it out of the way of
+   fixed things beneath (a book's reaction row cannot be scrolled away). */
+.site-notes-banner {
+  position: fixed;
+  z-index: 102;
+  right: max(36px, env(safe-area-inset-right, 0px));
+  bottom: 100px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 28px);
+  padding: 4px 4px 4px 12px;
+  border: 1px solid #d9b77a;
+  border-radius: 12px;
+  background: #fff8e6;
+  color: #5c3b0c;
+  box-shadow: 0 6px 20px #5a3d0a2e;
+  -webkit-tap-highlight-color: transparent;
+}
+.site-notes-banner[data-at="top"] {
+  top: max(4px, env(safe-area-inset-top, 0px));
+  bottom: auto;
+}
+.site-notes-banner p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.site-notes-banner p > span {
+  display: block;
+}
+.site-notes-banner .site-notes-banner-note {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #8a3b1c;
+}
+@media (max-width: 760px) {
+  .site-notes-banner {
+    right: auto;
+    left: max(14px, env(safe-area-inset-left, 0px));
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.site-notes-primary,
+.site-notes-quiet,
+.site-notes-move {
+  display: inline-grid;
+  place-items: center;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.site-notes-primary {
+  background: #7a4f14;
+  color: #fffdf3;
+}
+.site-notes-quiet,
+.site-notes-move {
+  border: 1px solid #d9b77a;
+  background: #fffdf7;
+  color: #6b430f;
+}
+.site-notes-move {
+  padding: 0;
+  font-size: 16px;
+}
+
+/* The sheet and the card: placed by the script within what is left of the
+   screen (the visual viewport), above or below the pin. */
+.site-notes-sheet,
+.site-notes-card {
+  position: fixed;
+  z-index: 103;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 12px 14px;
+  border: 1px solid #d9b77a;
+  border-radius: 12px;
+  background: #fffdf7;
+  color: #3d2a0c;
+  box-shadow: 0 10px 40px #5a3d0a33;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.site-notes-sheet[data-side="bottom"],
+.site-notes-card[data-side="bottom"] {
+  transform: translateY(-100%);
+}
+.site-notes-sheet > *,
+.site-notes-card > * {
+  flex: none;
+}
+.site-notes-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.site-notes-head h2,
+.site-notes-card h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.site-notes-where {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.site-notes-where p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #6b4a1a;
+  overflow-wrap: anywhere;
+}
+.site-notes-text-button {
+  padding: 0 4px;
+  color: #6b430f;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.site-notes-kept,
+.site-notes-limit,
+.site-notes-label {
+  margin: 0;
+  font-size: 12px;
+  color: #6b4a1a;
+}
+/* The words get what room is left, down to two lines. */
+.site-notes-sheet > .site-notes-field {
+  flex: 1 1 auto;
+  min-height: 52px;
+  width: 100%;
+  resize: none;
+  padding: 10px 12px;
+  border: 1px solid #d9b77a;
+  border-radius: 8px;
+  background: #fff;
+  color: #2d2210;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.site-notes-field::placeholder {
+  color: #8c7a5c;
+}
+.site-notes-problem {
+  margin: 0;
+  font-size: 12px;
+  color: #8a3b1c;
+}
+.site-notes-card-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.site-notes-card-meta,
+.site-notes-card-why {
+  margin: 0;
+  font-size: 12px;
+  color: #6b4a1a;
+}
+.site-notes-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* While the mode is on, a toast (注釈を取り下げました) drops from the top,
+   clear of the banner's buttons at the bottom. */
+body:has(.site-notes-mode) .toast,
+body:has(.site-notes-mode) dialog .toast {
+  top: 18px;
+  bottom: auto;
+}
+/* Below the banner when that is at the top (over a Modal, or moved there),
+   so 元に戻す never covers やめる. */
+body:has(.site-notes-banner[data-at="top"]) .toast,
+body:has(.site-notes-banner[data-at="top"]) dialog .toast {
+  top: calc(max(4px, env(safe-area-inset-top, 0px)) + 64px);
+}
