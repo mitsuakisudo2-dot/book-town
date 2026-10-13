@@ -18,6 +18,17 @@ export const popReactionKey = (
 export type BookDisplay = "spine" | "face";
 export type ShopTheme = "sage" | "ink" | "ochre" | "rose";
 
+/**
+ * Where a reading came from. `sample`: checked by hand for the 見本's books,
+ * kept only in the code and never saved.
+ */
+export type ReadingSource = "openbd" | "ndl" | "typed" | "estimate" | "sample";
+/** How a title or an author is read, in katakana as the source wrote it (spaces and 「家, 名」 kept). */
+export interface BookReading {
+  text: string;
+  source: ReadingSource;
+}
+
 export interface Book {
   id: string;
   /** Optional licensed cover or local preview URL; spines remain generated. */
@@ -35,6 +46,10 @@ export interface Book {
   isbn?: string;
   /** List price in yen, tax included. Demo prices are placeholders, labeled as such. */
   price?: number;
+  subtitle?: string;
+  /** Lets a title written in kanji be found by its kana or romaji. */
+  titleReading?: BookReading;
+  authorReading?: BookReading;
 }
 
 export interface Reader {

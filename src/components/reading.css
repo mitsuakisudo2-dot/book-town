@@ -59,10 +59,12 @@
   align-items: center;
   gap: 8px;
 }
-.search-results h2 span {
-  font-family: inherit;
+/* Titles only close in spelling, below the matches. */
+.search-near {
   font-size: 11px;
+  font-weight: 400;
   color: #98a38c;
+  margin: 18px 0 0;
 }
 .search-discover section > p {
   font-size: 11px;

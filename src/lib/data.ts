@@ -356,10 +356,48 @@ const demoPrices: Record<string, number> = {
   "traveling-tree": 715,
   "secret-garden": 1045,
 };
-export const books: Book[] = catalog.map((book) => ({
-  ...book,
-  price: demoPrices[book.id],
-}));
+// How the demo titles and the Japanese authors' names are read, checked by
+// hand, so a title written in kanji is found by its kana or its romaji.
+// Titles written in kana are their own reading. は and を are written as
+// usual, since a reading can be shown; the search hears them as わ and お.
+const demoReadings: Record<string, { title: string; author?: string }> = {
+  "left-hand": { title: "ヤミ ノ ヒダリテ" },
+  dispossessed: { title: "ショユウ セザル ヒトビト" },
+  fahrenheit: { title: "カシ ヨンヒャクゴジュウイチド" },
+  "invisible-cities": { title: "ミエナイ トシ" },
+  fictions: { title: "デンキシュウ" },
+  walking: { title: "サンポ" },
+  "book-of-disquiet": { title: "フアン ノ ショ" },
+  "hundred-years": { title: "ヒャクネン ノ コドク" },
+  "lonely-hunter": { title: "ココロ ハ コドク ナ カリュウド" },
+  "old-man-sea": { title: "ロウジン ト ウミ" },
+  "night-fog": { title: "ヨル ト キリ" },
+  walden: { title: "モリ ノ セイカツ" },
+  laozi: { title: "ロウシ", author: "ロウシ" },
+  poetics: { title: "シガク" },
+  "galaxy-railroad": {
+    title: "ギンガ テツドウ ノ ヨル",
+    author: "ミヤザワ, ケンジ",
+  },
+  "ten-nights": { title: "ユメ ジュウヤ", author: "ナツメ, ソウセキ" },
+  silence: { title: "チンモク", author: "エンドウ, シュウサク" },
+  "stone-history": { title: "イシ ノ ライレキ", author: "オクイズミ, ヒカル" },
+  "traveling-tree": { title: "タビ ヲ スル キ", author: "ホシノ, ミチオ" },
+  "secret-garden": { title: "ヒミツ ノ ハナゾノ" },
+};
+export const books: Book[] = catalog.map((book) => {
+  const reading = demoReadings[book.id];
+  return {
+    ...book,
+    price: demoPrices[book.id],
+    ...(reading
+      ? { titleReading: { text: reading.title, source: "sample" as const } }
+      : {}),
+    ...(reading?.author
+      ? { authorReading: { text: reading.author, source: "sample" as const } }
+      : {}),
+  };
+});
 
 export const readers: Reader[] = [
   {
