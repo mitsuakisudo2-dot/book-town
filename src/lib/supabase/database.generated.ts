@@ -265,6 +265,7 @@ export type Database = {
           parent_id: string | null;
           reading_mode: string | null;
           spoiler: boolean;
+          spoiler_folded: boolean;
         };
         ComputedFields: never;
         Insert: {
@@ -276,6 +277,7 @@ export type Database = {
           parent_id?: string | null;
           reading_mode?: string | null;
           spoiler?: boolean;
+          spoiler_folded?: boolean;
         };
         Update: {
           author_id?: string;
@@ -286,6 +288,7 @@ export type Database = {
           parent_id?: string | null;
           reading_mode?: string | null;
           spoiler?: boolean;
+          spoiler_folded?: boolean;
         };
         Relationships: [
           {

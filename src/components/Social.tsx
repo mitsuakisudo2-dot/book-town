@@ -708,9 +708,13 @@ export function PostCard({
             読書中のつぶやき
           </span>
         )}
-        {(post.spoiler || reported) && (
+        {(post.spoiler || post.folded || reported) && (
           <span className="spoiler-tag">
-            {post.spoiler ? "ネタバレあり" : "ネタバレの可能性を報告済み"}
+            {post.spoiler
+              ? "ネタバレあり"
+              : reported
+                ? "ネタバレの可能性を報告済み"
+                : "ネタバレかもしれません"}
           </span>
         )}
         {hidden ? (
@@ -727,6 +731,24 @@ export function PostCard({
           </div>
         ) : (
           <PostText body={post.body} />
+        )}
+        {mine && post.folded && !post.spoiler && (
+          <div className="spoiler-folded-note" role="note">
+            <p>
+              読んだ人から「ネタバレでは？」という声があったので、みんなの画面ではたたんで表示しています。投稿は消えていません。
+            </p>
+            {(book || post.parentId) && (
+              <button
+                type="button"
+                onClick={() => {
+                  actions.markSpoiler(post.id);
+                  notify("ネタバレの印を付けました");
+                }}
+              >
+                ネタバレの印を付ける
+              </button>
+            )}
+          </div>
         )}
         {book && (showBook || isReply) && (
           <Link href={bookPath(book.id)} className="post-book">

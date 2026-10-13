@@ -155,6 +155,37 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* Only the writer sees why their post was folded, and how to mark it. */
+.spoiler-folded-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  background: #f7efe5;
+  border: 1px dashed #e3cfbb;
+}
+.spoiler-folded-note p {
+  flex: 1 1 220px;
+  font-size: 11px;
+  line-height: 1.8;
+  color: #7c5a46;
+}
+.spoiler-folded-note button {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c5a46;
+  background: #fffaf2;
+  border: 1px solid #e3cfbb;
+  border-radius: 999px;
+  padding: 5px 13px;
+}
+.spoiler-folded-note button:hover {
+  background: #fff;
+}
+
 /* Words the writer covered: a dark slip over them until a reader taps. */
 .hidden-words {
   display: inline-block;

@@ -329,6 +329,7 @@ export function townFromRows(
         body: row.body,
         bookId: row.book_id,
         spoiler: row.spoiler,
+        ...(row.spoiler_folded && !row.spoiler ? { folded: true } : {}),
         parentId: row.parent_id,
         createdAt: row.created_at,
         likes: mine ? reactionCount(row.id, "like") : 0,
@@ -547,6 +548,7 @@ export type Write =
   | { kind: "shelves"; shelves: Shelf[] }
   | { kind: "delete-posts"; ids: string[] }
   | { kind: "posts"; rows: TablesInsert<"posts">[] }
+  | { kind: "mark-spoilers"; ids: string[] }
   | { kind: "end-sessions"; rows: { id: string; ended_at: string }[] }
   | { kind: "sessions"; rows: TablesInsert<"reading_sessions">[] }
   | { kind: "delete-records"; ids: string[] }
@@ -725,6 +727,16 @@ export function planWrites(
         parent_id: post.parentId,
         reading_mode: post.readingMode,
       })),
+    });
+  const was = new Map(own(base).map((post) => [post.id, post]));
+  const marked = own(next).filter((post) => {
+    const before = was.get(post.id);
+    return before && !before.spoiler && post.spoiler;
+  });
+  if (marked.length)
+    writes.push({
+      kind: "mark-spoilers",
+      ids: marked.map((post) => post.id),
     });
 
   const before = new Map(

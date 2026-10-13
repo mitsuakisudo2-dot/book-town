@@ -7,9 +7,14 @@ const oldestFirst = (a: Post, b: Post) => time(a) - time(b);
 /** Private reading notes stay on the reading screen only. */
 const isPublic = (post: Post) => post.readingMode !== "solo";
 
-/** A post the viewer marked as a possible spoiler is hidden for them like a marked one. */
+/**
+ * A post the viewer asked about as a possible spoiler is hidden for them like a
+ * marked one, and for everyone once enough readers asked (folded).
+ */
 export const isSpoilerFor = (state: TownState, post: Post): boolean =>
-  post.spoiler || state.spoilerReports.includes(post.id);
+  post.spoiler ||
+  post.folded === true ||
+  state.spoilerReports.includes(post.id);
 
 /** The timeline carries every public top-level post; spoilers arrive covered until shown. */
 export const timelinePosts = (state: TownState): Post[] =>

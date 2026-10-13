@@ -106,6 +106,11 @@ export interface Post {
   bookId: string | null;
   /** Spoiler posts never reach the timeline; they wait behind the book page's door. */
   spoiler: boolean;
+  /**
+   * Three readers asked 「ネタバレでは？」, so it is folded for everyone like a
+   * marked spoiler. Only the database folds; demo posts never are.
+   */
+  folded?: boolean;
   /** Replies point to a top-level post. Threads are one level deep. */
   parentId: string | null;
   createdAt: string;
@@ -297,6 +302,8 @@ export interface TownActions {
   toggleLike(postId: string): void;
   toggleWant(postId: string): void;
   toggleSpoilerReport(postId: string): void;
+  /** The writer puts the spoiler mark on their own post afterwards. */
+  markSpoiler(postId: string): void;
   startReading(bookId: string | null, mode: ReadingMode): string | null;
   endReading(finished: boolean): void;
   addBook(book: NewBook): string | null;
