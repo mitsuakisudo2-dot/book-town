@@ -11,6 +11,35 @@
   margin-bottom: 20px;
   color: var(--muted);
 }
+/* Work kept from before is told in one quiet line, with a way to let it go. */
+.scene-editor-kept {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 14px;
+  margin: -12px 0 16px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #5f6f55;
+}
+.scene-editor-kept button {
+  min-height: 32px;
+  padding: 4px 0;
+  color: #4f6446;
+  text-decoration: underline;
+  text-decoration-color: #c9d3bd;
+  text-underline-offset: 3px;
+}
+.scene-editor-kept button:hover {
+  color: var(--green);
+}
+.scene-editor-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 14px;
+  color: #7a5a35;
+}
 .scene-editor-columns {
   display: grid;
   grid-template-columns: minmax(200px, 0.8fr) minmax(0, 1.2fr);
@@ -50,6 +79,10 @@
   padding: 14px 0;
   margin: 0 0 14px;
   min-width: 0;
+}
+/* While older work waits on the reader's choice, the controls rest. */
+.scene-section:disabled {
+  opacity: 0.55;
 }
 .scene-section legend {
   font-family: var(--serif);
@@ -234,6 +267,15 @@
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+}
+.scene-editor-footer > .scene-editor-leave {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.scene-editor-leave span {
+  margin-right: auto;
+  font-size: 12px;
+  line-height: 1.7;
 }
 .scene-error {
   font-size: 12px;

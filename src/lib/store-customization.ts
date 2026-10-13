@@ -9,7 +9,6 @@ import {
 import {
   addBookPlacement,
   bookPop,
-  furnitureBooks,
   objectById,
   placementSize,
   placementWidth,
@@ -64,13 +63,18 @@ export interface SceneBackup {
 export const placementReactionKey = (scene: StoreScene, p: SceneObject) =>
   JSON.stringify(["scene", scene.storeId, p.id]);
 
-/** Old private items are kept unplaced and private. The old Shop is never mutated. */
+/**
+ * Old private items are kept unplaced and private. The old Shop is never
+ * mutated. A scene the owner already manages keeps all it has (template,
+ * rows, placements with their POPs, privacy and order); shelf books it does
+ * not have yet join it unplaced, with their shelf POPs.
+ */
 export function migrateShopScene(
   shop: Shop,
   books: Book[],
   existing?: StoreScene,
 ): StoreScene {
-  if (existing?.ownerManaged) return structuredClone(existing);
+  if (existing?.ownerManaged) return withShelfBooks(existing, shop, books);
   let scene = structuredClone(existing ?? woodScene(shop, books, 0));
   scene.ownerManaged = true;
   scene.templateId ??= "warm";
@@ -86,6 +90,43 @@ export function migrateShopScene(
         p = objectById(scene, id)!;
         p.source = { shopId: shop.id, shelfId: shelf.id, itemId: item.id };
       }
+      p.isPublic = shelf.isPublic;
+    }
+  return scene;
+}
+/** Adds shelf books missing from a managed scene, unplaced; nothing else changes. */
+function withShelfBooks(
+  existing: StoreScene,
+  shop: Shop,
+  books: Book[],
+): StoreScene {
+  let scene = structuredClone(existing);
+  for (const shelf of shop.shelves)
+    for (const item of shelf.items) {
+      const book = books.find((b) => b.id === item.bookId);
+      // Already in the scene, wherever the owner put it.
+      if (
+        !book ||
+        scene.objects.some(
+          (o) =>
+            o.kind === "book" &&
+            o.source?.itemId === item.id &&
+            o.bookId === item.bookId,
+        )
+      )
+        continue;
+      // A shelf gives a removed book's item id to the next book it takes
+      // (counterId), so the plain id may already name an earlier book.
+      const plain = "placement:" + shop.id + ":" + item.id;
+      const taken = (id: string) =>
+        objectById(scene, id) !== undefined ||
+        objectById(scene, "pop:" + id) !== undefined;
+      let id = taken(plain) ? plain + ":" + item.bookId : plain;
+      for (let n = 2; taken(id); n++) id = plain + ":" + item.bookId + ":" + n;
+      scene = addBookPlacement(scene, book, null, id, item.display);
+      scene = setBookPop(scene, id, item.pop);
+      const p = objectById(scene, id)!;
+      p.source = { shopId: shop.id, shelfId: shelf.id, itemId: item.id };
       p.isPublic = shelf.isPublic;
     }
   return scene;
@@ -144,7 +185,7 @@ export function resolveStoreScene(
   const candidate = saved ?? woodScene(shop, books, variant);
   return publicStoreScene(candidate);
 }
-/** Templates change furniture and palette. Book/POP IDs and explicit privacy survive. */
+/** Templates change furniture and palette. Book/POP IDs, rows and explicit privacy survive. */
 export function applyStoreTemplate(
   scene: StoreScene,
   id: TemplateId,
@@ -192,41 +233,64 @@ export function applyStoreTemplate(
       next.style = original.style;
     }
   }
-  const order = scene.objects
-    .filter((o) => o.kind === "furniture")
-    .sort((a, b) => a.rect.y - b.rect.y)
-    .flatMap((f) => furnitureBooks(scene, f.id));
-  const placed = new Map(order.map((p, i) => [p.id, i]));
+  // Books keep the size rule of the furniture they move onto, so a scene
+  // saved before a size change still fits its new rows.
+  const fit = (p: SceneObject, row: SceneObject) => {
+    const book = books.find((b) => b.id === p.bookId);
+    if (book) p.preferredSize = placementSize(book, p.display!, row.bookHeight);
+  };
+  const last = (rowId: string, objects: SceneObject[]) =>
+    Math.max(
+      -1,
+      ...objects
+        .filter((o) => o.kind === "book" && o.parentId === rowId)
+        .map((o) => o.order ?? 0),
+    );
+  // Each book stays on the row with the same number, in its order there, so
+  // trying another template and coming back keeps the arrangement. A row the
+  // new furniture lacks (the window table) joins the last row, after it.
+  const joining: { p: SceneObject; from: number; order: number }[] = [];
   for (const original of scene.objects.filter((o) => o.kind === "book")) {
-    const p = structuredClone(original),
-      i = placed.get(p.id);
+    const p = structuredClone(original);
     if (
       original.parentId &&
       objectById(scene, original.parentId)?.isPublic !== true
     )
       p.isPublic = false;
-    p.parentId =
-      i === undefined
-        ? null
-        : rows[
-            Math.min(
-              rows.length - 1,
-              Math.floor((i * rows.length) / Math.max(1, order.length)),
-            )
-          ].id;
-    p.order = i ?? p.order;
-    // Books keep the size rule of the furniture they move onto, so a scene
-    // saved before a size change still fits its new rows.
-    const dest = rows.find((r) => r.id === p.parentId),
-      book = books.find((b) => b.id === p.bookId);
-    if (dest && book)
-      p.preferredSize = placementSize(book, p.display!, dest.bookHeight);
+    const from = original.parentId
+      ? oldRows.findIndex((r) => r.id === original.parentId)
+      : -1;
+    p.parentId = from >= 0 && from < rows.length ? rows[from].id : null;
+    if (p.parentId) fit(p, rows[from]);
+    else if (from >= rows.length) joining.push({ p, from, order: p.order! });
     base.objects.push(p);
     const pop = bookPop(scene, p.id);
     if (pop) base.objects.push(structuredClone(pop));
   }
+  const end = rows[rows.length - 1];
+  joining.sort((a, b) => a.from - b.from || a.order - b.order);
+  for (const { p } of joining) {
+    p.order = last(end.id, base.objects) + 1;
+    p.parentId = end.id;
+    fit(p, end);
+  }
+  // Rows fill one at a time. What a row cannot hold goes on to the next row
+  // as public as it, and past the last one waits among the unplaced books.
   let next = base;
-  for (const row of rows) next = relayoutRow(next, row.id);
+  rows.forEach((row, i) => {
+    const meant = next.objects
+      .filter((o) => o.kind === "book" && o.parentId === row.id)
+      .map((o) => o.id);
+    next = relayoutRow(next, row.id);
+    const onward = rows.slice(i + 1).find((r) => r.isPublic === row.isPublic);
+    for (const id of meant) {
+      const p = objectById(next, id)!;
+      if (p.parentId !== null || !onward) continue;
+      p.order = last(onward.id, next.objects) + 1;
+      p.parentId = onward.id;
+      fit(p, onward);
+    }
+  });
   return next;
 }
 export function renameSceneObject(

@@ -51,6 +51,35 @@ async function legacy() {
     () => JSON.parse(localStorage.getItem("book-town-v1")).data,
   );
 }
+const DRAFTS = "book-town-scene-drafts-v1";
+async function drafts() {
+  return page.evaluate((key) => localStorage.getItem(key), DRAFTS);
+}
+/** Opens the editor again on the page as it is (no reload). */
+async function reopen() {
+  await page
+    .getByRole("button", { name: "店内を飾りつける", exact: true })
+    .click();
+  await expect(dialog()).toBeVisible();
+}
+const keptLine = () => dialog().locator(".scene-editor-kept");
+/** Throws the kept work away with 書きかけを消す, as a reader would. */
+async function discardKept() {
+  await keptLine()
+    .getByRole("button", { name: "書きかけを消す", exact: true })
+    .click();
+  await keptLine().getByText("書きかけを消しますか？").waitFor();
+  await keptLine().getByRole("button", { name: "消す", exact: true }).click();
+  await expect(keptLine()).toHaveCount(0);
+}
+/** The books on the row being edited, left to right. */
+async function rowTitles() {
+  return dialog()
+    .locator('[aria-label="この棚の本"] button')
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.firstChild.textContent),
+    );
+}
 async function selectSolaris() {
   await dialog()
     .locator(".scene-placement-list button")
@@ -162,6 +191,40 @@ try {
     await dialog()
       .getByRole("button", { name: "キャンセル", exact: true })
       .click();
+    // Work would be lost: キャンセル asks once, and やめる goes back to it.
+    const leave = dialog().getByRole("group", {
+      name: "書きかけを消して閉じる",
+    });
+    await expect(leave).toContainText(
+      "保存していない飾りつけを消して閉じますか？",
+    );
+    await expect(
+      leave.getByRole("button", { name: "やめる", exact: true }),
+    ).toBeFocused();
+    await leave.getByRole("button", { name: "やめる", exact: true }).click();
+    await expect(dialog().getByLabel("看板の店名")).toHaveValue(
+      "キャンセルした店",
+    );
+    await expect(
+      dialog().getByRole("button", { name: "キャンセル", exact: true }),
+    ).toBeFocused();
+    await dialog()
+      .getByRole("button", { name: "キャンセル", exact: true })
+      .click();
+    await leave
+      .getByRole("button", { name: "消して閉じる", exact: true })
+      .click();
+    await expect(dialog()).toHaveCount(0);
+    expect(await drafts()).toBe(null);
+    await reopen();
+    await expect(dialog().getByLabel("看板の店名")).not.toHaveValue(
+      "キャンセルした店",
+    );
+    await expect(keptLine()).toHaveCount(0);
+    await dialog()
+      .getByRole("button", { name: "キャンセル", exact: true })
+      .click();
+    await expect(dialog()).toHaveCount(0);
     expect((await legacy()).ownShop).toEqual(original);
     const value = await page.evaluate(() =>
       localStorage.getItem("book-town-walk-v1"),
@@ -290,6 +353,12 @@ try {
       expect(
         next.objects.find((o) => o.id === "placement:mine:secret").isPublic,
       ).toBe(false);
+      // Each book stays on its row, in its order there.
+      const rows = (scene) =>
+        scene.objects
+          .filter((o) => o.kind === "book")
+          .map((o) => [o.id, o.parentId, o.order]);
+      expect(rows(next)).toEqual(rows(before));
       expect((await walkData()).legacyBackups).toHaveLength(1);
     },
   );
@@ -345,8 +414,12 @@ try {
       const row = (await walkData()).sceneOverrides[0].objects
         .filter((o) => o.kind === "book" && o.parentId === "row-0")
         .sort((a, b) => a.order - b.order);
-      expect(row[0].bookId).toBe("momo");
-      expect(row[1].bookId).toBe("solaris");
+      // モモ went one place left of where it was added, before ソラリス.
+      expect(row.map((o) => o.bookId)).toEqual([
+        "left-hand",
+        "momo",
+        "solaris",
+      ]);
     },
   );
   await check(
@@ -365,6 +438,213 @@ try {
       await open();
       await dialog().getByLabel("この棚を公開する").check();
       await save();
+    },
+  );
+  await check(
+    "a greeting is kept through Escape, a tap outside, the ×, 戻る and a reload",
+    async () => {
+      await open();
+      const saved = await dialog()
+        .getByLabel("店主からのひとこと")
+        .inputValue();
+      await expect(keptLine()).toHaveCount(0);
+      const ways = {
+        Escape: () => page.keyboard.press("Escape"),
+        "a tap outside": () => page.mouse.click(6, 6),
+        "the ×": () =>
+          dialog().getByRole("button", { name: "閉じる", exact: true }).click(),
+        戻る: () => page.goBack(),
+        "a reload": () => page.reload(),
+      };
+      for (const [way, close] of Object.entries(ways)) {
+        const words = "雨の日の本屋へ、ようこそ。(" + way + ")";
+        await dialog().getByLabel("店主からのひとこと").fill(words);
+        await close();
+        await expect(dialog()).toHaveCount(0);
+        await expect(page).toHaveURL(/\/my-shop\/$/);
+        await reopen();
+        await expect(dialog().getByLabel("店主からのひとこと")).toHaveValue(
+          words,
+        );
+        await expect(keptLine()).toContainText("書きかけを続けています");
+      }
+      // Only the reader's own 書きかけを消す throws it away.
+      await discardKept();
+      await expect(dialog().getByLabel("店主からのひとこと")).toHaveValue(
+        saved,
+      );
+      await expect(dialog().getByLabel("看板の店名")).toBeFocused();
+      expect(await drafts()).toBe(null);
+      await page.keyboard.press("Escape");
+      await reopen();
+      await expect(keptLine()).toHaveCount(0);
+      await expect(dialog().getByLabel("店主からのひとこと")).toHaveValue(
+        saved,
+      );
+      await page.keyboard.press("Escape");
+    },
+  );
+  await check(
+    "a new order and a POP are kept through Escape, and saving lets them go",
+    async () => {
+      await open();
+      await selectSolaris();
+      const before = await rowTitles();
+      const at = before.indexOf("ソラリス");
+      await dialog()
+        .getByRole("button", {
+          name: at > 0 ? "← 左へ" : "右へ →",
+          exact: true,
+        })
+        .click();
+      const arranged = await rowTitles();
+      expect(arranged).not.toEqual(before);
+      await dialog().getByLabel("この本のPOP").fill("並べ替えたあとの言葉。");
+      await page.keyboard.press("Escape");
+      await expect(dialog()).toHaveCount(0);
+      await reopen();
+      await selectSolaris();
+      expect(await rowTitles()).toEqual(arranged);
+      await expect(dialog().getByLabel("この本のPOP")).toHaveValue(
+        "並べ替えたあとの言葉。",
+      );
+      await save();
+      expect(await drafts()).toBe(null);
+      const pop = (await walkData()).sceneOverrides[0].objects.find(
+        (o) => o.id === "pop:placement:mine:a",
+      );
+      expect(pop.text).toBe("並べ替えたあとの言葉。");
+      await reopen();
+      await expect(keptLine()).toHaveCount(0);
+      await selectSolaris();
+      expect(await rowTitles()).toEqual(arranged);
+      await page.keyboard.press("Escape");
+    },
+  );
+  await check(
+    "work begun before a scene saved elsewhere is not laid over it unasked",
+    async () => {
+      await open();
+      await dialog().getByLabel("店主からのひとこと").fill("古い書きかけ");
+      await selectSolaris();
+      const longPop = "古い書きかけのPOP。".repeat(40);
+      await dialog().getByLabel("この本のPOP").fill(longPop);
+      await page.keyboard.press("Escape");
+      // Another device saves the scene meanwhile.
+      await page.evaluate(() => {
+        const walk = JSON.parse(localStorage.getItem("book-town-walk-v1"));
+        walk.sceneOverrides[0].objects.find((o) => o.id === "sign").text =
+          "別の端末で直した店";
+        localStorage.setItem("book-town-walk-v1", JSON.stringify(walk));
+      });
+      await page.reload();
+      await reopen();
+      await expect(keptLine()).toContainText(
+        "書きかけより新しい店内が保存されています",
+      );
+      await expect(dialog().getByLabel("看板の店名")).toHaveValue(
+        "別の端末で直した店",
+      );
+      await expect(dialog().getByLabel("店主からのひとこと")).not.toHaveValue(
+        "古い書きかけ",
+      );
+      // Nothing new is written over the older work before the reader
+      // chooses: the editor waits, and the hand is on the choice.
+      await expect(
+        keptLine().getByRole("button", { name: "書きかけを開く", exact: true }),
+      ).toBeFocused();
+      await expect(dialog().getByLabel("店主からのひとこと")).toBeDisabled();
+      await expect(dialog().getByLabel("看板の店名")).toBeDisabled();
+      await expect(
+        dialog().getByRole("button", { name: "店内を保存", exact: true }),
+      ).toBeDisabled();
+      await page.keyboard.type("あ");
+      expect(await drafts()).toContain(longPop);
+      // Closed and opened again, it still waits.
+      await page.keyboard.press("Escape");
+      await expect(dialog()).toHaveCount(0);
+      await reopen();
+      await expect(keptLine()).toContainText(
+        "書きかけより新しい店内が保存されています",
+      );
+      expect(await drafts()).toContain(longPop);
+      // Asked for, the older work opens.
+      await keptLine()
+        .getByRole("button", { name: "書きかけを開く", exact: true })
+        .click();
+      await expect(dialog().getByLabel("店主からのひとこと")).toHaveValue(
+        "古い書きかけ",
+      );
+      await expect(dialog().getByLabel("看板の店名")).toHaveValue("夜道の本屋");
+      await expect(keptLine()).toContainText("書きかけを続けています");
+      await expect(dialog().getByLabel("店主からのひとこと")).toBeEnabled();
+      await selectSolaris();
+      await expect(dialog().getByLabel("この本のPOP")).toHaveValue(longPop);
+      await discardKept();
+      await expect(dialog().getByLabel("看板の店名")).toHaveValue(
+        "別の端末で直した店",
+      );
+      await dialog().getByLabel("看板の店名").fill("夜道の本屋");
+      await save();
+      expect(await drafts()).toBe(null);
+    },
+  );
+  await check(
+    "a browser that will not keep the work says so and keeps it on screen",
+    async () => {
+      await open();
+      await page.evaluate((key) => {
+        const original = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (k, v) {
+          if (k === key) throw new Error("quota");
+          return original.call(this, k, v);
+        };
+      }, DRAFTS);
+      await dialog().getByLabel("店主からのひとこと").fill("残せない言葉");
+      await expect(keptLine()).toHaveText(
+        "このブラウザに書きかけを残せませんでした",
+      );
+      await expect(dialog().getByLabel("店主からのひとこと")).toHaveValue(
+        "残せない言葉",
+      );
+      expect(await drafts()).toBe(null);
+      await dialog()
+        .getByRole("button", { name: "キャンセル", exact: true })
+        .click();
+      await dialog()
+        .getByRole("button", { name: "消して閉じる", exact: true })
+        .click();
+      await expect(dialog()).toHaveCount(0);
+      await page.goto(base + "/my-shop/");
+    },
+  );
+  await check(
+    "a book shelved after the scene was saved waits among the unplaced books",
+    async () => {
+      await page.evaluate(() => {
+        const envelope = JSON.parse(localStorage.getItem("book-town-v1"));
+        envelope.data.ownShop.shelves[0].items.push({
+          id: "later",
+          bookId: "dispossessed",
+          display: "spine",
+          pop: "あとから棚に来た本",
+        });
+        localStorage.setItem("book-town-v1", JSON.stringify(envelope));
+      });
+      const before = (await walkData()).sceneOverrides[0];
+      await open();
+      const waiting = dialog().getByRole("group", {
+        name: /^まだ並べていない本/,
+      });
+      await waiting.getByRole("button", { name: /所有せざる人々/ }).click();
+      await expect(dialog().getByLabel("この本のPOP")).toHaveValue(
+        "あとから棚に来た本",
+      );
+      await expect(dialog().getByLabel("この本を置く棚")).toHaveValue("");
+      // Opening it changes nothing that was saved.
+      await expect(keptLine()).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      expect((await walkData()).sceneOverrides[0]).toEqual(before);
     },
   );
   await check(
@@ -428,9 +708,15 @@ try {
       expect(
         await page.evaluate(() => localStorage.getItem("book-town-walk-v1")),
       ).toBe(before);
+      // The refused work is still kept in this browser.
+      expect(await drafts()).toContain("保存できなかった店");
       await dialog()
         .getByRole("button", { name: "キャンセル", exact: true })
         .click();
+      await dialog()
+        .getByRole("button", { name: "消して閉じる", exact: true })
+        .click();
+      expect(await drafts()).toBe(null);
       await page.goto(base + "/walk/#mine");
       await expect(page.locator(".walk-sign")).toHaveText("夜道の本屋");
     },
