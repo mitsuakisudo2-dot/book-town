@@ -156,6 +156,61 @@ export type Database = {
           },
         ];
       };
+      cover_refusals: {
+        Row: {
+          created_at: string;
+          isbn: string;
+          note: string;
+          source: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          isbn: string;
+          note?: string;
+          source: string;
+        };
+        Update: {
+          created_at?: string;
+          isbn?: string;
+          note?: string;
+          source?: string;
+        };
+        Relationships: [];
+      };
+      moderation_folds: {
+        Row: {
+          owner_id: string | null;
+          since: string;
+          state: string;
+          target_id: string;
+          target_kind: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          owner_id?: string | null;
+          since?: string;
+          state: string;
+          target_id: string;
+          target_kind: string;
+        };
+        Update: {
+          owner_id?: string | null;
+          since?: string;
+          state?: string;
+          target_id?: string;
+          target_kind?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "moderation_folds_owner_id_fkey";
+            columns: ["owner_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       moderation_hides: {
         Row: {
           created_at: string;
@@ -428,6 +483,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      reader_settings: {
+        Row: {
+          spoiler_display: string;
+          updated_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          spoiler_display?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          spoiler_display?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reader_settings_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: true;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       reading_entries: {
         Row: {
           body: string;
@@ -534,8 +616,10 @@ export type Database = {
           reason: string;
           reporter_id: string;
           status: string;
+          status_at: string;
           target_id: string;
           target_kind: string;
+          urgent: boolean;
         };
         ComputedFields: never;
         Insert: {
@@ -545,8 +629,10 @@ export type Database = {
           reason: string;
           reporter_id: string;
           status?: string;
+          status_at?: string;
           target_id: string;
           target_kind: string;
+          urgent?: boolean;
         };
         Update: {
           created_at?: string;
@@ -555,8 +641,10 @@ export type Database = {
           reason?: string;
           reporter_id?: string;
           status?: string;
+          status_at?: string;
           target_id?: string;
           target_kind?: string;
+          urgent?: boolean;
         };
         Relationships: [
           {
