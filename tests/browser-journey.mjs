@@ -535,18 +535,20 @@ try {
       await expect(page).toHaveTitle(/ \| Book Town$/);
       const nav = page.locator(".shop-journey-nav");
       await expect(nav.getByRole("link", { name: /本の街へ/ })).toBeVisible();
-      // Walking along the row takes the shop's place, so going back still
-      // leaves the row rather than stepping through each shop.
+      // Each shop along the row is a step: 戻る returns to the one before,
+      // and from the first shop opened directly, the way is to the town.
       const shopURL = page.url();
       await nav.getByRole("link", { name: /^次の書店/ }).click();
       await expect(page).not.toHaveURL(shopURL);
-      await expect(nav.getByRole("link", { name: /本の街へ/ })).toBeVisible();
+      await expect(nav.getByRole("button", { name: /戻る/ })).toBeVisible();
       const rowURL = page.url();
       await page.locator(".owner-profile-link").first().click();
       await expect(page).toHaveURL(/\/profiles\//);
       await expect(page.locator(".profile-back")).toHaveText(/戻る/);
       await page.locator(".profile-back").click();
       await expect(page).toHaveURL(rowURL);
+      await nav.getByRole("button", { name: /戻る/ }).click();
+      await expect(page).toHaveURL(shopURL);
       await expect(nav.getByRole("link", { name: /本の街へ/ })).toBeVisible();
     },
   );
@@ -621,6 +623,85 @@ try {
     },
   );
   await mobile.close();
+  await check(
+    "戻る returns to the tab, filter, search, lane and shop the reader left",
+    async () => {
+      await go(page, "/timeline/");
+      await page
+        .getByRole("button", { name: "フォロー中", exact: true })
+        .click();
+      await expect(page).toHaveURL(/show=following/);
+      await page.locator("main a[href^='/']").first().click();
+      await expect(page).not.toHaveURL(/timeline/);
+      await page.goBack();
+      await expect(
+        page.getByRole("button", { name: "フォロー中", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+
+      await go(page, "/search/");
+      await page.getByRole("searchbox").first().fill("夜");
+      await expect(page).toHaveURL(/q=%E5%A4%9C/);
+      await page.locator("main a[href^='/books/']").first().click();
+      await expect(page).toHaveURL(/\/books\//);
+      await page.goBack();
+      await expect(page.getByRole("searchbox").first()).toHaveValue("夜");
+
+      await go(page, "/profile/");
+      await page
+        .getByRole("button", { name: /お気に入り/ })
+        .first()
+        .click();
+      await expect(page).toHaveURL(/books=favorites/);
+      await page.locator("main a[href^='/books/']").first().click();
+      await expect(page).toHaveURL(/\/books\//);
+      await page.goBack();
+      await expect(
+        page.getByRole("button", { name: /お気に入り/ }).first(),
+      ).toHaveAttribute("aria-pressed", "true");
+
+      // Each shop along the row is a step: 戻る goes to the one before.
+      await go(page, "/shops/shop-orbit/");
+      await page.getByRole("link", { name: /^次の書店：/ }).click();
+      await expect(page).not.toHaveURL(/shop-orbit/);
+      await page.goBack();
+      await expect(page).toHaveURL(/shops\/shop-orbit/);
+
+      // The walk comes back to the shop in view, not the one it began at.
+      await go(page, "/walk/#shop-orbit");
+      await page.mouse.move(720, 500);
+      await page.mouse.wheel(0, 900);
+      await expect(page).not.toHaveURL(/#shop-orbit$/);
+      const walked = page.url();
+      await page.locator("main a[href^='/profiles/']").first().click();
+      await expect(page).toHaveURL(/\/profiles\//);
+      await page.goBack();
+      await expect(page).toHaveURL(walked);
+
+      // The street keeps its lane, and a tap on a shop is not lost while
+      // the street grows underneath it.
+      await go(page, "/");
+      await page.getByRole("button", { name: "路地を変えてみる" }).click();
+      await expect(page).toHaveURL(/lane=1/);
+      const first = await page
+        .locator(".street-shop-title a")
+        .first()
+        .getAttribute("aria-label");
+      await page
+        .locator(".street-shop")
+        .last()
+        .getByRole("link", { name: /^紹介と/ })
+        .click();
+      await expect(page).toHaveURL(/\/shops\//);
+      await page.goBack();
+      await expect(page).toHaveURL(/lane=1/);
+      expect(
+        await page
+          .locator(".street-shop-title a")
+          .first()
+          .getAttribute("aria-label"),
+      ).toBe(first);
+    },
+  );
   await check("a link to a shop that is gone says it is closed", async () => {
     await page.goto(`${baseURL}/shop/?id=gone-shop`);
     await expect(

@@ -33,6 +33,10 @@ import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
+import { useUrlParam } from "../lib/url-state";
+
+const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
+type Collection = (typeof COLLECTIONS)[number];
 
 interface ProfileViewProps {
   state: TownState;
@@ -55,9 +59,13 @@ export function ProfileView({
   const shop = isSelf
     ? state.ownShop
     : state.shops.find((place) => place.ownerId === readerId);
-  const [collection, setCollection] = useState<
-    "wishlist" | "favorites" | "library"
-  >("wishlist");
+  // The chosen shelf of books is kept in the address, for coming back to it.
+  const [books, setBooks] = useUrlParam("books");
+  const collection: Collection = COLLECTIONS.includes(books as Collection)
+    ? (books as Collection)
+    : "wishlist";
+  const setCollection = (next: Collection) =>
+    setBooks(next === "wishlist" ? null : next);
   const peekOpen = useReadingPeekOpen();
   const [sheet, setSheet] = useState<
     "following" | "followers" | "settings" | "register" | null

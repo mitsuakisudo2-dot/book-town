@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import {
+  FEELINGS,
   FEELING_WORDS,
   type Book,
   type Feeling,
@@ -14,7 +15,13 @@ import { booksFelt, feelingsInTown } from "../lib/records";
 import { findReader } from "../lib/social";
 import { bookPath } from "../lib/books";
 import { matchBooks } from "./BookPicker";
-import { postsWithTag, popularTags, takeRequestedSearch } from "../lib/tags";
+import {
+  onSearchRequest,
+  postsWithTag,
+  popularTags,
+  takeRequestedSearch,
+} from "../lib/tags";
+import { readParam, replaceAddress, useUrlParam } from "../lib/url-state";
 import { PostCard } from "./Social";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./reading.css";
@@ -81,6 +88,28 @@ export function SearchView({ state, actions, notify }: Shared) {
     );
     return () => clearTimeout(timer);
   }, []);
+  // A tag tapped while already here searches at once; stepping back through
+  // searches brings each one back.
+  useEffect(() => {
+    const fromAddress = () => setQuery(readParam("q") ?? "");
+    const stop = onSearchRequest((next) => {
+      takeRequestedSearch();
+      setQuery(next);
+    });
+    addEventListener("popstate", fromAddress);
+    return () => {
+      stop();
+      removeEventListener("popstate", fromAddress);
+    };
+  }, []);
+  // What is being searched stays in the address, for coming back to it.
+  useEffect(() => {
+    const timer = setTimeout(
+      () => replaceAddress({ params: { q: query.trim() ? query : null } }),
+      300,
+    );
+    return () => clearTimeout(timer);
+  }, [query]);
   const term = query.trim().toLocaleLowerCase();
   const tagTerm = /^[#＃]/.test(term) ? term.slice(1) : null;
   const personTerm = term.replace(/^@/, "");
@@ -102,7 +131,10 @@ export function SearchView({ state, actions, notify }: Shared) {
     .filter((book) => presence(book.id) > 0)
     .sort((a, b) => presence(b.id) - presence(a.id))
     .slice(0, 6);
-  const [feeling, setFeeling] = useState<Feeling | null>(null);
+  const [feelingParam, setFeelingParam] = useUrlParam("feeling");
+  const feeling = FEELINGS.includes(feelingParam as Feeling)
+    ? (feelingParam as Feeling)
+    : null;
   const feelings = feelingsInTown(state);
   const felt = feeling
     ? booksFelt(state, feeling).flatMap((bookId) =>
@@ -323,9 +355,7 @@ export function SearchView({ state, actions, notify }: Shared) {
                     className="feeling-chip"
                     aria-pressed={feeling === entry}
                     onClick={() =>
-                      setFeeling((current) =>
-                        current === entry ? null : entry,
-                      )
+                      setFeelingParam(feeling === entry ? null : entry)
                     }
                   >
                     {FEELING_WORDS[entry]}

@@ -62,11 +62,22 @@ export function popularTags(state: TownState, limit = 12) {
     .map(([tag, count]) => ({ tag, count }));
 }
 
-/** A search handed over by a tapped tag; read once by the search page. */
+/**
+ * A search handed over by a tapped tag; read once by the search page, or
+ * taken at once when the search page is already open.
+ */
 let pendingSearch: string | null = null;
+const searchListeners = new Set<(query: string) => void>();
 export const requestSearch = (query: string) => {
   pendingSearch = query;
+  searchListeners.forEach((listener) => listener(query));
 };
+export function onSearchRequest(listener: (query: string) => void) {
+  searchListeners.add(listener);
+  return () => {
+    searchListeners.delete(listener);
+  };
+}
 export function takeRequestedSearch(): string | null {
   const query = pendingSearch;
   pendingSearch = null;
