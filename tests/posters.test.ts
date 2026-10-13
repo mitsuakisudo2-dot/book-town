@@ -4,6 +4,7 @@ import {
   cleanPosterDraft,
   emptyPage,
   FOLDED_POSTER_NAMES,
+  OWN_POSTER_REVIEW_WORDS,
   pagesFromRows,
   pagesToRows,
   pageRowBookIds,
@@ -13,6 +14,7 @@ import {
   postersOf,
   postersOfBook,
   posterSpoilerView,
+  posterThumbName,
   posterTitle,
   restorePoster,
   timelinePosters,
@@ -433,7 +435,7 @@ async function main() {
         [
           [
             "review-folded:poster:" + ownSpoiler.id,
-            "通報があったため、運営が確かめるまで、あなたのポスターをみんなの画面ではたたんでいます。ポスターは消えていません",
+            "通報があったため、運営が確かめるまで、あなたのポスター「最後に」をみんなの画面ではたたんでいます。ポスターは消えていません",
             posterPath(ownSpoiler.id),
             "2026-10-13T02:00:00Z",
           ],
@@ -443,13 +445,95 @@ async function main() {
         notices("held").map((notice) => [notice.text, notice.href]),
         [
           [
-            "運営が確かめるまで、あなたのポスターをほかの人から見えないようにしています。問題がなければ、元に戻ります",
+            "運営が確かめるまで、あなたのポスター「最後に」をほかの人から見えないようにしています。問題がなければ、元に戻ります",
             posterPath(ownSpoiler.id),
           ],
         ],
       );
       // Another reader's folded poster is not the viewer's news.
       assert.deepEqual(notices("folded", "poster-nagi-night-sf"), []);
+    },
+  );
+
+  await check(
+    "two of the maker's folded posters read apart; one taken down is no news",
+    () => {
+      const since = "2026-10-13T02:00:00Z";
+      const second: Poster = {
+        ...ownSpoiler,
+        id: "me-poster-2",
+        spoiler: false,
+        pages: [{ heading: "", text: "雨の日に。", bookIds: ["momo"] }],
+      };
+      const town = withSetting("fold_possible");
+      const state: TownState = {
+        ...town,
+        posters: [...town.posters, second],
+        reviewFolds: {
+          "poster:me-poster-1": { state: "folded", since },
+          "poster:me-poster-2": { state: "folded", since },
+        },
+      };
+      const told = (from: TownState) =>
+        notificationsFor(from)
+          .filter((notice) => notice.id.startsWith("review-"))
+          .map((notice) => [notice.text, notice.href]);
+      assert.deepEqual(told(state), [
+        [
+          "通報があったため、運営が確かめるまで、あなたのポスター「最後に」をみんなの画面ではたたんでいます。ポスターは消えていません",
+          posterPath("me-poster-1"),
+        ],
+        [
+          "通報があったため、運営が確かめるまで、あなたのポスター『モモ』をみんなの画面ではたたんでいます。ポスターは消えていません",
+          posterPath("me-poster-2"),
+        ],
+      ]);
+      // Held and then taken down by its maker: nothing is left to say.
+      const id = crypto.randomUUID();
+      const store = createTownStore({
+        kind: "account",
+        newId: () => crypto.randomUUID(),
+        load: () => ({
+          state: structuredClone({
+            ...town,
+            posters: [...town.posters, { ...second, id }],
+            reviewFolds: { ["poster:" + id]: { state: "held", since } },
+          }),
+          status: "saved",
+        }),
+        save: () => "saved",
+      });
+      store.initialize();
+      assert.equal(told(store.getSnapshot()).length, 1);
+      assert.equal(store.actions.deletePoster(id), true);
+      assert.deepEqual(told(store.getSnapshot()), []);
+      assert.deepEqual(store.getSnapshot().reviewFolds, {});
+    },
+  );
+
+  await check(
+    "a thumb's spoken name says what its tile shows, and the maker's note",
+    () => {
+      const books = seedState.books;
+      const plain = { ...ownSpoiler, spoiler: false };
+      assert.equal(posterThumbName(plain, books, null), "ポスター 最後に");
+      assert.equal(
+        posterThumbName(ownSpoiler, books, null),
+        "ネタバレを含むポスター（『百年の孤独』）",
+      );
+      // Folded: the words on its tile (たたんでいます, and why), none of its own.
+      assert.equal(
+        posterThumbName(plain, books, "folded"),
+        "ポスター たたんでいます（通報があったため）",
+      );
+      assert.equal(
+        posterThumbName(plain, books, "reported"),
+        "ポスター たたんでいます（あなたが通報したため）",
+      );
+      assert.deepEqual(OWN_POSTER_REVIEW_WORDS, {
+        folded: "通報があり、みんなの画面ではたたんでいます",
+        held: "運営が確かめるまで、ほかの人には見えません",
+      });
     },
   );
 

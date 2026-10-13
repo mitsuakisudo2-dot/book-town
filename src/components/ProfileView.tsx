@@ -12,7 +12,7 @@ import {
   type TownState,
 } from "../lib/types";
 import { useTownBackend } from "../lib/store";
-import { readerPosts, reviewCoverOf } from "../lib/social";
+import { readerPosts, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
 import { BarcodeRegister } from "./BarcodeRegister";
@@ -1136,6 +1136,7 @@ function ProfilePosters({
                   poster.id,
                   poster.authorId,
                 )}
+                note={reviewNoteOf(state, "poster", poster.id, poster.authorId)}
               />
             </li>
           ))}

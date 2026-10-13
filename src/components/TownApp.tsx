@@ -70,7 +70,7 @@ import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
 import { replaceAddress } from "../lib/url-state";
 import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
-import { findReader, reviewCoverOf } from "../lib/social";
+import { findReader, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { PosterThumb } from "./PosterView";
 import { PosterEditor } from "./PosterEditor";
 import { PosterScreen } from "./PosterScreen";
@@ -994,6 +994,7 @@ function BookPosters({ state, book }: { state: TownState; book: Book }) {
                   poster.id,
                   poster.authorId,
                 )}
+                note={reviewNoteOf(state, "poster", poster.id, poster.authorId)}
               />
             </li>
           );

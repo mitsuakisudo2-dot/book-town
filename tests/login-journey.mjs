@@ -976,10 +976,11 @@ try {
     async () => {
       await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
       const row = page.locator(".book-posters-row");
-      const folded = row.getByRole("link", { name: /^たたんでいるポスター/ });
+      // Its spoken name says what its tile says, and why: たたんでいます.
+      const folded = row.getByRole("link", { name: /たたんでいます/ });
       await expect(folded).toHaveAttribute(
         "aria-label",
-        "たたんでいるポスター、レン",
+        "ポスター たたんでいます（通報があったため）、レン",
       );
       await expect(folded).toContainText("たたんでいます");
       await expect(folded).toContainText("通報があったため");
@@ -998,12 +999,23 @@ try {
         );
       expect(named.filter((name) => name.includes("たたまれた"))).toEqual([]);
       expect(await page.title()).not.toContain("たたまれた");
-      // The maker's own held poster is theirs to see, as it is.
-      await expect(
-        row.getByRole("link", {
-          name: /^ポスター 確かめられているわたしのポスター/,
-        }),
-      ).toBeVisible();
+      // The maker's own held poster is theirs to see, as it is, with a word
+      // on what others get.
+      const ownHeld = row.getByRole("link", {
+        name: /^ポスター 確かめられているわたしのポスター/,
+      });
+      await expect(ownHeld).toBeVisible();
+      await expect(ownHeld).toHaveAttribute(
+        "aria-label",
+        "ポスター 確かめられているわたしのポスター、アキ（運営が確かめるまで、ほかの人には見えません）",
+      );
+      await expect(ownHeld).toContainText(
+        "運営が確かめるまで、ほかの人には見えません",
+      );
+      await expectReadable(
+        ownHeld.locator(".poster-thumb-review"),
+        "own held thumb",
+      );
       await noOverflow("book page with a folded poster");
       await row.scrollIntoViewIfNeeded();
       await page.screenshot({
@@ -1016,9 +1028,16 @@ try {
       await expect(page).toHaveURL(new RegExp("id=" + COVER_BOOK));
       // On the maker's profile too.
       await page.goto(base + "/profile/?id=" + OTHER);
-      await expect(
-        page.getByRole("link", { name: /^たたんでいるポスター/ }),
-      ).toHaveCount(1);
+      // The folded one, and the one the reader reported, each saying why.
+      const grid = page.locator(".profile-poster-grid").getByRole("link");
+      await expect(grid).toHaveCount(2);
+      for (const name of [
+        "ポスター たたんでいます（通報があったため）",
+        "ポスター たたんでいます（あなたが通報したため）",
+      ])
+        await expect(page.getByRole("link", { name, exact: true })).toHaveCount(
+          1,
+        );
       await expect(page.locator("main")).not.toContainText(
         "たたまれたポスターの見出し",
       );
@@ -1029,14 +1048,15 @@ try {
     "the maker hears of a folded and a held poster, and reads why on it",
     async () => {
       await page.goto(base + "/notifications/");
+      // Each poster by its own name, so two never read alike.
       await expect(
         page.getByText(
-          "通報があったため、運営が確かめるまで、あなたのポスターをみんなの画面ではたたんでいます。ポスターは消えていません",
+          "通報があったため、運営が確かめるまで、あなたのポスター「たたまれたわたしのポスター」をみんなの画面ではたたんでいます。ポスターは消えていません",
         ),
       ).toBeVisible();
       await page
         .getByRole("link", {
-          name: /運営が確かめるまで、あなたのポスターをほかの人から見えないようにしています/,
+          name: /運営が確かめるまで、あなたのポスター「確かめられているわたしのポスター」をほかの人から見えないようにしています/,
         })
         .click();
       await expect(page).toHaveURL(new RegExp("id=" + POSTER_OWN_HELD));
@@ -1051,6 +1071,39 @@ try {
         page.getByRole("button", { name: "このポスターを通報" }),
       ).toHaveCount(0);
       await shotBoth("19-poster-maker-note");
+      // On the maker's own profile, each says what others get.
+      await page.goto(base + "/profiles/me/");
+      const grid = page.locator(".profile-poster-grid");
+      await expect(
+        grid.getByRole("link", {
+          name: /^ポスター 確かめられているわたしのポスター/,
+        }),
+      ).toContainText("運営が確かめるまで、ほかの人には見えません");
+      await expect(
+        grid.getByRole("link", {
+          name: /^ポスター たたまれたわたしのポスター/,
+        }),
+      ).toHaveAttribute(
+        "aria-label",
+        "ポスター たたまれたわたしのポスター（通報があり、みんなの画面ではたたんでいます）",
+      );
+      await noOverflow("own posters with notes");
+      await grid.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(output, "19-poster-maker-grid-390.png"),
+      });
+      // And where it is changed.
+      await page.goto(base + "/posters/new/?id=" + POSTER_OWN_FOLDED);
+      await expect(
+        page.getByRole("heading", { name: "ポスターを直す" }),
+      ).toBeVisible();
+      await expect(page.locator(".poster-editor-review")).toHaveText(
+        "通報があったため、運営が確かめるまで、みんなの画面ではたたんで表示しています。ポスターは消えていません。",
+      );
+      await expectReadable(
+        page.locator(".poster-editor-review p"),
+        "editor review note",
+      );
       // Back to the posts' town for what follows.
       town = filled();
     },

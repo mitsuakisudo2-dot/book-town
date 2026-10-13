@@ -2014,6 +2014,7 @@ async function main() {
         "private.owner_of(text, uuid)",
         "private.weigh_report()",
         "private.refold_reports()",
+        "private.refold_taken_down()",
         "private.stamp_report_status()",
         "private.stamp_profile_time()",
       ])
@@ -2461,6 +2462,52 @@ async function main() {
       [BEN, pages()],
     );
   });
+
+  await check(
+    "a post or a poster its writer takes down keeps no fold, held or folded",
+    async () => {
+      const rows = async (target: string) =>
+        (
+          await db.query(
+            "select state from moderation_folds where target_id = $1",
+            [target],
+          )
+        ).rows.length;
+      // Held, then taken down: nobody, the writer included, reads it as held.
+      const post = await newPost("消す前の言葉");
+      await report(OLD1, "post", post, "threat");
+      assert.equal(await fold(AKI, "post", post), "held");
+      await as(AKI, "delete from posts where id = $1", [post]);
+      assert.equal(await fold(AKI, "post", post), null);
+      assert.equal(await rows(post), 0);
+      const [poster] = await as<{ id: string }>(
+        AKI,
+        "insert into posters (author_id, template, pages) values ($1, 'one_book', $2) returning id",
+        [AKI, pages(book.id)],
+      );
+      await report(OLD4, "poster", poster.id, "threat");
+      assert.equal(await fold(AKI, "poster", poster.id), "held");
+      await as(AKI, "delete from posters where id = $1", [poster.id]);
+      assert.equal(await fold(AKI, "poster", poster.id), null);
+      assert.equal(await rows(poster.id), 0);
+      // Its reports stay for the operator; looking at them folds nothing back.
+      await operator(
+        `update reports set status = 'checking' where target_id in ('${post}', '${poster.id}')`,
+      );
+      assert.equal(await rows(post), 0);
+      assert.equal(await rows(poster.id), 0);
+      // Folded by three, then taken down: gone for everyone.
+      const folded = await newPost("たたまれてから消す言葉");
+      for (const visitor of [OLD1, OLD2, OLD3])
+        await report(visitor, "post", folded);
+      assert.equal(await fold(null, "post", folded), "folded");
+      await as(AKI, "delete from posts where id = $1", [folded]);
+      assert.equal(await rows(folded), 0);
+      await operator(
+        `update reports set status = 'dismissed' where target_id in ('${post}', '${poster.id}', '${folded}')`,
+      );
+    },
+  );
 
   await check("deleting an account removes everything it owned", async () => {
     await db.exec(`delete from auth.users where id = '${BEN}'`);

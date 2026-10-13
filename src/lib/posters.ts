@@ -272,6 +272,38 @@ export const FOLDED_POSTER_NAMES: Record<ReviewCover, string> = {
   reported: "あなたが通報したポスター",
 };
 
+/** Why a folded poster's thumb is folded, under its たたんでいます. */
+export const FOLDED_POSTER_REASONS: Record<ReviewCover, string> = {
+  folded: "通報があったため",
+  reported: "あなたが通報したため",
+};
+
+/**
+ * What the maker reads beside their own thumb when reports folded or hold it,
+ * where there is no room for the whole note (reviewNoteWords).
+ */
+export const OWN_POSTER_REVIEW_WORDS: Record<"folded" | "held", string> = {
+  folded: "通報があり、みんなの画面ではたたんでいます",
+  held: "運営が確かめるまで、ほかの人には見えません",
+};
+
+/**
+ * A thumb's spoken name, saying what its tile shows: a folded one says
+ * たたんでいます and why (none of its words or books), a spoiler which book it
+ * is about, any other its title.
+ */
+export function posterThumbName(
+  poster: Pick<Poster, "pages" | "spoiler">,
+  books: Pick<Book, "id" | "title">[],
+  folded: ReviewCover | null,
+): string {
+  if (folded)
+    return `ポスター たたんでいます（${FOLDED_POSTER_REASONS[folded]}）`;
+  if (!poster.spoiler) return "ポスター " + posterTitle(poster, books);
+  const first = books.find((book) => book.id === posterBookIds(poster)[0]);
+  return "ネタバレを含むポスター" + (first ? `（『${first.title}』）` : "");
+}
+
 const newestFirst = (a: Poster, b: Poster) =>
   Date.parse(b.createdAt) - Date.parse(a.createdAt);
 

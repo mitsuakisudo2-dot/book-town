@@ -236,22 +236,25 @@ language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function private.review_state(text, uuid) from public, anon, authenticated;
 
--- Brings one thing's row up to date.
+-- Brings one thing's row up to date. Something gone (its writer took it
+-- down) keeps no row: nothing is left folded, and nobody is told it is held.
 create function private.refold_review(kind text, target uuid) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
   next text;
+  owner uuid;
 begin
   if kind not in ('post', 'shop', 'profile', 'poster') then
     return;
   end if;
   next := private.review_state(kind, target);
-  if next is null then
+  owner := private.owner_of(kind, target);
+  if next is null or owner is null then
     delete from public.moderation_folds
     where target_kind = kind and target_id = target;
   else
     insert into public.moderation_folds (target_kind, target_id, state, owner_id)
-    values (kind, target, next, private.owner_of(kind, target))
+    values (kind, target, next, owner)
     on conflict (target_kind, target_id) do update
       set state = excluded.state,
           owner_id = excluded.owner_id,
@@ -261,6 +264,30 @@ begin
 end;
 $$;
 revoke all on function private.refold_review(text, uuid) from public, anon, authenticated;
+
+-- A post, a poster or a shop taken down takes its fold along (target_id
+-- has no foreign key, since it names rows of several tables). Its reports
+-- stay for the operator.
+create function private.refold_taken_down() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform private.refold_review(tg_argv[0], old.id);
+  return null;
+end;
+$$;
+revoke all on function private.refold_taken_down() from public, anon, authenticated;
+create trigger posts_refold_taken_down after delete on public.posts
+  for each row execute function private.refold_taken_down('post');
+create trigger shops_refold_taken_down after delete on public.shops
+  for each row execute function private.refold_taken_down('shop');
+do $$
+begin
+  if to_regclass('public.posters') is not null then
+    create trigger posters_refold_taken_down after delete on public.posters
+      for each row execute function private.refold_taken_down('poster');
+  end if;
+end;
+$$;
 
 -- A report filed, checked, dismissed or removed (a reporter's account deleted
 -- takes its reports along) refolds what it was about.

@@ -10,6 +10,7 @@ import {
 } from "./types";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
 import { posterPath, profilePath, shopPath } from "./paths";
+import { posterTitle, type Poster } from "./posters";
 import { coverHidden } from "./hidden-words";
 
 export interface Notice {
@@ -41,6 +42,20 @@ export const monthDay = (at: string): string => {
 const quote = (post: string) => {
   const body = coverHidden(post);
   return "「" + (body.length > 40 ? body.slice(0, 40) + "…" : body) + "」";
+};
+
+/**
+ * The maker's own poster, named so two of them never read alike: by its
+ * heading, or by its book.
+ */
+const ownPosterWords = (
+  poster: Poster | undefined,
+  books: TownState["books"],
+) => {
+  if (!poster) return "あなたのポスター";
+  const title = posterTitle(poster, books);
+  if (title === "ポスター") return "あなたのポスター";
+  return "あなたのポスター" + (title.startsWith("『") ? title : quote(title));
 };
 
 /**
@@ -175,7 +190,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
     if (!own) continue;
     const thing =
       kind === "poster"
-        ? "あなたのポスター"
+        ? ownPosterWords(poster, state.books)
         : "あなたの投稿" + (post ? quote(post.body) : "");
     notices.push({
       id: `review-${fold.state}:${key}`,

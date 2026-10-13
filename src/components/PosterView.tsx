@@ -12,12 +12,13 @@ import {
 import Link from "next/link";
 import { ME_ID, type Book, type Reader, type TownState } from "../lib/types";
 import {
-  FOLDED_POSTER_NAMES,
+  FOLDED_POSTER_REASONS,
+  OWN_POSTER_REVIEW_WORDS,
   POSTER_THEME_STYLES,
   emptyPage,
   posterBookIds,
   posterSpoilerView,
-  posterTitle,
+  posterThumbName,
   type Poster,
   type PosterPage,
 } from "../lib/posters";
@@ -593,7 +594,8 @@ export function PosterFoldCover({
  * A poster's first page, small, for lists and rows. A spoiler poster shows
  * only that it is covered, and which book it is about: none of its words or
  * covers. One folded by reports shows only that it is folded: not even its
- * books. Where posters by many readers meet, the caption names the maker.
+ * books. Its maker sees their own as it is, with a word on what reports did.
+ * Where posters by many readers meet, the caption names the maker.
  */
 export function PosterThumb({
   poster,
@@ -602,6 +604,7 @@ export function PosterThumb({
   badge,
   caption,
   folded = null,
+  note = null,
 }: {
   poster: Poster;
   books: Book[];
@@ -611,20 +614,20 @@ export function PosterThumb({
   caption?: string;
   /** Folded by reports for this reader (reviewCoverOf). */
   folded?: ReviewCover | null;
+  /** The maker's own, folded or held by reports (reviewNoteOf). */
+  note?: "folded" | "held" | null;
 }) {
   const firstBook = books.find((book) => book.id === posterBookIds(poster)[0]);
-  const label = folded
-    ? FOLDED_POSTER_NAMES[folded]
-    : poster.spoiler
-      ? "ネタバレを含むポスター" +
-        (firstBook ? `（『${firstBook.title}』）` : "")
-      : "ポスター " + posterTitle(poster, books);
+  const review = note ? OWN_POSTER_REVIEW_WORDS[note] : "";
   return (
     <Link
       href={href}
       className="poster-thumb"
       aria-label={
-        label + (caption ? "、" + caption : "") + (badge ? `（${badge}）` : "")
+        posterThumbName(poster, books, folded) +
+        (caption ? "、" + caption : "") +
+        (badge ? `（${badge}）` : "") +
+        (review ? `（${review}）` : "")
       }
     >
       <div className="poster-thumb-tile">
@@ -632,11 +635,7 @@ export function PosterThumb({
           <span className="poster-thumb-door is-report">
             <Icon name="lock" size={16} />
             たたんでいます
-            <small>
-              {folded === "reported"
-                ? "あなたが通報したため"
-                : "通報があったため"}
-            </small>
+            <small>{FOLDED_POSTER_REASONS[folded]}</small>
           </span>
         ) : poster.spoiler ? (
           <span className="poster-thumb-door" style={themeStyle(poster)}>
@@ -659,6 +658,11 @@ export function PosterThumb({
         <span className="poster-thumb-note" aria-hidden="true">
           {badge && <span className="poster-thumb-badge">{badge}</span>}
           {poster.pages.length > 1 && `${poster.pages.length}ページ`}
+        </span>
+      )}
+      {review && (
+        <span className="poster-thumb-review" aria-hidden="true">
+          {review}
         </span>
       )}
     </Link>
