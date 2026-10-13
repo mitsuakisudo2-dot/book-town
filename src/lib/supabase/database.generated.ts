@@ -833,7 +833,6 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      is_blocked_with: { Args: { other: string }; Returns: boolean };
       isbn13_valid: { Args: { isbn: string }; Returns: boolean };
       public_scene_of: { Args: { scene: Json; shop: string }; Returns: Json };
       replace_profile_nine: {

@@ -7,6 +7,7 @@ import {
   planWrites,
   referencedBookIds,
   townFromRows,
+  type BookRow,
   type RemoteIds,
   type RemoteRows,
   type ShopRow,
@@ -47,7 +48,7 @@ const profile = (id: string, handle: string): Tables<"profiles"> => ({
   updated_at: at,
 });
 
-const book = (id: string, createdBy: string | null): Tables<"books"> => ({
+const book = (id: string): BookRow => ({
   id,
   isbn: null,
   title: "華氏451度",
@@ -55,7 +56,6 @@ const book = (id: string, createdBy: string | null): Tables<"books"> => ({
   publisher: "",
   price: null,
   source: "manual",
-  created_by: createdBy,
   created_at: at,
   updated_at: at,
 });
@@ -106,7 +106,7 @@ function rows(extra: Partial<RemoteRows> = {}): RemoteRows {
   return {
     profiles: [profile(AKI, "aki"), profile(BEN, "ben")],
     nine: [],
-    books: [book(BOOK, AKI), book(OTHER_BOOK, BEN)],
+    books: [book(BOOK), book(OTHER_BOOK)],
     shops: [],
     ownShelves: [],
     ownSceneBooks: [],
@@ -218,7 +218,17 @@ async function main() {
   );
 
   await check("other people's books carry no summary of their own", () => {
-    const town = townFromRows(rows(), ids);
+    // A reader's own registered books are the ones in their 登録 list; who
+    // typed a book in is not something the database tells anyone.
+    const town = townFromRows(
+      rows({
+        marks: [
+          { user_id: AKI, book_id: BOOK, kind: "library", created_at: at },
+          { user_id: AKI, book_id: OTHER_BOOK, kind: "wish", created_at: at },
+        ],
+      }),
+      ids,
+    );
     const mine = town.books.find((entry) => entry.id === BOOK);
     const theirs = town.books.find((entry) => entry.id === OTHER_BOOK);
     assert.notEqual(mine?.summary, theirs?.summary);

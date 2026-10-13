@@ -21,6 +21,10 @@ async function main() {
     $$;
     grant usage on schema auth to anon, authenticated;
     grant usage on schema public to anon, authenticated;
+    -- What Supabase gives anything new in public until a migration says otherwise.
+    alter default privileges in schema public grant all on tables to anon, authenticated;
+    alter default privileges in schema public grant all on sequences to anon, authenticated;
+    alter default privileges in schema public grant execute on functions to anon, authenticated;
   `;
   await db.exec(supabase);
 
@@ -145,7 +149,7 @@ async function main() {
     "visitors who are not logged in read public things only",
     async () => {
       assert.equal((await as(null, "select * from profiles")).length, 3);
-      assert.equal((await as(null, "select * from books")).length, 1);
+      assert.equal((await as(null, "select id, title from books")).length, 1);
       const shops = await as<{ name: string }>(null, "select name from shops");
       assert.deepEqual(
         shops.map((shop) => shop.name),
@@ -615,6 +619,78 @@ async function main() {
       1,
     );
   });
+
+  await check(
+    "who typed a book in, and who blocked whom, cannot be asked",
+    async () => {
+      // Everyone reads the catalog, but not who typed each book in.
+      for (const visitor of [null, AKI, BEN])
+        await refused(
+          visitor,
+          "select created_by from books",
+          [],
+          /permission/,
+        );
+      assert.equal(
+        (
+          await as(
+            null,
+            "select id, isbn, title, author, publisher, price, source, created_at, updated_at from books where id = $1",
+            [book.id],
+          )
+        ).length,
+        1,
+      );
+      // A new book is saved the way the app does it, twice without harm, and
+      // only the one who typed it in can fix it.
+      const typed = "00000000-0000-4000-8000-0000000000b1";
+      // (The shape below is the statement the API builds for the app's upsert.)
+      for (let time = 0; time < 2; time++)
+        await as(
+          BEN,
+          `with saved as (
+             insert into books (id, title, created_by)
+             select id, title, created_by
+             from json_populate_recordset(null::books, $1) as row
+             on conflict (id) do nothing
+             returning 1
+           ) select count(*) from saved`,
+          [JSON.stringify([{ id: typed, title: "砂丘", created_by: BEN }])],
+        );
+      assert.equal(
+        await affects(BEN, "update books set title = '砂の丘' where id = $1", [
+          typed,
+        ]),
+        1,
+      );
+      assert.equal(
+        await affects(AKI, "update books set title = '横取り' where id = $1", [
+          typed,
+        ]),
+        0,
+      );
+      await db.exec(`delete from books where id = '${typed}'`);
+      // Whether someone blocked you is not a question anyone can call.
+      for (const visitor of [null, AKI]) {
+        await refused(visitor, "select public.is_blocked_with($1)", [BEN]);
+        await refused(visitor, "select private.end_follows_on_block()", []);
+      }
+      // Visits are only ever the signed-in reader's own.
+      await refused(null, "select * from shop_visits", [], /permission/);
+      await refused(AKI, "truncate shop_visits", [], /permission/);
+      // Anything added to public later is closed until a migration opens it.
+      await db.exec(
+        "create table public.added_later (id int); create function public.added_later_fn() returns int language sql as 'select 1';",
+      );
+      for (const visitor of [null, AKI]) {
+        await refused(visitor, "select * from added_later", [], /permission/);
+        await refused(visitor, "select added_later_fn()", [], /permission/);
+      }
+      await db.exec(
+        "drop table public.added_later; drop function public.added_later_fn();",
+      );
+    },
+  );
 
   const [akiNote] = await as<{ id: string }>(
     AKI,
