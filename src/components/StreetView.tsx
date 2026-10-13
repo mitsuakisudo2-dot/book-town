@@ -14,12 +14,13 @@ import {
 } from "../lib/types";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
-import { BookInHand } from "./BookInHand";
+import { BookInHand, heldBookOf } from "./BookInHand";
 import "./street.css";
 import { profilePath, shopPath, walkPath } from "../lib/paths";
 import { useTownBackend } from "../lib/store";
 import { shopOpenedRecently } from "../lib/just-opened";
 import { replaceAddress, useUrlParam } from "../lib/url-state";
+import { useLayerReturn } from "../lib/back-layer";
 
 /** The most rounds of the street kept on the page at once. */
 const MAX_ROUNDS = 30;
@@ -91,6 +92,16 @@ export function StreetView({
     item: ShelfItem;
   } | null>(null);
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
+  // Back from a book's own page, the same book is in hand again.
+  useLayerReturn((name) => {
+    const held = heldBookOf(name);
+    const shop = shops.find((entry) => entry.id === held?.shopId);
+    const shelf = shop?.shelves.find((entry) => entry.id === held?.shelfId);
+    const item = shelf?.items.find((entry) => entry.id === held?.itemId);
+    if (!shop || !shelf || !item || selected?.item.id === item.id) return false;
+    setSelected({ shop, shelf, item });
+    return true;
+  }, shops.length > 0);
   const term = search.trim().toLocaleLowerCase();
   const matching = shops.filter((shop) => {
     const stock = shop.shelves

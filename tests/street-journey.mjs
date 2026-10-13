@@ -1,6 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { settleBeforeNavigating } from "./journey-layers.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -118,7 +119,7 @@ try {
     viewport: { width: 1440, height: 1000 },
     locale: "ja-JP",
   });
-  const page = await desktop.newPage();
+  const page = settleBeforeNavigating(await desktop.newPage());
   currentPage = page;
   watch(page);
   await check(
@@ -660,7 +661,7 @@ try {
       hasTouch: true,
       locale: "ja-JP",
     });
-    const phone = await mobile.newPage();
+    const phone = settleBeforeNavigating(await mobile.newPage());
     currentPage = phone;
     watch(phone);
     await check(

@@ -1,6 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { settleBeforeNavigating } from "./journey-layers.mjs";
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../outputs/phase2-customization-qa",
@@ -16,7 +17,7 @@ const context = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
   locale: "ja-JP",
 });
-const page = await context.newPage();
+const page = settleBeforeNavigating(await context.newPage());
 const passed = [],
   errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
@@ -449,7 +450,7 @@ try {
           ],
         },
       });
-      const other = await locked.newPage();
+      const other = settleBeforeNavigating(await locked.newPage());
       other.on("pageerror", (e) => errors.push(e.message));
       await other.goto(base + "/my-shop/");
       await other

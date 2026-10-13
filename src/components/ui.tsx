@@ -2,7 +2,9 @@
 import { useEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import type { Book, Reader } from "../lib/types";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { bookArt } from "../lib/book-art";
+import { useBackLayer } from "../lib/back-layer";
 import "./illustrated-jackets.css";
 const shapes: Record<string, ReactNode> = {
   book: (
@@ -340,6 +342,40 @@ export function Modal({
   useEffect(() => {
     closeRef.current = onClose;
   }, [onClose]);
+  // 戻る closes the dialog; closing it takes that step back off.
+  const layer = useBackLayer(onClose);
+  const router = useRouter();
+  const leaveRef = useRef(layer.leave);
+  useEffect(() => {
+    leaveRef.current = layer.leave;
+  });
+  useEffect(() => {
+    // A link inside the dialog leaves from the page beneath it, so that 戻る
+    // from there returns to the page and not to a dialog already closed.
+    const dialog = ref.current;
+    const follow = (event: MouseEvent) => {
+      const link = (event.target as Element | null)?.closest?.("a[href]");
+      if (
+        !(link instanceof HTMLAnchorElement) ||
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        (link.target && link.target !== "_self") ||
+        link.hasAttribute("download") ||
+        link.origin !== location.origin
+      )
+        return;
+      event.preventDefault();
+      const href = link.pathname + link.search + link.hash;
+      leaveRef.current(() => router.push(href));
+      closeRef.current();
+    };
+    dialog?.addEventListener("click", follow, true);
+    return () => dialog?.removeEventListener("click", follow, true);
+  }, [router]);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const old = document.body.style.overflow;

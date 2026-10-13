@@ -9,7 +9,8 @@ const here = () => location.pathname + location.search;
 
 if (typeof window !== "undefined")
   addEventListener("popstate", () => {
-    poppedTo = here();
+    // A dialog closed by 戻る stays on the same page: no page to step back to.
+    if (here() !== trail[trail.length - 1]) poppedTo = here();
   });
 
 /** Called once a page of the town has appeared. */

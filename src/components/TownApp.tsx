@@ -24,7 +24,7 @@ import { WoodenShelf } from "./WoodenShelf";
 import { ShopEditor } from "./ShopEditor";
 import { ProfileView } from "./ProfileView";
 import { StreetView } from "./StreetView";
-import { BookInHand } from "./BookInHand";
+import { BookInHand, heldBookOf } from "./BookInHand";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookReviews } from "./Social";
 import { HomeView } from "./HomeView";
@@ -53,6 +53,7 @@ import {
 import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
 import { replaceAddress } from "../lib/url-state";
+import { useLayerReturn } from "../lib/back-layer";
 
 type View =
   | "town"
@@ -422,6 +423,16 @@ function ShopView({
     item: ShelfItem;
     shelf: Shelf;
   } | null>(null);
+  // Back from a book's own page, the same book is in hand again.
+  useLayerReturn((name) => {
+    const held = heldBookOf(name);
+    if (!shop || held?.shopId !== shop.id) return false;
+    const shelf = shop.shelves.find((entry) => entry.id === held.shelfId);
+    const item = shelf?.items.find((entry) => entry.id === held.itemId);
+    if (!shelf || !item || selected?.item.id === item.id) return false;
+    setSelected({ item, shelf });
+    return true;
+  }, Boolean(shop));
   const publicShops = [
     ...state.shops,
     ...(state.ownShop ? [state.ownShop] : []),

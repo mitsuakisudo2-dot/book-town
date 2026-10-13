@@ -1,6 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { settleBeforeNavigating } from "./journey-layers.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -95,7 +96,7 @@ try {
     hasTouch: true,
     isMobile: true,
   });
-  page = await context.newPage();
+  page = settleBeforeNavigating(await context.newPage());
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
@@ -396,7 +397,19 @@ try {
     await page.getByRole("button", { name: /1 フォロー/ }).click();
     const dialog = page.getByRole("dialog", { name: "フォロー" });
     await expect(dialog.getByRole("link", { name: /凪/ })).toBeVisible();
-    await page.keyboard.press("Escape");
+    // A link in the list leaves from the profile: 戻る returns to the
+    // profile, and the next 戻る leaves it.
+    const href = await dialog
+      .getByRole("link", { name: /凪/ })
+      .getAttribute("href");
+    const there = new URL(href, page.url()).href;
+    await dialog.getByRole("link", { name: /凪/ }).click();
+    await expect(page).toHaveURL(there);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/profiles\/me\/$/);
+    await expect(dialog).toHaveCount(0);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/profiles\/r-nagi\/$/);
     await go("/notifications/");
     await expect(
       page.getByText(/フォロー中の凪さんが投稿しました/).first(),
@@ -604,6 +617,17 @@ try {
         .click();
       await expect(page.locator(".open-shelf-book")).toHaveCount(5);
       await page.getByRole("button", { name: "看板を決める" }).click();
+      // 戻る goes back one step at a time, keeping what was chosen.
+      await page.goBack();
+      await expect(page.locator(".open-shelf-book")).toHaveCount(5);
+      await page.goBack();
+      await expect(
+        page.getByRole("button", { name: /人生の9冊の本屋/ }),
+      ).toBeVisible();
+      await expect(page).toHaveURL(/\/my-shop\/$/);
+      await page.goForward();
+      await expect(page.locator(".open-shelf-book")).toHaveCount(5);
+      await page.goForward();
       await page.getByRole("button", { name: "名前の例" }).click();
       await expect(page.getByLabel("書店の名前")).toHaveValue("雨音書店");
       await page.getByLabel("ひとこと").fill("一頁ぶん、遠回り。");
@@ -614,6 +638,10 @@ try {
       await expect(page.getByRole("status")).toContainText(
         "「雨音書店」が開店しました",
       );
+      // The steps that led to the opening are behind it: 戻る leaves the page.
+      await expect
+        .poll(() => page.evaluate(() => history.state?.booktownLayers ?? null))
+        .toBeNull();
       const shop = (await stored()).ownShop;
       expect(shop.name).toBe("雨音書店");
       expect(shop.tagline).toBe("一頁ぶん、遠回り。");

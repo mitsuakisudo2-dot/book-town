@@ -11,7 +11,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { preload } from "react-dom";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
-import { BookInHand } from "./BookInHand";
+import { BookInHand, heldBookOf } from "./BookInHand";
 import { DoodleIcon, StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { ShelfZoom } from "./ShelfZoom";
 import {
@@ -53,6 +53,7 @@ import {
 import "./walk.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { replaceAddress } from "../lib/url-state";
+import { useLayerReturn } from "../lib/back-layer";
 
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
@@ -155,6 +156,17 @@ export function WalkView({
     session && !session.ended ? session.ids[session.index] : null;
   const scene = scenes.find((s) => s.storeId === currentId);
   const shop = shops.find((s) => s.id === currentId);
+  // Back from a book's own page, the same book is in hand again.
+  useLayerReturn((name) => {
+    const held = heldBookOf(name);
+    if (!held || held.shelfId || held.shopId !== currentId || !scene)
+      return false;
+    if (overlay?.kind === "book" && overlay.placementId === held.itemId)
+      return false;
+    if (!objectById(scene, held.itemId)) return false;
+    setOverlay({ kind: "book", placementId: held.itemId });
+    return true;
+  }, Boolean(scene));
   const owner =
     shop?.ownerId === state.me.id
       ? state.me

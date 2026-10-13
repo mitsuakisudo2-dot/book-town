@@ -1,6 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { settleBeforeNavigating } from "./journey-layers.mjs";
 
 // Signs in with an emailed code and creates the first profile, in a real browser
 // against a stand-in for Supabase. Serve the app with
@@ -120,7 +121,7 @@ await context.route(supabase + "/**", async (route) => {
   }
   return json(404, { message: "not mocked: " + url.pathname });
 });
-const page = await context.newPage();
+const page = settleBeforeNavigating(await context.newPage());
 page.on("pageerror", (e) => errors.push(e.message));
 async function check(name, run) {
   await run();

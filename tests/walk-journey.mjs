@@ -1,6 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { settleBeforeNavigating } from "./journey-layers.mjs";
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../work/walk-qa",
@@ -18,7 +19,7 @@ const context = await browser.newContext({
   viewport: { width: 390, height: 884 },
   hasTouch: true,
 });
-const page = await context.newPage();
+const page = settleBeforeNavigating(await context.newPage());
 page.on("pageerror", (e) => errors.push(e.message));
 async function check(name, run) {
   await run();
@@ -182,6 +183,21 @@ try {
       await expect(page.locator(".walk-close-shelf")).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(page.locator(".walk-close-shelf")).toHaveCount(0);
+
+      // 戻る does the same, one layer at a time, and stays in the walk.
+      const walked = page.url();
+      await page
+        .getByRole("button", { name: /の段を近くで見る$/ })
+        .first()
+        .click();
+      await page.locator(".walk-close-book").first().click();
+      await expect(page.locator(".bh-dialog")).toBeVisible();
+      await page.goBack();
+      await expect(page.locator(".bh-dialog")).not.toBeVisible();
+      await expect(page.locator(".walk-close-shelf")).toBeVisible();
+      await page.goBack();
+      await expect(page.locator(".walk-close-shelf")).toHaveCount(0);
+      await expect(page).toHaveURL(walked);
     },
   );
   await check(
@@ -404,7 +420,7 @@ try {
       const isolated = await browser.newContext({
         viewport: { width: 390, height: 884 },
       });
-      const other = await isolated.newPage();
+      const other = settleBeforeNavigating(await isolated.newPage());
       await other.addInitScript(() =>
         localStorage.setItem("book-town-walk-v1", "{broken"),
       );
@@ -427,7 +443,7 @@ try {
       const isolated = await browser.newContext({
         viewport: { width: 390, height: 884 },
       });
-      const other = await isolated.newPage();
+      const other = settleBeforeNavigating(await isolated.newPage());
       await other.addInitScript(() => {
         const original = Storage.prototype.setItem;
         Storage.prototype.setItem = function (key, value) {
