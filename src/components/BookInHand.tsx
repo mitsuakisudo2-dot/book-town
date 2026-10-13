@@ -15,7 +15,6 @@ import { CoverRemovalLink } from "./Report";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookDiscovery } from "./BookDiscovery";
 import { bookPath } from "../lib/books";
-import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./book-in-hand.css";
 import type { ReadEntry } from "../lib/store-scene-adapter";
 import { StoreStamp } from "./StoreCanvas";
@@ -179,20 +178,54 @@ export function BookInHand({
   const popReactions = activePop?.legacy
     ? (state.popReactions[activeReactionKey] ?? [])
     : (reading?.reactions[activeReactionKey] ?? []);
+  // The POPs lie side by side on a track the browser scrolls: it follows the
+  // finger and snaps one POP per page. The count, the owner and the reactions
+  // follow the page the track has come to rest on.
+  const trackRef = useRef<HTMLDivElement>(null);
+  const trackTouched = useRef(false);
+  // The page a button sent the track to: it stays the one shown while the
+  // track glides there, however many presses come before it arrives.
+  const trackAim = useRef<{ key: string; page: number } | null>(null);
+  const settleTimer = useRef<number | undefined>(undefined);
+  function showPopPage(index: number) {
+    const next = Math.max(0, Math.min(index, popCandidates.length - 1));
+    setPopPage((page) =>
+      (page?.key === reactionKey ? page.index : 0) === next
+        ? page
+        : { key: reactionKey, index: next },
+    );
+    return next;
+  }
+  function settlePop() {
+    window.clearTimeout(settleTimer.current);
+    const track = trackRef.current;
+    if (!track || trackTouched.current || !track.clientWidth) return;
+    const at = track.scrollLeft / track.clientWidth;
+    const aim = trackAim.current;
+    if (aim?.key === reactionKey && Math.abs(at - aim.page) > 0.02) return;
+    trackAim.current = null;
+    showPopPage(Math.round(at));
+  }
+  // Not every browser tells when a scroll has ended: a short quiet does.
+  function settlePopSoon() {
+    window.clearTimeout(settleTimer.current);
+    settleTimer.current = window.setTimeout(settlePop, 120);
+  }
+  useEffect(() => {
+    const timer = settleTimer;
+    return () => window.clearTimeout(timer.current);
+  }, []);
   function movePop(direction: -1 | 1) {
-    setPopPage({
-      key: reactionKey,
-      index: Math.max(
-        0,
-        Math.min(popIndex + direction, popCandidates.length - 1),
-      ),
+    const next = showPopPage(popIndex + direction);
+    const track = trackRef.current;
+    trackAim.current = { key: reactionKey, page: next };
+    track?.scrollTo({
+      left: next * track.clientWidth,
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
     });
   }
-  const popSwipe = useHorizontalSwipe({
-    onSwipe: movePop,
-    enabled: popCandidates.length > 1,
-    contain: true,
-  });
   // Before the page beneath is held still, so its scroll is recorded.
   const layer = useBackLayer(
     onClose,
@@ -473,7 +506,6 @@ export function BookInHand({
           <section
             className={`bh-pop owner-pop${popCandidates.length > 1 ? " has-pages" : ""}`}
             aria-label="この本に寄せられたPOP"
-            {...popSwipe}
           >
             <div className="bh-pop-label">
               <span>
@@ -502,22 +534,56 @@ export function BookInHand({
                 </button>
               )}
               <div
-                className="bh-pop-message"
-                aria-live="polite"
-                aria-atomic="true"
+                ref={trackRef}
+                className="bh-pop-track"
+                tabIndex={-1}
+                onScroll={settlePopSoon}
+                onScrollEnd={settlePop}
+                onTouchStart={() => {
+                  trackTouched.current = true;
+                  trackAim.current = null;
+                }}
+                onWheel={() => {
+                  trackAim.current = null;
+                }}
+                onTouchEnd={(event) => {
+                  trackTouched.current = event.touches.length > 0;
+                  settlePopSoon();
+                }}
+                onTouchCancel={() => {
+                  trackTouched.current = false;
+                  settlePopSoon();
+                }}
               >
-                {activePop.pop.trim() ? (
-                  <p className="bh-pop-text">{activePop.pop}</p>
-                ) : (
-                  <p className="bh-pop-empty">
-                    この本のPOPは、まだ書かれていません。
-                  </p>
-                )}
-                {activePop.stamp && (
-                  <span className="bh-pop-stamp">
-                    <StoreStamp name={activePop.stamp} />
-                  </span>
-                )}
+                {popCandidates.map((entry, page) => (
+                  <div
+                    key={entryKey(entry)}
+                    className={
+                      "bh-pop-page" + (page === popIndex ? " is-current" : "")
+                    }
+                    aria-hidden={page === popIndex ? undefined : true}
+                  >
+                    {entry.pop.trim() ? (
+                      <p className="bh-pop-text">{entry.pop}</p>
+                    ) : (
+                      <p className="bh-pop-empty">
+                        この本のPOPは、まだ書かれていません。
+                      </p>
+                    )}
+                    {entry.stamp && (
+                      <span className="bh-pop-stamp">
+                        <StoreStamp name={entry.stamp} />
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {/* Told once the reader turns to another POP; the page itself
+                  is read where it stands. */}
+              <div className="bh-sr-only" aria-live="polite" aria-atomic="true">
+                {popPage?.key === reactionKey &&
+                  (activePop.pop.trim() ||
+                    "この本のPOPは、まだ書かれていません。")}
               </div>
               {popCandidates.length > 1 && (
                 <button

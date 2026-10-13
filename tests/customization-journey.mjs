@@ -307,10 +307,11 @@ try {
         animations: "disabled",
       });
       await page.locator('[data-placement="placement:mine:a"]').click();
-      await expect(page.locator(".bh-pop-text")).toHaveText(
+      const shownPop = page.locator(".bh-pop-page.is-current");
+      await expect(shownPop.locator(".bh-pop-text")).toHaveText(
         "遠い星の海で、言葉のない相手に出会う。",
       );
-      await expect(page.locator(".bh-pop-stamp")).toBeVisible();
+      await expect(shownPop.locator(".bh-pop-stamp")).toBeVisible();
       await expect(
         page.getByRole("button", { name: "いいね", exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
@@ -326,7 +327,7 @@ try {
         (await legacy()).popReactions[JSON.stringify(["mine", "public", "a"])],
       ).toEqual(["like"]);
       await page.getByRole("button", { name: "次のPOP", exact: true }).click();
-      await expect(page.locator(".bh-pop-text")).not.toHaveText(
+      await expect(shownPop.locator(".bh-pop-text")).not.toHaveText(
         "遠い星の海で、言葉のない相手に出会う。",
       );
       await expect(

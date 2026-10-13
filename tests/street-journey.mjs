@@ -71,6 +71,67 @@ async function expectBook(page, title) {
   ).toBeVisible();
 }
 
+// The POP the pager is on. Its neighbours lie beside it on the track, hidden
+// from screen readers, so a check about the POP shown reads this page only.
+const CURRENT_POP = ".bh-pop-page.is-current";
+
+/** Draws a finger most of a page across the POP: -1 to the next, 1 back. */
+async function swipePop(page, pop, direction, held) {
+  const track = pop.locator(".bh-pop-track");
+  const width = await track.evaluate((element) => element.clientWidth);
+  await fingerDrag(page, track, direction * width * 0.7, 0, held);
+}
+
+/** The page the pager is on is the one the track rests on. */
+async function expectPopInView(pop) {
+  await expect
+    .poll(() =>
+      pop.evaluate((card) => {
+        const track = card.querySelector(".bh-pop-track");
+        const page = track.querySelector(".bh-pop-page.is-current");
+        return Math.abs(
+          page.getBoundingClientRect().left -
+            track.getBoundingClientRect().left,
+        );
+      }),
+    )
+    .toBeLessThan(2);
+}
+
+// A finger drawn through the DevTools protocol: the browser scrolls what is
+// under it as it would for a real touch. `held` runs before the finger lifts.
+async function fingerDrag(page, locator, dx, dy, held) {
+  await locator.scrollIntoViewIfNeeded();
+  const box = await locator.boundingBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  const steps = 12;
+  const at = (step) => [
+    { x: x + (dx * step) / steps, y: y + (dy * step) / steps, id: 1 },
+  ];
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: at(0),
+    });
+    for (let step = 1; step <= steps; step++) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: at(step),
+      });
+      await page.waitForTimeout(16);
+    }
+    await held?.();
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+  } finally {
+    await cdp.detach();
+  }
+}
+
 // Synthetic touch checks exercise intent detection; real-device gesture arbitration
 // remains a separate manual check and is not claimed by this browser suite.
 async function touchGesture(page, dx, dy, selector = ".bh-content") {
@@ -200,9 +261,9 @@ try {
       await expect(dialog).toContainText(
         "翻訳で読む、理解の届かなさ。異なる世界に触れる入口として。",
       );
-      await expect(dialog.locator(".bh-pop-text")).not.toContainText(
-        "自分の記憶に出会ってしまう",
-      );
+      await expect(
+        dialog.locator(`${CURRENT_POP} .bh-pop-text`),
+      ).not.toContainText("自分の記憶に出会ってしまう");
       await page.keyboard.press("Escape");
     },
   );
@@ -215,7 +276,8 @@ try {
         .click();
       const dialog = page.locator(".bh-dialog");
       const pop = dialog.locator(".owner-pop");
-      const firstPop = await pop.locator(".bh-pop-text").innerText();
+      const shown = pop.locator(`${CURRENT_POP} .bh-pop-text`);
+      const firstPop = await shown.innerText();
       const firstReaction = await pop
         .getByRole("button", { name: "いいね", exact: true })
         .getAttribute("aria-pressed");
@@ -229,8 +291,27 @@ try {
         "/profiles/r-nagi/",
       );
 
+      // Only the POP on show is read out; turning to another tells it.
+      await expect(pop.locator(".bh-pop-page")).toHaveCount(4);
+      await expect(
+        pop.locator('.bh-pop-page:not([aria-hidden="true"])'),
+      ).toHaveCount(1);
+      await expect(pop.locator(CURRENT_POP)).not.toHaveAttribute("aria-hidden");
+      await expectPopInView(pop);
+
       await pop.getByRole("button", { name: "次のPOP" }).click();
-      await expect(pop.locator(".bh-pop-text")).not.toHaveText(firstPop);
+      await expect(shown).not.toHaveText(firstPop);
+      await expectPopInView(pop);
+      await expect(
+        pop.locator('.bh-pop-page:not([aria-hidden="true"])'),
+      ).toHaveCount(1);
+      await expect(pop.locator(".bh-pop-pager .bh-sr-only")).toHaveAttribute(
+        "aria-live",
+        "polite",
+      );
+      await expect(pop.locator(".bh-pop-pager .bh-sr-only")).toHaveText(
+        await shown.innerText(),
+      );
       await expect(pop.locator(".bh-shop-link")).not.toHaveText("軌道書房");
       await expect(pop.locator(".bh-shop-link")).toHaveText("雨と翻訳");
       await expect(pop.locator(".bh-shop-link")).toHaveAttribute(
@@ -255,7 +336,8 @@ try {
         before === "true" ? "false" : "true",
       );
       await pop.getByRole("button", { name: "前のPOP" }).click();
-      await expect(pop.locator(".bh-pop-text")).toHaveText(firstPop);
+      await expect(shown).toHaveText(firstPop);
+      await expectPopInView(pop);
       await expect(pop.locator(".bh-shop-link")).toHaveText("軌道書房");
       await expect(reaction).toHaveAttribute("aria-pressed", firstReaction);
       await pop.getByRole("button", { name: "次のPOP" }).click();
@@ -285,6 +367,7 @@ try {
       }
       await expect(pop.locator(".bh-pop-page-count")).toHaveText("4 / 4");
       await expect(pop.getByRole("button", { name: "次のPOP" })).toBeDisabled();
+      await expectPopInView(pop);
       await page.reload();
       await shelf
         .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
@@ -295,6 +378,35 @@ try {
         "aria-pressed",
         before === "true" ? "false" : "true",
       );
+      await page.keyboard.press("Escape");
+    },
+  );
+  await check(
+    "POP buttons glide to the next POP, and jump there under reduced motion",
+    async () => {
+      await shop(page, "軌道書房")
+        .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
+        .click();
+      const pop = page.locator(".bh-dialog .owner-pop");
+      // Where the track is, in pages, just as the button is pressed.
+      const pressed = (name) =>
+        pop.evaluate((card, label) => {
+          const track = card.querySelector(".bh-pop-track");
+          card.querySelector(`[aria-label="${label}"]`).click();
+          return track.scrollLeft / track.clientWidth;
+        }, name);
+      try {
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        expect(await pressed("次のPOP")).toBeCloseTo(1, 2);
+        await expect(pop.locator(".bh-pop-page-count")).toHaveText("2 / 4");
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        expect(await pressed("前のPOP")).toBeCloseTo(1, 2);
+        await expectPopInView(pop);
+        await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 4");
+        await expect(pop.locator(".bh-shop-link")).toHaveText("軌道書房");
+      } finally {
+        await page.emulateMedia({ reducedMotion: null });
+      }
       await page.keyboard.press("Escape");
     },
   );
@@ -310,6 +422,7 @@ try {
         await expectBook(page, "ソラリス");
         await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 4");
         await expect(pop.locator(".bh-shop-link")).toHaveText("軌道書房");
+        await expectPopInView(pop);
       };
       await pop.getByRole("button", { name: "次のPOP" }).click();
       await dialog.getByRole("button", { name: "次の本", exact: true }).click();
@@ -781,7 +894,7 @@ try {
       await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 5");
       for (let n = 0; n < 4; n++)
         await pop.getByRole("button", { name: "次のPOP" }).click();
-      await expect(pop.locator(".bh-pop-text")).toHaveText(
+      await expect(pop.locator(`${CURRENT_POP} .bh-pop-text`)).toHaveText(
         "公開QAのソラリスPOP",
       );
       await expect(pop.locator(".bh-owner-link")).toHaveAttribute(
@@ -950,32 +1063,116 @@ try {
         await expectBook(phone, "ソラリス");
         await expect(pop.locator(".bh-pop-page-count")).toHaveText("2 / 4");
         await expect(pop.locator(".bh-shop-link")).toHaveText("雨と翻訳");
-        await touchGesture(phone, -110, 0, ".bh-pop-message");
-        await expectBook(phone, "ソラリス");
-        await expect(pop.locator(".bh-pop-page-count")).toHaveText("3 / 4");
-        await expect(pop.locator(".bh-shop-link")).toHaveText("問いの余白");
-        await touchGesture(phone, 110, 0, ".bh-pop-message");
-        await expect(pop.locator(".bh-pop-page-count")).toHaveText("2 / 4");
-        await touchGesture(phone, -8, -110, ".bh-pop-message");
-        await expect(pop.locator(".bh-pop-page-count")).toHaveText("2 / 4");
-        await touchGesture(
-          phone,
-          -110,
-          0,
-          ".bh-pop-reactions button:first-child",
-        );
-        await expect(pop.locator(".bh-pop-page-count")).toHaveText("2 / 4");
-        await expectBook(phone, "ソラリス");
+        await expectPopInView(pop);
         await noOverflow(phone, `${width}px POP pager`);
         await pop.screenshot({
           path: path.join(output, `pop-pager-${width}.png`),
           animations: "disabled",
         });
+        // Outside the POP, a swipe still turns to the next book, and the
+        // book comes back on its own first POP.
         await touchGesture(phone, -110, 0);
         await expectBook(phone, "闇の左手");
         await touchGesture(phone, 110, 0);
         await expectBook(phone, "ソラリス");
         await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 4");
+        await expectPopInView(pop);
+        await phone.keyboard.press("Escape");
+      },
+    );
+    await check(
+      `${width}px a finger on the POP moves it and settles on the next, never the book`,
+      async () => {
+        await shop(phone, "軌道書房")
+          .getByRole("button", {
+            name: "ソラリス · 面陳 · POPあり",
+            exact: true,
+          })
+          .tap();
+        const pop = phone.locator(".owner-pop");
+        const track = pop.locator(".bh-pop-track");
+        const count = pop.locator(".bh-pop-page-count");
+        const shopLink = pop.locator(".bh-shop-link");
+        await restingBox(track);
+        const page = await track.evaluate((element) => element.clientWidth);
+        // The POP moves under the finger; what it names waits until it rests.
+        await swipePop(phone, pop, -1, async () => {
+          await expect
+            .poll(() => track.evaluate((element) => element.scrollLeft))
+            .toBeGreaterThan(page * 0.4);
+          // Longer than a scroll is given to come to rest.
+          await phone.waitForTimeout(400);
+          expect(
+            await track.evaluate((element) => element.scrollLeft),
+          ).toBeLessThan(page * 0.95);
+          await expect(count).toHaveText("1 / 4");
+          await expect(shopLink).toHaveText("軌道書房");
+        });
+        await expect(count).toHaveText("2 / 4");
+        await expect(shopLink).toHaveText("雨と翻訳");
+        await expect(pop.locator(".bh-owner-link")).toHaveAttribute(
+          "href",
+          "/profiles/r-sumire/",
+        );
+        await expectPopInView(pop);
+        await expectBook(phone, "ソラリス");
+        await swipePop(phone, pop, -1);
+        await expect(count).toHaveText("3 / 4");
+        await expect(shopLink).toHaveText("問いの余白");
+        await expectPopInView(pop);
+        await swipePop(phone, pop, 1);
+        await expect(count).toHaveText("2 / 4");
+        await expectPopInView(pop);
+        // The reaction goes to the POP the track rests on.
+        const like = pop.getByRole("button", { name: "いいね", exact: true });
+        const liked = await like.getAttribute("aria-pressed");
+        await like.tap();
+        await expect(like).toHaveAttribute(
+          "aria-pressed",
+          liked === "true" ? "false" : "true",
+        );
+        await like.tap();
+        await expect(like).toHaveAttribute("aria-pressed", liked);
+        // At either end the POP stays, and the book does not turn.
+        await pop.getByRole("button", { name: "前のPOP" }).tap();
+        await expect(count).toHaveText("1 / 4");
+        await swipePop(phone, pop, 1);
+        await expect(count).toHaveText("1 / 4");
+        await expectPopInView(pop);
+        await expectBook(phone, "ソラリス");
+        for (const shown of ["2 / 4", "3 / 4", "4 / 4"]) {
+          await pop.getByRole("button", { name: "次のPOP" }).tap();
+          await expect(count).toHaveText(shown);
+        }
+        await swipePop(phone, pop, -1);
+        await expect(count).toHaveText("4 / 4");
+        await expectPopInView(pop);
+        await expectBook(phone, "ソラリス");
+        // Across the reactions nothing turns.
+        await fingerDrag(
+          phone,
+          pop.locator(".bh-pop-reactions button").first(),
+          -page * 0.7,
+          0,
+        );
+        await expect(count).toHaveText("4 / 4");
+        await expect(like).toHaveAttribute("aria-pressed", liked);
+        await expectBook(phone, "ソラリス");
+        // Drawn upward from the POP, the finger scrolls the book's page.
+        const content = phone.locator(".bh-dialog .bh-content");
+        const top = await content.evaluate((element) => element.scrollTop);
+        const left = await track.evaluate((element) => element.scrollLeft);
+        await fingerDrag(phone, track, -6, -160);
+        await expect
+          .poll(() => content.evaluate((element) => element.scrollTop))
+          .toBeGreaterThan(top + 60);
+        expect(
+          Math.abs(
+            (await track.evaluate((element) => element.scrollLeft)) - left,
+          ),
+        ).toBeLessThanOrEqual(1);
+        await expect(count).toHaveText("4 / 4");
+        await expectBook(phone, "ソラリス");
         await phone.keyboard.press("Escape");
       },
     );
@@ -1026,7 +1223,7 @@ try {
             exact: true,
           })
           .tap();
-        await touchGesture(phone, -110, 0, ".bh-pop-message");
+        await swipePop(phone, phone.locator(".bh-dialog .owner-pop"), -1);
         await expectBook(phone, "ソラリス");
         await expect(phone.locator(".bh-pop-page-count")).toHaveText("2 / 4");
         await expect(phone).toHaveURL(/shops\/shop-orbit\/$/);

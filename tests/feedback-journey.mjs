@@ -220,9 +220,9 @@ try {
         await expectTitle("ソラリス");
         await expect(page).toHaveURL(beforeURL);
         await expect(dialog()).toHaveCount(1);
-        await expect(dialog().locator(".bh-pop-text")).toContainText(
-          "翻訳で読む、理解の届かなさ",
-        );
+        await expect(
+          dialog().locator(".bh-pop-page.is-current .bh-pop-text"),
+        ).toContainText("翻訳で読む、理解の届かなさ");
         await expect(reaction("いいね")).toHaveAttribute(
           "aria-pressed",
           "false",

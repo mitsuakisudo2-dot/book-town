@@ -141,12 +141,12 @@
   font-size: 13px;
 }
 .bh-pop.owner-pop {
+  --bh-pop-pad: 25px;
   position: relative;
-  padding: 22px 25px 18px;
+  padding: 22px var(--bh-pop-pad) 18px;
   border: 1px solid #e2dbc8;
   background: #f5f0df;
   box-shadow: 1px 3px 0 #e5e0d14f;
-  touch-action: pan-y;
 }
 .bh-pop::before {
   content: "";
@@ -195,8 +195,27 @@
 .bh-pop-pager .bh-pop-empty {
   margin: 0;
 }
-.bh-pop-message {
+/* One POP per page, across the whole card: the browser scrolls the track
+   under the finger and snaps it to a page. */
+.bh-pop-track {
+  display: flex;
+  margin-inline: calc(var(--bh-pop-pad) * -1);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  outline: none;
+}
+.bh-pop-track::-webkit-scrollbar {
+  display: none;
+}
+.bh-pop-page {
+  flex: 0 0 100%;
   min-width: 0;
+  padding-inline: var(--bh-pop-pad);
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 .bh-pop-page-button {
   position: absolute;
@@ -456,11 +475,12 @@
     font-size: 10px;
   }
   .bh-pop.owner-pop {
-    padding: 18px 18px 14px;
+    --bh-pop-pad: 18px;
+    padding-block: 18px 14px;
   }
   .bh-pop.owner-pop.has-pages {
+    --bh-pop-pad: 24px;
     margin-inline: 4px;
-    padding-inline: 24px;
   }
   .bh-pop .bh-pop-text {
     font-size: 17px;
@@ -492,11 +512,11 @@
     font-size: 19px;
   }
   .bh-pop.owner-pop {
-    padding-inline: 14px;
+    --bh-pop-pad: 14px;
   }
   .bh-pop.owner-pop.has-pages {
+    --bh-pop-pad: 22px;
     margin-inline: 9px;
-    padding-inline: 22px;
   }
   .bh-pop .bh-pop-text {
     font-size: 16px;
