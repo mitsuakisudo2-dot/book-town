@@ -289,8 +289,11 @@ async function main() {
         town.posts.find((entry) => entry.id === postId)?.authorId,
         aki.id,
       );
+      // The 見本 readers read alongside; only real readers are counted here.
       assert.deepEqual(
-        town.readingNow.map((entry) => entry.readerId),
+        town.readingNow
+          .map((entry) => entry.readerId)
+          .filter((id) => isDatabaseId(id)),
         [aki.id],
       );
       // Aki's lists are hers alone.
@@ -357,7 +360,12 @@ async function main() {
       const again = (await townOf(aki)).getSnapshot();
       assert.notEqual(again.readingSessions[0].endedAt, null);
       assert.deepEqual(again.finishedBooks, [bookId]);
-      assert.deepEqual((await townOf(ben)).getSnapshot().readingNow, []);
+      assert.deepEqual(
+        (await townOf(ben))
+          .getSnapshot()
+          .readingNow.filter((entry) => isDatabaseId(entry.readerId)),
+        [],
+      );
     },
   );
 
