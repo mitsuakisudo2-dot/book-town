@@ -12,10 +12,9 @@ const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../work/booktown/poster-qa",
 );
 await mkdir(output, { recursive: true });
+// Uses Playwright's own Chromium unless BOOK_TOWN_CHROME names another browser.
 const browser = await chromium.launch({
-  executablePath:
-    process.env.BOOK_TOWN_CHROME ??
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  executablePath: process.env.BOOK_TOWN_CHROME || undefined,
   headless: true,
 });
 const errors = [];

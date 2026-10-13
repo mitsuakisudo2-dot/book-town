@@ -56,6 +56,70 @@ jobs:
         env:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/login-qa
 
+  # The demo build in a real browser, as a reader without an account uses it.
+  # No Supabase settings, so the town lives in the browser's storage. One
+  # build and one server for every journey.
+  demo-journeys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - name: Serve the built site
+        id: serve
+        run: python3 -m http.server 5173 --bind 127.0.0.1 --directory out &
+      # Each journey runs even after an earlier one failed, so one run shows
+      # every screen that broke.
+      - run: pnpm test:walk
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/walk
+      - run: pnpm test:customization
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/customization
+      - run: pnpm test:app
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/app
+      - run: pnpm test:browser
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/browser
+      - run: pnpm test:street
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/street
+      - run: pnpm test:social
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/social
+      - run: pnpm test:feedback
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/feedback
+      - run: pnpm test:poster-journey
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/poster
+      # Screenshots of the demo town only; nothing secret is in them.
+      - name: Keep the screenshots of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-journeys-qa
+          path: ${{ runner.temp }}/qa
+          retention-days: 7
+
   # Signs in and saves a town against a real local Supabase: auth, the code
   # email, the REST API and row level security, with the migrations and
   # supabase/config.toml applied.
