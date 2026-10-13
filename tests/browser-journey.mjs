@@ -408,6 +408,10 @@ try {
       await again.getByRole("button", { name: "完了", exact: true }).click();
       await expect(again).not.toBeVisible();
       const reopened = await openEditor();
+      // A visit counts only what it did itself.
+      await expect(
+        reopened.locator(".editor-picker-footer [role=status]"),
+      ).toHaveText("押すたびに、並べる・外すを切り替えられます");
       await reopened
         .locator(".editor-book-choice")
         .filter({ hasText: "外しました・押すと戻す" })
@@ -582,6 +586,93 @@ try {
         "まだ内緒の二冊",
       );
       expect(await kept("book-town-shelf-name-drafts-v1")).toBeNull();
+    },
+  );
+  await check(
+    "A shelf removed takes its kept work along; a new one in its place starts clean",
+    async () => {
+      const kept = () =>
+        page.evaluate(() =>
+          localStorage.getItem("book-town-shelf-name-drafts-v1"),
+        );
+      await go(page, "/my-shop/");
+      const panels = page.locator(".editor-shelf-panel");
+      const count = await panels.count();
+      const addShelf = async (name) => {
+        await page
+          .getByRole("button", { name: "本棚を追加", exact: true })
+          .click();
+        await page
+          .getByRole("dialog")
+          .getByRole("textbox", { name: "本棚の名前", exact: true })
+          .fill(name);
+        await page
+          .getByRole("button", { name: "この名前で本棚をつくる", exact: true })
+          .click();
+        await expect(panels).toHaveCount(count + 1);
+        return (await stored(page)).ownShop.shelves.at(-1).id;
+      };
+      const goneId = await addShelf("消える棚");
+      // A name half written for it, kept in this browser.
+      const shopId = (await stored(page)).ownShop.id;
+      await page.evaluate(
+        (key) =>
+          localStorage.setItem(
+            "book-town-shelf-name-drafts-v1",
+            JSON.stringify({
+              version: 1,
+              drafts: { [key]: { name: "消えた棚の書きかけ" } },
+            }),
+          ),
+        `demo/${shopId}/${goneId}`,
+      );
+      await page.reload();
+      const gone = panels.nth(count);
+      const goneName = gone.getByRole("textbox", {
+        name: "本棚の名前",
+        exact: true,
+      });
+      await expect(goneName).toHaveValue("消えた棚の書きかけ");
+      await expect(gone.getByText("書きかけを続けています")).toBeVisible();
+      // A book placed and taken off is offered back in the picker.
+      const title = await addFirstBook(page, gone);
+      await gone.locator(".shelf-book-button").first().click();
+      await gone.getByRole("button", { name: "この本を棚から外す" }).click();
+      await gone
+        .getByRole("button", { name: "本棚を編集", exact: true })
+        .click();
+      const picker = page.getByRole("dialog", { name: "本棚を編集" });
+      await expect(
+        picker.locator(".editor-book-choice").filter({ hasText: title }),
+      ).toContainText("外しました・押すと戻す");
+      await picker.getByRole("button", { name: "完了", exact: true }).click();
+      await expect(picker).not.toBeVisible();
+      // Removed, its book and its name go with it.
+      await gone.getByRole("button", { name: "「消える棚」を削除" }).click();
+      await expect(panels).toHaveCount(count);
+      expect(await kept()).toBeNull();
+      // A new shelf is given the same id, and nothing of the old one.
+      expect(await addShelf("新しい棚")).toBe(goneId);
+      const fresh = panels.nth(count);
+      const freshName = fresh.getByRole("textbox", {
+        name: "本棚の名前",
+        exact: true,
+      });
+      await expect(freshName).toHaveValue("新しい棚");
+      await expect(fresh.locator(".kept-note")).toHaveCount(0);
+      await fresh
+        .getByRole("button", { name: "本棚を編集", exact: true })
+        .click();
+      await expect(picker.getByText("外しました・押すと戻す")).toHaveCount(0);
+      await expect(
+        picker.locator(".editor-picker-footer [role=status]"),
+      ).toHaveText("押すたびに、並べる・外すを切り替えられます");
+      await picker.getByRole("button", { name: "完了", exact: true }).click();
+      await page.reload();
+      await expect(freshName).toHaveValue("新しい棚");
+      await expect(fresh.locator(".kept-note")).toHaveCount(0);
+      await fresh.getByRole("button", { name: "「新しい棚」を削除" }).click();
+      await expect(panels).toHaveCount(count);
     },
   );
   await check(

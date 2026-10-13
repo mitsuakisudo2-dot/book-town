@@ -37,12 +37,15 @@ import { KeptNote, OpenShop, ThemePicker } from "./OpenShop";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { useAccountState } from "../lib/account-session";
 import { useKeptDraft } from "../lib/kept-draft";
+import { openShopDraftStore } from "../lib/open-shop-draft";
 import {
+  overSaved,
   sameSign,
   shelfNameDraftStore,
   shopSignDraftStore,
   signLosesWords,
   townTook,
+  useKeptUntilSaved,
   workOwner,
   type ShopSign,
 } from "../lib/shop-draft";
@@ -62,6 +65,13 @@ type TakenOffShelves = Record<string, Record<string, TakenOff>>;
 const SAVE_REFUSED =
   "うまく保存できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。";
 
+const shopSign = (shop: Shop): ShopSign => ({
+  name: shop.name,
+  description: shop.description,
+  tagline: ownTagline(shop),
+  theme: shop.theme,
+});
+
 function ShopSettings({
   shop,
   owner,
@@ -71,18 +81,12 @@ function ShopSettings({
   ShopEditorProps,
   "actions" | "notify"
 >) {
-  const kept = useKeptDraft(
-    shopSignDraftStore,
-    owner ? owner + "/" + shop.id : null,
-  );
-  const saved: ShopSign = {
-    name: shop.name,
-    description: shop.description,
-    tagline: ownTagline(shop),
-    theme: shop.theme,
-  };
-  // What is written and not saved yet; once it matches the shop, nothing.
-  const work = kept.draft && !sameSign(kept.draft, saved) ? kept.draft : null;
+  const signKey = owner ? owner + "/" + shop.id : null;
+  const kept = useKeptDraft(shopSignDraftStore, signKey);
+  const saved = shopSign(shop);
+  // What is written and not saved yet, over the sign as it is now; once it
+  // matches the shop, nothing.
+  const work = overSaved(kept.draft, saved);
   const { name, description, tagline, theme } = work ?? saved;
   // Whether the page opened on words kept from before, decided once the
   // browser's storage is read.
@@ -91,6 +95,13 @@ function ShopSettings({
   const [refused, setRefused] = useState(false);
   const settings = useRef<HTMLDetailsElement>(null);
   const nameField = useRef<HTMLInputElement>(null);
+  const saving = useKeptUntilSaved(() => {
+    // Turned away by the account after all: the words come back, open.
+    setResumed(true);
+    setRefused(true);
+    if (settings.current) settings.current.open = true;
+    notify(SAVE_REFUSED);
+  });
   // The walk's "write your words" card opens these settings at the field.
   useEffect(() => {
     if (location.hash !== "#shop-words" || !settings.current) return;
@@ -105,14 +116,15 @@ function ShopSettings({
     if (resumed && settings.current) settings.current.open = true;
   }, [resumed]);
   // Saved since (here or on another device), they are let go.
-  const signSaved = Boolean(kept.draft && sameSign(kept.draft, saved));
+  const signSaved = Boolean(kept.draft && !work);
   useEffect(() => {
-    if (signSaved && owner) shopSignDraftStore.clear(owner + "/" + shop.id);
-  }, [signSaved, owner, shop.id]);
+    if (signSaved && saving.settled && signKey)
+      shopSignDraftStore.clear(signKey);
+  }, [signSaved, saving.settled, signKey]);
   function change(patch: Partial<ShopSign>) {
     setRefused(false);
     const next = { ...(work ?? saved), ...patch };
-    kept.set(sameSign(next, saved) ? null : next);
+    kept.set(sameSign(next, saved) ? null : { work: next, base: saved });
   }
   return (
     <details className="editor-settings" id="shop-words" ref={settings}>
@@ -137,8 +149,15 @@ function ShopSettings({
           );
           // Turned away, the words stay here and in the browser.
           if (!took) return setRefused(true);
-          kept.clear();
+          // Kept until the account has them too, as the town now holds them.
+          const now = getTownSnapshot().ownShop;
+          if (now && signKey)
+            saving.hold("sign", shopSignDraftStore, signKey, {
+              work: shopSign(now),
+              base: saved,
+            });
           setResumed(false);
+          setRefused(false);
           notify("書店の看板と紹介を変更しました。");
         }}
       >
@@ -244,9 +263,11 @@ function AddBookPicker({
     limit: books.length,
   });
   const [display, setDisplay] = useState<ShelfItem["display"]>("spine");
-  // What this visit changed, for the running tally at the bottom.
+  // What this visit changed, for the running tally at the bottom. Books
+  // taken off before it are only offered back (removedHere), not counted.
   const [addedHere, setAddedHere] = useState<string[]>([]);
-  const removedCount = Object.keys(removedHere).filter(
+  const [removedNow, setRemovedNow] = useState<string[]>([]);
+  const removedCount = removedNow.filter(
     (bookId) => !shelf.items.some((item) => item.bookId === bookId),
   ).length;
   const remaining = shelf.capacity - shelfUsed(shelf);
@@ -266,9 +287,13 @@ function AddBookPicker({
       actions.removeShelfBook(shelf.id, placed.id);
       setAddedHere(addedHere.filter((id) => id !== book.id));
       notify(`「${book.title}」を棚から外しました。`);
-    } else if (placed) takeOff(placed, book.title);
-    else if (taken) putBack(book.id, book.title);
-    else if (actions.addShelfBook(shelf.id, book.id, display)) {
+    } else if (placed) {
+      takeOff(placed, book.title);
+      setRemovedNow([...removedNow.filter((id) => id !== book.id), book.id]);
+    } else if (taken) {
+      if (putBack(book.id, book.title))
+        setRemovedNow(removedNow.filter((id) => id !== book.id));
+    } else if (actions.addShelfBook(shelf.id, book.id, display)) {
       // The editor stays open so several books can be placed in a row.
       setAddedHere([...addedHere, book.id]);
       notify(`「${book.title}」を本棚に並べました。`);
@@ -475,17 +500,36 @@ function ShelfEditingPanel({
   const [resumed, setResumed] = useState<boolean | null>(null);
   if (resumed === null && keptName.loaded) setResumed(typed !== null);
   const nameField = useRef<HTMLInputElement>(null);
+  const saving = useKeptUntilSaved(() => {
+    // Turned away by the account after all: the name waits to be set again.
+    setResumed(true);
+    notify(SAVE_REFUSED);
+  });
+  // A name kept that the shelf has now (set here or elsewhere) is let go.
+  const nameSaved = Boolean(keptName.draft && typed === null);
+  useEffect(() => {
+    if (nameSaved && saving.settled && nameKey)
+      shelfNameDraftStore.clear(nameKey);
+  }, [nameSaved, saving.settled, nameKey]);
   /** Sets the name written; an emptied field goes back to the name it had. */
   function setName() {
     const next = shelfName.trim();
-    if (
-      !next ||
-      next === shelf.name ||
-      townTook(() => actions.updateShelf(shelf.id, { name: next }))
-    ) {
-      keptName.clear();
+    if (!next || next === shelf.name) {
+      if (typed !== null) keptName.clear();
       setResumed(false);
-    } else notify(SAVE_REFUSED);
+      return;
+    }
+    if (!townTook(() => actions.updateShelf(shelf.id, { name: next })))
+      return notify(SAVE_REFUSED);
+    // Kept until the account has it too, as the shelf is now called.
+    const now = getTownSnapshot().ownShop?.shelves.find(
+      (entry) => entry.id === shelf.id,
+    );
+    if (now && nameKey)
+      saving.hold("shelf-name", shelfNameDraftStore, nameKey, {
+        name: now.name,
+      });
+    setResumed(false);
   }
   const setNameRef = useRef(setName);
   useEffect(() => {
@@ -837,6 +881,44 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     (shelf) => shelf.id === addBookShelfId,
   );
   const removeShelf = shop?.shelves.find((shelf) => shelf.id === removeShelfId);
+  // Once all the town holds is saved: the opening that led to the shop is
+  // done, and names kept for shelves no longer here (removed elsewhere) go,
+  // so a new shelf given the same id starts clean.
+  const settled = persistenceStatus === "saved";
+  useEffect(() => {
+    if (!shop || !owner || !settled) return;
+    openShopDraftStore.clear(owner);
+    shelfNameDraftStore.initialize();
+    const prefix = `${owner}/${shop.id}/`;
+    for (const key of Object.keys(shelfNameDraftStore.getSnapshot().drafts))
+      if (
+        key.startsWith(prefix) &&
+        !shop.shelves.some((shelf) => key === prefix + shelf.id)
+      )
+        shelfNameDraftStore.clear(key);
+  }, [shop, owner, settled]);
+  // Shelves removed here, counted by id: a new shelf can be given the id of
+  // one removed, and must not get its books from an old 元に戻す.
+  const removedShelves = useRef<Record<string, number>>({});
+  /** Removes a shelf, and the work kept for it here: its books and name. */
+  function removeShelfAndWork(shelfId: string) {
+    if (!townTook(() => actions.removeShelf(shelfId))) {
+      notify(
+        "本棚を削除できませんでした。少しおいて、もう一度お試しください。",
+      );
+      return false;
+    }
+    removedShelves.current[shelfId] =
+      (removedShelves.current[shelfId] ?? 0) + 1;
+    setTakenOff((all) => {
+      const rest = { ...all };
+      delete rest[shelfId];
+      return rest;
+    });
+    if (owner && shop)
+      shelfNameDraftStore.clear(`${owner}/${shop.id}/${shelfId}`);
+    return true;
+  }
   function forget(shelfId: string, bookId: string) {
     setTakenOff((all) => {
       const rest = { ...all[shelfId] };
@@ -850,14 +932,19 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     bookId: string,
     title: string,
     taken = takenOff[shelfId]?.[bookId],
+    removals = removedShelves.current[shelfId] ?? 0,
   ) {
     if (!taken) return false;
+    const now = getTownSnapshot().ownShop?.shelves.find(
+      (shelf) => shelf.id === shelfId,
+    );
+    // The shelf it came off is gone, even if a new one has its id.
+    if (!now || (removedShelves.current[shelfId] ?? 0) !== removals) {
+      notify("棚がなくなったため、戻せませんでした。");
+      return false;
+    }
     // Already back on the shelf (by the picker, or a second tap).
-    if (
-      getTownSnapshot()
-        .ownShop?.shelves.find((shelf) => shelf.id === shelfId)
-        ?.items.some((item) => item.bookId === bookId)
-    ) {
+    if (now.items.some((item) => item.bookId === bookId)) {
       forget(shelfId, bookId);
       return true;
     }
@@ -884,6 +971,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       pop: item.pop,
       index: shelf.items.findIndex((entry) => entry.id === item.id),
     };
+    const removals = removedShelves.current[shelf.id] ?? 0;
     actions.removeShelfBook(shelf.id, item.id);
     setTakenOff((all) => ({
       ...all,
@@ -895,7 +983,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         : `「${title}」を棚から外しました。`,
       {
         label: "元に戻す",
-        run: () => putBack(shelf.id, item.bookId, title, taken),
+        run: () => putBack(shelf.id, item.bookId, title, taken, removals),
       },
     );
   }
@@ -996,10 +1084,8 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             onAdd={() => setAddBookShelfId(shelf.id)}
             onRemove={() => {
               if (shelf.items.length > 0) setRemoveShelfId(shelf.id);
-              else {
-                actions.removeShelf(shelf.id);
+              else if (removeShelfAndWork(shelf.id))
                 notify("空の本棚を削除しました。");
-              }
             }}
           />
         ))}
@@ -1116,7 +1202,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
                 type="button"
                 className="editor-button danger"
                 onClick={() => {
-                  actions.removeShelf(removeShelf.id);
+                  if (!removeShelfAndWork(removeShelf.id)) return;
                   setRemoveShelfId(null);
                   notify("本棚を削除しました。");
                 }}

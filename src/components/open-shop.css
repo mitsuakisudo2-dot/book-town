@@ -150,6 +150,11 @@
   line-height: 1.8;
   color: #5f6f55;
 }
+/* A long unbroken name wraps inside the line, never past the page. */
+.kept-note > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .kept-note button {
   min-height: 32px;
   padding: 4px 0;

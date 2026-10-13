@@ -7,7 +7,12 @@ import {
   type KeptDraftOptions,
 } from "./kept-draft";
 import { PROFILE_LINK_LIMIT } from "./links";
-import { ownerKeyPattern } from "./shop-draft";
+import {
+  ownerKeyPattern,
+  readOverSaved,
+  unchanged,
+  type OverSaved,
+} from "./shop-draft";
 import {
   BIO_MAX_LENGTH,
   NINE_NOTE_MAX_LENGTH,
@@ -152,11 +157,12 @@ export function readNineWork(value: unknown): NineWork | null {
   return { ids: [...work.ids], notes: Object.fromEntries(notes) };
 }
 
-/** Keyed by owner (workOwner): the reader's own card. */
-export const profileDraftOptions: KeptDraftOptions<ProfileWork> = {
+/** Keyed by owner (workOwner): the reader's own card, over the saved one. */
+export const profileDraftOptions: KeptDraftOptions<OverSaved<ProfileWork>> = {
   storageKey: PROFILE_DRAFT_KEY,
   keyPattern: ownerKeyPattern(),
-  read: readProfileWork,
+  read: (value) => readOverSaved(value, readProfileWork),
+  isEmpty: unchanged,
   limit: 4,
 };
 export const profileDraftStore = createKeptDraftStore(profileDraftOptions);

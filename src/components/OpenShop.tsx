@@ -19,7 +19,11 @@ import {
   type TownActions,
   type TownState,
 } from "../lib/types";
-import { FIRST_SHELF_ID, usePersistenceStatus } from "../lib/store";
+import {
+  FIRST_SHELF_ID,
+  getTownSnapshot,
+  usePersistenceStatus,
+} from "../lib/store";
 import { recentlyFinished } from "../lib/records";
 import { BookPicker } from "./BookPicker";
 import { BookJacket, Icon } from "./ui";
@@ -36,7 +40,7 @@ import {
   type OpenShopKind,
   type OpenShopWork,
 } from "../lib/open-shop-draft";
-import { townTook, workOwner } from "../lib/shop-draft";
+import { townTook, useKeptUntilSaved, workOwner } from "../lib/shop-draft";
 
 type Shared = {
   state: TownState;
@@ -374,6 +378,16 @@ export function OpenShop({
     kept.clear();
     setResumed(false);
   }
+  const saving = useKeptUntilSaved(() => {
+    // Turned away by the account after all: no shop stands, and the sign is
+    // there to open it again, with the work as it was.
+    if (getTownSnapshot().ownShop) return;
+    setResumed(true);
+    setStep("sign");
+    notify(
+      "開店できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。",
+    );
+  });
   // Back or forward to a step of this flow shows that step again, with the
   // work kept for it.
   useLayerReturn((layer) => {
@@ -433,8 +447,9 @@ export function OpenShop({
       ),
     );
     noteShopOpened();
-    // The shop is open: the work that led here is done.
-    kept.clear();
+    // The shop is open: the work that led here is kept only until the
+    // account has the shop too.
+    if (draft && owner) saving.hold("open", openShopDraftStore, owner, draft);
     // The steps that led here come off: 戻る from the open shop leaves it.
     leaveLayers(
       () => {},
@@ -536,17 +551,21 @@ export function OpenShop({
             saved={kept.saved}
             asks={openShopHasWords(draft)}
             onDiscard={discard}
-            lead={`「${draft.name.trim() || kindTitle(draft.kind)}」を開きかけています`}
             action={
-              <button
-                type="button"
-                onClick={() => {
-                  setResumed(true);
-                  choose(draft.kind, draft.step);
-                }}
-              >
-                続きから
-              </button>
+              <>
+                <span className="open-resume-what">
+                  「{draft.name.trim() || kindTitle(draft.kind)}」
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResumed(true);
+                    choose(draft.kind, draft.step);
+                  }}
+                >
+                  続きから
+                </button>
+              </>
             }
           />
         )}

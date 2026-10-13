@@ -23,6 +23,7 @@ import {
   type ProfileWork,
 } from "../src/lib/profile-draft";
 import {
+  overSaved,
   readShelfName,
   readShopSign,
   sameSign,
@@ -173,6 +174,15 @@ check("a profile being changed is kept until it matches the saved one", () => {
   // A field emptied loses no words of the reader's.
   assert.equal(profileLosesWords({ ...saved, bio: "" }, saved), false);
   assert.deepEqual(readProfileWork(work), work);
+  // Kept with the card it was written over; nothing changed, nothing kept.
+  const storage = memory();
+  const store = createKeptDraftStore(profileDraftOptions, () => storage);
+  store.set("demo", { work, base: saved });
+  store.set("reader:a-1", { work: saved, base: saved });
+  const again = createKeptDraftStore(profileDraftOptions, () => storage);
+  again.initialize();
+  assert.deepEqual(again.get("demo"), { work, base: saved });
+  assert.equal(again.get("reader:a-1"), null);
   for (const broken of [
     { ...work, name: "あ".repeat(81) },
     { ...work, handle: "a".repeat(22) },
@@ -243,12 +253,79 @@ check("the shop's sign and a shelf's new name are kept as written", () => {
   assert.equal(readShelfName({ name: "棚".repeat(81) }), null);
   const storage = memory();
   const store = createKeptDraftStore(shopSignDraftOptions, () => storage);
-  store.set("demo/mine", work);
-  store.set("reader:a-1/mine", { ...work, name: "別の書店" });
+  store.set("demo/mine", { work, base: saved });
+  store.set("reader:a-1/mine", {
+    work: { ...work, name: "別の書店" },
+    base: saved,
+  });
   const again = createKeptDraftStore(shopSignDraftOptions, () => storage);
   again.initialize();
-  assert.deepEqual(again.get("demo/mine"), work);
-  assert.equal(again.get("reader:a-1/mine")?.name, "別の書店");
+  assert.deepEqual(again.get("demo/mine"), { work, base: saved });
+  assert.equal(again.get("reader:a-1/mine")?.work.name, "別の書店");
+  // Work that changes nothing from the sign it was written over is not kept,
+  // and a side that no longer fits the form drops the entry.
+  store.set("demo/mine", { work: saved, base: saved });
+  assert.equal(store.get("demo/mine"), null);
+  storage.setItem(
+    "book-town-shop-sign-drafts-v1",
+    JSON.stringify({
+      version: 1,
+      drafts: {
+        "demo/mine": { work, base: { ...saved, theme: "blue" } },
+        "demo/other": work,
+      },
+    }),
+  );
+  const broken = createKeptDraftStore(shopSignDraftOptions, () => storage);
+  broken.initialize();
+  assert.deepEqual(broken.getSnapshot().drafts, {});
+});
+
+check("kept work follows what was saved since, but for its own changes", () => {
+  // Written on the phone over name A; the name was changed to B elsewhere.
+  const base = profileForm(reader);
+  const kept = { work: { ...base, bio: "電車で書いた自己紹介" }, base };
+  const savedNow = { ...base, name: "別の端末で変えた名前" };
+  assert.deepEqual(overSaved(kept, savedNow), {
+    ...savedNow,
+    bio: "電車で書いた自己紹介",
+  });
+  // A link added here stays; links left as they were follow the saved ones.
+  const linked = {
+    work: { ...base, links: ["https://note.com/yoru"] },
+    base,
+  };
+  assert.deepEqual(overSaved(linked, savedNow)?.links, [
+    "https://note.com/yoru",
+  ]);
+  assert.deepEqual(
+    overSaved(kept, { ...savedNow, links: ["https://example.com/"] })?.links,
+    ["https://example.com/"],
+  );
+  // The same change saved elsewhere leaves nothing to keep.
+  assert.equal(overSaved(kept, { ...base, bio: "電車で書いた自己紹介" }), null);
+  assert.equal(overSaved(null, base), null);
+  // The sign: a new description over an older name keeps the newer name.
+  const sign = {
+    name: "夜と寄り道書房",
+    tagline: "一頁ぶん、遠回り。",
+    description: "",
+    theme: "rose" as const,
+  };
+  const keptSign = {
+    work: { ...sign, description: "紹介の書きかけ" },
+    base: sign,
+  };
+  assert.deepEqual(overSaved(keptSign, { ...sign, name: "雨音書店" }), {
+    ...sign,
+    name: "雨音書店",
+    description: "紹介の書きかけ",
+  });
+  // A save the account turned away puts the old sign back; the work held
+  // over it (what was sent, over what was there) shows again.
+  const sent = { ...sign, tagline: "新しいひとこと" };
+  assert.equal(overSaved({ work: sent, base: sign }, sent), null);
+  assert.deepEqual(overSaved({ work: sent, base: sign }, sign), sent);
 });
 
 check("a change the town turns away is told apart from one it took", () => {

@@ -12,7 +12,7 @@ import {
   type TownActions,
   type TownState,
 } from "../lib/types";
-import { useTownBackend } from "../lib/store";
+import { getTownSnapshot, useTownBackend } from "../lib/store";
 import { readerPosts, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
@@ -25,7 +25,12 @@ import { FoldedWords, ProfilePosts } from "./Social";
 import { KeptNote } from "./OpenShop";
 import { useAccountState } from "../lib/account-session";
 import { useKeptDraft } from "../lib/kept-draft";
-import { townTook, workOwner } from "../lib/shop-draft";
+import {
+  overSaved,
+  townTook,
+  useKeptUntilSaved,
+  workOwner,
+} from "../lib/shop-draft";
 import {
   NINE_MAX,
   PROFILE_FIELDS,
@@ -172,30 +177,15 @@ export function ProfileView({
   const keptNine = useKeptDraft(nineDraftStore, owner);
   const savedProfile = reader ? profileForm(reader) : null;
   const savedNine = reader ? nineForm(reader) : null;
-  // Kept work that matches what is saved is nothing to keep.
-  const profileWork =
-    keptProfile.draft &&
-    savedProfile &&
-    !sameProfile(keptProfile.draft, savedProfile)
-      ? keptProfile.draft
-      : null;
+  // Kept work that matches what is saved is nothing to keep. The card's
+  // fields left as they were follow what is saved now.
+  const profileWork = savedProfile
+    ? overSaved(keptProfile.draft, savedProfile)
+    : null;
   const nineWork =
     keptNine.draft && savedNine && !sameNine(keptNine.draft, savedNine)
       ? keptNine.draft
       : null;
-  // Saved since (here or on another device), it is let go.
-  const profileSaved = Boolean(
-    keptProfile.draft &&
-    savedProfile &&
-    sameProfile(keptProfile.draft, savedProfile),
-  );
-  const nineSaved = Boolean(
-    keptNine.draft && savedNine && sameNine(keptNine.draft, savedNine),
-  );
-  useEffect(() => {
-    if (profileSaved) profileDraftStore.clear(owner ?? "");
-    if (nineSaved) nineDraftStore.clear(owner ?? "");
-  }, [profileSaved, nineSaved, owner]);
   const profile = profileWork ?? savedProfile;
   const {
     name: draftName = "",
@@ -213,6 +203,24 @@ export function ProfileView({
   const [resumedNine, setResumedNine] = useState(false);
   const [confirming, setConfirming] = useState<"profile" | "nine" | null>(null);
   const [refused, setRefused] = useState<"profile" | "nine" | null>(null);
+  const saving = useKeptUntilSaved((what) => {
+    // Turned away by the account after all: the work is still kept, and
+    // the editor shows it again, with a word about it, when it is opened.
+    setRefused(what === "nine" ? "nine" : "profile");
+    notify(
+      what === "nine"
+        ? "人生の9冊を保存できませんでした。書きかけは残しています。"
+        : "プロフィールを保存できませんでした。書きかけは残しています。",
+    );
+  });
+  // Saved since (here or on another device), it is let go.
+  const profileSaved = Boolean(keptProfile.draft && !profileWork);
+  const nineSaved = Boolean(keptNine.draft && !nineWork);
+  useEffect(() => {
+    if (!owner || !saving.settled) return;
+    if (profileSaved) profileDraftStore.clear(owner);
+    if (nineSaved) nineDraftStore.clear(owner);
+  }, [profileSaved, nineSaved, owner, saving.settled]);
   const [handleError, setHandleError] = useState("");
   const [linkError, setLinkError] = useState("");
   const [search, setSearch] = useState("");
@@ -264,14 +272,19 @@ export function ProfileView({
     setConfirming(null);
     setRefused(null);
     const next = { ...(profileWork ?? savedProfile), ...patch };
-    keptProfile.set(sameProfile(next, savedProfile) ? null : next);
+    keptProfile.set(
+      sameProfile(next, savedProfile)
+        ? null
+        : { work: next, base: savedProfile },
+    );
   }
-  // The dialog opens on what was kept, or on the saved profile.
+  // The dialog opens on what was kept, or on the saved profile; a save the
+  // account turned away is told again there.
   function beginProfileEdit() {
     if (!reader) return;
     setResumedProfile(profileWork !== null);
     setConfirming(null);
-    setRefused(null);
+    setRefused((was) => (was === "profile" && profileWork ? was : null));
     setHandleError("");
     setLinkError("");
     setEditingProfile(true);
@@ -315,7 +328,12 @@ export function ProfileView({
       )
     )
       return setRefused("profile");
-    keptProfile.clear();
+    // Kept until the account has it too, as the town now holds it.
+    if (owner && savedProfile)
+      saving.hold("profile", profileDraftStore, owner, {
+        work: profileForm(getTownSnapshot().me),
+        base: savedProfile,
+      });
     setEditingProfile(false);
     notify("プロフィールを保存しました");
   }
@@ -360,7 +378,7 @@ export function ProfileView({
     if (!reader) return;
     setResumedNine(nineWork !== null);
     setConfirming(null);
-    setRefused(null);
+    setRefused((was) => (was === "nine" && nineWork ? was : null));
     setSearch("");
     setEditingNine(true);
   }
@@ -396,7 +414,14 @@ export function ProfileView({
     // Turned away, the dialog stays open on the nine chosen, kept.
     if (!townTook(() => actions.updateNine(draftNine, notes)))
       return setRefused("nine");
-    keptNine.clear();
+    // Kept until the account has them too, as the town now holds them.
+    if (owner)
+      saving.hold(
+        "nine",
+        nineDraftStore,
+        owner,
+        nineForm(getTownSnapshot().me),
+      );
     setEditingNine(false);
     notify("人生の9冊を保存しました");
   }

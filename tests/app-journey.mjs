@@ -883,13 +883,22 @@ try {
         page.getByRole("button", { name: "あずき", exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
       // A reload starts at the first step, with a way to go on from there.
+      const resume = page.locator(".open-resume");
+      const goOn = page.getByRole("button", { name: "続きから", exact: true });
       await page.reload();
-      await expect(
-        page.getByText("「夜更けの一冊堂」を開きかけています"),
-      ).toBeVisible();
-      await page.getByRole("button", { name: "続きから", exact: true }).click();
+      await expect(resume).toContainText("書きかけを続けています");
+      await expect(resume).toContainText("「夜更けの一冊堂」");
+      await goOn.click();
       await expect(page.getByLabel("書店の名前")).toHaveValue("夜更けの一冊堂");
       await expect(page.getByText("書きかけを続けています")).toBeVisible();
+      // A long name with no place to break stays inside the phone's width.
+      const long = "TheMidnightLibrary".repeat(5).slice(0, 80);
+      await page.getByLabel("書店の名前").fill(long);
+      await page.reload();
+      await expect(resume).toContainText(long);
+      await noOverflow("a long shop name kept on the first step");
+      await goOn.click();
+      await page.getByLabel("書店の名前").fill("夜更けの一冊堂");
       await page.getByRole("button", { name: "本を選び直す" }).click();
       await expect(page.locator(".open-shelf-book")).toHaveCount(1);
       await expect(page.locator(".open-shelf-book")).toContainText("ソラリス");
