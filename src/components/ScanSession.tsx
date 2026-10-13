@@ -13,6 +13,12 @@ import {
 } from "react";
 import { useAccountState } from "../lib/account-session";
 import { useBackLayer } from "../lib/back-layer";
+import {
+  forgetReader,
+  guideRect,
+  loadDetector,
+  readerKind,
+} from "../lib/barcode-reader";
 import { imeKey } from "../lib/keys";
 import { normalizeIsbn } from "../lib/books";
 import {
@@ -57,26 +63,32 @@ import "./scan.css";
 
 // The continuous scanner (plan 7-1, flow A): the camera stays open and every
 // book read is registered at once, with no question about reading status,
-// shelf or visibility. Two taps in all: open, and ［終わる］. Where the
-// browser cannot read barcodes, or the camera is refused, ISBNs are typed one
-// after another instead. Every read goes into the scan journal first
-// (library-journal.ts), so a book read offline, while the town loads, or
-// just before the tab is closed is registered later.
+// shelf or visibility. Two taps in all: open, and ［終わる］. Barcodes are
+// read by the browser's own reader, or by ZXing in WebAssembly where there is
+// none (Safari on the iPhone; barcode-reader.ts). Where neither can, or the
+// camera is refused, ISBNs are typed one after another instead. Every read
+// goes into the scan journal first (library-journal.ts), so a book read
+// offline, while the town loads, or just before the tab is closed is
+// registered later.
 
-type Detector = {
-  detect(source: CanvasImageSource): Promise<Array<{ rawValue: string }>>;
-};
-type DetectorClass = {
-  new (options: { formats: string[] }): Detector;
-  getSupportedFormats?: () => Promise<string[]>;
-};
-const detectorClass = (): DetectorClass | undefined =>
-  (window as unknown as { BarcodeDetector?: DetectorClass }).BarcodeDetector;
 const canRead = () =>
-  Boolean(detectorClass() && navigator.mediaDevices?.getUserMedia);
+  Boolean(readerKind() && navigator.mediaDevices?.getUserMedia);
+/**
+ * A computer whose browser has no reader of its own (Chrome on Windows and
+ * Linux, Firefox) starts typing: its camera, most often one that cannot
+ * focus near, is asked for only on ［カメラで読む］.
+ */
+const startsTyping = () =>
+  readerKind() === "wasm" && !window.matchMedia?.("(pointer: coarse)").matches;
+/** This many reads failing in a row: the reader is not working. */
+const FAILS_TO_STOP = 5;
 
-/** Why ISBNs are typed: the browser, the camera, or the reader's choice. */
-type TypingWhy = "no-reader" | "denied" | "no-camera" | "busy" | "chosen";
+/**
+ * Why ISBNs are typed: the browser, the reader not loaded this time, the
+ * camera, or the reader's choice.
+ */
+type TypingWhy =
+  "no-reader" | "reader-failed" | "denied" | "no-camera" | "busy" | "chosen";
 type Input =
   | { kind: "camera"; phase: "starting" | "running" | "hidden" | "manual" }
   | { kind: "typing"; why: TypingWhy };
@@ -311,10 +323,15 @@ export function ScanSession({
   const sound = useScanSound();
   const [session] = useState(() => libraryJournal.newSession());
   const [input, setInput] = useState<Input>(() =>
-    canRead()
-      ? { kind: "camera", phase: "starting" }
-      : { kind: "typing", why: "no-reader" },
+    !canRead()
+      ? { kind: "typing", why: "no-reader" }
+      : startsTyping()
+        ? { kind: "typing", why: "chosen" }
+        : { kind: "camera", phase: "starting" },
   );
+  /** ［ライト］: null where the camera has no light; on or off, as set here. */
+  const [torch, setTorch] = useState<boolean | null>(null);
+  const torchTrack = useRef<MediaStreamTrack | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
   const [current, setCurrent] = useState<Current | null>(null);
   const [flash, setFlash] = useState(0);
@@ -330,6 +347,7 @@ export function ScanSession({
   const layer = useRef<HTMLDivElement>(null);
   const sheet = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
+  const guide = useRef<HTMLSpanElement>(null);
   const field = useRef<HTMLInputElement>(null);
   const shelf = useRef<HTMLOListElement>(null);
 
@@ -439,9 +457,11 @@ export function ScanSession({
       (code) => heldItem(libraryJournal, reader, generation, code),
     );
     setHint(null);
+    // Every read shows on the card: on an iPhone there is no vibration, and
+    // in silent mode no sound either.
+    flashCard();
     if (reaction.kind === "same") {
       reads.current = noteRead(reads.current, isbn, at, null);
-      flashCard();
       setCurrent((shownNow) => ({ ...(shownNow ?? {}), say: "same" }));
       return;
     }
@@ -524,7 +544,7 @@ export function ScanSession({
     if (ids.length) send(owner, ids);
   }, [owner, ready, online, send]);
 
-  // The camera, with the reader's own barcode reading, while it is wanted.
+  // The camera, with a barcode reader, while it is wanted.
   const cameraOn =
     input.kind === "camera" &&
     (input.phase === "starting" || input.phase === "running");
@@ -536,64 +556,156 @@ export function ScanSession({
     const typeInstead = (why: TypingWhy) => {
       if (!stopped) setInput({ kind: "typing", why });
     };
-    const Detector = detectorClass();
     const element = video.current;
-    if (!Detector || !element) {
+    if (!element || !canRead()) {
       typeInstead("no-reader");
       return;
     }
-    void (async () => {
+    // ZXing is given a larger picture than the browser's own size, which
+    // can be small (Safari).
+    const larger: MediaTrackConstraints = {
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+    };
+    const wasm = readerKind() === "wasm";
+    const size = wasm ? larger : {};
+    const ask = (video: MediaTrackConstraints) =>
+      navigator.mediaDevices.getUserMedia({ video, audio: false });
+    const why = (error: unknown): TypingWhy | "retry" => {
+      const name = (error as { name?: string } | null)?.name;
+      if (name === "NotAllowedError" || name === "SecurityError")
+        return "denied";
+      if (name === "NotFoundError" || name === "OverconstrainedError")
+        return "retry";
+      return "busy";
+    };
+    /** The camera, or why there is none. */
+    const openCamera = async (): Promise<MediaStream | TypingWhy> => {
       try {
-        const formats = await Detector.getSupportedFormats?.();
-        if (formats && !formats.includes("ean_13"))
-          return typeInstead("no-reader");
-      } catch {
-        // Unknown: try to read all the same.
-      }
-      const ask = (video: MediaTrackConstraints | true) =>
-        navigator.mediaDevices.getUserMedia({ video, audio: false });
-      const why = (error: unknown): TypingWhy | "retry" => {
-        const name = (error as { name?: string } | null)?.name;
-        if (name === "NotAllowedError" || name === "SecurityError")
-          return "denied";
-        if (name === "NotFoundError" || name === "OverconstrainedError")
-          return "retry";
-        return "busy";
-      };
-      let media: MediaStream;
-      try {
-        media = await ask({ facingMode: { ideal: "environment" } });
+        return await ask({ facingMode: { ideal: "environment" }, ...size });
       } catch (error) {
         const first = why(error);
-        if (first !== "retry") return typeInstead(first);
+        if (first !== "retry") return first;
         // The back camera could not be had: any camera, once.
         try {
-          media = await ask(true);
+          return await ask(size);
         } catch (again) {
           const second = why(again);
-          return typeInstead(second === "retry" ? "no-camera" : second);
+          return second === "retry" ? "no-camera" : second;
         }
       }
-      if (stopped) {
-        media.getTracks().forEach((track) => track.stop());
-        return;
+    };
+    // The camera is this effect's the moment it is had, while the reader may
+    // still be loading: closed meanwhile (［終わる］, ［ISBNを打つ］, the page
+    // hidden), it is let go at once, not when the reader comes.
+    const camera = openCamera().then((got) => {
+      if (typeof got === "string") return got;
+      if (stopped) got.getTracks().forEach((track) => track.stop());
+      else {
+        stream = got;
+        // Another app took the camera, or the permission went: type instead.
+        got
+          .getVideoTracks()[0]
+          ?.addEventListener("ended", () => typeInstead("busy"));
       }
-      stream = media;
+      return got;
+    });
+    void (async () => {
+      // Both at once: loading the reader does not hold up the camera's
+      // question.
+      const [reader, got] = await Promise.all([loadDetector(), camera]);
+      if (stopped) return;
+      const media = typeof got === "string" ? null : got;
+      const giveUp = (why: TypingWhy) => {
+        media?.getTracks().forEach((track) => track.stop());
+        typeInstead(why);
+      };
+      // The browser first, then the camera, then this time's network.
+      if (!reader.ok && reader.why === "no-reader") return giveUp("no-reader");
+      if (!media) return typeInstead(got as TypingWhy);
+      if (!reader.ok) return giveUp(reader.why);
       const track = media.getVideoTracks()[0];
-      // Another app took the camera, or the permission went: type instead.
-      track?.addEventListener("ended", () => typeInstead("busy"));
-      void track
+      // The camera went while the reader was loading.
+      if (track?.readyState === "ended") return giveUp("busy");
+      // The browser's own reader turned out not to read EAN-13, and the
+      // camera was opened at its own size: ZXing's larger picture first.
+      const resized = reader.wasm && !wasm;
+      const tuned = track
         ?.applyConstraints({
+          ...(resized ? larger : {}),
           advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
         })
         .catch(() => {});
+      if (resized) {
+        await tuned;
+        if (stopped) return;
+      }
+      // ［ライト］ only where the camera has one. Whether it is on is kept
+      // here: Safari before 18.4 reports it wrongly (WebKit bug 280970).
+      const light = (
+        track?.getCapabilities?.() as { torch?: boolean } | undefined
+      )?.torch;
+      torchTrack.current = light ? track : null;
+      setTorch(light ? false : null);
       element.srcObject = media;
-      await element.play().catch(() => {});
+      try {
+        await element.play();
+      } catch {
+        // The picture would not start: paused, and ［続ける］ (a tap) starts
+        // it again.
+        if (!stopped)
+          setInput((now) =>
+            now.kind === "camera" ? { kind: "camera", phase: "hidden" } : now,
+          );
+        return;
+      }
       if (stopped) return;
       setInput((now) =>
         now.kind === "camera" ? { kind: "camera", phase: "running" } : now,
       );
-      const detector = new Detector({ formats: ["ean_13"] });
+      const detector = new reader.Detector({ formats: ["ean_13"] });
+      // ZXing reads the guide's band only, drawn into the one canvas: the
+      // whole frame would be a new canvas of its size at every read. The
+      // browser's own reader takes the video as it is.
+      const band = reader.wasm
+        ? document
+            .createElement("canvas")
+            .getContext("2d", { willReadFrequently: true })
+        : null;
+      const frame = () => {
+        if (!band) return element;
+        const view = element.getBoundingClientRect();
+        const box = guide.current?.getBoundingClientRect();
+        const rect = guideRect(
+          { width: element.videoWidth, height: element.videoHeight },
+          view,
+          box
+            ? {
+                x: 0,
+                y: box.top - view.top,
+                width: view.width,
+                height: box.height,
+              }
+            : { x: 0, y: 0, width: view.width, height: view.height },
+        );
+        if (!rect) return null;
+        const canvas = band.canvas;
+        if (canvas.width !== rect.width) canvas.width = rect.width;
+        if (canvas.height !== rect.height) canvas.height = rect.height;
+        band.drawImage(
+          element,
+          rect.x,
+          rect.y,
+          rect.width,
+          rect.height,
+          0,
+          0,
+          rect.width,
+          rect.height,
+        );
+        return band.getImageData(0, 0, rect.width, rect.height);
+      };
+      let failed = 0;
       const look = async () => {
         if (stopped) return;
         // Until the reader's account is known nothing is read, and a book
@@ -601,11 +713,19 @@ export function ScanSession({
         if (element.readyState >= 2 && latest.current.owner) {
           let codes: string[] = [];
           try {
-            codes = (await detector.detect(element)).map(
-              (code) => code.rawValue,
-            );
+            const image = frame();
+            if (image)
+              codes = (await detector.detect(image)).map(
+                (code) => code.rawValue,
+              );
+            failed = 0;
           } catch {
-            // A frame the detector could not read: the next one may.
+            // A frame the reader could not read: the next one may. Five in
+            // a row, and the reader is not working: it is let go.
+            if (++failed >= FAILS_TO_STOP) {
+              if (reader.wasm) forgetReader();
+              return giveUp("reader-failed");
+            }
           }
           if (stopped) return;
           handlers.current.onFrame(codes);
@@ -620,8 +740,26 @@ export function ScanSession({
       stream?.getTracks().forEach((track) => track.stop());
       element.srcObject = null;
       inView.current = {};
+      torchTrack.current = null;
     };
   }, [cameraOn]);
+
+  /** ［ライト］: on, off. */
+  function switchTorch() {
+    const track = torchTrack.current;
+    if (!track || torch === null) return;
+    const next = !torch;
+    void track
+      .applyConstraints({
+        advanced: [{ torch: next } as MediaTrackConstraintSet],
+      })
+      .then(
+        () => {
+          if (torchTrack.current === track) setTorch(next);
+        },
+        () => {},
+      );
+  }
 
   // Leaving the page pauses the camera; coming back waits for ［続ける］.
   useEffect(() => {
@@ -917,11 +1055,12 @@ export function ScanSession({
         ? SCAN_COPY.card.untitledTitle
         : (cardIsbn ?? "")));
   const author = cardBook?.author ?? card?.author;
+  // Typing, the field's own line says it: the card waits empty.
   const line2 = !current
     ? !owner
       ? SCAN_COPY.preparing
       : typing
-        ? SCAN_COPY.firstTyping
+        ? ""
         : SCAN_COPY.firstCamera
     : current.say
       ? SAYS[current.say]
@@ -1040,7 +1179,21 @@ export function ScanSession({
             <video ref={video} muted playsInline aria-label="カメラの映像" />
             {input.phase === "running" ? (
               <>
-                <span className="scan-guide-box" aria-hidden="true" />
+                <span
+                  className="scan-guide-box"
+                  ref={guide}
+                  aria-hidden="true"
+                />
+                {torch !== null && (
+                  <button
+                    type="button"
+                    className={"scan-torch" + (torch ? " is-on" : "")}
+                    aria-pressed={torch}
+                    onClick={switchTorch}
+                  >
+                    ライト
+                  </button>
+                )}
                 <p
                   className={"scan-guide" + (hint ? " is-hint" : "")}
                   aria-live="polite"

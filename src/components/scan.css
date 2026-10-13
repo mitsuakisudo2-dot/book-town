@@ -8,6 +8,13 @@
   z-index: 80;
   background: #203b2d55;
 }
+/* On a phone the sheet is the whole width: nothing of the page shows past it
+   (under ［終わる］ while typing, above the keyboard). */
+@media (max-width: 480px) {
+  .scan-session {
+    background: var(--paper);
+  }
+}
 .scan-sheet {
   position: absolute;
   top: var(--scan-top, 0px);
@@ -105,6 +112,25 @@
   border: 2px solid #fffdf3cc;
   border-radius: 8px;
   box-shadow: 0 0 0 999px #0000002e;
+}
+/* ［ライト］, over the picture's top corner, clear of the guide. */
+.scan-torch {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid #fffdf380;
+  border-radius: 22px;
+  background: #1f2a23b3;
+  color: #fffdf3;
+  font-size: 13px;
+  font-weight: 600;
+}
+.scan-torch.is-on {
+  border-color: #e8cf8a;
+  background: #f6edce;
+  color: #5b4a22;
 }
 .scan-guide,
 .scan-camera-note {
