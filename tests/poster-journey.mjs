@@ -161,7 +161,7 @@ try {
           .getByRole("textbox", { name: "この本のこと" })
           .fill("わからないまま、見つめ続ける話。");
         await expect(
-          page.getByText("書きかけは、このブラウザに残しています。"),
+          page.getByText("書きかけは、このブラウザに残しています"),
         ).toBeVisible();
         await page.reload();
         await expect(page.getByRole("textbox", { name: "見出し" })).toHaveValue(
@@ -170,6 +170,25 @@ try {
         await expect(
           page.getByRole("textbox", { name: "この本のこと" }),
         ).toHaveValue("わからないまま、見つめ続ける話。");
+        // Thrown away only when asked, in the words every screen uses, with
+        // answers the size of a finger.
+        const line = page.locator(".poster-editor-kept");
+        await line.getByRole("button", { name: "書きかけを消す" }).click();
+        await expect(line).toContainText("書きかけを消しますか？");
+        for (const name of ["消す", "残す"]) {
+          const box = await line
+            .getByRole("button", { name, exact: true })
+            .boundingBox();
+          expect(box.width).toBeGreaterThanOrEqual(44);
+          expect(box.height).toBeGreaterThanOrEqual(44);
+        }
+        await line.getByRole("button", { name: "残す", exact: true }).click();
+        await expect(
+          line.getByRole("button", { name: "書きかけを消す" }),
+        ).toBeFocused();
+        await expect(page.getByRole("textbox", { name: "見出し" })).toHaveValue(
+          "海を前にした夜に",
+        );
       },
     );
 

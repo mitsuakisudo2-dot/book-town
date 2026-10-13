@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   CODE_LENGTH,
   MINIMUM_AGE,
@@ -11,8 +11,18 @@ import {
   normalizeEmail,
 } from "../lib/account";
 import { accountActions, useAccountState } from "../lib/account-session";
+import {
+  HANDLE_FIELD_MAX_LENGTH,
+  SENT_CODE,
+  profileWorkStore,
+  sentCodeStore,
+  type ProfileWork,
+} from "../lib/account-draft";
+import { useKeptDraft } from "../lib/kept-draft";
+import { adoptVisitorRecords } from "../lib/record-draft";
 import { libraryJournal, useJournal } from "../lib/library-journal";
 import { Icon } from "./ui";
+import { KeptDraftNote } from "./KeptDraftNote";
 import "./profile.css";
 import "./reading.css";
 import "./account.css";
@@ -20,6 +30,21 @@ import "./account.css";
 /** Sign-in with a code from email, then the first profile. One page for both. */
 export default function AccountView() {
   const account = useAccountState();
+  // The step reached in signing in is kept only while signed out.
+  useEffect(() => {
+    if (account.status === "loading" || account.status === "signed-out")
+      sentCodeStore.initialize();
+    else sentCodeStore.clear(SENT_CODE);
+  }, [account.status]);
+  // What a visitor wrote about a finished book before being asked to sign in
+  // goes with them into the account (every sign-in ends on this page).
+  const userId =
+    account.status === "signed-in" || account.status === "needs-profile"
+      ? account.user.id
+      : null;
+  useEffect(() => {
+    if (userId) adoptVisitorRecords(userId);
+  }, [userId]);
   return (
     <main className="account-page">
       <Link href="/" className="account-brand">
@@ -32,7 +57,9 @@ export default function AccountView() {
           <p className="account-lead">ログインの状態を確かめています…</p>
         )}
         {account.status === "signed-out" && <SignIn />}
-        {account.status === "needs-profile" && <FirstProfile />}
+        {account.status === "needs-profile" && (
+          <FirstProfile userId={account.user.id} />
+        )}
         {account.status === "unavailable" && <Unavailable />}
         {account.status === "signed-in" && (
           <SignedIn
@@ -60,9 +87,13 @@ function DemoNotice() {
 }
 
 function SignIn() {
-  const [email, setEmail] = useState("");
+  // The address the code went to, kept through a reload while the code works.
+  const sent = useKeptDraft(sentCodeStore, SENT_CODE);
+  const sentTo = sent.draft?.email ?? "";
+  // What is typed; until then, the address the code went to.
+  const [typed, setTyped] = useState<string | null>(null);
+  const email = typed ?? sentTo;
   const [code, setCode] = useState("");
-  const [sentTo, setSentTo] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -81,7 +112,7 @@ function SignIn() {
     const result = await accountActions.sendCode(email);
     setBusy(false);
     if (!result.ok) return setError(result.message);
-    setSentTo(normalizeEmail(email));
+    sent.set({ email: normalizeEmail(email), sentAt: Date.now() });
     setCode("");
   }
 
@@ -91,6 +122,8 @@ function SignIn() {
     setError("");
     const result = await accountActions.verifyCode(sentTo, code);
     setBusy(false);
+    // Once the code works, the step stays until the account says who signed
+    // in (the profile is read first); AccountView then forgets it.
     if (!result.ok) setError(result.message);
   }
 
@@ -113,7 +146,7 @@ function SignIn() {
             required
             maxLength={254}
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => setTyped(event.target.value)}
             aria-describedby={error ? "account-error" : undefined}
             autoFocus
           />
@@ -163,7 +196,8 @@ function SignIn() {
         <button
           type="button"
           onClick={() => {
-            setSentTo("");
+            setTyped(sentTo);
+            sent.clear();
             setError("");
           }}
         >
@@ -174,9 +208,26 @@ function SignIn() {
   );
 }
 
-function FirstProfile() {
-  const [name, setName] = useState("");
-  const [handle, setHandle] = useState("");
+const NO_PROFILE_WORK: ProfileWork = { name: "", handle: "" };
+
+function FirstProfile({ userId }: { userId: string }) {
+  // The name and the ID typed so far are kept through a reload, by person.
+  const kept = useKeptDraft(profileWorkStore, userId);
+  const work = kept.draft ?? NO_PROFILE_WORK;
+  const { name, handle } = work;
+  // Whether the form opened on work kept from before, said once.
+  const [resumed, setResumed] = useState<boolean | null>(null);
+  const change = (patch: Partial<ProfileWork>) => {
+    const next = { ...work, ...patch };
+    kept.set(next);
+    // Emptied by hand, what is typed next is new work, not kept work.
+    if (!next.name.trim() && !next.handle.trim()) setResumed(false);
+  };
+  const hasWork = kept.draft !== null;
+  useEffect(() => {
+    if (kept.loaded && resumed === null) setResumed(hasWork);
+  }, [kept.loaded, resumed, hasWork]);
+  const nameField = useRef<HTMLInputElement>(null);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   // Records start private; each one can be published, and is told when it is.
   const [readingPublic, setReadingPublic] = useState(false);
@@ -195,6 +246,7 @@ function FirstProfile() {
     });
     setBusy(false);
     if (!result.ok) setError(result.message);
+    else kept.clear();
   }
 
   return (
@@ -203,15 +255,28 @@ function FirstProfile() {
       <p className="account-lead">
         街で呼ばれる名前と、あなたのIDを決めてください。どちらもあとから変えられます。
       </p>
+      <KeptDraftNote
+        className="account-kept"
+        work={hasWork}
+        continuing={Boolean(resumed)}
+        saved={kept.saved}
+        wordsLost
+        onDiscard={() => {
+          kept.clear();
+          setResumed(false);
+          nameField.current?.focus();
+        }}
+      />
       <form className="profile-form" onSubmit={create}>
         <label htmlFor="account-name">ユーザー名</label>
         <input
           id="account-name"
+          ref={nameField}
           autoComplete="nickname"
           required
           maxLength={NAME_MAX_LENGTH}
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => change({ name: event.target.value })}
           autoFocus
         />
         <label htmlFor="account-handle">ユーザーID</label>
@@ -223,9 +288,9 @@ function FirstProfile() {
             autoCapitalize="none"
             spellCheck={false}
             required
-            maxLength={21}
+            maxLength={HANDLE_FIELD_MAX_LENGTH}
             value={handle}
-            onChange={(event) => setHandle(event.target.value)}
+            onChange={(event) => change({ handle: event.target.value })}
             aria-describedby="account-handle-hint"
           />
         </div>

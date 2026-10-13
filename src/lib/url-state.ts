@@ -37,7 +37,13 @@ export function replaceAddress(change: {
   // Keeping the router's own entry state tells Next.js this is not a
   // navigation of its own; otherwise it would restore this page and cancel a
   // link the reader has just tapped (the street grows while they scroll).
-  history.replaceState(history.state, "", next);
+  try {
+    history.replaceState(history.state, "", next);
+  } catch {
+    // Safari refuses many replacements in a short time (a query typed fast);
+    // the address catches up with the next change.
+    return;
+  }
   noteAddressChanged();
   emit();
 }

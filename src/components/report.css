@@ -31,6 +31,9 @@
   accent-color: var(--green);
   margin: 0;
 }
+.report-form .kept-note {
+  margin-bottom: 8px;
+}
 .report-form .report-note {
   font-size: 11px;
   line-height: 1.9;

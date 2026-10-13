@@ -121,6 +121,9 @@
   font-weight: 500;
   color: #3f4d3b;
 }
+.kept-note.account-kept {
+  margin: 0;
+}
 .account-journal-warning {
   flex-basis: 100%;
   text-align: center;

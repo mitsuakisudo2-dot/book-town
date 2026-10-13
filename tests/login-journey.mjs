@@ -1,7 +1,12 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { restingBox, settleBeforeNavigating } from "./journey-layers.mjs";
+import {
+  escapeWhileComposing,
+  layersSettled,
+  restingBox,
+  settleBeforeNavigating,
+} from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
 
 // Signs in with an emailed code and creates the first profile, in a real browser
@@ -45,9 +50,14 @@ const session = () => {
 };
 
 let profile = null;
+// How long the stand-in takes to read the signed-in person's own profile.
+let ownProfileDelay = 0;
 // The rest of the town, once a test fills it: rows by table.
 let town = null;
 const reportsSent = [];
+// A change carrying these words is refused by the stand-in, as the database
+// refuses one that breaks a rule, after the screen has moved on.
+const REFUSED_MARK = "（断られる）";
 // What the database grants a reporter to read of their own reports.
 const REPORT_GRANTED = [
   "id",
@@ -189,6 +199,8 @@ await context.route(supabase + "/**", async (route) => {
   if (url.pathname === "/auth/v1/user") return json(200, user);
   if (url.pathname === "/rest/v1/profiles") {
     if (request.method() === "GET") {
+      if (ownProfileDelay && url.searchParams.get("id") === "eq." + user.id)
+        await new Promise((done) => setTimeout(done, ownProfileDelay));
       const own = profile ? [profile] : [];
       return json(
         200,
@@ -214,6 +226,16 @@ await context.route(supabase + "/**", async (route) => {
         ...body,
       };
       return json(201, profile);
+    }
+    if (request.method() === "PATCH") {
+      townWrites.push(url.pathname);
+      if (JSON.stringify(body).includes(REFUSED_MARK))
+        return json(400, {
+          code: "23514",
+          message: "new row violates check constraint",
+        });
+      profile = { ...profile, ...body };
+      return route.fulfill({ status: 204, body: "" });
     }
   }
   if (url.pathname === "/rest/v1/rpc/can_annotate") {
@@ -313,6 +335,10 @@ await context.route(supabase + "/**", async (route) => {
     town?.reports.unshift(row);
     return json(201, row);
   }
+  // What an owner's shop counts (followers, visitors): nobody yet.
+  if (url.pathname.startsWith("/rest/v1/") && request.method() === "HEAD")
+    return route.fulfill({ status: 200, headers: { "content-range": "*/0" } });
+  if (url.pathname === "/rest/v1/rpc/shop_visitors") return json(200, 0);
   if (url.pathname.startsWith("/rest/v1/") && request.method() !== "GET")
     townWrites.push(url.pathname);
   // The rest of the signed-in town: a new reader has nothing yet. Like
@@ -404,6 +430,23 @@ const shotBoth = async (name) => {
   await shot(name + "-1280");
   await page.setViewportSize({ width: 390, height: 844 });
 };
+/** The report drafts this browser keeps, by key. */
+const keptReports = () =>
+  page.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem("book-town-report-drafts-v1") ?? "null")
+        ?.drafts ?? {},
+  );
+/** The keys of the record drafts this browser keeps. */
+const keptRecordKeys = () =>
+  page.evaluate(() =>
+    Object.keys(
+      JSON.parse(localStorage.getItem("book-town-record-drafts-v1") ?? "null")
+        ?.drafts ?? {},
+    ),
+  );
+/** What a visitor writes about a finished 見本 book before signing in. */
+const VISITOR_NOTE = "灰色の男たちのところで、時計を見た。";
 // A dialog closed by hand takes its step off the history a moment later
 // (src/lib/back-layer.ts). A second Escape waits for that, as a reader's
 // next key would: pressed while the browser is still stepping back, it
@@ -455,6 +498,30 @@ try {
   );
 
   await check(
+    "a visitor's words on a finished book are kept when 記録する asks them to sign in",
+    async () => {
+      await page.goto(base + "/books/momo/");
+      const feelings = page.locator(".book-feelings");
+      await feelings
+        .getByRole("button", { name: "読み終えた気持ちを残す" })
+        .click();
+      const sheet = page.getByRole("dialog", { name: "読み終えた気持ち" });
+      await sheet.getByRole("button", { name: "あたたかくなった" }).click();
+      await sheet
+        .getByLabel("ひとこと（なくても大丈夫です）")
+        .fill(VISITOR_NOTE);
+      await sheet.getByRole("button", { name: "記録する" }).click();
+      const invite = page.getByRole("heading", {
+        name: "本の街の住人になりませんか",
+      });
+      await expect(invite).toBeVisible();
+      await page.getByRole("button", { name: "このまま見る" }).click();
+      await expect(invite).toHaveCount(0);
+      expect(await keptRecordKeys()).toEqual(["visitor:record-new:momo"]);
+    },
+  );
+
+  await check(
     "a signed-out visitor finds the sign-in link on a phone",
     async () => {
       await page.goto(base + "/");
@@ -501,14 +568,118 @@ try {
     },
   );
 
+  await check(
+    "the code step survives a reload while the reader is in the mail app",
+    async () => {
+      const step = page.getByRole("heading", {
+        name: "メールを確かめてください",
+      });
+      const kept = () =>
+        page.evaluate(() => sessionStorage.getItem("book-town-sign-in-v1"));
+      await page.reload();
+      await expect(step).toBeVisible();
+      await expect(page.getByText(INVITED)).toBeVisible();
+      // Only the address and when the code was sent, never a code.
+      expect(Object.keys(JSON.parse(await kept()).drafts.sent).sort()).toEqual([
+        "email",
+        "sentAt",
+      ]);
+      // Sending again goes to the same address after the reload.
+      const asked = codeRequests.length;
+      await page.getByRole("button", { name: "コードを送り直す" }).click();
+      await expect.poll(() => codeRequests.length).toBe(asked + 1);
+      await expect(step).toBeVisible();
+      // Changing the address forgets the step and keeps the address to fix.
+      await page
+        .getByRole("button", { name: "メールアドレスを変える" })
+        .click();
+      await expect(page.getByLabel("メールアドレス")).toHaveValue(INVITED);
+      expect(await kept()).toBeNull();
+      await page.reload();
+      await expect(
+        page.getByRole("heading", { name: "本の街に入る" }),
+      ).toBeVisible();
+      await page.getByLabel("メールアドレス").fill(INVITED);
+      await page.getByRole("button", { name: "コードを送る" }).click();
+      await expect(step).toBeVisible();
+      await page.reload();
+      await expect(step).toBeVisible();
+    },
+  );
+
   await check("the right code leads to the first profile", async () => {
+    // The profile is read before the page changes; until then the code step
+    // stays, never the empty sign-in it came from.
+    await page.evaluate(() => {
+      const heading = () =>
+        document.querySelector(".account-card h1")?.textContent ?? "";
+      window.headingsSeen = [heading()];
+      new MutationObserver(() => {
+        const text = heading();
+        if (text && window.headingsSeen.at(-1) !== text)
+          window.headingsSeen.push(text);
+      }).observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    });
+    ownProfileDelay = 1500;
     await page.getByLabel("6桁のコード").fill("123456");
     await page.getByRole("button", { name: "ログインする" }).click();
     await expect(
       page.getByRole("heading", { name: "ようこそ、本の街へ" }),
     ).toBeVisible();
+    ownProfileDelay = 0;
+    expect(await page.evaluate(() => window.headingsSeen)).toEqual([
+      "メールを確かめてください",
+      "ようこそ、本の街へ",
+    ]);
+    // Signed in, the step is not kept any more.
+    await expect
+      .poll(() =>
+        page.evaluate(() => sessionStorage.getItem("book-town-sign-in-v1")),
+      )
+      .toBeNull();
     await shot("3-welcome");
   });
+
+  await check(
+    "the first profile typed so far survives a reload, until thrown away",
+    async () => {
+      const name = page.getByLabel("ユーザー名");
+      const handle = page.getByLabel("ユーザーID");
+      const resumed = page.getByText("書きかけを続けています");
+      await name.fill("アキ");
+      await handle.fill("aki");
+      await expect(resumed).toHaveCount(0);
+      await page.reload();
+      await expect(
+        page.getByRole("heading", { name: "ようこそ、本の街へ" }),
+      ).toBeVisible();
+      await expect(name).toHaveValue("アキ");
+      await expect(handle).toHaveValue("aki");
+      await expect(resumed).toBeVisible();
+      await expectReadable(page.locator(".account-kept"), "kept first profile");
+      await shot("3-welcome-resumed");
+      // Thrown away only when asked, and asked once.
+      await page.getByRole("button", { name: "書きかけを消す" }).click();
+      await page.getByRole("button", { name: "残す", exact: true }).click();
+      await expect(name).toHaveValue("アキ");
+      await expect(
+        page.getByRole("button", { name: "書きかけを消す" }),
+      ).toBeFocused();
+      await page.getByRole("button", { name: "書きかけを消す" }).click();
+      await page.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(name).toHaveValue("");
+      await expect(handle).toHaveValue("");
+      await expect(resumed).toHaveCount(0);
+      await expect(name).toBeFocused();
+      await page.reload();
+      await expect(name).toHaveValue("");
+      await expect(resumed).toHaveCount(0);
+    },
+  );
 
   await check(
     "the ID, the name and the age are checked before saving",
@@ -551,6 +722,12 @@ try {
       page.getByRole("heading", { name: "ログインしています" }),
     ).toBeVisible();
     await expect(page.getByText("アキ（@aki_books）さん")).toBeVisible();
+    // Kept until now through reloads, the typed profile is not kept after.
+    expect(
+      await page.evaluate(() =>
+        sessionStorage.getItem("book-town-first-profile-v1"),
+      ),
+    ).toBeNull();
     expect(inserted.at(-1)).toEqual({
       id: user.id,
       handle: "aki_books",
@@ -606,7 +783,98 @@ try {
         /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
       );
     }
+    // A shop just opened has nothing on its shelf, nor may another reader's
+    // public shelf: neither counts its books, and the owner can fill theirs.
+    const NEIGHBOUR = "2b0c1a3f-6d5e-4f4a-9b8c-7d6e5f4a3b2c";
+    const NEIGHBOUR_SHOP = "1a9b0c2e-5c4d-4e3f-8a7b-6c5d4e3f2a1b";
+    const empty = {
+      id: "first",
+      name: "はじめの本棚",
+      capacity: 20,
+      isPublic: true,
+      items: [],
+    };
+    const shopRow = (id, owner_id, name) => ({
+      id,
+      owner_id,
+      name,
+      description: "",
+      tagline: "",
+      theme: "sage",
+      is_open: true,
+      public_shelves: [empty],
+      public_scene_books: [],
+    });
+    town = {
+      profiles: [
+        {
+          id: NEIGHBOUR,
+          handle: "tomo_reads",
+          name: "トモ",
+          bio: "",
+          color: "#8a7f6a",
+          links: [],
+          compose_icon: "pen",
+          reading_visibility: "private",
+          created_at: "2026-10-12T00:00:00Z",
+          updated_at: "2026-10-12T00:00:00Z",
+        },
+      ],
+      shops: [
+        shopRow("0f1e2d3c-4b5a-4968-8776-655443322110", user.id, "アキの本屋"),
+        shopRow(NEIGHBOUR_SHOP, NEIGHBOUR, "トモの本屋"),
+      ],
+      shop_private: [{ shelves: [empty], scene_books: [] }],
+    };
+    for (const path of ["/shops/mine/", "/shop/?id=" + NEIGHBOUR_SHOP]) {
+      await page.goto(base + path);
+      const label = page.locator(".store-shelf-label");
+      await expect(label).toContainText("はじめの本棚");
+      await expect(page.locator("main")).not.toContainText(
+        /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+      );
+      await expect(label.getByRole("link", { name: "本を並べる" })).toHaveCount(
+        path === "/shops/mine/" ? 1 : 0,
+      );
+    }
+    await expect(
+      page.getByRole("heading", { name: "トモの本屋" }),
+    ).toBeVisible();
+    await page.goto(base + "/shops/mine/");
+    const fill = page
+      .locator(".store-shelf-label")
+      .getByRole("link", { name: "本を並べる" });
+    await expect(fill).toHaveAttribute("href", "/my-shop/");
+    expect((await fill.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await shot("7-empty-shelf");
+    town = null;
   });
+
+  await check(
+    "what a visitor wrote on a finished book waits for them once signed in",
+    async () => {
+      await page.goto(base + "/books/momo/");
+      await page
+        .locator(".book-feelings")
+        .getByRole("button", { name: "書きかけの気持ちを続ける" })
+        .click();
+      const sheet = page.getByRole("dialog", { name: "読み終えた気持ち" });
+      const note = sheet.getByLabel("ひとこと（なくても大丈夫です）");
+      await expect(note).toHaveValue(VISITOR_NOTE);
+      await expect(
+        sheet.getByRole("button", { name: "あたたかくなった" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await expect(sheet.getByText("書きかけを続けています")).toBeVisible();
+      expect(await keptRecordKeys()).toEqual([user.id + ":record-new:momo"]);
+      // Thrown away here, so the rest of the journey has no record of momo.
+      await sheet.getByRole("button", { name: "書きかけを消す" }).click();
+      await sheet.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(note).toHaveValue("");
+      expect(await keptRecordKeys()).toEqual([]);
+      await page.keyboard.press("Escape");
+      await expect(sheet).toHaveCount(0);
+    },
+  );
 
   await check(
     "a like for a 見本 says it reaches nobody, and nothing is sent",
@@ -627,6 +895,48 @@ try {
       ).toHaveAttribute("aria-pressed", "false");
       expect(townWrites.length).toBe(writes);
       await shot("8-sample-like");
+    },
+  );
+
+  await check(
+    "a profile change the account turns away later is kept, and said",
+    async () => {
+      await page.goto(base + "/profiles/me/");
+      const editProfile = page.getByRole("button", {
+        name: "プロフィールを編集",
+      });
+      const dialog = page.getByRole("dialog", { name: "読書家のプロフィール" });
+      const bio = dialog.getByLabel("自己紹介", { exact: true });
+      const kept = () =>
+        page.evaluate(() =>
+          localStorage.getItem("book-town-profile-drafts-v1"),
+        );
+      const refused = "夜にだけ本を読みます" + REFUSED_MARK;
+      await editProfile.click();
+      await bio.fill(refused);
+      await dialog.getByRole("button", { name: "保存する" }).click();
+      // The town takes it and the dialog closes; the account turns it away a
+      // moment later, and the words are still kept.
+      await expect(dialog).toHaveCount(0);
+      await expect(
+        page.getByText(
+          "プロフィールを保存できませんでした。書きかけは残しています。",
+        ),
+      ).toBeVisible();
+      expect(profile.bio).toBe("");
+      expect(await kept()).toContain(refused);
+      await editProfile.click();
+      await expect(bio).toHaveValue(refused);
+      await expect(dialog.getByText("書きかけを続けています")).toBeVisible();
+      await expect(dialog.getByRole("alert")).toContainText(
+        "うまく保存できませんでした。書きかけは残しています。",
+      );
+      // Written again and taken by the account, nothing is kept aside.
+      await bio.fill("夜にだけ本を読みます。");
+      await dialog.getByRole("button", { name: "保存する" }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect.poll(() => profile.bio).toBe("夜にだけ本を読みます。");
+      await expect.poll(kept).toBeNull();
     },
   );
 
@@ -1060,6 +1370,23 @@ try {
         "その他",
       ]);
       await dialog.getByLabel("脅し・危害を加えるという言葉").check();
+      // What is chosen and written is kept for this account and this post
+      // through a close by hand, until the report is received.
+      const words = dialog.getByLabel("くわしく（なくても大丈夫です）");
+      await words.fill("同じ言葉が何度も届きます。");
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      expect(Object.keys(await keptReports())).toEqual([
+        `${user.id}:post:${TO_REPORT}`,
+      ]);
+      await layersSettled(page);
+      await post.getByRole("button", { name: "その他の操作" }).click();
+      await post.getByRole("button", { name: "この投稿を通報" }).click();
+      await expect(
+        dialog.getByLabel("脅し・危害を加えるという言葉"),
+      ).toBeChecked();
+      await expect(words).toHaveValue("同じ言葉が何度も届きます。");
+      await expect(dialog.getByText("書きかけを続けています")).toBeVisible();
       await dialog.getByRole("button", { name: "通報する" }).click();
       await expect(dialog).toContainText(
         "受け付けました。知らせてくださって、ありがとうございます。",
@@ -1077,8 +1404,10 @@ try {
         target_kind: "post",
         target_id: TO_REPORT,
         reason: "threat",
-        detail: "",
+        detail: "同じ言葉が何度も届きます。",
       });
+      // Received, nothing is kept aside any more.
+      expect(await keptReports()).toEqual({});
       await shot("10-report-sent");
       await dialog.getByRole("button", { name: "閉じる" }).last().click();
       const mine = page
@@ -1509,6 +1838,47 @@ try {
   );
 
   await check(
+    "a cover request being written is kept until it is sent or thrown away",
+    async () => {
+      await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
+      const ask = page.getByRole("button", { name: "表紙の削除依頼はこちら" });
+      const dialog = page.getByRole("dialog", { name: "表紙の削除を依頼する" });
+      const words = dialog.getByLabel(
+        "この表紙とのご関係と、依頼の内容（必ず書いてください）",
+      );
+      const key = `${user.id}:book:${COVER_BOOK}`;
+      await ask.click();
+      await words.fill("書きかけの依頼です。");
+      // Closed by hand, the words wait for the next time.
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      expect((await keptReports())[key]).toEqual({
+        reason: "cover",
+        detail: "書きかけの依頼です。",
+      });
+      await layersSettled(page);
+      await ask.click();
+      await expect(words).toHaveValue("書きかけの依頼です。");
+      await expect(dialog.getByText("書きかけを続けています")).toBeVisible();
+      // やめる asks once for the words, and 消す throws them away.
+      await dialog.getByRole("button", { name: "やめる" }).click();
+      await expect(dialog.getByText("書きかけを消しますか？")).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: "残す", exact: true }),
+      ).toBeFocused();
+      await dialog.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      expect(Object.keys(await keptReports())).not.toContain(key);
+      await layersSettled(page);
+      await ask.click();
+      await expect(words).toHaveValue("");
+      await expect(dialog.getByText("書きかけを続けています")).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+    },
+  );
+
+  await check(
     "a cover can be asked to be taken down, and a refused one is not shown",
     async () => {
       await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
@@ -1555,9 +1925,16 @@ try {
         .getByLabel("この表紙とのご関係と、依頼の内容（必ず書いてください）")
         .fill("この本の装丁を担当した者です。");
       await shot("14-cover-request");
+      expect(Object.keys(await keptReports())).toContain(
+        `${user.id}:book:${COVER_BOOK}`,
+      );
       await send.click();
       await expect(dialog).toContainText(
         "受け付けました。運営が確認を始めたときと、確認し終えたときに、お知らせでお伝えします。",
+      );
+      // Received, the request written before is not kept any more.
+      expect(Object.keys(await keptReports())).not.toContain(
+        `${user.id}:book:${COVER_BOOK}`,
       );
       expect(reportsSent.at(-1)).toEqual({
         reporter_id: user.id,
@@ -2236,6 +2613,46 @@ try {
       await expect(annotate).toHaveCount(0);
       await expect(page.locator("[data-site-notes]")).toHaveCount(0);
       expect(siteNoteRequests.length).toBe(requests);
+    },
+  );
+
+  await check(
+    "an Escape that cancels a kana conversion closes neither the request nor the book",
+    async () => {
+      town = filled();
+      await page.goto(base + "/shop/?id=" + OTHER_SHOP);
+      await page.locator(".shelf-book-button").first().click();
+      const inHand = page.locator(".bh-dialog");
+      await expect(inHand).toBeVisible();
+      await inHand
+        .getByRole("button", { name: "表紙の削除依頼はこちら" })
+        .click();
+      const request = page.getByRole("dialog", {
+        name: "表紙の削除を依頼する",
+      });
+      const words = request.getByLabel(
+        "この表紙とのご関係と、依頼の内容（必ず書いてください）",
+      );
+      await words.fill("装丁を担当した者です");
+      await escapeWhileComposing(page);
+      await expect(request).toBeVisible();
+      await expect(words).toHaveValue("装丁を担当した者です");
+      await expect(inHand).toBeVisible();
+      await escapeWhileComposing(page, { keyCode229: true });
+      await expect(request).toBeVisible();
+      await expect(inHand).toBeVisible();
+      // Plain Escapes still close one layer each: the request, then, once
+      // its step is off the history (see back-layer.ts), the book.
+      await words.fill("");
+      await page.keyboard.press("Escape");
+      await expect(request).toHaveCount(0);
+      await expect(inHand).toBeVisible();
+      await page.waitForFunction(
+        () => history.state?.booktownLayers?.length === 1,
+      );
+      await page.keyboard.press("Escape");
+      await expect(inHand).not.toBeVisible();
+      town = null;
     },
   );
 

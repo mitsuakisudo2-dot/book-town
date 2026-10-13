@@ -8,6 +8,7 @@ import {
   setBookPop,
   unplacedBooks,
   validateScene,
+  type StoreScene,
 } from "../src/lib/store-scene";
 import { publicScenePops, sceneEntry } from "../src/lib/store-scene-adapter";
 import {
@@ -238,6 +239,161 @@ check("dense rows and template changes keep overflow with its POP", () => {
   assert.equal(changed.objects.filter((o) => o.kind === "bookPop").length, 30);
   assert.ok(unplacedBooks(changed).length > 0);
   assert.deepEqual(validateScene(changed), []);
+});
+/** The placements on a row, left to right. */
+const rowBooks = (s: StoreScene, rowId: string) =>
+  s.objects
+    .filter((o) => o.kind === "book" && o.parentId === rowId)
+    .sort((a, b) => a.order! - b.order!)
+    .map((o) => o.id);
+const arrangement = (s: StoreScene) =>
+  s.objects
+    .filter((o) => o.kind === "row")
+    .map((row) => [row.id, rowBooks(s, row.id)]);
+check("all books on row 3 stay on row 3 after warm, study and warm", () => {
+  let third = migrateShopScene({ ...shop, shelves: [] }, books);
+  for (const [i, id] of [
+    "left-hand",
+    "solaris",
+    "dispossessed",
+    "fahrenheit",
+  ].entries())
+    third = addBookPlacement(
+      third,
+      books.find((b) => b.id === id)!,
+      "row-2",
+      "third-" + i,
+      "spine",
+      i,
+    );
+  const warm = applyStoreTemplate(third, "warm", books);
+  const study = applyStoreTemplate(warm, "study", books);
+  const back = applyStoreTemplate(study, "warm", books);
+  const expected = [
+    ["row-0", []],
+    ["row-1", []],
+    ["row-2", ["third-0", "third-1", "third-2", "third-3"]],
+  ];
+  assert.deepEqual(arrangement(warm), expected);
+  assert.deepEqual(arrangement(study), expected);
+  assert.deepEqual(back, warm);
+  assert.deepEqual(validateScene(back), []);
+});
+check("the window table's books join the last shelf row, after it", () => {
+  let table = applyStoreTemplate(
+    migrateShopScene({ ...shop, shelves: [] }, books),
+    "window",
+    books,
+  );
+  table = addBookPlacement(table, books[0], "row-2", "shelf", "spine", 0);
+  table = addBookPlacement(table, books[1], "table-row", "table-1", "face", 0);
+  table = addBookPlacement(table, books[2], "table-row", "table-2", "face", 1);
+  const warm = applyStoreTemplate(table, "warm", books);
+  assert.deepEqual(rowBooks(warm, "row-2"), ["shelf", "table-1", "table-2"]);
+  assert.deepEqual(validateScene(warm), []);
+  // And back at the window, the shelf row keeps them in that order.
+  const again = applyStoreTemplate(warm, "window", books);
+  assert.deepEqual(rowBooks(again, "row-2"), ["shelf", "table-1", "table-2"]);
+});
+check(
+  "what a row cannot hold after a change goes on to the next row as public",
+  () => {
+    // Saved with books smaller than the furniture now takes.
+    let small = migrateShopScene({ ...shop, shelves: [] }, books);
+    objectById(small, "row-0")!.bookHeight = 0.06;
+    for (let i = 0; i < 8; i++)
+      small = addBookPlacement(small, books[i], "row-0", "s-" + i, "face", i);
+    small.objects = small.objects.filter(
+      (o) => o.kind !== "book" || o.parentId,
+    );
+    const placed = rowBooks(small, "row-0");
+    assert.ok(placed.length >= 6);
+    for (const hidden of [false, true]) {
+      const before = structuredClone(small);
+      objectById(before, "row-1")!.isPublic = !hidden;
+      const changed = applyStoreTemplate(before, "study", books);
+      const [kept, next, last] = ["row-0", "row-1", "row-2"].map((id) =>
+        rowBooks(changed, id),
+      );
+      assert.ok(kept.length > 0 && kept.length < placed.length);
+      // The row keeps its first books; the rest follow on, in order, and
+      // never onto a row less public than the one they left.
+      assert.deepEqual(
+        [...kept, ...next, ...last, ...unplacedBooks(changed).map((o) => o.id)],
+        placed,
+      );
+      assert.ok((hidden ? last : next).length > 0);
+      if (hidden) assert.deepEqual(next, []);
+      assert.deepEqual(validateScene(changed), []);
+    }
+  },
+);
+check(
+  "books shelved after the scene was first saved join it unplaced, with their POPs",
+  () => {
+    const managed = changePlacement(
+      applyStoreTemplate(scene, "study", books),
+      "placement:mine:a",
+      { pop: "店内の言葉", isPublic: false },
+      books,
+    );
+    const later = structuredClone(shop);
+    later.shelves[0].items.push({
+      id: "c",
+      bookId: "momo",
+      display: "face",
+      pop: "あとから来た本",
+    });
+    later.shelves[1].items.push({
+      id: "d",
+      bookId: "fictions",
+      display: "spine",
+      pop: "秘密のあと",
+    });
+    const reopened = migrateShopScene(later, books, managed);
+    // What the scene had is untouched: template, rows, POPs, privacy, order.
+    assert.deepEqual(
+      reopened.objects.slice(0, managed.objects.length),
+      managed.objects,
+    );
+    assert.equal(reopened.templateId, "study");
+    const c = objectById(reopened, "placement:mine:c")!;
+    assert.equal(c.parentId, null);
+    assert.equal(c.isPublic, true);
+    assert.equal(c.display, "face");
+    assert.deepEqual(c.source, {
+      shopId: "mine",
+      shelfId: "public",
+      itemId: "c",
+    });
+    assert.equal(bookPop(reopened, c.id)?.text, "あとから来た本");
+    const d = objectById(reopened, "placement:mine:d")!;
+    assert.equal(d.isPublic, false);
+    assert.equal(bookPop(reopened, d.id)?.text, "秘密のあと");
+    assert.ok(!publicScenePops([reopened]).some((p) => p.pop === "秘密のあと"));
+    assert.deepEqual(validateOwnedScene(reopened, later, books), []);
+    // Opening it again adds nothing more.
+    assert.deepEqual(migrateShopScene(later, books, reopened), reopened);
+  },
+);
+check("a shelf item id given to another book gets its own placement", () => {
+  // The first book left the shelf, and its item id went to the next book.
+  const reused = structuredClone(shop);
+  reused.shelves[0].items[0] = {
+    id: "a",
+    bookId: "momo",
+    display: "spine",
+    pop: "同じ番号の別の本",
+  };
+  const reopened = migrateShopScene(reused, books, scene);
+  assert.equal(objectById(reopened, "placement:mine:a")!.bookId, books[0].id);
+  assert.equal(bookPop(reopened, "placement:mine:a")?.text, "公の言葉");
+  const momo = objectById(reopened, "placement:mine:a:momo")!;
+  assert.equal(momo.bookId, "momo");
+  assert.equal(momo.parentId, null);
+  assert.equal(bookPop(reopened, momo.id)?.text, "同じ番号の別の本");
+  assert.deepEqual(validateScene(reopened), []);
+  assert.deepEqual(migrateShopScene(reused, books, reopened), reopened);
 });
 check(
   "labels preserve input spaces and are independent from the legacy shop",

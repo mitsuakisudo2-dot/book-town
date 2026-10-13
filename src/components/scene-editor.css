@@ -11,6 +11,13 @@
   margin-bottom: 20px;
   color: var(--muted);
 }
+/* Work kept from before is told in the quiet kept line, under the intro. */
+.kept-note.scene-editor-kept {
+  margin: -12px 0 16px;
+}
+.kept-note.scene-editor-kept-footer {
+  margin: 0 0 6px;
+}
 .scene-editor-columns {
   display: grid;
   grid-template-columns: minmax(200px, 0.8fr) minmax(0, 1.2fr);
@@ -50,6 +57,10 @@
   padding: 14px 0;
   margin: 0 0 14px;
   min-width: 0;
+}
+/* While older work waits on the reader's choice, the controls rest. */
+.scene-section:disabled {
+  opacity: 0.55;
 }
 .scene-section legend {
   font-family: var(--serif);

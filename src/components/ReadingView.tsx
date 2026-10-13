@@ -26,6 +26,7 @@ import { booksBeforeSearch } from "../lib/book-lists";
 import {
   HiddenWordsHint,
   HideWordsButton,
+  LengthNearLimit,
   PostCard,
   PostComposer,
 } from "./Social";
@@ -38,6 +39,20 @@ import { bookPath } from "../lib/books";
 import { recentlyFinished } from "../lib/records";
 import { uncoverHidden } from "../lib/hidden-words";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
+import {
+  appendPostDraft,
+  carryPostDraft,
+  clearPostDraft,
+  readingDraftKey,
+  usePostDraft,
+  useReadingDrafts,
+} from "../lib/post-draft";
+import {
+  DiscardDraft,
+  KeptDraftNote,
+  useNotTakenWords,
+  useOpenedWithWork,
+} from "./KeptDraftNote";
 
 type Shared = {
   state: TownState;
@@ -77,14 +92,29 @@ const FINISH_PHRASES = [
 const pick = (phrases: string[]) =>
   phrases[Math.floor(Math.random() * phrases.length)];
 
+/** The draft a review of the book read starts from (a new post without one). */
+const reviewDraftKey = (book?: Book) =>
+  book ? "review:" + book.id : "new-post";
+
+/**
+ * Carries the line written in a sitting into the review of its book, when
+ * that has nothing written yet; otherwise the review shows it (LineToAdd).
+ */
+const carryLine = (sessionId: string, book?: Book) =>
+  carryPostDraft(readingDraftKey(sessionId), reviewDraftKey(book));
+
 export function ReadingView(props: Shared) {
   const clock = useClock();
   const active = activeSession(props.state);
   const book = active?.bookId
     ? props.state.books.find((entry) => entry.id === active.bookId)
     : undefined;
-  // After closing the book, "感想を書く" opens a composer for the book just read.
-  const [review, setReview] = useState<{ book?: Book } | null>(null);
+  // After closing the book, "感想を書く" opens a composer for the book just
+  // read, with the sitting whose line was meant for it.
+  const [review, setReview] = useState<{
+    book?: Book;
+    line?: string;
+  } | null>(null);
   // Finishing a book goes on to how it felt.
   const [finished, setFinished] = useState<Book | null>(null);
   // Closing the book leaves a small card of what this time was.
@@ -93,10 +123,11 @@ export function ReadingView(props: Shared) {
     <>
       {active ? (
         <ReadingRoom
+          key={active.id}
           {...props}
           book={book}
           clock={clock}
-          onReview={(read) => setReview({ book: read })}
+          onReview={(read, line) => setReview({ book: read, line })}
           onFinished={setFinished}
           onClosed={setClosed}
         />
@@ -112,6 +143,10 @@ export function ReadingView(props: Shared) {
               onDismiss={() => setClosed(null)}
             />
           )}
+          <UnsentLines
+            {...props}
+            onReview={(read, line) => setReview({ book: read, line })}
+          />
           <StartReading {...props} clock={clock} />
         </>
       )}
@@ -127,6 +162,13 @@ export function ReadingView(props: Shared) {
           title={review.book ? `『${review.book.title}』の感想` : "感想を書く"}
           onClose={() => setReview(null)}
         >
+          {review.line && (
+            <LineToAdd
+              sessionId={review.line}
+              book={review.book}
+              notify={props.notify}
+            />
+          )}
           <PostComposer
             {...props}
             fixedBook={review.book}
@@ -288,7 +330,7 @@ function ClosedCard({
       )}
       <div>
         <p className="reading-closed-time">
-          今日の読書 <b>{formatDuration(Math.max(1, closed.seconds))}</b>
+          今日の読書 <b>{formatDuration(closed.seconds)}</b>
         </p>
         {closed.book && (
           <p className="reading-closed-title">『{closed.book.title}』</p>
@@ -306,6 +348,108 @@ function ClosedCard({
           </button>
         </div>
       </div>
+    </section>
+  );
+}
+
+/**
+ * A line written while reading, meant for this review but left out of it
+ * because the review already had words: shown above it, to add at its end.
+ * Not added, it waits on the reading page.
+ */
+function LineToAdd({
+  sessionId,
+  book,
+  notify,
+}: {
+  sessionId: string;
+  book?: Book;
+  notify: Shared["notify"];
+}) {
+  const { draft } = usePostDraft(readingDraftKey(sessionId));
+  if (!draft.body.trim()) return null;
+  return (
+    <div className="reading-unsent-line reading-line-to-add">
+      <p>読みながら書いた言葉は、まだ感想に入れていません</p>
+      <blockquote>{uncoverHidden(draft.body)}</blockquote>
+      <button
+        type="button"
+        className="button secondary"
+        onClick={(event) => {
+          const review = event.currentTarget
+            .closest(".modal")
+            ?.querySelector("textarea");
+          if (appendPostDraft(readingDraftKey(sessionId), reviewDraftKey(book)))
+            review?.focus();
+          else
+            notify(
+              "長くなりすぎるため、書き足せませんでした。言葉は読書のページに残しています",
+            );
+        }}
+      >
+        <Icon name="pen" size={15} />
+        書き足す
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Lines written while reading and never sent, from a sitting already over.
+ * They wait here until the reader uses them for a review or throws them away.
+ */
+function UnsentLines({
+  state,
+  onReview,
+}: Shared & { onReview: (book?: Book, line?: string) => void }) {
+  const drafts = useReadingDrafts();
+  const lines = drafts.flatMap(({ sessionId, draft }) => {
+    const session = state.readingSessions.find(
+      (entry) => entry.id === sessionId,
+    );
+    // Only this reader's sittings that are over: a running one's line is in
+    // the reading room, and a line from a sitting not in this town (another
+    // account's, on this browser) is never shown here.
+    if (!session || session.endedAt === null || !draft.body.trim()) return [];
+    const book = session.bookId
+      ? state.books.find((entry) => entry.id === session.bookId)
+      : undefined;
+    return [{ sessionId, body: draft.body, book }];
+  });
+  if (!lines.length) return null;
+  return (
+    <section className="reading-unsent" aria-labelledby="reading-unsent-title">
+      <h2 id="reading-unsent-title">読みながら書いて、送っていない言葉</h2>
+      <ul>
+        {lines.map(({ sessionId, body, book }) => (
+          <li key={sessionId}>
+            <blockquote>{uncoverHidden(body)}</blockquote>
+            <small>
+              {book
+                ? `『${book.title}』を読みながら`
+                : "本を選ばずに読みながら"}
+            </small>
+            <div className="reading-unsent-actions">
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => {
+                  // It starts the review, unless one is already being written.
+                  carryLine(sessionId, book);
+                  onReview(book, sessionId);
+                }}
+              >
+                <Icon name="pen" size={15} />
+                感想に使う
+              </button>
+              <DiscardDraft
+                wordsLost
+                onDiscard={() => clearPostDraft(readingDraftKey(sessionId))}
+              />
+            </div>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -493,14 +637,26 @@ function ReadingRoom({
 }: Shared & {
   book?: Book;
   clock: ReturnType<typeof useClock>;
-  onReview: (book?: Book) => void;
+  onReview: (book?: Book, line?: string) => void;
   onFinished: (book: Book) => void;
   onClosed: (closed: Closed) => void;
 }) {
   const id = useId();
   const session = activeSession(state);
-  const [memo, setMemo] = useState("");
-  const [spoiler, setSpoiler] = useState(false);
+  // The line being written is kept in this browser until it is sent, carried
+  // into a review, or thrown away: leaving, a reload or closing the book
+  // does not lose it.
+  const memoKey = session ? readingDraftKey(session.id) : null;
+  const {
+    draft: { body: memo, spoiler },
+    kept,
+    saved,
+    loaded,
+    update,
+    clear,
+  } = usePostDraft(memoKey);
+  const continuing = useOpenedWithWork(loaded, kept);
+  const notTaken = useNotTakenWords();
   const field = useRef<HTMLTextAreaElement>(null);
   const peekOpen = useReadingPeekOpen();
   const [ending, setEnding] = useState<{
@@ -526,19 +682,41 @@ function ReadingRoom({
         Date.parse(post.createdAt) >= startedAt,
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  /** Sends the line written; false when the town did not take it (it stays). */
+  function send(): boolean {
+    const created = actions.createPost({
+      body: memo,
+      spoiler: Boolean(book) && spoiler,
+      fromReading: true,
+    });
+    if (!created) {
+      notify(notTaken);
+      return false;
+    }
+    clear();
+    return true;
+  }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (
-      !actions.createPost({
-        body: memo,
-        spoiler: Boolean(book) && spoiler,
-        fromReading: true,
-      })
-    )
-      return;
-    setMemo("");
-    setSpoiler(false);
-    notify(together ? "つぶやきました" : "メモしました（自分だけ）");
+    if (send())
+      notify(together ? "つぶやきました" : "メモしました（自分だけ）");
+  }
+  /** Closes the book; `sent` is a line sent just now, for the closing card. */
+  function close(finished: boolean, sent?: string) {
+    actions.endReading(finished);
+    // Finishing a book asks how it felt; the record says the rest.
+    if (finished && book) onFinished(book);
+    else
+      onClosed({
+        book,
+        seconds: seconds ?? 0,
+        memo:
+          sent ??
+          uncoverHidden(
+            written.find((post) => post.body.trim())?.body ?? "",
+          ).trim(),
+      });
+    setEnding(null);
   }
   return (
     <div className="reading-page">
@@ -617,7 +795,7 @@ function ReadingRoom({
               : "気になった言葉や、考えたことを残す"
           }
           value={memo}
-          onChange={(event) => setMemo(event.target.value)}
+          onChange={(event) => update({ body: event.target.value })}
         />
         <div className="composer-tools">
           {book && (
@@ -625,7 +803,7 @@ function ReadingRoom({
               <input
                 type="checkbox"
                 checked={spoiler}
-                onChange={(event) => setSpoiler(event.target.checked)}
+                onChange={(event) => update({ spoiler: event.target.checked })}
               />
               ネタバレあり
             </label>
@@ -635,17 +813,26 @@ function ReadingRoom({
             <HideWordsButton
               field={field}
               body={memo}
-              onChange={setMemo}
+              onChange={(body) => update({ body })}
               notify={notify}
             />
           )}
-          <span className="composer-count" aria-hidden="true">
-            {memo.length}/{POST_MAX_LENGTH}
+          <span className="composer-send">
+            <LengthNearLimit length={memo.length} max={POST_MAX_LENGTH} />
+            <button className="button" type="submit" disabled={!memo.trim()}>
+              {together ? "つぶやく" : "メモする"}
+            </button>
           </span>
-          <button className="button" type="submit" disabled={!memo.trim()}>
-            {together ? "つぶやく" : "メモする"}
-          </button>
         </div>
+        <KeptDraftNote
+          continuing={continuing && kept}
+          saved={saved}
+          wordsLost={memo.trim() !== ""}
+          onDiscard={() => {
+            clear();
+            field.current?.focus();
+          }}
+        />
         {together && <HiddenWordsHint body={memo} />}
       </form>
 
@@ -709,6 +896,28 @@ function ReadingRoom({
               今回の読書 {seconds === null ? "—" : formatDuration(seconds)}
               {book && `・『${book.title}』`}
             </p>
+            {/* A line not sent yet is offered, never dropped with the book. */}
+            {memo.trim() && (
+              <div className="reading-unsent-line">
+                <p>
+                  {together
+                    ? "まだつぶやいていない言葉があります"
+                    : "まだメモしていない言葉があります"}
+                </p>
+                <blockquote>{uncoverHidden(memo)}</blockquote>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => {
+                    const line = uncoverHidden(memo).trim();
+                    if (send()) close(ending.finished, line);
+                  }}
+                >
+                  {(together ? "つぶやいて" : "メモして") +
+                    (ending.finished ? "読み終える" : "閉じる")}
+                </button>
+              </div>
+            )}
             <div className="reading-confirm-actions">
               <button
                 type="button"
@@ -722,7 +931,9 @@ function ReadingRoom({
                 className="button secondary"
                 onClick={() => {
                   actions.endReading(ending.finished);
-                  onReview(book);
+                  // The line not sent starts the review, when that is empty.
+                  carryLine(session.id, book);
+                  onReview(book, session.id);
                 }}
               >
                 <Icon name="pen" size={15} />
@@ -731,20 +942,7 @@ function ReadingRoom({
               <button
                 type="button"
                 className="button"
-                onClick={() => {
-                  actions.endReading(ending.finished);
-                  // Finishing a book asks how it felt; the record says the rest.
-                  if (ending.finished && book) onFinished(book);
-                  else
-                    onClosed({
-                      book,
-                      seconds: seconds ?? 0,
-                      memo: uncoverHidden(
-                        written.find((post) => post.body.trim())?.body ?? "",
-                      ).trim(),
-                    });
-                  setEnding(null);
-                }}
+                onClick={() => close(ending.finished)}
               >
                 {ending.finished ? "読み終えた" : "本を閉じる"}
               </button>
