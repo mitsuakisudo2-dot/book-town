@@ -1,18 +1,13 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useDeferredValue, useEffect, useId, useMemo, useState } from "react";
 import type { Book } from "../lib/types";
+import { prepareSearch, searchBooks, strongMatch } from "../lib/search";
 import { BookJacket, Icon } from "./ui";
 
-export function matchBooks(books: Book[], query: string): Book[] {
-  const term = query.trim().toLocaleLowerCase();
-  if (!term) return [];
-  return books.filter((book) =>
-    `${book.title} ${book.author} ${book.genre} ${book.isbn ?? ""}`
-      .toLocaleLowerCase()
-      .includes(term),
-  );
-}
+/** Books for a query, best first. Kept for pickers not yet moved to searchBooks. */
+export const matchBooks = (books: Book[], query: string): Book[] =>
+  searchBooks(books, query).map((match) => match.book);
 
 /** Search the catalog by title, author, genre or ISBN, and pick one book. */
 export function BookPicker({
@@ -36,6 +31,16 @@ export function BookPicker({
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
+  // Typing stays quick while a long list is searched.
+  useEffect(() => prepareSearch(books), [books]);
+  const typed = useDeferredValue(query);
+  // The reader's own books come first among equals.
+  const ownKey = suggestions.join(" ");
+  const own = useMemo(() => new Set(ownKey.split(" ")), [ownKey]);
+  const results = useMemo(
+    () => searchBooks(books, typed, { own, limit: 6 }),
+    [books, typed, own],
+  );
   const selected = value ? books.find((book) => book.id === value) : undefined;
   if (selected)
     return (
@@ -55,12 +60,11 @@ export function BookPicker({
         </button>
       </div>
     );
-  const results = matchBooks(books, query).slice(0, 6);
   const suggested = suggestions
     .map((bookId) => books.find((book) => book.id === bookId))
     .filter((book): book is Book => Boolean(book))
     .slice(0, 6);
-  const shown = query.trim() ? results : suggested;
+  const shown = query.trim() ? results.map((match) => match.book) : suggested;
   return (
     <div className="book-picker">
       <label className="picker-search" htmlFor={id}>
@@ -75,9 +79,23 @@ export function BookPicker({
           autoFocus={autoFocus}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && results[0]) {
-              event.preventDefault();
-              onChange(results[0].id);
+            // Enter that confirms a kana conversion is the keyboard's own.
+            if (
+              event.key !== "Enter" ||
+              event.nativeEvent.isComposing ||
+              event.keyCode === 229
+            )
+              return;
+            // Enter in the search never sends the form around it (a post).
+            event.preventDefault();
+            // It takes the first book only when it is surely the one meant: a
+            // title that begins so, or the one book found.
+            const now = searchBooks(books, query, { own, limit: 2 });
+            const sure =
+              now[0] &&
+              (strongMatch(now[0]) || (now.length === 1 && !now[0].near));
+            if (sure) {
+              onChange(now[0].book.id);
               setQuery("");
             }
           }}
@@ -109,7 +127,7 @@ export function BookPicker({
           ))}
         </ul>
       )}
-      {query.trim() && !results.length && (
+      {query.trim() && typed === query && !results.length && (
         <p className="picker-caption">
           「{query.trim()}
           」に合う本は見つかりませんでした。プロフィールの「本を登録」から追加できます。
