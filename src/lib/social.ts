@@ -83,6 +83,22 @@ export const findReader = (
     ? state.me
     : state.readers.find((reader) => reader.id === readerId);
 
+/** How many times the viewer pressed いいね on a post; 0 when not liked. */
+export const tapsOf = (state: TownState, postId: string): number =>
+  state.likedPosts.includes(postId) ? (state.likeTaps[postId] ?? 1) : 0;
+
+/**
+ * On the writer's own post: how many others liked it, and how many times they
+ * pressed in all. Only the writer is ever shown these.
+ */
+export function likesReceived(post: Post): { people: number; taps: number } {
+  if (!post.likers) return { people: post.likes, taps: post.likes };
+  return {
+    people: post.likers.length,
+    taps: post.likers.reduce((sum, liker) => sum + liker.taps, 0),
+  };
+}
+
 export const likeCount = (state: TownState, post: Post): number =>
   post.likes + (state.likedPosts.includes(post.id) ? 1 : 0);
 

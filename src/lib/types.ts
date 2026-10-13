@@ -98,6 +98,16 @@ export const BIO_MAX_LENGTH = 2000;
 export const NINE_NOTE_MAX_LENGTH = 500;
 export const SHOP_MESSAGE_MAX_LENGTH = 2000;
 
+/** A like can be pressed again, up to this many times per person and post. */
+export const LIKE_TAPS_MAX = 10;
+
+export interface Liker {
+  readerId: string;
+  taps: number;
+  /** When they first liked it. */
+  at: string;
+}
+
 /** One kind of post. A top-level post with a book is also a review on that book's page. */
 export interface Post {
   id: string;
@@ -117,6 +127,8 @@ export interface Post {
   /** Reactions from other readers in the demo data. The viewer's own are stored separately. */
   likes: number;
   wants: number;
+  /** On the viewer's own posts: who else liked it, and how many times each pressed. */
+  likers?: Liker[];
   /**
    * Written while reading. "together" memos are ordinary public posts with a reading badge;
    * "solo" memos are private notes only the writer sees.
@@ -236,6 +248,11 @@ export interface TownState {
   popReactions: Record<string, PopReaction[]>;
   posts: Post[];
   likedPosts: string[];
+  /**
+   * How many times the viewer pressed いいね on a liked post, when more than
+   * once (up to LIKE_TAPS_MAX). A liked post missing here was pressed once.
+   */
+  likeTaps: Record<string, number>;
   /** Posts that made the viewer want to read their book; the post records who inspired it. */
   wantedPosts: string[];
   spoilerReports: string[];
@@ -300,6 +317,8 @@ export interface TownActions {
   createPost(draft: PostDraft): string | null;
   deletePost(postId: string): void;
   toggleLike(postId: string): void;
+  /** Presses いいね once more, up to LIKE_TAPS_MAX. Returns how many times now. */
+  tapLike(postId: string): number;
   toggleWant(postId: string): void;
   toggleSpoilerReport(postId: string): void;
   /** The writer puts the spoiler mark on their own post afterwards. */

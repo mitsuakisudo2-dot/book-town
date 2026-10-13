@@ -264,7 +264,10 @@ async function main() {
     const store = await townOf(ben);
     const { actions } = store;
     actions.toggleFollow(akiShopId);
-    actions.toggleLike(postId);
+    // Pressed three times: one row, counted three.
+    actions.tapLike(postId);
+    actions.tapLike(postId);
+    actions.tapLike(postId);
     actions.toggleWant(postId);
     actions.togglePopReaction(akiShopId, shelfId, itemId, "love");
     const reply = actions.createPost({
@@ -282,6 +285,7 @@ async function main() {
       0,
     );
     assert.deepEqual(benAgain.likedPosts, [postId]);
+    assert.deepEqual(benAgain.likeTaps, { [postId]: 3 });
     assert.deepEqual(benAgain.wantedPosts, [postId]);
     assert.deepEqual(benAgain.wishlist, [bookId]);
     assert.equal(Object.values(benAgain.popReactions)[0]?.[0], "love");
@@ -290,7 +294,16 @@ async function main() {
     assert.equal(akiAgain.ownShop?.followers, 1);
     const post = akiAgain.posts.find((entry) => entry.id === postId);
     assert.equal(post?.likes, 1);
+    assert.deepEqual(
+      post?.likers?.map((liker) => liker.taps),
+      [3],
+    );
     assert.equal(post?.wants, 1);
+    assert.ok(
+      notificationsFor(akiAgain).some((notice) =>
+        notice.text.includes("3回いいねしました"),
+      ),
+    );
     assert.ok(
       notificationsFor(akiAgain).some((notice) =>
         notice.text.includes("返信しました"),
