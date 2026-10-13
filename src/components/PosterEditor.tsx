@@ -35,12 +35,13 @@ import {
   type PosterWork,
 } from "../lib/poster-draft";
 import { leavePageFor } from "../lib/in-town";
+import { reviewNoteOf, reviewNoteWords } from "../lib/social";
 import { currentBookId } from "../lib/reading";
 import { usePersistenceStatus } from "../lib/store";
 import { posterNewPath, posterPath, profilePath } from "../lib/paths";
 import { accountRequested } from "../lib/visitor";
 import { refusedForSample } from "../lib/sample-notice";
-import { matchBooks } from "./BookPicker";
+import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { BackLink } from "./BackLink";
 import { PosterSheet } from "./PosterView";
 import { BookJacket, Icon } from "./ui";
@@ -222,6 +223,10 @@ function PosterMaker({
   const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
   const [enlarged, setEnlarged] = useState(false);
   const elsewhere = key === "new" ? workElsewhere(all, state) : [];
+  // Folded or held by reports: the maker is told here too, as on its page.
+  const reviewNote = poster
+    ? reviewNoteOf(state, "poster", poster.id, poster.authorId)
+    : null;
   const elsewhereId = useId();
 
   // When a change takes away the button the hand was on, the hand goes on
@@ -389,6 +394,14 @@ function PosterMaker({
         <p className="page-subtitle">
           表紙を選んで、ひとこと。プロフィールや作品ページ、タイムラインに貼り出せます。
         </p>
+        {reviewNote && (
+          <div
+            className="spoiler-folded-note report-folded-note poster-editor-review"
+            role="note"
+          >
+            <p>{reviewNoteWords("poster", reviewNote)}</p>
+          </div>
+        )}
         {elsewhere.length > 0 && (
           <section
             className="poster-editor-elsewhere"
@@ -855,11 +868,16 @@ function BookChoice({
     .map((bookId) => state.books.find((book) => book.id === bookId))
     .filter((book): book is Book => Boolean(book));
   const own = ownBooks(state);
+  // The reader's own books come first among equal matches.
+  const results = useBookSearch(state.books, query, {
+    own: own.map(({ book }) => book.id),
+    limit: OWN_SHOWN,
+  });
   const searching = query.trim() !== "";
+  // Titles only close in spelling wait under their own quiet heading.
+  const near = searching ? results.near.map(({ book }) => ({ book })) : [];
   const offered: { book: Book; from?: string }[] = searching
-    ? matchBooks(state.books, query)
-        .slice(0, OWN_SHOWN)
-        .map((book) => ({ book }))
+    ? results.found.map(({ book }) => ({ book }))
     : own.length
       ? all
         ? own
@@ -884,6 +902,32 @@ function BookChoice({
     // A book the town is still loading keeps its place at the end.
     onChange([...next, ...chosen.filter((entry) => !next.includes(entry))]);
   }
+
+  const offer = ({ book, from }: { book: Book; from?: string }) => {
+    const place = chosen.indexOf(book.id);
+    return (
+      <li key={book.id}>
+        <button
+          type="button"
+          aria-pressed={place >= 0}
+          onClick={() => toggle(book.id)}
+        >
+          <BookJacket book={book} className="poster-offer-jacket" />
+          <b>{book.title}</b>
+          <small>
+            {place >= 0 ? (
+              <span className="poster-offer-on">
+                <Icon name="check" size={11} />
+                {max > 1 ? `${place + 1}番目に載せています` : "載せています"}
+              </span>
+            ) : (
+              (from ?? book.author)
+            )}
+          </small>
+        </button>
+      </li>
+    );
+  };
 
   return (
     <fieldset className="poster-step">
@@ -953,17 +997,37 @@ function BookChoice({
           placeholder="題名・著者・ISBNで探す"
           autoComplete="off"
           onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            // The Enter that confirms a kana conversion is the keyboard's.
+            if (!enterPressed(event)) return;
+            // Enter never puts the poster up from here (the form does not
+            // send it either); it takes a book only when it is surely the one
+            // meant, as in every picker, and never takes one off.
+            event.preventDefault();
+            const sure = results.sure();
+            if (!sure || chosen.includes(sure.id)) return;
+            if (max > 1 && chosen.length >= max) {
+              setFull(true);
+              return;
+            }
+            toggle(sure.id);
+            setQuery("");
+          }}
         />
       </label>
-      <p className="picker-caption">
-        {searching
-          ? offered.length
-            ? "街の本から"
-            : `「${query.trim()}」に合う本は見つかりませんでした。プロフィールの「本を登録」から追加できます。`
-          : own.length
-            ? "あなたの本から"
-            : "街の本から（読んだ本や読みたい本を登録すると、ここに並びます）"}
-      </p>
+      {(!searching || results.settled || offered.length > 0) && (
+        <p className="picker-caption">
+          {searching
+            ? offered.length
+              ? "街の本から"
+              : near.length
+                ? "ぴったり合う本はありませんでした。"
+                : `「${query.trim()}」に合う本は見つかりませんでした。プロフィールの「本を登録」から追加できます。`
+            : own.length
+              ? "あなたの本から"
+              : "街の本から（読んだ本や読みたい本を登録すると、ここに並びます）"}
+        </p>
+      )}
       {full && chosen.length >= max && (
         <p className="poster-editor-quiet" role="status">
           1ページに並べられるのは{max}
@@ -971,35 +1035,17 @@ function BookChoice({
         </p>
       )}
       {offered.length > 0 && (
-        <ul className="poster-book-offer">
-          {offered.map(({ book, from }) => {
-            const place = chosen.indexOf(book.id);
-            return (
-              <li key={book.id}>
-                <button
-                  type="button"
-                  aria-pressed={place >= 0}
-                  onClick={() => toggle(book.id)}
-                >
-                  <BookJacket book={book} className="poster-offer-jacket" />
-                  <b>{book.title}</b>
-                  <small>
-                    {place >= 0 ? (
-                      <span className="poster-offer-on">
-                        <Icon name="check" size={11} />
-                        {max > 1
-                          ? `${place + 1}番目に載せています`
-                          : "載せています"}
-                      </span>
-                    ) : (
-                      (from ?? book.author)
-                    )}
-                  </small>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <ul className="poster-book-offer">{offered.map(offer)}</ul>
+      )}
+      {near.length > 0 && (
+        <>
+          <p className="search-near" id={id + "-near"}>
+            {results.nearHeading}
+          </p>
+          <ul className="poster-book-offer" aria-labelledby={id + "-near"}>
+            {near.map(offer)}
+          </ul>
+        </>
       )}
       {!searching && own.length > OWN_SHOWN && (
         <button

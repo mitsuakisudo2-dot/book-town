@@ -830,8 +830,9 @@ input[type="checkbox"] {
 .icon-button:hover {
   background: #e9eedf;
 }
+/* Quiet, but readable on the paper (AA, 4.5:1 and more). */
 .muted {
-  color: #95a18a;
+  color: #5f6a55;
 }
 .field {
   border: 1px solid var(--line);
@@ -2994,4 +2995,36 @@ dialog .toast {
   top: auto;
   bottom: 112px;
   left: 50%;
+}
+/* The one way back from what a toast just said (公開しました → 自分だけに戻す). */
+.toast-undo {
+  margin-left: 6px;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: #fffdf3;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.toast-undo:focus-visible {
+  outline: 2px solid #fffdf3;
+  outline-offset: 2px;
+}
+
+/* Books only close in spelling, under a quiet heading below the matches:
+   the search page and every picker that finds books. Quiet in size, but
+   readable (4.5:1 or more on the paper and on white). */
+.search-near {
+  font-size: 11px;
+  font-weight: 400;
+  color: #5f6a55;
+  margin: 18px 0 0;
+}
+.book-picker .search-near,
+.poster-book-search ~ .search-near {
+  margin: 10px 0 4px;
 }

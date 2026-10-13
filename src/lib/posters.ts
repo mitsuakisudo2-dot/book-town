@@ -1,4 +1,5 @@
 import { ME_ID, type Book, type TownState } from "./types";
+import type { ReviewCover, SpoilerView } from "./social";
 
 // A poster is what a reader makes about books: a few pages, each set by its
 // template (one book told at length, a lineup of covers, or words alone) in a
@@ -262,37 +263,141 @@ export function posterTitle(
   return text.length > 24 ? text.slice(0, 24) + "…" : text || "ポスター";
 }
 
+/**
+ * What a poster folded by reports is called where it is listed or titled:
+ * none of its words, nor its books.
+ */
+export const FOLDED_POSTER_NAMES: Record<ReviewCover, string> = {
+  folded: "たたんでいるポスター",
+  reported: "あなたが通報したポスター",
+};
+
+/** Why a folded poster's thumb is folded, under its たたんでいます. */
+export const FOLDED_POSTER_REASONS: Record<ReviewCover, string> = {
+  folded: "通報があったため",
+  reported: "あなたが通報したため",
+};
+
+/**
+ * What the maker reads beside their own thumb when reports folded or hold it,
+ * where there is no room for the whole note (reviewNoteWords).
+ */
+export const OWN_POSTER_REVIEW_WORDS: Record<"folded" | "held", string> = {
+  folded: "通報があり、みんなの画面ではたたんでいます",
+  held: "運営が確かめるまで、ほかの人には見えません",
+};
+
+/**
+ * A thumb's spoken name, saying what its tile shows: a folded one says
+ * たたんでいます and why (none of its words or books), a spoiler which book it
+ * is about, any other its title.
+ */
+export function posterThumbName(
+  poster: Pick<Poster, "pages" | "spoiler">,
+  books: Pick<Book, "id" | "title">[],
+  folded: ReviewCover | null,
+): string {
+  if (folded)
+    return `ポスター たたんでいます（${FOLDED_POSTER_REASONS[folded]}）`;
+  if (!poster.spoiler) return "ポスター " + posterTitle(poster, books);
+  const first = books.find((book) => book.id === posterBookIds(poster)[0]);
+  return "ネタバレを含むポスター" + (first ? `（『${first.title}』）` : "");
+}
+
 const newestFirst = (a: Poster, b: Poster) =>
   Date.parse(b.createdAt) - Date.parse(a.createdAt);
 
 /** The posters others may see: put up, not drafts. */
 export const isPublished = (poster: Poster) => poster.status === "published";
 
-/** A reader's posters, newest first; the viewer also sees their drafts. */
+/**
+ * How a poster reaches this reader, by its maker's spoiler mark and the
+ * reader's 「ネタバレの表示」, as a post its writer marked does: behind its
+ * door whatever the setting, and not listed at all for a reader who chose
+ * 出さない. The maker always sees their own.
+ */
+export function posterSpoilerView(
+  state: Pick<TownState, "settings">,
+  poster: Pick<Poster, "spoiler" | "authorId">,
+): SpoilerView {
+  if (!poster.spoiler) return "open";
+  if (
+    state.settings.spoilerDisplay === "leave_out" &&
+    poster.authorId !== ME_ID
+  )
+    return "left_out";
+  return "folded";
+}
+
+const listed = (state: TownState, poster: Poster) =>
+  posterSpoilerView(state, poster) !== "left_out";
+
+/**
+ * A reader's posters as this reader gets them, newest first; the viewer
+ * also sees their drafts.
+ */
 export function postersOf(state: TownState, readerId: string): Poster[] {
   return state.posters
     .filter(
       (poster) =>
         poster.authorId === readerId &&
-        (isPublished(poster) || readerId === ME_ID),
+        (isPublished(poster) || readerId === ME_ID) &&
+        listed(state, poster),
     )
     .sort(newestFirst);
 }
 
+const showsBook = (poster: Poster, bookId: string) =>
+  isPublished(poster) &&
+  poster.pages.some((page) => page.bookIds.includes(bookId));
+
 /**
- * The posters a book appears in, those that show it on their first page
- * first, then newest first.
+ * The posters a book appears in, as this reader gets them: those that show
+ * it on their first page first, then newest first.
  */
 export function postersOfBook(state: TownState, bookId: string): Poster[] {
   const firstPage = (poster: Poster) =>
     poster.pages[0]?.bookIds.includes(bookId) ? 0 : 1;
   return state.posters
-    .filter(
-      (poster) =>
-        isPublished(poster) &&
-        poster.pages.some((page) => page.bookIds.includes(bookId)),
-    )
+    .filter((poster) => showsBook(poster, bookId) && listed(state, poster))
     .sort((a, b) => firstPage(a) - firstPage(b) || newestFirst(a, b));
+}
+
+/**
+ * Whether the reader's 「ネタバレの表示」 kept any of a book's posters out,
+ * which its page says once, without a count.
+ */
+export const postersLeftOutOfBook = (
+  state: TownState,
+  bookId: string,
+): boolean =>
+  state.posters.some(
+    (poster) => showsBook(poster, bookId) && !listed(state, poster),
+  );
+
+/**
+ * The posters their makers chose to show on the timeline, as this reader
+ * gets them; with `followingOnly`, those of followed owners and the
+ * viewer's own.
+ */
+export function timelinePosters(
+  state: TownState,
+  followingOnly = false,
+): Poster[] {
+  const owners = new Set(
+    state.shops
+      .filter((shop) => state.following.includes(shop.id))
+      .map((shop) => shop.ownerId),
+  );
+  return state.posters.filter(
+    (poster) =>
+      isPublished(poster) &&
+      poster.inTimeline &&
+      listed(state, poster) &&
+      (!followingOnly ||
+        poster.authorId === ME_ID ||
+        owners.has(poster.authorId)),
+  );
 }
 
 // In the database a page is a list of blocks, so later templates (a ranking,

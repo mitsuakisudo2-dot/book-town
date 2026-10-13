@@ -23,6 +23,7 @@ import { handleProblem, normalizeHandle } from "./handles";
 import { tapsOf } from "./social";
 import {
   COMPOSE_ICONS,
+  SPOILER_DISPLAYS,
   LIKE_TAPS_MAX,
   ME_ID,
   POP_REACTIONS,
@@ -37,6 +38,7 @@ import {
   SHOP_TAGLINE_MAX_LENGTH,
   READING_MODES,
   popReactionKey,
+  reviewKey,
   OWN_SHOP_ID,
   displayCost,
   normalizeCapacity,
@@ -64,6 +66,19 @@ const clean = (value: string, max = 10000): string => value.slice(0, max);
 
 const toggled = (list: string[], id: string): string[] =>
   list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id];
+
+/** Folds by reports, less those of things that are gone. */
+const withoutFolds = (
+  folds: TownState["reviewFolds"],
+  kind: "post" | "poster",
+  gone: Set<string>,
+): TownState["reviewFolds"] => {
+  const keys = [...gone].map((id) => reviewKey(kind, id));
+  if (!keys.some((key) => key in folds)) return folds;
+  return Object.fromEntries(
+    Object.entries(folds).filter(([key]) => !keys.includes(key)),
+  );
+};
 
 const isBackend = (
   source: TownRepository | TownBackend,
@@ -555,6 +570,8 @@ export function createTownStore(
       const keep = (id: string) => !removed.has(id);
       commit({
         ...state,
+        // Gone, it keeps no fold, nor a notice about one.
+        reviewFolds: withoutFolds(state.reviewFolds, "post", removed),
         posts: state.posts.filter((entry) => keep(entry.id)),
         likedPosts: state.likedPosts.filter(keep),
         likeTaps: Object.fromEntries(
@@ -768,6 +785,29 @@ export function createTownStore(
         settings: { ...state.settings, readingPublic: value === true },
       });
     },
+    setSpoilerDisplay(value) {
+      initialize();
+      if (
+        !SPOILER_DISPLAYS.includes(value) ||
+        state.settings.spoilerDisplay === value
+      )
+        return;
+      commit({
+        ...state,
+        settings: { ...state.settings, spoilerDisplay: value },
+      });
+    },
+    noteReport(report) {
+      initialize();
+      if (!report || typeof report.id !== "string") return;
+      commit({
+        ...state,
+        myReports: [
+          report,
+          ...state.myReports.filter((entry) => entry.id !== report.id),
+        ],
+      });
+    },
     savePoster(draft, posterId) {
       initialize();
       const poster = cleanPosterDraft(
@@ -827,6 +867,12 @@ export function createTownStore(
         return false;
       return commit({
         ...state,
+        // Taken down, it keeps no fold, nor a notice about one.
+        reviewFolds: withoutFolds(
+          state.reviewFolds,
+          "poster",
+          new Set([posterId]),
+        ),
         posters: state.posters.filter((entry) => entry.id !== posterId),
       });
     },

@@ -2,16 +2,16 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { expectReadable } from "./journey-contrast.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../work/booktown/social-qa",
 );
 await mkdir(output, { recursive: true });
+// Uses Playwright's own Chromium unless BOOK_TOWN_CHROME names another browser.
 const browser = await chromium.launch({
-  executablePath:
-    process.env.BOOK_TOWN_CHROME ??
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  executablePath: process.env.BOOK_TOWN_CHROME || undefined,
   headless: true,
 });
 const errors = [];
@@ -343,6 +343,165 @@ try {
         fullPage: true,
       });
     });
+    await check(
+      `${label} the spoiler setting folds, or leaves out, spoilers everywhere`,
+      async () => {
+        const stored = () =>
+          page.evaluate(
+            () => JSON.parse(localStorage.getItem("book-town-v1")).data,
+          );
+        await go("/timeline/");
+        // By default a marked post or poster is folded, in its place.
+        await expect(page.locator(".social-note")).toContainText(
+          "ネタバレの印が付いた投稿とポスター、3人以上が「ネタバレでは？」と言った投稿は、たたんでいます",
+        );
+        await expect(page.locator("main .spoiler-cover").first()).toBeVisible();
+        await go("/profiles/me/");
+        await page.getByRole("button", { name: "設定" }).click();
+        const settings = page.getByRole("dialog", { name: "設定" });
+        const display = settings.getByRole("group", { name: "ネタバレの表示" });
+        await expect(
+          display.getByLabel(
+            "ネタバレの可能性があるもの（3人以上が「ネタバレでは？」）はたたんで表示する",
+          ),
+        ).toBeChecked();
+        await expect(display).toContainText(
+          "書いた人がネタバレの印を付けたものは、はじめからたたんであります。",
+        );
+        await expectReadable(
+          display.locator(".spoiler-display-note"),
+          "spoiler display note",
+        );
+        // Records start private: 自分だけ is the first choice, and chosen.
+        const records = settings.getByRole("group", {
+          name: "読み終えた本の記録（これから残す記録）",
+        });
+        await expect(records.getByRole("radio").first()).toBeChecked();
+        await expect(records.getByLabel("自分だけ")).toBeChecked();
+        await display
+          .getByLabel("ネタバレの印があるもの・可能性があるものは出さない")
+          .check();
+        await expect(page.locator(".toast")).toContainText(
+          "ネタバレの印があるもの・可能性があるものは、出さないようにします",
+        );
+        await noOverflow(`${label} settings`);
+        await page.screenshot({
+          caret: "initial",
+          path: path.join(output, `settings-spoilers-${viewport.width}.png`),
+        });
+        await page.keyboard.press("Escape");
+        expect((await stored()).settings.spoilerDisplay).toBe("leave_out");
+        await go("/timeline/");
+        await expect(page.locator(".social-note")).toHaveText(
+          "ネタバレの印が付いた投稿とポスター、その可能性がある投稿は、設定により出していません。",
+        );
+        // Others' marked posts are left out; the reader's own never are.
+        for (const title of ["闇の左手", "銀河鉄道の夜"])
+          await expect(
+            page.locator("main .spoiler-cover", { hasText: title }),
+          ).toHaveCount(0);
+        await expect(
+          card("あなた", "").locator(".spoiler-cover").first(),
+        ).toBeVisible();
+        await expect(card("すみれ", "二駅乗り過ごした")).toBeVisible();
+        // The book page has no door, and says once (no count) why.
+        await go("/books/galaxy-railroad/");
+        await expect(
+          page.getByRole("button", { name: /ネタバレありのレビュー/ }),
+        ).toHaveCount(0);
+        const leftOut = page.getByText(
+          "ネタバレを含むかもしれないレビューは、設定により出していません",
+        );
+        await expect(leftOut).toBeVisible();
+        await expect(leftOut).not.toContainText(/\d/);
+        await page.screenshot({
+          caret: "initial",
+          path: path.join(output, `book-left-out-${viewport.width}.png`),
+          fullPage: true,
+        });
+        // Back to folding: the door is there again.
+        await go("/profiles/me/");
+        await page.getByRole("button", { name: "設定" }).click();
+        await page
+          .getByRole("dialog", { name: "設定" })
+          .getByLabel(
+            "ネタバレの可能性があるもの（3人以上が「ネタバレでは？」）はたたんで表示する",
+          )
+          .check();
+        await page.keyboard.press("Escape");
+        await go("/books/galaxy-railroad/");
+        await expect(
+          page.getByRole("button", { name: /ネタバレありのレビュー/ }),
+        ).toBeVisible();
+      },
+    );
+
+    await check(
+      `${label} a record starts private; publishing is told, with a way back`,
+      async () => {
+        const records = () =>
+          page.evaluate(
+            () =>
+              JSON.parse(localStorage.getItem("book-town-v1")).data
+                .readingRecords,
+          );
+        const own = async () =>
+          (await records()).find(
+            (record) => record.readerId === "me" && record.bookId === "laozi",
+          );
+        await go("/books/laozi/");
+        await page
+          .getByRole("button", { name: "読み終えた気持ちを残す" })
+          .click();
+        const sheet = page.getByRole("dialog", { name: "読み終えた気持ち" });
+        await expect(sheet.getByText("自分だけに残します")).toBeVisible();
+        await sheet.getByRole("button", { name: "公開にする" }).click();
+        await expect(
+          sheet.getByText("公開します（同じ本を読んだ人に届きます）"),
+        ).toBeVisible();
+        // No confirmation in between: saving publishes, and says so.
+        await sheet.getByRole("button", { name: "記録する" }).click();
+        await expect(sheet).toHaveCount(0);
+        const toast = page.locator(".toast");
+        await expect(toast).toContainText(
+          "公開しました。同じ本を読んだ人に届きます",
+        );
+        expect((await own()).isPublic).toBe(true);
+        await noOverflow(`${label} publish toast`);
+        await page.screenshot({
+          caret: "initial",
+          path: path.join(output, `record-published-${viewport.width}.png`),
+        });
+        // The toast does not take the focus from where the reader is.
+        expect(
+          await page.evaluate(() =>
+            document.activeElement?.classList.contains("toast-undo"),
+          ),
+        ).toBe(false);
+        await toast.getByRole("button", { name: "自分だけに戻す" }).click();
+        await expect(toast).toContainText("自分だけに戻しました");
+        await expect(toast.getByRole("button")).toHaveCount(0);
+        expect((await own()).isPublic).toBe(false);
+        // Publishing one record later is one quiet tap on the book page.
+        const mine = page.locator(".book-feelings-own");
+        await mine.getByRole("button", { name: "公開する" }).click();
+        await expect(toast).toContainText("公開しました");
+        expect((await own()).isPublic).toBe(true);
+        // A reader who goes to the undo by keyboard keeps it past its 8 s,
+        // and it goes its way once they leave it.
+        await toast.getByRole("button", { name: "自分だけに戻す" }).focus();
+        await page.waitForTimeout(9000);
+        await expect(
+          toast.getByRole("button", { name: "自分だけに戻す" }),
+        ).toBeFocused();
+        await mine.getByRole("button", { name: "自分だけにする" }).focus();
+        await expect(toast).toHaveCount(0, { timeout: 10000 });
+        await mine.getByRole("button", { name: "自分だけにする" }).click();
+        await expect(toast).toContainText("自分だけにしました");
+        expect((await own()).isPublic).toBe(false);
+      },
+    );
+
     await check(
       `${label} following nobody yet, the timeline suggests owners with POPs`,
       async () => {

@@ -25,6 +25,7 @@ jobs:
       - run: pnpm test:domain
       - run: pnpm test:walk-domain
       - run: pnpm test:covers
+      - run: pnpm test:search
       - run: pnpm test:posters
       - run: pnpm test:customization-domain
       - run: pnpm test:shop-layout
@@ -56,6 +57,45 @@ jobs:
       - run: pnpm test:login
         env:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/login-qa
+
+  # The demo build (no Supabase) in a real browser: the walk and the store
+  # editor, as a reader without an account uses them. The other journeys
+  # (browser, street, feedback, social, app, poster-journey) are run by hand;
+  # together they would add about five minutes to every run.
+  demo-journeys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - name: Serve the built site
+        id: serve
+        run: python3 -m http.server 5173 --bind 127.0.0.1 --directory out &
+      - run: pnpm test:walk
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/walk
+      # Runs even after the walk failed, so one run shows both screens.
+      - run: pnpm test:customization
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/customization
+      # Screenshots of the demo town only; nothing secret is in them.
+      - name: Keep the screenshots of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-journeys-qa
+          path: ${{ runner.temp }}/qa
+          retention-days: 7
 
   # Signs in and saves a town against a real local Supabase: auth, the code
   # email, the REST API and row level security, with the migrations and

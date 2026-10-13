@@ -10,6 +10,12 @@ import { useEffect, useSyncExternalStore } from "react";
 // Covers are shown as the source serves them, never cropped or drawn over.
 // Google's are not kept beyond this page: only the answer that a book has no
 // cover, and openBD's covers, are remembered by the browser for a while.
+//
+// A rights holder may ask (a cover removal request, filed as a report about
+// the book) for a cover not to be shown. When the operator accepts, the
+// database lists the ISBN and source in cover_refusals, and that source is
+// simply not asked for that book: the next one is, or it keeps its 装丁カード.
+// No image is ever altered or replaced by another.
 
 export type CoverSourceName = "openbd" | "google";
 
@@ -135,6 +141,38 @@ const googleBooks: CoverSource = {
 /** Where covers are looked for, first to last. */
 export const COVER_SOURCES: CoverSource[] = [openBd, googleBooks];
 
+/** Sources not to ask for a book, by ISBN (cover_refusals). */
+export type CoverRefusals = Map<string, Set<CoverSourceName>>;
+
+/** The refusals as the list the database gives them. */
+export function coverRefusalsFrom(
+  rows: { isbn: string; source: string }[],
+): CoverRefusals {
+  const refused: CoverRefusals = new Map();
+  for (const row of rows) {
+    if (!COVER_SOURCES.some((source) => source.name === row.source)) continue;
+    const sources = refused.get(row.isbn) ?? new Set<CoverSourceName>();
+    sources.add(row.source as CoverSourceName);
+    refused.set(row.isbn, sources);
+  }
+  return refused;
+}
+
+/**
+ * A cover as it may be shown: none when its source is refused for the book,
+ * or when the refusals could not be read (then no outside cover is shown on
+ * this page, rather than one that was asked to be taken down).
+ */
+export function shownCover(
+  isbn: string,
+  cover: Cover | null,
+  refusals: CoverRefusals | "unreadable",
+): Cover | null {
+  if (!cover) return null;
+  if (refusals === "unreadable") return null;
+  return refusals.get(isbn)?.has(cover.source) ? null : cover;
+}
+
 // What is known: a cover, or null when every source said it has none.
 const known = new Map<string, Cover | null>();
 const waiting = new Set<string>();
@@ -211,6 +249,7 @@ export async function lookCovers(
   sources: CoverSource[] = COVER_SOURCES,
   fetcher: typeof fetch = (...args) => fetch(...args),
   rest: Set<CoverSourceName> = new Set(),
+  refused: CoverRefusals = new Map(),
 ): Promise<Map<string, Cover | null>> {
   const answers = new Map<string, Cover | null>();
   let missing = [...isbns];
@@ -221,8 +260,13 @@ export async function lookCovers(
       complete = false;
       continue;
     }
+    // A source refused for a book is passed over for it; the next is asked.
+    const asking = missing.filter(
+      (isbn) => !refused.get(isbn)?.has(source.name),
+    );
+    if (!asking.length) continue;
     try {
-      const found = await source.find(missing, fetcher);
+      const found = await source.find(asking, fetcher);
       for (const [isbn, cover] of found) answers.set(isbn, cover);
       missing = missing.filter((isbn) => !found.has(isbn));
     } catch {
@@ -234,15 +278,65 @@ export async function lookCovers(
   return answers;
 }
 
+// Which covers rights holders asked us not to show. Read once a page, before
+// any source is asked, from the loader the town registers (town-session.ts);
+// a build without a database has none, so nothing is refused.
+let refusalLoader: (() => Promise<{ isbn: string; source: string }[]>) | null =
+  null;
+let refusals: CoverRefusals | "unreadable" | null = null;
+let readingRefusals: Promise<CoverRefusals | "unreadable"> | null = null;
+
+/** Where the refused covers are read from. */
+export function setCoverRefusalLoader(
+  load: () => Promise<{ isbn: string; source: string }[]>,
+) {
+  refusalLoader = load;
+  refusals = null;
+  readingRefusals = null;
+}
+
+function readRefusals(): Promise<CoverRefusals | "unreadable"> {
+  if (!refusalLoader) return Promise.resolve(new Map());
+  readingRefusals ??= refusalLoader()
+    .then(coverRefusalsFrom, () => "unreadable" as const)
+    .then((read) => {
+      refusals = read;
+      // A cover remembered from before it was refused is asked for again,
+      // so the book can fall back to the next source.
+      if (read !== "unreadable")
+        for (const [isbn, cover] of known)
+          if (cover && !shownCover(isbn, cover, read)) {
+            known.delete(isbn);
+            asked.delete(isbn);
+            request(isbn);
+          }
+      listeners.forEach((listener) => listener());
+      return read;
+    });
+  return readingRefusals;
+}
+
 let flushing: ReturnType<typeof setTimeout> | null = null;
 function flush() {
   flushing = null;
   const isbns = [...waiting];
   waiting.clear();
   if (!isbns.length) return;
-  void lookCovers(isbns, COVER_SOURCES, undefined, resting).then((answers) => {
-    for (const [isbn, cover] of answers) known.set(isbn, cover);
-    keep(answers);
+  void readRefusals().then(async (refused) => {
+    if (refused === "unreadable") {
+      // Not settled for good: the next page asks again.
+      for (const isbn of isbns) known.set(isbn, null);
+    } else {
+      const answers = await lookCovers(
+        isbns,
+        COVER_SOURCES,
+        undefined,
+        resting,
+        refused,
+      );
+      for (const [isbn, cover] of answers) known.set(isbn, cover);
+      keep(answers);
+    }
     listeners.forEach((listener) => listener());
   });
 }
@@ -266,14 +360,20 @@ function subscribe(listener: () => void) {
 /** The real cover of the book with this ISBN, once found; null otherwise. */
 export function useCover(isbn: string | undefined): Cover | null {
   useEffect(() => {
-    if (isbn) request(isbn);
+    if (!isbn) return;
+    request(isbn);
+    // Remembered covers wait for the refusals too, even when nothing is asked.
+    void readRefusals();
   }, [isbn]);
   return useSyncExternalStore(
     subscribe,
     () => {
       if (!isbn) return null;
       restore();
-      return known.get(isbn) ?? null;
+      const cover = known.get(isbn) ?? null;
+      if (!cover || !refusalLoader) return cover;
+      // Until the refusals are read, a remembered cover waits.
+      return refusals ? shownCover(isbn, cover, refusals) : null;
     },
     () => null,
   );

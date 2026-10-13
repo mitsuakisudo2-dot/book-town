@@ -59,11 +59,6 @@
   align-items: center;
   gap: 8px;
 }
-.search-results h2 span {
-  font-family: inherit;
-  font-size: 11px;
-  color: #98a38c;
-}
 .search-discover section > p {
   font-size: 11px;
   color: #98a38c;
@@ -97,6 +92,11 @@
   gap: 2px;
   flex: 1;
   min-width: 0;
+}
+/* A reader's avatar keeps its round size beside the name. */
+.search-shop > .reader-avatar {
+  display: inline-grid;
+  flex: none;
 }
 .search-book b,
 .search-shop b {
@@ -809,4 +809,36 @@
   .reading-closed {
     animation: none;
   }
+}
+
+/* お知らせ「あなたの通報」: one quiet line each, newest first. */
+.own-reports {
+  margin: 34px 0 18px;
+  scroll-margin-top: 80px;
+}
+.own-reports h2 {
+  font-size: 14px;
+  margin: 0 0 10px;
+  color: #50604a;
+}
+.own-reports ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.own-reports li {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #5f6a55;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: #f6f4ec;
+}
+/* A jacket that can show an outside cover leads to the book's own page. */
+.reading-jacket-link {
+  flex: none;
+  display: block;
+  border-radius: 4px;
 }

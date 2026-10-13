@@ -1,3 +1,5 @@
+import { expect } from "@playwright/test";
+
 // A dialog closed by hand takes its step back off the browser's history a
 // moment later (see src/lib/back-layer.ts). A journey that then goes to an
 // address, reloads or steps through the history waits for that first, as a
@@ -27,4 +29,38 @@ export function settleBeforeNavigating(page) {
     };
   }
   return page;
+}
+
+// The book in hand rises into place as it opens (bh-appear in
+// src/components/book-in-hand.css). A size read during that motion can come
+// out a fraction of a pixel short (43.9999 for a 44px button), so a journey
+// that measures what a dialog shows waits for the page to stop moving first.
+
+/** The element's box once no animation or transition that ends is running. */
+export async function restingBox(locator) {
+  const box = await locator.evaluate(async (element) => {
+    const moving = () =>
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.playState === "running" &&
+            animation.effect?.getComputedTiming().endTime !== Infinity,
+        );
+    const deadline = performance.now() + 3000;
+    let running = moving();
+    while (running.length && performance.now() < deadline) {
+      await Promise.race([
+        Promise.allSettled(running.map((animation) => animation.finished)),
+        new Promise((resolve) =>
+          setTimeout(resolve, deadline - performance.now()),
+        ),
+      ]);
+      running = moving();
+    }
+    const { x, y, width, height } = element.getBoundingClientRect();
+    return { x, y, width, height, moving: running.length };
+  });
+  expect(box.moving, "measured while the page was still moving").toBe(0);
+  return box;
 }

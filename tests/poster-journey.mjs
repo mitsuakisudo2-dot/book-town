@@ -2,6 +2,7 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { expectReadable } from "./journey-contrast.mjs";
 
 // A reader makes a poster about a book, puts it up, finds it on the
 // timeline, their profile and the book's page, changes it and takes it down;
@@ -12,10 +13,9 @@ const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../work/booktown/poster-qa",
 );
 await mkdir(output, { recursive: true });
+// Uses Playwright's own Chromium unless BOOK_TOWN_CHROME names another browser.
 const browser = await chromium.launch({
-  executablePath:
-    process.env.BOOK_TOWN_CHROME ??
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  executablePath: process.env.BOOK_TOWN_CHROME || undefined,
   headless: true,
 });
 const errors = [];
@@ -113,13 +113,41 @@ try {
         const search = editor().getByRole("searchbox", {
           name: "ポスターに載せる本を探す",
         });
-        await search.fill("モモ");
+        const offered = (title) =>
+          editor().getByRole("button", { name: new RegExp(`^${title}の表紙`) });
+        // A near title waits under a quiet heading that is still readable.
+        await search.fill("秘密の森の花園");
+        await expect(editor().locator(".search-near")).toBeVisible();
+        await expectReadable(editor().locator(".search-near"), "近い題名の本");
+        // Several titles hold 孤独: Enter waits for a tap.
+        await search.fill("孤独");
         await search.press("Enter");
         // A poster put up would have moved to its own page by now.
         await page.waitForTimeout(400);
         await expect(page).toHaveURL(/\/posters\/new\/\?book=solaris/);
         await expect(heading).toHaveValue("まだ書いている途中");
-        await search.fill("");
+        await expect(search).toHaveValue("孤独");
+        // A book surely meant, here read from kana, is taken as in every
+        // picker, and the poster still waits for 貼り出す.
+        await search.fill("もも");
+        await search.press("Enter");
+        await page.waitForTimeout(400);
+        await expect(page).toHaveURL(/\/posters\/new\/\?book=solaris/);
+        await expect(heading).toHaveValue("まだ書いている途中");
+        await expect(search).toHaveValue("");
+        await expect(offered("モモ")).toHaveAttribute("aria-pressed", "true");
+        await expect(offered("ソラリス")).toHaveAttribute(
+          "aria-pressed",
+          "false",
+        );
+        // Back to the book this poster is about, by its romaji.
+        await search.fill("solaris");
+        await search.press("Enter");
+        await expect(search).toHaveValue("");
+        await expect(offered("ソラリス")).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
       },
     );
 
@@ -290,6 +318,77 @@ try {
         await expect(page.locator(".poster-pages .poster-sheet")).toHaveCount(
           0,
         );
+      },
+    );
+
+    await check(
+      `${at}: a reader who leaves spoilers out is not shown others' spoiler posters`,
+      async () => {
+        const setting = async (label) => {
+          await go("/profiles/me/");
+          await page.getByRole("button", { name: "設定" }).click();
+          await page
+            .getByRole("dialog", { name: "設定" })
+            .getByRole("group", { name: "ネタバレの表示" })
+            .getByLabel(label)
+            .check();
+          await page.keyboard.press("Escape");
+        };
+        const spoilerThumb = () =>
+          page.getByRole("link", { name: /^ネタバレを含むポスター/ });
+        // By default a spoiler poster is listed, behind its door.
+        await go("/timeline/");
+        await expect(
+          page.getByRole("article", { name: "はるのポスター" }),
+        ).toBeVisible();
+        await setting("ネタバレの印があるもの・可能性があるものは出さない");
+        await go("/timeline/");
+        await expect(
+          page.getByRole("article", { name: "はるのポスター" }),
+        ).toHaveCount(0);
+        await expect(
+          page.getByRole("article", { name: "凪のポスター" }),
+        ).toBeVisible();
+        await go("/profiles/r-haru/");
+        await expect(spoilerThumb()).toHaveCount(0);
+        // The book's page says once, without a count, that some were left out.
+        await go("/books/hundred-years/");
+        await expect(spoilerThumb()).toHaveCount(0);
+        const leftOut = page.getByText(
+          "ネタバレを含むポスターは、設定により出していません",
+        );
+        await expect(leftOut).toBeVisible();
+        await expect(leftOut).not.toContainText(/\d/);
+        await expect(
+          page.getByRole("link", { name: "この本でポスターを作る" }),
+        ).toBeVisible();
+        await noOverflow(`${at} book page, spoiler posters left out`);
+        await page.screenshot({
+          path: path.join(output, `${at}-posters-left-out.png`),
+          fullPage: true,
+        });
+        // Opened from its own address, it is there, still behind its door.
+        await go("/posters/?id=poster-haru-last-page");
+        await expect(
+          page.getByRole("heading", {
+            name: "ネタバレを含むポスター",
+            level: 1,
+          }),
+        ).toBeVisible();
+        await page.getByRole("button", { name: "表示する" }).click();
+        await expect(
+          page
+            .getByRole("region", { name: "はるのポスター" })
+            .locator(".poster-sheet")
+            .first(),
+        ).toBeVisible();
+        // Back to folding: listed again, behind its door.
+        await setting(
+          "ネタバレの可能性があるもの（3人以上が「ネタバレでは？」）はたたんで表示する",
+        );
+        await go("/books/hundred-years/");
+        await expect(spoilerThumb()).toBeVisible();
+        await expect(leftOut).toHaveCount(0);
       },
     );
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ME_ID,
@@ -21,6 +21,7 @@ import { useTownBackend } from "../lib/store";
 import { shopOpenedRecently } from "../lib/just-opened";
 import { replaceAddress, useUrlParam } from "../lib/url-state";
 import { useLayerReturn } from "../lib/back-layer";
+import { shopMatcher } from "../lib/search";
 
 /** The most rounds of the street kept on the page at once. */
 const MAX_ROUNDS = 30;
@@ -102,30 +103,15 @@ export function StreetView({
     setSelected({ shop, shelf, item });
     return true;
   }, shops.length > 0);
-  const term = search.trim().toLocaleLowerCase();
-  const matching = shops.filter((shop) => {
-    const stock = shop.shelves
-      .filter((s) => s.isPublic)
-      .flatMap((s) => s.items)
-      .map((i) => state.books.find((b) => b.id === i.bookId))
-      .filter((b): b is Book => !!b);
-    const owner =
-      shop.ownerId === "me"
-        ? state.me
-        : state.readers.find((r) => r.id === shop.ownerId);
-    return (
+  const term = search.trim();
+  // Shops are found the way the search page finds them: by name, words or
+  // owner, or by a book on a public shelf, in kana, romaji or as written.
+  const match = useMemo(() => shopMatcher(state, term), [state, term]);
+  const matching = shops.filter(
+    (shop) =>
       (!followingOnly || state.following.includes(shop.id)) &&
-      (!term ||
-        (
-          shop.name +
-          shop.description +
-          (owner?.name ?? "") +
-          stock.map((b) => b.title + b.author).join("")
-        )
-          .toLocaleLowerCase()
-          .includes(term))
-    );
-  });
+      (!term || (match ? match(shop) > 0 : false)),
+  );
   const pivot = offset % Math.max(1, matching.length);
   const turnedOrder = [...matching.slice(pivot), ...matching.slice(0, pivot)];
   const newOwn =
@@ -247,7 +233,11 @@ export function StreetView({
       </div>
       {term && (
         <div className="street-search-result" role="status">
-          「{search}」からつながる{matching.length}軒
+          {/* Said here too when nothing matched: the empty street below is
+              not read out, and a count of none is never shown. */}
+          {matching.length
+            ? `「${term}」からつながる書店`
+            : `「${term}」からつながる書店は、まだ見つかりませんでした`}
           <button onClick={() => setSearch("")} aria-label="検索をクリア">
             <Icon name="close" size={15} />
             クリア

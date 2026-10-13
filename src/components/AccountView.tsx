@@ -177,7 +177,8 @@ function FirstProfile() {
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [ageConfirmed, setAgeConfirmed] = useState(false);
-  const [readingPublic, setReadingPublic] = useState(true);
+  // Records start private; each one can be published, and is told when it is.
+  const [readingPublic, setReadingPublic] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -244,24 +245,24 @@ function FirstProfile() {
             <input
               type="radio"
               name="reading-visibility"
-              checked={readingPublic}
-              onChange={() => setReadingPublic(true)}
+              checked={!readingPublic}
+              onChange={() => setReadingPublic(false)}
             />
             <span>
-              <b>公開する</b>
-              同じ本を読んだ人と出会えます。1冊ずつ自分だけにもできます。
+              <b>自分だけ</b>
+              記録はあなたにだけ見えます。1冊ずつ公開にもできます。
             </span>
           </label>
           <label>
             <input
               type="radio"
               name="reading-visibility"
-              checked={!readingPublic}
-              onChange={() => setReadingPublic(false)}
+              checked={readingPublic}
+              onChange={() => setReadingPublic(true)}
             />
             <span>
-              <b>自分だけ</b>
-              記録はあなたにだけ見えます。あとから変えられます。
+              <b>公開する</b>
+              同じ本を読んだ人と出会えます。公開したときは、毎回お知らせします。
             </span>
           </label>
         </fieldset>

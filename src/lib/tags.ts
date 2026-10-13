@@ -1,5 +1,8 @@
 import type { Post, TownState } from "./types";
 import { coverHidden } from "./hidden-words";
+import { notLeftOut, reviewCoverOf, spoilerViewOf } from "./social";
+import { romajiToKana } from "./search/romaji";
+import { sameText, textKey as tagKey } from "./search/text";
 
 // A tag is # (or the full-width ＃) followed by letters, digits, _ or Japanese marks.
 const TAG = /[#＃]([\p{L}\p{N}_ー・々〆]{1,30})/gu;
@@ -39,27 +42,98 @@ export function splitTags(body: string): BodyPart[] {
   return parts;
 }
 
-/** Public posts that carry a tag, newest first. Private reading notes never appear. */
-export const postsWithTag = (state: TownState, tag: string): Post[] =>
-  state.posts
+/**
+ * Whether a tag is the one asked for: the same word written another way
+ * (tagKey), or asked in romaji (misuteri finds #ミステリ). A tag written in
+ * romaji (#misuteri) stays a tag of its own.
+ */
+function tagFinder(asked: string): (tag: string) => boolean {
+  const romaji = romajiToKana(asked.normalize("NFKC"));
+  const keys = new Set([tagKey(asked)]);
+  if (romaji?.kana && !romaji.tail) keys.add(tagKey(romaji.kana));
+  return (tag) => keys.has(tagKey(tag));
+}
+
+/**
+ * Public posts that carry a tag, newest first. Private reading notes never
+ * appear, nor spoilers the reader chose not to see.
+ */
+export function postsWithTag(state: TownState, tag: string): Post[] {
+  const asked = tagFinder(tag);
+  return state.posts
     .filter(
       (post) =>
         post.readingMode !== "solo" &&
-        extractTags(post.body).includes(tag.toLowerCase()),
+        extractTags(post.body).some(asked) &&
+        notLeftOut(state, post),
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
 
-/** Tags in use across public posts, most used first. */
+/** Whether the reader's 「ネタバレの表示」 left out a public post with this tag. */
+export function tagLeftOut(state: TownState, tag: string): boolean {
+  const asked = tagFinder(tag);
+  return state.posts.some(
+    (post) =>
+      post.readingMode !== "solo" &&
+      !notLeftOut(state, post) &&
+      extractTags(post.body).some(asked),
+  );
+}
+
+/**
+ * Tags in use across public posts, most used first: the number of posts that
+ * carry each. Spellings of one tag count together, under the one used most,
+ * and a post that writes a tag in several spellings counts once. A tag is
+ * offered only from posts that reach this reader as they are: never from a
+ * spoiler (its tag can be the spoiler itself) or a post folded by reports,
+ * which are read only after a tap, nor from one the reader chose to leave out.
+ */
 export function popularTags(state: TownState, limit = 12) {
-  const counts = new Map<string, number>();
-  for (const post of state.posts)
-    if (post.readingMode !== "solo")
-      for (const tag of extractTags(post.body))
-        counts.set(tag, (counts.get(tag) ?? 0) + 1);
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja"))
-    .slice(0, limit)
-    .map(([tag, count]) => ({ tag, count }));
+  const counts = new Map<
+    string,
+    { count: number; spellings: Map<string, number> }
+  >();
+  for (const post of state.posts) {
+    if (
+      post.readingMode === "solo" ||
+      spoilerViewOf(state, post) !== "open" ||
+      reviewCoverOf(state, "post", post.id, post.authorId) !== null
+    )
+      continue;
+    const seen = new Set<string>();
+    for (const tag of extractTags(post.body)) {
+      const key = tagKey(tag);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const entry = counts.get(key) ?? { count: 0, spellings: new Map() };
+      entry.count++;
+      entry.spellings.set(tag, (entry.spellings.get(tag) ?? 0) + 1);
+      counts.set(key, entry);
+    }
+  }
+  return [...counts.values()]
+    .map(({ count, spellings }) => ({
+      tag: [...spellings].sort((a, b) => b[1] - a[1])[0][0],
+      count,
+    }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "ja"))
+    .slice(0, limit);
+}
+
+/**
+ * Tags in use to offer a post being written: the town's popular ones it does
+ * not carry yet in any spelling (a draft with #ミステリー is not offered #ミステリ).
+ */
+export function suggestTags(
+  state: TownState,
+  written: readonly string[],
+  limit = 4,
+): string[] {
+  return popularTags(state, 8)
+    .map((entry) => entry.tag)
+    .filter((tag) => !written.some((own) => sameText(own, tag)))
+    .slice(0, limit);
 }
 
 /**

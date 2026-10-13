@@ -136,7 +136,7 @@ pnpm test:customization-domain
 pnpm build
 ```
 
-ブラウザテストは、プレビューを起動したまま別のターミナルで実行します。`BOOK_TOWN_CHROME` にその環境でインストール済みのChrome実行ファイルを指定してください。`BOOK_TOWN_URL` でテスト先、`BOOK_TOWN_QA_OUTPUT` で結果保存先を変更できます。
+ブラウザテストは、プレビューを起動したまま別のターミナルで実行します。既定ではPlaywrightのChromiumを使います。ほかのブラウザで試すときは `BOOK_TOWN_CHROME` にその実行ファイルを指定してください。`BOOK_TOWN_URL` でテスト先、`BOOK_TOWN_QA_OUTPUT` で結果保存先を変更できます。
 
 ```sh
 pnpm test:walk

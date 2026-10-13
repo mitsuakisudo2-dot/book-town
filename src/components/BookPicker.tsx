@@ -2,17 +2,8 @@
 
 import { useId, useState } from "react";
 import type { Book } from "../lib/types";
+import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { BookJacket, Icon } from "./ui";
-
-export function matchBooks(books: Book[], query: string): Book[] {
-  const term = query.trim().toLocaleLowerCase();
-  if (!term) return [];
-  return books.filter((book) =>
-    `${book.title} ${book.author} ${book.genre} ${book.isbn ?? ""}`
-      .toLocaleLowerCase()
-      .includes(term),
-  );
-}
 
 /** Search the catalog by title, author, genre or ISBN, and pick one book. */
 export function BookPicker({
@@ -36,6 +27,8 @@ export function BookPicker({
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
+  // The reader's own books come first among equals.
+  const results = useBookSearch(books, query, { own: suggestions, limit: 6 });
   const selected = value ? books.find((book) => book.id === value) : undefined;
   if (selected)
     return (
@@ -55,12 +48,33 @@ export function BookPicker({
         </button>
       </div>
     );
-  const results = matchBooks(books, query).slice(0, 6);
   const suggested = suggestions
     .map((bookId) => books.find((book) => book.id === bookId))
     .filter((book): book is Book => Boolean(book))
     .slice(0, 6);
-  const shown = query.trim() ? results : suggested;
+  const searching = query.trim() !== "";
+  const shown = searching
+    ? results.found.map((match) => match.book)
+    : suggested;
+  const choice = (book: Book) => (
+    <li key={book.id}>
+      <button
+        type="button"
+        onClick={() => {
+          onChange(book.id);
+          setQuery("");
+        }}
+      >
+        <BookJacket book={book} className="picker-jacket" />
+        <span>
+          <b>{book.title}</b>
+          <small>
+            {book.author}・{book.genre}
+          </small>
+        </span>
+      </button>
+    </li>
+  );
   return (
     <div className="book-picker">
       <label className="picker-search" htmlFor={id}>
@@ -75,45 +89,44 @@ export function BookPicker({
           autoFocus={autoFocus}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && results[0]) {
-              event.preventDefault();
-              onChange(results[0].id);
+            // Enter that confirms a kana conversion is the keyboard's own.
+            if (!enterPressed(event)) return;
+            // Enter in the search never sends the form around it (a post).
+            event.preventDefault();
+            // It takes the first book only when it is surely the one meant: a
+            // title that begins so, or the one book found.
+            const sure = results.sure();
+            if (sure) {
+              onChange(sure.id);
               setQuery("");
             }
           }}
         />
       </label>
-      {!query.trim() && suggested.length > 0 && (
+      {!searching && suggested.length > 0 && (
         <p className="picker-caption">{suggestionLabel}</p>
       )}
       {shown.length > 0 && (
         <ul className="picker-results" aria-label={label + "の候補"}>
-          {shown.map((book) => (
-            <li key={book.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  onChange(book.id);
-                  setQuery("");
-                }}
-              >
-                <BookJacket book={book} className="picker-jacket" />
-                <span>
-                  <b>{book.title}</b>
-                  <small>
-                    {book.author}・{book.genre}
-                  </small>
-                </span>
-              </button>
-            </li>
-          ))}
+          {shown.map(choice)}
         </ul>
       )}
-      {query.trim() && !results.length && (
+      {searching && results.settled && !results.found.length && (
         <p className="picker-caption">
-          「{query.trim()}
-          」に合う本は見つかりませんでした。プロフィールの「本を登録」から追加できます。
+          {results.near.length
+            ? "ぴったり合う本はありませんでした。"
+            : `「${query.trim()}」に合う本は見つかりませんでした。プロフィールの「本を登録」から追加できます。`}
         </p>
+      )}
+      {searching && results.near.length > 0 && (
+        <>
+          <p className="search-near" id={id + "-near"}>
+            {results.nearHeading}
+          </p>
+          <ul className="picker-results" aria-labelledby={id + "-near"}>
+            {results.near.map(({ book }) => choice(book))}
+          </ul>
+        </>
       )}
     </div>
   );

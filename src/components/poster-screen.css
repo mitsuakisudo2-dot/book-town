@@ -68,6 +68,9 @@
   font-size: 12px;
   line-height: 1.7;
 }
+.poster-screen-review {
+  margin-top: 16px;
+}
 .poster-screen-fact {
   margin-top: 12px;
   font-size: 11px;
@@ -162,6 +165,13 @@
 }
 .book-posters-invite {
   margin: 26px 0 0;
+}
+/* Said once, without a count: the reader chose not to see these. */
+.book-posters-left-out {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #5f6a55;
 }
 @media (max-width: 640px) {
   .book-posters-row {

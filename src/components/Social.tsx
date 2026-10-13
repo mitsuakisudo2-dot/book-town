@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 import Link from "next/link";
@@ -15,7 +16,11 @@ import {
   ME_ID,
   POST_MAX_LENGTH,
   type Book,
+  type Notify,
   type Post,
+  OWN_SHOP_ID,
+  reviewKey,
+  type SpoilerDisplay,
   type TownActions,
   type TownState,
 } from "../lib/types";
@@ -24,12 +29,18 @@ import {
   findReader,
   followedTimelinePosts,
   formatPostTime,
-  isSpoilerFor,
   ownersToFollow,
   likesReceived,
   readerPosts,
   repliesOf,
+  hasReplies,
+  reviewCoverOf,
+  reviewCoverWords,
+  reviewNoteOf,
+  reviewNoteWords,
+  spoilerViewOf,
   tapsOf,
+  wordsFolded,
   timelinePosts,
   wantCount,
   wantSources,
@@ -39,16 +50,16 @@ import { bookPath } from "../lib/books";
 import { EMPTY_POST_DRAFT, usePostDraft } from "../lib/post-draft";
 import {
   extractTags,
-  popularTags,
   requestSearch,
   splitTags,
+  suggestTags,
 } from "../lib/tags";
 import { BookPicker } from "./BookPicker";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
 import "./poster-screen.css";
 import { isDatabaseId, posterNewPath, profilePath } from "../lib/paths";
-import { isPublished, type Poster } from "../lib/posters";
+import { timelinePosters, type Poster } from "../lib/posters";
 import { leaveLayers } from "../lib/back-layer";
 import { PosterCard } from "./PosterView";
 import { ReportButton } from "./Report";
@@ -60,28 +71,21 @@ import { useUrlParam } from "../lib/url-state";
 type Shared = {
   state: TownState;
   actions: TownActions;
-  notify: (message: string) => void;
+  notify: Notify;
 };
 
 /**
- * Posters their makers chose to show on the timeline; with `followingOnly`,
- * those of followed owners and the viewer's own.
+ * What the timeline says of spoilers, by the reader's 「ネタバレの表示」.
+ * Posters carry only their maker's mark (no 「ネタバレでは？」), and follow it.
  */
-function timelinePosters(state: TownState, followingOnly: boolean): Poster[] {
-  const owners = new Set(
-    state.shops
-      .filter((shop) => state.following.includes(shop.id))
-      .map((shop) => shop.ownerId),
-  );
-  return state.posters.filter(
-    (poster) =>
-      isPublished(poster) &&
-      poster.inTimeline &&
-      (!followingOnly ||
-        poster.authorId === ME_ID ||
-        owners.has(poster.authorId)),
-  );
-}
+const SPOILER_NOTES: Record<SpoilerDisplay, string> = {
+  show_all:
+    "ネタバレの印が付いた投稿とポスターは、たたんでいます。「表示する」を押すと読めます。",
+  fold_possible:
+    "ネタバレの印が付いた投稿とポスター、3人以上が「ネタバレでは？」と言った投稿は、たたんでいます。「表示する」を押すと読めます。",
+  leave_out:
+    "ネタバレの印が付いた投稿とポスター、その可能性がある投稿は、設定により出していません。",
+};
 
 type FeedEntry =
   | { kind: "post"; post: Post; at: number }
@@ -197,7 +201,7 @@ export function TimelineView(props: Shared) {
         )}
       </div>
       <p className="social-note">
-        ネタバレを含む投稿は隠しています。「表示する」を押すと読めます。
+        {SPOILER_NOTES[props.state.settings.spoilerDisplay]}
       </p>
     </div>
   );
@@ -250,7 +254,7 @@ function FollowSuggestions({ state, actions, notify }: Shared) {
 const REVIEW_PREVIEW = 3;
 
 export function BookReviews({ book, ...props }: Shared & { book: Book }) {
-  const { open, spoilers } = bookReviews(props.state, book.id);
+  const { open, spoilers, leftOut } = bookReviews(props.state, book.id);
   const [doorOpen, setDoorOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const sources = wantSources(props.state, book.id);
@@ -287,7 +291,7 @@ export function BookReviews({ book, ...props }: Shared & { book: Book }) {
             残りのレビューをすべて表示（{open.length - shown.length}件）
           </button>
         )}
-        {!open.length && (
+        {!open.length && !leftOut && (
           <div className="empty-state">
             <h3>この本の、最初の感想を。</h3>
             <p>読み終えた人も、読んでいる途中の人も。</p>
@@ -316,6 +320,12 @@ export function BookReviews({ book, ...props }: Shared & { book: Book }) {
             </div>
           )}
         </div>
+      )}
+      {/* Said once, without a count: the reader chose not to see these. */}
+      {leftOut && (
+        <p className="social-note reviews-left-out">
+          ネタバレを含むかもしれないレビューは、設定により出していません
+        </p>
       )}
     </section>
   );
@@ -381,10 +391,7 @@ export function PostComposer({
   const [picking, setPicking] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const tags = extractTags(body);
-  const tagSuggestions = popularTags(state, 8)
-    .map((entry) => entry.tag)
-    .filter((tag) => !tags.includes(tag))
-    .slice(0, 4);
+  const tagSuggestions = suggestTags(state, tags);
   const attached = fixedBook?.id ?? bookId;
   const isReply = Boolean(parent);
   // A top-level spoiler needs a book to sit behind; replies already belong to one.
@@ -711,6 +718,51 @@ export function PostText({ body }: { body: string }) {
   );
 }
 
+/**
+ * A shop's or a person's own words (an introduction, a bio). Folded by
+ * reports, others see a quiet line and open it with one tap; the owner sees
+ * the words and why they are folded for others. `inLink`: inside a link, so
+ * no button is put there; the page it leads to opens them.
+ */
+export function FoldedWords({
+  state,
+  kind,
+  id,
+  inLink = false,
+  children,
+}: {
+  state: TownState;
+  kind: "shop" | "profile";
+  id: string;
+  inLink?: boolean;
+  children: ReactNode;
+}) {
+  const [read, setRead] = useState(false);
+  const own = id === ME_ID || id === OWN_SHOP_ID;
+  if (own && state.reviewFolds[reviewKey(kind, id)]?.state === "folded")
+    return (
+      <>
+        {children}
+        <p className="words-folded-note" role="note">
+          通報があったため、運営が確かめるまで、紹介文をみんなの画面ではたたんでいます
+        </p>
+      </>
+    );
+  if (read || !wordsFolded(state, kind, id)) return <>{children}</>;
+  return (
+    <span className="words-folded">
+      <span>
+        この紹介文は、通報があったため、運営が確かめるまでたたんでいます
+      </span>
+      {!inLink && (
+        <button type="button" onClick={() => setRead(true)}>
+          読む
+        </button>
+      )}
+    </span>
+  );
+}
+
 export function PostCard({
   state,
   actions,
@@ -734,10 +786,17 @@ export function PostCard({
   const replies = isReply ? [] : repliesOf(state, post.id);
   const [threadOpen, setThreadOpen] = useState(false);
   const [shown, setShown] = useState(false);
+  const [reportRead, setReportRead] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const mine = post.authorId === ME_ID;
   const reported = state.spoilerReports.includes(post.id);
-  const hidden = isSpoilerFor(state, post) && !revealed && !shown;
+  const view = spoilerViewOf(state, post);
+  const hidden = view === "folded" && !revealed && !shown;
+  // Folded by reports: one tap opens it, then any spoiler cover applies.
+  const cover = reviewCoverOf(state, "post", post.id, post.authorId);
+  // Until it is opened, nothing of it shows: not its words, nor its book.
+  const covered = cover !== null && !reportRead;
+  const note = reviewNoteOf(state, "post", post.id, post.authorId);
   const taps = tapsOf(state, post.id);
   const [pops, setPops] = useState(0);
   const received = likesReceived(post);
@@ -751,7 +810,8 @@ export function PostCard({
     !mine &&
     isDatabaseId(post.id) &&
     (savedIn === "account" || savedIn === "visitor");
-  if (!author) return null;
+  // A reader who chose not to see spoilers is not shown this one at all.
+  if (!author || view === "left_out") return null;
   const profile = profilePath(author.id);
   return (
     <article
@@ -804,7 +864,18 @@ export function PostCard({
                 : "ネタバレかもしれません"}
           </span>
         )}
-        {hidden ? (
+        {covered ? (
+          <div className="spoiler-cover report-cover">
+            <span>
+              <Icon name="lock" size={15} />
+              {reviewCoverWords("post", cover)}
+            </span>
+            <button type="button" onClick={() => setReportRead(true)}>
+              <Icon name="eye" size={15} />
+              読む
+            </button>
+          </div>
+        ) : hidden ? (
           <div className="spoiler-cover">
             <span>
               <Icon name="lock" size={15} />
@@ -818,6 +889,11 @@ export function PostCard({
           </div>
         ) : (
           <PostText body={post.body} />
+        )}
+        {note && (
+          <div className="spoiler-folded-note report-folded-note" role="note">
+            <p>{reviewNoteWords("post", note)}</p>
+          </div>
         )}
         {mine && post.folded && !post.spoiler && (
           <div className="spoiler-folded-note" role="note">
@@ -837,7 +913,7 @@ export function PostCard({
             )}
           </div>
         )}
-        {book && (showBook || isReply) && (
+        {book && (showBook || isReply) && !covered && (
           <Link href={bookPath(book.id)} className="post-book">
             <BookJacket book={book} className="post-book-jacket" />
             <span>
@@ -989,7 +1065,7 @@ export function PostCard({
         {mine && confirmingDelete && (
           <div className="delete-confirm" role="group" aria-label="投稿の削除">
             <span>
-              {replies.length
+              {hasReplies(state, post.id)
                 ? "この投稿と返信を削除しますか？"
                 : "この投稿を削除しますか？"}
             </span>

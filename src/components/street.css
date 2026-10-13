@@ -163,10 +163,12 @@
 }
 .street-search-result button {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 5px;
   min-height: 40px;
   color: #657a60;
+  white-space: nowrap;
 }
 .street-layout {
   display: grid;

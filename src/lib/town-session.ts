@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountStore } from "./account-session";
 import { localTownRepository } from "./repository";
 import { getSupabase } from "./supabase/client";
+import { supabaseConfigured } from "./supabase/config";
+import { setCoverRefusalLoader } from "./covers";
 import type { Database } from "./supabase/database.generated";
 import {
   accountTownBackend,
@@ -64,6 +66,20 @@ function followAccountWith<B>(
   accountStore.subscribe(sync);
   sync();
 }
+
+// Covers rights holders asked us not to show (cover_refusals), read by
+// everyone who has the database, signed in or not.
+if (supabaseConfigured)
+  setCoverRefusalLoader(async () => {
+    const client = getSupabase();
+    if (!client) throw new Error("No database on this page");
+    const { data, error } = await client
+      .from("cover_refusals")
+      .select("isbn, source")
+      .limit(1000);
+    if (error) throw error;
+    return data ?? [];
+  });
 
 /** The town: the person's town in Supabase, or the demo in this browser. */
 export function followAccount(switchTo: (backend: TownBackend) => void) {
