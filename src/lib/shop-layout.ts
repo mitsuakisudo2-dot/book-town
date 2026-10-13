@@ -19,7 +19,9 @@ import { migrateShopScene, publicStoreScene } from "./store-customization";
 // Nothing here is called by a screen yet.
 
 export const LAYOUT_FORMAT = 2 as const;
-/** How many shelves the editor offers for now; only the commands look at it. */
+/** How many shelves the editor offers for now. A provisional choice, not a
+ * product limit (the data holds up to HARD_MAX_SHELVES); only the commands
+ * look at it. */
 export const MAX_SHELVES = 3;
 /** The safety limit validateLayout keeps (and the database's layout_problem
  * is to keep). */
