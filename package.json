@@ -14,6 +14,7 @@
     "test:search": "tsx tests/search.test.ts && tsx tests/search-text.test.ts",
     "test:posters": "tsx tests/posters.test.ts",
     "test:customization-domain": "tsx tests/customization-domain.test.ts",
+    "test:shop-layout": "tsx tests/shop-layout-domain.test.ts",
     "test:db": "tsx tests/database-policies.test.ts",
     "test:account": "tsx tests/account-domain.test.ts",
     "test:town-sync": "tsx tests/town-remote.test.ts && tsx tests/walk-remote.test.ts",
