@@ -4,10 +4,12 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  journalTown,
   useTownStore,
   usePersistenceStatus,
   useTownBackend,
 } from "../lib/store";
+import { useJournalSender } from "../lib/library-journal";
 import { saveWarning } from "../lib/persistence";
 import { useAccountState } from "../lib/account-session";
 import {
@@ -208,6 +210,9 @@ export default function TownApp({
     noteToast(message);
     setToast({ message, undo });
   }, []);
+  // Books the scanner kept on this device are sent once the town can take
+  // them, here on every page (library-journal.ts).
+  useJournalSender(journalTown, notify);
   const shared = { state, actions, notify };
   // Enter in the top search opens the search page for what was typed: books,
   // readers and shops alike. On the street, what is typed also narrows the

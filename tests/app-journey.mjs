@@ -535,8 +535,17 @@ try {
     "a book registered by ISBN can be read and attached to posts",
     async () => {
       await go("/profiles/me/");
-      await page.getByRole("button", { name: "本を登録" }).click();
-      const dialog = page.getByRole("dialog", { name: "本を登録" });
+      // 「本を登録」 opens the scanner; one book by hand is ［手で入力］ there.
+      await page
+        .locator(".profile-minor-actions")
+        .getByRole("button", { name: "本を登録" })
+        .click();
+      const scanner = page.getByRole("dialog", { name: "本を続けて登録" });
+      await scanner.getByRole("button", { name: "手で入力" }).click();
+      const dialog = page.getByRole("dialog", {
+        name: "本を登録",
+        exact: true,
+      });
       await dialog.getByLabel("ISBN").fill("978-4-00-000000-2");
       await dialog.getByRole("button", { name: "ISBNで探す" }).click();
       await expect(
@@ -548,6 +557,8 @@ try {
       await expect(dialog.getByLabel("著者")).toHaveValue("試験 太郎");
       await dialog.getByRole("button", { name: "登録する" }).click();
       await expect(dialog).toHaveCount(0);
+      await scanner.getByRole("button", { name: "終わる" }).click();
+      await expect(scanner).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: /^登録\s*\d*$/ }),
       ).toHaveAttribute("aria-pressed", "true");
@@ -592,13 +603,31 @@ try {
 
       // A book openBD has a cover for shows openBD's.
       await go("/profiles/me/?books=library");
-      await page.getByRole("button", { name: "本を登録", exact: true }).click();
-      const dialog = page.getByRole("dialog", { name: "本を登録" });
+      await page
+        .locator(".profile-minor-actions")
+        .getByRole("button", { name: "本を登録" })
+        .click();
+      const scanner = page.getByRole("dialog", { name: "本を続けて登録" });
+      const dialog = page.getByRole("dialog", {
+        name: "本を登録",
+        exact: true,
+      });
+      await scanner.getByRole("button", { name: "手で入力" }).click();
       await dialog.getByLabel("ISBN").fill(OPENBD_ISBN);
       await dialog.getByRole("button", { name: "ISBNで探す" }).click();
       await expect(dialog.getByLabel("タイトル")).toHaveValue("表紙のある本");
       await dialog.getByRole("button", { name: "登録する" }).click();
       await expect(dialog).toHaveCount(0);
+
+      // A book without an ISBN, by hand from the same scanner.
+      await scanner.getByRole("button", { name: "手で入力" }).click();
+      await dialog.getByLabel("タイトル").fill("手で書いた本");
+      await dialog.getByLabel("著者").fill("試験 次郎");
+      await dialog.getByRole("button", { name: "登録する" }).click();
+      await expect(dialog).toHaveCount(0);
+      await scanner.getByRole("button", { name: "終わる" }).click();
+      await expect(scanner).toHaveCount(0);
+
       const openBd = page
         .locator(".profile-saved-book", { hasText: "表紙のある本" })
         .locator(".book-jacket.has-cover img");
@@ -608,11 +637,6 @@ try {
       );
 
       // A book without an ISBN keeps its 装丁カード, set top to bottom.
-      await page.getByRole("button", { name: "本を登録", exact: true }).click();
-      await dialog.getByLabel("タイトル").fill("手で書いた本");
-      await dialog.getByLabel("著者").fill("試験 次郎");
-      await dialog.getByRole("button", { name: "登録する" }).click();
-      await expect(dialog).toHaveCount(0);
       const card = page
         .locator(".profile-saved-book", { hasText: "手で書いた本" })
         .locator(".book-jacket");

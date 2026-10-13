@@ -1074,7 +1074,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 12px;
@@ -1089,4 +1089,66 @@
     flex: 1 1 auto;
     justify-content: center;
   }
+}
+
+/* The library's way in, beside what the tab holds. */
+.profile-library-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.profile-library-head .profile-section-description {
+  margin: 0;
+}
+.profile-library-head .button {
+  flex: none;
+  min-height: 44px;
+}
+/* Books the scanner kept on this device: 書名待ち, 送れなかった本. */
+.journal-notes {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+.journal-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-left: 3px solid #c9a54f;
+  border-radius: 6px;
+  background: #fbf6e6;
+}
+.journal-note p,
+.journal-title-about {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  color: #3f4a39;
+}
+.journal-note small,
+.journal-title-about small {
+  font-size: 11px;
+  color: #6b7262;
+}
+.journal-note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.journal-note-actions .button {
+  min-height: 44px;
+}
+.journal-title-form {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.journal-title-form:last-child {
+  border-bottom: 0;
 }

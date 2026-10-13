@@ -624,6 +624,7 @@ try {
       "/notifications/",
       "/search/",
       "/profiles/me/",
+      "/profiles/me/?books=library",
       "/my-shop/",
       "/reading-list/",
       "/timeline/",
@@ -812,8 +813,17 @@ try {
       };
       await page.route(supabase + "/rest/v1/**", hold);
       await page.goto(base + "/profiles/me/");
-      await page.getByRole("button", { name: "本を登録", exact: true }).click();
-      const dialog = page.getByRole("dialog", { name: "本を登録" });
+      // One book by hand: ［手で入力］ in the scanner.
+      await page
+        .locator(".profile-minor-actions")
+        .getByRole("button", { name: "本を登録" })
+        .click();
+      const scanner = page.getByRole("dialog", { name: "本を続けて登録" });
+      await scanner.getByRole("button", { name: "手で入力" }).click();
+      const dialog = page.getByRole("dialog", {
+        name: "本を登録",
+        exact: true,
+      });
       const register = dialog.getByRole("button", {
         name: "登録する",
         exact: true,
@@ -841,7 +851,102 @@ try {
       await expect
         .poll(() => sent)
         .toEqual(["/rest/v1/books", "/rest/v1/book_marks"]);
+      await scanner.getByRole("button", { name: "終わる" }).click();
+      await expect(scanner).toHaveCount(0);
       await page.unroute(supabase + "/rest/v1/**", hold);
+    },
+  );
+
+  await check(
+    "an ISBN read while the town loads waits on the device, then is registered",
+    async () => {
+      let holding = true;
+      const held = [];
+      const sent = [];
+      const hold = (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() !== "GET") {
+          sent.push({ path: url.pathname, rows: request.postDataJSON() });
+          return route.fulfill({ status: 201, body: "" });
+        }
+        if (!holding || url.searchParams.get("id") === "eq." + user.id)
+          return route.fallback();
+        held.push(route);
+      };
+      // openBD knows its title.
+      const READ_ISBN = "9784101092058";
+      const titles = (route) => {
+        const isbns = new URL(route.request().url()).searchParams
+          .get("isbn")
+          .split(",");
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify(
+            isbns.map((isbn) =>
+              isbn === READ_ISBN
+                ? { summary: { isbn, title: "車輪の下", author: "ヘッセ／著" } }
+                : null,
+            ),
+          ),
+        });
+      };
+      await page.route("https://api.openbd.jp/**", titles);
+      await page.route(supabase + "/rest/v1/**", hold);
+      await page.goto(base + "/profiles/me/");
+      await page
+        .locator(".profile-minor-actions")
+        .getByRole("button", { name: "本を登録" })
+        .click();
+      const scanner = page.getByRole("dialog", { name: "本を続けて登録" });
+      await expect(scanner.locator(".scan-banner")).toContainText(
+        "読み込んでいます",
+      );
+      // This browser reads no barcodes: the ISBN is typed.
+      await scanner.getByLabel("ISBN", { exact: true }).fill(READ_ISBN);
+      await expect(scanner.locator(".scan-card-status")).toHaveText(
+        "読み込みが終わったら登録します",
+      );
+      // Kept on this device, and nothing sent yet.
+      const journalKey = "book-town-library-journal:" + user.id;
+      const journal = () =>
+        page.evaluate(
+          (key) => JSON.parse(localStorage.getItem(key))?.items ?? null,
+          journalKey,
+        );
+      expect(await journal()).toEqual([
+        expect.objectContaining({ isbn: READ_ISBN, state: "ready" }),
+      ]);
+      const decided = (await journal())[0].bookId;
+      expect(sent).toEqual([]);
+      await shot("8-scan-while-loading");
+      // Once the town is read, it is registered with the id it was given.
+      holding = false;
+      for (const route of held.splice(0)) await route.fallback();
+      await expect(scanner.locator(".scan-card-status")).toHaveText(
+        "登録しました",
+      );
+      await expect(scanner.locator(".scan-count")).toHaveText("この回 1冊");
+      await expect
+        .poll(() => sent.map((write) => write.path))
+        .toEqual(["/rest/v1/books", "/rest/v1/book_marks"]);
+      const [books, marks] = sent.map((write) => [write.rows].flat());
+      expect(books).toHaveLength(1);
+      expect(books[0]).toEqual(
+        expect.objectContaining({ isbn: READ_ISBN, title: "車輪の下" }),
+      );
+      expect(books[0].id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+      // The id decided at the read: sent twice, it would be one book.
+      expect(books[0].id).toBe(decided);
+      expect(marks.map((mark) => mark.book_id)).toEqual([books[0].id]);
+      // Saved: the device lets it go.
+      await expect.poll(journal).toBeNull();
+      await scanner.getByRole("button", { name: "終わる" }).click();
+      await expect(page.locator(".toast")).toContainText("1冊を登録しました");
+      await page.unroute(supabase + "/rest/v1/**", hold);
+      await page.unroute("https://api.openbd.jp/**", titles);
     },
   );
 

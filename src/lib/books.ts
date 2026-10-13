@@ -42,6 +42,30 @@ export function normalizeIsbn(raw: string): string | null {
   return null;
 }
 
+/** The longest title or author a book keeps, as the database allows. */
+export const BOOK_TEXT_MAX = 200;
+/** A title or author as kept: a longer one is cut, ending in …. */
+export function bookText(value: string): string {
+  const text = value.trim();
+  if (text.length <= BOOK_TEXT_MAX) return text;
+  let cut = "";
+  // By whole characters, so a cut never splits one in two.
+  for (const char of text) {
+    if (cut.length + char.length > BOOK_TEXT_MAX - 1) break;
+    cut += char;
+  }
+  return cut.trimEnd() + "…";
+}
+
+/** A list price as kept: whole yen up to 1,000,000, as the database allows. */
+export const bookPrice = (value: unknown): number | undefined =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= 1 &&
+  value <= 1_000_000
+    ? value
+    : undefined;
+
 // Registered books get an original jacket drawn from these tokens, never a scanned cover.
 const jackets: Array<[string, string]> = [
   ["#374d53", "#f3ede1"],

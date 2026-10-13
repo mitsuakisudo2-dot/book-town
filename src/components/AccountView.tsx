@@ -20,6 +20,7 @@ import {
 } from "../lib/account-draft";
 import { useKeptDraft } from "../lib/kept-draft";
 import { adoptVisitorRecords } from "../lib/record-draft";
+import { libraryJournal, useJournal } from "../lib/library-journal";
 import { Icon } from "./ui";
 import { KeptDraftNote } from "./KeptDraftNote";
 import "./profile.css";
@@ -353,11 +354,7 @@ function Unavailable() {
       >
         もう一度読み込む
       </button>
-      <div className="account-links">
-        <button type="button" onClick={() => void accountActions.signOut()}>
-          ログアウト
-        </button>
-      </div>
+      <SignOut />
     </>
   );
 }
@@ -372,12 +369,38 @@ function SignedIn({ handle, name }: { handle: string; name: string }) {
       <Link className="button primary" href="/">
         本の街へ
       </Link>
-      <div className="account-links">
-        <button type="button" onClick={() => void accountActions.signOut()}>
-          ログアウト
-        </button>
-      </div>
+      <SignOut />
     </>
+  );
+}
+
+/**
+ * ログアウト lets this reader's scan journal go from the device (a shared
+ * device keeps nothing of theirs), saying first when books still wait in it.
+ * A sign-out the reader did not press (a failed token refresh) keeps it.
+ */
+function SignOut() {
+  const account = useAccountState();
+  const userId = "user" in account ? account.user.id : null;
+  const waiting = useJournal(userId).length;
+  return (
+    <div className="account-links">
+      {waiting > 0 && (
+        <p className="account-journal-warning">
+          まだ登録できていない本が{waiting}
+          冊あります。ログアウトすると、この端末の控えから消えます
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          if (userId) libraryJournal.forget(userId);
+          void accountActions.signOut();
+        }}
+      >
+        ログアウト
+      </button>
+    </div>
   );
 }
 

@@ -130,6 +130,20 @@ if (typeof window !== "undefined")
   );
 
 /**
+ * Runs `then` once a layer closed just now has taken its step off the
+ * history. Going back puts the page where it was scrolled when the layer
+ * opened, so a page that shows the reader something after a layer closes
+ * (the books a scan just read in) waits for that first.
+ */
+export function afterLayerCloses(then: () => void) {
+  // After the closed layer's own timer (close, below), which may go back.
+  setTimeout(() => {
+    if (backing) void backing.then(() => setTimeout(then, 0));
+    else then();
+  }, 0);
+}
+
+/**
  * Goes on to another page from inside dialogs (a post sent, then the
  * timeline): their steps come off first, so that 戻る from there returns to
  * the page beneath. A named layer (a book in hand) stays, to come back to,
