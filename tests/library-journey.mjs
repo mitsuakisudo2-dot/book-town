@@ -1,6 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { ean13Modules, withCheckDigit } from "./ean13.mjs";
 import { restingBox, settleBeforeNavigating } from "./journey-layers.mjs";
 
 // Registering books in the demo build, on a phone. First by hand, through
@@ -11,9 +12,11 @@ import { restingBox, settleBeforeNavigating } from "./journey-layers.mjs";
 // twenty books in a row, the same book twice, price codes, a book openBD
 // does not know, ［取り消す］, offline, ［終わる］, 書名を入れる, a tab closed
 // before its books were saved, 390px, 戻る, the sound and the vibration;
-// and ISBNs typed where no barcode can be read. Nothing leaves this machine:
-// openBD and Google Books are answered here, and every other outside
-// address is refused.
+// ISBNs typed where no barcode can be read; and, with no reader of the
+// browser's own, ZXing in WebAssembly (served from out/zxing/) reading a
+// book's barcode drawn on the camera. Nothing leaves this machine: openBD
+// and Google Books are answered here, and every other outside address is
+// refused.
 
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -179,12 +182,18 @@ async function scanningPage() {
   return opened;
 }
 
-// The first phone's browser cannot read barcodes, so the scanner takes
-// typed ISBNs there.
+// The first phone's browser has no reader of its own, and the WebAssembly
+// one never arrives (as on a network that fails), so the scanner takes typed
+// ISBNs there. Its fake camera starts without asking.
 const context = await browser.newContext(phone);
 await answerOutside(context);
 await context.addInitScript(() => {
   delete window.BarcodeDetector;
+});
+const readerAsked = [];
+await context.route("**/zxing/**", (route) => {
+  readerAsked.push(route.request().url());
+  return route.abort();
 });
 const page = settleBeforeNavigating(await context.newPage());
 page.on("pageerror", (e) => errors.push(e.message));
@@ -525,19 +534,26 @@ try {
   );
 
   await check(
-    "with no barcode reader, ISBNs are typed one after another",
+    "with the reader not loaded, ISBNs are typed one after another",
     async () => {
       await toasts();
       await openScanner();
-      await expect(scanner()).toContainText(
-        "このブラウザはバーコードを読み取れません。ISBNを続けて打って登録できます",
-      );
+      const failed =
+        "読み取りの準備ができませんでした。電波のよい所で［カメラで読む］をもう一度";
+      await expect(scanner().locator(".scan-notes")).toContainText(failed);
       // The settings would not help here, so they are not mentioned.
       await expect(scanner()).not.toContainText("端末の設定");
-      await expect(
-        scanner().getByRole("button", { name: "カメラで読む" }),
-      ).toHaveCount(0);
-      // The field has the focus as the scanner opens: the keyboard is up.
+      // The field has the focus once the camera gives way: the keyboard is up.
+      await expect(field()).toBeFocused();
+      await page.screenshot({
+        path: path.join(output, "scan-reader-failed.png"),
+      });
+      // ［カメラで読む］ tries the reader again from the beginning.
+      const asked = readerAsked.length;
+      expect(asked).toBeGreaterThan(0);
+      await scanner().getByRole("button", { name: "カメラで読む" }).click();
+      await expect.poll(() => readerAsked.length).toBeGreaterThan(asked);
+      await expect(scanner().locator(".scan-notes")).toContainText(failed);
       await expect(field()).toBeFocused();
       // Thirteen digits register at once, and the field is ready for the next.
       const typed = isbnOf(41);
@@ -1133,14 +1149,8 @@ try {
       await openScanner(timed);
       await cameraRunning(timed);
       const [first, second] = [isbnOf(31), isbnOf(32)];
-      await show(timed, first);
-      await expect(count(timed)).toHaveText("この回 1冊");
-      await expect(cardStatus(timed)).toHaveText("登録しました");
-      // In: one short vibration, and a tone (♪ is on).
-      await expect.poll(async () => (await feedback(timed)).buzz).toEqual([30]);
-      const sounded = await feedback(timed);
-      expect(sounded.tones).toBeGreaterThan(0);
-      const kept = await stored(timed);
+      // Every read flashes the card: an iPhone neither vibrates nor, on
+      // silent, sounds.
       await timed.evaluate(() => {
         window.__flashed = false;
         new MutationObserver(() => {
@@ -1152,11 +1162,26 @@ try {
           attributeFilter: ["class"],
         });
       });
+      const flashed = () =>
+        timed.evaluate(() => {
+          const was = window.__flashed;
+          window.__flashed = false;
+          return was;
+        });
+      await show(timed, first);
+      await expect(count(timed)).toHaveText("この回 1冊");
+      await expect(cardStatus(timed)).toHaveText("登録しました");
+      await expect.poll(flashed).toBe(true);
+      // In: one short vibration, and a tone (♪ is on).
+      await expect.poll(async () => (await feedback(timed)).buzz).toEqual([30]);
+      const sounded = await feedback(timed);
+      expect(sounded.tones).toBeGreaterThan(0);
+      const kept = await stored(timed);
+      // Past the first flash, within the 3 seconds.
+      await timed.clock.setFixedTime(start + 900);
       await show(timed, first);
       await expect(cardStatus(timed)).toHaveText("同じ本です");
-      await expect
-        .poll(() => timed.evaluate(() => window.__flashed))
-        .toBe(true);
+      await expect.poll(flashed).toBe(true);
       await expect(count(timed)).toHaveText("この回 1冊");
       expect(await stored(timed)).toEqual(kept);
       // Within 3 seconds: no sound, no vibration.
@@ -1179,6 +1204,132 @@ try {
         "isbn-" + second,
       ]);
       await timed.context().close();
+    },
+  );
+
+  await check(
+    "with no WebAssembly either, the browser cannot read barcodes",
+    async () => {
+      const bare = await browser.newContext(phone);
+      await answerOutside(bare);
+      await bare.addInitScript(() => {
+        delete window.BarcodeDetector;
+        delete window.WebAssembly;
+        window.__asked = 0;
+        navigator.mediaDevices.getUserMedia = () => {
+          window.__asked += 1;
+          return Promise.reject(new DOMException("none", "NotFoundError"));
+        };
+      });
+      const on = settleBeforeNavigating(await bare.newPage());
+      on.on("pageerror", (e) => errors.push(e.message));
+      await go("/profiles/me/?books=library", on);
+      await openScanner(on);
+      await expect(scanner(on)).toContainText(
+        "このブラウザはバーコードを読み取れません。ISBNを続けて打って登録できます",
+      );
+      await expect(
+        scanner(on).getByRole("button", { name: "カメラで読む" }),
+      ).toHaveCount(0);
+      await expect(field(on)).toBeFocused();
+      // The camera is not asked for, for nothing.
+      expect(await on.evaluate(() => window.__asked)).toBe(0);
+      await bare.close();
+    },
+  );
+
+  await check(
+    "with no reader of its own, ZXing in WebAssembly reads a book on the camera",
+    async () => {
+      const book = isbnOf(61);
+      const zxing = await browser.newContext({
+        ...phone,
+        permissions: ["camera"],
+      });
+      await answerOutside(zxing);
+      // The camera shows a book's two barcodes, the ISBN above the price
+      // code, as a phone held upright over the back of a Japanese book.
+      await zxing.addInitScript(
+        ({ isbnBars, priceBars }) => {
+          delete window.BarcodeDetector;
+          window.__asked = [];
+          navigator.mediaDevices.getUserMedia = async (constraints) => {
+            window.__asked.push(constraints);
+            const canvas = document.createElement("canvas");
+            canvas.width = 1280;
+            canvas.height = 720;
+            const paint = canvas.getContext("2d");
+            const draw = () => {
+              paint.fillStyle = "#efece4";
+              paint.fillRect(0, 0, 1280, 720);
+              paint.fillStyle = "#262626";
+              const wide = 3;
+              const left = (1280 - 95 * wide) / 2;
+              for (const [bars, top] of [
+                [isbnBars, 300],
+                [priceBars, 376],
+              ])
+                for (let at = 0; at < 95; at++)
+                  if (bars[at] === "1")
+                    paint.fillRect(left + at * wide, top, wide, 56);
+            };
+            draw();
+            setInterval(draw, 100);
+            return canvas.captureStream(10);
+          };
+        },
+        {
+          isbnBars: ean13Modules(book),
+          // A price code as printed: its check digit is right.
+          priceBars: ean13Modules(withCheckDigit("192019300700")),
+        },
+      );
+      const on = settleBeforeNavigating(await zxing.newPage());
+      on.on("pageerror", (e) => errors.push(e.message));
+      const fetched = [];
+      on.on("response", (response) => {
+        if (response.url().includes("/zxing/"))
+          fetched.push([new URL(response.url()).pathname, response.status()]);
+      });
+      await go("/profiles/me/?books=library", on);
+      // A phone (pointer: coarse): the camera opens at once.
+      await openScanner(on);
+      await expect(scanner(on).locator(".scan-guide")).toHaveText(
+        "上の段（978…）を枠に",
+      );
+      await expect(count(on)).toHaveText("この回 1冊", { timeout: 15000 });
+      await expect(cardTitle(on)).toHaveText("試験の本 61");
+      await expect(cardStatus(on)).toHaveText("登録しました");
+      // The price code under it is passed over, and nothing is said of it.
+      await expect(scanner(on).locator(".scan-guide")).not.toHaveClass(
+        /is-hint/,
+      );
+      await on.screenshot({ path: path.join(output, "scan-zxing.png") });
+      expect((await stored(on)).library).toEqual(["isbn-" + book]);
+      // Held in view, it is one book.
+      await on.waitForTimeout(1500);
+      await expect(count(on)).toHaveText("この回 1冊");
+      // From this site, once; and a larger picture was asked for.
+      expect(fetched).toEqual([
+        [expect.stringMatching(/^\/zxing\/zxing_reader-[\d.]+\.wasm$/), 200],
+      ]);
+      const asked = await on.evaluate(() => window.__asked);
+      expect(asked[0].video).toEqual(
+        expect.objectContaining({
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        }),
+      );
+      // Reopened, the reader is the one already loaded.
+      await finishScanning(on);
+      await openScanner(on);
+      await expect(cardStatus(on)).toHaveText("もうライブラリにあります", {
+        timeout: 15000,
+      });
+      expect(fetched).toHaveLength(1);
+      expect((await stored(on)).library).toEqual(["isbn-" + book]);
+      await finishScanning(on);
+      await zxing.close();
     },
   );
 

@@ -156,6 +156,13 @@ const context = await browser.newContext({
   viewport: { width: 390, height: 844 },
   hasTouch: true,
 });
+// No camera on this phone: the scanner takes typed ISBNs, whichever barcode
+// reader the browser has.
+await context.addInitScript(() => {
+  if (navigator.mediaDevices)
+    navigator.mediaDevices.getUserMedia = () =>
+      Promise.reject(new DOMException("none", "NotFoundError"));
+});
 await context.route(supabase + "/**", async (route) => {
   const request = route.request();
   const url = new URL(request.url());
@@ -746,7 +753,7 @@ try {
       await expect(scanner.locator(".scan-banner")).toContainText(
         "読み込んでいます",
       );
-      // This browser reads no barcodes: the ISBN is typed.
+      // No camera here: the ISBN is typed.
       await scanner.getByLabel("ISBN", { exact: true }).fill(READ_ISBN);
       await expect(scanner.locator(".scan-card-status")).toHaveText(
         "読み込みが終わったら登録します",
