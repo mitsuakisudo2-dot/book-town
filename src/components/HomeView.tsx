@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode, type TouchEvent } from "react";
+import { useEffect, useRef, type ReactNode, type TouchEvent } from "react";
 import Link from "next/link";
 import { bookPath } from "../lib/books";
 import { useRouter } from "next/navigation";
@@ -9,7 +9,12 @@ import { ComposeFab, TimelineView } from "./Social";
 import { BookJacket, Icon } from "./ui";
 import { bookToContinue } from "../lib/reading";
 import { leaveLayers } from "../lib/back-layer";
-import { useHomeAddress, type HomePath } from "../lib/last-address";
+import {
+  noteHomeAddress,
+  useHomeAddress,
+  type HomePath,
+} from "../lib/last-address";
+import { useUrlParam } from "../lib/url-state";
 
 type Shared = {
   state: TownState;
@@ -61,6 +66,11 @@ export function HomeView({
   const other: HomeTab = tab === "shelves" ? "timeline" : "shelves";
   const otherAddress = useHomeAddress(routes[other]);
   const href = (to: HomeTab) => (to === tab ? routes[to] : otherAddress);
+  // This tab's choices are kept as they now are, however they changed: a
+  // filter, a link back to the start, 戻る or 進む.
+  const [show] = useUrlParam("show");
+  const [lane] = useUrlParam("lane");
+  useEffect(() => noteHomeAddress(), [tab, show, lane]);
   const start = useRef<{ x: number; y: number; time: number } | null>(null);
   function onTouchStart(event: TouchEvent<HTMLDivElement>) {
     start.current =

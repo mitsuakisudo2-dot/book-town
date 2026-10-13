@@ -48,6 +48,8 @@ const session = () => {
 };
 
 let profile = null;
+// How long the stand-in takes to read the signed-in person's own profile.
+let ownProfileDelay = 0;
 // The rest of the town, once a test fills it: rows by table.
 let town = null;
 const reportsSent = [];
@@ -112,6 +114,8 @@ await context.route(supabase + "/**", async (route) => {
   if (url.pathname === "/auth/v1/user") return json(200, user);
   if (url.pathname === "/rest/v1/profiles") {
     if (request.method() === "GET") {
+      if (ownProfileDelay && url.searchParams.get("id") === "eq." + user.id)
+        await new Promise((done) => setTimeout(done, ownProfileDelay));
       const own = profile ? [profile] : [];
       return json(
         200,
@@ -384,15 +388,39 @@ try {
   );
 
   await check("the right code leads to the first profile", async () => {
+    // The profile is read before the page changes; until then the code step
+    // stays, never the empty sign-in it came from.
+    await page.evaluate(() => {
+      const heading = () =>
+        document.querySelector(".account-card h1")?.textContent ?? "";
+      window.headingsSeen = [heading()];
+      new MutationObserver(() => {
+        const text = heading();
+        if (text && window.headingsSeen.at(-1) !== text)
+          window.headingsSeen.push(text);
+      }).observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    });
+    ownProfileDelay = 1500;
     await page.getByLabel("6桁のコード").fill("123456");
     await page.getByRole("button", { name: "ログインする" }).click();
     await expect(
       page.getByRole("heading", { name: "ようこそ、本の街へ" }),
     ).toBeVisible();
+    ownProfileDelay = 0;
+    expect(await page.evaluate(() => window.headingsSeen)).toEqual([
+      "メールを確かめてください",
+      "ようこそ、本の街へ",
+    ]);
     // Signed in, the step is not kept any more.
-    expect(
-      await page.evaluate(() => sessionStorage.getItem("book-town-sign-in-v1")),
-    ).toBeNull();
+    await expect
+      .poll(() =>
+        page.evaluate(() => sessionStorage.getItem("book-town-sign-in-v1")),
+      )
+      .toBeNull();
     await shot("3-welcome");
   });
 
@@ -412,6 +440,7 @@ try {
       await expect(name).toHaveValue("アキ");
       await expect(handle).toHaveValue("aki");
       await expect(resumed).toBeVisible();
+      await expectReadable(page.locator(".account-kept"), "kept first profile");
       await shot("3-welcome-resumed");
       // Thrown away only when asked, and asked once.
       await page.getByRole("button", { name: "書きかけを消す" }).click();

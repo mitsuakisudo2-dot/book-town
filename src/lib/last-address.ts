@@ -70,7 +70,7 @@ function current(): HomeAddresses {
   return kept;
 }
 
-/** Notes the page's address, when it is a Home tab (called as it changes). */
+/** Notes the page's address when it is a Home tab, as its choices change. */
 export function noteHomeAddress() {
   const path = location.pathname;
   const address = homeAddressOf(path, location.search);

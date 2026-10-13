@@ -110,8 +110,9 @@ function SignIn() {
     setError("");
     const result = await accountActions.verifyCode(sentTo, code);
     setBusy(false);
+    // Once the code works, the step stays until the account says who signed
+    // in (the profile is read first); AccountView then forgets it.
     if (!result.ok) setError(result.message);
-    else sent.clear();
   }
 
   if (!sentTo)
