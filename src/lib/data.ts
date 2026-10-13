@@ -1410,7 +1410,7 @@ export const posters: Poster[] = [
       },
     ],
   }),
-  poster("poster-shiori-look-again", "r-shiori", "2026-10-10T15:05:00+09:00", {
+  poster("poster-shiori-look-again", "r-shiori", "2026-10-12T08:45:00+09:00", {
     template: "lineup",
     theme: "wakakusa",
     font: "gothic",
@@ -1435,7 +1435,7 @@ export const posters: Poster[] = [
       },
     ],
   }),
-  poster("poster-haru-last-page", "r-haru", "2026-10-12T08:45:00+09:00", {
+  poster("poster-haru-last-page", "r-haru", "2026-10-10T15:05:00+09:00", {
     template: "one_book",
     theme: "kosho",
     font: "mincho",

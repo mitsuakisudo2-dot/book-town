@@ -291,10 +291,40 @@ async function main() {
       assert.equal(kept.filter((poster) => poster.id === id).length, 1);
       assert.equal(kept.length, seedState.posters.length + 1);
 
-      actions.deletePoster(id!);
+      assert.equal(actions.deletePoster(id!), true);
       assert.ok(
         !store.getSnapshot().posters.some((poster) => poster.id === id),
       );
+      assert.equal(actions.deletePoster(id!), false);
+    },
+  );
+
+  await check(
+    "while the account's town loads, a poster is not said to be kept",
+    () => {
+      let saves = 0;
+      const store = createTownStore({
+        kind: "account",
+        newId: () => crypto.randomUUID(),
+        load: () => new Promise(() => {}),
+        save: () => {
+          saves++;
+          return "saved";
+        },
+      });
+      store.initialize();
+      // The editor keeps the maker's words only when this says nothing was kept.
+      assert.equal(
+        store.actions.savePoster(
+          draft({
+            template: "text",
+            pages: [{ heading: "見出し", text: "本文", bookIds: [] }],
+          }),
+        ),
+        null,
+      );
+      assert.equal(store.getSnapshot().posters.length, 0);
+      assert.equal(saves, 0);
     },
   );
 }

@@ -429,13 +429,35 @@ export async function applyWrite(
           .in("id", write.ids),
       );
       return;
-    case "posters":
-      await settled(
+    case "posters": {
+      const made = await all(
         client
           .from("posters")
-          .upsert(write.rows, { onConflict: "id", ...ignore }),
+          .upsert(write.rows, { onConflict: "id", ...ignore })
+          .select("id"),
       );
+      // A poster already there was kept by an earlier try whose answer was
+      // lost; the maker may have changed it since, so it takes these fields.
+      const fresh = new Set(made.map((row) => row.id));
+      for (const row of write.rows)
+        if (row.id && !fresh.has(row.id))
+          await settled(
+            client
+              .from("posters")
+              .update({
+                template: row.template,
+                theme: row.theme,
+                font: row.font,
+                pages: row.pages,
+                spoiler: row.spoiler,
+                show_in_timeline: row.show_in_timeline,
+                status: row.status,
+              })
+              .eq("id", row.id)
+              .eq("author_id", ids.userId),
+          );
       return;
+    }
     case "update-poster":
       await settled(
         client

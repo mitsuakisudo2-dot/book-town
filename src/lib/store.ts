@@ -107,6 +107,7 @@ const reachesSample = (name: string, args: unknown[]) => {
 const ANSWERING_ACTIONS = new Set<keyof TownActions>([
   "addShelfBook",
   "changeDisplay",
+  "deletePoster",
 ]);
 
 export function createTownStore(
@@ -184,11 +185,13 @@ export function createTownStore(
     else start(backend);
   }
 
-  function commit(next: TownState) {
-    if (next === state || loading) return;
+  /** Whether the change was taken: nothing is changed while the town loads. */
+  function commit(next: TownState): boolean {
+    if (next === state || loading) return false;
     state = next;
     status = backend.save(state);
     notify();
+    return true;
   }
 
   function withShop(nextShop: Shop) {
@@ -789,13 +792,16 @@ export function createTownStore(
               : current.createdAt,
           updatedAt: at,
         };
-        commit({
+        // Until the town has loaded, nothing is kept: the maker's work stays
+        // with them rather than being thanked for and lost.
+        return commit({
           ...state,
           posters: state.posters.map((entry) =>
             entry.id === posterId ? next : entry,
           ),
-        });
-        return posterId;
+        })
+          ? posterId
+          : null;
       }
       const entry: Poster = {
         id: nextId(
@@ -807,8 +813,9 @@ export function createTownStore(
         createdAt: at,
         updatedAt: at,
       };
-      commit({ ...state, posters: [...state.posters, entry] });
-      return entry.id;
+      return commit({ ...state, posters: [...state.posters, entry] })
+        ? entry.id
+        : null;
     },
     deletePoster(posterId) {
       initialize();
@@ -817,8 +824,8 @@ export function createTownStore(
           (entry) => entry.id === posterId && entry.authorId === ME_ID,
         )
       )
-        return;
-      commit({
+        return false;
+      return commit({
         ...state,
         posters: state.posters.filter((entry) => entry.id !== posterId),
       });

@@ -26,6 +26,7 @@
     "test:feedback": "node tests/feedback-journey.mjs",
     "test:social": "node tests/social-journey.mjs",
     "test:app": "node tests/app-journey.mjs",
+    "test:poster-journey": "node tests/poster-journey.mjs",
     "test:settings": "tsx tests/hosted-settings.test.ts"
   },
   "dependencies": {

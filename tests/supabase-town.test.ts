@@ -4,6 +4,7 @@ import { createTownStore } from "../src/lib/store";
 import { notificationsFor } from "../src/lib/notifications";
 import {
   accountTownBackend,
+  applyWrite,
   visitorTownBackend,
 } from "../src/lib/supabase/town-backend";
 import {
@@ -746,6 +747,36 @@ async function main() {
       again.actions.deletePoster(lineup);
       await settled(again);
       assert.deepEqual(await postersOf(ben), [[draft, "published"]]);
+
+      // An insert tried again after it had landed still carries the edits
+      // made since (its first answer was lost on the way back).
+      const row = {
+        id: draft!,
+        author_id: aki.id,
+        template: "text",
+        theme: "sumi",
+        font: "gothic",
+        pages: [{ blocks: [{ type: "text" as const, text: "書き直した。" }] }],
+        spoiler: false,
+        show_in_timeline: false,
+        status: "published",
+      };
+      await applyWrite(
+        aki.client,
+        { kind: "posters", rows: [row] },
+        { userId: aki.id, shopId: aki.id },
+      );
+      const changed = await aki.client
+        .from("posters")
+        .select("template, theme, font, pages")
+        .eq("id", draft!)
+        .single();
+      assert.deepEqual(changed.data, {
+        template: "text",
+        theme: "sumi",
+        font: "gothic",
+        pages: row.pages,
+      });
     },
   );
 

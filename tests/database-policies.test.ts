@@ -1754,6 +1754,23 @@ async function main() {
         // A book the catalog does not have refuses the save.
         [[page([{ type: "books", book_ids: many(1) }])], /foreign key/],
         [[page([{ type: "books", book_ids: ["not-a-book"] }])], /uuid/],
+        // Nothing but the blocks is kept, so a page cannot carry anything else.
+        [[{ ...page([]), note: "x" }], /list of blocks/],
+        [[page([{ type: "heading", text: "a", note: "x" }])], /heading, words/],
+        [
+          [page([{ type: "books", book_ids: [], note: words(9000) }])],
+          /heading, words/,
+        ],
+        [
+          [
+            page([
+              { type: "text", text: words(2000) },
+              { type: "text", text: words(2000) },
+            ]),
+          ],
+          /one block of each kind/,
+        ],
+        [[page(Array.from({ length: 4 }, () => "x"))], /list of blocks/],
       ] as const) {
         let error: unknown = null;
         try {
@@ -1775,6 +1792,20 @@ async function main() {
         "insert into posters (author_id, template, pages) values ($1, 'ranking', $2)",
         [AKI, pages()],
         /check constraint/,
+      );
+      // A one-book poster shows one book a page, words alone none.
+      const two = [page([{ type: "books", book_ids: many(2) }])];
+      await refused(
+        AKI,
+        "insert into posters (author_id, template, pages) values ($1, 'one_book', $2)",
+        [AKI, JSON.stringify(two)],
+        /fewer books/,
+      );
+      await refused(
+        AKI,
+        "insert into posters (author_id, template, pages) values ($1, 'text', $2)",
+        [AKI, JSON.stringify([page([{ type: "books", book_ids: many(1) }])])],
+        /fewer books/,
       );
       // At the limits, it is kept.
       await make(

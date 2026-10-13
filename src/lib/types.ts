@@ -343,10 +343,12 @@ export interface TownActions {
   markNotificationsSeen(ids: string[]): void;
   /**
    * Keeps a poster: a new one, or with `posterId` the viewer's own changed.
-   * A poster put up must be complete (posterProblem). Returns its id.
+   * A poster put up must be complete (posterProblem). Returns its id, or
+   * null when nothing was kept (refused, or the town is still loading).
    */
   savePoster(draft: PosterDraft, posterId?: string): string | null;
-  deletePoster(posterId: string): void;
+  /** Takes down the viewer's own poster; false when nothing was taken down. */
+  deletePoster(posterId: string): boolean;
 }
 
 export type AppActions = TownActions;

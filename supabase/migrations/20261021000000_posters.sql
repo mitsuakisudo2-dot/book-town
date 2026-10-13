@@ -13,7 +13,8 @@ create table public.posters (
     check (theme in ('kinari', 'navy', 'kosho', 'wakakusa', 'usubeni', 'sumi')),
   font text not null default 'mincho' check (font in ('mincho', 'gothic')),
   -- [{"blocks": [{"type": "heading" | "text", "text": "…"} | {"type": "books", "book_ids": ["…"]}]}]
-  pages jsonb not null,
+  -- Ten full pages take about 70 kB; the cap keeps a town light to load.
+  pages jsonb not null check (octet_length(pages::text) <= 131072),
   spoiler boolean not null default false,
   show_in_timeline boolean not null default false,
   -- Whether others may hang it in their shops (a later phase); the maker can refuse.
@@ -23,8 +24,8 @@ create table public.posters (
   updated_at timestamptz not null default now()
 );
 create index posters_author on public.posters (author_id);
-create index posters_timeline on public.posters (created_at desc)
-  where status = 'published' and show_in_timeline;
+-- A town loads the newest posters first, as it does posts.
+create index posters_created on public.posters (created_at desc);
 
 -- Which books each poster shows, so a book's page finds its posters. Written
 -- by the database from the pages, never by hand.
@@ -37,15 +38,19 @@ create table public.poster_books (
 );
 create index poster_books_book on public.poster_books (book_id);
 
--- The same limits as the app (src/lib/posters.ts): 10 pages, 9 books a page
--- and 100 a poster, a heading of 60 characters and words of 2000 a block.
+-- The same limits as the app (src/lib/posters.ts): 10 pages, at most one
+-- heading, one text and one row of books a page, 9 books a page (1 for a
+-- one-book poster, none for words alone) and 100 a poster, a heading of 60
+-- characters and words of 2000. Nothing else is kept in a page.
 create function private.check_poster() returns trigger
 language plpgsql set search_path = '' as $$
 declare
   page jsonb;
   block jsonb;
+  kinds text[];
   on_page integer;
   total integer := 0;
+  most integer := case new.template when 'one_book' then 1 when 'text' then 0 else 9 end;
 begin
   if jsonb_typeof(new.pages) is distinct from 'array'
     or jsonb_array_length(new.pages) not between 1 and 10 then
@@ -53,21 +58,31 @@ begin
   end if;
   for page in select value from jsonb_array_elements(new.pages) loop
     if jsonb_typeof(page) is distinct from 'object'
+      or page - 'blocks' <> '{}'::jsonb
       or jsonb_typeof(page -> 'blocks') is distinct from 'array'
-      or jsonb_array_length(page -> 'blocks') > 20 then
+      or jsonb_array_length(page -> 'blocks') > 3 then
       raise exception 'a poster page is a list of blocks' using errcode = '23514';
     end if;
     on_page := 0;
+    kinds := '{}';
     for block in select value from jsonb_array_elements(page -> 'blocks') loop
+      if jsonb_typeof(block) is distinct from 'object'
+        or (block ->> 'type') = any (kinds) then
+        raise exception 'a poster page has one block of each kind' using errcode = '23514';
+      end if;
+      kinds := kinds || (block ->> 'type');
       if block ->> 'type' = 'heading'
+        and block - 'type' - 'text' = '{}'::jsonb
         and jsonb_typeof(block -> 'text') = 'string'
         and char_length(block ->> 'text') <= 60 then
         continue;
       elsif block ->> 'type' = 'text'
+        and block - 'type' - 'text' = '{}'::jsonb
         and jsonb_typeof(block -> 'text') = 'string'
         and char_length(block ->> 'text') <= 2000 then
         continue;
       elsif block ->> 'type' = 'books'
+        and block - 'type' - 'book_ids' = '{}'::jsonb
         and jsonb_typeof(block -> 'book_ids') = 'array' then
         on_page := on_page + jsonb_array_length(block -> 'book_ids');
       else
@@ -76,6 +91,9 @@ begin
     end loop;
     if on_page > 9 then
       raise exception 'a poster page shows at most 9 books' using errcode = '23514';
+    end if;
+    if on_page > most then
+      raise exception 'this kind of poster shows fewer books a page' using errcode = '23514';
     end if;
     total := total + on_page;
   end loop;
