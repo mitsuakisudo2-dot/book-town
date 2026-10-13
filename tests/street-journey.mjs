@@ -1,7 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { restingBox, settleBeforeNavigating } from "./journey-layers.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -761,8 +761,11 @@ try {
           .tap();
         const pop = phone.locator(".owner-pop");
         const buttons = pop.getByRole("button", { name: /のPOP$/ });
+        // all() does not wait: without this the loop could check no arrow.
+        await expect(buttons).toHaveCount(2);
         for (const button of await buttons.all()) {
-          const rect = await button.boundingBox();
+          // Measured once the book has finished rising into place.
+          const rect = await restingBox(button);
           expect(rect.width).toBeGreaterThanOrEqual(44);
           expect(rect.height).toBeGreaterThanOrEqual(44);
           const centerDelta = await button.evaluate((element) => {
