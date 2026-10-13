@@ -54,6 +54,7 @@ import {
 } from "../src/lib/post-draft";
 import {
   ME_ID,
+  POP_REACTIONS,
   popReactionKey,
   shelfUsed,
   type TownState,
@@ -423,6 +424,59 @@ check("a visitor is invited to sign in instead of changing the town", () => {
   visitor.actions.markNotificationsSeen(["any"]);
   assert.equal(invited, 4);
 });
+
+check(
+  "with an account, a 見本 keeps its books but receives no like or follow",
+  () => {
+    let refused = 0;
+    const saved: TownState[] = [];
+    const account = createTownStore(
+      {
+        kind: "account",
+        newId: counterId,
+        load: () => ({ state: structuredClone(seedState), status: "saved" }),
+        save: (state) => {
+          saved.push(state);
+          return "saved";
+        },
+      },
+      undefined,
+      { onSample: () => (refused += 1) },
+    );
+    account.initialize();
+    const sampleShop = seedState.shops[0];
+    const samplePost = seedState.posts.find(
+      (post) => post.authorId !== ME_ID && post.bookId,
+    )!;
+    const before = account.getSnapshot();
+    account.actions.toggleFollow(sampleShop.id);
+    account.actions.toggleLike(samplePost.id);
+    account.actions.toggleSpoilerReport(samplePost.id);
+    const item = sampleShop.shelves[0].items[0];
+    account.actions.togglePopReaction(
+      sampleShop.id,
+      sampleShop.shelves[0].id,
+      item.id,
+      POP_REACTIONS[0],
+    );
+    assert.equal(
+      account.actions.createPost({
+        ...EMPTY_POST_DRAFT,
+        body: "返信",
+        parentId: samplePost.id,
+      }),
+      null,
+    );
+    assert.equal(refused, 5);
+    assert.equal(account.getSnapshot(), before);
+    // Its books are real books: wanting one, or a 見本's post, is kept.
+    account.actions.toggleWish(samplePost.bookId!);
+    account.actions.toggleWant(samplePost.id);
+    assert.equal(refused, 5);
+    assert.ok(account.getSnapshot().wishlist.includes(samplePost.bookId!));
+    assert.equal(saved.length, 2);
+  },
+);
 
 check(
   "old saves gain optional fields without losing existing personal data",

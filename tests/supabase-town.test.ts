@@ -19,6 +19,8 @@ import { fileReport } from "../src/lib/supabase/reports";
 import { createWalkStore } from "../src/lib/walk-store";
 import type { Database } from "../src/lib/supabase/database.types";
 import { ME_ID, OWN_SHOP_ID, type PersistenceStatus } from "../src/lib/types";
+import { demoBooks, demoPosts } from "../src/lib/data";
+import { isDatabaseId } from "../src/lib/paths";
 
 // Two readers use the town against a real local Supabase (`supabase start`):
 // what one saves comes back after a reload, what is public reaches the other,
@@ -229,6 +231,46 @@ async function main() {
       .single();
     akiShopId = shops.data!.id;
   });
+
+  await check(
+    "見本 stand in a signed-in town, and their books can be kept",
+    async () => {
+      const chi = await reader("chi");
+      const store = await townOf(chi);
+      const town = store.getSnapshot();
+      assert.ok(town.shops.some((entry) => entry.demo));
+      assert.ok(town.posts.some((entry) => !isDatabaseId(entry.authorId)));
+      const sample = demoBooks[0].id;
+      store.actions.toggleWish(sample);
+      const about = store.actions.createPost({
+        body: "見本の店で見つけた本。",
+        bookId: sample,
+      })!;
+      // A like for a 見本's post would reach nobody, so it is not kept.
+      store.actions.toggleLike(demoPosts[0].id);
+      await settled(store);
+      const again = (await townOf(chi)).getSnapshot();
+      assert.deepEqual(again.wishlist, [sample]);
+      assert.equal(
+        again.posts.find((entry) => entry.id === about)?.bookId,
+        sample,
+      );
+      assert.deepEqual(again.likedPosts, []);
+      // The book's catalog row is shared: another reader keeps it too.
+      const other = await townOf(ben);
+      other.actions.toggleFavorite(sample);
+      await settled(other);
+      assert.deepEqual((await townOf(ben)).getSnapshot().favorites, [sample]);
+      other.actions.toggleFavorite(sample);
+      await settled(other);
+      // Others read the post about it, with the 見本's book.
+      const seen = (await townOf(aki)).getSnapshot();
+      assert.equal(
+        seen.posts.find((entry) => entry.id === about)?.bookId,
+        sample,
+      );
+    },
+  );
 
   await check(
     "another reader sees the public shelf and never the private one",

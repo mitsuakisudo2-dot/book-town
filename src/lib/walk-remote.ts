@@ -65,7 +65,7 @@ function parseScenePlacement(key: string): string | null {
 const screenKey = (storeId: string, placementId: string) =>
   JSON.stringify(["scene", storeId, placementId]);
 
-function parseScreenKey(key: string): [string, string] | null {
+export function parseScreenKey(key: string): [string, string] | null {
   try {
     const value: unknown = JSON.parse(key);
     return Array.isArray(value) &&

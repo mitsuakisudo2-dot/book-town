@@ -16,7 +16,10 @@ import {
 } from "./walk-backend";
 import { followAccountWalk } from "./town-session";
 import { requestAccount } from "./visitor";
-import type { PersistenceStatus, TownState } from "./types";
+import { refuseForSample } from "./sample-notice";
+import { isDatabaseId } from "./paths";
+import { parseScreenKey } from "./walk-remote";
+import { OWN_SHOP_ID, type PersistenceStatus, type TownState } from "./types";
 
 export interface WalkSnapshot extends WalkData {
   ready: boolean;
@@ -30,6 +33,25 @@ export interface WalkStoreOptions {
   follow?: (switchTo: (backend: WalkBackend) => void) => void;
   /** Called when a visitor who is not signed in tries to leave something. */
   onVisitor?: () => void;
+  /** Called when a signed-in reader leaves something at a 見本's shop. */
+  onSample?: () => void;
+}
+
+/** Keys whose values differ between two records. */
+const changedKeys = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+  [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(
+    (key) => a[key] !== b[key],
+  );
+
+/** Whether a change leaves a like, a word or a reaction at a 見本's shop. */
+function reachesSample(before: WalkState, after: WalkState) {
+  const shops = [
+    ...changedKeys(before.reactions, after.reactions),
+    ...changedKeys(before.placementReactions, after.placementReactions).map(
+      (key) => parseScreenKey(key)?.[0] ?? OWN_SHOP_ID,
+    ),
+  ];
+  return shops.some((id) => id !== OWN_SHOP_ID && !isDatabaseId(id));
 }
 
 export function createWalkStore(
@@ -125,6 +147,11 @@ export function createWalkStore(
       options.onVisitor?.();
       return false;
     }
+    // Nobody is behind a 見本's shop to receive what is left there.
+    if (backend.kind === "account" && reachesSample(snapshot.state, next)) {
+      options.onSample?.();
+      return false;
+    }
     if (next !== snapshot.state) {
       const status = backend.save({ ...data(), state: next });
       set({ state: next, status });
@@ -209,7 +236,11 @@ export function createWalkStore(
 const walkStore = createWalkStore(
   localWalkBackend(),
   supabaseConfigured
-    ? { follow: followAccountWalk, onVisitor: requestAccount }
+    ? {
+        follow: followAccountWalk,
+        onVisitor: requestAccount,
+        onSample: refuseForSample,
+      }
     : {},
 );
 

@@ -454,7 +454,9 @@ export function accountTownBackend(
           () => ids?.shopId ?? crypto.randomUUID(),
         );
         ids = loaded.ids;
-        return loaded.state;
+        // The 見本 keep the town from feeling empty while few have opened a
+        // shop; they are left out of what is written (planWrites).
+        return withSamples(loaded.state);
       },
       async write(base, target) {
         if (!ids) throw new TownSyncError("The town is not loaded yet", true);
