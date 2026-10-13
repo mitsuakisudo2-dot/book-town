@@ -1,4 +1,4 @@
-import { hasKanji, searchFold } from "./fold";
+import { hasKanji, kanaFold, searchFold, strictFold } from "./fold";
 import { romajiToKana } from "./romaji";
 
 // Names, @IDs, shop names and tags are found the way books are: folded alike
@@ -9,8 +9,17 @@ import { romajiToKana } from "./romaji";
 /** How a short text matches: a higher number is a closer match; none is 0. */
 export const TEXT_MATCH = { none: 0, within: 1, start: 2, exact: 3 } as const;
 
+/**
+ * Added to a match that also holds as written, long vowels and は/わ kept:
+ * ゆき before ゆうき for 「ゆき」, and かんな before かなこ for "kan". Less
+ * than one step, so it only orders matches of the same kind.
+ */
+const AS_WRITTEN = 0.5;
+
 interface Form {
   key: string;
+  /** The same text with long vowels and は/わ kept (kanaFold). */
+  written: string;
   size: number;
   kanji: boolean;
   /** Romaji still being typed ("nag"): it may only begin a field. */
@@ -26,6 +35,7 @@ function formsOf(text: string): Form[] {
     if (key && !forms.some((form) => form.key === key))
       forms.push({
         key,
+        written: kanaFold(raw),
         size: Array.from(key).length,
         kanji: hasKanji(key),
         startOnly,
@@ -73,42 +83,71 @@ function nextFits(form: Form, key: string): boolean {
   return after !== "" && form.next.includes(after);
 }
 
-/**
- * Like the book search: the same text, the start of it, or (from two
- * characters, or one kanji) anywhere in it.
- */
-function relate(form: Form, key: string): number {
-  if (!key) return TEXT_MATCH.none;
-  if (key === form.key && !form.startOnly) return TEXT_MATCH.exact;
-  if (key.startsWith(form.key) && nextFits(form, key)) return TEXT_MATCH.start;
-  if (
-    !form.startOnly &&
-    (form.size >= 2 || form.kanji) &&
-    key.includes(form.key)
-  )
-    return TEXT_MATCH.within;
-  return TEXT_MATCH.none;
+/** A field read for matching: folded, and as written. */
+interface Field {
+  key: string;
+  written: string;
 }
 
 /**
- * How closely any of the fields matches the query (TEXT_MATCH). A query of
- * several words also matches when each word is found in one of the fields.
+ * Like the book search: the same text, the start of it, or (from two
+ * characters, or one kanji) anywhere in it. A match that also holds as
+ * written comes first among its kind; romaji still being typed never does.
  */
-export function textMatch(
+function relate(form: Form, field: Field): number {
+  const { key, written } = field;
+  if (!key) return TEXT_MATCH.none;
+  const level =
+    key === form.key && !form.startOnly
+      ? TEXT_MATCH.exact
+      : key.startsWith(form.key) && nextFits(form, key)
+        ? TEXT_MATCH.start
+        : !form.startOnly &&
+            (form.size >= 2 || form.kanji) &&
+            key.includes(form.key)
+          ? TEXT_MATCH.within
+          : TEXT_MATCH.none;
+  if (!level || form.startOnly || !form.written) return level;
+  const holds =
+    level === TEXT_MATCH.exact
+      ? written === form.written
+      : level === TEXT_MATCH.start
+        ? written.startsWith(form.written)
+        : written.includes(form.written);
+  return holds ? level + AS_WRITTEN : level;
+}
+
+/**
+ * How closely any of the fields matches the query, for ordering: TEXT_MATCH,
+ * plus AS_WRITTEN when the match also holds as written. A query of several
+ * words also matches (as within) when each word is found in one of the fields.
+ */
+export function textRank(
   query: TextQuery | null,
   fields: readonly (string | null | undefined)[],
 ): number {
   if (!query) return TEXT_MATCH.none;
-  const keys = fields.map((field) => searchFold(field ?? "")).filter(Boolean);
+  const read = fields
+    .map((field) => ({
+      key: searchFold(field ?? ""),
+      written: kanaFold(field ?? ""),
+    }))
+    .filter((field) => field.key);
   let best: number = TEXT_MATCH.none;
   for (const form of query.whole)
-    for (const key of keys) best = Math.max(best, relate(form, key));
+    for (const field of read) best = Math.max(best, relate(form, field));
   if (best || !query.words.length) return best;
   const every = query.words.every((forms) =>
-    forms.some((form) => keys.some((key) => relate(form, key))),
+    forms.some((form) => read.some((field) => relate(form, field))),
   );
   return every ? TEXT_MATCH.within : TEXT_MATCH.none;
 }
+
+/** How closely any of the fields matches the query: one of TEXT_MATCH. */
+export const textMatch = (
+  query: TextQuery | null,
+  fields: readonly (string | null | undefined)[],
+): number => Math.floor(textRank(query, fields));
 
 /** Whether a typed query finds any of the fields. */
 export const textMatches = (
@@ -117,13 +156,15 @@ export const textMatches = (
 ): boolean => textMatch(readTextQuery(query), fields) > TEXT_MATCH.none;
 
 /**
- * One word however it was typed, the way searches fold text: ホラー is ほらー,
- * ＳＦ is sf. A word of marks alone (ー・) is kept as written.
+ * One word however it was written: hiragana or katakana, full or half width,
+ * capitals, old kanji and the long-vowel mark aside (#ホラー is #ほら, #ＳＦ is
+ * #sf). Unlike a search, it keeps は and へ and every other kana, so #へび is
+ * not #えび. A word of marks alone (ー・) is kept as written.
  */
 export const textKey = (text: string): string =>
-  searchFold(text) || text.toLowerCase();
+  strictFold(text).replace(/ー/g, "") || text.toLowerCase();
 
-/** Whether two words are the same once folded: #ホラー is #ほらー, #ＳＦ is #sf. */
+/** Whether two words are one written another way (textKey): #ミステリー is #みすてり. */
 export const sameText = (a: string, b: string): boolean =>
   textKey(a) === textKey(b);
 

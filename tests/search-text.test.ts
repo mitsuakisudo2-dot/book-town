@@ -5,6 +5,7 @@ import {
   readTextQuery,
   sameText,
   textMatch,
+  textRank,
   textMatches,
   TEXT_MATCH,
 } from "../src/lib/search/text";
@@ -125,8 +126,35 @@ async function main() {
         ["mina", "みなみ"],
       ])
         assert.ok(names(findReaders(town, typed)).includes(name), typed);
+      // The n read as written comes first: かんな before かなこ for "kan".
+      const both: TownState = {
+        ...seedState,
+        readers: [
+          reader("r-kanako", "かなこ", "booklover"),
+          reader("r-kanna", "かんな", "reed"),
+        ],
+      };
+      assert.deepEqual(names(findReaders(both, "kan")).slice(0, 2), [
+        "かんな",
+        "かなこ",
+      ]);
     },
   );
+
+  await check("a name written as typed comes before one only folded", () => {
+    const list = ["ゆうき", "ゆき"];
+    assert.deepEqual(
+      byMatch(list, (text) => textRank(readTextQuery("ゆき"), [text])),
+      ["ゆき", "ゆうき"],
+    );
+    assert.deepEqual(
+      byMatch(list, (text) => textRank(readTextQuery("yuki"), [text])),
+      ["ゆき", "ゆうき"],
+    );
+    // Both are still the same kind of match.
+    assert.equal(match("ゆき", ["ゆうき"]), TEXT_MATCH.exact);
+    assert.equal(match("ゆき", ["ゆき"]), TEXT_MATCH.exact);
+  });
 
   await check(
     "one kana begins a field; two, or one kanji, may be anywhere",
@@ -159,11 +187,18 @@ async function main() {
     },
   );
 
-  await check("tags are the same once folded", () => {
+  await check("tags are the same when written another way", () => {
     assert.ok(sameText("ホラー", "ほらー"));
+    assert.ok(sameText("ホラー", "ﾎﾗｰ"));
+    assert.ok(sameText("ミステリー", "みすてり"));
     assert.ok(sameText("ＳＦ", "sf"));
     assert.ok(sameText("寝る前の一冊", "寝る前の一冊"));
     assert.ok(!sameText("寝る前", "寝る前の一冊"));
+    // Different words stay different, though a search folds them alike.
+    assert.ok(!sameText("へび", "えび"));
+    assert.ok(!sameText("はな", "わな"));
+    assert.ok(!sameText("ゆうき", "ゆき"));
+    assert.ok(!sameText("ガンダムα", "ガンダムβ"));
     // A tag of marks alone is compared as written.
     assert.ok(sameText("ー・", "ー・"));
     assert.ok(!sameText("ー・", "・"));
@@ -188,6 +223,31 @@ async function main() {
     assert.deepEqual(names(findReaders(seedState, "しおり")), ["栞"]);
     // After @, the @ID is matched as written.
     assert.deepEqual(names(findReaders(seedState, "@なぎ")), []);
+    // IDs read the way names are spelled: しんや finds @shinya.
+    const named = (handle: string, name: string): Reader => ({
+      ...seedState.readers[0],
+      id: "r-" + handle,
+      handle,
+      name,
+    });
+    const town: TownState = {
+      ...seedState,
+      readers: [
+        named("shinya", "晋也"),
+        named("kenichi", "健一"),
+        named("satoh", "佐藤"),
+        named("mio_2", "澪"),
+        named("mio2", "美緒"),
+        named("m_i_o_2", "海央"),
+      ],
+    };
+    assert.deepEqual(names(findReaders(town, "しんや")), ["晋也"]);
+    assert.deepEqual(names(findReaders(town, "けんいち")), ["健一"]);
+    assert.deepEqual(names(findReaders(town, "さとう")), ["佐藤"]);
+    // An @ID that only looks alike is not the one asked for.
+    assert.deepEqual(names(findReaders(town, "@mio2")), ["美緒"]);
+    assert.deepEqual(names(findReaders(town, "@mio_2")), ["澪"]);
+    assert.deepEqual(names(findReaders(town, "@mio")), ["澪", "美緒"]);
     // What a reader wrote about themselves is not their name.
     assert.deepEqual(names(findReaders(seedState, "惑星")), []);
     assert.deepEqual(findReaders(seedState, " "), []);
@@ -340,6 +400,53 @@ async function main() {
       { tag: "積読", count: 3 },
       { tag: "ホラー", count: 1 },
     ]);
+  });
+
+  await check("different words stay different tags", () => {
+    const state: TownState = {
+      ...seedState,
+      posts: [
+        post("w-1", "うちの子 #へび"),
+        post("w-2", "今日の晩ごはん #えび"),
+        post("w-3", "#えび フライ"),
+        post("w-4", "#はな が咲いた"),
+        post("w-5", "#わな にかかる"),
+      ],
+    };
+    const ids = (tag: string) =>
+      postsWithTag(state, tag)
+        .map((entry) => entry.id)
+        .sort();
+    assert.deepEqual(ids("へび"), ["w-1"]);
+    assert.deepEqual(ids("hebi"), ["w-1"]);
+    assert.deepEqual(ids("えび"), ["w-2", "w-3"]);
+    assert.deepEqual(ids("はな"), ["w-4"]);
+    assert.deepEqual(
+      popularTags(state).map((entry) => [entry.tag, entry.count]),
+      [
+        ["えび", 2],
+        ["はな", 1],
+        ["へび", 1],
+        ["わな", 1],
+      ],
+    );
+    assert.deepEqual(suggestTags(state, ["へび"]), ["えび", "はな", "わな"]);
+    // A tag written in romaji is a tag of its own; searching in romaji
+    // still finds the kana tag.
+    const romaji: TownState = {
+      ...seedState,
+      posts: [post("r-1", "#ミステリ"), post("r-2", "#misuteri")],
+    };
+    assert.deepEqual(
+      postsWithTag(romaji, "ミステリ").map((entry) => entry.id),
+      ["r-1"],
+    );
+    assert.deepEqual(
+      postsWithTag(romaji, "misuteri")
+        .map((entry) => entry.id)
+        .sort(),
+      ["r-1", "r-2"],
+    );
   });
 
   await check("a draft is not offered a tag it has in another spelling", () => {

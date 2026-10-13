@@ -1,13 +1,8 @@
 import type { Post, TownState } from "./types";
 import { coverHidden } from "./hidden-words";
 import { notLeftOut, reviewCoverOf, spoilerViewOf } from "./social";
-import {
-  readTextQuery,
-  sameText,
-  textKey as tagKey,
-  textMatch,
-  TEXT_MATCH,
-} from "./search/text";
+import { romajiToKana } from "./search/romaji";
+import { sameText, textKey as tagKey } from "./search/text";
 
 // A tag is # (or the full-width ＃) followed by letters, digits, _ or Japanese marks.
 const TAG = /[#＃]([\p{L}\p{N}_ー・々〆]{1,30})/gu;
@@ -48,14 +43,15 @@ export function splitTags(body: string): BodyPart[] {
 }
 
 /**
- * Whether a tag is the one asked for: the same once folded, or read from
- * romaji (#misuteri is #ミステリ).
+ * Whether a tag is the one asked for: the same word written another way
+ * (tagKey), or asked in romaji (misuteri finds #ミステリ). A tag written in
+ * romaji (#misuteri) stays a tag of its own.
  */
 function tagFinder(asked: string): (tag: string) => boolean {
-  const query = readTextQuery(asked);
-  const key = tagKey(asked);
-  return (tag) =>
-    tagKey(tag) === key || textMatch(query, [tag]) === TEXT_MATCH.exact;
+  const romaji = romajiToKana(asked.normalize("NFKC"));
+  const keys = new Set([tagKey(asked)]);
+  if (romaji?.kana && !romaji.tail) keys.add(tagKey(romaji.kana));
+  return (tag) => keys.has(tagKey(tag));
 }
 
 /**
