@@ -1,7 +1,10 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { settleBeforeNavigating } from "./journey-layers.mjs";
+import {
+  enterWhileComposing,
+  settleBeforeNavigating,
+} from "./journey-layers.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -580,6 +583,12 @@ try {
         exact: true,
       });
       await shelfName.fill("まだ内緒の二冊");
+      // The Enter that confirms a kana conversion stays in the field; only
+      // the reader's own Enter sets the name.
+      await enterWhileComposing(page);
+      await enterWhileComposing(page, { keyCode229: true });
+      await expect(shelfName).toBeFocused();
+      await expect(shelfName).toHaveValue("まだ内緒の二冊");
       await page.reload();
       await expect(shelfName).toHaveValue("まだ内緒の二冊");
       expect((await stored(page)).ownShop.shelves[1].name).toBe(

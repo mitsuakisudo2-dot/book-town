@@ -870,12 +870,15 @@ try {
       await page.getByLabel("書店の名前").fill("夜更けの一冊堂");
       await page.getByLabel("ひとこと").fill("一冊だけ、深く。");
       await page.getByRole("button", { name: "あずき", exact: true }).click();
-      // Out to the street and 戻る: the sign is as it was left.
+      // Out to Home (the tab last open there) and 戻る: the sign is as it
+      // was left.
       await page
         .getByRole("navigation", { name: "スマートフォンナビゲーション" })
         .getByRole("link", { name: "ホーム" })
         .click();
-      await expect(page).toHaveURL(`${baseURL}/`);
+      await expect(page).toHaveURL(
+        (url) => url.pathname === "/" || url.pathname === "/timeline/",
+      );
       await page.goBack();
       await expect(page.getByLabel("書店の名前")).toHaveValue("夜更けの一冊堂");
       await expect(page.getByLabel("ひとこと")).toHaveValue("一冊だけ、深く。");

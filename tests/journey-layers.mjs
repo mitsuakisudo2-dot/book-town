@@ -75,8 +75,18 @@ export async function restingBox(locator) {
  * conversion as the keyboard would. With `keyCode229`, the Escape comes as
  * Safari reports the key that ends a conversion (keyCode 229, not composing).
  */
-export async function escapeWhileComposing(
+export const escapeWhileComposing = (page, options) =>
+  keyWhileComposing(page, "Escape", options);
+
+/** The same for the Enter that confirms a conversion: a field keeps it. */
+export const enterWhileComposing = (page, options) =>
+  keyWhileComposing(page, "Enter", options);
+
+const KEY_CODES = { Escape: 27, Enter: 13 };
+
+async function keyWhileComposing(
   page,
+  key,
   { text = "にほん", keyCode229 = false } = {},
 ) {
   const cdp = await page.context().newCDPSession(page);
@@ -90,10 +100,10 @@ export async function escapeWhileComposing(
     for (const type of ["rawKeyDown", "keyUp"])
       await cdp.send("Input.dispatchKeyEvent", {
         type,
-        key: "Escape",
-        code: "Escape",
-        windowsVirtualKeyCode: keyCode229 ? 229 : 27,
-        nativeVirtualKeyCode: keyCode229 ? 229 : 27,
+        key,
+        code: key,
+        windowsVirtualKeyCode: keyCode229 ? 229 : KEY_CODES[key],
+        nativeVirtualKeyCode: keyCode229 ? 229 : KEY_CODES[key],
       });
     if (!keyCode229)
       await cdp.send("Input.imeSetComposition", {

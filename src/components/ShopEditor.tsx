@@ -571,7 +571,8 @@ function ShelfEditingPanel({
               maxLength={SHELF_NAME_MAX_LENGTH}
               onBlur={setName}
               onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
+                // The Enter that confirms a kana conversion is the keyboard's.
+                if (enterPressed(event)) event.currentTarget.blur();
               }}
               placeholder="本棚の名前"
               aria-label="本棚の名前"

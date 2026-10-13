@@ -3,6 +3,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   escapeWhileComposing,
+  layersSettled,
   settleBeforeNavigating,
 } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
@@ -53,6 +54,9 @@ let ownProfileDelay = 0;
 // The rest of the town, once a test fills it: rows by table.
 let town = null;
 const reportsSent = [];
+// A change carrying these words is refused by the stand-in, as the database
+// refuses one that breaks a rule, after the screen has moved on.
+const REFUSED_MARK = "（断られる）";
 // What the database grants a reporter to read of their own reports.
 const REPORT_GRANTED = [
   "id",
@@ -141,6 +145,16 @@ await context.route(supabase + "/**", async (route) => {
         ...body,
       };
       return json(201, profile);
+    }
+    if (request.method() === "PATCH") {
+      townWrites.push(url.pathname);
+      if (JSON.stringify(body).includes(REFUSED_MARK))
+        return json(400, {
+          code: "23514",
+          message: "new row violates check constraint",
+        });
+      profile = { ...profile, ...body };
+      return route.fulfill({ status: 204, body: "" });
     }
   }
   // Like the database, refuse any read of a report column the reporter is
@@ -262,6 +276,13 @@ const shotBoth = async (name) => {
   await shot(name + "-1280");
   await page.setViewportSize({ width: 390, height: 844 });
 };
+/** The report drafts this browser keeps, by key. */
+const keptReports = () =>
+  page.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem("book-town-report-drafts-v1") ?? "null")
+        ?.drafts ?? {},
+  );
 const noOverflow = async (label) => {
   const size = await page.evaluate(() => ({
     width: innerWidth,
@@ -651,6 +672,48 @@ try {
     },
   );
 
+  await check(
+    "a profile change the account turns away later is kept, and said",
+    async () => {
+      await page.goto(base + "/profiles/me/");
+      const editProfile = page.getByRole("button", {
+        name: "プロフィールを編集",
+      });
+      const dialog = page.getByRole("dialog", { name: "読書家のプロフィール" });
+      const bio = dialog.getByLabel("自己紹介", { exact: true });
+      const kept = () =>
+        page.evaluate(() =>
+          localStorage.getItem("book-town-profile-drafts-v1"),
+        );
+      const refused = "夜にだけ本を読みます" + REFUSED_MARK;
+      await editProfile.click();
+      await bio.fill(refused);
+      await dialog.getByRole("button", { name: "保存する" }).click();
+      // The town takes it and the dialog closes; the account turns it away a
+      // moment later, and the words are still kept.
+      await expect(dialog).toHaveCount(0);
+      await expect(
+        page.getByText(
+          "プロフィールを保存できませんでした。書きかけは残しています。",
+        ),
+      ).toBeVisible();
+      expect(profile.bio).toBe("");
+      expect(await kept()).toContain(refused);
+      await editProfile.click();
+      await expect(bio).toHaveValue(refused);
+      await expect(dialog.getByText("書きかけを続けています")).toBeVisible();
+      await expect(dialog.getByRole("alert")).toContainText(
+        "うまく保存できませんでした。書きかけは残しています。",
+      );
+      // Written again and taken by the account, nothing is kept aside.
+      await bio.fill("夜にだけ本を読みます。");
+      await dialog.getByRole("button", { name: "保存する" }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect.poll(() => profile.bio).toBe("夜にだけ本を読みます。");
+      await expect.poll(kept).toBeNull();
+    },
+  );
+
   // Another reader, their shop and posts; what reports did; the reader's own
   // reports; and two books with outside covers.
   const OTHER = "3c1d2b4a-7e6f-4a5b-8c9d-0e1f2a3b4c5d";
@@ -917,6 +980,23 @@ try {
         "その他",
       ]);
       await dialog.getByLabel("脅し・危害を加えるという言葉").check();
+      // What is chosen and written is kept for this account and this post
+      // through a close by hand, until the report is received.
+      const words = dialog.getByLabel("くわしく（なくても大丈夫です）");
+      await words.fill("同じ言葉が何度も届きます。");
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      expect(Object.keys(await keptReports())).toEqual([
+        `${user.id}:post:${TO_REPORT}`,
+      ]);
+      await layersSettled(page);
+      await post.getByRole("button", { name: "その他の操作" }).click();
+      await post.getByRole("button", { name: "この投稿を通報" }).click();
+      await expect(
+        dialog.getByLabel("脅し・危害を加えるという言葉"),
+      ).toBeChecked();
+      await expect(words).toHaveValue("同じ言葉が何度も届きます。");
+      await expect(dialog.getByText("書きかけを続けています")).toBeVisible();
       await dialog.getByRole("button", { name: "通報する" }).click();
       await expect(dialog).toContainText(
         "受け付けました。知らせてくださって、ありがとうございます。",
@@ -934,8 +1014,10 @@ try {
         target_kind: "post",
         target_id: TO_REPORT,
         reason: "threat",
-        detail: "",
+        detail: "同じ言葉が何度も届きます。",
       });
+      // Received, nothing is kept aside any more.
+      expect(await keptReports()).toEqual({});
       await shot("10-report-sent");
       await dialog.getByRole("button", { name: "閉じる" }).last().click();
       const mine = page
@@ -1296,6 +1378,47 @@ try {
   );
 
   await check(
+    "a cover request being written is kept until it is sent or thrown away",
+    async () => {
+      await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
+      const ask = page.getByRole("button", { name: "表紙の削除依頼はこちら" });
+      const dialog = page.getByRole("dialog", { name: "表紙の削除を依頼する" });
+      const words = dialog.getByLabel(
+        "この表紙とのご関係と、依頼の内容（必ず書いてください）",
+      );
+      const key = `${user.id}:book:${COVER_BOOK}`;
+      await ask.click();
+      await words.fill("書きかけの依頼です。");
+      // Closed by hand, the words wait for the next time.
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      expect((await keptReports())[key]).toEqual({
+        reason: "cover",
+        detail: "書きかけの依頼です。",
+      });
+      await layersSettled(page);
+      await ask.click();
+      await expect(words).toHaveValue("書きかけの依頼です。");
+      await expect(dialog.getByText("書きかけを続けています")).toBeVisible();
+      // やめる asks once for the words, and 消す throws them away.
+      await dialog.getByRole("button", { name: "やめる" }).click();
+      await expect(dialog.getByText("書きかけを消しますか？")).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: "残す", exact: true }),
+      ).toBeFocused();
+      await dialog.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      expect(Object.keys(await keptReports())).not.toContain(key);
+      await layersSettled(page);
+      await ask.click();
+      await expect(words).toHaveValue("");
+      await expect(dialog.getByText("書きかけを続けています")).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+    },
+  );
+
+  await check(
     "a cover can be asked to be taken down, and a refused one is not shown",
     async () => {
       await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
@@ -1342,9 +1465,16 @@ try {
         .getByLabel("この表紙とのご関係と、依頼の内容（必ず書いてください）")
         .fill("この本の装丁を担当した者です。");
       await shot("14-cover-request");
+      expect(Object.keys(await keptReports())).toContain(
+        `${user.id}:book:${COVER_BOOK}`,
+      );
       await send.click();
       await expect(dialog).toContainText(
         "受け付けました。運営が確認を始めたときと、確認し終えたときに、お知らせでお伝えします。",
+      );
+      // Received, the request written before is not kept any more.
+      expect(Object.keys(await keptReports())).not.toContain(
+        `${user.id}:book:${COVER_BOOK}`,
       );
       expect(reportsSent.at(-1)).toEqual({
         reporter_id: user.id,
