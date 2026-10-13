@@ -11,6 +11,7 @@ import { bookPath } from "../lib/books";
 import { findReader, formatPostTime } from "../lib/social";
 import { isDatabaseId, posterNewPath, profilePath } from "../lib/paths";
 import { usePersistenceStatus } from "../lib/store";
+import { useUrlParam } from "../lib/url-state";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import { PosterPages } from "./PosterView";
 import { ReportButton } from "./Report";
@@ -32,6 +33,10 @@ export function PosterScreen({
   posterId,
 }: Shared & { posterId: string }) {
   const persistence = usePersistenceStatus();
+  // The page being read stays in the address (?page=2), so coming back from
+  // a book on it opens the same page.
+  const [pageParam, setPageParam] = useUrlParam("page");
+  const startPage = Math.max(0, parseInt(pageParam ?? "", 10) - 1 || 0);
   const found = state.posters.find((entry) => entry.id === posterId);
   // Someone else's draft is theirs alone, as if it were not there.
   const poster =
@@ -78,7 +83,13 @@ export function PosterScreen({
       <BackLink className="back-link" />
       <div className="poster-screen-layout">
         <div className="poster-screen-sheet">
-          <PosterPages poster={poster} books={state.books} author={author} />
+          <PosterPages
+            poster={poster}
+            books={state.books}
+            author={author}
+            startPage={startPage}
+            onTurn={(at) => setPageParam(at ? String(at + 1) : null)}
+          />
         </div>
         <aside className="poster-screen-about" aria-labelledby="poster-title">
           <div className="poster-screen-author">
@@ -120,7 +131,10 @@ export function PosterScreen({
           )}
           {mine && !draft && !poster.inTimeline && (
             <p className="poster-screen-fact">
-              タイムラインには出さず、プロフィールと作品ページに貼っています。
+              {/* A poster with no books is on no book's page. */}
+              {posterBookIds(poster).length
+                ? "タイムラインには出さず、プロフィールと作品ページに貼っています。"
+                : "タイムラインには出さず、プロフィールに貼っています。"}
             </p>
           )}
           {mine ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,6 +19,7 @@ import {
   POSTER_THEMES,
   emptyPage,
   pageBooks,
+  posterBookIds,
   posterProblem,
   type Poster,
   type PosterDraft,
@@ -26,10 +27,14 @@ import {
   type PosterTemplate,
 } from "../lib/posters";
 import {
+  posterMark,
+  posterWorkFor,
   posterWorkKey,
   usePosterDraft,
+  type KeptPosterWork,
   type PosterWork,
 } from "../lib/poster-draft";
+import { leavePageFor } from "../lib/in-town";
 import { currentBookId } from "../lib/reading";
 import { usePersistenceStatus } from "../lib/store";
 import { posterNewPath, posterPath, profilePath } from "../lib/paths";
@@ -86,15 +91,20 @@ export function PosterEditor({
         消されたか、まだ読み込んでいるところかもしれません。
       </EditorRefusal>
     );
-  if (poster && poster.authorId !== ME_ID)
+  if (poster && poster.authorId !== ME_ID) {
+    const first = posterBookIds(poster)[0];
     return (
       <EditorRefusal
         title="このポスターは、作った人だけが直せます"
         poster={poster}
+        bookId={first}
       >
-        気に入ったら、同じ本で自分のポスターを作ることもできます。
+        {first
+          ? "気に入ったら、同じ本で自分のポスターを作ることもできます。"
+          : "気に入ったら、自分のポスターを作ることもできます。"}
       </EditorRefusal>
     );
+  }
   return (
     <PosterMaker
       // The work of one poster never carries over into another's.
@@ -109,10 +119,13 @@ export function PosterEditor({
 function EditorRefusal({
   title,
   poster,
+  bookId,
   children,
 }: {
   title: string;
   poster?: Poster;
+  /** The book a poster of the reader's own would start about. */
+  bookId?: string;
   children: ReactNode;
 }) {
   return (
@@ -127,7 +140,7 @@ function EditorRefusal({
               ポスターを見る
             </Link>
           )}
-          <Link href={posterNewPath()} className="button">
+          <Link href={posterNewPath({ bookId })} className="button">
             ポスターを作る
             <Icon name="arrow" size={16} />
           </Link>
@@ -136,6 +149,48 @@ function EditorRefusal({
     </div>
   );
 }
+
+/**
+ * Work kept in this browser for other posters, newest first, each named by
+ * its heading or its book. Work on a poster that is gone, or changed since
+ * elsewhere, would not open, so it is left out.
+ */
+function workElsewhere(
+  all: Record<string, KeptPosterWork>,
+  state: TownState,
+): { key: string; name: string; href: string }[] {
+  const book = (id?: string) => state.books.find((entry) => entry.id === id);
+  return Object.entries(all)
+    .filter(([key]) => key !== "new")
+    .sort(([, a], [, b]) => Date.parse(b.at) - Date.parse(a.at))
+    .flatMap(([key, work]) => {
+      const { posterId, bookId } = posterWorkFor(key);
+      if (posterId) {
+        const poster = state.posters.find(
+          (entry) => entry.id === posterId && entry.authorId === ME_ID,
+        );
+        if (!poster || work.from !== posterMark(workOf(poster))) return [];
+      }
+      const heading = work.pages
+        .map((page) => page.heading.trim())
+        .find(Boolean);
+      const first = [...work.pages.flatMap((page) => page.bookIds), bookId]
+        .map(book)
+        .find(Boolean);
+      return [
+        {
+          key,
+          name: heading ?? (first ? `『${first.title}』` : "題のないポスター"),
+          href: posterNewPath({ posterId, bookId }),
+        },
+      ];
+    });
+}
+
+const FAILED = {
+  save: "うまく残せませんでした。少し待って、もう一度お試しください。",
+  delete: "うまく消せませんでした。少し待って、もう一度お試しください。",
+};
 
 /** A step back the reader can take after a change that let something go. */
 type Undo = { work: PosterWork; message: string };
@@ -149,12 +204,11 @@ function PosterMaker({
 }: Shared & { poster?: Poster; bookId?: string }) {
   const router = useRouter();
   const key = posterWorkKey({ posterId: poster?.id, bookId });
-  const { kept, saved, keep, clear } = usePosterDraft(key);
-  // Work kept from before the poster was last changed (elsewhere) is stale.
-  const keptFresh =
-    kept && (!poster || Date.parse(kept.at) >= Date.parse(poster.updatedAt))
-      ? kept
-      : null;
+  const { kept, all, saved, keep, clear } = usePosterDraft(key);
+  // Work begun from another version of the poster (changed since, on
+  // another device) is out of date.
+  const from = poster ? posterMark(workOf(poster)) : undefined;
+  const keptFresh = kept && kept.from === from ? kept : null;
   const work: PosterWork =
     keptFresh ?? (poster ? workOf(poster) : freshWork(bookId));
   const [pageIndex, setPageIndex] = useState(0);
@@ -162,13 +216,36 @@ function PosterMaker({
   const page = work.pages[at];
   const [undo, setUndo] = useState<Undo | null>(null);
   const [asked, setAsked] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<keyof typeof FAILED | null>(null);
+  // What a screen reader says when a press did nothing.
+  const [said, setSaid] = useState({ words: "", times: 0 });
   const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
   const [enlarged, setEnlarged] = useState(false);
+  const elsewhere = key === "new" ? workElsewhere(all, state) : [];
+  const elsewhereId = useId();
+
+  // When a change takes away the button the hand was on, the hand goes on
+  // to what took its place: a confirm's やめる, the button that opened it,
+  // or the page now chosen.
+  const form = useRef<HTMLFormElement>(null);
+  const tabs = useRef<HTMLDivElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const resetButton = useRef<HTMLButtonElement>(null);
+  const deleteButton = useRef<HTMLButtonElement>(null);
+  const handTo = useRef<(() => HTMLElement | null | undefined) | null>(null);
+  useEffect(() => {
+    const find = handTo.current;
+    if (!find) return;
+    handTo.current = null;
+    find()?.focus();
+  });
+  const chosenTab = () =>
+    tabs.current?.querySelector<HTMLElement>("[aria-pressed='true']");
 
   const known = new Set(state.books.map((book) => book.id));
   const limit = pageBooks[work.template];
-  // The town may still be loading a book; until then the poster goes without it.
+  // The town may still be loading a book; until then the poster goes without
+  // it. Books the template has no room for wait, out of sight.
   const shown = (pages: PosterPage[]) =>
     pages.map((entry) => ({
       ...entry,
@@ -188,10 +265,17 @@ function PosterMaker({
   const problem = posterProblem(finished("published"));
   const published = poster?.status === "published";
 
+  const say = (words: string) =>
+    setSaid((last) => ({ words, times: last.times + 1 }));
+  function fail(what: keyof typeof FAILED) {
+    setFailed(what);
+    say(FAILED[what]);
+  }
+
   function change(next: PosterWork, step: Undo | null = null) {
-    keep(next);
+    keep(next, from);
     setUndo(step);
-    setFailed(false);
+    setFailed(null);
   }
   const changePage = (patch: Partial<PosterPage>) =>
     change({
@@ -200,39 +284,25 @@ function PosterMaker({
         index === at ? { ...entry, ...patch } : entry,
       ),
     });
+  // The template shows only the books it has room for. The rest stay with
+  // the page and come back with a template that holds them.
+  const chooseBooks = (bookIds: string[]) =>
+    changePage({
+      bookIds: [
+        ...bookIds,
+        ...page.bookIds.slice(limit.max).filter((id) => !bookIds.includes(id)),
+      ].slice(0, POSTER_LIMITS.booksPerPage),
+    });
 
   function chooseTemplate(template: PosterTemplate) {
-    if (template === work.template) return;
-    const max = pageBooks[template].max;
-    const removed = work.pages.reduce(
-      (sum, entry) => sum + Math.max(0, entry.bookIds.length - max),
-      0,
-    );
-    change(
-      {
-        ...work,
-        template,
-        pages: work.pages.map((entry) => ({
-          ...entry,
-          bookIds: entry.bookIds.slice(0, max),
-        })),
-      },
-      removed
-        ? {
-            work,
-            message:
-              template === "text"
-                ? "文章の型には本を載せないので、選んでいた本を外しました。"
-                : `「${POSTER_TEMPLATE_WORDS[template].name}」に入りきらない${removed}冊を外しました。`,
-          }
-        : null,
-    );
+    if (template !== work.template) change({ ...work, template });
   }
 
   function addPage() {
     if (work.pages.length >= POSTER_LIMITS.pages) return;
     change({ ...work, pages: [...work.pages, emptyPage()] });
     setPageIndex(work.pages.length);
+    handTo.current = chosenTab;
   }
 
   function removePage() {
@@ -243,11 +313,23 @@ function PosterMaker({
       empty ? null : { work, message: `${at + 1}ページ目を外しました。` },
     );
     setPageIndex(Math.max(0, at - 1));
+    handTo.current = chosenTab;
+  }
+
+  function confirm(what: "reset" | "delete") {
+    setConfirming(what);
+    handTo.current = () => cancelButton.current;
+  }
+  function cancel() {
+    const trigger = confirming === "delete" ? deleteButton : resetButton;
+    setConfirming(null);
+    handTo.current = () => trigger.current;
   }
 
   function save(status: PosterDraft["status"]) {
     if (status === "published" && problem) {
       setAsked(true);
+      say(problem);
       // Show the page the message is about.
       const first = work.pages.findIndex(
         (_, index) =>
@@ -261,8 +343,10 @@ function PosterMaker({
     }
     const id = actions.savePoster(finished(status), poster?.id);
     if (!id) {
-      // A visitor is invited to sign in instead; nothing was kept.
-      setFailed(!accountRequested() && !refusedForSample());
+      // Nothing was kept, so the work stays here. A visitor is invited to
+      // sign in instead.
+      if (accountRequested() || refusedForSample()) setFailed(null);
+      else fail("save");
       return;
     }
     clear();
@@ -271,18 +355,21 @@ function PosterMaker({
         ? "下書きに残しました。"
         : published
           ? "ポスターを直しました。"
-          : "街の掲示板に、貼り出しました。",
+          : "ポスターを貼り出しました。",
     );
-    router.push(posterPath(id));
+    // The editor is done with: 戻る from the poster does not open it again.
+    leavePageFor(posterPath(id), router);
   }
 
   function remove() {
     if (!poster) return;
-    actions.deletePoster(poster.id);
-    if (accountRequested()) return;
+    if (!actions.deletePoster(poster.id)) {
+      if (!accountRequested() && !refusedForSample()) fail("delete");
+      return;
+    }
     clear();
     notify("ポスターを消しました。");
-    router.push(profilePath(ME_ID));
+    leavePageFor(profilePath(ME_ID), router);
   }
 
   const preview = {
@@ -300,8 +387,28 @@ function PosterMaker({
           {poster ? "ポスターを直す" : "ポスターを作る"}
         </h1>
         <p className="page-subtitle">
-          表紙を選んで、ひとこと。街の掲示板に貼り出せます。
+          表紙を選んで、ひとこと。プロフィールや作品ページ、タイムラインに貼り出せます。
         </p>
+        {elsewhere.length > 0 && (
+          <section
+            className="poster-editor-elsewhere"
+            aria-labelledby={elsewhereId}
+          >
+            <h2 id={elsewhereId}>このブラウザに残している書きかけ</h2>
+            <ul>
+              {elsewhere.map((entry) => (
+                <li key={entry.key}>
+                  <span>{entry.name}</span>
+                  <Link href={entry.href}>
+                    つづきを書く
+                    <span className="sr-only">（{entry.name}）</span>
+                    <Icon name="arrow" size={13} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </header>
       <div className="poster-editor-layout">
         <section
@@ -321,6 +428,7 @@ function PosterMaker({
               className="poster-page-tabs"
               role="group"
               aria-label="直すページ"
+              ref={tabs}
             >
               {work.pages.map((_, index) => (
                 <button
@@ -372,25 +480,27 @@ function PosterMaker({
 
         <form
           className="poster-editor-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            save("published");
-          }}
+          ref={form}
+          // Enter in a text box never puts the poster up: only 貼り出す does.
+          onSubmit={(event) => event.preventDefault()}
         >
-          {undo && (
-            <p className="poster-editor-undo" role="status">
-              {undo.message}
-              <button
-                type="button"
-                onClick={() => {
-                  change(undo.work);
-                  setPageIndex(Math.min(at, undo.work.pages.length - 1));
-                }}
-              >
-                元に戻す
-              </button>
-            </p>
-          )}
+          <div role="status">
+            {undo && (
+              <p className="poster-editor-undo">
+                {undo.message}
+                <button
+                  type="button"
+                  onClick={() => {
+                    change(undo.work);
+                    setPageIndex(Math.min(at, undo.work.pages.length - 1));
+                    handTo.current = chosenTab;
+                  }}
+                >
+                  元に戻す
+                </button>
+              </p>
+            )}
+          </div>
 
           <fieldset className="poster-step">
             <legend>
@@ -421,8 +531,12 @@ function PosterMaker({
             <BookChoice
               state={state}
               template={work.template}
-              chosen={page.bookIds}
-              onChange={(bookIds) => changePage({ bookIds })}
+              chosen={page.bookIds.slice(0, limit.max)}
+              waiting={
+                page.bookIds.slice(limit.max).filter((id) => known.has(id))
+                  .length
+              }
+              onChange={chooseBooks}
               where={work.pages.length > 1 ? `${at + 1}ページ目に` : ""}
             />
           )}
@@ -508,7 +622,10 @@ function PosterMaker({
               <span>
                 タイムラインにも出す
                 <small>
-                  文字の投稿と並んで流れます。プロフィールと作品ページには、いつも載ります。
+                  {/* A poster of words alone is on no book's page. */}
+                  {work.template === "text"
+                    ? "文字の投稿と並んで流れます。プロフィールには、いつも載ります。"
+                    : "文字の投稿と並んで流れます。プロフィールと作品ページには、いつも載ります。"}
                 </small>
               </span>
             </label>
@@ -531,7 +648,11 @@ function PosterMaker({
 
           <div className="poster-editor-actions">
             <div className="poster-editor-buttons">
-              <button type="submit" className="button">
+              <button
+                type="button"
+                className="button"
+                onClick={() => save("published")}
+              >
                 {published ? "直して貼り出す" : "貼り出す"}
               </button>
               {!published && (
@@ -544,10 +665,13 @@ function PosterMaker({
                 </button>
               )}
             </div>
+            {/* Why a press did nothing, said each time, even in the same words. */}
+            <p className="sr-only" role="alert">
+              {said.times > 0 && <span key={said.times}>{said.words}</span>}
+            </p>
             {problem && (
               <p
                 className={"poster-editor-problem" + (asked ? " is-asked" : "")}
-                role={asked ? "alert" : undefined}
               >
                 <Icon name="leaf" size={14} />
                 <span>
@@ -556,10 +680,8 @@ function PosterMaker({
                 </span>
               </p>
             )}
-            {failed && (
-              <p className="poster-editor-problem is-asked" role="alert">
-                うまく残せませんでした。少し待って、もう一度お試しください。
-              </p>
+            {failed === "save" && (
+              <p className="poster-editor-problem is-asked">{FAILED.save}</p>
             )}
             {!saved ? (
               <p className="poster-editor-quiet" role="status">
@@ -579,11 +701,16 @@ function PosterMaker({
                           setUndo(null);
                           setPageIndex(0);
                           setConfirming(null);
+                          // Back to the start, where the first step is.
+                          handTo.current = () =>
+                            form.current?.querySelector<HTMLElement>(
+                              "input[name='poster-template']:checked",
+                            );
                         }}
                       >
                         消す
                       </button>
-                      <button type="button" onClick={() => setConfirming(null)}>
+                      <button type="button" ref={cancelButton} onClick={cancel}>
                         やめる
                       </button>
                     </span>
@@ -591,7 +718,8 @@ function PosterMaker({
                     <button
                       type="button"
                       className="poster-editor-text-button"
-                      onClick={() => setConfirming("reset")}
+                      ref={resetButton}
+                      onClick={() => confirm("reset")}
                     >
                       {poster ? "直す前に戻す" : "最初からやり直す"}
                     </button>
@@ -616,7 +744,8 @@ function PosterMaker({
                   <button
                     type="button"
                     className="button secondary"
-                    onClick={() => setConfirming(null)}
+                    ref={cancelButton}
+                    onClick={cancel}
                   >
                     やめる
                   </button>
@@ -625,10 +754,16 @@ function PosterMaker({
                 <button
                   type="button"
                   className="poster-editor-text-button"
-                  onClick={() => setConfirming("delete")}
+                  ref={deleteButton}
+                  onClick={() => confirm("delete")}
                 >
                   このポスターを消す
                 </button>
+              )}
+              {failed === "delete" && (
+                <p className="poster-editor-problem is-asked">
+                  {FAILED.delete}
+                </p>
               )}
             </div>
           )}
@@ -660,10 +795,18 @@ function TemplateSketch({ template }: { template: PosterTemplate }) {
   );
 }
 
-/** Where a book of the viewer's own comes from, said in a word. */
+/**
+ * Where a book of the viewer's own comes from, said in a word. The books on
+ * their own shop's shelves come first.
+ */
 function ownBooks(state: TownState): { book: Book; from: string }[] {
   const reading = currentBookId(state);
+  const shelved =
+    state.ownShop?.shelves.flatMap((shelf) =>
+      shelf.items.map((item) => item.bookId),
+    ) ?? [];
   const sources: [string[], string][] = [
+    [shelved, "本棚"],
     [reading ? [reading] : [], "読んでいる"],
     [state.finishedBooks, "読んだ"],
     [state.library, "登録した本"],
@@ -690,12 +833,15 @@ function BookChoice({
   state,
   template,
   chosen,
+  waiting,
   onChange,
   where,
 }: {
   state: TownState;
   template: PosterTemplate;
   chosen: string[];
+  /** Books chosen for a template with more room, kept out of sight. */
+  waiting: number;
   onChange: (bookIds: string[]) => void;
   /** Which page, when there are several: "2ページ目に". */
   where: string;
@@ -790,6 +936,12 @@ function BookChoice({
           ))}
         </ol>
       )}
+      {waiting > 0 && (
+        <p className="poster-editor-quiet">
+          ほかに選んでいた{waiting}冊は、「{POSTER_TEMPLATE_WORDS.lineup.name}
+          」の型にすると、また並びます。
+        </p>
+      )}
       <p className="poster-cover-note">表紙はそのままの形で載ります。</p>
       <label className="picker-search poster-book-search" htmlFor={id}>
         <Icon name="search" size={15} />
@@ -812,7 +964,7 @@ function BookChoice({
             ? "あなたの本から"
             : "街の本から（読んだ本や読みたい本を登録すると、ここに並びます）"}
       </p>
-      {full && (
+      {full && chosen.length >= max && (
         <p className="poster-editor-quiet" role="status">
           1ページに並べられるのは{max}
           冊までです。「ページを足す」で、続きを次のページに並べられます。

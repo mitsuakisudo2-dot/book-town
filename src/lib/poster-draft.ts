@@ -19,8 +19,10 @@ export const POSTER_DRAFT_KEY = "book-town-poster-drafts-v1";
 /** What the editor is in the middle of; whether it is put up is chosen last. */
 export type PosterWork = Omit<PosterDraft, "status">;
 export type KeptPosterWork = PosterWork & {
-  /** When it was last changed, to tell it from a poster changed since. */
+  /** When it was last changed. */
   at: string;
+  /** For a poster being changed: the mark of the poster it began from. */
+  from?: string;
 };
 type Snapshot = { drafts: Record<string, KeptPosterWork>; saved: boolean };
 type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -36,6 +38,40 @@ export const posterWorkKey = (options: {
     : options.bookId
       ? "book:" + options.bookId
       : "new";
+
+/** Which poster a key's work belongs to, as posterWorkKey was told. */
+export function posterWorkFor(key: string): {
+  posterId?: string;
+  bookId?: string;
+} {
+  if (key.startsWith("poster:")) return { posterId: key.slice(7) };
+  if (key.startsWith("book:")) return { bookId: key.slice(5) };
+  return {};
+}
+
+/**
+ * A short mark of what a poster says and how it looks. Work on a poster keeps
+ * the mark of the version it began from, so a version changed since (on
+ * another device) is told apart. Times cannot tell: the database stamps a
+ * poster by its own clock, and the work is stamped by this device's.
+ */
+export function posterMark(work: PosterWork): string {
+  const value = JSON.stringify([
+    work.template,
+    work.theme,
+    work.font,
+    work.spoiler,
+    work.inTimeline,
+    work.pages.map((page) => [page.heading, page.text, page.bookIds]),
+  ]);
+  // FNV-1a, enough to tell one version from the next.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
 
 const text = (value: unknown, limit: number): value is string =>
   typeof value === "string" && [...value].length <= limit;
@@ -54,6 +90,7 @@ function readWork(value: unknown): KeptPosterWork | null {
     typeof work.spoiler !== "boolean" ||
     typeof work.inTimeline !== "boolean" ||
     typeof work.at !== "string" ||
+    (work.from !== undefined && typeof work.from !== "string") ||
     !Array.isArray(work.pages) ||
     !work.pages.length ||
     work.pages.length > POSTER_LIMITS.pages
@@ -85,6 +122,7 @@ function readWork(value: unknown): KeptPosterWork | null {
     inTimeline: work.inTimeline,
     pages,
     at: work.at,
+    ...(work.from ? { from: work.from } : {}),
   };
 }
 
@@ -136,12 +174,13 @@ export function createPosterDraftStore(storage: () => DraftStorage) {
     emit();
   }
 
-  function keep(key: string, work: PosterWork) {
+  /** Keeps the work under `key`; `from` marks the poster it began from. */
+  function keep(key: string, work: PosterWork, from?: string) {
     initialize();
-    write({
-      ...snapshot.drafts,
-      [key]: { ...work, at: new Date().toISOString() },
-    });
+    const kept: KeptPosterWork = { ...work, at: new Date().toISOString() };
+    if (from) kept.from = from;
+    else delete kept.from;
+    write({ ...snapshot.drafts, [key]: kept });
   }
 
   function clear(key: string) {
@@ -169,7 +208,10 @@ export function createPosterDraftStore(storage: () => DraftStorage) {
 
 const posterDraftStore = createPosterDraftStore(() => window.localStorage);
 
-/** The work kept under `key`, and how to keep or let go of it. */
+/**
+ * The work kept under `key`, and how to keep or let go of it; `all` is every
+ * piece of work kept in this browser, by key.
+ */
 export function usePosterDraft(key: string) {
   const snapshot = useSyncExternalStore(
     posterDraftStore.subscribe,
@@ -179,8 +221,10 @@ export function usePosterDraft(key: string) {
   useEffect(() => posterDraftStore.initialize(), []);
   return {
     kept: snapshot.drafts[key] ?? null,
+    all: snapshot.drafts,
     saved: snapshot.saved,
-    keep: (work: PosterWork) => posterDraftStore.keep(key, work),
+    keep: (work: PosterWork, from?: string) =>
+      posterDraftStore.keep(key, work, from),
     clear: () => posterDraftStore.clear(key),
   };
 }

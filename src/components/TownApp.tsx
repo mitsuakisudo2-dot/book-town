@@ -46,6 +46,7 @@ import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
 import { WalkView } from "./WalkView";
 import {
+  isDatabaseId,
   posterNewPath,
   posterPath,
   profilePath,
@@ -67,6 +68,7 @@ import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
 import { replaceAddress } from "../lib/url-state";
 import { postersOfBook } from "../lib/posters";
+import { findReader } from "../lib/social";
 import { PosterThumb } from "./PosterView";
 import { PosterEditor } from "./PosterEditor";
 import { PosterScreen } from "./PosterScreen";
@@ -915,15 +917,25 @@ function BookPosters({ state, book }: { state: TownState; book: Book }) {
         <p>読書家が、この本を貼り出したポスター。表紙から、その人の言葉へ。</p>
       </div>
       <ul className="book-posters-row">
-        {posters.map((poster) => (
-          <li key={poster.id}>
-            <PosterThumb
-              poster={poster}
-              books={state.books}
-              href={posterPath(poster.id)}
-            />
-          </li>
-        ))}
+        {posters.map((poster) => {
+          // Who made it, and a 見本 says it is one, as on the timeline.
+          const maker = findReader(state, poster.authorId);
+          const sample =
+            poster.authorId !== ME_ID && !isDatabaseId(poster.authorId);
+          return (
+            <li key={poster.id}>
+              <PosterThumb
+                poster={poster}
+                books={state.books}
+                href={posterPath(poster.id)}
+                caption={
+                  [maker?.name, sample && "見本"].filter(Boolean).join(" · ") ||
+                  undefined
+                }
+              />
+            </li>
+          );
+        })}
       </ul>
       {make}
     </section>

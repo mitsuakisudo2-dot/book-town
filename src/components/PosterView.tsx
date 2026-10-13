@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -128,8 +129,9 @@ function Sheet({
     onCut,
   );
   const wordless = !sheet.heading && !sheet.text;
+  // Not a heading element: the page or the card around the poster has those.
   const heading = sheet.heading ? (
-    <h3 className="poster-heading">{sheet.heading}</h3>
+    <p className="poster-heading">{sheet.heading}</p>
   ) : null;
   const text = sheet.text ? (
     <p className={"poster-text" + (cut.text ? " is-cut" : "")}>{sheet.text}</p>
@@ -278,12 +280,27 @@ export function PosterPages({
   poster,
   books,
   author,
+  compact = false,
+  startPage = 0,
+  onTurn,
 }: {
   poster: Poster;
   books: Book[];
   author: Reader;
+  /** Among other posts, a covered poster takes a short band, not a page. */
+  compact?: boolean;
+  /** The page to open at, counted from 0. A spoiler opens at its first. */
+  startPage?: number;
+  /** Told the page in view after each turn, to keep it in the address. */
+  onTurn?: (index: number) => void;
 }) {
-  const [index, setIndex] = useState(0);
+  const count = poster.pages.length;
+  const many = count > 1;
+  const within = (at: number) => Math.max(0, Math.min(count - 1, at));
+  const [index, setIndex] = useState(() =>
+    poster.spoiler ? 0 : within(startPage),
+  );
+  const [start] = useState(index);
   const [open, setOpen] = useState(!poster.spoiler);
   const [cut, setCut] = useState<boolean[]>([]);
   const [reading, setReading] = useState<number | null>(null);
@@ -291,10 +308,25 @@ export function PosterPages({
   const door = useRef<HTMLButtonElement>(null);
   const hide = useRef<HTMLButtonElement>(null);
   const turned = useRef(false);
-  const count = poster.pages.length;
-  const many = count > 1;
+  // The page a turn is scrolling to: the pages it passes on the way are not
+  // the page being read.
+  const pending = useRef<number | null>(null);
+  const report = useRef(onTurn);
   const page = poster.pages[Math.min(index, count - 1)] ?? emptyPage();
   const firstBook = books.find((book) => book.id === posterBookIds(poster)[0]);
+
+  useEffect(() => {
+    report.current = onTurn;
+  });
+  useEffect(() => {
+    report.current?.(index);
+  }, [index]);
+
+  // Coming back to the poster, the page being read is there at once.
+  useLayoutEffect(() => {
+    const element = track.current;
+    if (element && start) element.scrollLeft = start * element.clientWidth;
+  }, [start]);
 
   // After the door is opened or closed, the hand stays on its counterpart.
   useEffect(() => {
@@ -303,13 +335,24 @@ export function PosterPages({
   }, [open]);
 
   const go = (next: number) => {
-    const target = Math.max(0, Math.min(count - 1, next));
+    const target = within(next);
     const element = track.current;
     setIndex(target);
-    element?.scrollTo({
-      left: target * element.clientWidth,
-      behavior: quietScroll(),
-    });
+    if (!element) return;
+    const left = target * element.clientWidth;
+    pending.current = Math.abs(element.scrollLeft - left) > 1 ? target : null;
+    element.scrollTo({ left, behavior: quietScroll() });
+  };
+  const settle = (element: HTMLDivElement, ended: boolean) => {
+    if (!element.clientWidth) return;
+    const at = within(Math.round(element.scrollLeft / element.clientWidth));
+    if (pending.current !== null && at !== pending.current && !ended) return;
+    pending.current = null;
+    setIndex(at);
+  };
+  // A swipe or a wheel takes over from a turn still on its way.
+  const takeOver = () => {
+    pending.current = null;
   };
   const keys = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -320,6 +363,7 @@ export function PosterPages({
     turned.current = true;
     setOpen(next);
     // Opened again, it starts from its first page, as the track does.
+    pending.current = null;
     setIndex(0);
     setReading(null);
   };
@@ -330,7 +374,10 @@ export function PosterPages({
         className="poster-pages"
         aria-label={author.name + "のポスター（ネタバレを含みます）"}
       >
-        <div className="poster-door" style={themeStyle(poster)}>
+        <div
+          className={"poster-door" + (compact ? " is-compact" : "")}
+          style={themeStyle(poster)}
+        >
           <span className="poster-door-mark" aria-hidden="true">
             <Icon name="lock" size={18} />
           </span>
@@ -358,12 +405,10 @@ export function PosterPages({
           role={many ? "group" : undefined}
           aria-label={many ? "ページ（左右のキーでめくれます）" : undefined}
           onKeyDown={many ? keys : undefined}
-          onScroll={(event) => {
-            const element = event.currentTarget;
-            if (!element.clientWidth) return;
-            const at = Math.round(element.scrollLeft / element.clientWidth);
-            if (at !== index) setIndex(Math.max(0, Math.min(count - 1, at)));
-          }}
+          onScroll={(event) => settle(event.currentTarget, false)}
+          onScrollEnd={(event) => settle(event.currentTarget, true)}
+          onPointerDown={takeOver}
+          onWheel={takeOver}
         >
           {poster.pages.map((_, at) => (
             <div
@@ -396,15 +441,25 @@ export function PosterPages({
           </span>
         )}
       </div>
+      {/* Said aloud when a page turns; the counter above is only seen. */}
+      {many && (
+        <span className="poster-said" aria-live="polite">
+          {`${index + 1}ページ目（全${count}ページ）`}
+        </span>
+      )}
       {(many || poster.spoiler) && (
         <div className="poster-controls">
           {many && (
             <>
+              {/* aria-disabled, not disabled: at the first or last page the
+                  focus stays on the button instead of falling to the page. */}
               <button
                 type="button"
                 className="poster-turn is-back"
-                onClick={() => go(index - 1)}
-                disabled={index === 0}
+                onClick={() => {
+                  if (index > 0) go(index - 1);
+                }}
+                aria-disabled={index === 0 || undefined}
                 aria-label="前のページ"
               >
                 <Icon name="chevron" size={16} />
@@ -424,8 +479,10 @@ export function PosterPages({
               <button
                 type="button"
                 className="poster-turn"
-                onClick={() => go(index + 1)}
-                disabled={index === count - 1}
+                onClick={() => {
+                  if (index < count - 1) go(index + 1);
+                }}
+                aria-disabled={index === count - 1 || undefined}
                 aria-label="次のページ"
               >
                 <Icon name="chevron" size={16} />
@@ -456,8 +513,10 @@ export function PosterPages({
           </button>
           {reading === index && (
             <div className={"poster-fulltext is-" + poster.font}>
-              {page.heading && <h3>{page.heading}</h3>}
-              {page.text && <p>{page.text}</p>}
+              {page.heading && (
+                <p className="poster-fulltext-heading">{page.heading}</p>
+              )}
+              {page.text && <p className="poster-fulltext-text">{page.text}</p>}
             </div>
           )}
         </div>
@@ -468,18 +527,22 @@ export function PosterPages({
 
 /**
  * A poster's first page, small, for lists and rows. A spoiler poster shows
- * only that it is covered: none of its words or covers.
+ * only that it is covered, and which book it is about: none of its words or
+ * covers. Where posters by many readers meet, the caption names the maker.
  */
 export function PosterThumb({
   poster,
   books,
   href,
   badge,
+  caption,
 }: {
   poster: Poster;
   books: Book[];
   href: string;
   badge?: string;
+  /** Who made it, with 「 · 見本」 for an invented reader. */
+  caption?: string;
 }) {
   const firstBook = books.find((book) => book.id === posterBookIds(poster)[0]);
   const label = poster.spoiler
@@ -489,13 +552,16 @@ export function PosterThumb({
     <Link
       href={href}
       className="poster-thumb"
-      aria-label={label + (badge ? `（${badge}）` : "")}
+      aria-label={
+        label + (caption ? "、" + caption : "") + (badge ? `（${badge}）` : "")
+      }
     >
       <div className="poster-thumb-tile">
         {poster.spoiler ? (
           <span className="poster-thumb-door" style={themeStyle(poster)}>
             <Icon name="lock" size={16} />
             ネタバレを含む
+            {firstBook && <small>『{firstBook.title}』</small>}
           </span>
         ) : (
           <div aria-hidden="true">
@@ -503,6 +569,11 @@ export function PosterThumb({
           </div>
         )}
       </div>
+      {caption && (
+        <span className="poster-thumb-caption" aria-hidden="true">
+          {caption}
+        </span>
+      )}
       {(badge || poster.pages.length > 1) && (
         <span className="poster-thumb-note" aria-hidden="true">
           {badge && <span className="poster-thumb-badge">{badge}</span>}
@@ -552,7 +623,12 @@ export function PosterCard({
           </time>
         </header>
         <span className="poster-tag">ポスター</span>
-        <PosterPages poster={poster} books={state.books} author={author} />
+        <PosterPages
+          poster={poster}
+          books={state.books}
+          author={author}
+          compact
+        />
         <Link href={posterPath(poster.id)} className="poster-open">
           ポスターを開く
           <Icon name="arrow" size={14} />
