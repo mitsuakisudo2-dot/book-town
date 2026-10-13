@@ -76,8 +76,18 @@ type Layer = {
 
 /** Layers set aside in the last moment, whose step is about to come off. */
 const closing = new Set<Layer>();
+/** Layers closed while another's step was coming off, waiting for it. */
+const shutting = new Set<string>();
 /** Layers open now. */
 const opened = new Set<Layer>();
+
+/**
+ * The layer was closed and its step has yet to come off. A step the browser
+ * arrives at meanwhile (another layer's coming off first) may still have it,
+ * and does not open it again.
+ */
+const closed = (token: string) =>
+  shutting.has(token) || [...closing].some((layer) => layer.token === token);
 
 /**
  * Steps back, and settles once the browser is there. Going back takes a
@@ -142,8 +152,26 @@ export function leaveLayers(
 function close(layer: Layer) {
   if (!layer.open) return;
   layer.open = false;
+  takeOff(layer.token);
+}
+
+/** Takes a closed layer's step off. */
+function takeOff(token: string) {
+  // Closed just as another layer's step comes off (a request closed, and at
+  // once the book it was asked from): until the browser gets there, the
+  // history shows the step being left, with this layer not on top. Taken out
+  // of that step, it would stay in the one arrived at, and open again; so it
+  // waits, and goes from there.
+  if (backing) {
+    shutting.add(token);
+    void backing.then(() => {
+      shutting.delete(token);
+      takeOff(token);
+    });
+    return;
+  }
   const layers = stack();
-  const at = layers.lastIndexOf(layer.token);
+  const at = layers.lastIndexOf(token);
   if (at < 0) return;
   // The page changed its address beneath (a tab chosen as the dialog
   // closed): the step stays, as that change, rather than undoing it.
@@ -306,7 +334,7 @@ export function useLayerReturn(
     if (!ready) return;
     const look = () => {
       const top = layerOnTop();
-      if (!top || !ref.current(top)) return;
+      if (!top || closed(top) || !ref.current(top)) return;
       // Rendered by now; the layer, mounted next, holds the page still here.
       const at = layerState()?.booktownScroll;
       if (at) scrollTo({ left: at[0], top: at[1], behavior: "instant" });
