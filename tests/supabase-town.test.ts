@@ -19,7 +19,12 @@ import {
 import { fileReport } from "../src/lib/supabase/reports";
 import { createWalkStore } from "../src/lib/walk-store";
 import type { Database } from "../src/lib/supabase/database.types";
-import { ME_ID, OWN_SHOP_ID, type PersistenceStatus } from "../src/lib/types";
+import {
+  ME_ID,
+  OWN_SHOP_ID,
+  reviewKey,
+  type PersistenceStatus,
+} from "../src/lib/types";
 import { demoBooks, demoPosts } from "../src/lib/data";
 import { isDatabaseId } from "../src/lib/paths";
 
@@ -781,10 +786,11 @@ async function main() {
   );
 
   await check(
-    "three reports hide a post from everyone but its writer, until dismissed",
+    "reports from new accounts made together fold nothing; the reporter hears only how far it got",
     async () => {
       const carol = await reader("carol");
       const dan = await reader("dan");
+      const eve = await reader("eve");
       const row = await ben.client
         .from("posts")
         .insert({ author_id: ben.id, body: "この本、いまなら半額です" })
@@ -792,27 +798,64 @@ async function main() {
         .single();
       assert.ifError(row.error);
       const target = { kind: "post" as const, id: row.data.id };
+      const key = reviewKey("post", target.id);
       const seenBy = async (person: { id: string; client: Client }) =>
         (await townOf(person))
           .getSnapshot()
           .posts.some((entry) => entry.id === target.id);
-      for (const person of [aki, carol, dan])
-        assert.equal(
-          await fileReport(person.client, person.id, target, "spam", ""),
-          "sent",
+      for (const person of [aki, carol, dan]) {
+        const sent = await fileReport(
+          person.client,
+          person.id,
+          target,
+          "spam",
+          "",
         );
+        assert.equal(sent.result, "sent");
+        assert.equal(sent.result === "sent" && sent.report.status, "open");
+      }
       assert.equal(
-        await fileReport(aki.client, aki.id, target, "spam", "二度目"),
+        (await fileReport(aki.client, aki.id, target, "spam", "二度目")).result,
         "already",
       );
-      assert.equal(await seenBy(aki), false);
+      // Accounts this new, made the same day, weigh one person at most: the
+      // post is neither hidden nor folded, for its writer or anyone else.
+      const others = (await townOf(eve)).getSnapshot();
+      assert.ok(others.posts.some((entry) => entry.id === target.id));
+      assert.equal(others.reviewFolds[key], undefined);
       assert.equal(await seenBy(ben), true);
-      const dismissed = await admin
+      // The reporter keeps the post, folded as their own report, and never
+      // reads what the operator decided about it.
+      const mine = (await townOf(aki)).getSnapshot();
+      assert.ok(mine.posts.some((entry) => entry.id === target.id));
+      const statusOf = async () =>
+        (await townOf(aki))
+          .getSnapshot()
+          .myReports.find((entry) => entry.targetId === target.id)?.status;
+      assert.equal(await statusOf(), "open");
+      const secret = await aki.client
         .from("reports")
-        .update({ status: "dismissed" })
+        .select("status")
         .eq("target_id", target.id);
-      assert.ifError(dismissed.error);
-      assert.equal(await seenBy(aki), true);
+      assert.ok(secret.error, "a reporter cannot read the decision");
+      for (const [status, heard] of [
+        ["checking", "checking"],
+        ["dismissed", "checked"],
+      ] as const) {
+        const changed = await admin
+          .from("reports")
+          .update({ status })
+          .eq("target_id", target.id);
+        assert.ifError(changed.error);
+        assert.equal(await statusOf(), heard);
+      }
+      // Only the operator hides a post outright; its writer still sees it.
+      const hidden = await admin
+        .from("moderation_hides")
+        .insert({ target_kind: "post", target_id: target.id });
+      assert.ifError(hidden.error);
+      assert.equal(await seenBy(eve), false);
+      assert.equal(await seenBy(ben), true);
     },
   );
 
