@@ -18,6 +18,7 @@ import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
 import { ScanSession } from "./ScanSession";
 import { JournalNotes, TitlesToType } from "./LibraryJournalNotes";
+import { booksBeforeSearch } from "../lib/book-lists";
 import { linkLabel, normalizeLink, PROFILE_LINK_LIMIT } from "../lib/links";
 import { handleProblem, normalizeHandle } from "../lib/handles";
 import { useClock } from "./useClock";
@@ -142,13 +143,17 @@ export function ProfileView({
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   // The 9冊 picker finds books the way every search does; the reader's own
   // books come first among equals, and near titles wait under a quiet heading.
+  // Before anything is typed, or by a genre, never a book another reader only
+  // typed in.
+  const beforeSearch = booksBeforeSearch(state);
   const nineSearch = useBookSearch(state.books, search, {
     own: state.library,
     limit: state.books.length,
+    genreFinds: beforeSearch,
   });
   const searchingNine = search.trim() !== "";
   const selectableBooks = (
-    searchingNine ? nineSearch.found.map((match) => match.book) : state.books
+    searchingNine ? nineSearch.found.map((match) => match.book) : beforeSearch
   ).filter((book) => !draftNine.includes(book.id));
   const nearNine = searchingNine
     ? nineSearch.near
@@ -1124,9 +1129,11 @@ export function ProfileView({
             {!selectableBooks.length &&
               (!searchingNine || nineSearch.settled) && (
                 <p className="profile-muted">
-                  {nearNine.length
-                    ? "ぴったり合う本はありませんでした。"
-                    : "条件に合う本がありません。"}
+                  {!searchingNine
+                    ? "題名や著者で、本を探してください。"
+                    : nearNine.length
+                      ? "ぴったり合う本はありませんでした。"
+                      : "条件に合う本がありません。"}
                 </p>
               )}
             {nearNine.length > 0 && (

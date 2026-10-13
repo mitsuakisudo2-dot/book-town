@@ -28,6 +28,7 @@ jobs:
       - run: pnpm test:search
       - run: pnpm test:posters
       - run: pnpm test:customization-domain
+      - run: pnpm test:shop-layout
       - run: pnpm test:db
       - run: pnpm test:account
       - run: pnpm test:town-sync

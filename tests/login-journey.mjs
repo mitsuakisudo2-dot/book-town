@@ -179,11 +179,28 @@ await context.route(supabase + "/**", async (route) => {
   }
   if (url.pathname.startsWith("/rest/v1/") && request.method() !== "GET")
     townWrites.push(url.pathname);
-  // The rest of the signed-in town: a new reader has nothing yet.
+  // The rest of the signed-in town: a new reader has nothing yet. Like
+  // PostgREST, the page asked for (offset, limit) and the total, which the
+  // app reads to know it has every one of the reader's own rows.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "GET") {
     townReads.push(url.pathname);
     const table = url.pathname.slice("/rest/v1/".length);
-    return json(200, town?.[table] ?? []);
+    const rows = town?.[table] ?? [];
+    const from = Number(url.searchParams.get("offset") ?? 0);
+    const page = rows.slice(
+      from,
+      from + Number(url.searchParams.get("limit") ?? rows.length),
+    );
+    const range = page.length ? `${from}-${from + page.length - 1}` : "*";
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: {
+        "content-range": `${range}/${rows.length}`,
+        "access-control-expose-headers": "Content-Range",
+      },
+      body: JSON.stringify(page),
+    });
   }
   return json(404, { message: "not mocked: " + url.pathname });
 });
@@ -998,6 +1015,76 @@ try {
   );
 
   await check(
+    "another reader's typed-in book waits for its name in lists before a search",
+    async () => {
+      // レン typed in 星の本 and used it nowhere; こころの本 is on their public shelf.
+      await page.goto(base + "/search/");
+      await expect(
+        page.getByRole("heading", { name: "棚の隅の本" }),
+      ).toBeVisible();
+      await expect(page.locator("main")).not.toContainText("星の本");
+      // Nor does a genre find it: the 登録した本 chip, or part of it typed.
+      const box = page.getByRole("searchbox", { name: "本と書店を検索" });
+      const listed = (title) =>
+        page.locator(".search-results .search-book").filter({
+          hasText: title,
+        });
+      await page
+        .getByRole("group", { name: "ジャンルで探す" })
+        .getByRole("button", { name: "登録した本" })
+        .click();
+      await expect(box).toHaveValue("登録した本");
+      await expect(listed("こころの本")).toHaveCount(1);
+      await expect(listed("星の本")).toHaveCount(0);
+      await box.fill("登録");
+      await expect(listed("こころの本")).toHaveCount(1);
+      await expect(listed("星の本")).toHaveCount(0);
+      await box.fill("星の本");
+      await expect(listed("星の本")).toHaveCount(1);
+      // The 人生の9冊 picker offers it only once it is searched for.
+      await page.goto(base + "/profiles/me/");
+      await page
+        .getByRole("region", { name: "人生の9冊" })
+        .getByRole("button", { name: "編集" })
+        .click();
+      const nine = page.getByRole("dialog", { name: "人生の9冊を選ぶ" });
+      const pick = (title) =>
+        nine.getByRole("button", { name: title + "を人生の9冊に加える" });
+      await expect(pick("こころの本")).toBeVisible();
+      await expect(pick("星の本")).toHaveCount(0);
+      const nineBox = nine.getByRole("searchbox", {
+        name: "人生の9冊に追加する本を検索",
+      });
+      await nineBox.fill("登録した本");
+      await expect(pick("こころの本")).toBeVisible();
+      await expect(pick("星の本")).toHaveCount(0);
+      await nineBox.fill("星の本");
+      await expect(pick("星の本")).toBeVisible();
+      await nine.getByRole("button", { name: "キャンセル" }).click();
+      await expect(nine).toHaveCount(0);
+      // Nor does a 見本's shop fill out its shelves with it in the walk,
+      // though it may with こころの本 (one 見本's shelf is named 星の本).
+      const onShelf = (title) =>
+        page.locator(`.walk-book-target[aria-label^="${title}、試験 作家。"]`);
+      await page.goto(base + "/walk/");
+      await expect(page.locator(".walk-book-target").first()).toBeVisible();
+      await expect(page).toHaveURL(/\/walk\/#./);
+      const first = page.url();
+      let shelved = 0;
+      for (let step = 0; step < 12; step++) {
+        const at = page.url();
+        await expect(onShelf("星の本")).toHaveCount(0);
+        if (/#shop-/.test(at)) shelved += await onShelf("こころの本").count();
+        await page.getByRole("button", { name: "次の書店" }).click();
+        await expect(page).not.toHaveURL(at);
+        if (page.url() === first) break;
+      }
+      expect(page.url()).toBe(first);
+      expect(shelved).toBeGreaterThan(0);
+    },
+  );
+
+  await check(
     "a poster folded by reports opens with a tap; its maker is told gently",
     async () => {
       town = withPosters();
@@ -1355,6 +1442,12 @@ try {
       expect(await page.evaluate(() => window.bookAskedToClose)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(inHand).not.toBeVisible();
+      // Closed at once after the request, it stays closed, and both steps
+      // came off: one 戻る leaves the shop.
+      await page.goBack();
+      await expect(page).toHaveURL(
+        new RegExp("/books/registered/\\?id=" + COVER_BOOK + "$"),
+      );
       // Google's cover of 星の本 was refused: Google is not asked for it, and
       // the book keeps its 装丁カード, with no credit and no link.
       await page.goto(base + "/books/registered/?id=" + REFUSED_BOOK);
