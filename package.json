@@ -10,6 +10,7 @@
     "build": "next build --webpack",
     "test:domain": "tsx tests/domain.test.ts",
     "test:walk-domain": "tsx tests/walk-domain.test.ts",
+    "test:covers": "tsx tests/covers.test.ts",
     "test:customization-domain": "tsx tests/customization-domain.test.ts",
     "test:db": "tsx tests/database-policies.test.ts",
     "test:account": "tsx tests/account-domain.test.ts",

@@ -24,6 +24,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm test:domain
       - run: pnpm test:walk-domain
+      - run: pnpm test:covers
       - run: pnpm test:customization-domain
       - run: pnpm test:db
       - run: pnpm test:account

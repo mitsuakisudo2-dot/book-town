@@ -1787,13 +1787,15 @@
   font-size: 11px;
   color: #89917e;
 }
+/* A real cover is shown whole, as its source serves it: never cropped. */
 .jacket-image {
   position: absolute;
   inset: 0;
   z-index: 7;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: 50% 100%;
 }
 .jacket-image[hidden] {
   display: none;
