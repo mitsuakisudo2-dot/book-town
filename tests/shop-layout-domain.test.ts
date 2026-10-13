@@ -6,6 +6,7 @@ import {
   placementSize,
   reachableOnly,
   rect,
+  setRowStyle,
   validateScene,
   type SceneObject,
   type StoreScene,
@@ -33,6 +34,7 @@ import {
   MAIN_SHELF_ID,
   MAX_SHELVES,
   protectedKeys,
+  PUBLIC_KINDS,
   publicFingerprint,
   publicShelfScene,
   publicShelfScenes,
@@ -44,6 +46,8 @@ import {
   validateLayout,
   writeBackShelf,
   type LayoutCheck,
+  type RetiredShelf,
+  type ShelfDoc,
   type ShelfId,
   type ShopLayout,
 } from "../src/lib/shop-layout";
@@ -496,6 +500,41 @@ async function main() {
     },
   );
 
+  await check(
+    "a book on a private row of a public shelf put away stays private, wherever it goes next",
+    () => {
+      const L = threeShelves();
+      find(L, "shelf:third/tier-0")!.isPublic = false;
+      assert.equal(shelfOf(L, "shelf:third").isPublic, true);
+      assert.ok(!visibleIds(L).has("placement:third-1"));
+      const next = removeShelf(L, "shelf:third", "2026-10-02T00:00:00.000Z");
+      keepsEverything(L, next, "remove");
+      const book = next.unplaced.find((o) => o.id === "placement:third-1")!;
+      assert.equal(book.parentId, null);
+      assert.equal(book.isPublic, false);
+      // Put on a public row of a public shelf later, it still does not show.
+      const { layout, unplaced } = moveToShelf(
+        addShelf(next, "warm", "shelf:fresh"),
+        "placement:third-1",
+        "shelf:fresh",
+        BOOKS,
+      );
+      assert.equal(unplaced, false);
+      assert.equal(
+        find(layout, "placement:third-1")!.parentId,
+        "shelf:fresh/tier-0",
+      );
+      assert.ok(!visibleIds(layout).has("placement:third-1"));
+      // A book visitors saw leaves unmarked, ready to be shown again.
+      const open = removeShelf(
+        threeShelves(),
+        "shelf:third",
+        "2026-10-02T00:00:00.000Z",
+      );
+      assert.equal(find(open, "placement:third-1")!.isPublic, undefined);
+    },
+  );
+
   await check("shelves move one place and stop at the ends", () => {
     const L = threeShelves();
     const later = moveShelf(L, MAIN_SHELF_ID, 1);
@@ -564,6 +603,52 @@ async function main() {
           row.bookHeight,
         ),
       );
+    },
+  );
+
+  await check(
+    "a book takes the height of the row it comes to, by a move or by a preset",
+    () => {
+      const sizeOn = (p: SceneObject, bookHeight: number) =>
+        placementSize(
+          BOOKS.find((b) => b.id === p.bookId)!,
+          p.display!,
+          bookHeight,
+        );
+      // From the table, whose books are 0.105 high, to a shelf tier of 0.146.
+      const L = addShelf(layoutFromScene(windowScene()), "warm", "shelf:next");
+      const onTable = find(L, "placement:shop-orbit:o12")!;
+      assert.equal(onTable.parentId, "table-row");
+      assert.equal(find(L, "table-row")!.bookHeight, 0.105);
+      const { layout, unplaced } = moveToShelf(
+        L,
+        onTable.id,
+        "shelf:next",
+        BOOKS,
+      );
+      assert.equal(unplaced, false);
+      const moved = find(layout, onTable.id)!;
+      assert.equal(moved.parentId, "shelf:next/tier-0");
+      assert.equal(find(layout, "shelf:next/tier-0")!.bookHeight, 0.146);
+      assert.deepEqual(moved.preferredSize, sizeOn(moved, 0.146));
+      assert.notDeepEqual(moved.preferredSize, onTable.preferredSize);
+      // A preset gives a row its own height back, and its books follow.
+      let scene = shelfScene(L, MAIN_SHELF_ID, "mine", { unplaced: true });
+      scene = setRowStyle(scene, "row-0", { bookHeight: 0.12 }, BOOKS);
+      const lowered = writeBackShelf(L, MAIN_SHELF_ID, scene);
+      const onRow0 = shelfOf(lowered, MAIN_SHELF_ID).objects.filter(
+        (o) => o.kind === "book" && o.parentId === "row-0",
+      );
+      assert.ok(onRow0.length > 0);
+      for (const p of onRow0)
+        assert.deepEqual(p.preferredSize, sizeOn(p, 0.12), p.id);
+      const reset = applyShelfPreset(lowered, MAIN_SHELF_ID, "warm", BOOKS);
+      assert.equal(find(reset, "row-0")!.bookHeight, 0.146);
+      for (const p of onRow0) {
+        const after = find(reset, p.id)!;
+        assert.equal(after.parentId, "row-0", p.id);
+        assert.deepEqual(after.preferredSize, sizeOn(after, 0.146), p.id);
+      }
     },
   );
 
@@ -715,6 +800,23 @@ async function main() {
             visibleKeys(L),
             "seed " + seed + " step " + step,
           );
+          // A placement hidden where it stood is marked private when it leaves
+          // its shelf, so no later move can show it unasked.
+          const seen = visibleIds(L);
+          for (const before of L.shelves) {
+            const still = next.shelves.find((s) => s.id === before.id);
+            for (const p of before.objects)
+              if (
+                p.kind === "book" &&
+                !seen.has(p.id) &&
+                !still?.objects.some((o) => o.id === p.id)
+              )
+                assert.equal(
+                  find(next, p.id)!.isPublic,
+                  false,
+                  "seed " + seed + " step " + step + " " + p.id,
+                );
+          }
           L = next;
         }
       }
@@ -874,6 +976,65 @@ async function main() {
       assert.ok(!visibleIds(repaired).has(taken));
       // What is not lost is left as it is.
       assert.deepEqual(repairLost(published, source), published);
+    },
+  );
+
+  await check(
+    "the v1 scene and the published layout are each protected, even without the other",
+    () => {
+      const scene = demoScene();
+      const base = layoutFromScene(scene);
+      const drop = (L: ShopLayout, id: string) => {
+        const next = structuredClone(L);
+        const shelf = shelfOf(next, MAIN_SHELF_ID);
+        shelf.objects = shelf.objects.filter(
+          (o) => o.id !== id && o.parentId !== id,
+        );
+        return next;
+      };
+      // Never published: readers have seen only the v1 scene.
+      const unpublished = { scene, baseLayout: base, publishedLayout: null };
+      assert.deepEqual(
+        sorted(protectedKeys(unpublished)),
+        sorted(keptKeys(scene)),
+      );
+      const v1Only = "placement:shop-orbit:o7";
+      const fromScene = repairLost(drop(base, v1Only), unpublished);
+      assert.deepEqual(lostKeys(protectedKeys(unpublished), fromScene), []);
+      assert.equal(find(fromScene, v1Only)!.parentId, null);
+      assert.equal(find(fromScene, v1Only)!.isPublic, false);
+      // Published in the new form, with a book added after the move: only the
+      // published layout has it, and it is protected all the same.
+      const added = "placement:after-move";
+      const published = placeOn(
+        addShelf(base, "warm", "shelf:new"),
+        "shelf:new",
+        BOOK_A,
+        added,
+        "公開したあとで足した本",
+      );
+      const source = { scene, baseLayout: base, publishedLayout: published };
+      const protect = protectedKeys(source);
+      const pairs = [
+        JSON.stringify(["book", added, BOOK_A.id]),
+        JSON.stringify(["bookPop", "pop:" + added, added]),
+      ];
+      for (const key of pairs) {
+        assert.ok(!keptKeys(scene).has(key), key);
+        assert.ok(protect.has(key), key);
+      }
+      assert.deepEqual(
+        sorted(protect),
+        sorted(new Set([...keptKeys(scene), ...keptKeys(published)])),
+      );
+      // A draft from before it was added gets it back, private, with its POP.
+      const repaired = repairLost(base, source);
+      assert.deepEqual(lostKeys(protect, repaired), []);
+      ok(validateLayout(repaired, { bookIds: BOOK_IDS }));
+      const back = repaired.unplaced.find((o) => o.id === added)!;
+      assert.equal(back.parentId, null);
+      assert.equal(back.isPublic, false);
+      assert.equal(find(repaired, "pop:" + added)!.parentId, added);
     },
   );
 
@@ -1048,6 +1209,39 @@ async function main() {
     },
   );
 
+  await check(
+    "a kind visitors may not see yet stays with the owner, with what stands on it",
+    () => {
+      assert.ok(!PUBLIC_KINDS.includes("poster"));
+      const L = threeShelves();
+      shelfOf(L, MAIN_SHELF_ID).objects.push(
+        {
+          id: "poster:1",
+          kind: "poster" as SceneObject["kind"],
+          parentId: null,
+          rect: rect(0.05, 0.14, 0.3, 0.04),
+          z: 4,
+          posterRef: { posterId: "00000000-0000-4000-8000-0000000000d1" },
+        },
+        {
+          id: "stamp:on-poster",
+          kind: "stamp",
+          parentId: "poster:1",
+          rect: rect(0.1, 0.1, 0.2, 0.2),
+          z: 5,
+        },
+      );
+      const visible = visibleIds(L);
+      assert.ok(!visible.has("poster:1"));
+      assert.ok(!visible.has("stamp:on-poster"));
+      assert.ok(visible.has("row-0"));
+      assert.deepEqual(
+        publicShelfScenes(L, "s").map((s) => s.objects),
+        publicShelfScenes(threeShelves(), "s").map((s) => s.objects),
+      );
+    },
+  );
+
   // 4. Validation ------------------------------------------------------------------------
 
   await check(
@@ -1167,8 +1361,75 @@ async function main() {
     refuses((L) => {
       find(L, "row-0")!.layer = "sky" as SceneObject["layer"];
     }, /row-0: invalid layer/);
+    refuses((L) => {
+      L.shelves = [];
+    }, /shelf count/);
+    refuses((L) => {
+      delete (L.shelves[0] as Partial<ShelfDoc>).isPublic;
+    }, /shelf:main: invalid visibility/);
+    refuses((L) => {
+      L.unplaced.push({
+        id: "label:loose",
+        kind: "label",
+        parentId: null,
+        rect: rect(0.05, 0.14, 0.3, 0.04),
+        z: 4,
+        text: "まだ置いていない札",
+      });
+    }, /label:loose: only books wait unplaced/);
+    refuses((L) => {
+      find(L, "pop:placement:third-1")!.id = "p".repeat(201);
+    }, /shelf:third: invalid object/);
+    refuses((L) => {
+      find(L, "pop:placement:third-1")!.id = "";
+    }, /shelf:third: invalid object/);
+    refuses((L) => {
+      L.shelves[0].intro = "あ".repeat(501);
+    }, /shelf:main: invalid intro/);
+    refuses((L) => {
+      L.shelves[0].look = { ...L.shelves[0].look, paper: "cream" };
+    }, /shelf:main: invalid look/);
+    refuses((L) => {
+      L.shelves[0].own = { snapshotId: 5 as unknown as string };
+    }, /shelf:main: invalid own data/);
+    refuses((L) => {
+      find(L, "row-0")!.own = { note: 5 as unknown as string };
+    }, /row-0: invalid own data/);
+    refuses((L) => {
+      find(L, "row-0")!.textStyle = { color: "red" };
+    }, /row-0: invalid text style/);
+    refuses((L) => {
+      (find(L, "row-0") as unknown as Record<string, unknown>)["a\u0000b"] =
+        "鍵に隠れた文字";
+    }, /U\+0000/);
+    refuses((L) => {
+      delete (L.retired![0] as Partial<RetiredShelf>).retiredAt;
+    }, /retired 1: invalid/);
+    refuses((L) => {
+      L.retired![0].shelf.objects.push({
+        id: "label:retired",
+        kind: "label",
+        parentId: "row-0",
+        rect: rect(0.05, 0.14, 0.3, 0.04),
+        z: 4,
+        text: "別の本棚の段に掛けた札",
+      });
+    }, /label:retired: parent outside its place/);
+    // Over 2MB in all, though every shelf keeps within its own limit.
+    refuses((L) => {
+      L.retired![0].shelf.objects.push({
+        id: "label:long",
+        kind: "label",
+        parentId: null,
+        rect: rect(0.05, 0.14, 0.3, 0.04),
+        z: 4,
+        text: "あ".repeat(700_000),
+      });
+    }, /(^|\n)too large($|\n)/);
     // Well-formed reserved values pass.
     const L = threeShelves();
+    find(L, "pop:placement:third-1")!.id = "語".repeat(200);
+    L.shelves[0].intro = "あ".repeat(500);
     find(L, "row-0")!.posterRef = {
       posterId: "00000000-0000-4000-8000-0000000000d1",
     };
@@ -1263,6 +1524,15 @@ async function main() {
       assert.equal(shown[1].templateId, "window");
       assert.equal(shown[1].theme.wood, "#93633c");
       assert.equal(shown[0].theme.wood, demoScene().theme.wood);
+      // Each shelf's own colours over the shop's; the shop's when it has none.
+      const L = threeShelves();
+      assert.notEqual(L.common.theme.paper, "#f8eaca");
+      assert.equal(shown[1].theme.paper, "#f8eaca");
+      shelfOf(L, "shelf:third").look = { paper: "#fefefe" };
+      delete shelfOf(L, MAIN_SHELF_ID).look;
+      const [main, third] = publicShelfScenes(L, "s");
+      assert.deepEqual(main.theme, L.common.theme);
+      assert.deepEqual(third.theme, { ...L.common.theme, paper: "#fefefe" });
     },
   );
 
@@ -1338,6 +1608,54 @@ async function main() {
         BOOKS,
       ).layout;
       assert.notEqual(mark(moved), mark(addShelf(L, "warm", "shelf:next")));
+    },
+  );
+
+  await check(
+    "the mark notices the world, the preset and every part of the frame",
+    () => {
+      const L = layoutFromScene(demoScene());
+      const mark = (layout: ShopLayout) =>
+        publicFingerprint(publicShelfScenes(layout, "mine"));
+      assert.notEqual(mark(applyShopWorld(L, "study")), mark(L));
+      assert.notEqual(
+        mark(applyShelfPreset(L, MAIN_SHELF_ID, "study", BOOKS)),
+        mark(L),
+      );
+      const changes: Record<string, (L: ShopLayout) => void> = {
+        light: (L) => {
+          L.common.theme.light = "#ffffff";
+        },
+        wood: (L) => {
+          L.shelves[0].look = { wood: "#123456" };
+        },
+        preset: (L) => {
+          L.shelves[0].presetId = "study";
+        },
+        darkness: (L) => {
+          L.common.background.darkness = 0.5;
+        },
+        forbidden: (L) => {
+          L.common.forbidden = [];
+        },
+        "shelf ID": (L) => {
+          L.shelves[0].id = "shelf:renamed";
+        },
+      };
+      for (const [what, change] of Object.entries(changes)) {
+        const changed = structuredClone(L);
+        change(changed);
+        assert.notEqual(mark(changed), mark(L), what);
+      }
+      // Where an object sits in the list does not count; the shelf's number does.
+      const [scene] = publicShelfScenes(L, "mine");
+      const reversed = { ...scene, objects: [...scene.objects].reverse() };
+      assert.notDeepEqual(reversed.objects, scene.objects);
+      assert.equal(publicFingerprint([reversed]), publicFingerprint([scene]));
+      assert.notEqual(
+        publicFingerprint([{ ...scene, shelfIndex: 1 }]),
+        publicFingerprint([scene]),
+      );
     },
   );
 
