@@ -75,6 +75,62 @@ async function expectBook(page, title) {
 // from screen readers, so a check about the POP shown reads this page only.
 const CURRENT_POP = ".bh-pop-page.is-current";
 
+/**
+ * The three reactions under a POP stand in one row at equal widths, each a
+ * full touch target with its icon and every word of its name in sight.
+ */
+async function expectReactionsInOneRow(pop, label) {
+  const row = pop.locator(".bh-pop-reactions");
+  await expect(row.getByRole("button")).toHaveCount(3);
+  await restingBox(row);
+  const buttons = await row.evaluate((element) =>
+    Array.from(element.querySelectorAll("button"), (button) => {
+      const box = button.getBoundingClientRect();
+      const words = button.querySelector("span") ?? button;
+      const range = document.createRange();
+      range.selectNodeContents(words);
+      const lines = Array.from(range.getClientRects());
+      const icon = button.querySelector("svg").getBoundingClientRect();
+      return {
+        name: button.textContent,
+        top: box.top,
+        left: box.left,
+        right: box.right,
+        width: box.width,
+        height: box.height,
+        clipped:
+          button.scrollWidth > button.clientWidth ||
+          button.scrollHeight > button.clientHeight,
+        wordsInside: lines.every(
+          (line) =>
+            line.left >= box.left &&
+            line.right <= box.right &&
+            line.top >= box.top &&
+            line.bottom <= box.bottom,
+        ),
+        iconInside:
+          icon.width > 0 && icon.left >= box.left && icon.right <= box.right,
+      };
+    }),
+  );
+  const card = await pop.boundingBox();
+  expect(
+    buttons.map((button) => button.name),
+    label,
+  ).toEqual(["いいね", "読みたくなった", "私も好き！"]);
+  for (const button of buttons) {
+    expect(Math.abs(button.top - buttons[0].top), label).toBeLessThan(1);
+    expect(Math.abs(button.width - buttons[0].width), label).toBeLessThan(1);
+    expect(button.width, label).toBeGreaterThanOrEqual(44);
+    expect(button.height, label).toBeGreaterThanOrEqual(44);
+    expect(button.clipped, `${label}: ${button.name} clipped`).toBe(false);
+    expect(button.wordsInside, `${label}: ${button.name} words`).toBe(true);
+    expect(button.iconInside, `${label}: ${button.name} icon`).toBe(true);
+    expect(button.left, label).toBeGreaterThanOrEqual(card.x);
+    expect(button.right, label).toBeLessThanOrEqual(card.x + card.width);
+  }
+}
+
 /** Draws a finger most of a page across the POP: -1 to the next, 1 back. */
 async function swipePop(page, pop, direction, held) {
   const track = pop.locator(".bh-pop-track");
@@ -282,6 +338,7 @@ try {
         .getByRole("button", { name: "いいね", exact: true })
         .getAttribute("aria-pressed");
       await expectBook(page, "ソラリス");
+      await expectReactionsInOneRow(pop, "1440px reactions");
       await expect(pop.locator(".bh-pop-page-count")).toHaveText("1 / 4");
       await expect(pop.getByRole("button", { name: "前のPOP" })).toBeDisabled();
       await expect(pop.getByRole("button", { name: "次のPOP" })).toBeEnabled();
@@ -1246,6 +1303,55 @@ try {
         await expectBook(phone, titles[0]);
         await touchGesture(phone, 110, 0);
         await expectBook(phone, titles[0]);
+        await phone.keyboard.press("Escape");
+      },
+    );
+    await mobile.close();
+  }
+  {
+    const mobile = await browser.newContext({
+      viewport: { width: 430, height: 793 },
+      isMobile: true,
+      hasTouch: true,
+      locale: "ja-JP",
+    });
+    const phone = settleBeforeNavigating(await mobile.newPage());
+    currentPage = phone;
+    watch(phone);
+    await check(
+      "From 320px to 430px the three POP reactions share one row at equal widths",
+      async () => {
+        await go(phone);
+        await shop(phone, "軌道書房")
+          .getByRole("button", {
+            name: "ソラリス · 面陳 · POPあり",
+            exact: true,
+          })
+          .tap();
+        await expectBook(phone, "ソラリス");
+        const pop = phone.locator(".bh-dialog .owner-pop");
+        for (const width of [
+          430, 428, 414, 412, 393, 390, 375, 360, 344, 320,
+        ]) {
+          await phone.setViewportSize({ width, height: 793 });
+          await expectReactionsInOneRow(pop, `${width}px reactions`);
+        }
+        // Pressed, a reaction still shows it.
+        const like = pop.getByRole("button", { name: "いいね", exact: true });
+        await expect(like).toHaveAttribute("aria-pressed", "false");
+        const plain = await like.evaluate(
+          (element) => getComputedStyle(element).backgroundColor,
+        );
+        await like.tap();
+        await expect(like).toHaveAttribute("aria-pressed", "true");
+        expect(
+          await like.evaluate(
+            (element) => getComputedStyle(element).backgroundColor,
+          ),
+        ).not.toBe(plain);
+        await expectReactionsInOneRow(pop, "320px pressed reactions");
+        await like.tap();
+        await expect(like).toHaveAttribute("aria-pressed", "false");
         await phone.keyboard.press("Escape");
       },
     );

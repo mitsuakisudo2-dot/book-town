@@ -637,11 +637,24 @@ export function BookInHand({
                     }
                     size={16}
                   />
-                  {reaction === "like"
-                    ? "いいね"
-                    : reaction === "read"
-                      ? "読みたくなった"
-                      : "私も好き！"}
+                  {/* A narrow button turns its words at these breaks only. */}
+                  <span>
+                    {reaction === "like" ? (
+                      "いいね"
+                    ) : reaction === "read" ? (
+                      <>
+                        読みたく
+                        <wbr />
+                        なった
+                      </>
+                    ) : (
+                      <>
+                        私も
+                        <wbr />
+                        好き！
+                      </>
+                    )}
+                  </span>
                 </button>
               ))}
             </div>
