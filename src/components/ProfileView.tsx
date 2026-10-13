@@ -109,19 +109,24 @@ export function ProfileView({
   const [sheet, setSheet] = useState<
     "following" | "followers" | "settings" | "scan" | "titles" | null
   >(null);
-  // After a scan that read books in, the reader lands on them.
+  // After a scan that read books in, the reader lands on them: the 登録
+  // tab, newest first. The tab changes once the scanner's step is off the
+  // history, so that step comes off rather than staying as the change.
   const [landing, setLanding] = useState(false);
   const libraryTab = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!landing) return;
     setLanding(false);
     afterLayerCloses(() => {
-      document
-        .getElementById("profile-collection-title")
-        ?.scrollIntoView({ block: "start" });
-      libraryTab.current?.focus({ preventScroll: true });
+      setBooks("library");
+      requestAnimationFrame(() => {
+        document
+          .getElementById("profile-collection-title")
+          ?.scrollIntoView({ block: "start" });
+        libraryTab.current?.focus({ preventScroll: true });
+      });
     });
-  }, [landing]);
+  }, [landing, setBooks]);
   const clock = useClock(60_000);
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingNine, setEditingNine] = useState(false);
@@ -549,7 +554,12 @@ export function ProfileView({
           )}
           {state[collection].length ? (
             <div className="profile-collection-grid">
-              {state[collection].map((id) => {
+              {/* The library newest first (plan 5-6): what was just
+                  registered comes first. */}
+              {(collection === "library"
+                ? [...state.library].reverse()
+                : state[collection]
+              ).map((id) => {
                 const book = state.books.find((entry) => entry.id === id);
                 return book ? (
                   <article className="profile-saved-book" key={id}>
@@ -858,7 +868,6 @@ export function ProfileView({
           notify={notify}
           onClose={(kept) => {
             setSheet(null);
-            setCollection("library");
             setLanding(kept);
           }}
         />

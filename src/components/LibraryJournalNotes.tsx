@@ -9,6 +9,7 @@ import {
   retryRefused,
   sendJournal,
   useJournal,
+  useJournalSending,
   waitingForTitle,
   type ScanItem,
 } from "../lib/library-journal";
@@ -44,7 +45,9 @@ export function JournalNotes({
 }) {
   const owner = useOwner();
   const items = useJournal(owner);
-  const waiting = waitingForTitle(items);
+  // A book whose title openBD is answering now (the scanner just closed) is
+  // not counted until it has answered.
+  const waiting = waitingForTitle(items, useJournalSending());
   const refused = refusedItems(items);
   if (!owner || (!waiting.length && !refused.length)) return null;
 

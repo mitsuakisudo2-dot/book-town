@@ -10,9 +10,10 @@ import { restingBox, settleBeforeNavigating } from "./journey-layers.mjs";
 // with a stand-in for the browser's barcode reader on the fake camera:
 // twenty books in a row, the same book twice, price codes, a book openBD
 // does not know, ［取り消す］, offline, ［終わる］, 書名を入れる, a tab closed
-// before its books were saved, 390px, 戻る; and ISBNs typed where no barcode
-// can be read. Nothing leaves this machine: openBD and Google Books are
-// answered here, and every other outside address is refused.
+// before its books were saved, 390px, 戻る, the sound and the vibration;
+// and ISBNs typed where no barcode can be read. Nothing leaves this machine:
+// openBD and Google Books are answered here, and every other outside
+// address is refused.
 
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -70,7 +71,8 @@ const titleOf = (isbn) => {
 /** The price code printed under every Japanese book's ISBN. */
 const PRICE = "1920193006000";
 
-// "stall": openBD takes the question and never answers.
+// "stall": openBD takes the question and never answers. "slow": it answers
+// after a second and a half, well within the four seconds it is given.
 let openBd = "answer";
 const stalled = [];
 async function answerOutside(context) {
@@ -81,24 +83,27 @@ async function answerOutside(context) {
       if (url.host === "api.openbd.jp") {
         if (openBd === "stall") return void stalled.push(route);
         const isbns = url.searchParams.get("isbn").split(",");
-        return route.fulfill({
-          contentType: "application/json",
-          body: JSON.stringify(
-            isbns.map((isbn) => {
-              const title = isbn === LONG ? LONG_TITLE : titleOf(isbn);
-              return title
-                ? {
-                    summary: {
-                      isbn,
-                      title,
-                      author: "試験 花子／著",
-                      publisher: "試験書房",
-                    },
-                  }
-                : null;
-            }),
-          ),
-        });
+        const answer = () =>
+          route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify(
+              isbns.map((isbn) => {
+                const title = isbn === LONG ? LONG_TITLE : titleOf(isbn);
+                return title
+                  ? {
+                      summary: {
+                        isbn,
+                        title,
+                        author: "試験 花子／著",
+                        publisher: "試験書房",
+                      },
+                    }
+                  : null;
+              }),
+            ),
+          });
+        if (openBd === "slow") return void setTimeout(answer, 1500);
+        return answer();
       }
       if (url.host === "www.googleapis.com")
         return route.fulfill({ contentType: "application/json", body: "{}" });
@@ -128,7 +133,8 @@ async function answerOutside(context) {
  * A phone whose browser reads barcodes: the stand-in reader gives the codes
  * pushed to `__barcodes`, one frame each (an array is several codes in one
  * frame), and nothing in the frames between. `__emptyRun` counts the frames
- * with nothing since the last code.
+ * with nothing since the last code. What the phone did back is kept too:
+ * each vibration in `__buzz`, and the tones started in `__tones`.
  */
 async function scanningPage() {
   const context = await browser.newContext({
@@ -137,6 +143,17 @@ async function scanningPage() {
   });
   await answerOutside(context);
   await context.addInitScript(() => {
+    window.__buzz = [];
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      value: (pattern) => (window.__buzz.push(pattern), true),
+    });
+    window.__tones = 0;
+    const oscillator = AudioContext.prototype.createOscillator;
+    AudioContext.prototype.createOscillator = function () {
+      window.__tones += 1;
+      return oscillator.call(this);
+    };
     window.__barcodes = [];
     window.__emptyRun = 0;
     window.BarcodeDetector = class {
@@ -231,6 +248,9 @@ async function show(on, ...frames) {
     () => window.__barcodes.length === 0 && window.__emptyRun >= 4,
   );
 }
+/** The vibrations and the number of tones so far. */
+const feedback = (on) =>
+  on.evaluate(() => ({ buzz: [...window.__buzz], tones: window.__tones }));
 const cameraRunning = (on) =>
   on.waitForFunction(
     () => document.querySelector(".scan-session video")?.readyState >= 2,
@@ -567,11 +587,10 @@ try {
       await openScanner(scan);
       await cameraRunning(scan);
       await expect(scanner(scan).locator(".scan-guide")).toHaveText(
-        "上の段のバーコード（978…）を枠に",
+        "上の段（978…）を枠に",
       );
-      await expect(cardStatus(scan)).toHaveText(
-        "バーコード（978…）を枠に入れてください",
-      );
+      // Said once: the card says what a read does.
+      await expect(cardStatus(scan)).toHaveText("読むと、その場で登録します");
       // Nothing is counted before the first book.
       await expect(count(scan)).toHaveText("");
       await expect(scanner(scan)).not.toContainText(/(^|\D)0(冊|件)/);
@@ -607,15 +626,18 @@ try {
       inLibrary.add("isbn-" + isbn);
       await expectLibrary();
       const guide = scanner(scan).locator(".scan-guide");
-      await expect(guide).toHaveText("上の段のバーコード（978…）を枠に");
+      await expect(guide).toHaveText("上の段（978…）を枠に");
       const kept = await journal(scan);
-      // Alone: the first read is let go, the second says what to read.
+      // Alone: the first read is let go, the second says what to read, in
+      // a mark of its own rather than the guide's words.
       await show(scan, PRICE);
-      await expect(guide).toHaveText("上の段のバーコード（978…）を枠に");
+      await expect(guide).toHaveText("上の段（978…）を枠に");
+      await expect(guide).not.toHaveClass(/is-hint/);
       await show(scan, PRICE);
       await expect(guide).toHaveText(
         "上の段のバーコード（978…）を読んでください",
       );
+      await expect(guide).toHaveClass(/is-hint/);
       await expect(count(scan)).toHaveText("この回 21冊");
       await expectLibrary();
       expect(await journal(scan)).toEqual(kept);
@@ -831,6 +853,16 @@ try {
       await toasts(scan);
       await openScanner(scan);
       await cameraRunning(scan);
+      // A book in the library already: said, with the other sound, and
+      // nothing written or counted.
+      const kept = await stored(scan);
+      await show(scan, twenty[0]);
+      await expect(cardTitle(scan)).toHaveText("試験の本 1");
+      await expect(cardStatus(scan)).toHaveText("もうライブラリにあります");
+      await expect(count(scan)).toHaveText("");
+      expect(await stored(scan)).toEqual(kept);
+      expect(await journal(scan)).toBeNull();
+      expect((await feedback(scan)).buzz).toEqual([[20, 60, 20]]);
       const isbn = isbnOf(24);
       await show(scan, isbn);
       await expect(count(scan)).toHaveText("この回 1冊");
@@ -838,6 +870,46 @@ try {
       await expect(scanner(scan)).toHaveCount(0);
       await expect(scan).toHaveURL(/\/profiles\/me\//);
       await expect(scan.locator(".toast")).toContainText("1冊を登録しました");
+      inLibrary.add("isbn-" + isbn);
+      await expectLibrary();
+      await scan.goBack();
+      await expect(scan).toHaveURL(base + "/");
+    },
+  );
+
+  await check(
+    "closed by hand from another tab, the scanner leaves no step behind",
+    async () => {
+      await go("/profiles/me/", scan);
+      const wishTab = scan
+        .locator(".profile-collection-tabs")
+        .getByRole("button", { name: /^読みたい/ });
+      await expect(wishTab).toHaveAttribute("aria-pressed", "true");
+      // Nothing read: ✕ leaves the tab and the history as they were.
+      await openScanner(scan);
+      await scanner(scan).getByRole("button", { name: "閉じる" }).click();
+      await expect(scanner(scan)).toHaveCount(0);
+      await expect(wishTab).toHaveAttribute("aria-pressed", "true");
+      await expect(scan).toHaveURL(base + "/profiles/me/");
+      // A book read: ［終わる］ lands on the 登録 tab, the book first, and
+      // one 戻る leaves the profile.
+      await openScanner(scan);
+      await cameraRunning(scan);
+      const isbn = isbnOf(29);
+      await show(scan, isbn);
+      await expect(count(scan)).toHaveText("この回 1冊");
+      await finishScanning(scan);
+      await expect(scan.locator(".toast")).toContainText("1冊を登録しました");
+      await expect(scan).toHaveURL(/[?&]books=library/);
+      await expect(
+        scan.getByRole("button", { name: /^登録/, pressed: true }),
+      ).toBeFocused();
+      await expect(scan.locator(".profile-saved-book").first()).toContainText(
+        "試験の本 29",
+      );
+      await expect(
+        scan.locator(".profile-saved-book").first(),
+      ).toBeInViewport();
       inLibrary.add("isbn-" + isbn);
       await expectLibrary();
       await scan.goBack();
@@ -874,12 +946,23 @@ try {
         };
       });
       const read = [25, 26, 27].map(isbnOf);
+      const before = await feedback(scan);
       await show(scan, ...read);
       await expect(count(scan)).toHaveText("この回 3冊");
-      // And one whose title openBD is still being asked for.
+      // ♪ is off: a vibration for each book, and no sound.
+      const after = await feedback(scan);
+      expect(after.buzz).toEqual([...before.buzz, 30, 30, 30]);
+      expect(after.tones).toBe(before.tones);
+      // And one whose title openBD is still being asked for: after four
+      // seconds the card says so, and the next book can be read.
       openBd = "stall";
       const asking = isbnOf(28);
       await show(scan, asking);
+      await expect(cardTitle(scan)).toHaveText("書名がわからない本", {
+        timeout: 8000,
+      });
+      await expect(cardStatus(scan)).toHaveText(`${asking}・控えに置きました`);
+      await expect(count(scan)).toHaveText("この回 3冊・書名待ち 1冊");
       await expect
         .poll(async () =>
           ((await journal(scan)) ?? []).map((item) => item.state).sort(),
@@ -918,7 +1001,7 @@ try {
   );
 
   await check(
-    "with the camera refused, ISBNs are typed, and the settings are named",
+    "with the camera refused or missing, ISBNs are typed, and why is said",
     async () => {
       const refused = await scanningPage();
       await refused.addInitScript(() => {
@@ -937,11 +1020,105 @@ try {
         scanner(refused).getByRole("button", { name: "カメラで読む" }),
       ).toHaveCount(0);
       await expect(field(refused)).toBeFocused();
+      // ［終わる］ is wide, and in the bottom third of the screen (plan 7-0).
+      const end = await restingBox(
+        scanner(refused).getByRole("button", { name: "終わる" }),
+      );
+      expect(end.y).toBeGreaterThanOrEqual((844 * 2) / 3);
+      expect(end.width).toBeGreaterThan(390 / 2);
+      await refused.screenshot({ path: path.join(output, "scan-refused.png") });
       await field(refused).fill(isbnOf(30));
       await expect(cardTitle(refused)).toHaveText("試験の本 30");
       await expect(cardStatus(refused)).toHaveText("登録しました");
       await expect(count(refused)).toHaveText("この回 1冊");
       await refused.context().close();
+      // No camera at all, after one more try without asking for the back
+      // one (plan 10-8): said, and the camera is not offered again.
+      const none = await scanningPage();
+      await none.addInitScript(() => {
+        window.__asked = 0;
+        navigator.mediaDevices.getUserMedia = () => {
+          window.__asked += 1;
+          return Promise.reject(new DOMException("none", "NotFoundError"));
+        };
+      });
+      await go("/profiles/me/?books=library", none);
+      await openScanner(none);
+      await expect(scanner(none)).toContainText(
+        "カメラが見つかりません。ISBNを続けて打てます",
+      );
+      await expect(
+        scanner(none).getByRole("button", { name: "カメラで読む" }),
+      ).toHaveCount(0);
+      await expect(scanner(none)).not.toContainText("端末の設定");
+      expect(await none.evaluate(() => window.__asked)).toBe(2);
+      await none.context().close();
+    },
+  );
+
+  await check(
+    "a 書名待ち book entered by hand is in, and ［終わる］ waits for openBD",
+    async () => {
+      const typing = await scanningPage();
+      await typing.addInitScript(() => {
+        navigator.mediaDevices.getUserMedia = () =>
+          Promise.reject(new DOMException("denied", "NotAllowedError"));
+      });
+      await go("/profiles/me/?books=library", typing);
+      await openScanner(typing);
+      const unknown = isbnOf(902);
+      await field(typing).fill(unknown);
+      await expect(cardTitle(typing)).toHaveText("書名がわからない本");
+      await expect(count(typing)).toHaveText("書名待ち 1冊");
+      // ［手で入力］ over the scanner offers no second camera.
+      await scanner(typing).getByRole("button", { name: "手で入力" }).click();
+      const form = typing.getByRole("dialog", {
+        name: "本を登録",
+        exact: true,
+      });
+      await expect(form).toContainText(
+        "ISBNがあれば探せます。書名だけでも登録できます。",
+      );
+      await expect(form).not.toContainText("読み取ります");
+      await expect(
+        form.getByRole("button", { name: "カメラで読み取る" }),
+      ).toHaveCount(0);
+      await form.getByLabel("ISBN").fill(unknown);
+      await form.getByLabel("タイトル").fill("手で入れた本");
+      await form.getByRole("button", { name: "登録する", exact: true }).click();
+      await expect(form).toHaveCount(0);
+      // The book read before is that book: no 書名待ち left anywhere.
+      await expect(count(typing)).toHaveText("この回 1冊");
+      await expect.poll(() => journal(typing)).toBeNull();
+      await expect(typing.locator(".journal-note")).toHaveCount(0);
+      // A title still on its way from openBD as the scanner closes: the
+      // notice waits for it, and the 登録 tab never shows it as 書名待ち.
+      await typing.evaluate(() => {
+        window.__noted = false;
+        new MutationObserver(() => {
+          if (document.querySelector(".journal-note")) window.__noted = true;
+        }).observe(document.body, { childList: true, subtree: true });
+      });
+      openBd = "slow";
+      const slow = isbnOf(33);
+      await field(typing).fill(slow);
+      await expect(cardStatus(typing)).toHaveText("書名を調べています…");
+      await toasts(typing);
+      await finishScanning(typing);
+      await typing.waitForFunction(() =>
+        window.__toasts.includes("2冊を登録しました"),
+      );
+      expect(await typing.evaluate(() => window.__noted)).toBe(false);
+      expect(
+        (await toasts(typing)).filter((text) => text.includes("控え")),
+      ).toEqual([]);
+      await expect(typing.locator(".journal-note")).toHaveCount(0);
+      expect((await stored(typing)).library).toEqual(
+        expect.arrayContaining(["isbn-" + unknown, "isbn-" + slow]),
+      );
+      expect(await journal(typing)).toBeNull();
+      openBd = "answer";
+      await typing.context().close();
     },
   );
 
@@ -959,6 +1136,10 @@ try {
       await show(timed, first);
       await expect(count(timed)).toHaveText("この回 1冊");
       await expect(cardStatus(timed)).toHaveText("登録しました");
+      // In: one short vibration, and a tone (♪ is on).
+      await expect.poll(async () => (await feedback(timed)).buzz).toEqual([30]);
+      const sounded = await feedback(timed);
+      expect(sounded.tones).toBeGreaterThan(0);
       const kept = await stored(timed);
       await timed.evaluate(() => {
         window.__flashed = false;
@@ -978,9 +1159,15 @@ try {
         .toBe(true);
       await expect(count(timed)).toHaveText("この回 1冊");
       expect(await stored(timed)).toEqual(kept);
+      // Within 3 seconds: no sound, no vibration.
+      expect(await feedback(timed)).toEqual(sounded);
       await timed.clock.setFixedTime(start + 4000);
       await show(timed, first);
       await expect(cardStatus(timed)).toHaveText("この回でもう入れました");
+      // Later: the other vibration, and the two lower tones.
+      const again = await feedback(timed);
+      expect(again.buzz).toEqual([30, [20, 60, 20]]);
+      expect(again.tones).toBe(sounded.tones + 2);
       // Another book between does not make it new either.
       await show(timed, second);
       await expect(count(timed)).toHaveText("この回 2冊");

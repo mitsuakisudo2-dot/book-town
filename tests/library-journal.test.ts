@@ -17,7 +17,6 @@ import {
   settleJournal,
   undoScan,
   waitingForTitle,
-  type JournalTown,
   type LibraryJournal,
   type ScanItem,
 } from "../src/lib/library-journal";
@@ -433,7 +432,17 @@ async function main() {
       const kept = read(page.journal, Y, {
         known: { title: "門", author: "" },
       });
+      const landed = read(page.journal, isbnOf(9), {
+        known: { title: "道草", author: "" },
+      });
       await sendJournal(page.journal, OWNER, page.town);
+      // The second one's rows were written before the refusal.
+      db.books.set(landed.bookId, {
+        id: landed.bookId,
+        isbn: isbnOf(9),
+        title: "道草",
+      });
+      db.marks.add(landed.bookId);
       page.backend.refuse();
       settleJournal(page.journal, OWNER, page.town, "recovered");
       assert.deepEqual(
@@ -600,6 +609,8 @@ async function main() {
       kind: "again",
       was: "in",
     });
+    // Sent again later, the library has it: still put in this time.
+    assert.equal(noteTaken(reads, A, "already").taken[A], "in");
     // ［取り消す］: new again.
     reads = forgetRead(reads, A);
     assert.equal(scanReaction(reads, A, 5000, town, none).kind, "new");
@@ -720,9 +731,16 @@ async function main() {
       const absent = read(page.journal, X);
       const silent = read(page.journal, Y);
       const { lookUp, asked } = openBd({ [X]: null, [Y]: "no answer" });
-      const sent = await sendJournal(page.journal, OWNER, page.town, {
+      const sending = sendJournal(page.journal, OWNER, page.town, {
         lookUp,
       });
+      // While openBD is asked, they are not 書名待ち yet.
+      assert.deepEqual(
+        waitingForTitle(page.journal.items(OWNER), page.journal.sending()),
+        [],
+      );
+      const sent = await sending;
+      assert.equal(page.journal.sending().size, 0);
       assert.deepEqual(
         sent.map((entry) => entry.result),
         ["untitled", "lookup"],
@@ -778,6 +796,112 @@ async function main() {
           ?.state,
         "lookup",
       );
+      // Entered by hand (［手で入力］) while openBD was asked again: the
+      // library has it, so the read is that book, and is let go once saved.
+      const byHand = await sendJournal(page.journal, OWNER, page.town, {
+        only: [silent.id],
+        lookUp: async (isbns) => {
+          page.town.register(
+            { title: "手で入れた本", author: "", isbn: Y },
+            "manual",
+          );
+          return { found: new Map(), unanswered: isbns };
+        },
+      });
+      assert.deepEqual(
+        byHand.map((entry) => entry.result),
+        ["already"],
+      );
+      page.backend.flush();
+      settleJournal(page.journal, OWNER, page.town);
+      assert.deepEqual(page.journal.items(OWNER), []);
+    },
+  );
+
+  await check(
+    "openBD's long title and author are cut, and an odd price left out (10-0)",
+    async () => {
+      // Read while the town loads: what openBD answered waits on the device.
+      const db = database();
+      const storage = fakeStorage();
+      let open = () => {};
+      const gate = new Promise<void>((resolve) => (open = resolve));
+      const page = await pageLoad(db, storage, { gate });
+      const item = read(page.journal, X);
+      const lookUp = async (isbns: string[]): Promise<OpenBdAnswer> => ({
+        found: new Map(
+          isbns.map((isbn) => [
+            isbn,
+            {
+              isbn,
+              title: "長い題名".repeat(60),
+              author: "共著者".repeat(84),
+              publisher: "",
+              price: 1_200_000,
+            },
+          ]),
+        ),
+        unanswered: [],
+      });
+      const waiting = await sendJournal(page.journal, OWNER, page.town, {
+        lookUp,
+      });
+      assert.deepEqual(
+        waiting.map((entry) => entry.result),
+        ["waiting"],
+      );
+      // Written to the device cut, never as openBD wrote it.
+      const kept: ScanItem[] = JSON.parse(
+        storage.values.get(JOURNAL_KEY + OWNER) ?? "",
+      ).items;
+      assert.deepEqual(
+        kept.map((entry) => [
+          entry.id,
+          entry.state,
+          entry.title,
+          entry.author,
+          entry.price,
+        ]),
+        [
+          [
+            item.id,
+            "ready",
+            "長い題名".repeat(60).slice(0, 199) + "…",
+            "共著者".repeat(84).slice(0, 199) + "…",
+            undefined,
+          ],
+        ],
+      );
+      open();
+      await tick();
+      const sent = await sendJournal(page.journal, OWNER, page.town, {
+        lookUp,
+      });
+      assert.deepEqual(
+        sent.map((entry) => entry.result),
+        ["added"],
+      );
+      const book = page.store
+        .getSnapshot()
+        .books.find((entry) => entry.id === item.bookId);
+      assert.ok(page.store.getSnapshot().library.includes(item.bookId));
+      assert.equal(book?.title, kept[0].title);
+      assert.equal(book?.author, kept[0].author);
+      assert.equal(book?.price, undefined);
+      page.backend.flush();
+      settleJournal(page.journal, OWNER, page.town);
+      assert.deepEqual(page.journal.items(OWNER), []);
+      assert.deepEqual([...db.marks], [item.bookId]);
+      // A known book's words are cut as they are kept, too.
+      const known = keepRead(page.journal, OWNER, {
+        session: page.journal.newSession(),
+        isbn: Y,
+        via: "scan",
+        known: { title: "門", author: "著".repeat(250), price: 1_200_000 },
+      });
+      assert.equal(known.author, "著".repeat(199) + "…");
+      assert.equal(known.price, undefined);
+      assert.equal(known.state, "ready");
     },
   );
 
@@ -871,21 +995,45 @@ async function main() {
           old,
           { ...mine, id: "bad-isbn", isbn: "9784101010138" },
           { ...mine, id: "no-id", bookId: "" },
-          { ...mine, id: "big", title: "あ".repeat(201) },
           "nothing",
           { ...mine, id: "op", kind: "op" },
+          // Too long, or a price out of range: cut or left out, still kept.
+          {
+            ...mine,
+            id: "big",
+            title: "あ".repeat(201),
+            author: "い".repeat(300),
+            price: 1_200_000,
+            state: "ready",
+          },
+          { ...mine, id: "odd", title: 7, price: 0.5, state: "ready" },
         ],
       }),
     );
     assert.deepEqual(
       readJournal(storage.values.get(JOURNAL_KEY + OWNER) ?? null, now),
-      [mine],
+      [
+        mine,
+        {
+          ...mine,
+          id: "big",
+          title: "あ".repeat(199) + "…",
+          author: "い".repeat(199) + "…",
+          state: "ready",
+        },
+        // With no title left, it asks for one again.
+        { ...mine, id: "odd", state: "lookup" },
+      ],
     );
     assert.deepEqual(
       readJournal(JSON.stringify({ version: 2, items: [mine] }), now),
       [],
     );
     assert.deepEqual(readJournal("{", now), []);
+    storage.values.set(
+      JOURNAL_KEY + OWNER,
+      JSON.stringify({ version: 1, items: [mine] }),
+    );
     now += 1000;
     // Storage refusing: the journal works in memory and says so.
     storage.refuse(true);
@@ -987,17 +1135,31 @@ async function main() {
     assert.equal(undoScan(page.journal, OWNER, page.town, late.id), "undone");
     assert.deepEqual(await sending, []);
     assert.equal(page.store.getSnapshot().library.length, 0);
-    // The town could not take it out now: nothing changed, and it says so.
+    // The town could not take it out now: it is loading again, on another
+    // backend, and may come back with the book. Nothing changed, and it
+    // says so; once it is read, the book comes out.
     const Z = isbnOf(4);
     const third = read(page.journal, Z, {
       known: { title: "三冊目", author: "" },
     });
     await sendJournal(page.journal, OWNER, page.town);
-    const stuck: JournalTown = { ...page.town, toggleLibrary: () => {} };
-    assert.equal(undoScan(page.journal, OWNER, stuck, third.id), "not-yet");
+    page.backend.flush();
+    let open = () => {};
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    page.store.use(accountBackend(db, [], gate));
+    assert.equal(page.town.ready(), false);
+    assert.equal(undoScan(page.journal, OWNER, page.town, third.id), "not-yet");
     assert.equal(page.journal.cancelled.has(third.id), false);
     assert.equal(page.journal.items(OWNER).length, 1);
+    open();
+    await tick();
     assert.ok(page.store.getSnapshot().library.includes(third.bookId));
+    assert.equal(undoScan(page.journal, OWNER, page.town, third.id), "undone");
+    assert.equal(
+      page.store.getSnapshot().library.includes(third.bookId),
+      false,
+    );
+    assert.deepEqual(page.journal.items(OWNER), []);
   });
 
   await check("no 0 and plain facts (U10)", () => {

@@ -118,6 +118,20 @@
   line-height: 1.6;
   text-shadow: 0 1px 2px #0008;
 }
+/* A hint for a barcode that is not the book's: told apart from the guide. */
+.scan-guide.is-hint {
+  left: 50%;
+  right: auto;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #f6edce;
+  color: #5b4a22;
+  font-weight: 600;
+  text-shadow: none;
+}
 .scan-camera-note {
   top: 0;
   bottom: 0;
@@ -178,6 +192,10 @@
   border-left: 3px solid var(--line);
   border-radius: 8px;
   background: #fffdf8;
+}
+/* Typing: the card, the shelf and ［終わる］ stay at the bottom, in reach. */
+.scan-sheet.is-typing .scan-card {
+  margin-top: auto;
 }
 .scan-card.is-kept {
   border-left-color: #c9a54f;
@@ -298,13 +316,16 @@
 }
 .scan-bottom {
   flex: none;
-  display: grid;
-  grid-template-columns: auto auto 1fr;
+  display: flex;
   gap: 8px;
 }
 .scan-bottom .button {
   min-height: 48px;
   padding-inline: 12px;
+}
+/* ［終わる］ takes what the others leave, however many there are. */
+.scan-bottom .button.primary {
+  flex: 1;
 }
 .scan-sheet .google-covers-credit {
   flex: none;

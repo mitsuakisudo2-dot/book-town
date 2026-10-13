@@ -23,6 +23,7 @@ import {
   undoScan,
   useJournal,
   useJournalKept,
+  type ScanItemState,
   type Sent,
 } from "../lib/library-journal";
 import { saveWarning } from "../lib/persistence";
@@ -126,6 +127,43 @@ const KEPT: Shows[] = [
   "unavailable",
 ];
 const UNDOABLE: Shows[] = ["added", ...KEPT];
+
+/** What a card shows once its read was sent. */
+function showsOf(
+  result: Sent["result"],
+  savedIn: ReturnType<typeof useTownBackend>,
+): Shows {
+  switch (result) {
+    case "added":
+    case "already":
+    case "untitled":
+      return result;
+    case "lookup":
+      // openBD did not answer in time: as untitled until it does (10-9).
+      return navigator.onLine === false ? "offline" : "untitled";
+    case "waiting":
+      return savedIn === "unavailable" ? "unavailable" : "waiting";
+    default:
+      return "unavailable";
+  }
+}
+
+/**
+ * The session's books by what they came to: registered, waiting for a
+ * title (書名待ち), and kept on the device for another reason. A refusal
+ * after the card said 登録しました takes it back.
+ */
+function tally(cards: Card[], states: Map<string, ScanItemState>) {
+  const shown = (card: Card): Shows =>
+    states.get(card.id) === "refused" ? "refused" : card.shows;
+  const count = (...kinds: Shows[]) =>
+    cards.filter((card) => kinds.includes(shown(card))).length;
+  return {
+    added: count("added"),
+    waiting: count("untitled", "offline"),
+    later: count("looking", "waiting", "unavailable"),
+  };
+}
 
 const SAYS: Record<Say, string> = {
   same: SCAN_COPY.card.same,
@@ -309,34 +347,14 @@ export function ScanSession({
   }, [session]);
 
   const states = new Map(items.map((item) => [item.id, item.state]));
-  // A refusal after the card said 登録しました takes it back.
   const shown = (card: Card): Shows =>
     states.get(card.id) === "refused" ? "refused" : card.shows;
-  const count = (...kinds: Shows[]) =>
-    cards.filter((card) => kinds.includes(shown(card))).length;
-  const added = count("added");
-  const waiting = count("untitled", "offline");
-  const later = count("looking", "waiting", "unavailable");
+  const { added, waiting, later } = tally(cards, states);
 
   /** Updates the cards from what sending their items came to. */
   const settle = useCallback((sent: Sent[]) => {
     if (!sent.length) return;
-    const now = latest.current;
-    const showsOf = (result: Sent["result"]): Shows =>
-      result === "added"
-        ? "added"
-        : result === "already"
-          ? "already"
-          : result === "untitled"
-            ? "untitled"
-            : result === "lookup"
-              ? // openBD did not answer in time: as untitled until it does (10-9).
-                navigator.onLine === false
-                ? "offline"
-                : "untitled"
-              : result === "waiting" && now.savedIn !== "unavailable"
-                ? "waiting"
-                : "unavailable";
+    const { savedIn: where } = latest.current;
     for (const { item, result } of sent) {
       if (result === "added")
         reads.current = noteTaken(reads.current, item.isbn, "in");
@@ -350,7 +368,7 @@ export function ScanSession({
         if (!entry || card.shows === "undone") return card;
         return {
           ...card,
-          shows: showsOf(entry.result),
+          shows: showsOf(entry.result, where),
           bookId: entry.item.bookId,
           title: entry.item.title ?? card.title,
           author: entry.item.author ?? card.author,
@@ -364,6 +382,24 @@ export function ScanSession({
         : shownNow,
     );
   }, []);
+
+  // The sends this session started that have not answered yet (openBD is
+  // being asked): ［終わる］ waits for them to say where those books went.
+  const inFlight = useRef(new Set<Promise<Sent[]>>());
+  const send = useCallback(
+    (reader: string, ids: string[]) => {
+      const sending = sendJournal(libraryJournal, reader, journalTown, {
+        only: ids,
+      });
+      inFlight.current.add(sending);
+      const done = () => inFlight.current.delete(sending);
+      void sending.then((sent) => {
+        done();
+        settle(sent);
+      }, done);
+    },
+    [settle],
+  );
 
   const flashCard = () => {
     const now = Date.now();
@@ -456,9 +492,7 @@ export function ScanSession({
       },
     ]);
     setCurrent({ cardId: item.id });
-    void sendJournal(libraryJournal, reader, journalTown, {
-      only: [item.id],
-    }).then(settle);
+    send(reader, [item.id]);
   }
 
   /** One camera frame's codes. */
@@ -486,11 +520,8 @@ export function ScanSession({
   useEffect(() => {
     if (!owner || !ready) return;
     const ids = latest.current.cards.map((card) => card.id);
-    if (!ids.length) return;
-    void sendJournal(libraryJournal, owner, journalTown, { only: ids }).then(
-      settle,
-    );
-  }, [owner, ready, online, settle]);
+    if (ids.length) send(owner, ids);
+  }, [owner, ready, online, send]);
 
   // The camera, with the reader's own barcode reading, while it is wanted.
   const cameraOn =
@@ -702,9 +733,19 @@ export function ScanSession({
       ...actions,
       registerBook(book, via, bookId) {
         const done = actions.registerBook(book, via, bookId);
+        const isbn = book.isbn ? normalizeIsbn(book.isbn) : null;
+        const reader = latest.current.owner;
+        // The same book read before and kept for want of its title is in
+        // the library now: sent again, the journal lets it go.
+        if (done && done.result !== "not-saved" && isbn && reader) {
+          const held = libraryJournal
+            .items(reader)
+            .filter((item) => item.isbn === isbn)
+            .map((item) => item.id);
+          if (held.length) send(reader, held);
+        }
         if (done?.result === "added") {
           const cardId = `${session}-m${++manualCount.current}`;
-          const isbn = book.isbn ? normalizeIsbn(book.isbn) : null;
           libraryJournal.added.set(cardId, done.bookId);
           if (isbn)
             reads.current = noteRead(reads.current, isbn, Date.now(), "in");
@@ -723,7 +764,7 @@ export function ScanSession({
         return done;
       },
     }),
-    [actions, session],
+    [actions, session, send],
   );
   const openManual = () => {
     setManual(true);
@@ -740,13 +781,44 @@ export function ScanSession({
     );
   };
 
-  /** ［終わる］, ✕, 戻る, Escape: closes at once, and says what was read in. */
+  /**
+   * ［終わる］, ✕, 戻る, Escape: closes at once, and says what was read in.
+   * While a title is still being asked of openBD (OPENBD_TIMEOUT_MS at
+   * most), the notice waits for the answer, to say where that book went.
+   */
   function finish() {
     if (closed.current) return;
     closed.current = true;
-    const notice = closingNotice({ added, waiting, later });
-    if (notice) notify(notice);
     onClose(added + waiting + later > 0);
+    const asking = [...inFlight.current];
+    const tell = (counts: ReturnType<typeof tally>) => {
+      const notice = closingNotice(counts);
+      if (notice) notify(notice);
+    };
+    if (!asking.length) return tell({ added, waiting, later });
+    const { savedIn: where, owner: reader } = latest.current;
+    void Promise.allSettled(asking).then((answers) => {
+      const came = new Map<string, Shows>();
+      for (const answer of answers)
+        if (answer.status === "fulfilled")
+          for (const { item, result } of answer.value)
+            came.set(item.id, showsOf(result, where));
+      tell(
+        tally(
+          cards.map((card) =>
+            card.shows === "undone"
+              ? card
+              : { ...card, shows: came.get(card.id) ?? card.shows },
+          ),
+          new Map(
+            (reader ? libraryJournal.items(reader) : []).map((item) => [
+              item.id,
+              item.state,
+            ]),
+          ),
+        ),
+      );
+    });
   }
   const finishRef = useRef(finish);
   useEffect(() => {
@@ -966,7 +1038,10 @@ export function ScanSession({
             {input.phase === "running" ? (
               <>
                 <span className="scan-guide-box" aria-hidden="true" />
-                <p className="scan-guide" aria-live="polite">
+                <p
+                  className={"scan-guide" + (hint ? " is-hint" : "")}
+                  aria-live="polite"
+                >
                   {hint ?? SCAN_COPY.guide}
                 </p>
               </>
@@ -1075,8 +1150,11 @@ export function ScanSession({
               ISBNを打つ
             </button>
           ) : (
+            // Only where asking again could help: not for a browser that
+            // cannot read barcodes, a camera refused, or none at all.
             input.why !== "denied" &&
-            input.why !== "no-reader" && (
+            input.why !== "no-reader" &&
+            input.why !== "no-camera" && (
               <button
                 type="button"
                 className="button secondary"
@@ -1106,6 +1184,7 @@ export function ScanSession({
           notify={notify}
           onClose={closeManual}
           lead="書名やISBNを入れて1冊ずつ登録します"
+          camera={false}
         />
       )}
     </div>

@@ -31,6 +31,7 @@ export function BarcodeRegister({
   notify,
   onClose,
   lead = "バーコードで本を登録",
+  camera = true,
 }: {
   state: TownState;
   actions: TownActions;
@@ -38,6 +39,8 @@ export function BarcodeRegister({
   onClose: () => void;
   /** The line under the title: what this form is for where it opens. */
   lead?: string;
+  /** False over a scanner, which reads barcodes itself: no camera here. */
+  camera?: boolean;
 }) {
   const id = useId();
   const savedIn = useTownBackend();
@@ -229,9 +232,11 @@ export function BarcodeRegister({
     <Modal title="本を登録" onClose={onClose}>
       <p className="modal-lead">{lead}</p>
       <p className="muted">
-        裏表紙のISBNバーコード（978・979で始まる段）を読み取ります。登録した本は、読書の開始や投稿で選べます。
+        {camera
+          ? "裏表紙のISBNバーコード（978・979で始まる段）を読み取ります。登録した本は、読書の開始や投稿で選べます。"
+          : "ISBNがあれば探せます。書名だけでも登録できます。"}
       </p>
-      {scanning ? (
+      {!camera ? null : scanning ? (
         <div className="scan-frame">
           <video ref={video} muted playsInline aria-label="カメラの映像" />
           <button
@@ -257,7 +262,7 @@ export function BarcodeRegister({
           </button>
         )
       )}
-      {!canScan && (
+      {camera && !canScan && (
         <p className="note-box">
           このブラウザはバーコードの読み取りに対応していません。ISBNを入力してください。
         </p>

@@ -17,7 +17,12 @@ import { journalOwner, type JournalTown } from "./library-journal";
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId } from "./paths";
-import { createRegisteredBook, normalizeIsbn } from "./books";
+import {
+  bookPrice,
+  bookText,
+  createRegisteredBook,
+  normalizeIsbn,
+} from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
 import { cleanPosterDraft, posterProblem, type Poster } from "./posters";
@@ -68,21 +73,6 @@ const clean = (value: string, max = 10000): string => value.slice(0, max);
 
 const toggled = (list: string[], id: string): string[] =>
   list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id];
-
-/** The longest title or author a book keeps, as the database allows. */
-const BOOK_TEXT_MAX = 200;
-/** A title or author as kept: a longer one is cut, ending in …. */
-function bookText(value: string): string {
-  const text = value.trim();
-  if (text.length <= BOOK_TEXT_MAX) return text;
-  let cut = "";
-  // By whole characters, so a cut never splits one in two.
-  for (const char of text) {
-    if (cut.length + char.length > BOOK_TEXT_MAX - 1) break;
-    cut += char;
-  }
-  return cut.trimEnd() + "…";
-}
 
 /** The reader's own registered book with this ISBN, if any. */
 export const libraryBookByIsbn = (state: TownState, isbn: string) =>
@@ -738,13 +728,7 @@ export function createTownStore(
         (backend.kind === "account" ? isDatabaseId(bookId) : bookId === given)
           ? bookId
           : given;
-      const price =
-        typeof input.price === "number" &&
-        Number.isInteger(input.price) &&
-        input.price > 0 &&
-        input.price <= 1_000_000
-          ? input.price
-          : undefined;
+      const price = bookPrice(input.price);
       const book = createRegisteredBook(id, {
         title,
         author,

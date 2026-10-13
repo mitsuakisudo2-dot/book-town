@@ -17,7 +17,7 @@
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { AccountState } from "./account";
-import { normalizeIsbn } from "./books";
+import { bookPrice, bookText, normalizeIsbn } from "./books";
 import { lookUpBooks, type OpenBdAnswer } from "./openbd";
 import type { TownBackend } from "./town-backend";
 import type {
@@ -81,12 +81,31 @@ const record = (value: unknown): value is Raw =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const name = (value: unknown, max = 80): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= max;
-const words = (value: unknown): value is string | undefined =>
-  value === undefined || (typeof value === "string" && value.length <= 200);
+/** A title or author as a book keeps it, or nothing. */
+const words = (value: unknown): string =>
+  typeof value === "string" ? bookText(value) : "";
+
+/**
+ * What a book's title, author and price come to in the journal: cut as the
+ * book keeps them (books.ts), so an item never holds what it could not send.
+ */
+export const bookWords = (book: {
+  title: string;
+  author: string;
+  price?: number;
+}): Pick<ScanItem, "title" | "author" | "price"> => {
+  const price = bookPrice(book.price);
+  return {
+    title: bookText(book.title),
+    author: bookText(book.author),
+    ...(price ? { price } : {}),
+  };
+};
 
 /**
  * The items kept under one key, less anything malformed, of another
- * version, or older than JOURNAL_DAYS.
+ * version, or older than JOURNAL_DAYS. A title or author too long is cut and
+ * a price out of range left out: the read itself is kept.
  */
 export function readJournal(raw: string | null, now: number): ScanItem[] {
   if (!raw) return [];
@@ -103,7 +122,6 @@ export function readJournal(raw: string | null, now: number): ScanItem[] {
   for (const value of data.items) {
     if (!record(value)) continue;
     const at = typeof value.at === "string" ? Date.parse(value.at) : NaN;
-    const { price } = value;
     if (
       value.kind !== "scan" ||
       !name(value.id) ||
@@ -115,20 +133,15 @@ export function readJournal(raw: string | null, now: number): ScanItem[] {
       (value.via !== "scan" && value.via !== "isbn") ||
       !name(value.bookId) ||
       !STATES.includes(value.state as ScanItemState) ||
-      !words(value.title) ||
-      !words(value.author) ||
-      !(
-        price === undefined ||
-        (typeof price === "number" &&
-          Number.isInteger(price) &&
-          price >= 1 &&
-          price <= 1_000_000)
-      ) ||
       !Number.isFinite(at) ||
       now - at > JOURNAL_DAYS * DAY_MS
     )
       continue;
     ids.add(value.id);
+    const title = words(value.title);
+    const author = words(value.author);
+    const price = bookPrice(value.price);
+    const state = value.state as ScanItemState;
     items.push({
       kind: "scan",
       id: value.id,
@@ -137,10 +150,11 @@ export function readJournal(raw: string | null, now: number): ScanItem[] {
       isbn: value.isbn,
       via: value.via,
       bookId: value.bookId,
-      ...(value.title ? { title: value.title } : {}),
-      ...(value.author ? { author: value.author } : {}),
-      ...(typeof price === "number" ? { price } : {}),
-      state: value.state as ScanItemState,
+      ...(title ? { title } : {}),
+      ...(author ? { author } : {}),
+      ...(price ? { price } : {}),
+      // One that lost its title asks for it again.
+      state: title || state === "untitled" ? state : "lookup",
       at: value.at as string,
     });
   }
@@ -153,8 +167,13 @@ type Patch = Partial<Omit<ScanItem, "kind" | "id">>;
 export interface LibraryJournal {
   /** This page load. */
   readonly page: string;
-  /** Items being sent now in this page, so two senders never send one twice. */
-  readonly sending: Set<string>;
+  /**
+   * Items being sent now in this page, so two senders never send one twice:
+   * a new set each time it changes.
+   */
+  sending(): ReadonlySet<string>;
+  /** Marks items as being sent now, or done. */
+  markSending(ids: string[], on: boolean): void;
   /** Items taken back (［取り消す］) in this page: never registered after. */
   readonly cancelled: Set<string>;
   /** The book each item (or a book entered by hand) became in this page, for ［取り消す］. */
@@ -202,6 +221,7 @@ export function createLibraryJournal(
   const handedTo = new Map<string, number>();
   const listeners = new Set<() => void>();
   let keptLast = true;
+  let sending: ReadonlySet<string> = new Set();
   let sessions = 0;
   let counted = 0;
   let listening = false;
@@ -266,7 +286,17 @@ export function createLibraryJournal(
 
   return {
     page,
-    sending: new Set(),
+    sending: () => sending,
+    markSending(ids, on) {
+      if (!ids.length) return;
+      const next = new Set(sending);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      sending = next;
+      emit();
+    },
     cancelled: new Set(),
     added: new Map(),
     live: new Set(),
@@ -383,7 +413,7 @@ export function keepRead(
     known?: { title: string; author: string; price?: number };
   },
 ): ScanItem {
-  const { known } = read;
+  const known = read.known ? bookWords(read.known) : undefined;
   const item: ScanItem = {
     kind: "scan",
     id: journal.newItemId(read.session),
@@ -392,14 +422,8 @@ export function keepRead(
     isbn: read.isbn,
     via: read.via,
     bookId: decideBookId(owner, read.isbn),
-    ...(known
-      ? {
-          title: known.title,
-          author: known.author,
-          ...(known.price ? { price: known.price } : {}),
-        }
-      : {}),
-    state: known ? "ready" : "lookup",
+    ...(known?.title ? known : {}),
+    state: known?.title ? "ready" : "lookup",
     at: new Date(journal.now()).toISOString(),
   };
   journal.add(owner, item);
@@ -426,9 +450,21 @@ export const heldItem = (
         !(item.state === "registered" && journal.handed(item.id, generation)),
     );
 
-/** Items waiting for a title: 書名待ち. */
-export const waitingForTitle = (items: ScanItem[]) =>
-  items.filter((item) => item.state === "lookup" || item.state === "untitled");
+const NOT_SENDING: ReadonlySet<string> = new Set();
+
+/**
+ * Items waiting for a title: 書名待ち. Those being sent now are left out:
+ * openBD may be answering for them.
+ */
+export const waitingForTitle = (
+  items: ScanItem[],
+  sending: ReadonlySet<string> = NOT_SENDING,
+) =>
+  items.filter(
+    (item) =>
+      (item.state === "lookup" || item.state === "untitled") &&
+      !sending.has(item.id),
+  );
 /** Items the database refused. */
 export const refusedItems = (items: ScanItem[]) =>
   items.filter((item) => item.state === "refused");
@@ -514,12 +550,15 @@ export async function sendJournal(
           item.state === "ready" ||
           (item.state === "registered" &&
             !journal.handed(item.id, generation))) &&
-        !journal.sending.has(item.id) &&
+        !journal.sending().has(item.id) &&
         !journal.cancelled.has(item.id) &&
         (!options.only || options.only.includes(item.id)) &&
         !options.skip?.(item),
     );
-  for (const item of picked) journal.sending.add(item.id);
+  journal.markSending(
+    picked.map((item) => item.id),
+    true,
+  );
   const sent: Sent[] = [];
   // The same reader's town, on the same backend, as when this began.
   const same = () => town.owner() === owner && town.generation() === generation;
@@ -556,12 +595,7 @@ export async function sendJournal(
         ? undefined
         : town.state().books.find((book) => book.isbn === item.isbn);
       if (known)
-        journal.update(owner, id, {
-          title: known.title,
-          author: known.author,
-          ...(known.price ? { price: known.price } : {}),
-          state: "ready",
-        });
+        journal.update(owner, id, { ...bookWords(known), state: "ready" });
       left.push(item);
     }
     const asking = left
@@ -583,12 +617,7 @@ export async function sendJournal(
         if (!item || item.title) continue;
         const book = answer.found.get(isbn);
         if (book)
-          journal.update(owner, id, {
-            title: book.title,
-            author: book.author,
-            ...(book.price ? { price: book.price } : {}),
-            state: "ready",
-          });
+          journal.update(owner, id, { ...bookWords(book), state: "ready" });
         else if (!answer.unanswered.includes(isbn))
           journal.update(owner, id, { state: "untitled" });
       }
@@ -596,7 +625,8 @@ export async function sendJournal(
     }
     for (const { id } of left) {
       const item = current(id);
-      if (!item) continue;
+      // In the library by now (entered by hand meanwhile): title or not.
+      if (!item || inLibrary(item)) continue;
       if (!item.title) {
         sent.push({
           item,
@@ -604,7 +634,6 @@ export async function sendJournal(
         });
         continue;
       }
-      if (inLibrary(item)) continue;
       if (!town.ready() || !same()) {
         sent.push({
           item,
@@ -635,7 +664,10 @@ export async function sendJournal(
       }
     }
   } finally {
-    for (const item of picked) journal.sending.delete(item.id);
+    journal.markSending(
+      picked.map((item) => item.id),
+      false,
+    );
   }
   return sent;
 }
@@ -703,6 +735,9 @@ export function undoScan(
   town: JournalTown,
   id: string,
 ): "undone" | "not-yet" {
+  // A book the store took, while the town loads again (another backend):
+  // the loading town does not show it, yet it may come back with it.
+  if (journal.added.has(id) && !town.ready()) return "not-yet";
   journal.cancelled.add(id);
   const bookId = journal.added.get(id);
   if (bookId && town.state().library.includes(bookId)) {
@@ -823,6 +858,17 @@ export function useJournal(
     journal.subscribe,
     () => (owner ? journal.items(owner) : NO_ITEMS),
     () => NO_ITEMS,
+  );
+}
+
+/** The items being sent now, for a screen that leaves them out. */
+export function useJournalSending(
+  journal: LibraryJournal = libraryJournal,
+): ReadonlySet<string> {
+  return useSyncExternalStore(
+    journal.subscribe,
+    journal.sending,
+    () => NOT_SENDING,
   );
 }
 

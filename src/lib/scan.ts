@@ -162,13 +162,19 @@ export function noteRead(
   };
 }
 
-/** What a read came to once it was sent, unless it was taken back since. */
+/**
+ * What a read came to once it was sent, unless it was taken back since. A
+ * book put in during this session stays so: the library having it is that.
+ */
 export function noteTaken(
   reads: SessionReads,
   isbn: string,
   taken: Taken,
 ): SessionReads {
-  return isbn in reads.taken && reads.taken[isbn] !== taken
+  const was = reads.taken[isbn];
+  return was !== undefined &&
+    was !== taken &&
+    !(was === "in" && taken === "already")
     ? { ...reads, taken: { ...reads.taken, [isbn]: taken } }
     : reads;
 }
@@ -233,8 +239,8 @@ export const SCAN_COPY = {
   name: "本を続けて登録",
   preparing: "準備しています…",
   cameraStarting: "カメラを起動しています…",
-  guide: "上の段のバーコード（978…）を枠に",
-  firstCamera: "バーコード（978…）を枠に入れてください",
+  guide: "上の段（978…）を枠に",
+  firstCamera: "読むと、その場で登録します",
   firstTyping: "ISBNを打つと、その場で登録します",
   paused: "一時停止しています",
   banner: {
