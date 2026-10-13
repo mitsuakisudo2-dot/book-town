@@ -5,6 +5,7 @@ import {
   keptText,
   type KeptDraftOptions,
 } from "./kept-draft";
+import { DRAFT_OWNER } from "./draft-owner";
 import type { ReportTarget } from "./report";
 import { REPORT_DETAIL_MAX, type ReportReason } from "./supabase/reports";
 
@@ -50,7 +51,9 @@ export function readReportWork(value: unknown): ReportWork | null {
 
 export const REPORT_DRAFT_OPTIONS: KeptDraftOptions<ReportWork> = {
   storageKey: REPORT_DRAFT_KEY,
-  keyPattern: /^[^:]+:(post|shop|profile|poster|book):.+$/,
+  keyPattern: new RegExp(
+    "^" + DRAFT_OWNER + ":(post|shop|profile|poster|book):.+$",
+  ),
   read: readReportWork,
   isEmpty: (work) => work.reason === null && !work.detail,
 };

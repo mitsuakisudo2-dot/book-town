@@ -20,6 +20,7 @@ import {
 } from "../lib/account-draft";
 import { useKeptDraft } from "../lib/kept-draft";
 import { Icon } from "./ui";
+import { KeptDraftNote } from "./KeptDraftNote";
 import "./profile.css";
 import "./reading.css";
 import "./account.css";
@@ -215,9 +216,7 @@ function FirstProfile({ userId }: { userId: string }) {
   useEffect(() => {
     if (kept.loaded && resumed === null) setResumed(hasWork);
   }, [kept.loaded, resumed, hasWork]);
-  const [confirming, setConfirming] = useState(false);
   const nameField = useRef<HTMLInputElement>(null);
-  const discardButton = useRef<HTMLButtonElement>(null);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   // Records start private; each one can be published, and is told when it is.
   const [readingPublic, setReadingPublic] = useState(false);
@@ -245,50 +244,18 @@ function FirstProfile({ userId }: { userId: string }) {
       <p className="account-lead">
         街で呼ばれる名前と、あなたのIDを決めてください。どちらもあとから変えられます。
       </p>
-      {resumed && hasWork && (
-        <p className="account-kept">
-          書きかけを続けています
-          {confirming ? (
-            <span className="account-kept-confirm">
-              書きかけを消しますか？
-              <button
-                type="button"
-                onClick={() => {
-                  kept.clear();
-                  setResumed(false);
-                  setConfirming(false);
-                  requestAnimationFrame(() => nameField.current?.focus());
-                }}
-              >
-                消す
-              </button>
-              <button
-                type="button"
-                autoFocus
-                onClick={() => {
-                  setConfirming(false);
-                  requestAnimationFrame(() => discardButton.current?.focus());
-                }}
-              >
-                やめる
-              </button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              ref={discardButton}
-              onClick={() => setConfirming(true)}
-            >
-              書きかけを消す
-            </button>
-          )}
-        </p>
-      )}
-      {!kept.saved && hasWork && (
-        <p className="account-kept" role="status">
-          このブラウザに書きかけを残せませんでした
-        </p>
-      )}
+      <KeptDraftNote
+        className="account-kept"
+        work={hasWork}
+        continuing={Boolean(resumed)}
+        saved={kept.saved}
+        wordsLost
+        onDiscard={() => {
+          kept.clear();
+          setResumed(false);
+          nameField.current?.focus();
+        }}
+      />
       <form className="profile-form" onSubmit={create}>
         <label htmlFor="account-name">ユーザー名</label>
         <input

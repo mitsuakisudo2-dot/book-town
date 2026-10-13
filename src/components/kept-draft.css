@@ -1,0 +1,49 @@
+/* Work kept in this browser (KeptDraftNote): one quiet line, the same on
+   every screen, with the way to throw it away. Screens place it with their
+   own class (margins only). */
+.kept-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #5d6858;
+}
+/* A long unbroken name wraps inside the line, never past the page. */
+.kept-note > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Small words with a place to tap the size of a finger, which overlaps the
+   lines around it rather than spreading the line out. */
+.kept-note button,
+.kept-note-button,
+.kept-note-confirm button {
+  min-width: 44px;
+  min-height: 44px;
+  margin: -10px 0;
+  padding: 0;
+  font-size: 12px;
+  color: #4f6145;
+  text-decoration: underline;
+  text-decoration-color: #c9d3bd;
+  text-underline-offset: 3px;
+}
+.kept-note button:hover,
+.kept-note-button:hover,
+.kept-note-confirm button:hover {
+  color: var(--green);
+}
+/* 書きかけを消しますか？ 消す／残す, in place of the way to throw it away. */
+.kept-note-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+  color: #7a5a35;
+}
+.kept-note.kept-note-confirm {
+  display: flex;
+}

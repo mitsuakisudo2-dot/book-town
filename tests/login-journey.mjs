@@ -444,7 +444,7 @@ try {
       await shot("3-welcome-resumed");
       // Thrown away only when asked, and asked once.
       await page.getByRole("button", { name: "書きかけを消す" }).click();
-      await page.getByRole("button", { name: "やめる" }).click();
+      await page.getByRole("button", { name: "残す", exact: true }).click();
       await expect(name).toHaveValue("アキ");
       await expect(
         page.getByRole("button", { name: "書きかけを消す" }),

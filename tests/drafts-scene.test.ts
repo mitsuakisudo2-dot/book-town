@@ -75,12 +75,12 @@ const work: KeptScene = {
 check("work is kept per reader and shop, and read back by a new page", () => {
   const storage = memory();
   const store = createKeptDraftStore(sceneDraftOptions, () => storage);
-  const mine = sceneWorkKey("reader-1", "mine");
+  const mine = sceneWorkKey("reader-1", "mine")!;
   store.set(mine, work);
-  store.set(sceneWorkKey(null, "mine"), work);
+  store.set(sceneWorkKey("demo", "mine")!, work);
   // Another reader on the same browser has nothing of the first one's.
-  assert.equal(store.get(sceneWorkKey("reader-2", "mine")), null);
-  assert.equal(store.get(sceneWorkKey("reader-1", "elsewhere")), null);
+  assert.equal(store.get(sceneWorkKey("reader-2", "mine")!), null);
+  assert.equal(store.get(sceneWorkKey("reader-1", "elsewhere")!), null);
   const reopened = createKeptDraftStore(sceneDraftOptions, () => storage);
   reopened.initialize();
   assert.deepEqual(reopened.get(mine), work);
@@ -89,7 +89,7 @@ check("work is kept per reader and shop, and read back by a new page", () => {
     "ようこそ、雨の日の本屋へ。",
   );
   reopened.clear(mine);
-  reopened.clear(sceneWorkKey(null, "mine"));
+  reopened.clear(sceneWorkKey("demo", "mine")!);
   assert.equal(storage.data.has(SCENE_DRAFT_KEY), false);
 });
 
@@ -151,8 +151,8 @@ check("work that is not a scene the editor makes is not read back", () => {
       version: 1,
       drafts: {
         "demo/mine": work,
-        "reader:x/mine": { scene: { objects: "no" }, from: "a" },
-        "stray/mine": work,
+        "u-1/mine": { scene: { objects: "no" }, from: "a" },
+        "reader:u-1/mine": work,
       },
     }),
   );
@@ -232,7 +232,7 @@ function accountWalk(scenes: StoreScene[]) {
       }),
   };
 }
-const key = sceneWorkKey("reader-1", "mine");
+const key = sceneWorkKey("reader-1", "mine")!;
 /** Saves the kept work to the account as the editor does, and closes. */
 function send(
   account: ReturnType<typeof accountWalk>,

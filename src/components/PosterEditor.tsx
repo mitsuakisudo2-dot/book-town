@@ -724,7 +724,7 @@ function PosterMaker({
                         消す
                       </button>
                       <button type="button" ref={cancelButton} onClick={cancel}>
-                        やめる
+                        残す
                       </button>
                     </span>
                   ) : (

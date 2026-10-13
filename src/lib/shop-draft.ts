@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { AccountState } from "./account";
+import { DRAFT_OWNER } from "./draft-owner";
 import {
   createKeptDraftStore,
   keptText,
@@ -27,19 +27,15 @@ export const SHOP_SIGN_DRAFT_KEY = "book-town-shop-sign-drafts-v1";
 export const SHELF_NAME_DRAFT_KEY = "book-town-shelf-name-drafts-v1";
 
 /**
- * Whose work it is: the demo's reader in this browser, or a signed-in
- * account. Two accounts on one browser never see each other's work; while
- * the account is still being read, nothing is kept.
+ * A key that starts with its owner (draftOwner), so two accounts on one
+ * browser never see each other's work; the rest of a key follows a "/".
  */
-export function workOwner(account: AccountState): string | null {
-  if (account.status === "demo") return "demo";
-  return "user" in account ? "reader:" + account.user.id : null;
-}
-
-/** An owner's key, as workOwner gives it; the rest of a key follows a "/". */
-const OWNER = String.raw`(demo|reader:[\w-]+)`;
 export const ownerKeyPattern = (parts = 0) =>
-  new RegExp("^" + OWNER + String.raw`(/[^/]+)`.repeat(parts) + "$");
+  new RegExp("^" + DRAFT_OWNER + String.raw`(/[^/]+)`.repeat(parts) + "$");
+
+/** Said when a save is turned away: the work stays in hand, kept. */
+export const SAVE_REFUSED =
+  "うまく保存できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。";
 
 /** Whether the town took a change: one refused leaves the town as it was. */
 export function townTook(change: () => unknown): boolean {

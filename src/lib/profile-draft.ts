@@ -157,7 +157,7 @@ export function readNineWork(value: unknown): NineWork | null {
   return { ids: [...work.ids], notes: Object.fromEntries(notes) };
 }
 
-/** Keyed by owner (workOwner): the reader's own card, over the saved one. */
+/** Keyed by owner (draftOwner): the reader's own card, over the saved one. */
 export const profileDraftOptions: KeptDraftOptions<OverSaved<ProfileWork>> = {
   storageKey: PROFILE_DRAFT_KEY,
   keyPattern: ownerKeyPattern(),
@@ -167,7 +167,7 @@ export const profileDraftOptions: KeptDraftOptions<OverSaved<ProfileWork>> = {
 };
 export const profileDraftStore = createKeptDraftStore(profileDraftOptions);
 
-/** Keyed by owner (workOwner): the reader's own nine. */
+/** Keyed by owner (draftOwner): the reader's own nine. */
 export const nineDraftOptions: KeptDraftOptions<NineWork> = {
   storageKey: NINE_DRAFT_KEY,
   keyPattern: ownerKeyPattern(),

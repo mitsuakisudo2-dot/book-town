@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { draftOwner } from "../src/lib/draft-owner";
 import { createKeptDraftStore } from "../src/lib/kept-draft";
 import {
   OPEN_SHOP_DRAFT_KEY,
@@ -31,7 +32,6 @@ import {
   shopSignDraftOptions,
   signLosesWords,
   townTook,
-  workOwner,
 } from "../src/lib/shop-draft";
 import { townActions, townStore } from "../src/lib/store";
 
@@ -63,33 +63,30 @@ const opening: OpenShopWork = {
 };
 
 check("work belongs to the demo or to one account, never between", () => {
-  assert.equal(workOwner({ status: "demo" }), "demo");
-  assert.equal(workOwner({ status: "loading" }), null);
-  assert.equal(workOwner({ status: "signed-out" }), null);
+  // Keyed by draftOwner, the one rule every kept store follows.
+  assert.equal(draftOwner({ status: "demo" }), "demo");
+  assert.equal(draftOwner({ status: "loading" }), null);
   assert.equal(
-    workOwner({ status: "needs-profile", user: user("a-1") }),
-    "reader:a-1",
+    draftOwner({ status: "needs-profile", user: user("a-1") }),
+    "a-1",
   );
-  assert.equal(
-    workOwner({ status: "unavailable", user: user("b-2") }),
-    "reader:b-2",
-  );
+  assert.equal(draftOwner({ status: "unavailable", user: user("b-2") }), "b-2");
   // One account's opening is not read under another's key.
   const storage = memory();
   const store = createKeptDraftStore(openShopDraftOptions, () => storage);
-  store.set("reader:a-1", opening);
-  assert.deepEqual(store.get("reader:a-1"), opening);
-  assert.equal(store.get("reader:b-2"), null);
+  store.set("a-1", opening);
+  assert.deepEqual(store.get("a-1"), opening);
+  assert.equal(store.get("b-2"), null);
   assert.equal(store.get("demo"), null);
   // Keys are only the owner for the opening and the profile, owner/shop for
   // the sign and owner/shop/shelf for a shelf's name.
   assert.equal(openShopDraftOptions.keyPattern.test("demo/mine"), false);
-  assert.equal(profileDraftOptions.keyPattern.test("reader:a-1"), true);
-  assert.equal(nineDraftOptions.keyPattern.test("me"), false);
+  assert.equal(profileDraftOptions.keyPattern.test("a-1"), true);
+  assert.equal(nineDraftOptions.keyPattern.test("demo/mine"), false);
   assert.equal(shopSignDraftOptions.keyPattern.test("demo/mine"), true);
   assert.equal(shopSignDraftOptions.keyPattern.test("demo"), false);
   assert.equal(
-    shelfNameDraftOptions.keyPattern.test("reader:a-1/mine/shelf-first"),
+    shelfNameDraftOptions.keyPattern.test("a-1/mine/shelf-first"),
     true,
   );
   assert.equal(shelfNameDraftOptions.keyPattern.test("demo/mine"), false);
@@ -178,11 +175,11 @@ check("a profile being changed is kept until it matches the saved one", () => {
   const storage = memory();
   const store = createKeptDraftStore(profileDraftOptions, () => storage);
   store.set("demo", { work, base: saved });
-  store.set("reader:a-1", { work: saved, base: saved });
+  store.set("a-1", { work: saved, base: saved });
   const again = createKeptDraftStore(profileDraftOptions, () => storage);
   again.initialize();
   assert.deepEqual(again.get("demo"), { work, base: saved });
-  assert.equal(again.get("reader:a-1"), null);
+  assert.equal(again.get("a-1"), null);
   for (const broken of [
     { ...work, name: "あ".repeat(81) },
     { ...work, handle: "a".repeat(22) },
@@ -254,14 +251,14 @@ check("the shop's sign and a shelf's new name are kept as written", () => {
   const storage = memory();
   const store = createKeptDraftStore(shopSignDraftOptions, () => storage);
   store.set("demo/mine", { work, base: saved });
-  store.set("reader:a-1/mine", {
+  store.set("a-1/mine", {
     work: { ...work, name: "別の書店" },
     base: saved,
   });
   const again = createKeptDraftStore(shopSignDraftOptions, () => storage);
   again.initialize();
   assert.deepEqual(again.get("demo/mine"), { work, base: saved });
-  assert.equal(again.get("reader:a-1/mine")?.work.name, "別の書店");
+  assert.equal(again.get("a-1/mine")?.work.name, "別の書店");
   // Work that changes nothing from the sign it was written over is not kept,
   // and a side that no longer fits the form drops the entry.
   store.set("demo/mine", { work: saved, base: saved });

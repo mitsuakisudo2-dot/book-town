@@ -191,29 +191,23 @@ try {
     await dialog()
       .getByRole("button", { name: "キャンセル", exact: true })
       .click();
-    // Work would be lost: キャンセル asks once, and やめる goes back to it.
-    const leave = dialog().getByRole("group", {
-      name: "書きかけを消して閉じる",
-    });
-    await expect(leave).toContainText(
-      "保存していない飾りつけを消して閉じますか？",
-    );
+    // Work would be lost: キャンセル asks once, and 残す closes and keeps it.
+    const stop = dialog().locator(".kept-note-confirm");
+    await expect(stop).toContainText("書きかけを消しますか？");
     await expect(
-      leave.getByRole("button", { name: "やめる", exact: true }),
+      stop.getByRole("button", { name: "残す", exact: true }),
     ).toBeFocused();
-    await leave.getByRole("button", { name: "やめる", exact: true }).click();
+    await stop.getByRole("button", { name: "残す", exact: true }).click();
+    await expect(dialog()).toHaveCount(0);
+    await reopen();
     await expect(dialog().getByLabel("看板の店名")).toHaveValue(
       "キャンセルした店",
     );
-    await expect(
-      dialog().getByRole("button", { name: "キャンセル", exact: true }),
-    ).toBeFocused();
+    await expect(keptLine()).toContainText("書きかけを続けています");
     await dialog()
       .getByRole("button", { name: "キャンセル", exact: true })
       .click();
-    await leave
-      .getByRole("button", { name: "消して閉じる", exact: true })
-      .click();
+    await stop.getByRole("button", { name: "消す", exact: true }).click();
     await expect(dialog()).toHaveCount(0);
     expect(await drafts()).toBe(null);
     await reopen();
@@ -612,7 +606,8 @@ try {
         .getByRole("button", { name: "キャンセル", exact: true })
         .click();
       await dialog()
-        .getByRole("button", { name: "消して閉じる", exact: true })
+        .locator(".kept-note-confirm")
+        .getByRole("button", { name: "消す", exact: true })
         .click();
       await expect(dialog()).toHaveCount(0);
       await page.goto(base + "/my-shop/");
@@ -714,7 +709,8 @@ try {
         .getByRole("button", { name: "キャンセル", exact: true })
         .click();
       await dialog()
-        .getByRole("button", { name: "消して閉じる", exact: true })
+        .locator(".kept-note-confirm")
+        .getByRole("button", { name: "消す", exact: true })
         .click();
       expect(await drafts()).toBe(null);
       await page.goto(base + "/walk/#mine");

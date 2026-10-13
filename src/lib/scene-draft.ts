@@ -6,6 +6,7 @@ import {
   type KeptDraftOptions,
   type KeptDraftStore,
 } from "./kept-draft";
+import { DRAFT_OWNER } from "./draft-owner";
 import { validateScene, type SceneKind, type StoreScene } from "./store-scene";
 import {
   SHELF_NAME_MAX_LENGTH,
@@ -28,11 +29,12 @@ export type KeptScene = {
 };
 
 /**
- * Whose work it is: one shop of the signed-in reader, or the demo's shop in
- * this browser. Two accounts on one browser never see each other's work.
+ * Whose work it is: one shop of its owner (draftOwner), so two accounts on
+ * one browser never see each other's work. Null, keeping nothing, while the
+ * account is still being read.
  */
-export const sceneWorkKey = (readerId: string | null, shopId: string) =>
-  (readerId ? "reader:" + readerId : "demo") + "/" + shopId;
+export const sceneWorkKey = (owner: string | null, shopId: string) =>
+  owner === null ? null : owner + "/" + shopId;
 
 /** The longest text each kind of object can hold, as the editor writes it. */
 const TEXT_LIMITS: Partial<Record<SceneKind, number>> = {
@@ -81,7 +83,7 @@ export function readKeptScene(value: unknown): KeptScene | null {
 
 export const sceneDraftOptions: KeptDraftOptions<KeptScene> = {
   storageKey: SCENE_DRAFT_KEY,
-  keyPattern: /^(demo|reader:[\w-]+)\/[^/]+$/,
+  keyPattern: new RegExp("^" + DRAFT_OWNER + "/[^/]+$"),
   read: readKeptScene,
   // A scene can be long; a few readers' shops are all one browser holds.
   limit: 4,

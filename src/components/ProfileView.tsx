@@ -22,14 +22,15 @@ import { handleProblem, normalizeHandle } from "../lib/handles";
 import { useClock } from "./useClock";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { FoldedWords, ProfilePosts } from "./Social";
-import { KeptNote } from "./OpenShop";
+import { KeptDraftNote, StopConfirm } from "./KeptDraftNote";
 import { useAccountState } from "../lib/account-session";
+import { draftOwner } from "../lib/draft-owner";
 import { useKeptDraft } from "../lib/kept-draft";
 import {
+  SAVE_REFUSED,
   overSaved,
   townTook,
   useKeptUntilSaved,
-  workOwner,
 } from "../lib/shop-draft";
 import {
   NINE_MAX,
@@ -95,41 +96,6 @@ import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import { useUrlParam } from "../lib/url-state";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 
-const SAVE_REFUSED =
-  "うまく保存できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。";
-
-/** キャンセル with words written: asked once, in place of the buttons. */
-function LeaveConfirm({
-  onStay,
-  onLeave,
-  className = "",
-}: {
-  onStay: () => void;
-  onLeave: () => void;
-  className?: string;
-}) {
-  return (
-    <div
-      className={"profile-form-actions profile-leave " + className}
-      role="group"
-      aria-label="書きかけを消して閉じる"
-    >
-      <span>書きかけを消して閉じますか？</span>
-      <button
-        className="button secondary"
-        type="button"
-        autoFocus
-        onClick={onStay}
-      >
-        やめる
-      </button>
-      <button className="button secondary" type="button" onClick={onLeave}>
-        消して閉じる
-      </button>
-    </div>
-  );
-}
-
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
 type Collection = (typeof COLLECTIONS)[number];
 
@@ -170,9 +136,10 @@ export function ProfileView({
   const [editingNine, setEditingNine] = useState(false);
   // What is being changed is kept in this browser for the reader: Escape, a
   // tap outside, 戻る or a reload closes the dialog and keeps it; only
-  // キャンセル, 書きかけを消す and a save let it go.
+  // キャンセル (answered 消す when words would go), 書きかけを消す and a save
+  // let it go.
   const account = useAccountState();
-  const owner = isSelf ? workOwner(account) : null;
+  const owner = isSelf ? draftOwner(account) : null;
   const keptProfile = useKeptDraft(profileDraftStore, owner);
   const keptNine = useKeptDraft(nineDraftStore, owner);
   const savedProfile = reader ? profileForm(reader) : null;
@@ -1022,12 +989,12 @@ export function ProfileView({
           onClose={() => setEditingProfile(false)}
         >
           <form className="profile-form" onSubmit={saveProfile}>
-            <KeptNote
+            <KeptDraftNote
               className="profile-kept"
               work={profileWork !== null}
-              resumed={resumedProfile}
+              continuing={resumedProfile}
               saved={keptProfile.saved}
-              asks={Boolean(
+              wordsLost={Boolean(
                 profileWork &&
                 savedProfile &&
                 profileLosesWords(profileWork, savedProfile),
@@ -1155,9 +1122,12 @@ export function ProfileView({
               </p>
             )}
             {confirming === "profile" ? (
-              <LeaveConfirm
-                onStay={() => setConfirming(null)}
-                onLeave={cancelProfile}
+              <StopConfirm
+                onDiscard={cancelProfile}
+                onKeep={() => {
+                  setConfirming(null);
+                  setEditingProfile(false);
+                }}
               />
             ) : (
               <div className="profile-form-actions">
@@ -1188,12 +1158,12 @@ export function ProfileView({
           wide
         >
           <div className="profile-nine-editor">
-            <KeptNote
+            <KeptDraftNote
               className="profile-kept"
               work={nineWork !== null}
-              resumed={resumedNine}
+              continuing={resumedNine}
               saved={keptNine.saved}
-              asks={Boolean(
+              wordsLost={Boolean(
                 nineWork && savedNine && nineLosesWords(nineWork, savedNine),
               )}
               onDiscard={() => {
@@ -1335,10 +1305,13 @@ export function ProfileView({
               </p>
             )}
             {confirming === "nine" ? (
-              <LeaveConfirm
+              <StopConfirm
                 className="profile-nine-save"
-                onStay={() => setConfirming(null)}
-                onLeave={cancelNine}
+                onDiscard={cancelNine}
+                onKeep={() => {
+                  setConfirming(null);
+                  setEditingNine(false);
+                }}
               />
             ) : (
               <div className="profile-form-actions profile-nine-save">

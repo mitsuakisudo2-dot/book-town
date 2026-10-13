@@ -33,12 +33,13 @@ import { StoreSceneEditor } from "./StoreSceneEditor";
 import { useWalkStore } from "../lib/walk-store";
 import { hasPublicSceneBooks } from "../lib/store-customization";
 import { publicWalkShops } from "../lib/store-scene-adapter";
-import { KeptNote, OpenShop, ThemePicker } from "./OpenShop";
+import { OpenShop, ThemePicker } from "./OpenShop";
+import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
-import { useAccountState } from "../lib/account-session";
 import { useKeptDraft } from "../lib/kept-draft";
 import { openShopDraftStore } from "../lib/open-shop-draft";
 import {
+  SAVE_REFUSED,
   overSaved,
   sameSign,
   shelfNameDraftStore,
@@ -46,7 +47,6 @@ import {
   signLosesWords,
   townTook,
   useKeptUntilSaved,
-  workOwner,
   type ShopSign,
 } from "../lib/shop-draft";
 import "./editor.css";
@@ -61,9 +61,6 @@ type ShopEditorProps = {
 type TakenOff = { display: ShelfItem["display"]; pop: string; index: number };
 /** Books taken off on this page, by shelf and book, to put back with a tap. */
 type TakenOffShelves = Record<string, Record<string, TakenOff>>;
-
-const SAVE_REFUSED =
-  "うまく保存できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。";
 
 const shopSign = (shop: Shop): ShopSign => ({
   name: shop.name,
@@ -161,12 +158,12 @@ function ShopSettings({
           notify("書店の看板と紹介を変更しました。");
         }}
       >
-        <KeptNote
+        <KeptDraftNote
           className="editor-kept"
           work={work !== null}
-          resumed={Boolean(resumed)}
+          continuing={Boolean(resumed)}
           saved={kept.saved}
-          asks={work !== null && signLosesWords(work, saved)}
+          wordsLost={work !== null && signLosesWords(work, saved)}
           onDiscard={() => {
             kept.clear();
             setResumed(false);
@@ -605,12 +602,12 @@ function ShelfEditingPanel({
           </button>
         </div>
       </div>
-      <KeptNote
+      <KeptDraftNote
         className="editor-kept"
         work={typed !== null}
-        resumed={Boolean(resumed)}
+        continuing={Boolean(resumed)}
         saved={keptName.saved}
-        asks={Boolean(typed?.trim())}
+        wordsLost={Boolean(typed?.trim())}
         onDiscard={() => {
           keptName.clear();
           setResumed(false);
@@ -858,7 +855,7 @@ function ShopMessages({ state }: { state: TownState }) {
 
 export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   const walk = useWalkStore();
-  const owner = workOwner(useAccountState());
+  const owner = useDraftOwner();
   const [takenOff, setTakenOff] = useState<TakenOffShelves>({});
   const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
   const persistenceStatus = usePersistenceStatus();

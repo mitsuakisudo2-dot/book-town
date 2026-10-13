@@ -11,34 +11,9 @@
   margin-bottom: 20px;
   color: var(--muted);
 }
-/* Work kept from before is told in one quiet line, with a way to let it go. */
-.scene-editor-kept {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 14px;
+/* Work kept from before is told in the quiet kept line, under the intro. */
+.kept-note.scene-editor-kept {
   margin: -12px 0 16px;
-  font-size: 12px;
-  line-height: 1.8;
-  color: #5f6f55;
-}
-.scene-editor-kept button {
-  min-height: 32px;
-  padding: 4px 0;
-  color: #4f6446;
-  text-decoration: underline;
-  text-decoration-color: #c9d3bd;
-  text-underline-offset: 3px;
-}
-.scene-editor-kept button:hover {
-  color: var(--green);
-}
-.scene-editor-confirm {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 14px;
-  color: #7a5a35;
 }
 .scene-editor-columns {
   display: grid;
@@ -267,15 +242,6 @@
   display: flex;
   gap: 10px;
   justify-content: flex-end;
-}
-.scene-editor-footer > .scene-editor-leave {
-  flex-wrap: wrap;
-  align-items: center;
-}
-.scene-editor-leave span {
-  margin-right: auto;
-  font-size: 12px;
-  line-height: 1.7;
 }
 .scene-error {
   font-size: 12px;

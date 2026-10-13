@@ -138,42 +138,12 @@
   box-shadow: none;
 }
 
-/* Work kept in this browser from before: one quiet line, and a way to let it
-   go. Shared by the screens that keep a reader's work (KeptNote). */
-.kept-note {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 14px;
+/* Where the kept line sits: above a step, and on the first step, where kept
+   work waits to be gone on with. */
+.kept-note.open-kept {
   margin: 0 0 14px;
-  font-size: 12px;
-  line-height: 1.8;
-  color: #5f6f55;
 }
-/* A long unbroken name wraps inside the line, never past the page. */
-.kept-note > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.kept-note button {
-  min-height: 32px;
-  padding: 4px 0;
-  color: #4f6446;
-  text-decoration: underline;
-  text-decoration-color: #c9d3bd;
-  text-underline-offset: 3px;
-}
-.kept-note button:hover {
-  color: var(--green);
-}
-.kept-note-confirm {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 14px;
-  color: #7a5a35;
-}
-.open-resume {
+.kept-note.open-resume {
   margin: -12px 0 20px;
 }
 

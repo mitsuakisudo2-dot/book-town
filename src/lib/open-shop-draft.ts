@@ -103,7 +103,7 @@ export const openShopUntouched = (work: OpenShopWork) =>
 export const openShopHasWords = (work: OpenShopWork) =>
   [work.pop, work.name, work.tagline].some((text) => text.trim() !== "");
 
-/** Keyed by owner (workOwner): one opening at a time for each reader. */
+/** Keyed by owner (draftOwner): one opening at a time for each reader. */
 export const openShopDraftOptions: KeptDraftOptions<OpenShopWork> = {
   storageKey: OPEN_SHOP_DRAFT_KEY,
   keyPattern: ownerKeyPattern(),

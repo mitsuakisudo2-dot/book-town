@@ -552,7 +552,7 @@ try {
       );
       // Thrown away on purpose, asked once, the saved words come back.
       await settings.getByRole("button", { name: "書きかけを消す" }).click();
-      await settings.getByRole("button", { name: "やめる" }).click();
+      await settings.getByRole("button", { name: "残す", exact: true }).click();
       await expect(settings.getByLabel("書店の紹介")).toHaveValue(
         "夜にだけ開く、小さな本屋です。",
       );
@@ -778,15 +778,19 @@ try {
       await editProfile.click();
       await expect(bio).toHaveValue("書きかけの自己紹介。まだ途中です。");
       expect((await stored(page)).me.bio).toBe(saved);
-      // キャンセル asks once, for the words it would lose.
+      // キャンセル asks once, for the words it would lose; 残す closes and
+      // keeps them.
       await dialog.getByRole("button", { name: "キャンセル" }).click();
+      await expect(dialog.getByText("書きかけを消しますか？")).toBeVisible();
       await expect(
-        dialog.getByText("書きかけを消して閉じますか？"),
-      ).toBeVisible();
-      await dialog.getByRole("button", { name: "やめる" }).click();
+        dialog.getByRole("button", { name: "残す", exact: true }),
+      ).toBeFocused();
+      await dialog.getByRole("button", { name: "残す", exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      await editProfile.click();
       await expect(bio).toHaveValue("書きかけの自己紹介。まだ途中です。");
       await dialog.getByRole("button", { name: "キャンセル" }).click();
-      await dialog.getByRole("button", { name: "消して閉じる" }).click();
+      await dialog.getByRole("button", { name: "消す", exact: true }).click();
       await expect(dialog).toHaveCount(0);
       expect(await kept("book-town-profile-drafts-v1")).toBeNull();
       await editProfile.click();

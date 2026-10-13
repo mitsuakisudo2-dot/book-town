@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccountState } from "../lib/account-session";
 import { draftOwner } from "../lib/draft-owner";
 import { usePersistenceStatus, useTownBackend } from "../lib/store";
-import "./social.css";
+import "./kept-draft.css";
+
+// What a reader writes or arranges is kept in this browser (src/lib/
+// kept-draft.ts) until the save is confirmed or the reader throws it away.
+// Every screen that keeps work tells it with the same quiet line and asks
+// the same question before throwing it away: 書きかけを消しますか？ 消す／残す.
 
 /**
  * Whether a screen opened with work kept from before, and it is still there.
@@ -100,6 +105,10 @@ export function KeptDraftNote({
   saved,
   wordsLost,
   onDiscard,
+  work = true,
+  lead = "書きかけを続けています",
+  action,
+  className,
 }: {
   /** The screen opened with work kept from before, and it is still there. */
   continuing: boolean;
@@ -108,13 +117,23 @@ export function KeptDraftNote({
   /** Whether throwing the work away loses words written. */
   wordsLost: boolean;
   onDiscard: () => void;
+  /** There is work in hand at all; without it nothing is said. */
+  work?: boolean;
+  /** The words for kept work, when a screen has more to say about it. */
+  lead?: ReactNode;
+  /** A step on from the kept work, before the way to throw it away. */
+  action?: ReactNode;
+  /** Where the line sits on its screen. */
+  className?: string;
 }) {
-  if (saved && !continuing) return null;
+  if (!work || (saved && !continuing)) return null;
   return (
-    <p className="kept-note" role={saved ? undefined : "status"}>
-      {saved
-        ? "書きかけを続けています"
-        : "このブラウザに書きかけを残せませんでした"}
+    <p className={className ? "kept-note " + className : "kept-note"}>
+      {continuing && <span>{lead}</span>}
+      {!saved && (
+        <span role="status">このブラウザに書きかけを残せませんでした</span>
+      )}
+      {continuing && action}
       {continuing && (
         <DiscardDraft wordsLost={wordsLost} onDiscard={onDiscard} />
       )}
@@ -123,21 +142,28 @@ export function KeptDraftNote({
 }
 
 /**
- * Asked once when a reader stops (やめる) with words written: throw the work
- * away, or keep it for the next time. Either way the screen closes, as the
- * reader asked.
+ * Asked once when a reader stops (やめる, キャンセル) with words written: throw
+ * the work away, or keep it for the next time. Either way the screen closes,
+ * as the reader asked.
  */
 export function StopConfirm({
   onDiscard,
   onKeep,
+  className,
 }: {
   onDiscard: () => void;
   onKeep: () => void;
+  /** Where the question sits on its screen. */
+  className?: string;
 }) {
   const keep = useRef<HTMLButtonElement>(null);
   useEffect(() => keep.current?.focus(), []);
   return (
-    <p className="kept-note kept-note-confirm">
+    <p
+      className={
+        "kept-note kept-note-confirm" + (className ? " " + className : "")
+      }
+    >
       書きかけを消しますか？
       <button type="button" onClick={onDiscard}>
         消す

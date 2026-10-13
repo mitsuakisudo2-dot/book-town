@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Fragment,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { Fragment, useId, useState } from "react";
 import Link from "next/link";
 import {
   ME_ID,
@@ -30,7 +23,6 @@ import { BookJacket, Icon } from "./ui";
 import "./open-shop.css";
 import { noteShopOpened } from "../lib/just-opened";
 import { leaveLayers, useBackLayer, useLayerReturn } from "../lib/back-layer";
-import { useAccountState } from "../lib/account-session";
 import { useKeptDraft } from "../lib/kept-draft";
 import {
   FRESH_OPEN_SHOP,
@@ -40,7 +32,8 @@ import {
   type OpenShopKind,
   type OpenShopWork,
 } from "../lib/open-shop-draft";
-import { townTook, useKeptUntilSaved, workOwner } from "../lib/shop-draft";
+import { townTook, useKeptUntilSaved } from "../lib/shop-draft";
+import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 
 type Shared = {
   state: TownState;
@@ -87,95 +80,6 @@ export function ThemePicker({
         </button>
       ))}
     </div>
-  );
-}
-
-/**
- * Work kept in this browser from before, told in one quiet line with a way
- * to let it go; letting go of words the reader wrote asks once first. When
- * the browser would not keep the work in hand, the line says so too.
- */
-export function KeptNote({
-  work,
-  resumed,
-  saved,
-  asks,
-  onDiscard,
-  lead = "書きかけを続けています",
-  action,
-  className = "",
-}: {
-  /** There is work in hand, not saved yet. */
-  work: boolean;
-  /** The screen opened on work kept from before. */
-  resumed: boolean;
-  /** False when the browser would not keep the latest change. */
-  saved: boolean;
-  /** Letting the work go would lose words the reader wrote. */
-  asks: boolean;
-  onDiscard: () => void;
-  lead?: ReactNode;
-  /** A step on from the work, before the way to let it go. */
-  action?: ReactNode;
-  className?: string;
-}) {
-  const [confirming, setConfirming] = useState(false);
-  const discardButton = useRef<HTMLButtonElement>(null);
-  const stayButton = useRef<HTMLButtonElement>(null);
-  // When a press takes away the button the hand was on, the hand goes on to
-  // what took its place.
-  const handTo = useRef<"stay" | "discard" | null>(null);
-  useEffect(() => {
-    const to = handTo.current;
-    handTo.current = null;
-    if (to) (to === "stay" ? stayButton : discardButton).current?.focus();
-  });
-  if (!work || (saved && !resumed)) return null;
-  return (
-    <p className={"kept-note " + className}>
-      {resumed && <span>{lead}</span>}
-      {!saved && (
-        <span role="status">このブラウザに書きかけを残せませんでした</span>
-      )}
-      {resumed && action}
-      {resumed &&
-        (confirming ? (
-          <span className="kept-note-confirm">
-            書きかけを消しますか？
-            <button
-              type="button"
-              onClick={() => {
-                setConfirming(false);
-                onDiscard();
-              }}
-            >
-              消す
-            </button>
-            <button
-              type="button"
-              ref={stayButton}
-              onClick={() => {
-                setConfirming(false);
-                handTo.current = "discard";
-              }}
-            >
-              やめる
-            </button>
-          </span>
-        ) : (
-          <button
-            type="button"
-            ref={discardButton}
-            onClick={() => {
-              if (!asks) return onDiscard();
-              setConfirming(true);
-              handTo.current = "stay";
-            }}
-          >
-            書きかけを消す
-          </button>
-        ))}
-    </p>
   );
 }
 
@@ -286,7 +190,7 @@ export function OpenShop({
   const nameId = useId();
   const taglineId = useId();
   const popId = useId();
-  const owner = workOwner(useAccountState());
+  const owner = useDraftOwner();
   const kept = useKeptDraft(openShopDraftStore, owner);
   const persistence = usePersistenceStatus();
   // Kept work waits for the town: its books are checked against the town's,
@@ -464,11 +368,12 @@ export function OpenShop({
     setStep("opened");
   }
   const keptNote = (
-    <KeptNote
+    <KeptDraftNote
+      className="open-kept"
       work={draft !== null}
-      resumed={Boolean(resumed)}
+      continuing={Boolean(resumed)}
       saved={kept.saved}
-      asks={openShopHasWords(work)}
+      wordsLost={openShopHasWords(work)}
       onDiscard={discard}
     />
   );
@@ -544,12 +449,11 @@ export function OpenShop({
         </p>
         {/* Work kept from before waits here, to go on from where it was. */}
         {ready && draft && (
-          <KeptNote
+          <KeptDraftNote
             className="open-resume"
-            work
-            resumed
+            continuing
             saved={kept.saved}
-            asks={openShopHasWords(draft)}
+            wordsLost={openShopHasWords(draft)}
             onDiscard={discard}
             action={
               <>

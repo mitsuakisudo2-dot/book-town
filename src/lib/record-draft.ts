@@ -6,6 +6,7 @@ import {
   keptText,
   type KeptDraftOptions,
 } from "./kept-draft";
+import { DRAFT_OWNER } from "./draft-owner";
 import { FEELINGS, RECORD_NOTE_MAX_LENGTH, type Feeling } from "./types";
 
 // How a finished book felt, kept while it is chosen and written: a tap outside
@@ -90,7 +91,7 @@ export function readRecordChanges(value: unknown): RecordChanges | null {
 
 export const RECORD_DRAFT_OPTIONS: KeptDraftOptions<RecordChanges> = {
   storageKey: RECORD_DRAFT_KEY,
-  keyPattern: /^[^:]+:(record-new|record):.+$/,
+  keyPattern: new RegExp("^" + DRAFT_OWNER + ":(record-new|record):.+$"),
   read: readRecordChanges,
   isEmpty: (changes) => !Object.keys(changes).length,
 };
