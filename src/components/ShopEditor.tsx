@@ -28,6 +28,7 @@ import { useWalkStore } from "../lib/walk-store";
 import { hasPublicSceneBooks } from "../lib/store-customization";
 import { publicWalkShops } from "../lib/store-scene-adapter";
 import { OpenShop, ThemePicker } from "./OpenShop";
+import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import "./editor.css";
 
 type ShopEditorProps = {
@@ -138,15 +139,22 @@ function ShopSettings({
 function AddBookPicker({
   shelf,
   books,
+  library,
   actions,
   notify,
   onClose,
 }: {
   shelf: Shelf;
   books: Book[];
+  /** The reader's own books: first among equal matches. */
+  library: string[];
   onClose: () => void;
 } & Pick<ShopEditorProps, "actions" | "notify">) {
   const [search, setSearch] = useState("");
+  const results = useBookSearch(books, search, {
+    own: library,
+    limit: books.length,
+  });
   const [display, setDisplay] = useState<ShelfItem["display"]>("spine");
   // What this visit changed, for the running tally at the bottom.
   const [addedHere, setAddedHere] = useState<string[]>([]);
@@ -160,12 +168,98 @@ function AddBookPicker({
   const removedCount = Object.keys(removedHere).length;
   const remaining = shelf.capacity - shelfUsed(shelf);
   const cost = display === "face" ? 3 : 1;
-  const query = search.trim().toLocaleLowerCase();
-  const filtered = books.filter((book) =>
-    `${book.title} ${book.author} ${book.genre}`
-      .toLocaleLowerCase()
-      .includes(query),
-  );
+  // Every book until something is typed; then the matches, best first, and
+  // titles only close in spelling under their own quiet heading.
+  const searching = search.trim() !== "";
+  const filtered = searching ? results.found.map((match) => match.book) : books;
+  const near = searching ? results.near.map((match) => match.book) : [];
+
+  function choose(book: Book) {
+    const placed = shelf.items.find((item) => item.bookId === book.id);
+    const justAdded = addedHere.includes(book.id);
+    const taken = removedHere[book.id];
+    if (placed) {
+      actions.removeShelfBook(shelf.id, placed.id);
+      if (justAdded) setAddedHere(addedHere.filter((id) => id !== book.id));
+      else
+        setRemovedHere({
+          ...removedHere,
+          [book.id]: {
+            display: placed.display,
+            pop: placed.pop,
+            index: shelf.items.indexOf(placed),
+          },
+        });
+      notify(
+        placed.pop.trim() && !justAdded
+          ? `「${book.title}」を外しました。もう一度押すとPOPごと戻せます。`
+          : `「${book.title}」を棚から外しました。`,
+      );
+    } else if (taken) {
+      if (
+        actions.addShelfBook(shelf.id, book.id, taken.display, {
+          pop: taken.pop,
+          index: taken.index,
+        })
+      ) {
+        const rest = { ...removedHere };
+        delete rest[book.id];
+        setRemovedHere(rest);
+        notify(`「${book.title}」を元の場所に戻しました。`);
+      } else notify("棚の空きスペースが足りず、戻せませんでした。");
+    } else if (actions.addShelfBook(shelf.id, book.id, display)) {
+      // The editor stays open so several books can be placed in a row.
+      setAddedHere([...addedHere, book.id]);
+      notify(`「${book.title}」を本棚に並べました。`);
+    } else {
+      notify("棚の空きスペースが足りません。並べ方を変えてみてください。");
+    }
+  }
+
+  const choice = (book: Book) => {
+    const placed = shelf.items.find((item) => item.bookId === book.id);
+    const justAdded = addedHere.includes(book.id);
+    const taken = removedHere[book.id];
+    const needed = taken ? (taken.display === "face" ? 3 : 1) : cost;
+    return (
+      <button
+        className={"editor-book-choice" + (placed ? " is-added" : "")}
+        key={book.id}
+        type="button"
+        aria-pressed={Boolean(placed)}
+        disabled={!placed && needed > remaining}
+        onClick={() => choose(book)}
+      >
+        <BookJacket book={book} className="editor-picker-jacket" />
+        <span className="editor-book-choice-title">{book.title}</span>
+        <span className="editor-book-choice-author">{book.author}</span>
+        <span className="editor-book-choice-add">
+          {placed ? (
+            <>
+              <Icon name="check" size={14} />
+              {justAdded
+                ? "並べました"
+                : placed.pop.trim()
+                  ? "POPあり"
+                  : "棚にあります"}
+              ・押すと外す
+            </>
+          ) : taken ? (
+            <>
+              <Icon name="back" size={14} />
+              外しました・押すと戻す
+            </>
+          ) : (
+            <>
+              <Icon name="plus" size={14} />
+              棚に並べる
+            </>
+          )}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <Modal title="本棚を編集" onClose={onClose} wide>
       <div className="editor-book-picker">
@@ -177,8 +271,21 @@ function AddBookPicker({
           <Icon name="search" size={18} />
           <input
             autoFocus
+            type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              // The Enter that confirms a kana conversion is the keyboard's.
+              if (!enterPressed(event)) return;
+              event.preventDefault();
+              // Enter places a book only when it is surely the one meant, and
+              // never takes one off the shelf.
+              const sure = results.sure();
+              if (!sure || shelf.items.some((item) => item.bookId === sure.id))
+                return;
+              choose(sure);
+              setSearch("");
+            }}
             placeholder="タイトル、著者、ジャンルで探す"
             aria-label="追加する本を検索"
           />
@@ -213,96 +320,17 @@ function AddBookPicker({
             空きスペースが足りません。背表紙で並べるか、棚を整理してください。
           </p>
         )}
-        <div className="editor-picker-grid">
-          {filtered.map((book) => {
-            const placed = shelf.items.find((item) => item.bookId === book.id);
-            const justAdded = addedHere.includes(book.id);
-            const taken = removedHere[book.id];
-            const needed = taken ? (taken.display === "face" ? 3 : 1) : cost;
-            return (
-              <button
-                className={"editor-book-choice" + (placed ? " is-added" : "")}
-                key={book.id}
-                type="button"
-                aria-pressed={Boolean(placed)}
-                disabled={!placed && needed > remaining}
-                onClick={() => {
-                  if (placed) {
-                    actions.removeShelfBook(shelf.id, placed.id);
-                    if (justAdded)
-                      setAddedHere(addedHere.filter((id) => id !== book.id));
-                    else
-                      setRemovedHere({
-                        ...removedHere,
-                        [book.id]: {
-                          display: placed.display,
-                          pop: placed.pop,
-                          index: shelf.items.indexOf(placed),
-                        },
-                      });
-                    notify(
-                      placed.pop.trim() && !justAdded
-                        ? `「${book.title}」を外しました。もう一度押すとPOPごと戻せます。`
-                        : `「${book.title}」を棚から外しました。`,
-                    );
-                  } else if (taken) {
-                    if (
-                      actions.addShelfBook(shelf.id, book.id, taken.display, {
-                        pop: taken.pop,
-                        index: taken.index,
-                      })
-                    ) {
-                      const rest = { ...removedHere };
-                      delete rest[book.id];
-                      setRemovedHere(rest);
-                      notify(`「${book.title}」を元の場所に戻しました。`);
-                    } else
-                      notify("棚の空きスペースが足りず、戻せませんでした。");
-                  } else if (actions.addShelfBook(shelf.id, book.id, display)) {
-                    // The editor stays open so several books can be placed in a row.
-                    setAddedHere([...addedHere, book.id]);
-                    notify(`「${book.title}」を本棚に並べました。`);
-                  } else {
-                    notify(
-                      "棚の空きスペースが足りません。並べ方を変えてみてください。",
-                    );
-                  }
-                }}
-              >
-                <BookJacket book={book} className="editor-picker-jacket" />
-                <span className="editor-book-choice-title">{book.title}</span>
-                <span className="editor-book-choice-author">{book.author}</span>
-                <span className="editor-book-choice-add">
-                  {placed ? (
-                    <>
-                      <Icon name="check" size={14} />
-                      {justAdded
-                        ? "並べました"
-                        : placed.pop.trim()
-                          ? "POPあり"
-                          : "棚にあります"}
-                      ・押すと外す
-                    </>
-                  ) : taken ? (
-                    <>
-                      <Icon name="back" size={14} />
-                      外しました・押すと戻す
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="plus" size={14} />
-                      棚に並べる
-                    </>
-                  )}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        {filtered.length === 0 && (
+        {filtered.length > 0 && (
+          <div className="editor-picker-grid">{filtered.map(choice)}</div>
+        )}
+        {searching && results.settled && filtered.length === 0 && (
           <div className="editor-empty-search">
             <Icon name="book" size={28} />
-            <p>この言葉に合う本は見つかりませんでした。</p>
+            <p>
+              {near.length
+                ? "ぴったり合う本はありませんでした。"
+                : "この言葉に合う本は見つかりませんでした。"}
+            </p>
             <button
               type="button"
               className="editor-text-button"
@@ -311,6 +339,20 @@ function AddBookPicker({
               すべての本を見る
             </button>
           </div>
+        )}
+        {near.length > 0 && (
+          <>
+            <h3 className="search-near" id="editor-near-title">
+              {results.nearHeading}
+            </h3>
+            <div
+              className="editor-picker-grid"
+              role="group"
+              aria-labelledby="editor-near-title"
+            >
+              {near.map(choice)}
+            </div>
+          </>
         )}
         <div className="editor-picker-footer">
           <span role="status">
@@ -838,6 +880,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         <AddBookPicker
           shelf={addBookShelf}
           books={state.books}
+          library={state.library}
           actions={actions}
           notify={notify}
           onClose={() => setAddBookShelfId(null)}

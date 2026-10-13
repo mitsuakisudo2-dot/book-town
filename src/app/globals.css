@@ -2995,3 +2995,16 @@ dialog .toast {
   bottom: 112px;
   left: 50%;
 }
+
+/* Books only close in spelling, under a quiet heading below the matches:
+   the search page and every picker that finds books. */
+.search-near {
+  font-size: 11px;
+  font-weight: 400;
+  color: #98a38c;
+  margin: 18px 0 0;
+}
+.book-picker .search-near,
+.poster-book-search ~ .search-near {
+  margin: 10px 0 4px;
+}

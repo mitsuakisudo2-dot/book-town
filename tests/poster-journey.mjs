@@ -113,13 +113,37 @@ try {
         const search = editor().getByRole("searchbox", {
           name: "ポスターに載せる本を探す",
         });
-        await search.fill("モモ");
+        const offered = (title) =>
+          editor().getByRole("button", { name: new RegExp(`^${title}の表紙`) });
+        // Several titles hold 孤独: Enter waits for a tap.
+        await search.fill("孤独");
         await search.press("Enter");
         // A poster put up would have moved to its own page by now.
         await page.waitForTimeout(400);
         await expect(page).toHaveURL(/\/posters\/new\/\?book=solaris/);
         await expect(heading).toHaveValue("まだ書いている途中");
-        await search.fill("");
+        await expect(search).toHaveValue("孤独");
+        // A book surely meant, here read from kana, is taken as in every
+        // picker, and the poster still waits for 貼り出す.
+        await search.fill("もも");
+        await search.press("Enter");
+        await page.waitForTimeout(400);
+        await expect(page).toHaveURL(/\/posters\/new\/\?book=solaris/);
+        await expect(heading).toHaveValue("まだ書いている途中");
+        await expect(search).toHaveValue("");
+        await expect(offered("モモ")).toHaveAttribute("aria-pressed", "true");
+        await expect(offered("ソラリス")).toHaveAttribute(
+          "aria-pressed",
+          "false",
+        );
+        // Back to the book this poster is about, by its romaji.
+        await search.fill("solaris");
+        await search.press("Enter");
+        await expect(search).toHaveValue("");
+        await expect(offered("ソラリス")).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
       },
     );
 

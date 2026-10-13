@@ -324,6 +324,13 @@ try {
     "catalog addition and left-to-right reorder persist",
     async () => {
       await open();
+      // Romaji and kana find a book here as in every search.
+      for (const typed of ["momo", "もも"]) {
+        await dialog().getByLabel("棚に加える本を探す").fill(typed);
+        await expect(
+          dialog().locator(".scene-search-results button").first(),
+        ).toContainText("モモ");
+      }
       await dialog().getByLabel("棚に加える本を探す").fill("モモ");
       await dialog().locator(".scene-search-results button").first().click();
       await expect(dialog().locator("#scene-book-form")).toContainText("モモ");

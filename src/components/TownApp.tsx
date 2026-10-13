@@ -50,9 +50,12 @@ import {
   posterNewPath,
   posterPath,
   profilePath,
+  searchPath,
   shopPath,
   walkPath,
 } from "../lib/paths";
+import { requestSearch } from "../lib/tags";
+import { enterPressed } from "../lib/search/use-book-search";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { ReportButton, ReportDialog } from "./Report";
 import { BookFeelings } from "./ReadingRecords";
@@ -190,6 +193,20 @@ export default function TownApp({
     setToast(message);
   }, []);
   const shared = { state, actions, notify };
+  // Enter in the top search opens the search page for what was typed: books,
+  // readers and shops alike. On the street, what is typed also narrows the
+  // shops as it is typed, and stays there for coming back.
+  const searchEverything = () => {
+    const query = search.trim();
+    if (!query) return;
+    requestSearch(query);
+    if (view === "search") {
+      setSearch("");
+      return;
+    }
+    router.push(searchPath(query));
+    if (view !== "town") setSearch("");
+  };
   const section = sectionOf(
     view,
     selectedId,
@@ -283,10 +300,10 @@ export default function TownApp({
           </Link>
           <form
             className="top-search"
+            role="search"
             onSubmit={(e) => {
               e.preventDefault();
-              if (view !== "town")
-                router.push("/#search=" + encodeURIComponent(search));
+              searchEverything();
             }}
           >
             <Icon name="search" size={18} />
@@ -295,6 +312,12 @@ export default function TownApp({
               aria-label="本や書店を検索"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                // The Enter that confirms a kana conversion stays the keyboard's.
+                if (!enterPressed(e)) return;
+                e.preventDefault();
+                searchEverything();
+              }}
             />
             <kbd>↵</kbd>
           </form>
