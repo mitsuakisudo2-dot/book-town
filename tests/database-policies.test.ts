@@ -1843,16 +1843,13 @@ async function main() {
     );
   });
 
-  await check(
-    "the old spoiler reason never folds or hides",
-    async () => {
-      const post = await newPost("終盤の話をした");
-      for (const visitor of [OLD1, OLD2, OLD3, OLD4])
-        await report(visitor, "post", post, "spoiler");
-      assert.ok(await readable(null, post));
-      assert.equal(await fold(null, "post", post), null);
-    },
-  );
+  await check("the old spoiler reason never folds or hides", async () => {
+    const post = await newPost("終盤の話をした");
+    for (const visitor of [OLD1, OLD2, OLD3, OLD4])
+      await report(visitor, "post", post, "spoiler");
+    assert.ok(await readable(null, post));
+    assert.equal(await fold(null, "post", post), null);
+  });
 
   await check(
     "a reporter's account deleted takes its weight along",

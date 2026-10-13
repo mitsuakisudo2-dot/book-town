@@ -1,3 +1,7 @@
+import type { FiledReport } from "./supabase/reports";
+
+export type { FiledReport };
+
 export const ME_ID = "me";
 export const OWN_SHOP_ID = "mine";
 export const DEFAULT_SHELF_CAPACITY = 20;
@@ -168,11 +172,36 @@ export interface ReadingNow {
 export const COMPOSE_ICONS = ["pen", "typewriter", "quill"] as const;
 export type ComposeIcon = (typeof COMPOSE_ICONS)[number];
 
+/**
+ * 「ネタバレの表示」, the reader's own: show_all すべて表示する,
+ * fold_possible (the default) たたむ what three readers asked 「ネタバレでは？」
+ * about, leave_out 出さない what is marked or possibly a spoiler. A post its
+ * writer marked is folded from the start whichever is chosen.
+ */
+export const SPOILER_DISPLAYS = [
+  "show_all",
+  "fold_possible",
+  "leave_out",
+] as const;
+export type SpoilerDisplay = (typeof SPOILER_DISPLAYS)[number];
+
 export interface Settings {
   composeIcon: ComposeIcon;
-  /** Whether new reading records start public; chosen when signing up. */
+  /** Whether new reading records start public. Chosen when signing up; starts false (自分だけ). */
   readingPublic: boolean;
+  /** 「ネタバレの表示」: the reader's own. */
+  spoilerDisplay: SpoilerDisplay;
 }
+
+/** What can be folded by reports. */
+export type ReviewKind = "post" | "shop" | "profile" | "poster";
+/** A thing folded by reports: everyone sees it folded, or (only its owner knows) held. */
+export interface ReviewFold {
+  state: "folded" | "held";
+  since: string;
+}
+/** reviewFolds is keyed by kind and id. */
+export const reviewKey = (kind: ReviewKind, id: string) => kind + ":" + id;
 
 /**
  * 読後の気持ち, chosen instead of stars: any number, none is fine too. The
@@ -267,7 +296,21 @@ export interface TownState {
   seenNotifications: string[];
   /** Words other readers left at the viewer's shop. Only an account receives them. */
   shopMessages: ShopMessage[];
+  /**
+   * Things folded by reports (reviewKey → fold). A held one is only ever
+   * the viewer's own: the database shows held things to their owner alone.
+   */
+  reviewFolds: Record<string, ReviewFold>;
+  /** The viewer's own reports, newest first. Only an account files them. */
+  myReports: FiledReport[];
 }
+
+/** A toast's way back: a text button that undoes what the toast says was done. */
+export interface ToastUndo {
+  label: string;
+  run: () => void;
+}
+export type Notify = (message: string, undo?: ToastUndo) => void;
 
 export interface ShopMessage {
   readerId: string;
@@ -336,6 +379,9 @@ export interface TownActions {
   ): void;
   deleteRecord(recordId: string): void;
   setReadingPublic(value: boolean): void;
+  setSpoilerDisplay(value: SpoilerDisplay): void;
+  /** Remembers a report just filed (fileReport writes it; the sync does not). */
+  noteReport(report: FiledReport): void;
   markNotificationsSeen(ids: string[]): void;
 }
 

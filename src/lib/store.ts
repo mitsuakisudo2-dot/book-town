@@ -22,6 +22,7 @@ import { handleProblem, normalizeHandle } from "./handles";
 import { tapsOf } from "./social";
 import {
   COMPOSE_ICONS,
+  SPOILER_DISPLAYS,
   LIKE_TAPS_MAX,
   ME_ID,
   POP_REACTIONS,
@@ -762,6 +763,29 @@ export function createTownStore(
       commit({
         ...state,
         settings: { ...state.settings, readingPublic: value === true },
+      });
+    },
+    setSpoilerDisplay(value) {
+      initialize();
+      if (
+        !SPOILER_DISPLAYS.includes(value) ||
+        state.settings.spoilerDisplay === value
+      )
+        return;
+      commit({
+        ...state,
+        settings: { ...state.settings, spoilerDisplay: value },
+      });
+    },
+    noteReport(report) {
+      initialize();
+      if (!report || typeof report.id !== "string") return;
+      commit({
+        ...state,
+        myReports: [
+          report,
+          ...state.myReports.filter((entry) => entry.id !== report.id),
+        ],
       });
     },
     markNotificationsSeen(ids) {

@@ -1,4 +1,12 @@
-import { ME_ID, type Post, type Reader, type TownState } from "./types";
+import {
+  ME_ID,
+  OWN_SHOP_ID,
+  reviewKey,
+  type Post,
+  type Reader,
+  type ReviewKind,
+  type TownState,
+} from "./types";
 
 const time = (post: Post) => Date.parse(post.createdAt) || 0;
 const newestFirst = (a: Post, b: Post) => time(b) - time(a);
@@ -8,18 +16,73 @@ const oldestFirst = (a: Post, b: Post) => time(a) - time(b);
 const isPublic = (post: Post) => post.readingMode !== "solo";
 
 /**
- * A post the viewer asked about as a possible spoiler is hidden for them like a
- * marked one, and for everyone once enough readers asked (folded).
+ * How a post reaches this reader. open: as it is. folded: covered, opened with
+ * a tap (behind the door on a book page). left_out: not shown at all.
  */
-export const isSpoilerFor = (state: TownState, post: Post): boolean =>
-  post.spoiler ||
-  post.folded === true ||
-  state.spoilerReports.includes(post.id);
+export type SpoilerView = "open" | "folded" | "left_out";
+
+/**
+ * Decides spoilers, by the writer's mark, the readers' 「ネタバレでは？」 and
+ * the reader's 「ネタバレの表示」. A post its writer marked is folded from the
+ * start, always; one three readers asked about (folded) is folded unless the
+ * reader shows everything; one the reader asked about is folded for them. A
+ * reader who chose 出さない gets none of these, except their own posts.
+ */
+export function spoilerViewOf(state: TownState, post: Post): SpoilerView {
+  const marked = post.spoiler;
+  const askedByMe = state.spoilerReports.includes(post.id);
+  const possible = post.folded === true || askedByMe;
+  if (!marked && !possible) return "open";
+  const mode = state.settings.spoilerDisplay;
+  if (mode === "leave_out" && post.authorId !== ME_ID) return "left_out";
+  if (marked || askedByMe) return "folded";
+  return mode === "show_all" ? "open" : "folded";
+}
+
+/** Whether a post reaches this reader at all. */
+export const notLeftOut = (state: TownState, post: Post): boolean =>
+  spoilerViewOf(state, post) !== "left_out";
+
+/**
+ * Whether something is folded by reports for this reader: folded for
+ * everyone, held (only ever the reader's own), or reported by the reader
+ * themselves, which keeps it folded on their own screen whatever came of it.
+ */
+export function reviewFoldOf(
+  state: TownState,
+  kind: ReviewKind,
+  id: string,
+): "folded" | "held" | "reported" | null {
+  if (
+    state.myReports.some(
+      (entry) => entry.kind === kind && entry.targetId === id,
+    )
+  )
+    return "reported";
+  return state.reviewFolds[reviewKey(kind, id)]?.state ?? null;
+}
+
+/**
+ * Whether a shop's or a person's own words (an introduction, a bio) are
+ * folded by reports, for everyone but their owner. Names, shelves, POPs and
+ * posts stay as they are; each has its own report button.
+ */
+export const wordsFolded = (
+  state: Pick<TownState, "reviewFolds">,
+  kind: "shop" | "profile",
+  id: string,
+): boolean =>
+  id !== ME_ID &&
+  id !== OWN_SHOP_ID &&
+  state.reviewFolds[reviewKey(kind, id)]?.state === "folded";
 
 /** The timeline carries every public top-level post; spoilers arrive covered until shown. */
 export const timelinePosts = (state: TownState): Post[] =>
   state.posts
-    .filter((post) => post.parentId === null && isPublic(post))
+    .filter(
+      (post) =>
+        post.parentId === null && isPublic(post) && notLeftOut(state, post),
+    )
     .sort(newestFirst);
 
 /** Following currently means following a shop; its owner's public posts come along. */
@@ -55,7 +118,11 @@ export function ownersToFollow(state: TownState, limit = 3) {
     .slice(0, limit);
 }
 
-/** Reviews are top-level posts with this book; spoilers are kept apart, behind the door. */
+/**
+ * Reviews are top-level posts with this book; spoilers are kept apart, behind
+ * the door. A review folded by reports stays in its place, folded there.
+ * `leftOut`: the reader's setting kept some out, which the page says once.
+ */
 export function bookReviews(state: TownState, bookId: string) {
   const reviews = state.posts
     .filter(
@@ -63,14 +130,18 @@ export function bookReviews(state: TownState, bookId: string) {
         post.parentId === null && post.bookId === bookId && isPublic(post),
     )
     .sort(newestFirst);
+  const view = (post: Post) => spoilerViewOf(state, post);
   return {
-    open: reviews.filter((post) => !isSpoilerFor(state, post)),
-    spoilers: reviews.filter((post) => isSpoilerFor(state, post)),
+    open: reviews.filter((post) => view(post) === "open"),
+    spoilers: reviews.filter((post) => view(post) === "folded"),
+    leftOut: reviews.some((post) => view(post) === "left_out"),
   };
 }
 
 export const repliesOf = (state: TownState, postId: string): Post[] =>
-  state.posts.filter((post) => post.parentId === postId).sort(oldestFirst);
+  state.posts
+    .filter((post) => post.parentId === postId && notLeftOut(state, post))
+    .sort(oldestFirst);
 
 export const readerPosts = (state: TownState, readerId: string): Post[] =>
   timelinePosts(state).filter((post) => post.authorId === readerId);

@@ -14,6 +14,7 @@ import { counterId, type RecordKind, type TownBackend } from "../town-backend";
 import { withSamples } from "../samples";
 import type { TownState } from "../types";
 import type { Database, Json } from "./database.generated";
+import { REPORT_COLUMNS } from "./reports";
 import {
   all,
   backgroundSync,
@@ -40,6 +41,9 @@ const BOOK_COLUMNS =
 
 const SHOP_COLUMNS =
   "id, owner_id, name, description, tagline, theme, is_open, public_shelves, public_scene_books";
+
+// Everything folded for everyone; the person's own held things too.
+const FOLD_COLUMNS = "target_kind, target_id, state, since";
 
 /** The newest books, and every book the rows refer to. */
 async function booksFor(client: Client, rows: Omit<RemoteRows, "books">) {
@@ -80,6 +84,9 @@ export async function loadTown(
     ownSessions,
     together,
     records,
+    folds,
+    myReports,
+    readerSettings,
   ] = await Promise.all([
     all(client.from("profiles").select("*").limit(LIMIT)),
     all(client.from("profile_nine").select("*").limit(LIMIT)),
@@ -121,6 +128,21 @@ export async function loadTown(
         .select("*")
         .order("created_at", { ascending: false })
         .limit(LIMIT),
+    ),
+    all(client.from("moderation_folds").select(FOLD_COLUMNS).limit(LIMIT)),
+    all(
+      client
+        .from("reports")
+        .select(REPORT_COLUMNS)
+        .eq("reporter_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(200),
+    ),
+    all(
+      client
+        .from("reader_settings")
+        .select("spoiler_display")
+        .eq("user_id", userId),
     ),
   ]);
 
@@ -185,6 +207,9 @@ export async function loadTown(
     sessions: [...ownSessions, ...together],
     records,
     seenNotifications,
+    folds,
+    myReports,
+    readerSettings: readerSettings[0] ?? null,
   };
   const ids: RemoteIds = { userId, shopId: own?.id ?? newShopId() };
   return {
@@ -199,39 +224,41 @@ export async function loadTown(
  * database decides what is public (supabase/migrations); this only asks.
  */
 export async function loadPublicTown(client: Client): Promise<TownState> {
-  const [profiles, nine, shops, posts, together, records] = await Promise.all([
-    all(client.from("profiles").select("*").limit(LIMIT)),
-    all(client.from("profile_nine").select("*").limit(LIMIT)),
-    all(
-      client
-        .from("shops")
-        .select(SHOP_COLUMNS)
-        .eq("is_open", true)
-        .limit(LIMIT),
-    ),
-    all(
-      client
-        .from("posts")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(POSTS),
-    ),
-    all(
-      client
-        .from("reading_sessions")
-        .select("*")
-        .eq("mode", "together")
-        .is("ended_at", null)
-        .limit(LIMIT),
-    ),
-    all(
-      client
-        .from("reading_entries")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(LIMIT),
-    ),
-  ]);
+  const [profiles, nine, shops, posts, together, records, folds] =
+    await Promise.all([
+      all(client.from("profiles").select("*").limit(LIMIT)),
+      all(client.from("profile_nine").select("*").limit(LIMIT)),
+      all(
+        client
+          .from("shops")
+          .select(SHOP_COLUMNS)
+          .eq("is_open", true)
+          .limit(LIMIT),
+      ),
+      all(
+        client
+          .from("posts")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(POSTS),
+      ),
+      all(
+        client
+          .from("reading_sessions")
+          .select("*")
+          .eq("mode", "together")
+          .is("ended_at", null)
+          .limit(LIMIT),
+      ),
+      all(
+        client
+          .from("reading_entries")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(LIMIT),
+      ),
+      all(client.from("moderation_folds").select(FOLD_COLUMNS).limit(LIMIT)),
+    ]);
   const rows: Omit<RemoteRows, "books"> = {
     profiles,
     nine,
@@ -250,6 +277,10 @@ export async function loadPublicTown(client: Client): Promise<TownState> {
     sessions: together,
     records,
     seenNotifications: [],
+    folds,
+    // A visitor files no reports and keeps no settings: the defaults.
+    myReports: [],
+    readerSettings: null,
   };
   return townFromRows(
     { ...rows, books: await booksFor(client, rows) },
@@ -399,6 +430,13 @@ export async function applyWrite(
           .update(write.patch)
           .eq("id", write.id)
           .eq("user_id", ids.userId),
+      );
+      return;
+    case "reader-settings":
+      await settled(
+        client
+          .from("reader_settings")
+          .upsert(write.row, { onConflict: "user_id" }),
       );
       return;
     case "remove":

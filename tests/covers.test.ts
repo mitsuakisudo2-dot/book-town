@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import {
   COVER_SOURCES,
+  coverRefusalsFrom,
   googleCover,
   lookCovers,
   openBdCovers,
+  shownCover,
   type CoverSourceName,
 } from "../src/lib/covers";
 
@@ -169,6 +171,83 @@ async function main() {
       );
       assert.equal(later.get(MOMO)?.source, "openbd");
       assert.equal(again.asked.length, 1);
+    },
+  );
+  await check(
+    "a refused source is passed over for that book; the next is asked",
+    async () => {
+      const refused = coverRefusalsFrom([
+        { isbn: KOKORO, source: "openbd" },
+        { isbn: MOMO, source: "google" },
+        { isbn: NONE, source: "openbd" },
+        { isbn: NONE, source: "google" },
+        // A source the app does not know is ignored.
+        { isbn: MOMO, source: "elsewhere" },
+      ]);
+      assert.deepEqual([...refused.get(NONE)!].sort(), ["google", "openbd"]);
+      assert.deepEqual([...refused.get(MOMO)!], ["google"]);
+      const { asked, fetcher } = stand((url) =>
+        url.host === "api.openbd.jp"
+          ? { body: [openBdRecord(MOMO)] }
+          : url.searchParams.get("q") === "isbn:" + KOKORO
+            ? {
+                body: {
+                  items: [googleVolume(KOKORO, "https://books.google.com/k")],
+                },
+              }
+            : { body: {} },
+      );
+      const answers = await lookCovers(
+        [KOKORO, MOMO, NONE],
+        COVER_SOURCES,
+        fetcher,
+        new Set(),
+        refused,
+      );
+      // KOKORO: openBD refused, so Google's cover. MOMO: openBD has none and
+      // Google is refused, so its 装丁カード. NONE: neither is asked.
+      assert.equal(answers.get(KOKORO)?.source, "google");
+      assert.equal(answers.get(MOMO), null);
+      assert.equal(answers.get(NONE), null);
+      assert.match(asked[0], /isbn=9784001141276$/);
+      const google = asked.filter((u) => u.startsWith("www.googleapis.com"));
+      assert.equal(google.length, 1);
+      assert.ok(google[0].includes(KOKORO));
+    },
+  );
+
+  await check("a book refused by every source asks nothing", async () => {
+    const { asked, fetcher } = stand(() => ({ body: {} }));
+    const answers = await lookCovers(
+      [NONE],
+      COVER_SOURCES,
+      fetcher,
+      new Set(),
+      coverRefusalsFrom([
+        { isbn: NONE, source: "openbd" },
+        { isbn: NONE, source: "google" },
+      ]),
+    );
+    assert.equal(answers.get(NONE), null);
+    assert.equal(asked.length, 0);
+  });
+
+  await check(
+    "a cover is shown only when its source is not refused, and refusals were read",
+    () => {
+      const cover = {
+        url: "https://books.google.com/k",
+        source: "google" as const,
+      };
+      const refused = coverRefusalsFrom([{ isbn: KOKORO, source: "google" }]);
+      assert.equal(shownCover(KOKORO, cover, refused), null);
+      assert.equal(shownCover(MOMO, cover, refused), cover);
+      assert.equal(
+        shownCover(KOKORO, { ...cover, source: "openbd" }, refused)?.source,
+        "openbd",
+      );
+      assert.equal(shownCover(MOMO, cover, "unreadable"), null);
+      assert.equal(shownCover(MOMO, null, new Map()), null);
     },
   );
 }

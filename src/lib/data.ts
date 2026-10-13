@@ -1390,9 +1390,16 @@ export function createInitialState(): TownState {
     finishedBooks: [],
     library: [],
     readingRecords,
-    settings: { composeIcon: "pen", readingPublic: true },
+    // Records stay the reader's own until they choose to publish them.
+    settings: {
+      composeIcon: "pen",
+      readingPublic: false,
+      spoilerDisplay: "fold_possible",
+    },
     seenNotifications: [],
     shopMessages: [],
+    reviewFolds: {},
+    myReports: [],
   });
 }
 

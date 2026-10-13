@@ -43,6 +43,19 @@ export function recordsOf(state: TownState, readerId: string): ReadingRecord[] {
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
+/**
+ * How a record's few words reach this reader. The reader's own are open; a
+ * note marked as a spoiler is folded (a tap reads it), or left out for a
+ * reader who chose not to see spoilers. Its feelings show either way.
+ */
+export function recordNoteView(
+  state: TownState,
+  record: ReadingRecord,
+): "open" | "folded" | "left_out" {
+  if (record.readerId === ME_ID || !record.spoiler) return "open";
+  return state.settings.spoilerDisplay === "leave_out" ? "left_out" : "folded";
+}
+
 /** The viewer's latest record of a book, if they kept one. */
 export function ownRecordFor(
   state: TownState,

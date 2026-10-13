@@ -1,5 +1,6 @@
 import type { Post, TownState } from "./types";
 import { coverHidden } from "./hidden-words";
+import { notLeftOut } from "./social";
 
 // A tag is # (or the full-width ＃) followed by letters, digits, _ or Japanese marks.
 const TAG = /[#＃]([\p{L}\p{N}_ー・々〆]{1,30})/gu;
@@ -39,13 +40,17 @@ export function splitTags(body: string): BodyPart[] {
   return parts;
 }
 
-/** Public posts that carry a tag, newest first. Private reading notes never appear. */
+/**
+ * Public posts that carry a tag, newest first. Private reading notes never
+ * appear, nor spoilers the reader chose not to see.
+ */
 export const postsWithTag = (state: TownState, tag: string): Post[] =>
   state.posts
     .filter(
       (post) =>
         post.readingMode !== "solo" &&
-        extractTags(post.body).includes(tag.toLowerCase()),
+        extractTags(post.body).includes(tag.toLowerCase()) &&
+        notLeftOut(state, post),
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
