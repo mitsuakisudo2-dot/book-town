@@ -1029,7 +1029,7 @@ async function main() {
       target_kind: "post",
       target_id: "p1",
       reason: "harassment",
-      status: "open",
+      progress: "open",
       created_at: created,
       status_at: created,
       ...extra,
@@ -1038,9 +1038,12 @@ async function main() {
       rows({
         myReports: [
           report("r1", "2026-10-10T00:00:00Z"),
-          report("r2", "2026-10-12T00:00:00Z", { status: "checking" }),
+          report("r2", "2026-10-12T00:00:00Z", { progress: "checking" }),
           report("r3", "2026-10-11T00:00:00Z", { reason: "spoiler" }),
-          report("r4", "2026-10-11T00:00:00Z", { status: "lost" }),
+          report("r4", "2026-10-11T00:00:00Z", { progress: "lost" }),
+          // Never the operator's own words for which way it went.
+          report("r5", "2026-10-09T00:00:00Z", { progress: "checked" }),
+          report("r6", "2026-10-09T00:00:00Z", { progress: "resolved" }),
         ],
         readerSettings: { spoiler_display: "leave_out" },
       }),
@@ -1048,7 +1051,7 @@ async function main() {
     );
     assert.deepEqual(
       town.myReports.map((entry) => entry.id + ":" + entry.status),
-      ["r2:checking", "r3:open", "r1:open"],
+      ["r2:checking", "r3:open", "r1:open", "r5:checked"],
     );
     assert.equal(town.settings.spoilerDisplay, "leave_out");
     // No row, or one it does not know: folded when possible.

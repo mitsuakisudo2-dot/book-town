@@ -483,6 +483,15 @@ try {
         await mine.getByRole("button", { name: "公開する" }).click();
         await expect(toast).toContainText("公開しました");
         expect((await own()).isPublic).toBe(true);
+        // A reader who goes to the undo by keyboard keeps it past its 8 s,
+        // and it goes its way once they leave it.
+        await toast.getByRole("button", { name: "自分だけに戻す" }).focus();
+        await page.waitForTimeout(9000);
+        await expect(
+          toast.getByRole("button", { name: "自分だけに戻す" }),
+        ).toBeFocused();
+        await mine.getByRole("button", { name: "自分だけにする" }).focus();
+        await expect(toast).toHaveCount(0, { timeout: 10000 });
         await mine.getByRole("button", { name: "自分だけにする" }).click();
         await expect(toast).toContainText("自分だけにしました");
         expect((await own()).isPublic).toBe(false);

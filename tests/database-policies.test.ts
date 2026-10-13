@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
 
 // Runs the Supabase migrations on an in-memory Postgres and checks, as each kind of
 // visitor, that the row level security policies allow and refuse the right things.
@@ -1359,14 +1360,22 @@ async function main() {
         "insert into reports (reporter_id, target_kind, target_id, reason) values ($1, 'post', $2, 'harassment')",
         [CHI, akiChat.id],
       );
-      const columns =
-        "id, target_kind, target_id, reason, status, created_at, status_at";
-      const [filed] = await as<{ status: string }>(
+      // The app's own read: every column it asks for is granted, and the
+      // policy alone keeps the rows the reporter's own.
+      const columns = REPORT_COLUMNS;
+      const [filed] = await as<{ progress: string }>(
         CHI,
-        `select ${columns} from reports`,
+        `select ${columns} from reports order by created_at desc limit 200`,
       );
-      assert.equal(filed.status, "open");
+      assert.equal(filed.progress, "open");
       assert.equal((await as(AKI, `select ${columns} from reports`)).length, 0);
+      // reporter_id is not granted, so filtering on it is refused too.
+      await refused(
+        CHI,
+        `select ${columns} from reports where reporter_id = $1`,
+        [CHI],
+        /permission/,
+      );
       await refused(
         CHI,
         "insert into reports (reporter_id, target_kind, target_id, reason) values ($1, 'post', $2, 'spam')",
@@ -1532,12 +1541,12 @@ async function main() {
       );
       assert.equal(await fold(null, "post", post), "folded");
       // The reporter sees 確認中, and when it changed.
-      const [mine] = await as<{ status: string; late: boolean }>(
+      const [mine] = await as<{ progress: string; late: boolean }>(
         OLD1,
-        "select status, status_at > created_at as late from reports where target_id = $1",
+        "select progress, status_at > created_at as late from reports where target_id = $1",
         [post],
       );
-      assert.deepEqual(mine, { status: "checking", late: true });
+      assert.deepEqual(mine, { progress: "checking", late: true });
       await operator(
         `update reports set status = 'dismissed' where target_id = '${post}' and reporter_id = '${OLD3}'`,
       );
@@ -1547,6 +1556,38 @@ async function main() {
         insert into moderation_hides (target_kind, target_id) values ('post', '${post}');
         update reports set status = 'resolved' where target_id = '${post}' and status <> 'dismissed';
       `);
+      // Acted on or not, each reporter reads only 確認しました ('checked'),
+      // and cannot ask the database which, not even in a filter.
+      for (const visitor of [OLD1, OLD3])
+        assert.deepEqual(
+          await as(
+            visitor,
+            "select progress from reports where target_id = $1",
+            [post],
+          ),
+          [{ progress: "checked" }],
+        );
+      await refused(OLD1, "select status from reports", [], /permission/);
+      await refused(
+        OLD1,
+        "select id from reports where status = 'resolved'",
+        [],
+        /permission/,
+      );
+      // Changing one's mind between the two moves nothing the reporter sees.
+      const at = async () =>
+        (
+          await as<{ status_at: string }>(
+            OLD3,
+            "select status_at from reports where target_id = $1",
+            [post],
+          )
+        )[0].status_at;
+      const before = await at();
+      await operator(
+        `update reports set status = 'resolved' where target_id = '${post}' and reporter_id = '${OLD3}'`,
+      );
+      assert.equal(String(await at()), String(before));
       assert.equal(await fold(null, "post", post), null);
       assert.ok(!(await readable(null, post)));
       assert.ok(!(await readable(OLD1, post)));
@@ -1661,6 +1702,73 @@ async function main() {
   );
 
   await check(
+    "accounts made together cannot split themselves apart with forged newer profile dates",
+    async () => {
+      // Six throwaway accounts, made at the same moment, each moving its
+      // profile's date a day further on, at sign-up or after.
+      const throwaways = [0, 1, 2, 3, 4, 5].map(
+        (n) =>
+          "00000000-0000-4000-8000-0000000002" + String(n).padStart(2, "0"),
+      );
+      for (const [n, id] of throwaways.entries()) {
+        await db.exec(
+          `insert into auth.users (id, created_at) values ('${id}', now() - interval '30 days')`,
+        );
+        await as(
+          id,
+          "insert into profiles (id, handle, name, created_at) values ($1, $2, $2, now() + $3::interval)",
+          [id, "t" + id.slice(-2), `${n * 25} hours`],
+        );
+        await as(
+          id,
+          "update profiles set created_at = now() + $2::interval where id = $1",
+          [id, `${n * 25 + 1} hours`],
+        );
+      }
+      // The database dated each profile when it was made, and kept it.
+      const dates = await db.query<{ kept: boolean }>(
+        `select max(created_at) <= now() and max(created_at) - min(created_at) < interval '1 hour' as kept
+         from profiles where id = any($1)`,
+        [throwaways],
+      );
+      assert.ok(dates.rows[0].kept);
+      const post = await newPost("ふつうの言葉");
+      for (const id of throwaways) await report(id, "post", post);
+      // Made together, they are one person's worth: nothing folds.
+      assert.equal(await fold(null, "post", post), null);
+      await db.query("delete from auth.users where id = any($1)", [throwaways]);
+    },
+  );
+
+  await check(
+    "one reporter's serious reports are weighed one at a time",
+    async () => {
+      // Each serious report takes a lock for its reporter until it is saved,
+      // so reports sent together wait for each other and see each other.
+      const post = await newPost("一度に送られる通報");
+      const key = (text: string) =>
+        `(hashtext(${text})::bigint & 4294967295)::oid`;
+      const held = () =>
+        db.query<{ n: number }>(
+          `select count(*)::int as n from pg_locks
+           where locktype = 'advisory' and objsubid = 2
+             and classid = ${key("'book-town.urgent-reports'")}
+             and objid = ${key("$1::text")}`,
+          [OLD2],
+        );
+      await db.exec("begin");
+      try {
+        assert.equal((await held()).rows[0].n, 0);
+        await report(OLD2, "post", post, "personal_info");
+        assert.equal((await held()).rows[0].n, 1);
+      } finally {
+        await db.exec("rollback");
+      }
+      assert.equal((await held()).rows[0].n, 0);
+    },
+  );
+
+  await check(
     "clients file reports and nothing more; folds are the database's",
     async () => {
       const post = await newPost("書き換えられない");
@@ -1735,9 +1843,9 @@ async function main() {
       assert.deepEqual(
         await as(
           BEN,
-          "select target_kind, reason, status from reports where target_kind = 'book'",
+          "select target_kind, reason, progress from reports where target_kind = 'book'",
         ),
-        [{ target_kind: "book", reason: "cover", status: "open" }],
+        [{ target_kind: "book", reason: "cover", progress: "open" }],
       );
       for (const [kind, reason, detail] of [
         ["book", "spam", "x"],
@@ -1907,6 +2015,7 @@ async function main() {
         "private.weigh_report()",
         "private.refold_reports()",
         "private.stamp_report_status()",
+        "private.stamp_profile_time()",
       ])
         for (const role of ["anon", "authenticated"])
           assert.equal(

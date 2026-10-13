@@ -32,6 +32,7 @@ import {
   likesReceived,
   readerPosts,
   repliesOf,
+  hasReplies,
   reviewFoldOf,
   spoilerViewOf,
   tapsOf,
@@ -1009,7 +1010,7 @@ export function PostCard({
         {mine && confirmingDelete && (
           <div className="delete-confirm" role="group" aria-label="投稿の削除">
             <span>
-              {replies.length
+              {hasReplies(state, post.id)
                 ? "この投稿と返信を削除しますか？"
                 : "この投稿を削除しますか？"}
             </span>

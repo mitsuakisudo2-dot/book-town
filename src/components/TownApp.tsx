@@ -133,11 +133,19 @@ export default function TownApp({
   const [about, setAbout] = useState(false);
   useEffect(() => notePageShown(), [view, selectedId]);
   useEffect(() => {
-    if (!toast) return;
-    // A toast that can be undone stays long enough to be undone.
+    if (!toast || toast.held) return;
+    // A toast that can be undone stays long enough to be undone, and stays
+    // while the pointer or the focus is on it (its time starts again after).
     const timer = setTimeout(() => setToast(null), toast.undo ? 8000 : 3500);
     return () => clearTimeout(timer);
   }, [toast]);
+  const holdToast = useCallback(
+    (held: boolean) =>
+      setToast((shown) =>
+        shown && !!shown.held !== held ? { ...shown, held } : shown,
+      ),
+    [],
+  );
   useEffect(() => {
     const load = () => {
       if (location.hash.startsWith("#search="))
@@ -376,7 +384,7 @@ export default function TownApp({
           </Link>
         ))}
       </nav>
-      {toast && <Toast toast={toast} />}
+      {toast && <Toast toast={toast} onHold={holdToast} />}
       {about && (
         <Modal title="Book Townへようこそ" onClose={() => setAbout(false)}>
           <p className="modal-lead">読書家の小さな書店が集まる、本の街。</p>
@@ -722,14 +730,31 @@ function ShopView({
  * A book opened in hand sits in the browser's top layer, above everything else on the
  * page. While one is open the toast is placed inside it, so it is seen and read aloud.
  */
-type ShownToast = { message: string; undo?: ToastUndo };
+type ShownToast = { message: string; undo?: ToastUndo; held?: boolean };
 /**
  * With an undo, the toast carries one text button; pressing it undoes and the
- * toast says so. It never takes the focus from where the reader is.
+ * toast says so. It never takes the focus from where the reader is, but a
+ * reader who goes to it (pointer or keyboard) keeps it until they leave.
  */
-function Toast({ toast: { message, undo } }: { toast: ShownToast }) {
+function Toast({
+  toast: { message, undo },
+  onHold,
+}: {
+  toast: ShownToast;
+  onHold: (held: boolean) => void;
+}) {
   const toast = (
-    <div className="toast" role="status">
+    <div
+      className="toast"
+      role="status"
+      onPointerEnter={() => onHold(true)}
+      onPointerLeave={() => onHold(false)}
+      onFocus={() => onHold(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          onHold(false);
+      }}
+    >
       {/* Turned away from a 見本: a leaf, not a tick, for nothing was done. */}
       <Icon name={message === SAMPLE_NOTICE ? "leaf" : "check"} size={17} />
       {message}

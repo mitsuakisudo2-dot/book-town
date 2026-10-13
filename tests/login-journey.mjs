@@ -47,6 +47,17 @@ let profile = null;
 // The rest of the town, once a test fills it: rows by table.
 let town = null;
 const reportsSent = [];
+// What the database grants a reporter to read of their own reports.
+const REPORT_GRANTED = [
+  "id",
+  "target_kind",
+  "target_id",
+  "reason",
+  "progress",
+  "created_at",
+  "status_at",
+];
+const reportReadsRefused = [];
 const coverAsks = [];
 const inserted = [];
 const codeRequests = [];
@@ -124,6 +135,29 @@ await context.route(supabase + "/**", async (route) => {
       return json(201, profile);
     }
   }
+  // Like the database, refuse any read of a report column the reporter is
+  // not granted, whether selected or filtered on (reporter_id, status, ...).
+  if (url.pathname === "/rest/v1/reports") {
+    const asked = [
+      ...(url.searchParams.get("select") ?? "").split(","),
+      ...[...url.searchParams.keys()].filter(
+        (key) => !["select", "order", "limit", "offset"].includes(key),
+      ),
+      ...(url.searchParams.get("order") ?? "")
+        .split(",")
+        .map((o) => o.split(".")[0]),
+    ]
+      .map((column) => column.trim())
+      .filter(Boolean);
+    const refused = asked.filter((column) => !REPORT_GRANTED.includes(column));
+    if (refused.length) {
+      reportReadsRefused.push(...refused);
+      return json(403, {
+        code: "42501",
+        message: "permission denied for table reports",
+      });
+    }
+  }
   if (url.pathname === "/rest/v1/reports" && request.method() === "POST") {
     reportsSent.push(body);
     const at = new Date().toISOString();
@@ -134,7 +168,7 @@ await context.route(supabase + "/**", async (route) => {
       target_kind: body.target_kind,
       target_id: body.target_id,
       reason: body.reason,
-      status: "open",
+      progress: "open",
       created_at: at,
       status_at: at,
     };
@@ -470,7 +504,15 @@ try {
         tagline: "",
         theme: "sage",
         is_open: true,
-        public_shelves: [],
+        public_shelves: [
+          {
+            id: "night",
+            name: "夜の棚",
+            capacity: 10,
+            isPublic: true,
+            items: [{ id: "n1", bookId: COVER_BOOK, display: "face", pop: "" }],
+          },
+        ],
         public_scene_books: [],
       },
     ],
@@ -515,7 +557,7 @@ try {
         target_kind: "profile",
         target_id: OTHER,
         reason: "harassment",
-        status: "checking",
+        progress: "checking",
         created_at: "2026-10-12T03:00:00Z",
         status_at: ago(1),
       },
@@ -524,7 +566,7 @@ try {
         target_kind: "shop",
         target_id: OTHER_SHOP,
         reason: "spam",
-        status: "dismissed",
+        progress: "checked",
         created_at: "2026-10-11T03:00:00Z",
         status_at: ago(2),
       },
@@ -614,12 +656,12 @@ try {
       await page.goto(base + "/notifications/");
       await expect(
         page.getByText(
-          "10月12日に通報してくださった読書家を、運営が確認しています",
+          "10月12日にいただいた読書家についての通報を、運営が確認しています",
         ),
       ).toBeVisible();
       await expect(
         page.getByText(
-          "10月11日に通報してくださった本屋を、運営が確認しました。知らせてくださって、ありがとうございます",
+          "10月11日にいただいた本屋についての通報を、運営が確認しました。知らせてくださって、ありがとうございます",
         ),
       ).toBeVisible();
       // The writer of the held post is told too, never who or how many.
@@ -633,6 +675,8 @@ try {
         "10月11日 · 本屋 · 宣伝・スパム · 確認しました",
       ]);
       await expect(own.getByRole("link")).toHaveCount(0);
+      // Every read of reports asked only for what a reporter may read.
+      expect(reportReadsRefused).toEqual([]);
       await shot("11-own-reports");
       await page.getByRole("link", { name: /運営が確認しています/ }).click();
       await expect(page).toHaveURL(/\/notifications\/#reports$/);
@@ -688,6 +732,33 @@ try {
       await expect(page.locator(".cover-credit")).toContainText("openBD");
       const ask = page.getByRole("button", { name: "表紙の削除依頼はこちら" });
       await expect(ask).toBeVisible();
+      // Quiet, but readable (AA contrast against what is behind it) and a 24px target.
+      const look = await ask.evaluate((button) => {
+        const rgb = (value) => value.match(/[\d.]+/g).map(Number);
+        const lum = ([r, g, b]) => {
+          const c = [r, g, b].map((v) => {
+            const x = v / 255;
+            return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        };
+        let back = button;
+        let bg = "rgba(0, 0, 0, 0)";
+        while (back && /rgba\(.*, 0\)$/.test(bg)) {
+          bg = getComputedStyle(back).backgroundColor;
+          back = back.parentElement;
+        }
+        const a = lum(rgb(getComputedStyle(button).color));
+        const b = lum(rgb(bg));
+        return {
+          contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+          height: button.getBoundingClientRect().height,
+          size: parseFloat(getComputedStyle(button).fontSize),
+        };
+      });
+      expect(look.contrast).toBeGreaterThanOrEqual(4.5);
+      expect(look.height).toBeGreaterThanOrEqual(24);
+      expect(look.size).toBeGreaterThanOrEqual(12);
       await shot("13-cover-link");
       await ask.click();
       const dialog = page.getByRole("dialog", { name: "表紙の削除を依頼する" });
@@ -715,6 +786,32 @@ try {
           OPENBD_ISBN,
       });
       await dialog.getByRole("button", { name: "閉じる" }).last().click();
+      // Asked from a book in hand: one Escape closes the request, not the book.
+      await page.goto(base + "/shop/?id=" + OTHER_SHOP);
+      await page.locator(".shelf-book-button").first().click();
+      const inHand = page.locator(".bh-dialog");
+      await expect(inHand).toBeVisible();
+      await inHand
+        .getByRole("button", { name: "表紙の削除依頼はこちら" })
+        .click();
+      const request = page.getByRole("dialog", {
+        name: "表紙の削除を依頼する",
+      });
+      await request
+        .getByLabel("この表紙とのご関係と、依頼の内容（必ず書いてください）")
+        .fill("書きかけ");
+      // The book is not asked to close at all (it could open again after).
+      await inHand.evaluate((book) => {
+        window.bookAskedToClose = [];
+        for (const name of ["cancel", "close"])
+          book.addEventListener(name, () => window.bookAskedToClose.push(name));
+      });
+      await page.keyboard.press("Escape");
+      await expect(request).toHaveCount(0);
+      await expect(inHand).toBeVisible();
+      expect(await page.evaluate(() => window.bookAskedToClose)).toEqual([]);
+      await page.keyboard.press("Escape");
+      await expect(inHand).not.toBeVisible();
       // Google's cover of 星の本 was refused: Google is not asked for it, and
       // the book keeps its 装丁カード, with no credit and no link.
       await page.goto(base + "/books/registered/?id=" + REFUSED_BOOK);
@@ -747,6 +844,21 @@ try {
       await expect(
         page.getByRole("heading", { name: "本の街に入る" }),
       ).toBeVisible();
+    },
+  );
+
+  await check(
+    "a visitor is not offered a cover removal request they could not send",
+    async () => {
+      // Signing in is by invitation, so the link would only lead to a sign-in
+      // a rights holder without an account cannot finish.
+      town = filled();
+      await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
+      await expect(page.locator(".cover-credit")).toContainText("openBD");
+      await expect(
+        page.getByRole("button", { name: "表紙の削除依頼はこちら" }),
+      ).toHaveCount(0);
+      town = null;
     },
   );
 

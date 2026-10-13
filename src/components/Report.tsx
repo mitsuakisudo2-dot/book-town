@@ -68,10 +68,15 @@ export function ReportButton({
  * Beside a cover's credit, for a real cover (openBD or Google) of a book in
  * the database: a rights holder can ask for it not to be shown here. Where
  * the cover came from is added for the operator.
+ *
+ * Signed-in readers only. Sign-in is by invitation, so a visitor (a rights
+ * holder without an account, most likely) could only be sent to a sign-in
+ * they cannot complete; there is no other way to ask yet.
  */
 export function CoverRemovalLink({ book }: { book: Book }) {
+  const savedIn = useTownBackend();
   const cover = useCover(book.coverUrl ? undefined : book.isbn);
-  if (!cover || !book.isbn) return null;
+  if (!cover || !book.isbn || savedIn !== "account") return null;
   return (
     <ReportButton
       className="cover-removal-link"

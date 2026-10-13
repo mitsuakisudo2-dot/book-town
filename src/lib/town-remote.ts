@@ -114,7 +114,7 @@ export interface RemoteRows {
     | "target_kind"
     | "target_id"
     | "reason"
-    | "status"
+    | "progress"
     | "created_at"
     | "status_at"
   >[];

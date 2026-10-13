@@ -613,6 +613,7 @@ export type Database = {
           created_at: string;
           detail: string;
           id: string;
+          progress: string;
           reason: string;
           reporter_id: string;
           status: string;
@@ -626,6 +627,7 @@ export type Database = {
           created_at?: string;
           detail?: string;
           id?: string;
+          progress?: never;
           reason: string;
           reporter_id: string;
           status?: string;
@@ -638,6 +640,7 @@ export type Database = {
           created_at?: string;
           detail?: string;
           id?: string;
+          progress?: never;
           reason?: string;
           reporter_id?: string;
           status?: string;

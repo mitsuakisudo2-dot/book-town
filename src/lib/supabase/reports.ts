@@ -13,12 +13,12 @@ export type ReportReason =
   | "cover";
 /** Reports filed before 2026-10-13 may also say "spoiler". */
 export type FiledReason = ReportReason | "spoiler";
-export const REPORT_STATUSES = [
-  "open",
-  "checking",
-  "resolved",
-  "dismissed",
-] as const;
+/**
+ * How far along a report is, as the reporter may know it: the database's
+ * `progress`. Resolved and dismissed are both "checked"; the reporter cannot
+ * read which (reports.status is not granted to them).
+ */
+export const REPORT_STATUSES = ["open", "checking", "checked"] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
 /** One of the viewer's own reports, as far as they may know it. */
@@ -58,8 +58,7 @@ export const REPORT_REASON_WORDS: Record<FiledReason, string> = {
 export const REPORT_STATUS_WORDS: Record<ReportStatus, string> = {
   open: "受け付けました",
   checking: "確認中",
-  resolved: "確認しました",
-  dismissed: "確認しました",
+  checked: "確認しました",
 };
 
 /** The same limit as reports.detail in the database. */
@@ -67,7 +66,7 @@ export const REPORT_DETAIL_MAX = 1000;
 
 /** The columns a reporter may read of their own reports. */
 export const REPORT_COLUMNS =
-  "id, target_kind, target_id, reason, status, created_at, status_at";
+  "id, target_kind, target_id, reason, progress, created_at, status_at";
 
 const KINDS: ReportKind[] = ["post", "shop", "profile", "poster", "book"];
 
@@ -79,7 +78,7 @@ export function filedReportFrom(
     | "target_kind"
     | "target_id"
     | "reason"
-    | "status"
+    | "progress"
     | "created_at"
     | "status_at"
   >,
@@ -87,7 +86,7 @@ export function filedReportFrom(
   if (
     !KINDS.includes(row.target_kind as ReportKind) ||
     !(row.reason in REPORT_REASON_WORDS) ||
-    !REPORT_STATUSES.includes(row.status as ReportStatus)
+    !REPORT_STATUSES.includes(row.progress as ReportStatus)
   )
     return null;
   return {
@@ -95,7 +94,7 @@ export function filedReportFrom(
     kind: row.target_kind as ReportKind,
     targetId: row.target_id,
     reason: row.reason as FiledReason,
-    status: row.status as ReportStatus,
+    status: row.progress as ReportStatus,
     createdAt: row.created_at,
     statusAt: row.status_at,
   };

@@ -204,7 +204,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
       text:
         report.kind === "book"
           ? `${day}にいただいた表紙の削除依頼を、運営が${done ? "確認しました" : "確認しています"}`
-          : `${day}に通報してくださった${REPORT_KIND_WORDS[report.kind]}を、運営が${
+          : `${day}にいただいた${REPORT_KIND_WORDS[report.kind]}についての通報を、運営が${
               done
                 ? "確認しました。知らせてくださって、ありがとうございます"
                 : "確認しています"

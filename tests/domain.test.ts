@@ -24,6 +24,7 @@ import {
   likesReceived,
   tapsOf,
   repliesOf,
+  hasReplies,
   readerPosts,
   reviewFoldOf,
   spoilerViewOf,
@@ -1696,6 +1697,18 @@ check(
     assert.ok(!ids(repliesOf(out, "p-7")).length);
     assert.ok(!ids(repliesOf(showing("leave_out"), "p-7")).includes("p-7-r1"));
     assert.ok(ids(repliesOf(seedState, "p-7")).includes("p-7-r1"));
+    // A reply left out is still a reply: deleting the post deletes it for
+    // everyone, so the writer is asked about the replies too.
+    const p7 = seedState.posts.find((entry) => entry.id === "p-7")!;
+    const mineWithHidden = showing("leave_out", {
+      ...seedState,
+      posts: seedState.posts.map((entry) =>
+        entry.id === "p-7" ? { ...p7, authorId: ME_ID } : entry,
+      ),
+    });
+    assert.deepEqual(ids(repliesOf(mineWithHidden, "p-7")), []);
+    assert.equal(hasReplies(mineWithHidden, "p-7"), true);
+    assert.equal(hasReplies(mineWithHidden, "p-3"), false);
     const together = {
       ...seedState.posts[2],
       id: "x-memo",
@@ -1765,7 +1778,7 @@ check(
         "profile:r-nagi": { state: "folded", since: "2026-10-13T02:00:00Z" },
         "profile:me": { state: "folded", since: "2026-10-13T02:00:00Z" },
       },
-      myReports: [filed({ targetId: "p-5", status: "dismissed" })],
+      myReports: [filed({ targetId: "p-5", status: "checked" })],
     };
     assert.equal(reviewFoldOf(state, "post", "p-3"), "folded");
     // A reporter keeps what they reported folded, whatever came of it.
@@ -1854,28 +1867,38 @@ check(
       [
         [
           "report:report-1:checking",
-          "10月13日に通報してくださった投稿を、運営が確認しています",
+          "10月13日にいただいた投稿についての通報を、運営が確認しています",
           "/notifications/#reports",
         ],
       ],
     );
-    // Acted on or not, the reporter reads the same words.
-    for (const status of ["resolved", "dismissed"] as const)
-      assert.deepEqual(
-        reports(status).map((notice) => [notice.id, notice.text]),
+    // Acted on or not (the reporter cannot know which), the same words.
+    assert.deepEqual(
+      reports("checked").map((notice) => [notice.id, notice.text]),
+      [
         [
-          [
-            "report:report-1:done",
-            "10月13日に通報してくださった投稿を、運営が確認しました。知らせてくださって、ありがとうございます",
-          ],
+          "report:report-1:done",
+          "10月13日にいただいた投稿についての通報を、運営が確認しました。知らせてくださって、ありがとうございます",
         ],
-      );
+      ],
+    );
+    // A person or a shop reported is named as what the report was about, so
+    // it never reads as if the reporter were the one being checked.
     assert.equal(
       reports("checking", "shop")[0].text,
-      "10月13日に通報してくださった本屋を、運営が確認しています",
+      "10月13日にいただいた本屋についての通報を、運営が確認しています",
     );
     assert.equal(
-      reports("resolved", "book")[0].text,
+      reports("checking", "profile")[0].text,
+      "10月13日にいただいた読書家についての通報を、運営が確認しています",
+    );
+    for (const kind of ["post", "shop", "profile", "poster"] as const)
+      assert.doesNotMatch(
+        reports("checked", kind)[0].text,
+        /通報してくださった/,
+      );
+    assert.equal(
+      reports("checked", "book")[0].text,
       "10月13日にいただいた表紙の削除依頼を、運営が確認しました",
     );
     for (const notice of notificationsFor({

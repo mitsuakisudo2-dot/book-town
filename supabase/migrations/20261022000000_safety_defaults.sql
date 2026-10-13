@@ -7,7 +7,7 @@
 --   from accounts made at about the same time, weigh less, so a few throwaway
 --   accounts cannot fold or hide an ordinary post.
 -- * The reporter hears 受け付けました, 確認中 and 確認しました, never what was
---   done about the other person.
+--   done about the other person: they read `progress`, never `status`.
 -- * A rights holder can ask for a book's cover to be taken down (a report
 --   about a book); the operator then refuses that cover source for the ISBN.
 -- * Each reader keeps their own settings (for now, how spoilers are shown).
@@ -43,16 +43,24 @@ alter table public.reports add constraint reports_status_check
   check (status in ('open', 'checking', 'resolved', 'dismissed'));
 
 alter table public.reports
-  -- When the status last changed, for the reporter's notices.
+  -- When the reporter's progress last changed, for their notices.
   add column status_at timestamptz not null default now(),
   -- Set by the database at filing: a serious report that acts at once.
-  add column urgent boolean not null default false;
+  add column urgent boolean not null default false,
+  -- What the reporter may read: resolved and dismissed are both 'checked',
+  -- so nobody learns from the API which way it went.
+  add column progress text not null generated always as (
+    case when status in ('open', 'checking') then status else 'checked' end
+  ) stored;
 update public.reports set status_at = created_at;
 
+-- Only a change the reporter can see moves status_at; resolved to dismissed
+-- (or back) would otherwise tell them something happened after 確認しました.
 create function private.stamp_report_status() returns trigger
 language plpgsql set search_path = '' as $$
 begin
-  if new.status is distinct from old.status then
+  if new.status is distinct from old.status
+     and (old.status in ('open', 'checking') or new.status in ('open', 'checking')) then
     new.status_at := now();
   end if;
   return new;
@@ -64,11 +72,31 @@ create trigger reports_stamp_status before update of status on public.reports
 
 -- How old an account is ------------------------------------------------------------
 
+-- A profile is dated by the database when it is made, and keeps that date:
+-- a reader cannot move it, older or newer (newer dates spaced a day apart
+-- would split accounts made together into many 'people'). The operator, in
+-- the dashboard, still can.
+create function private.stamp_profile_time() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if current_user in ('anon', 'authenticated') then
+    if tg_op = 'INSERT' then
+      new.created_at := now();
+    else
+      new.created_at := old.created_at;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function private.stamp_profile_time() from public, anon, authenticated;
+create trigger profiles_stamp_created before insert or update on public.profiles
+  for each row execute function private.stamp_profile_time();
+
 -- When the account was made: the later of its sign-up and its first profile.
--- auth.users cannot be written by the person; profiles.created_at can, but
--- the later of the two means a forged older date changes nothing. Invited
--- accounts are all made by the operator, often on one day; their profiles
--- are made at each reader's first sign-in, which keeps them apart.
+-- Neither can be written by the person (above). Invited accounts are all
+-- made by the operator, often on one day; their profiles are made at each
+-- reader's first sign-in, which keeps them apart.
 create function private.account_born(person uuid) returns timestamptz
 language sql stable security definer set search_path = '' as $$
   select greatest(u.created_at, p.created_at)
@@ -97,6 +125,12 @@ create function private.weigh_report() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   new.status_at := now();
+  -- One reporter's serious reports are weighed one at a time, so many sent
+  -- at once still see each other and only three act at once.
+  if new.reason in ('personal_info', 'threat') then
+    perform pg_advisory_xact_lock(hashtext('book-town.urgent-reports'),
+                                  hashtext(new.reporter_id::text));
+  end if;
   new.urgent := new.reason in ('personal_info', 'threat')
     and new.target_kind in ('post', 'poster', 'profile', 'shop')
     and coalesce(private.account_born(new.reporter_id) <= now() - interval '7 days', false)
@@ -264,10 +298,12 @@ language sql stable security definer set search_path = '' as $$
   )
 $$;
 
--- Who may do what with reports, column by column. A reporter reads their own
--- reports' status, never whether one acted at once.
+-- Who may do what with reports, column by column. A reporter reads how far
+-- along their own reports are (progress), never status (which way it went),
+-- whether one acted at once, or reporter_id (the policy already keeps the
+-- rows their own; a filter on it is refused).
 revoke all on public.reports from anon, authenticated;
-grant select (id, target_kind, target_id, reason, status, created_at, status_at)
+grant select (id, target_kind, target_id, reason, progress, created_at, status_at)
   on public.reports to authenticated;
 grant insert (reporter_id, target_kind, target_id, reason, detail)
   on public.reports to authenticated;

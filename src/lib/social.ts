@@ -143,6 +143,13 @@ export const repliesOf = (state: TownState, postId: string): Post[] =>
     .filter((post) => post.parentId === postId && notLeftOut(state, post))
     .sort(oldestFirst);
 
+/**
+ * Whether a post has any reply at all, shown or left out by the reader's
+ * settings: deleting the post deletes every one of them, for everyone.
+ */
+export const hasReplies = (state: TownState, postId: string): boolean =>
+  state.posts.some((post) => post.parentId === postId);
+
 export const readerPosts = (state: TownState, readerId: string): Post[] =>
   timelinePosts(state).filter((post) => post.authorId === readerId);
 

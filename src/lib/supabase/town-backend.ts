@@ -133,8 +133,9 @@ export async function loadTown(
     all(
       client
         .from("reports")
+        // Only the reader's own come back (the policy); reporter_id itself is
+        // not theirs to read, so it cannot be filtered on.
         .select(REPORT_COLUMNS)
-        .eq("reporter_id", userId)
         .order("created_at", { ascending: false })
         .limit(200),
     ),
