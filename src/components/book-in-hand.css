@@ -141,12 +141,12 @@
   font-size: 13px;
 }
 .bh-pop.owner-pop {
+  --bh-pop-pad: 25px;
   position: relative;
-  padding: 22px 25px 18px;
+  padding: 22px var(--bh-pop-pad) 18px;
   border: 1px solid #e2dbc8;
   background: #f5f0df;
   box-shadow: 1px 3px 0 #e5e0d14f;
-  touch-action: pan-y;
 }
 .bh-pop::before {
   content: "";
@@ -195,8 +195,45 @@
 .bh-pop-pager .bh-pop-empty {
   margin: 0;
 }
-.bh-pop-message {
+/* One POP per page, across the whole card: the browser scrolls the track
+   under the finger and snaps it to a page. */
+.bh-pop-track {
+  display: flex;
+  margin-inline: calc(var(--bh-pop-pad) * -1);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  outline: none;
+}
+.bh-pop-track::-webkit-scrollbar {
+  display: none;
+}
+/* At an end a finger drawn outward has no POP to turn to, and some browsers
+   would take it as a swipe back through the history, closing the book. */
+.bh-pop-track.at-first {
+  touch-action: pan-y pan-right;
+}
+.bh-pop-track.at-last {
+  touch-action: pan-y pan-left;
+}
+.bh-pop-track.at-first.at-last {
+  touch-action: pan-y;
+}
+.bh-pop-page {
+  flex: 0 0 100%;
   min-width: 0;
+  padding-inline: var(--bh-pop-pad);
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+/* Ordinary POPs share one height, so nothing under the card moves as they
+   turn. A long POP counts for about six lines until it is the one on show:
+   a short POP never sits over a long empty card. */
+.bh-pop-page:not(.is-current) {
+  max-height: 210px;
+  overflow: hidden;
 }
 .bh-pop-page-button {
   position: absolute;
@@ -456,11 +493,12 @@
     font-size: 10px;
   }
   .bh-pop.owner-pop {
-    padding: 18px 18px 14px;
+    --bh-pop-pad: 18px;
+    padding-block: 18px 14px;
   }
   .bh-pop.owner-pop.has-pages {
+    --bh-pop-pad: 24px;
     margin-inline: 4px;
-    padding-inline: 24px;
   }
   .bh-pop .bh-pop-text {
     font-size: 17px;
@@ -492,11 +530,11 @@
     font-size: 19px;
   }
   .bh-pop.owner-pop {
-    padding-inline: 14px;
+    --bh-pop-pad: 14px;
   }
   .bh-pop.owner-pop.has-pages {
+    --bh-pop-pad: 22px;
     margin-inline: 9px;
-    padding-inline: 22px;
   }
   .bh-pop .bh-pop-text {
     font-size: 16px;
@@ -531,18 +569,23 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* The three reactions stand side by side at equal widths. Where the row is
+   narrow, each sets its icon above its words. */
 .bh-pop-reactions {
-  display: flex;
-  flex-wrap: wrap;
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
   margin: 0 0 14px;
 }
 .bh-pop-reactions button {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  min-width: 0;
   min-height: 44px;
-  padding: 7px 11px;
+  padding: 7px 8px;
   border: 1px solid #ddd4bc;
   border-radius: 24px;
   background: #fbf8ed;
@@ -552,8 +595,29 @@
     background 0.16s,
     transform 0.16s;
 }
-.bh-pop-reactions button:hover {
-  transform: translateY(-1px);
+.bh-pop-reactions button svg {
+  flex: 0 0 auto;
+}
+.bh-pop-reactions button > span {
+  min-width: 0;
+  line-height: 1.35;
+  text-align: center;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+@container (max-width: 400px) {
+  .bh-pop-reactions button {
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 3px;
+    border-radius: 14px;
+  }
+}
+/* A finger leaves no hover behind to hold one reaction above the others. */
+@media (hover: hover) {
+  .bh-pop-reactions button:hover {
+    transform: translateY(-1px);
+  }
 }
 .bh-pop-reactions button[aria-pressed="true"] {
   color: #365242;
@@ -857,7 +921,6 @@
   }
   .bh-pop-reactions button {
     font-size: 11px;
-    padding-inline: 9px;
   }
   .bh-choice-book {
     flex-basis: 100px;

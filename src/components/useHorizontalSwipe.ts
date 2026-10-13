@@ -7,12 +7,10 @@ export function useHorizontalSwipe({
   onSwipe,
   enabled = true,
   exclude = "button,a,input,textarea,select,summary",
-  contain = false,
 }: {
   onSwipe: (direction: -1 | 1) => void;
   enabled?: boolean;
   exclude?: string;
-  contain?: boolean;
 }) {
   const start = useRef<{
     id: number;
@@ -23,7 +21,6 @@ export function useHorizontalSwipe({
   } | null>(null);
   return {
     onTouchStart(event: TouchEvent<HTMLElement>) {
-      if (contain) event.stopPropagation();
       const target = event.target;
       if (
         !enabled ||
@@ -44,7 +41,6 @@ export function useHorizontalSwipe({
       };
     },
     onTouchMove(event: TouchEvent<HTMLElement>) {
-      if (contain) event.stopPropagation();
       const from = start.current;
       if (!from || event.touches.length !== 1) {
         start.current = null;
@@ -58,7 +54,6 @@ export function useHorizontalSwipe({
       else if (dy > 12) from.axis = "vertical";
     },
     onTouchEnd(event: TouchEvent<HTMLElement>) {
-      if (contain) event.stopPropagation();
       const from = start.current;
       start.current = null;
       if (!enabled || !from || from.axis === "vertical" || event.touches.length)
@@ -76,8 +71,7 @@ export function useHorizontalSwipe({
       )
         onSwipe(dx < 0 ? 1 : -1);
     },
-    onTouchCancel(event: TouchEvent<HTMLElement>) {
-      if (contain) event.stopPropagation();
+    onTouchCancel() {
       start.current = null;
     },
   };

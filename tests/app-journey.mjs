@@ -824,7 +824,7 @@ try {
           .getByRole("link", { name: /^この本についてGoogleで調べる/ }),
       ).toHaveAttribute(
         "href",
-        "https://www.google.com/search?q=" +
+        "https://google.com/search?q=" +
           encodeURIComponent("ソラリス　スタニスワフ・レム"),
       );
       const reviews = page.locator(
@@ -854,6 +854,11 @@ try {
         .getByRole("button", { name: "感想を書く" })
         .click();
       const review = page.getByRole("dialog", { name: "『モモ』の感想" });
+      // On a touch screen the review opens without the keyboard over it.
+      await expect(
+        review.getByRole("button", { name: "閉じる" }),
+      ).toBeFocused();
+      await expect(review.locator("textarea")).not.toBeFocused();
       await review
         .locator("textarea")
         .fill("時間どろぼうの話を、時間をかけて読んだ。");

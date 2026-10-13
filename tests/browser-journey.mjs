@@ -171,7 +171,7 @@ try {
         .textContent();
       await firstPop.click();
       await expect(
-        page.getByRole("dialog").locator(".owner-pop"),
+        page.getByRole("dialog").locator(".owner-pop .bh-pop-page.is-current"),
       ).toContainText(words.slice(0, 12));
       await page.getByRole("button", { name: "本を閉じて棚に戻る" }).click();
       await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -179,7 +179,7 @@ try {
         .getByRole("button", { name: "ソラリス · 面陳 · POPあり", exact: true })
         .click();
       await expect(
-        page.getByRole("dialog").locator(".owner-pop"),
+        page.getByRole("dialog").locator(".owner-pop .bh-pop-page.is-current"),
       ).toContainText("自分の記憶に出会ってしまう");
       await page
         .getByRole("button", { name: "読みたいに加える", exact: true })
@@ -510,7 +510,7 @@ try {
         .filter({ hasText: "ソラリス" });
       await popBook.click();
       await expect(
-        page.getByRole("dialog").locator(".owner-pop"),
+        page.getByRole("dialog").locator(".owner-pop .bh-pop-page.is-current"),
       ).toContainText("理解できないもの");
       await page.getByRole("link", { name: "作品のページを開く" }).click();
       await expect(page).toHaveURL(/\/books\/solaris\/$/);

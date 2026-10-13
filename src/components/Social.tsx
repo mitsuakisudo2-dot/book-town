@@ -375,12 +375,10 @@ export function PostComposer({
   fixedBook,
   parent,
   onDone,
-  autoFocus = false,
 }: Shared & {
   fixedBook?: Book;
   parent?: Post;
   onDone?: (postId: string) => void;
-  autoFocus?: boolean;
 }) {
   const id = useId();
   const {
@@ -460,7 +458,6 @@ export function PostComposer({
           className="field composer-text"
           rows={isReply ? 2 : 4}
           maxLength={POST_MAX_LENGTH}
-          autoFocus={autoFocus}
           placeholder={
             isReply
               ? "返信を書く"
@@ -608,10 +605,9 @@ export function ComposeFab({
         <span>{draft.body || draft.bookId ? "下書き" : "投稿"}</span>
       </button>
       {open && (
-        <Modal title="投稿する" onClose={() => setOpen(false)}>
+        <Modal title="投稿する" onClose={() => setOpen(false)} writing>
           <PostComposer
             {...props}
-            autoFocus
             onDone={() => {
               setOpen(false);
               onPosted?.();
