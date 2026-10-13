@@ -976,6 +976,70 @@ export type Database = {
           },
         ];
       };
+      site_notes: {
+        Row: {
+          anchor: string;
+          anchor_x: number | null;
+          anchor_y: number | null;
+          body: string;
+          build: string | null;
+          created_at: string;
+          device: string;
+          id: string;
+          layer: string | null;
+          page: string;
+          removed_at: string | null;
+          scroll_y: number;
+          target: string;
+          user_id: string;
+          viewport_h: number;
+          viewport_w: number;
+          x: number;
+          y: number;
+        };
+        ComputedFields: never;
+        Insert: {
+          anchor?: string;
+          anchor_x?: number | null;
+          anchor_y?: number | null;
+          body: string;
+          build?: string | null;
+          created_at?: string;
+          device?: string;
+          id?: string;
+          layer?: string | null;
+          page: string;
+          removed_at?: string | null;
+          scroll_y: number;
+          target?: string;
+          user_id?: string;
+          viewport_h: number;
+          viewport_w: number;
+          x: number;
+          y: number;
+        };
+        Update: {
+          anchor?: string;
+          anchor_x?: number | null;
+          anchor_y?: number | null;
+          body?: string;
+          build?: string | null;
+          created_at?: string;
+          device?: string;
+          id?: string;
+          layer?: string | null;
+          page?: string;
+          removed_at?: string | null;
+          scroll_y?: number;
+          target?: string;
+          user_id?: string;
+          viewport_h?: number;
+          viewport_w?: number;
+          x?: number;
+          y?: number;
+        };
+        Relationships: [];
+      };
       spoiler_reports: {
         Row: {
           created_at: string;
@@ -1015,6 +1079,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      can_annotate: { Args: never; Returns: boolean };
       isbn13_valid: { Args: { isbn: string }; Returns: boolean };
       public_scene_of: { Args: { scene: Json; shop: string }; Returns: Json };
       replace_profile_nine: {

@@ -859,6 +859,40 @@ async function main() {
     },
   );
 
+  await check(
+    "only staff leave site notes, and who is staff is never served",
+    async () => {
+      // No one here is staff: CI's database starts with no accounts.
+      const asked = await aki.client.rpc("can_annotate");
+      assert.ifError(asked.error);
+      assert.equal(asked.data, false);
+      const notes = await aki.client.from("site_notes").select("id");
+      assert.ifError(notes.error);
+      assert.deepEqual(notes.data, []);
+      const left = await aki.client.from("site_notes").insert({
+        page: "/",
+        x: 1,
+        y: 1,
+        viewport_w: 390,
+        viewport_h: 844,
+        scroll_y: 0,
+        body: "注釈",
+      });
+      assert.equal(left.error?.code, "42501");
+      const visitor = newClient();
+      assert.ok((await visitor.rpc("can_annotate")).error);
+      assert.ok((await visitor.from("site_notes").select("id")).error);
+      // The private schema is not served by the API, to anyone.
+      for (const client of [aki.client, visitor]) {
+        const staff = await (client as unknown as SupabaseClient)
+          .schema("private")
+          .from("staff")
+          .select();
+        assert.ok(staff.error, "private.staff must not be served");
+      }
+    },
+  );
+
   console.log(passed + " Supabase town checks passed");
 }
 
