@@ -31,9 +31,9 @@ type Client = SupabaseClient<Database>;
 export { TownSyncError, shouldRetry };
 
 // Supabase returns at most 1000 rows a request. The person's own marks,
-// readings and records are read a page at a time (allRows) so none is left
-// out; the rest stops at 1000, which covers everyone while Booktown is
-// invite-only.
+// readings and records are read a page at a time (allRows), and their own nine
+// on its own, so none is left out; the rest stops at 1000, which covers
+// everyone while Booktown is invite-only.
 const LIMIT = 1000;
 const POSTS = 500;
 const CATALOG = 300;
@@ -76,7 +76,8 @@ export async function loadTown(
 ): Promise<{ state: TownState; ids: RemoteIds }> {
   const [
     profiles,
-    nine,
+    ownNine,
+    othersNine,
     shops,
     follows,
     marks,
@@ -94,7 +95,16 @@ export async function loadTown(
     posters,
   ] = await Promise.all([
     all(client.from("profiles").select("*").limit(LIMIT)),
-    all(client.from("profile_nine").select("*").limit(LIMIT)),
+    // The person's own nine, whole, as changing it rewrites the list; and
+    // others'.
+    all(client.from("profile_nine").select("*").eq("profile_id", userId)),
+    all(
+      client
+        .from("profile_nine")
+        .select("*")
+        .neq("profile_id", userId)
+        .limit(LIMIT),
+    ),
     all(client.from("shops").select(SHOP_COLUMNS).limit(LIMIT)),
     all(
       client.from("shop_follows").select("shop_id").eq("follower_id", userId),
@@ -226,7 +236,7 @@ export async function loadTown(
 
   const rows: Omit<RemoteRows, "books"> = {
     profiles,
-    nine,
+    nine: [...ownNine, ...othersNine],
     shops,
     ownShelves,
     ownSceneBooks,

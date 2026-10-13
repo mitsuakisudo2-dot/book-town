@@ -19,6 +19,7 @@ import { isSampleBook, sampleBookRowId, withSamples } from "../src/lib/samples";
 import {
   all,
   allRows,
+  RowsChangedError,
   TownSyncError,
   type Outcome,
 } from "../src/lib/supabase/sync";
@@ -533,17 +534,24 @@ async function main() {
         created_at: at,
       }));
       const key = (row: AnyRow) => row.book_id + ":" + row.kind;
-      for (const cap of [1000, 300, 5000]) {
+      // Never more than 1000 at a time, each page after the first starting
+      // at the last row read, until one brings nothing new.
+      const thousands = [0, 999, 1998, 2499];
+      const pages: [number, number[]][] = [
+        [1000, thousands],
+        [300, [0, 299, 598, 897, 1196, 1495, 1794, 2093, 2392, 2499]],
+        [5000, thousands],
+      ];
+      for (const [cap, starts] of pages) {
         const fake = fakeReads({ book_marks: marks }, { cap });
         const read = await allRows(fake.pages("book_marks"), [
           "book_id",
           "kind",
         ]);
         assert.deepEqual(read.map(key), marks.map(key).sort());
-        // Until a page comes back empty, never more than 1000 at a time.
-        assert.equal(
-          fake.asked.length,
-          Math.ceil(2500 / Math.min(cap, 1000)) + 1,
+        assert.deepEqual(
+          fake.asked.map((ask) => ask.from),
+          starts,
         );
       }
     },
@@ -558,32 +566,58 @@ async function main() {
   await check(
     "rows that change while being read are read again, never used short",
     async () => {
+      // 1500 sessions ten apart, so a new one can go between any two.
       const sessions = () =>
-        Array.from({ length: 1500 }, (_, n) => ({ id: uuid(100 + n) }));
-      // Reads 1500 sessions, changing them once the first page is answered.
-      const readChanging = (change: (rows: AnyRow[]) => void) => {
+        Array.from({ length: 1500 }, (_, n) => ({ id: uuid(10 * n + 10) }));
+      // Reads them, changing them once the first page is answered.
+      const readChanging = (change: (rows: AnyRow[]) => void, cap = 1000) => {
         const rows = sessions();
         const fake = fakeReads(
           { reading_sessions: rows },
-          { between: (_, from) => from === 0 && change(rows) },
+          { cap, between: (_, from) => from === 0 && change(rows) },
         );
         return allRows(fake.pages("reading_sessions"), ["id"]);
       };
+      const changed = (error: unknown) =>
+        error instanceof RowsChangedError && error.retry;
       // A row added ahead of the next page pushes one across the boundary.
       await assert.rejects(
         readChanging((rows) => rows.unshift({ id: uuid(1) })),
-        retried,
+        changed,
       );
-      // A row removed meanwhile lets the next page skip one: the count tells.
+      // A row removed ahead of it lets one slip between the pages, even when
+      // a row added after it keeps the count.
       await assert.rejects(
-        readChanging((rows) => rows.splice(0, 1)),
-        retried,
+        readChanging((rows) => {
+          rows.splice(5, 1);
+          rows.push({ id: uuid(99999) });
+        }),
+        changed,
       );
-      // So does a row added after the last one.
+      // A row added after the last one: the count tells.
       await assert.rejects(
-        readChanging((rows) => rows.push({ id: uuid(9999) })),
-        retried,
+        readChanging((rows) => rows.push({ id: uuid(99999) })),
+        changed,
       );
+      // Whatever is removed and added between two pages, the read is tried
+      // again or holds every row that was there all along, each once.
+      for (const cap of [1000, 300])
+        for (const removed of [null, 0, 5, cap - 1, cap, 1499])
+          for (const after of [null, -1, 5, cap - 2, cap - 1, cap, 1499]) {
+            const read = await readChanging((rows) => {
+              if (after !== null) rows.push({ id: uuid(10 * after + 15) });
+              if (removed !== null) rows.splice(removed, 1);
+            }, cap).catch((error) => {
+              assert.ok(changed(error));
+              return null;
+            });
+            if (!read) continue;
+            const ids = new Set(read.map((row) => row.id));
+            assert.equal(ids.size, read.length);
+            assert.ok(
+              sessions().every((row, n) => n === removed || ids.has(row.id)),
+            );
+          }
       // Without a count there is no telling the list is whole.
       const uncounted = fakeReads({ reading_sessions: sessions() });
       await assert.rejects(
@@ -678,7 +712,7 @@ async function main() {
         fake.asked
           .filter((ask) => ask.table === "book_marks")
           .map((ask) => ask.from),
-        [0, 1000, 1001],
+        [0, 999, 1000],
       );
       // The reader's own reading and records, each once, beside others'.
       assert.deepEqual(
@@ -696,43 +730,76 @@ async function main() {
   );
 
   await check(
+    "the reader's own nine comes whole, however many nines the town holds",
+    async () => {
+      const fake = fakeReads({
+        ...wishedTown(),
+        // 112 others' nines fill a request before the reader's own comes.
+        profile_nine: [
+          ...Array.from({ length: 1008 }, (_, n) => ({
+            profile_id: uuid(0x5000 + Math.floor(n / 9)),
+            position: (n % 9) + 1,
+            book_id: wished[n % 9],
+            note: "",
+          })),
+          {
+            profile_id: AKI,
+            position: 1,
+            book_id: wished[0],
+            note: "最初の一冊",
+          },
+        ],
+      });
+      const { state } = await loadTown(fake.client, AKI, [], () => AKI_SHOP);
+      assert.deepEqual(state.me.lifeNine, [wished[0]]);
+      assert.deepEqual(state.me.nineNotes, { [wished[0]]: "最初の一冊" });
+    },
+  );
+
+  await check(
     "a town whose rows change while it is read is read again as a whole",
     async () => {
-      const rows = wishedTown();
-      const favorite = uuid(0xfff);
-      rows.books.push(book(favorite));
-      let moved = false;
-      const fake = fakeReads(rows, {
-        between(table, from) {
-          if (table !== "book_marks" || from || moved) return;
-          // Another device keeps a book while the first page is on its way.
-          moved = true;
-          rows.book_marks.unshift({
-            user_id: AKI,
-            book_id: favorite,
-            kind: "favorite",
-            created_at: at,
-          });
-        },
+      // Another device keeps a book while the first page of marks is on its
+      // way, as many reads in a row as asked.
+      const loadChanging = async (times: number) => {
+        const rows = wishedTown();
+        const kept = Array.from({ length: times }, (_, n) => uuid(0xf00 + n));
+        rows.books.push(...kept.map((id) => book(id)));
+        let moved = 0;
+        const fake = fakeReads(rows, {
+          between(table, from) {
+            if (table !== "book_marks" || from || moved === times) return;
+            rows.book_marks.unshift({
+              user_id: AKI,
+              book_id: kept[moved++],
+              kind: "favorite",
+              created_at: at,
+            });
+          },
+        });
+        const backend = accountTownBackend(fake.client, AKI, {
+          storage: false,
+          retryDelays: [1],
+        });
+        const statuses: string[] = [];
+        backend.watch?.({
+          status: (status) => statuses.push(status),
+          replace: () => undefined,
+        });
+        const { state } = await backend.load();
+        backend.close?.();
+        assert.equal(state.wishlist.length, 1001);
+        assert.deepEqual([...state.favorites].sort(), kept);
+        const reads = fake.asked.filter((ask) => ask.table === "profiles");
+        return { statuses, reads: reads.length };
+      };
+      // Read again at once, with nothing on screen: the network is fine.
+      assert.deepEqual(await loadChanging(1), { statuses: [], reads: 2 });
+      // Rows that keep changing are waited out like network trouble.
+      assert.deepEqual(await loadChanging(4), {
+        statuses: ["unavailable"],
+        reads: 5,
       });
-      const backend = accountTownBackend(fake.client, AKI, {
-        storage: false,
-        retryDelays: [1],
-      });
-      const statuses: string[] = [];
-      backend.watch?.({
-        status: (status) => statuses.push(status),
-        replace: () => undefined,
-      });
-      const { state } = await backend.load();
-      backend.close?.();
-      assert.deepEqual(statuses, ["unavailable"]);
-      assert.equal(
-        fake.asked.filter((ask) => ask.table === "profiles").length,
-        2,
-      );
-      assert.equal(state.wishlist.length, 1001);
-      assert.deepEqual(state.favorites, [favorite]);
     },
   );
 
