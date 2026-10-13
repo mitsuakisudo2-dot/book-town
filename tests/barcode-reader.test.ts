@@ -9,6 +9,7 @@ import {
   guideRect,
   loadDetector,
   readerFailure,
+  readerKind,
   webKitOnly,
   zxingWasmPath,
   type DetectorClass,
@@ -25,6 +26,10 @@ import { bookBarcodes, withCheckDigit } from "./ean13.mjs";
 // main() because tsx compiles this file as CommonJS.
 
 const ISBN = "9784003101018";
+const IPHONE =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1";
+const ANDROID =
+  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
 const PRICE = withCheckDigit("192019300700");
 
 /** A reader module that counts what was asked of it. */
@@ -52,6 +57,39 @@ const aborted = (inner: string) =>
   new WebAssembly.RuntimeError(
     `Aborted(${inner}). Build with -sASSERTIONS for more info.`,
   );
+
+// A check that never settles would end the run quietly, with nothing left
+// for Node to wait on and exit code 0: it is a failure here.
+let finished = false;
+process.on("beforeExit", () => {
+  if (finished) return;
+  console.error("A check never finished");
+  process.exitCode = 1;
+});
+
+/**
+ * Runs `run` in a browser with this user agent and this BarcodeDetector of
+ * its own, as barcode-reader.ts sees them (window and navigator).
+ */
+async function inBrowser<T>(
+  userAgent: string,
+  BarcodeDetector: DetectorClass,
+  run: () => Promise<T>,
+): Promise<T> {
+  const globals = globalThis as { window?: unknown };
+  const navigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  globals.window = { BarcodeDetector };
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { userAgent, maxTouchPoints: 5 },
+  });
+  try {
+    return await run();
+  } finally {
+    delete globals.window;
+    if (navigator) Object.defineProperty(globalThis, "navigator", navigator);
+  }
+}
 
 async function main() {
   let passed = 0;
@@ -175,15 +213,26 @@ async function main() {
     },
   );
 
+  await check(
+    "every build writes the WebAssembly first, Vercel's too",
+    async () => {
+      const json = async (file: string) =>
+        JSON.parse(await readFile(path.join(__dirname, "..", file), "utf8"));
+      const { scripts } = await json("package.json");
+      for (const name of ["build", "dev"])
+        assert.match(scripts[name], /^node scripts\/copy-zxing\.mjs && /);
+      // Whatever the project's settings say, Vercel runs that build.
+      assert.equal((await json("vercel.json")).buildCommand, "pnpm build");
+    },
+  );
+
   await check("WebKit's own reader is passed over, Chrome's is not", () => {
-    const iphone =
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1";
+    const iphone = IPHONE;
     const chromeOnIphone =
       "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/140.0.0.0 Mobile/15E148 Safari/604.1";
     const mac =
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15";
-    const android =
-      "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
+    const android = ANDROID;
     const chromeOnMac =
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
     assert.equal(webKitOnly(iphone, 5), true);
@@ -219,6 +268,49 @@ async function main() {
     });
     assert.equal(imported, 0);
   });
+
+  await check(
+    "on an iPhone, WebKit's own reader is passed over for ZXing",
+    async () => {
+      forgetReader();
+      // WebKit's, turned on in Safari's settings: it says it reads EAN-13.
+      class WebKits {
+        static async getSupportedFormats() {
+          return ["ean_13", "qr_code"];
+        }
+        async detect() {
+          return [];
+        }
+      }
+      const { reader } = fakeReader(() => Promise.resolve({}));
+      let imported = 0;
+      const importReader = async () => {
+        imported += 1;
+        return reader;
+      };
+      const native = WebKits as unknown as DetectorClass;
+      await inBrowser(IPHONE, native, async () => {
+        assert.equal(readerKind(), "wasm");
+        assert.deepEqual(await loadDetector({ importReader }), {
+          ok: true,
+          Detector: reader.BarcodeDetector,
+          wasm: true,
+        });
+      });
+      assert.equal(imported, 1);
+      // The same reader on Android's Chrome is used, and nothing is loaded.
+      forgetReader();
+      await inBrowser(ANDROID, native, async () => {
+        assert.equal(readerKind(), "native");
+        assert.deepEqual(await loadDetector({ importReader }), {
+          ok: true,
+          Detector: native,
+          wasm: false,
+        });
+      });
+      assert.equal(imported, 1);
+    },
+  );
 
   await check(
     "a failed load is let go: the network may work another time",
@@ -299,6 +391,64 @@ async function main() {
     assert.ok(Date.now() - started < 1000);
     assert.equal(asked.purged, 1);
   });
+
+  await check(
+    "the time counts from the start: a script that never comes fails too",
+    async () => {
+      const started = Date.now();
+      assert.deepEqual(
+        await loadDetector({
+          native: undefined,
+          importReader: () => new Promise<ReaderModule>(() => {}),
+          timeoutMs: 30,
+        }),
+        { ok: false, why: "reader-failed" },
+      );
+      assert.ok(Date.now() - started < 1000);
+      // ［カメラで読む］ asks for the script again, not the stalled one.
+      const { reader } = fakeReader(() => Promise.resolve({}));
+      let imported = 0;
+      assert.deepEqual(
+        await loadDetector({
+          native: undefined,
+          importReader: async () => {
+            imported += 1;
+            return reader;
+          },
+          timeoutMs: 30,
+        }),
+        { ok: true, Detector: reader.BarcodeDetector, wasm: true },
+      );
+      assert.equal(imported, 1);
+      forgetReader();
+    },
+  );
+
+  await check(
+    "a script that comes after the time ran out starts nothing",
+    async () => {
+      const { reader, asked } = fakeReader(() => Promise.resolve({}));
+      let arrived!: () => void;
+      const came = new Promise<void>((resolve) => (arrived = resolve));
+      assert.deepEqual(
+        await loadDetector({
+          native: undefined,
+          importReader: () =>
+            new Promise((resolve) =>
+              setTimeout(() => {
+                resolve(reader);
+                arrived();
+              }, 60),
+            ),
+          timeoutMs: 30,
+        }),
+        { ok: false, why: "reader-failed" },
+      );
+      await came;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.equal(asked.prepared.length, 0);
+    },
+  );
 
   await check("the script itself not loading is a failure too", async () => {
     let imported = 0;
@@ -392,6 +542,7 @@ async function main() {
   );
 
   console.log(passed + " barcode reader checks passed");
+  finished = true;
 }
 
 main().catch((error) => {

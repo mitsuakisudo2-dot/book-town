@@ -129,10 +129,13 @@ async function startWasm(
   timeoutMs: number,
 ): Promise<DetectorClass> {
   let reader: ReaderModule | undefined;
-  try {
-    reader = await importReader();
-    loaded = reader;
-    const version = reader.ZXING_WASM_VERSION;
+  let givenUp = false;
+  const start = async () => {
+    const imported = await importReader();
+    // The script came after the time ran out: the next start has it.
+    if (givenUp) return imported.BarcodeDetector;
+    reader = loaded = imported;
+    const version = imported.ZXING_WASM_VERSION;
     // An absolute path: Emscripten would look beside the page otherwise
     // (/profiles/me/zxing_reader.wasm).
     overrides ??= {
@@ -141,12 +144,15 @@ async function startWasm(
     };
     // Awaited here: a start that failed stays in the reader, and every
     // detect() after it fails ("Barcode detection service unavailable").
-    await withinTime(
-      reader.prepareZXingModule({ overrides, fireImmediately: true }),
-      timeoutMs,
-    );
-    return reader.BarcodeDetector;
+    await imported.prepareZXingModule({ overrides, fireImmediately: true });
+    return imported.BarcodeDetector;
+  };
+  try {
+    // The time counts from the start: the script itself, a chunk of this
+    // site's JavaScript, can stall on a weak network as well as the .wasm.
+    return await withinTime(start(), timeoutMs);
   } catch (error) {
+    givenUp = true;
     // Let go, so the next start tries again from the beginning.
     reader?.purgeZXingModule();
     throw error;
