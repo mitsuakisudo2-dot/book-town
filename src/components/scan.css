@@ -1,0 +1,333 @@
+/* The continuous scanner (ScanSession.tsx): a layer over the whole page. The
+   camera takes the height; the card, the small shelf and ［終わる］ stay at
+   the bottom, in reach of the thumb. While ISBNs are typed, the sheet is as
+   tall as what the keyboard leaves (--scan-height, from visualViewport). */
+.scan-session {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #203b2d55;
+}
+.scan-sheet {
+  position: absolute;
+  top: var(--scan-top, 0px);
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: 480px;
+  height: var(--scan-height, 100dvh);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--paper);
+  padding: env(safe-area-inset-top) 16px
+    calc(12px + env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+.scan-sheet.is-typing {
+  gap: 6px;
+}
+.scan-top {
+  flex: none;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+}
+.scan-icon-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: #536448;
+}
+.scan-icon-button:hover {
+  background: #eef2e8;
+}
+.scan-sound {
+  position: relative;
+  font-size: 20px;
+  line-height: 1;
+}
+.scan-sound.is-off > span {
+  color: #9aa58f;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+.scan-sound small {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  font-size: 10px;
+  color: #5e6b55;
+}
+.scan-count {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+}
+.scan-banner {
+  flex: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #f6edce;
+  color: #5b4a22;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.scan-camera {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 160px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1f2a23;
+}
+.scan-camera video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.scan-guide-box {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 38%;
+  height: 24%;
+  border: 2px solid #fffdf3cc;
+  border-radius: 8px;
+  box-shadow: 0 0 0 999px #0000002e;
+}
+.scan-guide,
+.scan-camera-note {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  text-align: center;
+  color: #fffdf3;
+  font-size: 12px;
+  line-height: 1.6;
+  text-shadow: 0 1px 2px #0008;
+}
+.scan-camera-note {
+  top: 0;
+  bottom: 0;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+}
+.scan-camera-note .button {
+  min-height: 44px;
+}
+.scan-typing {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.scan-typing-label {
+  font-size: 12px;
+  color: #536448;
+}
+.scan-typing-row {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+.scan-typing-row .field,
+.scan-typing-row .button {
+  min-height: 44px;
+}
+.scan-typing-row .field {
+  width: 100%;
+  min-width: 0;
+  letter-spacing: 0.04em;
+}
+/* Shrinks first when the keyboard leaves little room. */
+.scan-notes {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #5e6b55;
+}
+.scan-notes p + p {
+  margin-top: 2px;
+}
+.scan-card {
+  flex: none;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf8;
+}
+.scan-card.is-kept {
+  border-left-color: #c9a54f;
+}
+.scan-card.is-flash {
+  animation: scan-flash 600ms ease;
+}
+@keyframes scan-flash {
+  0% {
+    box-shadow: 0 0 0 4px #e8cf8a;
+    background: #fbf3dc;
+  }
+  100% {
+    box-shadow: 0 0 0 0 #e8cf8a00;
+    background: #fffdf8;
+  }
+}
+.scan-card-cover .book-jacket {
+  width: 48px;
+}
+.scan-card-tile {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 64px;
+  border: 1px dashed #c8c2b2;
+  border-radius: 3px;
+  color: #8b917f;
+  background: #f7f4ee;
+}
+.scan-card-text {
+  min-width: 0;
+}
+.scan-card-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.scan-card-title span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.scan-card-title small {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  font-weight: 400;
+  color: #6b7262;
+}
+.scan-card-status {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #536448;
+  overflow-wrap: anywhere;
+}
+.scan-undo {
+  min-height: 44px;
+}
+/* 本棚が主役: one spine for each book read in, on a plank of wood. */
+.scan-shelf {
+  flex: none;
+  position: relative;
+  height: 56px;
+}
+.scan-shelf ol {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 48px;
+  margin: 0;
+  padding: 0 4px;
+  list-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.scan-spine {
+  flex: none;
+  width: 8px;
+  height: 42px;
+  border-radius: 1px 1px 0 0;
+  box-shadow: inset -1px 0 0 #0000002e;
+  animation: scan-spine-in 240ms ease-out;
+}
+.scan-spine.is-added {
+  background: #768281;
+}
+.scan-spine.is-kept {
+  width: 7px;
+  height: 40px;
+  border: 1px dashed #9aa58f;
+  background: transparent;
+  box-shadow: none;
+}
+@keyframes scan-spine-in {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+}
+.scan-plank {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  border-radius: 2px;
+  background: linear-gradient(#be9a6c, #b39166 54%, #ab885c 55%, #b7976d);
+  box-shadow: inset 0 1px 0 #f1dab288;
+}
+.scan-bottom {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+}
+.scan-bottom .button {
+  min-height: 48px;
+  padding-inline: 12px;
+}
+.scan-sheet .google-covers-credit {
+  flex: none;
+  margin: 0;
+  text-align: center;
+}
+/* A toast while the scanner is open stands under its top bar, clear of ✕ and ♪. */
+body:has(.scan-session) .toast {
+  top: calc(env(safe-area-inset-top) + 60px);
+  bottom: auto;
+  left: 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-spine {
+    animation: none;
+  }
+  .scan-card.is-flash {
+    animation: none;
+    background: #fbf3dc;
+  }
+}
+@media (min-width: 760px) {
+  .scan-sheet {
+    box-shadow: 0 0 40px #203b2d33;
+  }
+}

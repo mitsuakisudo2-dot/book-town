@@ -414,8 +414,17 @@ export interface TownActions {
    * The one way a book enters the reader's library. A title or author over
    * 200 characters is cut to end in …. Null when there is no title, when the
    * ISBN does not check out, or for a visitor (asked to sign in instead).
+   *
+   * `bookId`: the id decided when a scanned book was read (library-journal.ts).
+   * A new book takes it, so the same read sent twice is one book. Ignored when
+   * another book already has that id, or when it is not an id the town could
+   * have given.
    */
-  registerBook(book: NewBook, via: RegisterVia): Registration | null;
+  registerBook(
+    book: NewBook,
+    via: RegisterVia,
+    bookId?: string,
+  ): Registration | null;
   /** registerBook, answering with the book's id (null when not registered). */
   addBook(book: NewBook): string | null;
   toggleLibrary(bookId: string): void;

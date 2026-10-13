@@ -30,11 +30,14 @@ export function BarcodeRegister({
   actions,
   notify,
   onClose,
+  lead = "バーコードで本を登録",
 }: {
   state: TownState;
   actions: TownActions;
   notify: (message: string) => void;
   onClose: () => void;
+  /** The line under the title: what this form is for where it opens. */
+  lead?: string;
 }) {
   const id = useId();
   const savedIn = useTownBackend();
@@ -224,7 +227,7 @@ export function BarcodeRegister({
 
   return (
     <Modal title="本を登録" onClose={onClose}>
-      <p className="modal-lead">バーコードで本を登録</p>
+      <p className="modal-lead">{lead}</p>
       <p className="muted">
         裏表紙のISBNバーコード（978・979で始まる段）を読み取ります。登録した本は、読書の開始や投稿で選べます。
       </p>
