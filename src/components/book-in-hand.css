@@ -592,13 +592,20 @@
 .bh-favorite.is-active svg {
   fill: #cbbf87;
 }
+.book-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+}
 .book-purchase {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin-top: 10px;
 }
-.book-purchase a {
+.book-purchase a,
+.book-lookup {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -611,16 +618,29 @@
   font-size: 12px;
   white-space: nowrap;
 }
-.book-purchase a:hover {
+.book-purchase a:hover,
+.book-lookup:hover {
   border-color: #9fb491;
   background: #f1f5ea;
 }
-.book-purchase a:focus-visible {
+.book-purchase a:focus-visible,
+.book-lookup:focus-visible {
   outline: 2px solid #8fac80;
   outline-offset: 2px;
 }
-.book-purchase a > span {
+.book-purchase a > span,
+.book-lookup > span {
   font-size: 11px;
+  color: #6f8162;
+}
+/* Not a shop: a quieter pill, set a little apart from the two that are. */
+.book-lookup {
+  border-style: dashed;
+  background: transparent;
+  color: #4d5f50;
+}
+.book-lookup svg {
+  flex: none;
   color: #6f8162;
 }
 .book-price {
