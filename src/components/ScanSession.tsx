@@ -562,10 +562,12 @@ export function ScanSession({
     }
     // ZXing is given a larger picture than the browser's own size, which
     // can be small (Safari).
-    const size: MediaTrackConstraints =
-      readerKind() === "wasm"
-        ? { width: { ideal: 1920 }, height: { ideal: 1080 } }
-        : {};
+    const larger: MediaTrackConstraints = {
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+    };
+    const wasm = readerKind() === "wasm";
+    const size = wasm ? larger : {};
     const ask = (video: MediaTrackConstraints) =>
       navigator.mediaDevices.getUserMedia({ video, audio: false });
     const why = (error: unknown): TypingWhy | "retry" => {
@@ -592,35 +594,51 @@ export function ScanSession({
         }
       }
     };
+    // The camera is this effect's the moment it is had, while the reader may
+    // still be loading: closed meanwhile (［終わる］, ［ISBNを打つ］, the page
+    // hidden), it is let go at once, not when the reader comes.
+    const camera = openCamera().then((got) => {
+      if (typeof got === "string") return got;
+      if (stopped) got.getTracks().forEach((track) => track.stop());
+      else {
+        stream = got;
+        // Another app took the camera, or the permission went: type instead.
+        got
+          .getVideoTracks()[0]
+          ?.addEventListener("ended", () => typeInstead("busy"));
+      }
+      return got;
+    });
     void (async () => {
       // Both at once: loading the reader does not hold up the camera's
       // question.
-      const [reader, camera] = await Promise.all([
-        loadDetector(),
-        openCamera(),
-      ]);
-      const media = typeof camera === "string" ? null : camera;
-      stream = media;
+      const [reader, got] = await Promise.all([loadDetector(), camera]);
+      if (stopped) return;
+      const media = typeof got === "string" ? null : got;
       const giveUp = (why: TypingWhy) => {
         media?.getTracks().forEach((track) => track.stop());
         typeInstead(why);
       };
-      if (stopped) {
-        media?.getTracks().forEach((track) => track.stop());
-        return;
-      }
       // The browser first, then the camera, then this time's network.
       if (!reader.ok && reader.why === "no-reader") return giveUp("no-reader");
-      if (!media) return typeInstead(camera as TypingWhy);
+      if (!media) return typeInstead(got as TypingWhy);
       if (!reader.ok) return giveUp(reader.why);
       const track = media.getVideoTracks()[0];
-      // Another app took the camera, or the permission went: type instead.
-      track?.addEventListener("ended", () => typeInstead("busy"));
-      void track
+      // The camera went while the reader was loading.
+      if (track?.readyState === "ended") return giveUp("busy");
+      // The browser's own reader turned out not to read EAN-13, and the
+      // camera was opened at its own size: ZXing's larger picture first.
+      const resized = reader.wasm && !wasm;
+      const tuned = track
         ?.applyConstraints({
+          ...(resized ? larger : {}),
           advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
         })
         .catch(() => {});
+      if (resized) {
+        await tuned;
+        if (stopped) return;
+      }
       // ［ライト］ only where the camera has one. Whether it is on is kept
       // here: Safari before 18.4 reports it wrongly (WebKit bug 280970).
       const light = (
