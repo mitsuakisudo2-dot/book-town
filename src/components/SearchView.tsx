@@ -19,6 +19,7 @@ import {
   onSearchRequest,
   postsWithTag,
   popularTags,
+  tagLeftOut,
   takeRequestedSearch,
 } from "../lib/tags";
 import { readParam, replaceAddress, useUrlParam } from "../lib/url-state";
@@ -167,6 +168,8 @@ export function SearchView({ state, actions, notify }: Shared) {
 
   const bookResults = term && !tagTerm ? matchBooks(state.books, term) : [];
   const tagResults = tagTerm ? postsWithTag(state, tagTerm) : [];
+  // Said once, without a count, as on a book's page: the reader chose this.
+  const tagHasLeftOut = tagTerm !== null && tagLeftOut(state, tagTerm);
   const people =
     term && !tagTerm
       ? [state.me, ...state.readers].filter((reader) =>
@@ -247,7 +250,8 @@ export function SearchView({ state, actions, notify }: Shared) {
         <div className="search-results" role="status">
           <section aria-labelledby="search-tag-title">
             <h2 id="search-tag-title">
-              #{tagTerm} の投稿 <span>{tagResults.length}</span>
+              #{tagTerm} の投稿{" "}
+              {tagResults.length > 0 && <span>{tagResults.length}</span>}
             </h2>
             {tagResults.length ? (
               <div className="post-feed">
@@ -263,7 +267,16 @@ export function SearchView({ state, actions, notify }: Shared) {
                 ))}
               </div>
             ) : (
-              <p className="search-empty">このタグの投稿は、まだありません。</p>
+              !tagHasLeftOut && (
+                <p className="search-empty">
+                  このタグの投稿は、まだありません。
+                </p>
+              )
+            )}
+            {tagHasLeftOut && (
+              <p className="search-empty">
+                ネタバレを含むかもしれない投稿は、設定により出していません
+              </p>
             )}
           </section>
         </div>
@@ -292,7 +305,7 @@ export function SearchView({ state, actions, notify }: Shared) {
           )}
           <section aria-labelledby="search-books-title">
             <h2 id="search-books-title">
-              本 <span>{bookResults.length}</span>
+              本 {bookResults.length > 0 && <span>{bookResults.length}</span>}
             </h2>
             {bookResults.length ? (
               <ul className="search-list">
@@ -311,7 +324,7 @@ export function SearchView({ state, actions, notify }: Shared) {
           </section>
           <section aria-labelledby="search-shops-title">
             <h2 id="search-shops-title">
-              書店 <span>{shopResults.length}</span>
+              書店 {shopResults.length > 0 && <span>{shopResults.length}</span>}
             </h2>
             {shopResults.length ? (
               <ul className="search-list">

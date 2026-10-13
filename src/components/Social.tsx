@@ -794,6 +794,8 @@ export function PostCard({
   const hidden = view === "folded" && !revealed && !shown;
   // Folded by reports: one tap opens it, then any spoiler cover applies.
   const cover = reviewCoverOf(state, "post", post.id, post.authorId);
+  // Until it is opened, nothing of it shows: not its words, nor its book.
+  const covered = cover !== null && !reportRead;
   const note = reviewNoteOf(state, "post", post.id, post.authorId);
   const taps = tapsOf(state, post.id);
   const [pops, setPops] = useState(0);
@@ -862,7 +864,7 @@ export function PostCard({
                 : "ネタバレかもしれません"}
           </span>
         )}
-        {cover && !reportRead ? (
+        {covered ? (
           <div className="spoiler-cover report-cover">
             <span>
               <Icon name="lock" size={15} />
@@ -911,7 +913,7 @@ export function PostCard({
             )}
           </div>
         )}
-        {book && (showBook || isReply) && (
+        {book && (showBook || isReply) && !covered && (
           <Link href={bookPath(book.id)} className="post-book">
             <BookJacket book={book} className="post-book-jacket" />
             <span>

@@ -1,6 +1,6 @@
 import type { Post, TownState } from "./types";
 import { coverHidden } from "./hidden-words";
-import { notLeftOut } from "./social";
+import { notLeftOut, reviewCoverOf, spoilerViewOf } from "./social";
 
 // A tag is # (or the full-width ＃) followed by letters, digits, _ or Japanese marks.
 const TAG = /[#＃]([\p{L}\p{N}_ー・々〆]{1,30})/gu;
@@ -54,11 +54,29 @@ export const postsWithTag = (state: TownState, tag: string): Post[] =>
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
-/** Tags in use across public posts, most used first. */
+/** Whether the reader's 「ネタバレの表示」 left out a public post with this tag. */
+export const tagLeftOut = (state: TownState, tag: string): boolean =>
+  state.posts.some(
+    (post) =>
+      post.readingMode !== "solo" &&
+      !notLeftOut(state, post) &&
+      extractTags(post.body).includes(tag.toLowerCase()),
+  );
+
+/**
+ * Tags in use across public posts, most used first. A tag is offered only
+ * from posts that reach this reader as they are: never from a spoiler (its
+ * tag can be the spoiler itself) or a post folded by reports, which are read
+ * only after a tap, nor from one the reader chose to leave out.
+ */
 export function popularTags(state: TownState, limit = 12) {
   const counts = new Map<string, number>();
   for (const post of state.posts)
-    if (post.readingMode !== "solo")
+    if (
+      post.readingMode !== "solo" &&
+      spoilerViewOf(state, post) === "open" &&
+      reviewCoverOf(state, "post", post.id, post.authorId) === null
+    )
       for (const tag of extractTags(post.body))
         counts.set(tag, (counts.get(tag) ?? 0) + 1);
   return [...counts.entries()]

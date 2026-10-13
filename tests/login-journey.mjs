@@ -540,7 +540,10 @@ try {
       },
     ],
     posts: [
-      postRow(FOLDED, OTHER, "三人分の通報でたたまれた言葉。", ago(2)),
+      {
+        ...postRow(FOLDED, OTHER, "三人分の通報でたたまれた言葉。", ago(2)),
+        book_id: COVER_BOOK,
+      },
       postRow(TO_REPORT, OTHER, "これから通報される言葉。", ago(3)),
       postRow(OWN_HELD, user.id, "運営が確かめている、わたしの言葉。", ago(4)),
     ],
@@ -683,6 +686,9 @@ try {
       await expect(
         page.getByText("三人分の通報でたたまれた言葉。"),
       ).toHaveCount(0);
+      // Nor its book, until it is opened.
+      await expect(folded).not.toContainText("こころの本");
+      await expect(folded.locator(".post-book")).toHaveCount(0);
       // The writer's own post, held: still theirs to read, and why.
       await expect(
         page.getByText(
@@ -697,6 +703,12 @@ try {
       await expect(
         page.getByText("三人分の通報でたたまれた言葉。"),
       ).toBeVisible();
+      await expect(
+        page
+          .locator("article.post-card")
+          .filter({ hasText: "三人分の通報でたたまれた言葉。" })
+          .locator(".post-book"),
+      ).toContainText("こころの本");
     },
   );
 

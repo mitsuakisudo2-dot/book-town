@@ -47,7 +47,12 @@ import {
   weekOf,
 } from "../src/lib/notifications";
 import { normalizeIsbn, bookPath } from "../src/lib/books";
-import { extractTags, popularTags, postsWithTag } from "../src/lib/tags";
+import {
+  extractTags,
+  popularTags,
+  postsWithTag,
+  tagLeftOut,
+} from "../src/lib/tags";
 import {
   coverHidden,
   coverSelection,
@@ -1801,6 +1806,72 @@ check(
     assert.ok(!wordsFolded(state, "shop", "shop-orbit"));
     // Report-folded posts stay in their place on the timeline.
     assert.ok(timelinePosts(state).some((post) => post.id === "p-3"));
+  },
+);
+
+check(
+  "a tag is offered only from posts that reach the reader as they are",
+  () => {
+    const base = seedState.posts.find((post) => post.id === "p-3")!;
+    const address: Post = {
+      ...base,
+      id: "x-address",
+      body: "あの人の住所は #山田太郎の家 です",
+      spoiler: false,
+      folded: false,
+    };
+    const spoiler: Post = {
+      ...base,
+      id: "x-spoiler",
+      body: "#犯人は執事 だった",
+      spoiler: true,
+      bookId: "solaris",
+    };
+    const asked: Post = {
+      ...base,
+      id: "x-asked",
+      body: "#最後の一行 がすべて",
+      spoiler: false,
+      folded: true,
+      bookId: "solaris",
+    };
+    const state: TownState = {
+      ...seedState,
+      posts: [...seedState.posts, address, spoiler, asked],
+      reviewFolds: {
+        "post:x-address": { state: "folded", since: "2026-10-13T02:00:00Z" },
+      },
+    };
+    const offered = (from: TownState) =>
+      popularTags(from, 100).map((entry) => entry.tag);
+    for (const mode of SPOILER_DISPLAYS) {
+      const town = showing(mode, state);
+      // Folded by reports, or a spoiler: its words stay behind the cover.
+      assert.ok(!offered(town).includes("山田太郎の家"), mode);
+      assert.ok(!offered(town).includes("犯人は執事"), mode);
+      // Every tag offered leads to a post the reader can read.
+      for (const tag of offered(town))
+        assert.ok(postsWithTag(town, tag).length > 0, mode + " #" + tag);
+    }
+    // Three readers' 「ネタバレでは？」: offered only to one who shows all.
+    assert.ok(!offered(state).includes("最後の一行"));
+    assert.ok(offered(showing("show_all", state)).includes("最後の一行"));
+    // Reported by the reader, it stays folded for them, tags and all.
+    const reported: TownState = {
+      ...state,
+      reviewFolds: {},
+      myReports: [filed({ targetId: "x-address" })],
+    };
+    assert.ok(!offered(reported).includes("山田太郎の家"));
+    // Unfolded, its tags are offered like any post's.
+    assert.ok(offered({ ...state, reviewFolds: {} }).includes("山田太郎の家"));
+    // The search says once that the reader's setting left a post out,
+    // rather than that there is none.
+    const out = showing("leave_out", state);
+    assert.deepEqual(postsWithTag(out, "犯人は執事"), []);
+    assert.equal(tagLeftOut(out, "犯人は執事"), true);
+    assert.equal(tagLeftOut(state, "犯人は執事"), false);
+    assert.equal(tagLeftOut(out, "積読"), false);
   },
 );
 
