@@ -8,7 +8,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build": "next build --webpack",
-    "test:domain": "tsx tests/domain.test.ts",
+    "test:domain": "tsx tests/domain.test.ts && tsx tests/kept-draft.test.ts",
     "test:walk-domain": "tsx tests/walk-domain.test.ts",
     "test:covers": "tsx tests/covers.test.ts",
     "test:search": "tsx tests/search.test.ts && tsx tests/search-text.test.ts",
