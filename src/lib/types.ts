@@ -46,6 +46,8 @@ export interface Book {
   isbn?: string;
   /** List price in yen, tax included. Demo prices are placeholders, labeled as such. */
   price?: number;
+  /** The work this edition belongs to (books.work_id, once the database has it). Without it, the book is its own work. */
+  workId?: string;
   subtitle?: string;
   /** Lets a title written in kanji be found by its kana or romaji. */
   titleReading?: BookReading;
