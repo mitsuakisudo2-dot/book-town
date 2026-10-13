@@ -299,7 +299,7 @@ export type Database = {
           created_at: string;
           font: string;
           id: string;
-          pages: Json;
+          pages: NonNullable<Json>;
           show_in_timeline: boolean;
           spoiler: boolean;
           status: string;
@@ -314,7 +314,7 @@ export type Database = {
           created_at?: string;
           font?: string;
           id?: string;
-          pages: Json;
+          pages: NonNullable<Json>;
           show_in_timeline?: boolean;
           spoiler?: boolean;
           status?: string;
@@ -328,7 +328,7 @@ export type Database = {
           created_at?: string;
           font?: string;
           id?: string;
-          pages?: Json;
+          pages?: NonNullable<Json>;
           show_in_timeline?: boolean;
           spoiler?: boolean;
           status?: string;
