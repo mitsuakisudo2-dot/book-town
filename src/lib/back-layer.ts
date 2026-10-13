@@ -166,6 +166,10 @@ function takeOff(token: string) {
     shutting.add(token);
     void backing.then(() => {
       shutting.delete(token);
+      // Opened again meanwhile (the same book, the same step): the step is
+      // its own now.
+      if ([...opened].some((layer) => layer.open && layer.token === token))
+        return;
       takeOff(token);
     });
     return;
