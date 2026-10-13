@@ -51,7 +51,9 @@ export function BookPurchase({ book }: { book: Book }) {
 /** The fine print for the jacket, the price and the shop links. */
 export function bookNote(book: Book): string {
   return [
-    "表紙はデモ用のオリジナルデザインです。",
+    book.genre === REGISTERED_GENRE
+      ? "表紙が見つからない本は、題名から作ったBookTownの装丁カードで表しています。"
+      : "表紙はデモ用のオリジナルデザインです。",
     book.price && book.genre !== REGISTERED_GENRE
       ? "定価はデモ用の仮の値です。"
       : "",

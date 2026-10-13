@@ -10,7 +10,7 @@ import {
   type TownActions,
   type TownState,
 } from "../lib/types";
-import { BookJacket, Icon, ReaderAvatar } from "./ui";
+import { BookJacket, CoverCredit, Icon, ReaderAvatar } from "./ui";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookDiscovery } from "./BookDiscovery";
 import { bookPath } from "../lib/books";
@@ -457,6 +457,7 @@ export function BookInHand({
                 </Link>
               </h2>
               <p className="bh-author">{book.author}</p>
+              <CoverCredit book={book} />
               <BookPrice book={book} />
               <BookPurchase book={book} />
             </div>

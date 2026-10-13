@@ -1,9 +1,22 @@
 "use client";
-import { useEffect, useRef, type ReactNode, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type CSSProperties,
+} from "react";
 import type { Book, Reader } from "../lib/types";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { bookArt } from "../lib/book-art";
+import { REGISTERED_GENRE } from "../lib/books";
+import {
+  countGoogleCover,
+  countGoogleMark,
+  useCover,
+  useGoogleCoversShown,
+} from "../lib/covers";
 import { useBackLayer } from "../lib/back-layer";
 import "./illustrated-jackets.css";
 const shapes: Record<string, ReactNode> = {
@@ -209,6 +222,25 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
     </svg>
   );
 }
+/** A title short enough, and Japanese, to be set top to bottom on a 装丁カード. */
+const tateTitle = (title: string) =>
+  title.length <= 14 &&
+  /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(title) &&
+  !/[A-Za-z0-9]{3}/.test(title);
+
+/**
+ * The size a 装丁カード title is set at top to bottom: large while it fits one
+ * column, then smaller, and in two even columns past ten characters.
+ */
+function tateSize(characters: number): string {
+  const column = characters > 10 ? Math.ceil(characters / 2) : characters;
+  return Math.min(13, 96 / (column * 1.14)).toFixed(2) + "cqw";
+}
+
+/**
+ * A book's face: its real cover when a source has one (see covers.ts), shown
+ * as served, or else its BookTown 装丁カード, drawn from its title and author.
+ */
 export function BookJacket({
   book,
   className = "",
@@ -226,8 +258,19 @@ export function BookJacket({
   /** Atlas panel chosen by the screen, so neighbouring covers differ. */
   artIndex?: number;
 }) {
+  const found = useCover(book.coverUrl ? undefined : book.isbn);
+  const coverUrl = book.coverUrl ?? found?.url;
+  const [loaded, setLoaded] = useState<string | null>(null);
+  const covered = Boolean(coverUrl) && loaded === coverUrl;
+  const fromGoogle = covered && !book.coverUrl && found?.source === "google";
+  useEffect(() => (fromGoogle ? countGoogleCover() : undefined), [fromGoogle]);
+
   const art = illustrated ? bookArt(book, artIndex) : null;
   className += illustrated ? " is-illustrated" : "";
+  const tate =
+    !illustrated && book.genre === REGISTERED_GENRE && tateTitle(book.title);
+  className += tate ? " is-tate" : "";
+  className += covered ? " has-cover" : "";
   const style = {
     background: book.color,
     color: art?.ink ?? book.ink,
@@ -236,9 +279,26 @@ export function BookJacket({
     "--art-y": art?.y,
     "--art-shade": art?.light ? "#f6f0dc50" : "#101e3580",
     "--art-shadow": art?.light ? "#f5ecce" : "#10252d",
+    "--tate-size": tate ? tateSize([...book.title].length) : undefined,
   } as CSSProperties;
   const content = (
     <>
+      {coverUrl ? (
+        <Image
+          key={coverUrl}
+          className="jacket-image"
+          src={coverUrl}
+          alt=""
+          loading="lazy"
+          fill
+          sizes="160px"
+          unoptimized
+          onLoad={() => setLoaded(coverUrl)}
+          onError={(event) => {
+            event.currentTarget.hidden = true;
+          }}
+        />
+      ) : null}
       <span className="jacket-edge" />
       {illustrated ? (
         <span className="jacket-illustration" />
@@ -262,20 +322,6 @@ export function BookJacket({
       onClick={onClick}
       aria-label={book.title + "の詳細"}
     >
-      {book.coverUrl ? (
-        <Image
-          className="jacket-image"
-          src={book.coverUrl}
-          alt={book.title}
-          loading="lazy"
-          fill
-          sizes="160px"
-          unoptimized
-          onError={(event) => {
-            event.currentTarget.hidden = true;
-          }}
-        />
-      ) : null}
       {content}
     </button>
   ) : (
@@ -283,25 +329,48 @@ export function BookJacket({
       className={"book-jacket " + className}
       style={style}
       role="img"
-      aria-label={book.title + "のオリジナル仮表紙"}
+      aria-label={
+        book.title + (covered ? "の表紙" : "の表紙（BookTownの装丁カード）")
+      }
     >
-      {book.coverUrl ? (
-        <Image
-          className="jacket-image"
-          src={book.coverUrl}
-          alt={book.title}
-          loading="lazy"
-          fill
-          sizes="160px"
-          unoptimized
-          onError={(event) => {
-            event.currentTarget.hidden = true;
-          }}
-        />
-      ) : null}
       {content}
     </div>
   );
+}
+
+/**
+ * Where a book's cover came from, beside the book: Google's mark and a link to
+ * the book on Google Books, or openBD's name. Nothing for a 装丁カード.
+ */
+export function CoverCredit({ book }: { book: Book }) {
+  const cover = useCover(book.coverUrl ? undefined : book.isbn);
+  const google = cover?.source === "google";
+  useEffect(() => (google ? countGoogleMark() : undefined), [google]);
+  if (!cover) return null;
+  return cover.source === "google" ? (
+    <span className="cover-credit">
+      表紙: <span className="powered-by-google">powered by Google</span>
+      {cover.link ? (
+        <>
+          {" ・ "}
+          <a href={cover.link} target="_blank" rel="noopener noreferrer">
+            Google Books でこの本を見る
+          </a>
+        </>
+      ) : null}
+    </span>
+  ) : (
+    <span className="cover-credit">表紙: openBD（版元ドットコム）</span>
+  );
+}
+
+/** Google's mark for the page, while any of its covers is on screen. */
+export function GoogleCoversCredit() {
+  return useGoogleCoversShown() ? (
+    <p className="google-covers-credit">
+      表紙の一部: <span className="powered-by-google">powered by Google</span>
+    </p>
+  ) : null;
 }
 export function ReaderAvatar({
   reader,

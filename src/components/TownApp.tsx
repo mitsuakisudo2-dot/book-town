@@ -19,7 +19,14 @@ import {
   type Shelf,
   type Book,
 } from "../lib/types";
-import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
+import {
+  BookJacket,
+  CoverCredit,
+  GoogleCoversCredit,
+  Icon,
+  Modal,
+  ReaderAvatar,
+} from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
 import { ShopEditor } from "./ShopEditor";
 import { ProfileView } from "./ProfileView";
@@ -334,6 +341,7 @@ export default function TownApp({
             <Wishlist {...shared} />
           )}
         </main>
+        <GoogleCoversCredit />
         <footer className="town-footer">
           <span>読書の終わりを、交流の始まりに。</span>
           <small>BOOK TOWN · それぞれの「好き」が集まる、本の街。</small>
@@ -772,6 +780,7 @@ function BookView({
           <p className="book-page-author">{book.author}</p>
           <BookPrice book={book} />
           <BookPurchase book={book} />
+          <CoverCredit book={book} />
         </div>
         <div className="book-hero-body">
           <p className="book-summary">{book.summary}</p>

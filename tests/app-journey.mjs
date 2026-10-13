@@ -1,5 +1,5 @@
 import { chromium, expect } from "@playwright/test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
 
@@ -16,6 +16,8 @@ const browser = await chromium.launch({
 });
 const errors = [];
 const passed = [];
+const GOOGLE_ISBN = "9784101092058";
+const OPENBD_ISBN = "9784003101018";
 let page;
 
 async function check(name, operation) {
@@ -101,14 +103,66 @@ try {
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
-  // The ISBN lookup is answered locally so the test never depends on the network.
-  await page.route("https://api.openbd.jp/**", (route) =>
-    route.fulfill({
+  // The ISBN lookups and covers are answered locally so the test never
+  // depends on the network. openBD has the cover of 表紙のある本; Google
+  // Books has the one of QAの本.
+  await page.route("https://api.openbd.jp/**", (route) => {
+    const isbns = new URL(route.request().url()).searchParams
+      .get("isbn")
+      .split(",");
+    return route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify([
-        { summary: { title: "QAの本", author: "試験 太郎／著" } },
-      ]),
-    }),
+      body: JSON.stringify(
+        isbns.map((isbn) =>
+          isbn === OPENBD_ISBN
+            ? {
+                summary: {
+                  isbn,
+                  title: "表紙のある本",
+                  author: "試験 花子／著",
+                  cover: `https://cover.openbd.jp/${isbn}.jpg`,
+                },
+              }
+            : { summary: { isbn, title: "QAの本", author: "試験 太郎／著" } },
+        ),
+      ),
+    });
+  });
+  await page.route("https://www.googleapis.com/books/**", (route) => {
+    const isbn = new URL(route.request().url()).searchParams
+      .get("q")
+      .replace("isbn:", "");
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        isbn === GOOGLE_ISBN
+          ? {
+              items: [
+                {
+                  volumeInfo: {
+                    industryIdentifiers: [
+                      { type: "ISBN_13", identifier: isbn },
+                    ],
+                    imageLinks: {
+                      thumbnail:
+                        "http://books.google.com/books/content?id=qa&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
+                    },
+                    canonicalVolumeLink:
+                      "https://books.google.com/books/about/QA.html?id=qa",
+                  },
+                },
+              ],
+            }
+          : {},
+      ),
+    });
+  });
+  const coverImage = await readFile(
+    new URL("../public/favicon.ico", import.meta.url),
+  );
+  await page.route(
+    /^https:\/\/(cover\.openbd\.jp|books\.google\.com\/books\/content)/,
+    (route) => route.fulfill({ contentType: "image/png", body: coverImage }),
   );
 
   await check(
@@ -387,6 +441,70 @@ try {
         .getByRole("searchbox", { name: "読む本を探す" })
         .fill("9784101092058");
       await expect(page.getByRole("button", { name: /^QAの本/ })).toBeVisible();
+    },
+  );
+
+  await check(
+    "a registered book shows its real cover, unaltered, with where it came from",
+    async () => {
+      await go("/profiles/me/?books=library");
+      // QAの本 has no cover at openBD, so it is Google's, credited on the page.
+      const saved = page.locator(".profile-saved-book", { hasText: "QAの本" });
+      const google = saved.locator(".book-jacket.has-cover img");
+      await expect(google).toHaveAttribute(
+        "src",
+        "https://books.google.com/books/content?id=qa&printsec=frontcover&img=1&zoom=1&source=gbs_api",
+      );
+      await expect(google).toHaveCSS("object-fit", "contain");
+      await expect(saved.locator(".jacket-title")).toBeHidden();
+      await expect(page.locator(".google-covers-credit")).toHaveText(
+        "表紙の一部: powered by Google",
+      );
+
+      // On its own page, the cover names Google and links the book there.
+      await saved.locator("a, button").first().click();
+      const credit = page.locator(".cover-credit").first();
+      await expect(credit).toContainText("powered by Google");
+      await expect(
+        credit.getByRole("link", { name: "Google Books でこの本を見る" }),
+      ).toHaveAttribute(
+        "href",
+        "https://books.google.com/books/about/QA.html?id=qa",
+      );
+
+      // A book openBD has a cover for shows openBD's.
+      await go("/profiles/me/?books=library");
+      await page.getByRole("button", { name: "本を登録", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "本を登録" });
+      await dialog.getByLabel("ISBN").fill(OPENBD_ISBN);
+      await dialog.getByRole("button", { name: "ISBNで探す" }).click();
+      await expect(dialog.getByLabel("タイトル")).toHaveValue("表紙のある本");
+      await dialog.getByRole("button", { name: "登録する" }).click();
+      await expect(dialog).toHaveCount(0);
+      const openBd = page
+        .locator(".profile-saved-book", { hasText: "表紙のある本" })
+        .locator(".book-jacket.has-cover img");
+      await expect(openBd).toHaveAttribute(
+        "src",
+        `https://cover.openbd.jp/${OPENBD_ISBN}.jpg`,
+      );
+
+      // A book without an ISBN keeps its 装丁カード, set top to bottom.
+      await page.getByRole("button", { name: "本を登録", exact: true }).click();
+      await dialog.getByLabel("タイトル").fill("手で書いた本");
+      await dialog.getByLabel("著者").fill("試験 次郎");
+      await dialog.getByRole("button", { name: "登録する" }).click();
+      await expect(dialog).toHaveCount(0);
+      const card = page
+        .locator(".profile-saved-book", { hasText: "手で書いた本" })
+        .locator(".book-jacket");
+      await expect(card).not.toHaveClass(/has-cover/);
+      await expect(card).toHaveClass(/is-tate/);
+      await expect(card.locator(".jacket-title")).toHaveCSS(
+        "writing-mode",
+        "vertical-rl",
+      );
+      await page.screenshot({ path: path.join(output, "covers.png") });
     },
   );
 

@@ -1014,6 +1014,63 @@ div.book-jacket:hover {
   letter-spacing: 0.12em;
   opacity: 0.8;
 }
+/* With its real cover loaded, the jacket is only that cover. */
+.book-jacket.has-cover {
+  background: transparent !important;
+  box-shadow: none;
+  border-radius: 0;
+}
+.book-jacket.has-cover > :not(.jacket-image) {
+  display: none;
+}
+/* A 装丁カード for a Japanese title: set top to bottom, like a 文庫. */
+.book-jacket.is-tate .jacket-title {
+  writing-mode: vertical-rl;
+  top: 17%;
+  bottom: 13%;
+  left: auto;
+  right: 13%;
+  font-size: var(--tate-size, 13cqw);
+  line-height: 1.45;
+  letter-spacing: 0.14em;
+  text-align: start;
+  text-wrap: balance;
+}
+.book-jacket.is-tate .jacket-author {
+  writing-mode: vertical-rl;
+  top: auto;
+  bottom: 15%;
+  left: 12%;
+  right: auto;
+  max-height: 44%;
+  overflow: hidden;
+  font-size: 6cqw;
+  letter-spacing: 0.16em;
+  text-align: start;
+}
+.cover-credit {
+  display: block;
+  margin: 6px 0;
+  font-size: 10px;
+  line-height: 1.7;
+  color: #8d977f;
+}
+.cover-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.powered-by-google {
+  font-family: Roboto, Arial, sans-serif;
+  letter-spacing: 0;
+  color: #5f6368;
+}
+.google-covers-credit {
+  margin: 18px 43px 0;
+  font-size: 10px;
+  color: #8d977f;
+  text-align: right;
+}
 .jacket-art {
   position: absolute;
   inset: 0;
