@@ -45,7 +45,14 @@ import "./usability.css";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
 import { WalkView } from "./WalkView";
-import { profilePath, shopPath, walkPath } from "../lib/paths";
+import {
+  isDatabaseId,
+  posterNewPath,
+  posterPath,
+  profilePath,
+  shopPath,
+  walkPath,
+} from "../lib/paths";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { ReportButton, ReportDialog } from "./Report";
 import { BookFeelings } from "./ReadingRecords";
@@ -60,6 +67,12 @@ import {
 import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
 import { replaceAddress } from "../lib/url-state";
+import { postersOfBook } from "../lib/posters";
+import { findReader } from "../lib/social";
+import { PosterThumb } from "./PosterView";
+import { PosterEditor } from "./PosterEditor";
+import { PosterScreen } from "./PosterScreen";
+import "./poster-screen.css";
 import { useLayerReturn } from "../lib/back-layer";
 
 type View =
@@ -73,7 +86,9 @@ type View =
   | "editor"
   | "book"
   | "profile"
-  | "wishlist";
+  | "wishlist"
+  | "poster"
+  | "poster-new";
 type Shared = {
   state: TownState;
   actions: TownActions;
@@ -99,7 +114,11 @@ const links: { href: string; icon: string; label: string; section: Section }[] =
     },
   ];
 /** Which item of the main navigation a view belongs to. */
-function sectionOf(view: View, selectedId?: string): Section | null {
+function sectionOf(
+  view: View,
+  selectedId?: string,
+  ownPoster = false,
+): Section | null {
   if (view === "walk") return "walk";
   // A shop's page is part of walking the shops, wherever it was opened from.
   if (view === "shop") return "walk";
@@ -107,15 +126,21 @@ function sectionOf(view: View, selectedId?: string): Section | null {
   if (view === "search") return "search";
   if (view === "reading") return "reading";
   if (view === "editor" || view === "wishlist") return "profile";
+  // What the viewer makes lives on their profile, as their posters do.
+  if (view === "poster-new" || (view === "poster" && ownPoster))
+    return "profile";
   if (view === "profile" && (selectedId ?? "me") === "me") return "profile";
   return null;
 }
 export default function TownApp({
   view,
   selectedId,
+  bookId,
 }: {
   view: View;
   selectedId?: string;
+  /** Making a poster: the book it starts about. */
+  bookId?: string;
 }) {
   const { state, actions } = useTownStore();
   const persistence = usePersistenceStatus();
@@ -165,7 +190,13 @@ export default function TownApp({
     setToast(message);
   }, []);
   const shared = { state, actions, notify };
-  const section = sectionOf(view, selectedId);
+  const section = sectionOf(
+    view,
+    selectedId,
+    state.posters.some(
+      (poster) => poster.id === selectedId && poster.authorId === ME_ID,
+    ),
+  );
   // A visitor who is not signed in has no pages of their own yet.
   const visitor = savedIn === "visitor";
   const ownPage =
@@ -337,6 +368,14 @@ export default function TownApp({
             <ShopEditor {...shared} />
           ) : view === "profile" ? (
             <ProfileView {...shared} readerId={selectedId || "me"} />
+          ) : view === "poster" ? (
+            <PosterScreen {...shared} posterId={selectedId || ""} />
+          ) : view === "poster-new" ? (
+            <PosterEditor
+              {...shared}
+              posterId={selectedId || undefined}
+              bookId={bookId || undefined}
+            />
           ) : (
             <Wishlist {...shared} />
           )}
@@ -799,6 +838,7 @@ function BookView({
         actions={actions}
         notify={notify}
       />
+      <BookPosters state={state} book={book} />
       <BookReviews
         book={book}
         state={state}
@@ -854,6 +894,51 @@ function BookView({
         )}
       </div>
     </>
+  );
+}
+/**
+ * The posters a book appears in, those that open with it first. With none
+ * yet, only the way to make the first.
+ */
+function BookPosters({ state, book }: { state: TownState; book: Book }) {
+  const posters = postersOfBook(state, book.id);
+  const make = (
+    <Link href={posterNewPath({ bookId: book.id })} className="text-button">
+      <Icon name="plus" size={14} />
+      この本でポスターを作る
+    </Link>
+  );
+  if (!posters.length) return <p className="book-posters-invite">{make}</p>;
+  return (
+    <section className="book-posters" aria-labelledby="book-posters-title">
+      <div className="book-path-heading">
+        <span className="eyebrow">POSTERS WITH THIS BOOK</span>
+        <h2 id="book-posters-title">この本が出てくるポスター</h2>
+        <p>読書家が、この本を貼り出したポスター。表紙から、その人の言葉へ。</p>
+      </div>
+      <ul className="book-posters-row">
+        {posters.map((poster) => {
+          // Who made it, and a 見本 says it is one, as on the timeline.
+          const maker = findReader(state, poster.authorId);
+          const sample =
+            poster.authorId !== ME_ID && !isDatabaseId(poster.authorId);
+          return (
+            <li key={poster.id}>
+              <PosterThumb
+                poster={poster}
+                books={state.books}
+                href={posterPath(poster.id)}
+                caption={
+                  [maker?.name, sample && "見本"].filter(Boolean).join(" · ") ||
+                  undefined
+                }
+              />
+            </li>
+          );
+        })}
+      </ul>
+      {make}
+    </section>
   );
 }
 function Wishlist({ state, actions, notify }: Shared) {

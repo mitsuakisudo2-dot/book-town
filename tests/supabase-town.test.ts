@@ -4,6 +4,7 @@ import { createTownStore } from "../src/lib/store";
 import { notificationsFor } from "../src/lib/notifications";
 import {
   accountTownBackend,
+  applyWrite,
   visitorTownBackend,
 } from "../src/lib/supabase/town-backend";
 import {
@@ -682,6 +683,100 @@ async function main() {
       akiStore.actions.deleteRecord(shared);
       await settled(akiStore);
       assert.deepEqual(await fromBen(), [secret]);
+    },
+  );
+
+  await check(
+    "a poster is put up for everyone, and a draft stays with its maker",
+    async () => {
+      const store = await townOf(aki);
+      const look = { theme: "navy", font: "mincho" } as const;
+      const draft = store.actions.savePoster({
+        template: "one_book",
+        ...look,
+        pages: [{ heading: "", text: "ずっと手元に。", bookIds: [bookId] }],
+        spoiler: false,
+        inTimeline: true,
+        status: "draft",
+      });
+      // A 見本's book goes on a poster too, under its database id.
+      const lineup = store.actions.savePoster({
+        template: "lineup",
+        ...look,
+        pages: [
+          {
+            heading: "夜の本",
+            text: "",
+            bookIds: [bookId, demoBooks[0].id],
+          },
+        ],
+        spoiler: false,
+        inTimeline: true,
+        status: "published",
+      });
+      assert.ok(draft && lineup);
+      await settled(store);
+
+      const postersOf = async (person: typeof aki) =>
+        (await townOf(person))
+          .getSnapshot()
+          .posters.filter((poster) => isDatabaseId(poster.id))
+          .map((poster) => [poster.id, poster.status]);
+      assert.deepEqual(
+        (await postersOf(aki)).sort(),
+        [
+          [draft, "draft"],
+          [lineup, "published"],
+        ].sort(),
+      );
+      assert.deepEqual(await postersOf(ben), [[lineup, "published"]]);
+      const fromBen = (await townOf(ben))
+        .getSnapshot()
+        .posters.find((poster) => poster.id === lineup);
+      assert.deepEqual(fromBen?.pages[0].bookIds, [bookId, demoBooks[0].id]);
+      assert.equal(fromBen?.authorId, aki.id);
+
+      const again = await townOf(aki);
+      const kept = again
+        .getSnapshot()
+        .posters.find((poster) => poster.id === draft)!;
+      assert.equal(
+        again.actions.savePoster({ ...kept, status: "published" }, draft),
+        draft,
+      );
+      again.actions.deletePoster(lineup);
+      await settled(again);
+      assert.deepEqual(await postersOf(ben), [[draft, "published"]]);
+
+      // An insert tried again after it had landed still carries the edits
+      // made since (its first answer was lost on the way back).
+      const row = {
+        id: draft!,
+        author_id: aki.id,
+        template: "text",
+        theme: "sumi",
+        font: "gothic",
+        pages: [{ blocks: [{ type: "text" as const, text: "書き直した。" }] }],
+        spoiler: false,
+        show_in_timeline: false,
+        status: "published",
+      };
+      await applyWrite(
+        aki.client,
+        { kind: "posters", rows: [row] },
+        { userId: aki.id, shopId: aki.id },
+      );
+      const changed = await aki.client
+        .from("posters")
+        .select("template, theme, font, pages")
+        .eq("id", draft!)
+        .single();
+      assert.deepEqual(changed.data, {
+        template: "text",
+        theme: "sumi",
+        font: "gothic",
+        pages: row.pages,
+      });
     },
   );
 

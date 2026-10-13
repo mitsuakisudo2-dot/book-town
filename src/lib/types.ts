@@ -1,3 +1,5 @@
+import type { Poster, PosterDraft } from "./posters";
+
 export const ME_ID = "me";
 export const OWN_SHOP_ID = "mine";
 export const DEFAULT_SHELF_CAPACITY = 20;
@@ -267,6 +269,8 @@ export interface TownState {
   seenNotifications: string[];
   /** Words other readers left at the viewer's shop. Only an account receives them. */
   shopMessages: ShopMessage[];
+  /** The viewer's own posters, drafts too, and others' put up. */
+  posters: Poster[];
 }
 
 export interface ShopMessage {
@@ -337,6 +341,14 @@ export interface TownActions {
   deleteRecord(recordId: string): void;
   setReadingPublic(value: boolean): void;
   markNotificationsSeen(ids: string[]): void;
+  /**
+   * Keeps a poster: a new one, or with `posterId` the viewer's own changed.
+   * A poster put up must be complete (posterProblem). Returns its id, or
+   * null when nothing was kept (refused, or the town is still loading).
+   */
+  savePoster(draft: PosterDraft, posterId?: string): string | null;
+  /** Takes down the viewer's own poster; false when nothing was taken down. */
+  deletePoster(posterId: string): boolean;
 }
 
 export type AppActions = TownActions;

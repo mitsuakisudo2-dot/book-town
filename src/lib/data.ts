@@ -10,6 +10,7 @@ import {
   type Shop,
   type TownState,
 } from "./types";
+import type { Poster } from "./posters";
 
 // Every cover and spine is drawn by the app from these original design tokens.
 // The summaries and shop-owner notes are original demo copy, not quoted text.
@@ -1361,6 +1362,94 @@ export const readingRecords: ReadingRecord[] = [
   },
 ];
 
+// Posters the demo readers made. Their words are original demo copy.
+const poster = (
+  id: string,
+  authorId: string,
+  createdAt: string,
+  fields: Pick<Poster, "template" | "theme" | "font" | "pages"> &
+    Partial<Pick<Poster, "spoiler" | "inTimeline">>,
+): Poster => ({
+  id,
+  authorId,
+  spoiler: false,
+  inTimeline: true,
+  status: "published",
+  createdAt,
+  updatedAt: createdAt,
+  ...fields,
+});
+
+export const posters: Poster[] = [
+  poster("poster-nagi-night-sf", "r-nagi", "2026-10-08T23:40:00+09:00", {
+    template: "lineup",
+    theme: "navy",
+    font: "mincho",
+    pages: [
+      {
+        heading: "眠れない夜に読んだSF",
+        text: "どれも遠い星の話なのに、読み終えると自分の部屋の話だった。",
+        bookIds: ["solaris", "left-hand", "dispossessed", "fahrenheit"],
+      },
+    ],
+  }),
+  poster("poster-sumire-weekend", "r-sumire", "2026-10-09T10:20:00+09:00", {
+    template: "one_book",
+    theme: "kinari",
+    font: "mincho",
+    pages: [
+      {
+        heading: "旅に出られない週末に",
+        text: "ひとつの章がひとつの都市。寝る前に一つずつ読むと、知らない街の夢を見る。地図にない場所ばかりなのに、どの都市にも見覚えがある。それが不思議で、何度も開いてしまう。",
+        bookIds: ["invisible-cities"],
+      },
+      {
+        heading: "そして、近所を歩く",
+        text: "遠くへ行けない日は、この本を持って近所を歩く。いつもの角が、少しだけ物語になる。",
+        bookIds: ["walking"],
+      },
+    ],
+  }),
+  poster("poster-shiori-look-again", "r-shiori", "2026-10-12T08:45:00+09:00", {
+    template: "lineup",
+    theme: "wakakusa",
+    font: "gothic",
+    pages: [
+      {
+        heading: "見慣れたものを、もう一度",
+        text: "美術館に行けない日の、目の散歩に。",
+        bookIds: ["ways-of-seeing", "walden", "traveling-tree"],
+      },
+    ],
+  }),
+  poster("poster-sou-slow", "r-sou", "2026-10-11T21:30:00+09:00", {
+    template: "text",
+    theme: "sumi",
+    font: "mincho",
+    inTimeline: false,
+    pages: [
+      {
+        heading: "一冊を、何年もかけて読む",
+        text: "急いで読まなくていい本がある。三ページ読んで閉じ、季節がひとつ変わってから続きを開く。そのあいだに自分が少し変わっていて、同じ文が違って聞こえる。\n\n読み終えることより、読みかけのまま一緒に暮らすことのほうが、大事な本もある。",
+        bookIds: [],
+      },
+    ],
+  }),
+  poster("poster-haru-last-page", "r-haru", "2026-10-10T15:05:00+09:00", {
+    template: "one_book",
+    theme: "kosho",
+    font: "mincho",
+    spoiler: true,
+    pages: [
+      {
+        heading: "最後のページについて",
+        text: "読み終えたあと、最初の一行に戻りたくなった。百年分の名前が、最後の一ページで一度にほどけていく。あの結び方を知ってから読み返すと、すべての場面が違って見える。",
+        bookIds: ["hundred-years"],
+      },
+    ],
+  }),
+];
+
 export function createInitialState(): TownState {
   return structuredClone({
     books,
@@ -1393,6 +1482,7 @@ export function createInitialState(): TownState {
     settings: { composeIcon: "pen", readingPublic: true },
     seenNotifications: [],
     shopMessages: [],
+    posters,
   });
 }
 
@@ -1402,4 +1492,5 @@ export const demoReaders = readers;
 export const demoShops = shops;
 export const demoPosts = posts;
 export const demoReadingRecords = readingRecords;
+export const demoPosters = posters;
 export const seedState = createInitialState();

@@ -23,3 +23,18 @@ export const profilePath = (id: string): string =>
 /** The walk through the shops, starting inside one of them. */
 export const walkPath = (id: string): string =>
   "/walk/#" + encodeURIComponent(id);
+
+/** A poster's own page; every poster shares the one exported page. */
+export const posterPath = (id: string): string =>
+  "/posters/?id=" + encodeURIComponent(id);
+
+/** Making a poster: about a book (?book=), or the viewer's own changed (?id=). */
+export function posterNewPath(
+  options: { bookId?: string; posterId?: string } = {},
+): string {
+  if (options.posterId)
+    return "/posters/new/?id=" + encodeURIComponent(options.posterId);
+  if (options.bookId)
+    return "/posters/new/?book=" + encodeURIComponent(options.bookId);
+  return "/posters/new/";
+}

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 
-export type ReportKind = "post" | "shop" | "profile";
+export type ReportKind = "post" | "shop" | "profile" | "poster";
 export type ReportReason =
   "spam" | "harassment" | "spoiler" | "inappropriate" | "other";
 

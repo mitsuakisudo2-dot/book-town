@@ -30,6 +30,23 @@ export function noteAddressChanged() {
   if (trail.length) trail[trail.length - 1] = here();
 }
 
+/**
+ * Leaves this page for `to` without leaving it behind (a form whose work is
+ * done): 戻る then skips it. When the tab came here from `to`, it goes back
+ * there; otherwise `to` takes this page's place.
+ */
+export function leavePageFor(
+  to: string,
+  router: { back(): void; replace(href: string): void },
+) {
+  if (trail.length > 1 && trail[trail.length - 2] === to) {
+    router.back();
+    return;
+  }
+  trail.pop();
+  router.replace(to);
+}
+
 export function subscribeTrail(listener: () => void) {
   listeners.add(listener);
   return () => {
