@@ -6,6 +6,8 @@ import {
   COMPOSE_ICONS,
   ownTagline,
   type ComposeIcon,
+  type Notify,
+  type SpoilerDisplay,
   type TownActions,
   type TownState,
 } from "../lib/types";
@@ -18,13 +20,37 @@ import { linkLabel, normalizeLink, PROFILE_LINK_LIMIT } from "../lib/links";
 import { handleProblem, normalizeHandle } from "../lib/handles";
 import { useClock } from "./useClock";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
-import { ProfilePosts } from "./Social";
+import { FoldedWords, ProfilePosts } from "./Social";
 
 const composeIconNames: Record<ComposeIcon, string> = {
   pen: "万年筆",
   typewriter: "タイプライター",
   quill: "羽根ペン",
 };
+
+/** 「ネタバレの表示」, in the order of how much is shown. */
+const SPOILER_CHOICES: {
+  value: SpoilerDisplay;
+  label: string;
+  told: string;
+}[] = [
+  {
+    value: "show_all",
+    label: "すべて表示する",
+    told: "ネタバレの可能性があるものも、そのまま表示します",
+  },
+  {
+    value: "fold_possible",
+    label:
+      "ネタバレの可能性があるもの（3人以上が「ネタバレでは？」）はたたんで表示する",
+    told: "ネタバレの可能性があるものは、たたんで表示します",
+  },
+  {
+    value: "leave_out",
+    label: "ネタバレの印があるもの・可能性があるものは出さない",
+    told: "ネタバレの印があるもの・可能性があるものは、出さないようにします",
+  },
+];
 import "./profile.css";
 import "./reading.css";
 import { isDatabaseId, profilePath, shopPath } from "../lib/paths";
@@ -42,7 +68,7 @@ interface ProfileViewProps {
   state: TownState;
   actions: TownActions;
   readerId: string;
-  notify: (message: string) => void;
+  notify: Notify;
 }
 
 export function ProfileView({
@@ -201,9 +227,11 @@ export function ProfileView({
           </p>
           <h1 id="profile-name">{reader.name}</h1>
           <p className="profile-handle">@{reader.handle}</p>
-          <p className="profile-bio">
-            {reader.bio || "読書家の名刺は、好きな本から。"}
-          </p>
+          <FoldedWords state={state} kind="profile" id={reader.id}>
+            <p className="profile-bio">
+              {reader.bio || "読書家の名刺は、好きな本から。"}
+            </p>
+          </FoldedWords>
           {reader.links && reader.links.length > 0 && (
             <ul className="profile-links" aria-label="リンク">
               {reader.links.map((url) => (
@@ -527,7 +555,9 @@ export function ProfileView({
                   <p className="profile-shop-tagline">{ownTagline(shop)}</p>
                 )}
                 <h3>{shop.name}</h3>
-                <p className="profile-shop-description">{shop.description}</p>
+                <FoldedWords state={state} kind="shop" id={shop.id} inLink>
+                  <p className="profile-shop-description">{shop.description}</p>
+                </FoldedWords>
               </div>
               <span className="profile-shop-enter">
                 書店に入る <Icon name="arrow" />
@@ -661,21 +691,7 @@ export function ProfileView({
       {sheet === "settings" && (
         <Modal title="設定" onClose={() => setSheet(null)}>
           <fieldset className="record-visibility">
-            <legend>
-              読み終えた本の記録（これから残す記録のはじめの公開範囲）
-            </legend>
-            <label>
-              <input
-                type="radio"
-                name="reading-public"
-                checked={state.settings.readingPublic}
-                onChange={() => {
-                  actions.setReadingPublic(true);
-                  notify("これからの記録は、はじめから公開になります");
-                }}
-              />
-              公開
-            </label>
+            <legend>読み終えた本の記録（これから残す記録）</legend>
             <label>
               <input
                 type="radio"
@@ -683,11 +699,47 @@ export function ProfileView({
                 checked={!state.settings.readingPublic}
                 onChange={() => {
                   actions.setReadingPublic(false);
-                  notify("これからの記録は、はじめは自分だけになります");
+                  notify(
+                    "これから残す記録は、自分だけになります。今までの記録はそのままです",
+                  );
                 }}
               />
               自分だけ
             </label>
+            <label>
+              <input
+                type="radio"
+                name="reading-public"
+                checked={state.settings.readingPublic}
+                onChange={() => {
+                  actions.setReadingPublic(true);
+                  notify(
+                    "これから残す記録は、公開になります。今までの記録はそのままです",
+                  );
+                }}
+              />
+              公開
+            </label>
+          </fieldset>
+          <fieldset className="record-visibility spoiler-display">
+            <legend>ネタバレの表示</legend>
+            {SPOILER_CHOICES.map((choice) => (
+              <label key={choice.value}>
+                <input
+                  type="radio"
+                  name="spoiler-display"
+                  checked={state.settings.spoilerDisplay === choice.value}
+                  onChange={() => {
+                    actions.setSpoilerDisplay(choice.value);
+                    notify(choice.told);
+                  }}
+                />
+                {choice.label}
+              </label>
+            ))}
+            <p className="spoiler-display-note">
+              書いた人がネタバレの印を付けたものは、はじめからたたんであります。
+            </p>
           </fieldset>
           <fieldset className="record-visibility">
             <legend>読書中の画面</legend>

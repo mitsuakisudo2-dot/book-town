@@ -1,5 +1,5 @@
 import { chromium, expect } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
 
@@ -44,6 +44,10 @@ const session = () => {
 };
 
 let profile = null;
+// The rest of the town, once a test fills it: rows by table.
+let town = null;
+const reportsSent = [];
+const coverAsks = [];
 const inserted = [];
 const codeRequests = [];
 const townReads = [];
@@ -92,7 +96,15 @@ await context.route(supabase + "/**", async (route) => {
     return route.fulfill({ status: 204, body: "" });
   if (url.pathname === "/auth/v1/user") return json(200, user);
   if (url.pathname === "/rest/v1/profiles") {
-    if (request.method() === "GET") return json(200, profile ? [profile] : []);
+    if (request.method() === "GET") {
+      const own = profile ? [profile] : [];
+      return json(
+        200,
+        url.searchParams.get("id") === "eq." + user.id
+          ? own
+          : [...own, ...(town?.profiles ?? [])],
+      );
+    }
     if (request.method() === "POST") {
       inserted.push(body);
       if (body.handle === "taken")
@@ -112,15 +124,82 @@ await context.route(supabase + "/**", async (route) => {
       return json(201, profile);
     }
   }
+  if (url.pathname === "/rest/v1/reports" && request.method() === "POST") {
+    reportsSent.push(body);
+    const at = new Date().toISOString();
+    const row = {
+      id:
+        "6d1e0c2a-0000-4000-8000-0000000000" +
+        String(reportsSent.length).padStart(2, "0"),
+      target_kind: body.target_kind,
+      target_id: body.target_id,
+      reason: body.reason,
+      status: "open",
+      created_at: at,
+      status_at: at,
+    };
+    // Read back with the town, as the database would.
+    town?.reports.unshift(row);
+    return json(201, row);
+  }
   if (url.pathname.startsWith("/rest/v1/") && request.method() !== "GET")
     townWrites.push(url.pathname);
   // The rest of the signed-in town: a new reader has nothing yet.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "GET") {
     townReads.push(url.pathname);
-    return json(200, []);
+    const table = url.pathname.slice("/rest/v1/".length);
+    return json(200, town?.[table] ?? []);
   }
   return json(404, { message: "not mocked: " + url.pathname });
 });
+// Covers are answered locally: openBD has こころ's; Google has 星の本's,
+// which its rights holder asked us not to show (cover_refusals).
+const OPENBD_ISBN = "9784101010137";
+const REFUSED_ISBN = "9784001141276";
+await context.route("https://api.openbd.jp/**", (route) => {
+  const isbns = new URL(route.request().url()).searchParams
+    .get("isbn")
+    .split(",");
+  coverAsks.push(...isbns.map((isbn) => "openbd:" + isbn));
+  return route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify(
+      isbns.map((isbn) =>
+        isbn === OPENBD_ISBN
+          ? { summary: { isbn, cover: `https://cover.openbd.jp/${isbn}.jpg` } }
+          : null,
+      ),
+    ),
+  });
+});
+await context.route("https://www.googleapis.com/books/**", (route) => {
+  const isbn = new URL(route.request().url()).searchParams
+    .get("q")
+    .replace("isbn:", "");
+  coverAsks.push("google:" + isbn);
+  return route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      items: [
+        {
+          volumeInfo: {
+            industryIdentifiers: [{ type: "ISBN_13", identifier: isbn }],
+            imageLinks: {
+              thumbnail: "https://books.google.com/books/content?id=x",
+            },
+          },
+        },
+      ],
+    }),
+  });
+});
+const coverImage = await readFile(
+  new URL("../public/favicon.ico", import.meta.url),
+);
+await context.route(
+  /^https:\/\/(cover\.openbd\.jp|books\.google\.com\/books\/content)/,
+  (route) => route.fulfill({ contentType: "image/png", body: coverImage }),
+);
 const page = settleBeforeNavigating(await context.newPage());
 page.on("pageerror", (e) => errors.push(e.message));
 async function check(name, run) {
@@ -241,9 +320,17 @@ try {
 
   await check("the profile is created as the signed-in person", async () => {
     await page.getByLabel("13歳以上です").check();
-    // Records start public unless the reader keeps them to themselves.
-    await expect(page.getByRole("radio", { name: /^公開する/ })).toBeChecked();
-    await page.getByRole("radio", { name: /^自分だけ/ }).check();
+    // Records start private: 自分だけ comes first, chosen; each one can be
+    // published, and is told when it is.
+    const choices = page.getByRole("radio");
+    await expect(choices.first()).toHaveAccessibleName(/^自分だけ/);
+    await expect(page.getByRole("radio", { name: /^自分だけ/ })).toBeChecked();
+    await expect(
+      page.getByRole("radio", { name: /^公開する/ }),
+    ).not.toBeChecked();
+    await expect(page.locator(".account-choice")).toContainText(
+      "公開したときは、毎回お知らせします。",
+    );
     await page.getByRole("button", { name: "はじめる" }).click();
     await expect(
       page.getByRole("heading", { name: "ログインしています" }),
@@ -323,6 +410,325 @@ try {
       ).toHaveAttribute("aria-pressed", "false");
       expect(townWrites.length).toBe(writes);
       await shot("8-sample-like");
+    },
+  );
+
+  // Another reader, their shop and posts; what reports did; the reader's own
+  // reports; and two books with outside covers.
+  const OTHER = "3c1d2b4a-7e6f-4a5b-8c9d-0e1f2a3b4c5d";
+  const OTHER_SHOP = "4d2e3c5b-8f7a-4b6c-9d0e-1f2a3b4c5d6e";
+  const FOLDED = "5e3f4d6c-9a8b-4c7d-8e1f-2a3b4c5d6e7f";
+  const TO_REPORT = "6f4a5e7d-0b9c-4d8e-9f2a-3b4c5d6e7f80";
+  const OWN_HELD = "7a5b6f8e-1c0d-4e9f-8a3b-4c5d6e7f8091";
+  const COVER_BOOK = "8b6c7a9f-2d1e-4f0a-9b4c-5d6e7f8091a2";
+  const REFUSED_BOOK = "9c7d8b0a-3e2f-4a1b-8c5d-6e7f8091a2b3";
+  const ago = (hours) => new Date(Date.now() - hours * 3600_000).toISOString();
+  const postRow = (id, author_id, body, created_at) => ({
+    id,
+    author_id,
+    body,
+    book_id: null,
+    spoiler: false,
+    spoiler_folded: false,
+    parent_id: null,
+    reading_mode: null,
+    created_at,
+  });
+  const bookRow = (id, isbn, title) => ({
+    id,
+    isbn,
+    title,
+    author: "試験 作家",
+    publisher: "",
+    price: null,
+    source: "isbn",
+    created_by: OTHER,
+    created_at: ago(30),
+    updated_at: ago(30),
+  });
+  const filled = () => ({
+    profiles: [
+      {
+        id: OTHER,
+        handle: "ren_reads",
+        name: "レン",
+        bio: "夜にだけ本を読む人です。",
+        color: "#8a7f6a",
+        links: [],
+        compose_icon: "pen",
+        reading_visibility: "private",
+        created_at: ago(400),
+        updated_at: ago(400),
+      },
+    ],
+    shops: [
+      {
+        id: OTHER_SHOP,
+        owner_id: OTHER,
+        name: "レンの夜の本屋",
+        description: "夜更けに開く、小さな本屋です。",
+        tagline: "",
+        theme: "sage",
+        is_open: true,
+        public_shelves: [],
+        public_scene_books: [],
+      },
+    ],
+    posts: [
+      postRow(FOLDED, OTHER, "三人分の通報でたたまれた言葉。", ago(2)),
+      postRow(TO_REPORT, OTHER, "これから通報される言葉。", ago(3)),
+      postRow(OWN_HELD, user.id, "運営が確かめている、わたしの言葉。", ago(4)),
+    ],
+    books: [
+      bookRow(COVER_BOOK, OPENBD_ISBN, "こころの本"),
+      bookRow(REFUSED_BOOK, REFUSED_ISBN, "星の本"),
+    ],
+    moderation_folds: [
+      {
+        target_kind: "post",
+        target_id: FOLDED,
+        state: "folded",
+        since: ago(1),
+      },
+      {
+        target_kind: "post",
+        target_id: OWN_HELD,
+        state: "held",
+        since: ago(1),
+      },
+      {
+        target_kind: "profile",
+        target_id: OTHER,
+        state: "folded",
+        since: ago(1),
+      },
+      {
+        target_kind: "shop",
+        target_id: OTHER_SHOP,
+        state: "folded",
+        since: ago(1),
+      },
+    ],
+    reports: [
+      {
+        id: "1a000000-0000-4000-8000-000000000001",
+        target_kind: "profile",
+        target_id: OTHER,
+        reason: "harassment",
+        status: "checking",
+        created_at: "2026-10-12T03:00:00Z",
+        status_at: ago(1),
+      },
+      {
+        id: "1a000000-0000-4000-8000-000000000002",
+        target_kind: "shop",
+        target_id: OTHER_SHOP,
+        reason: "spam",
+        status: "dismissed",
+        created_at: "2026-10-11T03:00:00Z",
+        status_at: ago(2),
+      },
+    ],
+    cover_refusals: [{ isbn: REFUSED_ISBN, source: "google" }],
+  });
+
+  await check(
+    "a post folded by reports opens with a tap; the writer is told gently",
+    async () => {
+      town = filled();
+      await page.goto(base + "/timeline/");
+      const folded = page.locator("article.post-card").filter({
+        hasText: "通報があったため、運営が確かめるまで、たたんでいます",
+      });
+      await expect(folded).toBeVisible();
+      await expect(
+        page.getByText("三人分の通報でたたまれた言葉。"),
+      ).toHaveCount(0);
+      // The writer's own post, held: still theirs to read, and why.
+      await expect(
+        page.getByText(
+          "運営が確かめるまで、ほかの人からは見えないようにしています。問題がなければ、元に戻ります。",
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByText("運営が確かめている、わたしの言葉。"),
+      ).toBeVisible();
+      await shot("9-folded-post");
+      await folded.getByRole("button", { name: "読む" }).click();
+      await expect(
+        page.getByText("三人分の通報でたたまれた言葉。"),
+      ).toBeVisible();
+    },
+  );
+
+  await check(
+    "a reporter is told the report was received, and the post folds for them",
+    async () => {
+      const post = page
+        .locator("article.post-card")
+        .filter({ hasText: "これから通報される言葉。" });
+      await post.getByRole("button", { name: "その他の操作" }).click();
+      await post.getByRole("button", { name: "この投稿を通報" }).click();
+      const dialog = page.getByRole("dialog", { name: "通報する" });
+      await expect(dialog.locator("label:has(input[type=radio])")).toHaveText([
+        "宣伝・スパム",
+        "嫌がらせ・攻撃的な言葉",
+        "個人情報をさらしている",
+        "脅し・危害を加えるという言葉",
+        "不適切な内容",
+        "その他",
+      ]);
+      await dialog.getByLabel("脅し・危害を加えるという言葉").check();
+      await dialog.getByRole("button", { name: "通報する" }).click();
+      await expect(dialog).toContainText(
+        "受け付けました。知らせてくださって、ありがとうございます。",
+      );
+      await expect(dialog).toContainText(
+        "運営が確認を始めたときと、確認し終えたときに、お知らせでお伝えします。相手への対応の中身は、お伝えしていません。",
+      );
+      await expect(dialog).toContainText(
+        "この投稿は、あなたの画面ではたたんでおきます。",
+      );
+      expect(reportsSent.at(-1)).toEqual({
+        reporter_id: user.id,
+        target_kind: "post",
+        target_id: TO_REPORT,
+        reason: "threat",
+        detail: "",
+      });
+      await shot("10-report-sent");
+      await dialog.getByRole("button", { name: "閉じる" }).last().click();
+      const mine = page
+        .locator("article.post-card")
+        .filter({ hasText: "あなたが通報した投稿です" });
+      await expect(mine).toBeVisible();
+      await expect(page.getByText("これから通報される言葉。")).toHaveCount(0);
+      await mine.getByRole("button", { name: "読む" }).click();
+      await expect(page.getByText("これから通報される言葉。")).toBeVisible();
+    },
+  );
+
+  await check(
+    "the reporter hears only how far along each report is",
+    async () => {
+      await page.goto(base + "/notifications/");
+      await expect(
+        page.getByText(
+          "10月12日に通報してくださった読書家を、運営が確認しています",
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByText(
+          "10月11日に通報してくださった本屋を、運営が確認しました。知らせてくださって、ありがとうございます",
+        ),
+      ).toBeVisible();
+      // The writer of the held post is told too, never who or how many.
+      await expect(
+        page.getByText(/運営が確かめるまで、あなたの投稿「運営が確かめている/),
+      ).toBeVisible();
+      const own = page.getByRole("region", { name: "あなたの通報" });
+      await expect(own.getByRole("listitem")).toHaveText([
+        /^\d+月\d+日 · 投稿 · 脅し・危害を加えるという言葉 · 受け付けました$/,
+        "10月12日 · 読書家 · 嫌がらせ・攻撃的な言葉 · 確認中",
+        "10月11日 · 本屋 · 宣伝・スパム · 確認しました",
+      ]);
+      await expect(own.getByRole("link")).toHaveCount(0);
+      await shot("11-own-reports");
+      await page.getByRole("link", { name: /運営が確認しています/ }).click();
+      await expect(page).toHaveURL(/\/notifications\/#reports$/);
+      await expect(own).toBeInViewport();
+    },
+  );
+
+  await check(
+    "a person's and a shop's words folded by reports open with a tap",
+    async () => {
+      await page.goto(base + "/profile/?id=" + OTHER);
+      await expect(
+        page.getByRole("heading", { name: "レン", exact: true }),
+      ).toBeVisible();
+      const words = page.getByText(
+        "この紹介文は、通報があったため、運営が確かめるまでたたんでいます",
+      );
+      // The bio, and the shop's introduction on its sign (opened on the shop's page).
+      await expect(words).toHaveCount(2);
+      await expect(page.getByText("夜にだけ本を読む人です。")).toHaveCount(0);
+      await shot("12-folded-bio");
+      await expect(page.locator(".words-folded button")).toHaveCount(1);
+      await page
+        .locator(".words-folded")
+        .getByRole("button", { name: "読む" })
+        .click();
+      await expect(page.getByText("夜にだけ本を読む人です。")).toBeVisible();
+      await page.goto(base + "/shop/?id=" + OTHER_SHOP);
+      await expect(
+        page.getByRole("heading", { name: "レンの夜の本屋" }).first(),
+      ).toBeVisible();
+      await expect(
+        page.getByText("夜更けに開く、小さな本屋です。"),
+      ).toHaveCount(0);
+      await page
+        .locator(".shop-about .words-folded")
+        .getByRole("button", { name: "読む" })
+        .click();
+      await expect(
+        page.getByText("夜更けに開く、小さな本屋です。"),
+      ).toBeVisible();
+      // In passing, folded words are not matched.
+      await page.goto(base + "/search/");
+      await page.getByRole("searchbox").first().fill("夜更けに開く");
+      await expect(page.getByText("レンの夜の本屋")).toHaveCount(0);
+    },
+  );
+
+  await check(
+    "a cover can be asked to be taken down, and a refused one is not shown",
+    async () => {
+      await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
+      await expect(page.locator(".cover-credit")).toContainText("openBD");
+      const ask = page.getByRole("button", { name: "表紙の削除依頼はこちら" });
+      await expect(ask).toBeVisible();
+      await shot("13-cover-link");
+      await ask.click();
+      const dialog = page.getByRole("dialog", { name: "表紙の削除を依頼する" });
+      await expect(dialog).toContainText(
+        "『こころの本』の表紙を、BookTown に出さないよう運営に依頼します。",
+      );
+      await expect(dialog.getByRole("radio")).toHaveCount(0);
+      const send = dialog.getByRole("button", { name: "依頼する" });
+      await expect(send).toBeDisabled();
+      await dialog
+        .getByLabel("この表紙とのご関係と、依頼の内容（必ず書いてください）")
+        .fill("この本の装丁を担当した者です。");
+      await shot("14-cover-request");
+      await send.click();
+      await expect(dialog).toContainText(
+        "受け付けました。運営が確認を始めたときと、確認し終えたときに、お知らせでお伝えします。",
+      );
+      expect(reportsSent.at(-1)).toEqual({
+        reporter_id: user.id,
+        target_kind: "book",
+        target_id: COVER_BOOK,
+        reason: "cover",
+        detail:
+          "この本の装丁を担当した者です。\n\n表紙の出どころ: openBD / ISBN " +
+          OPENBD_ISBN,
+      });
+      await dialog.getByRole("button", { name: "閉じる" }).last().click();
+      // Google's cover of 星の本 was refused: Google is not asked for it, and
+      // the book keeps its 装丁カード, with no credit and no link.
+      await page.goto(base + "/books/registered/?id=" + REFUSED_BOOK);
+      await expect(page.getByRole("heading", { name: "星の本" })).toBeVisible();
+      await expect(page.locator(".book-page-hero .jacket-title")).toBeVisible();
+      await expect(page.locator(".book-page-hero img")).toHaveCount(0);
+      await expect(page.locator(".cover-credit")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "表紙の削除依頼はこちら" }),
+      ).toHaveCount(0);
+      expect(coverAsks).toContain("openbd:" + REFUSED_ISBN);
+      expect(coverAsks).not.toContain("google:" + REFUSED_ISBN);
+      await shot("15-cover-refused");
+      town = null;
     },
   );
 

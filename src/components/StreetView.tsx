@@ -18,6 +18,7 @@ import { BookInHand, heldBookOf } from "./BookInHand";
 import "./street.css";
 import { profilePath, shopPath, walkPath } from "../lib/paths";
 import { useTownBackend } from "../lib/store";
+import { wordsFolded } from "../lib/social";
 import { shopOpenedRecently } from "../lib/just-opened";
 import { replaceAddress, useUrlParam } from "../lib/url-state";
 import { useLayerReturn } from "../lib/back-layer";
@@ -118,7 +119,7 @@ export function StreetView({
       (!term ||
         (
           shop.name +
-          shop.description +
+          (wordsFolded(state, "shop", shop.id) ? "" : shop.description) +
           (owner?.name ?? "") +
           stock.map((b) => b.title + b.author).join("")
         )

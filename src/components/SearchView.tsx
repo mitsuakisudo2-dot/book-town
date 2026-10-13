@@ -12,7 +12,7 @@ import {
   type TownState,
 } from "../lib/types";
 import { booksFelt, feelingsInTown } from "../lib/records";
-import { findReader } from "../lib/social";
+import { findReader, wordsFolded } from "../lib/social";
 import { bookPath } from "../lib/books";
 import { matchBooks } from "./BookPicker";
 import {
@@ -170,7 +170,7 @@ export function SearchView({ state, actions, notify }: Shared) {
   const people =
     term && !tagTerm
       ? [state.me, ...state.readers].filter((reader) =>
-          `${reader.name} ${reader.handle} ${reader.bio}`
+          `${reader.name} ${reader.handle} ${wordsFolded(state, "profile", reader.id) ? "" : reader.bio}`
             .toLocaleLowerCase()
             .includes(personTerm),
         )
@@ -185,7 +185,7 @@ export function SearchView({ state, actions, notify }: Shared) {
               : (findReader(state, shop.ownerId)?.name ?? "");
           return (
             shop.name +
-            shop.description +
+            (wordsFolded(state, "shop", shop.id) ? "" : shop.description) +
             owner +
             publicStock(state, shop)
               .map((book) => book.title + book.author)

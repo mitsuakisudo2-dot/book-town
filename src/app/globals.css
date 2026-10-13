@@ -2995,3 +2995,21 @@ dialog .toast {
   bottom: 112px;
   left: 50%;
 }
+/* The one way back from what a toast just said (公開しました → 自分だけに戻す). */
+.toast-undo {
+  margin-left: 6px;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: #fffdf3;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.toast-undo:focus-visible {
+  outline: 2px solid #fffdf3;
+  outline-offset: 2px;
+}

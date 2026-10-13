@@ -331,6 +331,9 @@ try {
       await expect(closed).toContainText("今日の読書");
       await expect(closed).toContainText("『ソラリス』");
       await expect(closed).toContainText("ちょうど第二章。");
+      await expect(
+        closed.getByRole("link", { name: "『ソラリス』の作品ページへ" }),
+      ).toHaveAttribute("href", "/books/solaris/");
       await closed.getByRole("button", { name: "閉じる" }).click();
       await expect(closed).toHaveCount(0);
       await expect(page.locator(".picker-chosen")).toContainText("ソラリス");
@@ -347,6 +350,12 @@ try {
         name: "『ソラリス』の続きを読む",
       });
       await expect(next).toContainText("ちょうど第二章。");
+      // The jacket is its own link, to the book's page (where its cover is
+      // credited); the two links sit side by side, not nested.
+      await expect(
+        page.getByRole("link", { name: "『ソラリス』の作品ページへ" }),
+      ).toHaveAttribute("href", "/books/solaris/");
+      await expect(page.locator(".home-continue a a")).toHaveCount(0);
       await next.click();
       await expect(page).toHaveURL(/\/reading\/$/);
       await expect(page.locator(".picker-chosen")).toContainText("ソラリス");

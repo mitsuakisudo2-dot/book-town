@@ -260,6 +260,19 @@
   border: 1px solid #ead7b0;
   color: #3a2e22;
 }
+.home-continue-book {
+  flex: none;
+  display: block;
+  border-radius: 3px;
+}
+.home-continue-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+}
 .home-continue-jacket {
   width: 40px;
   height: 58px;
@@ -306,8 +319,11 @@
   font-weight: 600;
 }
 @media (max-width: 420px) {
-  .home-continue {
+  .home-continue,
+  .home-continue-main {
     gap: 11px;
+  }
+  .home-continue {
     padding: 10px 11px;
   }
   .home-continue-go {

@@ -2,6 +2,7 @@
 
 import { useRef, type ReactNode, type TouchEvent } from "react";
 import Link from "next/link";
+import { bookPath } from "../lib/books";
 import { useRouter } from "next/navigation";
 import type { TownActions, TownState } from "../lib/types";
 import { ComposeFab, TimelineView } from "./Social";
@@ -133,26 +134,36 @@ function ContinueReading({ state }: { state: TownState }) {
   const next = bookToContinue(state);
   const book = next && state.books.find((entry) => entry.id === next.bookId);
   if (!next || !book) return null;
+  // The jacket leads to the book's own page (where its cover is credited);
+  // the rest of the card, to reading on. Two links side by side, not nested.
   return (
-    <Link
-      href="/reading/"
-      className="home-continue"
-      aria-label={`『${book.title}』の続きを読む`}
-    >
-      <BookJacket book={book} className="home-continue-jacket" />
-      <span className="home-continue-text">
-        <small>読みかけの本</small>
-        <b>{book.title}</b>
-        {next.lastWords && (
-          <span className="home-continue-words">
-            前回のひとこと「{next.lastWords}」
-          </span>
-        )}
-      </span>
-      <span className="home-continue-go">
-        <Icon name="reading" size={16} />
-        続きを読む
-      </span>
-    </Link>
+    <div className="home-continue">
+      <Link
+        href={bookPath(book.id)}
+        className="home-continue-book"
+        aria-label={`『${book.title}』の作品ページへ`}
+      >
+        <BookJacket book={book} className="home-continue-jacket" />
+      </Link>
+      <Link
+        href="/reading/"
+        className="home-continue-main"
+        aria-label={`『${book.title}』の続きを読む`}
+      >
+        <span className="home-continue-text">
+          <small>読みかけの本</small>
+          <b>{book.title}</b>
+          {next.lastWords && (
+            <span className="home-continue-words">
+              前回のひとこと「{next.lastWords}」
+            </span>
+          )}
+        </span>
+        <span className="home-continue-go">
+          <Icon name="reading" size={16} />
+          続きを読む
+        </span>
+      </Link>
+    </div>
   );
 }

@@ -58,3 +58,22 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* Under a cover's credit: small and quiet, for the rare rights holder. */
+.cover-removal-link {
+  display: block;
+  margin: -2px 0 6px;
+  padding: 2px 0;
+  font-size: 10px;
+  line-height: 1.7;
+  color: #a1aa95;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.cover-removal-link:hover,
+.cover-removal-link:focus-visible {
+  color: #6f7f63;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

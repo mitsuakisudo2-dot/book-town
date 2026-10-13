@@ -22,6 +22,7 @@ import {
   safeBackgroundUrl,
   worldPolygon,
 } from "../lib/store-scene";
+import { wordsFolded } from "../lib/social";
 import {
   publicScenePops,
   publicWalkShops,
@@ -119,17 +120,21 @@ export function WalkView({
     );
   }, [orderedStores, state.books, state.shops, state.ownShop, saved.scenes]);
   const ids = useMemo(() => shops.map((s) => s.id), [shops]);
+  const reviewFolds = state.reviewFolds;
   const scenes = useMemo(
     () =>
       shops.map((s) =>
         resolveStoreScene(
-          s,
+          // An introduction folded by reports is not said in passing.
+          wordsFolded({ reviewFolds }, "shop", s.id)
+            ? { ...s, description: "" }
+            : s,
           state.books,
           state.shops.findIndex((shop) => shop.id === s.id),
           saved.scenes,
         ),
       ),
-    [shops, state.books, state.shops, saved.scenes],
+    [shops, state.books, state.shops, saved.scenes, reviewFolds],
   );
   const pops = useMemo(() => publicScenePops(scenes), [scenes]);
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -514,7 +519,9 @@ export function WalkView({
                   </small>
                 </span>
               </Link>
-              {owner?.bio && <p className="walk-owner-bio">{owner.bio}</p>}
+              {owner?.bio && !wordsFolded(state, "profile", owner.id) && (
+                <p className="walk-owner-bio">{owner.bio}</p>
+              )}
             </div>
             <div className="walk-header-tools">
               {!(ownShop && delivers) && (
@@ -721,7 +728,12 @@ export function WalkView({
                       o.kind === "ownerPop"
                         ? "店主から"
                         : (o.text ?? shop.name),
-                    text: o.kind === "row" ? shop.description : (o.text ?? ""),
+                    text:
+                      o.kind === "row"
+                        ? wordsFolded(state, "shop", shop.id)
+                          ? ""
+                          : shop.description
+                        : (o.text ?? ""),
                   })
                 }
               />
