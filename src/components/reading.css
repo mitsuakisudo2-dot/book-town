@@ -731,6 +731,14 @@
 .reading-peek[open] > summary svg {
   transform: rotate(-90deg);
 }
+.reading-peek-keep {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 2px 12px;
+  font-size: 11px;
+  color: #8a9580;
+}
 .reading-mine {
   margin-top: 14px;
 }

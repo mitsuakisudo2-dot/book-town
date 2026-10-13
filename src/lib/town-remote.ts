@@ -1,6 +1,7 @@
 import { createRegisteredBook, REGISTERED_GENRE } from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
+import { tapsOf } from "./social";
 import {
   COMPOSE_ICONS,
   ME_ID,
@@ -57,10 +58,13 @@ export type ShopRow = Pick<
   | "public_scene_books"
 >;
 
+/** Who typed a book in is not readable, so a book row comes without it. */
+export type BookRow = Omit<Tables<"books">, "created_by">;
+
 export interface RemoteRows {
   profiles: Tables<"profiles">[];
   nine: Tables<"profile_nine">[];
-  books: Tables<"books">[];
+  books: BookRow[];
   /** Open shops, and the person's own shop whether it is open or not. */
   shops: ShopRow[];
   /** Every shelf of the person's own shop, private ones included. */
@@ -114,15 +118,18 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const text = (value: unknown, limit: number): value is string =>
   typeof value === "string" && value.length <= limit;
 
-/** Books from the catalog get a drawn jacket, like the ones registered in the demo. */
-export function bookFromRow(row: Tables<"books">, userId: string | null): Book {
+/**
+ * Books from the catalog get a drawn jacket, like the ones registered in the
+ * demo. `registered`: the book is among the reader's own registered books.
+ */
+export function bookFromRow(row: BookRow, registered: boolean): Book {
   const book = createRegisteredBook(row.id, {
     title: row.title,
     author: row.author,
     ...(row.isbn ? { isbn: row.isbn } : {}),
     ...(row.price ? { price: row.price } : {}),
   });
-  return userId !== null && row.created_by === userId
+  return registered
     ? book
     : {
         ...book,
@@ -238,7 +245,14 @@ export function townFromRows(
   now = Date.now(),
 ): TownState {
   const { userId } = ids;
-  const books = rows.books.map((row) => bookFromRow(row, userId));
+  const registered = new Set(
+    rows.marks
+      .filter((row) => row.kind === "library" && row.user_id === userId)
+      .map((row) => row.book_id),
+  );
+  const books = rows.books.map((row) =>
+    bookFromRow(row, registered.has(row.id)),
+  );
   const bookIds = new Set(books.map((book) => book.id));
   const readerId = (id: string) => (id === userId ? ME_ID : id);
 
@@ -334,6 +348,22 @@ export function townFromRows(
         createdAt: row.created_at,
         likes: mine ? reactionCount(row.id, "like") : 0,
         wants: mine ? reactionCount(row.id, "want") : 0,
+        ...(mine
+          ? {
+              likers: rows.postReactions
+                .filter(
+                  (reaction) =>
+                    reaction.post_id === row.id &&
+                    reaction.kind === "like" &&
+                    reaction.user_id !== userId,
+                )
+                .map((reaction) => ({
+                  readerId: readerId(reaction.user_id),
+                  taps: reaction.taps,
+                  at: reaction.created_at,
+                })),
+            }
+          : {}),
         readingMode: READING_MODES.includes(row.reading_mode as ReadingMode)
           ? (row.reading_mode as ReadingMode)
           : null,
@@ -433,6 +463,17 @@ export function townFromRows(
     popReactions,
     posts,
     likedPosts: reacted("like"),
+    likeTaps: Object.fromEntries(
+      rows.postReactions
+        .filter(
+          (row) =>
+            row.user_id === userId &&
+            row.kind === "like" &&
+            row.taps > 1 &&
+            postIds.has(row.post_id),
+        )
+        .map((row) => [row.post_id, row.taps]),
+    ),
     wantedPosts: reacted("want"),
     spoilerReports: rows.spoilerReports
       .map((row) => row.post_id)
@@ -549,6 +590,7 @@ export type Write =
   | { kind: "delete-posts"; ids: string[] }
   | { kind: "posts"; rows: TablesInsert<"posts">[] }
   | { kind: "mark-spoilers"; ids: string[] }
+  | { kind: "like-taps"; rows: { post_id: string; taps: number }[] }
   | { kind: "end-sessions"; rows: { id: string; ended_at: string }[] }
   | { kind: "sessions"; rows: TablesInsert<"reading_sessions">[] }
   | { kind: "delete-records"; ids: string[] }
@@ -824,6 +866,15 @@ export function planWrites(
     const fresh = difference(to[table], from[table]);
     if (fresh.length) writes.push({ kind: "add", table, rows: fresh });
   }
+  // Pressing a like again changes its count, once its row is there. A new
+  // row already starts at one press.
+  const pressed = next.likedPosts
+    .map((post_id) => ({ post_id, taps: tapsOf(next, post_id) }))
+    .filter((row) => {
+      const was = tapsOf(base, row.post_id);
+      return row.taps !== was && !(was === 0 && row.taps === 1);
+    });
+  if (pressed.length) writes.push({ kind: "like-taps", rows: pressed });
   return writes;
 }
 
@@ -854,6 +905,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     popReactions: {},
     posts: [],
     likedPosts: [],
+    likeTaps: {},
     wantedPosts: [],
     spoilerReports: [],
     readingNow: [],

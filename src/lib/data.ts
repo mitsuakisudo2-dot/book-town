@@ -1382,6 +1382,7 @@ export function createInitialState(): TownState {
     popReactions: {},
     posts,
     likedPosts: [],
+    likeTaps: {},
     wantedPosts: [],
     spoilerReports: [],
     readingNow,

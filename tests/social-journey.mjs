@@ -225,6 +225,27 @@ try {
     );
 
     await check(
+      `${label} a like is pressed again, up to ten, and taken back from the menu`,
+      async () => {
+        await go("/timeline/");
+        const post = card("すみれ", "二駅乗り過ごした");
+        const like = post.getByRole("button", { name: /いいね/ });
+        for (let press = 0; press < 3; press += 1) await like.click();
+        await expect(like).toHaveAttribute("aria-pressed", "true");
+        await expect(like).toHaveText("いいね3回");
+        for (let press = 0; press < 8; press += 1) await like.click();
+        await expect(like).toHaveText("いいね10回");
+        await expect(page.locator(".toast")).toHaveText(
+          "いいねは10回まで重ねられます",
+        );
+        await post.getByRole("button", { name: "その他の操作" }).click();
+        await post.getByRole("button", { name: "いいねを取り消す" }).click();
+        await expect(like).toHaveAttribute("aria-pressed", "false");
+        await expect(like).toHaveText("いいね");
+      },
+    );
+
+    await check(
       `${label} reviews hold conversations and replies can recommend a book`,
       async () => {
         await go("/books/solaris/");

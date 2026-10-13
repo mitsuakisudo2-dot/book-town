@@ -34,6 +34,10 @@ const LIMIT = 1000;
 const POSTS = 500;
 const CATALOG = 300;
 
+// Everything but who typed the book in, which the database does not show.
+const BOOK_COLUMNS =
+  "id, isbn, title, author, publisher, price, source, created_at, updated_at";
+
 const SHOP_COLUMNS =
   "id, owner_id, name, description, tagline, theme, is_open, public_shelves, public_scene_books";
 
@@ -42,7 +46,7 @@ async function booksFor(client: Client, rows: Omit<RemoteRows, "books">) {
   const catalog = await all(
     client
       .from("books")
-      .select("*")
+      .select(BOOK_COLUMNS)
       .order("created_at", { ascending: false })
       .limit(CATALOG),
   );
@@ -50,7 +54,7 @@ async function booksFor(client: Client, rows: Omit<RemoteRows, "books">) {
   const missing = referencedBookIds(rows).filter((id) => !have.has(id));
   const more = await Promise.all(
     chunks(missing, 100).map((ids) =>
-      all(client.from("books").select("*").in("id", ids)),
+      all(client.from("books").select(BOOK_COLUMNS).in("id", ids)),
     ),
   );
   return [...catalog, ...more.flat()];
@@ -344,6 +348,17 @@ export async function applyWrite(
       await settled(
         client.from("posts").update({ spoiler: true }).in("id", write.ids),
       );
+      return;
+    case "like-taps":
+      for (const row of write.rows)
+        await settled(
+          client
+            .from("post_reactions")
+            .update({ taps: row.taps })
+            .eq("user_id", ids.userId)
+            .eq("post_id", row.post_id)
+            .eq("kind", "like"),
+        );
       return;
     case "end-sessions":
       for (const row of write.rows)
