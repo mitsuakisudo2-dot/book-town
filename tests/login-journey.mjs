@@ -1567,6 +1567,23 @@ try {
   );
 
   await check(
+    "on a phone, the sheet of words for an owner opens without the keyboard",
+    async () => {
+      await page.goto(base + "/walk/#shop-orbit");
+      await expect(page.locator(".walk-book-target").first()).toBeVisible();
+      await page.getByRole("button", { name: "店主にひとことを伝える" }).tap();
+      const sheet = page.getByRole("dialog", { name: "店主にひとことを残す" });
+      await expect(sheet.getByRole("button", { name: "閉じる" })).toBeFocused();
+      const box = sheet.getByRole("textbox", { name: "店主に伝えたい言葉" });
+      await expect(box).not.toBeFocused();
+      await box.tap();
+      await expect(box).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(sheet).toHaveCount(0);
+    },
+  );
+
+  await check(
     "a poster folded by reports opens with a tap; its maker is told gently",
     async () => {
       town = withPosters();
