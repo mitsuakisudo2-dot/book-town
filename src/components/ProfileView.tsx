@@ -123,16 +123,17 @@ export function ProfileView({
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   // The 9冊 picker finds books the way every search does; the reader's own
   // books come first among equals, and near titles wait under a quiet heading.
+  // Before anything is typed, or by a genre, never a book another reader only
+  // typed in.
+  const beforeSearch = booksBeforeSearch(state);
   const nineSearch = useBookSearch(state.books, search, {
     own: state.library,
     limit: state.books.length,
+    genreFinds: beforeSearch,
   });
   const searchingNine = search.trim() !== "";
-  // Before anything is typed, never a book another reader only typed in.
   const selectableBooks = (
-    searchingNine
-      ? nineSearch.found.map((match) => match.book)
-      : booksBeforeSearch(state)
+    searchingNine ? nineSearch.found.map((match) => match.book) : beforeSearch
   ).filter((book) => !draftNine.includes(book.id));
   const nearNine = searchingNine
     ? nineSearch.near

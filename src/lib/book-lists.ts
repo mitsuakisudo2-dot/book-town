@@ -3,9 +3,10 @@ import { isPublished, posterBookIds } from "./posters";
 import { ME_ID, type Book, type TownState } from "./types";
 
 // A list of the town's books shown before anything is typed (棚の隅の本, a
-// picker's first books, the 見本's shelves in the walk) shows only books used
-// where everyone can see them, the 見本's, and the reader's own. A book
-// another reader only typed in waits until its title or author is searched.
+// picker's first books, the 見本's shelves in the walk), or found by a genre
+// chip, shows only books used where everyone can see them, the 見本's, and the
+// reader's own. A book another reader only typed in waits until its title,
+// author or ISBN is searched.
 // This is the screen's part only: the catalog still lets anyone read every
 // title, until the database itself hides them (R2).
 
@@ -21,6 +22,7 @@ function ownBookIds(state: TownState): (string | null)[] {
     ...(state.ownShop?.shelves ?? []).flatMap((shelf) =>
       shelf.items.map((item) => item.bookId),
     ),
+    ...(state.ownShop?.sceneBookIds ?? []),
     ...state.posts
       .filter((post) => post.authorId === ME_ID)
       .map((post) => post.bookId),
@@ -34,9 +36,9 @@ function ownBookIds(state: TownState): (string | null)[] {
 }
 
 /**
- * Books others can see used: on a public shelf, in a post or a public record,
- * among someone's 人生の9冊, on a poster put up, or read together right now.
- * A book only in a store scene is not counted here, so it is found by name.
+ * Books others can see used: on a public shelf or in a shop's public store
+ * scene, in a post or a public record, among someone's 人生の9冊, on a poster
+ * put up, or read together right now.
  */
 function publicBookIds(state: TownState): (string | null)[] {
   return [
@@ -45,6 +47,7 @@ function publicBookIds(state: TownState): (string | null)[] {
         .filter((shelf) => shelf.isPublic)
         .flatMap((shelf) => shelf.items.map((item) => item.bookId)),
     ),
+    ...state.shops.flatMap((shop) => shop.sceneBookIds ?? []),
     ...state.posts
       .filter((post) => post.readingMode !== "solo")
       .map((post) => post.bookId),

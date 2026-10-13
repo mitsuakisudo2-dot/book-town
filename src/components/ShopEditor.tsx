@@ -148,7 +148,10 @@ function AddBookPicker({
 }: {
   shelf: Shelf;
   books: Book[];
-  /** The books offered before anything is typed (booksBeforeSearch). */
+  /**
+   * The books offered before anything is typed, and the only ones a genre
+   * finds (booksBeforeSearch).
+   */
   shown: Book[];
   /** The reader's own books: first among equal matches. */
   library: string[];
@@ -158,6 +161,7 @@ function AddBookPicker({
   const results = useBookSearch(books, search, {
     own: library,
     limit: books.length,
+    genreFinds: shown,
   });
   const [display, setDisplay] = useState<ShelfItem["display"]>("spine");
   // What this visit changed, for the running tally at the bottom.
@@ -350,7 +354,7 @@ function AddBookPicker({
               className="editor-text-button"
               onClick={() => setSearch("")}
             >
-              すべての本を見る
+              検索をやめる
             </button>
           </div>
         )}

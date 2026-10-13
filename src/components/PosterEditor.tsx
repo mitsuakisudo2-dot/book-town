@@ -869,24 +869,25 @@ function BookChoice({
     .map((bookId) => state.books.find((book) => book.id === bookId))
     .filter((book): book is Book => Boolean(book));
   const own = ownBooks(state);
+  // Before anything is typed, or by a genre, never a book another reader only
+  // typed in.
+  const beforeSearch = booksBeforeSearch(state);
   // The reader's own books come first among equal matches.
   const results = useBookSearch(state.books, query, {
     own: own.map(({ book }) => book.id),
     limit: OWN_SHOWN,
+    genreFinds: beforeSearch,
   });
   const searching = query.trim() !== "";
   // Titles only close in spelling wait under their own quiet heading.
   const near = searching ? results.near.map(({ book }) => ({ book })) : [];
-  // Before anything is typed, never a book another reader only typed in.
   const offered: { book: Book; from?: string }[] = searching
     ? results.found.map(({ book }) => ({ book }))
     : own.length
       ? all
         ? own
         : own.slice(0, OWN_SHOWN)
-      : booksBeforeSearch(state)
-          .slice(0, OWN_SHOWN)
-          .map((book) => ({ book }));
+      : beforeSearch.slice(0, OWN_SHOWN).map((book) => ({ book }));
 
   function toggle(bookId: string) {
     if (max === 1) {

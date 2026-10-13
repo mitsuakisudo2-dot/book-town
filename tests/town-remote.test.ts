@@ -403,6 +403,34 @@ async function main() {
     assert.deepEqual(onPosters.sort(), [BOOK, OTHER_BOOK].sort());
   });
 
+  await check("a store scene's books are known as used", () => {
+    // A 見本's book by its own name; the owner's own scene, private books too.
+    const sample = demoBooks[0].id;
+    const town = townFromRows(
+      rows({
+        shops: [
+          shop(AKI_SHOP, AKI),
+          shop(BEN_SHOP, BEN, {
+            public_scene_books: [
+              OTHER_BOOK,
+              3,
+              sampleBookRowId(sample),
+              "gone",
+              OTHER_BOOK,
+            ],
+          }),
+        ],
+        ownSceneBooks: [BOOK],
+      }),
+      ids,
+    );
+    assert.deepEqual(town.shops[0].sceneBookIds, [OTHER_BOOK, sample]);
+    assert.deepEqual(town.ownShop?.sceneBookIds, [BOOK]);
+    // No scene, no field.
+    const bare = townFromRows(rows({ shops: [shop(BEN_SHOP, BEN)] }), ids);
+    assert.equal("sceneBookIds" in bare.shops[0], false);
+  });
+
   await check("posters: own drafts come back, others' only once put up", () => {
     const MINE = "00000000-0000-4000-8000-0000000000d1";
     const BENS = "00000000-0000-4000-8000-0000000000d2";

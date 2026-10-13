@@ -88,6 +88,7 @@ export function SearchView({ state, actions, notify }: Shared) {
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
   // Before anything is typed, only books used where everyone can see them,
   // the 見本's and the reader's own: never one another reader only typed in.
+  // A genre (a chip) finds only these too; a title or an author finds any.
   const shown = useMemo(() => booksBeforeSearch(state), [state]);
   const genres = [...new Set(shown.map((book) => book.genre))];
 
@@ -145,6 +146,7 @@ export function SearchView({ state, actions, notify }: Shared) {
   );
   const books = useBookSearch(state.books, term && !tagTerm ? query : "", {
     presence,
+    genreFinds: shown,
   });
   const { found, near } = books;
   const tagResults = tagTerm ? postsWithTag(state, tagTerm) : [];

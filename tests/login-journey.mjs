@@ -847,14 +847,24 @@ try {
         page.getByRole("heading", { name: "棚の隅の本" }),
       ).toBeVisible();
       await expect(page.locator("main")).not.toContainText("星の本");
-      await page
-        .getByRole("searchbox", { name: "本と書店を検索" })
-        .fill("星の本");
-      await expect(
+      // Nor does a genre find it: the 登録した本 chip, or part of it typed.
+      const box = page.getByRole("searchbox", { name: "本と書店を検索" });
+      const listed = (title) =>
         page.locator(".search-results .search-book").filter({
-          hasText: "星の本",
-        }),
-      ).toHaveCount(1);
+          hasText: title,
+        });
+      await page
+        .getByRole("group", { name: "ジャンルで探す" })
+        .getByRole("button", { name: "登録した本" })
+        .click();
+      await expect(box).toHaveValue("登録した本");
+      await expect(listed("こころの本")).toHaveCount(1);
+      await expect(listed("星の本")).toHaveCount(0);
+      await box.fill("登録");
+      await expect(listed("こころの本")).toHaveCount(1);
+      await expect(listed("星の本")).toHaveCount(0);
+      await box.fill("星の本");
+      await expect(listed("星の本")).toHaveCount(1);
       // The 人生の9冊 picker offers it only once it is searched for.
       await page.goto(base + "/profiles/me/");
       await page
@@ -866,9 +876,13 @@ try {
         nine.getByRole("button", { name: title + "を人生の9冊に加える" });
       await expect(pick("こころの本")).toBeVisible();
       await expect(pick("星の本")).toHaveCount(0);
-      await nine
-        .getByRole("searchbox", { name: "人生の9冊に追加する本を検索" })
-        .fill("星の本");
+      const nineBox = nine.getByRole("searchbox", {
+        name: "人生の9冊に追加する本を検索",
+      });
+      await nineBox.fill("登録した本");
+      await expect(pick("こころの本")).toBeVisible();
+      await expect(pick("星の本")).toHaveCount(0);
+      await nineBox.fill("星の本");
       await expect(pick("星の本")).toBeVisible();
       await nine.getByRole("button", { name: "キャンセル" }).click();
       await expect(nine).toHaveCount(0);

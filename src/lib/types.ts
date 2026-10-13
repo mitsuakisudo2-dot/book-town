@@ -98,6 +98,11 @@ export interface Shop {
    */
   weekVisitors?: { count: number; at: string };
   shelves: Shelf[];
+  /**
+   * The books standing in the shop's store scene, read with an account (only
+   * the public ones of another reader's shop): lists count them as used.
+   */
+  sceneBookIds?: string[];
   demo: boolean;
 }
 
