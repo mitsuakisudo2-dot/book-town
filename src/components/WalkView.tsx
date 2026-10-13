@@ -306,8 +306,9 @@ export function WalkView({
   }
   function close() {
     setOverlay(null);
-    // The book in hand and dialogs give focus back as they go; this finds the
-    // way back from the rest (a shelf brought close) or when the opener is gone.
+    // The book in hand and dialogs give focus back as they go; this catches
+    // what they leave on the page itself (a dialog that saved no opener) or an
+    // opener that is gone.
     focusNextFrame(() =>
       focus.current?.isConnected ? focus.current : stage.current,
     );
