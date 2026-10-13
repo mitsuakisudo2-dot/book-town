@@ -235,8 +235,8 @@ async function main() {
   await check(
     "見本 stand in a signed-in town, and their books can be kept",
     async () => {
-      const chi = await reader("chi");
-      const store = await townOf(chi);
+      const eri = await reader("eri");
+      const store = await townOf(eri);
       const town = store.getSnapshot();
       assert.ok(town.shops.some((entry) => entry.demo));
       assert.ok(town.posts.some((entry) => !isDatabaseId(entry.authorId)));
@@ -249,7 +249,7 @@ async function main() {
       // A like for a 見本's post would reach nobody, so it is not kept.
       store.actions.toggleLike(demoPosts[0].id);
       await settled(store);
-      const again = (await townOf(chi)).getSnapshot();
+      const again = (await townOf(eri)).getSnapshot();
       assert.deepEqual(again.wishlist, [sample]);
       assert.equal(
         again.posts.find((entry) => entry.id === about)?.bookId,
