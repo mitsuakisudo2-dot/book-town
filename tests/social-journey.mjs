@@ -1,6 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { settleBeforeNavigating } from "./journey-layers.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -80,7 +81,7 @@ try {
     { width: 390, height: 844 },
   ]) {
     const context = await browser.newContext({ viewport });
-    page = await context.newPage();
+    page = settleBeforeNavigating(await context.newPage());
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(message.text());

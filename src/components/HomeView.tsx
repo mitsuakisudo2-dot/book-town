@@ -7,6 +7,7 @@ import type { TownActions, TownState } from "../lib/types";
 import { ComposeFab, TimelineView } from "./Social";
 import { BookJacket, Icon } from "./ui";
 import { bookToContinue } from "../lib/reading";
+import { leaveLayers } from "../lib/back-layer";
 
 type Shared = {
   state: TownState;
@@ -118,7 +119,9 @@ export function HomeView({
       <ComposeFab
         {...shared}
         onPosted={() => {
-          if (tab !== "timeline") router.push(routes.timeline);
+          // The dialog's step comes off first; 戻る from the timeline is home.
+          if (tab !== "timeline")
+            leaveLayers(() => router.push(routes.timeline));
         }}
       />
     </div>

@@ -19,6 +19,36 @@ import "./book-in-hand.css";
 import type { ReadEntry } from "../lib/store-scene-adapter";
 import { StoreStamp } from "./StoreCanvas";
 import { profilePath, shopPath } from "../lib/paths";
+import { useBackLayer } from "../lib/back-layer";
+
+/**
+ * The book in hand, as one step of 戻る: the shop, the shelf (none for a
+ * book placed in a shop's scene) and the item. A page shown again on that
+ * step puts the same book back in hand.
+ */
+export type HeldBook = {
+  shopId: string;
+  shelfId: string | null;
+  itemId: string;
+};
+const HELD = "book:";
+export const heldBookName = (held: HeldBook) =>
+  HELD + JSON.stringify([held.shopId, held.shelfId, held.itemId]);
+export function heldBookOf(name: string): HeldBook | null {
+  if (!name.startsWith(HELD)) return null;
+  try {
+    const [shopId, shelfId, itemId] = JSON.parse(name.slice(HELD.length));
+    return typeof shopId === "string" && typeof itemId === "string"
+      ? {
+          shopId,
+          shelfId: typeof shelfId === "string" ? shelfId : null,
+          itemId,
+        }
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface SceneReading {
   entries: ReadEntry[];
@@ -162,6 +192,17 @@ export function BookInHand({
     enabled: popCandidates.length > 1,
     contain: true,
   });
+  // Before the page beneath is held still, so its scroll is recorded.
+  const layer = useBackLayer(
+    onClose,
+    item
+      ? heldBookName({
+          shopId: item.shopId,
+          shelfId: item.legacy?.shelfId ?? null,
+          itemId: item.id,
+        })
+      : undefined,
+  );
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -217,6 +258,8 @@ export function BookInHand({
   }
 
   function leaveForPage() {
+    // The book stays in hand in the step it leaves, for 戻る to return to.
+    layer.leave(() => {});
     // Next.js owns the destination page's scroll; only closing returns to the shelf.
     restoreViewportRef.current = false;
     onClose();

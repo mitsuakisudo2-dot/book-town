@@ -1,6 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { settleBeforeNavigating } from "./journey-layers.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -90,7 +91,7 @@ const context = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
   locale: "ja-JP",
 });
-const page = await context.newPage();
+const page = settleBeforeNavigating(await context.newPage());
 watch(page);
 try {
   await check(
@@ -560,7 +561,7 @@ try {
     locale: "ja-JP",
     storageState,
   });
-  const phone = await mobile.newPage();
+  const phone = settleBeforeNavigating(await mobile.newPage());
   watch(phone);
   await check(
     "390px mobile discovery, store, book, profile and wishlist fit viewport",
@@ -700,6 +701,60 @@ try {
           .first()
           .getAttribute("aria-label"),
       ).toBe(first);
+    },
+  );
+  await check(
+    "戻る closes a dialog or a book in hand, and a book left for its page is in hand again",
+    async () => {
+      const dialog = page.locator(".bh-dialog");
+      const book = page.locator("main .shelf-book-button").first();
+      await go(page, "/");
+      await page
+        .locator(".street-shop")
+        .filter({ has: page.getByRole("link", { name: "軌道書房に入る" }) })
+        .getByRole("link", { name: /^紹介と/ })
+        .click();
+      await expect(page).toHaveURL(/shops\/shop-orbit/);
+      const shopURL = page.url();
+
+      // 戻る puts the book back on the shelf, and stays in the shop.
+      await book.click();
+      await expect(dialog).toBeVisible();
+      await page.goBack();
+      await expect(dialog).not.toBeVisible();
+      await expect(page).toHaveURL(shopURL);
+
+      // Put back by hand, the book leaves no step behind: 戻る leaves the shop.
+      await book.click();
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("button", { name: "本を閉じて棚に戻る" }).click();
+      await expect(dialog).not.toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await page.goForward();
+      await expect(page).toHaveURL(shopURL);
+
+      // From the book's own page, 戻る returns with the same book in hand.
+      await book.click();
+      const title = await dialog.locator("h2").innerText();
+      await dialog.locator("h2").getByRole("link").click();
+      await expect(page).toHaveURL(/\/books\//);
+      await page.goBack();
+      await expect(page).toHaveURL(shopURL);
+      await expect(dialog).toBeVisible();
+      await expect(dialog.locator("h2")).toHaveText(title);
+      await page.goBack();
+      await expect(dialog).not.toBeVisible();
+      await expect(page).toHaveURL(shopURL);
+
+      // A dialog closes on 戻る too; a link inside it leaves from the page.
+      await go(page, "/timeline/");
+      await page.getByRole("button", { name: "投稿する" }).click();
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      await expect(compose).toBeVisible();
+      await page.goBack();
+      await expect(compose).toHaveCount(0);
+      await expect(page).toHaveURL(/\/timeline\/$/);
     },
   );
   await check("a link to a shop that is gone says it is closed", async () => {
