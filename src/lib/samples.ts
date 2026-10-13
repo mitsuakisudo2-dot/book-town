@@ -1,5 +1,6 @@
 import {
   demoBooks,
+  demoPosters,
   demoPosts,
   demoReaders,
   demoReadingRecords,
@@ -9,7 +10,7 @@ import {
 import type { TownState } from "./types";
 
 /**
- * 見本: the demo's shops, readers and posts, shown beside the real ones so the
+ * 見本: the demo's shops, readers, posts and posters, shown beside the real ones so the
  * town is never empty, even before many people have opened a shop. They are
  * marked as demo on screen and never saved; a real record wins if ids meet.
  */
@@ -38,6 +39,7 @@ export function withSamples(state: TownState): TownState {
     readingRecords: add(state.readingRecords, demoReadingRecords).sort(
       (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
     ),
+    posters: add(state.posters, demoPosters),
   };
 }
 

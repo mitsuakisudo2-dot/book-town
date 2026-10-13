@@ -1,3 +1,4 @@
+import type { Poster, PosterDraft } from "./posters";
 import type { FiledReport } from "./supabase/reports";
 
 export type { FiledReport };
@@ -303,6 +304,8 @@ export interface TownState {
   reviewFolds: Record<string, ReviewFold>;
   /** The viewer's own reports, newest first. Only an account files them. */
   myReports: FiledReport[];
+  /** The viewer's own posters, drafts too, and others' put up. */
+  posters: Poster[];
 }
 
 /** A toast's way back: a text button that undoes what the toast says was done. */
@@ -383,6 +386,14 @@ export interface TownActions {
   /** Remembers a report just filed (fileReport writes it; the sync does not). */
   noteReport(report: FiledReport): void;
   markNotificationsSeen(ids: string[]): void;
+  /**
+   * Keeps a poster: a new one, or with `posterId` the viewer's own changed.
+   * A poster put up must be complete (posterProblem). Returns its id, or
+   * null when nothing was kept (refused, or the town is still loading).
+   */
+  savePoster(draft: PosterDraft, posterId?: string): string | null;
+  /** Takes down the viewer's own poster; false when nothing was taken down. */
+  deletePoster(posterId: string): boolean;
 }
 
 export type AppActions = TownActions;

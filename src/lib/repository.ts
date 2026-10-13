@@ -1,6 +1,7 @@
 import { createInitialState } from "./data";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
+import { restorePoster, type Poster } from "./posters";
 import { DEFAULT_HANDLE, handleProblem } from "./handles";
 import { createRegisteredBook, normalizeIsbn, REGISTERED_GENRE } from "./books";
 import {
@@ -63,6 +64,8 @@ type PersonalData = Pick<
 > & {
   /** Only the viewer's own posts; demo posts always come from the current catalog. */
   posts: Post[];
+  /** Only the viewer's own posters; the demo's come from the current catalog. */
+  posters?: Poster[];
   /** Only books the viewer registered; their jackets are redrawn on load. */
   addedBooks: Pick<Book, "id" | "title" | "author" | "isbn" | "price">[];
 };
@@ -327,6 +330,24 @@ function restorePosts(
   return kept;
 }
 
+/** The viewer's own posters, each kept or dropped on its own. */
+function restorePosters(
+  value: unknown,
+  demo: Poster[],
+  bookIds: Set<string>,
+): Poster[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set(demo.map((poster) => poster.id));
+  const kept: Poster[] = [];
+  for (const candidate of value.slice(0, 1000)) {
+    const poster = restorePoster(candidate, bookIds);
+    if (!poster || poster.authorId !== ME_ID || ids.has(poster.id)) continue;
+    ids.add(poster.id);
+    kept.push(poster);
+  }
+  return kept;
+}
+
 /** Invalid records fall back atomically. Demo catalog changes are never overwritten by stored snapshots. */
 export function deserializeTown(raw: string | null): RepositorySnapshot {
   const initial = createInitialState();
@@ -465,6 +486,10 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
               .filter((id): id is string => text(id, 200))
               .slice(-500)
           : [],
+        posters: [
+          ...initial.posters,
+          ...restorePosters(data.posters, initial.posters, bookIds),
+        ],
       },
       status: "saved",
     };
@@ -496,6 +521,7 @@ export function serializeTown(state: TownState): string {
       ),
       settings: state.settings,
       seenNotifications: state.seenNotifications,
+      posters: state.posters.filter((poster) => poster.authorId === ME_ID),
       addedBooks: state.books
         .filter((book) => book.genre === REGISTERED_GENRE)
         .map(({ id, title, author, isbn, price }) => ({

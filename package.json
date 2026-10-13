@@ -11,6 +11,7 @@
     "test:domain": "tsx tests/domain.test.ts",
     "test:walk-domain": "tsx tests/walk-domain.test.ts",
     "test:covers": "tsx tests/covers.test.ts",
+    "test:posters": "tsx tests/posters.test.ts",
     "test:customization-domain": "tsx tests/customization-domain.test.ts",
     "test:db": "tsx tests/database-policies.test.ts",
     "test:account": "tsx tests/account-domain.test.ts",
@@ -25,6 +26,7 @@
     "test:feedback": "node tests/feedback-journey.mjs",
     "test:social": "node tests/social-journey.mjs",
     "test:app": "node tests/app-journey.mjs",
+    "test:poster-journey": "node tests/poster-journey.mjs",
     "test:settings": "tsx tests/hosted-settings.test.ts"
   },
   "dependencies": {

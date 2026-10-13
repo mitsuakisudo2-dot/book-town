@@ -87,6 +87,7 @@ export async function loadTown(
     folds,
     myReports,
     readerSettings,
+    posters,
   ] = await Promise.all([
     all(client.from("profiles").select("*").limit(LIMIT)),
     all(client.from("profile_nine").select("*").limit(LIMIT)),
@@ -144,6 +145,14 @@ export async function loadTown(
         .from("reader_settings")
         .select("spoiler_display")
         .eq("user_id", userId),
+    ),
+    // The person's own posters, drafts too, and others' put up.
+    all(
+      client
+        .from("posters")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(LIMIT),
     ),
   ]);
 
@@ -207,6 +216,7 @@ export async function loadTown(
     popReactions,
     sessions: [...ownSessions, ...together],
     records,
+    posters,
     seenNotifications,
     folds,
     myReports,
@@ -225,7 +235,7 @@ export async function loadTown(
  * database decides what is public (supabase/migrations); this only asks.
  */
 export async function loadPublicTown(client: Client): Promise<TownState> {
-  const [profiles, nine, shops, posts, together, records, folds] =
+  const [profiles, nine, shops, posts, together, records, folds, posters] =
     await Promise.all([
       all(client.from("profiles").select("*").limit(LIMIT)),
       all(client.from("profile_nine").select("*").limit(LIMIT)),
@@ -259,6 +269,13 @@ export async function loadPublicTown(client: Client): Promise<TownState> {
           .limit(LIMIT),
       ),
       all(client.from("moderation_folds").select(FOLD_COLUMNS).limit(LIMIT)),
+      all(
+        client
+          .from("posters")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(LIMIT),
+      ),
     ]);
   const rows: Omit<RemoteRows, "books"> = {
     profiles,
@@ -277,6 +294,7 @@ export async function loadPublicTown(client: Client): Promise<TownState> {
     popReactions: [],
     sessions: together,
     records,
+    posters,
     seenNotifications: [],
     folds,
     // A visitor files no reports and keeps no settings: the defaults.
@@ -438,6 +456,53 @@ export async function applyWrite(
         client
           .from("reader_settings")
           .upsert(write.row, { onConflict: "user_id" }),
+      );
+      return;
+    case "delete-posters":
+      await settled(
+        client
+          .from("posters")
+          .delete()
+          .eq("author_id", ids.userId)
+          .in("id", write.ids),
+      );
+      return;
+    case "posters": {
+      const made = await all(
+        client
+          .from("posters")
+          .upsert(write.rows, { onConflict: "id", ...ignore })
+          .select("id"),
+      );
+      // A poster already there was kept by an earlier try whose answer was
+      // lost; the maker may have changed it since, so it takes these fields.
+      const fresh = new Set(made.map((row) => row.id));
+      for (const row of write.rows)
+        if (row.id && !fresh.has(row.id))
+          await settled(
+            client
+              .from("posters")
+              .update({
+                template: row.template,
+                theme: row.theme,
+                font: row.font,
+                pages: row.pages,
+                spoiler: row.spoiler,
+                show_in_timeline: row.show_in_timeline,
+                status: row.status,
+              })
+              .eq("id", row.id)
+              .eq("author_id", ids.userId),
+          );
+      return;
+    }
+    case "update-poster":
+      await settled(
+        client
+          .from("posters")
+          .update(write.patch)
+          .eq("id", write.id)
+          .eq("author_id", ids.userId),
       );
       return;
     case "remove":

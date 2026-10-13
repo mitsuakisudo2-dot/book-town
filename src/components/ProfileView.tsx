@@ -53,7 +53,16 @@ const SPOILER_CHOICES: {
 ];
 import "./profile.css";
 import "./reading.css";
-import { isDatabaseId, profilePath, shopPath } from "../lib/paths";
+import {
+  isDatabaseId,
+  posterNewPath,
+  posterPath,
+  profilePath,
+  shopPath,
+} from "../lib/paths";
+import { postersOf } from "../lib/posters";
+import { PosterThumb } from "./PosterView";
+import "./poster-screen.css";
 import { ReportButton } from "./Report";
 import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
@@ -418,6 +427,8 @@ export function ProfileView({
           )}
         </div>
       </section>
+
+      <ProfilePosters state={state} readerId={reader.id} isSelf={isSelf} />
 
       <RecordShelf
         state={state}
@@ -1076,5 +1087,63 @@ export function ProfileView({
         </Modal>
       )}
     </div>
+  );
+}
+
+/**
+ * What the reader has made, first pages side by side at 4:5. Others see
+ * only what is put up; with none, the section is left out for them.
+ */
+function ProfilePosters({
+  state,
+  readerId,
+  isSelf,
+}: {
+  state: TownState;
+  readerId: string;
+  isSelf: boolean;
+}) {
+  const posters = postersOf(state, readerId);
+  if (!posters.length && !isSelf) return null;
+  return (
+    <section
+      className="profile-posters"
+      aria-labelledby="profile-posters-title"
+    >
+      <div className="profile-section-heading">
+        <div>
+          <p className="profile-eyebrow">MADE ABOUT BOOKS</p>
+          <h2 id="profile-posters-title">ポスター</h2>
+        </div>
+        {isSelf && posters.length > 0 && (
+          <Link className="button secondary" href={posterNewPath()}>
+            <Icon name="plus" /> ポスターを作る
+          </Link>
+        )}
+      </div>
+      {posters.length ? (
+        <ul className="profile-poster-grid">
+          {posters.map((poster) => (
+            <li key={poster.id}>
+              <PosterThumb
+                poster={poster}
+                books={state.books}
+                href={posterPath(poster.id)}
+                badge={poster.status === "draft" ? "下書き" : undefined}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="profile-posters-empty">
+          <p>
+            本を選んで、ひとこと添えるだけ。その時の気持ちを、1枚の小さな企画展に。
+          </p>
+          <Link className="button primary" href={posterNewPath()}>
+            <Icon name="plus" /> ポスターを作る
+          </Link>
+        </div>
+      )}
+    </section>
   );
 }

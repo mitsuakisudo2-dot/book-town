@@ -430,8 +430,9 @@ try {
     "a like for a 見本 says it reaches nobody, and nothing is sent",
     async () => {
       await page.goto(base + "/timeline/");
+      // A post: posters on the timeline are made, not liked.
       const sample = page
-        .locator("article")
+        .locator("article.post-card:not(.poster-card)")
         .filter({ hasText: "見本" })
         .first();
       const writes = townWrites.length;

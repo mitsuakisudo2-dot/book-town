@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   LIKE_TAPS_MAX,
   ME_ID,
@@ -53,7 +54,11 @@ import {
 import { BookPicker } from "./BookPicker";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
-import { isDatabaseId, profilePath } from "../lib/paths";
+import "./poster-screen.css";
+import { isDatabaseId, posterNewPath, profilePath } from "../lib/paths";
+import { isPublished, type Poster } from "../lib/posters";
+import { leaveLayers } from "../lib/back-layer";
+import { PosterCard } from "./PosterView";
 import { ReportButton } from "./Report";
 import { useTownBackend } from "../lib/store";
 import { notePosted, postedJustNow } from "../lib/just-posted";
@@ -76,6 +81,30 @@ const SPOILER_NOTES: Record<SpoilerDisplay, string> = {
     "ネタバレの印が付いた投稿と、その可能性がある投稿は、設定により出していません。",
 };
 
+/**
+ * Posters their makers chose to show on the timeline; with `followingOnly`,
+ * those of followed owners and the viewer's own.
+ */
+function timelinePosters(state: TownState, followingOnly: boolean): Poster[] {
+  const owners = new Set(
+    state.shops
+      .filter((shop) => state.following.includes(shop.id))
+      .map((shop) => shop.ownerId),
+  );
+  return state.posters.filter(
+    (poster) =>
+      isPublished(poster) &&
+      poster.inTimeline &&
+      (!followingOnly ||
+        poster.authorId === ME_ID ||
+        owners.has(poster.authorId)),
+  );
+}
+
+type FeedEntry =
+  | { kind: "post"; post: Post; at: number }
+  | { kind: "poster"; poster: Poster; at: number };
+
 export function TimelineView(props: Shared) {
   const [show, setShow] = useUrlParam("show");
   const followingOnly = show === "following";
@@ -84,6 +113,19 @@ export function TimelineView(props: Shared) {
   const posts = followingOnly
     ? followedTimelinePosts(props.state)
     : timelinePosts(props.state);
+  // Words and posters in one stream, newest first: neither is ranked above the other.
+  const feed: FeedEntry[] = [
+    ...posts.map((post) => ({
+      kind: "post" as const,
+      post,
+      at: Date.parse(post.createdAt) || 0,
+    })),
+    ...timelinePosters(props.state, followingOnly).map((poster) => ({
+      kind: "poster" as const,
+      poster,
+      at: Date.parse(poster.createdAt) || 0,
+    })),
+  ].sort((a, b) => b.at - a.at);
   return (
     <div className="social-page">
       <span className="eyebrow">READERS, IN THEIR OWN WORDS</span>
@@ -91,25 +133,31 @@ export function TimelineView(props: Shared) {
       <p className="page-subtitle">
         本のことも、そうでないことも。気になった人の好きな本へ。
       </p>
-      <div
-        className="timeline-filters"
-        role="group"
-        aria-label="投稿の表示範囲"
-      >
-        <button
-          type="button"
-          aria-pressed={!followingOnly}
-          onClick={() => setFollowingOnly(false)}
+      <div className="timeline-filter-row">
+        <div
+          className="timeline-filters"
+          role="group"
+          aria-label="投稿の表示範囲"
         >
-          すべて
-        </button>
-        <button
-          type="button"
-          aria-pressed={followingOnly}
-          onClick={() => setFollowingOnly(true)}
-        >
-          フォロー中
-        </button>
+          <button
+            type="button"
+            aria-pressed={!followingOnly}
+            onClick={() => setFollowingOnly(false)}
+          >
+            すべて
+          </button>
+          <button
+            type="button"
+            aria-pressed={followingOnly}
+            onClick={() => setFollowingOnly(true)}
+          >
+            フォロー中
+          </button>
+        </div>
+        <Link href={posterNewPath()} className="timeline-make-poster">
+          <Icon name="grid" size={16} />
+          ポスターを作る
+        </Link>
       </div>
       {followingOnly && (
         <p className="timeline-filter-note">
@@ -119,18 +167,33 @@ export function TimelineView(props: Shared) {
       {followingOnly && !props.state.following.length && (
         <FollowSuggestions {...props} />
       )}
-      {posts.some(
-        (post) => post.authorId !== ME_ID && !isDatabaseId(post.authorId),
-      ) && (
+      {feed.some((entry) => {
+        const author =
+          entry.kind === "post" ? entry.post.authorId : entry.poster.authorId;
+        return author !== ME_ID && !isDatabaseId(author);
+      }) && (
         <p className="timeline-demo-note">
           「見本」と付いた読書家と言葉は、街の雰囲気を伝えるための見本です。
         </p>
       )}
       <div className="post-feed" aria-label="タイムラインの投稿">
-        {posts.map((post) => (
-          <PostCard key={post.id} {...props} post={post} showBook />
-        ))}
-        {!posts.length && (
+        {feed.map((entry) =>
+          entry.kind === "post" ? (
+            <PostCard
+              key={entry.post.id}
+              {...props}
+              post={entry.post}
+              showBook
+            />
+          ) : (
+            <PosterCard
+              key={"poster:" + entry.poster.id}
+              poster={entry.poster}
+              state={props.state}
+            />
+          ),
+        )}
+        {!feed.length && (
           <div className="empty-state">
             <h2>
               {followingOnly
@@ -526,6 +589,7 @@ export function ComposeFab({
   const [open, setOpen] = useState(false);
   const { draft } = usePostDraft("new-post");
   const icon = props.state.settings.composeIcon;
+  const router = useRouter();
   return (
     <>
       <button
@@ -547,6 +611,18 @@ export function ComposeFab({
               onPosted?.();
             }}
           />
+          {/* Something made, not said: a poster has a page of its own to be made on. */}
+          <p className="compose-poster-way">
+            表紙を並べて伝えたいときは、
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => leaveLayers(() => router.push(posterNewPath()))}
+            >
+              ポスターを作る
+              <Icon name="arrow" size={14} />
+            </button>
+          </p>
         </Modal>
       )}
     </>
