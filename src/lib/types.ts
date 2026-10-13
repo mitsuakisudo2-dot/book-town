@@ -391,10 +391,11 @@ export interface TownActions {
   setComposeIcon(icon: ComposeIcon): void;
   /** Finishing a book, with how it felt. Also marks the book as finished. */
   recordReading(draft: RecordDraft): string | null;
+  /** False when nothing was changed (refused, or the town is still loading). */
   updateRecord(
     recordId: string,
     patch: Partial<Omit<RecordDraft, "bookId">>,
-  ): void;
+  ): boolean;
   deleteRecord(recordId: string): void;
   setReadingPublic(value: boolean): void;
   setSpoilerDisplay(value: SpoilerDisplay): void;

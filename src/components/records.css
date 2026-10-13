@@ -77,10 +77,11 @@
   align-items: center;
   gap: 7px;
 }
+/* Shown only near the limit, so it is read. */
 .record-count {
   margin-left: auto;
   font-size: 10px;
-  color: #a5ad97;
+  color: #6f7c64;
 }
 .record-visibility {
   border: 0;

@@ -4,9 +4,15 @@ import {
   createMemoryRepository,
   deserializeTown,
   serializeTown,
+  type RepositorySnapshot,
 } from "../src/lib/repository";
 import { createTownStore } from "../src/lib/store";
-import { counterId } from "../src/lib/town-backend";
+import {
+  counterId,
+  unavailableBackend,
+  type TownBackend,
+} from "../src/lib/town-backend";
+import { emptyTown } from "../src/lib/town-remote";
 import {
   bookFeelings,
   booksFelt,
@@ -37,6 +43,7 @@ import {
   activeSession,
   bookToContinue,
   currentBookId,
+  formatDuration,
   readersNow,
   readingFeed,
   readingTotals,
@@ -2065,6 +2072,85 @@ check("the spoiler setting and filed reports are kept as the store's", () => {
       ["report-1", "checking"],
     ],
   );
+});
+
+check("reading time is told without a 0 in it", () => {
+  assert.equal(formatDuration(0), "1分未満");
+  assert.equal(formatDuration(59), "1分未満");
+  assert.equal(formatDuration(60), "1分");
+  assert.equal(formatDuration(3600), "1時間");
+  assert.equal(formatDuration(3660), "1時間1分");
+  assert.equal(formatDuration(7200 + 59), "2時間");
+});
+
+check("words are not taken while the town loads or cannot be kept", () => {
+  const words = { body: "まだ街が来ない", bookId: null, spoiler: false };
+  // Before `follow` has chosen where the town lives, nothing is taken, and
+  // nothing is written into this browser's demo.
+  let switchTo: (backend: TownBackend) => void = () => {};
+  const demo = createMemoryRepository();
+  const before = serializeTown(demo.load().state);
+  const town = createTownStore(demo, undefined, {
+    follow: (next) => {
+      switchTo = next;
+    },
+  });
+  town.initialize();
+  assert.equal(town.actions.createPost(words), null);
+  assert.equal(
+    town.actions.recordReading({
+      bookId: "momo",
+      feelings: ["warm"],
+      note: "",
+      spoiler: false,
+      isPublic: false,
+    }),
+    null,
+  );
+  assert.equal(town.getSnapshot().posts.length, 0);
+  assert.equal(serializeTown(demo.load().state), before);
+  // While an account's town is on its way, the same. (The way is a
+  // thenable here, so the town arrives when the check says.)
+  let arrive: (snapshot: RepositorySnapshot) => void = () => {};
+  const saved: TownState[] = [];
+  switchTo({
+    kind: "account",
+    newId: counterId,
+    load: () =>
+      ({
+        then: (resolve: (snapshot: RepositorySnapshot) => void) => {
+          arrive = resolve;
+        },
+      }) as unknown as Promise<RepositorySnapshot>,
+    save: (state) => {
+      saved.push(state);
+      return "saving";
+    },
+  });
+  assert.equal(town.getPersistenceSnapshot(), "loading");
+  assert.equal(town.actions.createPost(words), null);
+  assert.deepEqual(saved, []);
+  arrive({ state: structuredClone(seedState), status: "saved" });
+  // Arrived, the town takes words, and a record answers when it changed.
+  assert.ok(town.actions.createPost(words));
+  assert.equal(saved.length, 1);
+  const recordId = town.actions.recordReading({
+    bookId: "momo",
+    feelings: ["warm"],
+    note: "",
+    spoiler: false,
+    isPublic: false,
+  });
+  assert.ok(recordId);
+  assert.equal(
+    town.actions.updateRecord(recordId, { note: "あたたかい" }),
+    true,
+  );
+  assert.equal(town.actions.updateRecord("no-such-record", {}), false);
+  // An account that could not be read takes no words at all.
+  switchTo(unavailableBackend(emptyTown()));
+  assert.equal(town.actions.createPost(words), null);
+  assert.equal(town.getSnapshot().posts.length, 0);
 });
 
 console.log(`${passed} domain checks passed.`);

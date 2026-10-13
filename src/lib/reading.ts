@@ -87,12 +87,13 @@ export const readingFeed = (state: TownState): Post[] =>
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
+/** Time read, in words that never show a 0: whole hours alone, else 「1分未満」. */
 export function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours) return `${hours}時間${minutes}分`;
+  if (hours) return minutes ? `${hours}時間${minutes}分` : `${hours}時間`;
   if (minutes) return `${minutes}分`;
-  return seconds ? "1分未満" : "0分";
+  return "1分未満";
 }
 
 export function formatTimer(seconds: number): string {

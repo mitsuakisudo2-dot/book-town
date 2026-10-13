@@ -34,6 +34,26 @@ async function go(route) {
     ),
   );
 }
+/** Reloads, and waits until React owns the page again. */
+async function reload() {
+  await page.reload();
+  await expect(page.locator("main")).toBeVisible();
+  await page.waitForFunction(() =>
+    Object.keys(document.querySelector("main") ?? {}).some((key) =>
+      key.startsWith("__reactFiber"),
+    ),
+  );
+}
+/** 戻る, once the open dialog has its step in the history. */
+async function back() {
+  await expect
+    .poll(() => page.evaluate(() => history.state?.booktownLayers?.length ?? 0))
+    .toBeGreaterThan(0);
+  await page.goBack();
+}
+/** A tap on the dimmed page around the open dialog. */
+const tapOutside = () =>
+  page.locator(".modal-backdrop").click({ position: { x: 5, y: 5 } });
 async function noOverflow(label) {
   const size = await page.evaluate(() => ({
     width: innerWidth,
@@ -499,6 +519,250 @@ try {
         await mine.getByRole("button", { name: "自分だけにする" }).click();
         await expect(toast).toContainText("自分だけにしました");
         expect((await own()).isPublic).toBe(false);
+      },
+    );
+
+    await check(
+      `${label} a post being written stays through closing and a reload; its count waits near the limit`,
+      async () => {
+        await go("/timeline/");
+        const fab = page.locator(".compose-fab");
+        await fab.click();
+        const dialog = page.getByRole("dialog", { name: "投稿する" });
+        const text = dialog.locator("textarea");
+        const count = dialog.locator(".composer-count");
+        // Nothing written shows no count (never 「0/1000」); it comes at 80%.
+        await expect(count).toHaveCount(0);
+        await expect(dialog).not.toContainText("/1000");
+        await text.fill("あ".repeat(799));
+        await expect(count).toHaveCount(0);
+        await text.fill("あ".repeat(800));
+        await expect(count).toHaveText("800/1000");
+        // The button keeps to the right edge, with the count or without it.
+        const gap = async () => {
+          const tools = await dialog.locator(".composer-tools").boundingBox();
+          const button = await dialog
+            .getByRole("button", { name: "投稿する" })
+            .boundingBox();
+          return tools.x + tools.width - (button.x + button.width);
+        };
+        expect(await gap()).toBeLessThan(2);
+        await text.fill("閉じても残る下書き。");
+        await expect(count).toHaveCount(0);
+        expect(await gap()).toBeLessThan(2);
+        // Escape keeps it, and the round button says a draft waits.
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+        await expect(fab).toContainText("下書き");
+        await reload();
+        await fab.click();
+        await expect(text).toHaveValue("閉じても残る下書き。");
+        await expect(dialog.getByText("書きかけを続けています")).toBeVisible();
+        // A tap outside, and 戻る, keep it too.
+        await tapOutside();
+        await expect(dialog).toHaveCount(0);
+        await fab.click();
+        await expect(text).toHaveValue("閉じても残る下書き。");
+        await back();
+        await expect(dialog).toHaveCount(0);
+        await fab.click();
+        await expect(text).toHaveValue("閉じても残る下書き。");
+        // Only 書きかけを消す throws it away, asked once.
+        await dialog.getByRole("button", { name: "書きかけを消す" }).click();
+        await expect(dialog.getByText("書きかけを消しますか？")).toBeVisible();
+        await dialog.getByRole("button", { name: "残す" }).click();
+        await expect(text).toHaveValue("閉じても残る下書き。");
+        await dialog.getByRole("button", { name: "書きかけを消す" }).click();
+        await dialog.getByRole("button", { name: "消す", exact: true }).click();
+        await expect(text).toHaveValue("");
+        await expect(text).toBeFocused();
+        await expect(dialog.getByText("書きかけを続けています")).toHaveCount(0);
+        // Posted, the draft is gone.
+        await text.fill("書いて、送った。");
+        await dialog.getByRole("button", { name: "投稿する" }).click();
+        await expect(dialog).toHaveCount(0);
+        await expect(fab).not.toContainText("下書き");
+        await fab.click();
+        await expect(text).toHaveValue("");
+        await page.keyboard.press("Escape");
+      },
+    );
+
+    await check(
+      `${label} a line written while reading survives leaving, a reload and closing the book`,
+      async () => {
+        await go("/reading/");
+        await page
+          .getByRole("searchbox", { name: "読む本を探す" })
+          .fill("夢十夜");
+        await page.getByRole("button", { name: /^夢十夜/ }).click();
+        await page.getByRole("button", { name: /一人で読む/ }).click();
+        await page
+          .getByRole("dialog", { name: "読書をはじめますか？" })
+          .getByRole("button", { name: "はじめる", exact: true })
+          .click();
+        const memo = page.getByLabel("読書メモ（自分だけ）");
+        await memo.fill("百年待っていてください。");
+        await expect(
+          page.locator(".memo-composer .composer-count"),
+        ).toHaveCount(0);
+        // Leaving and coming back, 戻る, and a reload all keep it.
+        await go("/timeline/");
+        await go("/reading/");
+        await expect(memo).toHaveValue("百年待っていてください。");
+        await expect(page.getByText("書きかけを続けています")).toBeVisible();
+        await go("/timeline/");
+        await page.goBack();
+        await expect(memo).toHaveValue("百年待っていてください。");
+        await reload();
+        await expect(memo).toHaveValue("百年待っていてください。");
+        // Closing the book offers the line not sent.
+        await page.getByRole("button", { name: "読書を終える" }).click();
+        const ending = page.getByRole("dialog", { name: "読書を終えますか？" });
+        await expect(ending).toContainText("まだメモしていない言葉があります");
+        await expect(ending.locator("blockquote")).toHaveText(
+          "百年待っていてください。",
+        );
+        await expect(
+          ending.getByRole("button", { name: "メモして閉じる" }),
+        ).toBeVisible();
+        // Closed without sending, it waits above the start, even after a reload.
+        await ending
+          .getByRole("button", { name: "本を閉じる", exact: true })
+          .click();
+        const unsent = page.getByRole("region", {
+          name: "読みながら書いて、送っていない言葉",
+        });
+        await expect(unsent.locator("blockquote")).toHaveText(
+          "百年待っていてください。",
+        );
+        await expect(unsent).toContainText("『夢十夜』を読みながら");
+        await expect(unsent).not.toContainText(/\d/);
+        await noOverflow(`${label} unsent line`);
+        await reload();
+        await expect(unsent.locator("blockquote")).toHaveText(
+          "百年待っていてください。",
+        );
+        // Used for the review, it starts the review and leaves this place.
+        await unsent.getByRole("button", { name: "感想に使う" }).click();
+        const review = page.getByRole("dialog", { name: "『夢十夜』の感想" });
+        await expect(review.locator("textarea")).toHaveValue(
+          "百年待っていてください。",
+        );
+        await expect(unsent).toHaveCount(0);
+        // Closed by Escape, the review keeps it on the book's page.
+        await page.keyboard.press("Escape");
+        await expect(review).toHaveCount(0);
+        await go("/books/ten-nights/");
+        const reviews = page.locator(".book-reviews");
+        await expect(reviews.locator("textarea")).toHaveValue(
+          "百年待っていてください。",
+        );
+        await expect(reviews.getByText("書きかけを続けています")).toBeVisible();
+        await reviews.getByRole("button", { name: "書きかけを消す" }).click();
+        await reviews
+          .getByRole("button", { name: "消す", exact: true })
+          .click();
+        await expect(reviews.locator("textarea")).toHaveValue("");
+        // A line sent as the book closes is posted, and kept nowhere else.
+        await go("/reading/");
+        await page.getByRole("button", { name: /一人で読む/ }).click();
+        await page
+          .getByRole("dialog", { name: "読書をはじめますか？" })
+          .getByRole("button", { name: "はじめる", exact: true })
+          .click();
+        await memo.fill("二夜目の一行。");
+        await page.getByRole("button", { name: "読書を終える" }).click();
+        await ending.getByRole("button", { name: "メモして閉じる" }).click();
+        await expect(ending).toHaveCount(0);
+        const closed = page.getByRole("status", { name: "今日の読書" });
+        await expect(closed).toContainText("二夜目の一行。");
+        await expect(closed).toContainText("1分未満");
+        await expect(unsent).toHaveCount(0);
+        const posts = await page.evaluate(
+          () => JSON.parse(localStorage.getItem("book-town-v1")).data.posts,
+        );
+        expect(
+          posts.filter((post) => post.body === "二夜目の一行。"),
+        ).toHaveLength(1);
+        expect(
+          await page.evaluate(() =>
+            localStorage.getItem("book-town-post-drafts-v1"),
+          ),
+        ).toBeNull();
+      },
+    );
+
+    await check(
+      `${label} feelings chosen for a finished book wait for the next time`,
+      async () => {
+        await go("/books/walden/");
+        const feelings = page.locator(".book-feelings");
+        await feelings
+          .getByRole("button", { name: "読み終えた気持ちを残す" })
+          .click();
+        const sheet = page.getByRole("dialog", { name: "読み終えた気持ち" });
+        const note = sheet.getByLabel("ひとこと（なくても大丈夫です）");
+        const quiet = sheet.getByRole("button", { name: "静かになった" });
+        await quiet.click();
+        await note.fill("湖の音が残った。");
+        await expect(sheet.locator(".record-count")).toHaveCount(0);
+        // A tap outside keeps it; the book page offers to go on.
+        await tapOutside();
+        await expect(sheet).toHaveCount(0);
+        const again = feelings.getByRole("button", {
+          name: "書きかけの気持ちを続ける",
+        });
+        await again.click();
+        await expect(quiet).toHaveAttribute("aria-pressed", "true");
+        await expect(note).toHaveValue("湖の音が残った。");
+        await expect(sheet.getByText("書きかけを続けています")).toBeVisible();
+        // So do Escape, あとで, 戻る and a reload.
+        await page.keyboard.press("Escape");
+        await expect(sheet).toHaveCount(0);
+        await again.click();
+        await sheet.getByRole("button", { name: "あとで" }).click();
+        await expect(sheet).toHaveCount(0);
+        await again.click();
+        await back();
+        await expect(sheet).toHaveCount(0);
+        await reload();
+        await again.click();
+        await expect(quiet).toHaveAttribute("aria-pressed", "true");
+        await expect(note).toHaveValue("湖の音が残った。");
+        // The count comes only near the limit.
+        await note.fill("湖".repeat(204));
+        await expect(sheet.locator(".record-count")).toHaveText("204/255");
+        await note.fill("湖の音が残った。");
+        // Kept for real, the work is cleared.
+        await sheet.getByRole("button", { name: "記録する" }).click();
+        await expect(sheet).toHaveCount(0);
+        const own = feelings.locator(".book-feelings-own");
+        await expect(own).toContainText("静かになった");
+        const edit = page.getByRole("dialog", { name: "記録を見直す" });
+        const editNote = edit.getByLabel("ひとこと（なくても大丈夫です）");
+        await own.getByRole("button", { name: "見直す" }).click();
+        await expect(editNote).toHaveValue("湖の音が残った。");
+        await expect(edit.getByText("書きかけを続けています")).toHaveCount(0);
+        // A change waits through Escape; やめる throws it away, asked once.
+        await editNote.fill("湖の音と、豆畑。");
+        await page.keyboard.press("Escape");
+        await own.getByRole("button", { name: "見直す" }).click();
+        await expect(editNote).toHaveValue("湖の音と、豆畑。");
+        await expect(edit.getByText("書きかけを続けています")).toBeVisible();
+        await edit.getByRole("button", { name: "やめる" }).click();
+        await expect(edit.getByText("書きかけを消しますか？")).toBeVisible();
+        await edit.getByRole("button", { name: "消す", exact: true }).click();
+        await expect(edit).toHaveCount(0);
+        await own.getByRole("button", { name: "見直す" }).click();
+        await expect(editNote).toHaveValue("湖の音が残った。");
+        await expect(edit.getByText("書きかけを続けています")).toHaveCount(0);
+        await page.keyboard.press("Escape");
+        expect(
+          await page.evaluate(() =>
+            localStorage.getItem("book-town-record-drafts-v1"),
+          ),
+        ).toBeNull();
       },
     );
 
