@@ -41,6 +41,24 @@ export interface SceneObject {
   isPublic?: boolean;
   /** Compatibility identity; never changed when a placement is moved. */
   source?: { shopId: string; shelfId: string; itemId: string };
+  /** The part this object plays in a shelf preset: "case", "tier-0"..,
+   * "table", "table-tier". Older objects have none; legacySlot (shop-layout)
+   * reads it from their ID. */
+  slot?: string;
+  /** The owner's own notes. Never published: stripOwnerData drops them. */
+  own?: { savedPopId?: string; copiedAt?: string; note?: string };
+  // Reserved for later releases: not drawn or edited yet, only checked
+  // when present.
+  layer?: "furniture" | "books" | "decor" | "pop" | "foreground";
+  textStyle?: {
+    font?: string;
+    color?: string;
+    size?: number;
+    align?: "start" | "center" | "end";
+    vertical?: boolean;
+  };
+  /** A poster shown on a shelf is referenced, never copied. */
+  posterRef?: { posterId: string };
 }
 export interface StoreTheme {
   id: string;
@@ -64,6 +82,12 @@ export interface StoreScene {
   };
   forbidden: Rect[];
   objects: SceneObject[];
+  /** Headings of one published shelf (shop-layout). Older readers ignore them.
+   * shelfIndex counts public shelves only, so a private shelf leaves no gap. */
+  shelfId?: string;
+  shelfIndex?: number;
+  shelfTitle?: string;
+  shelfIntro?: string;
 }
 export type BookPlacement = SceneObject & {
   kind: "book";
@@ -130,6 +154,38 @@ export const safeBackgroundUrl = (url: string | undefined) =>
   url && /^\/themes\/[\w-]+\/[\w.-]+$/.test(url) && !url.includes("..")
     ? url
     : undefined;
+/** Keeps only what can be reached from a root (no parentId, or null). An object
+ * whose parent is missing, empty, a number or part of a loop goes, with all it
+ * holds, so broken data can never hang a private book on nothing. The rule the
+ * database's private.reachable is to follow. */
+export function reachableOnly(scene: StoreScene): StoreScene {
+  const objects = (Array.isArray(scene.objects) ? scene.objects : []).filter(
+    (o) =>
+      typeof o === "object" &&
+      o !== null &&
+      !Array.isArray(o) &&
+      typeof o.id === "string",
+  );
+  const kept = new Set(
+    objects
+      .filter((o) => o.parentId === null || o.parentId === undefined)
+      .map((o) => o.id),
+  );
+  let added = true;
+  while (added) {
+    added = false;
+    for (const o of objects)
+      if (
+        !kept.has(o.id) &&
+        typeof o.parentId === "string" &&
+        kept.has(o.parentId)
+      ) {
+        kept.add(o.id);
+        added = true;
+      }
+  }
+  return { ...scene, objects: objects.filter((o) => kept.has(o.id)) };
+}
 export function furnitureBooks(scene: StoreScene, furnitureId: string) {
   return scene.objects
     .filter((o) => o.kind === "row" && o.parentId === furnitureId)

@@ -32,6 +32,8 @@ export interface Book {
   isbn?: string;
   /** List price in yen, tax included. Demo prices are placeholders, labeled as such. */
   price?: number;
+  /** The work this edition belongs to (books.work_id). Without it, the book is its own work. */
+  workId?: string;
 }
 
 export interface Reader {
