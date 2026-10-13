@@ -824,7 +824,7 @@ try {
           .getByRole("link", { name: /^この本についてGoogleで調べる/ }),
       ).toHaveAttribute(
         "href",
-        "https://www.google.com/search?q=" +
+        "https://google.com/search?q=" +
           encodeURIComponent("ソラリス　スタニスワフ・レム"),
       );
       const reviews = page.locator(

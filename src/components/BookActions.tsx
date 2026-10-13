@@ -49,10 +49,14 @@ export function BookPurchase({ book }: { book: Book }) {
           楽天ブックス<span aria-hidden="true">↗</span>
         </a>
       </div>
+      {/* No "www.": on an iPhone the Google app claims links to
+          www.google.com and opens them itself. google.com is redirected
+          there after the browser has the tap, and a redirect is not handed
+          to an app, so the search stays in the browser. */}
       <a
         className="book-lookup"
         href={
-          "https://www.google.com/search?q=" +
+          "https://google.com/search?q=" +
           encodeURIComponent(`${book.title}\u3000${book.author}`)
         }
         target="_blank"

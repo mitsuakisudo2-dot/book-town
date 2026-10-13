@@ -124,8 +124,11 @@ try {
           .getByRole("link", { name: /^この本についてGoogleで調べる/ });
         await expect(lookup).toBeVisible();
         await expect(lookup).toHaveAttribute("target", "_blank");
+        await expect(lookup).toHaveAttribute("rel", "noopener noreferrer");
+        // Without "www." the Google app on an iPhone does not take the tap.
         const search = new URL(await lookup.getAttribute("href"));
-        expect(search.hostname).toBe("www.google.com");
+        expect(search.hostname).toBe("google.com");
+        expect(search.pathname).toBe("/search");
         expect(search.searchParams.get("q")).toBe(
           "ソラリス　スタニスワフ・レム",
         );
