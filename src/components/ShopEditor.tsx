@@ -29,6 +29,7 @@ import { hasPublicSceneBooks } from "../lib/store-customization";
 import { publicWalkShops } from "../lib/store-scene-adapter";
 import { OpenShop, ThemePicker } from "./OpenShop";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
+import { booksBeforeSearch } from "../lib/book-lists";
 import "./editor.css";
 
 type ShopEditorProps = {
@@ -139,6 +140,7 @@ function ShopSettings({
 function AddBookPicker({
   shelf,
   books,
+  shown,
   library,
   actions,
   notify,
@@ -146,6 +148,8 @@ function AddBookPicker({
 }: {
   shelf: Shelf;
   books: Book[];
+  /** The books offered before anything is typed (booksBeforeSearch). */
+  shown: Book[];
   /** The reader's own books: first among equal matches. */
   library: string[];
   onClose: () => void;
@@ -168,10 +172,14 @@ function AddBookPicker({
   const removedCount = Object.keys(removedHere).length;
   const remaining = shelf.capacity - shelfUsed(shelf);
   const cost = display === "face" ? 3 : 1;
-  // Every book until something is typed; then the matches, best first, and
+  // Until something is typed, the books a list may show (and any taken off
+  // here, to put back); then the matches among every book, best first, and
   // titles only close in spelling under their own quiet heading.
   const searching = search.trim() !== "";
-  const filtered = searching ? results.found.map((match) => match.book) : books;
+  const shownIds = new Set(shown.map((book) => book.id));
+  const filtered = searching
+    ? results.found.map((match) => match.book)
+    : books.filter((book) => shownIds.has(book.id) || removedHere[book.id]);
   const near = searching ? results.near.map((match) => match.book) : [];
 
   function choose(book: Book) {
@@ -322,6 +330,12 @@ function AddBookPicker({
         )}
         {filtered.length > 0 && (
           <div className="editor-picker-grid">{filtered.map(choice)}</div>
+        )}
+        {!searching && filtered.length === 0 && (
+          <div className="editor-empty-search">
+            <Icon name="book" size={28} />
+            <p>題名や著者で、並べる本を探してください。</p>
+          </div>
         )}
         {searching && results.settled && filtered.length === 0 && (
           <div className="editor-empty-search">
@@ -880,6 +894,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         <AddBookPicker
           shelf={addBookShelf}
           books={state.books}
+          shown={booksBeforeSearch(state)}
           library={state.library}
           actions={actions}
           notify={notify}

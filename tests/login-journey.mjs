@@ -839,6 +839,62 @@ try {
   );
 
   await check(
+    "another reader's typed-in book waits for its name in lists before a search",
+    async () => {
+      // レン typed in 星の本 and used it nowhere; こころの本 is on their public shelf.
+      await page.goto(base + "/search/");
+      await expect(
+        page.getByRole("heading", { name: "棚の隅の本" }),
+      ).toBeVisible();
+      await expect(page.locator("main")).not.toContainText("星の本");
+      await page
+        .getByRole("searchbox", { name: "本と書店を検索" })
+        .fill("星の本");
+      await expect(
+        page.locator(".search-results .search-book").filter({
+          hasText: "星の本",
+        }),
+      ).toHaveCount(1);
+      // The 人生の9冊 picker offers it only once it is searched for.
+      await page.goto(base + "/profiles/me/");
+      await page
+        .getByRole("region", { name: "人生の9冊" })
+        .getByRole("button", { name: "編集" })
+        .click();
+      const nine = page.getByRole("dialog", { name: "人生の9冊を選ぶ" });
+      const pick = (title) =>
+        nine.getByRole("button", { name: title + "を人生の9冊に加える" });
+      await expect(pick("こころの本")).toBeVisible();
+      await expect(pick("星の本")).toHaveCount(0);
+      await nine
+        .getByRole("searchbox", { name: "人生の9冊に追加する本を検索" })
+        .fill("星の本");
+      await expect(pick("星の本")).toBeVisible();
+      await nine.getByRole("button", { name: "キャンセル" }).click();
+      await expect(nine).toHaveCount(0);
+      // Nor does a 見本's shop fill out its shelves with it in the walk,
+      // though it may with こころの本 (one 見本's shelf is named 星の本).
+      const onShelf = (title) =>
+        page.locator(`.walk-book-target[aria-label^="${title}、試験 作家。"]`);
+      await page.goto(base + "/walk/");
+      await expect(page.locator(".walk-book-target").first()).toBeVisible();
+      await expect(page).toHaveURL(/\/walk\/#./);
+      const first = page.url();
+      let shelved = 0;
+      for (let step = 0; step < 12; step++) {
+        const at = page.url();
+        await expect(onShelf("星の本")).toHaveCount(0);
+        if (/#shop-/.test(at)) shelved += await onShelf("こころの本").count();
+        await page.getByRole("button", { name: "次の書店" }).click();
+        await expect(page).not.toHaveURL(at);
+        if (page.url() === first) break;
+      }
+      expect(page.url()).toBe(first);
+      expect(shelved).toBeGreaterThan(0);
+    },
+  );
+
+  await check(
     "a poster folded by reports opens with a tap; its maker is told gently",
     async () => {
       town = withPosters();

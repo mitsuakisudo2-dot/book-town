@@ -37,6 +37,7 @@ import {
 import { leavePageFor } from "../lib/in-town";
 import { reviewNoteOf, reviewNoteWords } from "../lib/social";
 import { currentBookId } from "../lib/reading";
+import { booksBeforeSearch } from "../lib/book-lists";
 import { usePersistenceStatus } from "../lib/store";
 import { posterNewPath, posterPath, profilePath } from "../lib/paths";
 import { accountRequested } from "../lib/visitor";
@@ -876,13 +877,16 @@ function BookChoice({
   const searching = query.trim() !== "";
   // Titles only close in spelling wait under their own quiet heading.
   const near = searching ? results.near.map(({ book }) => ({ book })) : [];
+  // Before anything is typed, never a book another reader only typed in.
   const offered: { book: Book; from?: string }[] = searching
     ? results.found.map(({ book }) => ({ book }))
     : own.length
       ? all
         ? own
         : own.slice(0, OWN_SHOWN)
-      : state.books.slice(0, OWN_SHOWN).map((book) => ({ book }));
+      : booksBeforeSearch(state)
+          .slice(0, OWN_SHOWN)
+          .map((book) => ({ book }));
 
   function toggle(bookId: string) {
     if (max === 1) {
@@ -1025,7 +1029,9 @@ function BookChoice({
                 : `「${query.trim()}」に合う本は見つかりませんでした。プロフィールの「本を登録」から追加できます。`
             : own.length
               ? "あなたの本から"
-              : "街の本から（読んだ本や読みたい本を登録すると、ここに並びます）"}
+              : offered.length
+                ? "街の本から（読んだ本や読みたい本を登録すると、ここに並びます）"
+                : "題名や著者で、載せる本を探してください。"}
         </p>
       )}
       {full && chosen.length >= max && (

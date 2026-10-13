@@ -16,6 +16,7 @@ import { useTownBackend } from "../lib/store";
 import { readerPosts, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
+import { booksBeforeSearch } from "../lib/book-lists";
 import { BarcodeRegister } from "./BarcodeRegister";
 import { linkLabel, normalizeLink, PROFILE_LINK_LIMIT } from "../lib/links";
 import { handleProblem, normalizeHandle } from "../lib/handles";
@@ -127,8 +128,11 @@ export function ProfileView({
     limit: state.books.length,
   });
   const searchingNine = search.trim() !== "";
+  // Before anything is typed, never a book another reader only typed in.
   const selectableBooks = (
-    searchingNine ? nineSearch.found.map((match) => match.book) : state.books
+    searchingNine
+      ? nineSearch.found.map((match) => match.book)
+      : booksBeforeSearch(state)
   ).filter((book) => !draftNine.includes(book.id));
   const nearNine = searchingNine
     ? nineSearch.near
@@ -1079,9 +1083,11 @@ export function ProfileView({
             {!selectableBooks.length &&
               (!searchingNine || nineSearch.settled) && (
                 <p className="profile-muted">
-                  {nearNine.length
-                    ? "ぴったり合う本はありませんでした。"
-                    : "条件に合う本がありません。"}
+                  {!searchingNine
+                    ? "題名や著者で、本を探してください。"
+                    : nearNine.length
+                      ? "ぴったり合う本はありませんでした。"
+                      : "条件に合う本がありません。"}
                 </p>
               )}
             {nearNine.length > 0 && (
