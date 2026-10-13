@@ -11,6 +11,10 @@ export const SITE_NOTE_LIMITS = {
   anchor: 500,
   device: 40,
   perHour: 60,
+  /** The largest place across and down the page, and the largest window, in CSS pixels. */
+  x: 100_000,
+  y: 10_000_000,
+  viewport: 20_000,
 } as const;
 
 /** A deployed commit as the database keeps it, or null. */
@@ -117,12 +121,13 @@ export function noteSpotAt(tap: {
   width: number;
   height: number;
 }): Pick<SiteNoteSpot, "x" | "y" | "viewportW" | "viewportH" | "scrollY"> {
+  const { x, y, viewport } = SITE_NOTE_LIMITS;
   return {
-    x: whole(tap.clientX + Math.max(0, tap.scrollX), 100_000),
-    y: whole(tap.clientY + Math.max(0, tap.scrollY), 10_000_000),
-    viewportW: Math.max(1, whole(tap.width, 20_000)),
-    viewportH: Math.max(1, whole(tap.height, 20_000)),
-    scrollY: whole(tap.scrollY, 10_000_000),
+    x: whole(tap.clientX + Math.max(0, tap.scrollX), x),
+    y: whole(tap.clientY + Math.max(0, tap.scrollY), y),
+    viewportW: Math.max(1, whole(tap.width, viewport)),
+    viewportH: Math.max(1, whole(tap.height, viewport)),
+    scrollY: whole(tap.scrollY, y),
   };
 }
 
@@ -174,15 +179,22 @@ export function deviceLabel(userAgent: string, touchPoints = 0): string {
     .slice(0, SITE_NOTE_LIMITS.device);
 }
 
+/** A text, element or other node, as an element's childNodes holds it. */
+export interface NoteNode {
+  /** 1 for an element, 3 for text. */
+  nodeType: number;
+  textContent: string | null;
+}
+
 /** The few parts of a DOM element the descriptions read; tests pass plain objects. */
-export interface NoteElement {
+export interface NoteElement extends NoteNode {
   /** "BUTTON" for HTML, "path" for SVG: always lower-cased before use. */
   tagName: string;
   /** Classes are read with getAttribute("class"): an SVG's className is not a string. */
   getAttribute(name: string): string | null;
-  textContent: string | null;
   parentElement: NoteElement | null;
   children: ArrayLike<NoteElement>;
+  childNodes: ArrayLike<NoteNode>;
 }
 export type FindById = (id: string) => NoteElement | null;
 
@@ -255,16 +267,44 @@ function clip(text: string, max: number): string {
 /** The first `max` characters, never splitting one in two. */
 const upTo = (text: string, max: number) => [...text].slice(0, max).join("");
 
+/**
+ * The words in a node, as textContent has them, but never what was typed
+ * into a field. An input has no text; a textarea does, because React writes
+ * its value in as the default, so a textarea's words are left out wherever
+ * it sits (inside a label, say).
+ */
+function textOf(node: NoteNode): string {
+  if (node.nodeType === 3) return node.textContent ?? "";
+  if (node.nodeType !== 1) return "";
+  const element = node as NoteElement;
+  if (tagOf(element) === "textarea") return "";
+  return Array.from(element.childNodes, textOf).join("");
+}
+
 function labelledBy(element: NoteElement, byId?: FindById): string {
   const ids = squeeze(element.getAttribute("aria-labelledby"));
   if (!ids || !byId) return "";
   return squeeze(
     ids
       .split(" ")
-      .map((id) => byId(id)?.textContent ?? "")
+      .map((id) => {
+        const label = byId(id);
+        return label ? textOf(label) : "";
+      })
       .join(" "),
   );
 }
+
+/**
+ * A box of several parts (a book's hero, a card) tapped on its blank space:
+ * all its words would only crowd out where it was, so the heading before it
+ * says that alone. A paragraph keeps its words, links and all.
+ */
+const isRoomy = (element: NoteElement) =>
+  !wordOf(element) &&
+  tagOf(element) !== "p" &&
+  element.children.length > 1 &&
+  [...squeeze(element.textContent)].length > 40;
 
 function nameOf(element: NoteElement, byId?: FindById): string {
   const tag = tagOf(element);
@@ -277,8 +317,7 @@ function nameOf(element: NoteElement, byId?: FindById): string {
         ? element.getAttribute("placeholder")
         : null,
       element.getAttribute("title"),
-      // What a reader typed into a field is never kept: inputs have no text.
-      element.textContent,
+      isRoomy(element) ? null : textOf(element),
     ]
       .map(squeeze)
       .find(Boolean) ?? ""
@@ -332,7 +371,7 @@ function headingBefore(element: NoteElement, skip: string): string {
     for (const candidate of before(parent, node)) {
       if (++looked > 400) return "";
       if (!isHeading(candidate)) continue;
-      const text = squeeze(candidate.textContent);
+      const text = squeeze(textOf(candidate));
       if (text && text !== skip) return text;
     }
     node = parent;
@@ -366,7 +405,7 @@ export function layerTitle(layer: NoteElement, byId?: FindById): string {
       for (const child of Array.from(node.children)) {
         if (++looked > 200) return "";
         if (/^h[1-6]$/.test(tagOf(child)) || roleOf(child) === "heading")
-          return squeeze(child.textContent);
+          return squeeze(textOf(child));
         const found = first(child);
         if (found) return found;
       }

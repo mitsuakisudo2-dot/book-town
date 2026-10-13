@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   SITE_NOTE_LIMITS,
@@ -18,6 +18,7 @@ import {
   type SiteNoteSpot,
 } from "../src/lib/site-notes";
 import { forgetDraft, keepDraft, keptDraft } from "../src/lib/site-note-draft";
+import { pagePattern } from "../src/lib/supabase/site-notes";
 
 // The helpers behind 注釈モード: the device's name, the words for what was
 // tapped, the path back to it, and where its pin goes. Elements are plain
@@ -38,9 +39,12 @@ function el(
     (part): part is Fake => typeof part !== "string",
   );
   const node: Fake = {
+    nodeType: 1,
     // The DOM upper-cases HTML tags and keeps SVG ones as written.
     tagName: SVG.has(tag) ? tag : tag.toUpperCase(),
     getAttribute: (name) => attributes[name] ?? null,
+    // As the DOM's: a textarea's text is what was typed in it (React writes
+    // the value in as the default).
     get textContent() {
       return content
         .map((part) => (typeof part === "string" ? part : part.textContent))
@@ -48,6 +52,9 @@ function el(
     },
     parentElement: null,
     children,
+    childNodes: content.map((part) =>
+      typeof part === "string" ? { nodeType: 3, textContent: part } : part,
+    ),
   };
   for (const child of children) child.parentElement = node;
   return node;
@@ -200,6 +207,81 @@ async function main() {
     },
   );
 
+  await check("what was typed into a field is never kept", () => {
+    const typed = "山田花子さんの住所は";
+    // A bare textarea (the report's くわしく), tapped itself.
+    const field = el("textarea", { class: "field" }, typed);
+    const label = el(
+      "label",
+      { class: "form-label" },
+      "くわしく（なくても大丈夫です）",
+      field,
+    );
+    const form = el(
+      "form",
+      { "aria-labelledby": "report-title" },
+      el("h2", { id: "report-title" }, "通報する"),
+      label,
+    );
+    el("div", { role: "dialog" }, form);
+    assert.equal(meaningfulElement(field), field);
+    assert.equal(describeTarget(field), "入力欄 / 見出し「通報する」");
+    // The label around it, tapped on its words.
+    assert.equal(
+      describeTarget(label),
+      "ラベル「くわしく（なくても大丈夫です）」 / 見出し「通報する」",
+    );
+    // Nor through anything that names something by its words.
+    const titled = el(
+      "section",
+      { "aria-labelledby": "with-field" },
+      el("label", { id: "with-field" }, "ひとこと", el("textarea", {}, typed)),
+    );
+    const dialog = el(
+      "dialog",
+      {},
+      el("h2", {}, "棚の名前", el("textarea", {}, typed)),
+    );
+    for (const words of [
+      describeTarget(field),
+      describeTarget(label),
+      describeTarget(form, finder(form)),
+      describeTarget(titled, finder(titled)),
+      layerTitle(dialog),
+    ])
+      assert.ok(!words.includes("山田"), words);
+    assert.equal(layerTitle(dialog), "棚の名前");
+  });
+
+  await check("blank space in a box is named by the heading before it", () => {
+    const body = el(
+      "div",
+      { class: "book-hero-body" },
+      el(
+        "p",
+        {},
+        "遠い惑星を覆う海は、何を考えているのか。人間の言葉が届かない相手と向きあう、科学者たちの物語。",
+      ),
+      el("button", {}, "読みたい"),
+    );
+    el("main", {}, el("h1", {}, "ソラリス"), body);
+    assert.equal(describeTarget(body), "見出し「ソラリス」");
+    // A paragraph keeps its words, links and all; so does a small box.
+    const paragraph = el(
+      "p",
+      {},
+      "この本は",
+      el("a", {}, "軌道書房"),
+      "と",
+      el("a", {}, "雨の書店"),
+      "の棚にあります。どちらも夜にだけ開く、小さな本屋です。",
+    );
+    el("main", {}, el("h1", {}, "ソラリス"), paragraph);
+    assert.ok(describeTarget(paragraph).startsWith("「この本は軌道書房と"));
+    const small = el("div", {}, el("span", {}, "1冊"), el("span", {}, "棚"));
+    assert.equal(describeTarget(small), "「1冊棚」");
+  });
+
   await check("the heading before it says where on the page it was", () => {
     const button = el("button", {}, "好き");
     const page = el(
@@ -274,6 +356,11 @@ async function main() {
         layerTitle(el("div", { role: "dialog" }, el("p", {}, "本文"))),
         "",
       );
+      // Never longer than the database keeps.
+      assert.ok(
+        [...layerTitle(el("dialog", { "aria-label": "あ".repeat(200) }))]
+          .length <= SITE_NOTE_LIMITS.layer,
+      );
     },
   );
 
@@ -341,6 +428,24 @@ async function main() {
         height: 844,
       }),
       { x: 10, y: 20, viewportW: 390, viewportH: 844, scrollY: 0 },
+    );
+    // Never past what the database keeps.
+    assert.deepEqual(
+      noteSpotAt({
+        clientX: 1e9,
+        clientY: 1e9,
+        scrollX: 0,
+        scrollY: 1e9,
+        width: 1e9,
+        height: 0,
+      }),
+      {
+        x: SITE_NOTE_LIMITS.x,
+        y: SITE_NOTE_LIMITS.y,
+        viewportW: SITE_NOTE_LIMITS.viewport,
+        viewportH: 1,
+        scrollY: SITE_NOTE_LIMITS.y,
+      },
     );
   });
 
@@ -462,6 +567,10 @@ async function main() {
       "/search/?q=%E5%A4%9C",
     );
     assert.equal(at("/walk/", "", "#shop-orbit"), "/walk/#shop-orbit");
+    // Only the walk keeps its shop: elsewhere the part after # is the
+    // screen's own.
+    assert.equal(at("/shop/", "?id=A", "#shop-words"), "/shop/?id=A");
+    assert.equal(at("/notifications/", "", "#reports"), "/notifications/");
     // A sign-in link's keys, or what was typed in the street's search, never.
     assert.equal(at("/", "", "#search=%E5%A4%9C"), "/");
     assert.equal(
@@ -476,6 +585,24 @@ async function main() {
     assert.equal(pageKey("/shop/?id=A&show=following"), pageKey("/shop/?id=A"));
     assert.equal(pageKey("/search/?q=x"), "/search/");
     assert.notEqual(pageKey("/walk/#shop-orbit"), pageKey("/walk/#shop-rain"));
+  });
+
+  await check("the notes asked for are the page's own, and no deeper", () => {
+    const on = (pathname: string, page: string) =>
+      new RegExp(pagePattern(pathname)).test(page);
+    assert.ok(on("/", "/"));
+    assert.ok(on("/", "/?id=1"));
+    assert.ok(!on("/", "/walk/"));
+    assert.ok(on("/walk/", "/walk/#shop-orbit"));
+    assert.ok(on("/shop/", "/shop/?id=A&show=following"));
+    assert.ok(!on("/shop/", "/shops/shop-orbit/"));
+    // What a regular expression would read otherwise is taken as it is.
+    const odd = "/shops/a.b(c)+%_[1]$/";
+    assert.ok(on(odd, odd + "?id=1"));
+    assert.ok(!on(odd, "/shops/aXb(c)+%_[1]$/"));
+    assert.ok(!on(odd, odd + "more/"));
+    // Escapes only before signs: before a letter Postgres reads another meaning.
+    assert.doesNotMatch(pagePattern("/shops/a.b/1/"), /\\[A-Za-z0-9]/);
   });
 
   await check("a note's words are trimmed and kept to 2000 characters", () => {
@@ -510,16 +637,13 @@ async function main() {
   });
 
   await check("the app's limits are the database's", () => {
-    const sql = readFileSync(
-      join(
-        __dirname,
-        "..",
-        "supabase",
-        "migrations",
-        "20261023000000_site_notes.sql",
-      ),
-      "utf8",
+    // Found by its name's end: the date in front may change before it merges.
+    const migrations = join(__dirname, "..", "supabase", "migrations");
+    const file = readdirSync(migrations).find((name) =>
+      name.endsWith("_site_notes.sql"),
     );
+    assert.ok(file, "the site notes migration");
+    const sql = readFileSync(join(migrations, file), "utf8");
     const number = (pattern: RegExp) => Number(pattern.exec(sql)?.[1]);
     assert.equal(
       number(/char_length\(body\) between 1 and (\d+)/),
@@ -546,6 +670,17 @@ async function main() {
       SITE_NOTE_LIMITS.device,
     );
     assert.equal(number(/\) >= (\d+) then/), SITE_NOTE_LIMITS.perHour);
+    assert.equal(number(/\bx between 0 and (\d+)/), SITE_NOTE_LIMITS.x);
+    assert.equal(number(/\by between 0 and (\d+)/), SITE_NOTE_LIMITS.y);
+    assert.equal(number(/scroll_y between 0 and (\d+)/), SITE_NOTE_LIMITS.y);
+    assert.equal(
+      number(/viewport_w between 1 and (\d+)/),
+      SITE_NOTE_LIMITS.viewport,
+    );
+    assert.equal(
+      number(/viewport_h between 1 and (\d+)/),
+      SITE_NOTE_LIMITS.viewport,
+    );
   });
 
   console.log(passed + " site note checks passed");

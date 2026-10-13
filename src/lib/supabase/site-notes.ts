@@ -56,7 +56,19 @@ export async function askCanAnnotate(client: Client): Promise<boolean> {
   return !error && data === true;
 }
 
-/** The caller's notes not taken back whose page starts with `pathname`, oldest first. */
+/**
+ * A regular expression (read alike by Postgres and JavaScript) for the pages
+ * left on `pathname` itself: the path alone, or followed by ? or #, never a
+ * page further down it. Only the characters that mean something in one are
+ * escaped: a backslash before a letter means something else to Postgres.
+ */
+export const pagePattern = (pathname: string) =>
+  "^" + pathname.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([?#]|$)";
+
+/**
+ * The caller's notes not taken back on the page at `pathname` (with any query
+ * or #shop), oldest first. Past the cap, the newest are the ones kept.
+ */
 export async function loadOpenNotes(
   client: Client,
   pathname: string,
@@ -65,11 +77,11 @@ export async function loadOpenNotes(
     .from("site_notes")
     .select(SITE_NOTE_COLUMNS)
     .is("removed_at", null)
-    .like("page", pathname.replace(/[\\%_]/g, "\\$&") + "%")
-    .order("created_at")
+    .regexMatch("page", pagePattern(pathname))
+    .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw error;
-  return (data ?? []).map(siteNoteFrom);
+  return (data ?? []).map(siteNoteFrom).reverse();
 }
 
 /** Leaves a note. The database fills in who left it and when. */

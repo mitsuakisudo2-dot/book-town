@@ -17,6 +17,7 @@ import {
   publicStoreScene,
 } from "../src/lib/store-customization";
 import { fileReport } from "../src/lib/supabase/reports";
+import { loadOpenNotes } from "../src/lib/supabase/site-notes";
 import { createWalkStore } from "../src/lib/walk-store";
 import type { Database } from "../src/lib/supabase/database.types";
 import {
@@ -890,6 +891,43 @@ async function main() {
           .select();
         assert.ok(staff.error, "private.staff must not be served");
       }
+      // The screen's question for a page's notes, as the real API reads it.
+      // The operator's key is let past row level security, so it stands in
+      // for a staff member here.
+      const odd = "/shops/a.b(c)+%_[1]$,x/";
+      const pages = [odd, odd + "?id=1", odd + "#shop", odd + "more/", "/"];
+      const placed = await admin
+        .from("site_notes")
+        .insert(
+          pages.map((page) => ({
+            user_id: aki.id,
+            page,
+            x: 1,
+            y: 1,
+            viewport_w: 390,
+            viewport_h: 844,
+            scroll_y: 0,
+            body: "注釈",
+          })),
+        )
+        .select("id");
+      assert.ifError(placed.error);
+      const found = await loadOpenNotes(admin as unknown as Client, odd);
+      assert.deepEqual(found.map((note) => note.page).sort(), [
+        odd,
+        odd + "#shop",
+        odd + "?id=1",
+      ]);
+      const cleared = await admin
+        .from("site_notes")
+        .delete()
+        .in(
+          "id",
+          placed.data!.map((row) => row.id),
+        );
+      assert.ifError(cleared.error);
+      // To anyone else, the same question is simply answered with nothing.
+      assert.deepEqual(await loadOpenNotes(aki.client, odd), []);
     },
   );
 

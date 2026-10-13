@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
+import { pagePattern } from "../src/lib/supabase/site-notes";
 
 // Runs the Supabase migrations on an in-memory Postgres and checks, as each kind of
 // visitor, that the row level security policies allow and refuse the right things.
@@ -2582,7 +2583,8 @@ async function main() {
       assert.ok(note.created_at);
       assert.equal(note.removed_at, null);
       assert.equal(await notesSeenBy(NOTE_STAFF), 1);
-      // Another staff member neither reads nor takes it back.
+      // Another staff member neither reads nor takes it back, even with
+      // an update that names no row (and so reads nothing to be hidden by).
       assert.equal(await notesSeenBy(NOTE_STAFF2), 0);
       assert.equal(
         await affects(
@@ -2591,6 +2593,16 @@ async function main() {
           [staffNote],
         ),
         0,
+      );
+      await as(NOTE_STAFF2, "update site_notes set removed_at = now()");
+      assert.equal(
+        (
+          await db.query<{ removed_at: string | null }>(
+            "select removed_at from site_notes where id = $1",
+            [staffNote],
+          )
+        ).rows[0].removed_at,
+        null,
       );
       // Nobody names the writer or the time: both come from the database.
       await refused(
@@ -2699,7 +2711,15 @@ async function main() {
       { anchor_x: "1.5" },
       { build: "'main'" },
       { x: "-1" },
+      { x: "100001" },
+      { y: "-1" },
+      { y: "10000001" },
+      { scroll_y: "-1" },
+      { scroll_y: "10000001" },
       { viewport_w: "0" },
+      { viewport_w: "20001" },
+      { viewport_h: "0" },
+      { viewport_h: "20001" },
     ];
     for (const change of tooMuch)
       await assert.rejects(
@@ -2723,8 +2743,53 @@ async function main() {
     );
   });
 
+  await check(
+    "the screen asks for a page's own notes, read alike by Postgres",
+    async () => {
+      const odd = "/shops/a.b(c)+%_[1]$/";
+      const pages = [
+        "/",
+        "/?id=1",
+        "/walk/#shop-orbit",
+        odd,
+        odd + "?id=1",
+        odd + "#shop",
+        odd + "more/",
+        "/shops/aXb(c)+%_[1]$/",
+      ];
+      for (const page of pages)
+        await as(
+          NOTE_STAFF,
+          "insert into site_notes (page, x, y, viewport_w, viewport_h, scroll_y, body) values ($1, 1, 1, 390, 844, 0, 'ページ')",
+          [page],
+        );
+      const found = async (pathname: string) =>
+        (
+          await as<{ page: string }>(
+            NOTE_STAFF,
+            "select distinct page from site_notes where page ~ $1",
+            [pagePattern(pathname)],
+          )
+        )
+          .map((row) => row.page)
+          .sort();
+      assert.deepEqual(await found("/"), ["/", "/?id=1"]);
+      assert.deepEqual(await found(odd), [odd, odd + "#shop", odd + "?id=1"]);
+      assert.deepEqual(await found("/walk/"), ["/walk/#shop-orbit"]);
+    },
+  );
+
   await check("sixty notes an hour, then a pause", async () => {
     for (let n = 0; n < 60; n++) await leaveNote(NOTE_STAFF2, "注釈" + n);
+    await assert.rejects(
+      leaveNote(NOTE_STAFF2, "もう1つ"),
+      /60 site notes an hour/,
+    );
+    // Taking notes back makes no room: they were still sent.
+    assert.equal(
+      await affects(NOTE_STAFF2, "update site_notes set removed_at = now()"),
+      60,
+    );
     await assert.rejects(
       leaveNote(NOTE_STAFF2, "もう1つ"),
       /60 site notes an hour/,
@@ -2948,18 +3013,21 @@ async function main() {
     async () => {
       const earlier = new PGlite();
       await earlier.exec(supabase);
-      const notes = files.indexOf("20261023000000_site_notes.sql");
+      // Found by its name's end: the date in front may change before it merges.
+      const notes = files.findIndex((file) => file.endsWith("_site_notes.sql"));
+      assert.ok(notes > 0, "the site notes migration");
       for (const file of files.slice(0, notes))
         await earlier.exec(migrate(file));
+      // The oldest account, not the first id: Ben's sorts after Aki's.
       await earlier.exec(`
         insert into auth.users (id, created_at) values
-          ('${BEN}', now() - interval '3 days'),
-          ('${AKI}', now() - interval '30 days');
+          ('${AKI}', now() - interval '3 days'),
+          ('${BEN}', now() - interval '30 days');
       `);
       for (const file of files.slice(notes)) await earlier.exec(migrate(file));
       assert.deepEqual(
         (await earlier.query("select user_id from private.staff")).rows,
-        [{ user_id: AKI }],
+        [{ user_id: BEN }],
       );
       await earlier.close();
     },

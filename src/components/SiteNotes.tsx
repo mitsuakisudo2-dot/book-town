@@ -59,6 +59,13 @@ type Client = SupabaseClient<Database>;
 type Phase = "aim" | "write" | "read";
 
 /**
+ * The open mode's way to hear of a note brought back with 元に戻す: the
+ * toast outlives the mode it was raised in, which may have closed and
+ * opened again meanwhile.
+ */
+const returnedNotes = new Set<(note: SiteNote) => void>();
+
+/**
  * Where the button and the mode live: inside an open book in hand (a native
  * dialog, in the browser's top layer, which makes the rest of the page inert),
  * or else in the body. The toast and the report dialog do the same.
@@ -200,6 +207,48 @@ function anchorNow(found: Found): PinAnchor {
       null,
     ),
   };
+}
+
+/**
+ * The scrolling boxes under a point of the screen, nearest first: a shelf's
+ * rail, a book in hand's pages, a Modal. Never the page itself, which
+ * scrolls on its own.
+ */
+function scrollersAt(clientX: number, clientY: number): HTMLElement[] {
+  const hit = document
+    .elementsFromPoint(clientX, clientY)
+    .find((element) => !element.closest(OURS));
+  const found: HTMLElement[] = [];
+  for (
+    let node = hit instanceof HTMLElement ? hit : (hit?.parentElement ?? null);
+    node && node !== document.body && node !== document.documentElement;
+    node = node.parentElement
+  ) {
+    const style = getComputedStyle(node);
+    if (
+      (/auto|scroll|overlay/.test(style.overflowX) &&
+        node.scrollWidth > node.clientWidth) ||
+      (/auto|scroll|overlay/.test(style.overflowY) &&
+        node.scrollHeight > node.clientHeight)
+    )
+      found.push(node);
+  }
+  return found;
+}
+
+/** Scrolls the first of `boxes` that can go by (dx, dy); that one, or null. */
+function scrollFirst(
+  boxes: HTMLElement[],
+  dx: number,
+  dy: number,
+): HTMLElement | null {
+  for (const box of boxes) {
+    const { scrollLeft, scrollTop } = box;
+    box.scrollBy({ left: dx, top: dy, behavior: "instant" });
+    if (box.scrollLeft !== scrollLeft || box.scrollTop !== scrollTop)
+      return box;
+  }
+  return null;
 }
 
 /** Where a tap landed: the element under it, in words and as a path. */
@@ -398,6 +447,24 @@ function NotesMode({
       : "bottom",
   );
   const [layout, setLayout] = useState<Layout>({ pins: {}, sheet: null });
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const tintRef = useRef<HTMLDivElement>(null);
+
+  // A note brought back while this mode is open comes back as its pin.
+  useEffect(() => {
+    const back = (note: SiteNote) => {
+      if (pageKey(note.page) !== over.key || note.layer !== over.title) return;
+      setNotes((list) =>
+        [...list.filter((entry) => entry.id !== note.id), note].sort((a, b) =>
+          a.createdAt.localeCompare(b.createdAt),
+        ),
+      );
+    };
+    returnedNotes.add(back);
+    return () => {
+      returnedNotes.delete(back);
+    };
+  }, [over]);
 
   useEffect(() => {
     let current = true;
@@ -463,6 +530,29 @@ function NotesMode({
   }, [over, notes, spot, phase, reading]);
   useLayoutEffect(() => place(), [place]);
 
+  // The banner moves out of the way of a pin under it, once: a pin hidden
+  // below a book's fold waits at its bottom edge, where the banner starts.
+  // Moved by hand with ↑ or ↓, it stays where it was put.
+  const bannerSettled = useRef(false);
+  useLayoutEffect(() => {
+    const banner = bannerRef.current?.getBoundingClientRect();
+    if (!banner || bannerSettled.current) return;
+    const covered = Array.from(
+      modeRef.current?.querySelectorAll(".site-notes-pin") ?? [],
+    ).some((pin) => {
+      const box = pin.getBoundingClientRect();
+      return (
+        box.left < banner.right &&
+        banner.left < box.right &&
+        box.top < banner.bottom &&
+        banner.top < box.bottom
+      );
+    });
+    if (!covered) return;
+    bannerSettled.current = true;
+    setBannerAt((at) => (at === "bottom" ? "top" : "bottom"));
+  }, [layout, phase]);
+
   // Pins follow the page: scrolling (pins on sticky and fixed bars), the
   // keyboard, turning the phone, and content arriving after the mode opened.
   const placeRef = useRef(place);
@@ -481,7 +571,8 @@ function NotesMode({
     };
     const moved = later(false);
     const changed = later(true);
-    addEventListener("scroll", moved, { passive: true });
+    // Captured, so a shelf's rail or a book's pages scrolling moves pins too.
+    addEventListener("scroll", moved, { capture: true, passive: true });
     addEventListener("resize", changed);
     addEventListener("orientationchange", changed);
     const vv = window.visualViewport;
@@ -491,7 +582,7 @@ function NotesMode({
     watch.observe(document.body);
     return () => {
       cancelAnimationFrame(frame);
-      removeEventListener("scroll", moved);
+      removeEventListener("scroll", moved, { capture: true });
       removeEventListener("resize", changed);
       removeEventListener("orientationchange", changed);
       vv?.removeEventListener("resize", moved);
@@ -535,6 +626,91 @@ function NotesMode({
     };
     addEventListener("keydown", key, true);
     return () => removeEventListener("keydown", key, true);
+  }, []);
+
+  // The tint takes every tap, so a swipe or the wheel on it would reach only
+  // the page. One over a scrolling box beneath (a shelf's rail, a book in
+  // hand's pages, a Modal) is passed on to that box, so a place out of sight
+  // there can be brought into view without leaving the mode.
+  useEffect(() => {
+    const tint = tintRef.current;
+    if (!tint) return;
+    let drag: {
+      x: number;
+      y: number;
+      boxes: HTMLElement[];
+      // Undecided until the first move; null once left to the browser.
+      owner?: HTMLElement | null;
+      // Along one way only, as the browser itself scrolls.
+      across?: boolean;
+      snap?: string;
+    } | null = null;
+    const release = () => {
+      // A paged rail settles on a page again once the finger is lifted.
+      if (drag?.owner && drag.snap !== undefined)
+        drag.owner.style.scrollSnapType = drag.snap;
+      drag = null;
+    };
+    const start = (event: TouchEvent) => {
+      release();
+      const touch = event.touches[0];
+      if (event.touches.length !== 1 || !touch) return;
+      drag = {
+        x: touch.clientX,
+        y: touch.clientY,
+        boxes: scrollersAt(touch.clientX, touch.clientY),
+      };
+    };
+    const move = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!drag || event.touches.length !== 1 || !touch) return release();
+      const dx = drag.x - touch.clientX;
+      const dy = drag.y - touch.clientY;
+      drag.x = touch.clientX;
+      drag.y = touch.clientY;
+      if (drag.owner === null || (!dx && !dy)) return;
+      if (drag.owner === undefined) {
+        drag.across = Math.abs(dx) > Math.abs(dy);
+        drag.owner = drag.across
+          ? scrollFirst(drag.boxes, dx, 0)
+          : scrollFirst(drag.boxes, 0, dy);
+        if (!drag.owner) return;
+        // Followed pixel by pixel, not page by page.
+        drag.snap = drag.owner.style.scrollSnapType;
+        drag.owner.style.scrollSnapType = "none";
+      } else
+        drag.owner.scrollBy({
+          left: drag.across ? dx : 0,
+          top: drag.across ? 0 : dy,
+          behavior: "instant",
+        });
+      event.preventDefault();
+    };
+    const wheel = (event: WheelEvent) => {
+      const unit =
+        event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
+      if (
+        scrollFirst(
+          scrollersAt(event.clientX, event.clientY),
+          event.deltaX * unit,
+          event.deltaY * unit,
+        )
+      )
+        event.preventDefault();
+    };
+    tint.addEventListener("touchstart", start, { passive: true });
+    tint.addEventListener("touchmove", move, { passive: false });
+    tint.addEventListener("touchend", release);
+    tint.addEventListener("touchcancel", release);
+    tint.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      release();
+      tint.removeEventListener("touchstart", start);
+      tint.removeEventListener("touchmove", move);
+      tint.removeEventListener("touchend", release);
+      tint.removeEventListener("touchcancel", release);
+      tint.removeEventListener("wheel", wheel);
+    };
   }, []);
 
   useEffect(() => {
@@ -637,12 +813,7 @@ function NotesMode({
           notify("戻せませんでした。もう一度お試しください。");
           return;
         }
-        if (alive.current)
-          setNotes((list) =>
-            [...list, note].sort((a, b) =>
-              a.createdAt.localeCompare(b.createdAt),
-            ),
-          );
+        returnedNotes.forEach((back) => back(note));
         notify("注釈を戻しました");
       },
     });
@@ -709,11 +880,17 @@ function NotesMode({
       className="site-notes-mode"
       data-site-notes=""
       data-phase={phase}
+      data-over={over.layer ? "layer" : "page"}
       role="dialog"
       aria-modal="true"
       aria-label="注釈モード"
     >
-      <div className="site-notes-tint" onClick={tapTint} aria-hidden="true" />
+      <div
+        ref={tintRef}
+        className="site-notes-tint"
+        onClick={tapTint}
+        aria-hidden="true"
+      />
       {!over.layer && (
         <div className="site-notes-page-pins" ref={pagePinsRef}>
           {notes.map((note, index) =>
@@ -729,7 +906,7 @@ function NotesMode({
         {draft?.fixed && draftPin}
       </div>
       {phase === "aim" && (
-        <div className="site-notes-banner" data-at={bannerAt}>
+        <div ref={bannerRef} className="site-notes-banner" data-at={bannerAt}>
           <p>
             <span>メモしたい場所を</span>
             <span>タップしてください</span>
@@ -753,9 +930,10 @@ function NotesMode({
             aria-label={
               bannerAt === "bottom" ? "案内を上へ動かす" : "案内を下へ動かす"
             }
-            onClick={() =>
-              setBannerAt((at) => (at === "bottom" ? "top" : "bottom"))
-            }
+            onClick={() => {
+              bannerSettled.current = true;
+              setBannerAt((at) => (at === "bottom" ? "top" : "bottom"));
+            }}
           >
             <span aria-hidden="true">{bannerAt === "bottom" ? "↑" : "↓"}</span>
           </button>

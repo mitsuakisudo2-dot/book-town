@@ -71,10 +71,15 @@ create table public.site_notes (
 );
 create index site_notes_user_created on public.site_notes (user_id, created_at);
 
--- A page gone wrong cannot fill the table: sixty notes an hour per person.
+-- A page gone wrong cannot fill the table: sixty notes an hour per person,
+-- taken back or not.
 create function private.limit_site_notes() returns trigger
 language plpgsql set search_path = '' as $$
 begin
+  -- One person's notes are counted one at a time, so many sent at once
+  -- still see each other and the sixty holds.
+  perform pg_advisory_xact_lock(hashtext('book-town.site-notes'),
+                                hashtext(new.user_id::text));
   if (
     select count(*) from public.site_notes n
     where n.user_id = new.user_id and n.created_at > now() - interval '1 hour'
