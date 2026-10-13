@@ -19,6 +19,7 @@ import {
   type ProfileWork,
 } from "../lib/account-draft";
 import { useKeptDraft } from "../lib/kept-draft";
+import { adoptVisitorRecords } from "../lib/record-draft";
 import { Icon } from "./ui";
 import { KeptDraftNote } from "./KeptDraftNote";
 import "./profile.css";
@@ -34,6 +35,15 @@ export default function AccountView() {
       sentCodeStore.initialize();
     else sentCodeStore.clear(SENT_CODE);
   }, [account.status]);
+  // What a visitor wrote about a finished book before being asked to sign in
+  // goes with them into the account (every sign-in ends on this page).
+  const userId =
+    account.status === "signed-in" || account.status === "needs-profile"
+      ? account.user.id
+      : null;
+  useEffect(() => {
+    if (userId) adoptVisitorRecords(userId);
+  }, [userId]);
   return (
     <main className="account-page">
       <Link href="/" className="account-brand">

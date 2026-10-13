@@ -5,6 +5,7 @@ import {
   keptIds,
   keptText,
   type KeptDraftOptions,
+  type KeptDraftStore,
 } from "./kept-draft";
 import { DRAFT_OWNER } from "./draft-owner";
 import { FEELINGS, RECORD_NOTE_MAX_LENGTH, type Feeling } from "./types";
@@ -97,3 +98,25 @@ export const RECORD_DRAFT_OPTIONS: KeptDraftOptions<RecordChanges> = {
 };
 
 export const recordDrafts = createKeptDraftStore(RECORD_DRAFT_OPTIONS);
+
+/**
+ * A visitor's new records, handed to the account they sign in to: 記録する
+ * asked them to sign in, and what they wrote waits for them on the book. Work
+ * the account already keeps for the same book is not replaced; the visitor's
+ * then stays where it was, for the next time no one is signed in.
+ */
+export function adoptVisitorRecords(
+  owner: string,
+  store: KeptDraftStore<RecordChanges> = recordDrafts,
+) {
+  store.initialize();
+  const visitor = "visitor:record-new:";
+  for (const [key, changes] of Object.entries(store.getSnapshot().drafts)) {
+    if (!key.startsWith(visitor)) continue;
+    const bookId = key.slice(visitor.length);
+    const mine = recordWorkKey({ owner, bookId });
+    if (store.get(mine) !== null) continue;
+    store.set(mine, changes);
+    store.clear(key);
+  }
+}

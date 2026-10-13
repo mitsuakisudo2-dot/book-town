@@ -6,7 +6,8 @@ import type { AccountState } from "./account";
  * (by account), the demo's one reader, or someone not signed in. Null while
  * the account is still being checked: nothing is kept until it is known.
  * Every store that keeps a reader's own work keys it this way (records,
- * reports, the shop, its scene, the profile).
+ * reports, the shop, its scene, the profile), except post and poster drafts,
+ * which are still kept per browser.
  */
 export function draftOwner(account: AccountState): string | null {
   switch (account.status) {

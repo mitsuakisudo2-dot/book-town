@@ -300,6 +300,16 @@ const keptReports = () =>
       JSON.parse(localStorage.getItem("book-town-report-drafts-v1") ?? "null")
         ?.drafts ?? {},
   );
+/** The keys of the record drafts this browser keeps. */
+const keptRecordKeys = () =>
+  page.evaluate(() =>
+    Object.keys(
+      JSON.parse(localStorage.getItem("book-town-record-drafts-v1") ?? "null")
+        ?.drafts ?? {},
+    ),
+  );
+/** What a visitor writes about a finished 見本 book before signing in. */
+const VISITOR_NOTE = "灰色の男たちのところで、時計を見た。";
 const noOverflow = async (label) => {
   const size = await page.evaluate(() => ({
     width: innerWidth,
@@ -336,6 +346,30 @@ try {
       ).toBeVisible();
       expect(townReads).toContain("/rest/v1/shops");
       townReads.length = 0;
+    },
+  );
+
+  await check(
+    "a visitor's words on a finished book are kept when 記録する asks them to sign in",
+    async () => {
+      await page.goto(base + "/books/momo/");
+      const feelings = page.locator(".book-feelings");
+      await feelings
+        .getByRole("button", { name: "読み終えた気持ちを残す" })
+        .click();
+      const sheet = page.getByRole("dialog", { name: "読み終えた気持ち" });
+      await sheet.getByRole("button", { name: "あたたかくなった" }).click();
+      await sheet
+        .getByLabel("ひとこと（なくても大丈夫です）")
+        .fill(VISITOR_NOTE);
+      await sheet.getByRole("button", { name: "記録する" }).click();
+      const invite = page.getByRole("heading", {
+        name: "本の街の住人になりませんか",
+      });
+      await expect(invite).toBeVisible();
+      await page.getByRole("button", { name: "このまま見る" }).click();
+      await expect(invite).toHaveCount(0);
+      expect(await keptRecordKeys()).toEqual(["visitor:record-new:momo"]);
     },
   );
 
@@ -658,14 +692,40 @@ try {
       page.getByRole("heading", { name: "トモの本屋" }),
     ).toBeVisible();
     await page.goto(base + "/shops/mine/");
-    await expect(
-      page
-        .locator(".store-shelf-label")
-        .getByRole("link", { name: "本を並べる" }),
-    ).toHaveAttribute("href", "/my-shop/");
+    const fill = page
+      .locator(".store-shelf-label")
+      .getByRole("link", { name: "本を並べる" });
+    await expect(fill).toHaveAttribute("href", "/my-shop/");
+    expect((await fill.boundingBox()).height).toBeGreaterThanOrEqual(44);
     await shot("7-empty-shelf");
     town = null;
   });
+
+  await check(
+    "what a visitor wrote on a finished book waits for them once signed in",
+    async () => {
+      await page.goto(base + "/books/momo/");
+      await page
+        .locator(".book-feelings")
+        .getByRole("button", { name: "書きかけの気持ちを続ける" })
+        .click();
+      const sheet = page.getByRole("dialog", { name: "読み終えた気持ち" });
+      const note = sheet.getByLabel("ひとこと（なくても大丈夫です）");
+      await expect(note).toHaveValue(VISITOR_NOTE);
+      await expect(
+        sheet.getByRole("button", { name: "あたたかくなった" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await expect(sheet.getByText("書きかけを続けています")).toBeVisible();
+      expect(await keptRecordKeys()).toEqual([user.id + ":record-new:momo"]);
+      // Thrown away here, so the rest of the journey has no record of momo.
+      await sheet.getByRole("button", { name: "書きかけを消す" }).click();
+      await sheet.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(note).toHaveValue("");
+      expect(await keptRecordKeys()).toEqual([]);
+      await page.keyboard.press("Escape");
+      await expect(sheet).toHaveCount(0);
+    },
+  );
 
   await check(
     "a like for a 見本 says it reaches nobody, and nothing is sent",

@@ -7,6 +7,7 @@ import {
   readingDraftKey,
 } from "../src/lib/post-draft";
 import {
+  adoptVisitorRecords,
   readRecordChanges,
   RECORD_DRAFT_KEY,
   RECORD_DRAFT_OPTIONS,
@@ -184,6 +185,43 @@ check("a record's changes are kept per reader and book, or per record", () => {
     null,
   );
   assert.ok(storage.data.has(RECORD_DRAFT_KEY));
+});
+
+check("a visitor's new records go with them into the account", () => {
+  const storage = memory();
+  const drafts = createKeptDraftStore(RECORD_DRAFT_OPTIONS, () => storage);
+  drafts.set("visitor:record-new:momo", {
+    feelings: ["warm"],
+    note: "灰色の男たち。",
+  });
+  drafts.set("visitor:record-new:solaris", { note: "海。" });
+  drafts.set("u-1:record-new:solaris", { note: "もう書いていた" });
+  drafts.set("u-2:record-new:momo", { note: "ほかの人" });
+  adoptVisitorRecords("u-1", drafts);
+  assert.deepEqual(drafts.get("u-1:record-new:momo"), {
+    feelings: ["warm"],
+    note: "灰色の男たち。",
+  });
+  assert.equal(drafts.get("visitor:record-new:momo"), null);
+  // What the account already kept is not replaced, and the visitor's stays.
+  assert.deepEqual(drafts.get("u-1:record-new:solaris"), {
+    note: "もう書いていた",
+  });
+  assert.deepEqual(drafts.get("visitor:record-new:solaris"), { note: "海。" });
+  assert.deepEqual(drafts.get("u-2:record-new:momo"), { note: "ほかの人" });
+  // The next account to sign in here takes what is still waiting, and only
+  // that: what was handed to u-1 stays with u-1.
+  adoptVisitorRecords("u-2", drafts);
+  assert.deepEqual(drafts.get("u-2:record-new:momo"), { note: "ほかの人" });
+  assert.deepEqual(drafts.get("u-2:record-new:solaris"), { note: "海。" });
+  const reopened = createKeptDraftStore(RECORD_DRAFT_OPTIONS, () => storage);
+  reopened.initialize();
+  assert.deepEqual(Object.keys(reopened.getSnapshot().drafts).sort(), [
+    "u-1:record-new:momo",
+    "u-1:record-new:solaris",
+    "u-2:record-new:momo",
+    "u-2:record-new:solaris",
+  ]);
 });
 
 check("only what was changed is kept, so the rest follows the record", () => {
