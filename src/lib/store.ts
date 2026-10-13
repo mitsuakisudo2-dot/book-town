@@ -19,8 +19,10 @@ import { createRegisteredBook, normalizeIsbn } from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
 import { handleProblem, normalizeHandle } from "./handles";
+import { tapsOf } from "./social";
 import {
   COMPOSE_ICONS,
+  LIKE_TAPS_MAX,
   ME_ID,
   POP_REACTIONS,
   POST_MAX_LENGTH,
@@ -551,6 +553,9 @@ export function createTownStore(
         ...state,
         posts: state.posts.filter((entry) => keep(entry.id)),
         likedPosts: state.likedPosts.filter(keep),
+        likeTaps: Object.fromEntries(
+          Object.entries(state.likeTaps).filter(([id]) => keep(id)),
+        ),
         wantedPosts: state.wantedPosts.filter(keep),
         spoilerReports: state.spoilerReports.filter(keep),
       });
@@ -558,7 +563,27 @@ export function createTownStore(
     toggleLike(postId) {
       initialize();
       if (!state.posts.some((entry) => entry.id === postId)) return;
-      commit({ ...state, likedPosts: toggled(state.likedPosts, postId) });
+      const likeTaps = { ...state.likeTaps };
+      delete likeTaps[postId];
+      commit({
+        ...state,
+        likedPosts: toggled(state.likedPosts, postId),
+        likeTaps,
+      });
+    },
+    tapLike(postId) {
+      initialize();
+      const now = tapsOf(state, postId);
+      if (!state.posts.some((entry) => entry.id === postId)) return now;
+      if (now >= LIKE_TAPS_MAX) return now;
+      const taps = now + 1;
+      commit({
+        ...state,
+        likedPosts: now ? state.likedPosts : [...state.likedPosts, postId],
+        likeTaps:
+          taps > 1 ? { ...state.likeTaps, [postId]: taps } : state.likeTaps,
+      });
+      return taps;
     },
     toggleWant(postId) {
       initialize();
