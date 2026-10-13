@@ -28,6 +28,7 @@ import {
 } from "../src/lib/social";
 import {
   activeSession,
+  bookToContinue,
   currentBookId,
   readersNow,
   readingFeed,
@@ -40,6 +41,12 @@ import {
 } from "../src/lib/notifications";
 import { normalizeIsbn, bookPath } from "../src/lib/books";
 import { extractTags, popularTags, postsWithTag } from "../src/lib/tags";
+import {
+  coverHidden,
+  coverSelection,
+  splitHidden,
+  uncoverHidden,
+} from "../src/lib/hidden-words";
 import {
   createPostDraftStore,
   EMPTY_POST_DRAFT,
@@ -1368,6 +1375,67 @@ check("a spoiler reply is not quoted in the notice about it", () => {
   }).find((entry) => entry.id === "reply:p-spoiler-reply");
   assert.ok(notice);
   assert.ok(!notice.text.includes("海が生きていた"));
+});
+
+check("a writer can cover a few words without hiding the whole post", () => {
+  assert.deepEqual(splitHidden("犯人は||兄||だった｜｜！｜｜"), [
+    { text: "犯人は" },
+    { text: "兄", hidden: true },
+    { text: "だった" },
+    { text: "！", hidden: true },
+  ]);
+  // Unclosed, empty or mismatched marks stay as written.
+  for (const body of ["a||b", "a|| ||b", "a||b｜｜c"])
+    assert.deepEqual(splitHidden(body), [{ text: body }]);
+  assert.equal(coverHidden("最後に||彼は去る||。"), "最後に（ネタバレ）。");
+  assert.equal(uncoverHidden("最後に||彼は去る||。"), "最後に彼は去る。");
+
+  // The button covers what is selected, or leaves a covered place to type in.
+  assert.deepEqual(coverSelection("犯人は兄", 3, 4, 1000), {
+    body: "犯人は||兄||",
+    start: 5,
+    end: 6,
+  });
+  assert.deepEqual(coverSelection("犯人は", 3, 3, 1000), {
+    body: "犯人は||隠したい言葉||",
+    start: 5,
+    end: 11,
+  });
+  assert.equal(coverSelection("x".repeat(997), 0, 1, 1000), null);
+  assert.ok(coverSelection("x".repeat(996), 0, 1, 1000));
+
+  // Covered words do not leak through tags or quotes in notifications.
+  assert.deepEqual(extractTags("#ミステリ ||#犯人は兄||"), ["ミステリ"]);
+  const town = createTownStore(createMemoryRepository());
+  town.actions.toggleFollow("shop-orbit");
+  const state = town.getSnapshot();
+  const owner = state.shops.find((shop) => shop.id === "shop-orbit")?.ownerId;
+  const theirs = state.posts.find(
+    (post) => post.authorId === owner && !isSpoilerFor(state, post),
+  );
+  assert.ok(theirs);
+  const covered: TownState = {
+    ...state,
+    posts: [
+      ...state.posts,
+      { ...theirs, id: "p-covered", body: "結末で||主人公が去る||のが良い" },
+    ],
+  };
+  const notice = notificationsFor(covered).find(
+    (entry) => entry.id === "follow:p-covered",
+  );
+  assert.ok(notice?.text.includes("「結末で（ネタバレ）のが良い」"));
+  assert.ok(!notice?.text.includes("主人公が去る"));
+
+  // The writer's own last words come back to them uncovered.
+  const reader = createTownStore(createMemoryRepository());
+  reader.actions.startReading("solaris", "together");
+  reader.actions.createPost({ body: "海は||生きていた||", fromReading: true });
+  reader.actions.endReading(false);
+  assert.equal(
+    bookToContinue(reader.getSnapshot())?.lastWords,
+    "海は生きていた",
+  );
 });
 
 console.log(`${passed} domain checks passed.`);

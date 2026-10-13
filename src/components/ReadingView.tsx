@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
   ME_ID,
@@ -22,7 +22,12 @@ import {
 } from "../lib/reading";
 import { findReader, formatPostTime } from "../lib/social";
 import { BookPicker } from "./BookPicker";
-import { PostCard, PostComposer } from "./Social";
+import {
+  HiddenWordsHint,
+  HideWordsButton,
+  PostCard,
+  PostComposer,
+} from "./Social";
 import { RecordSheet } from "./ReadingRecords";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { useClock } from "./useClock";
@@ -30,6 +35,7 @@ import "./reading.css";
 import { isDatabaseId, profilePath } from "../lib/paths";
 import { bookPath } from "../lib/books";
 import { recentlyFinished } from "../lib/records";
+import { uncoverHidden } from "../lib/hidden-words";
 
 type Shared = {
   state: TownState;
@@ -486,6 +492,7 @@ function ReadingRoom({
   const session = activeSession(state);
   const [memo, setMemo] = useState("");
   const [spoiler, setSpoiler] = useState(false);
+  const field = useRef<HTMLTextAreaElement>(null);
   const [ending, setEnding] = useState<{
     finished: boolean;
     phrase: string;
@@ -583,6 +590,7 @@ function ReadingRoom({
           {together ? "読書中のつぶやき" : "読書メモ（自分だけ）"}
         </label>
         <textarea
+          ref={field}
           id={id}
           className="field"
           rows={3}
@@ -606,6 +614,15 @@ function ReadingRoom({
               ネタバレあり
             </label>
           )}
+          {/* A note only the reader sees has nothing to hide from anyone. */}
+          {together && (
+            <HideWordsButton
+              field={field}
+              body={memo}
+              onChange={setMemo}
+              notify={notify}
+            />
+          )}
           <span className="composer-count" aria-hidden="true">
             {memo.length}/{POST_MAX_LENGTH}
           </span>
@@ -613,6 +630,7 @@ function ReadingRoom({
             {together ? "つぶやく" : "メモする"}
           </button>
         </div>
+        {together && <HiddenWordsHint body={memo} />}
       </form>
 
       {written.length > 0 && (
@@ -690,7 +708,9 @@ function ReadingRoom({
                     onClosed({
                       book,
                       seconds: seconds ?? 0,
-                      memo: written.find((post) => post.body.trim())?.body,
+                      memo: uncoverHidden(
+                        written.find((post) => post.body.trim())?.body ?? "",
+                      ).trim(),
                     });
                   setEnding(null);
                 }}

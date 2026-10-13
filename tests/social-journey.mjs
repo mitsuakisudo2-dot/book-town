@@ -169,6 +169,38 @@ try {
     );
 
     await check(
+      `${label} a writer covers just the spoiling words of a post`,
+      async () => {
+        await go("/timeline/");
+        await page.locator(".compose-fab").click();
+        const dialog = page.getByRole("dialog", { name: "投稿する" });
+        const text = dialog.locator("textarea");
+        await text.fill("読み終えて驚いた。犯人は庭師だった。");
+        await text.evaluate((field) => {
+          const start = field.value.indexOf("庭師");
+          field.setSelectionRange(start, start + 2);
+        });
+        await dialog.getByRole("button", { name: "一部を隠す" }).click();
+        await expect(text).toHaveValue(
+          "読み終えて驚いた。犯人は||庭師||だった。",
+        );
+        await expect(text).toBeFocused();
+        await expect(dialog.getByText("「||」で囲んだ言葉は")).toBeVisible();
+        await dialog.getByRole("button", { name: "投稿する" }).click();
+        await expect(dialog).toHaveCount(0);
+        // Only those words are covered; the rest of the post reads as usual.
+        const post = card("あなた", "読み終えて驚いた");
+        await expect(post).toContainText("犯人は");
+        await expect(post).not.toContainText("庭師");
+        await post
+          .getByRole("button", { name: "隠された言葉（ネタバレ）を読む" })
+          .click();
+        await expect(post.locator("mark.hidden-words")).toHaveText("庭師");
+        await noOverflow(`${label} covered words`);
+      },
+    );
+
+    await check(
       `${label} 読みたくなった saves the book and remembers who inspired it`,
       async () => {
         await go("/timeline/");

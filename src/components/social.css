@@ -73,6 +73,16 @@
 .composer-spoiler.is-disabled {
   color: #b9bfae;
 }
+.composer-hide {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #8a6f5c;
+}
+.composer-hide:hover {
+  color: #5f4637;
+}
 .composer-count {
   font-size: 10px;
   color: #a6ae97;
@@ -174,6 +184,39 @@
 }
 .spoiler-folded-note button:hover {
   background: #fff;
+}
+
+/* Words the writer covered: a dark slip over them until a reader taps. */
+.hidden-words {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  color: #f4ece2;
+  background: #5b4a3f;
+  border-radius: 4px;
+  padding: 0 9px;
+  margin: 0 2px;
+  vertical-align: 1px;
+}
+.hidden-words:hover {
+  background: #6f5b4d;
+}
+mark.hidden-words.is-open {
+  display: inline;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background: #f1e4d2;
+  border-radius: 3px;
+  padding: 1px 2px;
+  margin: 0;
+  vertical-align: baseline;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 .spoiler-tag {
   display: inline-block;
