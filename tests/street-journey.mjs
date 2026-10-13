@@ -1420,11 +1420,14 @@ try {
         );
         await like.tap();
         await expect(like).toHaveAttribute("aria-pressed", "true");
-        expect(
-          await like.evaluate(
-            (element) => getComputedStyle(element).backgroundColor,
-          ),
-        ).not.toBe(plain);
+        // The background eases in, so it is read once the change has begun.
+        await expect
+          .poll(() =>
+            like.evaluate(
+              (element) => getComputedStyle(element).backgroundColor,
+            ),
+          )
+          .not.toBe(plain);
         await expectReactionsInOneRow(pop, "320px pressed reactions");
         await like.tap();
         await expect(like).toHaveAttribute("aria-pressed", "false");
