@@ -676,6 +676,15 @@ try {
           .locator(".book-page-hero")
           .getByRole("link", { name: /^Amazonで探す/ }),
       ).toBeVisible();
+      await expect(
+        page
+          .locator(".book-page-hero")
+          .getByRole("link", { name: /^この本についてGoogleで調べる/ }),
+      ).toHaveAttribute(
+        "href",
+        "https://www.google.com/search?q=" +
+          encodeURIComponent("ソラリス　スタニスワフ・レム"),
+      );
       const reviews = page.locator(
         ".book-reviews > .post-feed > article.post-card",
       );

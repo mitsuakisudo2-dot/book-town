@@ -119,6 +119,17 @@ try {
             url.searchParams.get("k") ?? url.searchParams.get("sitem"),
           ).toContain("ソラリス スタニスワフ・レム");
         }
+        // Beside them, a way to read about the book first.
+        const lookup = dialog()
+          .locator(".bh-book-intro")
+          .getByRole("link", { name: /^この本についてGoogleで調べる/ });
+        await expect(lookup).toBeVisible();
+        await expect(lookup).toHaveAttribute("target", "_blank");
+        const search = new URL(await lookup.getAttribute("href"));
+        expect(search.hostname).toBe("www.google.com");
+        expect(search.searchParams.get("q")).toBe(
+          "ソラリス　スタニスワフ・レム",
+        );
         await page.keyboard.press("Escape");
       },
     );
