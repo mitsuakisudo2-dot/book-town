@@ -112,6 +112,7 @@ a.poster-cover:hover {
   opacity: 0.38;
   font-size: 3.4cqw;
   line-height: 1.8;
+  word-break: auto-phrase;
 }
 .poster-placeholder.is-heading {
   font-size: 5.6cqw;
