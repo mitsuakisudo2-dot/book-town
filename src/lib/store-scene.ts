@@ -156,7 +156,9 @@ export const safeBackgroundUrl = (url: string | undefined) =>
     : undefined;
 /** Keeps only what can be reached from a root (no parentId, or null). An object
  * whose parent is missing, empty, a number or part of a loop goes, with all it
- * holds, so broken data can never hang a private book on nothing. The rule the
+ * holds, so broken data can never hang a private book on nothing. An ID that
+ * more than one object carries names none of them: no one can tell which a
+ * child stands on, so all of them go, with all they hold. The rule the
  * database's private.reachable is to follow. */
 export function reachableOnly(scene: StoreScene): StoreScene {
   const objects = (Array.isArray(scene.objects) ? scene.objects : []).filter(
@@ -166,15 +168,20 @@ export function reachableOnly(scene: StoreScene): StoreScene {
       !Array.isArray(o) &&
       typeof o.id === "string",
   );
+  const uses = new Map<string, number>();
+  for (const o of objects) uses.set(o.id, (uses.get(o.id) ?? 0) + 1);
+  // Only objects with an ID of their own can be kept, so a kept ID always
+  // names exactly one object.
+  const own = objects.filter((o) => uses.get(o.id) === 1);
   const kept = new Set(
-    objects
+    own
       .filter((o) => o.parentId === null || o.parentId === undefined)
       .map((o) => o.id),
   );
   let added = true;
   while (added) {
     added = false;
-    for (const o of objects)
+    for (const o of own)
       if (
         !kept.has(o.id) &&
         typeof o.parentId === "string" &&

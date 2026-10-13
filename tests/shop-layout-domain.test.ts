@@ -987,6 +987,67 @@ async function main() {
     );
   });
 
+  await check(
+    "an ID two objects carry names neither: both go, with all that stands on them",
+    () => {
+      const L = layoutFromScene(demoScene());
+      const loose = (id: string, kind: SceneObject["kind"], parentId: string) =>
+        ({
+          id,
+          kind,
+          parentId,
+          rect: rect(0.2, 0.1, 0.1, 0.2),
+          z: 3,
+          isPublic: true,
+          ...(kind === "book"
+            ? {
+                bookId: BOOK_A.id,
+                display: "face",
+                order: 99,
+                preferredSize: { w: 0.05, h: 0.1 },
+              }
+            : {}),
+        }) as SceneObject;
+      // A second "row-0" hung on nothing, with a book and a POP on it, and a
+      // book that copies the shared sign's ID.
+      shelfOf(L, MAIN_SHELF_ID).objects.push(
+        loose("row-0", "row", "gone"),
+        loose("placement:hung", "book", "row-0"),
+        loose("pop:placement:hung", "bookPop", "placement:hung"),
+        loose("sign", "book", "gone"),
+      );
+      assert.match(
+        errorsOf(validateLayout(L, { bookIds: BOOK_IDS })),
+        /row-0: duplicate ID/,
+      );
+      const all = shelfScene(L, MAIN_SHELF_ID, "s", { unplaced: false });
+      const kept = new Set(reachableOnly(all).objects.map((o) => o.id));
+      // Everything whose chain passes through a doubled ID.
+      const doubled = new Set(["row-0", "sign"]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const o of all.objects)
+          if (o.parentId && doubled.has(o.parentId) && !doubled.has(o.id)) {
+            doubled.add(o.id);
+            grew = true;
+          }
+      }
+      assert.ok(doubled.has("placement:hung"));
+      assert.ok(doubled.has("pop:placement:hung"));
+      assert.ok(doubled.has("placement:shop-orbit:o2"));
+      const visible = visibleIds(L);
+      for (const id of doubled) {
+        assert.ok(!kept.has(id), id);
+        assert.ok(!visible.has(id), id);
+      }
+      // The rest of the shelf stands as it did.
+      for (const id of ["main-shelf", "row-1", "greeting", "stamp"])
+        assert.ok(kept.has(id) && visible.has(id), id);
+      assert.ok(visible.has("placement:shop-orbit:o7"));
+    },
+  );
+
   // 4. Validation ------------------------------------------------------------------------
 
   await check(
