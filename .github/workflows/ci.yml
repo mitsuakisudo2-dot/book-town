@@ -31,6 +31,7 @@ jobs:
       - run: pnpm test:shop-layout
       - run: pnpm test:db
       - run: pnpm test:account
+      - run: pnpm test:site-notes
       - run: pnpm test:town-sync
       - run: pnpm test:settings
       - run: pnpm build

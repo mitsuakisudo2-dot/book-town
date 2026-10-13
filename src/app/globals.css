@@ -2996,9 +2996,11 @@ dialog .toast {
   bottom: 112px;
   left: 50%;
 }
-/* The one way back from what a toast just said (公開しました → 自分だけに戻す). */
+/* The one way back from what a toast just said (公開しました → 自分だけに戻す).
+   44px to tap, reaching into the toast's padding so the toast keeps its height. */
 .toast-undo {
-  margin-left: 6px;
+  min-height: 44px;
+  margin: -13px 0 -13px 6px;
   padding: 4px 2px;
   border: 0;
   background: none;
@@ -3013,6 +3015,11 @@ dialog .toast {
 .toast-undo:focus-visible {
   outline: 2px solid #fffdf3;
   outline-offset: 2px;
+}
+@media (max-width: 760px) {
+  .toast-undo {
+    margin-block: -12px;
+  }
 }
 
 /* Books only close in spelling, under a quiet heading below the matches:

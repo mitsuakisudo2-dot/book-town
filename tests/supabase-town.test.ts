@@ -17,6 +17,7 @@ import {
   publicStoreScene,
 } from "../src/lib/store-customization";
 import { fileReport } from "../src/lib/supabase/reports";
+import { loadOpenNotes } from "../src/lib/supabase/site-notes";
 import { createWalkStore } from "../src/lib/walk-store";
 import type { Database } from "../src/lib/supabase/database.types";
 import {
@@ -856,6 +857,77 @@ async function main() {
       assert.ifError(hidden.error);
       assert.equal(await seenBy(eve), false);
       assert.equal(await seenBy(ben), true);
+    },
+  );
+
+  await check(
+    "only staff leave site notes, and who is staff is never served",
+    async () => {
+      // No one here is staff: CI's database starts with no accounts.
+      const asked = await aki.client.rpc("can_annotate");
+      assert.ifError(asked.error);
+      assert.equal(asked.data, false);
+      const notes = await aki.client.from("site_notes").select("id");
+      assert.ifError(notes.error);
+      assert.deepEqual(notes.data, []);
+      const left = await aki.client.from("site_notes").insert({
+        page: "/",
+        x: 1,
+        y: 1,
+        viewport_w: 390,
+        viewport_h: 844,
+        scroll_y: 0,
+        body: "注釈",
+      });
+      assert.equal(left.error?.code, "42501");
+      const visitor = newClient();
+      assert.ok((await visitor.rpc("can_annotate")).error);
+      assert.ok((await visitor.from("site_notes").select("id")).error);
+      // The private schema is not served by the API, to anyone.
+      for (const client of [aki.client, visitor]) {
+        const staff = await (client as unknown as SupabaseClient)
+          .schema("private")
+          .from("staff")
+          .select();
+        assert.ok(staff.error, "private.staff must not be served");
+      }
+      // The screen's question for a page's notes, as the real API reads it.
+      // The operator's key is let past row level security, so it stands in
+      // for a staff member here.
+      const odd = "/shops/a.b(c)+%_[1]$,x/";
+      const pages = [odd, odd + "?id=1", odd + "#shop", odd + "more/", "/"];
+      const placed = await admin
+        .from("site_notes")
+        .insert(
+          pages.map((page) => ({
+            user_id: aki.id,
+            page,
+            x: 1,
+            y: 1,
+            viewport_w: 390,
+            viewport_h: 844,
+            scroll_y: 0,
+            body: "注釈",
+          })),
+        )
+        .select("id");
+      assert.ifError(placed.error);
+      const found = await loadOpenNotes(admin as unknown as Client, odd);
+      assert.deepEqual(found.map((note) => note.page).sort(), [
+        odd,
+        odd + "#shop",
+        odd + "?id=1",
+      ]);
+      const cleared = await admin
+        .from("site_notes")
+        .delete()
+        .in(
+          "id",
+          placed.data!.map((row) => row.id),
+        );
+      assert.ifError(cleared.error);
+      // To anyone else, the same question is simply answered with nothing.
+      assert.deepEqual(await loadOpenNotes(aki.client, odd), []);
     },
   );
 

@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
+import { pagePattern } from "../src/lib/supabase/site-notes";
 
 // Runs the Supabase migrations on an in-memory Postgres and checks, as each kind of
 // visitor, that the row level security policies allow and refuse the right things.
@@ -2509,6 +2510,399 @@ async function main() {
     },
   );
 
+  // 注釈モード: two staff members, whom the operator adds in the dashboard,
+  // and Chi, who is not staff.
+  const NOTE_STAFF = reader(20);
+  const NOTE_STAFF2 = reader(21);
+  await db.exec(
+    `insert into auth.users (id) values ('${NOTE_STAFF}'), ('${NOTE_STAFF2}')`,
+  );
+  // This database ran its migrations before anyone signed up: no staff yet.
+  assert.equal(
+    (
+      await db.query<{ n: number }>(
+        "select count(*)::int as n from private.staff",
+      )
+    ).rows[0].n,
+    0,
+  );
+  await operator(
+    `insert into private.staff (user_id) values ('${NOTE_STAFF}'), ('${NOTE_STAFF2}')`,
+  );
+  /** Leaves a note as `visitor`; `change` swaps one value of the row for a test. */
+  const leaveNote = (
+    visitor: Visitor,
+    body: string,
+    change: Record<string, string> = {},
+  ) => {
+    const row: Record<string, string> = {
+      page: "'/books/solaris/'",
+      x: "120",
+      y: "640",
+      viewport_w: "390",
+      viewport_h: "844",
+      scroll_y: "300",
+      target: "'リンク「本の街へ」'",
+      layer: "null",
+      anchor: "'main.town-main > a.back-link'",
+      anchor_x: "0.5",
+      anchor_y: "0.25",
+      body: "$1",
+      device: "'iPhone Safari'",
+      build: "null",
+      ...change,
+    };
+    return as<{
+      id: string;
+      user_id: string;
+      created_at: string;
+      removed_at: string | null;
+    }>(
+      visitor,
+      `insert into site_notes (${Object.keys(row).join(", ")})
+       values (${Object.values(row).join(", ")})
+       returning id, user_id, created_at, removed_at`,
+      [body],
+    );
+  };
+  const notesSeenBy = async (visitor: Visitor) =>
+    (await as(visitor, "select id from site_notes")).length;
+  const canAnnotate = async (visitor: Visitor) =>
+    (
+      await as<{ ok: boolean }>(visitor, "select public.can_annotate() as ok")
+    )[0].ok;
+  let staffNote = "";
+
+  await check(
+    "staff leave notes as themselves and read only their own",
+    async () => {
+      assert.equal(await canAnnotate(NOTE_STAFF), true);
+      const [note] = await leaveNote(NOTE_STAFF, "戻るの字が小さい");
+      staffNote = note.id;
+      assert.equal(note.user_id, NOTE_STAFF);
+      assert.ok(note.created_at);
+      assert.equal(note.removed_at, null);
+      assert.equal(await notesSeenBy(NOTE_STAFF), 1);
+      // Another staff member neither reads nor takes it back, even with
+      // an update that names no row (and so reads nothing to be hidden by).
+      assert.equal(await notesSeenBy(NOTE_STAFF2), 0);
+      assert.equal(
+        await affects(
+          NOTE_STAFF2,
+          "update site_notes set removed_at = now() where id = $1",
+          [staffNote],
+        ),
+        0,
+      );
+      await as(NOTE_STAFF2, "update site_notes set removed_at = now()");
+      assert.equal(
+        (
+          await db.query<{ removed_at: string | null }>(
+            "select removed_at from site_notes where id = $1",
+            [staffNote],
+          )
+        ).rows[0].removed_at,
+        null,
+      );
+      // Nobody names the writer or the time: both come from the database.
+      await refused(
+        NOTE_STAFF,
+        "insert into site_notes (user_id, page, x, y, viewport_w, viewport_h, scroll_y, body) values ($1, '/', 1, 1, 1, 1, 0, 'x')",
+        [NOTE_STAFF2],
+        /permission denied/,
+      );
+      await refused(
+        NOTE_STAFF,
+        "insert into site_notes (created_at, page, x, y, viewport_w, viewport_h, scroll_y, body) values (now() - interval '2 hours', '/', 1, 1, 1, 1, 0, 'x')",
+        [],
+        /permission denied/,
+      );
+    },
+  );
+
+  await check("site notes are closed to anyone who is not staff", async () => {
+    await refused(null, "select * from site_notes", [], /permission denied/);
+    await refused(
+      null,
+      "select public.can_annotate()",
+      [],
+      /permission denied/,
+    );
+    await refused(
+      null,
+      "insert into site_notes (page, x, y, viewport_w, viewport_h, scroll_y, body) values ('/', 1, 1, 1, 1, 0, 'x')",
+      [],
+      /permission denied/,
+    );
+    await refused(null, "select * from private.staff", [], /permission denied/);
+    assert.equal(await canAnnotate(CHI), false);
+    await refused(
+      CHI,
+      "insert into site_notes (page, x, y, viewport_w, viewport_h, scroll_y, body) values ('/', 1, 1, 1, 1, 0, 'x')",
+      [],
+      /row-level security/,
+    );
+    assert.equal(await notesSeenBy(CHI), 0);
+    assert.equal(
+      await affects(CHI, "update site_notes set removed_at = now()"),
+      0,
+    );
+    await refused(CHI, "select * from private.staff", [], /permission denied/);
+    await refused(
+      CHI,
+      "insert into private.staff (user_id) values ($1)",
+      [CHI],
+      /permission denied/,
+    );
+  });
+
+  await check("a note is only ever taken back or returned", async () => {
+    const [taken] = await as<{ removed_at: string }>(
+      NOTE_STAFF,
+      "update site_notes set removed_at = '2020-01-01' where id = $1 returning removed_at",
+      [staffNote],
+    );
+    // Dated now by the database, whatever time was sent.
+    assert.ok(new Date(taken.removed_at).getFullYear() >= 2026);
+    const [returned] = await as<{ removed_at: string | null }>(
+      NOTE_STAFF,
+      "update site_notes set removed_at = null where id = $1 returning removed_at",
+      [staffNote],
+    );
+    assert.equal(returned.removed_at, null);
+    await refused(
+      NOTE_STAFF,
+      "update site_notes set body = 'changed' where id = $1",
+      [staffNote],
+      /permission denied/,
+    );
+    await refused(
+      NOTE_STAFF,
+      "update site_notes set page = '/', removed_at = now() where id = $1",
+      [staffNote],
+      /permission denied/,
+    );
+    await refused(
+      NOTE_STAFF,
+      "delete from site_notes where id = $1",
+      [staffNote],
+      /permission denied/,
+    );
+  });
+
+  await check("a note's size is limited", async () => {
+    // Empty, untrimmed (the ideographic space too) or longer than 2000.
+    for (const body of ["", " x", "x\n", "x　", "あ".repeat(2001)])
+      await assert.rejects(
+        leaveNote(NOTE_STAFF, body),
+        /check constraint/,
+        JSON.stringify(body),
+      );
+    assert.equal((await leaveNote(NOTE_STAFF, "あ".repeat(2000))).length, 1);
+    const tooMuch: Record<string, string>[] = [
+      { page: "'shop'" },
+      { page: "'/" + "a".repeat(500) + "'" },
+      { target: "repeat('あ', 301)" },
+      { device: "repeat('a', 41)" },
+      { layer: "''" },
+      { layer: "repeat('あ', 121)" },
+      { anchor: "repeat('a', 501)" },
+      { anchor_y: "null" },
+      { anchor_x: "1.5" },
+      { build: "'main'" },
+      { x: "-1" },
+      { x: "100001" },
+      { y: "-1" },
+      { y: "10000001" },
+      { scroll_y: "-1" },
+      { scroll_y: "10000001" },
+      { viewport_w: "0" },
+      { viewport_w: "20001" },
+      { viewport_h: "0" },
+      { viewport_h: "20001" },
+    ];
+    for (const change of tooMuch)
+      await assert.rejects(
+        leaveNote(NOTE_STAFF, "x", change),
+        /check constraint/,
+        JSON.stringify(change),
+      );
+    assert.equal(
+      (await leaveNote(NOTE_STAFF, "x", { build: "'d9eb95a'" })).length,
+      1,
+    );
+    assert.equal(
+      (
+        await leaveNote(NOTE_STAFF, "x", {
+          layer: "'Book Townへようこそ'",
+          anchor_x: "null",
+          anchor_y: "null",
+        })
+      ).length,
+      1,
+    );
+  });
+
+  await check(
+    "the screen asks for a page's own notes, read alike by Postgres",
+    async () => {
+      const odd = "/shops/a.b(c)+%_[1]$/";
+      const pages = [
+        "/",
+        "/?id=1",
+        "/walk/#shop-orbit",
+        odd,
+        odd + "?id=1",
+        odd + "#shop",
+        odd + "more/",
+        "/shops/aXb(c)+%_[1]$/",
+      ];
+      for (const page of pages)
+        await as(
+          NOTE_STAFF,
+          "insert into site_notes (page, x, y, viewport_w, viewport_h, scroll_y, body) values ($1, 1, 1, 390, 844, 0, 'ページ')",
+          [page],
+        );
+      const found = async (pathname: string) =>
+        (
+          await as<{ page: string }>(
+            NOTE_STAFF,
+            "select distinct page from site_notes where page ~ $1",
+            [pagePattern(pathname)],
+          )
+        )
+          .map((row) => row.page)
+          .sort();
+      assert.deepEqual(await found("/"), ["/", "/?id=1"]);
+      assert.deepEqual(await found(odd), [odd, odd + "#shop", odd + "?id=1"]);
+      assert.deepEqual(await found("/walk/"), ["/walk/#shop-orbit"]);
+    },
+  );
+
+  await check("sixty notes an hour, then a pause", async () => {
+    for (let n = 0; n < 60; n++) await leaveNote(NOTE_STAFF2, "注釈" + n);
+    await assert.rejects(
+      leaveNote(NOTE_STAFF2, "もう1つ"),
+      /60 site notes an hour/,
+    );
+    // Taking notes back makes no room: they were still sent.
+    assert.equal(
+      await affects(NOTE_STAFF2, "update site_notes set removed_at = now()"),
+      60,
+    );
+    await assert.rejects(
+      leaveNote(NOTE_STAFF2, "もう1つ"),
+      /60 site notes an hour/,
+    );
+    await operator(
+      `update site_notes set created_at = created_at - interval '61 minutes' where user_id = '${NOTE_STAFF2}'`,
+    );
+    assert.equal((await leaveNote(NOTE_STAFF2, "1時間後")).length, 1);
+  });
+
+  await check(
+    "a person no longer staff can neither read nor write notes",
+    async () => {
+      assert.ok((await notesSeenBy(NOTE_STAFF2)) > 0);
+      await operator(
+        `delete from private.staff where user_id = '${NOTE_STAFF2}'`,
+      );
+      assert.equal(await canAnnotate(NOTE_STAFF2), false);
+      assert.equal(await notesSeenBy(NOTE_STAFF2), 0);
+      await assert.rejects(leaveNote(NOTE_STAFF2, "x"), /row-level security/);
+      assert.equal(
+        await affects(NOTE_STAFF2, "update site_notes set removed_at = now()"),
+        0,
+      );
+    },
+  );
+
+  await check(
+    "site notes and staff are open only as far as granted",
+    async () => {
+      const yes = async (sql: string, params: unknown[]) =>
+        (await db.query<{ ok: boolean }>(sql, params)).rows[0].ok;
+      const table = (role: string, name: string, privilege: string) =>
+        yes("select has_table_privilege($1, $2, $3) as ok", [
+          role,
+          name,
+          privilege,
+        ]);
+      const column = (role: string, name: string, privilege: string) =>
+        yes(
+          "select has_column_privilege($1, 'public.site_notes', $2, $3) as ok",
+          [role, name, privilege],
+        );
+      const runs = (role: string, fn: string) =>
+        yes("select has_function_privilege($1, $2, 'EXECUTE') as ok", [
+          role,
+          fn,
+        ]);
+      for (const role of ["anon", "authenticated"]) {
+        for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE"])
+          assert.equal(
+            await table(role, "private.staff", privilege),
+            false,
+            `${role} ${privilege} private.staff`,
+          );
+        for (const privilege of ["DELETE", "TRUNCATE"])
+          assert.equal(
+            await table(role, "public.site_notes", privilege),
+            false,
+            `${role} ${privilege} site_notes`,
+          );
+        for (const fn of [
+          "private.limit_site_notes()",
+          "private.stamp_site_note_removal()",
+        ])
+          assert.equal(await runs(role, fn), false, role + " " + fn);
+      }
+      for (const privilege of ["SELECT", "INSERT", "UPDATE"])
+        assert.equal(
+          await table("anon", "public.site_notes", privilege),
+          false,
+          "anon " + privilege,
+        );
+      assert.equal(await column("authenticated", "body", "UPDATE"), false);
+      assert.equal(await column("authenticated", "removed_at", "UPDATE"), true);
+      for (const name of ["user_id", "created_at", "removed_at", "id"])
+        assert.equal(
+          await column("authenticated", name, "INSERT"),
+          false,
+          "insert " + name,
+        );
+      assert.equal(await column("authenticated", "body", "INSERT"), true);
+      assert.equal(await runs("anon", "public.can_annotate()"), false);
+      assert.equal(await runs("authenticated", "public.can_annotate()"), true);
+      assert.equal(
+        await yes(
+          `select prosecdef and 'search_path=""' = any(proconfig) as ok
+           from pg_proc where oid = 'public.can_annotate()'::regprocedure`,
+          [],
+        ),
+        true,
+      );
+    },
+  );
+
+  await check(
+    "deleting a staff account removes their notes and their staff row",
+    async () => {
+      await db.exec(`delete from auth.users where id = '${NOTE_STAFF}'`);
+      for (const table of ["site_notes", "private.staff"])
+        assert.equal(
+          (
+            await db.query<{ n: number }>(
+              `select count(*)::int as n from ${table} where user_id = $1`,
+              [NOTE_STAFF],
+            )
+          ).rows[0].n,
+          0,
+          table,
+        );
+    },
+  );
+
   await check("deleting an account removes everything it owned", async () => {
     await db.exec(`delete from auth.users where id = '${BEN}'`);
     for (const table of [
@@ -2609,6 +3003,31 @@ async function main() {
       assert.deepEqual(
         await anon("select target_id, state from moderation_folds"),
         [{ target_id: post, state: "folded" }],
+      );
+      await earlier.close();
+    },
+  );
+
+  await check(
+    "the first account becomes staff when site notes arrive",
+    async () => {
+      const earlier = new PGlite();
+      await earlier.exec(supabase);
+      // Found by its name's end: the date in front may change before it merges.
+      const notes = files.findIndex((file) => file.endsWith("_site_notes.sql"));
+      assert.ok(notes > 0, "the site notes migration");
+      for (const file of files.slice(0, notes))
+        await earlier.exec(migrate(file));
+      // The oldest account, not the first id: Ben's sorts after Aki's.
+      await earlier.exec(`
+        insert into auth.users (id, created_at) values
+          ('${AKI}', now() - interval '3 days'),
+          ('${BEN}', now() - interval '30 days');
+      `);
+      for (const file of files.slice(notes)) await earlier.exec(migrate(file));
+      assert.deepEqual(
+        (await earlier.query("select user_id from private.staff")).rows,
+        [{ user_id: BEN }],
       );
       await earlier.close();
     },
