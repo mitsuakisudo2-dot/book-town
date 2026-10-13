@@ -23,26 +23,44 @@ export function BookPrice({
   );
 }
 
-/** Shop links sit beside the title and price, one tap from the book. */
+/**
+ * Shop links sit beside the title and price, one tap from the book, and
+ * beside them a way to read about it elsewhere first.
+ */
 export function BookPurchase({ book }: { book: Book }) {
   const query = encodeURIComponent(`${book.title} ${book.author}`);
   return (
-    <div className="book-purchase" role="group" aria-label="購入する">
+    <div className="book-links">
+      <div className="book-purchase" role="group" aria-label="購入する">
+        <a
+          href={`https://www.amazon.co.jp/s?k=${query}&i=stripbooks`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Amazonで探す（新しいタブで開きます）"
+        >
+          Amazon<span aria-hidden="true">↗</span>
+        </a>
+        <a
+          href={`https://books.rakuten.co.jp/search?sitem=${query}&g=001`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="楽天ブックスで探す（新しいタブで開きます）"
+        >
+          楽天ブックス<span aria-hidden="true">↗</span>
+        </a>
+      </div>
       <a
-        href={`https://www.amazon.co.jp/s?k=${query}&i=stripbooks`}
+        className="book-lookup"
+        href={
+          "https://www.google.com/search?q=" +
+          encodeURIComponent(`${book.title}\u3000${book.author}`)
+        }
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Amazonで探す（新しいタブで開きます）"
+        aria-label="この本についてGoogleで調べる（新しいタブで開きます）"
       >
-        Amazon<span aria-hidden="true">↗</span>
-      </a>
-      <a
-        href={`https://books.rakuten.co.jp/search?sitem=${query}&g=001`}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="楽天ブックスで探す（新しいタブで開きます）"
-      >
-        楽天ブックス<span aria-hidden="true">↗</span>
+        <Icon name="search" size={13} />
+        この本について調べる<span aria-hidden="true">↗</span>
       </a>
     </div>
   );
