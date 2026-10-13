@@ -232,8 +232,24 @@
 }
 .editor-settings-save {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   align-items: flex-end;
+  gap: 8px 14px;
+}
+.editor-save-refused {
+  flex: 1 1 240px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #9a5b3c;
+}
+/* Words kept from before, at the top of what they belong to. */
+.editor-settings .editor-kept {
+  margin: 0;
+  padding: 2px 20px 6px;
+}
+.editor-shelf-panel .editor-kept {
+  margin: 8px 0 -8px;
 }
 .editor-shelves-heading {
   display: flex;
@@ -992,6 +1008,9 @@
     grid-template-columns: 1fr;
     padding: 3px 16px 19px;
     gap: 17px;
+  }
+  .editor-settings .editor-kept {
+    padding: 2px 16px 6px;
   }
   .editor-settings-save {
     justify-content: flex-start;

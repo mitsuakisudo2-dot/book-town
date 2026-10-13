@@ -1,6 +1,13 @@
 "use client";
 
-import { Fragment, useId, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import {
   ME_ID,
@@ -12,13 +19,28 @@ import {
   type TownActions,
   type TownState,
 } from "../lib/types";
-import { FIRST_SHELF_ID } from "../lib/store";
+import {
+  FIRST_SHELF_ID,
+  getTownSnapshot,
+  usePersistenceStatus,
+} from "../lib/store";
 import { recentlyFinished } from "../lib/records";
 import { BookPicker } from "./BookPicker";
 import { BookJacket, Icon } from "./ui";
 import "./open-shop.css";
 import { noteShopOpened } from "../lib/just-opened";
 import { leaveLayers, useBackLayer, useLayerReturn } from "../lib/back-layer";
+import { useAccountState } from "../lib/account-session";
+import { useKeptDraft } from "../lib/kept-draft";
+import {
+  FRESH_OPEN_SHOP,
+  OPEN_SHOP_MAX,
+  openShopDraftStore,
+  openShopHasWords,
+  type OpenShopKind,
+  type OpenShopWork,
+} from "../lib/open-shop-draft";
+import { townTook, useKeptUntilSaved, workOwner } from "../lib/shop-draft";
 
 type Shared = {
   state: TownState;
@@ -68,7 +90,96 @@ export function ThemePicker({
   );
 }
 
-type Kind = "nine" | "five" | "one" | "free";
+/**
+ * Work kept in this browser from before, told in one quiet line with a way
+ * to let it go; letting go of words the reader wrote asks once first. When
+ * the browser would not keep the work in hand, the line says so too.
+ */
+export function KeptNote({
+  work,
+  resumed,
+  saved,
+  asks,
+  onDiscard,
+  lead = "書きかけを続けています",
+  action,
+  className = "",
+}: {
+  /** There is work in hand, not saved yet. */
+  work: boolean;
+  /** The screen opened on work kept from before. */
+  resumed: boolean;
+  /** False when the browser would not keep the latest change. */
+  saved: boolean;
+  /** Letting the work go would lose words the reader wrote. */
+  asks: boolean;
+  onDiscard: () => void;
+  lead?: ReactNode;
+  /** A step on from the work, before the way to let it go. */
+  action?: ReactNode;
+  className?: string;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const discardButton = useRef<HTMLButtonElement>(null);
+  const stayButton = useRef<HTMLButtonElement>(null);
+  // When a press takes away the button the hand was on, the hand goes on to
+  // what took its place.
+  const handTo = useRef<"stay" | "discard" | null>(null);
+  useEffect(() => {
+    const to = handTo.current;
+    handTo.current = null;
+    if (to) (to === "stay" ? stayButton : discardButton).current?.focus();
+  });
+  if (!work || (saved && !resumed)) return null;
+  return (
+    <p className={"kept-note " + className}>
+      {resumed && <span>{lead}</span>}
+      {!saved && (
+        <span role="status">このブラウザに書きかけを残せませんでした</span>
+      )}
+      {resumed && action}
+      {resumed &&
+        (confirming ? (
+          <span className="kept-note-confirm">
+            書きかけを消しますか？
+            <button
+              type="button"
+              onClick={() => {
+                setConfirming(false);
+                onDiscard();
+              }}
+            >
+              消す
+            </button>
+            <button
+              type="button"
+              ref={stayButton}
+              onClick={() => {
+                setConfirming(false);
+                handTo.current = "discard";
+              }}
+            >
+              やめる
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            ref={discardButton}
+            onClick={() => {
+              if (!asks) return onDiscard();
+              setConfirming(true);
+              handTo.current = "stay";
+            }}
+          >
+            書きかけを消す
+          </button>
+        ))}
+    </p>
+  );
+}
+
+type Kind = OpenShopKind;
 
 const KINDS: {
   kind: Exclude<Kind, "free">;
@@ -80,19 +191,19 @@ const KINDS: {
     kind: "nine",
     title: "人生の9冊の本屋",
     lead: "あなたを少し語ってくれる9冊を。",
-    max: 9,
+    max: OPEN_SHOP_MAX.nine,
   },
   {
     kind: "five",
     title: "今年の5冊の本屋",
     lead: "今年出会ってよかった5冊を。",
-    max: 5,
+    max: OPEN_SHOP_MAX.five,
   },
   {
     kind: "one",
     title: "たった1冊の本屋",
     lead: "いちばん渡したい1冊だけを、言葉を添えて。",
-    max: 1,
+    max: OPEN_SHOP_MAX.one,
   },
 ];
 
@@ -113,6 +224,7 @@ const OPENED = [
   "灯りがつきました。",
   "最初のお客さんは、案外すぐ来るかもしれません。",
 ];
+const openedWords = () => OPENED[Math.floor(Math.random() * OPENED.length)];
 
 const shelfName = (kind: Kind) =>
   kind === "nine"
@@ -122,6 +234,9 @@ const shelfName = (kind: Kind) =>
       : kind === "one"
         ? "たった1冊"
         : "はじめの本棚";
+
+const kindTitle = (kind: Kind) =>
+  KINDS.find((entry) => entry.kind === kind)?.title ?? "空の棚から始める本屋";
 
 /** Books the reader already knows, nearest to the shop they chose first. */
 function candidates(state: TownState, kind: Kind): string[] {
@@ -159,6 +274,7 @@ function candidates(state: TownState, kind: Kind): string[] {
 export function OpenShop({
   state,
   actions,
+  notify,
   onOpen,
   onDone,
 }: Shared & {
@@ -170,20 +286,46 @@ export function OpenShop({
   const nameId = useId();
   const taglineId = useId();
   const popId = useId();
+  const owner = workOwner(useAccountState());
+  const kept = useKeptDraft(openShopDraftStore, owner);
+  const persistence = usePersistenceStatus();
+  // Kept work waits for the town: its books are checked against the town's,
+  // and an account's town arrives after the page.
+  const ready = owner !== null && kept.loaded && persistence !== "loading";
   const [step, setStep] = useState<"kind" | "books" | "sign" | "opened">(
     "kind",
   );
   const [kind, setKind] = useState<Kind>("nine");
-  const [picked, setPicked] = useState<string[]>([]);
-  const [pop, setPop] = useState("");
-  const [name, setName] = useState("");
-  const [tagline, setTagline] = useState("");
-  const [theme, setTheme] = useState<Shop["theme"]>("sage");
+  // Whether this visit began with work kept from before.
+  const [resumed, setResumed] = useState<boolean | null>(null);
+  if (resumed === null && ready) setResumed(kept.draft !== null);
   const [example, setExample] = useState(0);
-  const [opened, setOpened] = useState({ name: "", words: OPENED[0] });
+  const [opened, setOpened] = useState<{
+    name: string;
+    words: string;
+    books: Book[];
+    theme: Shop["theme"];
+  }>({ name: "", words: OPENED[0], books: [], theme: "sage" });
+  const draft = kept.draft;
+  // The work in hand: what is kept, or a fresh start of the kind chosen.
+  const work: OpenShopWork = draft ?? {
+    ...FRESH_OPEN_SHOP,
+    kind,
+    step: kind === "free" ? "sign" : "books",
+  };
+  const { pop, name, tagline, theme } = work;
   const chosen = KINDS.find((entry) => entry.kind === kind);
   const max = chosen?.max ?? 0;
   const book = (id: string) => state.books.find((entry) => entry.id === id);
+  // A kind not touched yet starts from its usual books; books no longer in
+  // the town drop out of what was kept.
+  const usual = (next: Kind) => (next === "nine" ? state.me.lifeNine : []);
+  const picked =
+    kind === "free"
+      ? []
+      : (work.picks[kind] ?? usual(kind))
+          .filter((id) => book(id))
+          .slice(0, max);
   const pickedBooks = picked
     .map(book)
     .filter((entry): entry is Book => Boolean(entry));
@@ -207,47 +349,83 @@ export function OpenShop({
     )
     .slice(0, Math.max(0, 12 - suggested.length));
 
+  /** Writes the work in hand, kept for the reader as it is written. */
+  function change(patch: Partial<OpenShopWork>) {
+    kept.set({
+      ...work,
+      kind,
+      step: step === "books" || step === "sign" ? step : work.step,
+      ...patch,
+    });
+  }
+  function go(at: "kind" | "books" | "sign") {
+    setStep(at);
+    // The kept work goes on from the step reached.
+    if (draft && at !== "kind" && (draft.step !== at || draft.kind !== kind))
+      kept.set({ ...draft, kind, step: at });
+  }
   function choose(
     next: Kind,
     at: "books" | "sign" = next === "free" ? "sign" : "books",
   ) {
     setKind(next);
-    const preset =
-      next === "nine"
-        ? state.me.lifeNine.filter((id) => book(id)).slice(0, 9)
-        : [];
-    setPicked(preset);
     setStep(at);
+    // The kept work follows to the kind chosen; the books chosen for each
+    // kind stay with it.
+    if (draft) kept.set({ ...draft, kind: next, step: at });
   }
-  // Back or forward to a step of this flow shows that step again.
-  useLayerReturn((name) => {
-    const [flow, was, at] = name.split(":");
-    const known = KINDS.find((entry) => entry.kind === was);
-    if (flow !== "open-shop" || !known || (at !== "books" && at !== "sign"))
+  function discard() {
+    kept.clear();
+    setResumed(false);
+  }
+  const saving = useKeptUntilSaved(() => {
+    // Turned away by the account after all: no shop stands, and the sign is
+    // there to open it again, with the work as it was.
+    if (getTownSnapshot().ownShop) return;
+    setResumed(true);
+    setStep("sign");
+    notify(
+      "開店できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。",
+    );
+  });
+  // Back or forward to a step of this flow shows that step again, with the
+  // work kept for it.
+  useLayerReturn((layer) => {
+    const [flow, was, at] = layer.split(":");
+    const known =
+      was === "free" ? "free" : KINDS.find((entry) => entry.kind === was)?.kind;
+    if (
+      flow !== "open-shop" ||
+      !known ||
+      !(at === "sign" || (at === "books" && known !== "free"))
+    )
       return false;
     if (was === kind && at === step) return false;
-    // Within this visit the chosen books are kept; a page come back to
-    // afresh starts the step from its usual books.
-    if (was === kind && (picked.length || step !== "kind")) setStep(at);
-    else choose(known.kind, at);
+    choose(known, at);
     return true;
-  });
+  }, ready);
   function toggle(bookId: string) {
-    setPicked((list) =>
-      list.includes(bookId)
-        ? list.filter((id) => id !== bookId)
-        : list.length < max
-          ? [...list, bookId]
-          : max === 1
-            ? [bookId]
-            : list,
-    );
+    if (kind === "free") return;
+    const list = picked.includes(bookId)
+      ? picked.filter((id) => id !== bookId)
+      : picked.length < max
+        ? [...picked, bookId]
+        : max === 1
+          ? [bookId]
+          : picked;
+    change({ picks: { ...work.picks, [kind]: list } });
   }
   function open() {
     const shopName = name.trim();
-    if (!shopName) return;
+    if (!shopName || !ready) return;
     onOpen();
-    actions.createShop(shopName, "", theme);
+    if (!townTook(() => actions.createShop(shopName, "", theme))) {
+      // Turned away (the town was still on its way): nothing opened, and
+      // the work stays as it is.
+      onDone();
+      notify("まだ開店できませんでした。少しおいて、もう一度押してください。");
+      return;
+    }
     if (tagline.trim())
       actions.updateShop({
         name: shopName,
@@ -256,16 +434,22 @@ export function OpenShop({
         tagline: tagline.trim(),
       });
     actions.updateShelf(FIRST_SHELF_ID, { name: shelfName(kind) });
-    // The first book faces out; the rest stand as spines.
+    // The first book faces out; the rest stand as spines. Only たった1冊
+    // asks for a POP.
     picked.forEach((bookId, index) =>
       actions.addShelfBook(
         FIRST_SHELF_ID,
         bookId,
         index === 0 ? "face" : "spine",
-        index === 0 && pop.trim() ? { pop: pop.trim(), index: 0 } : undefined,
+        index === 0 && kind === "one" && pop.trim()
+          ? { pop: pop.trim(), index: 0 }
+          : undefined,
       ),
     );
     noteShopOpened();
+    // The shop is open: the work that led here is kept only until the
+    // account has the shop too.
+    if (draft && owner) saving.hold("open", openShopDraftStore, owner, draft);
     // The steps that led here come off: 戻る from the open shop leaves it.
     leaveLayers(
       () => {},
@@ -273,10 +457,21 @@ export function OpenShop({
     );
     setOpened({
       name: shopName,
-      words: OPENED[Math.floor(Math.random() * OPENED.length)],
+      words: openedWords(),
+      books: pickedBooks.slice(0, 9),
+      theme,
     });
     setStep("opened");
   }
+  const keptNote = (
+    <KeptNote
+      work={draft !== null}
+      resumed={Boolean(resumed)}
+      saved={kept.saved}
+      asks={openShopHasWords(work)}
+      onDiscard={discard}
+    />
+  );
 
   // Each step past the first is one step of 戻る, back to the one before.
   const steps = (
@@ -285,14 +480,14 @@ export function OpenShop({
         <StepBack
           key="books"
           name={`open-shop:${kind}:books`}
-          onBack={() => setStep("kind")}
+          onBack={() => go("kind")}
         />
       )}
       {step === "sign" && (
         <StepBack
           key="sign"
           name={`open-shop:${kind}:sign`}
-          onBack={() => setStep(kind === "free" ? "kind" : "books")}
+          onBack={() => go(kind === "free" ? "kind" : "books")}
         />
       )}
     </>
@@ -300,12 +495,12 @@ export function OpenShop({
 
   if (step === "opened")
     return (
-      <section className={"open-shop open-done theme-" + theme}>
+      <section className={"open-shop open-done theme-" + opened.theme}>
         <div className="open-storefront" aria-hidden="true">
           <div className="open-storefront-sign">{opened.name}</div>
           <div className="open-storefront-window">
             <span className="open-shutter" />
-            {pickedBooks.slice(0, 9).map((entry, index) => (
+            {opened.books.map((entry, index) => (
               <span
                 key={entry.id}
                 className="open-window-book"
@@ -347,12 +542,40 @@ export function OpenShop({
         <p className="open-lead">
           まずは、どんな本屋にするかだけ。本も名前も、あとから自由に変えられます。
         </p>
+        {/* Work kept from before waits here, to go on from where it was. */}
+        {ready && draft && (
+          <KeptNote
+            className="open-resume"
+            work
+            resumed
+            saved={kept.saved}
+            asks={openShopHasWords(draft)}
+            onDiscard={discard}
+            action={
+              <>
+                <span className="open-resume-what">
+                  「{draft.name.trim() || kindTitle(draft.kind)}」
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResumed(true);
+                    choose(draft.kind, draft.step);
+                  }}
+                >
+                  続きから
+                </button>
+              </>
+            }
+          />
+        )}
         <div className="open-kinds">
           {KINDS.map((entry) => (
             <button
               type="button"
               key={entry.kind}
               className={"open-kind is-" + entry.kind}
+              disabled={!ready}
               onClick={() => choose(entry.kind)}
             >
               <span className="open-kind-shelf" aria-hidden="true">
@@ -368,6 +591,7 @@ export function OpenShop({
         <button
           type="button"
           className="text-button open-free"
+          disabled={!ready}
           onClick={() => choose("free")}
         >
           空の棚から始める
@@ -382,7 +606,7 @@ export function OpenShop({
         <button
           type="button"
           className="text-button open-back"
-          onClick={() => setStep("kind")}
+          onClick={() => go("kind")}
         >
           <Icon name="back" size={14} /> 本屋の形を選び直す
         </button>
@@ -390,6 +614,7 @@ export function OpenShop({
         <h1 id="open-books-title">
           {max === 1 ? "渡したい1冊を選ぶ" : `${max}冊を選ぶ`}
         </h1>
+        {keptNote}
         <p className="open-lead" aria-live="polite">
           {picked.length === max
             ? "棚がいっぱいになりました。"
@@ -472,7 +697,7 @@ export function OpenShop({
               maxLength={POP_MAX_LENGTH}
               placeholder="読んだ夜のこと、誰に渡したいか、どこが好きか"
               value={pop}
-              onChange={(event) => setPop(event.target.value)}
+              onChange={(event) => change({ pop: event.target.value })}
             />
           </>
         )}
@@ -481,7 +706,7 @@ export function OpenShop({
             type="button"
             className="editor-button primary"
             disabled={!picked.length}
-            onClick={() => setStep("sign")}
+            onClick={() => go("sign")}
           >
             看板を決める
             <Icon name="arrow" size={16} />
@@ -496,13 +721,14 @@ export function OpenShop({
       <button
         type="button"
         className="text-button open-back"
-        onClick={() => setStep(kind === "free" ? "kind" : "books")}
+        onClick={() => go(kind === "free" ? "kind" : "books")}
       >
         <Icon name="back" size={14} />
         {kind === "free" ? "本屋の形を選び直す" : "本を選び直す"}
       </button>
       <span className="editor-kicker">まずは、看板から。</span>
       <h1 id="open-sign-title">店の名前と看板</h1>
+      {keptNote}
       <div className={"open-sign theme-" + theme} aria-hidden="true">
         <b className={name.trim() ? "" : "is-example"}>
           {name.trim() || NAME_EXAMPLES[example]}
@@ -525,7 +751,7 @@ export function OpenShop({
           <input
             id={nameId}
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => change({ name: event.target.value })}
             maxLength={SHOP_NAME_MAX_LENGTH}
             placeholder={"例：" + NAME_EXAMPLES[example]}
             required
@@ -535,7 +761,7 @@ export function OpenShop({
             type="button"
             className="editor-button secondary"
             onClick={() => {
-              setName(NAME_EXAMPLES[example]);
+              change({ name: NAME_EXAMPLES[example] });
               setExample((example + 1) % NAME_EXAMPLES.length);
             }}
           >
@@ -549,18 +775,22 @@ export function OpenShop({
         <input
           id={taglineId}
           value={tagline}
-          onChange={(event) => setTagline(event.target.value)}
+          onChange={(event) => change({ tagline: event.target.value })}
           maxLength={SHOP_TAGLINE_MAX_LENGTH}
           placeholder="例：一頁ぶん、遠回り。"
           autoComplete="off"
         />
         <div className="editor-label">
-          看板の色 <ThemePicker value={theme} onChange={setTheme} />
+          看板の色{" "}
+          <ThemePicker
+            value={theme}
+            onChange={(next) => change({ theme: next })}
+          />
         </div>
         <button
           className="editor-button primary open-submit"
           type="submit"
-          disabled={!name.trim()}
+          disabled={!name.trim() || !ready}
         >
           <Icon name="store" size={18} />
           書店をひらく

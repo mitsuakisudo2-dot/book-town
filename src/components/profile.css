@@ -447,6 +447,20 @@
   gap: 10px;
   margin-top: 15px;
 }
+/* キャンセル with words written asks once, in place of the buttons. */
+.profile-leave {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.profile-leave span {
+  margin-right: auto;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #7a5a35;
+}
+.profile-kept {
+  margin-bottom: 4px;
+}
 .profile-nine-editor-list {
   display: flex;
   flex-direction: column;

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   COMPOSE_ICONS,
   ownTagline,
@@ -12,7 +12,7 @@ import {
   type TownActions,
   type TownState,
 } from "../lib/types";
-import { useTownBackend } from "../lib/store";
+import { getTownSnapshot, useTownBackend } from "../lib/store";
 import { readerPosts, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
@@ -22,6 +22,29 @@ import { handleProblem, normalizeHandle } from "../lib/handles";
 import { useClock } from "./useClock";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { FoldedWords, ProfilePosts } from "./Social";
+import { KeptNote } from "./OpenShop";
+import { useAccountState } from "../lib/account-session";
+import { useKeptDraft } from "../lib/kept-draft";
+import {
+  overSaved,
+  townTook,
+  useKeptUntilSaved,
+  workOwner,
+} from "../lib/shop-draft";
+import {
+  NINE_MAX,
+  PROFILE_FIELDS,
+  nineDraftStore,
+  nineForm,
+  nineLosesWords,
+  profileDraftStore,
+  profileForm,
+  profileLosesWords,
+  sameNine,
+  sameProfile,
+  type NineWork,
+  type ProfileWork,
+} from "../lib/profile-draft";
 
 const composeIconNames: Record<ComposeIcon, string> = {
   pen: "万年筆",
@@ -72,6 +95,41 @@ import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import { useUrlParam } from "../lib/url-state";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 
+const SAVE_REFUSED =
+  "うまく保存できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。";
+
+/** キャンセル with words written: asked once, in place of the buttons. */
+function LeaveConfirm({
+  onStay,
+  onLeave,
+  className = "",
+}: {
+  onStay: () => void;
+  onLeave: () => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={"profile-form-actions profile-leave " + className}
+      role="group"
+      aria-label="書きかけを消して閉じる"
+    >
+      <span>書きかけを消して閉じますか？</span>
+      <button
+        className="button secondary"
+        type="button"
+        autoFocus
+        onClick={onStay}
+      >
+        やめる
+      </button>
+      <button className="button secondary" type="button" onClick={onLeave}>
+        消して閉じる
+      </button>
+    </div>
+  );
+}
+
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
 type Collection = (typeof COLLECTIONS)[number];
 
@@ -110,14 +168,61 @@ export function ProfileView({
   const clock = useClock(60_000);
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingNine, setEditingNine] = useState(false);
-  const [draftName, setDraftName] = useState("");
-  const [draftBio, setDraftBio] = useState("");
-  const [draftLinks, setDraftLinks] = useState<string[]>([]);
-  const [draftHandle, setDraftHandle] = useState("");
+  // What is being changed is kept in this browser for the reader: Escape, a
+  // tap outside, 戻る or a reload closes the dialog and keeps it; only
+  // キャンセル, 書きかけを消す and a save let it go.
+  const account = useAccountState();
+  const owner = isSelf ? workOwner(account) : null;
+  const keptProfile = useKeptDraft(profileDraftStore, owner);
+  const keptNine = useKeptDraft(nineDraftStore, owner);
+  const savedProfile = reader ? profileForm(reader) : null;
+  const savedNine = reader ? nineForm(reader) : null;
+  // Kept work that matches what is saved is nothing to keep. The card's
+  // fields left as they were follow what is saved now.
+  const profileWork = savedProfile
+    ? overSaved(keptProfile.draft, savedProfile)
+    : null;
+  const nineWork =
+    keptNine.draft && savedNine && !sameNine(keptNine.draft, savedNine)
+      ? keptNine.draft
+      : null;
+  const profile = profileWork ?? savedProfile;
+  const {
+    name: draftName = "",
+    bio: draftBio = "",
+    links: draftLinks = [""],
+    handle: draftHandle = "",
+  } = profile ?? {};
+  // Books no longer in the town drop out of the nine being chosen.
+  const draftNine = ((nineWork ?? savedNine)?.ids ?? []).filter((id) =>
+    state.books.some((book) => book.id === id),
+  );
+  const draftNotes = (nineWork ?? savedNine)?.notes ?? {};
+  // Whether each dialog opened on work kept from before.
+  const [resumedProfile, setResumedProfile] = useState(false);
+  const [resumedNine, setResumedNine] = useState(false);
+  const [confirming, setConfirming] = useState<"profile" | "nine" | null>(null);
+  const [refused, setRefused] = useState<"profile" | "nine" | null>(null);
+  const saving = useKeptUntilSaved((what) => {
+    // Turned away by the account after all: the work is still kept, and
+    // the editor shows it again, with a word about it, when it is opened.
+    setRefused(what === "nine" ? "nine" : "profile");
+    notify(
+      what === "nine"
+        ? "人生の9冊を保存できませんでした。書きかけは残しています。"
+        : "プロフィールを保存できませんでした。書きかけは残しています。",
+    );
+  });
+  // Saved since (here or on another device), it is let go.
+  const profileSaved = Boolean(keptProfile.draft && !profileWork);
+  const nineSaved = Boolean(keptNine.draft && !nineWork);
+  useEffect(() => {
+    if (!owner || !saving.settled) return;
+    if (profileSaved) profileDraftStore.clear(owner);
+    if (nineSaved) nineDraftStore.clear(owner);
+  }, [profileSaved, nineSaved, owner, saving.settled]);
   const [handleError, setHandleError] = useState("");
   const [linkError, setLinkError] = useState("");
-  const [draftNine, setDraftNine] = useState<string[]>([]);
-  const [draftNotes, setDraftNotes] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   // The 9冊 picker finds books the way every search does; the reader's own
@@ -161,15 +266,41 @@ export function ProfileView({
   const postCount = readerPosts(state, reader.id).length;
   const readingTime = clock ? readingTotals(state, clock.now).total : null;
 
+  /** Writes the profile being changed, kept for the reader as it is written. */
+  function changeProfile(patch: Partial<ProfileWork>) {
+    if (!savedProfile) return;
+    setConfirming(null);
+    setRefused(null);
+    const next = { ...(profileWork ?? savedProfile), ...patch };
+    keptProfile.set(
+      sameProfile(next, savedProfile)
+        ? null
+        : { work: next, base: savedProfile },
+    );
+  }
+  // The dialog opens on what was kept, or on the saved profile; a save the
+  // account turned away is told again there.
   function beginProfileEdit() {
     if (!reader) return;
-    setDraftName(reader.name);
-    setDraftBio(reader.bio);
-    setDraftLinks(reader.links?.length ? reader.links : [""]);
-    setDraftHandle(reader.handle);
+    setResumedProfile(profileWork !== null);
+    setConfirming(null);
+    setRefused((was) => (was === "profile" && profileWork ? was : null));
     setHandleError("");
     setLinkError("");
     setEditingProfile(true);
+  }
+  /** キャンセル: what was written is let go (asked first, when it has words). */
+  function cancelProfile() {
+    if (
+      confirming !== "profile" &&
+      profileWork &&
+      savedProfile &&
+      profileLosesWords(profileWork, savedProfile)
+    )
+      return setConfirming("profile");
+    keptProfile.clear();
+    setConfirming(null);
+    setEditingProfile(false);
   }
 
   function saveProfile(event: FormEvent<HTMLFormElement>) {
@@ -190,7 +321,19 @@ export function ProfileView({
       );
       return;
     }
-    actions.updateProfile(name, draftBio.trim(), links as string[], handle);
+    // Turned away, the dialog stays open on what was written, kept.
+    if (
+      !townTook(() =>
+        actions.updateProfile(name, draftBio.trim(), links as string[], handle),
+      )
+    )
+      return setRefused("profile");
+    // Kept until the account has it too, as the town now holds it.
+    if (owner && savedProfile)
+      saving.hold("profile", profileDraftStore, owner, {
+        work: profileForm(getTownSnapshot().me),
+        base: savedProfile,
+      });
     setEditingProfile(false);
     notify("プロフィールを保存しました");
   }
@@ -200,12 +343,8 @@ export function ProfileView({
       className="profile-picker-book"
       key={book.id}
       aria-label={`${book.title}を人生の9冊に加える`}
-      disabled={draftNine.length >= 9}
-      onClick={() =>
-        setDraftNine((ids) =>
-          ids.length < 9 && !ids.includes(book.id) ? [...ids, book.id] : ids,
-        )
-      }
+      disabled={draftNine.length >= NINE_MAX}
+      onClick={() => addNine(book.id)}
     >
       <BookJacket book={book} />
       <strong>{book.title}</strong>
@@ -216,10 +355,30 @@ export function ProfileView({
     </button>
   );
 
+  /** Writes the nine being chosen, kept for the reader as they change. */
+  function changeNine(patch: Partial<NineWork>) {
+    if (!savedNine) return;
+    setConfirming(null);
+    setRefused(null);
+    const next = { ids: draftNine, notes: draftNotes, ...patch };
+    // A book taken off keeps its word to come back to, if it has one.
+    next.notes = Object.fromEntries(
+      Object.entries(next.notes).filter(
+        ([id, note]) => next.ids.includes(id) || note.trim(),
+      ),
+    );
+    keptNine.set(sameNine(next, savedNine) ? null : next);
+  }
+  function addNine(bookId: string) {
+    if (draftNine.length < NINE_MAX && !draftNine.includes(bookId))
+      changeNine({ ids: [...draftNine, bookId] });
+  }
+  // The dialog opens on what was kept, or on the saved nine.
   function beginNineEdit() {
     if (!reader) return;
-    setDraftNine([...reader.lifeNine]);
-    setDraftNotes({ ...reader.nineNotes });
+    setResumedNine(nineWork !== null);
+    setConfirming(null);
+    setRefused((was) => (was === "nine" && nineWork ? was : null));
     setSearch("");
     setEditingNine(true);
   }
@@ -227,11 +386,23 @@ export function ProfileView({
   function moveNine(index: number, direction: number) {
     const target = index + direction;
     if (target < 0 || target >= draftNine.length) return;
-    setDraftNine((current) => {
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
+    const next = [...draftNine];
+    [next[index], next[target]] = [next[target], next[index]];
+    changeNine({ ids: next });
+  }
+
+  /** キャンセル: the nine go back as saved (asked first, when words would go). */
+  function cancelNine() {
+    if (
+      confirming !== "nine" &&
+      nineWork &&
+      savedNine &&
+      nineLosesWords(nineWork, savedNine)
+    )
+      return setConfirming("nine");
+    keptNine.clear();
+    setConfirming(null);
+    setEditingNine(false);
   }
 
   function saveNine() {
@@ -240,7 +411,17 @@ export function ProfileView({
         .map((id) => [id, (draftNotes[id] ?? "").trim()])
         .filter(([, note]) => Boolean(note)),
     );
-    actions.updateNine(draftNine, notes);
+    // Turned away, the dialog stays open on the nine chosen, kept.
+    if (!townTook(() => actions.updateNine(draftNine, notes)))
+      return setRefused("nine");
+    // Kept until the account has them too, as the town now holds them.
+    if (owner)
+      saving.hold(
+        "nine",
+        nineDraftStore,
+        owner,
+        nineForm(getTownSnapshot().me),
+      );
     setEditingNine(false);
     notify("人生の9冊を保存しました");
   }
@@ -321,7 +502,11 @@ export function ProfileView({
                 <Link className="button primary" href="/my-shop/">
                   <Icon name="store" /> {shop ? "書店を整える" : "書店をひらく"}
                 </Link>
-                <button className="button secondary" onClick={beginProfileEdit}>
+                <button
+                  className="button secondary"
+                  disabled={!owner}
+                  onClick={beginProfileEdit}
+                >
                   <Icon name="edit" /> プロフィールを編集
                 </button>
                 <span className="profile-minor-actions">
@@ -393,6 +578,7 @@ export function ProfileView({
           {isSelf && (
             <button
               className="button secondary profile-edit-nine"
+              disabled={!owner}
               onClick={beginNineEdit}
             >
               <Icon name="edit" /> 編集
@@ -836,14 +1022,34 @@ export function ProfileView({
           onClose={() => setEditingProfile(false)}
         >
           <form className="profile-form" onSubmit={saveProfile}>
+            <KeptNote
+              className="profile-kept"
+              work={profileWork !== null}
+              resumed={resumedProfile}
+              saved={keptProfile.saved}
+              asks={Boolean(
+                profileWork &&
+                savedProfile &&
+                profileLosesWords(profileWork, savedProfile),
+              )}
+              onDiscard={() => {
+                keptProfile.clear();
+                setResumedProfile(false);
+                setConfirming(null);
+                setRefused(null);
+                setHandleError("");
+                setLinkError("");
+                document.getElementById("reader-name")?.focus();
+              }}
+            />
             <label htmlFor="reader-name">ユーザー名</label>
             <input
               id="reader-name"
               autoComplete="nickname"
               required
-              maxLength={40}
+              maxLength={PROFILE_FIELDS.name}
               value={draftName}
-              onChange={(event) => setDraftName(event.target.value)}
+              onChange={(event) => changeProfile({ name: event.target.value })}
               autoFocus
             />
             <label htmlFor="reader-handle">ユーザーID</label>
@@ -854,11 +1060,11 @@ export function ProfileView({
                 autoComplete="username"
                 autoCapitalize="none"
                 spellCheck={false}
-                maxLength={21}
+                maxLength={PROFILE_FIELDS.handle}
                 value={draftHandle}
                 onChange={(event) => {
                   setHandleError("");
-                  setDraftHandle(event.target.value);
+                  changeProfile({ handle: event.target.value });
                 }}
                 aria-describedby="reader-handle-hint"
               />
@@ -876,10 +1082,10 @@ export function ProfileView({
             <label htmlFor="reader-bio">自己紹介</label>
             <textarea
               id="reader-bio"
-              maxLength={600}
+              maxLength={PROFILE_FIELDS.bio}
               rows={5}
               value={draftBio}
-              onChange={(event) => setDraftBio(event.target.value)}
+              onChange={(event) => changeProfile({ bio: event.target.value })}
               placeholder="好きな本や、いま気になっていること。"
             />
             <fieldset className="profile-link-fields">
@@ -894,16 +1100,16 @@ export function ProfileView({
                     type="text"
                     inputMode="url"
                     autoComplete="url"
-                    maxLength={300}
+                    maxLength={PROFILE_FIELDS.link}
                     placeholder="https://note.com/..."
                     value={link}
                     onChange={(event) => {
                       setLinkError("");
-                      setDraftLinks(
-                        draftLinks.map((entry, position) =>
+                      changeProfile({
+                        links: draftLinks.map((entry, position) =>
                           position === index ? event.target.value : entry,
                         ),
-                      );
+                      });
                     }}
                   />
                   <button
@@ -911,13 +1117,14 @@ export function ProfileView({
                     className="profile-link-remove"
                     aria-label={`リンク${index + 1}を削除`}
                     onClick={() =>
-                      setDraftLinks(
-                        draftLinks.length > 1
-                          ? draftLinks.filter(
-                              (_, position) => position !== index,
-                            )
-                          : [""],
-                      )
+                      changeProfile({
+                        links:
+                          draftLinks.length > 1
+                            ? draftLinks.filter(
+                                (_, position) => position !== index,
+                              )
+                            : [""],
+                      })
                     }
                   >
                     <Icon name="close" size={14} />
@@ -928,7 +1135,7 @@ export function ProfileView({
                 <button
                   type="button"
                   className="profile-link-add"
-                  onClick={() => setDraftLinks([...draftLinks, ""])}
+                  onClick={() => changeProfile({ links: [...draftLinks, ""] })}
                 >
                   <Icon name="plus" size={14} /> リンクを追加
                 </button>
@@ -942,22 +1149,34 @@ export function ProfileView({
             <p className="profile-form-hint">
               この名刺は、街を訪れる読書家に公開されます。
             </p>
-            <div className="profile-form-actions">
-              <button
-                className="button secondary"
-                type="button"
-                onClick={() => setEditingProfile(false)}
-              >
-                キャンセル
-              </button>
-              <button
-                className="button primary"
-                type="submit"
-                disabled={!draftName.trim()}
-              >
-                保存する
-              </button>
-            </div>
+            {refused === "profile" && (
+              <p className="profile-link-error" role="alert">
+                {SAVE_REFUSED}
+              </p>
+            )}
+            {confirming === "profile" ? (
+              <LeaveConfirm
+                onStay={() => setConfirming(null)}
+                onLeave={cancelProfile}
+              />
+            ) : (
+              <div className="profile-form-actions">
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={cancelProfile}
+                >
+                  キャンセル
+                </button>
+                <button
+                  className="button primary"
+                  type="submit"
+                  disabled={!draftName.trim()}
+                >
+                  保存する
+                </button>
+              </div>
+            )}
           </form>
         </Modal>
       )}
@@ -969,6 +1188,21 @@ export function ProfileView({
           wide
         >
           <div className="profile-nine-editor">
+            <KeptNote
+              className="profile-kept"
+              work={nineWork !== null}
+              resumed={resumedNine}
+              saved={keptNine.saved}
+              asks={Boolean(
+                nineWork && savedNine && nineLosesWords(nineWork, savedNine),
+              )}
+              onDiscard={() => {
+                keptNine.clear();
+                setResumedNine(false);
+                setConfirming(null);
+                setRefused(null);
+              }}
+            />
             <p className="profile-form-hint">
               何冊でも、好きな順番で。ひとことは任意です。
             </p>
@@ -988,13 +1222,12 @@ export function ProfileView({
                       <input
                         aria-label={`${book.title}へのひとこと`}
                         placeholder="この本へのひとこと（任意）"
-                        maxLength={140}
+                        maxLength={PROFILE_FIELDS.note}
                         value={draftNotes[id] ?? ""}
                         onChange={(event) =>
-                          setDraftNotes((notes) => ({
-                            ...notes,
-                            [id]: event.target.value,
-                          }))
+                          changeNine({
+                            notes: { ...draftNotes, [id]: event.target.value },
+                          })
                         }
                       />
                     </div>
@@ -1016,9 +1249,9 @@ export function ProfileView({
                       <button
                         aria-label={`${book.title}を人生の9冊から外す`}
                         onClick={() =>
-                          setDraftNine((ids) =>
-                            ids.filter((entry) => entry !== id),
-                          )
+                          changeNine({
+                            ids: draftNine.filter((entry) => entry !== id),
+                          })
                         }
                       >
                         <Icon name="close" />
@@ -1036,7 +1269,9 @@ export function ProfileView({
             <div className="profile-nine-picker-heading">
               <h3>一冊を加える</h3>
               <span>
-                {draftNine.length ? `${draftNine.length} / 9 冊` : "9冊まで"}
+                {draftNine.length
+                  ? `${draftNine.length} / ${NINE_MAX} 冊`
+                  : `${NINE_MAX}冊まで`}
               </span>
             </div>
             <input
@@ -1054,19 +1289,15 @@ export function ProfileView({
                 if (
                   !sure ||
                   draftNine.includes(sure.id) ||
-                  draftNine.length >= 9
+                  draftNine.length >= NINE_MAX
                 )
                   return;
-                setDraftNine((ids) =>
-                  ids.length < 9 && !ids.includes(sure.id)
-                    ? [...ids, sure.id]
-                    : ids,
-                );
+                addNine(sure.id);
                 setSearch("");
               }}
               placeholder="タイトル・著者・ジャンルで探す"
             />
-            {draftNine.length >= 9 && (
+            {draftNine.length >= NINE_MAX && (
               <p className="profile-picker-limit">
                 9冊を選びました。新しい本を加えるには、いずれかの本を外してください。
               </p>
@@ -1098,17 +1329,27 @@ export function ProfileView({
                 </div>
               </>
             )}
-            <div className="profile-form-actions profile-nine-save">
-              <button
-                className="button secondary"
-                onClick={() => setEditingNine(false)}
-              >
-                キャンセル
-              </button>
-              <button className="button primary" onClick={saveNine}>
-                この並びを保存
-              </button>
-            </div>
+            {refused === "nine" && (
+              <p className="profile-link-error" role="alert">
+                {SAVE_REFUSED}
+              </p>
+            )}
+            {confirming === "nine" ? (
+              <LeaveConfirm
+                className="profile-nine-save"
+                onStay={() => setConfirming(null)}
+                onLeave={cancelNine}
+              />
+            ) : (
+              <div className="profile-form-actions profile-nine-save">
+                <button className="button secondary" onClick={cancelNine}>
+                  キャンセル
+                </button>
+                <button className="button primary" onClick={saveNine}>
+                  この並びを保存
+                </button>
+              </div>
+            )}
           </div>
         </Modal>
       )}
