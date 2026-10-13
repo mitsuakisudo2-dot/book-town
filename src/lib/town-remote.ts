@@ -346,9 +346,20 @@ export function townFromRows(
     .map(readerFrom);
   const known = new Set(readers.map((reader) => reader.id));
 
+  // The books in a store scene, a 見本's by its own name: no field for none.
+  const sceneOf = (value: unknown) => {
+    const ids = Array.isArray(value)
+      ? value
+          .filter((id): id is string => typeof id === "string")
+          .map((id) => sampleBookOfRow(id) ?? id)
+          .filter((id) => bookIds.has(id))
+      : [];
+    return ids.length ? { sceneBookIds: [...new Set(ids)] } : {};
+  };
   const shopFrom = (
     row: ShopRow,
     shelves: unknown,
+    sceneBooks: unknown,
     followers: number,
   ): Shop => ({
     id: row.owner_id === userId ? OWN_SHOP_ID : row.id,
@@ -361,12 +372,18 @@ export function townFromRows(
       : "sage",
     followers,
     shelves: cleanShelves(shelves, bookIds),
+    ...sceneOf(sceneBooks),
     demo: false,
   });
   const ownRow = rows.shops.find((row) => row.owner_id === userId);
   const ownShop = ownRow
     ? {
-        ...shopFrom(ownRow, rows.ownShelves, rows.ownShopFollowers),
+        ...shopFrom(
+          ownRow,
+          rows.ownShelves,
+          rows.ownSceneBooks,
+          rows.ownShopFollowers,
+        ),
         ...(rows.ownShopVisitors && rows.ownShopVisitors.count > 0
           ? { weekVisitors: rows.ownShopVisitors }
           : {}),
@@ -377,7 +394,7 @@ export function townFromRows(
       (row) =>
         row.owner_id !== userId && row.is_open && known.has(row.owner_id),
     )
-    .map((row) => shopFrom(row, row.public_shelves, 0));
+    .map((row) => shopFrom(row, row.public_shelves, row.public_scene_books, 0));
   const shopIds = new Set(shops.map((shop) => shop.id));
 
   const visible = rows.posts.filter(

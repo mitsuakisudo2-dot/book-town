@@ -27,7 +27,9 @@ import {
   volumeNumber,
 } from "../src/lib/search/title";
 import { seedState } from "../src/lib/data";
-import type { Book, BookReading } from "../src/lib/types";
+import { booksBeforeSearch } from "../src/lib/book-lists";
+import { REGISTERED_GENRE } from "../src/lib/books";
+import { ME_ID, type Book, type BookReading } from "../src/lib/types";
 
 // The book search: how text is folded, read and split, and the order books
 // come in for the owner's examples (docs: search design §3, §5, §6, §9, §10).
@@ -817,6 +819,194 @@ async function main() {
       13,
     );
   });
+
+  await check(
+    "before anything is typed, another reader's typed-in book waits",
+    () => {
+      // Books from the database, each used once in one way (R1).
+      const uses = [
+        "nowhere",
+        "public shelf",
+        "private shelf",
+        "store scene",
+        "post",
+        "solo memo",
+        "public record",
+        "private record",
+        "9冊",
+        "poster",
+        "draft poster",
+        "reading together",
+        "own library",
+        "own wish",
+        "own favorite",
+        "own finished",
+        "own 9冊",
+        "own reading",
+        "own private shelf",
+        "own store scene",
+        "own solo memo",
+        "own private record",
+        "own draft poster",
+      ] as const;
+      const idOf = (use: (typeof uses)[number]) =>
+        "00000000-0000-4000-8000-" +
+        String(uses.indexOf(use)).padStart(12, "0");
+      const state = structuredClone(seedState);
+      state.books = [
+        ...state.books,
+        ...uses.map((use) =>
+          book({
+            id: idOf(use),
+            title: "試験の本 " + use,
+            author: "試験 作家",
+            genre: REGISTERED_GENRE,
+            ...(use === "nowhere" ? { isbn: "9784000000017" } : {}),
+          }),
+        ),
+        // Typed in this browser: the demo has no other readers.
+        book({ id: "my-book-1", title: "手元の本", author: "試験 作家" }),
+      ];
+      const shelf = (id: string, isPublic: boolean, bookId: string) => ({
+        id,
+        name: id,
+        capacity: 10,
+        isPublic,
+        items: [{ id: id + "-1", bookId, display: "spine" as const, pop: "" }],
+      });
+      state.shops[0].shelves.push(
+        shelf("t-public", true, idOf("public shelf")),
+        shelf("t-private", false, idOf("private shelf")),
+      );
+      state.shops[0].sceneBookIds = [idOf("store scene")];
+      state.ownShop = {
+        ...structuredClone(state.shops[1]),
+        id: "mine",
+        ownerId: ME_ID,
+        demo: false,
+        shelves: [shelf("t-own", false, idOf("own private shelf"))],
+        sceneBookIds: [idOf("own store scene")],
+      };
+      const post = (id: string, authorId: string, bookId: string) => ({
+        ...structuredClone(state.posts[0]),
+        id,
+        authorId,
+        bookId,
+        parentId: null,
+        readingMode: null,
+      });
+      state.posts.push(
+        post("t-post", "r-nagi", idOf("post")),
+        { ...post("t-solo", "r-nagi", idOf("solo memo")), readingMode: "solo" },
+        {
+          ...post("t-own-solo", ME_ID, idOf("own solo memo")),
+          readingMode: "solo",
+        },
+      );
+      const record = (
+        id: string,
+        readerId: string,
+        bookId: string,
+        isPublic: boolean,
+      ) => ({
+        ...structuredClone(state.readingRecords[0]),
+        id,
+        readerId,
+        bookId,
+        isPublic,
+      });
+      state.readingRecords.push(
+        record("t-public", "r-nagi", idOf("public record"), true),
+        record("t-private", "r-nagi", idOf("private record"), false),
+        record("t-own", ME_ID, idOf("own private record"), false),
+      );
+      state.readers[0].lifeNine.push(idOf("9冊"));
+      state.me.lifeNine.push(idOf("own 9冊"));
+      const poster = (
+        id: string,
+        authorId: string,
+        bookId: string,
+        status: "draft" | "published",
+      ) => ({
+        ...structuredClone(state.posters[0]),
+        id,
+        authorId,
+        status,
+        pages: [{ heading: "試験", text: "", bookIds: [bookId] }],
+      });
+      state.posters.push(
+        poster("t-up", "r-nagi", idOf("poster"), "published"),
+        poster("t-draft", "r-nagi", idOf("draft poster"), "draft"),
+        poster("t-own-draft", ME_ID, idOf("own draft poster"), "draft"),
+      );
+      state.readingNow.push({
+        readerId: "r-nagi",
+        bookId: idOf("reading together"),
+        minutesAgo: 3,
+      });
+      state.library.push(idOf("own library"));
+      state.wishlist.push(idOf("own wish"));
+      state.favorites.push(idOf("own favorite"));
+      state.finishedBooks.push(idOf("own finished"));
+      state.readingSessions.push({
+        id: "t-session",
+        bookId: idOf("own reading"),
+        mode: "solo",
+        startedAt: "2026-10-12T00:00:00Z",
+        endedAt: "2026-10-12T01:00:00Z",
+      });
+
+      const shown = booksBeforeSearch(state);
+      const waiting = uses.filter(
+        (use) => !shown.some((entry) => entry.id === idOf(use)),
+      );
+      assert.deepEqual(waiting, [
+        "nowhere",
+        "private shelf",
+        "solo memo",
+        "private record",
+        "draft poster",
+      ]);
+      // The 見本's books and one typed in this browser stay, in the town's order.
+      assert.deepEqual(
+        shown.filter((entry) => !entry.id.startsWith("00000000-")),
+        state.books.filter((entry) => !entry.id.startsWith("00000000-")),
+      );
+      // A search still finds every book, as before.
+      for (const use of waiting)
+        assert.equal(
+          searchBooks(state.books, "試験の本 " + use)[0]?.book.id,
+          idOf(use),
+          use,
+        );
+      // A genre finds only the books shown before a search (the 登録した本
+      // chip, or part of it typed); a title, an author or an ISBN finds any.
+      const genreFinds = new Set(shown.map((entry) => entry.id));
+      const found = (query: string, finds: Set<string> | null = genreFinds) =>
+        searchBooks(state.books, query, {
+          limit: state.books.length,
+          ...(finds ? { genreFinds: finds } : {}),
+        })
+          .filter(
+            (match) => !match.near && match.book.id.startsWith("00000000-"),
+          )
+          .map((match) => match.book.id)
+          .sort();
+      const listed = uses
+        .filter((use) => !waiting.includes(use))
+        .map(idOf)
+        .sort();
+      const every = uses.map(idOf).sort();
+      assert.deepEqual(found(REGISTERED_GENRE), listed);
+      assert.deepEqual(found("登録"), listed);
+      assert.deepEqual(found(REGISTERED_GENRE, null), every);
+      assert.deepEqual(found("試験 作家"), every);
+      assert.deepEqual(found("試験の本 nowhere"), [idOf("nowhere")]);
+      assert.deepEqual(found("978-4-00-000001-7"), [idOf("nowhere")]);
+      // A new reader's town of 見本 alone loses nothing.
+      assert.deepEqual(booksBeforeSearch(seedState), seedState.books);
+    },
+  );
 
   await check("a picker's Enter takes only a sure match", () => {
     assert.ok(strongMatch(first(books, "夜と")));

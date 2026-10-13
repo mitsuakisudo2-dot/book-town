@@ -8,6 +8,7 @@ import { BookJacket, Icon } from "./ui";
 /** Search the catalog by title, author, genre or ISBN, and pick one book. */
 export function BookPicker({
   books,
+  genreFinds,
   value,
   onChange,
   label,
@@ -16,6 +17,11 @@ export function BookPicker({
   autoFocus = false,
 }: {
   books: Book[];
+  /**
+   * The books a genre alone finds (booksBeforeSearch): never one another
+   * reader only typed in, which waits for its title, author or ISBN.
+   */
+  genreFinds?: Book[];
   value: string | null;
   onChange: (bookId: string | null) => void;
   label: string;
@@ -28,7 +34,11 @@ export function BookPicker({
   const id = useId();
   const [query, setQuery] = useState("");
   // The reader's own books come first among equals.
-  const results = useBookSearch(books, query, { own: suggestions, limit: 6 });
+  const results = useBookSearch(books, query, {
+    own: suggestions,
+    limit: 6,
+    genreFinds,
+  });
   const selected = value ? books.find((book) => book.id === value) : undefined;
   if (selected)
     return (
