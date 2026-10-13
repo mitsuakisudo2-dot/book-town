@@ -233,7 +233,7 @@ export function createWalkStore(
   };
 }
 
-const walkStore = createWalkStore(
+export const walkStore = createWalkStore(
   localWalkBackend(),
   supabaseConfigured
     ? {

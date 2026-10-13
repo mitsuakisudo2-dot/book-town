@@ -4,12 +4,14 @@ import {
   createKeptDraftStore,
   keptText,
   type KeptDraftOptions,
+  type KeptDraftStore,
 } from "./kept-draft";
 import { validateScene, type SceneKind, type StoreScene } from "./store-scene";
 import {
   SHELF_NAME_MAX_LENGTH,
   SHOP_DESCRIPTION_MAX_LENGTH,
   SHOP_NAME_MAX_LENGTH,
+  type PersistenceStatus,
 } from "./types";
 
 // The scene being decorated in 店内の飾りつけ (order, POPs, the greeting,
@@ -132,4 +134,57 @@ export function sceneWorkState(
 ): "fresh" | "stale" | "saved" {
   if (sceneMark(work.scene) === savedMark) return "saved";
   return work.from === savedMark ? "fresh" : "stale";
+}
+
+/** The walk as far as a scene's save is heard from it (walk-store.ts). */
+export interface SceneSaves {
+  subscribe(listener: () => void): () => void;
+  getSnapshot(): {
+    kind: string;
+    status: PersistenceStatus;
+    scenes: StoreScene[];
+  };
+}
+
+/**
+ * An account takes a scene in the background, after the editor has closed.
+ * The work stays kept until the account has the very scene sent, and is let
+ * go then, whether the editor is open or not. A refusal brings the account's
+ * own scene back and leaves the work kept, to go on with; work begun since
+ * the save is never let go here.
+ */
+export function keepUntilSaved(
+  store: KeptDraftStore<KeptScene>,
+  key: string,
+  sent: StoreScene,
+  saves: SceneSaves,
+) {
+  const mark = sceneMark(sent);
+  let settled = false;
+  let stop = () => {};
+  const settle = () => {
+    if (settled) return;
+    const now = saves.getSnapshot();
+    // Still on its way, or waiting out network trouble.
+    if (
+      now.kind === "account" &&
+      now.status !== "saved" &&
+      now.status !== "recovered"
+    )
+      return;
+    settled = true;
+    stop();
+    const held = now.scenes.find((scene) => scene.storeId === sent.storeId);
+    const work = store.get(key);
+    if (
+      now.kind === "account" &&
+      now.status === "saved" &&
+      sceneMark(held) === mark &&
+      work !== null &&
+      sceneMark(work.scene) === mark
+    )
+      store.clear(key);
+  };
+  stop = saves.subscribe(settle);
+  settle();
 }

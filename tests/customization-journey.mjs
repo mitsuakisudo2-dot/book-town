@@ -526,6 +526,9 @@ try {
     async () => {
       await open();
       await dialog().getByLabel("店主からのひとこと").fill("古い書きかけ");
+      await selectSolaris();
+      const longPop = "古い書きかけのPOP。".repeat(40);
+      await dialog().getByLabel("この本のPOP").fill(longPop);
       await page.keyboard.press("Escape");
       // Another device saves the scene meanwhile.
       await page.evaluate(() => {
@@ -545,6 +548,26 @@ try {
       await expect(dialog().getByLabel("店主からのひとこと")).not.toHaveValue(
         "古い書きかけ",
       );
+      // Nothing new is written over the older work before the reader
+      // chooses: the editor waits, and the hand is on the choice.
+      await expect(
+        keptLine().getByRole("button", { name: "書きかけを開く", exact: true }),
+      ).toBeFocused();
+      await expect(dialog().getByLabel("店主からのひとこと")).toBeDisabled();
+      await expect(dialog().getByLabel("看板の店名")).toBeDisabled();
+      await expect(
+        dialog().getByRole("button", { name: "店内を保存", exact: true }),
+      ).toBeDisabled();
+      await page.keyboard.type("あ");
+      expect(await drafts()).toContain(longPop);
+      // Closed and opened again, it still waits.
+      await page.keyboard.press("Escape");
+      await expect(dialog()).toHaveCount(0);
+      await reopen();
+      await expect(keptLine()).toContainText(
+        "書きかけより新しい店内が保存されています",
+      );
+      expect(await drafts()).toContain(longPop);
       // Asked for, the older work opens.
       await keptLine()
         .getByRole("button", { name: "書きかけを開く", exact: true })
@@ -554,6 +577,9 @@ try {
       );
       await expect(dialog().getByLabel("看板の店名")).toHaveValue("夜道の本屋");
       await expect(keptLine()).toContainText("書きかけを続けています");
+      await expect(dialog().getByLabel("店主からのひとこと")).toBeEnabled();
+      await selectSolaris();
+      await expect(dialog().getByLabel("この本のPOP")).toHaveValue(longPop);
       await discardKept();
       await expect(dialog().getByLabel("看板の店名")).toHaveValue(
         "別の端末で直した店",

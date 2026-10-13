@@ -26,13 +26,14 @@ import {
 } from "../lib/store-scene";
 import { useKeptDraft } from "../lib/kept-draft";
 import {
+  keepUntilSaved,
   sceneDraftStore,
   sceneMark,
   sceneWorkKey,
   sceneWorkState,
 } from "../lib/scene-draft";
 import { useAccountState } from "../lib/account-session";
-import { useWalkStore } from "../lib/walk-store";
+import { useWalkStore, walkStore } from "../lib/walk-store";
 import type { Book, TownState } from "../lib/types";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { StoreCanvas, StoreStamp } from "./StoreCanvas";
@@ -81,7 +82,8 @@ export function StoreSceneEditor({
   );
   const fresh = standing === "fresh" ? work : null;
   // Begun from a scene saved over since (on another device): not used
-  // unless the reader asks for it.
+  // unless the reader asks for it. Until they open it or throw it away the
+  // editor waits, so nothing new is written over it unasked.
   const stale = standing === "stale" ? work : null;
   const draft = useMemo(
     () => (fresh ? migrateShopScene(shop, state.books, fresh.scene) : start),
@@ -95,7 +97,8 @@ export function StoreSceneEditor({
   const [confirming, setConfirming] = useState<"cancel" | "discard" | null>(
     null,
   );
-  // Saved to the account, the work is let go once the account has it.
+  // Saved to the account, the work is let go once the account has it (also
+  // when the page was left while the save was on its way).
   const done = standing === "saved" && saved.status === "saved";
   useEffect(() => {
     if (done) sceneDraftStore.clear(key);
@@ -110,6 +113,12 @@ export function StoreSceneEditor({
     find()?.focus();
   });
   const keptButton = useRef<HTMLButtonElement>(null);
+  const openButton = useRef<HTMLButtonElement>(null);
+  const waiting = stale !== null;
+  useEffect(() => {
+    // The editor waits on the reader's choice: the hand goes to it.
+    if (waiting) openButton.current?.focus();
+  }, [waiting]);
   const cancelButton = useRef<HTMLButtonElement>(null);
   const stayButton = useRef<HTMLButtonElement>(null);
   const signInput = useRef<HTMLInputElement>(null);
@@ -168,11 +177,11 @@ export function StoreSceneEditor({
     </button>
   );
   function edit(command: (scene: StoreScene) => StoreScene) {
+    // The older work is the reader's to open or throw away first.
+    if (stale) return;
     setError("");
     setConfirming(null);
     const next = command(draft);
-    // Work begun on the newer scene takes the older work's place.
-    if (stale) setResumed(false);
     // Changed back to where it began, there is nothing left to keep.
     kept.set(
       sceneMark(next) === startMark
@@ -229,18 +238,17 @@ export function StoreSceneEditor({
         <p className="scene-editor-intro">
           本を選び、言葉を添えて、あなたの一軒に。保存すると「書店めぐり」に反映されます。
         </p>
-        {!kept.saved ? (
+        {!kept.saved && !stale ? (
           <p className="scene-editor-kept" role="status">
             このブラウザに書きかけを残せませんでした
           </p>
         ) : (
-          resumed &&
-          (fresh || stale) && (
+          (stale || (resumed && fresh)) && (
             <p className="scene-editor-kept">
               <span>
-                {fresh
-                  ? "書きかけを続けています"
-                  : "書きかけより新しい店内が保存されています"}
+                {stale
+                  ? "書きかけより新しい店内が保存されています。書きかけを開くか消すと、続けて飾れます"
+                  : "書きかけを続けています"}
               </span>
               {confirming === "discard" ? (
                 <span className="scene-editor-confirm">
@@ -257,10 +265,12 @@ export function StoreSceneEditor({
                   {stale && (
                     <button
                       type="button"
+                      ref={openButton}
                       onClick={() => {
                         // The reader chose it: it now goes on from the scene
                         // saved since, and saving puts it in that one's place.
                         kept.set({ scene: stale.scene, from: mark });
+                        setResumed(true);
                         handTo.current = () => keptButton.current;
                       }}
                     >
@@ -302,7 +312,7 @@ export function StoreSceneEditor({
             <p>棚や本をタップして編集できます</p>
           </div>
           <div className="scene-controls">
-            <fieldset className="scene-section">
+            <fieldset className="scene-section" disabled={waiting}>
               <legend>店の雰囲気</legend>
               <div className="scene-template-options">
                 {STORE_TEMPLATES.map((t) => (
@@ -365,7 +375,7 @@ export function StoreSceneEditor({
                 </select>
               </label>
             </fieldset>
-            <fieldset className="scene-section">
+            <fieldset className="scene-section" disabled={waiting}>
               <legend>棚と並べ方</legend>
               <label>
                 編集する棚
@@ -505,7 +515,11 @@ export function StoreSceneEditor({
               )}
             </fieldset>
             {placement && book && (
-              <fieldset className="scene-section" id="scene-book-form">
+              <fieldset
+                className="scene-section"
+                id="scene-book-form"
+                disabled={waiting}
+              >
                 <legend>{book.title}</legend>
                 <label>
                   見せ方
@@ -683,7 +697,7 @@ export function StoreSceneEditor({
               </fieldset>
             )}
             {unplaced.length > 0 && (
-              <fieldset className="scene-section">
+              <fieldset className="scene-section" disabled={waiting}>
                 <legend>まだ並べていない本 · {unplaced.length}冊</legend>
                 <p className="scene-hint">
                   棚に入りきらない本、下ろした本、本棚に新しく並べた本です。POPも残っています。本を選び、置く棚を指定してください。
@@ -764,6 +778,7 @@ export function StoreSceneEditor({
                 className="editor-button primary"
                 disabled={
                   !saved.ready ||
+                  waiting ||
                   (saved.kind === "local" && saved.status === "recovered")
                 }
                 onClick={() => {
@@ -775,11 +790,12 @@ export function StoreSceneEditor({
                   }
                   // A save in this browser is done. An account takes the
                   // scene in the background, so the work stays kept until
-                  // it has (the effect above lets it go then): a refusal
-                  // there brings the work back here.
-                  if (saved.kind === "account")
+                  // it has, after the editor has closed: a refusal there
+                  // brings the work back here.
+                  if (saved.kind === "account") {
                     kept.set({ scene: draft, from: fresh?.from ?? mark });
-                  else kept.clear();
+                    keepUntilSaved(sceneDraftStore, key, draft, walkStore);
+                  } else kept.clear();
                   notify("店内を保存しました。書店めぐりで眺められます。");
                   onClose();
                 }}

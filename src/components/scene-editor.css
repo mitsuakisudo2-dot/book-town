@@ -80,6 +80,10 @@
   margin: 0 0 14px;
   min-width: 0;
 }
+/* While older work waits on the reader's choice, the controls rest. */
+.scene-section:disabled {
+  opacity: 0.55;
+}
 .scene-section legend {
   font-family: var(--serif);
   font-size: 16px;
