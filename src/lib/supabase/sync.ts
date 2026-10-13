@@ -70,8 +70,9 @@ export interface Pageable<T> {
 }
 
 /**
- * Reads every row a select matches, a page at a time, until a page brings
- * nothing new, so it works whatever the server's own limit is. The rows go in
+ * Reads every row a select matches, a page at a time, until the rows the
+ * first page counted are all in (or a page brings nothing new), so it works
+ * whatever the server's own limit is. The rows go in
  * the order of their key (the primary key, without the columns the select
  * fixes). Each page after the first starts again at the last row already read:
  * if another row stands there, rows were added or removed ahead of it
@@ -106,7 +107,7 @@ export async function allRows<T extends Record<string, unknown>>(
       seen.add(key);
       rows.push(row);
     }
-    if (!fresh.length || total === null || rows.length > total) break;
+    if (!fresh.length || total === null || rows.length >= total) break;
   }
   if (total === null)
     throw new TownSyncError("The rows were not counted; reading again", true);

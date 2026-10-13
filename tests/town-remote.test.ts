@@ -535,11 +535,11 @@ async function main() {
       }));
       const key = (row: AnyRow) => row.book_id + ":" + row.kind;
       // Never more than 1000 at a time, each page after the first starting
-      // at the last row read, until one brings nothing new.
-      const thousands = [0, 999, 1998, 2499];
+      // at the last row read, until the rows counted are all in.
+      const thousands = [0, 999, 1998];
       const pages: [number, number[]][] = [
         [1000, thousands],
-        [300, [0, 299, 598, 897, 1196, 1495, 1794, 2093, 2392, 2499]],
+        [300, [0, 299, 598, 897, 1196, 1495, 1794, 2093, 2392]],
         [5000, thousands],
       ];
       for (const [cap, starts] of pages) {
@@ -712,7 +712,7 @@ async function main() {
         fake.asked
           .filter((ask) => ask.table === "book_marks")
           .map((ask) => ask.from),
-        [0, 999, 1000],
+        [0, 999],
       );
       // The reader's own reading and records, each once, beside others'.
       assert.deepEqual(
