@@ -53,7 +53,12 @@ import {
   unreadCount,
   weekOf,
 } from "../src/lib/notifications";
-import { normalizeIsbn, bookPath } from "../src/lib/books";
+import {
+  normalizeIsbn,
+  bookPath,
+  createRegisteredBook,
+} from "../src/lib/books";
+import { openBdBooks, openBdQuestions } from "../src/lib/openbd";
 import {
   extractTags,
   popularTags,
@@ -960,6 +965,302 @@ check("ISBNs are checked and registered books are deduplicated", () => {
   fresh.actions.toggleLibrary(manual);
   assert.deepEqual(fresh.getSnapshot().library, [first]);
 });
+
+// Registering a book: one way in (registerBook), and what it did, told apart.
+{
+  const KOKORO = "9784101010137";
+  /** An account's town where another reader already brought こころ in. */
+  const accountTown = (saves: TownState[] = []) => {
+    const town = createTownStore({
+      kind: "account",
+      newId: counterId,
+      load: () => ({
+        state: {
+          ...structuredClone(seedState),
+          books: [
+            ...structuredClone(seedState.books),
+            createRegisteredBook("their-kokoro", {
+              title: "こころ",
+              author: "夏目漱石",
+              isbn: KOKORO,
+            }),
+          ],
+        },
+        status: "saved",
+      }),
+      save: (state) => {
+        saves.push(state);
+        return "saved";
+      },
+    });
+    town.initialize();
+    return town;
+  };
+
+  check(
+    "a book is already registered only when it is in the reader's library",
+    () => {
+      const saves: TownState[] = [];
+      const town = accountTown(saves);
+      // Only in the town's catalogue: registered as usual, as that book.
+      assert.deepEqual(
+        town.actions.registerBook(
+          { title: "別の題", author: "", isbn: "4101010137" },
+          "isbn",
+        ),
+        { result: "added", bookId: "their-kokoro", title: "こころ" },
+      );
+      assert.deepEqual(town.getSnapshot().library, ["their-kokoro"]);
+      assert.equal(
+        town.getSnapshot().books.find((book) => book.id === "their-kokoro")
+          ?.title,
+        "こころ",
+      );
+      // In the library: nothing changes, and nothing is saved.
+      const before = town.getSnapshot();
+      const kept = saves.length;
+      assert.deepEqual(
+        town.actions.registerBook(
+          { title: "こころ", author: "", isbn: KOKORO },
+          "scan",
+        ),
+        { result: "already", bookId: "their-kokoro", title: "こころ" },
+      );
+      assert.equal(town.getSnapshot(), before);
+      assert.equal(saves.length, kept);
+      // A new ISBN is a new book; the second time, it is already there.
+      const added = town.actions.registerBook(
+        { title: "新しい本", author: "", isbn: "9784101092058" },
+        "isbn",
+      );
+      assert.deepEqual(added, {
+        result: "added",
+        bookId: "isbn-9784101092058",
+        title: "新しい本",
+      });
+      assert.equal(
+        town.actions.registerBook(
+          { title: "新しい本", author: "", isbn: "978-4-10-109205-8" },
+          "isbn",
+        )?.result,
+        "already",
+      );
+      // addBook is registerBook by hand, and answers with the book's id.
+      assert.equal(
+        town.actions.addBook({ title: "", author: "", isbn: KOKORO }),
+        null,
+      );
+      assert.equal(
+        town.actions.addBook({ title: "こころ", author: "", isbn: KOKORO }),
+        "their-kokoro",
+      );
+      // Without an ISBN, the same title is never taken for the same book.
+      const one = town.actions.registerBook(
+        { title: "手書きの本", author: "" },
+        "manual",
+      );
+      const two = town.actions.registerBook(
+        { title: "手書きの本", author: "" },
+        "manual",
+      );
+      assert.equal(one?.result, "added");
+      assert.equal(two?.result, "added");
+      assert.notEqual(
+        one?.result === "added" && one.bookId,
+        two?.result === "added" && two.bookId,
+      );
+    },
+  );
+
+  check(
+    "a book taken out of the library comes back as added, the same book",
+    () => {
+      // Nothing is kept for a book taken out yet, so there is nothing to
+      // restore: "restored" waits for the library to keep status and shelves.
+      const town = accountTown();
+      const first = town.actions.registerBook(
+        { title: "こころ", author: "", isbn: KOKORO },
+        "isbn",
+      );
+      town.actions.toggleLibrary("their-kokoro");
+      assert.deepEqual(town.getSnapshot().library, []);
+      const books = town.getSnapshot().books.length;
+      assert.deepEqual(
+        town.actions.registerBook(
+          { title: "こころ", author: "", isbn: KOKORO },
+          "isbn",
+        ),
+        first,
+      );
+      assert.deepEqual(town.getSnapshot().library, ["their-kokoro"]);
+      assert.equal(town.getSnapshot().books.length, books);
+    },
+  );
+
+  check("while the town loads, a book is never said to be registered", () => {
+    let saves = 0;
+    const loading = createTownStore({
+      kind: "account",
+      newId: counterId,
+      load: () => new Promise(() => {}),
+      save: () => {
+        saves++;
+        return "saved";
+      },
+    });
+    loading.initialize();
+    assert.deepEqual(
+      loading.actions.registerBook(
+        { title: "こころ", author: "", isbn: KOKORO },
+        "scan",
+      ),
+      { result: "not-saved" },
+    );
+    assert.equal(
+      loading.actions.addBook({ title: "手書きの本", author: "" }),
+      null,
+    );
+    assert.deepEqual(loading.getSnapshot().library, []);
+    assert.equal(saves, 0);
+    // Still checking who is signed in: the demo in this browser is not
+    // written to in the meantime either.
+    const repo = createMemoryRepository();
+    const checking = createTownStore(repo, undefined, { follow: () => {} });
+    checking.initialize();
+    assert.deepEqual(
+      checking.actions.registerBook({ title: "こころ", author: "" }, "manual"),
+      { result: "not-saved" },
+    );
+    assert.deepEqual(repo.load().state.library, []);
+  });
+
+  check(
+    "when the account could not be read, a book is never said to be registered",
+    () => {
+      // Nothing is ever written there; the page has to be read again.
+      const unread = createTownStore(
+        unavailableBackend(structuredClone(seedState)),
+      );
+      unread.initialize();
+      const before = unread.getSnapshot();
+      assert.deepEqual(
+        unread.actions.registerBook(
+          { title: "こころ", author: "", isbn: KOKORO },
+          "isbn",
+        ),
+        { result: "not-saved" },
+      );
+      assert.equal(
+        unread.actions.addBook({ title: "手書きの本", author: "" }),
+        null,
+      );
+      assert.equal(unread.getSnapshot(), before);
+      // Only out of reach for now: kept, and sent once it can be.
+      const offline = createTownStore({
+        kind: "account",
+        newId: counterId,
+        load: () => ({ state: structuredClone(seedState), status: "saved" }),
+        save: () => "unavailable",
+      });
+      offline.initialize();
+      assert.equal(
+        offline.actions.registerBook(
+          { title: "こころ", author: "", isbn: KOKORO },
+          "isbn",
+        )?.result,
+        "added",
+      );
+    },
+  );
+
+  check("a title or author over 200 characters ends in …", () => {
+    const repo = createMemoryRepository();
+    const town = createTownStore(repo);
+    const done = town.actions.registerBook(
+      {
+        title: "あ".repeat(250),
+        author: "い".repeat(198) + " " + "う".repeat(40),
+      },
+      "manual",
+    );
+    assert.equal(done?.result, "added");
+    const id = done?.result === "added" ? done.bookId : "";
+    // Named as kept, for the screen to say what was registered.
+    assert.equal(
+      done?.result === "added" && done.title,
+      "あ".repeat(199) + "…",
+    );
+    // Kept through a reload, which keeps no title over 200 characters.
+    const book = repo.load().state.books.find((entry) => entry.id === id);
+    assert.equal(book?.title, "あ".repeat(199) + "…");
+    // A space left at the cut is dropped before the ….
+    assert.equal(book?.author, "い".repeat(198) + "…");
+    // Exactly 200 is kept whole; a cut never splits a character in two.
+    const whole = town.actions.addBook({ title: "え".repeat(200), author: "" });
+    assert.equal(
+      town.getSnapshot().books.find((entry) => entry.id === whole)?.title,
+      "え".repeat(200),
+    );
+    const wide = town.actions.addBook({ title: "𠮷".repeat(150), author: "" });
+    const cut = town
+      .getSnapshot()
+      .books.find((entry) => entry.id === wide)?.title;
+    assert.equal(cut, "𠮷".repeat(99) + "…");
+    assert.ok(cut!.length <= 200);
+    // Blank is still no title.
+    assert.equal(
+      town.actions.registerBook({ title: "　 ", author: "" }, "manual"),
+      null,
+    );
+  });
+
+  check(
+    "openBD is asked 100 ISBNs at a time, and read with the publisher",
+    () => {
+      const isbns = Array.from({ length: 250 }, (_, i) => String(i));
+      const questions = openBdQuestions(isbns);
+      assert.deepEqual(
+        questions.map((question) => question.isbns.length),
+        [100, 100, 50],
+      );
+      assert.equal(
+        questions[2].url,
+        "https://api.openbd.jp/v1/get?isbn=" + isbns.slice(200).join(","),
+      );
+      const found = openBdBooks(
+        [KOKORO, "9784101092058", "9784003101018"],
+        [
+          {
+            summary: {
+              title: " こころ ",
+              author: "夏目漱石／著",
+              publisher: "新潮社",
+            },
+            onix: {
+              ProductSupply: {
+                SupplyDetail: { Price: [{ PriceAmount: "400" }] },
+              },
+            },
+          },
+          null,
+          { summary: { title: "  " } },
+        ],
+      );
+      assert.deepEqual(
+        [...found.values()],
+        [
+          {
+            isbn: KOKORO,
+            title: "こころ",
+            author: "夏目漱石",
+            publisher: "新潮社",
+            price: 440,
+          },
+        ],
+      );
+    },
+  );
+}
 
 check("reading, books, settings and seen notices survive reload", () => {
   const repo = createMemoryRepository();

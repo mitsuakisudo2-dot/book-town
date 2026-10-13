@@ -58,6 +58,11 @@ export interface SearchOptions {
   /** The reader's own books, first among equals (pickers). */
   own?: ReadonlySet<string>;
   limit?: number;
+  /**
+   * The ids of the books a genre alone finds (a genre chip such as 登録した本);
+   * any other is found only by its title, author or ISBN. Every book when absent.
+   */
+  genreFinds?: ReadonlySet<string>;
   /** Score every book instead of those the gram index keeps (tests compare the two). */
   unpruned?: boolean;
 }
@@ -464,7 +469,7 @@ function isbnBegins(book: Book, digits: string): boolean {
   );
 }
 
-function scoreBook(query: Query, keys: BookKeys): Hit | null {
+function scoreBook(query: Query, keys: BookKeys, byGenre = true): Hit | null {
   const ruby = rubyForm(query.forms[0], keys);
   const forms = ruby ? [...query.forms, ruby] : query.forms;
   let best = better(
@@ -475,7 +480,7 @@ function scoreBook(query: Query, keys: BookKeys): Hit | null {
     matchKeys(forms, keys.subtitle, SUBTITLE),
   );
   // Genres are local: they keep the genre buttons working.
-  if (genreMatch(query, keys.genre))
+  if (byGenre && genreMatch(query, keys.genre))
     best = better(best, {
       rank: MATCH.other,
       spelling: 0,
@@ -541,11 +546,12 @@ export function rankBooks(
   const pool = new Set(
     options.unpruned ? books : candidates(postingsOf(books), read.pruning),
   );
+  const genreFinds = (book: Book) => options.genreFinds?.has(book.id) ?? true;
   let byGenre = false;
   let genreAsked = false;
   for (const book of books) {
     const genre = keysOf(book).genre;
-    if (!genreMatch(read, genre)) continue;
+    if (!genreMatch(read, genre) || !genreFinds(book)) continue;
     pool.add(book);
     byGenre = true;
     genreAsked ||= genre === read.key;
@@ -559,7 +565,7 @@ export function rankBooks(
     [];
   for (const book of pool) {
     const keys = keysOf(book);
-    let hit = scoreBook(read, keys);
+    let hit = scoreBook(read, keys, genreFinds(book));
     // Ranked with titles that hold the query: not sure enough for Enter.
     if (isbnStart && isbnBegins(book, isbnStart))
       hit = better(hit, {

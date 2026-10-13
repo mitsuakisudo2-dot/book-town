@@ -19,6 +19,16 @@ export class TownSyncError extends Error {
 }
 
 /**
+ * Rows changed while they were being read, as when another device saves:
+ * nothing is wrong with the network, and reading again at once will do.
+ */
+export class RowsChangedError extends TownSyncError {
+  constructor(message: string) {
+    super(message, true);
+  }
+}
+
+/**
  * Network trouble, a busy server and an expired login get another try. Anything
  * else is the database saying no (a rule, a limit, a taken ID) and would only
  * fail again.
@@ -49,6 +59,64 @@ export async function settled<T>(
 export const all = async <T>(
   request: PromiseLike<Outcome<T[]>>,
 ): Promise<T[]> => (await settled(request)).data ?? [];
+
+/** How many rows `allRows` asks for at a time; Supabase's own limit. */
+const PAGE = 1000;
+
+/** A select that can be put in order and read a stretch at a time. */
+export interface Pageable<T> {
+  order(column: string): Pageable<T>;
+  range(from: number, to: number): PromiseLike<Outcome<T[]>>;
+}
+
+/**
+ * Reads every row a select matches, a page at a time, until the rows the
+ * first page counted are all in (or a page brings nothing new), so it works
+ * whatever the server's own limit is. The rows go in
+ * the order of their key (the primary key, without the columns the select
+ * fixes). Each page after the first starts again at the last row already read:
+ * if another row stands there, rows were added or removed ahead of it
+ * meanwhile, so the pages no longer meet and one could slip between them. That,
+ * a row met twice, or a total other than the first page's count fails as worth
+ * retrying, so the whole town is read again rather than written from a short
+ * list.
+ */
+export async function allRows<T extends Record<string, unknown>>(
+  select: (count?: "exact") => Pageable<T>,
+  keys: (keyof T & string)[],
+  size = PAGE,
+): Promise<T[]> {
+  const keyOf = (row: T) => JSON.stringify(keys.map((column) => row[column]));
+  const rows: T[] = [];
+  const seen = new Set<string>();
+  let total: number | null = null;
+  for (let first = true; ; first = false) {
+    let query = select(first ? "exact" : undefined);
+    for (const key of keys) query = query.order(key);
+    const from = first ? 0 : rows.length - 1;
+    const outcome = await settled(query.range(from, from + size - 1));
+    if (first) total = outcome.count ?? null;
+    const page = outcome.data ?? [];
+    if (!first && (!page.length || keyOf(page[0]) !== keyOf(rows[from])))
+      throw new RowsChangedError("Rows moved between two pages; reading again");
+    const fresh = first ? page : page.slice(1);
+    for (const row of fresh) {
+      const key = keyOf(row);
+      if (seen.has(key))
+        throw new RowsChangedError("A row was read twice; reading again");
+      seen.add(key);
+      rows.push(row);
+    }
+    if (!fresh.length || total === null || rows.length >= total) break;
+  }
+  if (total === null)
+    throw new TownSyncError("The rows were not counted; reading again", true);
+  if (rows.length !== total)
+    throw new RowsChangedError(
+      `Read ${rows.length} rows of ${total}; reading again`,
+    );
+  return rows;
+}
 
 export const chunks = <T>(list: T[], size: number): T[][] =>
   Array.from({ length: Math.ceil(list.length / size) }, (_, index) =>
@@ -156,7 +224,8 @@ export function backgroundSync<T>(
 
   /** Reads the value, waiting out network trouble. */
   async function load(): Promise<T> {
-    for (let attempt = 0; ; attempt++) {
+    let rereads = 0;
+    for (let attempt = 0; ;) {
       try {
         const value = await spec.read();
         synced = value;
@@ -164,6 +233,12 @@ export function backgroundSync<T>(
       } catch (error) {
         if (closed || !(error instanceof TownSyncError && error.retry))
           throw error;
+        // Rows changed while being read: read again straight away, a few
+        // times, without a word, as the network is fine.
+        if (error instanceof RowsChangedError && rereads < 3) {
+          rereads += 1;
+          continue;
+        }
         report("unavailable");
         await new Promise((resume) =>
           setTimeout(
@@ -171,6 +246,7 @@ export function backgroundSync<T>(
             retryDelays[Math.min(attempt, retryDelays.length - 1)],
           ),
         );
+        attempt += 1;
       }
     }
   }

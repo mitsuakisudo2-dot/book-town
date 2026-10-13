@@ -518,6 +518,11 @@
 .register-form .form-label {
   margin-bottom: 6px;
 }
+.register-form .button,
+.register-camera,
+.scan-frame .button {
+  min-height: 44px;
+}
 .register-message {
   font-size: 12px;
   color: #5f7a62;

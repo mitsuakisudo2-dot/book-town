@@ -22,6 +22,7 @@ import {
 } from "../lib/reading";
 import { findReader, formatPostTime } from "../lib/social";
 import { BookPicker } from "./BookPicker";
+import { booksBeforeSearch } from "../lib/book-lists";
 import {
   HiddenWordsHint,
   HideWordsButton,
@@ -508,6 +509,7 @@ function StartReading({
         </h2>
         <BookPicker
           books={state.books}
+          genreFinds={booksBeforeSearch(state)}
           value={bookId}
           onChange={setBookId}
           label="読む本を探す"

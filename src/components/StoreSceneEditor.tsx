@@ -35,6 +35,7 @@ import {
 import { useWalkStore, walkStore } from "../lib/walk-store";
 import type { Book, TownState } from "../lib/types";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
+import { booksBeforeSearch } from "../lib/book-lists";
 import { StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { Icon, Modal } from "./ui";
 import { KeptDraftNote, StopConfirm, useDraftOwner } from "./KeptDraftNote";
@@ -131,10 +132,12 @@ export function StoreSceneEditor({
   const pop = placement ? bookPop(draft, placement.id) : undefined;
   const unplaced = unplacedBooks(draft);
   // Books are found the way every search finds them; the reader's own come
-  // first among equals, and near titles wait under a quiet heading.
+  // first among equals, and near titles wait under a quiet heading. A genre
+  // never finds a book another reader only typed in.
   const found = useBookSearch(state.books, query, {
     own: state.library,
     limit: 10,
+    genreFinds: booksBeforeSearch(state),
   });
   const searching = query.trim() !== "";
   const choices = searching

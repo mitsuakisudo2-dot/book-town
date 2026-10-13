@@ -37,6 +37,7 @@ import {
 import { leavePageFor } from "../lib/in-town";
 import { reviewNoteOf, reviewNoteWords } from "../lib/social";
 import { currentBookId } from "../lib/reading";
+import { booksBeforeSearch } from "../lib/book-lists";
 import { usePersistenceStatus } from "../lib/store";
 import { posterNewPath, posterPath, profilePath } from "../lib/paths";
 import { accountRequested } from "../lib/visitor";
@@ -868,10 +869,14 @@ function BookChoice({
     .map((bookId) => state.books.find((book) => book.id === bookId))
     .filter((book): book is Book => Boolean(book));
   const own = ownBooks(state);
+  // Before anything is typed, or by a genre, never a book another reader only
+  // typed in.
+  const beforeSearch = booksBeforeSearch(state);
   // The reader's own books come first among equal matches.
   const results = useBookSearch(state.books, query, {
     own: own.map(({ book }) => book.id),
     limit: OWN_SHOWN,
+    genreFinds: beforeSearch,
   });
   const searching = query.trim() !== "";
   // Titles only close in spelling wait under their own quiet heading.
@@ -882,7 +887,7 @@ function BookChoice({
       ? all
         ? own
         : own.slice(0, OWN_SHOWN)
-      : state.books.slice(0, OWN_SHOWN).map((book) => ({ book }));
+      : beforeSearch.slice(0, OWN_SHOWN).map((book) => ({ book }));
 
   function toggle(bookId: string) {
     if (max === 1) {
@@ -1025,7 +1030,9 @@ function BookChoice({
                 : `「${query.trim()}」に合う本は見つかりませんでした。プロフィールの「本を登録」から追加できます。`
             : own.length
               ? "あなたの本から"
-              : "街の本から（読んだ本や読みたい本を登録すると、ここに並びます）"}
+              : offered.length
+                ? "街の本から（読んだ本や読みたい本を登録すると、ここに並びます）"
+                : "題名や著者で、載せる本を探してください。"}
         </p>
       )}
       {full && chosen.length >= max && (

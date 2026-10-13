@@ -11,6 +11,7 @@ import {
   type TownState,
 } from "../lib/types";
 import { booksFelt, feelingsInTown } from "../lib/records";
+import { booksBeforeSearch } from "../lib/book-lists";
 import { findReader } from "../lib/social";
 import { bookPath } from "../lib/books";
 import {
@@ -85,17 +86,21 @@ export function SearchView({ state, actions, notify }: Shared) {
   const signal = (bookId: string) =>
     signals.get(bookId) ?? { shelves: 0, talk: 0, reviews: 0, wants: 0 };
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
-  const genres = [...new Set(state.books.map((book) => book.genre))];
+  // Before anything is typed, only books used where everyone can see them,
+  // the 見本's and the reader's own: never one another reader only typed in.
+  // A genre (a chip) finds only these too; a title or an author finds any.
+  const shown = useMemo(() => booksBeforeSearch(state), [state]);
+  const genres = [...new Set(shown.map((book) => book.genre))];
 
   // Lists of what is talked about or shelved show only once there is enough
   // of it to be worth a list: a town of three readers has no "popular" books.
-  const talked = [...state.books]
+  const talked = [...shown]
     .filter((book) => signal(book.id).talk > 0)
     .sort((a, b) => signal(b.id).talk - signal(a.id).talk)
     .slice(0, 6);
   const shelvedAndWanted = (bookId: string) =>
     signal(bookId).shelves * 3 + signal(bookId).wants;
-  const popular = [...state.books]
+  const popular = [...shown]
     .filter((book) => shelvedAndWanted(book.id) > 0)
     .sort((a, b) => shelvedAndWanted(b.id) - shelvedAndWanted(a.id))
     .slice(0, 6);
@@ -106,7 +111,7 @@ export function SearchView({ state, actions, notify }: Shared) {
   const feelings = feelingsInTown(state);
   const felt = feeling
     ? booksFelt(state, feeling).flatMap((bookId) =>
-        state.books.filter((book) => book.id === bookId),
+        shown.filter((book) => book.id === bookId),
       )
     : [];
   const shelvedAt = (bookId: string) => {
@@ -129,7 +134,7 @@ export function SearchView({ state, actions, notify }: Shared) {
       .filter(Boolean)
       .join("・");
   // Books few people have shelved or talked about yet: the quiet corners of the town.
-  const quiet = state.books.filter(
+  const quiet = shown.filter(
     (book) => signal(book.id).shelves <= 1 && signal(book.id).reviews === 0,
   );
 
@@ -141,6 +146,7 @@ export function SearchView({ state, actions, notify }: Shared) {
   );
   const books = useBookSearch(state.books, term && !tagTerm ? query : "", {
     presence,
+    genreFinds: shown,
   });
   const { found, near } = books;
   const tagResults = tagTerm ? postsWithTag(state, tagTerm) : [];

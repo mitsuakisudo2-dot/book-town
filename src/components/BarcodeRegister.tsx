@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { normalizeIsbn } from "../lib/books";
+import { lookUpBook } from "../lib/openbd";
+import { libraryBookByIsbn, useTownBackend } from "../lib/store";
 import type { TownActions, TownState } from "../lib/types";
 import { Icon, Modal } from "./ui";
 
@@ -16,39 +18,8 @@ const detectorClass = (): DetectorClass | undefined =>
     : (window as unknown as { BarcodeDetector?: DetectorClass })
         .BarcodeDetector;
 
-/** Looks an ISBN up in openBD. Any failure falls back to typing the title by hand. */
-async function lookup(
-  isbn: string,
-): Promise<{ title: string; author: string; price?: number } | null> {
-  try {
-    const response = await fetch(`https://api.openbd.jp/v1/get?isbn=${isbn}`);
-    if (!response.ok) return null;
-    const [record] = (await response.json()) as Array<{
-      summary?: { title?: string; author?: string };
-      onix?: {
-        ProductSupply?: {
-          SupplyDetail?: { Price?: Array<{ PriceAmount?: string }> };
-        };
-      };
-    } | null>;
-    const title = record?.summary?.title?.trim();
-    // openBD lists the price before tax; the app shows prices with tax included.
-    const net = Number(
-      record?.onix?.ProductSupply?.SupplyDetail?.Price?.[0]?.PriceAmount,
-    );
-    return title
-      ? {
-          title,
-          author: (record?.summary?.author ?? "").replace(/／著.*$/, "").trim(),
-          ...(Number.isFinite(net) && net > 0
-            ? { price: Math.floor(net * 1.1) }
-            : {}),
-        }
-      : null;
-  } catch {
-    return null;
-  }
-}
+const NOT_AN_ISBN =
+  "ISBNとして読めませんでした。本の裏表紙にある978か979で始まる13桁の数字を入力してください。";
 
 /**
  * Register a book by scanning its ISBN barcode with the camera (where the browser can
@@ -66,15 +37,28 @@ export function BarcodeRegister({
   onClose: () => void;
 }) {
   const id = useId();
+  const savedIn = useTownBackend();
   const video = useRef<HTMLVideoElement>(null);
   const [scanning, setScanning] = useState(false);
   const [isbnText, setIsbnText] = useState("");
-  const [isbn, setIsbn] = useState<string | null>(null);
+  // The ISBN the camera read, to tell a scanned book from a typed one.
+  const [scanned, setScanned] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [price, setPrice] = useState("");
   const [message, setMessage] = useState("");
   const [looking, setLooking] = useState(false);
+  // The ISBN being looked up; an answer for any other comes too late.
+  const asking = useRef<string | null>(null);
+  // The ISBN the message and the filled-in book are about, and what was
+  // filled in. Another ISBN takes them back out, so one book's title is
+  // never registered under another book's ISBN.
+  const about = useRef<string | null>(null);
+  const filled = useRef<{
+    title: string;
+    author: string;
+    price: string;
+  } | null>(null);
   const canScan = Boolean(detectorClass());
 
   useEffect(() => {
@@ -105,6 +89,7 @@ export function BarcodeRegister({
             .find(Boolean);
           if (found) {
             setScanning(false);
+            setScanned(found);
             void accept(found);
           }
         }, 350);
@@ -122,25 +107,63 @@ export function BarcodeRegister({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning]);
 
+  /** Forgets what was found or said for another ISBN than `isbn`. */
+  function moveTo(isbn: string | null) {
+    if (isbn === about.current) return;
+    about.current = null;
+    asking.current = null;
+    setLooking(false);
+    setMessage("");
+    const was = filled.current;
+    filled.current = null;
+    if (!was) return;
+    // Only what was filled in: what the reader typed stays.
+    setTitle((now) => (now === was.title ? "" : now));
+    setAuthor((now) => (now === was.author ? "" : now));
+    setPrice((now) => (now === was.price ? "" : now));
+  }
+
+  function fill(book: { title: string; author: string; price?: number }) {
+    const next = {
+      title: book.title,
+      author: book.author,
+      price: book.price ? String(book.price) : "",
+    };
+    filled.current = next;
+    setTitle(next.title);
+    setAuthor(next.author);
+    setPrice(next.price);
+  }
+
   async function accept(found: string) {
-    setIsbn(found);
     setIsbnText(found);
-    const known = state.books.find((book) => book.isbn === found);
+    moveTo(found);
+    about.current = found;
+    // Whether it is already registered is about the reader's own library;
+    // a book the town knows only fills in its title.
+    const mine = libraryBookByIsbn(state, found);
+    const known = mine ?? state.books.find((book) => book.isbn === found);
     if (known) {
-      setTitle(known.title);
-      setAuthor(known.author);
-      setPrice(known.price ? String(known.price) : "");
-      setMessage("この本はもう登録されています。");
+      asking.current = null;
+      setLooking(false);
+      fill(known);
+      setMessage(
+        mine
+          ? "もうライブラリにあります。"
+          : "書籍情報が見つかりました。確認して登録してください。",
+      );
       return;
     }
+    asking.current = found;
     setLooking(true);
     setMessage("書籍情報を探しています…");
-    const record = await lookup(found);
+    // Gives up after a few seconds, so the title can always be typed by hand.
+    const book = await lookUpBook(found);
+    if (asking.current !== found) return;
+    asking.current = null;
     setLooking(false);
-    if (record) {
-      setTitle(record.title);
-      setAuthor(record.author);
-      setPrice(record.price ? String(record.price) : "");
+    if (book) {
+      fill(book);
       setMessage("書籍情報が見つかりました。確認して登録してください。");
     } else {
       setMessage(
@@ -153,9 +176,7 @@ export function BarcodeRegister({
     event.preventDefault();
     const found = normalizeIsbn(isbnText);
     if (!found) {
-      setMessage(
-        "ISBNとして読めませんでした。本の裏表紙にある978か979で始まる13桁の数字を入力してください。",
-      );
+      setMessage(NOT_AN_ISBN);
       return;
     }
     void accept(found);
@@ -163,20 +184,41 @@ export function BarcodeRegister({
 
   function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const yen = Number(price.replace(/[,，円¥\s]/g, ""));
-    const bookId = actions.addBook({
-      title,
-      author,
-      ...(isbn ? { isbn } : {}),
-      ...(price.trim() && Number.isInteger(yen) && yen > 0
-        ? { price: yen }
-        : {}),
-    });
-    if (!bookId) {
-      setMessage("タイトルを入力してください。");
+    // The ISBN in its field is registered, whether it was looked up or not.
+    const typed = isbnText.trim();
+    const isbn = typed ? normalizeIsbn(typed) : null;
+    if (typed && !isbn) {
+      setMessage(NOT_AN_ISBN);
       return;
     }
-    notify(`『${title.trim()}』を登録しました`);
+    const yen = Number(price.replace(/[,，円¥\s]/g, ""));
+    const done = actions.registerBook(
+      {
+        title,
+        author,
+        ...(isbn ? { isbn } : {}),
+        ...(price.trim() && Number.isInteger(yen) && yen > 0
+          ? { price: yen }
+          : {}),
+      },
+      !isbn ? "manual" : isbn === scanned ? "scan" : "isbn",
+    );
+    // A visitor is asked to sign in instead; nothing was registered.
+    if (!done) return;
+    if (done.result === "not-saved") {
+      setMessage(
+        savedIn === "unavailable"
+          ? "保存できません。ページを読み込み直してから、もう一度登録してください。"
+          : "まだ保存できません。読み込みが終わってから、もう一度押してください。",
+      );
+      return;
+    }
+    // Named as kept: a book the town knew by its own title, a long one cut.
+    notify(
+      done.result === "already"
+        ? `『${done.title}』はもうライブラリにあります`
+        : `『${done.title}』を登録しました`,
+    );
     onClose();
   }
 
@@ -201,7 +243,7 @@ export function BarcodeRegister({
         canScan && (
           <button
             type="button"
-            className="button"
+            className="button register-camera"
             onClick={() => {
               setMessage("");
               setScanning(true);
@@ -228,7 +270,9 @@ export function BarcodeRegister({
             value={isbnText}
             onChange={(event) => {
               setIsbnText(event.target.value);
-              setIsbn(null);
+              // Another ISBN: the old one's answer is no longer awaited, and
+              // what was found for it is taken back out.
+              moveTo(normalizeIsbn(event.target.value));
             }}
           />
         </label>
