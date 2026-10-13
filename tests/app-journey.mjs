@@ -617,6 +617,17 @@ try {
         .click();
       await expect(page.locator(".open-shelf-book")).toHaveCount(5);
       await page.getByRole("button", { name: "看板を決める" }).click();
+      // 戻る goes back one step at a time, keeping what was chosen.
+      await page.goBack();
+      await expect(page.locator(".open-shelf-book")).toHaveCount(5);
+      await page.goBack();
+      await expect(
+        page.getByRole("button", { name: /人生の9冊の本屋/ }),
+      ).toBeVisible();
+      await expect(page).toHaveURL(/\/my-shop\/$/);
+      await page.goForward();
+      await expect(page.locator(".open-shelf-book")).toHaveCount(5);
+      await page.goForward();
       await page.getByRole("button", { name: "名前の例" }).click();
       await expect(page.getByLabel("書店の名前")).toHaveValue("雨音書店");
       await page.getByLabel("ひとこと").fill("一頁ぶん、遠回り。");
@@ -627,6 +638,10 @@ try {
       await expect(page.getByRole("status")).toContainText(
         "「雨音書店」が開店しました",
       );
+      // The steps that led to the opening are behind it: 戻る leaves the page.
+      await expect
+        .poll(() => page.evaluate(() => history.state?.booktownLayers ?? null))
+        .toBeNull();
       const shop = (await stored()).ownShop;
       expect(shop.name).toBe("雨音書店");
       expect(shop.tagline).toBe("一頁ぶん、遠回り。");

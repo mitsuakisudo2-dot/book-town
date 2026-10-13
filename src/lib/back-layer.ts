@@ -122,16 +122,20 @@ if (typeof window !== "undefined")
 /**
  * Goes on to another page from inside dialogs (a post sent, then the
  * timeline): their steps come off first, so that 戻る from there returns to
- * the page beneath. A named layer (a book in hand) stays, to come back to.
+ * the page beneath. A named layer (a book in hand) stays, to come back to,
+ * unless `leaving` says it goes too.
  */
-export function leaveLayers(go: () => void) {
+export function leaveLayers(
+  go: () => void,
+  leaving: (token: string) => boolean = unnamed,
+) {
   const layers = stack();
   let count = 0;
-  while (count < layers.length && unnamed(layers[layers.length - 1 - count]))
+  while (count < layers.length && leaving(layers[layers.length - 1 - count]))
     count += 1;
   if (!count) return go();
-  const leaving = new Set(layers.slice(-count));
-  for (const layer of opened) if (leaving.has(layer.token)) layer.left = true;
+  const left = new Set(layers.slice(-count));
+  for (const layer of opened) if (left.has(layer.token)) layer.left = true;
   void back(count).then(() => setTimeout(go, 0));
 }
 
@@ -173,7 +177,7 @@ function record(layer: Layer) {
       },
       "",
     );
-  } else if (layers.at(-1) !== layer.token)
+  } else if (!layers.includes(layer.token))
     // Coming back to a step that recorded this layer opens no second one.
     history.pushState(
       {

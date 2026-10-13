@@ -18,6 +18,7 @@ import { BookPicker } from "./BookPicker";
 import { BookJacket, Icon } from "./ui";
 import "./open-shop.css";
 import { noteShopOpened } from "../lib/just-opened";
+import { leaveLayers, useBackLayer, useLayerReturn } from "../lib/back-layer";
 
 type Shared = {
   state: TownState;
@@ -206,15 +207,31 @@ export function OpenShop({
     )
     .slice(0, Math.max(0, 12 - suggested.length));
 
-  function choose(next: Kind) {
+  function choose(
+    next: Kind,
+    at: "books" | "sign" = next === "free" ? "sign" : "books",
+  ) {
     setKind(next);
     const preset =
       next === "nine"
         ? state.me.lifeNine.filter((id) => book(id)).slice(0, 9)
         : [];
     setPicked(preset);
-    setStep(next === "free" ? "sign" : "books");
+    setStep(at);
   }
+  // Back or forward to a step of this flow shows that step again.
+  useLayerReturn((name) => {
+    const [flow, was, at] = name.split(":");
+    const known = KINDS.find((entry) => entry.kind === was);
+    if (flow !== "open-shop" || !known || (at !== "books" && at !== "sign"))
+      return false;
+    if (was === kind && at === step) return false;
+    // Within this visit the chosen books are kept; a page come back to
+    // afresh starts the step from its usual books.
+    if (was === kind && (picked.length || step !== "kind")) setStep(at);
+    else choose(known.kind, at);
+    return true;
+  });
   function toggle(bookId: string) {
     setPicked((list) =>
       list.includes(bookId)
@@ -249,12 +266,37 @@ export function OpenShop({
       ),
     );
     noteShopOpened();
+    // The steps that led here come off: 戻る from the open shop leaves it.
+    leaveLayers(
+      () => {},
+      (token) => token.startsWith("open-shop:"),
+    );
     setOpened({
       name: shopName,
       words: OPENED[Math.floor(Math.random() * OPENED.length)],
     });
     setStep("opened");
   }
+
+  // Each step past the first is one step of 戻る, back to the one before.
+  const steps = (
+    <>
+      {kind !== "free" && (step === "books" || step === "sign") && (
+        <StepBack
+          key="books"
+          name={`open-shop:${kind}:books`}
+          onBack={() => setStep("kind")}
+        />
+      )}
+      {step === "sign" && (
+        <StepBack
+          key="sign"
+          name={`open-shop:${kind}:sign`}
+          onBack={() => setStep(kind === "free" ? "kind" : "books")}
+        />
+      )}
+    </>
+  );
 
   if (step === "opened")
     return (
@@ -336,6 +378,7 @@ export function OpenShop({
   if (step === "books")
     return (
       <section className="open-shop" aria-labelledby="open-books-title">
+        {steps}
         <button
           type="button"
           className="text-button open-back"
@@ -449,6 +492,7 @@ export function OpenShop({
 
   return (
     <section className="open-shop" aria-labelledby="open-sign-title">
+      {steps}
       <button
         type="button"
         className="text-button open-back"
@@ -529,4 +573,10 @@ export function OpenShop({
       </form>
     </section>
   );
+}
+
+/** One step of opening the shop, as a step of 戻る. */
+function StepBack({ name, onBack }: { name: string; onBack: () => void }) {
+  useBackLayer(onBack, name);
+  return null;
 }
