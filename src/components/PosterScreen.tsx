@@ -1,19 +1,27 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ME_ID, type TownActions, type TownState } from "../lib/types";
 import {
+  FOLDED_POSTER_NAMES,
   POSTER_TEMPLATE_WORDS,
   posterBookIds,
   posterTitle,
 } from "../lib/posters";
 import { bookPath } from "../lib/books";
-import { findReader, formatPostTime } from "../lib/social";
+import {
+  findReader,
+  formatPostTime,
+  reviewCoverOf,
+  reviewNoteOf,
+  reviewNoteWords,
+} from "../lib/social";
 import { isDatabaseId, posterNewPath, profilePath } from "../lib/paths";
 import { usePersistenceStatus } from "../lib/store";
 import { useUrlParam } from "../lib/url-state";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
-import { PosterPages } from "./PosterView";
+import { PosterFoldCover, PosterPages } from "./PosterView";
 import { ReportButton } from "./Report";
 import { BackLink } from "./BackLink";
 import "./poster-screen.css";
@@ -26,7 +34,10 @@ type Shared = {
 
 /**
  * A poster's own page: who made it, the poster at its largest, and the
- * books on it, each a step to its own page.
+ * books on it, each a step to its own page. Folded by reports, the poster
+ * and its books wait behind one cover until the reader opens it; a spoiler
+ * still has its door after that. Opened directly, a spoiler the reader
+ * keeps out of their lists (出さない) is here too, behind its door.
  */
 export function PosterScreen({
   state,
@@ -36,6 +47,7 @@ export function PosterScreen({
   // The page being read stays in the address (?page=2), so coming back from
   // a book on it opens the same page.
   const [pageParam, setPageParam] = useUrlParam("page");
+  const [read, setRead] = useState(false);
   const startPage = Math.max(0, parseInt(pageParam ?? "", 10) - 1 || 0);
   const found = state.posters.find((entry) => entry.id === posterId);
   // Someone else's draft is theirs alone, as if it were not there.
@@ -73,23 +85,39 @@ export function PosterScreen({
   const books = posterBookIds(poster)
     .map((id) => state.books.find((book) => book.id === id))
     .filter((book) => book !== undefined);
-  // A spoiler's words, its heading too, stay behind the door.
-  const title = poster.spoiler
-    ? "ネタバレを含むポスター"
-    : posterTitle(poster, state.books);
+  const cover = reviewCoverOf(state, "poster", poster.id, poster.authorId);
+  const note = reviewNoteOf(state, "poster", poster.id, poster.authorId);
+  // Opened with 読む, it stays open while the reader is here.
+  const covering = read ? null : cover;
+  // A spoiler's words, its heading too, stay behind the door; a folded
+  // poster's stay behind its cover, and are not its page's name either.
+  const title = cover
+    ? FOLDED_POSTER_NAMES[cover]
+    : poster.spoiler
+      ? "ネタバレを含むポスター"
+      : posterTitle(poster, state.books);
   const profile = profilePath(author.id);
   return (
     <div className="poster-screen">
       <BackLink className="back-link" />
       <div className="poster-screen-layout">
         <div className="poster-screen-sheet">
-          <PosterPages
-            poster={poster}
-            books={state.books}
-            author={author}
-            startPage={startPage}
-            onTurn={(at) => setPageParam(at ? String(at + 1) : null)}
-          />
+          {covering ? (
+            <PosterFoldCover
+              cover={covering}
+              author={author}
+              onRead={() => setRead(true)}
+            />
+          ) : (
+            <PosterPages
+              poster={poster}
+              books={state.books}
+              author={author}
+              startPage={startPage}
+              onTurn={(at) => setPageParam(at ? String(at + 1) : null)}
+              takeFocus={read}
+            />
+          )}
         </div>
         <aside className="poster-screen-about" aria-labelledby="poster-title">
           <div className="poster-screen-author">
@@ -123,6 +151,14 @@ export function PosterScreen({
           <h1 id="poster-title" className="poster-screen-title">
             {title}
           </h1>
+          {note && (
+            <div
+              className="spoiler-folded-note report-folded-note poster-screen-review"
+              role="note"
+            >
+              <p>{reviewNoteWords("poster", note)}</p>
+            </div>
+          )}
           {draft && (
             <p className="poster-screen-draft" role="note">
               <Icon name="lock" size={14} />
@@ -166,7 +202,7 @@ export function PosterScreen({
               </ReportButton>
             </div>
           )}
-          {books.length > 0 && (
+          {books.length > 0 && !covering && (
             <section
               className="poster-screen-books"
               aria-labelledby="poster-books-title"

@@ -114,6 +114,19 @@
   accent-color: var(--green);
   margin: 0;
 }
+.record-going {
+  /* One line that says where the record goes, and one way to change it. */
+  margin: 0 0 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 12px;
+  color: #5f7a62;
+}
+.record-going .text-button {
+  font-size: 12px;
+}
 .record-actions {
   display: flex;
   flex-wrap: wrap;
@@ -202,6 +215,11 @@
   gap: 4px 14px;
   font-size: 12px;
   color: #5f7a62;
+}
+.book-feelings-own-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
 }
 .book-feelings-own p {
   display: inline-flex;
@@ -297,4 +315,23 @@
   .feeling-chip {
     transition: none;
   }
+}
+/* 「ネタバレの表示」: three longer choices, one to a line. */
+.record-visibility.spoiler-display {
+  flex-direction: column;
+  align-items: stretch;
+}
+.record-visibility.spoiler-display label {
+  border-radius: 10px;
+  align-items: flex-start;
+  line-height: 1.6;
+}
+.record-visibility.spoiler-display input {
+  margin-top: 4px;
+  flex: none;
+}
+.spoiler-display-note {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #5f6a55;
 }

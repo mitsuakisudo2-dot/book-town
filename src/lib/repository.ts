@@ -6,6 +6,7 @@ import { DEFAULT_HANDLE, handleProblem } from "./handles";
 import { createRegisteredBook, normalizeIsbn, REGISTERED_GENRE } from "./books";
 import {
   COMPOSE_ICONS,
+  SPOILER_DISPLAYS,
   LIKE_TAPS_MAX,
   ME_ID,
   POP_REACTIONS,
@@ -17,6 +18,7 @@ import {
   shelfUsed,
   type Book,
   type ComposeIcon,
+  type SpoilerDisplay,
   type PersistenceStatus,
   type Post,
   type Reader,
@@ -468,10 +470,16 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
           )
             ? (settings.composeIcon as ComposeIcon)
             : initial.settings.composeIcon,
+          // A choice already saved in this browser was the reader's own.
           readingPublic:
             typeof settings.readingPublic === "boolean"
               ? settings.readingPublic
               : initial.settings.readingPublic,
+          spoilerDisplay: SPOILER_DISPLAYS.includes(
+            settings.spoilerDisplay as SpoilerDisplay,
+          )
+            ? (settings.spoilerDisplay as SpoilerDisplay)
+            : initial.settings.spoilerDisplay,
         },
         seenNotifications: Array.isArray(data.seenNotifications)
           ? [...new Set(data.seenNotifications)]

@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { TownActions, TownState } from "../lib/types";
-import { notificationsFor } from "../lib/notifications";
+import type { Notify, TownActions, TownState } from "../lib/types";
+import { monthDay, notificationsFor } from "../lib/notifications";
+import {
+  REPORT_KIND_WORDS,
+  REPORT_REASON_WORDS,
+  REPORT_STATUS_WORDS,
+} from "../lib/supabase/reports";
 import { useTownBackend } from "../lib/store";
 import { findReader, formatPostTime } from "../lib/social";
 import { useClock } from "./useClock";
@@ -13,7 +18,7 @@ import "./reading.css";
 type Shared = {
   state: TownState;
   actions: TownActions;
-  notify: (message: string) => void;
+  notify: Notify;
 };
 
 export function NotificationsView({ state, actions }: Shared) {
@@ -80,11 +85,49 @@ export function NotificationsView({ state, actions }: Shared) {
           </div>
         </div>
       )}
+      <OwnReports state={state} />
       <p className="search-note">
         {savedIn === "local"
           ? "お知らせはこのブラウザの中の出来事から作っています。デモの読書家の投稿は架空のデモデータです。"
           : "お知らせは、この街の投稿と、あなたの投稿への反応から作っています。"}
       </p>
     </div>
+  );
+}
+
+/**
+ * The reader's own reports, newest first: what, why, and how far along. Never
+ * which way it went, and no link to the thing (it may be gone). Not shown at
+ * all until there is one.
+ */
+function OwnReports({ state }: { state: TownState }) {
+  const reports = state.myReports;
+  const shown = reports.length > 0;
+  // Opened from a notice (/notifications/#reports), the list is brought into view.
+  useEffect(() => {
+    if (shown && location.hash === "#reports")
+      document.getElementById("reports")?.scrollIntoView({ block: "start" });
+  }, [shown]);
+  if (!shown) return null;
+  return (
+    <section
+      id="reports"
+      className="own-reports"
+      aria-labelledby="own-reports-title"
+    >
+      <h2 id="own-reports-title">あなたの通報</h2>
+      <ul>
+        {reports.map((report) => (
+          <li key={report.id}>
+            {[
+              monthDay(report.createdAt),
+              REPORT_KIND_WORDS[report.kind],
+              REPORT_REASON_WORDS[report.reason],
+              REPORT_STATUS_WORDS[report.status],
+            ].join(" · ")}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

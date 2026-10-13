@@ -58,3 +58,25 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* Under a cover's credit: small and quiet, for the rare rights holder, but
+   still readable (AA contrast on the page and the book in hand) and a 24px
+   target. */
+.cover-removal-link {
+  display: block;
+  min-height: 24px;
+  margin: -2px 0 6px;
+  padding: 3px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #626e59;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.cover-removal-link:hover,
+.cover-removal-link:focus-visible {
+  color: #4f5a47;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

@@ -12,7 +12,7 @@ import {
   type TownState,
 } from "../lib/types";
 import { booksFelt, feelingsInTown } from "../lib/records";
-import { findReader } from "../lib/social";
+import { findReader, wordsFolded } from "../lib/social";
 import { bookPath } from "../lib/books";
 import {
   bookSignals,
@@ -27,6 +27,7 @@ import {
   onSearchRequest,
   postsWithTag,
   popularTags,
+  tagLeftOut,
   takeRequestedSearch,
 } from "../lib/tags";
 import { readParam, replaceAddress, useUrlParam } from "../lib/url-state";
@@ -168,10 +169,12 @@ export function SearchView({ state, actions, notify }: Shared) {
       ? "著者名が近い本"
       : "題名や著者名が近い本";
   const tagResults = tagTerm ? postsWithTag(state, tagTerm) : [];
+  // Said once, without a count, as on a book's page: the reader chose this.
+  const tagHasLeftOut = tagTerm !== null && tagLeftOut(state, tagTerm);
   const people =
     term && !tagTerm
       ? [state.me, ...state.readers].filter((reader) =>
-          `${reader.name} ${reader.handle} ${reader.bio}`
+          `${reader.name} ${reader.handle} ${wordsFolded(state, "profile", reader.id) ? "" : reader.bio}`
             .toLocaleLowerCase()
             .includes(personTerm),
         )
@@ -186,7 +189,7 @@ export function SearchView({ state, actions, notify }: Shared) {
               : (findReader(state, shop.ownerId)?.name ?? "");
           return (
             shop.name +
-            shop.description +
+            (wordsFolded(state, "shop", shop.id) ? "" : shop.description) +
             owner +
             publicStock(state, shop)
               .map((book) => book.title + book.author)
@@ -270,7 +273,16 @@ export function SearchView({ state, actions, notify }: Shared) {
                 ))}
               </div>
             ) : (
-              <p className="search-empty">このタグの投稿は、まだありません。</p>
+              !tagHasLeftOut && (
+                <p className="search-empty">
+                  このタグの投稿は、まだありません。
+                </p>
+              )
+            )}
+            {tagHasLeftOut && (
+              <p className="search-empty">
+                ネタバレを含むかもしれない投稿は、設定により出していません
+              </p>
             )}
           </section>
         </div>

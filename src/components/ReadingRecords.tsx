@@ -5,6 +5,7 @@ import { profilePath } from "../lib/paths";
 import {
   bookFeelings,
   ownRecordFor,
+  recordNoteView,
   recordsOf,
   talkersOf,
 } from "../lib/records";
@@ -15,6 +16,7 @@ import {
   RECORD_NOTE_MAX_LENGTH,
   type Book,
   type Feeling,
+  type Notify,
   type ReadingRecord,
   type TownActions,
   type TownState,
@@ -26,7 +28,7 @@ import "./records.css";
 type Shared = {
   state: TownState;
   actions: TownActions;
-  notify: (message: string) => void;
+  notify: Notify;
 };
 
 const KEPT = [
@@ -35,6 +37,47 @@ const KEPT = [
   "しおり、確かに預かりました。",
 ];
 const pick = (list: string[]) => list[Math.floor(Math.random() * list.length)];
+
+/**
+ * Publishing is told every time, with the way back right there: no dialog to
+ * get past first, and nothing goes out unnoticed.
+ */
+function told(
+  actions: TownActions,
+  notify: Notify,
+  recordId: string,
+  isPublic: boolean,
+) {
+  if (isPublic) {
+    notify("公開しました。同じ本を読んだ人に届きます", {
+      label: "自分だけに戻す",
+      run: () => {
+        actions.updateRecord(recordId, { isPublic: false });
+        notify("自分だけに戻しました");
+      },
+    });
+  } else notify("自分だけにしました");
+}
+
+/** The quiet one-tap publish (or the way back) beside 「見直す」. */
+function PublishButton({
+  actions,
+  notify,
+  record,
+}: Pick<Shared, "actions" | "notify"> & { record: ReadingRecord }) {
+  return (
+    <button
+      type="button"
+      className="text-button record-publish"
+      onClick={() => {
+        actions.updateRecord(record.id, { isPublic: !record.isPublic });
+        told(actions, notify, record.id, !record.isPublic);
+      }}
+    >
+      {record.isPublic ? "自分だけにする" : "公開する"}
+    </button>
+  );
+}
 
 /**
  * Keeps what a reader felt when they finished a book: feelings instead of
@@ -64,13 +107,19 @@ export function RecordSheet({
         : [...list, feeling],
     );
 
+  // Saving and publishing are told apart: the toast says when a record went
+  // out to others (with the way back), and when it came back to the reader.
   function save() {
     const draft = { feelings, note, spoiler, isPublic };
     if (record) {
       actions.updateRecord(record.id, draft);
-      notify("記録を書き直しました");
-    } else if (actions.recordReading({ ...draft, bookId: book.id })) {
-      notify(pick(KEPT));
+      if (isPublic !== record.isPublic)
+        told(actions, notify, record.id, isPublic);
+      else notify("記録を書き直しました");
+    } else {
+      const id = actions.recordReading({ ...draft, bookId: book.id });
+      if (id && isPublic) told(actions, notify, id, true);
+      else if (id) notify(pick(KEPT));
     }
     onClose();
   }
@@ -130,27 +179,21 @@ export function RecordSheet({
           {note.length}/{RECORD_NOTE_MAX_LENGTH}
         </span>
       </div>
-      <fieldset className="record-visibility">
-        <legend>この記録を見られる人</legend>
-        <label>
-          <input
-            type="radio"
-            name="record-visibility"
-            checked={isPublic}
-            onChange={() => setIsPublic(true)}
-          />
-          公開
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="record-visibility"
-            checked={!isPublic}
-            onChange={() => setIsPublic(false)}
-          />
-          自分だけ
-        </label>
-      </fieldset>
+      <p className="record-going" aria-live="polite">
+        <Icon name={isPublic ? "users" : "lock"} size={14} />
+        <span>
+          {isPublic
+            ? "公開します（同じ本を読んだ人に届きます）"
+            : "自分だけに残します"}
+        </span>
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => setIsPublic(!isPublic)}
+        >
+          {isPublic ? "自分だけにする" : "公開にする"}
+        </button>
+      </p>
       <div className="record-actions">
         <button className="button primary" type="button" onClick={save}>
           {record ? "書き直す" : "記録する"}
@@ -237,13 +280,16 @@ export function BookFeelings({
                   .map((feeling) => FEELING_WORDS[feeling])
                   .join("・")}
           </p>
-          <button
-            type="button"
-            className="text-button"
-            onClick={() => setOpen(true)}
-          >
-            見直す
-          </button>
+          <span className="book-feelings-own-actions">
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setOpen(true)}
+            >
+              見直す
+            </button>
+            <PublishButton actions={actions} notify={notify} record={own} />
+          </span>
         </div>
       ) : (
         <button
@@ -295,7 +341,8 @@ export function RecordShelf({
         {records.map((record) => {
           const book = state.books.find((entry) => entry.id === record.bookId);
           if (!book) return null;
-          const hidden = record.spoiler && !mine && !opened.includes(record.id);
+          const noteView = recordNoteView(state, record);
+          const hidden = noteView === "folded" && !opened.includes(record.id);
           return (
             <li key={record.id} className="record-card">
               <Link href={bookPath(book.id)} className="record-card-book">
@@ -313,6 +360,7 @@ export function RecordShelf({
                   </p>
                 )}
                 {record.note &&
+                  noteView !== "left_out" &&
                   (hidden ? (
                     <button
                       type="button"
@@ -342,6 +390,13 @@ export function RecordShelf({
                     >
                       見直す
                     </button>
+                  )}
+                  {mine && (
+                    <PublishButton
+                      actions={actions}
+                      notify={notify}
+                      record={record}
+                    />
                   )}
                 </p>
               </div>
