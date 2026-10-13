@@ -799,6 +799,77 @@
   gap: 8px 14px;
   margin-top: 14px;
 }
+/* A line written while reading and not sent: offered as the book closes,
+   then kept above the start until it is used or thrown away. */
+.reading-unsent-line {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px dashed #cfd8bf;
+  border-radius: 8px;
+  background: #fbfaf4;
+}
+.reading-unsent-line p {
+  margin: 0;
+  font-size: 12px;
+  color: #6f7c64;
+}
+.reading-unsent-line blockquote,
+.reading-unsent blockquote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid #cfd8bf;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #55604b;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reading-unsent-line blockquote {
+  justify-self: stretch;
+  max-height: 9em;
+  overflow: auto;
+}
+.reading-line-to-add {
+  margin-bottom: 12px;
+}
+.reading-unsent {
+  max-width: 720px;
+  margin: 0 auto 8px;
+  padding: 16px 20px;
+  border: 1px solid #dfe5d2;
+  border-radius: 10px;
+  background: #f7f8f0;
+}
+.reading-unsent h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--ink);
+}
+.reading-unsent ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+.reading-unsent small {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #6f7c64;
+}
+.reading-unsent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
 @keyframes reading-closed-in {
   from {
     opacity: 0;

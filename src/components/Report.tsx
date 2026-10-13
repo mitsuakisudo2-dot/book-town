@@ -7,6 +7,12 @@ import { isDatabaseId } from "../lib/paths";
 import type { Book } from "../lib/types";
 import { closeReport, openReport, useReportTarget } from "../lib/report";
 import type { ReportTarget } from "../lib/report";
+import { useKeptDraft } from "../lib/kept-draft";
+import {
+  reportDrafts,
+  reportWorkKey,
+  type ReportWork,
+} from "../lib/report-draft";
 import { townActions, useTownBackend } from "../lib/store";
 import { getSupabase } from "../lib/supabase/client";
 import {
@@ -17,6 +23,7 @@ import {
 } from "../lib/supabase/reports";
 import { requestAccount } from "../lib/visitor";
 import { Icon, Modal } from "./ui";
+import { KeptDraftNote, StopConfirm, useOpenedWithWork } from "./KeptDraftNote";
 import "./report.css";
 
 // A spoiler is asked about with 「ネタバレでは？」 instead, which folds a post
@@ -106,17 +113,48 @@ export function ReportDialog() {
   return openDialog ? createPortal(form, openDialog) : form;
 }
 
+/**
+ * What the reporter chooses and writes is kept per thing reported until the
+ * report is received: closing by a tap, Escape, ✕ or 戻る loses nothing.
+ * やめる throws it away (asked once when words would be lost).
+ */
 function ReportForm({ target }: { target: ReportTarget }) {
   const account = useAccountState();
   // A report about a book is always a request to take its cover down.
   const cover = target.kind === "book";
-  const [reason, setReason] = useState<ReportReason | null>(
-    cover ? "cover" : null,
-  );
-  const [detail, setDetail] = useState("");
+  // Kept for the signed-in reporter only: what one account wrote about a
+  // post never shows for another account on this browser.
+  const key =
+    account.status === "signed-in"
+      ? reportWorkKey(account.user.id, target)
+      : null;
+  const { draft, saved, loaded, set, clear } = useKeptDraft(reportDrafts, key);
+  const continuing = useOpenedWithWork(loaded, draft !== null);
+  const base: ReportWork = { reason: cover ? "cover" : null, detail: "" };
+  // A cover request has its one reason, and only a cover request has it.
+  const work = draft
+    ? {
+        ...draft,
+        reason: cover
+          ? base.reason
+          : draft.reason === "cover"
+            ? null
+            : draft.reason,
+      }
+    : base;
+  const { reason, detail } = work;
+  const change = (patch: Partial<ReportWork>) => {
+    const next = { ...work, ...patch };
+    set(next.reason === base.reason && !next.detail ? null : next);
+  };
   const [phase, setPhase] = useState<Phase>("form");
+  const [stopping, setStopping] = useState(false);
   const done = phase === "sent" || phase === "already";
   const ready = reason !== null && (!cover || detail.trim() !== "");
+  const stop = () => {
+    clear();
+    closeReport();
+  };
 
   async function send() {
     const client = getSupabase();
@@ -135,6 +173,9 @@ function ReportForm({ target }: { target: ReportTarget }) {
     // The reporter's own list (お知らせ「あなたの通報」) has it at once, and a
     // post they reported folds on their screen.
     if (filed.result === "sent") townActions.noteReport(filed.report);
+    // Received (now or before): nothing is left to keep. A failure keeps it.
+    if (key && (filed.result === "sent" || filed.result === "already"))
+      reportDrafts.clear(key);
     setPhase(filed.result);
   }
 
@@ -196,7 +237,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
                     type="radio"
                     name="report-reason"
                     checked={reason === entry.value}
-                    onChange={() => setReason(entry.value)}
+                    onChange={() => change({ reason: entry.value })}
                   />
                   {entry.label}
                 </label>
@@ -213,9 +254,15 @@ function ReportForm({ target }: { target: ReportTarget }) {
               required={cover}
               maxLength={REPORT_DETAIL_MAX}
               value={detail}
-              onChange={(event) => setDetail(event.target.value)}
+              onChange={(event) => change({ detail: event.target.value })}
             />
           </label>
+          <KeptDraftNote
+            continuing={continuing && draft !== null}
+            saved={saved}
+            wordsLost={detail.trim() !== ""}
+            onDiscard={clear}
+          />
           <p className="muted report-note">
             {cover
               ? "運営が確かめて、この本の表紙を出さないようにします。表紙の画像に手を加えることはありません。"
@@ -226,27 +273,31 @@ function ReportForm({ target }: { target: ReportTarget }) {
               送れませんでした。時間をおいて、もう一度お試しください。
             </p>
           )}
-          <div className="report-actions">
-            <button
-              className="button primary"
-              type="submit"
-              disabled={!ready || phase === "sending"}
-            >
-              <Icon name="flag" size={16} />
-              {phase === "sending"
-                ? "送っています…"
-                : cover
-                  ? "依頼する"
-                  : "通報する"}
-            </button>
-            <button
-              className="button secondary"
-              type="button"
-              onClick={closeReport}
-            >
-              やめる
-            </button>
-          </div>
+          {stopping ? (
+            <StopConfirm onDiscard={stop} onKeep={closeReport} />
+          ) : (
+            <div className="report-actions">
+              <button
+                className="button primary"
+                type="submit"
+                disabled={!ready || phase === "sending"}
+              >
+                <Icon name="flag" size={16} />
+                {phase === "sending"
+                  ? "送っています…"
+                  : cover
+                    ? "依頼する"
+                    : "通報する"}
+              </button>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => (detail.trim() ? setStopping(true) : stop())}
+              >
+                やめる
+              </button>
+            </div>
+          )}
         </form>
       )}
     </Modal>

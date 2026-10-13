@@ -22,7 +22,22 @@ import {
   type TownState,
 } from "../lib/types";
 import { bookPath } from "../lib/books";
+import { useKeptDraft } from "../lib/kept-draft";
+import {
+  recordChanges,
+  recordDrafts,
+  recordWorkKey,
+  type RecordWork,
+} from "../lib/record-draft";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
+import {
+  KeptDraftNote,
+  StopConfirm,
+  useDraftOwner,
+  useNotTakenWords,
+  useOpenedWithWork,
+} from "./KeptDraftNote";
+import { LengthNearLimit } from "./Social";
 import "./records.css";
 
 type Shared = {
@@ -79,10 +94,27 @@ function PublishButton({
   );
 }
 
+/** The key of the reader's work on a book's new record (or a record's changes). */
+function useRecordWorkKey(options: {
+  recordId?: string;
+  bookId: string;
+}): string | null {
+  const owner = useDraftOwner();
+  return owner === null ? null : recordWorkKey({ owner, ...options });
+}
+
+/** Whether there is work kept for a book's new record (or a record's changes). */
+export const useRecordWorkKept = (options: {
+  recordId?: string;
+  bookId: string;
+}) => useKeptDraft(recordDrafts, useRecordWorkKey(options)).draft !== null;
+
 /**
  * Keeps what a reader felt when they finished a book: feelings instead of
  * stars, a few words, and who may see it. Opens empty for a new record, or
- * with an existing one to change it.
+ * with an existing one to change it. What is chosen and written is kept in
+ * this browser until it is saved: a tap outside, Escape, 戻る or あとで lose
+ * nothing. Only やめる (while changing a record) or 書きかけを消す throw it away.
  */
 export function RecordSheet({
   state,
@@ -93,34 +125,73 @@ export function RecordSheet({
   onClose,
 }: Shared & { book: Book; record?: ReadingRecord; onClose: () => void }) {
   const noteId = useId();
-  const [feelings, setFeelings] = useState<Feeling[]>(record?.feelings ?? []);
-  const [note, setNote] = useState(record?.note ?? "");
-  const [spoiler, setSpoiler] = useState(record?.spoiler ?? false);
-  const [isPublic, setIsPublic] = useState(
-    record?.isPublic ?? state.settings.readingPublic,
+  const { draft, saved, loaded, set, clear } = useKeptDraft(
+    recordDrafts,
+    useRecordWorkKey({ recordId: record?.id, bookId: book.id }),
   );
+  const continuing = useOpenedWithWork(loaded, draft !== null);
+  const notTaken = useNotTakenWords();
+  // What is kept for real: the record as it is, or a new one's empty start.
+  const base: RecordWork = record
+    ? {
+        feelings: record.feelings,
+        note: record.note,
+        spoiler: record.spoiler,
+        isPublic: record.isPublic,
+      }
+    : {
+        feelings: [],
+        note: "",
+        spoiler: false,
+        isPublic: state.settings.readingPublic,
+      };
+  // Only the changes are kept, over the record as it is now.
+  const work: RecordWork = { ...base, ...draft };
+  const { feelings, note, spoiler, isPublic } = work;
+  // Words written that are not in the record yet, lost if thrown away.
+  const wordsLost = note.trim() !== base.note.trim();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const change = (patch: Partial<RecordWork>) =>
+    set(recordChanges({ ...work, ...patch }, base));
   const toggle = (feeling: Feeling) =>
-    setFeelings((list) =>
-      list.includes(feeling)
-        ? list.filter((entry) => entry !== feeling)
-        : [...list, feeling],
-    );
+    change({
+      feelings: feelings.includes(feeling)
+        ? feelings.filter((entry) => entry !== feeling)
+        : [...feelings, feeling],
+    });
 
   // Saving and publishing are told apart: the toast says when a record went
   // out to others (with the way back), and when it came back to the reader.
+  // A change the town did not take keeps the sheet open, with the work.
   function save() {
-    const draft = { feelings, note, spoiler, isPublic };
     if (record) {
-      actions.updateRecord(record.id, draft);
+      // Only what was changed: the rest stays as the record is by now.
+      if (!actions.updateRecord(record.id, draft ?? {})) {
+        notify(notTaken);
+        return;
+      }
+      clear();
       if (isPublic !== record.isPublic)
         told(actions, notify, record.id, isPublic);
       else notify("記録を書き直しました");
     } else {
-      const id = actions.recordReading({ ...draft, bookId: book.id });
-      if (id && isPublic) told(actions, notify, id, true);
-      else if (id) notify(pick(KEPT));
+      const id = actions.recordReading({ ...work, bookId: book.id });
+      if (!id) {
+        notify(notTaken);
+        return;
+      }
+      clear();
+      if (isPublic) told(actions, notify, id, true);
+      else notify(pick(KEPT));
     }
+    onClose();
+  }
+
+  // やめる is the one close that throws the changes away (asked once when
+  // words would be lost); every other way out keeps them.
+  function stop() {
+    clear();
     onClose();
   }
 
@@ -162,7 +233,7 @@ export function RecordSheet({
         maxLength={RECORD_NOTE_MAX_LENGTH}
         placeholder="残っている場面や、読み終えた夜のこと"
         value={note}
-        onChange={(event) => setNote(event.target.value)}
+        onChange={(event) => change({ note: event.target.value })}
       />
       <div className="record-options">
         {note.trim() && (
@@ -170,14 +241,16 @@ export function RecordSheet({
             <input
               type="checkbox"
               checked={spoiler}
-              onChange={(event) => setSpoiler(event.target.checked)}
+              onChange={(event) => change({ spoiler: event.target.checked })}
             />
             ネタバレを含む
           </label>
         )}
-        <span className="record-count" aria-hidden="true">
-          {note.length}/{RECORD_NOTE_MAX_LENGTH}
-        </span>
+        <LengthNearLimit
+          length={note.length}
+          max={RECORD_NOTE_MAX_LENGTH}
+          className="record-count"
+        />
       </div>
       <p className="record-going" aria-live="polite">
         <Icon name={isPublic ? "users" : "lock"} size={14} />
@@ -189,41 +262,59 @@ export function RecordSheet({
         <button
           type="button"
           className="text-button"
-          onClick={() => setIsPublic(!isPublic)}
+          onClick={() => change({ isPublic: !isPublic })}
         >
           {isPublic ? "自分だけにする" : "公開にする"}
         </button>
       </p>
-      <div className="record-actions">
-        <button className="button primary" type="button" onClick={save}>
-          {record ? "書き直す" : "記録する"}
-        </button>
-        <button className="button secondary" type="button" onClick={onClose}>
-          {record ? "やめる" : "あとで"}
-        </button>
-        {record &&
-          (confirmingDelete ? (
-            <button
-              type="button"
-              className="text-button record-delete"
-              onClick={() => {
-                actions.deleteRecord(record.id);
-                notify("記録を消しました");
-                onClose();
-              }}
-            >
-              本当に消す
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="text-button record-delete"
-              onClick={() => setConfirmingDelete(true)}
-            >
-              記録を消す
-            </button>
-          ))}
-      </div>
+      <KeptDraftNote
+        continuing={continuing && draft !== null}
+        saved={saved}
+        wordsLost={wordsLost}
+        onDiscard={clear}
+      />
+      {stopping ? (
+        <StopConfirm onDiscard={stop} onKeep={onClose} />
+      ) : (
+        <div className="record-actions">
+          <button className="button primary" type="button" onClick={save}>
+            {record ? "書き直す" : "記録する"}
+          </button>
+          {/* あとで keeps what is chosen for the next time; やめる does not. */}
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() =>
+              !record ? onClose() : wordsLost ? setStopping(true) : stop()
+            }
+          >
+            {record ? "やめる" : "あとで"}
+          </button>
+          {record &&
+            (confirmingDelete ? (
+              <button
+                type="button"
+                className="text-button record-delete"
+                onClick={() => {
+                  actions.deleteRecord(record.id);
+                  clear();
+                  notify("記録を消しました");
+                  onClose();
+                }}
+              >
+                本当に消す
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="text-button record-delete"
+                onClick={() => setConfirmingDelete(true)}
+              >
+                記録を消す
+              </button>
+            ))}
+        </div>
+      )}
     </Modal>
   );
 }
@@ -239,6 +330,8 @@ export function BookFeelings({
   const words = bookFeelings(state, book.id);
   const talkers = talkersOf(state, book.id);
   const own = ownRecordFor(state, book.id);
+  // Feelings chosen and left for later are picked up where they were.
+  const keptNew = useRecordWorkKept({ bookId: book.id });
   return (
     <section className="book-feelings" aria-labelledby="book-feelings-title">
       <span className="eyebrow">AFTER THE LAST PAGE</span>
@@ -298,7 +391,7 @@ export function BookFeelings({
           onClick={() => setOpen(true)}
         >
           <Icon name="leaf" size={15} />
-          読み終えた気持ちを残す
+          {keptNew ? "書きかけの気持ちを続ける" : "読み終えた気持ちを残す"}
         </button>
       )}
       {open && (
@@ -327,8 +420,12 @@ export function RecordShelf({
   const records = recordsOf(state, readerId);
   if (!records.length) return null;
   const mine = readerId === ME_ID;
+  // The record as it is now, if it was changed after 見直す was tapped.
+  const editingRecord =
+    editing && records.find((entry) => entry.id === editing.id);
   const editingBook =
-    editing && state.books.find((book) => book.id === editing.bookId);
+    editingRecord &&
+    state.books.find((book) => book.id === editingRecord.bookId);
   return (
     <section className="record-shelf" aria-labelledby="record-shelf-title">
       <div className="profile-section-heading">
@@ -404,13 +501,13 @@ export function RecordShelf({
           );
         })}
       </ul>
-      {editing && editingBook && (
+      {editingRecord && editingBook && (
         <RecordSheet
           state={state}
           actions={actions}
           notify={notify}
           book={editingBook}
-          record={editing}
+          record={editingRecord}
           onClose={() => setEditing(null)}
         />
       )}
