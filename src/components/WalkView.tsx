@@ -74,6 +74,20 @@ type Overlay =
   | null;
 const WALK_HINT_KEY = "book-town-walk-hint";
 
+/**
+ * Focuses `target` once the change just made is drawn, unless the reader has
+ * moved on meanwhile (closed a book and at once picked the next one): focus
+ * stays where they went, and is not taken back a frame later.
+ */
+function focusNextFrame(target: () => HTMLElement | null | undefined) {
+  const from = document.activeElement;
+  requestAnimationFrame(() => {
+    const now = document.activeElement;
+    if (now && now !== from && now !== document.body) return;
+    target()?.focus({ preventScroll: true });
+  });
+}
+
 export function WalkView({
   state,
   actions,
@@ -302,11 +316,12 @@ export function WalkView({
   }
   function close() {
     setOverlay(null);
-    requestAnimationFrame(() => {
-      if (focus.current?.isConnected)
-        focus.current.focus({ preventScroll: true });
-      else stage.current?.focus({ preventScroll: true });
-    });
+    // The book in hand and dialogs give focus back as they go; this catches
+    // what they leave on the page itself (a dialog that saved no opener) or an
+    // opener that is gone.
+    focusNextFrame(() =>
+      focus.current?.isConnected ? focus.current : stage.current,
+    );
   }
   // Going past the last shop starts another round; say so once, quietly.
   const lastIndex = useRef<number | null>(null);
@@ -336,7 +351,7 @@ export function WalkView({
     if (overlay) return;
     setFirstHint(false);
     update((previous) => stepWalk(previous, direction));
-    requestAnimationFrame(() => stage.current?.focus({ preventScroll: true }));
+    focusNextFrame(() => stage.current);
   }
   useEffect(() => {
     const element = stage.current;

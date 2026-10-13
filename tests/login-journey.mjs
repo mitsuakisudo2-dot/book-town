@@ -1337,6 +1337,12 @@ try {
       expect(await page.evaluate(() => window.bookAskedToClose)).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(inHand).not.toBeVisible();
+      // Closed at once after the request, it stays closed, and both steps
+      // came off: one 戻る leaves the shop.
+      await page.goBack();
+      await expect(page).toHaveURL(
+        new RegExp("/books/registered/\\?id=" + COVER_BOOK + "$"),
+      );
       // Google's cover of 星の本 was refused: Google is not asked for it, and
       // the book keeps its 装丁カード, with no credit and no link.
       await page.goto(base + "/books/registered/?id=" + REFUSED_BOOK);
