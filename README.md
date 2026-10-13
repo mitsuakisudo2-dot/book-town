@@ -26,7 +26,7 @@ pnpm build
 
 この実行環境でのTurbopackのローカル処理制限を避け、ビルドにはNext.jsの正式なWebpackオプションを使っています。ビルドすると `out/` に静的サイトが生成されます。本番サーバーやデータベースなしでホスティングできます。
 
-ブラウザの操作テストは、開発サーバーを起動した状態で `pnpm test:browser`（既存機能）と `pnpm test:street`（街の散歩）、`pnpm test:feedback`（本の前景・リアクション）、`pnpm test:social`（タイムライン・レビュー）、`pnpm test:app`（下のバー・検索・読書・お知らせ・本の登録）を実行します。既定ではPlaywrightのChromium（`pnpm exec playwright install chromium` で入ります）を使います。ほかのブラウザで試すときは `BOOK_TOWN_CHROME` にChromium系ブラウザの実行ファイルを指定してください。`BOOK_TOWN_URL` でテスト先、`BOOK_TOWN_QA_OUTPUT` で結果保存先を変更できます。CIでは、Supabaseの設定のないデモのビルドで、これらと `pnpm test:walk`・`pnpm test:customization`・`pnpm test:poster-journey` をPRごとに回します。
+ブラウザの操作テストは、開発サーバーを起動した状態で `pnpm test:browser`（既存機能）と `pnpm test:street`（街の散歩）、`pnpm test:feedback`（本の前景・リアクション）、`pnpm test:social`（タイムライン・レビュー）、`pnpm test:app`（下のバー・検索・読書・お知らせ・本の登録）を実行します。既定ではPlaywrightのChromium（`pnpm exec playwright install chromium` で入ります）を使います。ほかのブラウザで試すときは `BOOK_TOWN_CHROME` にChromium系ブラウザの実行ファイルを指定してください。`BOOK_TOWN_URL` でテスト先、`BOOK_TOWN_QA_OUTPUT` で結果保存先を変更できます。CIでは、Supabaseの設定のないデモのビルドで `pnpm test:walk`（書店めぐり）と `pnpm test:customization`（店内の飾りつけ）をPRごとに回します。ここに挙げたほかの確認と `pnpm test:poster-journey`（ポスター）は、手元で回します。
 
 ## 試せる体験
 

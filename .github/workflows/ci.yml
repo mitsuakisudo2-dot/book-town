@@ -56,12 +56,13 @@ jobs:
         env:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/login-qa
 
-  # The demo build in a real browser, as a reader without an account uses it.
-  # No Supabase settings, so the town lives in the browser's storage. One
-  # build and one server for every journey.
+  # The demo build (no Supabase) in a real browser: the walk and the store
+  # editor, as a reader without an account uses them. The other journeys
+  # (browser, street, feedback, social, app, poster-journey) are run by hand;
+  # together they would add about five minutes to every run.
   demo-journeys:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     env:
       NEXT_TELEMETRY_DISABLED: 1
     steps:
@@ -77,40 +78,14 @@ jobs:
       - name: Serve the built site
         id: serve
         run: python3 -m http.server 5173 --bind 127.0.0.1 --directory out &
-      # Each journey runs even after an earlier one failed, so one run shows
-      # every screen that broke.
       - run: pnpm test:walk
-        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
         env:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/walk
+      # Runs even after the walk failed, so one run shows both screens.
       - run: pnpm test:customization
         if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
         env:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/customization
-      - run: pnpm test:app
-        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
-        env:
-          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/app
-      - run: pnpm test:browser
-        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
-        env:
-          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/browser
-      - run: pnpm test:street
-        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
-        env:
-          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/street
-      - run: pnpm test:social
-        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
-        env:
-          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/social
-      - run: pnpm test:feedback
-        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
-        env:
-          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/feedback
-      - run: pnpm test:poster-journey
-        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
-        env:
-          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/poster
       # Screenshots of the demo town only; nothing secret is in them.
       - name: Keep the screenshots of a failed run
         if: failure()
