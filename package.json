@@ -19,6 +19,7 @@
     "test:town-sync": "tsx tests/town-remote.test.ts && tsx tests/walk-remote.test.ts",
     "test:supabase": "tsx tests/supabase-login.test.ts && tsx tests/supabase-town.test.ts",
     "test:customization": "node tests/customization-journey.mjs",
+    "test:library-journey": "node tests/library-journey.mjs",
     "test:walk": "node tests/walk-journey.mjs",
     "test:login": "node tests/login-journey.mjs",
     "test:browser": "node tests/browser-journey.mjs",

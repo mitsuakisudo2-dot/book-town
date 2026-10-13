@@ -465,6 +465,60 @@ try {
     },
   );
 
+  await check(
+    "a book registered while the town loads is not said to be registered",
+    async () => {
+      // The town's reads wait; the reader's own profile comes, so they are
+      // signed in. What the page writes is answered here and noted.
+      let holding = true;
+      const held = [];
+      const sent = [];
+      const hold = (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() !== "GET") {
+          sent.push(url.pathname);
+          return route.fulfill({ status: 201, body: "" });
+        }
+        if (!holding || url.searchParams.get("id") === "eq." + user.id)
+          return route.fallback();
+        held.push(route);
+      };
+      await page.route(supabase + "/rest/v1/**", hold);
+      await page.goto(base + "/profiles/me/");
+      await page.getByRole("button", { name: "本を登録", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "本を登録" });
+      const register = dialog.getByRole("button", {
+        name: "登録する",
+        exact: true,
+      });
+      await dialog.getByLabel("タイトル").fill("こころ");
+      await register.click();
+      await expect(dialog.locator(".register-message")).toHaveText(
+        "まだ保存できません。読み込みが終わってから、もう一度押してください。",
+      );
+      await expect(dialog).toBeVisible();
+      await expect(page.locator(".toast")).toHaveCount(0);
+      expect(held.length).toBeGreaterThan(0);
+      expect(sent).toEqual([]);
+      await shot("8-register-while-loading");
+      // Once the town is read, the same press registers it, and it is sent.
+      holding = false;
+      for (const route of held.splice(0)) await route.fallback();
+      // The reader's name comes with the town, behind the dialog.
+      await expect(page.locator("#profile-name")).toHaveText("アキ");
+      await register.click();
+      await expect(page.locator(".toast")).toContainText(
+        "『こころ』を登録しました",
+      );
+      await expect(dialog).toHaveCount(0);
+      await expect
+        .poll(() => sent)
+        .toEqual(["/rest/v1/books", "/rest/v1/book_marks"]);
+      await page.unroute(supabase + "/rest/v1/**", hold);
+    },
+  );
+
   // Another reader, their shop and posts; what reports did; the reader's own
   // reports; and two books with outside covers.
   const OTHER = "3c1d2b4a-7e6f-4a5b-8c9d-0e1f2a3b4c5d";
