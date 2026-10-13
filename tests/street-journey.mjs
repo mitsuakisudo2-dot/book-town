@@ -132,10 +132,16 @@ async function expectReactionsInOneRow(pop, label) {
 }
 
 /** Draws a finger most of a page across the POP: -1 to the next, 1 back. */
-async function swipePop(page, pop, direction, held) {
+async function swipePop(page, pop, direction, held, lifted) {
   const track = pop.locator(".bh-pop-track");
   const width = await track.evaluate((element) => element.clientWidth);
-  await fingerDrag(page, track, direction * width * 0.7, 0, held);
+  await fingerDrag(page, track, direction * width * 0.7, 0, held, lifted);
+}
+
+/** A screen reader finds these words once in the pager, never twice. */
+async function expectReadOnce(pop, words) {
+  const tree = await pop.locator(".bh-pop-pager").ariaSnapshot();
+  expect(tree.split(words).length - 1, tree).toBe(1);
 }
 
 /** The page the pager is on is the one the track rests on. */
@@ -155,8 +161,9 @@ async function expectPopInView(pop) {
 }
 
 // A finger drawn through the DevTools protocol: the browser scrolls what is
-// under it as it would for a real touch. `held` runs before the finger lifts.
-async function fingerDrag(page, locator, dx, dy, held) {
+// under it as it would for a real touch. `held` runs before the finger lifts,
+// `lifted` at once after, given the protocol session.
+async function fingerDrag(page, locator, dx, dy, held, lifted) {
   await locator.scrollIntoViewIfNeeded();
   const box = await locator.boundingBox();
   const x = box.x + box.width / 2;
@@ -183,6 +190,7 @@ async function fingerDrag(page, locator, dx, dy, held) {
       type: "touchEnd",
       touchPoints: [],
     });
+    await lifted?.(cdp);
   } finally {
     await cdp.detach();
   }
@@ -278,8 +286,9 @@ try {
       await shelf.locator(".shelf-book-button").first().click();
       await expectBook(page, titles[0]);
       const dialog = page.locator(".bh-dialog");
+      const shownPop = dialog.locator(`${CURRENT_POP} .bh-pop-text`);
       await expect(dialog).toContainText("わからないものと暮らす");
-      await expect(dialog).toContainText(
+      await expect(shownPop).toHaveText(
         "異星人の話を読むつもりが、自分の記憶に出会ってしまう。わからない相手を、わからないまま大切にできるだろうか。",
       );
       await expect(
@@ -314,12 +323,9 @@ try {
           exact: true,
         })
         .click();
-      await expect(dialog).toContainText(
+      await expect(shownPop).toHaveText(
         "翻訳で読む、理解の届かなさ。異なる世界に触れる入口として。",
       );
-      await expect(
-        dialog.locator(`${CURRENT_POP} .bh-pop-text`),
-      ).not.toContainText("自分の記憶に出会ってしまう");
       await page.keyboard.press("Escape");
     },
   );
@@ -354,21 +360,25 @@ try {
         pop.locator('.bh-pop-page:not([aria-hidden="true"])'),
       ).toHaveCount(1);
       await expect(pop.locator(CURRENT_POP)).not.toHaveAttribute("aria-hidden");
+      await expectReadOnce(pop, firstPop);
       await expectPopInView(pop);
 
       await pop.getByRole("button", { name: "次のPOP" }).click();
       await expect(shown).not.toHaveText(firstPop);
       await expectPopInView(pop);
+      const turnedTo = await shown.innerText();
+      const told = pop.locator(".bh-pop-pager .bh-sr-only");
+      await expect(told).toHaveAttribute("aria-live", "polite");
+      await expect(told).toHaveText(turnedTo);
+      // The words reach a screen reader once: from the copy that tells the
+      // turn, and from the page itself once that copy has gone.
+      await expectReadOnce(pop, turnedTo);
+      await expect(told).toBeEmpty({ timeout: 10_000 });
       await expect(
         pop.locator('.bh-pop-page:not([aria-hidden="true"])'),
       ).toHaveCount(1);
-      await expect(pop.locator(".bh-pop-pager .bh-sr-only")).toHaveAttribute(
-        "aria-live",
-        "polite",
-      );
-      await expect(pop.locator(".bh-pop-pager .bh-sr-only")).toHaveText(
-        await shown.innerText(),
-      );
+      await expect(pop.locator(CURRENT_POP)).not.toHaveAttribute("aria-hidden");
+      await expectReadOnce(pop, turnedTo);
       await expect(pop.locator(".bh-shop-link")).not.toHaveText("軌道書房");
       await expect(pop.locator(".bh-shop-link")).toHaveText("雨と翻訳");
       await expect(pop.locator(".bh-shop-link")).toHaveAttribute(
@@ -1190,10 +1200,75 @@ try {
         );
         await like.tap();
         await expect(like).toHaveAttribute("aria-pressed", liked);
-        // At either end the POP stays, and the book does not turn.
+        // Pressed while the POP still glides in after the finger has left
+        // it, a reaction goes to that POP, not the one sliding away.
+        const next = pop.getByRole("button", { name: "次のPOP" });
+        await next.tap();
+        await expect(count).toHaveText("3 / 4");
+        const arriving = await like.getAttribute("aria-pressed");
+        await pop.getByRole("button", { name: "前のPOP" }).tap();
+        await expect(count).toHaveText("2 / 4");
+        await expectPopInView(pop);
+        await like.scrollIntoViewIfNeeded();
+        await track.scrollIntoViewIfNeeded();
+        const likeBox = await like.boundingBox();
+        await like.evaluate((button) => {
+          const card = button.closest(".owner-pop");
+          const track = card.querySelector(".bh-pop-track");
+          button.addEventListener(
+            "click",
+            () => {
+              window.pressedDuringGlide = {
+                at: track.scrollLeft / track.clientWidth,
+                count: card.querySelector(".bh-pop-page-count").textContent,
+              };
+            },
+            { capture: true, once: true },
+          );
+        });
+        await swipePop(phone, pop, -1, undefined, async (cdp) => {
+          const point = {
+            x: likeBox.x + likeBox.width / 2,
+            y: likeBox.y + likeBox.height / 2,
+            id: 2,
+          };
+          await cdp.send("Input.dispatchTouchEvent", {
+            type: "touchStart",
+            touchPoints: [point],
+          });
+          await cdp.send("Input.dispatchTouchEvent", {
+            type: "touchEnd",
+            touchPoints: [],
+          });
+        });
+        const pressed = await phone.evaluate(() => window.pressedDuringGlide);
+        expect(pressed.count).toBe("2 / 4");
+        expect(pressed.at).toBeGreaterThan(1.02);
+        expect(pressed.at).toBeLessThan(1.98);
+        await expect(count).toHaveText("3 / 4");
+        await expectPopInView(pop);
+        await expect(like).toHaveAttribute(
+          "aria-pressed",
+          arriving === "true" ? "false" : "true",
+        );
+        await pop.getByRole("button", { name: "前のPOP" }).tap();
+        await expect(count).toHaveText("2 / 4");
+        await expect(like).toHaveAttribute("aria-pressed", liked);
+        await next.tap();
+        await expect(count).toHaveText("3 / 4");
+        await like.tap();
+        await expect(like).toHaveAttribute("aria-pressed", arriving);
+        await pop.getByRole("button", { name: "前のPOP" }).tap();
+        await expect(count).toHaveText("2 / 4");
+        await expectPopInView(pop);
+        // At either end the POP stays, and the book neither turns nor
+        // closes: a finger drawn outward there is no swipe back through the
+        // history. It rests before it lifts, so no fling eats the next tap.
+        const rest = () => phone.waitForTimeout(150);
         await pop.getByRole("button", { name: "前のPOP" }).tap();
         await expect(count).toHaveText("1 / 4");
-        await swipePop(phone, pop, 1);
+        await expectPopInView(pop);
+        await swipePop(phone, pop, 1, rest);
         await expect(count).toHaveText("1 / 4");
         await expectPopInView(pop);
         await expectBook(phone, "ソラリス");
@@ -1201,7 +1276,8 @@ try {
           await pop.getByRole("button", { name: "次のPOP" }).tap();
           await expect(count).toHaveText(shown);
         }
-        await swipePop(phone, pop, -1);
+        await expectPopInView(pop);
+        await swipePop(phone, pop, -1, rest);
         await expect(count).toHaveText("4 / 4");
         await expectPopInView(pop);
         await expectBook(phone, "ソラリス");
@@ -1352,6 +1428,113 @@ try {
         await expectReactionsInOneRow(pop, "320px pressed reactions");
         await like.tap();
         await expect(like).toHaveAttribute("aria-pressed", "false");
+        await phone.keyboard.press("Escape");
+      },
+    );
+    await check(
+      "393px POP card keeps still for ordinary POPs and fits a long one only when it is shown",
+      async () => {
+        await phone.setViewportSize({ width: 393, height: 793 });
+        const solaris = () =>
+          shop(phone, "軌道書房")
+            .getByRole("button", {
+              name: "ソラリス · 面陳 · POPあり",
+              exact: true,
+            })
+            .tap();
+        const pop = phone.locator(".bh-dialog .owner-pop");
+        const count = pop.locator(".bh-pop-page-count");
+        const next = pop.getByRole("button", { name: "次のPOP" });
+        const reactions = pop.locator(".bh-pop-reactions");
+        const card = () =>
+          pop.evaluate((element, current) => {
+            const box = (selector) =>
+              element.querySelector(selector).getBoundingClientRect();
+            return {
+              track: box(".bh-pop-track").height,
+              shown: box(`${current} .bh-pop-text`),
+              count: box(".bh-pop-page-count").top,
+              reactions: box(".bh-pop-reactions"),
+              viewport: innerHeight,
+            };
+          }, CURRENT_POP);
+        // Turning between POPs of ordinary length moves nothing under them.
+        await solaris();
+        await expect(count).toHaveText("1 / 4");
+        const still = (await restingBox(reactions)).y;
+        for (const shown of ["2 / 4", "3 / 4", "4 / 4"]) {
+          await next.tap();
+          await expect(count).toHaveText(shown);
+          await expectPopInView(pop);
+          expect(
+            Math.abs((await restingBox(reactions)).y - still),
+          ).toBeLessThan(1);
+        }
+        await phone.keyboard.press("Escape");
+        // Another reader's long POP for the same book, near the most a POP
+        // may hold.
+        const long = "読み終えてから、何度も表紙を眺めた。".repeat(50);
+        await phone.evaluate((pop) => {
+          const envelope = JSON.parse(localStorage.getItem("book-town-v1"));
+          envelope.data.ownShop = {
+            id: "mine",
+            ownerId: "me",
+            name: "長いPOPの書店",
+            description: "長いPOPを書く書店。",
+            theme: "sage",
+            tagline: "一冊を長く語る",
+            followers: 0,
+            demo: false,
+            shelves: [
+              {
+                id: "long-pop",
+                name: "長く語る棚",
+                capacity: 20,
+                isPublic: true,
+                items: [
+                  {
+                    id: "long-solaris",
+                    bookId: "solaris",
+                    display: "face",
+                    pop,
+                  },
+                ],
+              },
+            ],
+          };
+          localStorage.setItem("book-town-v1", JSON.stringify(envelope));
+        }, long);
+        await phone.reload();
+        await solaris();
+        await expect(count).toHaveText("1 / 5");
+        await expectPopInView(pop);
+        // On a short POP the card stays near its words, and the count and the
+        // reactions are in sight with the card's top.
+        await pop.evaluate((element) => element.scrollIntoView());
+        await restingBox(reactions);
+        const short = await card();
+        expect(short.track).toBeLessThan(220);
+        expect(short.count - short.shown.bottom).toBeLessThan(120);
+        expect(short.reactions.bottom).toBeLessThanOrEqual(short.viewport);
+        // On the long POP the card grows to show every word of it.
+        for (const shown of ["2 / 5", "3 / 5", "4 / 5", "5 / 5"]) {
+          await next.tap();
+          await expect(count).toHaveText(shown);
+        }
+        await expectPopInView(pop);
+        await expect(pop.locator(`${CURRENT_POP} .bh-pop-text`)).toHaveText(
+          long,
+        );
+        const full = await card();
+        expect(full.shown.height).toBeGreaterThan(1000);
+        expect(full.track).toBeGreaterThanOrEqual(full.shown.height);
+        expect(full.count).toBeGreaterThanOrEqual(full.shown.bottom);
+        await noOverflow(phone, "393px long POP");
+        // Back on a short one, the card is short again.
+        await pop.getByRole("button", { name: "前のPOP" }).tap();
+        await expect(count).toHaveText("4 / 5");
+        await expectPopInView(pop);
+        expect((await card()).track).toBeLessThan(220);
         await phone.keyboard.press("Escape");
       },
     );

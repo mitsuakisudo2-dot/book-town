@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState, type TouchEvent } from "react";
 import {
   POP_REACTIONS,
   popReactionKey,
+  type PopReaction,
   type Shelf,
   type Shop,
   type TownActions,
@@ -215,17 +216,68 @@ export function BookInHand({
     const timer = settleTimer;
     return () => window.clearTimeout(timer.current);
   }, []);
-  function movePop(direction: -1 | 1) {
-    const next = showPopPage(popIndex + direction);
-    const track = trackRef.current;
-    trackAim.current = { key: reactionKey, page: next };
-    track?.scrollTo({
-      left: next * track.clientWidth,
+  function glidePop(track: HTMLDivElement, page: number) {
+    track.scrollTo({
+      left: page * track.clientWidth,
       behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
         ? "instant"
         : "smooth",
     });
   }
+  // The page the track rests on or is gliding to: where a button sent it,
+  // else the page most in view. A press during the glide means that POP.
+  function popInView() {
+    const aim = trackAim.current;
+    if (aim?.key === reactionKey) return aim.page;
+    const track = trackRef.current;
+    if (!track?.clientWidth) return popIndex;
+    return Math.max(
+      0,
+      Math.min(
+        Math.round(track.scrollLeft / track.clientWidth),
+        popCandidates.length - 1,
+      ),
+    );
+  }
+  function movePop(direction: -1 | 1) {
+    const next = showPopPage(popInView() + direction);
+    const track = trackRef.current;
+    trackAim.current = { key: reactionKey, page: next };
+    if (track) glidePop(track, next);
+  }
+  // A reaction goes to the POP in view, and the track comes to rest on it.
+  function reactToPop(reaction: PopReaction) {
+    const page = popInView();
+    const pop = popCandidates[page];
+    const track = trackRef.current;
+    showPopPage(page);
+    if (
+      track?.clientWidth &&
+      !trackTouched.current &&
+      Math.abs(track.scrollLeft / track.clientWidth - page) > 0.02
+    )
+      glidePop(track, page);
+    if (pop.legacy)
+      actions.togglePopReaction(
+        pop.shopId,
+        pop.legacy.shelfId,
+        pop.legacy.itemId,
+        reaction,
+      );
+    else reading?.toggleReaction(entryKey(pop), reaction);
+  }
+  // A turn is told to a screen reader from a hidden copy of the new POP.
+  // While the copy is there the page on show is hidden from it, so the
+  // words are never there twice; then the page is read where it stands.
+  const [telling, setTelling] = useState(false);
+  useEffect(() => {
+    const turned = popPage?.key === reactionKey;
+    setTelling(turned);
+    if (!turned) return;
+    const timer = window.setTimeout(() => setTelling(false), 5000);
+    return () => window.clearTimeout(timer);
+  }, [popPage, reactionKey]);
+  const told = telling && popPage?.key === reactionKey;
   // Before the page beneath is held still, so its scroll is recorded.
   const layer = useBackLayer(
     onClose,
@@ -535,7 +587,11 @@ export function BookInHand({
               )}
               <div
                 ref={trackRef}
-                className="bh-pop-track"
+                className={
+                  "bh-pop-track" +
+                  (popIndex === 0 ? " at-first" : "") +
+                  (popIndex === popCandidates.length - 1 ? " at-last" : "")
+                }
                 tabIndex={-1}
                 onScroll={settlePopSoon}
                 onScrollEnd={settlePop}
@@ -561,7 +617,7 @@ export function BookInHand({
                     className={
                       "bh-pop-page" + (page === popIndex ? " is-current" : "")
                     }
-                    aria-hidden={page === popIndex ? undefined : true}
+                    aria-hidden={page === popIndex && !told ? undefined : true}
                   >
                     {entry.pop.trim() ? (
                       <p className="bh-pop-text">{entry.pop}</p>
@@ -578,10 +634,8 @@ export function BookInHand({
                   </div>
                 ))}
               </div>
-              {/* Told once the reader turns to another POP; the page itself
-                  is read where it stands. */}
               <div className="bh-sr-only" aria-live="polite" aria-atomic="true">
-                {popPage?.key === reactionKey &&
+                {told &&
                   (activePop.pop.trim() ||
                     "この本のPOPは、まだ書かれていません。")}
               </div>
@@ -616,16 +670,7 @@ export function BookInHand({
                   key={reaction}
                   type="button"
                   aria-pressed={popReactions.includes(reaction)}
-                  onClick={() =>
-                    activePop.legacy
-                      ? actions.togglePopReaction(
-                          activePop.shopId,
-                          activePop.legacy.shelfId,
-                          activePop.legacy.itemId,
-                          reaction,
-                        )
-                      : reading?.toggleReaction(activeReactionKey, reaction)
-                  }
+                  onClick={() => reactToPop(reaction)}
                 >
                   <Icon
                     name={

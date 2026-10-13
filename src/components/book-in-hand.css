@@ -210,12 +210,30 @@
 .bh-pop-track::-webkit-scrollbar {
   display: none;
 }
+/* At an end a finger drawn outward has no POP to turn to, and some browsers
+   would take it as a swipe back through the history, closing the book. */
+.bh-pop-track.at-first {
+  touch-action: pan-y pan-right;
+}
+.bh-pop-track.at-last {
+  touch-action: pan-y pan-left;
+}
+.bh-pop-track.at-first.at-last {
+  touch-action: pan-y;
+}
 .bh-pop-page {
   flex: 0 0 100%;
   min-width: 0;
   padding-inline: var(--bh-pop-pad);
   scroll-snap-align: start;
   scroll-snap-stop: always;
+}
+/* Ordinary POPs share one height, so nothing under the card moves as they
+   turn. A long POP counts for about six lines until it is the one on show:
+   a short POP never sits over a long empty card. */
+.bh-pop-page:not(.is-current) {
+  max-height: 210px;
+  overflow: hidden;
 }
 .bh-pop-page-button {
   position: absolute;
