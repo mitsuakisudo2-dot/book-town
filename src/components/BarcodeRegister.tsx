@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { normalizeIsbn } from "../lib/books";
 import { lookUpBook } from "../lib/openbd";
-import { libraryBookByIsbn } from "../lib/store";
+import { libraryBookByIsbn, useTownBackend } from "../lib/store";
 import type { TownActions, TownState } from "../lib/types";
 import { Icon, Modal } from "./ui";
 
@@ -37,6 +37,7 @@ export function BarcodeRegister({
   onClose: () => void;
 }) {
   const id = useId();
+  const savedIn = useTownBackend();
   const video = useRef<HTMLVideoElement>(null);
   const [scanning, setScanning] = useState(false);
   const [isbnText, setIsbnText] = useState("");
@@ -49,6 +50,15 @@ export function BarcodeRegister({
   const [looking, setLooking] = useState(false);
   // The ISBN being looked up; an answer for any other comes too late.
   const asking = useRef<string | null>(null);
+  // The ISBN the message and the filled-in book are about, and what was
+  // filled in. Another ISBN takes them back out, so one book's title is
+  // never registered under another book's ISBN.
+  const about = useRef<string | null>(null);
+  const filled = useRef<{
+    title: string;
+    author: string;
+    price: string;
+  } | null>(null);
   const canScan = Boolean(detectorClass());
 
   useEffect(() => {
@@ -97,8 +107,38 @@ export function BarcodeRegister({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning]);
 
+  /** Forgets what was found or said for another ISBN than `isbn`. */
+  function moveTo(isbn: string | null) {
+    if (isbn === about.current) return;
+    about.current = null;
+    asking.current = null;
+    setLooking(false);
+    setMessage("");
+    const was = filled.current;
+    filled.current = null;
+    if (!was) return;
+    // Only what was filled in: what the reader typed stays.
+    setTitle((now) => (now === was.title ? "" : now));
+    setAuthor((now) => (now === was.author ? "" : now));
+    setPrice((now) => (now === was.price ? "" : now));
+  }
+
+  function fill(book: { title: string; author: string; price?: number }) {
+    const next = {
+      title: book.title,
+      author: book.author,
+      price: book.price ? String(book.price) : "",
+    };
+    filled.current = next;
+    setTitle(next.title);
+    setAuthor(next.author);
+    setPrice(next.price);
+  }
+
   async function accept(found: string) {
     setIsbnText(found);
+    moveTo(found);
+    about.current = found;
     // Whether it is already registered is about the reader's own library;
     // a book the town knows only fills in its title.
     const mine = libraryBookByIsbn(state, found);
@@ -106,9 +146,7 @@ export function BarcodeRegister({
     if (known) {
       asking.current = null;
       setLooking(false);
-      setTitle(known.title);
-      setAuthor(known.author);
-      setPrice(known.price ? String(known.price) : "");
+      fill(known);
       setMessage(
         mine
           ? "もうライブラリにあります。"
@@ -125,9 +163,7 @@ export function BarcodeRegister({
     asking.current = null;
     setLooking(false);
     if (book) {
-      setTitle(book.title);
-      setAuthor(book.author);
-      setPrice(book.price ? String(book.price) : "");
+      fill(book);
       setMessage("書籍情報が見つかりました。確認して登録してください。");
     } else {
       setMessage(
@@ -171,17 +207,17 @@ export function BarcodeRegister({
     if (!done) return;
     if (done.result === "not-saved") {
       setMessage(
-        "まだ保存できません。読み込みが終わってから、もう一度押してください。",
+        savedIn === "unavailable"
+          ? "保存できません。ページを読み込み直してから、もう一度登録してください。"
+          : "まだ保存できません。読み込みが終わってから、もう一度押してください。",
       );
       return;
     }
-    // A book the town knew is registered under its own title.
-    const known = state.books.find((book) => book.id === done.bookId);
-    const name = known?.title ?? title.trim();
+    // Named as kept: a book the town knew by its own title, a long one cut.
     notify(
       done.result === "already"
-        ? `『${name}』はもうライブラリにあります`
-        : `『${name}』を登録しました`,
+        ? `『${done.title}』はもうライブラリにあります`
+        : `『${done.title}』を登録しました`,
     );
     onClose();
   }
@@ -207,7 +243,7 @@ export function BarcodeRegister({
         canScan && (
           <button
             type="button"
-            className="button"
+            className="button register-camera"
             onClick={() => {
               setMessage("");
               setScanning(true);
@@ -234,12 +270,9 @@ export function BarcodeRegister({
             value={isbnText}
             onChange={(event) => {
               setIsbnText(event.target.value);
-              // A new ISBN: the answer for the old one is no longer awaited.
-              if (asking.current) {
-                asking.current = null;
-                setLooking(false);
-                setMessage("");
-              }
+              // Another ISBN: the old one's answer is no longer awaited, and
+              // what was found for it is taken back out.
+              moveTo(normalizeIsbn(event.target.value));
             }}
           />
         </label>

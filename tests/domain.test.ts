@@ -6,7 +6,7 @@ import {
   serializeTown,
 } from "../src/lib/repository";
 import { createTownStore } from "../src/lib/store";
-import { counterId } from "../src/lib/town-backend";
+import { counterId, unavailableBackend } from "../src/lib/town-backend";
 import {
   bookFeelings,
   booksFelt,
@@ -1001,7 +1001,7 @@ check("ISBNs are checked and registered books are deduplicated", () => {
           { title: "別の題", author: "", isbn: "4101010137" },
           "isbn",
         ),
-        { result: "added", bookId: "their-kokoro" },
+        { result: "added", bookId: "their-kokoro", title: "こころ" },
       );
       assert.deepEqual(town.getSnapshot().library, ["their-kokoro"]);
       assert.equal(
@@ -1017,7 +1017,7 @@ check("ISBNs are checked and registered books are deduplicated", () => {
           { title: "こころ", author: "", isbn: KOKORO },
           "scan",
         ),
-        { result: "already", bookId: "their-kokoro" },
+        { result: "already", bookId: "their-kokoro", title: "こころ" },
       );
       assert.equal(town.getSnapshot(), before);
       assert.equal(saves.length, kept);
@@ -1029,6 +1029,7 @@ check("ISBNs are checked and registered books are deduplicated", () => {
       assert.deepEqual(added, {
         result: "added",
         bookId: "isbn-9784101092058",
+        title: "新しい本",
       });
       assert.equal(
         town.actions.registerBook(
@@ -1126,6 +1127,45 @@ check("ISBNs are checked and registered books are deduplicated", () => {
     assert.deepEqual(repo.load().state.library, []);
   });
 
+  check(
+    "when the account could not be read, a book is never said to be registered",
+    () => {
+      // Nothing is ever written there; the page has to be read again.
+      const unread = createTownStore(
+        unavailableBackend(structuredClone(seedState)),
+      );
+      unread.initialize();
+      const before = unread.getSnapshot();
+      assert.deepEqual(
+        unread.actions.registerBook(
+          { title: "こころ", author: "", isbn: KOKORO },
+          "isbn",
+        ),
+        { result: "not-saved" },
+      );
+      assert.equal(
+        unread.actions.addBook({ title: "手書きの本", author: "" }),
+        null,
+      );
+      assert.equal(unread.getSnapshot(), before);
+      // Only out of reach for now: kept, and sent once it can be.
+      const offline = createTownStore({
+        kind: "account",
+        newId: counterId,
+        load: () => ({ state: structuredClone(seedState), status: "saved" }),
+        save: () => "unavailable",
+      });
+      offline.initialize();
+      assert.equal(
+        offline.actions.registerBook(
+          { title: "こころ", author: "", isbn: KOKORO },
+          "isbn",
+        )?.result,
+        "added",
+      );
+    },
+  );
+
   check("a title or author over 200 characters ends in …", () => {
     const repo = createMemoryRepository();
     const town = createTownStore(repo);
@@ -1138,6 +1178,11 @@ check("ISBNs are checked and registered books are deduplicated", () => {
     );
     assert.equal(done?.result, "added");
     const id = done?.result === "added" ? done.bookId : "";
+    // Named as kept, for the screen to say what was registered.
+    assert.equal(
+      done?.result === "added" && done.title,
+      "あ".repeat(199) + "…",
+    );
     // Kept through a reload, which keeps no title over 200 characters.
     const book = repo.load().state.books.find((entry) => entry.id === id);
     assert.equal(book?.title, "あ".repeat(199) + "…");

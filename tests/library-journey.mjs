@@ -5,7 +5,7 @@ import { settleBeforeNavigating } from "./journey-layers.mjs";
 
 // Registering a book in the demo build, on a phone: openBD that never
 // answers, an ISBN typed but not looked up, a book already in the library,
-// and one only the town knows. Nothing leaves this machine: openBD and
+// another ISBN typed after a book was found, and one only the town knows. Nothing leaves this machine: openBD and
 // Google Books are answered here, and every other outside address is refused.
 
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
@@ -30,6 +30,7 @@ const context = await browser.newContext({
 const KOKORO = "9784101010137";
 const WHEEL = "9784101092058";
 const LONG = "9784003101018";
+const MON = "9784101006017";
 const LONG_TITLE = "長い題名の本".repeat(40);
 // "stall": openBD takes the question and never answers.
 let openBd = "answer";
@@ -218,6 +219,51 @@ try {
   );
 
   await check(
+    "another ISBN takes the found book back out, so its title is not kept",
+    async () => {
+      await toasts();
+      await openRegister();
+      await dialog().getByLabel("ISBN").fill(KOKORO);
+      await dialog().getByRole("button", { name: "ISBNで探す" }).click();
+      await expect(message()).toHaveText("もうライブラリにあります。");
+      await expect(dialog().getByLabel("タイトル")).toHaveValue("こころ");
+      // What the reader changed by hand stays.
+      await dialog().getByLabel("著者").fill("夏目 漱石");
+      await dialog().getByLabel("ISBN").fill(MON);
+      await expect(message()).toHaveCount(0);
+      await expect(dialog().getByLabel("タイトル")).toHaveValue("");
+      await expect(dialog().getByLabel("著者")).toHaveValue("夏目 漱石");
+      await expect(registerButton()).toBeDisabled();
+      await dialog().getByLabel("タイトル").fill("門");
+      await registerButton().click();
+      await registered("『門』を登録しました");
+      const seen = await toasts();
+      expect(
+        seen.some((text) => text.includes("もうライブラリにあります")),
+      ).toBe(false);
+      const data = await stored();
+      expect(data.library).toEqual([
+        "isbn-" + KOKORO,
+        "isbn-" + WHEEL,
+        "isbn-" + MON,
+      ]);
+      expect(data.addedBooks).toContainEqual(
+        expect.objectContaining({
+          id: "isbn-" + MON,
+          title: "門",
+          author: "夏目 漱石",
+          isbn: MON,
+        }),
+      );
+      expect(
+        data.addedBooks
+          .filter((book) => book.title === "こころ")
+          .map((book) => book.id),
+      ).toEqual(["isbn-" + KOKORO]);
+    },
+  );
+
+  await check(
     "a book the town knows, but not the library, is registered as usual",
     async () => {
       await page
@@ -225,7 +271,7 @@ try {
         .click();
       await expect
         .poll(async () => (await stored()).library)
-        .toEqual(["isbn-" + WHEEL]);
+        .toEqual(["isbn-" + WHEEL, "isbn-" + MON]);
       await toasts();
       await openRegister();
       await dialog().getByLabel("ISBN").fill(KOKORO);
@@ -240,7 +286,11 @@ try {
         seen.some((text) => text.includes("もうライブラリにあります")),
       ).toBe(false);
       const data = await stored();
-      expect(data.library).toEqual(["isbn-" + WHEEL, "isbn-" + KOKORO]);
+      expect(data.library).toEqual([
+        "isbn-" + WHEEL,
+        "isbn-" + MON,
+        "isbn-" + KOKORO,
+      ]);
       expect(
         data.addedBooks.filter((book) => book.id === "isbn-" + KOKORO),
       ).toHaveLength(1);
@@ -258,7 +308,8 @@ try {
       );
       await expect(dialog().getByLabel("著者")).toHaveValue("試験 花子");
       await registerButton().click();
-      await registered("を登録しました");
+      // The toast names the book as kept, not as openBD wrote it.
+      await registered(`『${LONG_TITLE.slice(0, 199)}…』を登録しました`);
       const book = (await stored()).addedBooks.find(
         (entry) => entry.id === "isbn-" + LONG,
       );
@@ -281,6 +332,7 @@ try {
     }));
     expect(size.width).toBe(390);
     expect(size.document).toBeLessThanOrEqual(size.width + 1);
+    // Each place to press fits, and is at least 44px tall (plan 7-0).
     for (const target of [
       dialog().getByLabel("ISBN"),
       dialog().getByRole("button", { name: "ISBNで探す" }),
@@ -290,13 +342,14 @@ try {
       const box = await target.boundingBox();
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(390);
+      expect(box.height).toBeGreaterThanOrEqual(44);
     }
     await page.screenshot({ path: path.join(output, "dialog-390.png") });
     await page.goBack();
     await expect(dialog()).toHaveCount(0);
     await expect(page).toHaveURL(/\/profiles\/me\//);
     // Nothing was registered by closing.
-    expect((await stored()).library).toHaveLength(3);
+    expect((await stored()).library).toHaveLength(4);
   });
 
   expect(errors).toEqual([]);

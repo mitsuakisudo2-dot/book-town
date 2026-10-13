@@ -291,12 +291,18 @@ export type RegisterVia = "scan" | "isbn" | "manual";
  * - restored: a book taken out of the library came back with what it had.
  *   The library keeps nothing for a book taken out yet (no status, no
  *   shelves), so for now such a book simply comes back as added.
- * - not-saved: the town is still loading, so nothing could be kept. The
- *   screen must not say the book was registered.
+ * - not-saved: the town is still loading, or the account could not be
+ *   read, so nothing could be kept. The screen must not say the book was
+ *   registered.
  */
 export type RegisterResult = "added" | "already" | "restored" | "not-saved";
 export type Registration =
-  | { result: Exclude<RegisterResult, "not-saved">; bookId: string }
+  | {
+      result: Exclude<RegisterResult, "not-saved">;
+      bookId: string;
+      /** The title as kept: cut to 200 characters, or the town's own. */
+      title: string;
+    }
   | { result: "not-saved" };
 
 export interface TownState {

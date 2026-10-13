@@ -74,15 +74,28 @@ export function openBdBooks(
   return found;
 }
 
+/** What openBD answered about some ISBNs. */
+export interface OpenBdAnswer {
+  /** The books openBD has, by ISBN. */
+  found: Map<string, OpenBdBook>;
+  /**
+   * The ISBNs whose question failed or took too long: openBD said nothing
+   * about them, so they can be asked again later or typed by hand.
+   */
+  unanswered: string[];
+}
+
 /**
- * The books openBD has among `isbns`. Throws when openBD could not be asked,
- * or did not answer a question within four seconds.
+ * The books openBD has among `isbns`. A question that fails or is not
+ * answered within four seconds loses only its own ISBNs, never what earlier
+ * questions found.
  */
 export async function lookUpBooks(
   isbns: string[],
   fetcher: typeof fetch = (...args) => fetch(...args),
-): Promise<Map<string, OpenBdBook>> {
+): Promise<OpenBdAnswer> {
   const found = new Map<string, OpenBdBook>();
+  const unanswered: string[] = [];
   for (const question of openBdQuestions([...new Set(isbns)])) {
     const stop = new AbortController();
     const timer = setTimeout(() => stop.abort(), OPENBD_TIMEOUT_MS);
@@ -93,11 +106,13 @@ export async function lookUpBooks(
       if (!Array.isArray(records)) throw new Error("openBD answer");
       for (const [isbn, book] of openBdBooks(question.isbns, records))
         found.set(isbn, book);
+    } catch {
+      unanswered.push(...question.isbns);
     } finally {
       clearTimeout(timer);
     }
   }
-  return found;
+  return { found, unanswered };
 }
 
 /**
@@ -108,9 +123,5 @@ export async function lookUpBook(
   isbn: string,
   fetcher?: typeof fetch,
 ): Promise<OpenBdBook | null> {
-  try {
-    return (await lookUpBooks([isbn], fetcher)).get(isbn) ?? null;
-  } catch {
-    return null;
-  }
+  return (await lookUpBooks([isbn], fetcher)).found.get(isbn) ?? null;
 }

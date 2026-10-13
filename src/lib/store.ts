@@ -704,18 +704,21 @@ export function createTownStore(
       if (!title) return null;
       if (input.isbn && !isbn) return null;
       // Until the town is read (or while the account is still being
-      // checked), nothing would be kept: say so, never that it was registered.
-      if (status === "loading") return { result: "not-saved" };
+      // checked), and when the account could not be read at all, nothing
+      // would be kept: say so, never that it was registered.
+      if (status === "loading" || backend.kind === "unavailable")
+        return { result: "not-saved" };
       // Already registered is about the reader's own library, not the town:
       // a book only in the town's catalogue is registered as usual.
       const mine = isbn ? libraryBookByIsbn(state, isbn) : undefined;
-      if (mine) return { result: "already", bookId: mine.id };
+      if (mine)
+        return { result: "already", bookId: mine.id, title: mine.title };
       const existing = isbn
         ? state.books.find((book) => book.isbn === isbn)
         : undefined;
       if (existing)
         return commit({ ...state, library: [...state.library, existing.id] })
-          ? { result: "added", bookId: existing.id }
+          ? { result: "added", bookId: existing.id, title: existing.title }
           : { result: "not-saved" };
       const id = nextId(
         "book",
@@ -740,7 +743,7 @@ export function createTownStore(
         books: [...state.books, book],
         library: [...state.library, id],
       })
-        ? { result: "added", bookId: id }
+        ? { result: "added", bookId: id, title }
         : { result: "not-saved" };
     },
     addBook(input) {
