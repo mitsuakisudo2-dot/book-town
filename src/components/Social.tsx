@@ -50,6 +50,7 @@ import { ReportButton } from "./Report";
 import { useTownBackend } from "../lib/store";
 import { notePosted, postedJustNow } from "../lib/just-posted";
 import { coverSelection, splitHidden } from "../lib/hidden-words";
+import { useUrlParam } from "../lib/url-state";
 
 type Shared = {
   state: TownState;
@@ -58,7 +59,10 @@ type Shared = {
 };
 
 export function TimelineView(props: Shared) {
-  const [followingOnly, setFollowingOnly] = useState(false);
+  const [show, setShow] = useUrlParam("show");
+  const followingOnly = show === "following";
+  const setFollowingOnly = (only: boolean) =>
+    setShow(only ? "following" : null);
   const posts = followingOnly
     ? followedTimelinePosts(props.state)
     : timelinePosts(props.state);

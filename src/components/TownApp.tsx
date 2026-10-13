@@ -42,7 +42,8 @@ import { profilePath, shopPath, walkPath } from "../lib/paths";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { ReportButton, ReportDialog } from "./Report";
 import { BookFeelings } from "./ReadingRecords";
-import { accountRequested } from "../lib/visitor";
+import { accountRequested, closeAccountRequest } from "../lib/visitor";
+import { closeReport } from "../lib/report";
 import { carriedToast, noteToast } from "../lib/carried-toast";
 import {
   SAMPLE_NOTICE,
@@ -50,7 +51,8 @@ import {
   refusedForSample,
 } from "../lib/sample-notice";
 import { BackLink } from "./BackLink";
-import { notePageShown, noteReplacing } from "../lib/in-town";
+import { notePageShown } from "../lib/in-town";
+import { replaceAddress } from "../lib/url-state";
 
 type View =
   | "town"
@@ -131,6 +133,20 @@ export default function TownApp({
     window.addEventListener("hashchange", load);
     return () => window.removeEventListener("hashchange", load);
   }, [view]);
+  // On the street, what is typed in the top search stays in the address, so
+  // coming back finds the same shops.
+  useEffect(() => {
+    if (view !== "town") return;
+    if (!search && !location.hash.startsWith("#search=")) return;
+    replaceAddress({
+      hash: search ? "search=" + encodeURIComponent(search) : null,
+    });
+  }, [view, search]);
+  // A dialog about something on the page does not follow the reader to the next one.
+  useEffect(() => {
+    closeReport();
+    closeAccountRequest();
+  }, [view, selectedId]);
   // When a visitor's change became an invitation to sign in, nothing was done,
   // so the message saying it was done stays quiet.
   // A like or a follow meant for a 見本 says why nothing happened.
@@ -422,13 +438,12 @@ function ShopView({
     enabled: canBrowse && !selected,
     exclude:
       'button,a,input,textarea,select,summary,dialog,[role="dialog"],.shelf-scroll,.shop-shelf-index,[data-book-rail]',
-    // Walking along the row is one visit: going back leaves the row
-    // instead of stepping back through each shop.
+    // Each shop along the row is a step of its own: 戻る returns to the
+    // shop before it.
     onSwipe(direction) {
       const destination = direction < 0 ? previousShop : nextShop;
       if (!destination) return;
-      noteReplacing();
-      router.replace(shopPath(destination.id));
+      router.push(shopPath(destination.id));
     },
   });
   if (!shop)
@@ -467,8 +482,6 @@ function ShopView({
         {previousShop && (
           <Link
             href={shopPath(previousShop.id)}
-            replace
-            onClick={noteReplacing}
             aria-label={`前の書店：${previousShop.name}`}
           >
             <Icon name="back" size={17} />
@@ -485,8 +498,6 @@ function ShopView({
         {nextShop && (
           <Link
             href={shopPath(nextShop.id)}
-            replace
-            onClick={noteReplacing}
             aria-label={`次の書店：${nextShop.name}`}
           >
             次の書店
@@ -547,7 +558,22 @@ function ShopView({
       </p>
       <div className="shop-shelf-index">
         {shelves.map((s) => (
-          <a key={s.id} href={"#shelf-" + s.id}>
+          <a
+            key={s.id}
+            href={"#shelf-" + s.id}
+            // Jumping to a shelf on the same page is no step of its own.
+            onClick={(event) => {
+              const shelf = document.getElementById("shelf-" + s.id);
+              if (!shelf) return;
+              event.preventDefault();
+              shelf.scrollIntoView({
+                behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+                  ? "auto"
+                  : "smooth",
+              });
+              replaceAddress({ hash: "shelf-" + s.id });
+            }}
+          >
             {s.name}
             <Icon name="chevron" size={12} />
           </a>

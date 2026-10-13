@@ -19,6 +19,7 @@ import "./street.css";
 import { profilePath, shopPath, walkPath } from "../lib/paths";
 import { useTownBackend } from "../lib/store";
 import { shopOpenedRecently } from "../lib/just-opened";
+import { replaceAddress, useUrlParam } from "../lib/url-state";
 
 /** The most rounds of the street kept on the page at once. */
 const MAX_ROUNDS = 30;
@@ -57,8 +58,22 @@ export function StreetView({
   setSearch,
 }: Props) {
   const savedIn = useTownBackend();
-  const [followingOnly, setFollowingOnly] = useState(false);
-  const [offset, setOffset] = useState(0);
+  // The filter, the lane and how far down the street the reader went are kept
+  // in the address, so coming back finds the street as it was left.
+  const [show] = useUrlParam("show");
+  const followingOnly = show === "following";
+  const [lane] = useUrlParam("lane");
+  const offset = Math.max(0, Number.parseInt(lane ?? "", 10) || 0);
+  const [roundsParam, setRoundsParam] = useUrlParam("rounds");
+  // Changing the filter or the lane starts the street again from one round.
+  const setFollowingOnly = (only: boolean) =>
+    replaceAddress({
+      params: { show: only ? "following" : null, rounds: null },
+    });
+  const setOffset = (next: number) =>
+    replaceAddress({
+      params: { lane: next ? String(next) : null, rounds: null },
+    });
   // Says, for a moment, that the lane really changed.
   const [turned, setTurned] = useState(false);
   useEffect(() => {
@@ -116,10 +131,13 @@ export function StreetView({
   // The street has no end: past the last shop, another round of the same
   // town begins in a new order. A search or a short list stays one round.
   const endless = !term && matching.length >= 3;
-  // Changing the filter or the order starts the street again from one round.
   const walkKey = [followingOnly, offset].join(":");
-  const [rounds, setRounds] = useState({ key: walkKey, count: 1 });
-  const shownRounds = endless && rounds.key === walkKey ? rounds.count : 1;
+  const shownRounds = endless
+    ? Math.min(
+        Math.max(1, Number.parseInt(roundsParam ?? "", 10) || 1),
+        MAX_ROUNDS,
+      )
+    : 1;
   const roundsOf: Shop[][] = [ordered];
   for (let round = 1; round < shownRounds; round++)
     roundsOf.push(
@@ -133,19 +151,13 @@ export function StreetView({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting))
-          setRounds((current) => ({
-            key: walkKey,
-            count:
-              current.key === walkKey
-                ? Math.min(current.count + 1, MAX_ROUNDS)
-                : 2,
-          }));
+          setRoundsParam(String(Math.min(shownRounds + 1, MAX_ROUNDS)));
       },
       { rootMargin: "0px 0px 800px 0px" },
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [endless, shownRounds, walkKey]);
+  }, [endless, shownRounds, walkKey, setRoundsParam]);
   const reset = () => {
     setSearch("");
     setFollowingOnly(false);
