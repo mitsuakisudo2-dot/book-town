@@ -249,6 +249,111 @@ try {
   );
 
   await check(
+    "a kanji title is found by its reading and romaji, best match first, with no counts",
+    async () => {
+      await go("/search/");
+      const box = page.getByRole("searchbox", { name: "本と書店を検索" });
+      const found = page.locator(
+        "[aria-labelledby=search-books-title] > ul:not([aria-labelledby]) .search-book",
+      );
+      for (const typed of ["ぎんがてつどう", "gingatetsudou", "銀河 鉄道"]) {
+        await box.fill(typed);
+        await expect(found).toHaveCount(1);
+        await expect(found.first()).toContainText("銀河鉄道の夜");
+      }
+      // Found through its reading, the row says how it is read.
+      await box.fill("ぎんがてつどう");
+      await expect(found.first()).toContainText(
+        "よみ：ぎんが てつどう の よる",
+      );
+      // The title itself first, then titles that hold the word.
+      await box.fill("夜");
+      await expect(found.nth(0)).toContainText("夜と霧");
+      await expect(found).toHaveCount(3);
+      // Result headings and rows carry no counts.
+      await expect(page.locator(".search-results h2").first()).toHaveText("本");
+      await expect(page.locator(".search-results")).not.toContainText(
+        /軒の棚に|\d+冊/,
+      );
+      // Close spellings wait under their own quiet heading, and the page
+      // does not say first that nothing was found.
+      await box.fill("秘密の森の花園");
+      await expect(found).toHaveCount(0);
+      await expect(
+        page.getByRole("list", { name: "近い題名の本" }),
+      ).toContainText("秘密の花園");
+      await expect(
+        page.getByText("ぴったり合う本はありませんでした。"),
+      ).toBeVisible();
+      await expect(
+        page.getByText("合う本は見つかりませんでした。", { exact: true }),
+      ).toHaveCount(0);
+      // A name spelled a little differently is a close author, not a title.
+      await box.fill("ミハエル・エンデ");
+      await expect(
+        page.getByRole("list", { name: "著者名が近い本" }),
+      ).toContainText("モモ");
+      // Found by the author's reading, the row shows no title reading.
+      await box.fill("みやざわけんじ");
+      await expect(found.first()).toContainText("銀河鉄道の夜");
+      await expect(found.first()).not.toContainText("よみ：");
+      // A word of a reading that begins with a vowel: ロウジン ト ウミ.
+      await box.fill("うみ");
+      await expect(found.first()).toContainText("老人と海");
+      // A genre chip lists its books and nothing close.
+      await box.fill("");
+      await page
+        .getByRole("group", { name: "ジャンルで探す" })
+        .getByRole("button", { name: "ファンタジー" })
+        .click();
+      await expect(found).toHaveCount(2);
+      await expect(page.locator(".search-near")).toHaveCount(0);
+      // A search with nothing to find says so in words, never 0.
+      await box.fill("量子力学");
+      await expect(
+        page.getByText("合う本は見つかりませんでした。"),
+      ).toBeVisible();
+      await expect(page.locator(".search-results")).not.toContainText(/0/);
+      // In a picker, Enter never sends the post being written, and takes
+      // only a sure match: several equal ones or a near one wait for a tap.
+      await go("/timeline/");
+      await page.locator(".compose-fab").click();
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      await compose.locator("textarea").fill("下書きのつもりの文章");
+      await compose.getByRole("button", { name: "本を添える" }).click();
+      const picker = compose.getByRole("searchbox");
+      for (const [typed, shown] of [
+        ["孤独", /^百年の孤独/],
+        ["グウィン", /^闇の左手/],
+        ["秘密の森の花園", /^秘密の花園/],
+      ]) {
+        await picker.fill(typed);
+        await expect(
+          compose.getByRole("button", { name: shown }),
+        ).toBeVisible();
+        await picker.press("Enter");
+        await expect(compose).toBeVisible();
+        await expect(compose.locator(".picker-chosen")).toHaveCount(0);
+      }
+      await expect(page.getByText(/に投稿しました/)).toHaveCount(0);
+      await expect(compose.locator("textarea")).toHaveValue(
+        "下書きのつもりの文章",
+      );
+      await picker.fill("よるときり");
+      await expect(
+        compose.getByRole("button", { name: /^夜と霧/ }),
+      ).toBeVisible();
+      await picker.press("Enter");
+      await expect(compose.locator(".picker-chosen")).toContainText("夜と霧");
+      await compose.getByRole("button", { name: "夜と霧を外す" }).click();
+      await compose.locator("textarea").fill("");
+      await page.keyboard.press("Escape");
+      await expect(compose).toHaveCount(0);
+      await expect(page.getByText(/に投稿しました/)).toHaveCount(0);
+    },
+  );
+
+  await check(
     "reading together: default book, timer, public memo and readers now",
     async () => {
       await go("/reading/");

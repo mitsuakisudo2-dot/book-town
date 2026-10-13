@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useDeferredValue, useEffect, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   FEELINGS,
@@ -14,7 +14,15 @@ import {
 import { booksFelt, feelingsInTown } from "../lib/records";
 import { findReader } from "../lib/social";
 import { bookPath } from "../lib/books";
-import { matchBooks } from "./BookPicker";
+import {
+  bookSignals,
+  hiragana,
+  MATCH,
+  prepareSearch,
+  searchBooks,
+  searchPresence,
+  type BookMatch,
+} from "../lib/search";
 import {
   onSearchRequest,
   postsWithTag,
@@ -34,34 +42,6 @@ type Shared = {
   actions: TownActions;
   notify: (message: string) => void;
 };
-
-/** How present each book is in the town: on public shelves, in posts, and in 読みたくなった. */
-function bookSignals(state: TownState) {
-  const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
-  return new Map(
-    state.books.map((book) => {
-      const shelves = shops.reduce(
-        (count, shop) =>
-          count +
-          shop.shelves.filter(
-            (shelf) =>
-              shelf.isPublic &&
-              shelf.items.some((item) => item.bookId === book.id),
-          ).length,
-        0,
-      );
-      const posts = state.posts.filter(
-        (post) => post.bookId === book.id && post.readingMode !== "solo",
-      );
-      const reviews = posts.filter((post) => post.parentId === null).length;
-      const wants =
-        posts.reduce((sum, post) => sum + post.wants, 0) +
-        state.wantedPosts.filter((id) => posts.some((post) => post.id === id))
-          .length;
-      return [book.id, { shelves, talk: posts.length, reviews, wants }];
-    }),
-  );
-}
 
 function publicStock(state: TownState, shop: Shop): Book[] {
   return shop.shelves
@@ -113,7 +93,7 @@ export function SearchView({ state, actions, notify }: Shared) {
   const term = query.trim().toLocaleLowerCase();
   const tagTerm = /^[#＃]/.test(term) ? term.slice(1) : null;
   const personTerm = term.replace(/^@/, "");
-  const signals = bookSignals(state);
+  const signals = useMemo(() => bookSignals(state), [state]);
   const signal = (bookId: string) =>
     signals.get(bookId) ?? { shelves: 0, talk: 0, reviews: 0, wants: 0 };
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
@@ -165,7 +145,28 @@ export function SearchView({ state, actions, notify }: Shared) {
     (book) => signal(book.id).shelves <= 1 && signal(book.id).reviews === 0,
   );
 
-  const bookResults = term && !tagTerm ? matchBooks(state.books, term) : [];
+  // Typing stays quick while the town's books are searched.
+  useEffect(() => prepareSearch(state.books), [state.books]);
+  const bookQuery = term && !tagTerm ? query.trim() : "";
+  const bookTerm = useDeferredValue(bookQuery);
+  const bookResults = useMemo(
+    () =>
+      bookTerm
+        ? searchBooks(state.books, bookTerm, {
+            presence: (bookId) => searchPresence(signals.get(bookId)),
+          })
+        : [],
+    [state.books, bookTerm, signals],
+  );
+  const found = bookResults.filter((match) => !match.near);
+  const near = bookResults.filter((match) => match.near);
+  // Near matches are named for what was close: the title, the author, or both.
+  const nearAuthors = near.filter((match) => match.rank === MATCH.nearAuthor);
+  const nearHeading = !nearAuthors.length
+    ? "近い題名の本"
+    : nearAuthors.length === near.length
+      ? "著者名が近い本"
+      : "題名や著者名が近い本";
   const tagResults = tagTerm ? postsWithTag(state, tagTerm) : [];
   const people =
     term && !tagTerm
@@ -196,6 +197,14 @@ export function SearchView({ state, actions, notify }: Shared) {
         })
       : [];
 
+  // A match through the title's reading shows the reading; numbers stay out of results.
+  const matchRow = ({ book, byReading }: BookMatch) =>
+    bookRow(
+      book,
+      byReading && book.titleReading
+        ? "よみ：" + hiragana(book.titleReading.text)
+        : "",
+    );
   const bookRow = (book: Book, meta: string) => (
     <li key={book.id}>
       <Link href={bookPath(book.id)} className="search-book">
@@ -246,9 +255,7 @@ export function SearchView({ state, actions, notify }: Shared) {
       {tagTerm !== null ? (
         <div className="search-results" role="status">
           <section aria-labelledby="search-tag-title">
-            <h2 id="search-tag-title">
-              #{tagTerm} の投稿 <span>{tagResults.length}</span>
-            </h2>
+            <h2 id="search-tag-title">#{tagTerm} の投稿</h2>
             {tagResults.length ? (
               <div className="post-feed">
                 {tagResults.map((post) => (
@@ -271,9 +278,7 @@ export function SearchView({ state, actions, notify }: Shared) {
         <div className="search-results" role="status">
           {people.length > 0 && (
             <section aria-labelledby="search-people-title">
-              <h2 id="search-people-title">
-                読書家 <span>{people.length}</span>
-              </h2>
+              <h2 id="search-people-title">読書家</h2>
               <ul className="search-list">
                 {people.map((reader) => (
                   <li key={reader.id}>
@@ -291,28 +296,31 @@ export function SearchView({ state, actions, notify }: Shared) {
             </section>
           )}
           <section aria-labelledby="search-books-title">
-            <h2 id="search-books-title">
-              本 <span>{bookResults.length}</span>
-            </h2>
-            {bookResults.length ? (
-              <ul className="search-list">
-                {bookResults.map((book) =>
-                  bookRow(
-                    book,
-                    signal(book.id).shelves
-                      ? `${signal(book.id).shelves}軒の棚に`
-                      : "",
-                  ),
-                )}
-              </ul>
+            <h2 id="search-books-title">本</h2>
+            {found.length ? (
+              <ul className="search-list">{found.map(matchRow)}</ul>
             ) : (
-              <p className="search-empty">合う本は見つかりませんでした。</p>
+              bookTerm === bookQuery && (
+                <p className="search-empty">
+                  {near.length
+                    ? "ぴったり合う本はありませんでした。"
+                    : "合う本は見つかりませんでした。"}
+                </p>
+              )
+            )}
+            {near.length > 0 && (
+              <>
+                <h3 className="search-near" id="search-near-title">
+                  {nearHeading}
+                </h3>
+                <ul className="search-list" aria-labelledby="search-near-title">
+                  {near.map(({ book }) => bookRow(book, ""))}
+                </ul>
+              </>
             )}
           </section>
           <section aria-labelledby="search-shops-title">
-            <h2 id="search-shops-title">
-              書店 <span>{shopResults.length}</span>
-            </h2>
+            <h2 id="search-shops-title">書店</h2>
             {shopResults.length ? (
               <ul className="search-list">
                 {shopResults.map((shop) => (
@@ -328,7 +336,6 @@ export function SearchView({ state, actions, notify }: Shared) {
                           {shop.ownerId === state.me.id
                             ? state.me.name
                             : findReader(state, shop.ownerId)?.name}
-                          ・{publicStock(state, shop).length}冊
                         </small>
                       </span>
                       <Icon name="chevron" size={15} />
