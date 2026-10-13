@@ -541,6 +541,12 @@ try {
       const failed =
         "読み取りの準備ができませんでした。電波のよい所で［カメラで読む］をもう一度";
       await expect(scanner().locator(".scan-notes")).toContainText(failed);
+      // Said once: the field's line, and why, with nothing more on the card.
+      await expect(scanner().locator(".scan-notes")).toHaveText(
+        "13桁そろうと登録します" + failed,
+      );
+      await expect(cardStatus()).toHaveText("");
+      await expect(scanner()).not.toContainText("ISBNを続けて打");
       // The settings would not help here, so they are not mentioned.
       await expect(scanner()).not.toContainText("端末の設定");
       // The field has the focus once the camera gives way: the keyboard is up.
@@ -785,6 +791,12 @@ try {
     await scanner(scan).getByRole("button", { name: "ISBNを打つ" }).click();
     await expect(field(scan)).toBeFocused();
     await expect(scanner(scan)).toContainText("13桁そろうと登録します");
+    // On a phone nothing of the page shows past the sheet.
+    expect(
+      await scanner(scan).evaluate(
+        (layer) => getComputedStyle(layer).backgroundColor,
+      ),
+    ).toBe("rgb(247, 244, 238)");
     await scan.setViewportSize({ width: 390, height: 420 });
     for (const target of [
       field(scan),
@@ -1026,8 +1038,8 @@ try {
       });
       await go("/profiles/me/?books=library", refused);
       await openScanner(refused);
-      await expect(scanner(refused)).toContainText(
-        "カメラが使えません。ISBNを続けて打てます",
+      await expect(scanner(refused).locator(".scan-notes")).toHaveText(
+        "13桁そろうと登録しますカメラが使えませんカメラは端末の設定で許可できます",
       );
       await expect(scanner(refused)).toContainText(
         "カメラは端末の設定で許可できます",
@@ -1060,8 +1072,8 @@ try {
       });
       await go("/profiles/me/?books=library", none);
       await openScanner(none);
-      await expect(scanner(none)).toContainText(
-        "カメラが見つかりません。ISBNを続けて打てます",
+      await expect(scanner(none).locator(".scan-notes")).toHaveText(
+        "13桁そろうと登録しますカメラが見つかりません",
       );
       await expect(
         scanner(none).getByRole("button", { name: "カメラで読む" }),
@@ -1225,8 +1237,8 @@ try {
       on.on("pageerror", (e) => errors.push(e.message));
       await go("/profiles/me/?books=library", on);
       await openScanner(on);
-      await expect(scanner(on)).toContainText(
-        "このブラウザはバーコードを読み取れません。ISBNを続けて打って登録できます",
+      await expect(scanner(on).locator(".scan-notes")).toHaveText(
+        "13桁そろうと登録しますこのブラウザはバーコードを読み取れません",
       );
       await expect(
         scanner(on).getByRole("button", { name: "カメラで読む" }),

@@ -8,6 +8,13 @@
   z-index: 80;
   background: #203b2d55;
 }
+/* On a phone the sheet is the whole width: nothing of the page shows past it
+   (under ［終わる］ while typing, above the keyboard). */
+@media (max-width: 480px) {
+  .scan-session {
+    background: var(--paper);
+  }
+}
 .scan-sheet {
   position: absolute;
   top: var(--scan-top, 0px);

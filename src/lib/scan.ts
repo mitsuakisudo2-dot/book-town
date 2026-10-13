@@ -241,7 +241,6 @@ export const SCAN_COPY = {
   cameraStarting: "カメラを起動しています…",
   guide: "上の段（978…）を枠に",
   firstCamera: "読むと、その場で登録します",
-  firstTyping: "ISBNを打つと、その場で登録します",
   paused: "一時停止しています",
   banner: {
     offline:
@@ -260,14 +259,14 @@ export const SCAN_COPY = {
     price: "上の段のバーコード（978…）の数字を打ってください",
     magazine: "雑誌は［手で入力］から書名で登録できます",
   },
+  /** Why ISBNs are typed, under 13桁そろうと登録します: the cause only. */
   note: {
-    "no-reader":
-      "このブラウザはバーコードを読み取れません。ISBNを続けて打って登録できます",
+    "no-reader": "このブラウザはバーコードを読み取れません",
     "reader-failed":
       "読み取りの準備ができませんでした。電波のよい所で［カメラで読む］をもう一度",
-    denied: "カメラが使えません。ISBNを続けて打てます",
-    "no-camera": "カメラが見つかりません。ISBNを続けて打てます",
-    busy: "カメラをほかのアプリが使っているようです。ISBNを続けて打てます",
+    denied: "カメラが使えません",
+    "no-camera": "カメラが見つかりません",
+    busy: "カメラをほかのアプリが使っているようです",
     settings: "カメラは端末の設定で許可できます",
   },
   hint: {

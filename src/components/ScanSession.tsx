@@ -1034,11 +1034,12 @@ export function ScanSession({
         ? SCAN_COPY.card.untitledTitle
         : (cardIsbn ?? "")));
   const author = cardBook?.author ?? card?.author;
+  // Typing, the field's own line says it: the card waits empty.
   const line2 = !current
     ? !owner
       ? SCAN_COPY.preparing
       : typing
-        ? SCAN_COPY.firstTyping
+        ? ""
         : SCAN_COPY.firstCamera
     : current.say
       ? SAYS[current.say]
