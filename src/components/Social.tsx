@@ -47,7 +47,7 @@ import {
 } from "../lib/social";
 import { currentBookId } from "../lib/reading";
 import { bookPath } from "../lib/books";
-import { EMPTY_POST_DRAFT, usePostDraft } from "../lib/post-draft";
+import { usePostDraft } from "../lib/post-draft";
 import {
   extractTags,
   requestSearch,
@@ -64,6 +64,11 @@ import { timelinePosters, type Poster } from "../lib/posters";
 import { leaveLayers } from "../lib/back-layer";
 import { PosterCard } from "./PosterView";
 import { ReportButton } from "./Report";
+import {
+  KeptDraftNote,
+  useNotTakenWords,
+  useOpenedWithWork,
+} from "./KeptDraftNote";
 import { useTownBackend } from "../lib/store";
 import { notePosted, postedJustNow } from "../lib/just-posted";
 import { coverSelection, splitHidden } from "../lib/hidden-words";
@@ -278,7 +283,7 @@ export function BookReviews({ book, ...props }: Shared & { book: Book }) {
           さんの感想で、読みたくなった本です。
         </p>
       )}
-      <PostComposer {...props} fixedBook={book} />
+      <PostComposer key={book.id} {...props} fixedBook={book} />
       <div className="post-feed">
         {shown.map((post) => (
           <PostCard key={post.id} {...props} post={post} />
@@ -380,8 +385,11 @@ export function PostComposer({
   const id = useId();
   const {
     draft: { body, bookId, spoiler },
+    kept,
     saved,
+    loaded,
     update,
+    clear,
   } = usePostDraft(
     parent
       ? "reply:" + parent.id
@@ -389,6 +397,8 @@ export function PostComposer({
         ? "review:" + fixedBook.id
         : "new-post",
   );
+  const continuing = useOpenedWithWork(loaded, kept);
+  const notTaken = useNotTakenWords("下書き");
   const [picking, setPicking] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const tags = extractTags(body);
@@ -411,9 +421,13 @@ export function PostComposer({
       spoiler: canSpoil && spoiler,
       parentId: parent?.id ?? null,
     });
-    if (!created) return;
+    // Not taken: the words stay in the draft, and the writer is told why.
+    if (!created) {
+      notify(notTaken);
+      return;
+    }
     notePosted(created);
-    update(EMPTY_POST_DRAFT);
+    clear();
     setPicking(false);
     notify(
       isReply
@@ -537,17 +551,24 @@ export function PostComposer({
             onChange={(next) => update({ body: next })}
             notify={notify}
           />
-          <span className="composer-count" aria-hidden="true">
-            {body.length}/{POST_MAX_LENGTH}
+          <span className="composer-send">
+            <LengthNearLimit length={body.length} max={POST_MAX_LENGTH} />
+            <button className="button" type="submit" disabled={!body.trim()}>
+              {isReply ? "返信する" : "投稿する"}
+            </button>
           </span>
-          <button className="button" type="submit" disabled={!body.trim()}>
-            {isReply ? "返信する" : "投稿する"}
-          </button>
         </div>
-        {!saved ? (
-          <p className="draft-status" role="status">
-            下書きを保存できません。ページを再読み込みすると失われます。
-          </p>
+        {!saved || (continuing && kept) ? (
+          <KeptDraftNote
+            continuing={continuing && kept}
+            saved={saved}
+            wordsLost={body.trim() !== ""}
+            onDiscard={() => {
+              clear();
+              setPicking(false);
+              field.current?.focus();
+            }}
+          />
         ) : (
           (body.trim() || bookId) && (
             <p className="draft-status">
@@ -658,6 +679,27 @@ export function HideWordsButton({
       <Icon name="eye" size={15} />
       一部を隠す
     </button>
+  );
+}
+
+/**
+ * How much is written, only near the limit (from 80%), so an empty field
+ * never shows 「0/…」. The field's maxLength does the stopping.
+ */
+export function LengthNearLimit({
+  length,
+  max,
+  className = "composer-count",
+}: {
+  length: number;
+  max: number;
+  className?: string;
+}) {
+  if (length < Math.ceil(max * 0.8)) return null;
+  return (
+    <span className={className} aria-hidden="true">
+      {length}/{max}
+    </span>
   );
 }
 

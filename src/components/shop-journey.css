@@ -88,6 +88,18 @@
 .shop-journey .store-shelf-label {
   margin-bottom: 10px;
 }
+/* An empty shelf of the owner's own shop: a way to fill it, not a count.
+   A full tap target that keeps the label row its own height. */
+.store-shelf-fill {
+  margin: -6px 0 -6px auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  font-size: 12px;
+  color: var(--green);
+  white-space: nowrap;
+}
 .shop-about {
   margin-top: 28px;
   padding-top: 20px;

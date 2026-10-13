@@ -129,6 +129,23 @@
   margin: 22px auto 0;
   font-size: 12px;
 }
+/* Until the town is read, the kinds wait (kept work is checked against it). */
+.open-kind:disabled,
+.open-free:disabled {
+  opacity: 0.75;
+  cursor: progress;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Where the kept line sits: above a step, and on the first step, where kept
+   work waits to be gone on with. */
+.kept-note.open-kept {
+  margin: 0 0 14px;
+}
+.kept-note.open-resume {
+  margin: -12px 0 20px;
+}
 
 /* Picking books */
 .open-shelf {

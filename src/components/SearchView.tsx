@@ -58,8 +58,9 @@ export function SearchView({ state, actions, notify }: Shared) {
     );
     return () => clearTimeout(timer);
   }, []);
-  // A tag tapped while already here searches at once; stepping back through
-  // searches brings each one back.
+  // A tag tapped while already here searches at once (its link, or the top
+  // search, puts it in the address); stepping back through searches brings
+  // each one back.
   useEffect(() => {
     const fromAddress = () => setQuery(readParam("q") ?? "");
     const stop = onSearchRequest((next) => {
@@ -72,14 +73,13 @@ export function SearchView({ state, actions, notify }: Shared) {
       removeEventListener("popstate", fromAddress);
     };
   }, []);
-  // What is being searched stays in the address, for coming back to it.
-  useEffect(() => {
-    const timer = setTimeout(
-      () => replaceAddress({ params: { q: query.trim() ? query : null } }),
-      300,
-    );
-    return () => clearTimeout(timer);
-  }, [query]);
+  // What is being searched goes into the address as it changes, so a tap on
+  // a result or a reload a moment later still comes back to it. Not from an
+  // effect: by then a tapped link may have put its own address in place.
+  const search = (next: string) => {
+    setQuery(next);
+    replaceAddress({ params: { q: next.trim() ? next : null } });
+  };
   const term = query.trim().toLocaleLowerCase();
   const tagTerm = /^[#＃]/.test(term) ? term.slice(1) : null;
   const signals = useMemo(() => bookSignals(state), [state]);
@@ -199,7 +199,7 @@ export function SearchView({ state, actions, notify }: Shared) {
           id={id}
           type="search"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => search(event.target.value)}
           placeholder="タイトル・著者・書店名・#タグ・@ID"
           autoComplete="off"
         />
@@ -211,7 +211,7 @@ export function SearchView({ state, actions, notify }: Shared) {
             key={genre}
             aria-pressed={term === genre.toLocaleLowerCase()}
             onClick={() =>
-              setQuery(term === genre.toLocaleLowerCase() ? "" : genre)
+              search(term === genre.toLocaleLowerCase() ? "" : genre)
             }
           >
             {genre}
@@ -359,7 +359,7 @@ export function SearchView({ state, actions, notify }: Shared) {
                     type="button"
                     key={tag}
                     className="tag-chip is-set"
-                    onClick={() => setQuery("#" + tag)}
+                    onClick={() => search("#" + tag)}
                   >
                     #{tag}
                   </button>

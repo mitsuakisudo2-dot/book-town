@@ -1147,6 +1147,25 @@ try {
       await expect(cardTitle(refused)).toHaveText("試験の本 30");
       await expect(cardStatus(refused)).toHaveText("登録しました");
       await expect(count(refused)).toHaveText("この回 1冊");
+      // The Escape that cancels a kana conversion in the field is the
+      // keyboard's, as in every dialog: the scanner and the digits stay.
+      await field(refused).fill("９７８");
+      await field(refused).evaluate((input) =>
+        input.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Escape",
+            code: "Escape",
+            keyCode: 229,
+            isComposing: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        ),
+      );
+      await expect(scanner(refused)).toBeVisible();
+      await expect(field(refused)).toHaveValue("９７８");
+      await field(refused).press("Escape");
+      await expect(scanner(refused)).toHaveCount(0);
       await refused.context().close();
       // No camera at all, after one more try without asking for the back
       // one (plan 10-8): said, and the camera is not offered again.

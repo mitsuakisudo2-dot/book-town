@@ -447,6 +447,9 @@
   gap: 10px;
   margin-top: 15px;
 }
+.kept-note.profile-kept {
+  margin: 0 0 4px;
+}
 .profile-nine-editor-list {
   display: flex;
   flex-direction: column;

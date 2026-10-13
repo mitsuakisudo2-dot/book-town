@@ -64,3 +64,54 @@ export async function restingBox(locator) {
   expect(box.moving, "measured while the page was still moving").toBe(0);
   return box;
 }
+
+// The Escape that cancels a kana conversion belongs to the keyboard: a dialog
+// must not take it as a close request, or what is written in it goes with
+// the dialog. Chromium composes through the DevTools protocol as an input
+// method does, and an Escape pressed then reaches the page with isComposing.
+
+/**
+ * Presses Escape while `text` is being converted, then cancels the
+ * conversion as the keyboard would. With `keyCode229`, the Escape comes as
+ * Safari reports the key that ends a conversion (keyCode 229, not composing).
+ */
+export const escapeWhileComposing = (page, options) =>
+  keyWhileComposing(page, "Escape", options);
+
+/** The same for the Enter that confirms a conversion: a field keeps it. */
+export const enterWhileComposing = (page, options) =>
+  keyWhileComposing(page, "Enter", options);
+
+const KEY_CODES = { Escape: 27, Enter: 13 };
+
+async function keyWhileComposing(
+  page,
+  key,
+  { text = "にほん", keyCode229 = false } = {},
+) {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    if (!keyCode229)
+      await cdp.send("Input.imeSetComposition", {
+        text,
+        selectionStart: text.length,
+        selectionEnd: text.length,
+      });
+    for (const type of ["rawKeyDown", "keyUp"])
+      await cdp.send("Input.dispatchKeyEvent", {
+        type,
+        key,
+        code: key,
+        windowsVirtualKeyCode: keyCode229 ? 229 : KEY_CODES[key],
+        nativeVirtualKeyCode: keyCode229 ? 229 : KEY_CODES[key],
+      });
+    if (!keyCode229)
+      await cdp.send("Input.imeSetComposition", {
+        text: "",
+        selectionStart: 0,
+        selectionEnd: 0,
+      });
+  } finally {
+    await cdp.detach();
+  }
+}

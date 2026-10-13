@@ -136,6 +136,7 @@ const ANSWERING_ACTIONS = new Set<keyof TownActions>([
   "addShelfBook",
   "changeDisplay",
   "deletePoster",
+  "updateRecord",
 ]);
 
 export function createTownStore(
@@ -152,7 +153,9 @@ export function createTownStore(
   let status: PersistenceStatus = "loading";
   let initialized = false;
   // While an account's town is on its way, nothing can be changed or saved.
-  let loading = false;
+  // That includes the time before `follow` has chosen where the town lives,
+  // so nothing meant for an account is written into this browser's demo.
+  let loading = Boolean(options.follow);
   let generation = 0;
   let unwatch: (() => void) | null = null;
   const listeners = new Set<() => void>();
@@ -262,6 +265,9 @@ export function createTownStore(
 
   const nextId = (kind: RecordKind, ids: string[], isbn?: string | null) =>
     backend.newId(kind, ids, isbn);
+  // Words the reader wrote are not taken where they cannot be kept (an
+  // account that could not be read): the screen keeps them as a draft instead.
+  const keepsWords = () => backend.kind !== "unavailable";
 
   const actions: TownActions = {
     createShop(name, description, theme) {
@@ -532,6 +538,7 @@ export function createTownStore(
     },
     createPost(draft) {
       initialize();
+      if (!keepsWords()) return null;
       const body = draft.body.trim();
       const session = draft.fromReading
         ? state.readingSessions.find((entry) => entry.endedAt === null)
@@ -568,8 +575,10 @@ export function createTownStore(
         wants: 0,
         readingMode: session ? session.mode : null,
       };
-      commit({ ...state, posts: [...state.posts, post] });
-      return post.id;
+      // Not taken (the town is still loading): the composer keeps the draft.
+      return commit({ ...state, posts: [...state.posts, post] })
+        ? post.id
+        : null;
     },
     deletePost(postId) {
       initialize();
@@ -761,7 +770,11 @@ export function createTownStore(
     recordReading(draft) {
       initialize();
       const record = cleanRecord(draft);
-      if (!record || !state.books.some((book) => book.id === draft.bookId))
+      if (
+        !keepsWords() ||
+        !record ||
+        !state.books.some((book) => book.id === draft.bookId)
+      )
         return null;
       const entry: ReadingRecord = {
         id: nextId(
@@ -773,14 +786,14 @@ export function createTownStore(
         ...record,
         createdAt: now().toISOString(),
       };
-      commit({
+      const taken = commit({
         ...state,
         readingRecords: [...state.readingRecords, entry],
         finishedBooks: state.finishedBooks.includes(draft.bookId)
           ? state.finishedBooks
           : [...state.finishedBooks, draft.bookId],
       });
-      return entry.id;
+      return taken ? entry.id : null;
     },
     updateRecord(recordId, patch) {
       initialize();
@@ -788,8 +801,8 @@ export function createTownStore(
         (entry) => entry.id === recordId && entry.readerId === ME_ID,
       );
       const record = current && cleanRecord({ ...current, ...patch });
-      if (!current || !record) return;
-      commit({
+      if (!keepsWords() || !current || !record) return false;
+      return commit({
         ...state,
         readingRecords: state.readingRecords.map((entry) =>
           entry.id === recordId ? { ...entry, ...record } : entry,

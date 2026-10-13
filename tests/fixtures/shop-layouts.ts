@@ -3,6 +3,7 @@ import { demoBooks, demoShops } from "../../src/lib/data";
 import {
   addBookPlacement,
   objectById,
+  placementSize,
   rect,
   setBookPop,
   worldPolygon,
@@ -12,6 +13,7 @@ import {
 import {
   applyStoreTemplate,
   changePlacement,
+  insertPlacement,
   migrateShopScene,
 } from "../../src/lib/store-customization";
 import {
@@ -71,9 +73,25 @@ export function demoScene(): StoreScene {
   return changePlacement(scene, second.id, { stamp: "coffee" }, demoBooks);
 }
 
-/** The demo scene in the window template: a table and its row. */
-export const windowScene = () =>
-  applyStoreTemplate(demoScene(), "window", demoBooks);
+/**
+ * The demo scene in the window template: a table and its row. A template
+ * keeps each book on the row with the same number, so the new table starts
+ * empty; two books are set on it here, sized for the table first so that
+ * its row keeps them.
+ */
+export const windowScene = () => {
+  let scene = applyStoreTemplate(demoScene(), "window", demoBooks);
+  for (const id of ["placement:shop-orbit:o12", "placement:shop-orbit:o13"]) {
+    const p = objectById(scene, id)!;
+    p.preferredSize = placementSize(
+      demoBooks.find((b) => b.id === p.bookId)!,
+      p.display!,
+      0.105,
+    );
+    scene = insertPlacement(scene, id, "table-row", 9);
+  }
+  return scene;
+};
 
 /** Private things of every kind a v1 scene can hold. */
 export function privateScene(): StoreScene {

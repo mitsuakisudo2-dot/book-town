@@ -19,6 +19,7 @@ import {
   loadDetector,
   readerKind,
 } from "../lib/barcode-reader";
+import { imeKey } from "../lib/keys";
 import { normalizeIsbn } from "../lib/books";
 import {
   heldItem,
@@ -977,7 +978,9 @@ export function ScanSession({
       if (latest.current.manual) return;
       if (event.key === "Escape") {
         event.preventDefault();
-        finishRef.current();
+        // The Escape that cancels a kana conversion in the ISBN field is the
+        // keyboard's, as in every Modal.
+        if (!imeKey(event)) finishRef.current();
       }
       if (event.key === "Tab") {
         const all = Array.from(

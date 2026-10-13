@@ -83,10 +83,17 @@
 .composer-hide:hover {
   color: #5f4637;
 }
+/* The send button keeps to the right edge, with the count (shown only near
+   the limit) just before it; the two wrap together. */
+.composer-send {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
 .composer-count {
   font-size: 10px;
   color: #a6ae97;
-  margin-left: auto;
 }
 .composer-tools .button:disabled {
   opacity: 0.45;
@@ -540,12 +547,6 @@ mark.hidden-words.is-open {
   }
   .post-composer > .reader-avatar {
     display: none;
-  }
-  .composer-count {
-    margin-left: 0;
-  }
-  .composer-tools .button {
-    margin-left: auto;
   }
 }
 
