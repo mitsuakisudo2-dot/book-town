@@ -1,6 +1,15 @@
 import { createRegisteredBook, REGISTERED_GENRE } from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
+import {
+  pageRowBookIds,
+  pagesFromRows,
+  pagesToRows,
+  restorePoster,
+  withPageRowBooks,
+  type Poster,
+  type PosterPageRow,
+} from "./posters";
 import { tapsOf } from "./social";
 import {
   COMPOSE_ICONS,
@@ -94,6 +103,8 @@ export interface RemoteRows {
   sessions: Tables<"reading_sessions">[];
   /** The person's own reading records, and others' public ones. */
   records: Tables<"reading_entries">[];
+  /** The person's own posters, drafts too, and others' put up. */
+  posters: Tables<"posters">[];
   seenNotifications: string[];
 }
 
@@ -546,6 +557,31 @@ export function townFromRows(
         text: row.message,
         at: row.updated_at,
       })),
+    posters: rows.posters
+      .filter((row) => row.author_id === userId || known.has(row.author_id))
+      .flatMap((row): Poster[] => {
+        const poster = restorePoster(
+          {
+            id: row.id,
+            authorId: readerId(row.author_id),
+            template: row.template,
+            theme: row.theme,
+            font: row.font,
+            pages: pagesFromRows(row.pages, (id) => sampleBookOfRow(id) ?? id),
+            spoiler: row.spoiler,
+            inTimeline: row.show_in_timeline,
+            status: row.status,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          },
+          bookIds,
+        );
+        // Others' drafts never reach the town, whatever the rows say.
+        return poster &&
+          (poster.status === "published" || row.author_id === userId)
+          ? [poster]
+          : [];
+      }),
   };
 }
 
@@ -575,6 +611,9 @@ export function referencedBookIds(rows: Omit<RemoteRows, "books">): string[] {
   rows.posts.forEach((row) => row.book_id && ids.add(row.book_id));
   rows.sessions.forEach((row) => row.book_id && ids.add(row.book_id));
   rows.records.forEach((row) => ids.add(row.book_id));
+  rows.posters.forEach((row) =>
+    pageRowBookIds(row.pages).forEach((id) => ids.add(id)),
+  );
   // Shelves may hold a 見本's book by its name; the catalog has only ids.
   return [...ids].filter(isDatabaseId);
 }
@@ -626,8 +665,26 @@ export type Write =
         "body" | "feelings" | "spoiler" | "is_public"
       >;
     }
+  | { kind: "delete-posters"; ids: string[] }
+  | { kind: "posters"; rows: TablesInsert<"posters">[] }
+  | { kind: "update-poster"; id: string; patch: PosterFields }
   | { kind: "remove"; table: RelationTable; rows: Pair[] }
   | { kind: "add"; table: RelationTable; rows: Pair[] };
+
+type PosterFields = Pick<
+  Tables<"posters">,
+  "template" | "theme" | "font" | "spoiler" | "show_in_timeline" | "status"
+> & { pages: PosterPageRow[] };
+
+const posterFields = (poster: Poster): PosterFields => ({
+  template: poster.template,
+  theme: poster.theme,
+  font: poster.font,
+  pages: pagesToRows(poster.pages),
+  spoiler: poster.spoiler,
+  show_in_timeline: poster.inTimeline,
+  status: poster.status,
+});
 
 export type RelationTable =
   | "shop_follows"
@@ -879,6 +936,40 @@ export function planWrites(
       });
   }
 
+  const ownPosters = (state: TownState) =>
+    new Map(
+      state.posters
+        .filter((poster) => poster.authorId === ME_ID)
+        .map((poster) => [poster.id, poster]),
+    );
+  const basePosters = ownPosters(base);
+  const nextPosters = ownPosters(next);
+  const takenDown = [...basePosters.keys()].filter(
+    (id) => !nextPosters.has(id),
+  );
+  if (takenDown.length) writes.push({ kind: "delete-posters", ids: takenDown });
+  const madePosters = [...nextPosters.values()].filter(
+    (poster) => !basePosters.has(poster.id),
+  );
+  if (madePosters.length)
+    writes.push({
+      kind: "posters",
+      rows: madePosters.map((poster) => ({
+        id: poster.id,
+        author_id: user,
+        ...posterFields(poster),
+      })),
+    });
+  for (const poster of nextPosters.values()) {
+    const before = basePosters.get(poster.id);
+    if (before && !sameJson(posterFields(before), posterFields(poster)))
+      writes.push({
+        kind: "update-poster",
+        id: poster.id,
+        patch: posterFields(poster),
+      });
+  }
+
   const from = relations(base, ids);
   const to = relations(next, ids);
   for (const table of Object.keys(to) as RelationTable[]) {
@@ -931,6 +1022,26 @@ function withSampleRows(writes: Write[], user: string): Write[] {
         return [{ ...write, rows: write.rows.map(named) }];
       case "records":
         return [{ ...write, rows: write.rows.map(named) }];
+      case "posters":
+        return [
+          {
+            ...write,
+            rows: write.rows.map((row) => ({
+              ...row,
+              pages: withPageRowBooks(row.pages as PosterPageRow[], keep),
+            })),
+          },
+        ];
+      case "update-poster":
+        return [
+          {
+            ...write,
+            patch: {
+              ...write.patch,
+              pages: withPageRowBooks(write.patch.pages, keep),
+            },
+          },
+        ];
       case "add":
       case "remove": {
         const rows = write.rows.filter(real).map((row) =>
@@ -1006,6 +1117,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     settings: { composeIcon: "pen", readingPublic: false },
     seenNotifications: [],
     shopMessages: [],
+    posters: [],
   };
 }
 

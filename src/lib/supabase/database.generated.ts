@@ -258,6 +258,94 @@ export type Database = {
           },
         ];
       };
+      poster_books: {
+        Row: {
+          book_id: string;
+          first_page: number;
+          poster_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          book_id: string;
+          first_page: number;
+          poster_id: string;
+        };
+        Update: {
+          book_id?: string;
+          first_page?: number;
+          poster_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "poster_books_book_id_fkey";
+            columns: ["book_id"];
+            isOneToOne: false;
+            referencedRelation: "books";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "poster_books_poster_id_fkey";
+            columns: ["poster_id"];
+            isOneToOne: false;
+            referencedRelation: "posters";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      posters: {
+        Row: {
+          allow_display: boolean;
+          author_id: string;
+          created_at: string;
+          font: string;
+          id: string;
+          pages: NonNullable<Json>;
+          show_in_timeline: boolean;
+          spoiler: boolean;
+          status: string;
+          template: string;
+          theme: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          allow_display?: boolean;
+          author_id: string;
+          created_at?: string;
+          font?: string;
+          id?: string;
+          pages: NonNullable<Json>;
+          show_in_timeline?: boolean;
+          spoiler?: boolean;
+          status?: string;
+          template: string;
+          theme?: string;
+          updated_at?: string;
+        };
+        Update: {
+          allow_display?: boolean;
+          author_id?: string;
+          created_at?: string;
+          font?: string;
+          id?: string;
+          pages?: NonNullable<Json>;
+          show_in_timeline?: boolean;
+          spoiler?: boolean;
+          status?: string;
+          template?: string;
+          theme?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "posters_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       posts: {
         Row: {
           author_id: string;

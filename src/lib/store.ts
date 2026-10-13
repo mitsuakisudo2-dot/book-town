@@ -18,6 +18,7 @@ import { isDatabaseId } from "./paths";
 import { createRegisteredBook, normalizeIsbn } from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
+import { cleanPosterDraft, posterProblem, type Poster } from "./posters";
 import { handleProblem, normalizeHandle } from "./handles";
 import { tapsOf } from "./social";
 import {
@@ -106,6 +107,7 @@ const reachesSample = (name: string, args: unknown[]) => {
 const ANSWERING_ACTIONS = new Set<keyof TownActions>([
   "addShelfBook",
   "changeDisplay",
+  "deletePoster",
 ]);
 
 export function createTownStore(
@@ -183,11 +185,13 @@ export function createTownStore(
     else start(backend);
   }
 
-  function commit(next: TownState) {
-    if (next === state || loading) return;
+  /** Whether the change was taken: nothing is changed while the town loads. */
+  function commit(next: TownState): boolean {
+    if (next === state || loading) return false;
     state = next;
     status = backend.save(state);
     notify();
+    return true;
   }
 
   function withShop(nextShop: Shop) {
@@ -762,6 +766,68 @@ export function createTownStore(
       commit({
         ...state,
         settings: { ...state.settings, readingPublic: value === true },
+      });
+    },
+    savePoster(draft, posterId) {
+      initialize();
+      const poster = cleanPosterDraft(
+        draft,
+        new Set(state.books.map((book) => book.id)),
+      );
+      if (!poster || (poster.status === "published" && posterProblem(poster)))
+        return null;
+      const at = now().toISOString();
+      if (posterId !== undefined) {
+        const current = state.posters.find(
+          (entry) => entry.id === posterId && entry.authorId === ME_ID,
+        );
+        if (!current) return null;
+        const next: Poster = {
+          ...current,
+          ...poster,
+          // A draft put up is new on the board from then on.
+          createdAt:
+            current.status === "draft" && poster.status === "published"
+              ? at
+              : current.createdAt,
+          updatedAt: at,
+        };
+        // Until the town has loaded, nothing is kept: the maker's work stays
+        // with them rather than being thanked for and lost.
+        return commit({
+          ...state,
+          posters: state.posters.map((entry) =>
+            entry.id === posterId ? next : entry,
+          ),
+        })
+          ? posterId
+          : null;
+      }
+      const entry: Poster = {
+        id: nextId(
+          "poster",
+          state.posters.map((entry) => entry.id),
+        ),
+        authorId: ME_ID,
+        ...poster,
+        createdAt: at,
+        updatedAt: at,
+      };
+      return commit({ ...state, posters: [...state.posters, entry] })
+        ? entry.id
+        : null;
+    },
+    deletePoster(posterId) {
+      initialize();
+      if (
+        !state.posters.some(
+          (entry) => entry.id === posterId && entry.authorId === ME_ID,
+        )
+      )
+        return false;
+      return commit({
+        ...state,
+        posters: state.posters.filter((entry) => entry.id !== posterId),
       });
     },
     markNotificationsSeen(ids) {
