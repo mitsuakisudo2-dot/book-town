@@ -62,6 +62,7 @@ import { requestSearch } from "../lib/tags";
 import { enterPressed } from "../lib/search/use-book-search";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { CoverRemovalLink, ReportButton, ReportDialog } from "./Report";
+import { SiteNotesGate } from "./SiteNotesGate";
 import { BookFeelings } from "./ReadingRecords";
 import { accountRequested, closeAccountRequest } from "../lib/visitor";
 import { closeReport } from "../lib/report";
@@ -494,6 +495,7 @@ export default function TownApp({
       )}
       <AccountInvite />
       <ReportDialog />
+      <SiteNotesGate notify={notify} />
     </div>
   );
 }
