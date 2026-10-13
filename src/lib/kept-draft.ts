@@ -162,6 +162,14 @@ export function useKeptDraft<T>(store: KeptDraftStore<T>, key: string | null) {
   };
 }
 
+/**
+ * Whether a notice says a save was turned away and the work kept: every such
+ * notice says 残しています, and none that tells of something done does. The
+ * toast shows these with a leaf, not the tick of a save.
+ */
+export const isKeptNotice = (message: string) =>
+  message.includes("残しています");
+
 /** A string read back from storage, if it fits the limit (in characters). */
 export const keptText = (value: unknown, limit: number): value is string =>
   typeof value === "string" && [...value].length <= limit;

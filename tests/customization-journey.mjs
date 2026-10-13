@@ -204,6 +204,20 @@ try {
       "キャンセルした店",
     );
     await expect(keptLine()).toContainText("書きかけを続けています");
+    // On a phone the editor opens scrolled to its first field, and the line
+    // that says the work goes on is still in view.
+    await dialog()
+      .getByRole("button", { name: "キャンセル", exact: true })
+      .click();
+    await stop.getByRole("button", { name: "残す", exact: true }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await reopen();
+    await expect(dialog().getByLabel("看板の店名")).toBeFocused();
+    await expect(keptLine()).toBeInViewport();
+    await expect(
+      keptLine().getByRole("button", { name: "書きかけを消す", exact: true }),
+    ).toBeInViewport();
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await dialog()
       .getByRole("button", { name: "キャンセル", exact: true })
       .click();

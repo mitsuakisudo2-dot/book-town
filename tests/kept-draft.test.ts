@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { createKeptDraftStore, keptIds, keptText } from "../src/lib/kept-draft";
+import {
+  createKeptDraftStore,
+  isKeptNotice,
+  keptIds,
+  keptText,
+} from "../src/lib/kept-draft";
+import { SAVE_REFUSED } from "../src/lib/shop-draft";
 
 type Note = { text: string; ids: string[] };
 const memory = () => {
@@ -110,6 +116,19 @@ const options = {
   stop();
   store.set("new", { text: "もう", ids: [] });
   assert.equal(heard, 1);
+}
+
+{
+  // A refused save that kept the work is told without the tick of a save.
+  for (const refused of [
+    SAVE_REFUSED,
+    "保存できませんでした。書きかけはそのまま残しています",
+    "街を読み込んでいます。下書きはそのまま残しています",
+    "プロフィールを保存できませんでした。書きかけは残しています。",
+  ])
+    assert.equal(isKeptNotice(refused), true, refused);
+  for (const done of ["記録を書き直しました", "『こころ』を登録しました"])
+    assert.equal(isKeptNotice(done), false, done);
 }
 
 console.log("kept-draft ok");

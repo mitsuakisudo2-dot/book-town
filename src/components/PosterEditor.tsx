@@ -46,6 +46,7 @@ import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { BackLink } from "./BackLink";
 import { PosterSheet } from "./PosterView";
 import { BookJacket, Icon } from "./ui";
+import { KeptDraftNote } from "./KeptDraftNote";
 import "./poster-editor.css";
 
 type Shared = {
@@ -221,7 +222,7 @@ function PosterMaker({
   const [failed, setFailed] = useState<keyof typeof FAILED | null>(null);
   // What a screen reader says when a press did nothing.
   const [said, setSaid] = useState({ words: "", times: 0 });
-  const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [enlarged, setEnlarged] = useState(false);
   const elsewhere = key === "new" ? workElsewhere(all, state) : [];
   // Folded or held by reports: the maker is told here too, as on its page.
@@ -236,7 +237,6 @@ function PosterMaker({
   const form = useRef<HTMLFormElement>(null);
   const tabs = useRef<HTMLDivElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
-  const resetButton = useRef<HTMLButtonElement>(null);
   const deleteButton = useRef<HTMLButtonElement>(null);
   const handTo = useRef<(() => HTMLElement | null | undefined) | null>(null);
   useEffect(() => {
@@ -322,14 +322,13 @@ function PosterMaker({
     handTo.current = chosenTab;
   }
 
-  function confirm(what: "reset" | "delete") {
-    setConfirming(what);
+  function confirm() {
+    setConfirming(true);
     handTo.current = () => cancelButton.current;
   }
   function cancel() {
-    const trigger = confirming === "delete" ? deleteButton : resetButton;
-    setConfirming(null);
-    handTo.current = () => trigger.current;
+    setConfirming(false);
+    handTo.current = () => deleteButton.current;
   }
 
   function save(status: PosterDraft["status"]) {
@@ -697,55 +696,30 @@ function PosterMaker({
             {failed === "save" && (
               <p className="poster-editor-problem is-asked">{FAILED.save}</p>
             )}
-            {!saved ? (
-              <p className="poster-editor-quiet" role="status">
-                書きかけをこのブラウザに残せません。ページを閉じると失われます。
-              </p>
-            ) : (
-              keptFresh && (
-                <p className="poster-editor-quiet">
-                  書きかけは、このブラウザに残しています。
-                  {confirming === "reset" ? (
-                    <span className="poster-editor-confirm">
-                      書きかけを消しますか？
-                      <button
-                        type="button"
-                        onClick={() => {
-                          clear();
-                          setUndo(null);
-                          setPageIndex(0);
-                          setConfirming(null);
-                          // Back to the start, where the first step is.
-                          handTo.current = () =>
-                            form.current?.querySelector<HTMLElement>(
-                              "input[name='poster-template']:checked",
-                            );
-                        }}
-                      >
-                        消す
-                      </button>
-                      <button type="button" ref={cancelButton} onClick={cancel}>
-                        残す
-                      </button>
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="poster-editor-text-button"
-                      ref={resetButton}
-                      onClick={() => confirm("reset")}
-                    >
-                      {poster ? "直す前に戻す" : "最初からやり直す"}
-                    </button>
-                  )}
-                </p>
-              )
-            )}
+            {/* Shown from the first word, so it says the work is kept here,
+                not that it is being continued. */}
+            <KeptDraftNote
+              className="poster-editor-kept"
+              continuing={saved && keptFresh !== null}
+              saved={saved}
+              wordsLost
+              lead="書きかけは、このブラウザに残しています"
+              onDiscard={() => {
+                clear();
+                setUndo(null);
+                setPageIndex(0);
+                // Back to the start, where the first step is.
+                handTo.current = () =>
+                  form.current?.querySelector<HTMLElement>(
+                    "input[name='poster-template']:checked",
+                  );
+              }}
+            />
           </div>
 
           {poster && (
             <div className="poster-editor-delete">
-              {confirming === "delete" ? (
+              {confirming ? (
                 <div
                   className="delete-confirm"
                   role="group"
@@ -769,7 +743,7 @@ function PosterMaker({
                   type="button"
                   className="poster-editor-text-button"
                   ref={deleteButton}
-                  onClick={() => confirm("delete")}
+                  onClick={confirm}
                 >
                   このポスターを消す
                 </button>

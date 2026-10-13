@@ -77,11 +77,11 @@
   align-items: center;
   gap: 7px;
 }
-/* Shown only near the limit, so it is read. */
+/* Shown only near the limit, so it is read: as the composer's count. */
 .record-count {
   margin-left: auto;
-  font-size: 10px;
-  color: #6f7c64;
+  font-size: 12px;
+  color: #626e59;
 }
 .record-visibility {
   border: 0;

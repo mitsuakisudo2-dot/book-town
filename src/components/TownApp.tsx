@@ -64,6 +64,7 @@ import { BookFeelings } from "./ReadingRecords";
 import { accountRequested, closeAccountRequest } from "../lib/visitor";
 import { closeReport } from "../lib/report";
 import { carriedToast, noteToast } from "../lib/carried-toast";
+import { isKeptNotice } from "../lib/kept-draft";
 import {
   SAMPLE_NOTICE,
   onSampleRefusal,
@@ -837,8 +838,14 @@ function Toast({
           onHold(false);
       }}
     >
-      {/* Turned away from a 見本: a leaf, not a tick, for nothing was done. */}
-      <Icon name={message === SAMPLE_NOTICE ? "leaf" : "check"} size={17} />
+      {/* Turned away from a 見本, or a save refused with the work kept: a
+          leaf, not a tick, for nothing was done. */}
+      <Icon
+        name={
+          message === SAMPLE_NOTICE || isKeptNotice(message) ? "leaf" : "check"
+        }
+        size={17}
+      />
       {message}
       {undo && (
         <button type="button" className="toast-undo" onClick={undo.run}>

@@ -15,6 +15,9 @@
 .kept-note.scene-editor-kept {
   margin: -12px 0 16px;
 }
+.kept-note.scene-editor-kept-footer {
+  margin: 0 0 6px;
+}
 .scene-editor-columns {
   display: grid;
   grid-template-columns: minmax(200px, 0.8fr) minmax(0, 1.2fr);

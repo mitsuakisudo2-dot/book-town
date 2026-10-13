@@ -802,6 +802,7 @@ try {
         // The count comes only near the limit.
         await note.fill("湖".repeat(204));
         await expect(sheet.locator(".record-count")).toHaveText("204/255");
+        await expectReadable(sheet.locator(".record-count"), "record count");
         await note.fill("湖の音が残った。");
         // Kept for real, the work is cleared.
         await sheet.getByRole("button", { name: "記録する" }).click();

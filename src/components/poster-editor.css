@@ -619,18 +619,9 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.poster-editor-confirm {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  margin-left: 8px;
-  color: #7a5a35;
-}
-.poster-editor-confirm button {
-  color: var(--green);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+/* The kept line (KeptDraftNote), set where the maker's quiet notes sit. */
+.kept-note.poster-editor-kept {
+  margin: 6px 0;
 }
 .poster-editor-delete {
   margin-top: 34px;

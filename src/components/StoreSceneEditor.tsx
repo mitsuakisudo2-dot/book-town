@@ -227,19 +227,18 @@ export function StoreSceneEditor({
         <p className="scene-editor-intro">
           本を選び、言葉を添えて、あなたの一軒に。保存すると「書店めぐり」に反映されます。
         </p>
-        <KeptDraftNote
-          className="scene-editor-kept"
-          continuing={stale !== null || Boolean(resumed && fresh)}
-          saved={kept.saved}
-          wordsLost
-          onDiscard={discard}
-          lead={
-            stale
-              ? "書きかけより新しい店内が保存されています。書きかけを開くか消すと、続けて飾れます"
-              : undefined
-          }
-          action={
-            stale && (
+        {/* Work older than the scene saved since waits here, first, and
+            takes the focus. Work that goes on is told in the footer, which
+            stays on screen while the editor scrolls to its first field. */}
+        {stale && (
+          <KeptDraftNote
+            className="scene-editor-kept"
+            continuing
+            saved={kept.saved}
+            wordsLost
+            onDiscard={discard}
+            lead="書きかけより新しい店内が保存されています。書きかけを開くか消すと、続けて飾れます"
+            action={
               <button
                 type="button"
                 ref={openButton}
@@ -256,9 +255,9 @@ export function StoreSceneEditor({
               >
                 書きかけを開く
               </button>
-            )
-          }
-        />
+            }
+          />
+        )}
         <div className="scene-editor-columns">
           <div className="scene-preview">
             <div className="walk-artboard" aria-label="店内のプレビュー">
@@ -692,6 +691,15 @@ export function StoreSceneEditor({
           </div>
         </div>
         <div className="scene-editor-footer">
+          {!stale && (
+            <KeptDraftNote
+              className="scene-editor-kept scene-editor-kept-footer"
+              continuing={!stopping && Boolean(resumed && fresh)}
+              saved={kept.saved}
+              wordsLost
+              onDiscard={discard}
+            />
+          )}
           <p className="scene-hint">
             {saved.kind === "account"
               ? "あなたのアカウントに保存します。公開した棚だけが、書店めぐりで誰でも眺められます。これまでの本棚の内容は残ります。"

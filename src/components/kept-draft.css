@@ -36,12 +36,15 @@
 .kept-note-confirm button:hover {
   color: var(--green);
 }
-/* 書きかけを消しますか？ 消す／残す, in place of the way to throw it away. */
+/* 書きかけを消しますか？ 消す／残す, in place of the way to throw it away;
+   the same size whether or not a .kept-note holds it. */
 .kept-note-confirm {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 2px 14px;
+  font-size: 12px;
+  line-height: 1.8;
   color: #7a5a35;
 }
 .kept-note.kept-note-confirm {
