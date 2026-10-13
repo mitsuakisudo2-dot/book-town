@@ -1,5 +1,7 @@
 import type { Post, TownState } from "./types";
 import { coverHidden } from "./hidden-words";
+import { searchFold } from "./search/fold";
+import { readTextQuery, textMatch, TEXT_MATCH } from "./search/text";
 
 // A tag is # (or the full-width ＃) followed by letters, digits, _ or Japanese marks.
 const TAG = /[#＃]([\p{L}\p{N}_ー・々〆]{1,30})/gu;
@@ -39,27 +41,59 @@ export function splitTags(body: string): BodyPart[] {
   return parts;
 }
 
+/**
+ * One tag however it was typed, the way searches fold text: #ホラー is #ほらー,
+ * #ＳＦ is #sf. A tag of marks alone (#ー・) is kept as written.
+ */
+const tagKey = (tag: string) => searchFold(tag) || tag.toLowerCase();
+
+/**
+ * Whether a tag is the one asked for: the same once folded, or read from
+ * romaji (#misuteri is #ミステリ).
+ */
+function tagFinder(asked: string): (tag: string) => boolean {
+  const query = readTextQuery(asked);
+  const key = tagKey(asked);
+  return (tag) =>
+    tagKey(tag) === key || textMatch(query, [tag]) === TEXT_MATCH.exact;
+}
+
 /** Public posts that carry a tag, newest first. Private reading notes never appear. */
-export const postsWithTag = (state: TownState, tag: string): Post[] =>
-  state.posts
+export function postsWithTag(state: TownState, tag: string): Post[] {
+  const asked = tagFinder(tag);
+  return state.posts
     .filter(
       (post) =>
-        post.readingMode !== "solo" &&
-        extractTags(post.body).includes(tag.toLowerCase()),
+        post.readingMode !== "solo" && extractTags(post.body).some(asked),
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
 
-/** Tags in use across public posts, most used first. */
+/**
+ * Tags in use across public posts, most used first. Spellings of one tag
+ * count together, under the one used most.
+ */
 export function popularTags(state: TownState, limit = 12) {
-  const counts = new Map<string, number>();
+  const counts = new Map<
+    string,
+    { count: number; spellings: Map<string, number> }
+  >();
   for (const post of state.posts)
     if (post.readingMode !== "solo")
-      for (const tag of extractTags(post.body))
-        counts.set(tag, (counts.get(tag) ?? 0) + 1);
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja"))
-    .slice(0, limit)
-    .map(([tag, count]) => ({ tag, count }));
+      for (const tag of extractTags(post.body)) {
+        const key = tagKey(tag);
+        const entry = counts.get(key) ?? { count: 0, spellings: new Map() };
+        entry.count++;
+        entry.spellings.set(tag, (entry.spellings.get(tag) ?? 0) + 1);
+        counts.set(key, entry);
+      }
+  return [...counts.values()]
+    .map(({ count, spellings }) => ({
+      tag: [...spellings].sort((a, b) => b[1] - a[1])[0][0],
+      count,
+    }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "ja"))
+    .slice(0, limit);
 }
 
 /**

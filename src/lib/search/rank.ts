@@ -65,6 +65,31 @@ export interface SearchOptions {
 /** Enter in a picker takes the first book only when it is this sure. */
 export const strongMatch = (match: BookMatch) => match.rank >= MATCH.titleStart;
 
+/**
+ * The book Enter takes in a picker: the first, only when it is surely the one
+ * meant (a title that begins so, or the one book found). Never a near title.
+ */
+export function surePick(
+  books: readonly Book[],
+  query: string,
+  options: SearchOptions = {},
+): Book | null {
+  const now = searchBooks(books, query, { ...options, limit: 2 });
+  const first = now[0];
+  return first && (strongMatch(first) || (now.length === 1 && !first.near))
+    ? first.book
+    : null;
+}
+
+/** The quiet heading near matches stand under, named for what was close. */
+export function nearHeading(near: readonly BookMatch[]): string {
+  const authors = near.filter((match) => match.rank === MATCH.nearAuthor);
+  if (!authors.length) return "近い題名の本";
+  return authors.length === near.length
+    ? "著者名が近い本"
+    : "題名や著者名が近い本";
+}
+
 interface Form {
   kind: "typed" | "romaji" | "ruby";
   key: string;
