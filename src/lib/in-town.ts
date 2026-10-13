@@ -1,3 +1,5 @@
+import { noteHomeAddress } from "./last-address";
+
 // The pages of the town this tab has walked through, so a page can tell
 // whether going back stays in the town or leaves it (a page opened directly
 // from a shared link has nothing of the town behind it).
@@ -15,6 +17,7 @@ if (typeof window !== "undefined")
 
 /** Called once a page of the town has appeared. */
 export function notePageShown() {
+  noteHomeAddress();
   const page = here();
   const at = poppedTo === page ? trail.lastIndexOf(page) : -1;
   if (at >= 0) trail = trail.slice(0, at + 1);
@@ -28,6 +31,7 @@ export function notePageShown() {
 /** The page's address changed in place (a tab, a filter): same step, new address. */
 export function noteAddressChanged() {
   if (trail.length) trail[trail.length - 1] = here();
+  noteHomeAddress();
 }
 
 /**

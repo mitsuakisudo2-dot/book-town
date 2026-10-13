@@ -18,6 +18,7 @@ import {
   useGoogleCoversShown,
 } from "../lib/covers";
 import { useBackLayer } from "../lib/back-layer";
+import { imeKey } from "../lib/keys";
 import "./illustrated-jackets.css";
 const shapes: Record<string, ReactNode> = {
   book: (
@@ -458,7 +459,9 @@ export function Modal({
         // One Escape closes one layer: a book in hand beneath (a native
         // <dialog>) would otherwise take it as its own close request too.
         e.preventDefault();
-        closeRef.current();
+        // The Escape that cancels a kana conversion is the keyboard's: the
+        // dialog and what is written in it stay.
+        if (!imeKey(e)) closeRef.current();
       }
       if (e.key === "Tab") {
         const all = Array.from(

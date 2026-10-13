@@ -121,3 +121,29 @@
   font-weight: 500;
   color: #3f4d3b;
 }
+.account-kept {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #6f7d68;
+}
+.account-kept-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.account-kept button {
+  border: 0;
+  background: none;
+  min-height: 32px;
+  padding: 4px 0;
+  font: inherit;
+  color: #5d6858;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo } from "react";
+import { imeKey } from "../keys";
 import type { Book } from "../types";
 import { prepareSearch } from "./postings";
 import { nearHeading, searchBooks, surePick, type BookMatch } from "./rank";
@@ -75,5 +76,7 @@ export const enterPressed = (event: {
   nativeEvent: { isComposing?: boolean };
 }): boolean =>
   event.key === "Enter" &&
-  !event.nativeEvent.isComposing &&
-  event.keyCode !== 229;
+  !imeKey({
+    isComposing: event.nativeEvent.isComposing,
+    keyCode: event.keyCode,
+  });

@@ -72,6 +72,7 @@ import {
 import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
 import { replaceAddress } from "../lib/url-state";
+import { useLastHomeAddress } from "../lib/last-address";
 import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
 import { findReader, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { PosterThumb } from "./PosterView";
@@ -213,11 +214,14 @@ export default function TownApp({
   const searchEverything = () => {
     const query = search.trim();
     if (!query) return;
-    requestSearch(query);
     if (view === "search") {
+      // The search page takes it in place, so the address says it at once.
+      replaceAddress({ params: { q: query } });
+      requestSearch(query);
       setSearch("");
       return;
     }
+    requestSearch(query);
     router.push(searchPath(query));
     if (view !== "town") setSearch("");
   };
@@ -242,10 +246,16 @@ export default function TownApp({
             : null;
   const reading = Boolean(activeSession(state));
   const unread = unreadCount(state);
+  // ホーム returns to the Home tab open last, as it was left; on Home itself
+  // it stays the way back to the street's start.
+  const lastHome = useLastHomeAddress();
+  const homeHref = section === "home" ? "/" : lastHome;
+  const hrefOf = (link: (typeof links)[number]) =>
+    link.section === "home" ? homeHref : link.href;
   return (
     <div className={"town-shell" + (view === "walk" ? " is-walk" : "")}>
       <aside className="town-sidebar">
-        <Link className="brand" href="/">
+        <Link className="brand" href={homeHref}>
           <span className="brand-mark">
             <Icon name="store" size={31} />
           </span>
@@ -258,7 +268,7 @@ export default function TownApp({
           {links.map((l) => (
             <Link
               key={l.section}
-              href={l.href}
+              href={hrefOf(l)}
               className={"side-link " + (section === l.section ? "active" : "")}
               aria-current={section === l.section ? "page" : undefined}
             >
@@ -308,7 +318,7 @@ export default function TownApp({
       </aside>
       <div className="town-workspace">
         <header className="town-topbar">
-          <Link href="/" className="mobile-brand">
+          <Link href={homeHref} className="mobile-brand">
             <Icon name="store" size={24} />
             <span>Book Town</span>
           </Link>
@@ -429,7 +439,7 @@ export default function TownApp({
       >
         {links.map((l) => (
           <Link
-            href={l.href}
+            href={hrefOf(l)}
             key={l.section}
             className={
               (section === l.section ? "active" : "") +
@@ -685,7 +695,17 @@ function ShopView({
             <div className="store-shelf-label">
               <span>{String(i + 1).padStart(2, "0")}</span>
               <h3>{s.name}</h3>
-              <small>{s.items.length}冊の選書</small>
+              {/* An empty shelf has no count: the owner gets a way to fill it. */}
+              {s.items.length > 0 ? (
+                <small>{s.items.length}冊の選書</small>
+              ) : (
+                shop.ownerId === ME_ID && (
+                  <Link href="/my-shop/" className="store-shelf-fill">
+                    本を並べる
+                    <Icon name="arrow" size={12} />
+                  </Link>
+                )
+              )}
             </div>
             {/* The shelf keeps its own width; the owner's words fill the rest of the row. */}
             <div className="store-shelf-body">
