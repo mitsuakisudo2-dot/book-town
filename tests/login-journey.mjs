@@ -179,11 +179,28 @@ await context.route(supabase + "/**", async (route) => {
   }
   if (url.pathname.startsWith("/rest/v1/") && request.method() !== "GET")
     townWrites.push(url.pathname);
-  // The rest of the signed-in town: a new reader has nothing yet.
+  // The rest of the signed-in town: a new reader has nothing yet. Like
+  // PostgREST, the page asked for (offset, limit) and the total, which the
+  // app reads to know it has every one of the reader's own rows.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "GET") {
     townReads.push(url.pathname);
     const table = url.pathname.slice("/rest/v1/".length);
-    return json(200, town?.[table] ?? []);
+    const rows = town?.[table] ?? [];
+    const from = Number(url.searchParams.get("offset") ?? 0);
+    const page = rows.slice(
+      from,
+      from + Number(url.searchParams.get("limit") ?? rows.length),
+    );
+    const range = page.length ? `${from}-${from + page.length - 1}` : "*";
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: {
+        "content-range": `${range}/${rows.length}`,
+        "access-control-expose-headers": "Content-Range",
+      },
+      body: JSON.stringify(page),
+    });
   }
   return json(404, { message: "not mocked: " + url.pathname });
 });

@@ -17,6 +17,13 @@ import { demoBooks, demoPosters, demoPosts, demoShops } from "../src/lib/data";
 import type { Poster } from "../src/lib/posters";
 import { isSampleBook, sampleBookRowId, withSamples } from "../src/lib/samples";
 import {
+  all,
+  allRows,
+  TownSyncError,
+  type Outcome,
+} from "../src/lib/supabase/sync";
+import { accountTownBackend, loadTown } from "../src/lib/supabase/town-backend";
+import {
   ME_ID,
   OWN_SHOP_ID,
   popReactionKey,
@@ -165,6 +172,109 @@ const kinds = (writes: Write[]) =>
       ? write.kind + ":" + write.table
       : write.kind,
   );
+
+type AnyRow = Record<string, unknown>;
+
+interface FakeQuery extends PromiseLike<Outcome<AnyRow[]>> {
+  eq(column: string, value: unknown): FakeQuery;
+  neq(column: string, value: unknown): FakeQuery;
+  is(column: string, value: unknown): FakeQuery;
+  in(column: string, values: unknown[]): FakeQuery;
+  order(column: string, options?: { ascending?: boolean }): FakeQuery;
+  limit(count: number): FakeQuery;
+  range(from: number, to: number): FakeQuery;
+}
+
+/**
+ * Stands in for the Supabase client's reads: filters, order, limit and range
+ * over rows in memory, at most `cap` rows an answer, and the count when asked,
+ * like the server. `between` runs after each answer, so a check can change the
+ * rows while they are being read.
+ */
+function fakeReads(
+  tables: Record<string, AnyRow[]>,
+  options: {
+    cap?: number;
+    between?: (table: string, from: number) => void;
+  } = {},
+) {
+  const cap = options.cap ?? 1000;
+  const asked: { table: string; from: number; ids?: number }[] = [];
+  const select = (table: string, counted: boolean): FakeQuery => {
+    let rows = [...(tables[table] ?? [])];
+    const orders: [string, boolean][] = [];
+    let from = 0;
+    let size = Infinity;
+    let ids: number | undefined;
+    const answer = (): Outcome<AnyRow[]> => {
+      asked.push({ table, from, ids });
+      const sorted = [...rows].sort((a, b) => {
+        for (const [column, up] of orders) {
+          const [x, y] = [String(a[column]), String(b[column])];
+          if (x !== y) return x < y === up ? -1 : 1;
+        }
+        return 0;
+      });
+      const outcome = {
+        data: sorted.slice(from, from + Math.min(size, cap)),
+        error: null,
+        status: 200,
+        count: counted ? rows.length : null,
+      };
+      options.between?.(table, from);
+      return outcome;
+    };
+    const query: FakeQuery = {
+      eq(column, value) {
+        rows = rows.filter((row) => row[column] === value);
+        return query;
+      },
+      neq(column, value) {
+        rows = rows.filter((row) => row[column] !== value);
+        return query;
+      },
+      is(column, value) {
+        rows = rows.filter((row) => row[column] === value);
+        return query;
+      },
+      in(column, values) {
+        ids = values.length;
+        rows = rows.filter((row) => values.includes(row[column]));
+        return query;
+      },
+      order(column, order = {}) {
+        orders.push([column, order.ascending ?? true]);
+        return query;
+      },
+      limit(count) {
+        size = count;
+        return query;
+      },
+      range(start, end) {
+        from = start;
+        size = end - start + 1;
+        return query;
+      },
+      then(resolve, reject) {
+        return Promise.resolve().then(answer).then(resolve, reject);
+      },
+    };
+    return query;
+  };
+  const client = {
+    from: (table: string) => ({
+      select: (_columns?: string, options: { count?: string } = {}) =>
+        select(table, options.count === "exact"),
+    }),
+  };
+  return {
+    asked,
+    /** One table's select, for allRows. */
+    pages: (table: string) => (count?: "exact") =>
+      select(table, count === "exact"),
+    client: client as unknown as Parameters<typeof loadTown>[0],
+  };
+}
 
 async function main() {
   let passed = 0;
@@ -402,6 +512,229 @@ async function main() {
     });
     assert.deepEqual(onPosters.sort(), [BOOK, OTHER_BOOK].sort());
   });
+
+  // The person's own rows are read a page at a time (allRows), so the
+  // server's 1000-row limit never leaves one out.
+  const uuid = (n: number) =>
+    "00000000-0000-4000-8000-" + n.toString(16).padStart(12, "0");
+  const minutes = (n: number) =>
+    new Date(Date.parse(at) - n * 60_000).toISOString();
+  const retried = (error: unknown) =>
+    error instanceof TownSyncError && error.retry;
+
+  await check(
+    "pages meet without losing or repeating a row, whatever the server's limit",
+    async () => {
+      // Two marks a book, kept in no particular order.
+      const marks = Array.from({ length: 2500 }, (_, n) => ({
+        user_id: AKI,
+        book_id: uuid(2500 - Math.floor(n / 2)),
+        kind: n % 2 ? "wish" : "library",
+        created_at: at,
+      }));
+      const key = (row: AnyRow) => row.book_id + ":" + row.kind;
+      for (const cap of [1000, 300, 5000]) {
+        const fake = fakeReads({ book_marks: marks }, { cap });
+        const read = await allRows(fake.pages("book_marks"), [
+          "book_id",
+          "kind",
+        ]);
+        assert.deepEqual(read.map(key), marks.map(key).sort());
+        // Until a page comes back empty, never more than 1000 at a time.
+        assert.equal(
+          fake.asked.length,
+          Math.ceil(2500 / Math.min(cap, 1000)) + 1,
+        );
+      }
+    },
+  );
+
+  await check("an empty table is one request and no rows", async () => {
+    const fake = fakeReads({});
+    assert.deepEqual(await allRows(fake.pages("book_marks"), ["book_id"]), []);
+    assert.equal(fake.asked.length, 1);
+  });
+
+  await check(
+    "rows that change while being read are read again, never used short",
+    async () => {
+      const sessions = () =>
+        Array.from({ length: 1500 }, (_, n) => ({ id: uuid(100 + n) }));
+      // Reads 1500 sessions, changing them once the first page is answered.
+      const readChanging = (change: (rows: AnyRow[]) => void) => {
+        const rows = sessions();
+        const fake = fakeReads(
+          { reading_sessions: rows },
+          { between: (_, from) => from === 0 && change(rows) },
+        );
+        return allRows(fake.pages("reading_sessions"), ["id"]);
+      };
+      // A row added ahead of the next page pushes one across the boundary.
+      await assert.rejects(
+        readChanging((rows) => rows.unshift({ id: uuid(1) })),
+        retried,
+      );
+      // A row removed meanwhile lets the next page skip one: the count tells.
+      await assert.rejects(
+        readChanging((rows) => rows.splice(0, 1)),
+        retried,
+      );
+      // So does a row added after the last one.
+      await assert.rejects(
+        readChanging((rows) => rows.push({ id: uuid(9999) })),
+        retried,
+      );
+      // Without a count there is no telling the list is whole.
+      const uncounted = fakeReads({ reading_sessions: sessions() });
+      await assert.rejects(
+        allRows(() => uncounted.pages("reading_sessions")(), ["id"]),
+        retried,
+      );
+    },
+  );
+
+  // A reader with 1001 wishes: more than one request holds, and the books
+  // reach back past the newest 300 of the catalog.
+  const wished = Array.from({ length: 1001 }, (_, n) => uuid(0x1000 + n));
+  const wishedTown = () => ({
+    profiles: [profile(AKI, "aki"), profile(BEN, "ben")],
+    books: wished.map((id, n) => ({ ...book(id), created_at: minutes(n) })),
+    book_marks: [
+      ...wished.map((book_id, n) => ({
+        user_id: AKI,
+        book_id,
+        kind: "wish",
+        created_at: minutes(-n),
+      })),
+      // Someone else's marks are not the reader's.
+      { user_id: BEN, book_id: wished[0], kind: "finished", created_at: at },
+    ],
+    reading_sessions: [
+      {
+        id: uuid(0x2001),
+        user_id: AKI,
+        book_id: wished[1000],
+        mode: "solo",
+        started_at: minutes(10),
+        ended_at: minutes(5),
+      },
+    ],
+    reading_entries: [
+      {
+        id: uuid(0x3001),
+        user_id: AKI,
+        book_id: wished[999],
+        kind: "finished",
+        body: "",
+        feelings: ["quiet"],
+        spoiler: false,
+        is_public: false,
+        created_at: minutes(3),
+        updated_at: minutes(3),
+      },
+      {
+        id: uuid(0x3002),
+        user_id: BEN,
+        book_id: wished[998],
+        kind: "finished",
+        body: "",
+        feelings: ["warm"],
+        spoiler: false,
+        is_public: true,
+        created_at: minutes(2),
+        updated_at: minutes(2),
+      },
+    ],
+  });
+
+  await check(
+    "1001 marks all arrive, with the books they point to",
+    async () => {
+      const fake = fakeReads(wishedTown());
+      // One request stops at the server's limit.
+      assert.equal(
+        (
+          await all(
+            fake.client.from("book_marks").select("*").eq("user_id", AKI),
+          )
+        ).length,
+        1000,
+      );
+      fake.asked.length = 0;
+      const { state } = await loadTown(fake.client, AKI, [], () => AKI_SHOP);
+      assert.deepEqual(state.wishlist, wished);
+      assert.deepEqual(state.finishedBooks, []);
+      const known = new Set(state.books.map((entry) => entry.id));
+      assert.ok(wished.every((id) => known.has(id)));
+      // The newest 300, then the other 701 by id, 100 at a time.
+      const byId = fake.asked.filter(
+        (ask) => ask.table === "books" && ask.ids !== undefined,
+      );
+      assert.deepEqual(
+        byId.map((ask) => ask.ids),
+        [100, 100, 100, 100, 100, 100, 100, 1],
+      );
+      assert.deepEqual(
+        fake.asked
+          .filter((ask) => ask.table === "book_marks")
+          .map((ask) => ask.from),
+        [0, 1000, 1001],
+      );
+      // The reader's own reading and records, each once, beside others'.
+      assert.deepEqual(
+        state.readingSessions.map((entry) => entry.bookId),
+        [wished[1000]],
+      );
+      assert.deepEqual(
+        state.readingRecords.map((entry) => [entry.readerId, entry.bookId]),
+        [
+          [ME_ID, wished[999]],
+          [BEN, wished[998]],
+        ],
+      );
+    },
+  );
+
+  await check(
+    "a town whose rows change while it is read is read again as a whole",
+    async () => {
+      const rows = wishedTown();
+      const favorite = uuid(0xfff);
+      rows.books.push(book(favorite));
+      let moved = false;
+      const fake = fakeReads(rows, {
+        between(table, from) {
+          if (table !== "book_marks" || from || moved) return;
+          // Another device keeps a book while the first page is on its way.
+          moved = true;
+          rows.book_marks.unshift({
+            user_id: AKI,
+            book_id: favorite,
+            kind: "favorite",
+            created_at: at,
+          });
+        },
+      });
+      const backend = accountTownBackend(fake.client, AKI, {
+        storage: false,
+        retryDelays: [1],
+      });
+      const statuses: string[] = [];
+      backend.watch?.({
+        status: (status) => statuses.push(status),
+        replace: () => undefined,
+      });
+      const { state } = await backend.load();
+      backend.close?.();
+      assert.deepEqual(statuses, ["unavailable"]);
+      assert.equal(
+        fake.asked.filter((ask) => ask.table === "profiles").length,
+        2,
+      );
+      assert.equal(state.wishlist.length, 1001);
+      assert.deepEqual(state.favorites, [favorite]);
+    },
+  );
 
   await check("posters: own drafts come back, others' only once put up", () => {
     const MINE = "00000000-0000-4000-8000-0000000000d1";

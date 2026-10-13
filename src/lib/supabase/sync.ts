@@ -50,6 +50,57 @@ export const all = async <T>(
   request: PromiseLike<Outcome<T[]>>,
 ): Promise<T[]> => (await settled(request)).data ?? [];
 
+/** How many rows `allRows` asks for at a time; Supabase's own limit. */
+const PAGE = 1000;
+
+/** A select that can be put in order and read a stretch at a time. */
+export interface Pageable<T> {
+  order(column: string): Pageable<T>;
+  range(from: number, to: number): PromiseLike<Outcome<T[]>>;
+}
+
+/**
+ * Reads every row a select matches, a page at a time, until a page comes back
+ * empty, so it works whatever the server's own limit is. The rows go in the
+ * order of their key (the primary key, without the columns the select fixes)
+ * so none falls between two pages. The first page also counts them: a row met
+ * twice, or a total that differs, means the rows changed while being read, and
+ * fails as worth retrying, so the whole town is read again rather than written
+ * from a short list.
+ */
+export async function allRows<T extends Record<string, unknown>>(
+  select: (count?: "exact") => Pageable<T>,
+  keys: (keyof T & string)[],
+  size = PAGE,
+): Promise<T[]> {
+  const rows: T[] = [];
+  const seen = new Set<string>();
+  let total: number | null = null;
+  for (let first = true; ; first = false) {
+    let query = select(first ? "exact" : undefined);
+    for (const key of keys) query = query.order(key);
+    const outcome = await settled(
+      query.range(rows.length, rows.length + size - 1),
+    );
+    if (first) total = outcome.count ?? null;
+    const page = outcome.data ?? [];
+    for (const row of page) {
+      const key = JSON.stringify(keys.map((column) => row[column]));
+      if (seen.has(key))
+        throw new TownSyncError("A row was read twice; reading again", true);
+      seen.add(key);
+      rows.push(row);
+    }
+    if (!page.length || total === null || rows.length > total) break;
+  }
+  if (rows.length !== total)
+    throw new TownSyncError(
+      `Read ${rows.length} rows of ${total ?? "an unknown number"}; reading again`,
+      true,
+    );
+  return rows;
+}
+
 export const chunks = <T>(list: T[], size: number): T[][] =>
   Array.from({ length: Math.ceil(list.length / size) }, (_, index) =>
     list.slice(index * size, index * size + size),

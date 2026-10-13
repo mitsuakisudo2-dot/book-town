@@ -17,6 +17,7 @@ import type { Database, Json } from "./database.generated";
 import { REPORT_COLUMNS } from "./reports";
 import {
   all,
+  allRows,
   backgroundSync,
   chunks,
   settled,
@@ -29,8 +30,10 @@ type Client = SupabaseClient<Database>;
 
 export { TownSyncError, shouldRetry };
 
-// Supabase returns at most 1000 rows a request. That covers everyone while
-// Booktown is invite-only; paging comes with more readers.
+// Supabase returns at most 1000 rows a request. The person's own marks,
+// readings and records are read a page at a time (allRows) so none is left
+// out; the rest stops at 1000, which covers everyone while Booktown is
+// invite-only.
 const LIMIT = 1000;
 const POSTS = 500;
 const CATALOG = 300;
@@ -83,7 +86,8 @@ export async function loadTown(
     popReactions,
     ownSessions,
     together,
-    records,
+    ownRecords,
+    othersRecords,
     folds,
     myReports,
     readerSettings,
@@ -95,7 +99,11 @@ export async function loadTown(
     all(
       client.from("shop_follows").select("shop_id").eq("follower_id", userId),
     ),
-    all(client.from("book_marks").select("*").eq("user_id", userId)),
+    allRows(
+      (count) =>
+        client.from("book_marks").select("*", { count }).eq("user_id", userId),
+      ["book_id", "kind"],
+    ),
     all(
       client
         .from("posts")
@@ -112,7 +120,14 @@ export async function loadTown(
         .eq("reporter_id", userId),
     ),
     all(client.from("pop_reactions").select("*").eq("user_id", userId)),
-    all(client.from("reading_sessions").select("*").eq("user_id", userId)),
+    allRows(
+      (count) =>
+        client
+          .from("reading_sessions")
+          .select("*", { count })
+          .eq("user_id", userId),
+      ["id"],
+    ),
     all(
       client
         .from("reading_sessions")
@@ -122,11 +137,21 @@ export async function loadTown(
         .neq("user_id", userId)
         .limit(LIMIT),
     ),
-    // The person's own records, and others' public ones.
+    // Every one of the person's own records, and the newest of others'
+    // public ones.
+    allRows(
+      (count) =>
+        client
+          .from("reading_entries")
+          .select("*", { count })
+          .eq("user_id", userId),
+      ["id"],
+    ),
     all(
       client
         .from("reading_entries")
         .select("*")
+        .neq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(LIMIT),
     ),
@@ -215,7 +240,7 @@ export async function loadTown(
     spoilerReports,
     popReactions,
     sessions: [...ownSessions, ...together],
-    records,
+    records: [...ownRecords, ...othersRecords],
     posters,
     seenNotifications,
     folds,
