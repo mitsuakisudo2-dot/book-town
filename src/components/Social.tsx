@@ -55,6 +55,7 @@ import {
   suggestTags,
 } from "../lib/tags";
 import { BookPicker } from "./BookPicker";
+import { booksBeforeSearch } from "../lib/book-lists";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
 import "./poster-screen.css";
@@ -491,6 +492,7 @@ export function PostComposer({
         {!fixedBook && (picking || bookId) && (
           <BookPicker
             books={state.books}
+            genreFinds={booksBeforeSearch(state)}
             value={bookId}
             onChange={(next) => {
               update({

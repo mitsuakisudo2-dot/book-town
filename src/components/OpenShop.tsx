@@ -15,6 +15,7 @@ import {
 import { FIRST_SHELF_ID } from "../lib/store";
 import { recentlyFinished } from "../lib/records";
 import { BookPicker } from "./BookPicker";
+import { booksBeforeSearch } from "../lib/book-lists";
 import { BookJacket, Icon } from "./ui";
 import "./open-shop.css";
 import { noteShopOpened } from "../lib/just-opened";
@@ -454,6 +455,7 @@ export function OpenShop({
         <h2 className="open-subtitle">本を探す</h2>
         <BookPicker
           books={state.books}
+          genreFinds={booksBeforeSearch(state)}
           value={null}
           onChange={(bookId) =>
             bookId && !picked.includes(bookId) && toggle(bookId)

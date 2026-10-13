@@ -23,6 +23,7 @@ import {
   worldPolygon,
 } from "../lib/store-scene";
 import { wordsFolded } from "../lib/social";
+import { booksBeforeSearch } from "../lib/book-lists";
 import {
   publicScenePops,
   publicWalkShops,
@@ -135,6 +136,15 @@ export function WalkView({
   }, [orderedStores, state.books, state.shops, state.ownShop, saved.scenes]);
   const ids = useMemo(() => shops.map((s) => s.id), [shops]);
   const reviewFolds = state.reviewFolds;
+  // A 見本's shelves are filled out only with books a list may show before
+  // anything is typed: never one another reader only typed in.
+  const shownKey = booksBeforeSearch(state)
+    .map((book) => book.id)
+    .join("\n");
+  const sceneBooks = useMemo(() => {
+    const shown = new Set(shownKey.split("\n"));
+    return state.books.filter((book) => shown.has(book.id));
+  }, [state.books, shownKey]);
   const scenes = useMemo(
     () =>
       shops.map((s) =>
@@ -143,12 +153,12 @@ export function WalkView({
           wordsFolded({ reviewFolds }, "shop", s.id)
             ? { ...s, description: "" }
             : s,
-          state.books,
+          sceneBooks,
           state.shops.findIndex((shop) => shop.id === s.id),
           saved.scenes,
         ),
       ),
-    [shops, state.books, state.shops, saved.scenes, reviewFolds],
+    [shops, sceneBooks, state.shops, saved.scenes, reviewFolds],
   );
   const pops = useMemo(() => publicScenePops(scenes), [scenes]);
   const [overlay, setOverlay] = useState<Overlay>(null);

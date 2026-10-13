@@ -8,6 +8,7 @@ import {
   shownCover,
   type CoverSourceName,
 } from "../src/lib/covers";
+import { lookUpBook, lookUpBooks } from "../src/lib/openbd";
 
 // Checks where a book's cover is looked for, against stand-ins for openBD and
 // Google Books. Everything runs inside main() because tsx compiles this file
@@ -79,6 +80,42 @@ async function main() {
       0,
     );
   });
+
+  await check(
+    "a question openBD fails loses only its own ISBNs, not what others found",
+    async () => {
+      // Three questions of 100, 100 and 50; the second never gets an answer.
+      const isbns = Array.from({ length: 250 }, (_, i) =>
+        String(9784000000000 + i),
+      );
+      let questions = 0;
+      const fetcher = (async (input: string | URL | Request) => {
+        questions += 1;
+        if (questions === 2) throw new TypeError("Failed to fetch");
+        const asked = new URL(String(input)).searchParams
+          .get("isbn")!
+          .split(",");
+        return new Response(
+          JSON.stringify(
+            asked.map((isbn, index) =>
+              index === 0 ? { summary: { title: "本" + isbn } } : null,
+            ),
+          ),
+        );
+      }) as typeof fetch;
+      const { found, unanswered } = await lookUpBooks(isbns, fetcher);
+      assert.equal(questions, 3);
+      assert.deepEqual([...found.keys()], [isbns[0], isbns[200]]);
+      assert.deepEqual(unanswered, isbns.slice(100, 200));
+      // One book whose question failed is simply not found.
+      assert.equal(
+        await lookUpBook(KOKORO, (async () => {
+          throw new TypeError("Failed to fetch");
+        }) as typeof fetch),
+        null,
+      );
+    },
+  );
 
   await check("Google's cover is its own thumbnail, for that very ISBN", () => {
     const cover = googleCover(MOMO, {
