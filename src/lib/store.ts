@@ -67,6 +67,27 @@ const clean = (value: string, max = 10000): string => value.slice(0, max);
 const toggled = (list: string[], id: string): string[] =>
   list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id];
 
+/** The longest title or author a book keeps, as the database allows. */
+const BOOK_TEXT_MAX = 200;
+/** A title or author as kept: a longer one is cut, ending in …. */
+function bookText(value: string): string {
+  const text = value.trim();
+  if (text.length <= BOOK_TEXT_MAX) return text;
+  let cut = "";
+  // By whole characters, so a cut never splits one in two.
+  for (const char of text) {
+    if (cut.length + char.length > BOOK_TEXT_MAX - 1) break;
+    cut += char;
+  }
+  return cut.trimEnd() + "…";
+}
+
+/** The reader's own registered book with this ISBN, if any. */
+export const libraryBookByIsbn = (state: TownState, isbn: string) =>
+  state.books.find(
+    (book) => book.isbn === isbn && state.library.includes(book.id),
+  );
+
 /** Folds by reports, less those of things that are gone. */
 const withoutFolds = (
   folds: TownState["reviewFolds"],
@@ -673,21 +694,29 @@ export function createTownStore(
             : state.finishedBooks,
       });
     },
-    addBook(input) {
+    // `via` is not kept yet: the library will remember it as where a book
+    // came from (plan L1).
+    registerBook(input) {
       initialize();
-      const title = input.title.trim();
-      const author = input.author.trim();
+      const title = bookText(input.title);
+      const author = bookText(input.author);
       const isbn = input.isbn ? normalizeIsbn(input.isbn) : null;
-      if (!title || title.length > 200 || author.length > 200) return null;
+      if (!title) return null;
       if (input.isbn && !isbn) return null;
+      // Until the town is read (or while the account is still being
+      // checked), nothing would be kept: say so, never that it was registered.
+      if (status === "loading") return { result: "not-saved" };
+      // Already registered is about the reader's own library, not the town:
+      // a book only in the town's catalogue is registered as usual.
+      const mine = isbn ? libraryBookByIsbn(state, isbn) : undefined;
+      if (mine) return { result: "already", bookId: mine.id };
       const existing = isbn
         ? state.books.find((book) => book.isbn === isbn)
         : undefined;
-      if (existing) {
-        if (!state.library.includes(existing.id))
-          commit({ ...state, library: [...state.library, existing.id] });
-        return existing.id;
-      }
+      if (existing)
+        return commit({ ...state, library: [...state.library, existing.id] })
+          ? { result: "added", bookId: existing.id }
+          : { result: "not-saved" };
       const id = nextId(
         "book",
         state.books.map((book) => book.id),
@@ -706,12 +735,17 @@ export function createTownStore(
         ...(isbn ? { isbn } : {}),
         ...(price ? { price } : {}),
       });
-      commit({
+      return commit({
         ...state,
         books: [...state.books, book],
         library: [...state.library, id],
-      });
-      return id;
+      })
+        ? { result: "added", bookId: id }
+        : { result: "not-saved" };
+    },
+    addBook(input) {
+      const done = actions.registerBook(input, input.isbn ? "isbn" : "manual");
+      return done && done.result !== "not-saved" ? done.bookId : null;
     },
     toggleLibrary(bookId) {
       initialize();

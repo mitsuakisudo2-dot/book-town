@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { normalizeIsbn } from "../lib/books";
+import { lookUpBook } from "../lib/openbd";
+import { libraryBookByIsbn } from "../lib/store";
 import type { TownActions, TownState } from "../lib/types";
 import { Icon, Modal } from "./ui";
 
@@ -16,39 +18,8 @@ const detectorClass = (): DetectorClass | undefined =>
     : (window as unknown as { BarcodeDetector?: DetectorClass })
         .BarcodeDetector;
 
-/** Looks an ISBN up in openBD. Any failure falls back to typing the title by hand. */
-async function lookup(
-  isbn: string,
-): Promise<{ title: string; author: string; price?: number } | null> {
-  try {
-    const response = await fetch(`https://api.openbd.jp/v1/get?isbn=${isbn}`);
-    if (!response.ok) return null;
-    const [record] = (await response.json()) as Array<{
-      summary?: { title?: string; author?: string };
-      onix?: {
-        ProductSupply?: {
-          SupplyDetail?: { Price?: Array<{ PriceAmount?: string }> };
-        };
-      };
-    } | null>;
-    const title = record?.summary?.title?.trim();
-    // openBD lists the price before tax; the app shows prices with tax included.
-    const net = Number(
-      record?.onix?.ProductSupply?.SupplyDetail?.Price?.[0]?.PriceAmount,
-    );
-    return title
-      ? {
-          title,
-          author: (record?.summary?.author ?? "").replace(/／著.*$/, "").trim(),
-          ...(Number.isFinite(net) && net > 0
-            ? { price: Math.floor(net * 1.1) }
-            : {}),
-        }
-      : null;
-  } catch {
-    return null;
-  }
-}
+const NOT_AN_ISBN =
+  "ISBNとして読めませんでした。本の裏表紙にある978か979で始まる13桁の数字を入力してください。";
 
 /**
  * Register a book by scanning its ISBN barcode with the camera (where the browser can
@@ -69,12 +40,15 @@ export function BarcodeRegister({
   const video = useRef<HTMLVideoElement>(null);
   const [scanning, setScanning] = useState(false);
   const [isbnText, setIsbnText] = useState("");
-  const [isbn, setIsbn] = useState<string | null>(null);
+  // The ISBN the camera read, to tell a scanned book from a typed one.
+  const [scanned, setScanned] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [price, setPrice] = useState("");
   const [message, setMessage] = useState("");
   const [looking, setLooking] = useState(false);
+  // The ISBN being looked up; an answer for any other comes too late.
+  const asking = useRef<string | null>(null);
   const canScan = Boolean(detectorClass());
 
   useEffect(() => {
@@ -105,6 +79,7 @@ export function BarcodeRegister({
             .find(Boolean);
           if (found) {
             setScanning(false);
+            setScanned(found);
             void accept(found);
           }
         }, 350);
@@ -123,24 +98,36 @@ export function BarcodeRegister({
   }, [scanning]);
 
   async function accept(found: string) {
-    setIsbn(found);
     setIsbnText(found);
-    const known = state.books.find((book) => book.isbn === found);
+    // Whether it is already registered is about the reader's own library;
+    // a book the town knows only fills in its title.
+    const mine = libraryBookByIsbn(state, found);
+    const known = mine ?? state.books.find((book) => book.isbn === found);
     if (known) {
+      asking.current = null;
+      setLooking(false);
       setTitle(known.title);
       setAuthor(known.author);
       setPrice(known.price ? String(known.price) : "");
-      setMessage("この本はもう登録されています。");
+      setMessage(
+        mine
+          ? "もうライブラリにあります。"
+          : "書籍情報が見つかりました。確認して登録してください。",
+      );
       return;
     }
+    asking.current = found;
     setLooking(true);
     setMessage("書籍情報を探しています…");
-    const record = await lookup(found);
+    // Gives up after a few seconds, so the title can always be typed by hand.
+    const book = await lookUpBook(found);
+    if (asking.current !== found) return;
+    asking.current = null;
     setLooking(false);
-    if (record) {
-      setTitle(record.title);
-      setAuthor(record.author);
-      setPrice(record.price ? String(record.price) : "");
+    if (book) {
+      setTitle(book.title);
+      setAuthor(book.author);
+      setPrice(book.price ? String(book.price) : "");
       setMessage("書籍情報が見つかりました。確認して登録してください。");
     } else {
       setMessage(
@@ -153,9 +140,7 @@ export function BarcodeRegister({
     event.preventDefault();
     const found = normalizeIsbn(isbnText);
     if (!found) {
-      setMessage(
-        "ISBNとして読めませんでした。本の裏表紙にある978か979で始まる13桁の数字を入力してください。",
-      );
+      setMessage(NOT_AN_ISBN);
       return;
     }
     void accept(found);
@@ -163,20 +148,41 @@ export function BarcodeRegister({
 
   function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const yen = Number(price.replace(/[,，円¥\s]/g, ""));
-    const bookId = actions.addBook({
-      title,
-      author,
-      ...(isbn ? { isbn } : {}),
-      ...(price.trim() && Number.isInteger(yen) && yen > 0
-        ? { price: yen }
-        : {}),
-    });
-    if (!bookId) {
-      setMessage("タイトルを入力してください。");
+    // The ISBN in its field is registered, whether it was looked up or not.
+    const typed = isbnText.trim();
+    const isbn = typed ? normalizeIsbn(typed) : null;
+    if (typed && !isbn) {
+      setMessage(NOT_AN_ISBN);
       return;
     }
-    notify(`『${title.trim()}』を登録しました`);
+    const yen = Number(price.replace(/[,，円¥\s]/g, ""));
+    const done = actions.registerBook(
+      {
+        title,
+        author,
+        ...(isbn ? { isbn } : {}),
+        ...(price.trim() && Number.isInteger(yen) && yen > 0
+          ? { price: yen }
+          : {}),
+      },
+      !isbn ? "manual" : isbn === scanned ? "scan" : "isbn",
+    );
+    // A visitor is asked to sign in instead; nothing was registered.
+    if (!done) return;
+    if (done.result === "not-saved") {
+      setMessage(
+        "まだ保存できません。読み込みが終わってから、もう一度押してください。",
+      );
+      return;
+    }
+    // A book the town knew is registered under its own title.
+    const known = state.books.find((book) => book.id === done.bookId);
+    const name = known?.title ?? title.trim();
+    notify(
+      done.result === "already"
+        ? `『${name}』はもうライブラリにあります`
+        : `『${name}』を登録しました`,
+    );
     onClose();
   }
 
@@ -228,7 +234,12 @@ export function BarcodeRegister({
             value={isbnText}
             onChange={(event) => {
               setIsbnText(event.target.value);
-              setIsbn(null);
+              // A new ISBN: the answer for the old one is no longer awaited.
+              if (asking.current) {
+                asking.current = null;
+                setLooking(false);
+                setMessage("");
+              }
             }}
           />
         </label>
