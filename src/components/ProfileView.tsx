@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   COMPOSE_ICONS,
   ownTagline,
+  type Book,
   type ComposeIcon,
   type Notify,
   type SpoilerDisplay,
@@ -69,6 +70,7 @@ import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import { useUrlParam } from "../lib/url-state";
+import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
 type Collection = (typeof COLLECTIONS)[number];
@@ -118,17 +120,21 @@ export function ProfileView({
   const [draftNotes, setDraftNotes] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
-  const selectableBooks = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
-    return state.books.filter(
-      (book) =>
-        !draftNine.includes(book.id) &&
-        (!query ||
-          `${book.title} ${book.author} ${book.genre}`
-            .toLocaleLowerCase()
-            .includes(query)),
-    );
-  }, [state.books, draftNine, search]);
+  // The 9冊 picker finds books the way every search does; the reader's own
+  // books come first among equals, and near titles wait under a quiet heading.
+  const nineSearch = useBookSearch(state.books, search, {
+    own: state.library,
+    limit: state.books.length,
+  });
+  const searchingNine = search.trim() !== "";
+  const selectableBooks = (
+    searchingNine ? nineSearch.found.map((match) => match.book) : state.books
+  ).filter((book) => !draftNine.includes(book.id));
+  const nearNine = searchingNine
+    ? nineSearch.near
+        .map((match) => match.book)
+        .filter((book) => !draftNine.includes(book.id))
+    : [];
 
   if (!reader) {
     return (
@@ -188,6 +194,27 @@ export function ProfileView({
     setEditingProfile(false);
     notify("プロフィールを保存しました");
   }
+
+  const nineChoice = (book: Book) => (
+    <button
+      className="profile-picker-book"
+      key={book.id}
+      aria-label={`${book.title}を人生の9冊に加える`}
+      disabled={draftNine.length >= 9}
+      onClick={() =>
+        setDraftNine((ids) =>
+          ids.length < 9 && !ids.includes(book.id) ? [...ids, book.id] : ids,
+        )
+      }
+    >
+      <BookJacket book={book} />
+      <strong>{book.title}</strong>
+      <span>{book.author}</span>
+      <small>
+        <Icon name="plus" /> 加える
+      </small>
+    </button>
+  );
 
   function beginNineEdit() {
     if (!reader) return;
@@ -1008,13 +1035,35 @@ export function ProfileView({
             )}
             <div className="profile-nine-picker-heading">
               <h3>一冊を加える</h3>
-              <span>{draftNine.length} / 9 冊</span>
+              <span>
+                {draftNine.length ? `${draftNine.length} / 9 冊` : "9冊まで"}
+              </span>
             </div>
             <input
               className="profile-book-search"
+              type="search"
               aria-label="人生の9冊に追加する本を検索"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                // The Enter that confirms a kana conversion is the keyboard's.
+                if (!enterPressed(event)) return;
+                event.preventDefault();
+                // Enter adds a book only when it is surely the one meant.
+                const sure = nineSearch.sure();
+                if (
+                  !sure ||
+                  draftNine.includes(sure.id) ||
+                  draftNine.length >= 9
+                )
+                  return;
+                setDraftNine((ids) =>
+                  ids.length < 9 && !ids.includes(sure.id)
+                    ? [...ids, sure.id]
+                    : ids,
+                );
+                setSearch("");
+              }}
               placeholder="タイトル・著者・ジャンルで探す"
             />
             {draftNine.length >= 9 && (
@@ -1022,32 +1071,32 @@ export function ProfileView({
                 9冊を選びました。新しい本を加えるには、いずれかの本を外してください。
               </p>
             )}
-            <div className="profile-book-picker">
-              {selectableBooks.map((book) => (
-                <button
-                  className="profile-picker-book"
-                  key={book.id}
-                  aria-label={`${book.title}を人生の9冊に加える`}
-                  disabled={draftNine.length >= 9}
-                  onClick={() =>
-                    setDraftNine((ids) =>
-                      ids.length < 9 && !ids.includes(book.id)
-                        ? [...ids, book.id]
-                        : ids,
-                    )
-                  }
+            {selectableBooks.length > 0 && (
+              <div className="profile-book-picker">
+                {selectableBooks.map(nineChoice)}
+              </div>
+            )}
+            {!selectableBooks.length &&
+              (!searchingNine || nineSearch.settled) && (
+                <p className="profile-muted">
+                  {nearNine.length
+                    ? "ぴったり合う本はありませんでした。"
+                    : "条件に合う本がありません。"}
+                </p>
+              )}
+            {nearNine.length > 0 && (
+              <>
+                <h3 className="search-near" id="profile-near-title">
+                  {nineSearch.nearHeading}
+                </h3>
+                <div
+                  className="profile-book-picker"
+                  role="group"
+                  aria-labelledby="profile-near-title"
                 >
-                  <BookJacket book={book} />
-                  <strong>{book.title}</strong>
-                  <span>{book.author}</span>
-                  <small>
-                    <Icon name="plus" /> 加える
-                  </small>
-                </button>
-              ))}
-            </div>
-            {!selectableBooks.length && (
-              <p className="profile-muted">条件に合う本がありません。</p>
+                  {nearNine.map(nineChoice)}
+                </div>
+              </>
             )}
             <div className="profile-form-actions profile-nine-save">
               <button

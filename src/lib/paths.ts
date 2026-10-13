@@ -24,6 +24,10 @@ export const profilePath = (id: string): string =>
 export const walkPath = (id: string): string =>
   "/walk/#" + encodeURIComponent(id);
 
+/** The search page for a query: books, readers and shops, or posts for a #tag. */
+export const searchPath = (query: string): string =>
+  query.trim() ? "/search/?q=" + encodeURIComponent(query.trim()) : "/search/";
+
 /** A poster's own page; every poster shares the one exported page. */
 export const posterPath = (id: string): string =>
   "/posters/?id=" + encodeURIComponent(id);

@@ -1,28 +1,27 @@
 "use client";
 
-import { useDeferredValue, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   FEELINGS,
   FEELING_WORDS,
   type Book,
   type Feeling,
-  type Shop,
   type TownActions,
   type TownState,
 } from "../lib/types";
 import { booksFelt, feelingsInTown } from "../lib/records";
-import { findReader, wordsFolded } from "../lib/social";
+import { findReader } from "../lib/social";
 import { bookPath } from "../lib/books";
 import {
   bookSignals,
+  findReaders,
+  findShops,
   hiragana,
-  MATCH,
-  prepareSearch,
-  searchBooks,
   searchPresence,
   type BookMatch,
 } from "../lib/search";
+import { useBookSearch } from "../lib/search/use-book-search";
 import {
   onSearchRequest,
   postsWithTag,
@@ -44,24 +43,13 @@ type Shared = {
   notify: (message: string) => void;
 };
 
-function publicStock(state: TownState, shop: Shop): Book[] {
-  return shop.shelves
-    .filter((shelf) => shelf.isPublic)
-    .flatMap((shelf) =>
-      shelf.items.map((item) =>
-        state.books.find((book) => book.id === item.bookId),
-      ),
-    )
-    .filter((book): book is Book => Boolean(book));
-}
-
 export function SearchView({ state, actions, notify }: Shared) {
   const id = useId();
   const savedIn = useTownBackend();
   // A tapped #tag hands its search over; a shared ?q= link works on a fresh load.
   const [query, setQuery] = useState(() => takeRequestedSearch() ?? "");
   useEffect(() => {
-    const fromUrl = new URLSearchParams(window.location.search).get("q");
+    const fromUrl = readParam("q");
     if (!fromUrl) return;
     const timer = setTimeout(
       () => setQuery((current) => current || fromUrl),
@@ -93,7 +81,6 @@ export function SearchView({ state, actions, notify }: Shared) {
   }, [query]);
   const term = query.trim().toLocaleLowerCase();
   const tagTerm = /^[#＃]/.test(term) ? term.slice(1) : null;
-  const personTerm = term.replace(/^@/, "");
   const signals = useMemo(() => bookSignals(state), [state]);
   const signal = (bookId: string) =>
     signals.get(bookId) ?? { shelves: 0, talk: 0, reviews: 0, wants: 0 };
@@ -106,11 +93,11 @@ export function SearchView({ state, actions, notify }: Shared) {
     .filter((book) => signal(book.id).talk > 0)
     .sort((a, b) => signal(b.id).talk - signal(a.id).talk)
     .slice(0, 6);
-  const presence = (bookId: string) =>
+  const shelvedAndWanted = (bookId: string) =>
     signal(bookId).shelves * 3 + signal(bookId).wants;
   const popular = [...state.books]
-    .filter((book) => presence(book.id) > 0)
-    .sort((a, b) => presence(b.id) - presence(a.id))
+    .filter((book) => shelvedAndWanted(book.id) > 0)
+    .sort((a, b) => shelvedAndWanted(b.id) - shelvedAndWanted(a.id))
     .slice(0, 6);
   const [feelingParam, setFeelingParam] = useUrlParam("feeling");
   const feeling = FEELINGS.includes(feelingParam as Feeling)
@@ -146,59 +133,30 @@ export function SearchView({ state, actions, notify }: Shared) {
     (book) => signal(book.id).shelves <= 1 && signal(book.id).reviews === 0,
   );
 
-  // Typing stays quick while the town's books are searched.
-  useEffect(() => prepareSearch(state.books), [state.books]);
-  const bookQuery = term && !tagTerm ? query.trim() : "";
-  const bookTerm = useDeferredValue(bookQuery);
-  const bookResults = useMemo(
-    () =>
-      bookTerm
-        ? searchBooks(state.books, bookTerm, {
-            presence: (bookId) => searchPresence(signals.get(bookId)),
-          })
-        : [],
-    [state.books, bookTerm, signals],
+  // Books, readers and shops are all found the same way: by reading, romaji,
+  // either kana, either width. Typing stays quick while the town is searched.
+  const presence = useCallback(
+    (bookId: string) => searchPresence(signals.get(bookId)),
+    [signals],
   );
-  const found = bookResults.filter((match) => !match.near);
-  const near = bookResults.filter((match) => match.near);
-  // Near matches are named for what was close: the title, the author, or both.
-  const nearAuthors = near.filter((match) => match.rank === MATCH.nearAuthor);
-  const nearHeading = !nearAuthors.length
-    ? "近い題名の本"
-    : nearAuthors.length === near.length
-      ? "著者名が近い本"
-      : "題名や著者名が近い本";
+  const books = useBookSearch(state.books, term && !tagTerm ? query : "", {
+    presence,
+  });
+  const { found, near } = books;
   const tagResults = tagTerm ? postsWithTag(state, tagTerm) : [];
+  // Readers by name or @ID, shops by name, words, owner or a book on a public
+  // shelf: closest first, and never with a count.
+  const people = useMemo(
+    () => (books.query ? findReaders(state, books.query) : []),
+    [state, books.query],
+  );
+  const shopResults = useMemo(
+    () => (books.query ? findShops(state, books.query) : []),
+    [state, books.query],
+  );
+  const tags = popularTags(state);
   // Said once, without a count, as on a book's page: the reader chose this.
   const tagHasLeftOut = tagTerm !== null && tagLeftOut(state, tagTerm);
-  const people =
-    term && !tagTerm
-      ? [state.me, ...state.readers].filter((reader) =>
-          `${reader.name} ${reader.handle} ${wordsFolded(state, "profile", reader.id) ? "" : reader.bio}`
-            .toLocaleLowerCase()
-            .includes(personTerm),
-        )
-      : [];
-  const tags = popularTags(state);
-  const shopResults =
-    term && !tagTerm
-      ? shops.filter((shop) => {
-          const owner =
-            shop.ownerId === state.me.id
-              ? state.me.name
-              : (findReader(state, shop.ownerId)?.name ?? "");
-          return (
-            shop.name +
-            (wordsFolded(state, "shop", shop.id) ? "" : shop.description) +
-            owner +
-            publicStock(state, shop)
-              .map((book) => book.title + book.author)
-              .join("")
-          )
-            .toLocaleLowerCase()
-            .includes(term);
-        })
-      : [];
 
   // A match through the title's reading shows the reading; numbers stay out of results.
   const matchRow = ({ book, byReading }: BookMatch) =>
@@ -312,7 +270,7 @@ export function SearchView({ state, actions, notify }: Shared) {
             {found.length ? (
               <ul className="search-list">{found.map(matchRow)}</ul>
             ) : (
-              bookTerm === bookQuery && (
+              books.settled && (
                 <p className="search-empty">
                   {near.length
                     ? "ぴったり合う本はありませんでした。"
@@ -323,7 +281,7 @@ export function SearchView({ state, actions, notify }: Shared) {
             {near.length > 0 && (
               <>
                 <h3 className="search-near" id="search-near-title">
-                  {nearHeading}
+                  {books.nearHeading}
                 </h3>
                 <ul className="search-list" aria-labelledby="search-near-title">
                   {near.map(({ book }) => bookRow(book, ""))}
@@ -344,11 +302,7 @@ export function SearchView({ state, actions, notify }: Shared) {
                       <Icon name="store" size={20} />
                       <span>
                         <b>{shop.name}</b>
-                        <small>
-                          {shop.ownerId === state.me.id
-                            ? state.me.name
-                            : findReader(state, shop.ownerId)?.name}
-                        </small>
+                        <small>{findReader(state, shop.ownerId)?.name}</small>
                       </span>
                       <Icon name="chevron" size={15} />
                     </Link>
@@ -356,7 +310,9 @@ export function SearchView({ state, actions, notify }: Shared) {
                 ))}
               </ul>
             ) : (
-              <p className="search-empty">合う書店は見つかりませんでした。</p>
+              books.settled && (
+                <p className="search-empty">合う書店は見つかりませんでした。</p>
+              )
             )}
           </section>
         </div>

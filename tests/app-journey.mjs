@@ -2,6 +2,7 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { expectReadable } from "./journey-contrast.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -282,6 +283,8 @@ try {
       await expect(
         page.getByRole("list", { name: "近い題名の本" }),
       ).toContainText("秘密の花園");
+      // The quiet heading is small, but still readable.
+      await expectReadable(page.locator(".search-near"), "近い題名の本");
       await expect(
         page.getByText("ぴったり合う本はありませんでした。"),
       ).toBeVisible();
@@ -331,6 +334,8 @@ try {
         await expect(
           compose.getByRole("button", { name: shown }),
         ).toBeVisible();
+        if (typed === "秘密の森の花園")
+          await expectReadable(compose.locator(".search-near"), "近い題名の本");
         await picker.press("Enter");
         await expect(compose).toBeVisible();
         await expect(compose.locator(".picker-chosen")).toHaveCount(0);
@@ -949,6 +954,218 @@ try {
       await page.getByRole("link", { name: /ひとことを書く/ }).click();
       await expect(page).toHaveURL(/\/my-shop\/#shop-words$/);
       await expect(page.getByLabel("ひとこと")).toBeFocused();
+    },
+  );
+
+  // Enter while a kana conversion is still open: the keyboard's, never a search's.
+  const composingEnter = (box) =>
+    box.evaluate((input) =>
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          code: "Enter",
+          keyCode: 229,
+          isComposing: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+
+  await check(
+    "every search box reads kana and romaji, and Enter takes only a sure match",
+    async () => {
+      // The shelf picker: reading and romaji find the book, Enter places only
+      // the one surely meant and never takes a book off.
+      await go("/my-shop/");
+      await page
+        .locator(".editor-shelf-panel")
+        .first()
+        .getByRole("button", { name: "本棚を編集", exact: true })
+        .click();
+      const shelfPicker = page.getByRole("dialog", { name: "本棚を編集" });
+      const shelfSearch = shelfPicker.getByLabel("追加する本を検索");
+      const shelfTitles = shelfPicker.locator(
+        ".editor-picker-grid:not([role]) .editor-book-choice-title",
+      );
+      const shelved = async () =>
+        (await stored()).ownShop.shelves[0].items.map((item) => item.bookId);
+      const before = await shelved();
+      expect(before).toContain("galaxy-railroad");
+      expect(before).not.toContain("night-fog");
+      await shelfSearch.fill("chinmoku");
+      await expect(shelfTitles.first()).toHaveText("沈黙");
+      await shelfSearch.fill("孤独");
+      await expect(shelfTitles.first()).toContainText("孤独");
+      await shelfSearch.press("Enter");
+      await shelfSearch.fill("gingatetsudou");
+      await expect(shelfTitles.first()).toHaveText("銀河鉄道の夜");
+      await shelfSearch.press("Enter");
+      // Near titles wait under a quiet heading that is still readable.
+      await shelfSearch.fill("秘密の森の花園");
+      await expect(shelfPicker.locator(".search-near")).toBeVisible();
+      await expectReadable(shelfPicker.locator(".search-near"), "近い題名の本");
+      await shelfSearch.fill("よるときり");
+      await expect(shelfTitles.first()).toHaveText("夜と霧");
+      await composingEnter(shelfSearch);
+      await expect(shelfSearch).toHaveValue("よるときり");
+      expect(await shelved()).toEqual(before);
+      await shelfSearch.press("Enter");
+      await expect(shelfSearch).toHaveValue("");
+      await expect(shelfPicker).toBeVisible();
+      await expect.poll(shelved).toContain("night-fog");
+      expect(await shelved()).toHaveLength(before.length + 1);
+      await shelfPicker
+        .getByRole("button", { name: "完了", exact: true })
+        .click();
+      await expect(shelfPicker).toHaveCount(0);
+
+      // The 人生の9冊 picker, the same way.
+      await go("/profiles/me/");
+      await page.locator(".profile-edit-nine").click();
+      const nine = page.getByRole("dialog", { name: "人生の9冊を選ぶ" });
+      const nineSearch = nine.getByRole("searchbox", {
+        name: "人生の9冊に追加する本を検索",
+      });
+      const chosen = nine.locator(".profile-nine-editor-item");
+      await expect(chosen).toHaveCount(4);
+      await nineSearch.fill("roujintoumi");
+      await expect(
+        nine.locator(".profile-picker-book strong").first(),
+      ).toHaveText("老人と海");
+      await nineSearch.fill("秘密の森の花園");
+      await expect(nine.locator(".search-near")).toBeVisible();
+      await expectReadable(nine.locator(".search-near"), "近い題名の本");
+      await nineSearch.fill("ヒミツノハナゾノ");
+      await expect(
+        nine.locator(".profile-picker-book strong").first(),
+      ).toHaveText("秘密の花園");
+      await composingEnter(nineSearch);
+      await expect(chosen).toHaveCount(4);
+      await nineSearch.press("Enter");
+      await expect(chosen).toHaveCount(5);
+      await expect(chosen.last()).toContainText("秘密の花園");
+      await expect(nineSearch).toHaveValue("");
+      await nineSearch.fill("孤独");
+      await nineSearch.press("Enter");
+      await expect(chosen).toHaveCount(5);
+      await expect(nine).toBeVisible();
+      await nine
+        .getByRole("button", { name: "キャンセル", exact: true })
+        .click();
+      await expect(nine).toHaveCount(0);
+      expect((await stored()).me.lifeNine).not.toContain("secret-garden");
+
+      // Readers by name or @ID in either kana, either width, or romaji; no counts.
+      await go("/search/");
+      const box = page.getByRole("searchbox", { name: "本と書店を検索" });
+      const people = page.locator(
+        "[aria-labelledby=search-people-title] .search-list",
+      );
+      for (const [typed, handle] of [
+        ["スミレ", "@sumire"],
+        ["ＨＡＲＵ", "@haru"],
+        ["＠ｓｕｍｉ", "@sumire"],
+      ]) {
+        await box.fill(typed);
+        await expect(
+          page.getByRole("heading", { name: "読書家", exact: true }),
+        ).toBeVisible();
+        await expect(people.locator("li")).toHaveCount(1);
+        await expect(people).toContainText(handle);
+      }
+      const shopsFound = page.locator(
+        "[aria-labelledby=search-shops-title] .search-shop",
+      );
+      // Typed one letter at a time, a reader stays found at a last n.
+      for (const typed of ["a", "an", "ana"]) {
+        await box.fill(typed);
+        await expect(people.locator("b").first()).toHaveText("あなた");
+      }
+      // A kanji name typed in kana finds the reader by their romaji @ID,
+      // and the ID finds the shop they keep.
+      await box.fill("なぎ");
+      await expect(people).toContainText("@nagi");
+      await expect(shopsFound).toHaveText([/^軌道書房/]);
+      // After @, readers and shops are both found by @ID only.
+      await box.fill("@sumire");
+      await expect(people).toContainText("@sumire");
+      await expect(shopsFound).toHaveText([/^雨と翻訳/]);
+      await box.fill("@スミレ");
+      await expect(page.locator(".search-results")).toContainText(
+        "合う書店は見つかりませんでした。",
+      );
+      await expect(people).toHaveCount(0);
+      await expect(shopsFound).toHaveCount(0);
+      // A shop named for the word comes before one whose owner is.
+      await box.fill("灯");
+      await expect(shopsFound.first()).toContainText("小さな灯り");
+      await expect(shopsFound.nth(1)).toContainText("問いの余白");
+      // A book's reading also finds the shops that shelve it.
+      await box.fill("ぎんがてつどう");
+      await expect(shopsFound).not.toHaveCount(0);
+      expect(
+        (await page.locator(".search-results h2").allTextContents()).join(""),
+      ).not.toMatch(/\d/);
+
+      // The top search (on wider screens; phones have 検索 in the bottom bar)
+      // opens the search page, and 戻る comes back to where it was.
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await go("/timeline/");
+      const top = page.getByRole("textbox", {
+        name: "本や書店を検索",
+        exact: true,
+      });
+      await top.fill("ぎんがてつどう");
+      await composingEnter(top);
+      await page.waitForTimeout(300);
+      await expect(page).toHaveURL(/\/timeline\/$/);
+      await top.press("Enter");
+      await expect(page).toHaveURL(
+        `${baseURL}/search/?q=${encodeURIComponent("ぎんがてつどう")}`,
+      );
+      await expect(box).toHaveValue("ぎんがてつどう");
+      await expect(
+        page
+          .locator(
+            "[aria-labelledby=search-books-title] > ul:not([aria-labelledby]) .search-book",
+          )
+          .first(),
+      ).toContainText("銀河鉄道の夜");
+      await page.goBack();
+      await expect(page).toHaveURL(/\/timeline\/$/);
+      // On the street the words narrow the shops as typed, and stay there.
+      await go("/");
+      await top.fill("雨と翻訳");
+      await expect(page.locator(".street-shop")).toHaveCount(1);
+      await expect(page.locator(".street-search-result")).not.toContainText(
+        /\d/,
+      );
+      // When nothing matches, the status itself says so (the empty street
+      // below is not read out), still without a number.
+      await top.fill("量子力学");
+      await expect(page.locator(".street-shop")).toHaveCount(0);
+      await expect(
+        page.getByRole("status").filter({ hasText: "量子力学" }),
+      ).toContainText(
+        "「量子力学」からつながる書店は、まだ見つかりませんでした",
+      );
+      await top.fill("雨と翻訳");
+      await expect(page.locator(".street-search-result")).toContainText(
+        "「雨と翻訳」からつながる書店クリア",
+      );
+      await top.press("Enter");
+      await expect(page).toHaveURL(/\/search\/\?q=/);
+      await expect(
+        page
+          .locator("[aria-labelledby=search-shops-title] .search-shop")
+          .filter({ hasText: "雨と翻訳" }),
+      ).toHaveCount(1);
+      await page.goBack();
+      await expect(page).toHaveURL(/#search=/);
+      await expect(page.locator(".street-shop")).toHaveCount(1);
+      await top.fill("");
+      await page.setViewportSize({ width: 390, height: 844 });
     },
   );
 

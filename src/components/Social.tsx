@@ -50,9 +50,9 @@ import { bookPath } from "../lib/books";
 import { EMPTY_POST_DRAFT, usePostDraft } from "../lib/post-draft";
 import {
   extractTags,
-  popularTags,
   requestSearch,
   splitTags,
+  suggestTags,
 } from "../lib/tags";
 import { BookPicker } from "./BookPicker";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
@@ -391,10 +391,7 @@ export function PostComposer({
   const [picking, setPicking] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const tags = extractTags(body);
-  const tagSuggestions = popularTags(state, 8)
-    .map((entry) => entry.tag)
-    .filter((tag) => !tags.includes(tag))
-    .slice(0, 4);
+  const tagSuggestions = suggestTags(state, tags);
   const attached = fixedBook?.id ?? bookId;
   const isReply = Boolean(parent);
   // A top-level spoiler needs a book to sit behind; replies already belong to one.

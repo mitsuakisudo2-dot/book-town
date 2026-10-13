@@ -3014,3 +3014,17 @@ dialog .toast {
   outline: 2px solid #fffdf3;
   outline-offset: 2px;
 }
+
+/* Books only close in spelling, under a quiet heading below the matches:
+   the search page and every picker that finds books. Quiet in size, but
+   readable (4.5:1 or more on the paper and on white). */
+.search-near {
+  font-size: 11px;
+  font-weight: 400;
+  color: #5f6a55;
+  margin: 18px 0 0;
+}
+.book-picker .search-near,
+.poster-book-search ~ .search-near {
+  margin: 10px 0 4px;
+}
