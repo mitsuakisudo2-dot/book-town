@@ -541,6 +541,24 @@ a.poster-cover:hover {
 .poster-door button:hover {
   background: color-mix(in srgb, var(--poster-accent) 20%, transparent);
 }
+/* Folded by reports: the town's quiet grey, nothing of the poster's look. */
+.poster-door.is-report,
+.poster-thumb-door.is-report {
+  --poster-paper: #f1f0ea;
+  --poster-ink: #4f554a;
+  --poster-accent: #767a6b;
+}
+.poster-door.is-report p {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.8;
+  letter-spacing: 0.02em;
+  word-break: auto-phrase;
+}
+.poster-door.is-report.is-compact p {
+  font-size: 13px;
+  letter-spacing: 0;
+}
 
 /* A small first page, for grids and rows. */
 .poster-thumb {

@@ -7,6 +7,7 @@ import {
   type ReviewKind,
   type TownState,
 } from "./types";
+import { REPORT_KIND_WORDS } from "./supabase/reports";
 
 const time = (post: Post) => Date.parse(post.createdAt) || 0;
 const newestFirst = (a: Post, b: Post) => time(b) - time(a);
@@ -61,6 +62,55 @@ export function reviewFoldOf(
     return "reported";
   return state.reviewFolds[reviewKey(kind, id)]?.state ?? null;
 }
+
+/** What stands before a post or a poster folded by reports. */
+export type ReviewCover = "folded" | "reported";
+
+/**
+ * What reports put before a post or a poster, for a reader who did not make
+ * it: a cover to open first, saying why ("reported": the reader reported it
+ * themselves). Its writer never gets one; they read reviewNoteOf instead.
+ */
+export function reviewCoverOf(
+  state: TownState,
+  kind: "post" | "poster",
+  id: string,
+  authorId: string,
+): ReviewCover | null {
+  if (authorId === ME_ID) return null;
+  const fold = reviewFoldOf(state, kind, id);
+  return fold === null ? null : fold === "reported" ? "reported" : "folded";
+}
+
+/** What the writer reads under their own post or poster folded or held by reports. */
+export function reviewNoteOf(
+  state: TownState,
+  kind: "post" | "poster",
+  id: string,
+  authorId: string,
+): "folded" | "held" | null {
+  if (authorId !== ME_ID) return null;
+  const fold = reviewFoldOf(state, kind, id);
+  return fold === "folded" || fold === "held" ? fold : null;
+}
+
+/** The words on the cover, before anything of the post or the poster. */
+export const reviewCoverWords = (
+  kind: "post" | "poster",
+  cover: ReviewCover,
+): string =>
+  cover === "reported"
+    ? `あなたが通報した${REPORT_KIND_WORDS[kind]}です`
+    : "通報があったため、運営が確かめるまで、たたんでいます";
+
+/** The words of the writer's note: folded for others and not gone, or held until checked. */
+export const reviewNoteWords = (
+  kind: "post" | "poster",
+  note: "folded" | "held",
+): string =>
+  note === "held"
+    ? "運営が確かめるまで、ほかの人からは見えないようにしています。問題がなければ、元に戻ります。"
+    : `通報があったため、運営が確かめるまで、みんなの画面ではたたんで表示しています。${REPORT_KIND_WORDS[kind]}は消えていません。`;
 
 /**
  * Whether a shop's or a person's own words (an introduction, a bio) are

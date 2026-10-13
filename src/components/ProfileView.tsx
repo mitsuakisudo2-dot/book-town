@@ -12,7 +12,7 @@ import {
   type TownState,
 } from "../lib/types";
 import { useTownBackend } from "../lib/store";
-import { readerPosts } from "../lib/social";
+import { readerPosts, reviewCoverOf } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
 import { BarcodeRegister } from "./BarcodeRegister";
@@ -1130,6 +1130,12 @@ function ProfilePosters({
                 books={state.books}
                 href={posterPath(poster.id)}
                 badge={poster.status === "draft" ? "下書き" : undefined}
+                folded={reviewCoverOf(
+                  state,
+                  "poster",
+                  poster.id,
+                  poster.authorId,
+                )}
               />
             </li>
           ))}

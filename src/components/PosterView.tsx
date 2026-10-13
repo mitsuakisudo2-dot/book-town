@@ -12,15 +12,25 @@ import {
 import Link from "next/link";
 import { ME_ID, type Book, type Reader, type TownState } from "../lib/types";
 import {
+  FOLDED_POSTER_NAMES,
   POSTER_THEME_STYLES,
   emptyPage,
   posterBookIds,
+  posterSpoilerView,
   posterTitle,
   type Poster,
   type PosterPage,
 } from "../lib/posters";
 import { bookPath } from "../lib/books";
-import { findReader, formatPostTime } from "../lib/social";
+import {
+  findReader,
+  formatPostTime,
+  reviewCoverOf,
+  reviewCoverWords,
+  reviewNoteOf,
+  reviewNoteWords,
+  type ReviewCover,
+} from "../lib/social";
 import { isDatabaseId, posterPath, profilePath } from "../lib/paths";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./social.css";
@@ -283,6 +293,7 @@ export function PosterPages({
   compact = false,
   startPage = 0,
   onTurn,
+  takeFocus = false,
 }: {
   poster: Poster;
   books: Book[];
@@ -293,6 +304,11 @@ export function PosterPages({
   startPage?: number;
   /** Told the page in view after each turn, to keep it in the address. */
   onTurn?: (index: number) => void;
+  /**
+   * Shown where a cover was just opened (読む): the hand moves to the
+   * poster, or to its spoiler door, instead of being lost with the cover.
+   */
+  takeFocus?: boolean;
 }) {
   const count = poster.pages.length;
   const many = count > 1;
@@ -307,6 +323,7 @@ export function PosterPages({
   const track = useRef<HTMLDivElement>(null);
   const door = useRef<HTMLButtonElement>(null);
   const hide = useRef<HTMLButtonElement>(null);
+  const region = useRef<HTMLElement>(null);
   const turned = useRef(false);
   // The page a turn is scrolling to: the pages it passes on the way are not
   // the page being read.
@@ -327,6 +344,10 @@ export function PosterPages({
     const element = track.current;
     if (element && start) element.scrollLeft = start * element.clientWidth;
   }, [start]);
+
+  useEffect(() => {
+    if (takeFocus) (door.current ?? region.current)?.focus();
+  }, [takeFocus]);
 
   // After the door is opened or closed, the hand stays on its counterpart.
   useEffect(() => {
@@ -394,6 +415,8 @@ export function PosterPages({
   return (
     <section
       className="poster-pages"
+      ref={region}
+      tabIndex={takeFocus ? -1 : undefined}
       aria-label={author.name + "のポスター"}
       aria-roledescription={many ? "ページをめくれるポスター" : undefined}
     >
@@ -526,9 +549,51 @@ export function PosterPages({
 }
 
 /**
+ * A poster folded by reports, before anything of it: why, in the town's
+ * quiet grey rather than the poster's own look, and 読む. Its spoiler door,
+ * if it has one, comes after.
+ */
+export function PosterFoldCover({
+  cover,
+  author,
+  compact = false,
+  onRead,
+}: {
+  cover: ReviewCover;
+  author: Reader;
+  /** Among other posts, a short band, not a page. */
+  compact?: boolean;
+  onRead: () => void;
+}) {
+  return (
+    <section
+      className="poster-pages"
+      aria-label={
+        author.name +
+        "のポスター（" +
+        (cover === "reported" ? "あなたが通報しました" : "たたんでいます") +
+        "）"
+      }
+    >
+      <div className={"poster-door is-report" + (compact ? " is-compact" : "")}>
+        <span className="poster-door-mark" aria-hidden="true">
+          <Icon name="lock" size={18} />
+        </span>
+        <p>{reviewCoverWords("poster", cover)}</p>
+        <button type="button" onClick={onRead}>
+          <Icon name="eye" size={15} />
+          読む
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
  * A poster's first page, small, for lists and rows. A spoiler poster shows
  * only that it is covered, and which book it is about: none of its words or
- * covers. Where posters by many readers meet, the caption names the maker.
+ * covers. One folded by reports shows only that it is folded: not even its
+ * books. Where posters by many readers meet, the caption names the maker.
  */
 export function PosterThumb({
   poster,
@@ -536,6 +601,7 @@ export function PosterThumb({
   href,
   badge,
   caption,
+  folded = null,
 }: {
   poster: Poster;
   books: Book[];
@@ -543,11 +609,16 @@ export function PosterThumb({
   badge?: string;
   /** Who made it, with 「 · 見本」 for an invented reader. */
   caption?: string;
+  /** Folded by reports for this reader (reviewCoverOf). */
+  folded?: ReviewCover | null;
 }) {
   const firstBook = books.find((book) => book.id === posterBookIds(poster)[0]);
-  const label = poster.spoiler
-    ? "ネタバレを含むポスター" + (firstBook ? `（『${firstBook.title}』）` : "")
-    : "ポスター " + posterTitle(poster, books);
+  const label = folded
+    ? FOLDED_POSTER_NAMES[folded]
+    : poster.spoiler
+      ? "ネタバレを含むポスター" +
+        (firstBook ? `（『${firstBook.title}』）` : "")
+      : "ポスター " + posterTitle(poster, books);
   return (
     <Link
       href={href}
@@ -557,7 +628,17 @@ export function PosterThumb({
       }
     >
       <div className="poster-thumb-tile">
-        {poster.spoiler ? (
+        {folded ? (
+          <span className="poster-thumb-door is-report">
+            <Icon name="lock" size={16} />
+            たたんでいます
+            <small>
+              {folded === "reported"
+                ? "あなたが通報したため"
+                : "通報があったため"}
+            </small>
+          </span>
+        ) : poster.spoiler ? (
           <span className="poster-thumb-door" style={themeStyle(poster)}>
             <Icon name="lock" size={16} />
             ネタバレを含む
@@ -593,7 +674,14 @@ export function PosterCard({
   state: TownState;
 }) {
   const author = findReader(state, poster.authorId);
-  if (!author) return null;
+  // Folded by reports: one tap opens it, then its spoiler door applies.
+  const [read, setRead] = useState(false);
+  const cover = read
+    ? null
+    : reviewCoverOf(state, "poster", poster.id, poster.authorId);
+  const note = reviewNoteOf(state, "poster", poster.id, poster.authorId);
+  // A reader who chose not to see spoilers is not shown this one at all.
+  if (!author || posterSpoilerView(state, poster) === "left_out") return null;
   const mine = author.id === ME_ID;
   const profile = profilePath(author.id);
   return (
@@ -623,12 +711,27 @@ export function PosterCard({
           </time>
         </header>
         <span className="poster-tag">ポスター</span>
-        <PosterPages
-          poster={poster}
-          books={state.books}
-          author={author}
-          compact
-        />
+        {cover ? (
+          <PosterFoldCover
+            cover={cover}
+            author={author}
+            compact
+            onRead={() => setRead(true)}
+          />
+        ) : (
+          <PosterPages
+            poster={poster}
+            books={state.books}
+            author={author}
+            compact
+            takeFocus={read}
+          />
+        )}
+        {note && (
+          <div className="spoiler-folded-note report-folded-note" role="note">
+            <p>{reviewNoteWords("poster", note)}</p>
+          </div>
+        )}
         <Link href={posterPath(poster.id)} className="poster-open">
           ポスターを開く
           <Icon name="arrow" size={14} />

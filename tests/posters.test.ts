@@ -3,21 +3,35 @@ import { demoPosters, seedState } from "../src/lib/data";
 import {
   cleanPosterDraft,
   emptyPage,
+  FOLDED_POSTER_NAMES,
   pagesFromRows,
   pagesToRows,
   pageRowBookIds,
   posterBookIds,
   posterProblem,
+  postersLeftOutOfBook,
   postersOf,
   postersOfBook,
+  posterSpoilerView,
   posterTitle,
   restorePoster,
+  timelinePosters,
   POSTER_LIMITS,
+  type Poster,
   type PosterDraft,
 } from "../src/lib/posters";
+import { notificationsFor } from "../src/lib/notifications";
+import { posterPath } from "../src/lib/paths";
 import { createMemoryRepository } from "../src/lib/repository";
+import {
+  reviewCoverOf,
+  reviewCoverWords,
+  reviewNoteOf,
+  reviewNoteWords,
+} from "../src/lib/social";
 import { createTownStore } from "../src/lib/store";
-import { ME_ID } from "../src/lib/types";
+import type { FiledReport } from "../src/lib/supabase/reports";
+import { ME_ID, type SpoilerDisplay, type TownState } from "../src/lib/types";
 
 // Checks how a poster is made, kept and found. Everything runs inside main()
 // because tsx compiles this file as CommonJS.
@@ -35,6 +49,26 @@ const draft = (fields: Partial<PosterDraft> = {}): PosterDraft => ({
   inTimeline: true,
   status: "published",
   ...fields,
+});
+
+/** A poster of the viewer's own, put up, marked as a spoiler. */
+const ownSpoiler: Poster = {
+  ...draft({
+    template: "one_book",
+    spoiler: true,
+    pages: [
+      { heading: "最後に", text: "結末の話。", bookIds: ["hundred-years"] },
+    ],
+  }),
+  id: "me-poster-1",
+  authorId: ME_ID,
+  createdAt: "2026-10-13T00:00:00Z",
+  updatedAt: "2026-10-13T00:00:00Z",
+};
+const withSetting = (spoilerDisplay: SpoilerDisplay): TownState => ({
+  ...seedState,
+  posters: [...seedState.posters, ownSpoiler],
+  settings: { ...seedState.settings, spoilerDisplay },
 });
 
 async function check(name: string, run: () => void | Promise<void>) {
@@ -248,6 +282,176 @@ async function main() {
       ["poster-nagi-night-sf", "poster-late"],
     );
   });
+
+  await check(
+    "a reader who leaves spoilers out is not shown others' spoiler posters",
+    () => {
+      const haru = "poster-haru-last-page";
+      const ids = (posters: Poster[]) => posters.map((poster) => poster.id);
+      // 印あり: behind its door whether the reader shows all or folds.
+      for (const mode of ["show_all", "fold_possible"] as const) {
+        const state = withSetting(mode);
+        const poster = state.posters.find((entry) => entry.id === haru)!;
+        assert.equal(posterSpoilerView(state, poster), "folded", mode);
+        assert.ok(ids(timelinePosters(state)).includes(haru), mode);
+        assert.ok(ids(postersOf(state, "r-haru")).includes(haru), mode);
+        assert.ok(
+          ids(postersOfBook(state, "hundred-years")).includes(haru),
+          mode,
+        );
+        assert.equal(postersLeftOutOfBook(state, "hundred-years"), false);
+      }
+      // 出さない: not on the timeline, the maker's profile or the book's page,
+      // which says once that some were left out.
+      const state = withSetting("leave_out");
+      const poster = state.posters.find((entry) => entry.id === haru)!;
+      assert.equal(posterSpoilerView(state, poster), "left_out");
+      assert.ok(!ids(timelinePosters(state)).includes(haru));
+      assert.ok(!ids(postersOf(state, "r-haru")).includes(haru));
+      assert.ok(!ids(postersOfBook(state, "hundred-years")).includes(haru));
+      assert.equal(postersLeftOutOfBook(state, "hundred-years"), true);
+      assert.equal(postersLeftOutOfBook(state, "solaris"), false);
+      // Posters without the mark are as they were.
+      const nagi = state.posters.find(
+        (entry) => entry.id === "poster-nagi-night-sf",
+      )!;
+      assert.equal(posterSpoilerView(state, nagi), "open");
+      assert.ok(ids(timelinePosters(state)).includes(nagi.id));
+      // The maker always sees their own, behind its door.
+      assert.equal(posterSpoilerView(state, ownSpoiler), "folded");
+      assert.ok(ids(timelinePosters(state)).includes(ownSpoiler.id));
+      assert.ok(ids(timelinePosters(state, true)).includes(ownSpoiler.id));
+      assert.ok(ids(postersOf(state, ME_ID)).includes(ownSpoiler.id));
+      assert.ok(
+        ids(postersOfBook(state, "hundred-years")).includes(ownSpoiler.id),
+      );
+      // Following nobody, the timeline's フォロー中 has the viewer's own only.
+      assert.deepEqual(ids(timelinePosters(withSetting("show_all"), true)), [
+        ownSpoiler.id,
+      ]);
+    },
+  );
+
+  await check(
+    "a poster folded by reports is covered for others and explained to its maker",
+    () => {
+      const filed: FiledReport = {
+        id: "report-1",
+        kind: "poster",
+        targetId: "poster-sumire-weekend",
+        reason: "spam",
+        status: "checked",
+        createdAt: "2026-10-13T01:00:00Z",
+        statusAt: "2026-10-13T02:00:00Z",
+      };
+      const state: TownState = {
+        ...withSetting("fold_possible"),
+        reviewFolds: {
+          "poster:poster-nagi-night-sf": {
+            state: "folded",
+            since: "2026-10-13T02:00:00Z",
+          },
+          "poster:me-poster-1": {
+            state: "held",
+            since: "2026-10-13T02:00:00Z",
+          },
+        },
+        myReports: [filed],
+      };
+      const cover = (id: string) => {
+        const poster = state.posters.find((entry) => entry.id === id)!;
+        return reviewCoverOf(state, "poster", id, poster.authorId);
+      };
+      const note = (id: string) => {
+        const poster = state.posters.find((entry) => entry.id === id)!;
+        return reviewNoteOf(state, "poster", id, poster.authorId);
+      };
+      assert.equal(cover("poster-nagi-night-sf"), "folded");
+      // Reported by the reader: folded on their screen, whatever came of it.
+      assert.equal(cover("poster-sumire-weekend"), "reported");
+      assert.equal(cover("poster-shiori-look-again"), null);
+      // Its maker gets no cover, only the note.
+      assert.equal(cover("me-poster-1"), null);
+      assert.equal(note("me-poster-1"), "held");
+      assert.equal(note("poster-nagi-night-sf"), null);
+      // Folded, it stays in its place.
+      assert.ok(
+        timelinePosters(state).some(
+          (poster) => poster.id === "poster-nagi-night-sf",
+        ),
+      );
+      // Said of a poster as a poster, never as a post.
+      assert.equal(
+        reviewCoverWords("poster", "folded"),
+        "通報があったため、運営が確かめるまで、たたんでいます",
+      );
+      assert.equal(
+        reviewCoverWords("poster", "reported"),
+        "あなたが通報したポスターです",
+      );
+      assert.equal(
+        reviewCoverWords("post", "reported"),
+        "あなたが通報した投稿です",
+      );
+      assert.equal(
+        reviewNoteWords("poster", "folded"),
+        "通報があったため、運営が確かめるまで、みんなの画面ではたたんで表示しています。ポスターは消えていません。",
+      );
+      assert.equal(
+        reviewNoteWords("post", "folded"),
+        "通報があったため、運営が確かめるまで、みんなの画面ではたたんで表示しています。投稿は消えていません。",
+      );
+      assert.equal(
+        reviewNoteWords("poster", "held"),
+        "運営が確かめるまで、ほかの人からは見えないようにしています。問題がなければ、元に戻ります。",
+      );
+      // What a folded poster is called says nothing of its words or books.
+      assert.deepEqual(FOLDED_POSTER_NAMES, {
+        folded: "たたんでいるポスター",
+        reported: "あなたが通報したポスター",
+      });
+    },
+  );
+
+  await check(
+    "the maker hears of a folded or held poster, in a poster's words",
+    () => {
+      const notices = (fold: "folded" | "held", id = ownSpoiler.id) =>
+        notificationsFor({
+          ...withSetting("fold_possible"),
+          reviewFolds: {
+            ["poster:" + id]: { state: fold, since: "2026-10-13T02:00:00Z" },
+          },
+        }).filter((notice) => notice.id.startsWith("review-"));
+      assert.deepEqual(
+        notices("folded").map((notice) => [
+          notice.id,
+          notice.text,
+          notice.href,
+          notice.createdAt,
+        ]),
+        [
+          [
+            "review-folded:poster:" + ownSpoiler.id,
+            "通報があったため、運営が確かめるまで、あなたのポスターをみんなの画面ではたたんでいます。ポスターは消えていません",
+            posterPath(ownSpoiler.id),
+            "2026-10-13T02:00:00Z",
+          ],
+        ],
+      );
+      assert.deepEqual(
+        notices("held").map((notice) => [notice.text, notice.href]),
+        [
+          [
+            "運営が確かめるまで、あなたのポスターをほかの人から見えないようにしています。問題がなければ、元に戻ります",
+            posterPath(ownSpoiler.id),
+          ],
+        ],
+      );
+      // Another reader's folded poster is not the viewer's news.
+      assert.deepEqual(notices("folded", "poster-nagi-night-sf"), []);
+    },
+  );
 
   await check(
     "the store makes, puts up and takes down the viewer's posters",

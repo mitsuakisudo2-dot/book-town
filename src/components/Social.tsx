@@ -34,7 +34,10 @@ import {
   readerPosts,
   repliesOf,
   hasReplies,
-  reviewFoldOf,
+  reviewCoverOf,
+  reviewCoverWords,
+  reviewNoteOf,
+  reviewNoteWords,
   spoilerViewOf,
   tapsOf,
   wordsFolded,
@@ -56,7 +59,7 @@ import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
 import "./poster-screen.css";
 import { isDatabaseId, posterNewPath, profilePath } from "../lib/paths";
-import { isPublished, type Poster } from "../lib/posters";
+import { timelinePosters, type Poster } from "../lib/posters";
 import { leaveLayers } from "../lib/back-layer";
 import { PosterCard } from "./PosterView";
 import { ReportButton } from "./Report";
@@ -80,26 +83,6 @@ const SPOILER_NOTES: Record<SpoilerDisplay, string> = {
   leave_out:
     "ネタバレの印が付いた投稿と、その可能性がある投稿は、設定により出していません。",
 };
-
-/**
- * Posters their makers chose to show on the timeline; with `followingOnly`,
- * those of followed owners and the viewer's own.
- */
-function timelinePosters(state: TownState, followingOnly: boolean): Poster[] {
-  const owners = new Set(
-    state.shops
-      .filter((shop) => state.following.includes(shop.id))
-      .map((shop) => shop.ownerId),
-  );
-  return state.posters.filter(
-    (poster) =>
-      isPublished(poster) &&
-      poster.inTimeline &&
-      (!followingOnly ||
-        poster.authorId === ME_ID ||
-        owners.has(poster.authorId)),
-  );
-}
 
 type FeedEntry =
   | { kind: "post"; post: Post; at: number }
@@ -810,8 +793,8 @@ export function PostCard({
   const view = spoilerViewOf(state, post);
   const hidden = view === "folded" && !revealed && !shown;
   // Folded by reports: one tap opens it, then any spoiler cover applies.
-  const fold = reviewFoldOf(state, "post", post.id);
-  const reportCovered = !mine && fold !== null && !reportRead;
+  const cover = reviewCoverOf(state, "post", post.id, post.authorId);
+  const note = reviewNoteOf(state, "post", post.id, post.authorId);
   const taps = tapsOf(state, post.id);
   const [pops, setPops] = useState(0);
   const received = likesReceived(post);
@@ -879,13 +862,11 @@ export function PostCard({
                 : "ネタバレかもしれません"}
           </span>
         )}
-        {reportCovered ? (
+        {cover && !reportRead ? (
           <div className="spoiler-cover report-cover">
             <span>
               <Icon name="lock" size={15} />
-              {fold === "reported"
-                ? "あなたが通報した投稿です"
-                : "通報があったため、運営が確かめるまで、たたんでいます"}
+              {reviewCoverWords("post", cover)}
             </span>
             <button type="button" onClick={() => setReportRead(true)}>
               <Icon name="eye" size={15} />
@@ -907,13 +888,9 @@ export function PostCard({
         ) : (
           <PostText body={post.body} />
         )}
-        {mine && (fold === "folded" || fold === "held") && (
+        {note && (
           <div className="spoiler-folded-note report-folded-note" role="note">
-            <p>
-              {fold === "held"
-                ? "運営が確かめるまで、ほかの人からは見えないようにしています。問題がなければ、元に戻ります。"
-                : "通報があったため、運営が確かめるまで、みんなの画面ではたたんで表示しています。投稿は消えていません。"}
-            </p>
+            <p>{reviewNoteWords("post", note)}</p>
           </div>
         )}
         {mine && post.folded && !post.spoiler && (

@@ -243,6 +243,22 @@ async function check(name, run) {
 }
 const shot = (name) =>
   page.screenshot({ path: path.join(output, name + ".png"), fullPage: true });
+// The same page at a desktop's width too, then back to the phone.
+const shotBoth = async (name) => {
+  await shot(name + "-390");
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await shot(name + "-1280");
+  await page.setViewportSize({ width: 390, height: 844 });
+};
+const noOverflow = async (label) => {
+  const size = await page.evaluate(() => ({
+    width: innerWidth,
+    document: document.documentElement.scrollWidth,
+  }));
+  expect(size.document, label + ": root overflow").toBeLessThanOrEqual(
+    size.width + 1,
+  );
+};
 
 try {
   await check(
@@ -457,6 +473,12 @@ try {
   const OWN_HELD = "7a5b6f8e-1c0d-4e9f-8a3b-4c5d6e7f8091";
   const COVER_BOOK = "8b6c7a9f-2d1e-4f0a-9b4c-5d6e7f8091a2";
   const REFUSED_BOOK = "9c7d8b0a-3e2f-4a1b-8c5d-6e7f8091a2b3";
+  // Posters: another reader's folded one and one the reader will report,
+  // and two of the reader's own, held and folded.
+  const POSTER_FOLDED = "a0b1c2d3-4e5f-4a6b-8c7d-8e9f0a1b2c01";
+  const POSTER_TO_REPORT = "a0b1c2d3-4e5f-4a6b-8c7d-8e9f0a1b2c02";
+  const POSTER_OWN_HELD = "a0b1c2d3-4e5f-4a6b-8c7d-8e9f0a1b2c03";
+  const POSTER_OWN_FOLDED = "a0b1c2d3-4e5f-4a6b-8c7d-8e9f0a1b2c04";
   const ago = (hours) => new Date(Date.now() - hours * 3600_000).toISOString();
   const postRow = (id, author_id, body, created_at) => ({
     id,
@@ -574,6 +596,80 @@ try {
     ],
     cover_refusals: [{ isbn: REFUSED_ISBN, source: "google" }],
   });
+  const posterRow = (id, author_id, heading, text, bookId, created_at) => ({
+    id,
+    author_id,
+    template: "one_book",
+    theme: "navy",
+    font: "mincho",
+    pages: [
+      {
+        blocks: [
+          { type: "heading", text: heading },
+          { type: "books", book_ids: [bookId] },
+          { type: "text", text },
+        ],
+      },
+    ],
+    spoiler: false,
+    show_in_timeline: true,
+    allow_display: true,
+    status: "published",
+    created_at,
+    updated_at: created_at,
+  });
+  const fold = (target_id, state) => ({
+    target_kind: "poster",
+    target_id,
+    state,
+    since: ago(1),
+  });
+  const withPosters = () => {
+    const rows = filled();
+    rows.posters = [
+      posterRow(
+        POSTER_FOLDED,
+        OTHER,
+        "たたまれたポスターの見出し",
+        "たたまれたポスターの言葉。",
+        COVER_BOOK,
+        ago(5),
+      ),
+      {
+        ...posterRow(
+          POSTER_TO_REPORT,
+          OTHER,
+          "結末を語るポスター",
+          "最後の場面の話。",
+          REFUSED_BOOK,
+          ago(6),
+        ),
+        spoiler: true,
+      },
+      posterRow(
+        POSTER_OWN_HELD,
+        user.id,
+        "確かめられているわたしのポスター",
+        "わたしの言葉。",
+        COVER_BOOK,
+        ago(7),
+      ),
+      posterRow(
+        POSTER_OWN_FOLDED,
+        user.id,
+        "たたまれたわたしのポスター",
+        "わたしの別の言葉。",
+        REFUSED_BOOK,
+        ago(8),
+      ),
+    ];
+    rows.moderation_folds.push(
+      fold(POSTER_FOLDED, "folded"),
+      fold(POSTER_OWN_HELD, "held"),
+      fold(POSTER_OWN_FOLDED, "folded"),
+    );
+    return rows;
+  };
 
   await check(
     "a post folded by reports opens with a tap; the writer is told gently",
@@ -723,6 +819,219 @@ try {
       await page.goto(base + "/search/");
       await page.getByRole("searchbox").first().fill("夜更けに開く");
       await expect(page.getByText("レンの夜の本屋")).toHaveCount(0);
+    },
+  );
+
+  await check(
+    "a poster folded by reports opens with a tap; its maker is told gently",
+    async () => {
+      town = withPosters();
+      await page.goto(base + "/timeline/");
+      const posterCard = (text) =>
+        page.locator("article.poster-card").filter({ hasText: text });
+      const folded = posterCard(
+        "通報があったため、運営が確かめるまで、たたんでいます",
+      );
+      await expect(folded).toHaveCount(1);
+      await expect(folded).toHaveAttribute("aria-label", "レンのポスター");
+      await expect(page.getByText("たたまれたポスターの見出し")).toHaveCount(0);
+      await expect(page.getByText("たたまれたポスターの言葉。")).toHaveCount(0);
+      // The maker's own, held and folded: theirs to read, and why.
+      await expect(
+        posterCard("確かめられているわたしのポスター"),
+      ).toContainText(
+        "運営が確かめるまで、ほかの人からは見えないようにしています。問題がなければ、元に戻ります。",
+      );
+      await expect(posterCard("たたまれたわたしのポスター")).toContainText(
+        "通報があったため、運営が確かめるまで、みんなの画面ではたたんで表示しています。ポスターは消えていません。",
+      );
+      await noOverflow("timeline with a folded poster");
+      await posterCard("たたまれたわたしのポスター").scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(output, "16-poster-maker-card-390.png"),
+      });
+      await folded.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(output, "16-poster-folded-card-390.png"),
+      });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await folded.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(output, "16-poster-folded-card-1280.png"),
+      });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await folded.getByRole("button", { name: "読む" }).click();
+      await expect(page.getByText("たたまれたポスターの見出し")).toBeVisible();
+      await expect(
+        page.getByRole("region", { name: "レンのポスター", exact: true }),
+      ).toBeFocused();
+    },
+  );
+
+  await check(
+    "a folded poster's page keeps it and its books behind the cover",
+    async () => {
+      await page.goto(base + "/posters/?id=" + POSTER_FOLDED);
+      const title = page.getByRole("heading", { level: 1 });
+      await expect(title).toHaveText("たたんでいるポスター");
+      await expect(
+        page.getByText("通報があったため、運営が確かめるまで、たたんでいます"),
+      ).toBeVisible();
+      await expect(page.getByText("たたまれたポスターの見出し")).toHaveCount(0);
+      await expect(page.getByText("こころの本")).toHaveCount(0);
+      await expect(
+        page.getByRole("heading", { name: "このポスターの本" }),
+      ).toHaveCount(0);
+      await noOverflow("folded poster page");
+      await shotBoth("17-poster-folded-page");
+      await page.getByRole("button", { name: "読む" }).click();
+      await expect(page.getByText("たたまれたポスターの見出し")).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "このポスターの本" }),
+      ).toBeVisible();
+      // Opened, its words are read; they still do not name the page.
+      await expect(title).toHaveText("たたんでいるポスター");
+      await expect(
+        page.getByRole("region", { name: "レンのポスター", exact: true }),
+      ).toBeFocused();
+    },
+  );
+
+  await check(
+    "a poster the reader reports folds for them; its spoiler door comes after",
+    async () => {
+      await page.goto(base + "/posters/?id=" + POSTER_TO_REPORT);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+        "ネタバレを含むポスター",
+      );
+      await page.getByRole("button", { name: "このポスターを通報" }).click();
+      const dialog = page.getByRole("dialog", { name: "通報する" });
+      await expect(dialog).toContainText(
+        "「レンさんのポスター」について、運営に知らせます。",
+      );
+      await dialog.getByLabel("宣伝・スパム").check();
+      await dialog.getByRole("button", { name: "通報する" }).click();
+      await expect(dialog).toContainText(
+        "このポスターは、あなたの画面ではたたんでおきます。",
+      );
+      await expect(dialog).not.toContainText("この投稿は");
+      expect(reportsSent.at(-1)).toEqual({
+        reporter_id: user.id,
+        target_kind: "poster",
+        target_id: POSTER_TO_REPORT,
+        reason: "spam",
+        detail: "",
+      });
+      await dialog.getByRole("button", { name: "閉じる" }).last().click();
+      await expect(
+        page.getByText("あなたが通報したポスターです"),
+      ).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+        "あなたが通報したポスター",
+      );
+      await page.getByRole("button", { name: "読む" }).click();
+      // Then the poster's own spoiler door, with the hand on it.
+      const door = page.getByRole("button", { name: "表示する" });
+      await expect(door).toBeFocused();
+      await expect(page.getByText("最後の場面の話。")).toHaveCount(0);
+      await door.click();
+      await expect(page.getByText("最後の場面の話。")).toBeVisible();
+      // Read back with the town, it stays folded for the reporter.
+      await page.reload();
+      await expect(
+        page.getByText("あなたが通報したポスターです"),
+      ).toBeVisible();
+      await page.goto(base + "/timeline/");
+      await expect(
+        page
+          .locator("article.poster-card")
+          .filter({ hasText: "あなたが通報したポスターです" }),
+      ).toHaveCount(1);
+    },
+  );
+
+  await check(
+    "a folded poster's thumb on a book's page says nothing of its words",
+    async () => {
+      await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
+      const row = page.locator(".book-posters-row");
+      const folded = row.getByRole("link", { name: /^たたんでいるポスター/ });
+      await expect(folded).toHaveAttribute(
+        "aria-label",
+        "たたんでいるポスター、レン",
+      );
+      await expect(folded).toContainText("たたんでいます");
+      await expect(folded).toContainText("通報があったため");
+      await expect(page.locator("main")).not.toContainText(
+        "たたまれたポスターの見出し",
+      );
+      // Not in a label, a title or an alt text either.
+      const named = await page
+        .locator("main [aria-label], main [alt], main [title]")
+        .evaluateAll((elements) =>
+          elements.flatMap((element) =>
+            ["aria-label", "alt", "title"].map(
+              (name) => element.getAttribute(name) ?? "",
+            ),
+          ),
+        );
+      expect(named.filter((name) => name.includes("たたまれた"))).toEqual([]);
+      expect(await page.title()).not.toContain("たたまれた");
+      // The maker's own held poster is theirs to see, as it is.
+      await expect(
+        row.getByRole("link", {
+          name: /^ポスター 確かめられているわたしのポスター/,
+        }),
+      ).toBeVisible();
+      await noOverflow("book page with a folded poster");
+      await row.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(output, "18-poster-folded-thumb-390.png"),
+      });
+      // The thumb leads to the poster, and 戻る comes back to the book.
+      await folded.click();
+      await expect(page).toHaveURL(new RegExp("id=" + POSTER_FOLDED));
+      await page.goBack();
+      await expect(page).toHaveURL(new RegExp("id=" + COVER_BOOK));
+      // On the maker's profile too.
+      await page.goto(base + "/profile/?id=" + OTHER);
+      await expect(
+        page.getByRole("link", { name: /^たたんでいるポスター/ }),
+      ).toHaveCount(1);
+      await expect(page.locator("main")).not.toContainText(
+        "たたまれたポスターの見出し",
+      );
+    },
+  );
+
+  await check(
+    "the maker hears of a folded and a held poster, and reads why on it",
+    async () => {
+      await page.goto(base + "/notifications/");
+      await expect(
+        page.getByText(
+          "通報があったため、運営が確かめるまで、あなたのポスターをみんなの画面ではたたんでいます。ポスターは消えていません",
+        ),
+      ).toBeVisible();
+      await page
+        .getByRole("link", {
+          name: /運営が確かめるまで、あなたのポスターをほかの人から見えないようにしています/,
+        })
+        .click();
+      await expect(page).toHaveURL(new RegExp("id=" + POSTER_OWN_HELD));
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+        "確かめられているわたしのポスター",
+      );
+      await expect(page.locator(".poster-screen-review")).toHaveText(
+        "運営が確かめるまで、ほかの人からは見えないようにしています。問題がなければ、元に戻ります。",
+      );
+      await expect(page.getByText("わたしの言葉。")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "このポスターを通報" }),
+      ).toHaveCount(0);
+      await shotBoth("19-poster-maker-note");
+      // Back to the posts' town for what follows.
+      town = filled();
     },
   );
 

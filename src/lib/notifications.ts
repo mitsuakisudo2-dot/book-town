@@ -9,7 +9,7 @@ import {
   type TownState,
 } from "./types";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
-import { profilePath, shopPath } from "./paths";
+import { posterPath, profilePath, shopPath } from "./paths";
 import { coverHidden } from "./hidden-words";
 
 export interface Notice {
@@ -159,8 +159,15 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
             (entry) => entry.id === id && entry.authorId === ME_ID,
           )
         : undefined;
+    const poster =
+      kind === "poster"
+        ? state.posters.find(
+            (entry) => entry.id === id && entry.authorId === ME_ID,
+          )
+        : undefined;
     const own =
       post ||
+      poster ||
       (kind === "profile" && id === ME_ID) ||
       (kind === "shop" && id === OWN_SHOP_ID) ||
       // Only a poster's owner ever reads that it is held.
@@ -181,13 +188,15 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
             ? "通報があったため、運営が確かめるまで、あなたの紹介文をたたんでいます"
             : kind === "shop"
               ? "通報があったため、運営が確かめるまで、あなたの本屋の紹介文をたたんでいます"
-              : `通報があったため、運営が確かめるまで、${thing}をみんなの画面ではたたんでいます。投稿は消えていません`,
+              : `通報があったため、運営が確かめるまで、${thing}をみんなの画面ではたたんでいます。${REPORT_KIND_WORDS[kind]}は消えていません`,
       href:
         kind === "shop"
           ? shopPath(OWN_SHOP_ID)
-          : post?.bookId
-            ? bookPath(post.bookId)
-            : "/profiles/me/",
+          : kind === "poster"
+            ? posterPath(id)
+            : post?.bookId
+              ? bookPath(post.bookId)
+              : "/profiles/me/",
     });
   }
   // The reader's own reports: when the operator starts looking, and when they

@@ -69,8 +69,8 @@ import {
 import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
 import { replaceAddress } from "../lib/url-state";
-import { postersOfBook } from "../lib/posters";
-import { findReader } from "../lib/social";
+import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
+import { findReader, reviewCoverOf } from "../lib/social";
 import { PosterThumb } from "./PosterView";
 import { PosterEditor } from "./PosterEditor";
 import { PosterScreen } from "./PosterScreen";
@@ -942,17 +942,29 @@ function BookView({
 }
 /**
  * The posters a book appears in, those that open with it first. With none
- * yet, only the way to make the first.
+ * yet, only the way to make the first. Spoilers the reader chose not to see
+ * are left out, said once without a count.
  */
 function BookPosters({ state, book }: { state: TownState; book: Book }) {
   const posters = postersOfBook(state, book.id);
+  const leftOut = postersLeftOutOfBook(state, book.id) && (
+    <p className="book-posters-left-out">
+      ネタバレを含むポスターは、設定により出していません
+    </p>
+  );
   const make = (
     <Link href={posterNewPath({ bookId: book.id })} className="text-button">
       <Icon name="plus" size={14} />
       この本でポスターを作る
     </Link>
   );
-  if (!posters.length) return <p className="book-posters-invite">{make}</p>;
+  if (!posters.length)
+    return (
+      <>
+        <p className="book-posters-invite">{make}</p>
+        {leftOut}
+      </>
+    );
   return (
     <section className="book-posters" aria-labelledby="book-posters-title">
       <div className="book-path-heading">
@@ -976,12 +988,19 @@ function BookPosters({ state, book }: { state: TownState; book: Book }) {
                   [maker?.name, sample && "見本"].filter(Boolean).join(" · ") ||
                   undefined
                 }
+                folded={reviewCoverOf(
+                  state,
+                  "poster",
+                  poster.id,
+                  poster.authorId,
+                )}
               />
             </li>
           );
         })}
       </ul>
       {make}
+      {leftOut}
     </section>
   );
 }

@@ -12,6 +12,7 @@ import { getSupabase } from "../lib/supabase/client";
 import {
   fileReport,
   REPORT_DETAIL_MAX,
+  REPORT_KIND_WORDS,
   type ReportReason,
 } from "../lib/supabase/reports";
 import { requestAccount } from "../lib/visitor";
@@ -159,7 +160,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
                 </p>
                 {(target.kind === "post" || target.kind === "poster") && (
                   <p className="muted">
-                    この投稿は、あなたの画面ではたたんでおきます。
+                    {`この${REPORT_KIND_WORDS[target.kind]}は、あなたの画面ではたたんでおきます。`}
                   </p>
                 )}
               </>

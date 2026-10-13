@@ -293,6 +293,77 @@ try {
       },
     );
 
+    await check(
+      `${at}: a reader who leaves spoilers out is not shown others' spoiler posters`,
+      async () => {
+        const setting = async (label) => {
+          await go("/profiles/me/");
+          await page.getByRole("button", { name: "設定" }).click();
+          await page
+            .getByRole("dialog", { name: "設定" })
+            .getByRole("group", { name: "ネタバレの表示" })
+            .getByLabel(label)
+            .check();
+          await page.keyboard.press("Escape");
+        };
+        const spoilerThumb = () =>
+          page.getByRole("link", { name: /^ネタバレを含むポスター/ });
+        // By default a spoiler poster is listed, behind its door.
+        await go("/timeline/");
+        await expect(
+          page.getByRole("article", { name: "はるのポスター" }),
+        ).toBeVisible();
+        await setting("ネタバレの印があるもの・可能性があるものは出さない");
+        await go("/timeline/");
+        await expect(
+          page.getByRole("article", { name: "はるのポスター" }),
+        ).toHaveCount(0);
+        await expect(
+          page.getByRole("article", { name: "凪のポスター" }),
+        ).toBeVisible();
+        await go("/profiles/r-haru/");
+        await expect(spoilerThumb()).toHaveCount(0);
+        // The book's page says once, without a count, that some were left out.
+        await go("/books/hundred-years/");
+        await expect(spoilerThumb()).toHaveCount(0);
+        const leftOut = page.getByText(
+          "ネタバレを含むポスターは、設定により出していません",
+        );
+        await expect(leftOut).toBeVisible();
+        await expect(leftOut).not.toContainText(/\d/);
+        await expect(
+          page.getByRole("link", { name: "この本でポスターを作る" }),
+        ).toBeVisible();
+        await noOverflow(`${at} book page, spoiler posters left out`);
+        await page.screenshot({
+          path: path.join(output, `${at}-posters-left-out.png`),
+          fullPage: true,
+        });
+        // Opened from its own address, it is there, still behind its door.
+        await go("/posters/?id=poster-haru-last-page");
+        await expect(
+          page.getByRole("heading", {
+            name: "ネタバレを含むポスター",
+            level: 1,
+          }),
+        ).toBeVisible();
+        await page.getByRole("button", { name: "表示する" }).click();
+        await expect(
+          page
+            .getByRole("region", { name: "はるのポスター" })
+            .locator(".poster-sheet")
+            .first(),
+        ).toBeVisible();
+        // Back to folding: listed again, behind its door.
+        await setting(
+          "ネタバレの可能性があるもの（3人以上が「ネタバレでは？」）はたたんで表示する",
+        );
+        await go("/books/hundred-years/");
+        await expect(spoilerThumb()).toBeVisible();
+        await expect(leftOut).toHaveCount(0);
+      },
+    );
+
     await check(`${at}: a missing poster says so kindly`, async () => {
       await go("/posters/?id=no-such-poster");
       await expect(
