@@ -1579,12 +1579,264 @@ async function main() {
     },
   );
 
+  const pages = (...bookIds: string[]) =>
+    JSON.stringify([
+      {
+        blocks: [
+          { type: "heading", text: "夜の本" },
+          ...(bookIds.length ? [{ type: "books", book_ids: bookIds }] : []),
+          { type: "text", text: "眠れない夜に。" },
+        ],
+      },
+    ]);
+
+  await check(
+    "posters put up are seen by everyone, drafts by their maker only",
+    async () => {
+      const [second] = await as<{ id: string }>(
+        AKI,
+        "insert into books (title, author, created_by) values ('ソラリス', 'スタニスワフ・レム', $1) returning id",
+        [AKI],
+      );
+      const [up] = await as<{ id: string; created_at: string }>(
+        AKI,
+        `insert into posters (author_id, template, pages, show_in_timeline, created_at)
+         values ($1, 'lineup', $2, true, '2099-01-01') returning id, created_at`,
+        [AKI, pages(book.id, second.id)],
+      );
+      // Dated by the database, like posts.
+      assert.ok(new Date(up.created_at).getFullYear() < 2099);
+      const [draft] = await as<{ id: string; created_at: string }>(
+        AKI,
+        "insert into posters (author_id, template, pages, status) values ($1, 'one_book', $2, 'draft') returning id, created_at",
+        [AKI, pages(book.id)],
+      );
+      const seen = async (visitor: Visitor) =>
+        (
+          await as<{ id: string }>(
+            visitor,
+            "select id from posters where author_id = $1 order by created_at",
+            [AKI],
+          )
+        ).map((row) => row.id);
+      assert.deepEqual(await seen(AKI), [up.id, draft.id]);
+      assert.deepEqual(await seen(BEN), [up.id]);
+      assert.deepEqual(await seen(null), [up.id]);
+
+      // The database lists each poster's books from its pages, and shows
+      // them only with the poster.
+      const books = async (visitor: Visitor) =>
+        (
+          await as<{ poster_id: string; book_id: string; first_page: number }>(
+            visitor,
+            "select poster_id, book_id, first_page from poster_books where poster_id in ($1, $2) order by poster_id, book_id",
+            [up.id, draft.id],
+          )
+        ).map((row) => [row.poster_id, row.book_id, row.first_page]);
+      assert.deepEqual(
+        (await books(null)).sort(),
+        [
+          [up.id, book.id, 1],
+          [up.id, second.id, 1],
+        ].sort(),
+      );
+      assert.equal((await books(AKI)).length, 3);
+      assert.equal(
+        await affects(AKI, "update posters set pages = $2 where id = $1", [
+          up.id,
+          JSON.stringify([
+            { blocks: [{ type: "heading", text: "表紙" }] },
+            { blocks: [{ type: "books", book_ids: [second.id] }] },
+          ]),
+        ]),
+        1,
+      );
+      assert.deepEqual(await books(null), [[up.id, second.id, 2]]);
+      await refused(
+        AKI,
+        "insert into poster_books (poster_id, book_id, first_page) values ($1, $2, 1)",
+        [up.id, book.id],
+        /permission/,
+      );
+
+      // A draft put up is new on the board from then on.
+      await as(AKI, "update posters set status = 'published' where id = $1", [
+        draft.id,
+      ]);
+      const [putUp] = await as<{ created_at: string }>(
+        AKI,
+        "select created_at from posters where id = $1",
+        [draft.id],
+      );
+      assert.ok(
+        new Date(putUp.created_at).getTime() >
+          new Date(draft.created_at).getTime(),
+      );
+      assert.deepEqual(await seen(BEN), [up.id, draft.id]);
+
+      // Only the maker makes, changes or takes down their posters.
+      await refused(
+        BEN,
+        "insert into posters (author_id, template, pages) values ($1, 'text', $2)",
+        [AKI, pages()],
+        /row-level security/,
+      );
+      assert.equal(
+        await affects(BEN, "update posters set spoiler = true where id = $1", [
+          up.id,
+        ]),
+        0,
+      );
+      assert.equal(
+        await affects(BEN, "delete from posters where id = $1", [up.id]),
+        0,
+      );
+      for (const column of ["author_id", "created_at"])
+        await refused(
+          AKI,
+          `update posters set ${column} = ${column} where id = $1`,
+          [up.id],
+          /permission/,
+        );
+      await refused(
+        null,
+        "insert into posters (author_id, template, pages) values ($1, 'text', $2)",
+        [AKI, pages()],
+        /permission/,
+      );
+
+      // A block hides each person's posters from the other.
+      await as(
+        BEN,
+        "insert into blocks (blocker_id, blocked_id) values ($1, $2)",
+        [BEN, AKI],
+      );
+      assert.deepEqual(await seen(BEN), []);
+      await as(BEN, "delete from blocks where blocker_id = $1", [BEN]);
+      assert.equal(
+        await affects(AKI, "delete from posters where id = $1", [draft.id]),
+        1,
+      );
+      assert.deepEqual(await books(AKI), [[up.id, second.id, 2]]);
+    },
+  );
+
+  await check(
+    "a poster keeps to its limits: pages, books, words and the presets",
+    async () => {
+      const make = (template: string, value: unknown, theme = "kinari") =>
+        as(
+          AKI,
+          "insert into posters (author_id, template, theme, pages) values ($1, $2, $3, $4)",
+          [AKI, template, theme, JSON.stringify(value)],
+        );
+      const page = (blocks: unknown[]) => ({ blocks });
+      const words = (n: number) => "あ".repeat(n);
+      const many = (n: number) =>
+        Array.from(
+          { length: n },
+          (_, i) => "00000000-0000-4000-8000-" + String(i).padStart(12, "0"),
+        );
+      for (const [value, reason] of [
+        [[], /1 to 10 pages/],
+        [
+          Array.from({ length: 11 }, () =>
+            page([{ type: "heading", text: "a" }]),
+          ),
+          /1 to 10 pages/,
+        ],
+        [[page([{ type: "heading", text: words(61) }])], /heading, words/],
+        [[page([{ type: "text", text: words(2001) }])], /heading, words/],
+        [[page([{ type: "text", text: 3 }])], /heading, words/],
+        [[page([{ type: "photo", url: "x" }])], /heading, words/],
+        [[{ title: "x" }], /list of blocks/],
+        [[page([{ type: "books", book_ids: many(10) }])], /at most 9 books/],
+        // A book the catalog does not have refuses the save.
+        [[page([{ type: "books", book_ids: many(1) }])], /foreign key/],
+        [[page([{ type: "books", book_ids: ["not-a-book"] }])], /uuid/],
+      ] as const) {
+        let error: unknown = null;
+        try {
+          await make("lineup", value);
+        } catch (caught) {
+          error = caught;
+        }
+        assert.ok(error instanceof Error, JSON.stringify(value).slice(0, 80));
+        assert.match(error.message, reason);
+      }
+      await refused(
+        AKI,
+        "insert into posters (author_id, template, theme, pages) values ($1, 'lineup', 'neon', $2)",
+        [AKI, pages()],
+        /check constraint/,
+      );
+      await refused(
+        AKI,
+        "insert into posters (author_id, template, pages) values ($1, 'ranking', $2)",
+        [AKI, pages()],
+        /check constraint/,
+      );
+      // At the limits, it is kept.
+      await make(
+        "text",
+        Array.from({ length: 10 }, () =>
+          page([
+            { type: "heading", text: words(60) },
+            { type: "text", text: words(2000) },
+          ]),
+        ),
+        "sumi",
+      );
+      await db.exec("delete from posters where template = 'text'");
+    },
+  );
+
+  await check("a poster can be reported, and hidden like a post", async () => {
+    const [poster] = await as<{ id: string }>(
+      AKI,
+      "insert into posters (author_id, template, pages) values ($1, 'one_book', $2) returning id",
+      [AKI, pages(book.id)],
+    );
+    const seen = async (visitor: Visitor) =>
+      (await as(visitor, "select id from posters where id = $1", [poster.id]))
+        .length;
+    for (const reporter of [BEN, CHI])
+      await as(
+        reporter,
+        "insert into reports (reporter_id, target_kind, target_id, reason) values ($1, 'poster', $2, 'inappropriate')",
+        [reporter, poster.id],
+      );
+    assert.equal(await seen(null), 1);
+    await db.exec(
+      `insert into moderation_hides (target_kind, target_id) values ('poster', '${poster.id}')`,
+    );
+    assert.equal(await seen(null), 0);
+    assert.equal(await seen(BEN), 0);
+    assert.equal(await seen(AKI), 1);
+    await db.exec("delete from moderation_hides");
+    await db.exec("delete from reports where target_kind = 'poster'");
+    assert.equal(await seen(BEN), 1);
+    await refused(
+      BEN,
+      "insert into reports (reporter_id, target_kind, target_id, reason) values ($1, 'poster_book', $2, 'spam')",
+      [BEN, poster.id],
+      /check constraint/,
+    );
+    // Ben makes one too, for the account deletion below.
+    await as(
+      BEN,
+      "insert into posters (author_id, template, pages) values ($1, 'text', $2)",
+      [BEN, pages()],
+    );
+  });
+
   await check("deleting an account removes everything it owned", async () => {
     await db.exec(`delete from auth.users where id = '${BEN}'`);
     for (const table of [
       "profiles",
       "shops",
       "posts",
+      "posters",
       "post_reactions",
       "shop_follows",
       "saved_shops",
@@ -1596,7 +1848,7 @@ async function main() {
             ? "id"
             : table === "shops"
               ? "owner_id"
-              : table === "posts"
+              : table === "posts" || table === "posters"
                 ? "author_id"
                 : table === "shop_follows"
                   ? "follower_id"

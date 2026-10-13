@@ -13,7 +13,8 @@ import {
   type ShopRow,
   type Write,
 } from "../src/lib/town-remote";
-import { demoBooks, demoPosts, demoShops } from "../src/lib/data";
+import { demoBooks, demoPosters, demoPosts, demoShops } from "../src/lib/data";
+import type { Poster } from "../src/lib/posters";
 import { isSampleBook, sampleBookRowId, withSamples } from "../src/lib/samples";
 import {
   ME_ID,
@@ -121,10 +122,39 @@ function rows(extra: Partial<RemoteRows> = {}): RemoteRows {
     popReactions: [],
     sessions: [],
     records: [],
+    posters: [],
     seenNotifications: [],
     ...extra,
   };
 }
+
+const posterRow = (
+  id: string,
+  author: string,
+  extra: Partial<Tables<"posters">> = {},
+): Tables<"posters"> => ({
+  id,
+  author_id: author,
+  template: "lineup",
+  theme: "navy",
+  font: "mincho",
+  pages: [
+    {
+      blocks: [
+        { type: "heading", text: "夜の本" },
+        { type: "books", book_ids: [BOOK, OTHER_BOOK] },
+        { type: "text", text: "眠れない夜に。" },
+      ],
+    },
+  ],
+  spoiler: false,
+  show_in_timeline: true,
+  allow_display: true,
+  status: "published",
+  created_at: at,
+  updated_at: at,
+  ...extra,
+});
 
 const kinds = (writes: Write[]) =>
   writes.map((write) =>
@@ -362,6 +392,86 @@ async function main() {
       ownSceneBooks: [BOOK],
     });
     assert.deepEqual(inScenes.sort(), [BOOK, OTHER_BOOK].sort());
+    // So are the books on posters.
+    const onPosters = referencedBookIds({
+      ...rows(),
+      posters: [posterRow("00000000-0000-4000-8000-0000000000d1", BEN)],
+    });
+    assert.deepEqual(onPosters.sort(), [BOOK, OTHER_BOOK].sort());
+  });
+
+  await check("posters: own drafts come back, others' only once put up", () => {
+    const MINE = "00000000-0000-4000-8000-0000000000d1";
+    const BENS = "00000000-0000-4000-8000-0000000000d2";
+    const BENS_DRAFT = "00000000-0000-4000-8000-0000000000d3";
+    const GONE = "00000000-0000-4000-8000-0000000000d4";
+    const BAD = "00000000-0000-4000-8000-0000000000d5";
+    const town = townFromRows(
+      rows({
+        posters: [
+          posterRow(MINE, AKI, { status: "draft", show_in_timeline: false }),
+          posterRow(BENS, BEN, {
+            template: "one_book",
+            theme: "kosho",
+            spoiler: true,
+            pages: [
+              {
+                blocks: [
+                  // A book the town cannot read leaves the page; the
+                  // poster stays.
+                  {
+                    type: "books",
+                    book_ids: ["00000000-0000-4000-8000-000000000bff"],
+                  },
+                  { type: "text", text: "最後の頁について" },
+                  // A kind of block from a later version is passed over.
+                  { type: "photo", photo_id: "x" },
+                ],
+              },
+            ],
+          }),
+          posterRow(BENS_DRAFT, BEN, { status: "draft" }),
+          // Someone the town does not know is left out.
+          posterRow(GONE, "00000000-0000-4000-8000-00000000000c"),
+          posterRow(BAD, BEN, { theme: "neon" }),
+        ],
+      }),
+      ids,
+    );
+    assert.deepEqual(
+      town.posters.map((entry) => entry.id),
+      [MINE, BENS],
+    );
+    assert.deepEqual(town.posters[0], {
+      id: MINE,
+      authorId: ME_ID,
+      template: "lineup",
+      theme: "navy",
+      font: "mincho",
+      pages: [
+        {
+          heading: "夜の本",
+          text: "眠れない夜に。",
+          bookIds: [BOOK, OTHER_BOOK],
+        },
+      ],
+      spoiler: false,
+      inTimeline: false,
+      status: "draft",
+      createdAt: at,
+      updatedAt: at,
+    } satisfies Poster);
+    assert.equal(town.posters[1].authorId, BEN);
+    assert.equal(town.posters[1].spoiler, true);
+    assert.deepEqual(town.posters[1].pages, [
+      { heading: "", text: "最後の頁について", bookIds: [] },
+    ]);
+    // A visitor sees only what is put up.
+    const visitor = townFromRows(
+      rows({ posters: [posterRow(BENS_DRAFT, BEN, { status: "draft" })] }),
+      { userId: null, shopId: "" },
+    );
+    assert.deepEqual(visitor.posters, []);
   });
 
   await check("words left at the shop reach its owner, newest first", () => {
@@ -825,6 +935,88 @@ async function main() {
     );
   });
 
+  await check("own posters are made, changed and taken down", () => {
+    const before = base();
+    const poster: Poster = {
+      id: "00000000-0000-4000-8000-0000000000d6",
+      authorId: ME_ID,
+      template: "one_book",
+      theme: "kinari",
+      font: "mincho",
+      pages: [{ heading: "", text: "ずっと手元に。", bookIds: [BOOK] }],
+      spoiler: false,
+      inTimeline: true,
+      status: "draft",
+      createdAt: at,
+      updatedAt: at,
+    };
+    const others: Poster = {
+      ...poster,
+      id: "00000000-0000-4000-8000-0000000000d7",
+      authorId: BEN,
+    };
+    const made: TownState = { ...before, posters: [poster, others] };
+    // Someone else's poster on screen is never written; the database dates
+    // the new one itself.
+    assert.deepEqual(planWrites(before, made, ids), [
+      {
+        kind: "posters",
+        rows: [
+          {
+            id: poster.id,
+            author_id: AKI,
+            template: "one_book",
+            theme: "kinari",
+            font: "mincho",
+            pages: [
+              {
+                blocks: [
+                  { type: "books", book_ids: [BOOK] },
+                  { type: "text", text: "ずっと手元に。" },
+                ],
+              },
+            ],
+            spoiler: false,
+            show_in_timeline: true,
+            status: "draft",
+          },
+        ],
+      },
+    ]);
+    const putUp: TownState = {
+      ...made,
+      posters: [
+        { ...poster, status: "published", theme: "navy", updatedAt: "later" },
+        { ...others, theme: "sumi" },
+      ],
+    };
+    const writes = planWrites(made, putUp, ids);
+    assert.deepEqual(kinds(writes), ["update-poster"]);
+    assert.deepEqual(
+      (writes[0] as Extract<Write, { kind: "update-poster" }>).patch,
+      {
+        template: "one_book",
+        theme: "navy",
+        font: "mincho",
+        pages: [
+          {
+            blocks: [
+              { type: "books", book_ids: [BOOK] },
+              { type: "text", text: "ずっと手元に。" },
+            ],
+          },
+        ],
+        spoiler: false,
+        show_in_timeline: true,
+        status: "published",
+      },
+    );
+    assert.deepEqual(
+      planWrites(putUp, { ...putUp, posters: [putUp.posters[1]] }, ids),
+      [{ kind: "delete-posters", ids: [poster.id] }],
+    );
+  });
+
   await check("the empty town is the person's, with nothing in it", () => {
     const town = emptyTown({ handle: "aki" });
     assert.equal(town.me.id, ME_ID);
@@ -945,6 +1137,66 @@ async function main() {
           rows: [{ user_id: AKI, book_id: row, kind: "wish" }],
         },
       ]);
+    },
+  );
+
+  await check(
+    "a poster with a 見本's book keeps the book under its database id",
+    () => {
+      const SOLARIS = demoBooks[0].id;
+      const before = withSamples(townFromRows(rows(), ids));
+      // The 見本's own posters are shown, and never written.
+      assert.ok(
+        demoPosters.every((entry) =>
+          before.posters.some((shown) => shown.id === entry.id),
+        ),
+      );
+      const poster: Poster = {
+        id: "00000000-0000-4000-8000-0000000000d8",
+        authorId: ME_ID,
+        template: "lineup",
+        theme: "navy",
+        font: "gothic",
+        pages: [{ heading: "星の本", text: "", bookIds: [SOLARIS, BOOK] }],
+        spoiler: false,
+        inTimeline: true,
+        status: "published",
+        createdAt: at,
+        updatedAt: at,
+      };
+      const next = { ...before, posters: [...before.posters, poster] };
+      const writes = planWrites(before, next, ids);
+      assert.deepEqual(kinds(writes), ["books", "posters"]);
+      assert.deepEqual(
+        (writes[0] as Extract<Write, { kind: "books" }>).rows.map(
+          (row) => row.id,
+        ),
+        [sampleBookRowId(SOLARIS)],
+      );
+      assert.deepEqual(
+        (writes[1] as Extract<Write, { kind: "posters" }>).rows[0].pages,
+        [
+          {
+            blocks: [
+              { type: "heading", text: "星の本" },
+              { type: "books", book_ids: [sampleBookRowId(SOLARIS), BOOK] },
+            ],
+          },
+        ],
+      );
+      // Read back, the poster shows the 見本's book again.
+      const again = townFromRows(
+        rows({
+          posters: [
+            posterRow(poster.id, AKI, {
+              pages: (writes[1] as Extract<Write, { kind: "posters" }>).rows[0]
+                .pages,
+            }),
+          ],
+        }),
+        ids,
+      );
+      assert.deepEqual(again.posters[0].pages[0].bookIds, [SOLARIS, BOOK]);
     },
   );
 

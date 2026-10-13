@@ -686,6 +686,70 @@ async function main() {
   );
 
   await check(
+    "a poster is put up for everyone, and a draft stays with its maker",
+    async () => {
+      const store = await townOf(aki);
+      const look = { theme: "navy", font: "mincho" } as const;
+      const draft = store.actions.savePoster({
+        template: "one_book",
+        ...look,
+        pages: [{ heading: "", text: "ずっと手元に。", bookIds: [bookId] }],
+        spoiler: false,
+        inTimeline: true,
+        status: "draft",
+      });
+      // A 見本's book goes on a poster too, under its database id.
+      const lineup = store.actions.savePoster({
+        template: "lineup",
+        ...look,
+        pages: [
+          {
+            heading: "夜の本",
+            text: "",
+            bookIds: [bookId, demoBooks[0].id],
+          },
+        ],
+        spoiler: false,
+        inTimeline: true,
+        status: "published",
+      });
+      assert.ok(draft && lineup);
+      await settled(store);
+
+      const postersOf = async (person: typeof aki) =>
+        (await townOf(person))
+          .getSnapshot()
+          .posters.filter((poster) => isDatabaseId(poster.id))
+          .map((poster) => [poster.id, poster.status]);
+      assert.deepEqual(
+        (await postersOf(aki)).sort(),
+        [
+          [draft, "draft"],
+          [lineup, "published"],
+        ].sort(),
+      );
+      assert.deepEqual(await postersOf(ben), [[lineup, "published"]]);
+      const fromBen = (await townOf(ben))
+        .getSnapshot()
+        .posters.find((poster) => poster.id === lineup);
+      assert.deepEqual(fromBen?.pages[0].bookIds, [bookId, demoBooks[0].id]);
+      assert.equal(fromBen?.authorId, aki.id);
+
+      const again = await townOf(aki);
+      const kept = again
+        .getSnapshot()
+        .posters.find((poster) => poster.id === draft)!;
+      assert.equal(
+        again.actions.savePoster({ ...kept, status: "published" }, draft),
+        draft,
+      );
+      again.actions.deletePoster(lineup);
+      await settled(again);
+      assert.deepEqual(await postersOf(ben), [[draft, "published"]]);
+    },
+  );
+
+  await check(
     "three reports hide a post from everyone but its writer, until dismissed",
     async () => {
       const carol = await reader("carol");

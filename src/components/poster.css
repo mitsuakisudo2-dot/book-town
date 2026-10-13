@@ -1,0 +1,570 @@
+/*
+ * A poster's page: 4:5, and every length inside it in cqw of the sheet, so
+ * it is one composition at any size. The sheet itself sizes nothing in cqw
+ * (there it would measure the page around it); its children do.
+ */
+.poster-sheet {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  container-type: inline-size;
+  overflow: hidden;
+  border-radius: 3px;
+  color: var(--poster-ink);
+  background:
+    radial-gradient(
+      120% 80% at 22% 8%,
+      rgb(255 255 255 / 0.09),
+      transparent 62%
+    ),
+    var(--poster-paper);
+  text-align: start;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+}
+.poster-sheet.is-mincho {
+  font-family: var(--serif);
+}
+.poster-sheet.is-gothic {
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+}
+.poster-frame {
+  position: absolute;
+  inset: 3.4cqw;
+  border: 0.25cqw solid var(--poster-accent);
+  opacity: 0.4;
+  pointer-events: none;
+}
+.poster-body {
+  position: absolute;
+  inset: 8cqw;
+  min-height: 0;
+}
+
+.poster-heading {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+  letter-spacing: 0.04em;
+  font-feature-settings: "palt";
+  text-wrap: balance;
+}
+.is-mincho .poster-heading {
+  font-family: "Zen Old Mincho", var(--serif);
+  font-weight: 600;
+}
+.is-gothic .poster-heading {
+  font-weight: 700;
+}
+.poster-text {
+  min-height: 0;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-break: strict;
+  letter-spacing: 0.03em;
+}
+/* Cut, not shrunk: the rest is under 続きを読む on the poster's page. */
+.poster-text.is-cut {
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 2.6em), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 2.6em), transparent);
+}
+.poster-rule {
+  display: block;
+  flex: none;
+  width: 9cqw;
+  height: 0.6cqw;
+  border-radius: 1cqw;
+  background: var(--poster-accent);
+}
+
+.poster-cover {
+  display: block;
+  min-width: 0;
+  filter: drop-shadow(0 0.7cqw 1.1cqw rgb(0 0 0 / 0.24));
+  transition: transform 0.2s;
+}
+a.poster-cover:hover {
+  transform: translateY(-2px);
+}
+.poster-cover .poster-jacket {
+  width: 100%;
+}
+/* Where a cover will go, in a draft that has none yet. */
+.poster-slot {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 0.675;
+  border: 0.4cqw dashed currentColor;
+  border-radius: 1cqw;
+  opacity: 0.32;
+  text-align: center;
+  font-size: 3cqw;
+  line-height: 1.7;
+  padding: 4cqw;
+}
+.poster-placeholder {
+  display: block;
+  opacity: 0.38;
+  font-size: 3.4cqw;
+  line-height: 1.8;
+}
+.poster-placeholder.is-heading {
+  font-size: 5.6cqw;
+  line-height: 1.45;
+  letter-spacing: 0.04em;
+}
+.is-mincho .poster-placeholder.is-heading {
+  font-family: "Zen Old Mincho", var(--serif);
+}
+
+/* 1冊を語る: the cover large at the left, the words beside and below it. */
+.is-one_book .poster-body {
+  display: grid;
+  grid-template-columns: 42cqw minmax(0, 1fr);
+  grid-template-rows: auto;
+  align-content: center;
+  gap: 5.5cqw 5.5cqw;
+}
+.is-one_book.has-text .poster-body {
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+}
+.poster-lead {
+  grid-area: 1 / 1;
+  align-self: start;
+  width: 100%;
+}
+.poster-aside {
+  grid-area: 1 / 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4cqw;
+  min-height: 0;
+  padding-top: 0.6cqw;
+}
+.is-one_book .poster-heading {
+  font-size: 5.4cqw;
+  -webkit-line-clamp: 5;
+}
+.poster-book-name {
+  display: grid;
+  gap: 1.2cqw;
+  justify-items: start;
+}
+.poster-book-name::before {
+  content: "";
+  width: 7cqw;
+  height: 0.5cqw;
+  margin-bottom: 1.6cqw;
+  border-radius: 1cqw;
+  background: var(--poster-accent);
+}
+.poster-book-name b {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-size: 3cqw;
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.poster-book-name small {
+  font-size: 2.5cqw;
+  line-height: 1.6;
+  opacity: 0.72;
+  letter-spacing: 0.06em;
+}
+.is-one_book .poster-text {
+  grid-column: 1 / -1;
+  font-size: 3.5cqw;
+  line-height: 1.9;
+}
+
+/* 並べる: a heading, the covers in an even block, a line of words. */
+.is-lineup .poster-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4.5cqw;
+}
+.poster-head {
+  display: grid;
+  gap: 3cqw;
+  justify-items: start;
+  flex: none;
+}
+.is-lineup .poster-heading {
+  font-size: 6.2cqw;
+  -webkit-line-clamp: 3;
+}
+/* The covers' own box: each cover is as large as both its width and its
+   height allow, counted in this box's cqw and cqh. */
+.poster-covers {
+  flex: 1 1 0;
+  min-height: 0;
+  container-type: size;
+}
+.poster-shelf {
+  --gap: 4cqw;
+  --cover: min(
+    calc((100cqw - (var(--columns) - 1) * var(--gap)) / var(--columns) - 0.5px),
+    calc((100cqh - (var(--rows) - 1) * var(--gap)) / var(--rows) * 0.675)
+  );
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  align-items: flex-end;
+  gap: var(--gap);
+  height: 100%;
+}
+.poster-shelf > * {
+  flex: none;
+  width: var(--cover);
+}
+.poster-shelf > .poster-slot {
+  padding: 0;
+}
+.is-lineup .poster-text {
+  flex: none;
+  max-height: calc(3 * 1.85em);
+  font-size: 3.4cqw;
+  line-height: 1.85;
+}
+
+/* 文章: a magazine page, words alone. */
+.is-text .poster-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5cqw;
+  padding-top: 3cqw;
+}
+.poster-running {
+  display: block;
+  flex: none;
+  height: 0.25cqw;
+  background: var(--poster-accent);
+  opacity: 0.55;
+}
+.is-text .poster-heading {
+  flex: none;
+  font-size: 7.2cqw;
+  line-height: 1.42;
+  -webkit-line-clamp: 4;
+}
+.is-text .poster-text {
+  flex: 1 1 0;
+  font-size: 3.6cqw;
+  line-height: 2;
+  text-align: justify;
+}
+.is-text .poster-text::first-letter {
+  float: left;
+  margin: 0.08em 0.16em 0 0;
+  font-size: 3.1em;
+  line-height: 1.2;
+  color: var(--poster-accent);
+}
+.is-mincho.is-text .poster-text::first-letter {
+  font-family: "Zen Old Mincho", var(--serif);
+}
+
+/* The whole poster: pages side by side, turned by a swipe or the controls. */
+.poster-pages {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.poster-stage {
+  position: relative;
+  min-width: 0;
+}
+.poster-track {
+  display: flex;
+  border-radius: 3px;
+  box-shadow:
+    0 1px 2px #29362614,
+    0 8px 22px #2936261c;
+}
+.poster-track.is-many {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.poster-track.is-many::-webkit-scrollbar {
+  display: none;
+}
+.poster-track:focus-visible {
+  outline: 2px solid #7c986d;
+  outline-offset: 4px;
+}
+.poster-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+.poster-count {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgb(28 30 26 / 0.58);
+  color: #fbf8f1;
+  font-size: 11px;
+  line-height: 1.7;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+.poster-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+}
+.poster-turn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: #fffdf7;
+  color: #6f7c64;
+}
+.poster-turn:hover:not(:disabled) {
+  background: #eef1e6;
+  color: var(--green);
+}
+.poster-turn:disabled {
+  opacity: 0.35;
+}
+.poster-turn.is-back svg {
+  transform: scaleX(-1);
+}
+.poster-dots {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.poster-dots button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 24px;
+}
+.poster-dots button::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #cfd5c3;
+  transition:
+    width 0.2s,
+    background 0.2s;
+}
+.poster-dots button.is-current::before {
+  width: 14px;
+  background: var(--green);
+}
+.poster-rehide {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #8a6f5c;
+}
+.poster-rehide:hover {
+  background: #f4ece2;
+}
+.poster-more > button {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green);
+  padding: 2px 0;
+}
+.poster-more > button:hover {
+  text-decoration: underline;
+}
+.poster-fulltext {
+  margin-top: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf7;
+}
+.poster-fulltext.is-mincho {
+  font-family: var(--serif);
+}
+.poster-fulltext h3 {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.7;
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+.poster-fulltext p {
+  font-size: 13px;
+  line-height: 1.95;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The spoiler door: the poster's own colors, nothing of its words. */
+.poster-door,
+.poster-thumb-door {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  aspect-ratio: 4 / 5;
+  border-radius: 3px;
+  color: var(--poster-ink);
+  text-align: center;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0 10px,
+      color-mix(in srgb, var(--poster-accent) 13%, transparent) 10px 20px
+    ),
+    var(--poster-paper);
+}
+.poster-door {
+  gap: 10px;
+  padding: 24px;
+  box-shadow:
+    0 1px 2px #29362614,
+    0 8px 22px #2936261c;
+}
+.poster-door-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--poster-accent);
+  color: var(--poster-accent);
+  margin-bottom: 4px;
+}
+.poster-door p {
+  font-family: var(--serif);
+  font-size: 17px;
+  letter-spacing: 0.06em;
+}
+.poster-door small {
+  font-family: var(--serif);
+  font-size: 12px;
+  opacity: 0.8;
+  overflow-wrap: anywhere;
+}
+.poster-door button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--poster-accent);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--poster-ink);
+}
+.poster-door button:hover {
+  background: color-mix(in srgb, var(--poster-accent) 20%, transparent);
+}
+
+/* A small first page, for grids and rows. */
+.poster-thumb {
+  display: block;
+  min-width: 0;
+  container-type: inline-size;
+  color: var(--ink);
+}
+.poster-thumb-tile {
+  display: block;
+  border-radius: 3px;
+  box-shadow:
+    0 1px 2px #29362614,
+    0 4px 12px #2936261a;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+.poster-thumb:hover .poster-thumb-tile {
+  transform: translateY(-2px);
+  box-shadow:
+    0 2px 4px #29362618,
+    0 8px 18px #29362622;
+}
+.poster-thumb-door {
+  gap: 5cqw;
+  padding: 8cqw;
+  font-size: clamp(10px, 8cqw, 13px);
+  line-height: 1.6;
+}
+/* Beside the tile, never on it: a badge would lie over a cover. */
+.poster-thumb-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 6px;
+  font-size: 10px;
+  color: #8d9a80;
+}
+.poster-thumb-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f3ead9;
+  color: #7c5a46;
+}
+
+/* In the timeline, among the posts. */
+.poster-tag {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 1px 8px;
+  border-radius: 3px;
+  background: #e8eedf;
+  color: #4f6a45;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.poster-card .poster-pages {
+  max-width: 440px;
+}
+.poster-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: #8d9a80;
+}
+.poster-open:hover {
+  color: var(--green);
+}
+@media (max-width: 520px) {
+  /* On a phone the poster takes the card's whole width, under the avatar. */
+  .poster-card .poster-pages {
+    margin-left: -53px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .poster-cover,
+  .poster-thumb-tile,
+  .poster-dots button::before {
+    transition: none;
+  }
+}

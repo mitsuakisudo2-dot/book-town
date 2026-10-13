@@ -18,6 +18,7 @@ import { isDatabaseId } from "./paths";
 import { createRegisteredBook, normalizeIsbn } from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
+import { cleanPosterDraft, posterProblem, type Poster } from "./posters";
 import { handleProblem, normalizeHandle } from "./handles";
 import { tapsOf } from "./social";
 import {
@@ -762,6 +763,64 @@ export function createTownStore(
       commit({
         ...state,
         settings: { ...state.settings, readingPublic: value === true },
+      });
+    },
+    savePoster(draft, posterId) {
+      initialize();
+      const poster = cleanPosterDraft(
+        draft,
+        new Set(state.books.map((book) => book.id)),
+      );
+      if (!poster || (poster.status === "published" && posterProblem(poster)))
+        return null;
+      const at = now().toISOString();
+      if (posterId !== undefined) {
+        const current = state.posters.find(
+          (entry) => entry.id === posterId && entry.authorId === ME_ID,
+        );
+        if (!current) return null;
+        const next: Poster = {
+          ...current,
+          ...poster,
+          // A draft put up is new on the board from then on.
+          createdAt:
+            current.status === "draft" && poster.status === "published"
+              ? at
+              : current.createdAt,
+          updatedAt: at,
+        };
+        commit({
+          ...state,
+          posters: state.posters.map((entry) =>
+            entry.id === posterId ? next : entry,
+          ),
+        });
+        return posterId;
+      }
+      const entry: Poster = {
+        id: nextId(
+          "poster",
+          state.posters.map((entry) => entry.id),
+        ),
+        authorId: ME_ID,
+        ...poster,
+        createdAt: at,
+        updatedAt: at,
+      };
+      commit({ ...state, posters: [...state.posters, entry] });
+      return entry.id;
+    },
+    deletePoster(posterId) {
+      initialize();
+      if (
+        !state.posters.some(
+          (entry) => entry.id === posterId && entry.authorId === ME_ID,
+        )
+      )
+        return;
+      commit({
+        ...state,
+        posters: state.posters.filter((entry) => entry.id !== posterId),
       });
     },
     markNotificationsSeen(ids) {

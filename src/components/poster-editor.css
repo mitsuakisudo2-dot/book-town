@@ -1,0 +1,638 @@
+/* ポスターを作る: the form beside a live preview that is the poster itself. */
+.poster-editor {
+  container: poster-editor / inline-size;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.poster-editor-head {
+  margin-bottom: 22px;
+}
+/* A block, not a grid, on a phone: a grid row would hold the sticky preview
+   to its own height. */
+.poster-editor-layout {
+  display: block;
+}
+
+/* The preview stays in view while the form scrolls: on a phone a band under
+   the top bar, the sheet small and the pages beside it. */
+.poster-editor-preview {
+  position: sticky;
+  top: 79px;
+  z-index: 6;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 12px 0;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.poster-editor-sheet {
+  flex-shrink: 0;
+  width: min(46%, 27svh * 0.8, 230px);
+  transition: width 0.2s;
+}
+.poster-editor-preview.is-large {
+  flex-wrap: wrap;
+}
+.poster-editor-preview.is-large .poster-editor-sheet {
+  width: min(100%, 58svh * 0.8, 420px);
+  margin: 0 auto;
+}
+.poster-editor-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+.poster-editor-preview.is-large .poster-editor-pages {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.poster-page-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.poster-page-tabs button {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid #d5dccb;
+  border-radius: 6px;
+  background: #fffdf7;
+  color: #5d6f52;
+  font-size: 12px;
+}
+.poster-page-tabs button[aria-pressed="true"] {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fffdf3;
+}
+.poster-page-tabs .poster-page-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-style: dashed;
+  color: #6e8761;
+  font-size: 11px;
+}
+.poster-page-add:hover,
+.poster-page-tabs button:hover:not([aria-pressed="true"]) {
+  background: #eef2e6;
+}
+.poster-page-remove,
+.poster-preview-size,
+.poster-editor-text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: #829473;
+  text-decoration: underline;
+  text-decoration-color: #c9d3bd;
+  text-underline-offset: 3px;
+}
+.poster-page-remove:hover,
+.poster-preview-size:hover,
+.poster-editor-text-button:hover {
+  color: var(--green);
+}
+.poster-preview-size {
+  text-decoration: none;
+}
+
+/* The form, step by step. */
+.poster-editor-form {
+  min-width: 0;
+  margin-top: 24px;
+}
+.poster-step {
+  border: 0;
+  padding: 0;
+  margin: 0 0 30px;
+  min-width: 0;
+}
+.poster-step legend {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  margin-bottom: 12px;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.poster-step-number {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e5ebdc;
+  color: #4f6648;
+  font-family: "Noto Sans JP", sans-serif;
+  font-size: 11px;
+}
+.poster-step-note {
+  font-size: 11px;
+  line-height: 1.8;
+  color: #8a997b;
+  margin: -4px 0 12px;
+}
+.poster-editor-quiet {
+  display: block;
+  font-size: 11px;
+  line-height: 1.8;
+  color: #8f9a82;
+  margin: 6px 0;
+}
+
+/* Radios and checkboxes stay real for keyboards and screen readers; the
+   card around them shows the choice. */
+.poster-template input,
+.poster-theme input,
+.poster-font input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.poster-template:has(input:focus-visible),
+.poster-theme:has(input:focus-visible),
+.poster-font:has(input:focus-visible) {
+  outline: 2px solid #7c986d;
+  outline-offset: 3px;
+}
+
+.poster-templates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.poster-template {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf7;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.poster-template:hover {
+  border-color: #b9c8ad;
+}
+.poster-template:has(input:checked) {
+  border-color: var(--green);
+  background: #eef2e8;
+}
+.poster-template b {
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+.poster-template small {
+  font-size: 10px;
+  line-height: 1.6;
+  color: #8a997b;
+}
+
+/* A drawing of each layout: frames and lines, no covers. */
+.poster-sketch {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  width: 44px;
+  aspect-ratio: 4 / 5;
+  padding: 5px;
+  border: 1px solid #cfd8c3;
+  border-radius: 2px;
+  background: #f5f1e6;
+}
+.poster-sketch i {
+  display: block;
+  border-radius: 1px;
+  background: #b9c6ad;
+}
+.poster-sketch .sketch-cover {
+  aspect-ratio: 0.675;
+  background: #9fb090;
+}
+.poster-sketch .sketch-heading {
+  height: 3px;
+  width: 70%;
+  background: #7d9170;
+}
+.poster-sketch .sketch-line {
+  height: 2px;
+}
+.poster-sketch.is-one_book .sketch-cover {
+  width: 52%;
+  margin: 0 auto 1px;
+}
+.poster-sketch.is-lineup {
+  grid-template-columns: repeat(3, 1fr);
+}
+.poster-sketch.is-lineup :is(.sketch-heading, .sketch-line) {
+  grid-column: 1 / -1;
+}
+.poster-sketch.is-text .sketch-heading {
+  margin: 2px 0 3px;
+}
+
+/* Books on the page, in their order. */
+.poster-chosen {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 2px 0 6px;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+}
+.poster-chosen li {
+  flex: 0 0 74px;
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+}
+.poster-chosen-jacket {
+  width: 100%;
+}
+.poster-chosen-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: #6c7a61;
+}
+.poster-chosen-tools {
+  display: flex;
+  gap: 2px;
+}
+.poster-chosen-tools button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #7d8f70;
+}
+.poster-chosen-tools button:hover:not(:disabled) {
+  background: #e9eedf;
+}
+.poster-chosen-tools button:disabled {
+  opacity: 0.3;
+}
+.poster-chosen.is-one li {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-items: start;
+  max-width: 420px;
+  padding: 8px 10px;
+  border: 1px solid #d4ddc8;
+  border-radius: 8px;
+  background: #f4f6ee;
+}
+.poster-chosen.is-one .poster-chosen-jacket {
+  width: 48px;
+  flex-shrink: 0;
+}
+.poster-chosen.is-one .poster-chosen-title {
+  flex: 1;
+  white-space: normal;
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--ink);
+}
+.poster-cover-note {
+  font-size: 10px;
+  color: #9aa38d;
+  line-height: 1.7;
+  margin: 2px 0 10px;
+}
+.poster-book-search {
+  max-width: 420px;
+}
+
+/* Books to choose from: the cover whole, the choice shown around it. */
+.poster-book-offer {
+  list-style: none;
+  margin: 8px 0 6px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 12px 10px;
+}
+.poster-book-offer button {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  text-align: left;
+}
+.poster-book-offer button:hover {
+  background: #eef1e6;
+}
+.poster-book-offer button[aria-pressed="true"] {
+  border-color: var(--green);
+  background: #eef2e8;
+}
+.poster-offer-jacket {
+  width: 100%;
+}
+.poster-book-offer b,
+.poster-book-offer small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.poster-book-offer b {
+  font-size: 11px;
+  font-weight: 500;
+}
+.poster-book-offer small {
+  font-size: 9px;
+  color: #9aa38d;
+}
+.poster-offer-on {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--green);
+}
+
+/* Words. */
+.poster-field {
+  position: relative;
+  margin-bottom: 14px;
+}
+.poster-field label {
+  display: block;
+  font-size: 12px;
+  color: #6f7f63;
+  margin-bottom: 6px;
+}
+.poster-field textarea {
+  resize: vertical;
+  line-height: 1.9;
+}
+.poster-remaining {
+  display: block;
+  text-align: right;
+  font-size: 10px;
+  color: #9a8a62;
+  margin-top: 4px;
+}
+
+/* Look. */
+.poster-themes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 8px;
+  margin-bottom: 14px;
+}
+.poster-theme {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #6f7f63;
+  cursor: pointer;
+}
+.poster-theme:has(input:checked) {
+  border-color: var(--green);
+  background: #eef2e8;
+  color: var(--green);
+}
+.poster-swatch {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 46px;
+  border-radius: 4px;
+  border-bottom: 3px solid;
+  font-family: var(--serif);
+  font-size: 15px;
+  box-shadow: inset 0 0 0 1px #00000014;
+}
+.poster-swatch i {
+  position: absolute;
+  top: 7px;
+  left: 22%;
+  right: 22%;
+  height: 1px;
+}
+.poster-fonts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.poster-font {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fffdf7;
+  font-size: 11px;
+  color: #6f7f63;
+  cursor: pointer;
+}
+.poster-font span {
+  font-size: 15px;
+  color: var(--ink);
+}
+.poster-font.is-mincho span {
+  font-family: var(--serif);
+}
+.poster-font:has(input:checked) {
+  border-color: var(--green);
+  background: #eef2e8;
+  color: var(--green);
+}
+
+/* Before putting it up. */
+.poster-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.poster-option input {
+  width: 17px;
+  height: 17px;
+  margin: 3px 0 0;
+  flex-shrink: 0;
+}
+.poster-option small {
+  display: block;
+  font-size: 10px;
+  line-height: 1.7;
+  color: #8f9a82;
+  margin-top: 2px;
+}
+
+.poster-editor-actions {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.poster-editor-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.poster-editor-buttons .button {
+  min-width: 128px;
+}
+.poster-editor-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 12px 0 4px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #8a7c58;
+}
+.poster-editor-problem svg {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.poster-editor-problem.is-asked {
+  padding: 9px 12px;
+  border-radius: 6px;
+  background: #f5eedf;
+  color: #7a5a35;
+}
+.poster-editor-undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0 0 20px;
+  padding: 10px 13px;
+  border-radius: 6px;
+  background: #e9eedf;
+  color: #5f7354;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.poster-editor-undo button {
+  font-size: 12px;
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.poster-editor-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-left: 8px;
+  color: #7a5a35;
+}
+.poster-editor-confirm button {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.poster-editor-delete {
+  margin-top: 34px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+}
+.poster-editor-refusal {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+/* Under the phone's top bar, the band reaches the screen's edges. */
+@media (max-width: 760px) {
+  .poster-editor-preview {
+    top: 104px;
+    margin: 0 -19px;
+    padding: 10px 19px;
+  }
+}
+@media (max-width: 450px) {
+  .poster-editor-preview {
+    margin: 0 -16px;
+    padding: 10px 16px;
+  }
+}
+
+/* Wide: the preview stands beside the form, as large as it will be seen. */
+@container poster-editor (min-width: 740px) {
+  .poster-editor-layout {
+    display: grid;
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    grid-template-areas: "form preview";
+    gap: 40px;
+  }
+  .poster-editor-form {
+    grid-area: form;
+    margin-top: 0;
+  }
+  .poster-editor-preview {
+    grid-area: preview;
+    top: 103px;
+    display: block;
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: 0;
+  }
+  .poster-editor-sheet,
+  .poster-editor-preview.is-large .poster-editor-sheet {
+    width: 100%;
+    margin: 0;
+  }
+  .poster-editor-pages,
+  .poster-editor-preview.is-large .poster-editor-pages {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 14px;
+  }
+  .poster-preview-size {
+    display: none;
+  }
+  .poster-themes {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .poster-editor-sheet {
+    transition: none;
+  }
+}
