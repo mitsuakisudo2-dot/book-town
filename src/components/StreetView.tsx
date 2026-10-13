@@ -233,7 +233,11 @@ export function StreetView({
       </div>
       {term && (
         <div className="street-search-result" role="status">
-          「{term}」からつながる書店
+          {/* Said here too when nothing matched: the empty street below is
+              not read out, and a count of none is never shown. */}
+          {matching.length
+            ? `「${term}」からつながる書店`
+            : `「${term}」からつながる書店は、まだ見つかりませんでした`}
           <button onClick={() => setSearch("")} aria-label="検索をクリア">
             <Icon name="close" size={15} />
             クリア

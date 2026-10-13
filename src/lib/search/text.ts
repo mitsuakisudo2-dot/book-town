@@ -15,11 +15,13 @@ interface Form {
   kanji: boolean;
   /** Romaji still being typed ("nag"): it may only begin a field. */
   startOnly: boolean;
+  /** For romaji ending in n: the kana that may come next (な, の, ん…). */
+  next?: string;
 }
 
 function formsOf(text: string): Form[] {
   const forms: Form[] = [];
-  const add = (raw: string, startOnly: boolean) => {
+  const add = (raw: string, startOnly: boolean, next?: string) => {
     const key = searchFold(raw);
     if (key && !forms.some((form) => form.key === key))
       forms.push({
@@ -27,11 +29,18 @@ function formsOf(text: string): Form[] {
         size: Array.from(key).length,
         kanji: hasKanji(key),
         startOnly,
+        ...(next ? { next } : {}),
       });
   };
   add(text, false);
   const romaji = romajiToKana(text);
   if (romaji?.kana) add(romaji.kana, Boolean(romaji.tail));
+  // As in the book search, a last n is ん, or the start of な, の or に still
+  // being typed: "an" is あん, and also あ before an n-row kana (あなた).
+  if (romaji && !romaji.tail && /[^n']n$/i.test(text)) {
+    const before = romajiToKana(text.slice(0, -1));
+    if (before?.kana && !before.tail) add(before.kana, true, "なにぬねのん");
+  }
   return forms;
 }
 
@@ -57,6 +66,13 @@ export function readTextQuery(raw: string): TextQuery | null {
   };
 }
 
+/** Whether the text goes on with a kana the romaji's last n may begin. */
+function nextFits(form: Form, key: string): boolean {
+  if (!form.next) return true;
+  const after = key.charAt(form.key.length);
+  return after !== "" && form.next.includes(after);
+}
+
 /**
  * Like the book search: the same text, the start of it, or (from two
  * characters, or one kanji) anywhere in it.
@@ -64,7 +80,7 @@ export function readTextQuery(raw: string): TextQuery | null {
 function relate(form: Form, key: string): number {
   if (!key) return TEXT_MATCH.none;
   if (key === form.key && !form.startOnly) return TEXT_MATCH.exact;
-  if (key.startsWith(form.key)) return TEXT_MATCH.start;
+  if (key.startsWith(form.key) && nextFits(form, key)) return TEXT_MATCH.start;
   if (
     !form.startOnly &&
     (form.size >= 2 || form.kanji) &&
@@ -100,11 +116,16 @@ export const textMatches = (
   fields: readonly (string | null | undefined)[],
 ): boolean => textMatch(readTextQuery(query), fields) > TEXT_MATCH.none;
 
+/**
+ * One word however it was typed, the way searches fold text: ホラー is ほらー,
+ * ＳＦ is sf. A word of marks alone (ー・) is kept as written.
+ */
+export const textKey = (text: string): string =>
+  searchFold(text) || text.toLowerCase();
+
 /** Whether two words are the same once folded: #ホラー is #ほらー, #ＳＦ is #sf. */
-export const sameText = (a: string, b: string): boolean => {
-  const key = searchFold(a);
-  return key ? key === searchFold(b) : a.toLowerCase() === b.toLowerCase();
-};
+export const sameText = (a: string, b: string): boolean =>
+  textKey(a) === textKey(b);
 
 /** Keeps what matches, closest first; equals keep the order they came in. */
 export function byMatch<T>(list: readonly T[], score: (item: T) => number) {

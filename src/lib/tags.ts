@@ -1,7 +1,12 @@
 import type { Post, TownState } from "./types";
 import { coverHidden } from "./hidden-words";
-import { searchFold } from "./search/fold";
-import { readTextQuery, textMatch, TEXT_MATCH } from "./search/text";
+import {
+  readTextQuery,
+  sameText,
+  textKey as tagKey,
+  textMatch,
+  TEXT_MATCH,
+} from "./search/text";
 
 // A tag is # (or the full-width ＃) followed by letters, digits, _ or Japanese marks.
 const TAG = /[#＃]([\p{L}\p{N}_ー・々〆]{1,30})/gu;
@@ -42,12 +47,6 @@ export function splitTags(body: string): BodyPart[] {
 }
 
 /**
- * One tag however it was typed, the way searches fold text: #ホラー is #ほらー,
- * #ＳＦ is #sf. A tag of marks alone (#ー・) is kept as written.
- */
-const tagKey = (tag: string) => searchFold(tag) || tag.toLowerCase();
-
-/**
  * Whether a tag is the one asked for: the same once folded, or read from
  * romaji (#misuteri is #ミステリ).
  */
@@ -70,29 +69,49 @@ export function postsWithTag(state: TownState, tag: string): Post[] {
 }
 
 /**
- * Tags in use across public posts, most used first. Spellings of one tag
- * count together, under the one used most.
+ * Tags in use across public posts, most used first: the number of posts that
+ * carry each. Spellings of one tag count together, under the one used most,
+ * and a post that writes a tag in several spellings counts once.
  */
 export function popularTags(state: TownState, limit = 12) {
   const counts = new Map<
     string,
     { count: number; spellings: Map<string, number> }
   >();
-  for (const post of state.posts)
-    if (post.readingMode !== "solo")
-      for (const tag of extractTags(post.body)) {
-        const key = tagKey(tag);
-        const entry = counts.get(key) ?? { count: 0, spellings: new Map() };
-        entry.count++;
-        entry.spellings.set(tag, (entry.spellings.get(tag) ?? 0) + 1);
-        counts.set(key, entry);
-      }
+  for (const post of state.posts) {
+    if (post.readingMode === "solo") continue;
+    const seen = new Set<string>();
+    for (const tag of extractTags(post.body)) {
+      const key = tagKey(tag);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const entry = counts.get(key) ?? { count: 0, spellings: new Map() };
+      entry.count++;
+      entry.spellings.set(tag, (entry.spellings.get(tag) ?? 0) + 1);
+      counts.set(key, entry);
+    }
+  }
   return [...counts.values()]
     .map(({ count, spellings }) => ({
       tag: [...spellings].sort((a, b) => b[1] - a[1])[0][0],
       count,
     }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "ja"))
+    .slice(0, limit);
+}
+
+/**
+ * Tags in use to offer a post being written: the town's popular ones it does
+ * not carry yet in any spelling (a draft with #ミステリー is not offered #ミステリ).
+ */
+export function suggestTags(
+  state: TownState,
+  written: readonly string[],
+  limit = 4,
+): string[] {
+  return popularTags(state, 8)
+    .map((entry) => entry.tag)
+    .filter((tag) => !written.some((own) => sameText(own, tag)))
     .slice(0, limit);
 }
 

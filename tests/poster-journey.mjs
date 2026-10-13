@@ -2,6 +2,7 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { contrastOf } from "./journey-contrast.mjs";
 
 // A reader makes a poster about a book, puts it up, finds it on the
 // timeline, their profile and the book's page, changes it and takes it down;
@@ -115,6 +116,12 @@ try {
         });
         const offered = (title) =>
           editor().getByRole("button", { name: new RegExp(`^${title}の表紙`) });
+        // A near title waits under a quiet heading that is still readable.
+        await search.fill("秘密の森の花園");
+        await expect(editor().locator(".search-near")).toBeVisible();
+        expect(
+          await contrastOf(editor().locator(".search-near")),
+        ).toBeGreaterThanOrEqual(4.5);
         // Several titles hold 孤独: Enter waits for a tap.
         await search.fill("孤独");
         await search.press("Enter");

@@ -2,6 +2,7 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { contrastOf } from "./journey-contrast.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -283,6 +284,10 @@ try {
       await expect(
         page.getByRole("list", { name: "近い題名の本" }),
       ).toContainText("秘密の花園");
+      // The quiet heading is small, but still readable.
+      expect(
+        await contrastOf(page.locator(".search-near")),
+      ).toBeGreaterThanOrEqual(4.5);
       await expect(
         page.getByText("ぴったり合う本はありませんでした。"),
       ).toBeVisible();
@@ -332,6 +337,10 @@ try {
         await expect(
           compose.getByRole("button", { name: shown }),
         ).toBeVisible();
+        if (typed === "秘密の森の花園")
+          expect(
+            await contrastOf(compose.locator(".search-near")),
+          ).toBeGreaterThanOrEqual(4.5);
         await picker.press("Enter");
         await expect(compose).toBeVisible();
         await expect(compose.locator(".picker-chosen")).toHaveCount(0);
@@ -988,6 +997,12 @@ try {
       await shelfSearch.fill("gingatetsudou");
       await expect(shelfTitles.first()).toHaveText("銀河鉄道の夜");
       await shelfSearch.press("Enter");
+      // Near titles wait under a quiet heading that is still readable.
+      await shelfSearch.fill("秘密の森の花園");
+      await expect(shelfPicker.locator(".search-near")).toBeVisible();
+      expect(
+        await contrastOf(shelfPicker.locator(".search-near")),
+      ).toBeGreaterThanOrEqual(4.5);
       await shelfSearch.fill("よるときり");
       await expect(shelfTitles.first()).toHaveText("夜と霧");
       await composingEnter(shelfSearch);
@@ -1016,6 +1031,11 @@ try {
       await expect(
         nine.locator(".profile-picker-book strong").first(),
       ).toHaveText("老人と海");
+      await nineSearch.fill("秘密の森の花園");
+      await expect(nine.locator(".search-near")).toBeVisible();
+      expect(
+        await contrastOf(nine.locator(".search-near")),
+      ).toBeGreaterThanOrEqual(4.5);
       await nineSearch.fill("ヒミツノハナゾノ");
       await expect(
         nine.locator(".profile-picker-book strong").first(),
@@ -1054,11 +1074,36 @@ try {
         await expect(people.locator("li")).toHaveCount(1);
         await expect(people).toContainText(handle);
       }
+      const shopsFound = page.locator(
+        "[aria-labelledby=search-shops-title] .search-shop",
+      );
+      // Typed one letter at a time, a reader stays found at a last n.
+      for (const typed of ["a", "an", "ana"]) {
+        await box.fill(typed);
+        await expect(people.locator("b").first()).toHaveText("あなた");
+      }
+      // A kanji name typed in kana finds the reader by their romaji @ID,
+      // and the ID finds the shop they keep.
+      await box.fill("なぎ");
+      await expect(people).toContainText("@nagi");
+      await expect(shopsFound).toHaveText([/^軌道書房/]);
+      // After @, readers and shops are both found by @ID only.
+      await box.fill("@sumire");
+      await expect(people).toContainText("@sumire");
+      await expect(shopsFound).toHaveText([/^雨と翻訳/]);
+      await box.fill("@スミレ");
+      await expect(page.locator(".search-results")).toContainText(
+        "合う書店は見つかりませんでした。",
+      );
+      await expect(people).toHaveCount(0);
+      await expect(shopsFound).toHaveCount(0);
+      // A shop named for the word comes before one whose owner is.
+      await box.fill("灯");
+      await expect(shopsFound.first()).toContainText("小さな灯り");
+      await expect(shopsFound.nth(1)).toContainText("問いの余白");
       // A book's reading also finds the shops that shelve it.
       await box.fill("ぎんがてつどう");
-      await expect(
-        page.locator("[aria-labelledby=search-shops-title] .search-shop"),
-      ).not.toHaveCount(0);
+      await expect(shopsFound).not.toHaveCount(0);
       expect(
         (await page.locator(".search-results h2").allTextContents()).join(""),
       ).not.toMatch(/\d/);
@@ -1095,6 +1140,19 @@ try {
       await expect(page.locator(".street-shop")).toHaveCount(1);
       await expect(page.locator(".street-search-result")).not.toContainText(
         /\d/,
+      );
+      // When nothing matches, the status itself says so (the empty street
+      // below is not read out), still without a number.
+      await top.fill("量子力学");
+      await expect(page.locator(".street-shop")).toHaveCount(0);
+      await expect(
+        page.getByRole("status").filter({ hasText: "量子力学" }),
+      ).toContainText(
+        "「量子力学」からつながる書店は、まだ見つかりませんでした",
+      );
+      await top.fill("雨と翻訳");
+      await expect(page.locator(".street-search-result")).toContainText(
+        "「雨と翻訳」からつながる書店クリア",
       );
       await top.press("Enter");
       await expect(page).toHaveURL(/\/search\/\?q=/);

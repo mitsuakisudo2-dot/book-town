@@ -2,6 +2,7 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { contrastOf } from "./journey-contrast.mjs";
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../outputs/phase2-customization-qa",
@@ -470,6 +471,72 @@ try {
         await other.evaluate(() => localStorage.getItem("book-town-walk-v1")),
       ).toBe(corrupt);
       await locked.close();
+    },
+  );
+  await check(
+    "on a phone, a long title in the book search keeps its + full size",
+    async () => {
+      const town = JSON.parse(
+        await page.evaluate(() => localStorage.getItem("book-town-v1")),
+      );
+      town.data.addedBooks = [
+        ...(town.data.addedBooks ?? []),
+        {
+          id: "my-book-901",
+          title:
+            "銀河の夜をわたるための覚え書き――ある鉄道員と星をめぐる三十七の短い物語、そしてその後に続く静かな朝の記録",
+          author: "試験 太郎",
+        },
+      ];
+      const walk = await page.evaluate(() =>
+        localStorage.getItem("book-town-walk-v1"),
+      );
+      const phone = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        locale: "ja-JP",
+        storageState: {
+          cookies: [],
+          origins: [
+            {
+              origin: new URL(base).origin,
+              localStorage: [
+                { name: "book-town-v1", value: JSON.stringify(town) },
+                ...(walk ? [{ name: "book-town-walk-v1", value: walk }] : []),
+              ],
+            },
+          ],
+        },
+      });
+      const small = settleBeforeNavigating(await phone.newPage());
+      small.on("pageerror", (e) => errors.push(e.message));
+      await small.goto(base + "/my-shop/");
+      await small
+        .getByRole("button", { name: "店内を飾りつける", exact: true })
+        .click();
+      const editor = small.getByRole("dialog", {
+        name: "店内を飾りつける",
+        exact: true,
+      });
+      await editor.getByLabel("棚に加える本を探す").fill("銀河の夜");
+      const rows = editor.locator(".scene-search-results button");
+      await expect(rows.filter({ hasText: "銀河の夜をわたる" })).toHaveCount(1);
+      await expect(rows.filter({ hasText: "銀河鉄道の夜" })).toHaveCount(1);
+      // Found and near rows alike: the + never shrinks beside a long title.
+      const icons = await rows.evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const box = button
+            .querySelector(":scope > svg")
+            .getBoundingClientRect();
+          return `${Math.round(box.width)}x${Math.round(box.height)}`;
+        }),
+      );
+      expect(icons.length).toBeGreaterThanOrEqual(2);
+      expect(new Set(icons)).toEqual(new Set(["16x16"]));
+      // The quiet heading over the near row is still readable.
+      expect(
+        await contrastOf(editor.locator(".search-near")),
+      ).toBeGreaterThanOrEqual(4.5);
+      await phone.close();
     },
   );
   expect(errors).toEqual([]);
