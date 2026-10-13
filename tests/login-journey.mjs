@@ -46,6 +46,7 @@ let profile = null;
 const inserted = [];
 const codeRequests = [];
 const townReads = [];
+const townWrites = [];
 
 // Uses Playwright's own Chromium unless BOOK_TOWN_CHROME names another browser.
 const browser = await chromium.launch({
@@ -110,6 +111,8 @@ await context.route(supabase + "/**", async (route) => {
       return json(201, profile);
     }
   }
+  if (url.pathname.startsWith("/rest/v1/") && request.method() !== "GET")
+    townWrites.push(url.pathname);
   // The rest of the signed-in town: a new reader has nothing yet.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "GET") {
     townReads.push(url.pathname);
@@ -272,12 +275,9 @@ try {
     // Nothing has happened yet, so nothing is counted.
     await expect(page.locator(".profile-stats")).toHaveCount(0);
     await page.goto(base + "/reading/");
-    await expect(
-      page.getByRole("heading", {
-        name: "いまは、まだ誰も読みはじめていません",
-      }),
-    ).toBeVisible();
-    await shot("6-reading-quiet");
+    // The 見本 keep a new reader's town from being empty, marked as such.
+    await expect(page.getByText("見本の読書家").first()).toBeVisible();
+    await shot("6-reading-samples");
     await page.goto(base + "/notifications/");
     await expect(
       page.getByRole("heading", { name: "まだ静かです" }),
@@ -286,9 +286,6 @@ try {
     await shot("7-notices-quiet");
     await page.goto(base + "/search/");
     await expect(page.getByRole("heading", { name: "検索" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "話題の本" })).toHaveCount(
-      0,
-    );
     for (const path of [
       "/",
       "/reading/",
@@ -306,6 +303,27 @@ try {
       );
     }
   });
+
+  await check(
+    "a like for a 見本 says it reaches nobody, and nothing is sent",
+    async () => {
+      await page.goto(base + "/timeline/");
+      const sample = page
+        .locator("article")
+        .filter({ hasText: "見本" })
+        .first();
+      const writes = townWrites.length;
+      await sample.getByRole("button", { name: /いいね/ }).click();
+      await expect(
+        page.getByText("見本の書店と投稿には、いいねやフォローは届きません"),
+      ).toBeVisible();
+      await expect(
+        sample.getByRole("button", { name: /いいね/ }),
+      ).toHaveAttribute("aria-pressed", "false");
+      expect(townWrites.length).toBe(writes);
+      await shot("8-sample-like");
+    },
+  );
 
   await check(
     "the session survives a reload, and signing out ends it",

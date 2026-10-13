@@ -45,6 +45,11 @@ import { BookFeelings } from "./ReadingRecords";
 import { accountRequested, closeAccountRequest } from "../lib/visitor";
 import { closeReport } from "../lib/report";
 import { carriedToast, noteToast } from "../lib/carried-toast";
+import {
+  SAMPLE_NOTICE,
+  onSampleRefusal,
+  refusedForSample,
+} from "../lib/sample-notice";
 import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
 import { replaceAddress } from "../lib/url-state";
@@ -144,8 +149,10 @@ export default function TownApp({
   }, [view, selectedId]);
   // When a visitor's change became an invitation to sign in, nothing was done,
   // so the message saying it was done stays quiet.
+  // A like or a follow meant for a 見本 says why nothing happened.
+  useEffect(() => onSampleRefusal(setToast), []);
   const notify = useCallback((message: string) => {
-    if (accountRequested()) return;
+    if (accountRequested() || refusedForSample()) return;
     noteToast(message);
     setToast(message);
   }, []);
@@ -691,7 +698,8 @@ function ShopView({
 function Toast({ message }: { message: string }) {
   const toast = (
     <div className="toast" role="status">
-      <Icon name="check" size={17} />
+      {/* Turned away from a 見本: a leaf, not a tick, for nothing was done. */}
+      <Icon name={message === SAMPLE_NOTICE ? "leaf" : "check"} size={17} />
       {message}
     </div>
   );

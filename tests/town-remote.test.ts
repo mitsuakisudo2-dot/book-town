@@ -13,8 +13,8 @@ import {
   type ShopRow,
   type Write,
 } from "../src/lib/town-remote";
-import { demoPosts, demoShops } from "../src/lib/data";
-import { withSamples } from "../src/lib/samples";
+import { demoBooks, demoPosts, demoShops } from "../src/lib/data";
+import { isSampleBook, sampleBookRowId, withSamples } from "../src/lib/samples";
 import {
   ME_ID,
   OWN_SHOP_ID,
@@ -854,7 +854,9 @@ async function main() {
     assert.equal(town.posts[0].authorId, AKI);
     // Nobody's book is the visitor's own, so none shows its own summary.
     assert.ok(
-      town.books.every((entry) => entry.summary.startsWith("読書家が")),
+      town.books
+        .filter((entry) => !isSampleBook(entry.id))
+        .every((entry) => entry.summary.startsWith("読書家が")),
     );
   });
 
@@ -883,6 +885,85 @@ async function main() {
     // The samples are copies: changing the town never changes the demo data.
     town.shops[town.shops.length - 1].name = "変えた";
     assert.notEqual(demoShops.at(-1)?.name, "変えた");
+  });
+
+  await check(
+    "a signed-in reader keeps a 見本's book, under its database id",
+    () => {
+      const SOLARIS = demoBooks[0].id;
+      const row = sampleBookRowId(SOLARIS);
+      assert.match(
+        row,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      assert.equal(sampleBookRowId(SOLARIS), row);
+      const before = withSamples(townFromRows(rows(), ids));
+      const wished = { ...before, wishlist: [...before.wishlist, SOLARIS] };
+      const writes = planWrites(before, wished, ids);
+      // The catalog row is written first, by the reader, under the shared id.
+      assert.deepEqual(kinds(writes), ["books", "add:book_marks"]);
+      assert.deepEqual(writes[0], {
+        kind: "books",
+        rows: [
+          {
+            id: row,
+            title: demoBooks[0].title,
+            author: demoBooks[0].author,
+            source: "manual",
+            created_by: AKI,
+          },
+        ],
+      });
+      assert.deepEqual((writes[1] as Extract<Write, { kind: "add" }>).rows, [
+        { user_id: AKI, book_id: row, kind: "wish" },
+      ]);
+      // Read back, it is the 見本's book again, whatever its row says.
+      const again = townFromRows(
+        rows({
+          books: [
+            ...rows().books,
+            { ...book(row), title: "別の題", author: "誰か" },
+          ],
+          marks: [{ user_id: AKI, book_id: row, kind: "wish", created_at: at }],
+        }),
+        ids,
+      );
+      assert.deepEqual(again.wishlist, [SOLARIS]);
+      assert.equal(
+        again.books.find((entry) => entry.id === SOLARIS)?.title,
+        demoBooks[0].title,
+      );
+      assert.equal(
+        again.books.some((entry) => entry.id === row),
+        false,
+      );
+      // Taking it back removes the mark and leaves the catalog alone.
+      assert.deepEqual(planWrites(wished, before, ids), [
+        {
+          kind: "remove",
+          table: "book_marks",
+          rows: [{ user_id: AKI, book_id: row, kind: "wish" }],
+        },
+      ]);
+    },
+  );
+
+  await check("nothing is written toward a 見本's shop or post", () => {
+    const before = withSamples(townFromRows(rows(), ids));
+    const post = demoPosts.find((entry) => entry.bookId)!;
+    const next: TownState = {
+      ...before,
+      following: [demoShops[0].id],
+      likedPosts: [post.id],
+      // Wanting the book of a 見本's post still keeps the book.
+      wantedPosts: [post.id],
+      wishlist: [post.bookId!],
+    };
+    const writes = planWrites(before, next, ids);
+    assert.deepEqual(kinds(writes), ["books", "add:book_marks"]);
+    assert.deepEqual((writes[1] as Extract<Write, { kind: "add" }>).rows, [
+      { user_id: AKI, book_id: sampleBookRowId(post.bookId!), kind: "wish" },
+    ]);
   });
 
   console.log(passed + " town sync checks passed");

@@ -142,7 +142,11 @@ export function TimelineView(props: Shared) {
 
 /** Following nobody yet: a few owners, each with words of their own to read. */
 function FollowSuggestions({ state, actions, notify }: Shared) {
-  const owners = ownersToFollow(state);
+  // With an account, only owners who can receive a follow are suggested.
+  const savedIn = useTownBackend();
+  const owners = ownersToFollow(state).filter(
+    ({ shop }) => savedIn !== "account" || isDatabaseId(shop.id),
+  );
   if (!owners.length) return null;
   return (
     <section className="follow-suggestions" aria-labelledby="follow-first">

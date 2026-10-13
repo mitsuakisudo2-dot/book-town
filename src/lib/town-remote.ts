@@ -27,6 +27,9 @@ import {
   type TownState,
 } from "./types";
 import type { Tables, TablesInsert } from "./supabase/database.types";
+import { demoBooks } from "./data";
+import { isDatabaseId } from "./paths";
+import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
 
 /**
  * The signed-in town, translated between database rows and the TownState the
@@ -238,6 +241,22 @@ export interface TownViewer {
   shopId: string;
 }
 
+/** Book ids as the town knows them: a 見本's book by its own name. */
+function withSampleBookIds(rows: RemoteRows): RemoteRows {
+  const id = (bookId: string) => sampleBookOfRow(bookId) ?? bookId;
+  const named = <T extends { book_id: string | null }>(row: T): T =>
+    row.book_id === null ? row : { ...row, book_id: id(row.book_id) };
+  return {
+    ...rows,
+    books: rows.books.filter((row) => !sampleBookOfRow(row.id)),
+    nine: rows.nine.map(named),
+    marks: rows.marks.map(named),
+    posts: rows.posts.map(named),
+    sessions: rows.sessions.map(named),
+    records: rows.records.map(named),
+  };
+}
+
 /** Builds the town the signed-in person sees from what the database let them read. */
 export function townFromRows(
   rows: RemoteRows,
@@ -245,14 +264,17 @@ export function townFromRows(
   now = Date.now(),
 ): TownState {
   const { userId } = ids;
+  rows = withSampleBookIds(rows);
   const registered = new Set(
     rows.marks
       .filter((row) => row.kind === "library" && row.user_id === userId)
       .map((row) => row.book_id),
   );
-  const books = rows.books.map((row) =>
-    bookFromRow(row, registered.has(row.id)),
-  );
+  // The 見本's books are known to everyone, whoever kept them first.
+  const books = [
+    ...rows.books.map((row) => bookFromRow(row, registered.has(row.id))),
+    ...structuredClone(demoBooks),
+  ];
   const bookIds = new Set(books.map((book) => book.id));
   const readerId = (id: string) => (id === userId ? ME_ID : id);
 
@@ -553,7 +575,8 @@ export function referencedBookIds(rows: Omit<RemoteRows, "books">): string[] {
   rows.posts.forEach((row) => row.book_id && ids.add(row.book_id));
   rows.sessions.forEach((row) => row.book_id && ids.add(row.book_id));
   rows.records.forEach((row) => ids.add(row.book_id));
-  return [...ids];
+  // Shelves may hold a 見本's book by its name; the catalog has only ids.
+  return [...ids].filter(isDatabaseId);
 }
 
 // Writes ------------------------------------------------------------------------
@@ -875,7 +898,74 @@ export function planWrites(
       return row.taps !== was && !(was === 0 && row.taps === 1);
     });
   if (pressed.length) writes.push({ kind: "like-taps", rows: pressed });
-  return writes;
+  return withSampleRows(writes, user);
+}
+/**
+ * The 見本 in what is written. Their books are written under their database
+ * ids, each catalog row first; nobody stands behind their shops and posts, so
+ * nothing addressed to those is written at all.
+ */
+function withSampleRows(writes: Write[], user: string): Write[] {
+  const kept = new Set<string>();
+  const keep = (bookId: string) => {
+    if (!isSampleBook(bookId)) return bookId;
+    kept.add(bookId);
+    return sampleBookRowId(bookId);
+  };
+  const named = <T extends { book_id?: string | null }>(row: T): T =>
+    row.book_id ? { ...row, book_id: keep(row.book_id) } : row;
+  const real = (row: Pair) =>
+    (row.shop_id === undefined || isDatabaseId(row.shop_id)) &&
+    (row.post_id === undefined || isDatabaseId(row.post_id));
+  const mapped = writes.flatMap((write): Write[] => {
+    switch (write.kind) {
+      case "nine":
+        return [{ ...write, bookIds: write.bookIds.map(keep) }];
+      case "posts": {
+        const rows = write.rows
+          .filter((row) => !row.parent_id || isDatabaseId(row.parent_id))
+          .map(named);
+        return rows.length ? [{ ...write, rows }] : [];
+      }
+      case "sessions":
+        return [{ ...write, rows: write.rows.map(named) }];
+      case "records":
+        return [{ ...write, rows: write.rows.map(named) }];
+      case "add":
+      case "remove": {
+        const rows = write.rows.filter(real).map((row) =>
+          row.book_id === undefined
+            ? row
+            : {
+                ...row,
+                book_id:
+                  write.kind === "add"
+                    ? keep(row.book_id)
+                    : isSampleBook(row.book_id)
+                      ? sampleBookRowId(row.book_id)
+                      : row.book_id,
+              },
+        );
+        return rows.length ? [{ ...write, rows }] : [];
+      }
+      default:
+        return [write];
+    }
+  });
+  if (!kept.size) return mapped;
+  const catalog: Write = {
+    kind: "books",
+    rows: demoBooks
+      .filter((book) => kept.has(book.id))
+      .map((book) => ({
+        id: sampleBookRowId(book.id),
+        title: book.title,
+        author: book.author,
+        source: "manual",
+        created_by: user,
+      })),
+  };
+  return [catalog, ...mapped];
 }
 
 /** Stands in for "me" while nobody is signed in. */

@@ -13,6 +13,8 @@ import { emptyTown } from "./town-remote";
 import { supabaseConfigured } from "./supabase/config";
 import { followAccount } from "./town-session";
 import { requestAccount } from "./visitor";
+import { refuseForSample } from "./sample-notice";
+import { isDatabaseId } from "./paths";
 import { createRegisteredBook, normalizeIsbn } from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
@@ -75,10 +77,31 @@ export interface TownStoreOptions {
   follow?: (switchTo: (backend: TownBackend) => void) => void;
   /** Called when a visitor who is not signed in tries to change something. */
   onVisitor?: () => void;
+  /** Called when a signed-in reader's like or follow would go to a 見本. */
+  onSample?: () => void;
 }
 
 /** Actions a visitor's page runs by itself, which need no invitation. */
 const QUIET_ACTIONS = new Set<keyof TownActions>(["markNotificationsSeen"]);
+/**
+ * Actions that reach the person behind a shop or a post, and which shop or
+ * post they reach. With an account, those meant for a 見本 are turned away:
+ * nobody is there to receive them, and the database could not keep them.
+ */
+const REACHING: Partial<Record<string, (args: unknown[]) => unknown>> = {
+  toggleFollow: ([shopId]) => shopId,
+  togglePopReaction: ([shopId]) => shopId,
+  toggleLike: ([postId]) => postId,
+  tapLike: ([postId]) => postId,
+  toggleSpoilerReport: ([postId]) => postId,
+  createPost: ([draft]) =>
+    (draft as { parentId?: unknown } | undefined)?.parentId,
+};
+const reachesSample = (name: string, args: unknown[]) => {
+  const target = REACHING[name]?.(args);
+  return typeof target === "string" && !isDatabaseId(target);
+};
+
 /** Actions that answer whether they did anything. */
 const ANSWERING_ACTIONS = new Set<keyof TownActions>([
   "addShelfBook",
@@ -787,6 +810,10 @@ export function createTownStore(
       name,
       (...args: unknown[]) => {
         initialize();
+        if (backend.kind === "account" && reachesSample(name, args)) {
+          options.onSample?.();
+          return ANSWERING_ACTIONS.has(name) ? false : null;
+        }
         if (backend.kind !== "visitor")
           return (actions[name] as (...a: unknown[]) => unknown)(...args);
         if (!QUIET_ACTIONS.has(name)) options.onVisitor?.();
@@ -824,7 +851,11 @@ export const townStore = createTownStore(
   localTownRepository,
   undefined,
   supabaseConfigured
-    ? { follow: followAccount, onVisitor: requestAccount }
+    ? {
+        follow: followAccount,
+        onVisitor: requestAccount,
+        onSample: refuseForSample,
+      }
     : {},
 );
 export const townActions = townStore.actions;
