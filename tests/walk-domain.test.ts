@@ -27,8 +27,10 @@ import { publicScenePops, woodScene } from "../src/lib/store-scene-adapter";
 import {
   clearVisits,
   emptyWalk,
+  horizontalSwipe,
   qualifiedVisit,
   startWalk,
+  stepShelf,
   stepWalk,
   verticalSwipe,
   visitStore,
@@ -375,6 +377,46 @@ check(
     assert.equal(verticalSwipe(4, 100, 300), -1);
   },
 );
+check("a sideways swipe moves one shelf; pushing left goes to the next", () => {
+  assert.equal(horizontalSwipe(-100, 4, 300), 1);
+  assert.equal(horizontalSwipe(100, 4, 300), -1);
+  assert.equal(horizontalSwipe(4, 0, 100), null);
+  assert.equal(horizontalSwipe(-100, 4, 1400), null);
+  assert.equal(horizontalSwipe(-100, 70, 300), null);
+});
+check("a sideways swipe keeps the design's three limits", () => {
+  // At least 56 across.
+  assert.equal(horizontalSwipe(-56, 0, 300), 1);
+  assert.equal(horizontalSwipe(56, 0, 300), -1);
+  assert.equal(horizontalSwipe(-55, 0, 300), null);
+  // More than one and a half times as far across as up or down.
+  assert.equal(horizontalSwipe(-60, 39, 300), 1);
+  assert.equal(horizontalSwipe(-60, -39, 300), 1);
+  assert.equal(horizontalSwipe(-60, 40, 300), null);
+  // Over in less than 1.4 seconds.
+  assert.equal(horizontalSwipe(-200, 10, 1399), 1);
+  assert.equal(horizontalSwipe(-200, 10, 1400), null);
+});
+check("no gesture changes both the shop and the shelf", () => {
+  for (const duration of [100, 1399, 1400])
+    for (let dx = -300; dx <= 300; dx += 4)
+      for (let dy = -300; dy <= 300; dy += 4)
+        assert.ok(
+          verticalSwipe(dx, dy, duration) === null ||
+            horizontalSwipe(dx, dy, duration) === null,
+          dx + "," + dy + "," + duration,
+        );
+});
+check("shelves stop at either end instead of going round", () => {
+  assert.deepEqual(stepShelf(0, 3, 1), { index: 1, atEdge: false });
+  assert.deepEqual(stepShelf(2, 3, -1), { index: 1, atEdge: false });
+  assert.deepEqual(stepShelf(2, 3, 1), { index: 2, atEdge: true });
+  assert.deepEqual(stepShelf(0, 3, -1), { index: 0, atEdge: true });
+  for (const direction of [-1, 1] as const)
+    assert.deepEqual(stepShelf(0, 1, direction), { index: 0, atEdge: true });
+  // An index left from a shop with more shelves is brought back in range.
+  assert.deepEqual(stepShelf(5, 2, 1), { index: 1, atEdge: true });
+});
 check(
   "walk roundtrip retains scene data, rejects corruption and unknown versions",
   () => {

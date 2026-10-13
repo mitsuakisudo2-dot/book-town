@@ -931,6 +931,31 @@ async function main() {
     },
   );
 
+  // Last, as its books fill the newest of the catalog.
+  await check(
+    "more than 1000 marks are read a page at a time, every one with its book",
+    async () => {
+      const mio = await reader("mio");
+      // Put in as the operator, with ids made here, so no insert has to
+      // answer with more rows than the server hands out at once.
+      const ids = Array.from({ length: 1001 }, () => crypto.randomUUID());
+      const books = await admin
+        .from("books")
+        .insert(ids.map((id, n) => ({ id, title: `読みたい本 ${n + 1}` })));
+      assert.ifError(books.error);
+      const marks = await admin
+        .from("book_marks")
+        .insert(
+          ids.map((book_id) => ({ user_id: mio.id, book_id, kind: "wish" })),
+        );
+      assert.ifError(marks.error);
+      const town = (await townOf(mio)).getSnapshot();
+      assert.deepEqual([...town.wishlist].sort(), [...ids].sort());
+      const known = new Set(town.books.map((entry) => entry.id));
+      assert.ok(ids.every((id) => known.has(id)));
+    },
+  );
+
   console.log(passed + " Supabase town checks passed");
 }
 

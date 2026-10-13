@@ -100,6 +100,11 @@ export interface Shop {
    */
   weekVisitors?: { count: number; at: string };
   shelves: Shelf[];
+  /**
+   * The books standing in the shop's store scene, read with an account (only
+   * the public ones of another reader's shop): lists count them as used.
+   */
+  sceneBookIds?: string[];
   demo: boolean;
 }
 
@@ -283,6 +288,30 @@ export interface NewBook {
   price?: number;
 }
 
+/** How a book came to be registered: read by the camera, its ISBN typed, or by hand. */
+export type RegisterVia = "scan" | "isbn" | "manual";
+
+/**
+ * What registering a book did.
+ * - added: it is in the reader's library now.
+ * - already: it was in the library already; nothing changed.
+ * - restored: a book taken out of the library came back with what it had.
+ *   The library keeps nothing for a book taken out yet (no status, no
+ *   shelves), so for now such a book simply comes back as added.
+ * - not-saved: the town is still loading, or the account could not be
+ *   read, so nothing could be kept. The screen must not say the book was
+ *   registered.
+ */
+export type RegisterResult = "added" | "already" | "restored" | "not-saved";
+export type Registration =
+  | {
+      result: Exclude<RegisterResult, "not-saved">;
+      bookId: string;
+      /** The title as kept: cut to 200 characters, or the town's own. */
+      title: string;
+    }
+  | { result: "not-saved" };
+
 export interface TownState {
   books: Book[];
   readers: Reader[];
@@ -388,6 +417,22 @@ export interface TownActions {
   markSpoiler(postId: string): void;
   startReading(bookId: string | null, mode: ReadingMode): string | null;
   endReading(finished: boolean): void;
+  /**
+   * The one way a book enters the reader's library. A title or author over
+   * 200 characters is cut to end in …. Null when there is no title, when the
+   * ISBN does not check out, or for a visitor (asked to sign in instead).
+   *
+   * `bookId`: the id decided when a scanned book was read (library-journal.ts).
+   * A new book takes it, so the same read sent twice is one book. Ignored when
+   * another book already has that id, or when it is not an id the town could
+   * have given.
+   */
+  registerBook(
+    book: NewBook,
+    via: RegisterVia,
+    bookId?: string,
+  ): Registration | null;
+  /** registerBook, answering with the book's id (null when not registered). */
   addBook(book: NewBook): string | null;
   toggleLibrary(bookId: string): void;
   setComposeIcon(icon: ComposeIcon): void;

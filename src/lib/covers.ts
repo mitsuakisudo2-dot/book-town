@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
+import { openBdQuestions } from "./openbd";
 
 // A book with an ISBN shows its real cover when one of the sources below has
 // it, asked in this order; a book none of them has keeps its BookTown
@@ -56,15 +57,12 @@ const openBd: CoverSource = {
   keep: true,
   async find(isbns, fetcher) {
     const found = new Map<string, Cover>();
-    for (let start = 0; start < isbns.length; start += 100) {
-      const batch = isbns.slice(start, start + 100);
-      const response = await fetcher(
-        "https://api.openbd.jp/v1/get?isbn=" + batch.join(","),
-      );
+    for (const question of openBdQuestions(isbns)) {
+      const response = await fetcher(question.url);
       if (!response.ok) throw new Error("openBD " + response.status);
       const records = (await response.json()) as OpenBdRecord[];
       if (!Array.isArray(records)) throw new Error("openBD answer");
-      for (const [isbn, cover] of openBdCovers(batch, records))
+      for (const [isbn, cover] of openBdCovers(question.isbns, records))
         found.set(isbn, cover);
     }
     return found;

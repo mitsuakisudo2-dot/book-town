@@ -12,10 +12,17 @@ import {
 import { emptyTown } from "./town-remote";
 import { supabaseConfigured } from "./supabase/config";
 import { followAccount } from "./town-session";
+import { accountStore } from "./account-session";
+import { journalOwner, type JournalTown } from "./library-journal";
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId } from "./paths";
-import { createRegisteredBook, normalizeIsbn } from "./books";
+import {
+  bookPrice,
+  bookText,
+  createRegisteredBook,
+  normalizeIsbn,
+} from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
 import { cleanPosterDraft, posterProblem, type Poster } from "./posters";
@@ -66,6 +73,12 @@ const clean = (value: string, max = 10000): string => value.slice(0, max);
 
 const toggled = (list: string[], id: string): string[] =>
   list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id];
+
+/** The reader's own registered book with this ISBN, if any. */
+export const libraryBookByIsbn = (state: TownState, isbn: string) =>
+  state.books.find(
+    (book) => book.isbn === isbn && state.library.includes(book.id),
+  );
 
 /** Folds by reports, less those of things that are gone. */
 const withoutFolds = (
@@ -673,45 +686,66 @@ export function createTownStore(
             : state.finishedBooks,
       });
     },
-    addBook(input) {
+    // `via` is not kept yet: the library will remember it as where a book
+    // came from (plan L1).
+    registerBook(input, _via, bookId) {
       initialize();
-      const title = input.title.trim();
-      const author = input.author.trim();
+      const title = bookText(input.title);
+      const author = bookText(input.author);
       const isbn = input.isbn ? normalizeIsbn(input.isbn) : null;
-      if (!title || title.length > 200 || author.length > 200) return null;
+      if (!title) return null;
       if (input.isbn && !isbn) return null;
-      const existing = isbn
-        ? state.books.find((book) => book.isbn === isbn)
-        : undefined;
-      if (existing) {
-        if (!state.library.includes(existing.id))
-          commit({ ...state, library: [...state.library, existing.id] });
-        return existing.id;
-      }
-      const id = nextId(
-        "book",
-        state.books.map((book) => book.id),
-        isbn,
-      );
-      const price =
-        typeof input.price === "number" &&
-        Number.isInteger(input.price) &&
-        input.price > 0 &&
-        input.price <= 1_000_000
-          ? input.price
+      // Until the town is read (or while the account is still being
+      // checked), and when the account could not be read at all, nothing
+      // would be kept: say so, never that it was registered.
+      if (status === "loading" || backend.kind === "unavailable")
+        return { result: "not-saved" };
+      // Already registered is about the reader's own library, not the town:
+      // a book only in the town's catalogue is registered as usual.
+      const mine = isbn ? libraryBookByIsbn(state, isbn) : undefined;
+      if (mine)
+        return { result: "already", bookId: mine.id, title: mine.title };
+      // A book sent before under its decided id (its row arrived, its place
+      // in the library did not) is that book again; otherwise any book the
+      // town has with the ISBN.
+      const decided =
+        bookId && isbn
+          ? state.books.find((book) => book.id === bookId && book.isbn === isbn)
           : undefined;
+      const existing =
+        decided ??
+        (isbn ? state.books.find((book) => book.isbn === isbn) : undefined);
+      if (existing)
+        return commit({ ...state, library: [...state.library, existing.id] })
+          ? { result: "added", bookId: existing.id, title: existing.title }
+          : { result: "not-saved" };
+      const ids = state.books.map((book) => book.id);
+      const given = nextId("book", ids, isbn);
+      // The decided id, when it is one this town could have given itself.
+      const id =
+        bookId &&
+        !ids.includes(bookId) &&
+        (backend.kind === "account" ? isDatabaseId(bookId) : bookId === given)
+          ? bookId
+          : given;
+      const price = bookPrice(input.price);
       const book = createRegisteredBook(id, {
         title,
         author,
         ...(isbn ? { isbn } : {}),
         ...(price ? { price } : {}),
       });
-      commit({
+      return commit({
         ...state,
         books: [...state.books, book],
         library: [...state.library, id],
-      });
-      return id;
+      })
+        ? { result: "added", bookId: id, title }
+        : { result: "not-saved" };
+    },
+    addBook(input) {
+      const done = actions.registerBook(input, input.isbn ? "isbn" : "manual");
+      return done && done.result !== "not-saved" ? done.bookId : null;
     },
     toggleLibrary(bookId) {
       initialize();
@@ -949,6 +983,21 @@ export function createTownStore(
       options.follow ? "account" : "local",
     getPersistenceSnapshot: () => status,
     getServerPersistenceSnapshot: (): PersistenceStatus => "loading",
+    /**
+     * Whether a change made now is kept: the town has been read, and it is
+     * the demo or the reader's own account.
+     */
+    getReadySnapshot: () =>
+      !loading &&
+      status !== "loading" &&
+      (backend.kind === "local" || backend.kind === "account"),
+    getServerReadySnapshot: () => false,
+    /**
+     * Counts the backends the town has used in this page. Changes waiting to
+     * be written belong to one of them: a new one starts from what the
+     * database has, and what the old one had not written is gone.
+     */
+    getGeneration: () => generation,
     subscribe(listener: () => void) {
       listeners.add(listener);
       initialize();
@@ -999,3 +1048,35 @@ export function usePersistenceStatus(): PersistenceStatus {
     townStore.getServerPersistenceSnapshot,
   );
 }
+
+/** Whether a change made now is kept: the town is read, and it is the reader's own. */
+export function useTownReady(): boolean {
+  return useSyncExternalStore(
+    townStore.subscribe,
+    townStore.getReadySnapshot,
+    townStore.getServerReadySnapshot,
+  );
+}
+
+/** A town store as the scan journal sends to it (library-journal.ts). */
+export function journalTownOf(
+  store: ReturnType<typeof createTownStore>,
+  owner: () => string | null,
+): JournalTown {
+  return {
+    subscribe: store.subscribe,
+    state: store.getSnapshot,
+    status: store.getPersistenceSnapshot,
+    ready: store.getReadySnapshot,
+    generation: store.getGeneration,
+    where: store.getBackendSnapshot,
+    owner,
+    register: (book, via, bookId) =>
+      store.actions.registerBook(book, via, bookId),
+    toggleLibrary: (bookId) => store.actions.toggleLibrary(bookId),
+  };
+}
+
+export const journalTown = journalTownOf(townStore, () =>
+  journalOwner(accountStore.getSnapshot(), townStore.getBackendSnapshot()),
+);

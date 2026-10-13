@@ -23,6 +23,7 @@ import {
   worldPolygon,
 } from "../lib/store-scene";
 import { wordsFolded } from "../lib/social";
+import { booksBeforeSearch } from "../lib/book-lists";
 import {
   publicScenePops,
   publicWalkShops,
@@ -73,6 +74,20 @@ type Overlay =
   | null;
 const WALK_HINT_KEY = "book-town-walk-hint";
 
+/**
+ * Focuses `target` once the change just made is drawn, unless the reader has
+ * moved on meanwhile (closed a book and at once picked the next one): focus
+ * stays where they went, and is not taken back a frame later.
+ */
+function focusNextFrame(target: () => HTMLElement | null | undefined) {
+  const from = document.activeElement;
+  requestAnimationFrame(() => {
+    const now = document.activeElement;
+    if (now && now !== from && now !== document.body) return;
+    target()?.focus({ preventScroll: true });
+  });
+}
+
 export function WalkView({
   state,
   actions,
@@ -121,6 +136,15 @@ export function WalkView({
   }, [orderedStores, state.books, state.shops, state.ownShop, saved.scenes]);
   const ids = useMemo(() => shops.map((s) => s.id), [shops]);
   const reviewFolds = state.reviewFolds;
+  // A 見本's shelves are filled out only with books a list may show before
+  // anything is typed: never one another reader only typed in.
+  const shownKey = booksBeforeSearch(state)
+    .map((book) => book.id)
+    .join("\n");
+  const sceneBooks = useMemo(() => {
+    const shown = new Set(shownKey.split("\n"));
+    return state.books.filter((book) => shown.has(book.id));
+  }, [state.books, shownKey]);
   const scenes = useMemo(
     () =>
       shops.map((s) =>
@@ -129,12 +153,12 @@ export function WalkView({
           wordsFolded({ reviewFolds }, "shop", s.id)
             ? { ...s, description: "" }
             : s,
-          state.books,
+          sceneBooks,
           state.shops.findIndex((shop) => shop.id === s.id),
           saved.scenes,
         ),
       ),
-    [shops, state.books, state.shops, saved.scenes, reviewFolds],
+    [shops, sceneBooks, state.shops, saved.scenes, reviewFolds],
   );
   const pops = useMemo(() => publicScenePops(scenes), [scenes]);
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -292,11 +316,12 @@ export function WalkView({
   }
   function close() {
     setOverlay(null);
-    requestAnimationFrame(() => {
-      if (focus.current?.isConnected)
-        focus.current.focus({ preventScroll: true });
-      else stage.current?.focus({ preventScroll: true });
-    });
+    // The book in hand and dialogs give focus back as they go; this catches
+    // what they leave on the page itself (a dialog that saved no opener) or an
+    // opener that is gone.
+    focusNextFrame(() =>
+      focus.current?.isConnected ? focus.current : stage.current,
+    );
   }
   // Going past the last shop starts another round; say so once, quietly.
   const lastIndex = useRef<number | null>(null);
@@ -326,7 +351,7 @@ export function WalkView({
     if (overlay) return;
     setFirstHint(false);
     update((previous) => stepWalk(previous, direction));
-    requestAnimationFrame(() => stage.current?.focus({ preventScroll: true }));
+    focusNextFrame(() => stage.current);
   }
   useEffect(() => {
     const element = stage.current;

@@ -315,11 +315,28 @@ await context.route(supabase + "/**", async (route) => {
   }
   if (url.pathname.startsWith("/rest/v1/") && request.method() !== "GET")
     townWrites.push(url.pathname);
-  // The rest of the signed-in town: a new reader has nothing yet.
+  // The rest of the signed-in town: a new reader has nothing yet. Like
+  // PostgREST, the page asked for (offset, limit) and the total, which the
+  // app reads to know it has every one of the reader's own rows.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "GET") {
     townReads.push(url.pathname);
     const table = url.pathname.slice("/rest/v1/".length);
-    return json(200, town?.[table] ?? []);
+    const rows = town?.[table] ?? [];
+    const from = Number(url.searchParams.get("offset") ?? 0);
+    const page = rows.slice(
+      from,
+      from + Number(url.searchParams.get("limit") ?? rows.length),
+    );
+    const range = page.length ? `${from}-${from + page.length - 1}` : "*";
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: {
+        "content-range": `${range}/${rows.length}`,
+        "access-control-expose-headers": "Content-Range",
+      },
+      body: JSON.stringify(page),
+    });
   }
   return json(404, { message: "not mocked: " + url.pathname });
 });
@@ -578,6 +595,7 @@ try {
       "/notifications/",
       "/search/",
       "/profiles/me/",
+      "/profiles/me/?books=library",
       "/my-shop/",
       "/reading-list/",
       "/timeline/",
@@ -609,6 +627,164 @@ try {
       ).toHaveAttribute("aria-pressed", "false");
       expect(townWrites.length).toBe(writes);
       await shot("8-sample-like");
+    },
+  );
+
+  await check(
+    "a book registered while the town loads is not said to be registered",
+    async () => {
+      // The town's reads wait; the reader's own profile comes, so they are
+      // signed in. What the page writes is answered here and noted.
+      let holding = true;
+      const held = [];
+      const sent = [];
+      const hold = (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() !== "GET") {
+          sent.push(url.pathname);
+          return route.fulfill({ status: 201, body: "" });
+        }
+        if (!holding || url.searchParams.get("id") === "eq." + user.id)
+          return route.fallback();
+        held.push(route);
+      };
+      await page.route(supabase + "/rest/v1/**", hold);
+      await page.goto(base + "/profiles/me/");
+      // One book by hand: ［手で入力］ in the scanner.
+      await page
+        .locator(".profile-minor-actions")
+        .getByRole("button", { name: "本を登録" })
+        .click();
+      const scanner = page.getByRole("dialog", { name: "本を続けて登録" });
+      await scanner.getByRole("button", { name: "手で入力" }).click();
+      const dialog = page.getByRole("dialog", {
+        name: "本を登録",
+        exact: true,
+      });
+      const register = dialog.getByRole("button", {
+        name: "登録する",
+        exact: true,
+      });
+      await dialog.getByLabel("タイトル").fill("こころ");
+      await register.click();
+      await expect(dialog.locator(".register-message")).toHaveText(
+        "まだ保存できません。読み込みが終わってから、もう一度押してください。",
+      );
+      await expect(dialog).toBeVisible();
+      await expect(page.locator(".toast")).toHaveCount(0);
+      expect(held.length).toBeGreaterThan(0);
+      expect(sent).toEqual([]);
+      await shot("8-register-while-loading");
+      // Once the town is read, the same press registers it, and it is sent.
+      holding = false;
+      for (const route of held.splice(0)) await route.fallback();
+      // The reader's name comes with the town, behind the dialog.
+      await expect(page.locator("#profile-name")).toHaveText("アキ");
+      await register.click();
+      await expect(page.locator(".toast")).toContainText(
+        "『こころ』を登録しました",
+      );
+      await expect(dialog).toHaveCount(0);
+      await expect
+        .poll(() => sent)
+        .toEqual(["/rest/v1/books", "/rest/v1/book_marks"]);
+      await scanner.getByRole("button", { name: "終わる" }).click();
+      await expect(scanner).toHaveCount(0);
+      await page.unroute(supabase + "/rest/v1/**", hold);
+    },
+  );
+
+  await check(
+    "an ISBN read while the town loads waits on the device, then is registered",
+    async () => {
+      let holding = true;
+      const held = [];
+      const sent = [];
+      const hold = (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() !== "GET") {
+          sent.push({ path: url.pathname, rows: request.postDataJSON() });
+          return route.fulfill({ status: 201, body: "" });
+        }
+        if (!holding || url.searchParams.get("id") === "eq." + user.id)
+          return route.fallback();
+        held.push(route);
+      };
+      // openBD knows its title.
+      const READ_ISBN = "9784101092058";
+      const titles = (route) => {
+        const isbns = new URL(route.request().url()).searchParams
+          .get("isbn")
+          .split(",");
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify(
+            isbns.map((isbn) =>
+              isbn === READ_ISBN
+                ? { summary: { isbn, title: "車輪の下", author: "ヘッセ／著" } }
+                : null,
+            ),
+          ),
+        });
+      };
+      await page.route("https://api.openbd.jp/**", titles);
+      await page.route(supabase + "/rest/v1/**", hold);
+      await page.goto(base + "/profiles/me/");
+      await page
+        .locator(".profile-minor-actions")
+        .getByRole("button", { name: "本を登録" })
+        .click();
+      const scanner = page.getByRole("dialog", { name: "本を続けて登録" });
+      await expect(scanner.locator(".scan-banner")).toContainText(
+        "読み込んでいます",
+      );
+      // This browser reads no barcodes: the ISBN is typed.
+      await scanner.getByLabel("ISBN", { exact: true }).fill(READ_ISBN);
+      await expect(scanner.locator(".scan-card-status")).toHaveText(
+        "読み込みが終わったら登録します",
+      );
+      // Kept on this device, and nothing sent yet.
+      const journalKey = "book-town-library-journal:" + user.id;
+      const journal = () =>
+        page.evaluate(
+          (key) => JSON.parse(localStorage.getItem(key))?.items ?? null,
+          journalKey,
+        );
+      expect(await journal()).toEqual([
+        expect.objectContaining({ isbn: READ_ISBN, state: "ready" }),
+      ]);
+      const decided = (await journal())[0].bookId;
+      expect(sent).toEqual([]);
+      await shot("8-scan-while-loading");
+      // Once the town is read, it is registered with the id it was given.
+      holding = false;
+      for (const route of held.splice(0)) await route.fallback();
+      await expect(scanner.locator(".scan-card-status")).toHaveText(
+        "登録しました",
+      );
+      await expect(scanner.locator(".scan-count")).toHaveText("この回 1冊");
+      await expect
+        .poll(() => sent.map((write) => write.path))
+        .toEqual(["/rest/v1/books", "/rest/v1/book_marks"]);
+      const [books, marks] = sent.map((write) => [write.rows].flat());
+      expect(books).toHaveLength(1);
+      expect(books[0]).toEqual(
+        expect.objectContaining({ isbn: READ_ISBN, title: "車輪の下" }),
+      );
+      expect(books[0].id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+      // The id decided at the read: sent twice, it would be one book.
+      expect(books[0].id).toBe(decided);
+      expect(marks.map((mark) => mark.book_id)).toEqual([books[0].id]);
+      // Saved: the device lets it go.
+      await expect.poll(journal).toBeNull();
+      await scanner.getByRole("button", { name: "終わる" }).click();
+      await expect(page.locator(".toast")).toContainText("1冊を登録しました");
+      await page.unroute(supabase + "/rest/v1/**", hold);
+      await page.unroute("https://api.openbd.jp/**", titles);
     },
   );
 
@@ -986,6 +1162,76 @@ try {
   );
 
   await check(
+    "another reader's typed-in book waits for its name in lists before a search",
+    async () => {
+      // レン typed in 星の本 and used it nowhere; こころの本 is on their public shelf.
+      await page.goto(base + "/search/");
+      await expect(
+        page.getByRole("heading", { name: "棚の隅の本" }),
+      ).toBeVisible();
+      await expect(page.locator("main")).not.toContainText("星の本");
+      // Nor does a genre find it: the 登録した本 chip, or part of it typed.
+      const box = page.getByRole("searchbox", { name: "本と書店を検索" });
+      const listed = (title) =>
+        page.locator(".search-results .search-book").filter({
+          hasText: title,
+        });
+      await page
+        .getByRole("group", { name: "ジャンルで探す" })
+        .getByRole("button", { name: "登録した本" })
+        .click();
+      await expect(box).toHaveValue("登録した本");
+      await expect(listed("こころの本")).toHaveCount(1);
+      await expect(listed("星の本")).toHaveCount(0);
+      await box.fill("登録");
+      await expect(listed("こころの本")).toHaveCount(1);
+      await expect(listed("星の本")).toHaveCount(0);
+      await box.fill("星の本");
+      await expect(listed("星の本")).toHaveCount(1);
+      // The 人生の9冊 picker offers it only once it is searched for.
+      await page.goto(base + "/profiles/me/");
+      await page
+        .getByRole("region", { name: "人生の9冊" })
+        .getByRole("button", { name: "編集" })
+        .click();
+      const nine = page.getByRole("dialog", { name: "人生の9冊を選ぶ" });
+      const pick = (title) =>
+        nine.getByRole("button", { name: title + "を人生の9冊に加える" });
+      await expect(pick("こころの本")).toBeVisible();
+      await expect(pick("星の本")).toHaveCount(0);
+      const nineBox = nine.getByRole("searchbox", {
+        name: "人生の9冊に追加する本を検索",
+      });
+      await nineBox.fill("登録した本");
+      await expect(pick("こころの本")).toBeVisible();
+      await expect(pick("星の本")).toHaveCount(0);
+      await nineBox.fill("星の本");
+      await expect(pick("星の本")).toBeVisible();
+      await nine.getByRole("button", { name: "キャンセル" }).click();
+      await expect(nine).toHaveCount(0);
+      // Nor does a 見本's shop fill out its shelves with it in the walk,
+      // though it may with こころの本 (one 見本's shelf is named 星の本).
+      const onShelf = (title) =>
+        page.locator(`.walk-book-target[aria-label^="${title}、試験 作家。"]`);
+      await page.goto(base + "/walk/");
+      await expect(page.locator(".walk-book-target").first()).toBeVisible();
+      await expect(page).toHaveURL(/\/walk\/#./);
+      const first = page.url();
+      let shelved = 0;
+      for (let step = 0; step < 12; step++) {
+        const at = page.url();
+        await expect(onShelf("星の本")).toHaveCount(0);
+        if (/#shop-/.test(at)) shelved += await onShelf("こころの本").count();
+        await page.getByRole("button", { name: "次の書店" }).click();
+        await expect(page).not.toHaveURL(at);
+        if (page.url() === first) break;
+      }
+      expect(page.url()).toBe(first);
+      expect(shelved).toBeGreaterThan(0);
+    },
+  );
+
+  await check(
     "a poster folded by reports opens with a tap; its maker is told gently",
     async () => {
       town = withPosters();
@@ -1344,6 +1590,12 @@ try {
       await layersLeft(1);
       await page.keyboard.press("Escape");
       await expect(inHand).not.toBeVisible();
+      // Closed at once after the request, it stays closed, and both steps
+      // came off: one 戻る leaves the shop.
+      await page.goBack();
+      await expect(page).toHaveURL(
+        new RegExp("/books/registered/\\?id=" + COVER_BOOK + "$"),
+      );
       // Google's cover of 星の本 was refused: Google is not asked for it, and
       // the book keeps its 装丁カード, with no credit and no link.
       await page.goto(base + "/books/registered/?id=" + REFUSED_BOOK);

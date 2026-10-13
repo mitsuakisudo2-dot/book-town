@@ -120,3 +120,31 @@ export function verticalSwipe(
       : -1
     : null;
 }
+/** A sideways swipe: pushing left goes to the next shelf. Never true together
+ * with verticalSwipe, so one gesture cannot change both shop and shelf. */
+export function horizontalSwipe(
+  dx: number,
+  dy: number,
+  duration: number,
+): -1 | 1 | null {
+  return duration < 1400 &&
+    Math.abs(dx) >= 56 &&
+    Math.abs(dx) > Math.abs(dy) * 1.5
+    ? dx < 0
+      ? 1
+      : -1
+    : null;
+}
+/** One shelf on within a shop. Unlike the walk it does not go round: at either
+ * end it stays and says so, so the screen can nudge instead. */
+export function stepShelf(
+  index: number,
+  count: number,
+  direction: -1 | 1,
+): { index: number; atEdge: boolean } {
+  const here = Math.max(0, Math.min(count - 1, index));
+  const next = here + direction;
+  return next < 0 || next >= count
+    ? { index: here, atEdge: true }
+    : { index: next, atEdge: false };
+}

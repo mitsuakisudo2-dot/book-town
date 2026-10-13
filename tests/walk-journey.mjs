@@ -129,6 +129,40 @@ try {
     },
   );
   await check(
+    "a reader who goes on to the next book at once keeps it",
+    async () => {
+      // Closed, and the next book picked before the page is drawn again: the
+      // focus stays on it, and is not taken back to the book just put down
+      // a frame later (Enter would then open that one again, as a slow
+      // machine showed between a press's focus and its key).
+      const book = page.locator("[data-placement]").first();
+      const next = page.locator('[data-placement="placement:shop-orbit:o1"]');
+      await book.press("Enter");
+      await expect(page.locator(".bh-dialog")).toBeVisible();
+      await page.evaluate(() => {
+        const opener = document.querySelector("[data-placement]");
+        const onward = document.querySelector(
+          '[data-placement="placement:shop-orbit:o1"]',
+        );
+        const onFocus = (event) => {
+          if (event.target !== opener) return;
+          removeEventListener("focusin", onFocus, true);
+          queueMicrotask(() => onward.focus());
+        };
+        addEventListener("focusin", onFocus, true);
+      });
+      await page.locator(".bh-dialog").press("Escape");
+      await expect(page.locator(".bh-dialog")).toHaveCount(0);
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
+      await expect(next).toBeFocused();
+    },
+  );
+  await check(
     "book neighbors remain in furniture and POP reaction uses legacy identity",
     async () => {
       // The tier's lead face-out stands last, so its POP card meets the spines.

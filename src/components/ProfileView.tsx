@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   COMPOSE_ICONS,
   ownTagline,
@@ -16,7 +16,9 @@ import { useTownBackend } from "../lib/store";
 import { readerPosts, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
-import { BarcodeRegister } from "./BarcodeRegister";
+import { ScanSession } from "./ScanSession";
+import { JournalNotes, TitlesToType } from "./LibraryJournalNotes";
+import { booksBeforeSearch } from "../lib/book-lists";
 import { linkLabel, normalizeLink, PROFILE_LINK_LIMIT } from "../lib/links";
 import { handleProblem, normalizeHandle } from "../lib/handles";
 import { useClock } from "./useClock";
@@ -70,6 +72,7 @@ import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import { useUrlParam } from "../lib/url-state";
+import { afterLayerCloses } from "../lib/back-layer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
@@ -105,8 +108,26 @@ export function ProfileView({
     setBooks(next === "wishlist" ? null : next);
   const peekOpen = useReadingPeekOpen();
   const [sheet, setSheet] = useState<
-    "following" | "followers" | "settings" | "register" | null
+    "following" | "followers" | "settings" | "scan" | "titles" | null
   >(null);
+  // After a scan that read books in, the reader lands on them: the 登録
+  // tab, newest first. The tab changes once the scanner's step is off the
+  // history, so that step comes off rather than staying as the change.
+  const [landing, setLanding] = useState(false);
+  const libraryTab = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!landing) return;
+    setLanding(false);
+    afterLayerCloses(() => {
+      setBooks("library");
+      requestAnimationFrame(() => {
+        document
+          .getElementById("profile-collection-title")
+          ?.scrollIntoView({ block: "start" });
+        libraryTab.current?.focus({ preventScroll: true });
+      });
+    });
+  }, [landing, setBooks]);
   const clock = useClock(60_000);
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingNine, setEditingNine] = useState(false);
@@ -122,13 +143,17 @@ export function ProfileView({
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   // The 9冊 picker finds books the way every search does; the reader's own
   // books come first among equals, and near titles wait under a quiet heading.
+  // Before anything is typed, or by a genre, never a book another reader only
+  // typed in.
+  const beforeSearch = booksBeforeSearch(state);
   const nineSearch = useBookSearch(state.books, search, {
     own: state.library,
     limit: state.books.length,
+    genreFinds: beforeSearch,
   });
   const searchingNine = search.trim() !== "";
   const selectableBooks = (
-    searchingNine ? nineSearch.found.map((match) => match.book) : state.books
+    searchingNine ? nineSearch.found.map((match) => match.book) : beforeSearch
   ).filter((book) => !draftNine.includes(book.id));
   const nearNine = searchingNine
     ? nineSearch.near
@@ -328,7 +353,7 @@ export function ProfileView({
                   <button
                     type="button"
                     className="text-button"
-                    onClick={() => setSheet("register")}
+                    onClick={() => setSheet("scan")}
                   >
                     <Icon name="barcode" size={15} /> 本を登録
                   </button>
@@ -498,6 +523,7 @@ export function ProfileView({
               <span>{state.favorites.length || ""}</span>
             </button>
             <button
+              ref={libraryTab}
               aria-pressed={collection === "library"}
               onClick={() => setCollection("library")}
             >
@@ -505,16 +531,40 @@ export function ProfileView({
               <span>{state.library.length || ""}</span>
             </button>
           </div>
-          <p className="profile-section-description">
-            {collection === "wishlist"
-              ? "気になった一冊を、次の読書の楽しみに。"
-              : collection === "favorites"
-                ? "何度でも戻りたい一冊を、ここに。"
-                : "バーコードや手入力で登録した、あなたの本。"}
-          </p>
+          {collection === "library" ? (
+            <>
+              <div className="profile-library-head">
+                <p className="profile-section-description">
+                  バーコードや手入力で登録した、あなたの本。
+                </p>
+                <button
+                  type="button"
+                  className="button primary"
+                  onClick={() => setSheet("scan")}
+                >
+                  <Icon name="plus" size={16} /> 本を登録
+                </button>
+              </div>
+              <JournalNotes
+                notify={notify}
+                onTypeTitles={() => setSheet("titles")}
+              />
+            </>
+          ) : (
+            <p className="profile-section-description">
+              {collection === "wishlist"
+                ? "気になった一冊を、次の読書の楽しみに。"
+                : "何度でも戻りたい一冊を、ここに。"}
+            </p>
+          )}
           {state[collection].length ? (
             <div className="profile-collection-grid">
-              {state[collection].map((id) => {
+              {/* The library newest first (plan 5-6): what was just
+                  registered comes first. */}
+              {(collection === "library"
+                ? [...state.library].reverse()
+                : state[collection]
+              ).map((id) => {
                 const book = state.books.find((entry) => entry.id === id);
                 return book ? (
                   <article className="profile-saved-book" key={id}>
@@ -551,11 +601,8 @@ export function ProfileView({
                     ? "お気に入りの本は、まだありません。"
                     : "登録した本は、まだありません。"}
               </p>
-              {collection === "library" ? (
-                <button type="button" onClick={() => setSheet("register")}>
-                  バーコードで本を登録 <Icon name="arrow" size={16} />
-                </button>
-              ) : (
+              {/* The library's way in is ［＋本を登録］, just above. */}
+              {collection !== "library" && (
                 <Link href="/">
                   本の街で一冊に出会う <Icon name="arrow" size={16} />
                 </Link>
@@ -819,16 +866,19 @@ export function ProfileView({
           </fieldset>
         </Modal>
       )}
-      {sheet === "register" && (
-        <BarcodeRegister
+      {sheet === "scan" && (
+        <ScanSession
           state={state}
           actions={actions}
           notify={notify}
-          onClose={() => {
+          onClose={(kept) => {
             setSheet(null);
-            setCollection("library");
+            setLanding(kept);
           }}
         />
+      )}
+      {sheet === "titles" && (
+        <TitlesToType notify={notify} onClose={() => setSheet(null)} />
       )}
       {editingProfile && (
         <Modal
@@ -1079,9 +1129,11 @@ export function ProfileView({
             {!selectableBooks.length &&
               (!searchingNine || nineSearch.settled) && (
                 <p className="profile-muted">
-                  {nearNine.length
-                    ? "ぴったり合う本はありませんでした。"
-                    : "条件に合う本がありません。"}
+                  {!searchingNine
+                    ? "題名や著者で、本を探してください。"
+                    : nearNine.length
+                      ? "ぴったり合う本はありませんでした。"
+                      : "条件に合う本がありません。"}
                 </p>
               )}
             {nearNine.length > 0 && (
