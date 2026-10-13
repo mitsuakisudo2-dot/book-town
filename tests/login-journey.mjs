@@ -641,6 +641,9 @@ try {
       const hold = (route) => {
         const request = route.request();
         const url = new URL(request.url());
+        // Asking whether the reader is staff (注釈モード) writes nothing.
+        if (url.pathname === "/rest/v1/rpc/can_annotate")
+          return route.fallback();
         if (request.method() !== "GET") {
           sent.push(url.pathname);
           return route.fulfill({ status: 201, body: "" });
@@ -704,6 +707,9 @@ try {
       const hold = (route) => {
         const request = route.request();
         const url = new URL(request.url());
+        // Asking whether the reader is staff (注釈モード) writes nothing.
+        if (url.pathname === "/rest/v1/rpc/can_annotate")
+          return route.fallback();
         if (request.method() !== "GET") {
           sent.push({ path: url.pathname, rows: request.postDataJSON() });
           return route.fulfill({ status: 201, body: "" });
