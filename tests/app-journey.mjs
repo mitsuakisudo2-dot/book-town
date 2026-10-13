@@ -846,6 +846,86 @@ try {
   );
 
   await check(
+    "a shop being opened keeps its book, POP and sign through 戻る and a reload",
+    async () => {
+      const kept = () =>
+        page.evaluate(() =>
+          localStorage.getItem("book-town-open-shop-drafts-v1"),
+        );
+      const popField = page.getByLabel(
+        "この1冊を渡したい理由（POPになります）",
+      );
+      await go("/my-shop/");
+      await page.getByRole("button", { name: /たった1冊の本屋/ }).click();
+      await page
+        .getByRole("searchbox", { name: "棚に並べる本" })
+        .fill("ソラリス");
+      await page
+        .getByRole("list", { name: "棚に並べる本の候補" })
+        .getByRole("button", { name: /ソラリス/ })
+        .click();
+      await expect(page.locator(".open-shelf-book")).toHaveCount(1);
+      await popField.fill("眠れない夜に、そっと渡したい。");
+      await page.getByRole("button", { name: "看板を決める" }).click();
+      await page.getByLabel("書店の名前").fill("夜更けの一冊堂");
+      await page.getByLabel("ひとこと").fill("一冊だけ、深く。");
+      await page.getByRole("button", { name: "あずき", exact: true }).click();
+      // Out to the street and 戻る: the sign is as it was left.
+      await page
+        .getByRole("navigation", { name: "スマートフォンナビゲーション" })
+        .getByRole("link", { name: "ホーム" })
+        .click();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await page.goBack();
+      await expect(page.getByLabel("書店の名前")).toHaveValue("夜更けの一冊堂");
+      await expect(page.getByLabel("ひとこと")).toHaveValue("一冊だけ、深く。");
+      await expect(
+        page.getByRole("button", { name: "あずき", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      // A reload starts at the first step, with a way to go on from there.
+      await page.reload();
+      await expect(
+        page.getByText("「夜更けの一冊堂」を開きかけています"),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "続きから", exact: true }).click();
+      await expect(page.getByLabel("書店の名前")).toHaveValue("夜更けの一冊堂");
+      await expect(page.getByText("書きかけを続けています")).toBeVisible();
+      await page.getByRole("button", { name: "本を選び直す" }).click();
+      await expect(page.locator(".open-shelf-book")).toHaveCount(1);
+      await expect(page.locator(".open-shelf-book")).toContainText("ソラリス");
+      await expect(popField).toHaveValue("眠れない夜に、そっと渡したい。");
+      // 戻る to the kinds and 進む again finds the same book and words.
+      await page.goBack();
+      await expect(
+        page.getByRole("button", { name: /たった1冊の本屋/ }),
+      ).toBeVisible();
+      await page.goForward();
+      await expect(popField).toHaveValue("眠れない夜に、そっと渡したい。");
+      // Thrown away on purpose, asked once for the words in it, it is gone.
+      await page.getByRole("button", { name: "書きかけを消す" }).click();
+      await expect(page.getByText("書きかけを消しますか？")).toBeVisible();
+      await page.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(page.locator(".open-shelf-book")).toHaveCount(0);
+      await expect(popField).toHaveValue("");
+      expect(await kept()).toBeNull();
+      await page.reload();
+      await expect(
+        page.getByRole("heading", { name: "3分で、あなたの本屋を開く" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /たった1冊の本屋/ }),
+      ).toBeEnabled();
+      await expect(
+        page.getByRole("button", { name: "続きから", exact: true }),
+      ).toHaveCount(0);
+      // The empty first step shows no count of nothing.
+      await expect(page.locator(".open-shop")).not.toContainText(
+        /(?<!\d)0(?!\d)/,
+      );
+    },
+  );
+
+  await check(
     "a shop opens in three minutes: the nine, a sign, the lights",
     async () => {
       await go("/my-shop/");
@@ -887,6 +967,12 @@ try {
       await expect
         .poll(() => page.evaluate(() => history.state?.booktownLayers ?? null))
         .toBeNull();
+      // Open, the shop's opening is no longer kept as work in progress.
+      expect(
+        await page.evaluate(() =>
+          localStorage.getItem("book-town-open-shop-drafts-v1"),
+        ),
+      ).toBeNull();
       const shop = (await stored()).ownShop;
       expect(shop.name).toBe("雨音書店");
       expect(shop.tagline).toBe("一頁ぶん、遠回り。");

@@ -129,6 +129,48 @@
   margin: 22px auto 0;
   font-size: 12px;
 }
+/* Until the town is read, the kinds wait (kept work is checked against it). */
+.open-kind:disabled,
+.open-free:disabled {
+  opacity: 0.75;
+  cursor: progress;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Work kept in this browser from before: one quiet line, and a way to let it
+   go. Shared by the screens that keep a reader's work (KeptNote). */
+.kept-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 14px;
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #5f6f55;
+}
+.kept-note button {
+  min-height: 32px;
+  padding: 4px 0;
+  color: #4f6446;
+  text-decoration: underline;
+  text-decoration-color: #c9d3bd;
+  text-underline-offset: 3px;
+}
+.kept-note button:hover {
+  color: var(--green);
+}
+.kept-note-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 14px;
+  color: #7a5a35;
+}
+.open-resume {
+  margin: -12px 0 20px;
+}
 
 /* Picking books */
 .open-shelf {

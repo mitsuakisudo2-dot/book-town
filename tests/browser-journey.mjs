@@ -222,6 +222,13 @@ try {
         .click();
       await page.getByRole("button", { name: "棚を整える" }).click();
       await expect(page.locator(".editor-shelf-panel")).toHaveCount(1);
+      // An empty shelf tells its room, not a count of nothing.
+      await expect(page.locator(".editor-space-row")).toHaveText(
+        "20スペース、まだ空いています",
+      );
+      await expect(page.locator(".editor-shelf-panel")).not.toContainText(
+        /(?<!\d)0(?!\d)/,
+      );
       const settings = page.locator(".editor-settings");
       await settings.locator("summary").click();
       await settings.getByLabel("書店の名前").fill("夜と寄り道書房");
@@ -389,6 +396,30 @@ try {
         "aria-valuenow",
         "19",
       );
+      // Taken off and the picker closed, it still comes back from the picker
+      // opened again, to its place and with its POP.
+      const withPopAt = index(restored);
+      const again = await openEditor();
+      await again
+        .locator(".editor-book-choice")
+        .filter({ hasText: "POPあり・押すと外す" })
+        .click();
+      await expect(page.locator(".toast")).toContainText("POPごと元に戻せます");
+      await again.getByRole("button", { name: "完了", exact: true }).click();
+      await expect(again).not.toBeVisible();
+      const reopened = await openEditor();
+      await reopened
+        .locator(".editor-book-choice")
+        .filter({ hasText: "外しました・押すと戻す" })
+        .click();
+      await expect
+        .poll(async () => index((await stored(page)).ownShop.shelves[0].items))
+        .toBe(withPopAt);
+      expect((await stored(page)).ownShop.shelves[0].items[withPopAt].pop).toBe(
+        withPop.pop,
+      );
+      await reopened.getByRole("button", { name: "完了", exact: true }).click();
+      await expect(reopened).not.toBeVisible();
       await shelf.locator(".shelf-book-button").first().click();
       await expect(
         shelf
@@ -403,6 +434,11 @@ try {
       await unplaced(dialog).first().click();
       // The shelf is full: nothing more can be placed, but books on it can still come off.
       await expect(unplaced(dialog)).toHaveCount(0);
+      // Full, it says so, with no room of nothing and no advice about spines.
+      await expect(dialog.locator(".editor-picker-context")).toHaveText(
+        "「夜にひらく異世界」は満席です。本を外すと、また並べられます。",
+      );
+      await expect(dialog.locator(".editor-capacity-warning")).toHaveCount(0);
       await dialog.getByRole("button", { name: "完了", exact: true }).click();
       await expect(shelf.getByRole("meter")).toHaveAttribute(
         "aria-valuenow",
@@ -412,6 +448,33 @@ try {
         shelf.getByRole("button", { name: "本棚を編集", exact: true }),
       ).toBeEnabled();
       expect((await stored(page)).ownShop.shelves[0].items).toHaveLength(20);
+      await expect(shelf.locator(".editor-space-row")).toContainText(
+        "この棚は満席です",
+      );
+      // A book with a POP taken off from the shelf comes back with 元に戻す.
+      const full = (await stored(page)).ownShop.shelves[0].items;
+      await shelf.getByRole("button", { name: /POPあり/ }).click();
+      await shelf.getByRole("button", { name: "この本を棚から外す" }).click();
+      await expect(shelf.getByRole("meter")).toHaveAttribute(
+        "aria-valuenow",
+        "19",
+      );
+      await page
+        .locator(".toast")
+        .getByRole("button", { name: "元に戻す" })
+        .click();
+      await expect(page.locator(".toast")).toContainText(
+        "元の場所に戻しました",
+      );
+      await expect(shelf.getByRole("meter")).toHaveAttribute(
+        "aria-valuenow",
+        "20",
+      );
+      expect(
+        (await stored(page)).ownShop.shelves[0].items.map(
+          ({ bookId, display, pop }) => [bookId, display, pop],
+        ),
+      ).toEqual(full.map(({ bookId, display, pop }) => [bookId, display, pop]));
       await shelf.locator(".shelf-book-button").first().click();
       await shelf.getByRole("button", { name: "この本を棚から外す" }).click();
       await expect(shelf.getByRole("meter")).toHaveAttribute(
@@ -456,6 +519,69 @@ try {
       await go(page, "/reading-list/");
       await expect(page.locator(".catalog-book")).toHaveCount(1);
       await expect(page.locator(".catalog-book")).toContainText("ソラリス");
+    },
+  );
+  await check(
+    "The shop's words and a shelf's new name stay through leaving and a reload",
+    async () => {
+      const kept = (key) =>
+        page.evaluate((name) => localStorage.getItem(name), key);
+      await go(page, "/my-shop/");
+      const settings = page.locator(".editor-settings");
+      await settings.locator("summary").click();
+      await settings
+        .getByLabel("書店の紹介")
+        .fill("夜にだけ開く、小さな本屋です。");
+      await settings.getByLabel("ひとこと").fill("書きかけのひとこと");
+      // Out and back: the words are there, open where they were left.
+      await page.getByRole("link", { name: "お店を眺める" }).click();
+      await expect(page).toHaveURL(/\/shops\//);
+      await go(page, "/my-shop/");
+      await expect(settings).toHaveAttribute("open", "");
+      await expect(settings.getByLabel("書店の紹介")).toHaveValue(
+        "夜にだけ開く、小さな本屋です。",
+      );
+      await expect(settings.getByText("書きかけを続けています")).toBeVisible();
+      await page.reload();
+      await expect(settings.getByLabel("ひとこと")).toHaveValue(
+        "書きかけのひとこと",
+      );
+      // Thrown away on purpose, asked once, the saved words come back.
+      await settings.getByRole("button", { name: "書きかけを消す" }).click();
+      await settings.getByRole("button", { name: "やめる" }).click();
+      await expect(settings.getByLabel("書店の紹介")).toHaveValue(
+        "夜にだけ開く、小さな本屋です。",
+      );
+      await settings.getByRole("button", { name: "書きかけを消す" }).click();
+      await settings.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(settings.getByLabel("書店の紹介")).toHaveValue("");
+      await expect(settings.getByLabel("ひとこと")).toHaveValue(
+        "一頁ぶん、遠回り。",
+      );
+      expect(await kept("book-town-shop-sign-drafts-v1")).toBeNull();
+      // Saved, the words are the shop's and nothing is kept aside.
+      await settings.getByLabel("書店の紹介").fill("夜にだけ開く本屋。");
+      await settings
+        .getByRole("button", { name: "変更を保存", exact: true })
+        .click();
+      expect((await stored(page)).ownShop.description).toBe(
+        "夜にだけ開く本屋。",
+      );
+      expect(await kept("book-town-shop-sign-drafts-v1")).toBeNull();
+      // A shelf's name being written is set when the page goes, as when the
+      // field is left.
+      const second = page.locator(".editor-shelf-panel").nth(1);
+      const shelfName = second.getByRole("textbox", {
+        name: "本棚の名前",
+        exact: true,
+      });
+      await shelfName.fill("まだ内緒の二冊");
+      await page.reload();
+      await expect(shelfName).toHaveValue("まだ内緒の二冊");
+      expect((await stored(page)).ownShop.shelves[1].name).toBe(
+        "まだ内緒の二冊",
+      );
+      expect(await kept("book-town-shelf-name-drafts-v1")).toBeNull();
     },
   );
   await check(
@@ -525,6 +651,109 @@ try {
       await expect(
         page.getByRole("heading", { name: "ソラリス", exact: true }),
       ).toBeVisible();
+    },
+  );
+  await check(
+    "Profile and nine being changed stay through Escape, a tap outside, 戻る and a reload",
+    async () => {
+      const kept = (key) =>
+        page.evaluate((name) => localStorage.getItem(name), key);
+      await go(page, "/profiles/me/");
+      const editProfile = page.getByRole("button", {
+        name: "プロフィールを編集",
+      });
+      const dialog = page.getByRole("dialog", { name: "読書家のプロフィール" });
+      const bio = dialog.getByLabel("自己紹介", { exact: true });
+      const saved = (await stored(page)).me.bio;
+      await editProfile.click();
+      await bio.fill("書きかけの自己紹介。まだ途中です。");
+      // Escape keeps it.
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      await editProfile.click();
+      await expect(bio).toHaveValue("書きかけの自己紹介。まだ途中です。");
+      await expect(dialog.getByText("書きかけを続けています")).toBeVisible();
+      // A tap outside keeps it.
+      await page.mouse.click(8, 8);
+      await expect(dialog).toHaveCount(0);
+      await editProfile.click();
+      await expect(bio).toHaveValue("書きかけの自己紹介。まだ途中です。");
+      // 戻る keeps it, and stays on the profile.
+      await page.goBack();
+      await expect(dialog).toHaveCount(0);
+      await expect(page).toHaveURL(/\/profiles\/me\/$/);
+      // A reload keeps it.
+      await page.reload();
+      await editProfile.click();
+      await expect(bio).toHaveValue("書きかけの自己紹介。まだ途中です。");
+      expect((await stored(page)).me.bio).toBe(saved);
+      // キャンセル asks once, for the words it would lose.
+      await dialog.getByRole("button", { name: "キャンセル" }).click();
+      await expect(
+        dialog.getByText("書きかけを消して閉じますか？"),
+      ).toBeVisible();
+      await dialog.getByRole("button", { name: "やめる" }).click();
+      await expect(bio).toHaveValue("書きかけの自己紹介。まだ途中です。");
+      await dialog.getByRole("button", { name: "キャンセル" }).click();
+      await dialog.getByRole("button", { name: "消して閉じる" }).click();
+      await expect(dialog).toHaveCount(0);
+      expect(await kept("book-town-profile-drafts-v1")).toBeNull();
+      await editProfile.click();
+      await expect(bio).toHaveValue(saved);
+      await expect(dialog.getByText("書きかけを続けています")).toHaveCount(0);
+      // Saved, it is the profile and nothing is kept aside.
+      await bio.fill("書き終えた自己紹介。");
+      await dialog.getByRole("button", { name: "保存する" }).click();
+      await expect(dialog).toHaveCount(0);
+      expect((await stored(page)).me.bio).toBe("書き終えた自己紹介。");
+      expect(await kept("book-town-profile-drafts-v1")).toBeNull();
+
+      // The nine: a new order and a word, kept the same ways.
+      const nine = page.getByRole("dialog", { name: "人生の9冊を選ぶ" });
+      const items = nine.locator(".profile-nine-editor-item strong");
+      const before = (await stored(page)).me.lifeNine;
+      await page.locator(".profile-edit-nine").click();
+      const first = await items.first().textContent();
+      await nine
+        .getByRole("button", { name: `${first}を後ろへ移動`, exact: true })
+        .click();
+      await nine
+        .getByRole("textbox", { name: `${first}へのひとこと`, exact: true })
+        .fill("並べ直した夜の一冊。");
+      const order = await items.allTextContents();
+      expect(order[1]).toBe(first);
+      await page.keyboard.press("Escape");
+      await expect(nine).toHaveCount(0);
+      await page.reload();
+      await page.locator(".profile-edit-nine").click();
+      await expect(items).toHaveText(order);
+      await expect(
+        nine.getByRole("textbox", {
+          name: `${first}へのひとこと`,
+          exact: true,
+        }),
+      ).toHaveValue("並べ直した夜の一冊。");
+      await expect(nine.getByText("書きかけを続けています")).toBeVisible();
+      expect((await stored(page)).me.lifeNine).toEqual(before);
+      await page.goBack();
+      await expect(nine).toHaveCount(0);
+      await page.locator(".profile-edit-nine").click();
+      await expect(items).toHaveText(order);
+      // 書きかけを消す puts back the saved nine, asked once for the word.
+      await nine.getByRole("button", { name: "書きかけを消す" }).click();
+      await nine.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(items.first()).toHaveText(first);
+      expect(await kept("book-town-nine-drafts-v1")).toBeNull();
+      // Moved again and saved: the nine are the new order, nothing kept aside.
+      await nine
+        .getByRole("button", { name: `${first}を後ろへ移動`, exact: true })
+        .click();
+      await nine
+        .getByRole("button", { name: "この並びを保存", exact: true })
+        .click();
+      await expect(nine).toHaveCount(0);
+      expect((await stored(page)).me.lifeNine[1]).toBe(before[0]);
+      expect(await kept("book-town-nine-drafts-v1")).toBeNull();
     },
   );
   const storageState = await context.storageState();

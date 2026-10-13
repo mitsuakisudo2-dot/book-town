@@ -10,13 +10,19 @@ import {
   SHOP_TAGLINE_MAX_LENGTH,
   ownTagline,
   type Book,
+  type Notify,
   type Shelf,
   type ShelfItem,
   type Shop,
   type TownState,
   type TownActions,
 } from "../lib/types";
-import { shelfUsed, usePersistenceStatus, useTownBackend } from "../lib/store";
+import {
+  getTownSnapshot,
+  shelfUsed,
+  usePersistenceStatus,
+  useTownBackend,
+} from "../lib/store";
 import { shelfSaveMessage } from "../lib/persistence";
 import { bookPath } from "../lib/books";
 import { profilePath } from "../lib/paths";
@@ -27,26 +33,64 @@ import { StoreSceneEditor } from "./StoreSceneEditor";
 import { useWalkStore } from "../lib/walk-store";
 import { hasPublicSceneBooks } from "../lib/store-customization";
 import { publicWalkShops } from "../lib/store-scene-adapter";
-import { OpenShop, ThemePicker } from "./OpenShop";
+import { KeptNote, OpenShop, ThemePicker } from "./OpenShop";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
+import { useAccountState } from "../lib/account-session";
+import { useKeptDraft } from "../lib/kept-draft";
+import {
+  sameSign,
+  shelfNameDraftStore,
+  shopSignDraftStore,
+  signLosesWords,
+  townTook,
+  workOwner,
+  type ShopSign,
+} from "../lib/shop-draft";
 import "./editor.css";
 
 type ShopEditorProps = {
   state: TownState;
   actions: TownActions;
-  notify: (message: string) => void;
+  notify: Notify;
 };
+
+/** A book taken off a shelf here, with what it takes to put it back as it was. */
+type TakenOff = { display: ShelfItem["display"]; pop: string; index: number };
+/** Books taken off on this page, by shelf and book, to put back with a tap. */
+type TakenOffShelves = Record<string, Record<string, TakenOff>>;
+
+const SAVE_REFUSED =
+  "うまく保存できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。";
 
 function ShopSettings({
   shop,
+  owner,
   actions,
   notify,
-}: { shop: Shop } & Pick<ShopEditorProps, "actions" | "notify">) {
-  const [name, setName] = useState(shop.name);
-  const [description, setDescription] = useState(shop.description);
-  const [tagline, setTagline] = useState(ownTagline(shop));
-  const [theme, setTheme] = useState<Shop["theme"]>(shop.theme);
+}: { shop: Shop; owner: string | null } & Pick<
+  ShopEditorProps,
+  "actions" | "notify"
+>) {
+  const kept = useKeptDraft(
+    shopSignDraftStore,
+    owner ? owner + "/" + shop.id : null,
+  );
+  const saved: ShopSign = {
+    name: shop.name,
+    description: shop.description,
+    tagline: ownTagline(shop),
+    theme: shop.theme,
+  };
+  // What is written and not saved yet; once it matches the shop, nothing.
+  const work = kept.draft && !sameSign(kept.draft, saved) ? kept.draft : null;
+  const { name, description, tagline, theme } = work ?? saved;
+  // Whether the page opened on words kept from before, decided once the
+  // browser's storage is read.
+  const [resumed, setResumed] = useState<boolean | null>(null);
+  if (resumed === null && kept.loaded) setResumed(work !== null);
+  const [refused, setRefused] = useState(false);
   const settings = useRef<HTMLDetailsElement>(null);
+  const nameField = useRef<HTMLInputElement>(null);
   // The walk's "write your words" card opens these settings at the field.
   useEffect(() => {
     if (location.hash !== "#shop-words" || !settings.current) return;
@@ -56,11 +100,20 @@ function ShopSettings({
       .querySelector<HTMLInputElement>("input[name=tagline]")
       ?.focus({ preventScroll: true });
   }, []);
-  const dirty =
-    name !== shop.name ||
-    description !== shop.description ||
-    tagline !== ownTagline(shop) ||
-    theme !== shop.theme;
+  // Words kept from before are shown open, where they were left.
+  useEffect(() => {
+    if (resumed && settings.current) settings.current.open = true;
+  }, [resumed]);
+  // Saved since (here or on another device), they are let go.
+  const signSaved = Boolean(kept.draft && sameSign(kept.draft, saved));
+  useEffect(() => {
+    if (signSaved && owner) shopSignDraftStore.clear(owner + "/" + shop.id);
+  }, [signSaved, owner, shop.id]);
+  function change(patch: Partial<ShopSign>) {
+    setRefused(false);
+    const next = { ...(work ?? saved), ...patch };
+    kept.set(sameSign(next, saved) ? null : next);
+  }
   return (
     <details className="editor-settings" id="shop-words" ref={settings}>
       <summary>
@@ -74,24 +127,41 @@ function ShopSettings({
         onSubmit={(event) => {
           event.preventDefault();
           if (!name.trim()) return;
-          actions.updateShop({
-            name: name.trim(),
-            description: description.trim(),
-            tagline: tagline.trim(),
-            theme,
-          });
-          setName(name.trim());
-          setDescription(description.trim());
-          setTagline(tagline.trim());
+          const took = townTook(() =>
+            actions.updateShop({
+              name: name.trim(),
+              description: description.trim(),
+              tagline: tagline.trim(),
+              theme,
+            }),
+          );
+          // Turned away, the words stay here and in the browser.
+          if (!took) return setRefused(true);
+          kept.clear();
+          setResumed(false);
           notify("書店の看板と紹介を変更しました。");
         }}
       >
+        <KeptNote
+          className="editor-kept"
+          work={work !== null}
+          resumed={Boolean(resumed)}
+          saved={kept.saved}
+          asks={work !== null && signLosesWords(work, saved)}
+          onDiscard={() => {
+            kept.clear();
+            setResumed(false);
+            setRefused(false);
+            nameField.current?.focus();
+          }}
+        />
         <div className="editor-settings-fields">
           <label className="editor-label">
             書店の名前
             <input
+              ref={nameField}
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => change({ name: event.target.value })}
               maxLength={SHOP_NAME_MAX_LENGTH}
               required
             />
@@ -101,7 +171,7 @@ function ShopSettings({
             <input
               name="tagline"
               value={tagline}
-              onChange={(event) => setTagline(event.target.value)}
+              onChange={(event) => change({ tagline: event.target.value })}
               maxLength={SHOP_TAGLINE_MAX_LENGTH}
               placeholder="この書店を表す、ひとこと。"
             />
@@ -110,7 +180,7 @@ function ShopSettings({
             書店の紹介
             <textarea
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => change({ description: event.target.value })}
               maxLength={SHOP_DESCRIPTION_MAX_LENGTH}
               rows={3}
               placeholder="訪れた読者に、あなたの書店を紹介しましょう。"
@@ -118,12 +188,20 @@ function ShopSettings({
           </label>
           <div className="editor-label">
             看板の色
-            <ThemePicker value={theme} onChange={setTheme} />
+            <ThemePicker
+              value={theme}
+              onChange={(next) => change({ theme: next })}
+            />
           </div>
           <div className="editor-settings-save">
+            {refused && (
+              <p className="editor-save-refused" role="alert">
+                {SAVE_REFUSED}
+              </p>
+            )}
             <button
               className="editor-button primary"
-              disabled={!name.trim() || !dirty}
+              disabled={!name.trim() || !work}
               type="submit"
             >
               <Icon name="check" size={16} />
@@ -142,12 +220,22 @@ function AddBookPicker({
   library,
   actions,
   notify,
+  removedHere,
+  takeOff,
+  putBack,
   onClose,
 }: {
   shelf: Shelf;
   books: Book[];
   /** The reader's own books: first among equal matches. */
   library: string[];
+  /**
+   * Books taken off this shelf on this page, kept with their display, POP
+   * and place, so a second tap puts them back, even after the picker closes.
+   */
+  removedHere: Record<string, TakenOff>;
+  takeOff: (item: ShelfItem, title: string) => void;
+  putBack: (bookId: string, title: string) => boolean;
   onClose: () => void;
 } & Pick<ShopEditorProps, "actions" | "notify">) {
   const [search, setSearch] = useState("");
@@ -158,14 +246,9 @@ function AddBookPicker({
   const [display, setDisplay] = useState<ShelfItem["display"]>("spine");
   // What this visit changed, for the running tally at the bottom.
   const [addedHere, setAddedHere] = useState<string[]>([]);
-  // Books taken off here keep their display, POP and place, so a second tap puts them back.
-  const [removedHere, setRemovedHere] = useState<
-    Record<
-      string,
-      { display: ShelfItem["display"]; pop: string; index: number }
-    >
-  >({});
-  const removedCount = Object.keys(removedHere).length;
+  const removedCount = Object.keys(removedHere).filter(
+    (bookId) => !shelf.items.some((item) => item.bookId === bookId),
+  ).length;
   const remaining = shelf.capacity - shelfUsed(shelf);
   const cost = display === "face" ? 3 : 1;
   // Every book until something is typed; then the matches, best first, and
@@ -178,36 +261,14 @@ function AddBookPicker({
     const placed = shelf.items.find((item) => item.bookId === book.id);
     const justAdded = addedHere.includes(book.id);
     const taken = removedHere[book.id];
-    if (placed) {
+    if (placed && justAdded) {
+      // Placed in this visit: a second tap only takes the placing back.
       actions.removeShelfBook(shelf.id, placed.id);
-      if (justAdded) setAddedHere(addedHere.filter((id) => id !== book.id));
-      else
-        setRemovedHere({
-          ...removedHere,
-          [book.id]: {
-            display: placed.display,
-            pop: placed.pop,
-            index: shelf.items.indexOf(placed),
-          },
-        });
-      notify(
-        placed.pop.trim() && !justAdded
-          ? `「${book.title}」を外しました。もう一度押すとPOPごと戻せます。`
-          : `「${book.title}」を棚から外しました。`,
-      );
-    } else if (taken) {
-      if (
-        actions.addShelfBook(shelf.id, book.id, taken.display, {
-          pop: taken.pop,
-          index: taken.index,
-        })
-      ) {
-        const rest = { ...removedHere };
-        delete rest[book.id];
-        setRemovedHere(rest);
-        notify(`「${book.title}」を元の場所に戻しました。`);
-      } else notify("棚の空きスペースが足りず、戻せませんでした。");
-    } else if (actions.addShelfBook(shelf.id, book.id, display)) {
+      setAddedHere(addedHere.filter((id) => id !== book.id));
+      notify(`「${book.title}」を棚から外しました。`);
+    } else if (placed) takeOff(placed, book.title);
+    else if (taken) putBack(book.id, book.title);
+    else if (actions.addShelfBook(shelf.id, book.id, display)) {
       // The editor stays open so several books can be placed in a row.
       setAddedHere([...addedHere, book.id]);
       notify(`「${book.title}」を本棚に並べました。`);
@@ -264,8 +325,14 @@ function AddBookPicker({
     <Modal title="本棚を編集" onClose={onClose} wide>
       <div className="editor-book-picker">
         <p className="editor-picker-context">
-          「{shelf.name}」には、あと <strong>{remaining} スペース</strong>{" "}
-          並べられます。
+          {remaining > 0 ? (
+            <>
+              「{shelf.name}」には、あと <strong>{remaining} スペース</strong>{" "}
+              並べられます。
+            </>
+          ) : (
+            <>「{shelf.name}」は満席です。本を外すと、また並べられます。</>
+          )}
         </p>
         <label className="editor-search-field">
           <Icon name="search" size={18} />
@@ -315,7 +382,8 @@ function AddBookPicker({
             </button>
           </div>
         </div>
-        {cost > remaining && (
+        {/* A full shelf has said so above; this is for the room left. */}
+        {remaining > 0 && cost > remaining && (
           <p className="editor-capacity-warning" role="status">
             空きスペースが足りません。背表紙で並べるか、棚を整理してください。
           </p>
@@ -381,18 +449,57 @@ function AddBookPicker({
 function ShelfEditingPanel({
   shelf,
   books,
+  nameKey,
   actions,
   notify,
   onAdd,
   onRemove,
+  takeOff,
 }: {
   shelf: Shelf;
   books: Book[];
+  /** Where a new name being written for the shelf is kept (owner/shop/shelf). */
+  nameKey: string | null;
   onAdd: () => void;
   onRemove: () => void;
+  takeOff: (item: ShelfItem, title: string) => void;
 } & Pick<ShopEditorProps, "actions" | "notify">) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [shelfName, setShelfName] = useState(shelf.name);
+  const keptName = useKeptDraft(shelfNameDraftStore, nameKey);
+  // A name being written stays until it is set (Enter or leaving the field).
+  const typed =
+    keptName.draft && keptName.draft.name !== shelf.name
+      ? keptName.draft.name
+      : null;
+  const shelfName = typed ?? shelf.name;
+  const [resumed, setResumed] = useState<boolean | null>(null);
+  if (resumed === null && keptName.loaded) setResumed(typed !== null);
+  const nameField = useRef<HTMLInputElement>(null);
+  /** Sets the name written; an emptied field goes back to the name it had. */
+  function setName() {
+    const next = shelfName.trim();
+    if (
+      !next ||
+      next === shelf.name ||
+      townTook(() => actions.updateShelf(shelf.id, { name: next }))
+    ) {
+      keptName.clear();
+      setResumed(false);
+    } else notify(SAVE_REFUSED);
+  }
+  const setNameRef = useRef(setName);
+  useEffect(() => {
+    setNameRef.current = setName;
+  });
+  // Leaving the page while writing sets the name, as leaving the field does.
+  useEffect(() => {
+    const leave = () => {
+      if (nameField.current && document.activeElement === nameField.current)
+        setNameRef.current();
+    };
+    addEventListener("pagehide", leave);
+    return () => removeEventListener("pagehide", leave);
+  }, []);
   const selected = shelf.items.find((item) => item.id === selectedId) ?? null;
   const selectedBook = books.find((book) => book.id === selected?.bookId);
   const used = shelfUsed(shelf);
@@ -411,15 +518,17 @@ function ShelfEditingPanel({
           <label className="editor-shelf-name-label">
             <span className="sr-only">本棚の名前</span>
             <input
+              ref={nameField}
               value={shelfName}
-              onChange={(event) => setShelfName(event.target.value)}
+              onChange={(event) =>
+                keptName.set(
+                  event.target.value === shelf.name
+                    ? null
+                    : { name: event.target.value },
+                )
+              }
               maxLength={SHELF_NAME_MAX_LENGTH}
-              onBlur={() => {
-                const nextName = shelfName.trim() || shelf.name;
-                setShelfName(nextName);
-                if (nextName !== shelf.name)
-                  actions.updateShelf(shelf.id, { name: nextName });
-              }}
+              onBlur={setName}
               onKeyDown={(event) => {
                 if (event.key === "Enter") event.currentTarget.blur();
               }}
@@ -452,14 +561,41 @@ function ShelfEditingPanel({
           </button>
         </div>
       </div>
+      <KeptNote
+        className="editor-kept"
+        work={typed !== null}
+        resumed={Boolean(resumed)}
+        saved={keptName.saved}
+        asks={Boolean(typed?.trim())}
+        onDiscard={() => {
+          keptName.clear();
+          setResumed(false);
+        }}
+        action={
+          typed?.trim() && (
+            <button type="button" onClick={setName}>
+              この名前にする
+            </button>
+          )
+        }
+      />
+      {/* An empty shelf tells its room, not a count of nothing. */}
       <div className="editor-space-row">
-        <span>
-          棚のスペース <strong>{used}</strong>
-          <span className="editor-capacity-total"> / {shelf.capacity}</span>
-        </span>
-        <span className={remaining === 0 ? "editor-full-shelf" : ""}>
-          {remaining === 0 ? "この棚は満席です" : `あと ${remaining} スペース`}
-        </span>
+        {used ? (
+          <>
+            <span>
+              棚のスペース <strong>{used}</strong>
+              <span className="editor-capacity-total"> / {shelf.capacity}</span>
+            </span>
+            <span className={remaining === 0 ? "editor-full-shelf" : ""}>
+              {remaining === 0
+                ? "この棚は満席です"
+                : `あと ${remaining} スペース`}
+            </span>
+          </>
+        ) : (
+          <span>{shelf.capacity}スペース、まだ空いています</span>
+        )}
       </div>
       <div
         className="editor-capacity-track"
@@ -629,9 +765,8 @@ function ShelfEditingPanel({
               type="button"
               className="editor-remove-book"
               onClick={() => {
-                actions.removeShelfBook(shelf.id, selected.id);
+                takeOff(selected, selectedBook.title);
                 setSelectedId(null);
-                notify("本を棚から外しました。");
               }}
             >
               この本を棚から外す
@@ -679,6 +814,8 @@ function ShopMessages({ state }: { state: TownState }) {
 
 export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   const walk = useWalkStore();
+  const owner = workOwner(useAccountState());
+  const [takenOff, setTakenOff] = useState<TakenOffShelves>({});
   const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
   const persistenceStatus = usePersistenceStatus();
   const savedIn = useTownBackend();
@@ -700,6 +837,68 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     (shelf) => shelf.id === addBookShelfId,
   );
   const removeShelf = shop?.shelves.find((shelf) => shelf.id === removeShelfId);
+  function forget(shelfId: string, bookId: string) {
+    setTakenOff((all) => {
+      const rest = { ...all[shelfId] };
+      delete rest[bookId];
+      return { ...all, [shelfId]: rest };
+    });
+  }
+  /** Puts a book taken off here back in its place, with its POP. */
+  function putBack(
+    shelfId: string,
+    bookId: string,
+    title: string,
+    taken = takenOff[shelfId]?.[bookId],
+  ) {
+    if (!taken) return false;
+    // Already back on the shelf (by the picker, or a second tap).
+    if (
+      getTownSnapshot()
+        .ownShop?.shelves.find((shelf) => shelf.id === shelfId)
+        ?.items.some((item) => item.bookId === bookId)
+    ) {
+      forget(shelfId, bookId);
+      return true;
+    }
+    if (
+      !actions.addShelfBook(shelfId, bookId, taken.display, {
+        pop: taken.pop,
+        index: taken.index,
+      })
+    ) {
+      notify("棚の空きスペースが足りず、戻せませんでした。");
+      return false;
+    }
+    forget(shelfId, bookId);
+    notify(`「${title}」を元の場所に戻しました。`);
+    return true;
+  }
+  /**
+   * Takes a book off a shelf, keeping its display, POP and place: the toast
+   * puts it back, and so does a second tap on it in the picker.
+   */
+  function takeOff(shelf: Shelf, item: ShelfItem, title: string) {
+    const taken: TakenOff = {
+      display: item.display,
+      pop: item.pop,
+      index: shelf.items.findIndex((entry) => entry.id === item.id),
+    };
+    actions.removeShelfBook(shelf.id, item.id);
+    setTakenOff((all) => ({
+      ...all,
+      [shelf.id]: { ...all[shelf.id], [item.bookId]: taken },
+    }));
+    notify(
+      item.pop.trim()
+        ? `「${title}」を外しました。POPごと元に戻せます。`
+        : `「${title}」を棚から外しました。`,
+      {
+        label: "元に戻す",
+        run: () => putBack(shelf.id, item.bookId, title, taken),
+      },
+    );
+  }
   if (!shop || opening)
     return (
       <OpenShop
@@ -766,6 +965,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       <ShopSettings
         key={shop.id}
         shop={shop}
+        owner={owner}
         actions={actions}
         notify={notify}
       />
@@ -789,8 +989,10 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             key={shelf.id}
             shelf={shelf}
             books={state.books}
+            nameKey={owner && `${owner}/${shop.id}/${shelf.id}`}
             actions={actions}
             notify={notify}
+            takeOff={(item, title) => takeOff(shelf, item, title)}
             onAdd={() => setAddBookShelfId(shelf.id)}
             onRemove={() => {
               if (shelf.items.length > 0) setRemoveShelfId(shelf.id);
@@ -883,6 +1085,9 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           library={state.library}
           actions={actions}
           notify={notify}
+          removedHere={takenOff[addBookShelf.id] ?? {}}
+          takeOff={(item, title) => takeOff(addBookShelf, item, title)}
+          putBack={(bookId, title) => putBack(addBookShelf.id, bookId, title)}
           onClose={() => setAddBookShelfId(null)}
         />
       )}
