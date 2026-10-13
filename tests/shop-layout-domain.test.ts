@@ -748,6 +748,71 @@ async function main() {
   );
 
   await check(
+    "before any publishing, going back keeps hidden what was hidden at once",
+    () => {
+      // A v1 shop never published: its first draft was saved from the scene.
+      const scene = demoScene();
+      const base = layoutFromScene(scene);
+      const book = "placement:shop-orbit:o2";
+      let edited = shelfScene(base, MAIN_SHELF_ID, "mine", { unplaced: true });
+      edited = changePlacement(edited, book, { isPublic: false }, BOOKS);
+      objectById(edited, "row-2")!.isPublic = false;
+      const draft = writeBackShelf(base, MAIN_SHELF_ID, edited);
+      const ids = hiddenSincePublished(publicShelfScenes(draft, "mine"), [
+        publicStoreScene(scene),
+      ]);
+      assert.ok(ids.includes(book) && ids.includes("row-2"));
+      // Hiding at once (hide_published) has no published layout to change,
+      // so it marks the v1 scene's rows and books (private.with_private).
+      const hidden = structuredClone(scene);
+      for (const o of hidden.objects)
+        if ((o.kind === "row" || o.kind === "book") && ids.includes(o.id))
+          o.isPublic = false;
+      const seen = publicStoreScene(hidden).objects.map((o) => o.id);
+      for (const id of ids) assert.ok(!seen.includes(id), id);
+      const back = discardDraft({
+        scene: hidden,
+        baseLayout: base,
+        publishedLayout: null,
+      })!;
+      ok(validateLayout(back, { bookIds: BOOK_IDS }));
+      assert.equal(find(back, book)!.isPublic, false);
+      assert.equal(find(back, "row-2")!.isPublic, false);
+      for (const id of ids) assert.ok(!visibleIds(back).has(id), id);
+      // What the owner sees is what visitors see: nothing to publish.
+      assert.equal(
+        publicFingerprint(publicShelfScenes(back, "mine")),
+        publicFingerprint([publicStoreScene(hidden)]),
+      );
+      // Only marks change, and the saved first draft is left as it was.
+      assert.deepEqual(sorted(keptKeys(back)), sorted(keptKeys(base)));
+      assert.deepEqual(base, layoutFromScene(scene));
+      // A book the scene hides is hidden in the drawer too.
+      const waiting = layoutFromScene(privateScene());
+      assert.notEqual(find(waiting, "placement:waiting-a")!.isPublic, false);
+      const marked = privateScene();
+      objectById(marked, "placement:waiting-a")!.isPublic = false;
+      const fromDrawer = discardDraft({
+        scene: marked,
+        baseLayout: waiting,
+        publishedLayout: null,
+      })!;
+      assert.equal(fromDrawer.unplaced[0].id, "placement:waiting-a");
+      assert.equal(fromDrawer.unplaced[0].isPublic, false);
+      // It only ever hides: what the first draft hides stays hidden.
+      const privateBase = layoutFromScene(privateScene());
+      assert.deepEqual(
+        discardDraft({
+          scene: demoScene(),
+          baseLayout: privateBase,
+          publishedLayout: null,
+        }),
+        privateBase,
+      );
+    },
+  );
+
+  await check(
     "lost placements come back unplaced and private; a placement that took another's ID gets a new one",
     () => {
       const scene = demoScene();

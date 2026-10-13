@@ -548,12 +548,36 @@ export function repairLost(
   return next;
 }
 
+/** What the database's hide_published does to a layout (private.with_private):
+ * the named shelves, rows and books are marked private, nothing else changes. */
+function withPrivate(L: ShopLayout, ids: Set<string>): ShopLayout {
+  const next = clone(L);
+  const hide = (objects: SceneObject[]) => {
+    for (const o of objects)
+      if ((o.kind === "row" || o.kind === "book") && ids.has(o.id))
+        o.isPublic = false;
+  };
+  for (const shelf of next.shelves) {
+    if (ids.has(shelf.id)) shelf.isPublic = false;
+    hide(shelf.objects);
+  }
+  hide(next.unplaced);
+  return next;
+}
+
 /** "Back to the published version": the published layout, or before any
  * publishing the first draft. Fixed when saved, so a reused old shelf item ID
- * can never swap in another book. */
+ * can never swap in another book. Before any publishing, visitors see the v1
+ * scene, and hiding at once (hide_published) can only mark that scene, not the
+ * first draft. So the rows and books the scene hides now are hidden in the
+ * copy too: going back never shows again what the owner hid. It only hides. */
 export function discardDraft(source: LayoutSource): ShopLayout | null {
-  const doc = source.publishedLayout ?? source.baseLayout;
-  return doc ? clone(doc) : null;
+  if (source.publishedLayout) return clone(source.publishedLayout);
+  if (!source.baseLayout) return null;
+  const hidden = objectsIn(source.scene?.objects).filter(
+    (o) => (o.kind === "row" || o.kind === "book") && o.isPublic === false,
+  );
+  return withPrivate(source.baseLayout, new Set(hidden.map((o) => o.id)));
 }
 
 /** JSON with every object's keys in order, so equal content prints equal. */
