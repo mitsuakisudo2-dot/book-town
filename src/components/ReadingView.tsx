@@ -36,6 +36,7 @@ import { isDatabaseId, profilePath } from "../lib/paths";
 import { bookPath } from "../lib/books";
 import { recentlyFinished } from "../lib/records";
 import { uncoverHidden } from "../lib/hidden-words";
+import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 
 type Shared = {
   state: TownState;
@@ -493,6 +494,7 @@ function ReadingRoom({
   const [memo, setMemo] = useState("");
   const [spoiler, setSpoiler] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
+  const peekOpen = useReadingPeekOpen();
   const [ending, setEnding] = useState<{
     finished: boolean;
     phrase: string;
@@ -649,13 +651,28 @@ function ReadingRoom({
         </section>
       )}
       {together && <ReadersNow state={state} clock={clock} bookId={book?.id} />}
-      <details className="reading-peek">
+      <details className="reading-peek" open={peekOpen}>
         <summary>
           <Icon name="chevron" size={14} />
           ひと休みに、
           {together ? "みんなのつぶやき" : "街の読書"}
           をのぞく
         </summary>
+        <label className="reading-peek-keep">
+          <input
+            type="checkbox"
+            checked={peekOpen}
+            onChange={(event) => {
+              setReadingPeekOpen(event.target.checked);
+              notify(
+                event.target.checked
+                  ? "読書中も、街の言葉を開いておきます"
+                  : "読書中は、街の言葉をたたんでおきます",
+              );
+            }}
+          />
+          読書中はいつも開いておく
+        </label>
         {!together && (
           <ReadersNow state={state} clock={clock} bookId={book?.id} />
         )}

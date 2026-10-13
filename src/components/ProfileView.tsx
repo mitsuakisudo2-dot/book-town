@@ -32,6 +32,7 @@ import { ReportButton } from "./Report";
 import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
+import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 
 interface ProfileViewProps {
   state: TownState;
@@ -57,6 +58,7 @@ export function ProfileView({
   const [collection, setCollection] = useState<
     "wishlist" | "favorites" | "library"
   >("wishlist");
+  const peekOpen = useReadingPeekOpen();
   const [sheet, setSheet] = useState<
     "following" | "followers" | "settings" | "register" | null
   >(null);
@@ -677,6 +679,24 @@ export function ProfileView({
                 }}
               />
               自分だけ
+            </label>
+          </fieldset>
+          <fieldset className="record-visibility">
+            <legend>読書中の画面</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={peekOpen}
+                onChange={(event) => {
+                  setReadingPeekOpen(event.target.checked);
+                  notify(
+                    event.target.checked
+                      ? "読書中も、街の言葉を開いておきます"
+                      : "読書中は、街の言葉をたたんでおきます",
+                  );
+                }}
+              />
+              みんなのつぶやきを、たたまずに開いておく
             </label>
           </fieldset>
           <fieldset className="icon-choices">
