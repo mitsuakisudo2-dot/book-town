@@ -313,6 +313,13 @@ try {
       ).toBeHidden();
       await page.getByText("ひと休みに、街の読書をのぞく").click();
       await expect(others).toBeVisible();
+      // Kept open, the fold stays open the next time the page is shown.
+      await page.getByLabel("読書中はいつも開いておく").check();
+      await page.reload();
+      await expect(others).toBeVisible();
+      await page.getByLabel("読書中はいつも開いておく").uncheck();
+      await page.reload();
+      await expect(others).toBeHidden();
       await page
         .getByLabel("読書メモ（自分だけ）")
         .fill("ここは自分だけのメモ。");
