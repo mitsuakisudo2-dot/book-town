@@ -26,6 +26,7 @@ import {
   onSearchRequest,
   postsWithTag,
   popularTags,
+  tagLeftOut,
   takeRequestedSearch,
 } from "../lib/tags";
 import { readParam, replaceAddress, useUrlParam } from "../lib/url-state";
@@ -154,6 +155,8 @@ export function SearchView({ state, actions, notify }: Shared) {
     [state, books.query],
   );
   const tags = popularTags(state);
+  // Said once, without a count, as on a book's page: the reader chose this.
+  const tagHasLeftOut = tagTerm !== null && tagLeftOut(state, tagTerm);
 
   // A match through the title's reading shows the reading; numbers stay out of results.
   const matchRow = ({ book, byReading }: BookMatch) =>
@@ -228,7 +231,16 @@ export function SearchView({ state, actions, notify }: Shared) {
                 ))}
               </div>
             ) : (
-              <p className="search-empty">このタグの投稿は、まだありません。</p>
+              !tagHasLeftOut && (
+                <p className="search-empty">
+                  このタグの投稿は、まだありません。
+                </p>
+              )
+            )}
+            {tagHasLeftOut && (
+              <p className="search-empty">
+                ネタバレを含むかもしれない投稿は、設定により出していません
+              </p>
             )}
           </section>
         </div>

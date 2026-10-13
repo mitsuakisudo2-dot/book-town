@@ -1,8 +1,16 @@
 import { activeSession, readersNow } from "./reading";
 import { bookPath } from "./books";
-import { findReader, isSpoilerFor } from "./social";
-import { ME_ID, OWN_SHOP_ID, type TownState } from "./types";
-import { profilePath, shopPath } from "./paths";
+import { findReader, reviewFoldOf, spoilerViewOf } from "./social";
+import {
+  ME_ID,
+  OWN_SHOP_ID,
+  type Post,
+  type ReviewKind,
+  type TownState,
+} from "./types";
+import { REPORT_KIND_WORDS } from "./supabase/reports";
+import { posterPath, profilePath, shopPath } from "./paths";
+import { posterTitle, type Poster } from "./posters";
 import { coverHidden } from "./hidden-words";
 
 export interface Notice {
@@ -20,9 +28,34 @@ export function weekOf(at: string): string {
   return japan.toISOString().slice(0, 10);
 }
 
+/** A day as 10月13日, in Japan time. */
+const dayWords = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: "Asia/Tokyo",
+  month: "long",
+  day: "numeric",
+});
+export const monthDay = (at: string): string => {
+  const date = new Date(at);
+  return Number.isNaN(date.getTime()) ? "" : dayWords.format(date);
+};
+
 const quote = (post: string) => {
   const body = coverHidden(post);
   return "「" + (body.length > 40 ? body.slice(0, 40) + "…" : body) + "」";
+};
+
+/**
+ * The maker's own poster, named so two of them never read alike: by its
+ * heading, or by its book.
+ */
+const ownPosterWords = (
+  poster: Poster | undefined,
+  books: TownState["books"],
+) => {
+  if (!poster) return "あなたのポスター";
+  const title = posterTitle(poster, books);
+  if (title === "ポスター") return "あなたのポスター";
+  return "あなたのポスター" + (title.startsWith("『") ? title : quote(title));
 };
 
 /**
@@ -42,6 +75,11 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
       .filter((post) => post.authorId === ME_ID && post.parentId === null)
       .map((post) => [post.id, post]),
   );
+  // Quoted only when the reader would see the words as they are: not a
+  // spoiler they keep folded or out of sight, nor anything folded by reports.
+  const quotable = (post: Post) =>
+    spoilerViewOf(state, post) === "open" &&
+    reviewFoldOf(state, "post", post.id) === null;
   for (const post of state.posts) {
     const parent = post.parentId ? mine.get(post.parentId) : undefined;
     if (parent && post.authorId !== ME_ID)
@@ -52,7 +90,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         // A spoiler reply is not quoted where it cannot be covered.
         text:
           `${name(post.authorId)}さんがあなたの投稿に返信しました` +
-          (isSpoilerFor(state, post) ? "" : " " + quote(post.body)),
+          (quotable(post) ? " " + quote(post.body) : ""),
         href: parent.bookId ? bookPath(parent.bookId) : "/profiles/me/",
       });
   }
@@ -104,7 +142,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
       post.authorId === ME_ID ||
       post.parentId !== null ||
       post.readingMode === "solo" ||
-      isSpoilerFor(state, post)
+      !quotable(post)
     )
       continue;
     if (followed.has(post.authorId))
@@ -123,6 +161,84 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         text: `読みたい本『${title(post.bookId)}』に、${name(post.authorId)}さんの感想が届いています`,
         href: bookPath(post.bookId),
       });
+  }
+  // Folded or held by reports: its owner is told, gently, and that it is
+  // not gone. Never who reported, nor how many.
+  for (const [key, fold] of Object.entries(state.reviewFolds)) {
+    const at = key.indexOf(":");
+    const kind = key.slice(0, at) as ReviewKind;
+    const id = key.slice(at + 1);
+    const post =
+      kind === "post"
+        ? state.posts.find(
+            (entry) => entry.id === id && entry.authorId === ME_ID,
+          )
+        : undefined;
+    const poster =
+      kind === "poster"
+        ? state.posters.find(
+            (entry) => entry.id === id && entry.authorId === ME_ID,
+          )
+        : undefined;
+    const own =
+      post ||
+      poster ||
+      (kind === "profile" && id === ME_ID) ||
+      (kind === "shop" && id === OWN_SHOP_ID) ||
+      // Only a poster's owner ever reads that it is held.
+      (kind === "poster" && fold.state === "held");
+    if (!own) continue;
+    const thing =
+      kind === "poster"
+        ? ownPosterWords(poster, state.books)
+        : "あなたの投稿" + (post ? quote(post.body) : "");
+    notices.push({
+      id: `review-${fold.state}:${key}`,
+      readerId: ME_ID,
+      createdAt: fold.since,
+      text:
+        fold.state === "held"
+          ? `運営が確かめるまで、${thing}をほかの人から見えないようにしています。問題がなければ、元に戻ります`
+          : kind === "profile"
+            ? "通報があったため、運営が確かめるまで、あなたの紹介文をたたんでいます"
+            : kind === "shop"
+              ? "通報があったため、運営が確かめるまで、あなたの本屋の紹介文をたたんでいます"
+              : `通報があったため、運営が確かめるまで、${thing}をみんなの画面ではたたんでいます。${REPORT_KIND_WORDS[kind]}は消えていません`,
+      href:
+        kind === "shop"
+          ? shopPath(OWN_SHOP_ID)
+          : kind === "poster"
+            ? posterPath(id)
+            : post?.bookId
+              ? bookPath(post.bookId)
+              : "/profiles/me/",
+    });
+  }
+  // The reader's own reports: when the operator starts looking, and when they
+  // have looked. Just filed needs no notice (the dialog said 受け付けました),
+  // and what was done about the other person is never said.
+  for (const report of state.myReports) {
+    if (report.status === "open") continue;
+    const done = report.status !== "checking";
+    const day = monthDay(report.createdAt);
+    // What it was about comes first, so いただいた reads as the report we
+    // received, never as a poster or a cover someone gave us; and never
+    // 通報してくださった読書家, which reads as the reporter being checked.
+    const received = (day ? day + "に" : "") + "いただいた";
+    notices.push({
+      id: `report:${report.id}:${done ? "done" : "checking"}`,
+      readerId: ME_ID,
+      createdAt: report.statusAt,
+      text:
+        report.kind === "book"
+          ? `表紙について${received}削除の依頼を、運営が${done ? "確認しました" : "確認しています"}`
+          : `${REPORT_KIND_WORDS[report.kind]}について${received}通報を、運営が${
+              done
+                ? "確認しました。知らせてくださって、ありがとうございます"
+                : "確認しています"
+            }`,
+      href: "/notifications/#reports",
+    });
   }
   for (const message of state.shopMessages)
     notices.push({

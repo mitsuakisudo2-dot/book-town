@@ -16,7 +16,12 @@ import {
 } from "../src/lib/search/town";
 import { nearHeading, searchBooks, surePick } from "../src/lib/search/rank";
 import { popularTags, postsWithTag, suggestTags } from "../src/lib/tags";
-import type { Post, Reader, TownState } from "../src/lib/types";
+import {
+  reviewKey,
+  type Post,
+  type Reader,
+  type TownState,
+} from "../src/lib/types";
 
 // Readers, shops and tags are found the way books are (docs: search design
 // §3, §7 PR-2): the same fold for kana and katakana, width, long vowels and
@@ -239,6 +244,19 @@ async function main() {
       ),
     };
     assert.deepEqual(names(findShops(town, "みれ")), ["雨と翻訳", "窓辺の栞"]);
+    // A shop's words folded by reports are not shown, so they find nothing.
+    const folded: TownState = {
+      ...town,
+      reviewFolds: {
+        ...town.reviewFolds,
+        [reviewKey("shop", "shop-window")]: {
+          state: "folded",
+          since: "2026-10-13T00:00:00.000Z",
+        },
+      },
+    };
+    assert.deepEqual(names(findShops(folded, "みれ")), ["雨と翻訳"]);
+    assert.deepEqual(names(findShops(folded, "窓辺")), ["窓辺の栞"]);
     // Words found in different parts of a shop still find it.
     assert.deepEqual(names(findShops(seedState, "凪 軌道")), ["軌道書房"]);
   });

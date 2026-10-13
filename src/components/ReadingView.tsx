@@ -277,7 +277,13 @@ function ClosedCard({
   return (
     <section className="reading-closed" aria-label="今日の読書" role="status">
       {closed.book && (
-        <BookJacket book={closed.book} className="reading-closed-jacket" />
+        <Link
+          href={bookPath(closed.book.id)}
+          className="reading-jacket-link"
+          aria-label={`『${closed.book.title}』の作品ページへ`}
+        >
+          <BookJacket book={closed.book} className="reading-closed-jacket" />
+        </Link>
       )}
       <div>
         <p className="reading-closed-time">
@@ -537,7 +543,13 @@ function ReadingRoom({
       <span className="eyebrow">NOW READING</span>
       <section className="reading-now-card" aria-label="読書中">
         {book ? (
-          <BookJacket book={book} className="reading-jacket" />
+          <Link
+            href={bookPath(book.id)}
+            className="reading-jacket-link"
+            aria-label={`『${book.title}』の作品ページへ`}
+          >
+            <BookJacket book={book} className="reading-jacket" />
+          </Link>
         ) : (
           <span className="reading-jacket reading-no-book" aria-hidden="true">
             <Icon name="reading" size={34} />

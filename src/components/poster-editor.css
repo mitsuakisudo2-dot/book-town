@@ -7,6 +7,11 @@
 .poster-editor-head {
   margin-bottom: 22px;
 }
+/* Folded or held by reports: said before anything is changed. */
+.poster-editor-review {
+  max-width: 560px;
+  margin-top: 14px;
+}
 
 /* Work kept in this browser for other posters, to pick up again. */
 .poster-editor-elsewhere {

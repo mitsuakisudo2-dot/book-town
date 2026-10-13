@@ -1,5 +1,6 @@
 import type { Post, TownState } from "./types";
 import { coverHidden } from "./hidden-words";
+import { notLeftOut, reviewCoverOf, spoilerViewOf } from "./social";
 import {
   readTextQuery,
   sameText,
@@ -57,21 +58,40 @@ function tagFinder(asked: string): (tag: string) => boolean {
     tagKey(tag) === key || textMatch(query, [tag]) === TEXT_MATCH.exact;
 }
 
-/** Public posts that carry a tag, newest first. Private reading notes never appear. */
+/**
+ * Public posts that carry a tag, newest first. Private reading notes never
+ * appear, nor spoilers the reader chose not to see.
+ */
 export function postsWithTag(state: TownState, tag: string): Post[] {
   const asked = tagFinder(tag);
   return state.posts
     .filter(
       (post) =>
-        post.readingMode !== "solo" && extractTags(post.body).some(asked),
+        post.readingMode !== "solo" &&
+        extractTags(post.body).some(asked) &&
+        notLeftOut(state, post),
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+/** Whether the reader's 「ネタバレの表示」 left out a public post with this tag. */
+export function tagLeftOut(state: TownState, tag: string): boolean {
+  const asked = tagFinder(tag);
+  return state.posts.some(
+    (post) =>
+      post.readingMode !== "solo" &&
+      !notLeftOut(state, post) &&
+      extractTags(post.body).some(asked),
+  );
 }
 
 /**
  * Tags in use across public posts, most used first: the number of posts that
  * carry each. Spellings of one tag count together, under the one used most,
- * and a post that writes a tag in several spellings counts once.
+ * and a post that writes a tag in several spellings counts once. A tag is
+ * offered only from posts that reach this reader as they are: never from a
+ * spoiler (its tag can be the spoiler itself) or a post folded by reports,
+ * which are read only after a tap, nor from one the reader chose to leave out.
  */
 export function popularTags(state: TownState, limit = 12) {
   const counts = new Map<
@@ -79,7 +99,12 @@ export function popularTags(state: TownState, limit = 12) {
     { count: number; spellings: Map<string, number> }
   >();
   for (const post of state.posts) {
-    if (post.readingMode === "solo") continue;
+    if (
+      post.readingMode === "solo" ||
+      spoilerViewOf(state, post) !== "open" ||
+      reviewCoverOf(state, "post", post.id, post.authorId) !== null
+    )
+      continue;
     const seen = new Set<string>();
     for (const tag of extractTags(post.body)) {
       const key = tagKey(tag);

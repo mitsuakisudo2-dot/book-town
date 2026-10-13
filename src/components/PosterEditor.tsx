@@ -35,6 +35,7 @@ import {
   type PosterWork,
 } from "../lib/poster-draft";
 import { leavePageFor } from "../lib/in-town";
+import { reviewNoteOf, reviewNoteWords } from "../lib/social";
 import { currentBookId } from "../lib/reading";
 import { usePersistenceStatus } from "../lib/store";
 import { posterNewPath, posterPath, profilePath } from "../lib/paths";
@@ -222,6 +223,10 @@ function PosterMaker({
   const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
   const [enlarged, setEnlarged] = useState(false);
   const elsewhere = key === "new" ? workElsewhere(all, state) : [];
+  // Folded or held by reports: the maker is told here too, as on its page.
+  const reviewNote = poster
+    ? reviewNoteOf(state, "poster", poster.id, poster.authorId)
+    : null;
   const elsewhereId = useId();
 
   // When a change takes away the button the hand was on, the hand goes on
@@ -389,6 +394,14 @@ function PosterMaker({
         <p className="page-subtitle">
           表紙を選んで、ひとこと。プロフィールや作品ページ、タイムラインに貼り出せます。
         </p>
+        {reviewNote && (
+          <div
+            className="spoiler-folded-note report-folded-note poster-editor-review"
+            role="note"
+          >
+            <p>{reviewNoteWords("poster", reviewNote)}</p>
+          </div>
+        )}
         {elsewhere.length > 0 && (
           <section
             className="poster-editor-elsewhere"

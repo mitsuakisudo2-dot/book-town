@@ -13,6 +13,7 @@ import {
 import { tapsOf } from "./social";
 import {
   COMPOSE_ICONS,
+  SPOILER_DISPLAYS,
   ME_ID,
   OWN_SHOP_ID,
   POP_REACTIONS,
@@ -33,12 +34,18 @@ import {
   type ShelfDoodle,
   type Shop,
   type ShopTheme,
+  type SpoilerDisplay,
+  type FiledReport,
+  type ReviewFold,
+  type ReviewKind,
   type TownState,
+  reviewKey,
 } from "./types";
 import type { Tables, TablesInsert } from "./supabase/database.types";
 import { demoBooks } from "./data";
 import { isDatabaseId } from "./paths";
 import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
+import { filedReportFrom } from "./supabase/reports";
 
 /**
  * The signed-in town, translated between database rows and the TownState the
@@ -106,7 +113,27 @@ export interface RemoteRows {
   /** The person's own posters, drafts too, and others' put up. */
   posters: Tables<"posters">[];
   seenNotifications: string[];
+  /** What reports folded for everyone, and what they hold of the person's own. */
+  folds: Pick<
+    Tables<"moderation_folds">,
+    "target_kind" | "target_id" | "state" | "since"
+  >[];
+  /** The person's own reports, as far as a reporter may read them. */
+  myReports: Pick<
+    Tables<"reports">,
+    | "id"
+    | "target_kind"
+    | "target_id"
+    | "reason"
+    | "progress"
+    | "created_at"
+    | "status_at"
+  >[];
+  /** The person's own settings; none until they change one. */
+  readerSettings: Pick<Tables<"reader_settings">, "spoiler_display"> | null;
 }
+
+const REVIEW_KINDS: ReviewKind[] = ["post", "shop", "profile", "poster"];
 
 const THEMES: ShopTheme[] = ["sage", "ink", "ochre", "rose"];
 const DOODLES: ShelfDoodle[] = [
@@ -547,6 +574,11 @@ export function townFromRows(
         ? (ownProfile?.compose_icon as ComposeIcon)
         : "pen",
       readingPublic: ownProfile?.reading_visibility === "public",
+      spoilerDisplay: SPOILER_DISPLAYS.includes(
+        rows.readerSettings?.spoiler_display as SpoilerDisplay,
+      )
+        ? (rows.readerSettings?.spoiler_display as SpoilerDisplay)
+        : "fold_possible",
     },
     seenNotifications: rows.seenNotifications.slice(-500),
     shopMessages: rows.shopMessages
@@ -557,6 +589,30 @@ export function townFromRows(
         text: row.message,
         at: row.updated_at,
       })),
+    // The person's own shop and profile go by their aliases, like everywhere.
+    reviewFolds: Object.fromEntries(
+      rows.folds.flatMap((row): [string, ReviewFold][] => {
+        const kind = row.target_kind as ReviewKind;
+        if (
+          !REVIEW_KINDS.includes(kind) ||
+          (row.state !== "folded" && row.state !== "held")
+        )
+          return [];
+        const id =
+          kind === "profile"
+            ? readerId(row.target_id)
+            : kind === "shop" && row.target_id === ownRow?.id
+              ? OWN_SHOP_ID
+              : row.target_id;
+        return [[reviewKey(kind, id), { state: row.state, since: row.since }]];
+      }),
+    ),
+    myReports: rows.myReports
+      .flatMap((row): FiledReport[] => {
+        const report = filedReportFrom(row);
+        return report ? [report] : [];
+      })
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
     posters: rows.posters
       .filter((row) => row.author_id === userId || known.has(row.author_id))
       .flatMap((row): Poster[] => {
@@ -664,6 +720,10 @@ export type Write =
         Tables<"reading_entries">,
         "body" | "feelings" | "spoiler" | "is_public"
       >;
+    }
+  | {
+      kind: "reader-settings";
+      row: Pick<TablesInsert<"reader_settings">, "user_id" | "spoiler_display">;
     }
   | { kind: "delete-posters"; ids: string[] }
   | { kind: "posters"; rows: TablesInsert<"posters">[] }
@@ -788,6 +848,12 @@ export function planWrites(
       : "private";
   if (Object.keys(profile).length)
     writes.push({ kind: "profile", patch: profile });
+  // The reader's own settings; folds and reports are never written from here.
+  if (next.settings.spoilerDisplay !== base.settings.spoilerDisplay)
+    writes.push({
+      kind: "reader-settings",
+      row: { user_id: user, spoiler_display: next.settings.spoilerDisplay },
+    });
 
   if (
     !sameJson(next.me.lifeNine, base.me.lifeNine) ||
@@ -1114,9 +1180,15 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     finishedBooks: [],
     library: [],
     readingRecords: [],
-    settings: { composeIcon: "pen", readingPublic: false },
+    settings: {
+      composeIcon: "pen",
+      readingPublic: false,
+      spoilerDisplay: "fold_possible",
+    },
     seenNotifications: [],
     shopMessages: [],
+    reviewFolds: {},
+    myReports: [],
     posters: [],
   };
 }

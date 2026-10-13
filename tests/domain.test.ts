@@ -10,6 +10,7 @@ import { counterId } from "../src/lib/town-backend";
 import {
   bookFeelings,
   booksFelt,
+  recordNoteView,
   feelingsInTown,
   ownRecordFor,
   recentlyFinished,
@@ -19,14 +20,18 @@ import {
 import {
   bookReviews,
   followedTimelinePosts,
-  isSpoilerFor,
   likeCount,
   likesReceived,
   tapsOf,
   repliesOf,
+  hasReplies,
+  readerPosts,
+  reviewFoldOf,
+  spoilerViewOf,
   timelinePosts,
   wantCount,
   wantSources,
+  wordsFolded,
 } from "../src/lib/social";
 import {
   activeSession,
@@ -42,7 +47,12 @@ import {
   weekOf,
 } from "../src/lib/notifications";
 import { normalizeIsbn, bookPath } from "../src/lib/books";
-import { extractTags, popularTags, postsWithTag } from "../src/lib/tags";
+import {
+  extractTags,
+  popularTags,
+  postsWithTag,
+  tagLeftOut,
+} from "../src/lib/tags";
 import {
   coverHidden,
   coverSelection,
@@ -60,6 +70,10 @@ import {
   POP_REACTIONS,
   popReactionKey,
   shelfUsed,
+  SPOILER_DISPLAYS,
+  type FiledReport,
+  type Post,
+  type SpoilerDisplay,
   type TownState,
 } from "../src/lib/types";
 
@@ -677,7 +691,10 @@ check(
     const covered = timelinePosts(fresh.getSnapshot()).find(
       (post) => post.id === spoiler,
     );
-    assert.ok(covered && isSpoilerFor(fresh.getSnapshot(), covered));
+    assert.equal(
+      covered && spoilerViewOf(fresh.getSnapshot(), covered),
+      "folded",
+    );
     assert.ok(
       bookReviews(fresh.getSnapshot(), "silence").spoilers.some(
         (post) => post.id === spoiler,
@@ -687,7 +704,10 @@ check(
     const reported = timelinePosts(fresh.getSnapshot()).find(
       (post) => post.id === "p-1",
     );
-    assert.ok(reported && isSpoilerFor(fresh.getSnapshot(), reported));
+    assert.equal(
+      reported && spoilerViewOf(fresh.getSnapshot(), reported),
+      "folded",
+    );
     assert.ok(
       bookReviews(fresh.getSnapshot(), "solaris").spoilers.some(
         (post) => post.id === "p-1",
@@ -1369,12 +1389,13 @@ check(
       .posts.find((post) => post.authorId !== ME_ID && !post.spoiler)!;
     const state = fold(town.getSnapshot(), [review, chat, others.id]);
     // Folded posts go behind the door like marked ones.
-    assert.ok(!isSpoilerFor(town.getSnapshot(), others));
-    assert.ok(
-      isSpoilerFor(
+    assert.equal(spoilerViewOf(town.getSnapshot(), others), "open");
+    assert.equal(
+      spoilerViewOf(
         state,
         state.posts.find((post) => post.id === others.id)!,
       ),
+      "folded",
     );
     assert.ok(
       bookReviews(state, "solaris").spoilers.some((post) => post.id === review),
@@ -1468,7 +1489,7 @@ check("a writer can cover a few words without hiding the whole post", () => {
   const state = town.getSnapshot();
   const owner = state.shops.find((shop) => shop.id === "shop-orbit")?.ownerId;
   const theirs = state.posts.find(
-    (post) => post.authorId === owner && !isSpoilerFor(state, post),
+    (post) => post.authorId === owner && spoilerViewOf(state, post) === "open",
   );
   assert.ok(theirs);
   const covered: TownState = {
@@ -1557,6 +1578,491 @@ check("the writer learns who liked their post and how many times", () => {
     [
       `${nagi.name}さんが、あなたの投稿にいいねしました 「再読して、また泣いた。」`,
       `${haru.name}さんが、あなたの投稿に7回いいねしました 「再読して、また泣いた。」`,
+    ],
+  );
+});
+
+check("records start private: saving one does not publish it", () => {
+  assert.equal(seedState.settings.readingPublic, false);
+  assert.equal(seedState.settings.spoilerDisplay, "fold_possible");
+  const town = createTownStore(createMemoryRepository());
+  const state = town.getSnapshot();
+  // The sheet starts at the setting; saved as it starts, the record is the reader's own.
+  const id = town.actions.recordReading({
+    bookId: "momo",
+    feelings: ["warm"],
+    note: "",
+    spoiler: false,
+    isPublic: state.settings.readingPublic,
+  })!;
+  const record = () =>
+    town.getSnapshot().readingRecords.find((entry) => entry.id === id)!;
+  assert.equal(record().isPublic, false);
+  assert.ok(
+    !recordsOf({ ...town.getSnapshot(), me: state.me }, ME_ID).every(
+      (entry) => entry.isPublic,
+    ),
+  );
+  // Publishing is its own step, and taking it back is one more.
+  town.actions.updateRecord(id, { isPublic: true });
+  assert.equal(record().isPublic, true);
+  town.actions.updateRecord(id, { isPublic: false });
+  assert.equal(record().isPublic, false);
+  assert.equal(record().feelings[0], "warm");
+});
+
+/** The demo town with one setting for spoilers. */
+const showing = (mode: SpoilerDisplay, state = seedState): TownState => ({
+  ...state,
+  settings: { ...state.settings, spoilerDisplay: mode },
+});
+
+check(
+  "how a spoiler reaches a reader, for each choice of 「ネタバレの表示」",
+  () => {
+    const base = seedState.posts.find((post) => post.id === "p-3")!;
+    const kinds: Record<string, Post> = {
+      marked: { ...base, id: "x-marked", spoiler: true },
+      folded: { ...base, id: "x-folded", folded: true },
+      asked: { ...base, id: "x-asked" },
+      plain: { ...base, id: "x-plain" },
+    };
+    const expected: Record<SpoilerDisplay, Record<string, string>> = {
+      show_all: {
+        marked: "folded",
+        folded: "open",
+        asked: "folded",
+        plain: "open",
+      },
+      fold_possible: {
+        marked: "folded",
+        folded: "folded",
+        asked: "folded",
+        plain: "open",
+      },
+      leave_out: {
+        marked: "left_out",
+        folded: "left_out",
+        asked: "left_out",
+        plain: "open",
+      },
+    };
+    for (const mode of SPOILER_DISPLAYS)
+      for (const [kind, post] of Object.entries(kinds)) {
+        const state = {
+          ...showing(mode),
+          spoilerReports: ["x-asked"],
+          posts: Object.values(kinds),
+        };
+        assert.equal(
+          spoilerViewOf(state, post),
+          expected[mode][kind],
+          mode + " " + kind,
+        );
+        // The reader's own posts are never left out of their own screens.
+        const mine = { ...post, authorId: ME_ID };
+        assert.notEqual(
+          spoilerViewOf(state, mine),
+          "left_out",
+          mode + " mine " + kind,
+        );
+        if (kind === "marked")
+          assert.equal(spoilerViewOf(state, mine), "folded");
+      }
+  },
+);
+
+check(
+  "left-out spoilers leave every list, and the book page says so once",
+  () => {
+    const folded: TownState = {
+      ...seedState,
+      posts: seedState.posts.map((post) =>
+        post.id === "p-1" ? { ...post, folded: true } : post,
+      ),
+    };
+    const ids = (posts: Post[]) => posts.map((post) => post.id);
+    // fold_possible (the default): marked and folded wait behind the door.
+    const usual = bookReviews(folded, "solaris");
+    assert.ok(ids(usual.spoilers).includes("p-1"));
+    assert.equal(usual.leftOut, false);
+    assert.ok(ids(timelinePosts(folded)).includes("p-7"));
+    // show_all: three readers' fold opens; the writer's mark still folds.
+    const all = showing("show_all", folded);
+    assert.ok(ids(bookReviews(all, "solaris").open).includes("p-1"));
+    assert.ok(ids(bookReviews(all, "left-hand").spoilers).includes("p-7"));
+    // leave_out: out of the timeline, the book page, profiles, threads, feeds and tags.
+    const out = showing("leave_out", folded);
+    assert.ok(!ids(timelinePosts(out)).includes("p-7"));
+    assert.ok(!ids(timelinePosts(out)).includes("p-1"));
+    assert.ok(!ids(readerPosts(out, "r-nagi")).includes("p-7"));
+    const leftHand = bookReviews(out, "left-hand");
+    assert.deepEqual(ids(leftHand.spoilers), []);
+    assert.equal(leftHand.leftOut, true);
+    assert.ok(!ids(repliesOf(out, "p-7")).length);
+    assert.ok(!ids(repliesOf(showing("leave_out"), "p-7")).includes("p-7-r1"));
+    assert.ok(ids(repliesOf(seedState, "p-7")).includes("p-7-r1"));
+    // A reply left out is still a reply: deleting the post deletes it for
+    // everyone, so the writer is asked about the replies too.
+    const p7 = seedState.posts.find((entry) => entry.id === "p-7")!;
+    const mineWithHidden = showing("leave_out", {
+      ...seedState,
+      posts: seedState.posts.map((entry) =>
+        entry.id === "p-7" ? { ...p7, authorId: ME_ID } : entry,
+      ),
+    });
+    assert.deepEqual(ids(repliesOf(mineWithHidden, "p-7")), []);
+    assert.equal(hasReplies(mineWithHidden, "p-7"), true);
+    assert.equal(hasReplies(mineWithHidden, "p-3"), false);
+    const together = {
+      ...seedState.posts[2],
+      id: "x-memo",
+      readingMode: "together" as const,
+      spoiler: true,
+      bookId: "solaris",
+    };
+    const withMemo = { ...out, posts: [...out.posts, together] };
+    assert.ok(!ids(readingFeed(withMemo)).includes("x-memo"));
+    assert.ok(
+      ids(readingFeed({ ...withMemo, settings: seedState.settings })).includes(
+        "x-memo",
+      ),
+    );
+    const tagged = {
+      ...together,
+      id: "x-tag",
+      readingMode: null,
+      body: "#結末 の話",
+    };
+    const withTag = { ...out, posts: [...out.posts, tagged] };
+    assert.deepEqual(ids(postsWithTag(withTag, "結末")), []);
+    assert.deepEqual(
+      ids(postsWithTag({ ...withTag, settings: seedState.settings }, "結末")),
+      ["x-tag"],
+    );
+  },
+);
+
+check("a record's spoiler note is folded, or left out, for others only", () => {
+  const record = {
+    ...seedState.readingRecords[0],
+    note: "結末の話",
+    spoiler: true,
+  };
+  assert.equal(recordNoteView(seedState, record), "folded");
+  assert.equal(recordNoteView(showing("show_all"), record), "folded");
+  assert.equal(recordNoteView(showing("leave_out"), record), "left_out");
+  assert.equal(
+    recordNoteView(showing("leave_out"), { ...record, readerId: ME_ID }),
+    "open",
+  );
+  assert.equal(
+    recordNoteView(showing("leave_out"), { ...record, spoiler: false }),
+    "open",
+  );
+});
+
+const filed = (patch: Partial<FiledReport>): FiledReport => ({
+  id: "report-1",
+  kind: "post",
+  targetId: "p-3",
+  reason: "harassment",
+  status: "open",
+  createdAt: "2026-10-13T01:00:00Z",
+  statusAt: "2026-10-13T01:00:00Z",
+  ...patch,
+});
+
+check(
+  "folds by reports: everyone's, the owner's held, the reporter's own",
+  () => {
+    const state: TownState = {
+      ...seedState,
+      reviewFolds: {
+        "post:p-3": { state: "folded", since: "2026-10-13T02:00:00Z" },
+        "profile:r-nagi": { state: "folded", since: "2026-10-13T02:00:00Z" },
+        "profile:me": { state: "folded", since: "2026-10-13T02:00:00Z" },
+      },
+      myReports: [filed({ targetId: "p-5", status: "checked" })],
+    };
+    assert.equal(reviewFoldOf(state, "post", "p-3"), "folded");
+    // A reporter keeps what they reported folded, whatever came of it.
+    assert.equal(reviewFoldOf(state, "post", "p-5"), "reported");
+    assert.equal(reviewFoldOf(state, "post", "p-6"), null);
+    assert.equal(
+      reviewFoldOf(
+        {
+          ...state,
+          reviewFolds: { "post:p-9": { state: "held", since: "x" } },
+        },
+        "post",
+        "p-9",
+      ),
+      "held",
+    );
+    // Words fold for others; their owner reads them with a note instead.
+    assert.ok(wordsFolded(state, "profile", "r-nagi"));
+    assert.ok(!wordsFolded(state, "profile", ME_ID));
+    assert.ok(!wordsFolded(state, "shop", "shop-orbit"));
+    // Report-folded posts stay in their place on the timeline.
+    assert.ok(timelinePosts(state).some((post) => post.id === "p-3"));
+  },
+);
+
+check(
+  "a tag is offered only from posts that reach the reader as they are",
+  () => {
+    const base = seedState.posts.find((post) => post.id === "p-3")!;
+    const address: Post = {
+      ...base,
+      id: "x-address",
+      body: "あの人の住所は #山田太郎の家 です",
+      spoiler: false,
+      folded: false,
+    };
+    const spoiler: Post = {
+      ...base,
+      id: "x-spoiler",
+      body: "#犯人は執事 だった",
+      spoiler: true,
+      bookId: "solaris",
+    };
+    const asked: Post = {
+      ...base,
+      id: "x-asked",
+      body: "#最後の一行 がすべて",
+      spoiler: false,
+      folded: true,
+      bookId: "solaris",
+    };
+    const state: TownState = {
+      ...seedState,
+      posts: [...seedState.posts, address, spoiler, asked],
+      reviewFolds: {
+        "post:x-address": { state: "folded", since: "2026-10-13T02:00:00Z" },
+      },
+    };
+    const offered = (from: TownState) =>
+      popularTags(from, 100).map((entry) => entry.tag);
+    for (const mode of SPOILER_DISPLAYS) {
+      const town = showing(mode, state);
+      // Folded by reports, or a spoiler: its words stay behind the cover.
+      assert.ok(!offered(town).includes("山田太郎の家"), mode);
+      assert.ok(!offered(town).includes("犯人は執事"), mode);
+      // Every tag offered leads to a post the reader can read.
+      for (const tag of offered(town))
+        assert.ok(postsWithTag(town, tag).length > 0, mode + " #" + tag);
+    }
+    // Three readers' 「ネタバレでは？」: offered only to one who shows all.
+    assert.ok(!offered(state).includes("最後の一行"));
+    assert.ok(offered(showing("show_all", state)).includes("最後の一行"));
+    // Reported by the reader, it stays folded for them, tags and all.
+    const reported: TownState = {
+      ...state,
+      reviewFolds: {},
+      myReports: [filed({ targetId: "x-address" })],
+    };
+    assert.ok(!offered(reported).includes("山田太郎の家"));
+    // Unfolded, its tags are offered like any post's.
+    assert.ok(offered({ ...state, reviewFolds: {} }).includes("山田太郎の家"));
+    // The search says once that the reader's setting left a post out,
+    // rather than that there is none.
+    const out = showing("leave_out", state);
+    assert.deepEqual(postsWithTag(out, "犯人は執事"), []);
+    assert.equal(tagLeftOut(out, "犯人は執事"), true);
+    assert.equal(tagLeftOut(state, "犯人は執事"), false);
+    assert.equal(tagLeftOut(out, "積読"), false);
+  },
+);
+
+check(
+  "the writer hears of a fold, gently; the reporter hears only its status",
+  () => {
+    const town = createTownStore(createMemoryRepository());
+    const mine = town.actions.createPost({
+      body: "静かな夜の本",
+      bookId: "solaris",
+    })!;
+    const base = town.getSnapshot();
+    const state: TownState = {
+      ...base,
+      reviewFolds: {
+        ["post:" + mine]: { state: "folded", since: "2026-10-13T02:00:00Z" },
+        "profile:me": { state: "folded", since: "2026-10-13T02:01:00Z" },
+        "shop:mine": { state: "folded", since: "2026-10-13T02:02:00Z" },
+        // Others' folds are not the reader's news.
+        "post:p-3": { state: "folded", since: "2026-10-13T02:03:00Z" },
+      },
+    };
+    const text = (id: string) =>
+      notificationsFor(state).find((notice) => notice.id === id)?.text;
+    assert.equal(
+      text("review-folded:post:" + mine),
+      "通報があったため、運営が確かめるまで、あなたの投稿「静かな夜の本」をみんなの画面ではたたんでいます。投稿は消えていません",
+    );
+    assert.equal(
+      text("review-folded:profile:me"),
+      "通報があったため、運営が確かめるまで、あなたの紹介文をたたんでいます",
+    );
+    assert.equal(
+      text("review-folded:shop:mine"),
+      "通報があったため、運営が確かめるまで、あなたの本屋の紹介文をたたんでいます",
+    );
+    assert.equal(text("review-folded:post:p-3"), undefined);
+    const held = notificationsFor({
+      ...base,
+      reviewFolds: {
+        ["post:" + mine]: { state: "held", since: "2026-10-13T02:00:00Z" },
+      },
+    }).find((notice) => notice.id === "review-held:post:" + mine);
+    assert.equal(
+      held?.text,
+      "運営が確かめるまで、あなたの投稿「静かな夜の本」をほかの人から見えないようにしています。問題がなければ、元に戻ります",
+    );
+
+    const reports = (
+      status: FiledReport["status"],
+      kind: FiledReport["kind"] = "post",
+    ) =>
+      notificationsFor({
+        ...base,
+        myReports: [filed({ status, kind, statusAt: "2026-10-14T01:00:00Z" })],
+      }).filter((notice) => notice.id.startsWith("report:"));
+    assert.deepEqual(reports("open"), []);
+    assert.deepEqual(
+      reports("checking").map((notice) => [
+        notice.id,
+        notice.text,
+        notice.href,
+      ]),
+      [
+        [
+          "report:report-1:checking",
+          "投稿について10月13日にいただいた通報を、運営が確認しています",
+          "/notifications/#reports",
+        ],
+      ],
+    );
+    // Acted on or not (the reporter cannot know which), the same words.
+    assert.deepEqual(
+      reports("checked").map((notice) => [notice.id, notice.text]),
+      [
+        [
+          "report:report-1:done",
+          "投稿について10月13日にいただいた通報を、運営が確認しました。知らせてくださって、ありがとうございます",
+        ],
+      ],
+    );
+    // A person or a shop reported is named as what the report was about, so
+    // it never reads as if the reporter were the one being checked.
+    assert.equal(
+      reports("checking", "shop")[0].text,
+      "本屋について10月13日にいただいた通報を、運営が確認しています",
+    );
+    assert.equal(
+      reports("checking", "profile")[0].text,
+      "読書家について10月13日にいただいた通報を、運営が確認しています",
+    );
+    assert.equal(
+      reports("checking", "poster")[0].text,
+      "ポスターについて10月13日にいただいた通報を、運営が確認しています",
+    );
+    // What was reported comes first: いただいた is the report, never a
+    // poster or a cover someone gave, nor a reader who reported.
+    for (const kind of ["post", "shop", "profile", "poster", "book"] as const)
+      for (const status of ["checking", "checked"] as const)
+        assert.doesNotMatch(
+          reports(status, kind)[0].text,
+          /いただいた(ポスター|投稿|本屋|読書家|表紙)|通報してくださった/,
+        );
+    assert.equal(
+      reports("checked", "book")[0].text,
+      "表紙について10月13日にいただいた削除の依頼を、運営が確認しました",
+    );
+    for (const notice of notificationsFor({
+      ...state,
+      myReports: [filed({ status: "checking" })],
+    }))
+      assert.doesNotMatch(notice.text, /(^|\D)0(人|件)/);
+  },
+);
+
+check("folded and left-out posts are not quoted in notices", () => {
+  const town = createTownStore(createMemoryRepository());
+  const review = town.actions.createPost({
+    body: "結末に驚いた。",
+    bookId: "solaris",
+  })!;
+  town.actions.toggleFollow("shop-orbit");
+  const base = town.getSnapshot();
+  const owner = base.shops.find((shop) => shop.id === "shop-orbit")!.ownerId;
+  const theirs = base.posts.find(
+    (post) =>
+      post.authorId === owner && post.parentId === null && !post.spoiler,
+  )!;
+  const reply: Post = {
+    ...theirs,
+    id: "x-reply",
+    parentId: review,
+    folded: true,
+    body: "海が生きていたとは",
+  };
+  const folded: Post = {
+    ...theirs,
+    id: "x-folded",
+    folded: true,
+    body: "三人がたたんだ言葉",
+  };
+  const state = { ...base, posts: [...base.posts, reply, folded] };
+  const find = (from: TownState, id: string) =>
+    notificationsFor(from).find((notice) => notice.id === id);
+  // fold_possible: the reply is told without its words; the folded post is not news.
+  assert.ok(find(state, "reply:x-reply"));
+  assert.ok(!find(state, "reply:x-reply")!.text.includes("海が"));
+  assert.equal(find(state, "follow:x-folded"), undefined);
+  // show_all: three readers' folds are quoted like any post.
+  const all = showing("show_all", state);
+  assert.ok(find(all, "reply:x-reply")!.text.includes("海が"));
+  assert.ok(find(all, "follow:x-folded")!.text.includes("三人がたたんだ言葉"));
+  // leave_out: told of the reply, never with its words, and nothing more.
+  const out = showing("leave_out", state);
+  assert.ok(!find(out, "reply:x-reply")!.text.includes("海が"));
+  assert.equal(find(out, "follow:x-folded"), undefined);
+  // Folded by reports: never quoted.
+  const reported = {
+    ...all,
+    reviewFolds: { "post:x-folded": { state: "folded" as const, since: "x" } },
+  };
+  assert.equal(find(reported, "follow:x-folded"), undefined);
+});
+
+check("the spoiler setting and filed reports are kept as the store's", () => {
+  const repo = createMemoryRepository();
+  const town = createTownStore(repo);
+  town.actions.setSpoilerDisplay("leave_out");
+  town.actions.setSpoilerDisplay("hide_everything" as SpoilerDisplay);
+  assert.equal(town.getSnapshot().settings.spoilerDisplay, "leave_out");
+  assert.equal(repo.load().state.settings.spoilerDisplay, "leave_out");
+  const saved = JSON.parse(serializeTown(town.getSnapshot()));
+  saved.data.settings.spoilerDisplay = "everything";
+  assert.equal(
+    deserializeTown(JSON.stringify(saved)).state.settings.spoilerDisplay,
+    "fold_possible",
+  );
+  // A reader who chose 公開 in this browser before keeps that choice.
+  saved.data.settings.readingPublic = true;
+  assert.equal(
+    deserializeTown(JSON.stringify(saved)).state.settings.readingPublic,
+    true,
+  );
+  town.actions.noteReport(filed({}));
+  town.actions.noteReport(filed({ status: "checking" }));
+  town.actions.noteReport(filed({ id: "report-2" }));
+  assert.deepEqual(
+    town.getSnapshot().myReports.map((entry) => [entry.id, entry.status]),
+    [
+      ["report-2", "open"],
+      ["report-1", "checking"],
     ],
   );
 });

@@ -18,6 +18,8 @@ import {
   type ShelfItem,
   type Shelf,
   type Book,
+  type Notify,
+  type ToastUndo,
 } from "../lib/types";
 import {
   BookJacket,
@@ -33,7 +35,7 @@ import { ProfileView } from "./ProfileView";
 import { StreetView } from "./StreetView";
 import { BookInHand, heldBookOf } from "./BookInHand";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
-import { BookReviews } from "./Social";
+import { BookReviews, FoldedWords } from "./Social";
 import { HomeView } from "./HomeView";
 import { SearchView } from "./SearchView";
 import { ReadingView } from "./ReadingView";
@@ -57,7 +59,7 @@ import {
 import { requestSearch } from "../lib/tags";
 import { enterPressed } from "../lib/search/use-book-search";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
-import { ReportButton, ReportDialog } from "./Report";
+import { CoverRemovalLink, ReportButton, ReportDialog } from "./Report";
 import { BookFeelings } from "./ReadingRecords";
 import { accountRequested, closeAccountRequest } from "../lib/visitor";
 import { closeReport } from "../lib/report";
@@ -70,8 +72,8 @@ import {
 import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
 import { replaceAddress } from "../lib/url-state";
-import { postersOfBook } from "../lib/posters";
-import { findReader } from "../lib/social";
+import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
+import { findReader, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { PosterThumb } from "./PosterView";
 import { PosterEditor } from "./PosterEditor";
 import { PosterScreen } from "./PosterScreen";
@@ -95,7 +97,7 @@ type View =
 type Shared = {
   state: TownState;
   actions: TownActions;
-  notify: (message: string) => void;
+  notify: Notify;
 };
 type Section = "home" | "search" | "walk" | "reading" | "profile";
 const links: { href: string; icon: string; label: string; section: Section }[] =
@@ -151,15 +153,27 @@ export default function TownApp({
   const warning = saveWarning(savedIn, persistence);
   const account = useAccountState();
   const router = useRouter();
-  const [toast, setToast] = useState(carriedToast);
+  const [toast, setToast] = useState<ShownToast | null>(() => {
+    const message = carriedToast();
+    return message ? { message } : null;
+  });
   const [search, setSearch] = useState("");
   const [about, setAbout] = useState(false);
   useEffect(() => notePageShown(), [view, selectedId]);
   useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(""), 3500);
+    if (!toast || toast.held) return;
+    // A toast that can be undone stays long enough to be undone, and stays
+    // while the pointer or the focus is on it (its time starts again after).
+    const timer = setTimeout(() => setToast(null), toast.undo ? 8000 : 3500);
     return () => clearTimeout(timer);
   }, [toast]);
+  const holdToast = useCallback(
+    (held: boolean) =>
+      setToast((shown) =>
+        shown && !!shown.held !== held ? { ...shown, held } : shown,
+      ),
+    [],
+  );
   useEffect(() => {
     const load = () => {
       if (location.hash.startsWith("#search="))
@@ -186,11 +200,11 @@ export default function TownApp({
   // When a visitor's change became an invitation to sign in, nothing was done,
   // so the message saying it was done stays quiet.
   // A like or a follow meant for a 見本 says why nothing happened.
-  useEffect(() => onSampleRefusal(setToast), []);
-  const notify = useCallback((message: string) => {
+  useEffect(() => onSampleRefusal((message) => setToast({ message })), []);
+  const notify = useCallback<Notify>((message, undo) => {
     if (accountRequested() || refusedForSample()) return;
     noteToast(message);
-    setToast(message);
+    setToast({ message, undo });
   }, []);
   const shared = { state, actions, notify };
   // Enter in the top search opens the search page for what was typed: books,
@@ -432,7 +446,7 @@ export default function TownApp({
           </Link>
         ))}
       </nav>
-      {toast && <Toast message={toast} />}
+      {toast && <Toast toast={toast} onHold={holdToast} />}
       {about && (
         <Modal title="Book Townへようこそ" onClose={() => setAbout(false)}>
           <p className="modal-lead">読書家の小さな書店が集まる、本の街。</p>
@@ -717,7 +731,9 @@ function ShopView({
       )}
       <section className="shop-about" aria-label="書店の紹介">
         <h2>この書店について</h2>
-        <p className="shop-introduction">{shop.description}</p>
+        <FoldedWords state={state} kind="shop" id={shop.id}>
+          <p className="shop-introduction">{shop.description}</p>
+        </FoldedWords>
         {/* Only owners see how many follow them, in the demo as well. */}
         {shop.demo ? (
           <p className="shop-social-note">見本の書店</p>
@@ -776,12 +792,39 @@ function ShopView({
  * A book opened in hand sits in the browser's top layer, above everything else on the
  * page. While one is open the toast is placed inside it, so it is seen and read aloud.
  */
-function Toast({ message }: { message: string }) {
+type ShownToast = { message: string; undo?: ToastUndo; held?: boolean };
+/**
+ * With an undo, the toast carries one text button; pressing it undoes and the
+ * toast says so. It never takes the focus from where the reader is, but a
+ * reader who goes to it (pointer or keyboard) keeps it until they leave.
+ */
+function Toast({
+  toast: { message, undo },
+  onHold,
+}: {
+  toast: ShownToast;
+  onHold: (held: boolean) => void;
+}) {
   const toast = (
-    <div className="toast" role="status">
+    <div
+      className="toast"
+      role="status"
+      onPointerEnter={() => onHold(true)}
+      onPointerLeave={() => onHold(false)}
+      onFocus={() => onHold(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          onHold(false);
+      }}
+    >
       {/* Turned away from a 見本: a leaf, not a tick, for nothing was done. */}
       <Icon name={message === SAMPLE_NOTICE ? "leaf" : "check"} size={17} />
       {message}
+      {undo && (
+        <button type="button" className="toast-undo" onClick={undo.run}>
+          {undo.label}
+        </button>
+      )}
     </div>
   );
   const openDialog = document.querySelector("dialog[open]");
@@ -843,6 +886,7 @@ function BookView({
           <BookPrice book={book} />
           <BookPurchase book={book} />
           <CoverCredit book={book} />
+          <CoverRemovalLink book={book} />
         </div>
         <div className="book-hero-body">
           <p className="book-summary">{book.summary}</p>
@@ -921,17 +965,29 @@ function BookView({
 }
 /**
  * The posters a book appears in, those that open with it first. With none
- * yet, only the way to make the first.
+ * yet, only the way to make the first. Spoilers the reader chose not to see
+ * are left out, said once without a count.
  */
 function BookPosters({ state, book }: { state: TownState; book: Book }) {
   const posters = postersOfBook(state, book.id);
+  const leftOut = postersLeftOutOfBook(state, book.id) && (
+    <p className="book-posters-left-out">
+      ネタバレを含むポスターは、設定により出していません
+    </p>
+  );
   const make = (
     <Link href={posterNewPath({ bookId: book.id })} className="text-button">
       <Icon name="plus" size={14} />
       この本でポスターを作る
     </Link>
   );
-  if (!posters.length) return <p className="book-posters-invite">{make}</p>;
+  if (!posters.length)
+    return (
+      <>
+        <p className="book-posters-invite">{make}</p>
+        {leftOut}
+      </>
+    );
   return (
     <section className="book-posters" aria-labelledby="book-posters-title">
       <div className="book-path-heading">
@@ -955,12 +1011,20 @@ function BookPosters({ state, book }: { state: TownState; book: Book }) {
                   [maker?.name, sample && "見本"].filter(Boolean).join(" · ") ||
                   undefined
                 }
+                folded={reviewCoverOf(
+                  state,
+                  "poster",
+                  poster.id,
+                  poster.authorId,
+                )}
+                note={reviewNoteOf(state, "poster", poster.id, poster.authorId)}
               />
             </li>
           );
         })}
       </ul>
       {make}
+      {leftOut}
     </section>
   );
 }

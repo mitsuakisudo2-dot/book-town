@@ -454,7 +454,12 @@ export function Modal({
       ref.current?.querySelector<HTMLElement>("button")
     )?.focus();
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeRef.current();
+      if (e.key === "Escape") {
+        // One Escape closes one layer: a book in hand beneath (a native
+        // <dialog>) would otherwise take it as its own close request too.
+        e.preventDefault();
+        closeRef.current();
+      }
       if (e.key === "Tab") {
         const all = Array.from(
           ref.current?.querySelectorAll<HTMLElement>(

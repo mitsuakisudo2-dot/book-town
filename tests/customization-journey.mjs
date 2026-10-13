@@ -2,16 +2,15 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
-import { contrastOf } from "./journey-contrast.mjs";
+import { expectReadable } from "./journey-contrast.mjs";
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../outputs/phase2-customization-qa",
 );
 await mkdir(output, { recursive: true });
+// Uses Playwright's own Chromium unless BOOK_TOWN_CHROME names another browser.
 const browser = await chromium.launch({
-  executablePath:
-    process.env.BOOK_TOWN_CHROME ??
-    "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  executablePath: process.env.BOOK_TOWN_CHROME || undefined,
   headless: true,
 });
 const context = await browser.newContext({
@@ -533,9 +532,7 @@ try {
       expect(icons.length).toBeGreaterThanOrEqual(2);
       expect(new Set(icons)).toEqual(new Set(["16x16"]));
       // The quiet heading over the near row is still readable.
-      expect(
-        await contrastOf(editor.locator(".search-near")),
-      ).toBeGreaterThanOrEqual(4.5);
+      await expectReadable(editor.locator(".search-near"), "近い題名の本");
       await phone.close();
     },
   );

@@ -124,6 +124,9 @@ function rows(extra: Partial<RemoteRows> = {}): RemoteRows {
     records: [],
     posters: [],
     seenNotifications: [],
+    folds: [],
+    myReports: [],
+    readerSettings: null,
     ...extra,
   };
 }
@@ -1216,6 +1219,139 @@ async function main() {
     assert.deepEqual((writes[1] as Extract<Write, { kind: "add" }>).rows, [
       { user_id: AKI, book_id: sampleBookRowId(post.bookId!), kind: "wish" },
     ]);
+  });
+
+  await check("folds by reports arrive under the town's own names", () => {
+    const town = townFromRows(
+      rows({
+        shops: [shop(AKI_SHOP, AKI), shop("shop-ben", BEN)],
+        folds: [
+          { target_kind: "post", target_id: "p1", state: "folded", since: at },
+          { target_kind: "post", target_id: "p2", state: "held", since: at },
+          {
+            target_kind: "profile",
+            target_id: AKI,
+            state: "folded",
+            since: at,
+          },
+          {
+            target_kind: "profile",
+            target_id: BEN,
+            state: "folded",
+            since: at,
+          },
+          {
+            target_kind: "shop",
+            target_id: AKI_SHOP,
+            state: "folded",
+            since: at,
+          },
+          {
+            target_kind: "shop",
+            target_id: "shop-ben",
+            state: "folded",
+            since: at,
+          },
+          { target_kind: "poster", target_id: "x1", state: "held", since: at },
+          // Unknown kinds and states are left alone.
+          { target_kind: "book", target_id: BOOK, state: "folded", since: at },
+          { target_kind: "post", target_id: "p3", state: "gone", since: at },
+        ],
+      }),
+      ids,
+    );
+    assert.deepEqual(
+      Object.keys(town.reviewFolds).sort(),
+      [
+        "post:p1",
+        "post:p2",
+        "poster:x1",
+        "profile:" + BEN,
+        "profile:" + ME_ID,
+        "shop:" + OWN_SHOP_ID,
+        "shop:shop-ben",
+      ].sort(),
+    );
+    assert.deepEqual(town.reviewFolds["post:p2"], { state: "held", since: at });
+  });
+
+  await check("the reader's own reports and spoiler setting are read", () => {
+    const report = (id: string, created: string, extra = {}) => ({
+      id,
+      target_kind: "post",
+      target_id: "p1",
+      reason: "harassment",
+      progress: "open",
+      created_at: created,
+      status_at: created,
+      ...extra,
+    });
+    const town = townFromRows(
+      rows({
+        myReports: [
+          report("r1", "2026-10-10T00:00:00Z"),
+          report("r2", "2026-10-12T00:00:00Z", { progress: "checking" }),
+          report("r3", "2026-10-11T00:00:00Z", { reason: "spoiler" }),
+          report("r4", "2026-10-11T00:00:00Z", { progress: "lost" }),
+          // Never the operator's own words for which way it went.
+          report("r5", "2026-10-09T00:00:00Z", { progress: "checked" }),
+          report("r6", "2026-10-09T00:00:00Z", { progress: "resolved" }),
+        ],
+        readerSettings: { spoiler_display: "leave_out" },
+      }),
+      ids,
+    );
+    assert.deepEqual(
+      town.myReports.map((entry) => entry.id + ":" + entry.status),
+      ["r2:checking", "r3:open", "r1:open", "r5:checked"],
+    );
+    assert.equal(town.settings.spoilerDisplay, "leave_out");
+    // No row, or one it does not know: folded when possible.
+    assert.equal(
+      townFromRows(rows(), ids).settings.spoilerDisplay,
+      "fold_possible",
+    );
+    assert.equal(
+      townFromRows(rows({ readerSettings: { spoiler_display: "x" } }), ids)
+        .settings.spoilerDisplay,
+      "fold_possible",
+    );
+    const empty = emptyTown();
+    assert.equal(empty.settings.spoilerDisplay, "fold_possible");
+    assert.equal(empty.settings.readingPublic, false);
+    assert.deepEqual(empty.reviewFolds, {});
+    assert.deepEqual(empty.myReports, []);
+  });
+
+  await check("the spoiler setting is written only when it changes", () => {
+    const before = townFromRows(rows(), ids);
+    const next: TownState = {
+      ...before,
+      settings: { ...before.settings, spoilerDisplay: "show_all" },
+      // Folds and reports are the database's; nothing is written for them.
+      reviewFolds: { "post:p1": { state: "folded", since: at } },
+      myReports: [
+        {
+          id: "r1",
+          kind: "post",
+          targetId: "p1",
+          reason: "spam",
+          status: "open",
+          createdAt: at,
+          statusAt: at,
+        },
+      ],
+    };
+    assert.deepEqual(planWrites(before, next, ids), [
+      {
+        kind: "reader-settings",
+        row: { user_id: AKI, spoiler_display: "show_all" },
+      },
+    ]);
+    assert.deepEqual(
+      planWrites(before, { ...next, settings: before.settings }, ids),
+      [],
+    );
   });
 
   console.log(passed + " town sync checks passed");

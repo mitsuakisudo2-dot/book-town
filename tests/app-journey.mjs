@@ -2,17 +2,16 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
-import { contrastOf } from "./journey-contrast.mjs";
+import { expectReadable } from "./journey-contrast.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../work/booktown/app-qa",
 );
 await mkdir(output, { recursive: true });
+// Uses Playwright's own Chromium unless BOOK_TOWN_CHROME names another browser.
 const browser = await chromium.launch({
-  executablePath:
-    process.env.BOOK_TOWN_CHROME ??
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  executablePath: process.env.BOOK_TOWN_CHROME || undefined,
   headless: true,
 });
 const errors = [];
@@ -285,9 +284,7 @@ try {
         page.getByRole("list", { name: "近い題名の本" }),
       ).toContainText("秘密の花園");
       // The quiet heading is small, but still readable.
-      expect(
-        await contrastOf(page.locator(".search-near")),
-      ).toBeGreaterThanOrEqual(4.5);
+      await expectReadable(page.locator(".search-near"), "近い題名の本");
       await expect(
         page.getByText("ぴったり合う本はありませんでした。"),
       ).toBeVisible();
@@ -338,9 +335,7 @@ try {
           compose.getByRole("button", { name: shown }),
         ).toBeVisible();
         if (typed === "秘密の森の花園")
-          expect(
-            await contrastOf(compose.locator(".search-near")),
-          ).toBeGreaterThanOrEqual(4.5);
+          await expectReadable(compose.locator(".search-near"), "近い題名の本");
         await picker.press("Enter");
         await expect(compose).toBeVisible();
         await expect(compose.locator(".picker-chosen")).toHaveCount(0);
@@ -445,6 +440,9 @@ try {
       await expect(closed).toContainText("今日の読書");
       await expect(closed).toContainText("『ソラリス』");
       await expect(closed).toContainText("ちょうど第二章。");
+      await expect(
+        closed.getByRole("link", { name: "『ソラリス』の作品ページへ" }),
+      ).toHaveAttribute("href", "/books/solaris/");
       await closed.getByRole("button", { name: "閉じる" }).click();
       await expect(closed).toHaveCount(0);
       await expect(page.locator(".picker-chosen")).toContainText("ソラリス");
@@ -461,6 +459,12 @@ try {
         name: "『ソラリス』の続きを読む",
       });
       await expect(next).toContainText("ちょうど第二章。");
+      // The jacket is its own link, to the book's page (where its cover is
+      // credited); the two links sit side by side, not nested.
+      await expect(
+        page.getByRole("link", { name: "『ソラリス』の作品ページへ" }),
+      ).toHaveAttribute("href", "/books/solaris/");
+      await expect(page.locator(".home-continue a a")).toHaveCount(0);
       await next.click();
       await expect(page).toHaveURL(/\/reading\/$/);
       await expect(page.locator(".picker-chosen")).toContainText("ソラリス");
@@ -1000,9 +1004,7 @@ try {
       // Near titles wait under a quiet heading that is still readable.
       await shelfSearch.fill("秘密の森の花園");
       await expect(shelfPicker.locator(".search-near")).toBeVisible();
-      expect(
-        await contrastOf(shelfPicker.locator(".search-near")),
-      ).toBeGreaterThanOrEqual(4.5);
+      await expectReadable(shelfPicker.locator(".search-near"), "近い題名の本");
       await shelfSearch.fill("よるときり");
       await expect(shelfTitles.first()).toHaveText("夜と霧");
       await composingEnter(shelfSearch);
@@ -1033,9 +1035,7 @@ try {
       ).toHaveText("老人と海");
       await nineSearch.fill("秘密の森の花園");
       await expect(nine.locator(".search-near")).toBeVisible();
-      expect(
-        await contrastOf(nine.locator(".search-near")),
-      ).toBeGreaterThanOrEqual(4.5);
+      await expectReadable(nine.locator(".search-near"), "近い題名の本");
       await nineSearch.fill("ヒミツノハナゾノ");
       await expect(
         nine.locator(".profile-picker-book strong").first(),

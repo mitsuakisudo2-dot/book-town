@@ -7,6 +7,8 @@ export interface ReportTarget {
   kind: ReportKind;
   id: string;
   name: string;
+  /** Added to what the reader writes, for the operator (e.g. where a cover came from). */
+  extra?: string;
 }
 
 let target: ReportTarget | null = null;

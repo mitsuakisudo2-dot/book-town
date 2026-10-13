@@ -1,4 +1,4 @@
-import { findReader } from "../social";
+import { findReader, wordsFolded } from "../social";
 import type { Book, Reader, Shop, TownState } from "../types";
 import { searchBooks } from "./rank";
 import { romajiToKana } from "./romaji";
@@ -63,8 +63,8 @@ const STOCKED = 1;
 
 /**
  * How well each shop matches: by its name, then its owner's name or @ID,
- * then its words (closest first within each), or by a book on a public shelf
- * that the book search finds. A query that begins with @ looks at the
+ * then its words unless reports folded them (closest first within each), or
+ * by a book on a public shelf that the book search finds. A query that begins with @ looks at the
  * owner's @ID only, as the readers found with it do. Null when nothing
  * searchable was typed.
  */
@@ -88,7 +88,8 @@ export function shopMatcher(
     const classes = [
       [shop.name],
       [owner?.name, ...idForms(owner)],
-      [shop.description],
+      // Words folded by reports are not searched, as they are not shown.
+      [wordsFolded(state, "shop", shop.id) ? null : shop.description],
     ];
     for (const [at, fields] of classes.entries()) {
       const found = textMatch(query, fields);

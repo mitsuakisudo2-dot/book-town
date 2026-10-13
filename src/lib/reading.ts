@@ -1,5 +1,6 @@
 import { ME_ID, type Post, type ReadingSession, type TownState } from "./types";
 import { uncoverHidden } from "./hidden-words";
+import { notLeftOut } from "./social";
 
 export const activeSession = (state: TownState): ReadingSession | undefined =>
   state.readingSessions.find((session) => session.endedAt === null);
@@ -72,13 +73,17 @@ export function readersNow(
     : demo;
 }
 
-/** Everyone's reading-together posts across all books, plus the viewer's private notes. */
+/**
+ * Everyone's reading-together posts across all books, plus the viewer's
+ * private notes; spoilers the reader chose not to see are left out.
+ */
 export const readingFeed = (state: TownState): Post[] =>
   state.posts
     .filter(
       (post) =>
-        post.readingMode === "together" ||
-        (post.readingMode === "solo" && post.authorId === ME_ID),
+        (post.readingMode === "together" ||
+          (post.readingMode === "solo" && post.authorId === ME_ID)) &&
+        notLeftOut(state, post),
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
