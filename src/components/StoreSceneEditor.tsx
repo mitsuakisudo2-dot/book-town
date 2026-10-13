@@ -19,7 +19,8 @@ import {
   type StoreScene,
 } from "../lib/store-scene";
 import { useWalkStore } from "../lib/walk-store";
-import type { TownState } from "../lib/types";
+import type { Book, TownState } from "../lib/types";
+import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { Icon, Modal } from "./ui";
 import "./walk.css";
@@ -57,15 +58,47 @@ export function StoreSceneEditor({
   const book = state.books.find((b) => b.id === placement?.bookId);
   const pop = placement ? bookPop(draft, placement.id) : undefined;
   const unplaced = unplacedBooks(draft);
-  const choices = query.trim()
-    ? state.books
-        .filter((b) =>
-          (b.title + " " + b.author)
-            .toLocaleLowerCase()
-            .includes(query.trim().toLocaleLowerCase()),
-        )
-        .slice(0, 10)
+  // Books are found the way every search finds them; the reader's own come
+  // first among equals, and near titles wait under a quiet heading.
+  const found = useBookSearch(state.books, query, {
+    own: state.library,
+    limit: 10,
+  });
+  const searching = query.trim() !== "";
+  const choices = searching
+    ? found.found.map((match) => match.book)
     : state.books.filter((b) => state.library.includes(b.id)).slice(0, 10);
+  const nearChoices = searching ? found.near.map((match) => match.book) : [];
+  function placeBook(b: Book) {
+    const id = "placement:" + shop.id + ":" + crypto.randomUUID();
+    edit((s) => {
+      const next = addBookPlacement(
+        s,
+        b,
+        row.id,
+        id,
+        "spine",
+        Math.max(
+          -1,
+          ...s.objects
+            .filter((o) => o.kind === "book" && o.parentId === row.id)
+            .map((o) => o.order ?? 0),
+        ) + 1,
+      );
+      objectById(next, id)!.isPublic = row.isPublic === true;
+      return next;
+    });
+    setPlacementId(id);
+  }
+  const choiceButton = (b: Book) => (
+    <button key={b.id} type="button" onClick={() => placeBook(b)}>
+      <span>
+        {b.title}
+        <small>{b.author}</small>
+      </span>
+      <Icon name="plus" size={16} />
+    </button>
+  );
   function edit(command: (scene: StoreScene) => StoreScene) {
     setError("");
     setDraft((previous) => command(previous));
@@ -284,51 +317,41 @@ export function StoreSceneEditor({
                   value={query}
                   placeholder="タイトル・著者"
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    // The Enter that confirms a kana conversion is the keyboard's.
+                    if (!enterPressed(e)) return;
+                    e.preventDefault();
+                    // Enter places a book only when it is surely the one meant.
+                    const sure = found.sure();
+                    if (!sure) return;
+                    placeBook(sure);
+                    setQuery("");
+                  }}
                 />
               </label>
               <div className="scene-search-results">
-                {choices.map((b) => (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => {
-                      const id =
-                        "placement:" + shop.id + ":" + crypto.randomUUID();
-                      edit((s) => {
-                        const next = addBookPlacement(
-                          s,
-                          b,
-                          row.id,
-                          id,
-                          "spine",
-                          Math.max(
-                            -1,
-                            ...s.objects
-                              .filter(
-                                (o) =>
-                                  o.kind === "book" && o.parentId === row.id,
-                              )
-                              .map((o) => o.order ?? 0),
-                          ) + 1,
-                        );
-                        objectById(next, id)!.isPublic = row.isPublic === true;
-                        return next;
-                      });
-                      setPlacementId(id);
-                    }}
-                  >
-                    <span>
-                      {b.title}
-                      <small>{b.author}</small>
-                    </span>
-                    <Icon name="plus" size={16} />
-                  </button>
-                ))}
+                {choices.map(choiceButton)}
               </div>
-              {query.trim() && !choices.length && (
+              {searching && found.settled && !choices.length && (
                 <p className="scene-hint">
-                  見つかりませんでした。「本棚」から本を登録すると、ここでも選べます。
+                  {nearChoices.length
+                    ? "ぴったり合う本はありませんでした。"
+                    : "見つかりませんでした。「本棚」から本を登録すると、ここでも選べます。"}
                 </p>
+              )}
+              {nearChoices.length > 0 && (
+                <>
+                  <p className="search-near" id="scene-near-title">
+                    {found.nearHeading}
+                  </p>
+                  <div
+                    className="scene-search-results"
+                    role="group"
+                    aria-labelledby="scene-near-title"
+                  >
+                    {nearChoices.map(choiceButton)}
+                  </div>
+                </>
               )}
             </fieldset>
             {placement && book && (

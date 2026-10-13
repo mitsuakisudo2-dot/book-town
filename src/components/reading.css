@@ -59,13 +59,6 @@
   align-items: center;
   gap: 8px;
 }
-/* Titles only close in spelling, below the matches. */
-.search-near {
-  font-size: 11px;
-  font-weight: 400;
-  color: #98a38c;
-  margin: 18px 0 0;
-}
 .search-discover section > p {
   font-size: 11px;
   color: #98a38c;
@@ -99,6 +92,11 @@
   gap: 2px;
   flex: 1;
   min-width: 0;
+}
+/* A reader's avatar keeps its round size beside the name. */
+.search-shop > .reader-avatar {
+  display: inline-grid;
+  flex: none;
 }
 .search-book b,
 .search-shop b {
