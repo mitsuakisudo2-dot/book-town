@@ -21,49 +21,78 @@ export type RecordWork = {
   isPublic: boolean;
 };
 
-/** A new record of a book, or one of the reader's records being changed. */
+/**
+ * Only what the reader changed is kept, laid over the record each time the
+ * sheet opens: a part left alone (who may see it, say) follows the record,
+ * even when it is changed elsewhere in the meantime.
+ */
+export type RecordChanges = Partial<RecordWork>;
+
+/**
+ * A new record of a book, or one of the reader's records being changed, for
+ * one reader (see draftOwner): a book has the same id for everyone.
+ */
 export const recordWorkKey = (options: {
+  owner: string;
   recordId?: string;
   bookId: string;
 }) =>
-  options.recordId
-    ? "record:" + options.recordId
-    : "record-new:" + options.bookId;
+  options.owner +
+  (options.recordId
+    ? ":record:" + options.recordId
+    : ":record-new:" + options.bookId);
 
-/** Work read back from storage, if it is still the shape the sheet makes. */
-export function readRecordWork(value: unknown): RecordWork | null {
-  if (!value || typeof value !== "object") return null;
-  const work = value as Partial<RecordWork>;
-  if (
-    !keptIds(work.feelings, FEELINGS.length) ||
-    !work.feelings.every((feeling) =>
-      (FEELINGS as readonly string[]).includes(feeling),
-    ) ||
-    !keptText(work.note, RECORD_NOTE_MAX_LENGTH) ||
-    typeof work.spoiler !== "boolean" ||
-    typeof work.isPublic !== "boolean"
-  )
-    return null;
-  return {
-    feelings: [...new Set(work.feelings)] as Feeling[],
-    note: work.note,
-    spoiler: work.spoiler,
-    isPublic: work.isPublic,
-  };
+const sameFeelings = (a: Feeling[], b: Feeling[]) =>
+  a.length === b.length && a.every((feeling) => b.includes(feeling));
+
+/**
+ * The parts of `next` that differ from the record as it is (the order of
+ * feelings aside); null when nothing does.
+ */
+export function recordChanges(
+  next: RecordWork,
+  base: RecordWork,
+): RecordChanges | null {
+  const changes: RecordChanges = {};
+  if (!sameFeelings(next.feelings, base.feelings))
+    changes.feelings = next.feelings;
+  if (next.note !== base.note) changes.note = next.note;
+  if (next.spoiler !== base.spoiler) changes.spoiler = next.spoiler;
+  if (next.isPublic !== base.isPublic) changes.isPublic = next.isPublic;
+  return Object.keys(changes).length ? changes : null;
 }
 
-/** Whether two versions of a record say the same (the order of feelings aside). */
-export const sameRecordWork = (a: RecordWork, b: RecordWork) =>
-  a.note === b.note &&
-  a.spoiler === b.spoiler &&
-  a.isPublic === b.isPublic &&
-  a.feelings.length === b.feelings.length &&
-  a.feelings.every((feeling) => b.feelings.includes(feeling));
+/** Changes read back from storage, if each is one the sheet could make. */
+export function readRecordChanges(value: unknown): RecordChanges | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const work = value as Record<string, unknown>;
+  const changes: RecordChanges = {};
+  for (const [name, entry] of Object.entries(work)) {
+    if (name === "feelings") {
+      if (
+        !keptIds(entry, FEELINGS.length) ||
+        !entry.every((feeling) =>
+          (FEELINGS as readonly string[]).includes(feeling),
+        )
+      )
+        return null;
+      changes.feelings = [...new Set(entry)] as Feeling[];
+    } else if (name === "note") {
+      if (!keptText(entry, RECORD_NOTE_MAX_LENGTH)) return null;
+      changes.note = entry;
+    } else if (name === "spoiler" || name === "isPublic") {
+      if (typeof entry !== "boolean") return null;
+      changes[name] = entry;
+    } else return null;
+  }
+  return Object.keys(changes).length ? changes : null;
+}
 
-export const RECORD_DRAFT_OPTIONS: KeptDraftOptions<RecordWork> = {
+export const RECORD_DRAFT_OPTIONS: KeptDraftOptions<RecordChanges> = {
   storageKey: RECORD_DRAFT_KEY,
-  keyPattern: /^(record-new|record):.+$/,
-  read: readRecordWork,
+  keyPattern: /^[^:]+:(record-new|record):.+$/,
+  read: readRecordChanges,
+  isEmpty: (changes) => !Object.keys(changes).length,
 };
 
 export const recordDrafts = createKeptDraftStore(RECORD_DRAFT_OPTIONS);

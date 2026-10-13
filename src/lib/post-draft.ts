@@ -56,18 +56,25 @@ export function createPostDraftStore(storage: () => DraftStorage) {
       store.set(key, { ...(store.get(key) ?? EMPTY_POST_DRAFT), ...patch });
     },
     /**
-     * Moves the words of one draft into another with nothing written yet (a
-     * line from reading into the review of the book). False, and nothing
-     * moved, when there is nothing to move or the other holds words of its own.
+     * Moves the words of one draft into another (a line from reading into
+     * the review of the book): into one with nothing written yet, or, when
+     * `append`, after the words already there. False, and nothing moved,
+     * when there is nothing to move, the other holds words and `append` is
+     * not set, or both together would be too long for a post.
      */
-    carry(from: string, to: string): boolean {
+    carry(from: string, to: string, append = false): boolean {
       const moving = store.get(from);
       const there = store.get(to);
-      if (!moving?.body.trim() || there?.body.trim()) return false;
+      if (!moving?.body.trim()) return false;
+      const before = there?.body.trim() ? there.body.trimEnd() : "";
+      if (before && !append) return false;
+      const body = before ? before + "\n" + moving.body.trim() : moving.body;
+      if ([...body].length > POST_MAX_LENGTH) return false;
       store.set(to, {
-        body: moving.body,
+        body,
         bookId: there?.bookId ?? null,
-        spoiler: moving.spoiler,
+        // A line marked as a spoiler marks what it joins.
+        spoiler: moving.spoiler || Boolean(before && there?.spoiler),
       });
       store.clear(from);
       return true;
@@ -99,6 +106,10 @@ export const readingDraftKey = (sessionId: string) => READING + sessionId;
 /** Moves a draft's words into another composer's empty draft (see carry). */
 export const carryPostDraft = (from: string, to: string) =>
   postDraftStore.carry(from, to);
+
+/** Adds a draft's words after another composer's words (see carry). */
+export const appendPostDraft = (from: string, to: string) =>
+  postDraftStore.carry(from, to, true);
 
 export const clearPostDraft = (key: string) => postDraftStore.clear(key);
 

@@ -832,6 +832,9 @@
   max-height: 9em;
   overflow: auto;
 }
+.reading-line-to-add {
+  margin-bottom: 12px;
+}
 .reading-unsent {
   max-width: 720px;
   margin: 0 auto 8px;

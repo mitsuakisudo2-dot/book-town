@@ -1,18 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useAccountState } from "../lib/account-session";
+import { draftOwner } from "../lib/draft-owner";
 import { usePersistenceStatus, useTownBackend } from "../lib/store";
 import "./social.css";
 
 /**
- * Whether a screen opened with work kept from before. Decided once, when the
- * browser's storage has been read, so the first render matches the static
- * page; work begun on this screen does not count.
+ * Whether a screen opened with work kept from before, and it is still there.
+ * Decided when the browser's storage has been read, so the first render
+ * matches the static page; work begun on this screen does not count, nor
+ * does new work after the kept work was sent or thrown away.
  */
 export function useOpenedWithWork(loaded: boolean, kept: boolean): boolean {
   const [opened, setOpened] = useState<boolean | null>(null);
   if (loaded && opened === null) setOpened(kept);
+  else if (opened === true && loaded && !kept) setOpened(false);
   return opened === true;
+}
+
+/** Whose work this browser keeps now (see draftOwner). */
+export function useDraftOwner(): string | null {
+  return draftOwner(useAccountState());
 }
 
 /**

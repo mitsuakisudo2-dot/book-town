@@ -39,13 +39,13 @@ import { recentlyFinished } from "../lib/records";
 import { uncoverHidden } from "../lib/hidden-words";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import {
+  appendPostDraft,
   carryPostDraft,
   clearPostDraft,
   readingDraftKey,
   usePostDraft,
   useReadingDrafts,
 } from "../lib/post-draft";
-import { usePersistenceStatus } from "../lib/store";
 import {
   DiscardDraft,
   KeptDraftNote,
@@ -91,14 +91,29 @@ const FINISH_PHRASES = [
 const pick = (phrases: string[]) =>
   phrases[Math.floor(Math.random() * phrases.length)];
 
+/** The draft a review of the book read starts from (a new post without one). */
+const reviewDraftKey = (book?: Book) =>
+  book ? "review:" + book.id : "new-post";
+
+/**
+ * Carries the line written in a sitting into the review of its book, when
+ * that has nothing written yet; otherwise the review shows it (LineToAdd).
+ */
+const carryLine = (sessionId: string, book?: Book) =>
+  carryPostDraft(readingDraftKey(sessionId), reviewDraftKey(book));
+
 export function ReadingView(props: Shared) {
   const clock = useClock();
   const active = activeSession(props.state);
   const book = active?.bookId
     ? props.state.books.find((entry) => entry.id === active.bookId)
     : undefined;
-  // After closing the book, "感想を書く" opens a composer for the book just read.
-  const [review, setReview] = useState<{ book?: Book } | null>(null);
+  // After closing the book, "感想を書く" opens a composer for the book just
+  // read, with the sitting whose line was meant for it.
+  const [review, setReview] = useState<{
+    book?: Book;
+    line?: string;
+  } | null>(null);
   // Finishing a book goes on to how it felt.
   const [finished, setFinished] = useState<Book | null>(null);
   // Closing the book leaves a small card of what this time was.
@@ -111,7 +126,7 @@ export function ReadingView(props: Shared) {
           {...props}
           book={book}
           clock={clock}
-          onReview={(read) => setReview({ book: read })}
+          onReview={(read, line) => setReview({ book: read, line })}
           onFinished={setFinished}
           onClosed={setClosed}
         />
@@ -129,7 +144,7 @@ export function ReadingView(props: Shared) {
           )}
           <UnsentLines
             {...props}
-            onReview={(read) => setReview({ book: read })}
+            onReview={(read, line) => setReview({ book: read, line })}
           />
           <StartReading {...props} clock={clock} />
         </>
@@ -146,6 +161,13 @@ export function ReadingView(props: Shared) {
           title={review.book ? `『${review.book.title}』の感想` : "感想を書く"}
           onClose={() => setReview(null)}
         >
+          {review.line && (
+            <LineToAdd
+              sessionId={review.line}
+              book={review.book}
+              notify={props.notify}
+            />
+          )}
           <PostComposer
             {...props}
             fixedBook={review.book}
@@ -330,27 +352,65 @@ function ClosedCard({
 }
 
 /**
+ * A line written while reading, meant for this review but left out of it
+ * because the review already had words: shown above it, to add at its end.
+ * Not added, it waits on the reading page.
+ */
+function LineToAdd({
+  sessionId,
+  book,
+  notify,
+}: {
+  sessionId: string;
+  book?: Book;
+  notify: Shared["notify"];
+}) {
+  const { draft } = usePostDraft(readingDraftKey(sessionId));
+  if (!draft.body.trim()) return null;
+  return (
+    <div className="reading-unsent-line reading-line-to-add">
+      <p>読みながら書いた言葉は、まだ感想に入れていません</p>
+      <blockquote>{uncoverHidden(draft.body)}</blockquote>
+      <button
+        type="button"
+        className="button secondary"
+        onClick={(event) => {
+          const review = event.currentTarget
+            .closest(".modal")
+            ?.querySelector("textarea");
+          if (appendPostDraft(readingDraftKey(sessionId), reviewDraftKey(book)))
+            review?.focus();
+          else
+            notify(
+              "長くなりすぎるため、書き足せませんでした。言葉は読書のページに残しています",
+            );
+        }}
+      >
+        <Icon name="pen" size={15} />
+        書き足す
+      </button>
+    </div>
+  );
+}
+
+/**
  * Lines written while reading and never sent, from a sitting already over.
  * They wait here until the reader uses them for a review or throws them away.
  */
 function UnsentLines({
   state,
   onReview,
-}: Shared & { onReview: (book?: Book) => void }) {
+}: Shared & { onReview: (book?: Book, line?: string) => void }) {
   const drafts = useReadingDrafts();
-  const persistence = usePersistenceStatus();
   const lines = drafts.flatMap(({ sessionId, draft }) => {
     const session = state.readingSessions.find(
       (entry) => entry.id === sessionId,
     );
-    // A running sitting's line is in the reading room; until the town has
-    // loaded, which sitting a line was written in may not be known yet.
-    if (
-      !draft.body.trim() ||
-      (session ? session.endedAt === null : persistence === "loading")
-    )
-      return [];
-    const book = session?.bookId
+    // Only this reader's sittings that are over: a running one's line is in
+    // the reading room, and a line from a sitting not in this town (another
+    // account's, on this browser) is never shown here.
+    if (!session || session.endedAt === null || !draft.body.trim()) return [];
+    const book = session.bookId
       ? state.books.find((entry) => entry.id === session.bookId)
       : undefined;
     return [{ sessionId, body: draft.body, book }];
@@ -374,11 +434,8 @@ function UnsentLines({
                 className="button secondary"
                 onClick={() => {
                   // It starts the review, unless one is already being written.
-                  carryPostDraft(
-                    readingDraftKey(sessionId),
-                    book ? "review:" + book.id : "new-post",
-                  );
-                  onReview(book);
+                  carryLine(sessionId, book);
+                  onReview(book, sessionId);
                 }}
               >
                 <Icon name="pen" size={15} />
@@ -578,7 +635,7 @@ function ReadingRoom({
 }: Shared & {
   book?: Book;
   clock: ReturnType<typeof useClock>;
-  onReview: (book?: Book) => void;
+  onReview: (book?: Book, line?: string) => void;
   onFinished: (book: Book) => void;
   onClosed: (closed: Closed) => void;
 }) {
@@ -873,12 +930,8 @@ function ReadingRoom({
                 onClick={() => {
                   actions.endReading(ending.finished);
                   // The line not sent starts the review, when that is empty.
-                  if (memoKey)
-                    carryPostDraft(
-                      memoKey,
-                      book ? "review:" + book.id : "new-post",
-                    );
-                  onReview(book);
+                  carryLine(session.id, book);
+                  onReview(book, session.id);
                 }}
               >
                 <Icon name="pen" size={15} />

@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import { createKeptDraftStore } from "../src/lib/kept-draft";
+import { draftOwner } from "../src/lib/draft-owner";
 import {
   createPostDraftStore,
   POST_DRAFT_KEY,
   readingDraftKey,
 } from "../src/lib/post-draft";
 import {
-  readRecordWork,
+  readRecordChanges,
   RECORD_DRAFT_KEY,
   RECORD_DRAFT_OPTIONS,
+  recordChanges,
   recordWorkKey,
-  sameRecordWork,
   type RecordWork,
 } from "../src/lib/record-draft";
 import {
@@ -89,6 +90,30 @@ check("a reading line is carried into a review only when that is empty", () => {
   assert.equal(drafts.get("review:silence"), null);
 });
 
+check("a reading line can be added after a review's own words", () => {
+  const drafts = createPostDraftStore(() => memory());
+  const line = readingDraftKey("s2");
+  drafts.update("review:momo", { body: "前から書いていた感想。\n" });
+  drafts.update(line, { body: " 時間の花。", spoiler: true });
+  assert.equal(drafts.carry(line, "review:momo", true), true);
+  assert.deepEqual(drafts.get("review:momo"), {
+    body: "前から書いていた感想。\n時間の花。",
+    bookId: null,
+    spoiler: true,
+  });
+  assert.equal(drafts.get(line), null);
+  // Into an empty review it goes as it is, the same as carrying it.
+  drafts.update(line, { body: "ひとこと。" });
+  assert.equal(drafts.carry(line, "review:silence", true), true);
+  assert.equal(drafts.get("review:silence")?.body, "ひとこと。");
+  // Too long for one post together: nothing moves, and the line stays.
+  drafts.update("review:solaris", { body: "海".repeat(995) });
+  drafts.update(line, { body: "海の記憶。" });
+  assert.equal(drafts.carry(line, "review:solaris", true), false);
+  assert.equal(drafts.get("review:solaris")?.body.length, 995);
+  assert.equal(drafts.get(line)?.body, "海の記憶。");
+});
+
 check("post drafts read back too long or misshapen are dropped", () => {
   const storage = memory();
   storage.setItem(
@@ -116,71 +141,130 @@ const work = (patch: Partial<RecordWork> = {}): RecordWork => ({
   ...patch,
 });
 
-check("a record's work is kept per book, or per record being changed", () => {
-  assert.equal(recordWorkKey({ bookId: "momo" }), "record-new:momo");
+check(
+  "drafts are kept per reader: by account, the demo's or a visitor's",
+  () => {
+    const user = { id: "u-1", email: "a@example.com" };
+    assert.equal(draftOwner({ status: "loading" }), null);
+    assert.equal(draftOwner({ status: "demo" }), "demo");
+    assert.equal(draftOwner({ status: "signed-out" }), "visitor");
+    assert.equal(draftOwner({ status: "needs-profile", user }), "u-1");
+    assert.equal(draftOwner({ status: "unavailable", user }), "u-1");
+  },
+);
+
+check("a record's changes are kept per reader and book, or per record", () => {
   assert.equal(
-    recordWorkKey({ recordId: "me-record-2", bookId: "momo" }),
-    "record:me-record-2",
+    recordWorkKey({ owner: "u-1", bookId: "momo" }),
+    "u-1:record-new:momo",
+  );
+  assert.equal(
+    recordWorkKey({ owner: "u-1", recordId: "r-2", bookId: "momo" }),
+    "u-1:record:r-2",
   );
   const storage = memory();
   const drafts = createKeptDraftStore(RECORD_DRAFT_OPTIONS, () => storage);
-  drafts.set("record-new:momo", work());
-  drafts.set("record:me-record-2", work({ isPublic: true }));
-  drafts.set("review:momo", work());
+  drafts.set("u-1:record-new:momo", { note: "灰色の男たち。" });
+  drafts.set("u-1:record:r-2", { isPublic: true });
+  drafts.set("record-new:momo", { note: "誰のものでもない" });
+  drafts.set("u-1:review:momo", { note: "x" });
+  drafts.set("u-1:record:r-3", {});
   const reopened = createKeptDraftStore(RECORD_DRAFT_OPTIONS, () => storage);
   reopened.initialize();
   assert.deepEqual(Object.keys(reopened.getSnapshot().drafts), [
-    "record-new:momo",
-    "record:me-record-2",
+    "u-1:record-new:momo",
+    "u-1:record:r-2",
   ]);
-  assert.deepEqual(reopened.get("record-new:momo"), work());
-  assert.ok(storage.data.has(RECORD_DRAFT_KEY));
-  // The order feelings were chosen in does not make it different work.
+  assert.deepEqual(reopened.get("u-1:record-new:momo"), {
+    note: "灰色の男たち。",
+  });
+  // Another account on this browser has nothing kept for the same book.
   assert.equal(
-    sameRecordWork(work(), work({ feelings: ["again", "warm"] })),
-    true,
+    reopened.get(recordWorkKey({ owner: "u-2", bookId: "momo" })),
+    null,
   );
-  assert.equal(sameRecordWork(work(), work({ note: "" })), false);
-  assert.equal(sameRecordWork(work(), work({ isPublic: true })), false);
+  assert.ok(storage.data.has(RECORD_DRAFT_KEY));
 });
 
-check("a record's work read back must be one the sheet could make", () => {
-  assert.deepEqual(readRecordWork(work()), work());
+check("only what was changed is kept, so the rest follows the record", () => {
+  // The order feelings were chosen in does not make it a change.
+  assert.equal(
+    recordChanges(work({ feelings: ["again", "warm"] }), work()),
+    null,
+  );
+  assert.deepEqual(recordChanges(work({ note: "豆畑。" }), work()), {
+    note: "豆畑。",
+  });
+  const changes = recordChanges(
+    work({ note: "豆畑。", feelings: ["quiet"] }),
+    work(),
+  );
+  assert.deepEqual(changes, { feelings: ["quiet"], note: "豆畑。" });
+  // Made public elsewhere since: the note changed, and the record stays public.
   assert.deepEqual(
-    readRecordWork(work({ note: "あ".repeat(255) }))?.note.length,
+    { ...work({ isPublic: true }), ...changes },
+    work({ isPublic: true, note: "豆畑。", feelings: ["quiet"] }),
+  );
+});
+
+check("a record's changes read back must be ones the sheet could make", () => {
+  assert.deepEqual(readRecordChanges(work()), work());
+  assert.deepEqual(readRecordChanges({ isPublic: false }), {
+    isPublic: false,
+  });
+  assert.deepEqual(readRecordChanges({ feelings: ["warm", "warm"] }), {
+    feelings: ["warm"],
+  });
+  assert.equal(
+    readRecordChanges({ note: "あ".repeat(255) })?.note?.length,
     255,
   );
   for (const bad of [
     null,
     "work",
-    work({ note: "あ".repeat(256) }),
-    work({ feelings: ["cried", "bored" as never] }),
-    work({ feelings: "warm" as never }),
-    { ...work(), spoiler: "yes" },
-    { ...work(), isPublic: undefined },
+    [],
+    {},
+    { note: "あ".repeat(256) },
+    { feelings: ["cried", "bored"] },
+    { feelings: "warm" },
+    { spoiler: "yes" },
+    { isPublic: undefined },
+    { note: "x", stars: 5 },
   ])
-    assert.equal(readRecordWork(bad), null);
+    assert.equal(readRecordChanges(bad), null);
 });
 
-check("a report's reason and words are kept per thing reported", () => {
-  assert.equal(reportWorkKey({ kind: "post", id: "p-1" }), "post:p-1");
-  assert.equal(reportWorkKey({ kind: "book", id: "b-1" }), "book:b-1");
+check("a report's reason and words are kept per reporter and thing", () => {
+  assert.equal(
+    reportWorkKey("u-1", { kind: "post", id: "p-1" }),
+    "u-1:post:p-1",
+  );
+  assert.equal(
+    reportWorkKey("u-1", { kind: "book", id: "b-1" }),
+    "u-1:book:b-1",
+  );
   const storage = memory();
   const drafts = createKeptDraftStore(REPORT_DRAFT_OPTIONS, () => storage);
   const words: ReportWork = { reason: "harassment", detail: "何度も。" };
+  drafts.set("u-1:post:p-1", words);
+  drafts.set("u-1:profile:r-1", { reason: "spam", detail: "" });
+  drafts.set("u-1:shop:s-1", { reason: null, detail: "" });
+  drafts.set("u-1:comment:c-1", words);
   drafts.set("post:p-1", words);
-  drafts.set("profile:r-1", { reason: "spam", detail: "" });
-  drafts.set("shop:s-1", { reason: null, detail: "" });
-  drafts.set("comment:c-1", words);
   const reopened = createKeptDraftStore(REPORT_DRAFT_OPTIONS, () => storage);
   reopened.initialize();
   assert.deepEqual(Object.keys(reopened.getSnapshot().drafts), [
-    "post:p-1",
-    "profile:r-1",
+    "u-1:post:p-1",
+    "u-1:profile:r-1",
   ]);
-  assert.deepEqual(reopened.get("post:p-1"), words);
-  reopened.clear("post:p-1");
-  reopened.clear("profile:r-1");
+  assert.deepEqual(reopened.get("u-1:post:p-1"), words);
+  // Another account reporting the same post starts with nothing.
+  assert.equal(
+    reopened.get(reportWorkKey("u-2", { kind: "post", id: "p-1" })),
+    null,
+  );
+  reopened.clear("u-1:post:p-1");
+  reopened.clear("u-1:profile:r-1");
   assert.equal(storage.data.has(REPORT_DRAFT_KEY), false);
   assert.deepEqual(readReportWork({ reason: "cover", detail: "装丁" }), {
     reason: "cover",

@@ -24,15 +24,16 @@ import {
 import { bookPath } from "../lib/books";
 import { useKeptDraft } from "../lib/kept-draft";
 import {
+  recordChanges,
   recordDrafts,
   recordWorkKey,
-  sameRecordWork,
   type RecordWork,
 } from "../lib/record-draft";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import {
   KeptDraftNote,
   StopConfirm,
+  useDraftOwner,
   useNotTakenWords,
   useOpenedWithWork,
 } from "./KeptDraftNote";
@@ -93,11 +94,20 @@ function PublishButton({
   );
 }
 
+/** The key of the reader's work on a book's new record (or a record's changes). */
+function useRecordWorkKey(options: {
+  recordId?: string;
+  bookId: string;
+}): string | null {
+  const owner = useDraftOwner();
+  return owner === null ? null : recordWorkKey({ owner, ...options });
+}
+
 /** Whether there is work kept for a book's new record (or a record's changes). */
 export const useRecordWorkKept = (options: {
   recordId?: string;
   bookId: string;
-}) => useKeptDraft(recordDrafts, recordWorkKey(options)).draft !== null;
+}) => useKeptDraft(recordDrafts, useRecordWorkKey(options)).draft !== null;
 
 /**
  * Keeps what a reader felt when they finished a book: feelings instead of
@@ -117,7 +127,7 @@ export function RecordSheet({
   const noteId = useId();
   const { draft, saved, loaded, set, clear } = useKeptDraft(
     recordDrafts,
-    recordWorkKey({ recordId: record?.id, bookId: book.id }),
+    useRecordWorkKey({ recordId: record?.id, bookId: book.id }),
   );
   const continuing = useOpenedWithWork(loaded, draft !== null);
   const notTaken = useNotTakenWords();
@@ -135,16 +145,15 @@ export function RecordSheet({
         spoiler: false,
         isPublic: state.settings.readingPublic,
       };
-  const work = draft ?? base;
+  // Only the changes are kept, over the record as it is now.
+  const work: RecordWork = { ...base, ...draft };
   const { feelings, note, spoiler, isPublic } = work;
   // Words written that are not in the record yet, lost if thrown away.
   const wordsLost = note.trim() !== base.note.trim();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [stopping, setStopping] = useState(false);
-  const change = (patch: Partial<RecordWork>) => {
-    const next = { ...work, ...patch };
-    set(sameRecordWork(next, base) ? null : next);
-  };
+  const change = (patch: Partial<RecordWork>) =>
+    set(recordChanges({ ...work, ...patch }, base));
   const toggle = (feeling: Feeling) =>
     change({
       feelings: feelings.includes(feeling)
@@ -157,7 +166,8 @@ export function RecordSheet({
   // A change the town did not take keeps the sheet open, with the work.
   function save() {
     if (record) {
-      if (!actions.updateRecord(record.id, work)) {
+      // Only what was changed: the rest stays as the record is by now.
+      if (!actions.updateRecord(record.id, draft ?? {})) {
         notify(notTaken);
         return;
       }
@@ -410,8 +420,12 @@ export function RecordShelf({
   const records = recordsOf(state, readerId);
   if (!records.length) return null;
   const mine = readerId === ME_ID;
+  // The record as it is now, if it was changed after 見直す was tapped.
+  const editingRecord =
+    editing && records.find((entry) => entry.id === editing.id);
   const editingBook =
-    editing && state.books.find((book) => book.id === editing.bookId);
+    editingRecord &&
+    state.books.find((book) => book.id === editingRecord.bookId);
   return (
     <section className="record-shelf" aria-labelledby="record-shelf-title">
       <div className="profile-section-heading">
@@ -487,13 +501,13 @@ export function RecordShelf({
           );
         })}
       </ul>
-      {editing && editingBook && (
+      {editingRecord && editingBook && (
         <RecordSheet
           state={state}
           actions={actions}
           notify={notify}
           book={editingBook}
-          record={editing}
+          record={editingRecord}
           onClose={() => setEditing(null)}
         />
       )}

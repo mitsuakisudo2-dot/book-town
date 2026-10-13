@@ -122,7 +122,12 @@ function ReportForm({ target }: { target: ReportTarget }) {
   const account = useAccountState();
   // A report about a book is always a request to take its cover down.
   const cover = target.kind === "book";
-  const key = reportWorkKey(target);
+  // Kept for the signed-in reporter only: what one account wrote about a
+  // post never shows for another account on this browser.
+  const key =
+    account.status === "signed-in"
+      ? reportWorkKey(account.user.id, target)
+      : null;
   const { draft, saved, loaded, set, clear } = useKeptDraft(reportDrafts, key);
   const continuing = useOpenedWithWork(loaded, draft !== null);
   const base: ReportWork = { reason: cover ? "cover" : null, detail: "" };
@@ -169,7 +174,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
     // post they reported folds on their screen.
     if (filed.result === "sent") townActions.noteReport(filed.report);
     // Received (now or before): nothing is left to keep. A failure keeps it.
-    if (filed.result === "sent" || filed.result === "already")
+    if (key && (filed.result === "sent" || filed.result === "already"))
       reportDrafts.clear(key);
     setPhase(filed.result);
   }

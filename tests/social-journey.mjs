@@ -577,8 +577,10 @@ try {
         await expect(text).toHaveValue("");
         await expect(text).toBeFocused();
         await expect(dialog.getByText("書きかけを続けています")).toHaveCount(0);
-        // Posted, the draft is gone.
+        // Words written anew after that are not the old work.
         await text.fill("書いて、送った。");
+        await expect(dialog.getByText("書きかけを続けています")).toHaveCount(0);
+        // Posted, the draft is gone.
         await dialog.getByRole("button", { name: "投稿する" }).click();
         await expect(dialog).toHaveCount(0);
         await expect(fab).not.toContainText("下書き");
@@ -664,13 +666,54 @@ try {
           .getByRole("button", { name: "消す", exact: true })
           .click();
         await expect(reviews.locator("textarea")).toHaveValue("");
-        // A line sent as the book closes is posted, and kept nowhere else.
-        await go("/reading/");
-        await page.getByRole("button", { name: /一人で読む/ }).click();
-        await page
-          .getByRole("dialog", { name: "読書をはじめますか？" })
-          .getByRole("button", { name: "はじめる", exact: true })
+        // Words written anew there are not the old work.
+        await reviews.locator("textarea").fill("前から書いていた感想。");
+        await expect(reviews.getByText("書きかけを続けています")).toHaveCount(
+          0,
+        );
+        // A review with words of its own is not overwritten by the line; the
+        // review shows the line, and 書き足す adds it at the end.
+        const startSolo = async () => {
+          await go("/reading/");
+          await page.getByRole("button", { name: /一人で読む/ }).click();
+          await page
+            .getByRole("dialog", { name: "読書をはじめますか？" })
+            .getByRole("button", { name: "はじめる", exact: true })
+            .click();
+        };
+        await startSolo();
+        await memo.fill("三夜目の一行。");
+        await page.getByRole("button", { name: "読書を終える" }).click();
+        await ending.getByRole("button", { name: "感想を書く" }).click();
+        await expect(review.locator("textarea")).toHaveValue(
+          "前から書いていた感想。",
+        );
+        const toAdd = review.locator(".reading-line-to-add");
+        await expect(toAdd).toContainText(
+          "読みながら書いた言葉は、まだ感想に入れていません",
+        );
+        await expect(toAdd.locator("blockquote")).toHaveText("三夜目の一行。");
+        await noOverflow(`${label} line to add`);
+        await toAdd.getByRole("button", { name: "書き足す" }).click();
+        await expect(review.locator("textarea")).toHaveValue(
+          "前から書いていた感想。\n三夜目の一行。",
+        );
+        await expect(review.locator("textarea")).toBeFocused();
+        await expect(toAdd).toHaveCount(0);
+        await page.keyboard.press("Escape");
+        await expect(review).toHaveCount(0);
+        await expect(unsent).toHaveCount(0);
+        await go("/books/ten-nights/");
+        await expect(reviews.locator("textarea")).toHaveValue(
+          "前から書いていた感想。\n三夜目の一行。",
+        );
+        await reviews.getByRole("button", { name: "書きかけを消す" }).click();
+        await reviews
+          .getByRole("button", { name: "消す", exact: true })
           .click();
+        await expect(reviews.locator("textarea")).toHaveValue("");
+        // A line sent as the book closes is posted, and kept nowhere else.
+        await startSolo();
         await memo.fill("二夜目の一行。");
         await page.getByRole("button", { name: "読書を終える" }).click();
         await ending.getByRole("button", { name: "メモして閉じる" }).click();
@@ -690,6 +733,32 @@ try {
             localStorage.getItem("book-town-post-drafts-v1"),
           ),
         ).toBeNull();
+        // A line from a sitting not in this town (another account's, on this
+        // browser) is never shown here.
+        await page.evaluate(() =>
+          localStorage.setItem(
+            "book-town-post-drafts-v1",
+            JSON.stringify({
+              version: 1,
+              drafts: {
+                "reading:6b0c1c3e-0000-4000-8000-000000000000": {
+                  body: "ほかの人の言葉。",
+                  bookId: null,
+                  spoiler: false,
+                },
+              },
+            }),
+          ),
+        );
+        await reload();
+        await expect(
+          page.getByRole("button", { name: /一人で読む/ }),
+        ).toBeVisible();
+        await expect(unsent).toHaveCount(0);
+        await expect(page.getByText("ほかの人の言葉。")).toHaveCount(0);
+        await page.evaluate(() =>
+          localStorage.removeItem("book-town-post-drafts-v1"),
+        );
       },
     );
 
@@ -744,18 +813,48 @@ try {
         await own.getByRole("button", { name: "見直す" }).click();
         await expect(editNote).toHaveValue("湖の音が残った。");
         await expect(edit.getByText("書きかけを続けています")).toHaveCount(0);
-        // A change waits through Escape; やめる throws it away, asked once.
+        // A change waits through Escape. Made public beside 見直す in the
+        // meantime, the record stays public when the change is saved: only
+        // what was changed is kept, over the record as it is.
         await editNote.fill("湖の音と、豆畑。");
         await page.keyboard.press("Escape");
+        await expect(edit).toHaveCount(0);
+        await own.getByRole("button", { name: "公開する" }).click();
+        await expect(
+          own.getByRole("button", { name: "自分だけにする" }),
+        ).toBeVisible();
         await own.getByRole("button", { name: "見直す" }).click();
         await expect(editNote).toHaveValue("湖の音と、豆畑。");
         await expect(edit.getByText("書きかけを続けています")).toBeVisible();
+        await expect(edit.locator(".record-going")).toContainText("公開します");
+        await edit.getByRole("button", { name: "書き直す" }).click();
+        await expect(edit).toHaveCount(0);
+        await expect(
+          own.getByRole("button", { name: "自分だけにする" }),
+        ).toBeVisible();
+        const saved = await page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("book-town-v1")).data
+              .readingRecords,
+        );
+        expect(
+          saved
+            .filter((entry) => entry.bookId === "walden")
+            .map(({ note, isPublic }) => ({ note, isPublic })),
+        ).toEqual([{ note: "湖の音と、豆畑。", isPublic: true }]);
+        // やめる throws a change away, asked once.
+        await own.getByRole("button", { name: "見直す" }).click();
+        await expect(edit.getByText("書きかけを続けています")).toHaveCount(0);
+        await editNote.fill("湖の音と、豆畑と、冬。");
+        await page.keyboard.press("Escape");
+        await own.getByRole("button", { name: "見直す" }).click();
+        await expect(editNote).toHaveValue("湖の音と、豆畑と、冬。");
         await edit.getByRole("button", { name: "やめる" }).click();
         await expect(edit.getByText("書きかけを消しますか？")).toBeVisible();
         await edit.getByRole("button", { name: "消す", exact: true }).click();
         await expect(edit).toHaveCount(0);
         await own.getByRole("button", { name: "見直す" }).click();
-        await expect(editNote).toHaveValue("湖の音が残った。");
+        await expect(editNote).toHaveValue("湖の音と、豆畑。");
         await expect(edit.getByText("書きかけを続けています")).toHaveCount(0);
         await page.keyboard.press("Escape");
         expect(
