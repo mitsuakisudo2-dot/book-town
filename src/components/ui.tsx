@@ -262,6 +262,7 @@ export function BookJacket({
   illustrated = false,
   author = book.author,
   artIndex,
+  sizes = "160px",
 }: {
   book: Book;
   className?: string;
@@ -271,6 +272,8 @@ export function BookJacket({
   author?: string;
   /** Atlas panel chosen by the screen, so neighbouring covers differ. */
   artIndex?: number;
+  /** How wide the cover is drawn, for the image's `sizes`. */
+  sizes?: string;
 }) {
   const found = useCover(book.coverUrl ? undefined : book.isbn);
   const coverUrl = book.coverUrl ?? found?.url;
@@ -305,7 +308,7 @@ export function BookJacket({
           alt=""
           loading="lazy"
           fill
-          sizes="160px"
+          sizes={sizes}
           unoptimized
           onLoad={() => setLoaded(coverUrl)}
           onError={(event) => {

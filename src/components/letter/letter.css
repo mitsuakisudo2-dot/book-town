@@ -1,0 +1,761 @@
+/*
+ * 便り: the card on every screen that shows posts, and its page (v37
+ * app.css:693-793). Flat cards one under another with a thin rule between,
+ * the face in its own column, and the name, words, book and buttons on one
+ * left edge. Colours, type and radii come from tokens.css only.
+ */
+
+/* The feed. */
+.post-feed {
+  display: block;
+  background: var(--sheet);
+  border-block: 1px solid var(--line);
+}
+.post-feed > .letter:last-child,
+.post-feed > .poster-card:last-child {
+  border-bottom: 0;
+}
+.post-feed > .reviews-more {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  margin: 12px auto;
+}
+.post-feed > .empty-state {
+  background: var(--paper);
+}
+@media (max-width: 760px) {
+  /* On a phone the cards run from edge to edge. */
+  .town-main .post-feed {
+    margin-inline: -19px;
+  }
+}
+@media (max-width: 450px) {
+  .town-main .post-feed {
+    margin-inline: -16px;
+  }
+}
+
+/* A card. */
+.letter {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+  padding: 12px 16px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--sans);
+  scroll-margin-top: 60px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Pressed, the card answers at once, unless a control is what is pressed. */
+.letter:not(.is-page):active:not(:has(:is(a, button):active)) {
+  background: color-mix(in srgb, var(--sheet) 92%, var(--ink));
+}
+.letter > .post-avatar {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -2px;
+}
+.letter > :is(.post-head, .letter-body, .letter-actions) {
+  grid-column: 2;
+  min-width: 0;
+}
+
+/* The head: the name and 見本 on the first line, so nothing cuts 見本;
+   @handle, the shop and the time on the second. */
+.letter-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 6px;
+  margin: 0;
+  font-size: var(--t-who);
+  line-height: 1.45;
+}
+.letter .post-author {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-block: -11px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.letter-tag {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.letter-meta {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.letter-meta > * {
+  min-width: 0;
+}
+.letter-meta > * + *::before {
+  content: "·";
+  content: "·" / "";
+  margin: 0 4px;
+}
+.letter .post-handle {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.letter-shop {
+  flex: 0 100 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.letter-time,
+.letter-when {
+  flex: none;
+}
+.letter-time {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-block: -11.5px;
+  color: inherit;
+  text-decoration: none;
+}
+.letter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 0;
+}
+
+/* The words: 15px at 1.6, Japanese lines filled to the right edge. */
+.letter-body {
+  margin-top: 4px;
+}
+.letter-text {
+  color: var(--ink);
+  font-size: var(--t-body);
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  line-break: strict;
+  text-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.letter-text:focus:not(:focus-visible) {
+  outline: none;
+}
+.letter-text .post-text {
+  margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  white-space: pre-wrap;
+}
+/* Long: six lines, fading out, and 「続きを読む」. */
+.letter-text.is-folded {
+  max-height: calc(1.6em * 6);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black calc(100% - 1.6em),
+    rgb(0 0 0 / 0.35)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    black calc(100% - 1.6em),
+    rgb(0 0 0 / 0.35)
+  );
+}
+.letter-more,
+.letter-text-button {
+  display: inline-flex;
+  align-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--green);
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+.letter-more {
+  margin-bottom: -6px;
+}
+
+/* A spoiler, covered: one dashed box, a button, bars where the words are. */
+.letter-spoiler {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-box);
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.letter-spoiler:active {
+  background: color-mix(in srgb, var(--paper) 90%, var(--ink));
+}
+.letter-spoiler-bars {
+  display: grid;
+  gap: 10px;
+  filter: blur(2px);
+}
+.letter-spoiler-bars i {
+  display: block;
+  height: 14px;
+  border-radius: var(--r-pill);
+  background: var(--line);
+}
+.letter-spoiler-bars i:last-child:not(:first-child) {
+  width: 62%;
+}
+.letter-spoiler-words {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  color: var(--ink);
+  font-size: var(--t-ui);
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+}
+.letter-spoiler-words svg {
+  flex: none;
+}
+
+/* Folded by reports: the same quiet box, and 「読む」. */
+.letter-covered {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: 4px;
+  padding: 8px 8px 8px 14px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-box);
+  background: var(--paper);
+}
+.letter-covered p {
+  flex: 1 1 200px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-ui);
+  line-height: 1.6;
+}
+.letter-covered button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+
+/* What only the writer is told. */
+.letter .letter-note {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-box);
+  background: var(--notice);
+}
+.letter .letter-note p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 1.6;
+}
+
+/* The book, in a thin frame; 読みたい at its lower right. */
+.letter-book {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  container-type: inline-size;
+}
+.letter .post-book {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 4px 8px 10px;
+  border-radius: var(--r-box);
+  color: var(--ink);
+  text-decoration: none;
+}
+.letter-jacket {
+  display: block;
+  width: 44px;
+}
+.letter-jacket .book-jacket {
+  container-type: normal;
+}
+.letter-jacket .book-jacket > span:not(.jacket-edge):not(.jacket-art) {
+  display: none;
+}
+.letter-book-words {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+.letter-book-title {
+  font-family: var(--serif);
+  font-size: var(--t-body);
+  font-weight: 600;
+  line-height: 1.45;
+}
+.letter-book-author {
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.letter-feelings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.letter-feelings span {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  line-height: 1.6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.letter-want {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px;
+  border: 0;
+  background: none;
+}
+.letter-book .letter-want {
+  margin: 0 4px 4px 0;
+}
+/* Too narrow for the book's words beside 読みたい (a 320px phone): it
+   moves under them, still at the frame's lower right. */
+@container (max-width: 290px) {
+  .letter-book > .post-book {
+    grid-column: 1 / -1;
+  }
+  .letter-book > .letter-want {
+    grid-column: 1 / -1;
+    justify-self: end;
+    margin-top: -8px;
+  }
+}
+.letter-want-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 4px -4px 0 0;
+}
+.letter-want-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 12px 0 9px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--sheet);
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+.letter-want:active .letter-want-pill {
+  opacity: 0.6;
+}
+.letter-want.is-on .letter-want-pill {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+}
+.letter-want.is-lit .letter-want-pill {
+  animation: letter-want-glow 0.9s ease-out;
+}
+@keyframes letter-want-glow {
+  from {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--lamp-glow) 55%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.letter-credit {
+  margin: 4px 0 0;
+}
+.letter-credit .cover-credit {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+.letter-credit .cover-credit a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* Along the bottom: reply at the start, いいね in the very middle of the
+   words' column, 「…」 at the end; each 44px, named for screen readers. */
+.letter-actions {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 2px;
+}
+.letter-act {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-box);
+  background: none;
+  color: var(--ink-2);
+}
+.letter-act:active {
+  opacity: 0.6;
+}
+.letter-reply {
+  grid-column: 1;
+  justify-self: start;
+  margin-left: -15px;
+}
+.letter-like {
+  grid-column: 2;
+}
+.letter-like.is-on {
+  color: var(--green);
+}
+.letter-menu-slot {
+  grid-column: 3;
+  justify-self: end;
+  width: 44px;
+  height: 44px;
+  margin-right: -15px;
+}
+.letter-heart {
+  display: grid;
+  place-items: center;
+}
+.letter-heart.is-popping {
+  animation: letter-like-pop 0.42s ease-out;
+}
+@keyframes letter-like-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.45) rotate(-8deg);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+/* 「n回」 for a moment above the heart; never a count at rest. */
+.letter-like-pill {
+  position: absolute;
+  bottom: calc(100% - 4px);
+  left: 50%;
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--line-2);
+  color: var(--ink);
+  font-size: var(--t-meta);
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: letter-pill 1s ease-out forwards;
+}
+@keyframes letter-pill {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The sheet of 「…」 and the questions it asks. */
+.letter-menu {
+  display: grid;
+}
+.letter-menu > button {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  font-size: var(--t-page);
+  text-align: left;
+}
+.letter-menu > button:last-child {
+  border-bottom: 0;
+}
+.letter-menu > button.is-alert {
+  color: var(--alert);
+}
+.letter-menu-question {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: var(--t-page);
+  line-height: 1.6;
+}
+.letter-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.letter-confirm .button {
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: var(--t-ui);
+}
+.letter-confirm .button.secondary {
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+
+/* The post written a moment ago glows once where it lands. */
+@keyframes letter-arrive {
+  from {
+    background-color: var(--lamp-soft);
+  }
+}
+.letter.is-arriving {
+  animation: letter-arrive 2.6s ease-out;
+}
+
+/* A 便り's page: over the whole screen, sliding in from the right. */
+.post-page {
+  display: flex;
+  flex-direction: column;
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+.post-page.is-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  height: 100dvh;
+  box-shadow: -8px 0 24px color-mix(in srgb, var(--ink) 12%, transparent);
+  touch-action: pan-y pinch-zoom;
+  animation: post-page-in 0.18s cubic-bezier(0.2, 0, 0, 1);
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
+}
+.post-page.is-layer.is-dragging {
+  transition: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+@keyframes post-page-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+.post-page-head {
+  flex: none;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  height: 52px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--line);
+  background: var(--sheet);
+}
+.post-page-head :is(h1, h2) {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--t-who);
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+.post-page-back {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-box);
+  background: none;
+  color: var(--ink);
+}
+.post-page-scroll {
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
+}
+/* The post itself: the head beside the face, then all of it full width,
+   a little larger. */
+.post-page .letter.is-main {
+  padding: 8px 16px 0;
+}
+.post-page .letter.is-main > .post-avatar {
+  grid-row: 1;
+}
+.post-page .letter.is-main > :is(.letter-body, .letter-actions) {
+  grid-column: 1 / -1;
+}
+.post-page .letter.is-main .letter-text {
+  font-size: var(--t-page);
+  line-height: 1.65;
+}
+.post-page .letter.is-reply {
+  padding-top: 14px;
+}
+.post-page-replies-head {
+  margin: 14px 16px 0;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--t-ui);
+  font-weight: 700;
+  line-height: 1.5;
+}
+.post-page-none {
+  margin: 8px 16px;
+  color: var(--ink-2);
+  font-size: var(--t-ui);
+  line-height: 1.6;
+}
+.post-page-bar {
+  flex: none;
+  padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--sheet);
+}
+.post-page-reply {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 24px;
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: var(--t-ui);
+  text-align: left;
+}
+.post-page-missing {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  padding: 40px 16px;
+  color: var(--ink-2);
+  font-size: var(--t-page);
+  text-align: center;
+}
+/* At its own address, in the page: the bar stays above the bottom tabs. */
+.post-page.is-route {
+  margin: -24px -19px 0;
+}
+.post-page.is-route .post-page-bar {
+  position: sticky;
+  bottom: 0;
+}
+@media (min-width: 761px) {
+  .post-page.is-route {
+    max-width: 640px;
+    margin: 0 auto;
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    overflow: clip;
+  }
+}
+@media (max-width: 760px) {
+  .post-page.is-route .post-page-bar {
+    bottom: 74px;
+  }
+}
+@media (max-width: 450px) {
+  .post-page.is-route {
+    margin: -23px -16px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post-page.is-layer,
+  .letter.is-arriving,
+  .letter-heart.is-popping,
+  .letter-want.is-lit .letter-want-pill {
+    animation: none;
+    transition: none;
+  }
+  .letter-like-pill {
+    animation: none;
+  }
+}

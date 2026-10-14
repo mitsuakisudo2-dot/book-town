@@ -93,4 +93,31 @@ check("no `text-wrap: pretty` in the town's CSS or components", () => {
   }
 });
 
+check("letter.css takes every colour from the tokens", () => {
+  const css = read("src/components/letter/letter.css");
+  const hex = css.match(/#[0-9a-f]{3,8}\b/gi);
+  assert.equal(hex, null, `letter.css has hex colours: ${hex?.join(", ")}`);
+});
+
+check("covers are shown whole: no object-fit: cover on a jacket", () => {
+  // v37 cropped its covers (app.css .cover); the town shows them as served.
+  for (const file of [
+    "src/components/letter/letter.css",
+    "src/components/home/home.css",
+  ]) {
+    let css: string;
+    try {
+      css = read(file);
+    } catch {
+      continue; // home.css comes with the home (PR 1b).
+    }
+    for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g))
+      assert.ok(
+        !/object-fit\s*:\s*cover/.test(body) ||
+          !/jacket|cover|book/.test(selector),
+        `${file}: ${selector.trim()} crops a cover`,
+      );
+  }
+});
+
 console.log(`tokens ok (${passed})`);
