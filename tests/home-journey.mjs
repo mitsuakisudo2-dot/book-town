@@ -294,9 +294,9 @@ try {
           "いいね at the middle of the words' column",
         ).toBeLessThanOrEqual(1);
         expect(
-          at.dotsEnd,
+          Math.abs(at.textEnd - at.dotsEnd),
           "「…」 ends at the text's right edge",
-        ).toBeLessThanOrEqual(at.textEnd + 1);
+        ).toBeLessThanOrEqual(2);
         expect(at.menu, "「…」 inside the card").toBeLessThanOrEqual(
           at.articleRight,
         );
@@ -525,6 +525,23 @@ try {
       `${label} a 便り's page: by keyboard, its replies, the reply sheet, swipes and its address`,
       async () => {
         await go("/timeline/");
+        // A reply of the reader's own, older than the town's two, comes last
+        // in the saved town: the page puts it first.
+        await editTown(
+          `data.posts.push({
+             id: "me-post-early-reply",
+             authorId: "me",
+             body: "わたしも再読したくなりました。",
+             bookId: null,
+             spoiler: false,
+             parentId: "p-1",
+             createdAt: "2026-10-10T09:20:00+09:00",
+             likes: 0,
+             wants: 0,
+             readingMode: null,
+           });`,
+        );
+        await go("/timeline/");
         // Keyboard: Tab to the time link, Enter, 戻る has the focus; Escape
         // closes, and the time link has it again.
         const post = card("凪", "十年ぶりに再読");
@@ -550,13 +567,23 @@ try {
         ).toBe(true);
         // Replies, oldest first; the writer's own is marked.
         const replies = letter.locator("article.is-reply");
-        await expect(replies).toHaveCount(2);
-        await expect(replies.nth(0)).toContainText("灯");
-        await expect(replies.nth(1)).toContainText("凪");
+        await expect(replies).toHaveCount(3);
+        await expect(replies.nth(0)).toContainText(
+          "わたしも再読したくなりました",
+        );
+        await expect(replies.nth(1)).toContainText("灯");
+        await expect(replies.nth(2)).toContainText("凪");
         await expect(
-          replies.nth(1).locator(".letter-tag", { hasText: "投稿した人" }),
+          replies.nth(2).locator(".letter-tag", { hasText: "投稿した人" }),
         ).toBeVisible();
-        await expect(replies.nth(0)).not.toContainText("投稿した人");
+        await expect(replies.nth(1)).not.toContainText("投稿した人");
+        // Another's reply that recommends a book offers 読みたい in its row.
+        await expect(
+          replies
+            .nth(2)
+            .locator(".letter-book")
+            .getByRole("button", { name: "読みたい" }),
+        ).toBeVisible();
         await expect(replies.locator(".letter-reply")).toHaveCount(0);
         await expect(letter.locator(".post-page-replies-head")).toHaveText(
           "返信",
@@ -631,6 +658,11 @@ try {
         await expect
           .poll(() => letter.evaluate((element) => element.style.transform))
           .toBe("");
+        // Back in place before the next finger comes down on its edge.
+        await slidIn(letter);
+        expect(
+          await letter.evaluate((element) => element.getBoundingClientRect().x),
+        ).toBe(0);
         await watchFollowing(letter);
         await drag({ x: 10, y }, { x: 160, y }, { steps: 10, every: 20 });
         expect(await following(letter), "left the edge to Safari").toBe(false);
@@ -651,11 +683,188 @@ try {
           page.getByRole("heading", { level: 1, name: "便り" }),
         ).toBeVisible();
         await expect(page.locator("main")).toContainText("十年ぶりに再読");
-        await expect(page.locator("main article.is-reply")).toHaveCount(2);
+        await expect(page.locator("main article.is-reply")).toHaveCount(3);
+        // ホーム still returns to the Home tab left last.
+        await expect(
+          page
+            .getByRole("navigation", { name: "スマートフォンナビゲーション" })
+            .getByRole("link", { name: "ホーム" }),
+        ).toHaveAttribute("href", "/timeline/");
         await go("/post/?id=no-such-post");
         await expect(
           page.getByText("この便りは、いまは開けません"),
         ).toBeVisible();
+      },
+    );
+
+    await check(
+      `${label} a link on a 便り's page to the page beneath only closes it`,
+      async () => {
+        await go("/timeline/");
+        await go("/books/solaris/");
+        const review = card("凪", "十年ぶりに再読");
+        await review.evaluate((element) =>
+          element.scrollIntoView({ block: "center" }),
+        );
+        await page.waitForTimeout(100);
+        const under = await page.evaluate(() => scrollY);
+        expect(under).toBeGreaterThan(0);
+        await review.locator(".letter-time").tap();
+        const letter = letterPage("凪");
+        await expect(letter).toBeVisible();
+        // The book of a review opened on that book's page: the page closes,
+        // as 戻る would, with the book's page where it was.
+        await letter.locator(".is-main .post-book").tap();
+        await expect(letter).toHaveCount(0);
+        await expect(page).toHaveURL(/\/books\/solaris\/$/);
+        await expect.poll(() => page.evaluate(() => scrollY)).toBe(under);
+        // No step was left behind: 戻る leaves the book's page.
+        await page.goBack();
+        await expect(page).toHaveURL(/\/timeline\/$/);
+      },
+    );
+
+    await check(
+      `${label} a 便り opened from behind the spoiler door shows on its page as the door did`,
+      async () => {
+        await go("/books/galaxy-railroad/");
+        await editTown(
+          `data.posts.push({
+             id: "me-post-door-reply",
+             authorId: "me",
+             body: "最後の駅で降りなかった理由が、いまならわかる気がします。",
+             bookId: null,
+             spoiler: true,
+             parentId: "p-9",
+             createdAt: "2026-10-08T20:10:00+09:00",
+             likes: 0,
+             wants: 0,
+             readingMode: null,
+           });`,
+        );
+        await go("/books/galaxy-railroad/");
+        await page
+          .getByRole("button", { name: /ネタバレありのレビュー/ })
+          .tap();
+        const behind = card("はる", "あの終わり方");
+        await expect(behind).toBeVisible();
+        await behind.locator(".letter-time").tap();
+        const letter = letterPage("はる");
+        await expect(letter).toBeVisible();
+        await expect(letter.locator(".letter-spoiler")).toHaveCount(0);
+        await expect(letter.getByText("あの終わり方")).toBeVisible();
+        await expect(letter.getByText("最後の駅で降りなかった")).toBeVisible();
+        await letter.getByRole("button", { name: "戻る" }).tap();
+        await expect(letter).toHaveCount(0);
+        // Opened from the timeline, the same 便り is covered as it is there.
+        await page
+          .getByRole("navigation", { name: "スマートフォンナビゲーション" })
+          .getByRole("link", { name: "ホーム" })
+          .tap();
+        await expect(page).toHaveURL(/\/timeline\/$/);
+        const covered = page
+          .locator("main article.letter")
+          .filter({
+            has: page.getByRole("link", { name: "はる", exact: true }),
+          })
+          .filter({ has: page.locator(".letter-spoiler") })
+          .filter({ hasText: "銀河鉄道の夜" });
+        await expect(covered).toHaveCount(1);
+        await covered.locator(".letter-time").tap();
+        await expect(letter).toBeVisible();
+        await expect(letter.locator(".is-main .letter-spoiler")).toHaveCount(1);
+        await expect(page.getByText("あの終わり方")).toHaveCount(0);
+        await expect(page.getByText("最後の駅で降りなかった")).toHaveCount(0);
+        await letter.getByRole("button", { name: "戻る" }).tap();
+        await expect(letter).toHaveCount(0);
+      },
+    );
+
+    await check(
+      `${label} in a tag's list, a reply whose 便り is left out opens no page`,
+      async () => {
+        await go("/timeline/");
+        await editTown(
+          `data.settings.spoilerDisplay = "leave_out";
+           data.posts.push({
+             id: "me-post-tag-reply",
+             authorId: "me",
+             body: "わたしも大人になって読み返しました。 #夜ふかし",
+             bookId: null,
+             spoiler: false,
+             parentId: "p-9",
+             createdAt: "2026-10-09T08:00:00+09:00",
+             likes: 0,
+             wants: 0,
+             readingMode: null,
+           });`,
+        );
+        await go("/search/?q=" + encodeURIComponent("#夜ふかし"));
+        const mine = card("あなた", "大人になって読み返しました");
+        await expect(mine).toBeVisible();
+        await expect(mine.locator("a.letter-time")).toHaveCount(0);
+        await expect(mine.locator("time.letter-when")).toBeVisible();
+        await expect(mine.locator(".letter-reply")).toHaveCount(0);
+        await mine.locator(".letter-text").tap();
+        await page.waitForTimeout(300);
+        await expect(page.locator(".post-page.is-layer")).toHaveCount(0);
+        await editTown(`data.settings.spoilerDisplay = "fold_possible";`);
+      },
+    );
+
+    await check(
+      `${label} a 便り deleted at its own address: back where the reader came from, or home`,
+      async () => {
+        await go("/timeline/");
+        await compose("消すための便り。");
+        const id = await page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("book-town-v1")).data.posts.find(
+              (post) => post.body === "消すための便り。",
+            ).id,
+        );
+        await editTown(
+          `const post = data.posts.find((entry) => entry.id === ${JSON.stringify(id)});
+           post.likers = [{ readerId: "r-sumire", taps: 1, at: post.createdAt }];
+           post.likes = 1;`,
+        );
+        const remove = async () => {
+          const main = page.locator("main article.letter.is-main");
+          await main.getByRole("button", { name: "その他の操作" }).tap();
+          const menu = page.getByRole("dialog", { name: "その他の操作" });
+          await menu.getByRole("button", { name: "削除する" }).tap();
+          await menu.getByRole("button", { name: "削除する" }).tap();
+          await expect(menu).toHaveCount(0);
+        };
+        // From a notice: 戻る's way, back to the notices.
+        await go("/notifications/");
+        await page
+          .getByRole("link", { name: /消すための便り/ })
+          .first()
+          .tap();
+        await expect(page).toHaveURL(/\/post\/\?id=/);
+        await expect(
+          page.getByRole("heading", { level: 1, name: "便り" }),
+        ).toBeVisible();
+        await remove();
+        await expect(page).toHaveURL(/\/notifications\/$/);
+        await expect(page.locator(".toast")).toHaveText("投稿を削除しました");
+        // Opened at its address: to the town.
+        await go("/timeline/");
+        await compose("もうひとつ消す便り。");
+        const other = await page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("book-town-v1")).data.posts.find(
+              (post) => post.body === "もうひとつ消す便り。",
+            ).id,
+        );
+        await go("/post/?id=" + other);
+        await remove();
+        await expect(page).not.toHaveURL(/\/post\//);
+        await expect(page.locator(".toast")).toHaveText("投稿を削除しました");
+        await expect(
+          page.getByText("この便りは、いまは開けません"),
+        ).toHaveCount(0);
       },
     );
 
@@ -693,6 +902,12 @@ try {
         const cards = page.locator("main article.letter");
         await expect(cards.first()).toBeVisible();
         await expectTargetsAndType(cards, `${label} cards`);
+        const posters = page.locator("main article.poster-card");
+        await expect(posters.first()).toBeVisible();
+        await expectTargetsAndType(
+          posters.locator(".post-head"),
+          `${label} poster cards`,
+        );
         const sample = card("すみれ", "どこから開いてもいい本");
         await expectReadable(sample.locator(".post-text"), "card text");
         await expectReadable(sample.locator(".letter-meta"), "card meta");
@@ -756,6 +971,56 @@ try {
 
     await context.close();
   }
+
+  await check(
+    "On a desktop, the 便り's page keeps its column of the page at its address",
+    async () => {
+      const context = await browser.newContext({
+        viewport: { width: 1280, height: 900 },
+      });
+      page = settleBeforeNavigating(await context.newPage());
+      page.on("pageerror", (error) => errors.push(error.message));
+      page.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+      });
+      const column = () =>
+        page.locator(".post-page .letter.is-main").evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          return { left: box.left, width: box.width };
+        });
+      await go("/post/?id=p-1");
+      const route = await column();
+      await go("/timeline/");
+      await card("凪", "十年ぶりに再読").locator(".letter-time").click();
+      await expect(letterPage("凪")).toBeVisible();
+      await slidIn(letterPage("凪"));
+      const layer = await column();
+      expect(
+        Math.abs(layer.width - route.width),
+        "the same width",
+      ).toBeLessThanOrEqual(1);
+      expect(layer.width).toBeLessThanOrEqual(640);
+      expect(
+        Math.abs(layer.left + layer.width / 2 - 640),
+        "in the middle of the screen",
+      ).toBeLessThanOrEqual(1);
+      for (const part of [".post-page-back", ".post-page-reply"]) {
+        const box = await letterPage("凪")
+          .locator(part)
+          .evaluate((element) => {
+            const rect = element.getBoundingClientRect();
+            return { left: rect.left, right: rect.right };
+          });
+        expect(box.left, `${part} within the column`).toBeGreaterThanOrEqual(
+          layer.left - 1,
+        );
+        expect(box.right, `${part} within the column`).toBeLessThanOrEqual(
+          layer.left + layer.width + 1,
+        );
+      }
+      await context.close();
+    },
+  );
 
   await check(
     "No hydration errors, uncaught exceptions or console errors",
