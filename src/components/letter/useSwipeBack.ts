@@ -147,6 +147,12 @@ export function useSwipeBack(
       drag = null;
       if (ended.following) settle("open", 0);
     };
+    // The page that follows the finger takes the touch as its own. Left to
+    // the browser, a drag let go fast is a flick it carries on (Chrome), and
+    // the next tap, however soon, only stops that: it would open nothing.
+    const hold = (event: TouchEvent) => {
+      if (drag?.following && event.cancelable) event.preventDefault();
+    };
     const click = (event: MouseEvent) => {
       if (!swallow) return;
       swallow = false;
@@ -157,12 +163,14 @@ export function useSwipeBack(
     layer.addEventListener("pointermove", move);
     layer.addEventListener("pointerup", up);
     layer.addEventListener("pointercancel", cancel);
+    layer.addEventListener("touchmove", hold, { passive: false });
     layer.addEventListener("click", click, true);
     return () => {
       layer.removeEventListener("pointerdown", down);
       layer.removeEventListener("pointermove", move);
       layer.removeEventListener("pointerup", up);
       layer.removeEventListener("pointercancel", cancel);
+      layer.removeEventListener("touchmove", hold);
       layer.removeEventListener("click", click, true);
     };
   }, [ref]);
