@@ -1,8 +1,20 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import type { Book, TownActions, TownState } from "../lib/types";
 import { formatPrice, REGISTERED_GENRE } from "../lib/books";
+import { bookLookup } from "../lib/book-lookup";
+import { iosSafari } from "../lib/user-agent";
 import { Icon } from "./ui";
+
+const unchanging = () => () => {};
+/** Safari on an iPhone or iPad; false on the server and while hydrating. */
+const useIosSafari = () =>
+  useSyncExternalStore(
+    unchanging,
+    () => iosSafari(navigator.userAgent, navigator.maxTouchPoints ?? 0),
+    () => false,
+  );
 
 /** 定価, tax included. Books without a known price show nothing. */
 export function BookPrice({
@@ -29,6 +41,7 @@ export function BookPrice({
  */
 export function BookPurchase({ book }: { book: Book }) {
   const query = encodeURIComponent(`${book.title} ${book.author}`);
+  const lookup = bookLookup(book, useIosSafari());
   return (
     <div className="book-links">
       <div className="book-purchase" role="group" aria-label="購入する">
@@ -49,19 +62,22 @@ export function BookPurchase({ book }: { book: Book }) {
           楽天ブックス<span aria-hidden="true">↗</span>
         </a>
       </div>
-      {/* No "www.": on an iPhone the Google app can claim links to
-          www.google.com and open them itself. google.com is redirected
-          there after the browser has the tap, and a redirect is not handed
-          to an app, so the search stays in the browser. */}
+      {/* A page cannot ask the browser for its search engine. In Safari on
+          an iPhone or iPad, x-web-search:// is Safari's own search, with the
+          engine chosen in Settings > Safari. Only Safari answers it: other
+          browsers and apps' views would send it to Safari or drop it, so
+          they keep Google. The served page cannot know the browser, so that
+          address is put in once the page has started. Elsewhere, and until
+          then, Google, without "www.": on an iPhone the Google app can claim
+          links to www.google.com and open them itself. google.com is
+          redirected there after the browser has the tap, and a redirect is
+          not handed to an app. */}
       <a
         className="book-lookup"
-        href={
-          "https://google.com/search?q=" +
-          encodeURIComponent(`${book.title}\u3000${book.author}`)
-        }
+        href={lookup.href}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="この本についてGoogleで調べる（新しいタブで開きます）"
+        aria-label={lookup.label}
       >
         <Icon name="search" size={13} />
         この本について調べる<span aria-hidden="true">↗</span>
