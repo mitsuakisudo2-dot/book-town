@@ -21,6 +21,7 @@ import type { ReadEntry } from "../lib/store-scene-adapter";
 import { StoreStamp } from "./StoreCanvas";
 import { profilePath, shopPath } from "../lib/paths";
 import { useBackLayer } from "../lib/back-layer";
+import { focusBack } from "../lib/coarse-pointer";
 
 /**
  * The book in hand, as one step of 戻る: the shop, the shelf (none for a
@@ -313,6 +314,8 @@ export function BookInHand({
     bodyStyle.left = `-${position.x}px`;
     bodyStyle.right = "0";
     bodyStyle.width = "100%";
+    // The dialog holds no field, so opening it raises no keyboard; the focus
+    // starts on 閉じる.
     dialog.showModal();
     closeButtonRef.current?.focus({ preventScroll: true });
 
@@ -326,7 +329,7 @@ export function BookInHand({
           behavior: "instant",
         });
         if (previouslyFocused?.isConnected) {
-          previouslyFocused.focus({ preventScroll: true });
+          focusBack(previouslyFocused, { preventScroll: true });
         }
       }
     };

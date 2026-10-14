@@ -3,6 +3,17 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
+import {
+  coarse,
+  expectKeyboardUp,
+  expectNoKeyboard,
+  expectNoZoomOnFocus,
+  expectTapWrites,
+  fakeKeyboard,
+  forgetFocus,
+  toolbarPlace,
+  watchFocus,
+} from "./journey-keyboard.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -196,17 +207,35 @@ try {
         await page.locator(".compose-fab").click();
         const dialog = page.getByRole("dialog", { name: "投稿する" });
         const text = dialog.locator("textarea");
+        const hide = dialog.getByRole("button", { name: "選んだ言葉を隠す" });
         await text.fill("読み終えて驚いた。犯人は庭師だった。");
+        // ［隠す］ is there only while words are chosen in the text box:
+        // chosen with the mouse (three clicks choose the line), it comes,
+        // and a click that lets them go takes it away.
+        await expect(hide).toHaveCount(0);
+        await text.click({ clickCount: 3 });
+        await expect(hide).toHaveText("隠す");
+        await text.click();
+        await expect(hide).toHaveCount(0);
         await text.evaluate((field) => {
           const start = field.value.indexOf("庭師");
           field.setSelectionRange(start, start + 2);
         });
-        await dialog.getByRole("button", { name: "一部を隠す" }).click();
+        await hide.click();
         await expect(text).toHaveValue(
           "読み終えて驚いた。犯人は||庭師||だった。",
         );
         await expect(text).toBeFocused();
-        await expect(dialog.getByText("「||」で囲んだ言葉は")).toBeVisible();
+        // The caret goes on after them: nothing is left chosen, so it goes.
+        expect(
+          await text.evaluate((field) => [
+            field.selectionStart - field.value.indexOf("だった"),
+            field.selectionEnd - field.value.indexOf("だった"),
+          ]),
+        ).toEqual([0, 0]);
+        await expect(hide).toHaveCount(0);
+        // No line of help about the marks under it.
+        await expect(dialog.getByText("「||」で囲んだ言葉は")).toHaveCount(0);
         await dialog.getByRole("button", { name: "投稿する" }).click();
         await expect(dialog).toHaveCount(0);
         // Only those words are covered; the rest of the post reads as usual.
@@ -943,6 +972,45 @@ try {
         await expect(sheet).toHaveCount(0);
       },
     );
+    await check(
+      `${label} with a mouse, clicks in the post sheet and its layout are as before`,
+      async () => {
+        expect(await coarse(page)).toBe(false);
+        await go("/timeline/");
+        await page.locator(".compose-fab").click();
+        const dialog = page.getByRole("dialog", { name: "投稿する" });
+        await expect(dialog.locator("textarea")).toBeFocused();
+        // The buttons are in the card's flow, last, not docked.
+        const tools = dialog.locator(".composer-tools");
+        expect(
+          await tools.evaluate((tools) => getComputedStyle(tools).position),
+        ).toBe("static");
+        // ポスターを作る is one of them, after 本を添える; ネタバレあり waits
+        // for a book.
+        await expect(
+          tools.locator(".composer-book + .composer-poster"),
+        ).toHaveAccessibleName("ポスターを作る");
+        await expect(
+          dialog.getByRole("checkbox", { name: "ネタバレあり" }),
+        ).toHaveCount(0);
+        // A click takes the focus where it lands, as anywhere: the book's
+        // search, then the ネタバレあり box by its words.
+        await dialog.getByRole("button", { name: "本を添える" }).click();
+        await expect(dialog.getByRole("searchbox")).toBeFocused();
+        await pickBook(dialog, "モモ");
+        const words = dialog.locator(".composer-spoiler");
+        const box = await words.boundingBox();
+        await words.click({
+          position: { x: box.width - 8, y: box.height / 2 },
+        });
+        const spoiler = dialog.getByRole("checkbox", { name: "ネタバレあり" });
+        await expect(spoiler).toBeChecked();
+        await expect(spoiler).toBeFocused();
+        await dialog.getByRole("button", { name: "モモを外す" }).click();
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+      },
+    );
     await context.close();
   }
   {
@@ -952,36 +1020,43 @@ try {
       isMobile: true,
       hasTouch: true,
     });
+    await watchFocus(context);
+    await fakeKeyboard(context);
     page = settleBeforeNavigating(await context.newPage());
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(message.text());
     });
+    const fab = page.locator(".compose-fab");
+    const dialog = page.getByRole("dialog", { name: "投稿する" });
+    const text = dialog.locator("textarea");
+    const hide = dialog.getByRole("button", { name: "選んだ言葉を隠す" });
+    /** Notes each time the text box lets the focus go (__blurs). */
+    const countBlurs = () =>
+      text.evaluate((field) => {
+        window.__blurs = 0;
+        field.addEventListener("blur", () => window.__blurs++);
+      });
+    const blurs = () => page.evaluate(() => window.__blurs);
     await check(
-      "393px phone: a sheet for writing opens without the keyboard and waits for a tap on its field",
+      "393px phone: the post sheet opens with its text box ready and the keyboard up; the feelings sheet waits for a tap",
       async () => {
-        expect(
-          await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
-        ).toBe(true);
-        const typing = () =>
-          page.evaluate(() =>
-            Boolean(
-              document.activeElement?.matches(
-                "input,textarea,select,[contenteditable]",
-              ),
-            ),
-          );
+        expect(await coarse(page)).toBe(true);
         await go("/timeline/");
-        const fab = page.locator(".compose-fab");
+        // The text box has the focus, given within the tap that opened the
+        // sheet, so a phone's keyboard rises with it: typing goes in.
         await fab.tap();
-        const dialog = page.getByRole("dialog", { name: "投稿する" });
-        const text = dialog.locator("textarea");
-        const close = dialog.getByRole("button", { name: "閉じる" });
-        // The focus starts in the sheet, on its first button: no field
-        // has it, so no keyboard rises over the sheet.
-        await expect(close).toBeFocused();
-        await expect(text).not.toBeFocused();
-        expect(await typing()).toBe(false);
+        await expectKeyboardUp(page, text, "投稿する");
+        // In the town's shell still, at a phone's sizes: the text box at
+        // 16px, and the words around it readable.
+        await expectNoZoomOnFocus(text, "投稿する");
+        await expectReadable(dialog.locator(".composer-book"), "本を添える");
+        await expectReadable(
+          dialog.locator(".composer-poster"),
+          "ポスターを作る",
+        );
+        await page.keyboard.type("指で書きはじめる");
+        await expect(text).toHaveValue("指で書きはじめる");
         // The sheet still keeps the focus inside, both ways round.
         for (const key of ["Shift+Tab", "Tab", "Tab", "Tab"]) {
           await page.keyboard.press(key);
@@ -991,37 +1066,597 @@ try {
             ),
           ).toBe(true);
         }
-        // Escape and 戻る still close it.
+        // Escape and 戻る still close it. The words are kept, and the sheet
+        // opens again with the caret after them.
         await page.keyboard.press("Escape");
         await expect(dialog).toHaveCount(0);
+        await forgetFocus(page);
         await fab.tap();
-        await expect(close).toBeFocused();
+        await expectKeyboardUp(page, text, "投稿する again");
+        await expect(text).toHaveValue("指で書きはじめる");
+        expect(
+          await text.evaluate((field) => [
+            field.selectionStart,
+            field.selectionEnd,
+          ]),
+        ).toEqual([8, 8]);
         await back();
         await expect(dialog).toHaveCount(0);
-        // Writing starts with a tap on the field.
-        await fab.tap();
-        await expect(close).toBeFocused();
-        await text.tap();
-        await expect(text).toBeFocused();
-        await page.keyboard.type("指で書きはじめる");
-        await expect(text).toHaveValue("指で書きはじめる");
-        await page.keyboard.press("Escape");
-        await expect(dialog).toHaveCount(0);
-        // The feelings for a finished book wait for a tap the same way.
+        // The feelings for a finished book are chosen first: no writing
+        // screen. The sheet opens on 閉じる, with no keyboard, and the field
+        // waits for a tap.
         await go("/books/utopia/");
         await page
           .getByRole("button", { name: "読み終えた気持ちを残す" })
           .tap();
         const sheet = page.getByRole("dialog", { name: "読み終えた気持ち" });
-        const note = sheet.getByLabel("ひとこと（なくても大丈夫です）");
+        await expectNoKeyboard(page, "読み終えた気持ち", sheet);
         await expect(
           sheet.getByRole("button", { name: "閉じる" }),
         ).toBeFocused();
-        expect(await typing()).toBe(false);
-        await note.tap();
-        await expect(note).toBeFocused();
+        await expectTapWrites(
+          sheet.getByLabel("ひとこと（なくても大丈夫です）"),
+        );
         await page.keyboard.press("Escape");
         await expect(sheet).toHaveCount(0);
+      },
+    );
+    await check(
+      "393px phone: taps inside the post sheet keep the keyboard up",
+      async () => {
+        await go("/timeline/");
+        await fab.tap();
+        await expectKeyboardUp(page, text, "open");
+        // How often the text box lost the focus: each time, a phone's
+        // keyboard would go down, even for a moment.
+        await countBlurs();
+        // The line about the draft kept is blank space but for its buttons:
+        // a tap on its words keeps the keyboard up.
+        await dialog.getByText("書きかけを続けています").tap();
+        await expect(text).toBeFocused();
+        expect(await blurs(), "the text box let the focus go").toBe(0);
+        // 書きかけを消す asks, with the focus on its answer (the keyboard may
+        // go down meanwhile). 残す, and 消す, give the text box the focus
+        // again within the tap.
+        await dialog.getByRole("button", { name: "書きかけを消す" }).tap();
+        await expect(
+          dialog.getByRole("button", { name: "残す" }),
+        ).toBeFocused();
+        await forgetFocus(page);
+        await dialog.getByRole("button", { name: "残す" }).tap();
+        await expectKeyboardUp(page, text, "draft kept");
+        await expect(text).not.toHaveValue("");
+        await dialog.getByRole("button", { name: "書きかけを消す" }).tap();
+        await forgetFocus(page);
+        await dialog.getByRole("button", { name: "消す", exact: true }).tap();
+        await expect(text).toHaveValue("");
+        await expectKeyboardUp(page, text, "draft thrown away");
+        await page.keyboard.type("犯人は庭師だった。");
+        await page.evaluate(() => {
+          window.__blurs = 0;
+        });
+        // The title: the text box keeps the focus.
+        await dialog.getByRole("heading", { name: "投稿する" }).tap();
+        await expect(text).toBeFocused();
+        // ［隠す］ covers the words chosen, there in the text box.
+        await text.evaluate((field) => field.setSelectionRange(3, 5));
+        await hide.tap();
+        await expect(text).toHaveValue("犯人は||庭師||だった。");
+        await expect(text).toBeFocused();
+        expect(await blurs(), "the text box let the focus go").toBe(0);
+        // ［本を添える］: its search takes the focus within the tap, with no
+        // picker standing in for it; a book picked hands the focus back to
+        // the text box within that tap.
+        await forgetFocus(page);
+        await dialog.getByRole("button", { name: "本を添える" }).tap();
+        const search = dialog.getByRole("searchbox", {
+          name: "添える本を探す",
+        });
+        await expectKeyboardUp(page, search, "本を添える");
+        await expectNoZoomOnFocus(search, "本を添える");
+        await expect(
+          dialog.getByRole("group", { name: "添える本を探す" }),
+        ).toHaveCount(0);
+        await page.keyboard.type("モモ");
+        await forgetFocus(page);
+        await dialog.getByRole("button", { name: /^モモ/ }).first().tap();
+        await expectKeyboardUp(page, text, "a book picked");
+        // ネタバレあり, by its words and by its box: it flips, and the text
+        // box keeps the focus. (The caret as typing leaves it: with words
+        // chosen in the box, a label would not move the focus anyway.)
+        await text.evaluate((field) =>
+          field.setSelectionRange(field.value.length, field.value.length),
+        );
+        const before = await blurs();
+        const spoiler = dialog.getByRole("checkbox", { name: "ネタバレあり" });
+        const words = await dialog.locator(".composer-spoiler").boundingBox();
+        await page.touchscreen.tap(
+          words.x + words.width - 8,
+          words.y + words.height / 2,
+        );
+        await expect(spoiler).toBeChecked();
+        await expect(text).toBeFocused();
+        await spoiler.tap();
+        await expect(spoiler).not.toBeChecked();
+        await expect(text).toBeFocused();
+        // The book taken off again.
+        await dialog.getByRole("button", { name: "モモを外す" }).tap();
+        await expect(
+          dialog.getByRole("button", { name: "本を添える" }),
+        ).toBeVisible();
+        await expect(text).toBeFocused();
+        expect(await blurs(), "the text box let the focus go").toBe(before);
+        // With the keyboard put away, a tap on blank space (the title) brings
+        // the text box and its keyboard back, within the tap.
+        await text.evaluate((field) => field.blur());
+        await forgetFocus(page);
+        await dialog.getByRole("heading", { name: "投稿する" }).tap();
+        await expectKeyboardUp(page, text, "blank space");
+        // So does ［隠す］, for words chosen before the keyboard went away:
+        // they are covered in the text box, focused within the tap.
+        await text.evaluate((field) => field.setSelectionRange(0, 2));
+        await expect(hide).toBeVisible();
+        await text.evaluate((field) => field.blur());
+        await expect(hide).toBeVisible();
+        await forgetFocus(page);
+        await hide.tap();
+        await expect(text).toHaveValue("||犯人||は||庭師||だった。");
+        await expectKeyboardUp(page, text, "隠す, the keyboard put away");
+        await text.fill("");
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+      },
+    );
+    await check(
+      "393px phone: the post sheet's buttons sit just above the keyboard",
+      async () => {
+        await go("/timeline/");
+        await fab.tap();
+        await expectKeyboardUp(page, text, "open");
+        const near = (now, want, label) =>
+          expect(
+            Math.abs(now - want),
+            `${label}: ${now}, not ${want}`,
+          ).toBeLessThan(2);
+        const send = dialog.getByRole("button", { name: "投稿する" });
+        /** 投稿する in what is seen, and what a tap there reaches. */
+        const reachable = async (top, bottom) => {
+          const at = await send.evaluate((button) => {
+            const box = button.getBoundingClientRect();
+            const there = document.elementFromPoint(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+            );
+            return {
+              top: box.top,
+              bottom: box.bottom,
+              hit: Boolean(there && button.contains(there)),
+            };
+          });
+          expect(at.top).toBeGreaterThanOrEqual(top);
+          expect(at.bottom).toBeLessThanOrEqual(bottom);
+          expect(at.hit, "a tap on 投稿する reaches it").toBe(true);
+        };
+        // A keyboard 336px tall, with the page pushed 120px up: the sheet
+        // is what is left, the title at its top, the buttons on the keyboard.
+        await page.evaluate(() => window.__keyboard(336, 120));
+        let place = await toolbarPlace(dialog);
+        near(place.bottom, 577, "the buttons' bottom");
+        near(place.top, 120, "the sheet's top");
+        expect(
+          await page.evaluate(() => document.documentElement.dataset.keyboard),
+        ).toBe("up");
+        await reachable(120, 577);
+        // Long words scroll between them; the buttons stay.
+        await text.fill(
+          Array.from({ length: 30 }, (_, at) => `${at + 1}行目`).join("\n"),
+        );
+        place = await toolbarPlace(dialog);
+        near(place.bottom, 577, "long words: the buttons' bottom");
+        near(place.top, 120, "long words: the sheet's top");
+        await reachable(120, 577);
+        // The keyboard put away: the whole screen again.
+        await page.evaluate(() => window.__keyboard(0));
+        near((await toolbarPlace(dialog)).bottom, 793, "no keyboard");
+        // A phone may still report its keyboard after the field let go (iOS
+        // 26.0): with no field focused, the sheet keeps the whole screen.
+        await page.evaluate(() => window.__keyboard(336, 0));
+        near((await toolbarPlace(dialog)).bottom, 457, "the keyboard again");
+        await text.evaluate((field) => field.blur());
+        await expect
+          .poll(async () => Math.round((await toolbarPlace(dialog)).bottom))
+          .toBe(793);
+        await page.evaluate(() => window.__keyboard(0));
+        await text.fill("");
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+      },
+    );
+    await check(
+      "393px phone: the post sheet holds what is used: 隠す while words are chosen, ネタバレあり with a book, ポスターを作る beside 本を添える",
+      async () => {
+        await go("/timeline/");
+        await fab.tap();
+        await expectKeyboardUp(page, text, "open");
+        const toolbar = dialog.locator(".writing-toolbar");
+        const spoiler = dialog.getByRole("checkbox", { name: "ネタバレあり" });
+        // No row of tags and no lines of help: a #word in the words is a
+        // tag, as before.
+        await expect(dialog.locator(".tag-chip")).toHaveCount(0);
+        await expect(dialog.getByText("タグ", { exact: true })).toHaveCount(0);
+        await expect(dialog).not.toContainText("#ことば");
+        await expect(spoiler).toHaveCount(0);
+        await expect(hide).toHaveCount(0);
+        await page.keyboard.type("犯人は庭師だった。");
+        await expect(hide).toHaveCount(0);
+        await expect(dialog).not.toContainText("このブラウザに保存");
+        // The keyboard up and words chosen: ［隠す］ comes in the toolbar,
+        // on the keyboard, in its one row (the words keep their room), and
+        // a tap there reaches it.
+        await page.evaluate(() => window.__keyboard(336, 120));
+        await countBlurs();
+        const { height } = await toolbar.boundingBox();
+        await text.evaluate((field) => field.setSelectionRange(3, 5));
+        await expect(
+          toolbar.getByRole("button", { name: "選んだ言葉を隠す" }),
+        ).toBeVisible();
+        await expect(hide).toHaveText("隠す");
+        expect((await toolbar.boundingBox()).height).toBe(height);
+        const place = await toolbarPlace(dialog);
+        expect(Math.abs(place.bottom - 577)).toBeLessThan(2);
+        const at = await hide.evaluate((button) => {
+          const box = button.getBoundingClientRect();
+          const there = document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          );
+          return {
+            top: box.top,
+            bottom: box.bottom,
+            hit: Boolean(there && button.contains(there)),
+          };
+        });
+        expect(at.top).toBeGreaterThanOrEqual(120);
+        expect(at.bottom).toBeLessThanOrEqual(577);
+        expect(at.hit, "a tap on 隠す reaches it").toBe(true);
+        // The words let go of, it goes; chosen again, it comes back.
+        await text.evaluate((field) => field.setSelectionRange(9, 9));
+        await expect(hide).toHaveCount(0);
+        await text.evaluate((field) => field.setSelectionRange(3, 5));
+        await expect(hide).toBeVisible();
+        // Pressed: just those words are covered, the text box never lets
+        // the focus go, and the caret goes on after them, so ［隠す］ goes.
+        await hide.tap();
+        await expect(text).toHaveValue("犯人は||庭師||だった。");
+        await expect(text).toBeFocused();
+        expect(await blurs(), "the text box let the focus go").toBe(0);
+        expect(
+          await text.evaluate((field) => [
+            field.selectionStart,
+            field.selectionEnd,
+          ]),
+        ).toEqual([9, 9]);
+        await expect(hide).toHaveCount(0);
+        await expect(dialog.getByText("「||」で囲んだ言葉は")).toHaveCount(0);
+        // ポスターを作る: in the toolbar, right after 本を添える, in its row.
+        const book = toolbar.getByRole("button", { name: "本を添える" });
+        const poster = toolbar.getByRole("button", { name: "ポスターを作る" });
+        await expect(
+          toolbar.locator(".composer-book + .composer-poster"),
+        ).toHaveAccessibleName("ポスターを作る");
+        const [bookBox, posterBox] = [
+          await book.boundingBox(),
+          await poster.boundingBox(),
+        ];
+        expect(Math.abs(bookBox.y - posterBox.y)).toBeLessThan(2);
+        expect(posterBox.x).toBeGreaterThan(bookBox.x + bookBox.width);
+        // ネタバレあり comes with a book, in the toolbar, and goes with it.
+        await book.tap();
+        await page.keyboard.type("モモ");
+        await dialog.getByRole("button", { name: /^モモ/ }).first().tap();
+        await expect(
+          toolbar.getByRole("checkbox", { name: "ネタバレあり" }),
+        ).toBeVisible();
+        await expect(spoiler).toBeEnabled();
+        await dialog.getByRole("button", { name: "モモを外す" }).tap();
+        await expect(spoiler).toHaveCount(0);
+        // ポスターを作る leaves the sheet for the poster's own page; the
+        // words wait in the draft.
+        await page.evaluate(() => window.__keyboard(0));
+        await poster.tap();
+        await expect(dialog).toHaveCount(0);
+        await expect(page).toHaveURL(/\/posters\/new\/$/);
+        await expect(
+          page.getByRole("heading", { name: "ポスターを作る", level: 1 }),
+        ).toBeVisible();
+        await go("/timeline/");
+        await fab.tap();
+        await expect(text).toHaveValue("犯人は||庭師||だった。");
+        await text.fill("");
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+      },
+    );
+    await check(
+      "393px phone: ネタバレあり tapped during a kana conversion ends it, and the words stay",
+      async () => {
+        await go("/timeline/");
+        await fab.tap();
+        await expectKeyboardUp(page, text, "open");
+        // A book first, for ネタバレあり to be there.
+        await dialog.getByRole("button", { name: "本を添える" }).tap();
+        await page.keyboard.type("モモ");
+        await dialog.getByRole("button", { name: /^モモ/ }).first().tap();
+        await expect(text).toBeFocused();
+        const spoiler = dialog.getByRole("checkbox", { name: "ネタバレあり" });
+        await page.evaluate(() => {
+          window.__ended = 0;
+          document.addEventListener(
+            "compositionend",
+            () => window.__ended++,
+            true,
+          );
+        });
+        const cdp = await context.newCDPSession(page);
+        try {
+          await cdp.send("Input.imeSetComposition", {
+            text: "にほん",
+            selectionStart: 3,
+            selectionEnd: 3,
+          });
+          await spoiler.tap();
+        } finally {
+          await cdp.detach();
+        }
+        expect(await page.evaluate(() => window.__ended)).toBe(1);
+        await expect(text).toBeFocused();
+        await expect(text).toHaveValue("にほん");
+        await expect(spoiler).toBeChecked();
+        await dialog.getByRole("button", { name: "モモを外す" }).tap();
+        await text.fill("");
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+      },
+    );
+    await check(
+      "393px phone: outside writing screens, covered words and drafts thrown away leave the keyboard down; a review opens ready to write, every way in",
+      async () => {
+        // A review thrown away on the book's page, outside any sheet: the
+        // keyboard stays down, and the focus stays with the review (its
+        // form), not back at the top of the page.
+        await go("/books/momo/");
+        const momo = page.locator(".book-reviews");
+        const momoText = momo.locator("textarea");
+        const momoForm = momo.locator("form.post-composer");
+        await momoText.fill("消える感想。");
+        await reload();
+        await momo.getByRole("button", { name: "書きかけを消す" }).tap();
+        await momo.getByRole("button", { name: "消す", exact: true }).tap();
+        await expect(momoText).toHaveValue("");
+        await expectNoKeyboard(page, "review thrown away", momoForm);
+        // ［隠す］ waits for words chosen. Typing, the words chosen are
+        // covered there, and the text box is still theirs.
+        const momoHide = momo.getByRole("button", { name: "選んだ言葉を隠す" });
+        await expect(momoHide).toHaveCount(0);
+        await expectTapWrites(momoText);
+        await momoText.fill("犯人は庭師だった。");
+        await expect(momoHide).toHaveCount(0);
+        await momoText.evaluate((field) => field.setSelectionRange(3, 5));
+        await momoHide.tap();
+        await expect(momoText).toHaveValue("犯人は||庭師||だった。");
+        await expect(momoText).toBeFocused();
+        // Words chosen, then the keyboard put away: they are covered, and
+        // the keyboard stays down.
+        await momoText.evaluate((field) => field.setSelectionRange(0, 2));
+        await expect(momoHide).toBeVisible();
+        await momoText.evaluate((field) => field.blur());
+        await momoHide.tap();
+        await expect(momoText).toHaveValue("||犯人||は||庭師||だった。");
+        await expectNoKeyboard(page, "隠す, the keyboard put away");
+        await momoText.fill("");
+
+        // A review with words of its own, and a line written while reading.
+        await go("/books/ten-nights/");
+        const reviews = page.locator(".book-reviews");
+        await reviews.locator("textarea").fill("前から書いていた感想。");
+        await go("/reading/");
+        // A picker shown on the page is named by its search alone: it is
+        // not wrapped in a group of the same name.
+        await expect(
+          page.getByRole("group", { name: "読む本を探す" }),
+        ).toHaveCount(0);
+        // 夢十夜 alone; read again, the book read last is chosen already.
+        const read = async () => {
+          const search = page.getByRole("searchbox", { name: "読む本を探す" });
+          if (await search.count()) {
+            await search.fill("夢十夜");
+            await page.getByRole("button", { name: /^夢十夜/ }).tap();
+          }
+          await expect(page.locator(".picker-chosen")).toContainText("夢十夜");
+          await page.getByRole("button", { name: /一人で読む/ }).tap();
+          await page
+            .getByRole("dialog", { name: "読書をはじめますか？" })
+            .getByRole("button", { name: "はじめる", exact: true })
+            .tap();
+        };
+        await read();
+        const memo = page.getByLabel("読書メモ（自分だけ）");
+        // The memo thrown away after a reload: the keyboard stays down.
+        await memo.fill("消える一行。");
+        await reload();
+        await page.getByRole("button", { name: "書きかけを消す" }).tap();
+        await page.getByRole("button", { name: "消す", exact: true }).tap();
+        await expect(memo).toHaveValue("");
+        await expectNoKeyboard(
+          page,
+          "memo thrown away",
+          page.locator("form.memo-composer"),
+        );
+        // 読書を終える, then 感想を書く: the review is a writing screen,
+        // ready within the tap.
+        await memo.fill("三夜目の一行。");
+        await page.getByRole("button", { name: "読書を終える" }).tap();
+        await forgetFocus(page);
+        await page
+          .getByRole("dialog", { name: "読書を終えますか？" })
+          .getByRole("button", { name: "感想を書く" })
+          .tap();
+        const review = page.getByRole("dialog", { name: "『夢十夜』の感想" });
+        const reviewText = review.locator("textarea");
+        await expectKeyboardUp(page, reviewText, "感想を書く");
+        // ［書き足す］ adds the line; the text box keeps the focus, in view.
+        await review.getByRole("button", { name: "書き足す" }).tap();
+        await expect(reviewText).toHaveValue(
+          "前から書いていた感想。\n三夜目の一行。",
+        );
+        await expect(reviewText).toBeFocused();
+        await expect(reviewText).toBeInViewport();
+        await page.keyboard.press("Escape");
+        await expect(review).toHaveCount(0);
+        // The book closed with a line not sent: the closing card's 感想を書く
+        // and the line's 感想に使う open the review ready too.
+        await read();
+        await memo.fill("四夜目の一行。");
+        await page.getByRole("button", { name: "読書を終える" }).tap();
+        await page
+          .getByRole("dialog", { name: "読書を終えますか？" })
+          .getByRole("button", { name: "本を閉じる" })
+          .tap();
+        await forgetFocus(page);
+        await page.getByRole("button", { name: "感想を書く" }).tap();
+        await expectKeyboardUp(page, reviewText, "the closing card");
+        await page.keyboard.press("Escape");
+        await expect(review).toHaveCount(0);
+        await forgetFocus(page);
+        await page.getByRole("button", { name: "感想に使う" }).tap();
+        await expectKeyboardUp(page, reviewText, "a line not sent");
+        await page.keyboard.press("Escape");
+        await expect(review).toHaveCount(0);
+      },
+    );
+    await check(
+      "393px phone: the post sheet stays as it was opened when the main pointer changes",
+      async () => {
+        await go("/timeline/");
+        await fab.tap();
+        await expectKeyboardUp(page, text, "open");
+        await page.keyboard.type("指で");
+        await dialog.getByRole("button", { name: "本を添える" }).tap();
+        const search = dialog.getByRole("searchbox", {
+          name: "添える本を探す",
+        });
+        await expect(search).toBeFocused();
+        await dialog.evaluate((sheet) => {
+          window.__sheet = sheet;
+        });
+        const same = () => dialog.evaluate((sheet) => sheet === window.__sheet);
+        // A tablet's keyboard put on and taken off again: the sheet is not
+        // made anew, so the book's search is still there, still focused.
+        // (The session that stands in for the change is kept to the end:
+        // leaving it takes the finger away again.)
+        const cdp = await context.newCDPSession(page);
+        try {
+          await cdp.send("Emulation.setTouchEmulationEnabled", {
+            enabled: false,
+          });
+          await expect.poll(() => coarse(page)).toBe(false);
+          expect(await same(), "the sheet was made anew").toBe(true);
+          await expect(search).toBeFocused();
+          await cdp.send("Emulation.setTouchEmulationEnabled", {
+            enabled: true,
+            maxTouchPoints: 1,
+          });
+          await expect.poll(() => coarse(page)).toBe(true);
+          expect(await same(), "the sheet was made anew").toBe(true);
+          await expect(search).toBeFocused();
+          // And it still fits what the keyboard leaves.
+          await text.tap();
+          await page.evaluate(() => window.__keyboard(336, 120));
+          const place = await toolbarPlace(dialog);
+          expect(Math.abs(place.bottom - 577)).toBeLessThan(2);
+          expect(Math.abs(place.top - 120)).toBeLessThan(2);
+        } finally {
+          await cdp.detach();
+        }
+        await page.evaluate(() => window.__keyboard(0));
+        await text.fill("");
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+      },
+    );
+    await context.close();
+  }
+  {
+    // A phone on its side: the keyboard leaves it about 200px.
+    const context = await browser.newContext({
+      viewport: { width: 852, height: 393 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    await watchFocus(context);
+    await fakeKeyboard(context);
+    page = settleBeforeNavigating(await context.newPage());
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    await check(
+      "852px phone on its side: with the keyboard up, the words being written and 投稿する are both in sight",
+      async () => {
+        expect(await coarse(page)).toBe(true);
+        await go("/timeline/");
+        await page.locator(".compose-fab").tap();
+        const dialog = page.getByRole("dialog", { name: "投稿する" });
+        const text = dialog.locator("textarea");
+        await expectKeyboardUp(page, text, "投稿する");
+        await page.keyboard.type("横向きで書く");
+        /** Where it is against what is seen, and what a tap at `y` reaches. */
+        const sight = (locator) =>
+          locator.evaluate((element) => {
+            const box = element.getBoundingClientRect();
+            const toolbar = element
+              .closest('[role="dialog"]')
+              .querySelector(".writing-toolbar")
+              .getBoundingClientRect();
+            const viewport = window.visualViewport;
+            const reaches = (y) => {
+              const there = document.elementFromPoint(box.x + box.width / 2, y);
+              return Boolean(there && element.contains(there));
+            };
+            return {
+              top: box.top,
+              bottom: box.bottom,
+              seenTop: viewport.offsetTop,
+              seenBottom: viewport.offsetTop + viewport.height,
+              toolbarTop: toolbar.top,
+              middle: reaches(box.top + box.height / 2),
+              firstLines: reaches(box.top + 20),
+            };
+          });
+        for (const height of [160, 180, 200]) {
+          await page.evaluate((height) => window.__keyboard(height), height);
+          const label = `a keyboard ${height}px tall`;
+          // The text box: its first lines over the buttons, a tap there on it.
+          const words = await sight(text);
+          expect(words.top, label).toBeGreaterThanOrEqual(words.seenTop);
+          expect(words.top + 40, label).toBeLessThanOrEqual(words.toolbarTop);
+          expect(words.firstLines, `${label}: the text box`).toBe(true);
+          // 投稿する: whole in sight, a tap on it reaching it.
+          const send = await sight(
+            dialog.getByRole("button", { name: "投稿する" }),
+          );
+          expect(send.top, label).toBeGreaterThanOrEqual(send.seenTop);
+          expect(send.bottom, label).toBeLessThanOrEqual(send.seenBottom);
+          expect(send.middle, `${label}: 投稿する`).toBe(true);
+          if (height === 180)
+            await page.screenshot({
+              path: path.join(output, "social-phone-on-its-side.png"),
+            });
+        }
+        await page.evaluate(() => window.__keyboard(0));
+        await text.fill("");
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
       },
     );
     await context.close();

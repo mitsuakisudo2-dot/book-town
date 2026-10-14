@@ -42,6 +42,7 @@ import {
 } from "../lib/site-notes";
 import { forgetDraft, keepDraft, keptDraft } from "../lib/site-note-draft";
 import { formatPostTime } from "../lib/social";
+import { focusField } from "../lib/coarse-pointer";
 import type { Notify } from "../lib/types";
 import "./site-notes.css";
 
@@ -135,9 +136,10 @@ export default function SiteNotes({ notify }: { notify: Notify }) {
         data-site-notes=""
         onClick={() => {
           flushSync(() => setOn(true));
-          // A note half written here opens at its pin. iOS opens the
-          // keyboard only for a focus inside the tap itself.
-          textRef.current?.focus({ preventScroll: true });
+          // A note half written here opens at its pin, with a mouse ready to
+          // type into. On a touch screen it waits for a tap on the field
+          // (the mode puts the focus on the sheet's heading).
+          focusField(textRef.current, { instead: null, preventScroll: true });
         }}
       >
         注釈
@@ -406,6 +408,7 @@ function NotesMode({
   const pagePinsRef = useRef<HTMLDivElement>(null);
   const stopRef = useRef<HTMLButtonElement>(null);
   const cardRef = useRef<HTMLElement>(null);
+  const writeHeadRef = useRef<HTMLHeadingElement>(null);
   const ids = useId();
   // What the mode is over stays the same while it is on: nothing beneath
   // can open or close through the tint.
@@ -713,10 +716,17 @@ function NotesMode({
     };
   }, []);
 
+  // The sheet's field is ready to type into with a mouse. On a touch screen
+  // the keyboard would cover the page and the pin: the field waits for a
+  // tap, and the sheet's heading has the focus.
   useEffect(() => {
     if (phase === "aim") stopRef.current?.focus({ preventScroll: true });
     else if (phase === "read") cardRef.current?.focus({ preventScroll: true });
-    else textRef.current?.focus({ preventScroll: true });
+    else
+      focusField(textRef.current, {
+        instead: writeHeadRef.current,
+        preventScroll: true,
+      });
   }, [phase, reading, textRef]);
 
   const write = (value: string, where = spot) => {
@@ -748,7 +758,10 @@ function NotesMode({
       setPhase("write");
     });
     write(text, tapped.spot);
-    textRef.current?.focus({ preventScroll: true });
+    focusField(textRef.current, {
+      instead: writeHeadRef.current,
+      preventScroll: true,
+    });
   }
 
   /** やめる in the sheet: the words go, with a way back in the toast. */
@@ -952,7 +965,9 @@ function NotesMode({
         >
           {/* The buttons first: they stay in sight however little room the keyboard leaves. */}
           <div className="site-notes-head">
-            <h2 id={ids + "-write"}>注釈を残す</h2>
+            <h2 id={ids + "-write"} ref={writeHeadRef} tabIndex={-1}>
+              注釈を残す
+            </h2>
             <button
               type="submit"
               className="site-notes-primary"

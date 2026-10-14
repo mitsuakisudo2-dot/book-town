@@ -1706,6 +1706,15 @@
   height: 170px;
   margin: 12px 0 18px;
 }
+/* With a finger the words take the room the writing sheet has, above its
+   docked button (globals.css). */
+@media (pointer: coarse) {
+  .modal.is-writing .walk-message {
+    height: auto;
+    flex: 1 0 120px;
+    margin-bottom: 12px;
+  }
+}
 /* Ways to begin: tap to write them in, then change them freely. */
 .walk-starters {
   display: flex;

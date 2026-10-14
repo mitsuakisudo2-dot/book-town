@@ -8,6 +8,16 @@ import {
   settleBeforeNavigating,
 } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
+import {
+  coarse,
+  expectKeyboardUp,
+  expectNoKeyboard,
+  expectTapWrites,
+  fakeKeyboard,
+  forgetFocus,
+  toolbarPlace,
+  watchFocus,
+} from "./journey-keyboard.mjs";
 
 // Signs in with an emailed code and creates the first profile, in a real browser
 // against a stand-in for Supabase. Serve the app with
@@ -173,7 +183,11 @@ await context.addInitScript(() => {
     navigator.mediaDevices.getUserMedia = () =>
       Promise.reject(new DOMException("none", "NotFoundError"));
 });
-await context.route(supabase + "/**", async (route) => {
+// When a field takes the focus, and a keyboard stood in on the screen.
+await watchFocus(context);
+await fakeKeyboard(context);
+/** The stand-in for Supabase, for every context of this journey. */
+const standIn = async (route) => {
   const request = route.request();
   const url = new URL(request.url());
   const json = (status, body) =>
@@ -372,7 +386,8 @@ await context.route(supabase + "/**", async (route) => {
     });
   }
   return json(404, { message: "not mocked: " + url.pathname });
-});
+};
+await context.route(supabase + "/**", standIn);
 // Covers are answered locally: openBD has こころ's; Google has 星の本's,
 // which its rights holder asked us not to show (cover_refusals).
 const OPENBD_ISBN = "9784101010137";
@@ -573,7 +588,36 @@ try {
       await expect(
         page.getByRole("heading", { name: "本の街に入る" }),
       ).toBeVisible();
+      // On a phone the address waits for a tap: no keyboard over the page,
+      // and the step's heading has the focus.
+      expect(await coarse(page)).toBe(true);
+      await expectNoKeyboard(page, "sign in");
+      await expect(
+        page.getByRole("heading", { name: "本の街に入る" }),
+      ).toBeFocused();
+      await expectTapWrites(page.getByLabel("メールアドレス"));
       await shot("1-email");
+    },
+  );
+
+  await check(
+    "on a phone, an address that is not one is marked without the keyboard",
+    async () => {
+      const email = page.getByLabel("メールアドレス");
+      await email.fill("abc");
+      // The browser's own check would put the focus (and the keyboard) in
+      // the field; the page says why and marks the field instead.
+      await page.getByRole("button", { name: "コードを送る" }).tap();
+      await expect(page.locator("#account-error")).toContainText(
+        "メールアドレスの形を確かめてください",
+      );
+      await expect(email).toHaveAttribute("aria-invalid", "true");
+      await expectNoKeyboard(page, "address refused");
+      await expect(email).toBeInViewport();
+      await expectTapWrites(email);
+      await page.keyboard.type("@example.jp");
+      await expect(email).not.toHaveAttribute("aria-invalid");
+      expect(codeRequests).toHaveLength(0);
     },
   );
 
@@ -594,6 +638,12 @@ try {
         page.getByRole("heading", { name: "メールを確かめてください" }),
       ).toBeVisible();
       await expect(page.getByText(INVITED)).toBeVisible();
+      // The code waits for a tap too.
+      await expectNoKeyboard(page, "code step");
+      await expect(
+        page.getByRole("heading", { name: "メールを確かめてください" }),
+      ).toBeFocused();
+      await expectTapWrites(page.getByLabel("6桁のコード"));
       // The link in the email leads back to this site's sign-in page.
       expect(codeRequests.at(-1).searchParams.get("redirect_to")).toBe(
         new URL("/login/", base).href,
@@ -672,6 +722,10 @@ try {
     await expect(
       page.getByRole("heading", { name: "ようこそ、本の街へ" }),
     ).toBeVisible();
+    await expectNoKeyboard(page, "first profile");
+    await expect(
+      page.getByRole("heading", { name: "ようこそ、本の街へ" }),
+    ).toBeFocused();
     ownProfileDelay = 0;
     expect(await page.evaluate(() => window.headingsSeen)).toEqual([
       "メールを確かめてください",
@@ -716,7 +770,9 @@ try {
       await expect(name).toHaveValue("");
       await expect(handle).toHaveValue("");
       await expect(resumed).toHaveCount(0);
-      await expect(name).toBeFocused();
+      // The name waits for a tap: the keyboard stays down.
+      await expectNoKeyboard(page, "first profile thrown away");
+      await expectTapWrites(name);
       await page.reload();
       await expect(name).toHaveValue("");
       await expect(resumed).toHaveCount(0);
@@ -726,6 +782,17 @@ try {
   await check(
     "the ID, the name and the age are checked before saving",
     async () => {
+      // A name left empty is said and marked, with no keyboard over it.
+      await page.getByLabel("ユーザーID").fill("aki_books");
+      await page.getByRole("button", { name: "はじめる" }).tap();
+      await expect(page.locator("#account-error")).toContainText(
+        "ユーザー名を入れてください",
+      );
+      await expect(page.getByLabel("ユーザー名")).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
+      await expectNoKeyboard(page, "name left empty");
       await page.getByLabel("ユーザー名").fill("アキ");
       await page.getByLabel("ユーザーID").fill("booktown");
       await page.getByLabel("13歳以上です").check();
@@ -961,19 +1028,15 @@ try {
         const text = compose.locator("textarea");
         await text.fill(BEGUN);
         // Whose it is is not known yet: the words stay on the screen, and
-        // nothing is kept in the browser or said to be.
+        // nothing is kept in the browser.
         await expect(text).toHaveValue(BEGUN);
         expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
-        await expect(
-          compose.getByText("下書きはこのブラウザに保存しています。"),
-        ).toHaveCount(0);
         await expect
           .poll(() => keptDraftKeys(POST_DRAFTS), { timeout: 10000 })
           .toEqual([user.id + ":new-post"]);
         await expect(text).toHaveValue(BEGUN);
-        await expect(
-          compose.getByText("下書きはこのブラウザに保存しています。"),
-        ).toBeVisible();
+        // Kept quietly: the sheet says nothing of it.
+        await expect(compose).not.toContainText("このブラウザ");
         await text.fill("");
         await page.keyboard.press("Escape");
         await expect(compose).toHaveCount(0);
@@ -1754,17 +1817,47 @@ try {
   );
 
   await check(
-    "on a phone, the sheet of words for an owner opens without the keyboard",
+    "on a phone, the sheet of words for an owner opens ready to write, with 届ける just above the keyboard",
     async () => {
+      expect(await coarse(page)).toBe(true);
       await page.goto(base + "/walk/#shop-orbit");
       await expect(page.locator(".walk-book-target").first()).toBeVisible();
+      // A writing screen: its text box is focused within the opening tap,
+      // so the keyboard rises with it.
+      await forgetFocus(page);
       await page.getByRole("button", { name: "店主にひとことを伝える" }).tap();
       const sheet = page.getByRole("dialog", { name: "店主にひとことを残す" });
-      await expect(sheet.getByRole("button", { name: "閉じる" })).toBeFocused();
       const box = sheet.getByRole("textbox", { name: "店主に伝えたい言葉" });
-      await expect(box).not.toBeFocused();
-      await box.tap();
+      await expectKeyboardUp(page, box, "店主にひとことを残す");
+      // A way to begin, tapped: written in, and the keyboard stays up.
+      const starters = sheet.getByRole("group", { name: "書き出しの例" });
+      await starters.getByRole("button").first().tap();
+      await expect(box).not.toHaveValue("");
       await expect(box).toBeFocused();
+      // With the keyboard up, 届ける sits on it and the title at the top.
+      await page.evaluate(() => window.__keyboard(336, 120));
+      const place = await toolbarPlace(sheet);
+      expect(Math.abs(place.bottom - place.seen)).toBeLessThan(2);
+      expect(Math.abs(place.top - place.seenTop)).toBeLessThan(2);
+      const send = sheet.getByRole("button", { name: "届ける" });
+      /** 届ける in what is seen, and what a tap there reaches. */
+      const reachable = () =>
+        send.evaluate((button) => {
+          const box = button.getBoundingClientRect();
+          const there = document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          );
+          const viewport = window.visualViewport;
+          return (
+            box.bottom <= viewport.offsetTop + viewport.height + 1 &&
+            Boolean(there && button.contains(there))
+          );
+        });
+      expect(await reachable(), "届ける on the keyboard").toBe(true);
+      // Put away, the sheet is the whole screen, over the bottom bar.
+      await page.evaluate(() => window.__keyboard(0));
+      expect(await reachable(), "届ける with no keyboard").toBe(true);
       await page.keyboard.press("Escape");
       await expect(sheet).toHaveCount(0);
     },
@@ -2052,6 +2145,9 @@ try {
       );
       const key = `${user.id}:book:${COVER_BOOK}`;
       await ask.click();
+      // Its first field is the words: on a phone they wait for a tap.
+      await expectNoKeyboard(page, "cover request", dialog);
+      await expectTapWrites(words);
       await words.fill("書きかけの依頼です。");
       // Closed by hand, the words wait for the next time.
       await page.keyboard.press("Escape");
@@ -2383,7 +2479,13 @@ try {
       expect(townWrites.length).toBe(writes);
       const where = notesSheet.locator(".site-notes-where p");
       await expect(where).toContainText("「" + backName + "」");
-      await expect(notesField).toBeFocused();
+      // The keyboard would cover the page and the pin: the field waits for
+      // a tap, and the sheet's heading has the focus.
+      await expectNoKeyboard(page, "注釈を残す", notesSheet);
+      await expect(
+        notesSheet.getByRole("heading", { name: "注釈を残す" }),
+      ).toBeFocused();
+      await expectTapWrites(notesField);
       // The sheet's buttons stay within what the screen shows: here all of
       // it, then less of it, zoomed in (as above a keyboard).
       const inSight = () =>
@@ -2450,7 +2552,10 @@ try {
       await expect(notesSheet).toBeVisible();
       await expect(notesSheet).toContainText("書きかけの注釈です");
       await expect(notesField).toHaveValue("戻るの字が小さい");
-      await expect(notesField).toBeFocused();
+      await expectNoKeyboard(page, "注釈 half written", notesSheet);
+      await expect(
+        notesSheet.getByRole("heading", { name: "注釈を残す" }),
+      ).toBeFocused();
       const leave = notesSheet.getByRole("button", {
         name: "残す",
         exact: true,
@@ -3039,6 +3144,104 @@ try {
       await elsewhere.getByRole("link", { name: /つづきを書く/ }).click();
       await expect(heading).toHaveValue(A_POSTER);
       await signOut();
+    },
+  );
+
+  await check(
+    "with a mouse, each step's field is ready to type into, as before",
+    async () => {
+      const desk = await browser.newContext({
+        viewport: { width: 1280, height: 900 },
+      });
+      const signedIn = profile;
+      try {
+        // Nothing outside the site and the stand-in is needed here.
+        await desk.route(
+          (url) => !url.href.startsWith(base) && !url.href.startsWith(supabase),
+          (route) => route.abort(),
+        );
+        await desk.route(supabase + "/**", standIn);
+        const at = await desk.newPage();
+        at.on("pageerror", (e) => errors.push(e.message));
+        await at.goto(base + "/login/");
+        expect(await coarse(at)).toBe(false);
+        const email = at.getByLabel("メールアドレス");
+        await expect(email).toBeFocused();
+        // The browser's own check stops an address that is not one, and
+        // leaves the focus in the field to fix it.
+        const asked = codeRequests.length;
+        await email.fill("abc");
+        await at.getByRole("button", { name: "コードを送る" }).click();
+        await expect(email).toBeFocused();
+        await expect(at.locator("#account-error")).toHaveCount(0);
+        expect(codeRequests).toHaveLength(asked);
+        await email.fill(INVITED);
+        await at.getByRole("button", { name: "コードを送る" }).click();
+        await expect(at.getByLabel("6桁のコード")).toBeFocused();
+        // A reader with no profile yet, for the first profile's step.
+        profile = null;
+        await at.getByLabel("6桁のコード").fill("123456");
+        await at.getByRole("button", { name: "ログインする" }).click();
+        const name = at.getByLabel("ユーザー名");
+        await expect(name).toBeFocused();
+        await name.fill("アキ");
+        await at.reload();
+        await expect(at.getByText("書きかけを続けています")).toBeVisible();
+        await at.getByRole("button", { name: "書きかけを消す" }).click();
+        await at.getByRole("button", { name: "消す", exact: true }).click();
+        await expect(name).toHaveValue("");
+        await expect(name).toBeFocused();
+        profile = signedIn;
+
+        // 店主にひとことを残す: ready to type into, and laid out as any
+        // sheet, with no phone's toolbar: 届ける is its last button.
+        await at.goto(base + "/walk/#shop-orbit");
+        await expect(at.locator(".walk-book-target").first()).toBeVisible();
+        await at
+          .getByRole("button", { name: "店主にひとことを伝える" })
+          .click();
+        const words = at.getByRole("dialog", { name: "店主にひとことを残す" });
+        await expect(
+          words.getByRole("textbox", { name: "店主に伝えたい言葉" }),
+        ).toBeFocused();
+        await expect(
+          words.locator(".writing-toolbar, .modal-body"),
+        ).toHaveCount(0);
+        expect(
+          await words.evaluate((sheet) => sheet.lastElementChild?.textContent),
+        ).toBe("届ける");
+        await at.keyboard.press("Escape");
+        await expect(words).toHaveCount(0);
+
+        // 注釈モード: the sheet opens with its field ready.
+        staff = true;
+        const notesAsked = at.waitForResponse((response) =>
+          response.url().includes("/rest/v1/rpc/can_annotate"),
+        );
+        await at.goto(base + "/books/solaris/");
+        await (await notesAsked).finished();
+        await at.getByRole("button", { name: "注釈", exact: true }).click();
+        await expect(
+          at.getByText("メモしたい場所をタップしてください"),
+        ).toBeVisible();
+        // Clicked on the book's title, in the middle of the page.
+        const title = await at
+          .getByRole("heading", { level: 1 })
+          .first()
+          .boundingBox();
+        await at.mouse.click(
+          title.x + title.width / 2,
+          title.y + title.height / 2,
+        );
+        await expect(
+          at.getByRole("form", { name: "注釈を残す" }),
+        ).toBeVisible();
+        await expect(at.getByLabel("注釈", { exact: true })).toBeFocused();
+      } finally {
+        profile = signedIn;
+        staff = false;
+        await desk.close();
+      }
     },
   );
 

@@ -1,5 +1,7 @@
 "use client";
 import {
+  createContext,
+  useContext,
   useEffect,
   useRef,
   useState,
@@ -7,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import type { Book, Reader } from "../lib/types";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { bookArt } from "../lib/book-art";
@@ -18,8 +21,17 @@ import {
   useGoogleCoversShown,
 } from "../lib/covers";
 import { useBackLayer } from "../lib/back-layer";
-import { focusesFieldOnOpen } from "../lib/coarse-pointer";
+import {
+  fieldTakesFocus,
+  focusBack,
+  useCoarsePointer,
+} from "../lib/coarse-pointer";
 import { imeKey } from "../lib/keys";
+import {
+  focusWritingField,
+  useWritingSheet,
+  writingField,
+} from "./useWritingSheet";
 import "./illustrated-jackets.css";
 const shapes: Record<string, ReactNode> = {
   book: (
@@ -397,6 +409,20 @@ export function ReaderAvatar({
     </span>
   );
 }
+const WritingSheet = createContext(false);
+/** Whether this is inside a writing screen (Modal's `writing`). */
+export const useInWritingSheet = () => useContext(WritingSheet);
+
+/**
+ * Where a writing sheet goes with a finger: the end of the town's shell. It
+ * is then over the screen that opened it (a walk keeps its own layers, under
+ * the bottom bar), and still under the shell's rules that size words and
+ * fields for a phone (usability.css; a phone zooms in on a text box under
+ * 16px, and the sheet would no longer fit what the keyboard leaves).
+ */
+const writingHost = () =>
+  document.querySelector<HTMLElement>(".town-shell") ?? document.body;
+
 export function Modal({
   title,
   onClose,
@@ -409,13 +435,24 @@ export function Modal({
   children: ReactNode;
   wide?: boolean;
   /**
-   * A sheet mainly for writing. On a touch screen it opens without the
-   * keyboard over it: the focus starts on its first button, not its field.
+   * A sheet for writing (useWritingSheet). It opens with its text box
+   * focused (on a phone the keyboard rises with it). Taps inside keep the
+   * keyboard up. With a finger it fits what the keyboard leaves, its
+   * buttons (a .writing-toolbar, last) just above the keyboard.
    */
   writing?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const writingRef = useRef(writing);
+  const writingHandlers = useWritingSheet(ref, writing);
+  // With a finger a writing sheet is laid out for the keyboard (is-writing in
+  // globals.css), in the town's shell; with a mouse it is the card any sheet
+  // is. Decided as it opens, and kept: moved while open (a tablet's keyboard
+  // taken off), the sheet would be made anew, the reader's place in it lost,
+  // and its fit to the keyboard with it.
+  const finger = useCoarsePointer();
+  const [host] = useState(() => (writing && finger ? writingHost() : null));
+  const fitted = host !== null;
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
@@ -458,11 +495,21 @@ export function Modal({
     const prev = document.activeElement as HTMLElement | null;
     const old = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    (
-      (focusesFieldOnOpen(writingRef.current)
-        ? ref.current?.querySelector<HTMLElement>("input,textarea,select")
-        : null) ?? ref.current?.querySelector<HTMLElement>("button")
-    )?.focus();
+    // The focus goes into the dialog. A sheet for writing opens with its
+    // text box ready on any screen: this runs within the tap that opened it,
+    // so a phone's keyboard rises with it. Otherwise, with a mouse its first
+    // field is ready to type into; on a touch screen it starts on the first
+    // button (閉じる), so no keyboard rises over the sheet before the reader
+    // has seen it. (Here, after `prev` is taken, so that the focus goes back
+    // to what had it before.)
+    const text = writingRef.current ? writingField(ref.current) : null;
+    if (text) focusWritingField(text);
+    else
+      (
+        (fieldTakesFocus()
+          ? ref.current?.querySelector<HTMLElement>("input,textarea,select")
+          : null) ?? ref.current?.querySelector<HTMLElement>("button")
+      )?.focus();
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         // One Escape closes one layer: a book in hand beneath (a native
@@ -491,22 +538,26 @@ export function Modal({
     return () => {
       document.body.style.overflow = old;
       document.removeEventListener("keydown", key);
-      prev?.focus();
+      focusBack(prev);
     };
   }, []);
-  return (
+  const sheet = (
     <div
-      className="modal-backdrop"
+      className={"modal-backdrop" + (fitted ? " is-writing" : "")}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className={"modal " + (wide ? "wide" : "")}
+        className={
+          "modal " + (wide ? "wide" : "") + (fitted ? " is-writing" : "")
+        }
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        data-writing={writing ? "" : undefined}
+        {...writingHandlers}
       >
         <div className="modal-top">
           <h2>{title}</h2>
@@ -514,8 +565,15 @@ export function Modal({
             <Icon name="close" />
           </button>
         </div>
-        {children}
+        {writing ? (
+          <WritingSheet.Provider value>
+            {fitted ? <div className="modal-body">{children}</div> : children}
+          </WritingSheet.Provider>
+        ) : (
+          children
+        )}
       </div>
     </div>
   );
+  return host ? createPortal(sheet, host) : sheet;
 }

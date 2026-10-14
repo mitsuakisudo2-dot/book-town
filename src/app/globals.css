@@ -66,6 +66,19 @@ textarea:focus-visible {
   outline: 2px solid #7c986d;
   outline-offset: 4px;
 }
+/* A heading or a form holds the focus only to tell keys and screen readers
+   where a step begins or where they were, while its field waits for a tap on
+   a touch screen (focusField). */
+:is(h1, h2, form)[tabindex="-1"]:focus {
+  outline: none;
+}
+/* A field a check found wrong, shown without the focus on a touch screen
+   (markField). */
+input[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: #a2483a;
+  outline: 1px solid #a2483a;
+}
 button:active:not(:disabled) {
   transform: translateY(1px);
 }
@@ -889,6 +902,93 @@ input[type="checkbox"] {
 }
 .modal.wide {
   max-width: 650px;
+}
+/* A sheet for writing (Modal's `writing`, useWritingSheet.ts). With a finger
+   it is as tall as what the keyboard leaves (--vv-top and --vv-height, set
+   while a field in it has the focus): the title at the top, its buttons (the
+   .writing-toolbar, last) docked just above the keyboard, and what lies
+   between scrolls. No motion: it moves in one step as the keyboard does.
+   With a mouse it is the card it always was. */
+@media (pointer: coarse) {
+  .modal-backdrop.is-writing {
+    bottom: auto;
+    top: var(--vv-top, 0px);
+    height: var(--vv-height, 100%);
+  }
+  .modal.is-writing {
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+    overflow: hidden;
+  }
+  .modal.is-writing > .modal-top {
+    flex: none;
+  }
+  .modal.is-writing > .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    /* A field brought into view is not left under the toolbar. */
+    scroll-padding-bottom: 72px;
+  }
+  .modal.is-writing .writing-toolbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin-top: auto;
+    background: var(--paper);
+    border-top: 1px solid var(--line);
+    padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+  }
+  /* On the keyboard, the home indicator's room is the keyboard's. */
+  :root[data-keyboard="up"] .modal.is-writing .writing-toolbar {
+    padding-bottom: 8px;
+  }
+  .modal.is-writing .writing-toolbar :is(button, label) {
+    min-height: 44px;
+  }
+  /* Over a writing sheet the toast drops from the top of what is seen. */
+  body:has(.modal-backdrop.is-writing) .toast {
+    top: calc(var(--vv-top, 0px) + 12px);
+  }
+}
+@media (pointer: coarse) and (max-width: 760px),
+  (pointer: coarse) and (max-height: 500px) {
+  /* A phone, upright or on its side: the whole screen, as its own writing
+     apps do. (On its side a card would leave its text box no room over the
+     keyboard.) */
+  .modal-backdrop.is-writing {
+    padding: 0;
+    background: var(--paper);
+    backdrop-filter: none;
+  }
+  .modal.is-writing {
+    max-width: none;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0 16px;
+  }
+  .modal.is-writing > .modal-top {
+    margin: 0;
+    padding: max(8px, env(safe-area-inset-top)) 0 8px;
+  }
+}
+@media (pointer: coarse) and (max-height: 500px) {
+  /* On its side the keyboard leaves about 200px: a smaller title, so the
+     words being written show between it and the buttons. */
+  .modal.is-writing > .modal-top {
+    padding-block: 2px;
+  }
+  .modal.is-writing > .modal-top h2 {
+    font-size: 17px;
+    line-height: 1.5;
+  }
 }
 .modal-top {
   display: flex;

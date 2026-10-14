@@ -112,7 +112,7 @@ async function main() {
   await check("an invited address gets a six-digit code by email", async () => {
     assert.equal(await backend.sendCode(aki.email), null);
     const { subject } = await mailedCode(aki.email);
-    assert.equal(subject, "Book Town のログインコード");
+    assert.equal(subject, "BookTown のログインコード");
   });
 
   await check(

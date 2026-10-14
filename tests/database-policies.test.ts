@@ -4,9 +4,21 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { auto_explain } from "@electric-sql/pglite/contrib/auto_explain";
 import { demoBooks } from "../src/lib/data";
+import {
+  ENCOUNTER_MEMO_MAX_LENGTH,
+  ENTRY_SOURCES,
+  type LibraryEntry,
+  type MarkKind,
+} from "../src/lib/library";
 import { sampleBookRowId } from "../src/lib/samples";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
 import { pagePattern } from "../src/lib/supabase/site-notes";
+import { emptyTown, planWrites } from "../src/lib/town-remote";
+import {
+  entryOf,
+  type EntryPart,
+  LIBRARY_CASES,
+} from "./fixtures/library-cases";
 
 // Runs the Supabase migrations on an in-memory Postgres and checks, as each kind of
 // visitor, that the row level security policies allow and refuse the right things.
@@ -2967,7 +2979,9 @@ async function main() {
       assert.deepEqual(
         keys.rows.map((row) => row.ref),
         [
+          "book_encounters.book_id",
           "book_marks.book_id",
+          "library_entries.book_id",
           "poster_books.book_id",
           "posts.book_id",
           "profile_nine.book_id",
@@ -3020,6 +3034,8 @@ async function main() {
           jsonb_array_elements(shelf.value -> 'items') item (value)`;
       const own = `
         union select book_id::text from book_marks
+        union select book_id::text from library_entries where removed_at is null
+        union select book_id::text from book_encounters
         union select jsonb_array_elements_text(scene_books) from shop_private
         union select item.value ->> 'bookId' from shop_private,
           jsonb_array_elements(shelves) shelf (value),
@@ -3684,33 +3700,1912 @@ async function main() {
     },
   );
 
-  await check("deleting an account removes everything it owned", async () => {
-    await db.exec(`delete from auth.users where id = '${BEN}'`);
-    for (const table of [
-      "profiles",
-      "shops",
-      "posts",
-      "posters",
-      "post_reactions",
-      "shop_follows",
-      "saved_shops",
-      "shop_visits",
-    ]) {
-      const left = await db.query<{ n: number }>(
-        `select count(*)::int as n from ${table} where ${
-          table === "profiles"
-            ? "id"
-            : table === "shops"
-              ? "owner_id"
-              : table === "posts" || table === "posters"
-                ? "author_id"
-                : table === "shop_follows"
-                  ? "follower_id"
-                  : "user_id"
-        } = '${BEN}'`,
-      );
-      assert.equal(left.rows[0].n, 0, table);
+  // My library and the encounters behind it (20261025000000_library.sql).
+  // Chi keeps a library; Aki writes the posts and keeps the shop Chi meets
+  // books in. Ids made by a device (shelves, encounters) come from lib().
+  const lib = (n: number) =>
+    "00000000-0000-4000-8000-0000004" + String(n).padStart(5, "0");
+  let made = 0;
+  const deviceId = () => lib((made += 1));
+  /** A book typed in by `visitor` and used nowhere yet. */
+  const newBook = async (visitor: string, title = "棚の本") =>
+    (
+      await as<{ id: string }>(
+        visitor,
+        "insert into books (title, created_by) values ($1, $2) returning id",
+        [title, visitor],
+      )
+    )[0].id;
+  const libraryTables = [
+    "library_entries",
+    "library_shelves",
+    "library_shelf_books",
+    "book_encounters",
+  ];
+  const ENTRY_COLUMNS =
+    "user_id, book_id, status, status_at, wanted_at, liked_at, owned, source, batch_id, added_at, removed_at, like_restored, ever_used";
+  const SHELF_COLUMNS =
+    "id, user_id, name, note, position, show_wanted, created_at, deleted_at";
+  const SHELF_BOOK_COLUMNS = "shelf_id, user_id, book_id, added_at, position";
+  const ENCOUNTER_COLUMNS =
+    "id, user_id, book_id, kind, via, post_id, shop_id, placement_key, other_reader_id, memo, memo_at, undone_at, created_at";
+  /**
+   * The statement the API builds for the app's insert of new rows
+   * (upsert with ignoreDuplicates): how many of them were new.
+   */
+  const insertRows = async (
+    visitor: string,
+    table: string,
+    columns: string,
+    conflict: string,
+    rows: object[],
+  ) =>
+    (
+      await as<{ count: number }>(
+        visitor,
+        `with saved as (
+           insert into ${table} (${columns})
+           select ${columns} from json_populate_recordset(null::${table}, $1)
+           on conflict (${conflict}) do nothing
+           returning 1
+         ) select count(*)::int as count from saved`,
+        [JSON.stringify(rows)],
+      )
+    )[0].count;
+  const snake = (key: string) =>
+    key.replace(/[A-Z]/g, (letter) => "_" + letter.toLowerCase());
+  /** A library row as the app sends it: every column but updated_at. */
+  const rowOf = (user: string, entry: LibraryEntry) => ({
+    user_id: user,
+    ...Object.fromEntries(
+      Object.entries(entry).map(([key, value]) => [snake(key), value]),
+    ),
+  });
+  const putEntry = (user: string, bookId: string, part: EntryPart = {}) =>
+    insertRows(user, "library_entries", ENTRY_COLUMNS, "user_id, book_id", [
+      rowOf(user, entryOf(bookId, part)),
+    ]);
+  const iso = (value: unknown) =>
+    value === null ? null : (value as Date).toISOString();
+  /** A row read back as the app's LibraryEntry. */
+  const entryFrom = (row: Record<string, unknown>): LibraryEntry => ({
+    bookId: row.book_id as string,
+    status: row.status as LibraryEntry["status"],
+    statusAt: iso(row.status_at),
+    wantedAt: iso(row.wanted_at),
+    likedAt: iso(row.liked_at),
+    owned: row.owned as LibraryEntry["owned"],
+    source: row.source as LibraryEntry["source"],
+    batchId: row.batch_id as string | null,
+    addedAt: iso(row.added_at) as string,
+    removedAt: iso(row.removed_at),
+    likeRestored: row.like_restored as boolean,
+    everUsed: row.ever_used as boolean,
+  });
+  const rowsOf = (visitor: string, bookId: string) =>
+    as(visitor, "select * from library_entries where book_id = $1", [bookId]);
+  const shelfRow = (id: string, part: Record<string, unknown> = {}) => ({
+    id,
+    user_id: CHI,
+    name: "SF",
+    note: "",
+    position: "a0",
+    show_wanted: true,
+    created_at: "2026-09-01T00:00:00.000Z",
+    deleted_at: null,
+    ...part,
+  });
+  const putShelf = (part: Record<string, unknown> = {}, id = deviceId()) =>
+    insertRows(
+      (part.user_id as string | undefined) ?? CHI,
+      "library_shelves",
+      SHELF_COLUMNS,
+      "id",
+      [shelfRow(id, part)],
+    ).then(() => id);
+  const shelve = (shelfId: string, bookId: string, user = CHI) =>
+    insertRows(
+      user,
+      "library_shelf_books",
+      SHELF_BOOK_COLUMNS,
+      "user_id, shelf_id, book_id",
+      [
+        {
+          shelf_id: shelfId,
+          user_id: user,
+          book_id: bookId,
+          added_at: "2026-09-01T00:00:00.000Z",
+          position: null,
+        },
+      ],
+    );
+  type EncounterRow = Record<string, string | null> & { id: string };
+  /** An encounter as the app sends it: Chi's 読みたい on a book's page unless told otherwise. */
+  const encounterRow = (
+    part: Record<string, string | null> = {},
+  ): EncounterRow => ({
+    id: deviceId(),
+    user_id: CHI,
+    book_id: null,
+    kind: "want",
+    via: "book",
+    post_id: null,
+    shop_id: null,
+    placement_key: null,
+    other_reader_id: null,
+    memo: null,
+    memo_at: null,
+    undone_at: null,
+    created_at: "2026-09-01T00:00:00.000Z",
+    ...part,
+  });
+  const meet = (row: Record<string, unknown>, visitor = CHI) =>
+    insertRows(visitor, "book_encounters", ENCOUNTER_COLUMNS, "id", [row]);
+  /** The same encounter, inserted without ignoring duplicates. */
+  const meetPlainly = (row: Record<string, unknown>, visitor = CHI) =>
+    as(
+      visitor,
+      `insert into book_encounters (${ENCOUNTER_COLUMNS})
+       select ${ENCOUNTER_COLUMNS} from json_populate_record(null::book_encounters, $1)`,
+      [JSON.stringify(row)],
+    );
+  /** The database's error for a statement, which must be refused. */
+  const refusal = async (run: () => Promise<unknown>) => {
+    try {
+      await run();
+    } catch (error) {
+      const { message, code } = error as { message: string; code?: string };
+      return { message, code };
     }
+    assert.fail("expected the database to refuse");
+  };
+  /** Writes as the app that knows the library: it sends x-booktown-library: 1. */
+  const withLibraryHeader = async <T>(write: () => Promise<T>, value = "1") => {
+    await db.exec(
+      `select set_config('request.headers', '${JSON.stringify({ "x-booktown-library": value })}', false)`,
+    );
+    try {
+      return await write();
+    } finally {
+      await db.exec("select set_config('request.headers', '', false)");
+    }
+  };
+  /** A mark, dated `at` or now, written by `visitor`'s app. */
+  const mark = (
+    kind: string,
+    bookId: string,
+    at: string | null = null,
+    visitor = CHI,
+  ) =>
+    as(
+      visitor,
+      `insert into book_marks (user_id, book_id, kind, created_at)
+       values ($1, $2, $3, coalesce($4::timestamptz, now()))`,
+      [visitor, bookId, kind, at],
+    );
+  const unmark = (kind: string, bookId: string, visitor = CHI) =>
+    as(
+      visitor,
+      "delete from book_marks where user_id = $1 and book_id = $2 and kind = $3",
+      [visitor, bookId, kind],
+    );
+  const postAbout = async (
+    visitor: string,
+    bookId: string | null,
+    more: { parent?: string; mode?: string } = {},
+  ) =>
+    (
+      await as<{ id: string }>(
+        visitor,
+        "insert into posts (author_id, body, book_id, parent_id, reading_mode) values ($1, '出会った本', $2, $3, $4) returning id",
+        [visitor, bookId, more.parent ?? null, more.mode ?? null],
+      )
+    )[0].id;
+
+  await check(
+    "a library, its shelves and its encounters are their reader's alone",
+    async () => {
+      const chis = await newBook(CHI);
+      const chis2 = await newBook(CHI);
+      const akis = await newBook(AKI);
+      await putEntry(CHI, chis);
+      await putEntry(CHI, chis2);
+      await putEntry(AKI, akis);
+      const chiShelf = await putShelf();
+      const akiShelf = await putShelf({ user_id: AKI });
+      await shelve(chiShelf, chis);
+      await shelve(akiShelf, akis, AKI);
+      await meet(encounterRow({ book_id: chis }));
+      const everything = async () => {
+        const rows: unknown[] = [];
+        for (const table of libraryTables)
+          rows.push(
+            (await db.query(`select * from ${table} order by 1, 2, 3`)).rows,
+          );
+        return rows;
+      };
+      const before = await everything();
+      // Rows of Chi's, which someone signed out and Aki try to write.
+      const chisRows: [string, string, string, object][] = [
+        [
+          "library_entries",
+          ENTRY_COLUMNS,
+          "user_id, book_id",
+          rowOf(CHI, entryOf(akis, { everUsed: true })),
+        ],
+        ["library_shelves", SHELF_COLUMNS, "id", shelfRow(deviceId())],
+        [
+          "library_shelf_books",
+          SHELF_BOOK_COLUMNS,
+          "user_id, shelf_id, book_id",
+          {
+            shelf_id: chiShelf,
+            user_id: CHI,
+            book_id: chis2,
+            added_at: "2026-09-01T00:00:00.000Z",
+            position: null,
+          },
+        ],
+        [
+          "book_encounters",
+          ENCOUNTER_COLUMNS,
+          "id",
+          encounterRow({ book_id: akis }),
+        ],
+      ];
+      for (const [table, columns, conflict, row] of chisRows) {
+        await refused(null, `select * from ${table}`, [], /permission/);
+        await refused(
+          null,
+          `insert into ${table} (${columns})
+           select ${columns} from json_populate_record(null::${table}, $1)`,
+          [JSON.stringify(row)],
+          /permission/,
+        );
+        assert.equal(
+          (await as(AKI, `select * from ${table} where user_id = $1`, [CHI]))
+            .length,
+          0,
+          table,
+        );
+        await assert.rejects(
+          insertRows(AKI, table, columns, conflict, [row]),
+          /row-level security/,
+          table,
+        );
+        assert.ok(
+          (await as(CHI, `select user_id from ${table}`)).every(
+            (row) => row.user_id === CHI,
+          ),
+          table,
+        );
+      }
+      for (const sql of [
+        "update library_entries set status = 'finished' where user_id = $1",
+        "update library_entries set ever_used = true where user_id = $1",
+        "update library_shelves set name = '横取り' where user_id = $1",
+        "update library_shelf_books set position = 'a1' where user_id = $1",
+        "update book_encounters set memo = '横取り' where user_id = $1",
+        "delete from library_shelf_books where user_id = $1",
+        "delete from book_encounters where user_id = $1",
+      ])
+        assert.equal(await affects(AKI, sql, [CHI]), 0, sql);
+      // Nor marks one of Chi's books as used by an upsert merging onto it.
+      await refused(
+        AKI,
+        `insert into library_entries (${ENTRY_COLUMNS})
+         select ${ENTRY_COLUMNS} from json_populate_record(null::library_entries, $1)
+         on conflict (user_id, book_id) do update set ever_used = excluded.ever_used`,
+        [JSON.stringify(rowOf(CHI, entryOf(chis, { everUsed: true })))],
+        /row-level security/,
+      );
+      // Nobody puts a book on another's shelf, or one outside their own
+      // library on their own shelf.
+      for (const [visitor, shelfId, bookId] of [
+        [AKI, chiShelf, akis],
+        [AKI, akiShelf, chis],
+        [CHI, chiShelf, akis],
+      ])
+        await assert.rejects(
+          shelve(shelfId, bookId, visitor),
+          /foreign key/,
+          `${visitor} ${bookId}`,
+        );
+      assert.deepEqual(await everything(), before);
+    },
+  );
+
+  await check(
+    "a shelf tells nobody else which books are on it, whatever they send to it",
+    async () => {
+      // Aki's shelf, whose id Chi has come to know (an address shared, as
+      // the review doc's ?shelf= would be): one book on it, one not.
+      const on = await newBook(AKI);
+      const off = await newBook(AKI);
+      await putEntry(AKI, on);
+      await putEntry(AKI, off);
+      const shelf = await putShelf({ user_id: AKI, name: "誰にも見せない棚" });
+      await shelve(shelf, on, AKI);
+      const akis = () =>
+        as(AKI, "select * from library_shelf_books where shelf_id = $1", [
+          shelf,
+        ]);
+      const before = await akis();
+      // Chi puts each on it under her own name: the plain insert, and the
+      // API's upserts, ignoring duplicates and merging, by either key.
+      const insert = `insert into library_shelf_books (${SHELF_BOOK_COLUMNS})
+        values ($1, $2, $3, now(), null)`;
+      const statements = [
+        insert,
+        ...["shelf_id, book_id", "user_id, shelf_id, book_id"].flatMap(
+          (key) => [
+            `${insert} on conflict (${key}) do nothing returning 1`,
+            `${insert} on conflict (${key}) do update set position = excluded.position returning 1`,
+          ],
+        ),
+      ];
+      // Whether or not the books are in her own library.
+      for (const inHers of [false, true]) {
+        if (inHers) for (const bookId of [on, off]) await putEntry(CHI, bookId);
+        for (const sql of statements) {
+          const answer = (bookId: string) =>
+            refusal(() => as(CHI, sql, [shelf, CHI, bookId]));
+          assert.deepEqual(await answer(on), await answer(off), sql);
+        }
+      }
+      assert.deepEqual(await akis(), before);
+    },
+  );
+
+  await check(
+    "rows and shelves are never deleted, and a shelf put away keeps its books and their other shelves",
+    async () => {
+      const kept = await newBook(CHI);
+      await putEntry(CHI, kept);
+      const sf = await putShelf({ name: "SF" });
+      const night = await putShelf({ name: "夜に読む", position: "a1" });
+      await shelve(sf, kept);
+      await shelve(night, kept);
+      await refused(
+        CHI,
+        "delete from library_entries where book_id = $1",
+        [kept],
+        /permission/,
+      );
+      await refused(
+        CHI,
+        "delete from library_shelves where id = $1",
+        [sf],
+        /permission/,
+      );
+      const putAway = (deletedAt: string | null) =>
+        affects(
+          CHI,
+          "update library_shelves set deleted_at = $3 where id = $1 and user_id = $2",
+          [sf, CHI, deletedAt],
+        );
+      const shelvesOfKept = async () =>
+        (
+          await as<{ shelf_id: string }>(
+            CHI,
+            "select shelf_id from library_shelf_books where book_id = $1 order by shelf_id",
+            [kept],
+          )
+        ).map((row) => row.shelf_id);
+      assert.equal(await putAway("2026-09-05T00:00:00.000Z"), 1);
+      assert.deepEqual(await shelvesOfKept(), [sf, night].sort());
+      assert.equal(entryFrom((await rowsOf(CHI, kept))[0]).removedAt, null);
+      assert.equal(await putAway(null), 1);
+      assert.deepEqual(await shelvesOfKept(), [sf, night].sort());
+    },
+  );
+
+  await check("the library is open only as far as granted", async () => {
+    const yes = async (sql: string, params: unknown[]) =>
+      (await db.query<{ ok: boolean }>(sql, params)).rows[0].ok;
+    const table = (role: string, name: string, privilege: string) =>
+      yes("select has_table_privilege($1, $2, $3) as ok", [
+        role,
+        name,
+        privilege,
+      ]);
+    /** The columns of a table a role may use for a privilege, in order. */
+    const columns = async (role: string, name: string, privilege: string) =>
+      (
+        await db.query<{ name: string }>(
+          `select attname as name from pg_attribute
+           where attrelid = $2::regclass and attnum > 0 and not attisdropped
+             and has_column_privilege($1, attrelid, attnum, $3)
+           order by attnum`,
+          [role, name, privilege],
+        )
+      ).rows.map((row) => row.name);
+    const list = (names: string) => names.split(", ");
+    for (const name of libraryTables) {
+      assert.equal(
+        await yes(
+          "select relrowsecurity as ok from pg_class where oid = $1::regclass",
+          [name],
+        ),
+        true,
+        name,
+      );
+      for (const privilege of [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER",
+      ])
+        assert.equal(
+          await table("anon", name, privilege),
+          false,
+          `anon ${privilege} ${name}`,
+        );
+      for (const privilege of ["SELECT", "INSERT", "UPDATE", "REFERENCES"])
+        assert.deepEqual(
+          await columns("anon", name, privilege),
+          [],
+          `anon ${privilege} ${name}`,
+        );
+      for (const privilege of ["TRUNCATE", "REFERENCES", "TRIGGER"])
+        assert.equal(
+          await table("authenticated", name, privilege),
+          false,
+          `${privilege} ${name}`,
+        );
+      assert.equal(await table("authenticated", name, "SELECT"), true, name);
+      // Rows and shelves are only marked; a book's place on a shelf and an
+      // encounter taken back without a memo are deleted.
+      assert.equal(
+        await table("authenticated", name, "DELETE"),
+        name === "library_shelf_books" || name === "book_encounters",
+        `delete ${name}`,
+      );
+    }
+    for (const [name, privilege, names] of [
+      ["library_entries", "INSERT", ENTRY_COLUMNS],
+      [
+        "library_entries",
+        "UPDATE",
+        "status, status_at, wanted_at, liked_at, owned, removed_at, like_restored, ever_used",
+      ],
+      ["library_shelves", "INSERT", SHELF_COLUMNS],
+      [
+        "library_shelves",
+        "UPDATE",
+        "name, note, position, show_wanted, deleted_at",
+      ],
+      ["library_shelf_books", "INSERT", SHELF_BOOK_COLUMNS],
+      ["library_shelf_books", "UPDATE", "position"],
+      ["book_encounters", "INSERT", ENCOUNTER_COLUMNS],
+      ["book_encounters", "UPDATE", "memo, memo_at, undone_at"],
+    ])
+      assert.deepEqual(
+        await columns("authenticated", name, privilege),
+        list(names),
+        `${privilege} ${name}`,
+      );
+    for (const privilege of ["INSERT", "UPDATE"]) {
+      const theirs = await columns(
+        "authenticated",
+        "reader_settings",
+        privilege,
+      );
+      for (const name of list(
+        "library_hidden, likes_in_library, wanted_clears_on_status, memo_hint",
+      ))
+        assert.ok(theirs.includes(name), `${privilege} ${name}`);
+      assert.deepEqual(await columns("anon", "reader_settings", privilege), []);
+    }
+    for (const role of ["anon", "authenticated"])
+      for (const fn of [
+        "private.check_book_encounter()",
+        "private.library_clamp_times()",
+        "private.library_keep_used()",
+        "private.encounter_clamp_times()",
+        "private.library_follows_marks()",
+        "private.library_backfill()",
+      ])
+        assert.equal(
+          await yes("select has_function_privilege($1, $2, 'EXECUTE') as ok", [
+            role,
+            fn,
+          ]),
+          false,
+          `${role} ${fn}`,
+        );
+    // book_is_mine is widened, still called by the books' policy as before.
+    for (const role of ["anon", "authenticated"])
+      assert.equal(
+        await yes("select has_function_privilege($1, $2, 'EXECUTE') as ok", [
+          role,
+          "private.book_is_mine(uuid)",
+        ]),
+        true,
+      );
+    // The copy of marks runs as its owner (an account's deletion reaches it
+    // as supabase_auth_admin); the check of an encounter as the reader, so
+    // that the posts' and shops' own policies answer it.
+    const runsAs = (fn: string) =>
+      db
+        .query<{ definer: boolean; config: string[] }>(
+          "select prosecdef as definer, proconfig as config from pg_proc where oid = $1::regprocedure",
+          [fn],
+        )
+        .then((result) => result.rows[0]);
+    for (const [fn, definer] of [
+      ["private.library_follows_marks()", true],
+      ["private.book_is_mine(uuid)", true],
+      ["private.check_book_encounter()", false],
+      ["private.library_clamp_times()", false],
+      ["private.library_keep_used()", false],
+      ["private.encounter_clamp_times()", false],
+      ["private.library_backfill()", false],
+    ] as const)
+      assert.deepEqual(
+        await runsAs(fn),
+        { definer, config: ['search_path=""'] },
+        fn,
+      );
+  });
+
+  await check("the library refuses what no right write sends", async () => {
+    // Every source the app knows is taken, those of N19 and N20 too.
+    for (const source of ENTRY_SOURCES)
+      assert.equal(await putEntry(CHI, await newBook(CHI), { source }), 1);
+    const b = await newBook(CHI);
+    for (const part of [
+      { status: "done" },
+      { owned: "maybe" },
+      { source: "gift" },
+      { source: null },
+      { added_at: null },
+      { like_restored: null },
+      { ever_used: null },
+    ])
+      await assert.rejects(
+        insertRows(CHI, "library_entries", ENTRY_COLUMNS, "user_id, book_id", [
+          { ...rowOf(CHI, entryOf(b, {})), ...part },
+        ]),
+        /check constraint|not-null/,
+        JSON.stringify(part),
+      );
+    for (const part of [
+      { name: "   " },
+      { name: "あ".repeat(41) },
+      { note: "あ".repeat(501) },
+      { position: "" },
+      { position: "a-1" },
+      { position: "あ" },
+      { position: "a".repeat(65) },
+      { show_wanted: null },
+    ])
+      await assert.rejects(
+        putShelf(part),
+        /check constraint|not-null/,
+        JSON.stringify(part),
+      );
+    // At the limits, taken: a name of 40 between spaces, a note of 500.
+    const edge = await putShelf({
+      name: " " + "𠮷".repeat(40) + " ",
+      note: "あ".repeat(500),
+      position: "Zz09".repeat(16),
+    });
+    await putEntry(CHI, b);
+    await assert.rejects(
+      insertRows(
+        CHI,
+        "library_shelf_books",
+        SHELF_BOOK_COLUMNS,
+        "user_id, shelf_id, book_id",
+        [
+          {
+            shelf_id: edge,
+            user_id: CHI,
+            book_id: b,
+            added_at: "2026-09-01T00:00:00.000Z",
+            position: "a b",
+          },
+        ],
+      ),
+      /check constraint/,
+    );
+    for (const part of [
+      { kind: "sad" },
+      { via: "shelf" },
+      { kind: "like" },
+      { kind: "love" },
+      { memo: "" },
+      { memo: "𠮷".repeat(ENCOUNTER_MEMO_MAX_LENGTH + 1) },
+      { created_at: null },
+    ] as Record<string, string | null>[])
+      await assert.rejects(
+        meet(encounterRow({ book_id: b, ...part })),
+        /check constraint|not-null/,
+        JSON.stringify(part),
+      );
+    assert.equal(
+      await meet(
+        encounterRow({
+          book_id: b,
+          memo: "𠮷".repeat(ENCOUNTER_MEMO_MAX_LENGTH),
+          memo_at: "2026-09-02T00:00:00.000Z",
+        }),
+      ),
+      1,
+    );
+  });
+
+  await check(
+    "the library takes the statements the app sends, and refuses those it must not send",
+    async () => {
+      const books = (
+        await as<{ id: string }>(
+          CHI,
+          "insert into books (title, created_by) select '百冊のうち' || n, $1 from generate_series(1, 100) n returning id",
+          [CHI],
+        )
+      ).map((row) => row.id);
+      const ids = (some: string[]) => `{${some.join(",")}}`;
+      // New rows, inserted ignoring duplicates: sent again, none is new.
+      const rows = books.map((id) => rowOf(CHI, entryOf(id, {})));
+      for (const expected of [100, 0])
+        assert.equal(
+          await insertRows(
+            CHI,
+            "library_entries",
+            ENTRY_COLUMNS,
+            "user_id, book_id",
+            rows,
+          ),
+          expected,
+        );
+      // The columns changed, for 100 books at once (in=).
+      assert.equal(
+        (
+          await as(
+            CHI,
+            `update library_entries set status = 'finished', status_at = $3
+             where user_id = $1 and book_id = any ($2::uuid[]) returning book_id`,
+            [CHI, ids(books), "2026-09-01T00:00:00.000Z"],
+          )
+        ).length,
+        100,
+      );
+      // A shelf renamed; books put on it (again: not new) and taken off.
+      const trip = await putShelf({ name: "旅" });
+      assert.equal(
+        await affects(
+          CHI,
+          "update library_shelves set name = $3 where id = $1 and user_id = $2",
+          [trip, CHI, "旅の本"],
+        ),
+        1,
+      );
+      for (const [book, expected] of [
+        [books[0], 1],
+        [books[0], 0],
+        [books[1], 1],
+      ] as const)
+        assert.equal(await shelve(trip, book), expected);
+      assert.equal(
+        await affects(
+          CHI,
+          `delete from library_shelf_books
+           where user_id = $1 and shelf_id = $2 and book_id = any ($3::uuid[])`,
+          [CHI, trip, ids(books.slice(0, 2))],
+        ),
+        2,
+      );
+      // A partial upsert (the key and the columns changed) is refused, row
+      // or no row: as the API builds it, for the key it may not update; and
+      // with only the columns changed, for the source left null, which is
+      // checked before the conflict is.
+      for (const id of [books[2], await newBook(CHI)]) {
+        await refused(
+          CHI,
+          `insert into library_entries (user_id, book_id, status) values ($1, $2, 'reading')
+           on conflict (user_id, book_id) do update
+             set user_id = excluded.user_id, book_id = excluded.book_id, status = excluded.status`,
+          [CHI, id],
+          /permission denied/,
+        );
+        await refused(
+          CHI,
+          `insert into library_entries (user_id, book_id, status) values ($1, $2, 'reading')
+           on conflict (user_id, book_id) do update set status = excluded.status`,
+          [CHI, id],
+          /null value in column "source"/,
+        );
+      }
+      // The shelf books' default upsert would update every column it sends,
+      // and only position may be: refused, even for a book not yet there.
+      await refused(
+        CHI,
+        `insert into library_shelf_books (${SHELF_BOOK_COLUMNS}) values ($1, $2, $3, now(), null)
+         on conflict (user_id, shelf_id, book_id) do update
+           set shelf_id = excluded.shelf_id, user_id = excluded.user_id,
+             book_id = excluded.book_id, added_at = excluded.added_at,
+             position = excluded.position`,
+        [trip, CHI, books[3]],
+        /permission denied/,
+      );
+    },
+  );
+
+  /**
+   * Chi's row of `b` changed from `before` to `after` as the app sends it: a
+   * new row whole, inserted ignoring duplicates, or the columns that changed,
+   * updated. Then it is read back.
+   */
+  const sendEntry = async (
+    b: string,
+    before: LibraryEntry | null,
+    after: LibraryEntry | null,
+    why?: string,
+  ) => {
+    if (before === null && after !== null)
+      assert.equal(
+        await insertRows(
+          CHI,
+          "library_entries",
+          ENTRY_COLUMNS,
+          "user_id, book_id",
+          [rowOf(CHI, after)],
+        ),
+        1,
+      );
+    else if (before !== null && after !== null) {
+      const changed = (Object.keys(after) as (keyof LibraryEntry)[]).filter(
+        (key) => after[key] !== before[key],
+      );
+      if (changed.length)
+        assert.equal(
+          await affects(
+            CHI,
+            `update library_entries
+             set ${changed.map((key, i) => `${snake(key)} = $${i + 3}`).join(", ")}
+             where user_id = $1 and book_id = $2`,
+            [CHI, b, ...changed.map((key) => after[key])],
+          ),
+          1,
+        );
+    }
+    assert.deepEqual(
+      (await rowsOf(CHI, b)).map(entryFrom),
+      after === null ? [] : [after],
+      why,
+    );
+  };
+
+  // Every write the library's rules make is one the table takes and keeps
+  // through the writes after it, a use marking a row already there
+  // (ever_used) among them (tests/fixtures/library-cases.json).
+  for (const c of LIBRARY_CASES.apply)
+    await check(
+      `library_entries takes the write of applySet: ${c.name}`,
+      async () => {
+        const b = await newBook(CHI, "規則の本");
+        const before = c.entry === null ? null : entryOf(b, c.entry);
+        if (c.entry !== null) await putEntry(CHI, b, c.entry);
+        await sendEntry(
+          b,
+          before,
+          c.expect === "same"
+            ? before
+            : c.expect === null
+              ? null
+              : entryOf(b, c.expect),
+        );
+      },
+    );
+  for (const c of LIBRARY_CASES.sequence)
+    await check(
+      `library_entries takes each step's write: ${c.name}`,
+      async () => {
+        const b = await newBook(CHI, "使った本");
+        let row = c.entry === null ? null : entryOf(b, c.entry);
+        if (c.entry !== null) await putEntry(CHI, b, c.entry);
+        for (const step of c.steps) {
+          const after =
+            step.expect === "same"
+              ? row
+              : step.expect === null
+                ? null
+                : entryOf(b, step.expect);
+          await sendEntry(b, row, after, step.does);
+          row = after;
+        }
+      },
+    );
+
+  /** Chi's row of `b` after `change`, as a shared case expects it. */
+  const followed = async (
+    b: string,
+    expected: EntryPart | null | "same",
+    change: () => Promise<unknown>,
+  ) => {
+    const before = await rowsOf(CHI, b);
+    const clock = async () =>
+      (await db.query<{ at: Date }>("select clock_timestamp() as at")).rows[0]
+        .at;
+    const start = await clock();
+    await change();
+    const end = await clock();
+    const after = await rowsOf(CHI, b);
+    if (expected === "same") {
+      assert.deepEqual(after, before, "not even updated_at");
+      return;
+    }
+    if (expected === null) {
+      assert.deepEqual(after, []);
+      return;
+    }
+    const row = entryFrom(after[0]);
+    // "@now" is the database's time, between the two readings of the clock.
+    const expect = { ...expected };
+    for (const field of ["removedAt", "statusAt"] as const)
+      if (expect[field] === "@now") {
+        const at = Date.parse(row[field] ?? "");
+        assert.ok(at >= start.getTime() && at <= end.getTime(), field);
+        expect[field] = row[field];
+      }
+    assert.deepEqual(row, entryOf(b, expect));
+  };
+
+  for (const c of LIBRARY_CASES.follow)
+    await check(`book_marks_follow: ${c.name}`, async () => {
+      const b = await newBook(CHI, "印の本");
+      // Set up as the app that knows the library writes: nothing is copied.
+      await withLibraryHeader(async () => {
+        if (c.entry) await putEntry(CHI, b, c.entry);
+        for (const kind of c.marks)
+          await mark(kind, b, "2026-08-01T00:00:00.000Z");
+        if (c.shelf !== "none") {
+          const shelfId = await putShelf({
+            deleted_at:
+              c.shelf === "deleted" ? "2026-09-02T00:00:00.000Z" : null,
+          });
+          await shelve(shelfId, b);
+        }
+        if (c.record)
+          await as(
+            CHI,
+            "insert into reading_entries (user_id, book_id) values ($1, $2)",
+            [CHI, b],
+          );
+        if (c.memo)
+          await meet(
+            encounterRow({
+              book_id: b,
+              memo: "なぜ読みたいか",
+              memo_at: "2026-09-02T00:00:00.000Z",
+              undone_at: "2026-09-03T00:00:00.000Z",
+            }),
+          );
+      });
+      // The change, by an app that does not know the library.
+      await followed(b, c.expect, () =>
+        c.change.op === "insert"
+          ? mark(c.change.kind, b, c.change.at)
+          : unmark(c.change.kind, b),
+      );
+    });
+
+  // One save of an old app changing one book's marks, sent as it sends it:
+  // planWrites deletes each mark taken off, one by one, and then writes
+  // those put on in one insert ignoring duplicates (applyWrite in
+  // src/lib/supabase/town-backend.ts). The marks carry no date of their own.
+  for (const c of LIBRARY_CASES.save)
+    await check(`book_marks_follow, one save: ${c.name}`, async () => {
+      const b = await newBook(CHI, "印の本");
+      await withLibraryHeader(async () => {
+        if (c.entry) await putEntry(CHI, b, c.entry);
+        for (const kind of c.marks)
+          await mark(kind, b, "2026-08-01T00:00:00.000Z");
+      });
+      const listsOf = (kinds: MarkKind[]) => ({
+        wishlist: kinds.includes("wish") ? [b] : [],
+        favorites: kinds.includes("favorite") ? [b] : [],
+        library: kinds.includes("library") ? [b] : [],
+        finishedBooks: kinds.includes("finished") ? [b] : [],
+      });
+      const town = emptyTown();
+      const writes = planWrites(
+        { ...town, ...listsOf(c.marks) },
+        { ...town, ...listsOf(c.after) },
+        { userId: CHI, shopId: deviceId() },
+      );
+      assert.deepEqual(
+        writes.map((write) => write.kind === "remove" || write.kind === "add"),
+        writes.map(() => true),
+      );
+      await followed(b, c.expect, async () => {
+        for (const write of writes)
+          if (write.kind === "remove")
+            for (const row of write.rows)
+              await as(
+                CHI,
+                "delete from book_marks where user_id = $1 and book_id = $2 and kind = $3",
+                [row.user_id, row.book_id, row.kind],
+              );
+          else if (write.kind === "add")
+            await as(
+              CHI,
+              `insert into book_marks (user_id, book_id, kind)
+               select user_id, book_id, kind
+               from json_populate_recordset(null::book_marks, $1)
+               on conflict (user_id, book_id, kind) do nothing`,
+              [JSON.stringify(write.rows)],
+            );
+      });
+    });
+
+  await check(
+    "marks written with x-booktown-library: 1 are left alone, and a mark already there fires nothing",
+    async () => {
+      const kinds = ["wish", "favorite", "library", "finished"];
+      const b = await newBook(CHI);
+      await putEntry(CHI, b, {
+        status: "tsundoku",
+        statusAt: "2026-09-01T00:00:00.000Z",
+      });
+      const before = await rowsOf(CHI, b);
+      await withLibraryHeader(async () => {
+        for (const kind of kinds) await mark(kind, b);
+        for (const kind of kinds) await unmark(kind, b);
+      });
+      assert.deepEqual(await rowsOf(CHI, b), before, "not even updated_at");
+      const none = await newBook(CHI);
+      await withLibraryHeader(async () => {
+        for (const kind of kinds) await mark(kind, none);
+      });
+      assert.deepEqual(await rowsOf(CHI, none), []);
+      // Any other value is an app that does not know the library.
+      const other = await newBook(CHI);
+      await withLibraryHeader(
+        () => mark("wish", other, "2026-09-03T00:00:00.000Z"),
+        "0",
+      );
+      assert.equal(
+        entryFrom((await rowsOf(CHI, other))[0]).wantedAt,
+        "2026-09-03T00:00:00.000Z",
+      );
+      // Marks are upserted ignoring duplicates: one already there inserts
+      // nothing, so the trigger does not run and the row stays as it is.
+      await as(
+        CHI,
+        "update library_entries set wanted_at = null where user_id = $1 and book_id = $2",
+        [CHI, other],
+      );
+      const unwanted = await rowsOf(CHI, other);
+      await as(
+        CHI,
+        `insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')
+         on conflict (user_id, book_id, kind) do nothing`,
+        [CHI, other],
+      );
+      assert.deepEqual(await rowsOf(CHI, other), unwanted);
+    },
+  );
+
+  await check(
+    "a book in a library or met in an encounter is not deleted from under it",
+    async () => {
+      const kept = await newBook(CHI);
+      await putEntry(CHI, kept);
+      const met = await newBook(CHI);
+      await meet(encounterRow({ book_id: met }));
+      await assert.rejects(
+        operator(`delete from books where id = '${kept}'`),
+        /library_entries_book_id_fkey/,
+      );
+      await assert.rejects(
+        operator(`delete from books where id = '${met}'`),
+        /book_encounters_book_id_fkey/,
+      );
+    },
+  );
+
+  await check(
+    "a device clock running ahead dates nothing in the future",
+    async () => {
+      const ahead = "2099-01-01T00:00:00.000Z";
+      const b = await newBook(CHI);
+      await putEntry(CHI, b, {
+        status: "reading",
+        statusAt: ahead,
+        wantedAt: ahead,
+        likedAt: ahead,
+        addedAt: ahead,
+      });
+      const past = async (sql: string, params: unknown[]) =>
+        (await as<{ ok: boolean }>(CHI, sql, params))[0].ok;
+      const entryInPast = () =>
+        past(
+          `select added_at <= now() and status_at <= now() and wanted_at <= now()
+             and liked_at <= now() as ok
+           from library_entries where user_id = $1 and book_id = $2`,
+          [CHI, b],
+        );
+      assert.equal(await entryInPast(), true);
+      await as(
+        CHI,
+        `update library_entries set status_at = $3, wanted_at = $3, liked_at = $3
+         where user_id = $1 and book_id = $2`,
+        [CHI, b, ahead],
+      );
+      assert.equal(await entryInPast(), true);
+      await as(
+        CHI,
+        "update library_entries set wanted_at = null where user_id = $1 and book_id = $2",
+        [CHI, b],
+      );
+      assert.equal(entryFrom((await rowsOf(CHI, b))[0]).wantedAt, null);
+      const met = encounterRow({
+        book_id: b,
+        memo: "未来から",
+        memo_at: ahead,
+        created_at: ahead,
+      });
+      await meet(met);
+      const encounterInPast = () =>
+        past(
+          "select created_at <= now() and memo_at <= now() as ok from book_encounters where id = $1",
+          [met.id],
+        );
+      assert.equal(await encounterInPast(), true);
+      await as(CHI, "update book_encounters set memo_at = $2 where id = $1", [
+        met.id,
+        ahead,
+      ]);
+      assert.equal(await encounterInPast(), true);
+    },
+  );
+
+  await check(
+    "a use once made stays made: an update clearing ever_used keeps it, and the rest of the update is taken",
+    async () => {
+      const b = await newBook(CHI);
+      const used = entryOf(b, {
+        source: "shop",
+        status: "tsundoku",
+        statusAt: "2026-09-02T00:00:00.000Z",
+        everUsed: true,
+      });
+      await putEntry(CHI, b, used);
+      assert.equal(
+        await affects(
+          CHI,
+          "update library_entries set ever_used = false where user_id = $1 and book_id = $2",
+          [CHI, b],
+        ),
+        1,
+      );
+      assert.deepEqual((await rowsOf(CHI, b)).map(entryFrom), [used]);
+      // An undo writing back what an op found before the use, ever_used
+      // among it: the rest of it is taken.
+      assert.equal(
+        await affects(
+          CHI,
+          `update library_entries set status = null, status_at = null, ever_used = false
+           where user_id = $1 and book_id = $2`,
+          [CHI, b],
+        ),
+        1,
+      );
+      assert.deepEqual((await rowsOf(CHI, b)).map(entryFrom), [
+        { ...used, status: null, statusAt: null },
+      ]);
+      // A row not used yet is marked by an update, as before.
+      const fresh = await newBook(CHI);
+      await putEntry(CHI, fresh);
+      await sendEntry(
+        fresh,
+        entryOf(fresh, {}),
+        entryOf(fresh, { everUsed: true }),
+      );
+    },
+  );
+
+  await check(
+    "an old app's settings leave the library's alone, and hidden shelves keep to their form",
+    async () => {
+      const LIBRARY =
+        "library_hidden, likes_in_library, wanted_clears_on_status, memo_hint";
+      // The statements the API builds for the old app's upsert and the new one's.
+      const oldUpsert = (visitor: string, value: string) =>
+        as(
+          visitor,
+          `insert into reader_settings (user_id, spoiler_display) values ($1, $2)
+           on conflict (user_id) do update
+             set user_id = excluded.user_id, spoiler_display = excluded.spoiler_display`,
+          [visitor, value],
+        );
+      const newUpsert = (visitor: string, hidden: string) =>
+        as(
+          visitor,
+          `insert into reader_settings (user_id, spoiler_display, ${LIBRARY})
+           values ($1, 'leave_out', $2::text[], false, true, false)
+           on conflict (user_id) do update
+             set user_id = excluded.user_id, spoiler_display = excluded.spoiler_display,
+               library_hidden = excluded.library_hidden,
+               likes_in_library = excluded.likes_in_library,
+               wanted_clears_on_status = excluded.wanted_clears_on_status,
+               memo_hint = excluded.memo_hint`,
+          [visitor, hidden],
+        );
+      const settingsOf = async (visitor: string) =>
+        (
+          await as(
+            visitor,
+            `select ${LIBRARY} from reader_settings where user_id = $1`,
+            [visitor],
+          )
+        )[0];
+      // Ben has no settings yet: the old app's upsert gives him the defaults.
+      await oldUpsert(BEN, "leave_out");
+      assert.deepEqual(await settingsOf(BEN), {
+        library_hidden: [],
+        likes_in_library: true,
+        wanted_clears_on_status: false,
+        memo_hint: true,
+      });
+      await newUpsert(BEN, "{finished,a_shelf_not_known_yet}");
+      const chosen = {
+        library_hidden: ["finished", "a_shelf_not_known_yet"],
+        likes_in_library: false,
+        wanted_clears_on_status: true,
+        memo_hint: false,
+      };
+      assert.deepEqual(await settingsOf(BEN), chosen);
+      await oldUpsert(BEN, "show_all");
+      assert.deepEqual(await settingsOf(BEN), chosen);
+      // Keys of the form, unknown ones too, up to twenty; nothing else.
+      const twenty = Array.from(
+        { length: 20 },
+        (_, n) => "shelf_" + String.fromCharCode(97 + n),
+      );
+      for (const taken of [
+        "{}",
+        `{${twenty.join(",")}}`,
+        `{${"a".repeat(32)}}`,
+        "{_}",
+      ])
+        await newUpsert(BEN, taken);
+      for (const value of [
+        `{${[...twenty, "shelf_z"].join(",")}}`,
+        `{${"a".repeat(33)}}`,
+        "{Read}",
+        '{""}',
+        '{"a,b"}',
+        '{"a b"}',
+        "{NULL}",
+        "{read,NULL}",
+        "{{read},{wish}}",
+        "{読了}",
+      ])
+        await refused(
+          BEN,
+          "update reader_settings set library_hidden = $2::text[] where user_id = $1",
+          [BEN, value],
+          /check constraint/,
+        );
+      assert.deepEqual((await settingsOf(BEN)).library_hidden, ["_"]);
+    },
+  );
+
+  await check(
+    "a typed-in book is read by whoever keeps it in their library or met it, and only while they do",
+    async () => {
+      const AKI_ALONE = [false, true, false, false];
+      const AKI_AND_CHI = [false, true, false, true];
+      const shelved = await newBook(AKI, "まだ誰にも見せない本");
+      assert.deepEqual(await readersOf(shelved), AKI_ALONE);
+      await putEntry(CHI, shelved);
+      assert.deepEqual(await readersOf(shelved), AKI_AND_CHI, "in Chi's");
+      const takeOut = (at: string | null) =>
+        as(
+          CHI,
+          "update library_entries set removed_at = $3 where user_id = $1 and book_id = $2",
+          [CHI, shelved, at],
+        );
+      await takeOut("2026-09-05T00:00:00.000Z");
+      assert.deepEqual(await readersOf(shelved), AKI_ALONE, "taken out");
+      await takeOut(null);
+      assert.deepEqual(await readersOf(shelved), AKI_AND_CHI, "back in");
+      const met = await newBook(AKI, "まだ誰にも見せない本");
+      assert.deepEqual(await readersOf(met), AKI_ALONE);
+      const want = encounterRow({
+        book_id: met,
+        memo: "表紙が気になった",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      });
+      await meet(want);
+      assert.deepEqual(await readersOf(met), AKI_AND_CHI, "met");
+      await as(
+        CHI,
+        "update book_encounters set undone_at = now() where id = $1",
+        [want.id],
+      );
+      assert.deepEqual(await readersOf(met), AKI_AND_CHI, "kept for its memo");
+    },
+  );
+
+  // Chi's own shop, which she meets no book in.
+  const [chiShop] = await as<{ id: string }>(
+    CHI,
+    "insert into shops (owner_id, name, is_open) values ($1, '昼の本屋', true) returning id",
+    [CHI],
+  );
+  /** Why each case refused is refused, by its number. */
+  const violates = (constraint: string) => ({
+    code: "23514",
+    message: `new row for relation "book_encounters" violates check constraint "${constraint}"`,
+  });
+  const own = {
+    code: "23514",
+    message: "a reader's own post or shop is no encounter",
+  };
+  const ENCOUNTER_REFUSALS: Record<string, { code: string; message: string }> =
+    {
+      E3: violates("book_encounters_post_kind"),
+      E4: own,
+      E5: { code: "23503", message: "the post met is not found" },
+      E6: {
+        code: "23514",
+        message: "an encounter on a post meets the post's own book",
+      },
+      E10: own,
+      E11: { code: "23503", message: "the shop met is not found" },
+      E13: violates("book_encounters_placement_key_check"),
+      E14: {
+        code: "23514",
+        message: "an encounter on a POP names its shop and place",
+      },
+      E16: violates("book_encounters_book_page_kind"),
+      E18: violates("book_encounters_memo_check"),
+    };
+  for (const c of LIBRARY_CASES.encounter)
+    await check(`book_encounters: ${c.name}`, async () => {
+      const owner = c.owner === "me" ? CHI : AKI;
+      const b = await newBook(owner);
+      const row = encounterRow({
+        book_id: b,
+        kind: c.kind,
+        via: c.via,
+        other_reader_id: owner,
+      });
+      if (c.via === "post") {
+        if (c.sample) row.post_id = deviceId();
+        else if (c.reply) {
+          const theirs = await newBook(owner);
+          const parent = await postAbout(owner, theirs);
+          row.post_id = await postAbout(owner, b, { parent });
+          // A reply is met by its own book, never its parent's.
+          await assert.rejects(
+            meet({ ...row, id: deviceId(), book_id: theirs }),
+            /the post's own book/,
+          );
+        } else row.post_id = await postAbout(owner, c.noBook ? null : b);
+      } else if (c.via === "pop") {
+        row.shop_id = c.sample
+          ? deviceId()
+          : owner === CHI
+            ? chiShop.id
+            : akiShop.id;
+        const length = c.placementKeyLength ?? 12;
+        row.placement_key = length === 0 ? null : "あ".repeat(length);
+      }
+      let error: Error | null = await meet(row).then(
+        () => null,
+        (caught: Error) => caught,
+      );
+      if (!error && c.memoLength !== undefined)
+        error = await as(
+          CHI,
+          "update book_encounters set memo = $2, memo_at = $3 where id = $1",
+          [row.id, "𠮷".repeat(c.memoLength), "2026-09-02T00:00:00.000Z"],
+        ).then(
+          () => null,
+          (caught: Error) => caught,
+        );
+      assert.equal(error === null, c.accept, c.name);
+      // Refused for the case's own reason, by the insert check's words or
+      // the constraint's name.
+      if (error) {
+        const { code, message } = error as Error & { code?: string };
+        assert.deepEqual(
+          { code, message },
+          ENCOUNTER_REFUSALS[c.name.split(" ")[0]],
+          c.name,
+        );
+      }
+      if (error === null)
+        assert.deepEqual(
+          await as(
+            CHI,
+            "select other_reader_id from book_encounters where id = $1",
+            [row.id],
+          ),
+          [{ other_reader_id: c.via === "book" ? null : AKI }],
+        );
+    });
+
+  await check(
+    "a post or a shop the reader cannot see is refused as one that does not exist",
+    async () => {
+      const b = await newBook(AKI);
+      const onPost = (post: string) =>
+        refusal(() =>
+          meet(
+            encounterRow({
+              book_id: b,
+              kind: "like",
+              via: "post",
+              post_id: post,
+            }),
+          ),
+        );
+      const onPop = (shop: string) =>
+        refusal(() =>
+          meet(
+            encounterRow({
+              book_id: b,
+              kind: "love",
+              via: "pop",
+              shop_id: shop,
+              placement_key: "s1:i1",
+            }),
+          ),
+        );
+      const noPost = await onPost(deviceId());
+      assert.deepEqual(noPost, {
+        message: "the post met is not found",
+        code: "23503",
+      });
+      const noShop = await onPop(deviceId());
+      assert.deepEqual(noShop, {
+        message: "the shop met is not found",
+        code: "23503",
+      });
+      // Aki's private note, a post the operator hid, and Ben's closed shop.
+      assert.deepEqual(
+        await onPost(await postAbout(AKI, b, { mode: "solo" })),
+        noPost,
+      );
+      const hidden = await postAbout(AKI, b);
+      await hide("post", hidden);
+      assert.deepEqual(await onPost(hidden), noPost);
+      await operator(
+        `delete from moderation_hides where target_id = '${hidden}'`,
+      );
+      assert.deepEqual(await onPop(benShop.id), noShop);
+      // Aki's post and shop, while Chi has blocked her.
+      const shown = await postAbout(AKI, b);
+      await as(
+        CHI,
+        "insert into blocks (blocker_id, blocked_id) values ($1, $2)",
+        [CHI, AKI],
+      );
+      try {
+        assert.deepEqual(await onPost(shown), noPost);
+        assert.deepEqual(await onPop(akiShop.id), noShop);
+      } finally {
+        await as(
+          CHI,
+          "delete from blocks where blocker_id = $1 and blocked_id = $2",
+          [CHI, AKI],
+        );
+      }
+      // Seen again, they are met.
+      for (const row of [
+        encounterRow({ book_id: b, kind: "like", via: "post", post_id: shown }),
+        encounterRow({
+          book_id: b,
+          kind: "love",
+          via: "pop",
+          shop_id: akiShop.id,
+          placement_key: "s1:i1",
+        }),
+      ])
+        assert.equal(await meet(row), 1);
+    },
+  );
+
+  await check(
+    "an encounter sent again is taken as saved, even once its post or shop can no longer be read",
+    async () => {
+      // Sent again after an answer was lost (src/lib/supabase/sync.ts):
+      // inserted ignoring duplicates by its id, it adds nothing, whatever
+      // has become of its post or shop since. A refusal here would take
+      // every unsent change with it.
+      const b = await newBook(AKI);
+      const post = await postAbout(AKI, b);
+      const liked = encounterRow({
+        book_id: b,
+        kind: "like",
+        via: "post",
+        post_id: post,
+        memo: "炎の色",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      });
+      const loved = encounterRow({
+        book_id: b,
+        kind: "love",
+        via: "pop",
+        shop_id: akiShop.id,
+        placement_key: "s1:i7",
+      });
+      const sent = [liked, loved];
+      for (const row of sent) assert.equal(await meet(row), 1);
+      const saved = () =>
+        as(CHI, "select * from book_encounters where id = any ($1::uuid[])", [
+          `{${liked.id},${loved.id}}`,
+        ]);
+      const stored = await saved();
+      const again = async (why: string) => {
+        for (const row of sent) assert.equal(await meet(row), 0, why);
+        // Sent with other contents, the stored row is what stays.
+        assert.equal(
+          await meet({ ...liked, post_id: deviceId(), other_reader_id: BEN }),
+          0,
+          why,
+        );
+      };
+      await again("seen");
+      await as(
+        CHI,
+        "insert into blocks (blocker_id, blocked_id) values ($1, $2)",
+        [CHI, AKI],
+      );
+      try {
+        await again("Aki blocked");
+      } finally {
+        await as(
+          CHI,
+          "delete from blocks where blocker_id = $1 and blocked_id = $2",
+          [CHI, AKI],
+        );
+      }
+      await hide("post", post);
+      await again("hidden by the operator");
+      await operator(
+        `delete from moderation_hides where target_id = '${post}'`,
+      );
+      await operator(
+        `update shops set is_open = false where id = '${akiShop.id}'`,
+      );
+      try {
+        await again("the shop closed");
+      } finally {
+        await operator(
+          `update shops set is_open = true where id = '${akiShop.id}'`,
+        );
+      }
+      assert.deepEqual(await saved(), stored);
+      // The post deleted: the like stays with its memo, the post's link
+      // gone, and sending it again (still naming the post) adds nothing.
+      await as(AKI, "delete from posts where id = $1", [post]);
+      const [kept] = await as(
+        CHI,
+        "select post_id, other_reader_id, memo from book_encounters where id = $1",
+        [liked.id],
+      );
+      assert.deepEqual(kept, {
+        post_id: null,
+        other_reader_id: AKI,
+        memo: "炎の色",
+      });
+      await again("the post deleted");
+      // Sent plainly, it is refused as a duplicate, never as a post not
+      // found; a new encounter on the post gone is refused as before.
+      assert.equal((await refusal(() => meetPlainly(liked)))?.code, "23505");
+      assert.deepEqual(
+        await refusal(() => meet({ ...liked, id: deviceId() })),
+        { message: "the post met is not found", code: "23503" },
+      );
+    },
+  );
+
+  await check(
+    "whose post or shop it was is copied by the database, never taken from the device",
+    async () => {
+      const b = await newBook(AKI);
+      const post = await postAbout(AKI, b);
+      const rows = [
+        encounterRow({
+          book_id: b,
+          kind: "want",
+          via: "post",
+          post_id: post,
+          other_reader_id: BEN,
+        }),
+        encounterRow({
+          book_id: b,
+          kind: "want",
+          via: "pop",
+          shop_id: akiShop.id,
+          placement_key: "s1:i9",
+          other_reader_id: CHI,
+        }),
+        encounterRow({ book_id: b, other_reader_id: AKI }),
+      ];
+      for (const row of rows) await meet(row);
+      assert.deepEqual(
+        await as(
+          CHI,
+          "select other_reader_id from book_encounters where id = any ($1::uuid[]) order by id",
+          [`{${rows.map((row) => row.id).join(",")}}`],
+        ),
+        [
+          { other_reader_id: AKI },
+          { other_reader_id: AKI },
+          { other_reader_id: null },
+        ],
+      );
+    },
+  );
+
+  await check(
+    "an encounter is its reader's: not the post's writer's nor the shop's owner's, and only its memo and its taking back change",
+    async () => {
+      const b = await newBook(AKI);
+      const post = await postAbout(AKI, b);
+      const liked = encounterRow({
+        book_id: b,
+        kind: "like",
+        via: "post",
+        post_id: post,
+        memo: "最後の一行",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      });
+      const loved = encounterRow({
+        book_id: b,
+        kind: "love",
+        via: "pop",
+        shop_id: akiShop.id,
+        placement_key: "s1:i1",
+      });
+      await meet(liked);
+      await meet(loved);
+      for (const visitor of [AKI, BEN]) {
+        assert.deepEqual(
+          await as(
+            visitor,
+            "select id from book_encounters where user_id = $1 or other_reader_id = $2 or post_id = $3 or shop_id = $4",
+            [CHI, AKI, post, akiShop.id],
+          ),
+          [],
+          visitor,
+        );
+        for (const sql of [
+          "update book_encounters set memo = '横取り' where id = $1",
+          "update book_encounters set undone_at = now() where id = $1",
+          "delete from book_encounters where id = $1",
+        ])
+          assert.equal(await affects(visitor, sql, [liked.id]), 0, sql);
+      }
+      assert.equal(
+        await affects(
+          CHI,
+          "update book_encounters set memo = $2, memo_at = now() where id = $1",
+          [liked.id, "最後の二行"],
+        ),
+        1,
+      );
+      assert.equal(
+        await affects(
+          CHI,
+          "update book_encounters set undone_at = now() where id = $1",
+          [liked.id],
+        ),
+        1,
+      );
+      for (const [column, value] of [
+        ["id", deviceId()],
+        ["user_id", CHI],
+        ["book_id", b],
+        ["kind", "want"],
+        ["via", "book"],
+        ["post_id", null],
+        ["shop_id", null],
+        ["placement_key", "s1:i2"],
+        ["other_reader_id", null],
+        ["created_at", "2026-09-01T00:00:00.000Z"],
+      ] as [string, string | null][])
+        assert.deepEqual(
+          await refusal(() =>
+            as(CHI, `update book_encounters set ${column} = $2 where id = $1`, [
+              loved.id,
+              value,
+            ]),
+          ),
+          {
+            message: "permission denied for table book_encounters",
+            code: "42501",
+          },
+          column,
+        );
+    },
+  );
+
+  await check(
+    "one encounter of each press, and pressing again brings the same one back",
+    async () => {
+      const b = await newBook(AKI);
+      const post = await postAbout(AKI, b);
+      const like = encounterRow({
+        book_id: b,
+        kind: "like",
+        via: "post",
+        post_id: post,
+        memo: "残しておきたい",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      });
+      const love = encounterRow({
+        book_id: b,
+        kind: "love",
+        via: "pop",
+        shop_id: akiShop.id,
+        placement_key: "s1:i1",
+      });
+      const want = encounterRow({ book_id: b });
+      for (const row of [like, love, want]) {
+        assert.equal(await meet(row), 1);
+        // Sent again by the same device: nothing new, nothing refused.
+        assert.equal(await meet(row), 0);
+      }
+      // The same press from another device, or the same POP named the way
+      // the walk names it, is a second of the same.
+      for (const [row, index] of [
+        [{ ...like, id: deviceId() }, "book_encounters_post"],
+        [
+          { ...love, id: deviceId(), placement_key: "walk:3:2" },
+          "book_encounters_pop",
+        ],
+        [{ ...want, id: deviceId() }, "book_encounters_book"],
+      ] as const)
+        await assert.rejects(meet(row), new RegExp(index));
+      // Another kind of press on the same post is its own.
+      assert.equal(await meet({ ...like, id: deviceId(), kind: "want" }), 1);
+      // Taken back with a memo, it is kept; pressed again, it comes back.
+      const count = async () =>
+        (
+          await as<{ n: number }>(
+            CHI,
+            "select count(*)::int as n from book_encounters where post_id = $1 and kind = 'like'",
+            [post],
+          )
+        )[0].n;
+      for (const undone of ["2026-09-03T00:00:00.000Z", null])
+        assert.equal(
+          await affects(
+            CHI,
+            "update book_encounters set undone_at = $2 where id = $1",
+            [like.id, undone],
+          ),
+          1,
+        );
+      assert.equal(await count(), 1);
+      // Taken back without a memo, it is deleted.
+      assert.equal(
+        await affects(CHI, "delete from book_encounters where id = $1", [
+          love.id,
+        ]),
+        1,
+      );
+    },
+  );
+
+  await check(
+    "a post or a shop gone leaves its encounters and their memos, and whose they were until that account goes too",
+    async () => {
+      const GONE = lib(90001);
+      await db.exec(`insert into auth.users (id) values ('${GONE}')`);
+      await as(
+        GONE,
+        "insert into profiles (id, handle, name) values ($1, 'gone_reader', 'GONE')",
+        [GONE],
+      );
+      const [goneShop] = await as<{ id: string }>(
+        GONE,
+        "insert into shops (owner_id, name, is_open) values ($1, '閉じる本屋', true) returning id",
+        [GONE],
+      );
+      // Chi's own book, so that no book is left without its maker.
+      const b = await newBook(CHI);
+      const post = await postAbout(GONE, b);
+      const onPost = encounterRow({
+        book_id: b,
+        kind: "like",
+        via: "post",
+        post_id: post,
+        memo: "言葉が好き",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      });
+      const onPop = encounterRow({
+        book_id: b,
+        kind: "love",
+        via: "pop",
+        shop_id: goneShop.id,
+        placement_key: "s1:i1",
+        memo: "POPが好き",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      });
+      await meet(onPost);
+      await meet(onPop);
+      const left = () =>
+        as(
+          CHI,
+          `select id, post_id, shop_id, other_reader_id, memo from book_encounters
+           where id = any ($1::uuid[]) order by id`,
+          [`{${onPost.id},${onPop.id}}`],
+        );
+      await as(GONE, "delete from posts where id = $1", [post]);
+      assert.deepEqual(await left(), [
+        {
+          id: onPost.id,
+          post_id: null,
+          shop_id: null,
+          other_reader_id: GONE,
+          memo: "言葉が好き",
+        },
+        {
+          id: onPop.id,
+          post_id: null,
+          shop_id: goneShop.id,
+          other_reader_id: GONE,
+          memo: "POPが好き",
+        },
+      ]);
+      await operator(`delete from auth.users where id = '${GONE}'`);
+      assert.deepEqual(await left(), [
+        {
+          id: onPost.id,
+          post_id: null,
+          shop_id: null,
+          other_reader_id: null,
+          memo: "言葉が好き",
+        },
+        {
+          id: onPop.id,
+          post_id: null,
+          shop_id: null,
+          other_reader_id: null,
+          memo: "POPが好き",
+        },
+      ]);
+    },
+  );
+
+  await check("deleting an account removes everything it owned", async () => {
+    // Ben keeps a library too: a mark copied to its row, the row on a shelf,
+    // his settings, a record, his nine and encounters.
+    const bens = await newBook(AKI, "ベンの棚の本");
+    await mark("wish", bens, null, BEN);
+    await shelve(await putShelf({ user_id: BEN }), bens, BEN);
+    await as(
+      BEN,
+      `insert into reader_settings (user_id, spoiler_display) values ($1, 'show_all')
+       on conflict (user_id) do nothing`,
+      [BEN],
+    );
+    await as(
+      BEN,
+      "insert into reading_entries (user_id, book_id) values ($1, $2)",
+      [BEN, bens],
+    );
+    await operator(
+      `insert into profile_nine (profile_id, position, book_id)
+       values ('${BEN}', 9, '${bens}') on conflict do nothing`,
+    );
+    await meet(encounterRow({ user_id: BEN, book_id: bens }), BEN);
+    await meet(
+      encounterRow({
+        user_id: BEN,
+        book_id: bens,
+        kind: "like",
+        via: "pop",
+        shop_id: akiShop.id,
+        placement_key: "s1:i1",
+        memo: "ベンのメモ",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      }),
+      BEN,
+    );
+    // Chi met the book on Ben's post and on a POP of his shop, with a memo
+    // each: once his account goes, hers stay, with nothing of his left
+    // (decision 2).
+    await operator(
+      `update shops set is_open = true where id = '${benShop.id}'`,
+    );
+    const metBen = [
+      encounterRow({
+        book_id: bens,
+        kind: "like",
+        via: "post",
+        post_id: await postAbout(BEN, bens),
+        memo: "ベンの言葉",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      }),
+      encounterRow({
+        book_id: bens,
+        kind: "love",
+        via: "pop",
+        shop_id: benShop.id,
+        placement_key: "s1:i1",
+        memo: "ベンのPOP",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      }),
+    ];
+    for (const row of metBen) assert.equal(await meet(row), 1);
+    const chisOfBen = () =>
+      as(
+        CHI,
+        `select post_id is not null as post, shop_id is not null as shop,
+           other_reader_id, memo
+         from book_encounters where id = any ($1::uuid[]) order by memo`,
+        [`{${metBen.map((row) => row.id).join(",")}}`],
+      );
+    assert.deepEqual(await chisOfBen(), [
+      { post: false, shop: true, other_reader_id: BEN, memo: "ベンのPOP" },
+      { post: true, shop: false, other_reader_id: BEN, memo: "ベンの言葉" },
+    ]);
+    const kept: [string, string][] = [
+      ["library_entries", "user_id"],
+      ["library_shelves", "user_id"],
+      ["library_shelf_books", "user_id"],
+      ["book_encounters", "user_id"],
+      ["book_marks", "user_id"],
+      ["reader_settings", "user_id"],
+      ["reading_entries", "user_id"],
+      ["profile_nine", "profile_id"],
+    ];
+    const owned: [string, string][] = [
+      ["profiles", "id"],
+      ["shops", "owner_id"],
+      ["posts", "author_id"],
+      ["posters", "author_id"],
+      ["post_reactions", "user_id"],
+      ["shop_follows", "follower_id"],
+      ["saved_shops", "user_id"],
+      ["shop_visits", "user_id"],
+      ...kept,
+    ];
+    const left = async (table: string, column: string) =>
+      (
+        await db.query<{ n: number }>(
+          `select count(*)::int as n from ${table} where ${column} = $1`,
+          [BEN],
+        )
+      ).rows[0].n;
+    for (const [table, column] of kept)
+      assert.ok((await left(table, column)) > 0, "before: " + table);
+    // Supabase deletes an account as supabase_auth_admin, who owns auth.users
+    // and has no rights in public. The cascades run as each table's owner;
+    // the after triggers they fire run at the end of the statement, as
+    // supabase_auth_admin.
+    await db.exec(`
+      create role supabase_auth_admin nologin;
+      alter schema auth owner to supabase_auth_admin;
+      alter table auth.users owner to supabase_auth_admin;
+      set role supabase_auth_admin;
+    `);
+    try {
+      await db.exec(`delete from auth.users where id = '${BEN}'`);
+    } finally {
+      await db.exec("reset role");
+    }
+    for (const [table, column] of owned)
+      assert.equal(await left(table, column), 0, table);
+    assert.deepEqual(await chisOfBen(), [
+      { post: false, shop: false, other_reader_id: null, memo: "ベンのPOP" },
+      { post: false, shop: false, other_reader_id: null, memo: "ベンの言葉" },
+    ]);
     // The books Ben typed in stay in the catalog without an owner. The one
     // he only scanned is used nowhere, so nobody reads it any more.
     const orphan = await db.query<{ n: number }>(
@@ -3920,6 +5815,339 @@ async function main() {
       assert.deepEqual(await readable(CHI), everyone);
       assert.deepEqual(await readable(AKI), [...everyone, ...akis].sort());
       assert.deepEqual(await readable(BEN), [...everyone, ...bens].sort());
+      await earlier.close();
+    },
+  );
+
+  await check(
+    "a database from before the library gives each reader theirs from what they did, and leaves shops, likes and books as they were",
+    async () => {
+      const earlier = new PGlite();
+      await earlier.exec(supabase);
+      // Found by its name's end: the date in front may change before it merges.
+      const library = files.findIndex((file) => file.endsWith("_library.sql"));
+      assert.ok(library > 0, "the library migration");
+      for (const file of files.slice(0, library))
+        await earlier.exec(migrate(file));
+      const id = (n: number) =>
+        "00000000-0000-4000-8000-0000005" + String(n).padStart(5, "0");
+      const at = (time: string | null | undefined) =>
+        time ? `'${time}'` : "null";
+      // Each case of the shared ones is one reader and one book. Posts,
+      // posters and records are dated by the database when written, so
+      // their dates are set afterwards.
+      const sql: string[] = [];
+      const readers = LIBRARY_CASES.backfill.map((c, i) => {
+        const reader = id(100 + i);
+        const bookId = id(200 + i);
+        const nine = c.uses?.find((use) => use.kind === "nine");
+        sql.push(
+          `insert into auth.users (id) values ('${reader}');`,
+          `insert into profiles (id, handle, name, created_at)
+             values ('${reader}', 'library_${i}', 'L', ${nine ? at(nine.at) : "now()"});`,
+          `insert into books (id, title, source) values ('${bookId}', '本', 'ndl');`,
+        );
+        for (const mark of c.marks)
+          sql.push(
+            `insert into book_marks (user_id, book_id, kind, created_at)
+               values ('${reader}', '${bookId}', '${mark.kind}', ${at(mark.at)});`,
+          );
+        for (const [n, time] of c.records.entries()) {
+          const record = id(1000 + i * 10 + n);
+          sql.push(
+            `insert into reading_entries (id, user_id, book_id)
+               values ('${record}', '${reader}', '${bookId}');`,
+            `update reading_entries set created_at = ${at(time)} where id = '${record}';`,
+          );
+        }
+        for (const session of c.sessions)
+          sql.push(
+            `insert into reading_sessions (user_id, book_id, mode, started_at, ended_at)
+               values ('${reader}', '${bookId}', 'solo', ${at(session.startedAt)}, ${at(session.endedAt)});`,
+          );
+        // A reading without a book makes nothing.
+        sql.push(
+          `insert into reading_sessions (user_id, mode, started_at, ended_at)
+             values ('${reader}', 'solo', '2026-07-01T00:00:00Z', '2026-07-01T01:00:00Z');`,
+        );
+        for (const [n, use] of (c.uses ?? []).entries()) {
+          const used = id(2000 + i * 10 + n);
+          if (use.kind === "post")
+            sql.push(
+              `insert into posts (id, author_id, body, book_id)
+                 values ('${used}', '${reader}', '感想', '${bookId}');`,
+              `update posts set created_at = ${at(use.at)} where id = '${used}';`,
+            );
+          else if (use.kind === "poster")
+            sql.push(
+              `insert into posters (id, author_id, template, pages, status)
+                 values ('${used}', '${reader}', 'one_book', '${pages(bookId)}',
+                   '${use.draft ? "draft" : "published"}');`,
+              `update posters set created_at = ${at(use.at)} where id = '${used}';`,
+            );
+          else if (use.kind === "nine")
+            sql.push(
+              `insert into profile_nine (profile_id, position, book_id)
+                 values ('${reader}', 1, '${bookId}');`,
+            );
+          else
+            sql.push(
+              `insert into shops (id, owner_id, name, created_at)
+                 values ('${used}', '${reader}', '本屋', ${at(use.at)});`,
+              use.kind === "shelf"
+                ? `insert into shop_private (shop_id, shelves)
+                     values ('${used}', '${shelvesWith(bookId, !use.private)}');`
+                : `insert into shop_private (shop_id, scene)
+                     values ('${used}', '${sceneWith(bookId, true)}');`,
+            );
+        }
+        return { name: c.name, reader, bookId, expect: c.expect };
+      });
+      // A writer whose post and shop another reader likes: likes are not
+      // copied. Her shop also names ids that are no book here: a 見本's,
+      // and one that is no book at all.
+      const [writer, liker] = [id(1), id(2)];
+      const [posted, shelved, noBook] = [id(301), id(302), id(399)];
+      const [writersPost, writersShop] = [id(311), id(312)];
+      sql.push(
+        `insert into auth.users (id) values ('${writer}'), ('${liker}');`,
+        `insert into profiles (id, handle, name)
+           values ('${writer}', 'library_writer', 'W'), ('${liker}', 'library_liker', 'L');`,
+        `insert into books (id, title, source)
+           values ('${posted}', '本', 'ndl'), ('${shelved}', '本', 'ndl');`,
+        `insert into posts (id, author_id, body, book_id)
+           values ('${writersPost}', '${writer}', '感想', '${posted}');`,
+        `insert into shops (id, owner_id, name, is_open)
+           values ('${writersShop}', '${writer}', '本屋', true);`,
+        `insert into shop_private (shop_id, shelves, scene) values ('${writersShop}', '${JSON.stringify(
+          [
+            {
+              id: "s1",
+              name: "新着",
+              isPublic: true,
+              items: [
+                { id: "i1", bookId: shelved, display: "face" },
+                { id: "i2", bookId: "sample-book-1", display: "face" },
+                { id: "i3", bookId: noBook, display: "face" },
+              ],
+            },
+            { id: "s2", name: "まだ空の棚", isPublic: false },
+          ],
+        )}', '${JSON.stringify({
+          schemaVersion: 1,
+          storeId: "mine",
+          objects: [
+            { id: "shelf", kind: "furniture", parentId: null },
+            { id: "row", kind: "row", parentId: "shelf", isPublic: true },
+            {
+              id: "b1",
+              kind: "book",
+              bookId: "sample-book-2",
+              parentId: "row",
+            },
+            { id: "b2", kind: "book", bookId: shelved, parentId: "row" },
+          ],
+        })}');`,
+        `insert into post_reactions (user_id, post_id, kind)
+           values ('${liker}', '${writersPost}', 'like'), ('${liker}', '${writersPost}', 'want');`,
+        `insert into pop_reactions (user_id, shop_id, placement_key, reaction)
+           values ('${liker}', '${writersShop}', 's1:i1', 'like'),
+             ('${liker}', '${writersShop}', 's1:i1', 'love'),
+             ('${liker}', '${writersShop}', 's1:i1', 'read');`,
+      );
+      await earlier.exec(sql.join("\n"));
+      const snapshot = async () => {
+        const out: Record<string, unknown[]> = {};
+        for (const table of [
+          "shops",
+          "shop_private",
+          "pop_reactions",
+          "post_reactions",
+          "books",
+          "book_marks",
+        ])
+          out[table] = (
+            await earlier.query(`select * from ${table} t order by t::text`)
+          ).rows;
+        return out;
+      };
+      const before = await snapshot();
+
+      for (const file of files.slice(library))
+        await earlier.exec(migrate(file));
+      assert.deepEqual(await snapshot(), before, "nothing else was rewritten");
+      const entries = async (reader: string) =>
+        (
+          await earlier.query<Record<string, unknown>>(
+            "select * from library_entries where user_id = $1 order by book_id",
+            [reader],
+          )
+        ).rows;
+      for (const r of readers)
+        assert.deepEqual(
+          (await entries(r.reader)).map(entryFrom),
+          r.expect === null ? [] : [entryOf(r.bookId, r.expect)],
+          r.name,
+        );
+      assert.deepEqual(
+        (await entries(writer)).map((row) => [row.book_id, row.ever_used]),
+        [
+          [posted, true],
+          [shelved, true],
+        ],
+      );
+      assert.deepEqual(await entries(liker), []);
+      assert.deepEqual(
+        (await earlier.query("select * from book_encounters")).rows,
+        [],
+      );
+      // Run again, it changes nothing, not even a row's updated_at.
+      const all = async () =>
+        (
+          await earlier.query(
+            "select * from library_entries order by user_id, book_id",
+          )
+        ).rows;
+      const once = await all();
+      await earlier.exec("select private.library_backfill()");
+      assert.deepEqual(await all(), once);
+      // Posts written since by an app that sends no library ops (every app
+      // until L2b) are caught up by running it again, as the L2b migration
+      // will: a row for a book with none, and ever_used on a row a like
+      // made and on one taken out, which stays out. Nothing else changes.
+      const [later, liked, takenOut] = [id(321), id(322), id(323)];
+      const [first, since] = [
+        "2026-09-01T00:00:00.000Z",
+        "2026-09-03T00:00:00.000Z",
+      ];
+      await earlier.exec(`
+        insert into books (id, title, source)
+          values ('${later}', '本', 'ndl'), ('${liked}', '本', 'ndl'), ('${takenOut}', '本', 'ndl');
+        insert into library_entries (user_id, book_id, source, added_at, liked_at, removed_at)
+          values ('${liker}', '${liked}', 'like', '${first}', '${first}', null),
+            ('${liker}', '${takenOut}', 'like', '${first}', null, '${first}');
+        insert into posts (id, author_id, body, book_id)
+          values ('${id(331)}', '${liker}', '感想', '${later}'),
+            ('${id(332)}', '${liker}', '感想', '${liked}'),
+            ('${id(333)}', '${liker}', '感想', '${takenOut}');
+        update posts set created_at = '${since}' where author_id = '${liker}';
+      `);
+      const others = async () =>
+        (await all()).filter(
+          (row) => (row as { user_id: string }).user_id !== liker,
+        );
+      const othersBefore = await others();
+      await earlier.exec("select private.library_backfill()");
+      assert.deepEqual(await others(), othersBefore);
+      assert.deepEqual((await entries(liker)).map(entryFrom), [
+        entryOf(later, { source: "legacy", addedAt: since, everUsed: true }),
+        entryOf(liked, {
+          source: "like",
+          addedAt: first,
+          likedAt: first,
+          everUsed: true,
+        }),
+        entryOf(takenOut, {
+          source: "like",
+          addedAt: first,
+          removedAt: first,
+          everUsed: true,
+        }),
+      ]);
+      await earlier.close();
+    },
+  );
+
+  await check(
+    "the library's rollback, as its migration's header writes it, leaves the database as it was before, and the library can be added again",
+    async () => {
+      const earlier = new PGlite();
+      await earlier.exec(supabase);
+      // Found by its name's end: the date in front may change before it merges.
+      const library = files.findIndex((file) => file.endsWith("_library.sql"));
+      assert.ok(library > 0, "the library migration");
+      for (const file of files.slice(0, library))
+        await earlier.exec(migrate(file));
+      // Everything a migration makes or changes, by name: functions with
+      // their bodies and rights, relations (tables, indexes) with their
+      // rights and row security, columns with theirs, triggers, policies and
+      // constraints.
+      const catalog = async () =>
+        (
+          await earlier.query<{ kind: string; name: string; detail: string }>(
+            `select 'function' as kind, p.oid::regprocedure::text as name,
+                    md5(p.prosrc) || ' ' || coalesce(p.proacl::text, '') as detail
+             from pg_proc p
+             where p.pronamespace in ('public'::regnamespace, 'private'::regnamespace)
+             union all
+             select 'relation', c.oid::regclass::text,
+                    c.relkind::text || ' ' || coalesce(c.relacl::text, '') || ' ' || c.relrowsecurity::text
+             from pg_class c
+             where c.relnamespace in ('public'::regnamespace, 'private'::regnamespace)
+             union all
+             select 'column', a.attrelid::regclass::text || '.' || a.attname,
+                    format_type(a.atttypid, a.atttypmod) || ' ' || coalesce(a.attacl::text, '')
+             from pg_attribute a join pg_class c on c.oid = a.attrelid
+             where c.relnamespace in ('public'::regnamespace, 'private'::regnamespace)
+               and a.attnum > 0 and not a.attisdropped
+             union all
+             select 'trigger', t.tgrelid::regclass::text || '.' || t.tgname, t.tgfoid::regproc::text
+             from pg_trigger t where not t.tgisinternal
+             union all
+             select 'policy', p.polrelid::regclass::text || '.' || p.polname, ''
+             from pg_policy p
+             union all
+             select 'constraint', c.conrelid::regclass::text || '.' || c.conname,
+                    pg_get_constraintdef(c.oid)
+             from pg_constraint c
+             where c.connamespace in ('public'::regnamespace, 'private'::regnamespace)
+             order by 1, 2, 3`,
+          )
+        ).rows;
+      const before = await catalog();
+      const text = migrate(files[library]);
+      await earlier.exec(text);
+      // The rollback is the indented lines of the header, the comment
+      // before the file's first blank line.
+      const rollback = text
+        .slice(0, text.indexOf("\n\n"))
+        .split("\n")
+        .filter((line) => line.startsWith("--   "))
+        .map((line) => line.slice(3))
+        .join("\n");
+      assert.match(rollback, /drop trigger book_marks_follow/);
+      await earlier.exec(rollback);
+      // book_is_mine as the last migration before the library wrote it.
+      const mine = files
+        .slice(0, library)
+        .map(migrate)
+        .filter((sql) => /function private\.book_is_mine\(/.test(sql))
+        .at(-1);
+      assert.ok(mine, "a migration that writes book_is_mine");
+      const start = mine.search(
+        /create (or replace )?function private\.book_is_mine\(/,
+      );
+      const body = mine.indexOf("$$", start) + 2;
+      const end = mine.indexOf(";", mine.indexOf("$$", body)) + 1;
+      await earlier.exec(
+        mine
+          .slice(start, end)
+          .replace(
+            /^create (or replace )?function/,
+            "create or replace function",
+          ),
+      );
+      assert.deepEqual(await catalog(), before);
+      // A library corrected later comes back as this same file did.
+      await earlier.exec(text);
+      assert.equal(
+        (
+          await earlier.query<{ n: number }>(
+            "select count(*)::int as n from pg_trigger where tgname = 'book_marks_follow'",
+          )
+        ).rows[0].n,
+        1,
+      );
       await earlier.close();
     },
   );

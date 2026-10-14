@@ -1,4 +1,8 @@
 {
+  "site": {
+    "url": "https://booktown.page",
+    "returnTo": ["https://booktown.page/**"]
+  },
   "code": {
     "length": 6,
     "expiresInSeconds": 600
@@ -7,12 +11,12 @@
     "smtpHost": "smtp.resend.com",
     "smtpPort": 465,
     "smtpUser": "resend",
-    "sender": "onboarding@resend.dev",
-    "senderName": "Book Town",
+    "sender": "login@booktown.page",
+    "senderName": "BookTown",
     "perHour": 30
   },
   "magicLink": {
-    "subject": "Book Town のログインコード",
+    "subject": "BookTown のログインコード",
     "template": "templates/magic_link.html"
   }
 }

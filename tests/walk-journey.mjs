@@ -2,6 +2,12 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
+import {
+  coarse,
+  expectKeyboardUp,
+  forgetFocus,
+  watchFocus,
+} from "./journey-keyboard.mjs";
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../work/walk-qa",
@@ -18,6 +24,7 @@ const context = await browser.newContext({
   viewport: { width: 390, height: 884 },
   hasTouch: true,
 });
+await watchFocus(context);
 const page = settleBeforeNavigating(await context.newPage());
 page.on("pageerror", (e) => errors.push(e.message));
 async function check(name, run) {
@@ -335,26 +342,40 @@ try {
   await check(
     "message is explicitly unsent and saved only locally",
     async () => {
+      await forgetFocus(page);
       await page
         .getByRole("button", {
           name: "店主に伝える（送信されないデモ）",
           exact: true,
         })
-        .click();
+        .tap();
       await expect(
         page.getByText("送信されないデモです。", { exact: false }),
       ).toBeVisible();
       const box = page.getByRole("textbox", { name: "店主に伝えたい言葉" });
-      // On a touch screen the sheet opens without the keyboard over it.
-      await expect(
-        page
-          .getByRole("dialog", { name: "店主に伝える" })
-          .getByRole("button", { name: "閉じる" }),
-      ).toBeFocused();
-      await expect(box).not.toBeFocused();
+      // A writing screen: on a touch screen it opens with the text box
+      // focused within the tap, so the keyboard rises with it, and a way to
+      // begin tapped leaves it there.
+      expect(await coarse(page)).toBe(true);
+      await expectKeyboardUp(page, box, "店主に伝える");
+      // Its button last, just above the keyboard; the note about the demo
+      // over it.
+      const sheet = page.getByRole("dialog", { name: "店主に伝える" });
+      expect(
+        await sheet.evaluate((element) => {
+          const note = element.querySelector(".walk-message-note");
+          const toolbar = element.querySelector(".writing-toolbar");
+          return (
+            note.getBoundingClientRect().bottom <=
+            toolbar.getBoundingClientRect().top
+          );
+        }),
+      ).toBe(true);
       const starters = page.getByRole("group", { name: "書き出しの例" });
-      await starters.getByRole("button", { name: /^POPを読んで/ }).click();
-      await starters.getByRole("button", { name: "また来ます。" }).click();
+      await starters.getByRole("button", { name: /^POPを読んで/ }).tap();
+      await expect(box).toBeFocused();
+      await starters.getByRole("button", { name: "また来ます。" }).tap();
+      await expect(box).toBeFocused();
       await expect(box).toHaveValue(
         "POPを読んで、読みたくなりました。\nまた来ます。",
       );
@@ -452,6 +473,48 @@ try {
       await page.screenshot({
         path: path.join(output, "walk-table-short.png"),
       });
+    },
+  );
+  await check(
+    "with a mouse, the message sheet is as it always was: the button, then the note",
+    async () => {
+      const desk = await browser.newContext({
+        viewport: { width: 1280, height: 900 },
+      });
+      try {
+        const other = settleBeforeNavigating(await desk.newPage());
+        other.on("pageerror", (e) => errors.push(e.message));
+        await other.goto(base + "/walk/#shop-rain");
+        await expect(other.locator(".walk-owner")).toBeVisible();
+        expect(await coarse(other)).toBe(false);
+        await other
+          .getByRole("button", {
+            name: "店主に伝える（送信されないデモ）",
+            exact: true,
+          })
+          .click();
+        const sheet = other.getByRole("dialog", { name: "店主に伝える" });
+        await expect(
+          sheet.getByRole("textbox", { name: "店主に伝えたい言葉" }),
+        ).toBeFocused();
+        // No phone's toolbar: the sheet's own order, the note after the
+        // button, for the eye and for a screen reader alike.
+        await expect(
+          sheet.locator(".writing-toolbar, .modal-body"),
+        ).toHaveCount(0);
+        expect(
+          await sheet.evaluate((element) =>
+            [...element.children].slice(-2).map((child) => child.textContent),
+          ),
+        ).toEqual([
+          "手元に保存する",
+          "送信されないデモです。言葉はこのブラウザにだけ残ります。",
+        ]);
+        await other.keyboard.press("Escape");
+        await expect(sheet).toHaveCount(0);
+      } finally {
+        await desk.close();
+      }
     },
   );
   await check(

@@ -44,7 +44,6 @@
 .town-shell .post-head time,
 .town-shell .post-book small,
 .town-shell .composer-count,
-.town-shell .composer-tag-hint,
 .town-shell .picker-chosen small,
 .town-shell .reading-tag,
 .town-shell .demo-tag,
@@ -61,6 +60,7 @@
 }
 .town-shell .post-actions button,
 .town-shell .composer-book,
+.town-shell .composer-poster,
 .town-shell .composer-spoiler,
 .town-shell .spoiler-cover button,
 .town-shell .street-follow,
@@ -76,9 +76,6 @@
   font-size: 12px;
   color: #75604e;
 }
-.town-shell .composer-spoiler.is-disabled {
-  color: #89917f;
-}
 .town-shell .field,
 .town-shell .picker-search input {
   font-size: 16px;
@@ -90,15 +87,6 @@
 .town-shell .compose-fab span {
   font-size: 11px;
   line-height: 1;
-}
-.draft-status {
-  margin: 10px 0 0;
-  font-size: 12px;
-  line-height: 1.8;
-  color: #626e59;
-}
-.draft-status[role="status"] {
-  color: #8a4232;
 }
 .home-saved-books {
   display: flex;

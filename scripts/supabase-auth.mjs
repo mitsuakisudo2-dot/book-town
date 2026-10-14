@@ -1,7 +1,8 @@
 // Brings the hosted Supabase project's sign-in settings in line with
-// supabase/hosted-auth.json: how long the login code lasts and, once a Resend
-// key is stored, who sends the login email, how many it may send an hour, and
-// the email itself (supabase/templates/magic_link.html, the same file the local
+// supabase/hosted-auth.json: the site's address and the addresses a login link
+// may return to, how long the login code lasts and, once a Resend key is
+// stored, who sends the login email, how many it may send an hour, and the
+// email itself (supabase/templates/magic_link.html, the same file the local
 // Supabase uses). .github/workflows/supabase-auth.yml runs it.
 //
 //   node scripts/supabase-auth.mjs check   prints what would change
@@ -40,12 +41,24 @@ const SHOWN = new Set([
 
 /** Shown for reference; this script leaves them as they are. */
 const UNMANAGED = [
-  "site_url",
-  "uri_allow_list",
   "disable_signup",
   "external_email_enabled",
   "smtp_max_frequency",
 ];
+
+/**
+ * The addresses a login link may return to: every one already allowed, then
+ * the ones the settings ask for. Nothing is taken away, so a branch address
+ * added in the dashboard keeps working.
+ */
+export function allowList(current, wanted) {
+  const list = String(current ?? "")
+    .split(",")
+    .map((url) => url.trim())
+    .filter(Boolean);
+  for (const url of wanted ?? []) if (!list.includes(url)) list.push(url);
+  return list.join(",");
+}
 
 /**
  * The auth settings this repository asks for. Without a Resend key the
@@ -56,6 +69,7 @@ const UNMANAGED = [
  */
 export function desiredAuth(settings, { template, resendKey }) {
   const wanted = {
+    site_url: settings.site.url,
     mailer_otp_length: settings.code.length,
     mailer_otp_exp: settings.code.expiresInSeconds,
   };
@@ -174,6 +188,10 @@ async function main(mode) {
     throw error;
   }
 
+  wanted.uri_allow_list = allowList(
+    current.uri_allow_list,
+    settings.site.returnTo,
+  );
   const changed = authChanges(current, wanted, resendKey);
   console.log("Sign-in settings on the hosted project:");
   for (const key of Object.keys(wanted))

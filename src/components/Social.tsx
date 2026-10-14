@@ -2,6 +2,7 @@
 
 import {
   Fragment,
+  useEffect,
   useId,
   useRef,
   useState,
@@ -9,6 +10,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -48,12 +50,7 @@ import {
 import { currentBookId } from "../lib/reading";
 import { bookPath } from "../lib/books";
 import { postDraftKey, usePostDraft } from "../lib/post-draft";
-import {
-  extractTags,
-  requestSearch,
-  splitTags,
-  suggestTags,
-} from "../lib/tags";
+import { requestSearch, splitTags } from "../lib/tags";
 import { BookPicker } from "./BookPicker";
 import { booksBeforeSearch } from "../lib/book-lists";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
@@ -73,6 +70,7 @@ import {
 import { useTownBackend } from "../lib/store";
 import { notePosted, postedJustNow } from "../lib/just-posted";
 import { coverSelection, splitHidden } from "../lib/hidden-words";
+import { focusField } from "../lib/coarse-pointer";
 import { useUrlParam } from "../lib/url-state";
 
 type Shared = {
@@ -376,10 +374,19 @@ export function PostComposer({
   fixedBook,
   parent,
   onDone,
+  sheet = false,
+  moreTools,
 }: Shared & {
   fixedBook?: Book;
   parent?: Post;
   onDone?: (postId: string) => void;
+  /**
+   * In a writing screen (Modal's `writing`): the buttons come last, as its
+   * toolbar, which sits just above a phone's keyboard.
+   */
+  sheet?: boolean;
+  /** More buttons for the row, after 本を添える. */
+  moreTools?: ReactNode;
 }) {
   const id = useId();
   const owner = useDraftOwner();
@@ -399,8 +406,40 @@ export function PostComposer({
   const notTaken = useNotTakenWords("下書き");
   const [picking, setPicking] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
-  const tags = extractTags(body);
-  const tagSuggestions = suggestTags(state, tags);
+  // Where the words chosen in the text box are, in the words they were
+  // chosen in: once the draft changes (typed over, covered, thrown away)
+  // none are chosen until the box says so again.
+  const [chosen, setChosen] = useState<{
+    body: string;
+    start: number;
+    end: number;
+  } | null>(null);
+  const choosing =
+    chosen !== null &&
+    chosen.body === body &&
+    body.slice(chosen.start, chosen.end).trim() !== "";
+  // The box says so with a selectionchange, which reaches the document (some
+  // browsers send it only there, with the box focused), and older ones with
+  // a select. React's onSelect misses it with the document as its root.
+  useEffect(() => {
+    const text = field.current;
+    if (!text) return;
+    const note = (event: Event) => {
+      if (event.target !== text && document.activeElement !== text) return;
+      const { value, selectionStart: start, selectionEnd: end } = text;
+      setChosen((was) =>
+        was?.body === value && was.start === start && was.end === end
+          ? was
+          : { body: value, start, end },
+      );
+    };
+    document.addEventListener("selectionchange", note);
+    text.addEventListener("select", note);
+    return () => {
+      document.removeEventListener("selectionchange", note);
+      text.removeEventListener("select", note);
+    };
+  }, []);
   const attached = fixedBook?.id ?? bookId;
   const isReply = Boolean(parent);
   // A top-level spoiler needs a book to sit behind; replies already belong to one.
@@ -438,6 +477,50 @@ export function PostComposer({
     );
     onDone?.(created);
   }
+  const tools = (
+    <div className={"composer-tools" + (sheet ? " writing-toolbar" : "")}>
+      {!fixedBook && !picking && !bookId && (
+        <button
+          type="button"
+          className="composer-book"
+          // Rendered within the tap: in a writing screen the search
+          // takes the focus there, and the keyboard stays up for it.
+          onClick={() => flushSync(() => setPicking(true))}
+        >
+          <Icon name="book" size={15} />
+          {isReply ? "おすすめの本を添える" : "本を添える"}
+        </button>
+      )}
+      {moreTools}
+      {canSpoil && (
+        <label className="composer-spoiler">
+          <input
+            type="checkbox"
+            checked={spoiler}
+            onChange={(event) => update({ spoiler: event.target.checked })}
+          />
+          ネタバレあり
+        </label>
+      )}
+      {/* Only while words are chosen: the text box keeps the focus, so on
+          a phone the keyboard stays up as it comes and goes. */}
+      {choosing && (
+        <HideWordsButton
+          field={field}
+          body={body}
+          onChange={(next) => update({ body: next })}
+          notify={notify}
+          chosen
+        />
+      )}
+      <span className="composer-send">
+        <LengthNearLimit length={body.length} max={POST_MAX_LENGTH} />
+        <button className="button" type="submit" disabled={!body.trim()}>
+          {isReply ? "返信する" : "投稿する"}
+        </button>
+      </span>
+    </div>
+  );
   return (
     <form
       className={"post-composer" + (isReply ? " is-reply" : "")}
@@ -468,38 +551,6 @@ export function PostComposer({
           value={body}
           onChange={(event) => update({ body: event.target.value })}
         />
-        {!isReply && (
-          <div className="composer-tags">
-            <span className="composer-tag-label">タグ</span>
-            {tags.map((tag) => (
-              <span key={tag} className="tag-chip is-set">
-                #{tag}
-              </span>
-            ))}
-            {tagSuggestions.map((tag) => (
-              <button
-                type="button"
-                key={tag}
-                className="tag-chip"
-                aria-label={`タグ「${tag}」を付ける`}
-                onClick={() =>
-                  update({
-                    body: (body.trimEnd() + " #" + tag + " ")
-                      .trimStart()
-                      .slice(0, POST_MAX_LENGTH),
-                  })
-                }
-              >
-                ＋#{tag}
-              </button>
-            ))}
-            {!tags.length && (
-              <small className="composer-tag-hint">
-                本文に「#ことば」と書くとタグになります
-              </small>
-            )}
-          </div>
-        )}
         {!fixedBook && (picking || bookId) && (
           <BookPicker
             books={state.books}
@@ -520,66 +571,18 @@ export function PostComposer({
             autoFocus={picking}
           />
         )}
-        <div className="composer-tools">
-          {!fixedBook && !picking && !bookId && (
-            <button
-              type="button"
-              className="composer-book"
-              onClick={() => setPicking(true)}
-            >
-              <Icon name="book" size={15} />
-              {isReply ? "おすすめの本を添える" : "本を添える"}
-            </button>
-          )}
-          <label
-            className={"composer-spoiler" + (canSpoil ? "" : " is-disabled")}
-          >
-            <input
-              type="checkbox"
-              checked={canSpoil && spoiler}
-              disabled={!canSpoil}
-              onChange={(event) => update({ spoiler: event.target.checked })}
-            />
-            ネタバレあり
-          </label>
-          <HideWordsButton
-            field={field}
-            body={body}
-            onChange={(next) => update({ body: next })}
-            notify={notify}
-          />
-          <span className="composer-send">
-            <LengthNearLimit length={body.length} max={POST_MAX_LENGTH} />
-            <button className="button" type="submit" disabled={!body.trim()}>
-              {isReply ? "返信する" : "投稿する"}
-            </button>
-          </span>
-        </div>
-        {!saved || (continuing && kept) ? (
-          <KeptDraftNote
-            continuing={continuing && kept}
-            saved={saved}
-            wordsLost={body.trim() !== ""}
-            onDiscard={() => {
-              clear();
-              setPicking(false);
-              field.current?.focus();
-            }}
-          />
-        ) : (
-          kept &&
-          (body.trim() || bookId) && (
-            <p className="draft-status">
-              下書きはこのブラウザに保存しています。
-            </p>
-          )
-        )}
-        {!isReply && spoiler && canSpoil && (
-          <p className="composer-hint">
-            タイムラインでは隠して表示し、「表示する」を押した人だけが読めます。作品ページでは「ネタバレあり」の扉の向こうに置きます。
-          </p>
-        )}
-        <HiddenWordsHint body={body} />
+        {!sheet && tools}
+        <KeptDraftNote
+          continuing={continuing && kept}
+          saved={saved}
+          wordsLost={body.trim() !== ""}
+          onDiscard={() => {
+            clear();
+            setPicking(false);
+            focusField(field.current);
+          }}
+        />
+        {sheet && tools}
       </div>
     </form>
   );
@@ -600,7 +603,9 @@ export function ComposeFab({
       <button
         type="button"
         className={"compose-fab icon-" + icon}
-        onClick={() => setOpen(true)}
+        // The sheet opens within the tap, so a phone's keyboard rises with
+        // its text box (Modal's `writing`).
+        onClick={() => flushSync(() => setOpen(true))}
         aria-label="投稿する"
       >
         <Icon name={icon} size={22} />
@@ -610,23 +615,25 @@ export function ComposeFab({
         <Modal title="投稿する" onClose={() => setOpen(false)} writing>
           <PostComposer
             {...props}
+            sheet
             onDone={() => {
               setOpen(false);
               onPosted?.();
             }}
+            moreTools={
+              // Something made, not said: a poster has a page of its own to
+              // be made on, so this one leaves the sheet (and the keyboard).
+              <button
+                type="button"
+                className="composer-poster"
+                aria-label="ポスターを作る"
+                onClick={() => leaveLayers(() => router.push(posterNewPath()))}
+              >
+                <Icon name="grid" size={15} />
+                ポスター
+              </button>
+            }
           />
-          {/* Something made, not said: a poster has a page of its own to be made on. */}
-          <p className="compose-poster-way">
-            表紙を並べて伝えたいときは、
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => leaveLayers(() => router.push(posterNewPath()))}
-            >
-              ポスターを作る
-              <Icon name="arrow" size={14} />
-            </button>
-          </p>
         </Modal>
       )}
     </>
@@ -643,23 +650,31 @@ export function HideWordsButton({
   body,
   onChange,
   notify,
+  chosen = false,
 }: {
   field: RefObject<HTMLTextAreaElement | null>;
   body: string;
   onChange: (body: string) => void;
   notify: (message: string) => void;
+  /**
+   * Shown only while words are chosen (the post composer): 「隠す」, and the
+   * caret goes on after the covered words, leaving none chosen to cover twice.
+   */
+  chosen?: boolean;
 }) {
   return (
     <button
       type="button"
       className="composer-hide"
+      aria-label={chosen ? "選んだ言葉を隠す" : undefined}
       // Keep the words chosen in the text box chosen while the button is pressed.
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => {
         const text = field.current;
+        const start = text?.selectionStart ?? body.length;
         const covered = coverSelection(
           body,
-          text?.selectionStart ?? body.length,
+          start,
           text?.selectionEnd ?? body.length,
           POST_MAX_LENGTH,
         );
@@ -667,15 +682,23 @@ export function HideWordsButton({
           notify("文字数の上限に近いため、隠す印を付けられませんでした");
           return;
         }
-        onChange(covered.body);
-        requestAnimationFrame(() => {
-          text?.focus();
-          text?.setSelectionRange(covered.start, covered.end);
-        });
+        // The covered words are chosen in the text box (or, `chosen`, the
+        // caret put after them), rendered first so that this happens within
+        // the tap: a phone gives its keyboard back only for a focus given
+        // then (a writing screen whose keyboard was put away). On a touch
+        // screen only in one the reader was typing in, or in a writing
+        // screen: otherwise the keyboard would rise, and the button keeps
+        // the focus.
+        flushSync(() => onChange(covered.body));
+        if (!focusField(text, { instead: null })) return;
+        // The closing marks are as long as the opening ones.
+        const after = covered.end + covered.start - start;
+        if (chosen) text?.setSelectionRange(after, after);
+        else text?.setSelectionRange(covered.start, covered.end);
       }}
     >
       <Icon name="eye" size={15} />
-      一部を隠す
+      {chosen ? "隠す" : "一部を隠す"}
     </button>
   );
 }

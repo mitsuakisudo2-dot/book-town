@@ -5,6 +5,11 @@ import {
   enterWhileComposing,
   settleBeforeNavigating,
 } from "./journey-layers.mjs";
+import {
+  coarse,
+  expectNoKeyboard,
+  expectTapWrites,
+} from "./journey-keyboard.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -96,6 +101,78 @@ const context = await browser.newContext({
 const page = settleBeforeNavigating(await context.newPage());
 watch(page);
 try {
+  // Painted, not only parsed: a stylesheet that holds up rendering leaves the
+  // page without a first contentful paint.
+  async function townTextShownAt(reader) {
+    const shownAt = await reader.waitForFunction(
+      () => {
+        const main = document.querySelector("main.town-main");
+        return performance.getEntriesByName("first-contentful-paint").length >
+          0 &&
+          main?.checkVisibility({ opacityProperty: true }) &&
+          main.innerText.trim() !== ""
+          ? performance.now()
+          : 0;
+      },
+      null,
+      { polling: 100, timeout: 3000 },
+    );
+    return shownAt.jsonValue();
+  }
+  await check(
+    "the town shows its text while Google's font CSS never answers",
+    async () => {
+      const stalled = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        locale: "ja-JP",
+      });
+      // A line that drops Google: the request is never answered.
+      await stalled.route("https://fonts.googleapis.com/**", () => {});
+      const reader = await stalled.newPage();
+      watch(reader);
+      try {
+        await reader.goto(`${baseURL}/`, { waitUntil: "commit" });
+        expect(await townTextShownAt(reader)).toBeLessThan(3000);
+      } finally {
+        await stalled.close();
+      }
+    },
+  );
+  await check(
+    "a reader back within a day turns the font CSS on before it arrives, and is not held up when it never does",
+    async () => {
+      const returning = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        locale: "ja-JP",
+      });
+      // Google answers the first visit.
+      let answer = (route) =>
+        route.fulfill({
+          contentType: "text/css",
+          headers: { "access-control-allow-origin": "*" },
+          body: "/* the font faces */",
+        });
+      await returning.route("https://fonts.googleapis.com/**", (route) =>
+        answer(route),
+      );
+      const reader = await returning.newPage();
+      watch(reader);
+      try {
+        await reader.goto(`${baseURL}/`);
+        const fonts = reader.locator("#web-fonts");
+        await expect(fonts).toHaveAttribute("media", "all");
+        // Back again, and Google never answers.
+        answer = () => {};
+        await reader.goto(`${baseURL}/`, { waitUntil: "commit" });
+        expect(await townTextShownAt(reader)).toBeLessThan(3000);
+        // On for the screen without having arrived: with a cached copy, the
+        // first layout asks for the font files.
+        await expect(fonts).toHaveAttribute("media", "all");
+      } finally {
+        await returning.close();
+      }
+    },
+  );
   await check(
     "an empty wishlist offers a few owners' POPs to start from",
     async () => {
@@ -885,6 +962,75 @@ try {
       await expect(nav.getByRole("link", { name: /本の街へ/ })).toBeVisible();
     },
   );
+  await check(
+    "with a mouse, the profile's and the shop's sheets open with their field ready, and closing gives the focus back",
+    async () => {
+      expect(await coarse(page)).toBe(false);
+      await go(page, "/profiles/me/");
+      const editProfile = page.getByRole("button", {
+        name: "プロフィールを編集",
+      });
+      const profile = page.getByRole("dialog", {
+        name: "読書家のプロフィール",
+      });
+      const name = profile.getByLabel("ユーザー名", { exact: true });
+      await editProfile.click();
+      await expect(name).toBeFocused();
+      await profile
+        .getByLabel("自己紹介", { exact: true })
+        .fill("消すための自己紹介。");
+      await page.keyboard.press("Escape");
+      await expect(profile).toHaveCount(0);
+      await expect(editProfile).toBeFocused();
+      // Thrown away, the name is ready again.
+      await editProfile.click();
+      await profile.getByRole("button", { name: "書きかけを消す" }).click();
+      await profile.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(name).toBeFocused();
+      await page.keyboard.press("Escape");
+      const editNine = page.locator(".profile-edit-nine");
+      const nine = page.getByRole("dialog", { name: "人生の9冊を選ぶ" });
+      await editNine.click();
+      await expect(nine.getByRole("textbox").first()).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(editNine).toBeFocused();
+
+      await go(page, "/my-shop/");
+      const editShelf = page
+        .locator(".editor-shelf-panel")
+        .first()
+        .getByRole("button", { name: "本棚を編集", exact: true });
+      const picker = page.getByRole("dialog", { name: "本棚を編集" });
+      await editShelf.click();
+      await expect(picker.getByRole("searchbox")).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(editShelf).toBeFocused();
+      const addShelf = page.getByRole("button", {
+        name: "本棚を追加",
+        exact: true,
+      });
+      const newShelf = page.getByRole("dialog", { name: "新しい本棚をつくる" });
+      await addShelf.click();
+      await expect(
+        newShelf.getByRole("textbox", { name: "本棚の名前" }),
+      ).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(addShelf).toBeFocused();
+      // The sign's words thrown away: the shop's name is ready.
+      const settings = page.locator(".editor-settings");
+      await settings.locator("summary").click();
+      await settings.getByLabel("書店の紹介").fill("消すための紹介。");
+      await page.reload();
+      await settings.getByRole("button", { name: "書きかけを消す" }).click();
+      await settings.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(settings.getByLabel("書店の名前")).toBeFocused();
+      // The walk's invitation to write the owner's words (a link here)
+      // opens them ready.
+      await go(page, "/");
+      await go(page, "/my-shop/#shop-words");
+      await expect(settings.getByLabel("ひとこと")).toBeFocused();
+    },
+  );
   const mobile = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 1,
@@ -953,6 +1099,104 @@ try {
             item.pop.includes("理解できないもの"),
         ),
       ).toBe(true);
+    },
+  );
+  await check(
+    "390px phone: the profile's and the shop's sheets open without the keyboard, and a tap on a field writes",
+    async () => {
+      expect(await coarse(phone)).toBe(true);
+      const closer = (dialog) =>
+        dialog.getByRole("button", { name: "閉じる", exact: true });
+      await go(phone, "/profiles/me/");
+      const editProfile = phone.getByRole("button", {
+        name: "プロフィールを編集",
+      });
+      const profile = phone.getByRole("dialog", {
+        name: "読書家のプロフィール",
+      });
+      const bio = profile.getByLabel("自己紹介", { exact: true });
+      await editProfile.tap();
+      await expectNoKeyboard(phone, "profile", profile);
+      await expect(closer(profile)).toBeFocused();
+      await expectTapWrites(bio);
+      await phone.keyboard.type("指で書いた自己紹介。");
+      // Closed, the focus goes back to the button that opened it.
+      await phone.keyboard.press("Escape");
+      await expect(profile).toHaveCount(0);
+      await expect(editProfile).toBeFocused();
+      // Thrown away, the words go, and the keyboard stays down.
+      await editProfile.tap();
+      await profile.getByRole("button", { name: "書きかけを消す" }).tap();
+      await profile.getByRole("button", { name: "消す", exact: true }).tap();
+      await expect(bio).not.toHaveValue(/指で書いた/);
+      await expectNoKeyboard(phone, "profile thrown away", profile);
+      await expectTapWrites(profile.getByLabel("ユーザー名", { exact: true }));
+      await phone.keyboard.press("Escape");
+      await expect(profile).toHaveCount(0);
+      const nine = phone.getByRole("dialog", { name: "人生の9冊を選ぶ" });
+      await phone.locator(".profile-edit-nine").tap();
+      await expectNoKeyboard(phone, "nine", nine);
+      await expectTapWrites(nine.getByRole("textbox").first());
+      await phone.keyboard.press("Escape");
+      // A sheet whose first control is a choice opens on 閉じる all the same.
+      const settings = phone.getByRole("dialog", { name: "設定" });
+      await phone
+        .locator(".profile-minor-actions")
+        .getByRole("button", { name: "設定" })
+        .tap();
+      await expectNoKeyboard(phone, "settings", settings);
+      await expect(closer(settings)).toBeFocused();
+      await phone.keyboard.press("Escape");
+
+      await go(phone, "/my-shop/");
+      const editShelf = phone
+        .locator(".editor-shelf-panel")
+        .first()
+        .getByRole("button", { name: "本棚を編集", exact: true });
+      const picker = phone.getByRole("dialog", { name: "本棚を編集" });
+      await editShelf.tap();
+      await expectNoKeyboard(phone, "shelf books", picker);
+      await expectTapWrites(picker.getByRole("searchbox"));
+      await phone.keyboard.press("Escape");
+      await expect(editShelf).toBeFocused();
+      const newShelf = phone.getByRole("dialog", {
+        name: "新しい本棚をつくる",
+      });
+      await phone
+        .getByRole("button", { name: "本棚を追加", exact: true })
+        .tap();
+      await expectNoKeyboard(phone, "new shelf", newShelf);
+      await expectTapWrites(
+        newShelf.getByRole("textbox", { name: "本棚の名前" }),
+      );
+      await phone.keyboard.press("Escape");
+      // The sign's words thrown away: the field waits, and the form of the
+      // words, named for keys and screen readers, has the focus.
+      const sign = phone.locator(".editor-settings");
+      const words = sign.getByRole("form", { name: "書店の看板と紹介" });
+      await sign.locator("summary").tap();
+      await sign.getByLabel("書店の紹介").fill("指で書いた紹介。");
+      await phone.reload();
+      await sign.getByRole("button", { name: "書きかけを消す" }).tap();
+      await sign.getByRole("button", { name: "消す", exact: true }).tap();
+      await expect(sign.getByLabel("書店の紹介")).not.toHaveValue(/指で/);
+      await expect(words).toBeFocused();
+      await expectNoKeyboard(phone, "sign thrown away", words);
+      await expectTapWrites(sign.getByLabel("書店の名前"));
+      // Loaded afresh at the owner's words (the walk's link reloaded, or
+      // opened in a new tab): shown open with the field in view, the focus on
+      // their form, and no ring drawn around what only holds the focus.
+      await go(phone, "/");
+      await go(phone, "/my-shop/#shop-words");
+      await expect(words).toBeFocused();
+      await expect(sign).toHaveAttribute("open", "");
+      await expect(sign.getByLabel("ひとこと")).toBeInViewport();
+      await expectNoKeyboard(phone, "the shop's words loaded", words);
+      expect(
+        await words.evaluate((form) => getComputedStyle(form).outlineStyle),
+        "a ring around the form holding the focus",
+      ).toBe("none");
+      await expectTapWrites(sign.getByLabel("ひとこと"));
     },
   );
   await mobile.close();

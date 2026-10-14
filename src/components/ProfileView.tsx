@@ -97,6 +97,7 @@ import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import { useUrlParam } from "../lib/url-state";
 import { afterLayerCloses } from "../lib/back-layer";
+import { focusField } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
@@ -1056,7 +1057,7 @@ export function ProfileView({
                 setRefused(null);
                 setHandleError("");
                 setLinkError("");
-                document.getElementById("reader-name")?.focus();
+                focusField(document.getElementById("reader-name"));
               }}
             />
             <label htmlFor="reader-name">ユーザー名</label>
@@ -1067,7 +1068,6 @@ export function ProfileView({
               maxLength={PROFILE_FIELDS.name}
               value={draftName}
               onChange={(event) => changeProfile({ name: event.target.value })}
-              autoFocus
             />
             <label htmlFor="reader-handle">ユーザーID</label>
             <div className="profile-handle-field">

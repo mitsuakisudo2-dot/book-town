@@ -71,6 +71,91 @@ export type Database = {
           },
         ];
       };
+      book_encounters: {
+        Row: {
+          book_id: string;
+          created_at: string;
+          id: string;
+          kind: string;
+          memo: string | null;
+          memo_at: string | null;
+          other_reader_id: string | null;
+          placement_key: string | null;
+          post_id: string | null;
+          shop_id: string | null;
+          undone_at: string | null;
+          user_id: string;
+          via: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          book_id: string;
+          created_at?: string;
+          id: string;
+          kind: string;
+          memo?: string | null;
+          memo_at?: string | null;
+          other_reader_id?: string | null;
+          placement_key?: string | null;
+          post_id?: string | null;
+          shop_id?: string | null;
+          undone_at?: string | null;
+          user_id: string;
+          via: string;
+        };
+        Update: {
+          book_id?: string;
+          created_at?: string;
+          id?: string;
+          kind?: string;
+          memo?: string | null;
+          memo_at?: string | null;
+          other_reader_id?: string | null;
+          placement_key?: string | null;
+          post_id?: string | null;
+          shop_id?: string | null;
+          undone_at?: string | null;
+          user_id?: string;
+          via?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "book_encounters_book_id_fkey";
+            columns: ["book_id"];
+            isOneToOne: false;
+            referencedRelation: "books";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "book_encounters_other_reader_id_fkey";
+            columns: ["other_reader_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "book_encounters_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "posts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "book_encounters_shop_id_fkey";
+            columns: ["shop_id"];
+            isOneToOne: false;
+            referencedRelation: "shops";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "book_encounters_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       book_marks: {
         Row: {
           book_id: string;
@@ -177,6 +262,158 @@ export type Database = {
           source?: string;
         };
         Relationships: [];
+      };
+      library_entries: {
+        Row: {
+          added_at: string;
+          batch_id: string | null;
+          book_id: string;
+          ever_used: boolean;
+          like_restored: boolean;
+          liked_at: string | null;
+          owned: string | null;
+          removed_at: string | null;
+          source: string;
+          status: string | null;
+          status_at: string | null;
+          updated_at: string;
+          user_id: string;
+          wanted_at: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          added_at?: string;
+          batch_id?: string | null;
+          book_id: string;
+          ever_used?: boolean;
+          like_restored?: boolean;
+          liked_at?: string | null;
+          owned?: string | null;
+          removed_at?: string | null;
+          source: string;
+          status?: string | null;
+          status_at?: string | null;
+          updated_at?: string;
+          user_id: string;
+          wanted_at?: string | null;
+        };
+        Update: {
+          added_at?: string;
+          batch_id?: string | null;
+          book_id?: string;
+          ever_used?: boolean;
+          like_restored?: boolean;
+          liked_at?: string | null;
+          owned?: string | null;
+          removed_at?: string | null;
+          source?: string;
+          status?: string | null;
+          status_at?: string | null;
+          updated_at?: string;
+          user_id?: string;
+          wanted_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "library_entries_book_id_fkey";
+            columns: ["book_id"];
+            isOneToOne: false;
+            referencedRelation: "books";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "library_entries_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      library_shelf_books: {
+        Row: {
+          added_at: string;
+          book_id: string;
+          position: string | null;
+          shelf_id: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          added_at?: string;
+          book_id: string;
+          position?: string | null;
+          shelf_id: string;
+          user_id: string;
+        };
+        Update: {
+          added_at?: string;
+          book_id?: string;
+          position?: string | null;
+          shelf_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "library_shelf_books_shelf_id_user_id_fkey";
+            columns: ["shelf_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "library_shelves";
+            referencedColumns: ["id", "user_id"];
+          },
+          {
+            foreignKeyName: "library_shelf_books_user_id_book_id_fkey";
+            columns: ["user_id", "book_id"];
+            isOneToOne: false;
+            referencedRelation: "library_entries";
+            referencedColumns: ["user_id", "book_id"];
+          },
+        ];
+      };
+      library_shelves: {
+        Row: {
+          created_at: string;
+          deleted_at: string | null;
+          id: string;
+          name: string;
+          note: string;
+          position: string;
+          show_wanted: boolean;
+          updated_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          deleted_at?: string | null;
+          id: string;
+          name: string;
+          note?: string;
+          position: string;
+          show_wanted?: boolean;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          name?: string;
+          note?: string;
+          position?: string;
+          show_wanted?: boolean;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "library_shelves_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       moderation_folds: {
         Row: {
@@ -573,20 +810,32 @@ export type Database = {
       };
       reader_settings: {
         Row: {
+          library_hidden: string[];
+          likes_in_library: boolean;
+          memo_hint: boolean;
           spoiler_display: string;
           updated_at: string;
           user_id: string;
+          wanted_clears_on_status: boolean;
         };
         ComputedFields: never;
         Insert: {
+          library_hidden?: string[];
+          likes_in_library?: boolean;
+          memo_hint?: boolean;
           spoiler_display?: string;
           updated_at?: string;
           user_id: string;
+          wanted_clears_on_status?: boolean;
         };
         Update: {
+          library_hidden?: string[];
+          likes_in_library?: boolean;
+          memo_hint?: boolean;
           spoiler_display?: string;
           updated_at?: string;
           user_id?: string;
+          wanted_clears_on_status?: boolean;
         };
         Relationships: [
           {

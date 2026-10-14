@@ -33,6 +33,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test:domain
+      - run: pnpm test:library
       - run: pnpm test:walk-domain
       - run: pnpm test:covers
       - run: pnpm test:search
