@@ -5372,6 +5372,44 @@ async function main() {
       }),
       BEN,
     );
+    // Chi met the book on Ben's post and on a POP of his shop, with a memo
+    // each: once his account goes, hers stay, with nothing of his left
+    // (decision 2).
+    await operator(
+      `update shops set is_open = true where id = '${benShop.id}'`,
+    );
+    const metBen = [
+      encounterRow({
+        book_id: bens,
+        kind: "like",
+        via: "post",
+        post_id: await postAbout(BEN, bens),
+        memo: "ベンの言葉",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      }),
+      encounterRow({
+        book_id: bens,
+        kind: "love",
+        via: "pop",
+        shop_id: benShop.id,
+        placement_key: "s1:i1",
+        memo: "ベンのPOP",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      }),
+    ];
+    for (const row of metBen) assert.equal(await meet(row), 1);
+    const chisOfBen = () =>
+      as(
+        CHI,
+        `select post_id is not null as post, shop_id is not null as shop,
+           other_reader_id, memo
+         from book_encounters where id = any ($1::uuid[]) order by memo`,
+        [`{${metBen.map((row) => row.id).join(",")}}`],
+      );
+    assert.deepEqual(await chisOfBen(), [
+      { post: false, shop: true, other_reader_id: BEN, memo: "ベンのPOP" },
+      { post: true, shop: false, other_reader_id: BEN, memo: "ベンの言葉" },
+    ]);
     const kept: [string, string][] = [
       ["library_entries", "user_id"],
       ["library_shelves", "user_id"],
@@ -5419,6 +5457,10 @@ async function main() {
     }
     for (const [table, column] of owned)
       assert.equal(await left(table, column), 0, table);
+    assert.deepEqual(await chisOfBen(), [
+      { post: false, shop: false, other_reader_id: null, memo: "ベンのPOP" },
+      { post: false, shop: false, other_reader_id: null, memo: "ベンの言葉" },
+    ]);
     // The books Ben typed in stay in the catalog without an owner. The one
     // he only scanned is used nowhere, so nobody reads it any more.
     const orphan = await db.query<{ n: number }>(
