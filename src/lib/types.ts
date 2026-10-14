@@ -335,7 +335,10 @@ export interface TownState {
   readingNow: ReadingNow[];
   readingSessions: ReadingSession[];
   finishedBooks: string[];
-  /** Books the viewer registered as their own, newest last. */
+  /**
+   * Books the viewer registered on purpose (scanned, typed in, added from a
+   * search), newest last. Registering says nothing about owning a copy.
+   */
   library: string[];
   /** The viewer's own reading records, and others' public ones, oldest first. */
   readingRecords: ReadingRecord[];
