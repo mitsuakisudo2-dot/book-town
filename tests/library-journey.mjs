@@ -949,12 +949,14 @@ try {
     await expect(scanner(scan)).toContainText("13桁そろうと登録します");
     // Typing, with the keyboard taking half the screen: the field, the card
     // and ［終わる］ stay in what is left.
-    // On a phone nothing of the page shows past the sheet.
-    expect(
-      await scanner(scan).evaluate(
-        (layer) => getComputedStyle(layer).backgroundColor,
-      ),
-    ).toBe("rgb(247, 244, 238)");
+    // On a phone nothing of the page shows past the sheet: it is the page's
+    // own paper, with nothing see-through.
+    const [sheet, paper] = await scanner(scan).evaluate((layer) => [
+      getComputedStyle(layer).backgroundColor,
+      getComputedStyle(document.documentElement).backgroundColor,
+    ]);
+    expect(sheet).toMatch(/^rgb\(/);
+    expect(sheet).toBe(paper);
     await scan.setViewportSize({ width: 390, height: 420 });
     for (const target of [
       field(scan),
