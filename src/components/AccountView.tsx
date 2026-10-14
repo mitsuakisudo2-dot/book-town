@@ -9,6 +9,8 @@ import {
   linkFailure,
   normalizeCode,
   normalizeEmail,
+  profileDraftIssue,
+  validEmail,
 } from "../lib/account";
 import { accountActions, useAccountState } from "../lib/account-session";
 import {
@@ -23,6 +25,12 @@ import { adoptVisitorRecords } from "../lib/record-draft";
 import { adoptVisitorPosts } from "../lib/post-draft";
 import { adoptVisitorPosters } from "../lib/poster-draft";
 import { libraryJournal, useJournal } from "../lib/library-journal";
+import {
+  focusField,
+  markField,
+  useCoarsePointer,
+  useFocusFieldOnShow,
+} from "../lib/coarse-pointer";
 import { Icon } from "./ui";
 import { KeptDraftNote } from "./KeptDraftNote";
 import "./profile.css";
@@ -102,6 +110,16 @@ function SignIn() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Each step starts with its field ready where a mouse points. On a touch
+  // screen the field waits for a tap and the step's heading has the focus,
+  // and the browser's own check is off, since it would put the focus (and
+  // the keyboard) in the field: a field found wrong is marked instead.
+  const coarse = useCoarsePointer();
+  const heading = useRef<HTMLHeadingElement>(null);
+  const emailField = useRef<HTMLInputElement>(null);
+  const codeField = useRef<HTMLInputElement>(null);
+  useFocusFieldOnShow(emailField, { instead: heading, when: !sentTo });
+  useFocusFieldOnShow(codeField, { instead: heading, when: Boolean(sentTo) });
 
   // A link from the email that did not work lands here with its reason.
   useEffect(() => {
@@ -117,7 +135,12 @@ function SignIn() {
     setError("");
     const result = await accountActions.sendCode(email);
     setBusy(false);
-    if (!result.ok) return setError(result.message);
+    if (!result.ok) {
+      setError(result.message);
+      if (coarse && !validEmail(normalizeEmail(email)))
+        markField(emailField.current);
+      return;
+    }
     sent.set({ email: normalizeEmail(email), sentAt: Date.now() });
     setCode("");
   }
@@ -130,20 +153,27 @@ function SignIn() {
     setBusy(false);
     // Once the code works, the step stays until the account says who signed
     // in (the profile is read first); AccountView then forgets it.
-    if (!result.ok) setError(result.message);
+    if (!result.ok) {
+      setError(result.message);
+      if (coarse && normalizeCode(code).length !== CODE_LENGTH)
+        markField(codeField.current);
+    }
   }
 
   if (!sentTo)
     return (
       <>
-        <h1>本の街に入る</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          本の街に入る
+        </h1>
         <p className="account-lead">
           招待を受けたメールアドレスを入れてください。ログイン用のメールを送ります。パスワードはいりません。
         </p>
-        <form className="profile-form" onSubmit={send}>
+        <form className="profile-form" onSubmit={send} noValidate={coarse}>
           <label htmlFor="account-email">メールアドレス</label>
           <input
             id="account-email"
+            ref={emailField}
             type="email"
             inputMode="email"
             autoComplete="email"
@@ -154,7 +184,6 @@ function SignIn() {
             value={email}
             onChange={(event) => setTyped(event.target.value)}
             aria-describedby={error ? "account-error" : undefined}
-            autoFocus
           />
           <ErrorLine message={error} />
           <button className="button primary" disabled={busy || !email.trim()}>
@@ -166,17 +195,20 @@ function SignIn() {
 
   return (
     <>
-      <h1>メールを確かめてください</h1>
+      <h1 ref={heading} tabIndex={-1}>
+        メールを確かめてください
+      </h1>
       <p className="account-lead">
         <b>{sentTo}</b>{" "}
         にメールを送りました。メールのリンクを開くと、そのままログインできます。
         {CODE_LENGTH}
         桁のコードが書かれていれば、ここに入れてもかまいません。届かないときは、迷惑メールのフォルダも見てください。
       </p>
-      <form className="profile-form" onSubmit={verify}>
+      <form className="profile-form" onSubmit={verify} noValidate={coarse}>
         <label htmlFor="account-code">{CODE_LENGTH}桁のコード</label>
         <input
           id="account-code"
+          ref={codeField}
           className="account-code"
           inputMode="numeric"
           autoComplete="one-time-code"
@@ -185,7 +217,6 @@ function SignIn() {
           value={code}
           onChange={(event) => setCode(normalizeCode(event.target.value))}
           aria-describedby={error ? "account-error" : undefined}
-          autoFocus
         />
         <ErrorLine message={error} />
         <button
@@ -233,7 +264,14 @@ function FirstProfile({ userId }: { userId: string }) {
   useEffect(() => {
     if (kept.loaded && resumed === null) setResumed(hasWork);
   }, [kept.loaded, resumed, hasWork]);
+  // Ready to type where a mouse points; on a touch screen the name waits for
+  // a tap, and a field found wrong is marked instead of focused (SignIn).
+  const coarse = useCoarsePointer();
+  const heading = useRef<HTMLHeadingElement>(null);
   const nameField = useRef<HTMLInputElement>(null);
+  const handleField = useRef<HTMLInputElement>(null);
+  const ageField = useRef<HTMLInputElement>(null);
+  useFocusFieldOnShow(nameField, { instead: heading });
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   // Records start private; each one can be published, and is told when it is.
   const [readingPublic, setReadingPublic] = useState(false);
@@ -244,20 +282,24 @@ function FirstProfile({ userId }: { userId: string }) {
     event.preventDefault();
     setBusy(true);
     setError("");
-    const result = await accountActions.createProfile({
-      handle,
-      name,
-      ageConfirmed,
-      readingPublic,
-    });
+    const draft = { handle, name, ageConfirmed, readingPublic };
+    const result = await accountActions.createProfile(draft);
     setBusy(false);
-    if (!result.ok) setError(result.message);
-    else kept.clear();
+    if (result.ok) return kept.clear();
+    setError(result.message);
+    const issue = coarse ? profileDraftIssue(draft) : null;
+    if (issue)
+      markField(
+        { handle: handleField, name: nameField, age: ageField }[issue.field]
+          .current,
+      );
   }
 
   return (
     <>
-      <h1>ようこそ、本の街へ</h1>
+      <h1 ref={heading} tabIndex={-1}>
+        ようこそ、本の街へ
+      </h1>
       <p className="account-lead">
         街で呼ばれる名前と、あなたのIDを決めてください。どちらもあとから変えられます。
       </p>
@@ -270,10 +312,10 @@ function FirstProfile({ userId }: { userId: string }) {
         onDiscard={() => {
           kept.clear();
           setResumed(false);
-          nameField.current?.focus();
+          focusField(nameField.current, { instead: heading.current });
         }}
       />
-      <form className="profile-form" onSubmit={create}>
+      <form className="profile-form" onSubmit={create} noValidate={coarse}>
         <label htmlFor="account-name">ユーザー名</label>
         <input
           id="account-name"
@@ -283,13 +325,13 @@ function FirstProfile({ userId }: { userId: string }) {
           maxLength={NAME_MAX_LENGTH}
           value={name}
           onChange={(event) => change({ name: event.target.value })}
-          autoFocus
         />
         <label htmlFor="account-handle">ユーザーID</label>
         <div className="profile-handle-field">
           <span aria-hidden="true">@</span>
           <input
             id="account-handle"
+            ref={handleField}
             autoComplete="username"
             autoCapitalize="none"
             spellCheck={false}
@@ -305,6 +347,7 @@ function FirstProfile({ userId }: { userId: string }) {
         </p>
         <label className="account-check">
           <input
+            ref={ageField}
             type="checkbox"
             checked={ageConfirmed}
             onChange={(event) => setAgeConfirmed(event.target.checked)}

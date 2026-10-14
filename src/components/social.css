@@ -765,6 +765,23 @@ mark.hidden-words.is-open {
   background: transparent;
   margin: 0;
 }
+/* In a writing sheet with a finger, the text box takes the room the sheet
+   has, and the buttons stay docked under it (globals.css). */
+@media (pointer: coarse) {
+  .modal.is-writing .post-composer {
+    flex: 1 0 auto;
+    align-items: stretch;
+  }
+  .modal.is-writing .composer-body {
+    display: flex;
+    flex-direction: column;
+  }
+  .modal.is-writing .composer-text {
+    flex: 1 0 auto;
+    min-height: 7.5em;
+    resize: none;
+  }
+}
 
 @media (max-width: 760px) {
   .home-tabs {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
   POP_MAX_LENGTH,
@@ -50,6 +50,7 @@ import {
   type ShopSign,
 } from "../lib/shop-draft";
 import { booksBeforeSearch } from "../lib/book-lists";
+import { focusField } from "../lib/coarse-pointer";
 import "./editor.css";
 
 type ShopEditorProps = {
@@ -93,6 +94,7 @@ function ShopSettings({
   const [refused, setRefused] = useState(false);
   const settings = useRef<HTMLDetailsElement>(null);
   const nameField = useRef<HTMLInputElement>(null);
+  const title = useId();
   const saving = useKeptUntilSaved(() => {
     // Turned away by the account after all: the words come back, open.
     setResumed(true);
@@ -100,14 +102,16 @@ function ShopSettings({
     if (settings.current) settings.current.open = true;
     notify(SAVE_REFUSED);
   });
-  // The walk's "write your words" card opens these settings at the field.
+  // The walk's "write your words" card opens these settings at the field
+  // (on a touch screen the field waits for a tap; their form has the focus).
   useEffect(() => {
     if (location.hash !== "#shop-words" || !settings.current) return;
     settings.current.open = true;
     settings.current.scrollIntoView({ block: "center" });
-    settings.current
-      .querySelector<HTMLInputElement>("input[name=tagline]")
-      ?.focus({ preventScroll: true });
+    focusField(
+      settings.current.querySelector<HTMLInputElement>("input[name=tagline]"),
+      { preventScroll: true },
+    );
   }, []);
   // Words kept from before are shown open, where they were left.
   useEffect(() => {
@@ -127,13 +131,16 @@ function ShopSettings({
   return (
     <details className="editor-settings" id="shop-words" ref={settings}>
       <summary>
-        <span>
+        <span id={title}>
           <Icon name="edit" size={17} />
           書店の看板と紹介
         </span>
         <Icon name="chevron" size={16} />
       </summary>
+      {/* Named: on a touch screen it holds the focus while its fields wait
+          for a tap (focusField). */}
       <form
+        aria-labelledby={title}
         onSubmit={(event) => {
           event.preventDefault();
           if (!name.trim()) return;
@@ -169,7 +176,7 @@ function ShopSettings({
             kept.clear();
             setResumed(false);
             setRefused(false);
-            nameField.current?.focus();
+            focusField(nameField.current);
           }}
         />
         <div className="editor-settings-fields">
@@ -371,7 +378,6 @@ function AddBookPicker({
         <label className="editor-search-field">
           <Icon name="search" size={18} />
           <input
-            autoFocus
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -1158,7 +1164,6 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             <label className="editor-label">
               本棚の名前
               <input
-                autoFocus
                 value={newShelfName}
                 onChange={(event) => setNewShelfName(event.target.value)}
                 maxLength={SHELF_NAME_MAX_LENGTH}

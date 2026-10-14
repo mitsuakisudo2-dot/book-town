@@ -36,6 +36,7 @@ import { useWalkStore, walkStore } from "../lib/walk-store";
 import type { Book, TownState } from "../lib/types";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { booksBeforeSearch } from "../lib/book-lists";
+import { focusField } from "../lib/coarse-pointer";
 import { StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { Icon, Modal } from "./ui";
 import { KeptDraftNote, StopConfirm, useDraftOwner } from "./KeptDraftNote";
@@ -103,13 +104,13 @@ export function StoreSceneEditor({
     if (done && key) sceneDraftStore.clear(key);
   }, [done, key]);
   // When a press takes away the button the hand was on, the hand goes on to
-  // what took its place.
+  // what took its place (a field only where it raises no keyboard).
   const handTo = useRef<(() => HTMLElement | null | undefined) | null>(null);
   useEffect(() => {
     const find = handTo.current;
     if (!find) return;
     handTo.current = null;
-    find()?.focus();
+    focusField(find());
   });
   const openButton = useRef<HTMLButtonElement>(null);
   const waiting = stale !== null;

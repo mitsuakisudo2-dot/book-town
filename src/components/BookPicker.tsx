@@ -1,9 +1,10 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { Book } from "../lib/types";
+import { useCoarsePointer, useFocusFieldOnShow } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
-import { BookJacket, Icon } from "./ui";
+import { BookJacket, Icon, useInWritingSheet } from "./ui";
 
 /** Search the catalog by title, author, genre or ISBN, and pick one book. */
 export function BookPicker({
@@ -28,11 +29,24 @@ export function BookPicker({
   /** Shown before the reader types, e.g. the book being read or the wishlist. */
   suggestions?: string[];
   suggestionLabel?: string;
-  /** For a picker opened by a button: the reader is about to type a title. */
+  /**
+   * For a picker opened by a button: the reader is about to type a title.
+   * With a mouse the search takes the focus, as it does in a writing screen;
+   * elsewhere on a touch screen it waits for a tap, and the focus goes to
+   * the picker itself (focusField).
+   */
   autoFocus?: boolean;
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
+  const picker = useRef<HTMLDivElement>(null);
+  const search = useRef<HTMLInputElement>(null);
+  useFocusFieldOnShow(search, { instead: picker, when: autoFocus });
+  // Only a picker holding the focus for its search is a named group; any
+  // other is named by its search alone.
+  const finger = useCoarsePointer();
+  const writing = useInWritingSheet();
+  const standsIn = finger && autoFocus && !writing;
   // The reader's own books come first among equals.
   const results = useBookSearch(books, query, {
     own: suggestions,
@@ -86,7 +100,13 @@ export function BookPicker({
     </li>
   );
   return (
-    <div className="book-picker">
+    <div
+      className="book-picker"
+      ref={picker}
+      role={standsIn ? "group" : undefined}
+      aria-label={standsIn ? label : undefined}
+      tabIndex={standsIn ? -1 : undefined}
+    >
       <label className="picker-search" htmlFor={id}>
         <Icon name="search" size={15} />
         <span className="sr-only">{label}</span>
@@ -96,7 +116,7 @@ export function BookPicker({
           value={query}
           placeholder="題名・著者・ISBNで探す"
           autoComplete="off"
-          autoFocus={autoFocus}
+          ref={search}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
             // Enter that confirms a kana conversion is the keyboard's own.

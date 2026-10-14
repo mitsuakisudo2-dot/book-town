@@ -6,10 +6,11 @@ import {
   useState,
   type CSSProperties,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { preload } from "react-dom";
+import { flushSync, preload } from "react-dom";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { BookInHand, heldBookOf } from "./BookInHand";
 import { DoodleIcon, StoreCanvas, StoreStamp } from "./StoreCanvas";
@@ -56,6 +57,11 @@ import "./walk.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { replaceAddress } from "../lib/url-state";
 import { useLayerReturn } from "../lib/back-layer";
+import {
+  fieldTakesFocus,
+  takesText,
+  useCoarsePointer,
+} from "../lib/coarse-pointer";
 
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
@@ -318,10 +324,13 @@ export function WalkView({
     setOverlay(null);
     // The book in hand and dialogs give focus back as they go; this catches
     // what they leave on the page itself (a dialog that saved no opener) or an
-    // opener that is gone.
-    focusNextFrame(() =>
-      focus.current?.isConnected ? focus.current : stage.current,
-    );
+    // opener that is gone. On a touch screen a field never takes it back.
+    focusNextFrame(() => {
+      const opener = focus.current;
+      return opener?.isConnected && (fieldTakesFocus() || !takesText(opener))
+        ? opener
+        : stage.current;
+    });
   }
   // Going past the last shop starts another round; say so once, quietly.
   const lastIndex = useRef<number | null>(null);
@@ -558,8 +567,12 @@ export function WalkView({
                   }
                   onClick={() => {
                     if (visitor) return requestAccount();
-                    setMessage(reaction.message);
-                    open({ kind: "message" });
+                    // The sheet opens within the tap, so a phone's keyboard
+                    // rises with its text box (Modal's `writing`).
+                    flushSync(() => {
+                      setMessage(reaction.message);
+                      open({ kind: "message" });
+                    });
                   }}
                 >
                   <i>
@@ -959,23 +972,25 @@ export function WalkView({
             maxLength={SHOP_MESSAGE_MAX_LENGTH}
             onChange={(e) => setMessage(e.target.value)}
           />
-          <button
-            className="button"
-            onClick={() => {
-              const text = message.trim() ? message : "";
-              const persisted = editReaction({ message: text });
-              notify(
-                !persisted
-                  ? "届けられませんでした。言葉は再読み込みまで手元に残ります。"
-                  : text
-                    ? "ひとことを届けました。"
-                    : "ひとことを取り消しました。",
-              );
-              close();
-            }}
-          >
-            届ける
-          </button>
+          <MessageSend>
+            <button
+              className="button"
+              onClick={() => {
+                const text = message.trim() ? message : "";
+                const persisted = editReaction({ message: text });
+                notify(
+                  !persisted
+                    ? "届けられませんでした。言葉は再読み込みまで手元に残ります。"
+                    : text
+                      ? "ひとことを届けました。"
+                      : "ひとことを取り消しました。",
+                );
+                close();
+              }}
+            >
+              届ける
+            </button>
+          </MessageSend>
         </Modal>
       )}
       {overlay?.kind === "message" && !delivers && (
@@ -991,23 +1006,28 @@ export function WalkView({
             maxLength={SHOP_MESSAGE_MAX_LENGTH}
             onChange={(e) => setMessage(e.target.value)}
           />
-          <button
-            className="button"
-            onClick={() => {
-              const persisted = editReaction({ message });
-              notify(
-                persisted
-                  ? "言葉を手元に保存しました。店主には送信されません。"
-                  : "保存できませんでした。言葉は再読み込みまで手元に残ります。",
-              );
-              close();
-            }}
+          <MessageSend
+            note={
+              <p className="walk-message-note">
+                送信されないデモです。言葉はこのブラウザにだけ残ります。
+              </p>
+            }
           >
-            手元に保存する
-          </button>
-          <p className="walk-message-note">
-            送信されないデモです。言葉はこのブラウザにだけ残ります。
-          </p>
+            <button
+              className="button"
+              onClick={() => {
+                const persisted = editReaction({ message });
+                notify(
+                  persisted
+                    ? "言葉を手元に保存しました。店主には送信されません。"
+                    : "保存できませんでした。言葉は再読み込みまで手元に残ります。",
+                );
+                close();
+              }}
+            >
+              手元に保存する
+            </button>
+          </MessageSend>
         </Modal>
       )}
       {overlay?.kind === "menu" && shop && (
@@ -1078,6 +1098,31 @@ export function WalkView({
 function joinStarter(message: string, starter: string) {
   if (message.includes(starter)) return message;
   return message.trim() ? message.replace(/\s*$/, "\n") + starter : starter;
+}
+/**
+ * The button that sends words to an owner, and a line about it. With a
+ * finger the button is the writing sheet's toolbar, last, just above the
+ * keyboard, the line over it; with a mouse both stand as they always have,
+ * the line under the button.
+ */
+function MessageSend({
+  note,
+  children,
+}: {
+  note?: ReactNode;
+  children: ReactNode;
+}) {
+  return useCoarsePointer() ? (
+    <>
+      {note}
+      <div className="writing-toolbar">{children}</div>
+    </>
+  ) : (
+    <>
+      {children}
+      {note}
+    </>
+  );
 }
 function MessageStarters({
   starters,

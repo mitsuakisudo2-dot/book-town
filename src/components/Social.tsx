@@ -9,6 +9,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -73,6 +74,7 @@ import {
 import { useTownBackend } from "../lib/store";
 import { notePosted, postedJustNow } from "../lib/just-posted";
 import { coverSelection, splitHidden } from "../lib/hidden-words";
+import { focusField } from "../lib/coarse-pointer";
 import { useUrlParam } from "../lib/url-state";
 
 type Shared = {
@@ -376,10 +378,19 @@ export function PostComposer({
   fixedBook,
   parent,
   onDone,
+  sheet = false,
+  beforeTools,
 }: Shared & {
   fixedBook?: Book;
   parent?: Post;
   onDone?: (postId: string) => void;
+  /**
+   * In a writing screen (Modal's `writing`): the buttons come last, as its
+   * toolbar, which sits just above a phone's keyboard.
+   */
+  sheet?: boolean;
+  /** Shown just before the buttons. */
+  beforeTools?: ReactNode;
 }) {
   const id = useId();
   const owner = useDraftOwner();
@@ -438,6 +449,43 @@ export function PostComposer({
     );
     onDone?.(created);
   }
+  const tools = (
+    <div className={"composer-tools" + (sheet ? " writing-toolbar" : "")}>
+      {!fixedBook && !picking && !bookId && (
+        <button
+          type="button"
+          className="composer-book"
+          // Rendered within the tap: in a writing screen the search
+          // takes the focus there, and the keyboard stays up for it.
+          onClick={() => flushSync(() => setPicking(true))}
+        >
+          <Icon name="book" size={15} />
+          {isReply ? "おすすめの本を添える" : "本を添える"}
+        </button>
+      )}
+      <label className={"composer-spoiler" + (canSpoil ? "" : " is-disabled")}>
+        <input
+          type="checkbox"
+          checked={canSpoil && spoiler}
+          disabled={!canSpoil}
+          onChange={(event) => update({ spoiler: event.target.checked })}
+        />
+        ネタバレあり
+      </label>
+      <HideWordsButton
+        field={field}
+        body={body}
+        onChange={(next) => update({ body: next })}
+        notify={notify}
+      />
+      <span className="composer-send">
+        <LengthNearLimit length={body.length} max={POST_MAX_LENGTH} />
+        <button className="button" type="submit" disabled={!body.trim()}>
+          {isReply ? "返信する" : "投稿する"}
+        </button>
+      </span>
+    </div>
+  );
   return (
     <form
       className={"post-composer" + (isReply ? " is-reply" : "")}
@@ -520,41 +568,7 @@ export function PostComposer({
             autoFocus={picking}
           />
         )}
-        <div className="composer-tools">
-          {!fixedBook && !picking && !bookId && (
-            <button
-              type="button"
-              className="composer-book"
-              onClick={() => setPicking(true)}
-            >
-              <Icon name="book" size={15} />
-              {isReply ? "おすすめの本を添える" : "本を添える"}
-            </button>
-          )}
-          <label
-            className={"composer-spoiler" + (canSpoil ? "" : " is-disabled")}
-          >
-            <input
-              type="checkbox"
-              checked={canSpoil && spoiler}
-              disabled={!canSpoil}
-              onChange={(event) => update({ spoiler: event.target.checked })}
-            />
-            ネタバレあり
-          </label>
-          <HideWordsButton
-            field={field}
-            body={body}
-            onChange={(next) => update({ body: next })}
-            notify={notify}
-          />
-          <span className="composer-send">
-            <LengthNearLimit length={body.length} max={POST_MAX_LENGTH} />
-            <button className="button" type="submit" disabled={!body.trim()}>
-              {isReply ? "返信する" : "投稿する"}
-            </button>
-          </span>
-        </div>
+        {!sheet && tools}
         {!saved || (continuing && kept) ? (
           <KeptDraftNote
             continuing={continuing && kept}
@@ -563,7 +577,7 @@ export function PostComposer({
             onDiscard={() => {
               clear();
               setPicking(false);
-              field.current?.focus();
+              focusField(field.current);
             }}
           />
         ) : (
@@ -580,6 +594,8 @@ export function PostComposer({
           </p>
         )}
         <HiddenWordsHint body={body} />
+        {beforeTools}
+        {sheet && tools}
       </div>
     </form>
   );
@@ -600,7 +616,9 @@ export function ComposeFab({
       <button
         type="button"
         className={"compose-fab icon-" + icon}
-        onClick={() => setOpen(true)}
+        // The sheet opens within the tap, so a phone's keyboard rises with
+        // its text box (Modal's `writing`).
+        onClick={() => flushSync(() => setOpen(true))}
         aria-label="投稿する"
       >
         <Icon name={icon} size={22} />
@@ -610,23 +628,28 @@ export function ComposeFab({
         <Modal title="投稿する" onClose={() => setOpen(false)} writing>
           <PostComposer
             {...props}
+            sheet
             onDone={() => {
               setOpen(false);
               onPosted?.();
             }}
+            beforeTools={
+              // Something made, not said: a poster has a page of its own to be made on.
+              <p className="compose-poster-way">
+                表紙を並べて伝えたいときは、
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() =>
+                    leaveLayers(() => router.push(posterNewPath()))
+                  }
+                >
+                  ポスターを作る
+                  <Icon name="arrow" size={14} />
+                </button>
+              </p>
+            }
           />
-          {/* Something made, not said: a poster has a page of its own to be made on. */}
-          <p className="compose-poster-way">
-            表紙を並べて伝えたいときは、
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => leaveLayers(() => router.push(posterNewPath()))}
-            >
-              ポスターを作る
-              <Icon name="arrow" size={14} />
-            </button>
-          </p>
         </Modal>
       )}
     </>
@@ -667,11 +690,15 @@ export function HideWordsButton({
           notify("文字数の上限に近いため、隠す印を付けられませんでした");
           return;
         }
-        onChange(covered.body);
-        requestAnimationFrame(() => {
-          text?.focus();
+        // The covered words are chosen in the text box, rendered first so
+        // that this happens within the tap: a phone gives its keyboard back
+        // only for a focus given then (a writing screen whose keyboard was
+        // put away). On a touch screen only in one the reader was typing
+        // in, or in a writing screen: otherwise the keyboard would rise, and
+        // the button keeps the focus.
+        flushSync(() => onChange(covered.body));
+        if (focusField(text, { instead: null }))
           text?.setSelectionRange(covered.start, covered.end);
-        });
       }}
     >
       <Icon name="eye" size={15} />

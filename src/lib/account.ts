@@ -100,17 +100,33 @@ export interface ProfileDraft {
   readingPublic: boolean;
 }
 
+/**
+ * Why a first profile cannot be created yet, and the field it is about (so a
+ * screen can point to it), or null when it can.
+ */
+export function profileDraftIssue(
+  draft: ProfileDraft,
+): { field: "handle" | "name" | "age"; message: string } | null {
+  const handleError = handleProblem(normalizeHandle(draft.handle), []);
+  if (handleError) return { field: "handle", message: handleError };
+  const name = draft.name.trim();
+  if (!name) return { field: "name", message: "ユーザー名を入れてください。" };
+  if (name.length > NAME_MAX_LENGTH)
+    return {
+      field: "name",
+      message: `ユーザー名は${NAME_MAX_LENGTH}文字までです。`,
+    };
+  if (!draft.ageConfirmed)
+    return {
+      field: "age",
+      message: `Booktownは${MINIMUM_AGE}歳以上の方が使えます。`,
+    };
+  return null;
+}
+
 /** Why a first profile cannot be created yet, or null when it can. */
 export function profileDraftProblem(draft: ProfileDraft): string | null {
-  const handleError = handleProblem(normalizeHandle(draft.handle), []);
-  if (handleError) return handleError;
-  const name = draft.name.trim();
-  if (!name) return "ユーザー名を入れてください。";
-  if (name.length > NAME_MAX_LENGTH)
-    return `ユーザー名は${NAME_MAX_LENGTH}文字までです。`;
-  if (!draft.ageConfirmed)
-    return `Booktownは${MINIMUM_AGE}歳以上の方が使えます。`;
-  return null;
+  return profileDraftIssue(draft)?.message ?? null;
 }
 
 const failed = (reason: AccountFailure): AccountResult => ({

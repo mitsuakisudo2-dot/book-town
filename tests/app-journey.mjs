@@ -3,6 +3,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
+import {
+  expectKeyboardUp,
+  expectNoKeyboard,
+  expectNoZoomOnFocus,
+  expectTapWrites,
+  forgetFocus,
+  watchFocus,
+} from "./journey-keyboard.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -98,6 +106,7 @@ try {
     hasTouch: true,
     isMobile: true,
   });
+  await watchFocus(context);
   page = settleBeforeNavigating(await context.newPage());
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
@@ -850,20 +859,22 @@ try {
       await page.getByRole("button", { name: /一人で読む/ }).click();
       await confirmIn("読書をはじめますか？", "はじめる");
       await page.getByRole("button", { name: "読書を終える" }).click();
+      await forgetFocus(page);
       await page
         .getByRole("dialog", { name: "読書を終えますか？" })
         .getByRole("button", { name: "感想を書く" })
-        .click();
+        .tap();
       const review = page.getByRole("dialog", { name: "『モモ』の感想" });
-      // On a touch screen the review opens without the keyboard over it.
-      await expect(
-        review.getByRole("button", { name: "閉じる" }),
-      ).toBeFocused();
-      await expect(review.locator("textarea")).not.toBeFocused();
-      await review
-        .locator("textarea")
-        .fill("時間どろぼうの話を、時間をかけて読んだ。");
-      await review.getByRole("button", { name: "投稿する" }).click();
+      // A review is a writing screen: on a touch screen it opens with its
+      // text box ready, focused within the tap, and the keyboard up.
+      await expectKeyboardUp(page, review.locator("textarea"), "感想を書く");
+      // In the town's shell still, at a phone's sizes: the text box at 16px,
+      // and the words around it readable.
+      await expectNoZoomOnFocus(review.locator("textarea"), "感想を書く");
+      await expectReadable(review.locator(".composer-tag-hint"), "タグの案内");
+      await expectReadable(review.locator(".composer-spoiler"), "ネタバレあり");
+      await page.keyboard.type("時間どろぼうの話を、時間をかけて読んだ。");
+      await review.getByRole("button", { name: "投稿する" }).tap();
       await expect(review).toHaveCount(0);
       await expect(
         page.getByRole("heading", { name: "読書を開始" }),
@@ -1081,7 +1092,15 @@ try {
       await go("/walk/#mine");
       await page.getByRole("link", { name: /ひとことを書く/ }).click();
       await expect(page).toHaveURL(/\/my-shop\/#shop-words$/);
-      await expect(page.getByLabel("ひとこと")).toBeFocused();
+      // On a touch screen the words are shown open and wait for a tap: the
+      // keyboard does not rise over them, and their form has the focus.
+      const words = page.locator("#shop-words");
+      await expect(words).toHaveAttribute("open", "");
+      await expect(words.getByLabel("ひとこと")).toBeInViewport();
+      const form = words.getByRole("form", { name: "書店の看板と紹介" });
+      await expect(form).toBeFocused();
+      await expectNoKeyboard(page, "the shop's words", form);
+      await expectTapWrites(words.getByLabel("ひとこと"));
     },
   );
 
