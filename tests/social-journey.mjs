@@ -491,7 +491,7 @@ try {
           .getByLabel("ネタバレの印があるもの・可能性があるものは出さない")
           .check();
         await expect(page.locator(".toast")).toContainText(
-          "ネタバレの印があるもの・可能性があるものは、出さないようにします",
+          "ネタバレの印があるもの・可能性があるものは、出さないようにします（読み終えた本の投稿は出します）",
         );
         await noOverflow(`${label} settings`);
         await page.screenshot({
@@ -502,7 +502,7 @@ try {
         expect((await stored()).settings.spoilerDisplay).toBe("leave_out");
         await go("/timeline/");
         await expect(page.locator(".social-note")).toHaveText(
-          "ネタバレの印が付いた投稿とポスター、その可能性がある投稿は、設定により出していません。",
+          "ネタバレの印が付いた投稿とポスター、その可能性がある投稿は、設定により出していません。読み終えた本の投稿は出します。",
         );
         // Others' marked posts are left out; the reader's own never are.
         for (const title of ["闇の左手", "銀河鉄道の夜"])
