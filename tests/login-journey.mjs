@@ -1028,19 +1028,15 @@ try {
         const text = compose.locator("textarea");
         await text.fill(BEGUN);
         // Whose it is is not known yet: the words stay on the screen, and
-        // nothing is kept in the browser or said to be.
+        // nothing is kept in the browser.
         await expect(text).toHaveValue(BEGUN);
         expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
-        await expect(
-          compose.getByText("下書きはこのブラウザに保存しています。"),
-        ).toHaveCount(0);
         await expect
           .poll(() => keptDraftKeys(POST_DRAFTS), { timeout: 10000 })
           .toEqual([user.id + ":new-post"]);
         await expect(text).toHaveValue(BEGUN);
-        await expect(
-          compose.getByText("下書きはこのブラウザに保存しています。"),
-        ).toBeVisible();
+        // Kept quietly: the sheet says nothing of it.
+        await expect(compose).not.toContainText("このブラウザ");
         await text.fill("");
         await page.keyboard.press("Escape");
         await expect(compose).toHaveCount(0);

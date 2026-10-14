@@ -45,7 +45,8 @@
   gap: 10px 14px;
   margin-top: 10px;
 }
-.composer-book {
+.composer-book,
+.composer-poster {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -69,9 +70,6 @@
   gap: 6px;
   font-size: 11px;
   color: #8a6f5c;
-}
-.composer-spoiler.is-disabled {
-  color: #b9bfae;
 }
 .composer-hide {
   display: inline-flex;
@@ -752,12 +750,18 @@ mark.hidden-words.is-open {
 .picker-clear:hover {
   background: #e3e8da;
 }
-.post-composer .composer-book {
+.post-composer :is(.composer-book, .composer-poster) {
   flex: 0 1 auto;
+  gap: 4px;
   font-size: 11px;
   border: 1px dashed #c9d3bd;
   border-radius: 999px;
-  padding: 5px 11px;
+  padding: 5px 9px;
+}
+/* Close enough for 隠す, which comes and goes as words are chosen, to join
+   the row on a phone from 375px wide: a second row would push the words up. */
+.post-composer .composer-tools {
+  column-gap: 8px;
 }
 .modal .post-composer {
   border: 0;
@@ -821,21 +825,6 @@ mark.hidden-words.is-open {
 }
 .post-tag:hover {
   text-decoration: underline;
-}
-.composer-tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-}
-.composer-tag-label {
-  font-size: 11px;
-  color: #8a947d;
-}
-.composer-tag-hint {
-  font-size: 10px;
-  color: #a5ad97;
 }
 .tag-chip {
   display: inline-flex;

@@ -773,17 +773,27 @@ try {
     await expect(page.locator(".search-results")).toContainText(
       "今週は一冊も買わない",
     );
+    // The sheet offers no tags to pick: a #word written in the words is
+    // the tag, a link on the post.
     await go("/timeline/");
     await page.locator(".compose-fab").click();
     const compose = page.getByRole("dialog", { name: "投稿する" });
-    await compose.locator("textarea").fill("雨の日は");
-    await compose
-      .getByRole("button", { name: /タグ「.+」を付ける/ })
-      .first()
+    await expect(compose.locator(".tag-chip")).toHaveCount(0);
+    await compose.locator("textarea").fill("雨の日は #雨読 にかぎる");
+    await compose.getByRole("button", { name: "投稿する" }).click();
+    await expect(compose).toHaveCount(0);
+    await page
+      .locator("main article.post-card")
+      .filter({ hasText: "雨の日は" })
+      .getByRole("link", { name: "#雨読" })
       .click();
-    await expect(compose.locator("textarea")).toHaveValue(/^雨の日は #\S+ $/);
-    await expect(compose.locator(".tag-chip.is-set")).toHaveCount(1);
-    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(/\/search\//);
+    await expect(
+      page.getByRole("heading", { name: /#雨読 の投稿/ }),
+    ).toBeVisible();
+    await expect(page.locator(".search-results")).toContainText(
+      "雨の日は #雨読 にかぎる",
+    );
   });
 
   await check(
@@ -871,7 +881,6 @@ try {
       // In the town's shell still, at a phone's sizes: the text box at 16px,
       // and the words around it readable.
       await expectNoZoomOnFocus(review.locator("textarea"), "感想を書く");
-      await expectReadable(review.locator(".composer-tag-hint"), "タグの案内");
       await expectReadable(review.locator(".composer-spoiler"), "ネタバレあり");
       await page.keyboard.type("時間どろぼうの話を、時間をかけて読んだ。");
       await review.getByRole("button", { name: "投稿する" }).tap();

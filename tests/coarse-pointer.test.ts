@@ -297,7 +297,7 @@ function page() {
   // A writing screen (a post, a review) opens to be written in: there a
   // field takes the focus with a finger too, and the keyboard rises with
   // it: a book's search after ［本を添える］, the text box after a draft is
-  // thrown away, the words covered by ［一部を隠す］.
+  // thrown away, the words covered by ［隠す］.
   const { state, element } = page();
   const sheet = element("DIV");
   const close = element("BUTTON");
