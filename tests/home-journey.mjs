@@ -107,6 +107,27 @@ async function drag(from, to, { steps = 10, every = 16 } = {}) {
     await page.clock.resume();
   }
 }
+/**
+ * Taps `target` and gives how far the page was scrolled when the tap became
+ * a click. Playwright may scroll before it taps (a target still moving is
+ * tried again, centred), so the page opens over that place, not the one read
+ * before the tap.
+ */
+async function tapScrolled(target) {
+  await page.evaluate(() => {
+    const note = () => {
+      window.scrolledAtTap = scrollY;
+    };
+    window.scrolledAtTap = undefined;
+    window.stopNotingTap = () => removeEventListener("click", note, true);
+    addEventListener("click", note, true);
+  });
+  await target.tap();
+  return page.evaluate(() => {
+    window.stopNotingTap();
+    return window.scrolledAtTap;
+  });
+}
 /** Waits until a 便り's page has slid all the way in, under the finger. */
 const slidIn = (layer) =>
   layer.evaluate((element) =>
@@ -627,8 +648,7 @@ try {
         // The screen beneath stays where it was.
         await page.evaluate(() => scrollTo(0, 700));
         await page.waitForTimeout(100);
-        const before = await page.evaluate(() => scrollY);
-        expect(before).toBeGreaterThan(600);
+        expect(await page.evaluate(() => scrollY)).toBeGreaterThan(600);
         const below = page.locator("main article.letter .letter-time");
         const target = await below.evaluateAll((links) =>
           links.findIndex((link) => {
@@ -637,7 +657,8 @@ try {
           }),
         );
         expect(target).toBeGreaterThanOrEqual(0);
-        await below.nth(target).tap();
+        const before = await tapScrolled(below.nth(target));
+        expect(before).toBeGreaterThan(600);
         const opened = page.locator(".post-page.is-layer");
         await expect(opened).toBeVisible();
         await opened.getByRole("button", { name: "戻る" }).tap();
@@ -647,8 +668,7 @@ try {
         // Swipes: a slow 60px drag springs back; 150px, or a quick 40px
         // flick, closes it; a drag from the left edge is Safari's, not ours.
         await time.scrollIntoViewIfNeeded();
-        const under = await page.evaluate(() => scrollY);
-        await time.tap();
+        const under = await tapScrolled(time);
         await slidIn(letter);
         const y = 420;
         await watchFollowing(letter);
@@ -707,9 +727,8 @@ try {
           element.scrollIntoView({ block: "center" }),
         );
         await page.waitForTimeout(100);
-        const under = await page.evaluate(() => scrollY);
+        const under = await tapScrolled(review.locator(".letter-time"));
         expect(under).toBeGreaterThan(0);
-        await review.locator(".letter-time").tap();
         const letter = letterPage("凪");
         await expect(letter).toBeVisible();
         // The book of a review opened on that book's page: the page closes,
