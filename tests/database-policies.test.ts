@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { demoBooks } from "../src/lib/data";
+import { sampleBookRowId } from "../src/lib/samples";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
 import { pagePattern } from "../src/lib/supabase/site-notes";
 
@@ -154,7 +156,9 @@ async function main() {
     "visitors who are not logged in read public things only",
     async () => {
       assert.equal((await as(null, "select * from profiles")).length, 3);
-      assert.equal((await as(null, "select id, title from books")).length, 1);
+      // Aki's book is used nowhere yet: a typed-in book is its reader's own
+      // until it is shown (hide_registered_titles, below).
+      assert.equal((await as(null, "select id, title from books")).length, 0);
       const shops = await as<{ name: string }>(null, "select name from shops");
       assert.deepEqual(
         shops.map((shop) => shop.name),
@@ -2510,6 +2514,613 @@ async function main() {
     },
   );
 
+  // A book scanned or typed in is its reader's own until they use it where
+  // others can see (20261024000000_hide_registered_titles.sql). Ben scans
+  // one. Aki and Chi have never seen it, and neither has anyone signed out.
+  const scanned = "00000000-0000-4000-8000-0000000000b2";
+  /** The statement the API builds for the app's upsert of book rows. */
+  const saveBook = (visitor: string, id: string, title: string) =>
+    as<{ count: number }>(
+      visitor,
+      `with saved as (
+         insert into books (id, title, created_by)
+         select id, title, created_by
+         from json_populate_recordset(null::books, $1) as row
+         on conflict (id) do nothing
+         returning 1
+       ) select count(*)::int as count from saved`,
+      [JSON.stringify([{ id, title, created_by: visitor }])],
+    );
+  /** Whether a visitor reads a book, by its id and among the newest. */
+  const reads = async (visitor: Visitor, id: string) => {
+    const byId =
+      (await as(visitor, "select id, title from books where id = $1", [id]))
+        .length === 1;
+    const newest = await as<{ id: string }>(
+      visitor,
+      "select id, title from books order by created_at desc limit 300",
+    );
+    assert.equal(
+      newest.some((row) => row.id === id),
+      byId,
+      "the newest books agree with the book read by its id",
+    );
+    return byId;
+  };
+  /** Who reads a book: someone signed out, Aki, Ben and Chi. */
+  const readersOf = async (id: string) => [
+    await reads(null, id),
+    await reads(AKI, id),
+    await reads(BEN, id),
+    await reads(CHI, id),
+  ];
+  const EVERYONE = [true, true, true, true];
+  const BEN_ALONE = [false, false, true, false];
+  const BEN_AND_CHI = [false, false, true, true];
+  const readBy = async (expected: boolean[], why: string) =>
+    assert.deepEqual(await readersOf(scanned), expected, why);
+  const hide = (kind: string, id: string) =>
+    operator(
+      `insert into moderation_hides (target_kind, target_id) values ('${kind}', '${id}')`,
+    );
+  const unhide = () => operator("delete from moderation_hides");
+  /** What three reports ('folded') or a serious one ('held') leave. */
+  const foldAs = (kind: string, id: string, state: string, owner = BEN) =>
+    operator(
+      `insert into moderation_folds (target_kind, target_id, state, owner_id)
+       values ('${kind}', '${id}', '${state}', '${owner}')
+       on conflict (target_kind, target_id) do update set state = excluded.state`,
+    );
+  const unfold = (id: string) =>
+    operator(`delete from moderation_folds where target_id = '${id}'`);
+  /** One shelf holding the book, as the app saves a shop's shelves. */
+  const shelvesWith = (bookId: string, isPublic: boolean) =>
+    JSON.stringify([
+      {
+        id: "s1",
+        name: "新着",
+        isPublic,
+        items: [{ id: "i1", bookId, display: "face" }],
+      },
+    ]);
+  /** A store scene with the book on one shelf row. */
+  const sceneWith = (bookId: string, isPublic: boolean) =>
+    JSON.stringify({
+      schemaVersion: 1,
+      storeId: "mine",
+      objects: [
+        { id: "shelf", kind: "furniture", parentId: null },
+        { id: "row", kind: "row", parentId: "shelf", isPublic },
+        { id: "b1", kind: "book", bookId, parentId: "row" },
+      ],
+    });
+
+  await check(
+    "a book scanned or typed in is read by its reader alone",
+    async () => {
+      assert.deepEqual(await saveBook(BEN, scanned, "砂の器"), [{ count: 1 }]);
+      // Sent again after its answer was lost: nothing changes, nothing fails.
+      assert.deepEqual(await saveBook(BEN, scanned, "砂の器"), [{ count: 0 }]);
+      await readBy(BEN_ALONE, "scanned only");
+      // Its reader still fixes it and reads it back.
+      assert.deepEqual(
+        await as(
+          BEN,
+          "update books set author = '松本清張' where id = $1 returning title, author",
+          [scanned],
+        ),
+        [{ title: "砂の器", author: "松本清張" }],
+      );
+      // Anyone else's write of it changes nothing, and tells only that the
+      // id is taken.
+      for (const visitor of [AKI, CHI]) {
+        assert.deepEqual(await saveBook(visitor, scanned, "横取り"), [
+          { count: 0 },
+        ]);
+        assert.equal(
+          await affects(
+            visitor,
+            "update books set title = '横取り' where id = $1",
+            [scanned],
+          ),
+          0,
+        );
+      }
+      await refused(
+        CHI,
+        "insert into books (id, title, created_by) values ($1, '横取り', $2)",
+        [scanned, CHI],
+        /duplicate key/,
+      );
+      const [kept] = (
+        await db.query<{ title: string }>(
+          "select title from books where id = $1",
+          [scanned],
+        )
+      ).rows;
+      assert.equal(kept.title, "砂の器");
+      await readBy(BEN_ALONE, "after the others tried");
+    },
+  );
+
+  await check(
+    "a scanned book is read by everyone where it is shown, and only there",
+    async () => {
+      // An open shop's public shelf; not a closed shop's, nor a private shelf.
+      const shelve = (isPublic: boolean) =>
+        as(BEN, "update shop_private set shelves = $2 where shop_id = $1", [
+          benShop.id,
+          shelvesWith(scanned, isPublic),
+        ]);
+      await as(BEN, "insert into shop_private (shop_id) values ($1)", [
+        benShop.id,
+      ]);
+      await shelve(true);
+      await readBy(BEN_ALONE, "a public shelf of a closed shop");
+      await as(BEN, "update shops set is_open = true where id = $1", [
+        benShop.id,
+      ]);
+      await readBy(EVERYONE, "a public shelf of an open shop");
+      await shelve(false);
+      await readBy(BEN_ALONE, "a private shelf");
+      await shelve(true);
+      await readBy(EVERYONE, "back on the public shelf");
+      await hide("shop", benShop.id);
+      await readBy(BEN_ALONE, "a hidden shop");
+      await unhide();
+      await hide("profile", BEN);
+      await readBy(BEN_ALONE, "the shop of a hidden person");
+      await unhide();
+      await as(
+        BEN,
+        "update shop_private set shelves = '[]' where shop_id = $1",
+        [benShop.id],
+      );
+      await readBy(BEN_ALONE, "taken off the shelf");
+
+      // The store scene: a public row of an open shop.
+      const place = (isPublic: boolean) =>
+        as(BEN, "update shop_private set scene = $2 where shop_id = $1", [
+          benShop.id,
+          sceneWith(scanned, isPublic),
+        ]);
+      await place(false);
+      await readBy(BEN_ALONE, "a private row of the store scene");
+      await place(true);
+      await readBy(EVERYONE, "a public row of the store scene");
+      await as(BEN, "update shops set is_open = false where id = $1", [
+        benShop.id,
+      ]);
+      await readBy(BEN_ALONE, "the scene of a closed shop");
+      await as(BEN, "update shop_private set scene = null where shop_id = $1", [
+        benShop.id,
+      ]);
+
+      // A post, a reply or a memo of reading together; never a private note,
+      // nor a post the operator hid or a serious report holds. A folded post
+      // is still read with a tap, and so is its book.
+      const post = async (mode: string | null, parent: string | null = null) =>
+        (
+          await as<{ id: string }>(
+            BEN,
+            `insert into posts (author_id, body, book_id, reading_mode, parent_id)
+             values ($1, '読んだ', $2, $3, $4) returning id`,
+            [BEN, scanned, mode, parent],
+          )
+        )[0].id;
+      const takeDown = (id: string) =>
+        as(BEN, "delete from posts where id = $1", [id]);
+      const note = await post("solo");
+      await readBy(BEN_ALONE, "a private note");
+      const review = await post(null);
+      await readBy(EVERYONE, "a post");
+      await hide("post", review);
+      await readBy(BEN_ALONE, "a hidden post");
+      await unhide();
+      await foldAs("post", review, "held");
+      await readBy(BEN_ALONE, "a held post");
+      await foldAs("post", review, "folded");
+      await readBy(EVERYONE, "a folded post");
+      await unfold(review);
+      await hide("profile", BEN);
+      await readBy(BEN_ALONE, "a hidden person's post");
+      await unhide();
+      // A block keeps the post from Chi, not its book, which anyone signed
+      // out can read.
+      await as(
+        BEN,
+        "insert into blocks (blocker_id, blocked_id) values ($1, $2)",
+        [BEN, CHI],
+      );
+      assert.equal(
+        (await as(CHI, "select id from posts where id = $1", [review])).length,
+        0,
+      );
+      await readBy(EVERYONE, "a post kept from Chi by a block");
+      await as(BEN, "delete from blocks where blocker_id = $1", [BEN]);
+      await takeDown(review);
+      await readBy(BEN_ALONE, "a post taken down");
+      const reply = await post(null, await newPost("何を読んでいますか"));
+      await readBy(EVERYONE, "a reply");
+      await takeDown(reply);
+      const together = await post("together");
+      await readBy(EVERYONE, "a memo of reading together");
+      await takeDown(together);
+      await takeDown(note);
+      await readBy(BEN_ALONE, "no post left");
+
+      // A public reading record.
+      const [record] = await as<{ id: string }>(
+        BEN,
+        "insert into reading_entries (user_id, book_id) values ($1, $2) returning id",
+        [BEN, scanned],
+      );
+      await readBy(BEN_ALONE, "a private record");
+      await as(
+        BEN,
+        "update reading_entries set is_public = true where id = $1",
+        [record.id],
+      );
+      await readBy(EVERYONE, "a public record");
+      await hide("profile", BEN);
+      await readBy(BEN_ALONE, "a hidden person's record");
+      await unhide();
+      await as(BEN, "delete from reading_entries where id = $1", [record.id]);
+      await readBy(BEN_ALONE, "the record removed");
+
+      // 人生の9冊.
+      await as(BEN, "select replace_profile_nine($1, $2)", [[scanned], [""]]);
+      await readBy(EVERYONE, "the nine");
+      await hide("profile", BEN);
+      await readBy(BEN_ALONE, "a hidden person's nine");
+      await unhide();
+      await as(BEN, "select replace_profile_nine($1, $2)", [[], []]);
+      await readBy(BEN_ALONE, "out of the nine");
+
+      // A poster put up; not a draft, nor one hidden or held.
+      const [poster] = await as<{ id: string }>(
+        BEN,
+        "insert into posters (author_id, template, pages, status) values ($1, 'one_book', $2, 'draft') returning id",
+        [BEN, pages(scanned)],
+      );
+      await readBy(BEN_ALONE, "a draft poster");
+      await as(BEN, "update posters set status = 'published' where id = $1", [
+        poster.id,
+      ]);
+      await readBy(EVERYONE, "a poster put up");
+      await hide("poster", poster.id);
+      await readBy(BEN_ALONE, "a hidden poster");
+      await unhide();
+      await foldAs("poster", poster.id, "held");
+      await readBy(BEN_ALONE, "a held poster");
+      await foldAs("poster", poster.id, "folded");
+      await readBy(EVERYONE, "a folded poster");
+      await unfold(poster.id);
+      await as(BEN, "update posters set pages = $2 where id = $1", [
+        poster.id,
+        pages(),
+      ]);
+      await readBy(BEN_ALONE, "taken off the poster");
+      await as(BEN, "delete from posters where id = $1", [poster.id]);
+
+      // Reading together, while it runs and after: the session stays
+      // readable once it ends, and so does its book. Not reading alone.
+      const read = async (mode: string) =>
+        (
+          await as<{ id: string }>(
+            BEN,
+            "insert into reading_sessions (user_id, book_id, mode) values ($1, $2, $3) returning id",
+            [BEN, scanned, mode],
+          )
+        )[0].id;
+      const end = (id: string) =>
+        as(BEN, "update reading_sessions set ended_at = now() where id = $1", [
+          id,
+        ]);
+      await end(await read("solo"));
+      await readBy(BEN_ALONE, "reading alone");
+      const together2 = await read("together");
+      await readBy(EVERYONE, "reading together");
+      await end(together2);
+      await readBy(EVERYONE, "read together, ended");
+      await hide("profile", BEN);
+      await readBy(BEN_ALONE, "a hidden person's reading");
+      await unhide();
+      await as(BEN, "delete from reading_sessions where user_id = $1", [BEN]);
+      await readBy(BEN_ALONE, "used nowhere again");
+    },
+  );
+
+  await check(
+    "a reader's own use of a book, private ones too, shows it to them alone",
+    async () => {
+      const chi = (sql: string, params: unknown[]) =>
+        as<{ id: string }>(CHI, sql, params);
+      await chi(
+        "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
+        [CHI, scanned],
+      );
+      await readBy(BEN_AND_CHI, "a wish");
+      await chi("delete from book_marks where user_id = $1", [CHI]);
+      await readBy(BEN_ALONE, "the wish taken back");
+
+      const [note] = await chi(
+        "insert into posts (author_id, body, book_id, reading_mode) values ($1, 'ひとりで', $2, 'solo') returning id",
+        [CHI, scanned],
+      );
+      await readBy(BEN_AND_CHI, "a private note");
+      // Her post held by a serious report is still hers.
+      const [held] = await chi(
+        "insert into posts (author_id, body, book_id) values ($1, '話したい', $2) returning id",
+        [CHI, scanned],
+      );
+      await foldAs("post", held.id, "held", CHI);
+      await readBy(BEN_AND_CHI, "a held post");
+      await chi("delete from posts where id in ($1, $2)", [note.id, held.id]);
+
+      const [record] = await chi(
+        "insert into reading_entries (user_id, book_id) values ($1, $2) returning id",
+        [CHI, scanned],
+      );
+      await readBy(BEN_AND_CHI, "a private record");
+      await chi("delete from reading_entries where id = $1", [record.id]);
+
+      const [draft] = await chi(
+        "insert into posters (author_id, template, pages, status) values ($1, 'one_book', $2, 'draft') returning id",
+        [CHI, pages(scanned)],
+      );
+      await readBy(BEN_AND_CHI, "a draft poster");
+      await chi("delete from posters where id = $1", [draft.id]);
+
+      // Her earlier session still runs, so this one has ended.
+      const [alone] = await chi(
+        "insert into reading_sessions (user_id, book_id, mode, ended_at) values ($1, $2, 'solo', now()) returning id",
+        [CHI, scanned],
+      );
+      await readBy(BEN_AND_CHI, "reading alone");
+      await chi("delete from reading_sessions where id = $1", [alone.id]);
+
+      // Her own shop, closed: a private shelf, then the scene's private row.
+      const [shop] = await chi(
+        "insert into shops (owner_id, name) values ($1, '小さな本屋') returning id",
+        [CHI],
+      );
+      await chi("insert into shop_private (shop_id, shelves) values ($1, $2)", [
+        shop.id,
+        shelvesWith(scanned, false),
+      ]);
+      await readBy(BEN_AND_CHI, "a private shelf");
+      await chi(
+        "update shop_private set shelves = '[]', scene = $2 where shop_id = $1",
+        [shop.id, sceneWith(scanned, false)],
+      );
+      await readBy(BEN_AND_CHI, "a private row of the store scene");
+      await chi("delete from shops where id = $1", [shop.id]);
+      await readBy(BEN_ALONE, "used by nobody but Ben");
+    },
+  );
+
+  await check(
+    "catalog books are everyone's, and a 見本's book is kept by every reader",
+    async () => {
+      const ndl = "00000000-0000-4000-8000-0000000000d1";
+      await operator(
+        `insert into books (id, title, source) values ('${ndl}', '目録の本', 'ndl')`,
+      );
+      assert.deepEqual(await readersOf(ndl), EVERYONE);
+      await operator(`delete from books where id = '${ndl}'`);
+
+      // A 見本's book is written under one id for everyone, by the first
+      // reader who keeps it (withSampleRows in src/lib/town-remote.ts). The
+      // next reader's write of it changes nothing and is not refused, though
+      // they cannot read that row, and their own mark of it is kept. The app
+      // shows a 見本's books from its own copy, row or no row.
+      const sample = sampleBookRowId(demoBooks[1].id);
+      const keep = async (visitor: string) => {
+        const saved = await saveBook(visitor, sample, demoBooks[1].title);
+        await as(
+          visitor,
+          "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
+          [visitor, sample],
+        );
+        return saved[0].count;
+      };
+      assert.equal(await keep(AKI), 1);
+      assert.deepEqual(await readersOf(sample), [false, true, false, false]);
+      assert.equal(await keep(CHI), 0);
+      assert.deepEqual(await readersOf(sample), [false, true, false, true]);
+      assert.equal(
+        (await as(CHI, "select * from book_marks where book_id = $1", [sample]))
+          .length,
+        1,
+      );
+      // Written about, it is read by everyone, like any book.
+      const [post] = await as<{ id: string }>(
+        CHI,
+        "insert into posts (author_id, body, book_id) values ($1, '見本の本', $2) returning id",
+        [CHI, sample],
+      );
+      assert.deepEqual(await readersOf(sample), EVERYONE);
+      await as(CHI, "delete from posts where id = $1", [post.id]);
+      for (const visitor of [AKI, CHI])
+        await as(visitor, "delete from book_marks where book_id = $1", [
+          sample,
+        ]);
+    },
+  );
+
+  await check(
+    "every book a reader sees used, they read, and no other typed-in book",
+    async () => {
+      // Every column that keeps a book's id as a foreign key. A new one must
+      // be taught to private.book_is_listed and private.book_is_mine (create
+      // or replace), or its books go missing from the screens; so must a new
+      // jsonb column with book ids in it, which this list cannot see.
+      const keys = await db.query<{ ref: string }>(
+        `select c.conrelid::regclass::text || '.' || a.attname as ref
+         from pg_constraint c
+         join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any (c.conkey)
+         where c.contype = 'f' and c.confrelid = 'public.books'::regclass
+         order by 1`,
+      );
+      assert.deepEqual(
+        keys.rows.map((row) => row.ref),
+        [
+          "book_marks.book_id",
+          "poster_books.book_id",
+          "posts.book_id",
+          "profile_nine.book_id",
+          "reading_entries.book_id",
+          "reading_sessions.book_id",
+        ],
+      );
+
+      // Aki's open shop shows a book on a public shelf and in its scene,
+      // keeps another on a private shelf, and she shares a record.
+      const [hers] = await as<{ id: string }>(
+        AKI,
+        "insert into books (title, created_by) values ('棚の奥の本', $1) returning id",
+        [AKI],
+      );
+      await as(
+        AKI,
+        "update shop_private set shelves = $2, scene = $3 where shop_id = $1",
+        [
+          akiShop.id,
+          JSON.stringify([
+            ...JSON.parse(shelvesWith(book.id, true)),
+            ...JSON.parse(shelvesWith(hers.id, false)),
+          ]),
+          sceneWith(book.id, true),
+        ],
+      );
+      const [record] = await as<{ id: string }>(
+        AKI,
+        "insert into reading_entries (user_id, book_id, is_public) values ($1, $2, true) returning id",
+        [AKI, book.id],
+      );
+
+      // The book ids in the rows a visitor reads, as the town gathers them
+      // (referencedBookIds in src/lib/town-remote.ts).
+      const shown = `
+        select book_id::text as id from profile_nine
+        union select book_id::text from posts where book_id is not null
+        union select book_id::text from reading_sessions where book_id is not null
+        union select book_id::text from reading_entries
+        union select book_id::text from poster_books
+        union select listed.value #>> '{}' from posters,
+          jsonb_array_elements(pages) page (value),
+          jsonb_array_elements(page.value -> 'blocks') block (value),
+          jsonb_array_elements(block.value -> 'book_ids') listed (value)
+          where block.value ->> 'type' = 'books'
+        union select jsonb_array_elements_text(public_scene_books) from shops
+        union select item.value ->> 'bookId' from shops,
+          jsonb_array_elements(public_shelves) shelf (value),
+          jsonb_array_elements(shelf.value -> 'items') item (value)`;
+      const own = `
+        union select book_id::text from book_marks
+        union select jsonb_array_elements_text(scene_books) from shop_private
+        union select item.value ->> 'bookId' from shop_private,
+          jsonb_array_elements(shelves) shelf (value),
+          jsonb_array_elements(shelf.value -> 'items') item (value)`;
+      const uuid = "'^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$'";
+      for (const visitor of [null, AKI, BEN, CHI]) {
+        const used = (
+          await as<{ id: string }>(
+            visitor,
+            `select id from (${shown}${visitor ? own : ""}) used
+             where id ~ ${uuid} order by id`,
+          )
+        ).map((row) => row.id);
+        assert.ok(used.length >= 3, "the check sees books in use");
+        const typedIn = (
+          await as<{ id: string }>(
+            visitor,
+            "select id from books where source = 'manual' order by id",
+          )
+        ).map((row) => row.id);
+        const theirOwn = visitor
+          ? (
+              await db.query<{ id: string }>(
+                "select id::text from books where created_by = $1",
+                [visitor],
+              )
+            ).rows.map((row) => row.id)
+          : [];
+        assert.deepEqual(
+          used.filter((id) => !typedIn.includes(id)),
+          [],
+          `${visitor ?? "anon"} reads every book they see used`,
+        );
+        assert.deepEqual(
+          typedIn.filter((id) => !used.includes(id) && !theirOwn.includes(id)),
+          [],
+          `${visitor ?? "anon"} reads no other typed-in book`,
+        );
+      }
+      await as(AKI, "delete from reading_entries where id = $1", [record.id]);
+      await as(
+        AKI,
+        `update shop_private set scene = null, shelves = '[
+           {"id":"s1","name":"旅","isPublic":true},
+           {"id":"s2","name":"秘密の棚","isPublic":false}
+         ]' where shop_id = $1`,
+        [akiShop.id],
+      );
+    },
+  );
+
+  await check(
+    "the two questions about a book are the policy's, not the API's",
+    async () => {
+      for (const fn of [
+        "private.book_is_listed(uuid)",
+        "private.book_is_mine(uuid)",
+      ]) {
+        const [about] = (
+          await db.query<{
+            definer: boolean;
+            config: string[];
+            grantees: string[];
+          }>(
+            `select p.prosecdef as definer, p.proconfig as config,
+               array(
+                 select coalesce(r.rolname, 'PUBLIC')
+                 from aclexplode(p.proacl) a
+                 left join pg_roles r on r.oid = a.grantee
+                 where a.grantee <> p.proowner
+                 order by 1
+               ) as grantees
+             from pg_proc p where p.oid = $1::regprocedure`,
+            [fn],
+          )
+        ).rows;
+        // Run by anyone's reads through the policy, by nobody else; in the
+        // private schema, which the API does not serve.
+        assert.deepEqual(
+          about,
+          {
+            definer: true,
+            config: ['search_path=""'],
+            grantees: ["anon", "authenticated"],
+          },
+          fn,
+        );
+      }
+      // It only ever answers about the reader who asks. Ben's request to take
+      // down the book's cover (a report about it) is not a use of it.
+      const mine = (visitor: Visitor) =>
+        as<{ mine: boolean }>(
+          visitor,
+          "select private.book_is_mine($1) as mine",
+          [book.id],
+        );
+      assert.deepEqual(await mine(null), [{ mine: false }]);
+      assert.deepEqual(await mine(AKI), [{ mine: true }]);
+      assert.deepEqual(await mine(BEN), [{ mine: false }]);
+    },
+  );
+
   // 注釈モード: two staff members, whom the operator adds in the dashboard,
   // and Chi, who is not staff.
   const NOTE_STAFF = reader(20);
@@ -2930,11 +3541,13 @@ async function main() {
       );
       assert.equal(left.rows[0].n, 0, table);
     }
-    // The book Ben typed in stays in the catalog without an owner.
+    // The books Ben typed in stay in the catalog without an owner. The one
+    // he only scanned is used nowhere, so nobody reads it any more.
     const orphan = await db.query<{ n: number }>(
       "select count(*)::int as n from books where created_by is null",
     );
-    assert.equal(orphan.rows[0].n, 1);
+    assert.equal(orphan.rows[0].n, 2);
+    assert.deepEqual(await readersOf(scanned), [false, false, false, false]);
   });
 
   await check(
@@ -3029,6 +3642,114 @@ async function main() {
         (await earlier.query("select user_id from private.staff")).rows,
         [{ user_id: BEN }],
       );
+      await earlier.close();
+    },
+  );
+
+  await check(
+    "a database from before typed-in books were hidden keeps every shop, nine and shown book",
+    async () => {
+      const earlier = new PGlite();
+      await earlier.exec(supabase);
+      // Found by its name's end: the date in front may change before it merges.
+      const hiding = files.findIndex((file) =>
+        file.endsWith("_hide_registered_titles.sql"),
+      );
+      assert.ok(hiding > 0, "the migration that hides typed-in books");
+      for (const file of files.slice(0, hiding))
+        await earlier.exec(migrate(file));
+      const id = (n: number) =>
+        "00000000-0000-4000-8000-0000000003" + String(n).padStart(2, "0");
+      const [akiShop, benShop] = [id(1), id(2)];
+      // Each of Aki's books is shown one way; the catalog's to everyone.
+      const shown = {
+        shelf: id(11),
+        scene: id(12),
+        nine: id(13),
+        post: id(14),
+        record: id(15),
+        poster: id(16),
+        reading: id(17),
+        catalog: id(18),
+      };
+      // Aki's, kept to herself: on a private shelf, in a private note and on
+      // a draft poster. Ben's: only scanned, and on his closed shop's shelf.
+      const [privateShelf, note, draft] = [id(21), id(22), id(23)];
+      const [scannedOnly, closedShelf] = [id(24), id(25)];
+      const akis = [privateShelf, note, draft];
+      const bens = [scannedOnly, closedShelf];
+      const owner = (book: string) =>
+        book === shown.catalog ? null : bens.includes(book) ? BEN : AKI;
+      const books = [...Object.values(shown), ...akis, ...bens]
+        .map((book) => {
+          const by = owner(book);
+          return by
+            ? `('${book}', 'title', 'manual', '${by}')`
+            : `('${book}', 'title', 'ndl', null)`;
+        })
+        .join(", ");
+      await earlier.exec(`
+        insert into auth.users (id) values ('${AKI}'), ('${BEN}'), ('${CHI}');
+        insert into profiles (id, handle, name)
+          values ('${AKI}', 'aki', 'AKI'), ('${BEN}', 'ben', 'BEN'), ('${CHI}', 'chi', 'CHI');
+        insert into books (id, title, source, created_by) values ${books};
+        insert into shops (id, owner_id, name, is_open)
+          values ('${akiShop}', '${AKI}', '夜の本屋', true), ('${benShop}', '${BEN}', '準備中', false);
+        insert into shop_private (shop_id, shelves, scene) values
+          ('${akiShop}', '${JSON.stringify([
+            ...JSON.parse(shelvesWith(shown.shelf, true)),
+            ...JSON.parse(shelvesWith(privateShelf, false)),
+          ])}', '${sceneWith(shown.scene, true)}'),
+          ('${benShop}', '${shelvesWith(closedShelf, true)}', null);
+        insert into profile_nine (profile_id, position, book_id)
+          values ('${AKI}', 1, '${shown.nine}');
+        insert into posts (author_id, body, book_id, reading_mode) values
+          ('${AKI}', '感想', '${shown.post}', null), ('${AKI}', 'メモ', '${note}', 'solo');
+        insert into reading_entries (user_id, book_id, is_public)
+          values ('${AKI}', '${shown.record}', true);
+        insert into posters (author_id, template, pages, status) values
+          ('${AKI}', 'one_book', '${pages(shown.poster)}', 'published'),
+          ('${AKI}', 'one_book', '${pages(draft)}', 'draft');
+        insert into reading_sessions (user_id, book_id, mode)
+          values ('${AKI}', '${shown.reading}', 'together');
+      `);
+      const read = async (visitor: Visitor, sql: string) => {
+        await earlier.exec(
+          visitor
+            ? `set role authenticated; select set_config('request.jwt.claim.sub', '${visitor}', false);`
+            : "set role anon; select set_config('request.jwt.claim.sub', '', false);",
+        );
+        try {
+          return (await earlier.query<{ id: string }>(sql)).rows.map(
+            (row) => row.id,
+          );
+        } finally {
+          await earlier.exec("reset role");
+        }
+      };
+      const readable = (visitor: Visitor) =>
+        read(visitor, "select id from books order by id");
+      const counts = async () => [
+        (await read(null, "select id from shops")).length,
+        (await read(null, "select profile_id as id from profile_nine")).length,
+      ];
+      const catalog = () =>
+        earlier.query("select * from books order by id").then((r) => r.rows);
+      const before = {
+        counts: await counts(),
+        rows: await catalog(),
+        anon: await readable(null),
+      };
+      assert.equal(before.anon.length, 13, "every book, before");
+
+      for (const file of files.slice(hiding)) await earlier.exec(migrate(file));
+      assert.deepEqual(await counts(), before.counts);
+      assert.deepEqual(await catalog(), before.rows, "no row was rewritten");
+      const everyone = Object.values(shown).sort();
+      assert.deepEqual(await readable(null), everyone);
+      assert.deepEqual(await readable(CHI), everyone);
+      assert.deepEqual(await readable(AKI), [...everyone, ...akis].sort());
+      assert.deepEqual(await readable(BEN), [...everyone, ...bens].sort());
       await earlier.close();
     },
   );

@@ -28,6 +28,7 @@ import {
 } from "../src/lib/types";
 import { demoBooks, demoPosts } from "../src/lib/data";
 import { isDatabaseId } from "../src/lib/paths";
+import { sampleBookRowId } from "../src/lib/samples";
 
 // Two readers use the town against a real local Supabase (`supabase start`):
 // what one saves comes back after a reload, what is public reaches the other,
@@ -606,6 +607,19 @@ async function main() {
         shop?.shelves.map((shelf) => shelf.name),
         ["はじめの本棚"],
       );
+      // The books the visitor sees used come with them: the shelf's, and the
+      // nine's, read as Aki typed them in.
+      const titles = new Map(
+        town.books.map((entry) => [entry.id, entry.title]),
+      );
+      assert.deepEqual(
+        shop?.shelves[0].items.map((item) => titles.get(item.bookId)),
+        ["華氏451度"],
+      );
+      assert.deepEqual(
+        town.readers.find((entry) => entry.id === aki.id)?.lifeNine,
+        [bookId],
+      );
       assert.ok(town.posts.some((entry) => entry.id === open));
       assert.ok(!town.posts.some((entry) => entry.id === note));
       assert.ok(town.shops.some((entry) => entry.demo));
@@ -618,8 +632,18 @@ async function main() {
       const walk = createWalkStore(visitorWalkBackend(visitor), { onVisitor });
       walk.initialize();
       await walked(walk);
-      assert.ok(
-        walk.getSnapshot().scenes.some((entry) => entry.storeId === akiShopId),
+      const scene = walk
+        .getSnapshot()
+        .scenes.find((entry) => entry.storeId === akiShopId);
+      assert.ok(scene, "Aki's scene is on the visitor's walk");
+      // The walk takes its books from the town: each one in the scene is there.
+      const placed = scene.objects.flatMap((object) =>
+        object.kind === "book" && object.bookId ? [object.bookId] : [],
+      );
+      assert.ok(placed.length > 0, "the scene shows a book");
+      assert.deepEqual(
+        [...new Set(placed.map((id) => titles.get(id)))],
+        ["華氏451度"],
       );
       assert.equal(
         walk.update((state) => ({
@@ -931,6 +955,122 @@ async function main() {
     },
   );
 
+  await check(
+    "a book one reader only scanned reaches nobody else until it is shown",
+    async () => {
+      const store = await townOf(ben);
+      const scanned = store.actions.addBook({
+        title: "砂の器",
+        author: "松本清張",
+      })!;
+      assert.match(scanned, /^[0-9a-f-]{36}$/);
+      await settled(store);
+      /** The title as the API, Aki's town and a visitor's town give it. */
+      const seen = async () => {
+        const row = await newClient()
+          .from("books")
+          .select("title")
+          .eq("id", scanned);
+        assert.ifError(row.error);
+        const visitor = createTownStore(visitorTownBackend(newClient()));
+        visitor.initialize();
+        await settled(visitor);
+        const title = (town: { books: { id: string; title: string }[] }) =>
+          town.books.find((entry) => entry.id === scanned)?.title ?? null;
+        return [
+          row.data[0]?.title ?? null,
+          title((await townOf(aki)).getSnapshot()),
+          title(visitor.getSnapshot()),
+        ];
+      };
+      assert.deepEqual(await seen(), [null, null, null]);
+      const fromAki = await aki.client
+        .from("books")
+        .select("title")
+        .eq("id", scanned);
+      assert.ifError(fromAki.error);
+      assert.deepEqual(fromAki.data, []);
+      const own = (await townOf(ben)).getSnapshot();
+      assert.ok(own.library.includes(scanned));
+      assert.equal(
+        own.books.find((entry) => entry.id === scanned)?.title,
+        "砂の器",
+      );
+      // The questions the policy asks are not served by the API.
+      for (const client of [ben.client, newClient()])
+        assert.ok(
+          (
+            await (client as unknown as SupabaseClient)
+              .schema("private")
+              .rpc("book_is_mine", { b: scanned })
+          ).error,
+        );
+
+      // On the public shelf of Ben's new shop, which opens at once, it reaches
+      // everyone; moved to a private shelf, it is Ben's alone again.
+      const shop = await townOf(ben);
+      shop.actions.createShop("ベンの本屋", "", "sage");
+      const shelf = shop.getSnapshot().ownShop!.shelves[0].id;
+      assert.equal(shop.actions.addShelfBook(shelf, scanned, "face"), true);
+      await settled(shop);
+      assert.deepEqual(await seen(), ["砂の器", "砂の器", "砂の器"]);
+      shop.actions.updateShelf(shelf, { isPublic: false });
+      await settled(shop);
+      assert.deepEqual(await seen(), [null, null, null]);
+      const again = (await townOf(ben)).getSnapshot();
+      assert.deepEqual(
+        again.ownShop?.shelves[0].items.map((item) => item.bookId),
+        [scanned],
+      );
+      assert.equal(
+        again.books.find((entry) => entry.id === scanned)?.title,
+        "砂の器",
+      );
+    },
+  );
+
+  await check(
+    "a 見本's book is kept by a reader who cannot read its row",
+    async () => {
+      // demoBooks[0] is in Eri's post; this one is only ever wished for, so
+      // its row, written by the first reader, is not shown to anyone else.
+      const sample = demoBooks[1].id;
+      const first = await reader("fay");
+      const second = await reader("gus");
+      const wish = async (person: typeof first) => {
+        const store = await townOf(person);
+        store.actions.toggleWish(sample);
+        await settled(store);
+        assert.deepEqual((await townOf(person)).getSnapshot().wishlist, [
+          sample,
+        ]);
+      };
+      await wish(first);
+      const row = await second.client
+        .from("books")
+        .select("id")
+        .eq("id", sampleBookRowId(sample));
+      assert.ifError(row.error);
+      assert.deepEqual(row.data, []);
+      await wish(second);
+      // Signed out, the row is not read either, and the town still shows the
+      // 見本's book, from the app's own copy.
+      const anonymous = await newClient()
+        .from("books")
+        .select("id")
+        .eq("id", sampleBookRowId(sample));
+      assert.ifError(anonymous.error);
+      assert.deepEqual(anonymous.data, []);
+      const visitor = createTownStore(visitorTownBackend(newClient()));
+      visitor.initialize();
+      await settled(visitor);
+      assert.equal(
+        visitor.getSnapshot().books.find((entry) => entry.id === sample)?.title,
+        demoBooks[1].title,
+      );
+    },
+  );
+
   // Last, as its books fill the newest of the catalog.
   await check(
     "more than 1000 marks are read a page at a time, every one with its book",
@@ -953,6 +1093,16 @@ async function main() {
       assert.deepEqual([...town.wishlist].sort(), [...ids].sort());
       const known = new Set(town.books.map((entry) => entry.id));
       assert.ok(ids.every((id) => known.has(id)));
+      // They are the newest of the catalog, and only Mio's: nobody else's
+      // town reads them.
+      const others = (await townOf(aki)).getSnapshot();
+      assert.ok(!others.books.some((entry) => ids.includes(entry.id)));
+      const anonymous = await newClient()
+        .from("books")
+        .select("id")
+        .in("id", ids.slice(0, 100));
+      assert.ifError(anonymous.error);
+      assert.deepEqual(anonymous.data, []);
     },
   );
 
