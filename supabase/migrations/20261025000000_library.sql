@@ -55,8 +55,10 @@ create table public.library_entries (
   added_at timestamptz not null default now(),
   -- Taken out of the library: kept, with its shelves, so it can come back.
   removed_at timestamptz,
-  -- Brought back by a like and untouched since, so taking the like back
-  -- takes it out again.
+  -- Brought back by a like and given nothing since, so taking the like back
+  -- takes it out again. A mark written gives it something, and so does
+  -- reading it again; a wish, favorite or library mark taken off, like 読みたい
+  -- or ☆ taken back in the app, does not.
   like_restored boolean not null default false,
   -- Placed in the reader's own shop, or used in their own post, poster or
   -- 人生の9冊, at least once, taken out or not; never cleared
@@ -412,11 +414,14 @@ begin
            or e.like_restored);
   else
     -- The old app takes the finished mark off only when a book is read again
-    -- (startReading in src/lib/store.ts).
+    -- (startReading in src/lib/store.ts). Reading again gives a row a like
+    -- brought back a status and so ends like_restored, as startReading does
+    -- in the app; a wish taken off gives it nothing and leaves it.
     update public.library_entries e set
       wanted_at = case when r.kind = 'wish' then null else e.wanted_at end,
       status = case when r.kind = 'finished' then 'reading' else e.status end,
-      status_at = case when r.kind = 'finished' then now() else e.status_at end
+      status_at = case when r.kind = 'finished' then now() else e.status_at end,
+      like_restored = e.like_restored and r.kind <> 'finished'
     where e.user_id = r.user_id and e.book_id = r.book_id
       and ((r.kind = 'wish' and e.wanted_at is not null)
            or (r.kind = 'finished' and e.status = 'finished'));

@@ -95,8 +95,11 @@ export interface LibraryEntry {
   /** Taken out of the library: kept, with its status and shelves, so it can come back. */
   removedAt: string | null;
   /**
-   * Brought back by a like and untouched since, so taking the like back
+   * Brought back by a like and given nothing since, so taking the like back
    * takes it out again (4-10's way of writing likes, settled 2026-10-14).
+   * Taking 読みたい, ☆, a theme shelf, a status or 所有 back gives it
+   * nothing (putsOn), nor does an old app's wish, ☆ or library mark taken
+   * off (followMarks).
    */
   likeRestored: boolean;
   /**
@@ -454,6 +457,20 @@ const likeOnlyOp = (s: LibrarySet) =>
   Object.keys(s).every((key) => key === "liked");
 
 /**
+ * Puts something on the row: a status, 読みたい, 所有, ☆, registering, a
+ * theme shelf or a use. Taking one back (読みたい or ☆ off, off a theme
+ * shelf, a status or 所有 back to 未設定) puts nothing on, nor does a like.
+ */
+const putsOn = (s: LibrarySet) =>
+  (s.status ?? null) !== null ||
+  s.want === true ||
+  (s.owned ?? null) !== null ||
+  s.favorite === true ||
+  s.removed === false ||
+  s.addShelf !== undefined ||
+  s.meet === true;
+
+/**
  * 4-10's conditions 1 and 3 to 5, and the rest of condition 2 (no other
  * encounter stands, the memo review's 2章): nothing but a like keeps the row.
  * A row a like brought back counts nothing it held from before it was taken
@@ -544,7 +561,14 @@ export function applySet(
     // Status, 読みたい and shelves were kept with the row, so they come back.
     next.removedAt = null;
     next.likeRestored = likeOnlyOp(s);
-  } else if (!likeOnlyOp(s)) next.likeRestored = false;
+  } else if (putsOn(s)) {
+    // The reader gave a row a like brought back something of their own.
+    // Taking something back leaves it as the like brought it back, as an
+    // old app's wish or favorite mark taken off does (followMarks), so the
+    // order the reader takes a like, a 読みたい and a ☆ back in does not
+    // matter.
+    next.likeRestored = false;
+  }
 
   if (s.status !== undefined && s.status !== next.status) {
     next.status = s.status;
@@ -1613,9 +1637,11 @@ export function markChanges(
  * The trigger private.library_follows_marks, here: marks written by an app
  * that does not know the library, copied to its rows in the old app's
  * meaning, branch for branch as the SQL does. A mark written makes a row if
- * there is none (from legacy), and brings back one taken out (library, wish,
- * ☆). A wish taken off clears 読みたい; finished taken off happens only when
- * the old app reads a book again (startReading), so it becomes 読書中. A
+ * there is none (from legacy), brings back one taken out (library, wish,
+ * ☆), and ends likeRestored. A wish taken off clears 読みたい; finished taken
+ * off happens only when the old app reads a book again (startReading), so it
+ * becomes 読書中 and, as in the app, ends likeRestored; no other mark taken
+ * off does, as taking something back gives a row nothing (putsOn). A
  * library, wish or ☆ taken off then takes out a row nothing keeps; a row
  * once used in the shop, a post, a poster or the nine is kept (everUsed,
  * N19), though the shop and those are not looked at themselves. `keeps`
@@ -1669,6 +1695,7 @@ export function followMarks(
           wantedAt: kind === "wish" ? null : e.wantedAt,
           status: kind === "finished" ? "reading" : e.status,
           statusAt: kind === "finished" ? now : e.statusAt,
+          likeRestored: e.likeRestored && kind !== "finished",
         }),
       );
     if (!brings || e.removedAt !== null) continue;
