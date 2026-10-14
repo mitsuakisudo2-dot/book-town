@@ -86,7 +86,10 @@ create table public.library_shelf_books (
   added_at timestamptz not null default now(),
   -- Only for books moved by hand; the others go by added_at.
   position text collate "C" check (position ~ '^[0-9A-Za-z]{1,64}$'),
-  primary key (shelf_id, book_id),
+  -- The reader is in the key: a key of the shelf and the book alone would
+  -- be checked before the foreign keys, and someone who knows a shelf's id
+  -- could ask, book by book, whether it is on that shelf.
+  primary key (user_id, shelf_id, book_id),
   -- Only the reader's own shelf and a book of their own library can be
   -- joined. The cascades run only when an account goes: the app deletes
   -- neither shelves nor rows.
@@ -126,8 +129,8 @@ create table public.book_encounters (
   -- deleted. Pressed again, the same row comes back.
   undone_at timestamptz,
   created_at timestamptz not null default now(),
-  check (via <> 'book' or kind = 'want'),
-  check (via <> 'post' or kind in ('like', 'want'))
+  constraint book_encounters_book_page_kind check (via <> 'book' or kind = 'want'),
+  constraint book_encounters_post_kind check (via <> 'post' or kind in ('like', 'want'))
 );
 -- One of each press. A POP is one per shop and book, whichever way its
 -- place is named; a post or shop gone leaves its encounters standing alone.
@@ -155,12 +158,24 @@ create index book_encounters_other_reader on public.book_encounters (other_reade
 -- is no encounter. A post's encounter meets the post's own book (a reply's,
 -- never its parent's); a POP's names its shop and its place; a book page's
 -- names neither. Whose it was is copied from the post or the shop.
+-- One already saved, sent again after its answer was lost, is left to the
+-- insert's conflict on its id, whatever has become of its post or shop
+-- since: refused, it would take every unsent change with it. Only the
+-- reader's own rows are seen, so this tells nothing of anyone else's. The
+-- row is held until the insert is done, so it cannot be deleted in between
+-- and let one in unchecked.
 create function private.check_book_encounter() returns trigger
 language plpgsql set search_path = '' as $$
 declare
   owner uuid;
   met uuid;
 begin
+  perform 1 from public.book_encounters c
+  where c.id = new.id and c.user_id = new.user_id
+  for key share;
+  if found then
+    return new;
+  end if;
   if new.via = 'post' then
     if new.post_id is null or new.shop_id is not null
       or new.placement_key is not null then

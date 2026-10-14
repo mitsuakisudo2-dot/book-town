@@ -8,10 +8,12 @@ import {
   ENCOUNTER_MEMO_MAX_LENGTH,
   ENTRY_SOURCES,
   type LibraryEntry,
+  type MarkKind,
 } from "../src/lib/library";
 import { sampleBookRowId } from "../src/lib/samples";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
 import { pagePattern } from "../src/lib/supabase/site-notes";
+import { emptyTown, planWrites } from "../src/lib/town-remote";
 import {
   entryOf,
   type EntryPart,
@@ -3805,7 +3807,7 @@ async function main() {
       user,
       "library_shelf_books",
       SHELF_BOOK_COLUMNS,
-      "shelf_id, book_id",
+      "user_id, shelf_id, book_id",
       [
         {
           shelf_id: shelfId,
@@ -3838,6 +3840,14 @@ async function main() {
   });
   const meet = (row: Record<string, unknown>, visitor = CHI) =>
     insertRows(visitor, "book_encounters", ENCOUNTER_COLUMNS, "id", [row]);
+  /** The same encounter, inserted without ignoring duplicates. */
+  const meetPlainly = (row: Record<string, unknown>, visitor = CHI) =>
+    as(
+      visitor,
+      `insert into book_encounters (${ENCOUNTER_COLUMNS})
+       select ${ENCOUNTER_COLUMNS} from json_populate_record(null::book_encounters, $1)`,
+      [JSON.stringify(row)],
+    );
   /** The database's error for a statement, which must be refused. */
   const refusal = async (run: () => Promise<unknown>) => {
     try {
@@ -3926,7 +3936,7 @@ async function main() {
         [
           "library_shelf_books",
           SHELF_BOOK_COLUMNS,
-          "shelf_id, book_id",
+          "user_id, shelf_id, book_id",
           {
             shelf_id: chiShelf,
             user_id: CHI,
@@ -3991,6 +4001,48 @@ async function main() {
           `${visitor} ${bookId}`,
         );
       assert.deepEqual(await everything(), before);
+    },
+  );
+
+  await check(
+    "a shelf tells nobody else which books are on it, whatever they send to it",
+    async () => {
+      // Aki's shelf, whose id Chi has come to know (an address shared, as
+      // the review doc's ?shelf= would be): one book on it, one not.
+      const on = await newBook(AKI);
+      const off = await newBook(AKI);
+      await putEntry(AKI, on);
+      await putEntry(AKI, off);
+      const shelf = await putShelf({ user_id: AKI, name: "誰にも見せない棚" });
+      await shelve(shelf, on, AKI);
+      const akis = () =>
+        as(AKI, "select * from library_shelf_books where shelf_id = $1", [
+          shelf,
+        ]);
+      const before = await akis();
+      // Chi puts each on it under her own name: the plain insert, and the
+      // API's upserts, ignoring duplicates and merging, by either key.
+      const insert = `insert into library_shelf_books (${SHELF_BOOK_COLUMNS})
+        values ($1, $2, $3, now(), null)`;
+      const statements = [
+        insert,
+        ...["shelf_id, book_id", "user_id, shelf_id, book_id"].flatMap(
+          (key) => [
+            `${insert} on conflict (${key}) do nothing returning 1`,
+            `${insert} on conflict (${key}) do update set position = excluded.position returning 1`,
+          ],
+        ),
+      ];
+      // Whether or not the books are in her own library.
+      for (const inHers of [false, true]) {
+        if (inHers) for (const bookId of [on, off]) await putEntry(CHI, bookId);
+        for (const sql of statements) {
+          const answer = (bookId: string) =>
+            refusal(() => as(CHI, sql, [shelf, CHI, bookId]));
+          assert.deepEqual(await answer(on), await answer(off), sql);
+        }
+      }
+      assert.deepEqual(await akis(), before);
     },
   );
 
@@ -4234,7 +4286,7 @@ async function main() {
         CHI,
         "library_shelf_books",
         SHELF_BOOK_COLUMNS,
-        "shelf_id, book_id",
+        "user_id, shelf_id, book_id",
         [
           {
             shelf_id: edge,
@@ -4360,7 +4412,7 @@ async function main() {
       await refused(
         CHI,
         `insert into library_shelf_books (${SHELF_BOOK_COLUMNS}) values ($1, $2, $3, now(), null)
-         on conflict (shelf_id, book_id) do update
+         on conflict (user_id, shelf_id, book_id) do update
            set shelf_id = excluded.shelf_id, user_id = excluded.user_id,
              book_id = excluded.book_id, added_at = excluded.added_at,
              position = excluded.position`,
@@ -4369,6 +4421,40 @@ async function main() {
       );
     },
   );
+
+  /** Chi's row of `b` after `change`, as a shared case expects it. */
+  const followed = async (
+    b: string,
+    expected: EntryPart | null | "same",
+    change: () => Promise<unknown>,
+  ) => {
+    const before = await rowsOf(CHI, b);
+    const clock = async () =>
+      (await db.query<{ at: Date }>("select clock_timestamp() as at")).rows[0]
+        .at;
+    const start = await clock();
+    await change();
+    const end = await clock();
+    const after = await rowsOf(CHI, b);
+    if (expected === "same") {
+      assert.deepEqual(after, before, "not even updated_at");
+      return;
+    }
+    if (expected === null) {
+      assert.deepEqual(after, []);
+      return;
+    }
+    const row = entryFrom(after[0]);
+    // "@now" is the database's time, between the two readings of the clock.
+    const expect = { ...expected };
+    for (const field of ["removedAt", "statusAt"] as const)
+      if (expect[field] === "@now") {
+        const at = Date.parse(row[field] ?? "");
+        assert.ok(at >= start.getTime() && at <= end.getTime(), field);
+        expect[field] = row[field];
+      }
+    assert.deepEqual(row, entryOf(b, expect));
+  };
 
   for (const c of LIBRARY_CASES.follow)
     await check(`book_marks_follow: ${c.name}`, async () => {
@@ -4401,34 +4487,61 @@ async function main() {
             }),
           );
       });
-      const before = await rowsOf(CHI, b);
-      const clock = async () =>
-        (await db.query<{ at: Date }>("select clock_timestamp() as at")).rows[0]
-          .at;
-      const start = await clock();
       // The change, by an app that does not know the library.
-      if (c.change.op === "insert") await mark(c.change.kind, b, c.change.at);
-      else await unmark(c.change.kind, b);
-      const end = await clock();
-      const after = await rowsOf(CHI, b);
-      if (c.expect === "same") {
-        assert.deepEqual(after, before, "not even updated_at");
-        return;
-      }
-      if (c.expect === null) {
-        assert.deepEqual(after, []);
-        return;
-      }
-      const row = entryFrom(after[0]);
-      // "@now" is the database's time, between the two readings of the clock.
-      const expect = { ...c.expect };
-      for (const field of ["removedAt", "statusAt"] as const)
-        if (expect[field] === "@now") {
-          const at = Date.parse(row[field] ?? "");
-          assert.ok(at >= start.getTime() && at <= end.getTime(), field);
-          expect[field] = row[field];
-        }
-      assert.deepEqual(row, entryOf(b, expect));
+      await followed(b, c.expect, () =>
+        c.change.op === "insert"
+          ? mark(c.change.kind, b, c.change.at)
+          : unmark(c.change.kind, b),
+      );
+    });
+
+  // One save of an old app changing one book's marks, sent as it sends it:
+  // planWrites deletes each mark taken off, one by one, and then writes
+  // those put on in one insert ignoring duplicates (applyWrite in
+  // src/lib/supabase/town-backend.ts). The marks carry no date of their own.
+  for (const c of LIBRARY_CASES.save)
+    await check(`book_marks_follow, one save: ${c.name}`, async () => {
+      const b = await newBook(CHI, "印の本");
+      await withLibraryHeader(async () => {
+        if (c.entry) await putEntry(CHI, b, c.entry);
+        for (const kind of c.marks)
+          await mark(kind, b, "2026-08-01T00:00:00.000Z");
+      });
+      const listsOf = (kinds: MarkKind[]) => ({
+        wishlist: kinds.includes("wish") ? [b] : [],
+        favorites: kinds.includes("favorite") ? [b] : [],
+        library: kinds.includes("library") ? [b] : [],
+        finishedBooks: kinds.includes("finished") ? [b] : [],
+      });
+      const town = emptyTown();
+      const writes = planWrites(
+        { ...town, ...listsOf(c.marks) },
+        { ...town, ...listsOf(c.after) },
+        { userId: CHI, shopId: deviceId() },
+      );
+      assert.deepEqual(
+        writes.map((write) => write.kind === "remove" || write.kind === "add"),
+        writes.map(() => true),
+      );
+      await followed(b, c.expect, async () => {
+        for (const write of writes)
+          if (write.kind === "remove")
+            for (const row of write.rows)
+              await as(
+                CHI,
+                "delete from book_marks where user_id = $1 and book_id = $2 and kind = $3",
+                [row.user_id, row.book_id, row.kind],
+              );
+          else if (write.kind === "add")
+            await as(
+              CHI,
+              `insert into book_marks (user_id, book_id, kind)
+               select user_id, book_id, kind
+               from json_populate_recordset(null::book_marks, $1)
+               on conflict (user_id, book_id, kind) do nothing`,
+              [JSON.stringify(write.rows)],
+            );
+      });
     });
 
   await check(
@@ -4683,6 +4796,34 @@ async function main() {
     "insert into shops (owner_id, name, is_open) values ($1, '昼の本屋', true) returning id",
     [CHI],
   );
+  /** Why each case refused is refused, by its number. */
+  const violates = (constraint: string) => ({
+    code: "23514",
+    message: `new row for relation "book_encounters" violates check constraint "${constraint}"`,
+  });
+  const own = {
+    code: "23514",
+    message: "a reader's own post or shop is no encounter",
+  };
+  const ENCOUNTER_REFUSALS: Record<string, { code: string; message: string }> =
+    {
+      E3: violates("book_encounters_post_kind"),
+      E4: own,
+      E5: { code: "23503", message: "the post met is not found" },
+      E6: {
+        code: "23514",
+        message: "an encounter on a post meets the post's own book",
+      },
+      E10: own,
+      E11: { code: "23503", message: "the shop met is not found" },
+      E13: violates("book_encounters_placement_key_check"),
+      E14: {
+        code: "23514",
+        message: "an encounter on a POP names its shop and place",
+      },
+      E16: violates("book_encounters_book_page_kind"),
+      E18: violates("book_encounters_memo_check"),
+    };
   for (const c of LIBRARY_CASES.encounter)
     await check(`book_encounters: ${c.name}`, async () => {
       const owner = c.owner === "me" ? CHI : AKI;
@@ -4727,9 +4868,17 @@ async function main() {
           () => null,
           (caught: Error) => caught,
         );
-      if (error)
-        assert.match(error.message, /encounter|met is not found/, c.name);
       assert.equal(error === null, c.accept, c.name);
+      // Refused for the case's own reason, by the insert check's words or
+      // the constraint's name.
+      if (error) {
+        const { code, message } = error as Error & { code?: string };
+        assert.deepEqual(
+          { code, message },
+          ENCOUNTER_REFUSALS[c.name.split(" ")[0]],
+          c.name,
+        );
+      }
       if (error === null)
         assert.deepEqual(
           await as(
@@ -4819,6 +4968,101 @@ async function main() {
         }),
       ])
         assert.equal(await meet(row), 1);
+    },
+  );
+
+  await check(
+    "an encounter sent again is taken as saved, even once its post or shop can no longer be read",
+    async () => {
+      // Sent again after an answer was lost (src/lib/supabase/sync.ts):
+      // inserted ignoring duplicates by its id, it adds nothing, whatever
+      // has become of its post or shop since. A refusal here would take
+      // every unsent change with it.
+      const b = await newBook(AKI);
+      const post = await postAbout(AKI, b);
+      const liked = encounterRow({
+        book_id: b,
+        kind: "like",
+        via: "post",
+        post_id: post,
+        memo: "炎の色",
+        memo_at: "2026-09-02T00:00:00.000Z",
+      });
+      const loved = encounterRow({
+        book_id: b,
+        kind: "love",
+        via: "pop",
+        shop_id: akiShop.id,
+        placement_key: "s1:i7",
+      });
+      const sent = [liked, loved];
+      for (const row of sent) assert.equal(await meet(row), 1);
+      const saved = () =>
+        as(CHI, "select * from book_encounters where id = any ($1::uuid[])", [
+          `{${liked.id},${loved.id}}`,
+        ]);
+      const stored = await saved();
+      const again = async (why: string) => {
+        for (const row of sent) assert.equal(await meet(row), 0, why);
+        // Sent with other contents, the stored row is what stays.
+        assert.equal(
+          await meet({ ...liked, post_id: deviceId(), other_reader_id: BEN }),
+          0,
+          why,
+        );
+      };
+      await again("seen");
+      await as(
+        CHI,
+        "insert into blocks (blocker_id, blocked_id) values ($1, $2)",
+        [CHI, AKI],
+      );
+      try {
+        await again("Aki blocked");
+      } finally {
+        await as(
+          CHI,
+          "delete from blocks where blocker_id = $1 and blocked_id = $2",
+          [CHI, AKI],
+        );
+      }
+      await hide("post", post);
+      await again("hidden by the operator");
+      await operator(
+        `delete from moderation_hides where target_id = '${post}'`,
+      );
+      await operator(
+        `update shops set is_open = false where id = '${akiShop.id}'`,
+      );
+      try {
+        await again("the shop closed");
+      } finally {
+        await operator(
+          `update shops set is_open = true where id = '${akiShop.id}'`,
+        );
+      }
+      assert.deepEqual(await saved(), stored);
+      // The post deleted: the like stays with its memo, the post's link
+      // gone, and sending it again (still naming the post) adds nothing.
+      await as(AKI, "delete from posts where id = $1", [post]);
+      const [kept] = await as(
+        CHI,
+        "select post_id, other_reader_id, memo from book_encounters where id = $1",
+        [liked.id],
+      );
+      assert.deepEqual(kept, {
+        post_id: null,
+        other_reader_id: AKI,
+        memo: "炎の色",
+      });
+      await again("the post deleted");
+      // Sent plainly, it is refused as a duplicate, never as a post not
+      // found; a new encounter on the post gone is refused as before.
+      assert.equal((await refusal(() => meetPlainly(liked)))?.code, "23505");
+      assert.deepEqual(
+        await refusal(() => meet({ ...liked, id: deviceId() })),
+        { message: "the post met is not found", code: "23503" },
+      );
     },
   );
 

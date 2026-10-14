@@ -1240,12 +1240,13 @@ async function main() {
       for (const book_id of books.slice(0, 2))
         assert.ifError(
           (
-            await noa.client
-              .from("library_shelf_books")
-              .upsert(
-                { shelf_id: shelf, user_id: noa.id, book_id },
-                { onConflict: "shelf_id,book_id", ignoreDuplicates: true },
-              )
+            await noa.client.from("library_shelf_books").upsert(
+              { shelf_id: shelf, user_id: noa.id, book_id },
+              {
+                onConflict: "user_id,shelf_id,book_id",
+                ignoreDuplicates: true,
+              },
+            )
           ).error,
         );
       const off = await noa.client
@@ -1257,15 +1258,22 @@ async function main() {
         .select("book_id");
       assert.ifError(off.error);
       assert.equal(off.data.length, 1);
-      // Noa likes Aki's post: whose it was is the post's, whatever is sent,
-      // and only the memo and its taking back change afterwards.
+      // Noa likes Aki's post (a new one: the first was deleted above): whose
+      // it was is the post's, whatever is sent, and only the memo and its
+      // taking back change afterwards.
+      const post = await aki.client
+        .from("posts")
+        .insert({ author_id: aki.id, body: "炎の色", book_id: bookId })
+        .select("id")
+        .single();
+      assert.ifError(post.error);
       const met = {
         id: crypto.randomUUID(),
         user_id: noa.id,
         book_id: bookId,
         kind: "like",
         via: "post",
-        post_id: postId,
+        post_id: post.data.id,
         other_reader_id: noa.id,
         memo: "炎の色",
         memo_at: new Date().toISOString(),
@@ -1304,6 +1312,28 @@ async function main() {
       });
       assert.equal(nowhere.error?.code, "23503");
       assert.equal(nowhere.error?.message, "the post met is not found");
+      // Aki deletes her post: the like stays, and sent again (an answer
+      // lost) it is taken as saved.
+      assert.ifError(
+        (await aki.client.from("posts").delete().eq("id", post.data.id)).error,
+      );
+      const again = await noa.client
+        .from("book_encounters")
+        .upsert(met, { onConflict: "id", ignoreDuplicates: true })
+        .select("post_id, memo");
+      assert.ifError(again.error);
+      assert.deepEqual(again.data, []);
+      const left = await noa.client
+        .from("book_encounters")
+        .select("post_id, other_reader_id, memo")
+        .eq("id", met.id)
+        .single();
+      assert.ifError(left.error);
+      assert.deepEqual(left.data, {
+        post_id: null,
+        other_reader_id: aki.id,
+        memo: "炎の色が忘れられない",
+      });
       // Nobody else reads or changes any of it: not Aki, whose post it met,
       // nor Ben, nor anyone signed out.
       for (const table of [
