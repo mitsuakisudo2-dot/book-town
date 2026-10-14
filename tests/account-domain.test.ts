@@ -6,6 +6,7 @@ import {
   failureMessages,
   linkFailure,
   normalizeCode,
+  profileDraftIssue,
   profileDraftProblem,
   type AccountBackend,
   type AccountFailure,
@@ -189,6 +190,26 @@ async function main() {
       assert.match(
         profileDraftProblem({ ...draft, ageConfirmed: false }) ?? "",
         /13歳以上/,
+      );
+      // Each problem names its field, for a touch screen to point to it
+      // without raising the keyboard; the ID is asked about first.
+      assert.equal(profileDraftIssue(draft), null);
+      assert.equal(
+        profileDraftIssue({ ...draft, handle: "ab" })?.field,
+        "handle",
+      );
+      assert.equal(profileDraftIssue({ ...draft, name: "  " })?.field, "name");
+      assert.equal(
+        profileDraftIssue({ ...draft, name: "名".repeat(41) })?.field,
+        "name",
+      );
+      assert.equal(
+        profileDraftIssue({ ...draft, ageConfirmed: false })?.field,
+        "age",
+      );
+      assert.equal(
+        profileDraftIssue({ ...draft, handle: "", name: "" })?.field,
+        "handle",
       );
       assert.equal(
         (await store.actions.createProfile({ ...draft, ageConfirmed: false }))
