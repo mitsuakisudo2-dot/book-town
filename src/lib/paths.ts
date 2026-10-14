@@ -32,6 +32,10 @@ export const searchPath = (query: string): string =>
 export const posterPath = (id: string): string =>
   "/posters/?id=" + encodeURIComponent(id);
 
+/** A post's own page (便り), with its replies; every post shares one page. */
+export const postPath = (id: string): string =>
+  "/post/?id=" + encodeURIComponent(id);
+
 /** Making a poster: about a book (?book=), or the viewer's own changed (?id=). */
 export function posterNewPath(
   options: { bookId?: string; posterId?: string } = {},

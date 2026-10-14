@@ -8,6 +8,7 @@ import {
   type TownState,
 } from "./types";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
+import { hasFinished } from "./reading";
 
 const time = (post: Post) => Date.parse(post.createdAt) || 0;
 const newestFirst = (a: Post, b: Post) => time(b) - time(a);
@@ -22,18 +23,35 @@ const isPublic = (post: Post) => post.readingMode !== "solo";
  */
 export type SpoilerView = "open" | "folded" | "left_out";
 
+/** The book a post is about, for its spoilers: its own, else the post it answers. */
+export function spoilerBookOf(
+  state: Pick<TownState, "posts">,
+  post: Post,
+): string | null {
+  if (post.bookId) return post.bookId;
+  if (!post.parentId) return null;
+  return (
+    state.posts.find((entry) => entry.id === post.parentId)?.bookId ?? null
+  );
+}
+
 /**
  * Decides spoilers, by the writer's mark, the readers' 「ネタバレでは？」 and
- * the reader's 「ネタバレの表示」. A post its writer marked is folded from the
- * start, always; one three readers asked about (folded) is folded unless the
- * reader shows everything; one the reader asked about is folded for them. A
- * reader who chose 出さない gets none of these, except their own posts.
+ * the reader's 「ネタバレの表示」. A reader who finished the book reads what
+ * is said of it as it is: the writer's mark and three readers' folds open
+ * for them, whatever they chose (their own 「ネタバレでは？」 still folds it).
+ * For everyone else, a post its writer marked is folded from the start,
+ * always; one three readers asked about (folded) is folded unless the reader
+ * shows everything; one the reader asked about is folded for them. A reader
+ * who chose 出さない gets none of these, except their own posts.
  */
 export function spoilerViewOf(state: TownState, post: Post): SpoilerView {
   const marked = post.spoiler;
   const askedByMe = state.spoilerReports.includes(post.id);
   const possible = post.folded === true || askedByMe;
   if (!marked && !possible) return "open";
+  if (!askedByMe && hasFinished(state, spoilerBookOf(state, post)))
+    return "open";
   const mode = state.settings.spoilerDisplay;
   if (mode === "leave_out" && post.authorId !== ME_ID) return "left_out";
   if (marked || askedByMe) return "folded";
