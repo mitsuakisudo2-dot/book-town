@@ -506,6 +506,64 @@
       }
     }
   ],
+  "save": [
+    {
+      "name": "S1 a wish taken off and finished put on in one save takes the book out, finished",
+      "entry": {
+        "source": "legacy",
+        "wantedAt": "2026-09-01T00:00:00.000Z"
+      },
+      "marks": ["wish"],
+      "after": ["finished"],
+      "expect": {
+        "source": "legacy",
+        "status": "finished",
+        "statusAt": "@now",
+        "removedAt": "@now"
+      }
+    },
+    {
+      "name": "S2 a library mark taken off and finished put on in one save takes the book out, finished",
+      "entry": {
+        "source": "legacy"
+      },
+      "marks": ["library"],
+      "after": ["finished"],
+      "expect": {
+        "source": "legacy",
+        "status": "finished",
+        "statusAt": "@now",
+        "removedAt": "@now"
+      }
+    },
+    {
+      "name": "S3 a wish taken off and a favorite put on in one save leaves the book in",
+      "entry": {
+        "source": "legacy",
+        "wantedAt": "2026-09-01T00:00:00.000Z"
+      },
+      "marks": ["wish"],
+      "after": ["favorite"],
+      "expect": {
+        "source": "legacy"
+      }
+    },
+    {
+      "name": "S4 finished put on with the wish kept changes nothing but the status",
+      "entry": {
+        "source": "legacy",
+        "wantedAt": "2026-09-01T00:00:00.000Z"
+      },
+      "marks": ["wish"],
+      "after": ["wish", "finished"],
+      "expect": {
+        "source": "legacy",
+        "wantedAt": "2026-09-01T00:00:00.000Z",
+        "status": "finished",
+        "statusAt": "@now"
+      }
+    }
+  ],
   "backfill": [
     {
       "name": "B1 a library mark",

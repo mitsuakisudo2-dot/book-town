@@ -11,8 +11,9 @@ import type {
 } from "../../src/lib/library";
 
 // The library's shared cases (library-cases.json), typed. test:library runs
-// them against src/lib/library.ts; test:db replays the follow cases against
-// the trigger private.library_follows_marks, so both say the same thing.
+// them against src/lib/library.ts; test:db replays the follow and save cases
+// against the trigger private.library_follows_marks, so both say the same
+// thing.
 //
 // A row is written only by what differs from a row scanned at the start of
 // 2026 with nothing set (ENTRY_DEFAULTS), and a context only by what differs
@@ -39,6 +40,21 @@ export interface FollowCase {
    * The row after: "same" (unchanged), null (no row), or a row whose
    * removedAt or statusAt may be "@now", the database's time.
    */
+  expect: EntryPart | null | "same";
+}
+
+/**
+ * One save of an app that does not know the library, changing one book's
+ * marks: every mark taken off is deleted first, then every mark put on is
+ * written (planWrites in src/lib/town-remote.ts), each written mark dated by
+ * the database. The row after, as in FollowCase.
+ */
+export interface SaveCase {
+  name: string;
+  entry: EntryPart | null;
+  /** The book's marks before the save, and after it. */
+  marks: MarkKind[];
+  after: MarkKind[];
   expect: EntryPart | null | "same";
 }
 
@@ -101,6 +117,7 @@ export interface ApplyCase {
 
 export interface LibraryCases {
   follow: FollowCase[];
+  save: SaveCase[];
   backfill: BackfillCase[];
   encounter: EncounterCase[];
   apply: ApplyCase[];

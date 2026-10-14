@@ -2305,6 +2305,42 @@ for (const c of LIBRARY_CASES.follow)
     else assert.deepEqual(out.b, entryOf("b", c.expect, DB_NOW));
   });
 
+for (const c of LIBRARY_CASES.save)
+  check(`markChanges and followMarks: ${c.name}`, () => {
+    const lists = (kinds: MarkKind[]): MarkLists => ({
+      wishlist: kinds.includes("wish") ? ["b"] : [],
+      favorites: kinds.includes("favorite") ? ["b"] : [],
+      library: kinds.includes("library") ? ["b"] : [],
+      finishedBooks: kinds.includes("finished") ? ["b"] : [],
+    });
+    // The marks written are dated by the database, as the old app sends none.
+    const changes = markChanges(lists(c.marks), lists(c.after), DB_NOW);
+    // In the order the old app sends them: every mark taken off, then every
+    // mark put on.
+    const ops = changes.map((change) => change.op);
+    assert.deepEqual(ops, [
+      ...ops.filter((op) => op === "delete"),
+      ...ops.filter((op) => op === "insert"),
+    ]);
+    const entries: Record<string, LibraryEntry> =
+      c.entry === null ? {} : { b: entryOf("b", c.entry) };
+    const out = followMarks(
+      entries,
+      changes,
+      () => ({
+        library: c.after.includes("library"),
+        favorite: c.after.includes("favorite"),
+        liveShelf: false,
+        record: false,
+        memo: false,
+      }),
+      DB_NOW,
+    );
+    if (c.expect === "same") assert.equal(out, entries);
+    else if (c.expect === null) assert.equal(out.b, undefined);
+    else assert.deepEqual(out.b, entryOf("b", c.expect, DB_NOW));
+  });
+
 check(
   "6-2 the demo's lists changed by an app without the library reach the rows as marks",
   () => {
@@ -2321,10 +2357,11 @@ check(
       finishedBooks: ["a"],
     };
     const changes = markChanges(before, after, AT);
+    // Taken off first, as an old app saves them.
     assert.deepEqual(changes, [
+      { op: "delete", kind: "wish", bookId: "a", at: AT },
       { op: "insert", kind: "favorite", bookId: "b", at: AT },
       { op: "insert", kind: "finished", bookId: "a", at: AT },
-      { op: "delete", kind: "wish", bookId: "a", at: AT },
     ]);
     const entries = rows(
       entryOf("a", { source: "legacy", wantedAt: BEFORE }),
@@ -2342,9 +2379,15 @@ check(
       }),
       DB_NOW,
     );
+    // Nothing kept a once its wish was off; finished does not bring it back.
     assert.deepEqual(
       out.a,
-      entryOf("a", { source: "legacy", status: "finished", statusAt: AT }),
+      entryOf("a", {
+        source: "legacy",
+        status: "finished",
+        statusAt: AT,
+        removedAt: DB_NOW,
+      }),
     );
     assert.deepEqual(out.b, entryOf("b", { source: "legacy", addedAt: AT }));
     assert.equal(out.c, entries.c);
