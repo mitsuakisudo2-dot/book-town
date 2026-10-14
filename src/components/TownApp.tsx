@@ -84,6 +84,15 @@ import { PosterEditor } from "./PosterEditor";
 import { PosterScreen } from "./PosterScreen";
 import "./poster-screen.css";
 import { useLayerReturn } from "../lib/back-layer";
+import { PostLayer, PostPageView } from "./letter/PostPage";
+import {
+  closePost,
+  isPostOpen,
+  openPost,
+  postOfLayer,
+  usePostLayer,
+} from "./letter/post-layer";
+import { useAnnouncement } from "../lib/live-region";
 
 type View =
   | "town"
@@ -98,7 +107,8 @@ type View =
   | "profile"
   | "wishlist"
   | "poster"
-  | "poster-new";
+  | "poster-new"
+  | "post";
 type Shared = {
   state: TownState;
   actions: TownActions;
@@ -132,7 +142,8 @@ function sectionOf(
   if (view === "walk") return "walk";
   // A shop's page is part of walking the shops, wherever it was opened from.
   if (view === "shop") return "walk";
-  if (view === "town" || view === "timeline") return "home";
+  // A 便り's page opened at its own address is read as part of home.
+  if (view === "town" || view === "timeline" || view === "post") return "home";
   if (view === "search") return "search";
   if (view === "reading") return "reading";
   if (view === "editor" || view === "wishlist") return "profile";
@@ -215,6 +226,26 @@ export default function TownApp({
   // them, here on every page (library-journal.ts).
   useJournalSender(journalTown, notify);
   const shared = { state, actions, notify };
+  // A 便り's page is open over this screen: what is beneath it waits.
+  const postLayer = usePostLayer();
+  const layered = postLayer !== null && view !== "post";
+  // Back on a step that had a 便り's page open (left for a page linked from
+  // it), the page opens again, once the town is read.
+  useLayerReturn((name) => {
+    const id = postOfLayer(name);
+    if (
+      view === "post" ||
+      !id ||
+      isPostOpen(id) ||
+      !state.posts.some((post) => post.id === id)
+    )
+      return false;
+    openPost(id);
+    return true;
+  }, persistence !== "loading");
+  // A page of the town does not carry another page's layer.
+  useEffect(() => () => closePost(), []);
+  const said = useAnnouncement();
   // Enter in the top search opens the search page for what was typed: books,
   // readers and shops alike. On the street, what is typed also narrows the
   // shops as it is typed, and stays there for coming back.
@@ -261,7 +292,7 @@ export default function TownApp({
     link.section === "home" ? homeHref : link.href;
   return (
     <div className={"town-shell" + (view === "walk" ? " is-walk" : "")}>
-      <aside className="town-sidebar">
+      <aside className="town-sidebar" inert={layered}>
         <Link className="brand" href={homeHref}>
           <span className="brand-mark">
             <Icon name="store" size={31} />
@@ -323,7 +354,7 @@ export default function TownApp({
           </Link>
         )}
       </aside>
-      <div className="town-workspace">
+      <div className="town-workspace" inert={layered}>
         <header className="town-topbar">
           <Link href={homeHref} className="mobile-brand">
             <Icon name="store" size={24} />
@@ -424,6 +455,8 @@ export default function TownApp({
             <ProfileView {...shared} readerId={selectedId || "me"} />
           ) : view === "poster" ? (
             <PosterScreen {...shared} posterId={selectedId || ""} />
+          ) : view === "post" ? (
+            <PostPageView {...shared} postId={selectedId || ""} />
           ) : view === "poster-new" ? (
             <PosterEditor
               {...shared}
@@ -443,6 +476,7 @@ export default function TownApp({
       <nav
         className="town-bottom-nav"
         aria-label="スマートフォンナビゲーション"
+        inert={layered}
       >
         {links.map((l) => (
           <Link
@@ -504,6 +538,11 @@ export default function TownApp({
           </button>
         </Modal>
       )}
+      {view !== "post" && <PostLayer {...shared} />}
+      {/* Said to a screen reader without moving the focus (いいね's count). */}
+      <div className="sr-only town-said" aria-live="polite">
+        <span key={said.at}>{said.text}</span>
+      </div>
       <AccountInvite />
       <ReportDialog />
       <SiteNotesGate notify={notify} />

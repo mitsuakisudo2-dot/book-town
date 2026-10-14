@@ -1,0 +1,355 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { flushSync } from "react-dom";
+import { useBackLayer } from "../../lib/back-layer";
+import { canGoBackInTown, subscribeTrail } from "../../lib/in-town";
+import { imeKey } from "../../lib/keys";
+import { lockPageScroll } from "../../lib/scroll-lock";
+import { usePersistenceStatus } from "../../lib/store";
+import {
+  findReader,
+  formatPostTime,
+  repliesOf,
+  spoilerViewOf,
+} from "../../lib/social";
+import type {
+  Notify,
+  Post,
+  Reader,
+  TownActions,
+  TownState,
+} from "../../lib/types";
+import { PostComposer } from "../Social";
+import { Modal, ReaderAvatar } from "../ui";
+import { LetterIcon } from "./icons";
+import { LetterCard } from "./LetterCard";
+import {
+  closePost,
+  focusReturn,
+  postLayerName,
+  usePostLayer,
+} from "./post-layer";
+import { useSwipeBack } from "./useSwipeBack";
+import "./letter.css";
+
+type Shared = {
+  state: TownState;
+  actions: TownActions;
+  notify: Notify;
+};
+
+/**
+ * The post a page shows, with its writer: a reply's page is its post's.
+ * Nothing when it is not in the town, or the reader chose not to see it.
+ */
+function pagePostOf(
+  state: TownState,
+  id: string,
+): { post: Post; author: Reader } | null {
+  const found = state.posts.find((entry) => entry.id === id);
+  const post = found?.parentId
+    ? state.posts.find((entry) => entry.id === found.parentId)
+    : found;
+  const author = post ? findReader(state, post.authorId) : undefined;
+  if (!post || !author || spoilerViewOf(state, post) === "left_out")
+    return null;
+  return { post, author };
+}
+
+/** Elements the keyboard moves through, in order. */
+const focusables = (root: HTMLElement) =>
+  Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'a[href],button:not(:disabled),input:not(:disabled),textarea,select,[tabindex="0"]',
+    ),
+  ).filter((element) => element.tabIndex >= 0 && element.offsetParent !== null);
+
+/** Another layer is over the page and takes the keys: a sheet, a book, the notes. */
+const layerAbove = () =>
+  document.querySelector(".modal-backdrop, dialog[open], .site-notes-mode");
+
+/**
+ * A 便り's page over whatever screen opened it (決定 H:126-140): the whole
+ * screen, bottom tabs included, one step of 戻る. Mounted once in TownApp.
+ */
+export function PostLayer(props: Shared) {
+  const id = usePostLayer();
+  if (!id) return null;
+  return <OpenLayer key={id} {...props} postId={id} />;
+}
+
+function OpenLayer({ postId, ...props }: Shared & { postId: string }) {
+  const router = useRouter();
+  const shown = pagePostOf(props.state, postId);
+  const root = useRef<HTMLDivElement>(null);
+  const backButton = useRef<HTMLButtonElement>(null);
+  // Closing puts the page beneath back where it was; leaving for another
+  // page does not, as that page starts at its own top.
+  const restore = useRef(true);
+  // Before the page beneath is held still, so its scroll is recorded.
+  const step = useBackLayer(closePost, postLayerName(postId));
+  const stepRef = useRef(step);
+  useEffect(() => {
+    stepRef.current = step;
+  });
+  useEffect(() => {
+    const release = lockPageScroll();
+    backButton.current?.focus({ preventScroll: true });
+    return () => {
+      release(restore.current);
+      if (restore.current) focusReturn(postId);
+    };
+  }, [postId]);
+  // Deleted, or no longer to be seen: the page closes.
+  const gone = shown === null;
+  useEffect(() => {
+    if (gone) closePost();
+  }, [gone]);
+  // Registered before the links' listener, so a drag's click is no tap.
+  useSwipeBack(root, closePost);
+  useEffect(() => {
+    const layer = root.current;
+    // A link inside leaves from the page beneath, the page kept as this
+    // step's to come back to (useLayerReturn opens it again).
+    const follow = (event: MouseEvent) => {
+      const link = (event.target as Element | null)?.closest?.("a[href]");
+      if (
+        !(link instanceof HTMLAnchorElement) ||
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        (link.target && link.target !== "_self") ||
+        link.hasAttribute("download") ||
+        link.origin !== location.origin
+      )
+        return;
+      event.preventDefault();
+      const href = link.pathname + link.search + link.hash;
+      restore.current = false;
+      stepRef.current.leave(() => router.push(href));
+      closePost();
+    };
+    layer?.addEventListener("click", follow, true);
+    return () => layer?.removeEventListener("click", follow, true);
+  }, [router]);
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      const layer = root.current;
+      if (!layer || event.defaultPrevented || layerAbove()) return;
+      if (event.key === "Escape") {
+        // The Escape that cancels a kana conversion is the keyboard's.
+        if (imeKey(event)) return;
+        event.preventDefault();
+        closePost();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const all = focusables(layer);
+      if (!all.length) return;
+      const at = all.indexOf(document.activeElement as HTMLElement);
+      if (at < 0) {
+        event.preventDefault();
+        (event.shiftKey ? all[all.length - 1] : all[0]).focus();
+      } else if (event.shiftKey && at === 0) {
+        event.preventDefault();
+        all[all.length - 1].focus();
+      } else if (!event.shiftKey && at === all.length - 1) {
+        event.preventDefault();
+        all[0].focus();
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
+  if (!shown) return null;
+  const { post, author } = shown;
+  return (
+    <div
+      ref={root}
+      className="post-page is-layer"
+      role="dialog"
+      aria-modal="true"
+      // Its own name, as the layer has no address of its own (注釈モード).
+      aria-label={`${author.name}さんの便り（${formatPostTime(post.createdAt)}）`}
+    >
+      <PostPageHead backRef={backButton} onBack={closePost} />
+      <PostPageContent {...props} post={post} author={author} scrolls />
+    </div>
+  );
+}
+
+/**
+ * A 便り's page at its own address (/post/?id=), for links and notices from
+ * outside. 戻る goes back in the town, or to the town for a page opened
+ * directly.
+ */
+export function PostPageView({
+  postId,
+  ...props
+}: Shared & { postId: string }) {
+  const router = useRouter();
+  const canGoBack = useSyncExternalStore(
+    subscribeTrail,
+    canGoBackInTown,
+    () => false,
+  );
+  // Until the town is read, a post not found may yet arrive.
+  const loading = usePersistenceStatus() === "loading";
+  const shown = pagePostOf(props.state, postId);
+  return (
+    <div className="post-page is-route">
+      <PostPageHead
+        page
+        label={canGoBack ? "戻る" : "本の街へ"}
+        onBack={() => (canGoBack ? router.back() : router.push("/"))}
+      />
+      {shown ? (
+        <PostPageContent {...props} post={shown.post} author={shown.author} />
+      ) : loading ? (
+        <p className="post-page-none" role="status">
+          便りを開いています…
+        </p>
+      ) : (
+        <div className="post-page-missing">
+          <p>この便りは、いまは開けません</p>
+          <Link href="/" className="button secondary">
+            本の街へ
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PostPageHead({
+  label = "戻る",
+  onBack,
+  backRef,
+  page = false,
+}: {
+  label?: string;
+  onBack: () => void;
+  backRef?: RefObject<HTMLButtonElement | null>;
+  /** At its own address, the page's heading; in the layer, the dialog's. */
+  page?: boolean;
+}) {
+  const Heading = page ? "h1" : "h2";
+  return (
+    <header className="post-page-head">
+      <button
+        ref={backRef}
+        type="button"
+        className="post-page-back"
+        aria-label={label}
+        onClick={onBack}
+      >
+        <LetterIcon name="back" size={22} />
+      </button>
+      <Heading>便り</Heading>
+      <span />
+    </header>
+  );
+}
+
+function PostPageContent({
+  state,
+  actions,
+  notify,
+  post,
+  author,
+  scrolls = false,
+}: Shared & {
+  post: Post;
+  author: Reader;
+  /** In the layer, the page scrolls inside it; at its address, the window does. */
+  scrolls?: boolean;
+}) {
+  const [replying, setReplying] = useState(false);
+  const [landed, setLanded] = useState<string | null>(null);
+  const headId = useId();
+  const solo = post.readingMode === "solo";
+  const replies = solo ? [] : repliesOf(state, post.id);
+  const shared = { state, actions, notify };
+  // A reply just sent is brought into view where it landed.
+  useEffect(() => {
+    if (!landed) return;
+    document
+      .querySelector(`[data-post-id="${CSS.escape(landed)}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+    setLanded(null);
+  }, [landed]);
+  const body: ReactNode = (
+    <>
+      <LetterCard {...shared} post={post} place="page" showBook />
+      {!solo && (
+        <section className="post-page-replies" aria-labelledby={headId}>
+          <h3 id={headId} className="post-page-replies-head">
+            返信
+          </h3>
+          {replies.length ? (
+            replies.map((reply) => (
+              <LetterCard
+                key={reply.id}
+                {...shared}
+                post={reply}
+                place="page"
+                isReply
+                opAuthorId={post.authorId}
+              />
+            ))
+          ) : (
+            <p className="post-page-none">
+              まだ返信はありません。最初のひとことを送れます。
+            </p>
+          )}
+        </section>
+      )}
+    </>
+  );
+  return (
+    <>
+      {scrolls ? <div className="post-page-scroll">{body}</div> : body}
+      {!solo && (
+        <div className="post-page-bar">
+          <button
+            type="button"
+            className="post-page-reply"
+            // The sheet opens within the tap, so a phone's keyboard rises
+            // with its text box (Modal's `writing`).
+            onClick={() => flushSync(() => setReplying(true))}
+          >
+            <ReaderAvatar reader={state.me} size={36} />
+            <span>{author.name}さんに返信</span>
+          </button>
+        </div>
+      )}
+      {replying && (
+        <Modal title="返信" writing onClose={() => setReplying(false)}>
+          <PostComposer
+            {...shared}
+            parent={post}
+            sheet
+            onDone={(id) => {
+              setReplying(false);
+              setLanded(id);
+            }}
+          />
+        </Modal>
+      )}
+    </>
+  );
+}

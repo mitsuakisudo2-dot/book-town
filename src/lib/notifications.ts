@@ -9,7 +9,8 @@ import {
   type TownState,
 } from "./types";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
-import { posterPath, profilePath, shopPath } from "./paths";
+import { postPath, posterPath, profilePath, shopPath } from "./paths";
+import { postPageOf } from "./letter";
 import { posterTitle, type Poster } from "./posters";
 import { coverHidden } from "./hidden-words";
 
@@ -37,6 +38,21 @@ const dayWords = new Intl.DateTimeFormat("ja-JP", {
 export const monthDay = (at: string): string => {
   const date = new Date(at);
   return Number.isNaN(date.getTime()) ? "" : dayWords.format(date);
+};
+
+/**
+ * A notice about a post leads to that post's page (a reply's is its post's)
+ * when the post is in the town; otherwise, to where it led before.
+ */
+const pageOr = (
+  state: TownState,
+  post: Pick<Post, "id" | "parentId">,
+  otherwise: string,
+): string => {
+  const page = postPageOf(post);
+  return state.posts.some((entry) => entry.id === page)
+    ? postPath(page)
+    : otherwise;
 };
 
 const quote = (post: string) => {
@@ -91,7 +107,11 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         text:
           `${name(post.authorId)}さんがあなたの投稿に返信しました` +
           (quotable(post) ? " " + quote(post.body) : ""),
-        href: parent.bookId ? bookPath(parent.bookId) : "/profiles/me/",
+        href: pageOr(
+          state,
+          parent,
+          parent.bookId ? bookPath(parent.bookId) : "/profiles/me/",
+        ),
       });
   }
   // Folded by readers' 「ネタバレでは？」: told once and gently, never by whom.
@@ -105,7 +125,11 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
       readerId: ME_ID,
       createdAt: post.createdAt,
       text: `ネタバレかもしれないという声があったので、あなたの投稿${quote(post.body)}をたたんで表示しています`,
-      href: post.parentId && bookId ? bookPath(bookId) : "/profiles/me/",
+      href: pageOr(
+        state,
+        post,
+        post.parentId && bookId ? bookPath(bookId) : "/profiles/me/",
+      ),
     });
   }
   for (const post of mine.values())
@@ -128,7 +152,11 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         readerId: liker.readerId,
         createdAt: liker.at,
         text: `${who}さんが、あなたの投稿に${liker.taps > 1 ? liker.taps + "回" : ""}いいねしました ${quote(post.body)}`,
-        href: post.bookId ? bookPath(post.bookId) : "/profiles/me/",
+        href: pageOr(
+          state,
+          post,
+          post.bookId ? bookPath(post.bookId) : "/profiles/me/",
+        ),
       });
     }
   }
@@ -151,7 +179,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         readerId: post.authorId,
         createdAt: post.createdAt,
         text: `フォロー中の${name(post.authorId)}さんが投稿しました ${quote(post.body)}`,
-        href: profilePath(post.authorId),
+        href: pageOr(state, post, profilePath(post.authorId)),
       });
     else if (post.bookId && state.wishlist.includes(post.bookId))
       notices.push({

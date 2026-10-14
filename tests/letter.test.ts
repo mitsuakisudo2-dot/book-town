@@ -10,6 +10,7 @@ import {
   postPageOf,
   spoilerBars,
 } from "../src/lib/letter";
+import { notificationsFor } from "../src/lib/notifications";
 import { spoilerBookOf } from "../src/lib/social";
 import { LIKE_TAPS_MAX, ME_ID, type Post } from "../src/lib/types";
 
@@ -101,6 +102,47 @@ check("the book row carries the writer's public feelings, two at most", () => {
 check("a reply opens on its post's page", () => {
   assert.equal(postPageOf(post("p-1")), "p-1");
   assert.equal(postPageOf(post("p-1-r2")), "p-1");
+});
+
+check("notices about a post lead to its page while it is in the town", () => {
+  const liked = [{ readerId: "r-sumire", taps: 2, at: "2026-10-12T01:00:00Z" }];
+  const mine: Post = {
+    ...post("p-1"),
+    id: "m-1",
+    authorId: ME_ID,
+    likers: liked,
+  };
+  const answer: Post = {
+    ...post("p-1-r1"),
+    id: "m-1-r1",
+    parentId: "m-1",
+    authorId: "r-sumire",
+  };
+  // My reply on another's post, folded by readers: its page is that post's.
+  const myReply: Post = {
+    ...post("p-1-r1"),
+    id: "m-2",
+    authorId: ME_ID,
+    folded: true,
+    likers: liked,
+  };
+  // A reply whose post is not here keeps the old way.
+  const astray: Post = { ...myReply, id: "m-3", parentId: "gone" };
+  const state = {
+    ...seedState,
+    posts: [...seedState.posts, mine, answer, myReply, astray],
+    following: ["shop-orbit"],
+  };
+  const href = (id: string) =>
+    notificationsFor(state).find((notice) => notice.id === id)?.href;
+  assert.equal(href("reply:m-1-r1"), "/post/?id=m-1");
+  assert.equal(href("like:m-1:r-sumire"), "/post/?id=m-1");
+  assert.equal(href("like:m-2:r-sumire"), "/post/?id=p-1");
+  assert.equal(href("folded:m-2"), "/post/?id=p-1");
+  assert.equal(href("folded:m-3"), "/profiles/me/");
+  assert.equal(href("like:m-3:r-sumire"), "/profiles/me/");
+  // 軌道書房's owner (凪) wrote p-1.
+  assert.equal(href("follow:p-1"), "/post/?id=p-1");
 });
 
 console.log(`letter ok (${passed})`);
