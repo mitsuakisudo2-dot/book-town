@@ -5,10 +5,11 @@ import { ME_ID, type Book, type TownState } from "./types";
 // A list of the town's books shown before anything is typed (棚の隅の本, a
 // picker's first books, the 見本's shelves in the walk), or found by a genre
 // chip, shows only books used where everyone can see them, the 見本's, and the
-// reader's own. A book another reader only typed in waits until its title,
-// author or ISBN is searched.
-// This is the screen's part only: the catalog still lets anyone read every
-// title, until the database itself hides them (R2).
+// reader's own. Any other book of the catalog waits until its title, author or
+// ISBN is searched.
+// The database keeps the same rule for books typed in by hand: another
+// reader's that is not used where everyone can see it never reaches the town
+// (private.book_is_listed and book_is_mine, in supabase/migrations).
 
 /** Books the reader keeps, reads, made or shelved, private ones too. */
 function ownBookIds(state: TownState): (string | null)[] {

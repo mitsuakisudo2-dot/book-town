@@ -48,7 +48,7 @@ const SHOP_COLUMNS =
 // Everything folded for everyone; the person's own held things too.
 const FOLD_COLUMNS = "target_kind, target_id, state, since";
 
-/** The newest books, and every book the rows refer to. */
+/** The newest books the reader may read, and every book the rows refer to. */
 async function booksFor(client: Client, rows: Omit<RemoteRows, "books">) {
   const catalog = await all(
     client

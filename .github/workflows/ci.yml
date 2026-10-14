@@ -13,6 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # A migration the pull request adds needs a version of its own, after
+      # every one on the base branch: production applies them in that order
+      # and refuses an older one (scripts/check-migration-versions.sh).
+      - name: New migrations come after the base branch's
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          bash scripts/check-migration-versions.sh FETCH_HEAD
       # Uses the pnpm version named in package.json's packageManager field.
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
