@@ -2,6 +2,8 @@
 // from the page without touching it. Nothing here reads the DOM itself: the
 // screen hands in the elements it found (or plain objects, in the tests).
 
+import { browserName, iosDevice } from "./user-agent";
+
 /** The same limits as public.site_notes (tests check them against the migration). */
 export const SITE_NOTE_LIMITS = {
   body: 2000,
@@ -134,10 +136,10 @@ export function noteSpotAt(tap: {
 /** A short label such as "iPhone Safari"; never versions or the user agent itself. */
 export function deviceLabel(userAgent: string, touchPoints = 0): string {
   const ua = userAgent;
+  const ios = iosDevice(ua, touchPoints);
   const system = /iPhone|iPod/.test(ua)
     ? "iPhone"
-    : // iPadOS Safari presents itself as a Mac, but a Mac has no touch screen.
-      /iPad/.test(ua) || (/Macintosh/.test(ua) && touchPoints > 1)
+    : ios
       ? "iPad"
       : /Android/.test(ua)
         ? "Android"
@@ -150,29 +152,7 @@ export function deviceLabel(userAgent: string, touchPoints = 0): string {
               : /Linux/.test(ua)
                 ? "Linux"
                 : "";
-  const browser = /\bLine\//.test(ua)
-    ? "LINE"
-    : /Instagram/.test(ua)
-      ? "Instagram"
-      : /FBAN|FBAV|FB_IAB/.test(ua)
-        ? "Facebook"
-        : /EdgiOS|EdgA|Edg\//.test(ua)
-          ? "Edge"
-          : /OPR\/|OPiOS/.test(ua)
-            ? "Opera"
-            : /SamsungBrowser/.test(ua)
-              ? "Samsung Internet"
-              : /FxiOS|Firefox\//.test(ua)
-                ? "Firefox"
-                : /; wv\)/.test(ua)
-                  ? "アプリ内"
-                  : /CriOS|Chrome\//.test(ua)
-                    ? "Chrome"
-                    : /Version\/[\d.]+.*Safari\//.test(ua)
-                      ? "Safari"
-                      : system === "iPhone" || system === "iPad"
-                        ? "アプリ内"
-                        : "";
+  const browser = browserName(ua, ios);
   return [system, browser]
     .filter(Boolean)
     .join(" ")
