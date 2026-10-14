@@ -3,6 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
+import {
+  coarse,
+  expectNoKeyboard,
+  expectTapWrites,
+} from "./journey-keyboard.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -1022,6 +1027,89 @@ try {
         await expect(note).toBeFocused();
         await page.keyboard.press("Escape");
         await expect(sheet).toHaveCount(0);
+      },
+    );
+    await check(
+      "393px phone: a book to add, covered words, a draft thrown away and a line added to a review leave the keyboard down",
+      async () => {
+        expect(await coarse(page)).toBe(true);
+        await go("/timeline/");
+        const fab = page.locator(".compose-fab");
+        const dialog = page.getByRole("dialog", { name: "投稿する" });
+        const text = dialog.locator("textarea");
+        // ［本を添える］: the search waits for a tap; the picker has the focus.
+        await fab.tap();
+        await dialog.getByRole("button", { name: "本を添える" }).tap();
+        await expectNoKeyboard(page, "本を添える", dialog);
+        await expect(
+          dialog.getByRole("group", { name: "添える本を探す" }),
+        ).toBeFocused();
+        await expectTapWrites(dialog.getByRole("searchbox"));
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+        // A draft thrown away: it goes, and the keyboard stays down.
+        await fab.tap();
+        await text.fill("消す下書き。");
+        await page.keyboard.press("Escape");
+        await fab.tap();
+        await dialog.getByRole("button", { name: "書きかけを消す" }).tap();
+        await dialog.getByRole("button", { name: "消す", exact: true }).tap();
+        await expect(text).toHaveValue("");
+        await expectNoKeyboard(page, "draft thrown away", dialog);
+        // ［一部を隠す］ in a field not tapped yet: the place to write in is
+        // made, and the keyboard stays down.
+        await dialog.getByRole("button", { name: "一部を隠す" }).tap();
+        await expect(text).toHaveValue("||隠したい言葉||");
+        await expectNoKeyboard(page, "一部を隠す", dialog);
+        // Typing in it, the words chosen are covered there, still theirs.
+        await expectTapWrites(text);
+        await text.fill("犯人は庭師だった。");
+        await text.evaluate((field) => field.setSelectionRange(3, 5));
+        await dialog.getByRole("button", { name: "一部を隠す" }).tap();
+        await expect(text).toHaveValue("犯人は||庭師||だった。");
+        await expect(text).toBeFocused();
+        await page.keyboard.press("Escape");
+
+        // A review with words of its own, and a line written while reading.
+        await go("/books/ten-nights/");
+        const reviews = page.locator(".book-reviews");
+        await reviews.locator("textarea").fill("前から書いていた感想。");
+        await go("/reading/");
+        await page
+          .getByRole("searchbox", { name: "読む本を探す" })
+          .fill("夢十夜");
+        await page.getByRole("button", { name: /^夢十夜/ }).tap();
+        await page.getByRole("button", { name: /一人で読む/ }).tap();
+        await page
+          .getByRole("dialog", { name: "読書をはじめますか？" })
+          .getByRole("button", { name: "はじめる", exact: true })
+          .tap();
+        const memo = page.getByLabel("読書メモ（自分だけ）");
+        // The memo thrown away after a reload: the keyboard stays down.
+        await memo.fill("消える一行。");
+        await reload();
+        await page.getByRole("button", { name: "書きかけを消す" }).tap();
+        await page.getByRole("button", { name: "消す", exact: true }).tap();
+        await expect(memo).toHaveValue("");
+        await expectNoKeyboard(page, "memo thrown away");
+        await memo.fill("三夜目の一行。");
+        await page.getByRole("button", { name: "読書を終える" }).tap();
+        await page
+          .getByRole("dialog", { name: "読書を終えますか？" })
+          .getByRole("button", { name: "感想を書く" })
+          .tap();
+        const review = page.getByRole("dialog", { name: "『夢十夜』の感想" });
+        await expectNoKeyboard(page, "review", review);
+        // ［書き足す］ adds the line, in view, and waits for a tap to go on.
+        await review.getByRole("button", { name: "書き足す" }).tap();
+        await expect(review.locator("textarea")).toHaveValue(
+          "前から書いていた感想。\n三夜目の一行。",
+        );
+        await expectNoKeyboard(page, "line added", review);
+        await expect(review.locator("textarea")).toBeInViewport();
+        await expectTapWrites(review.locator("textarea"));
+        await page.keyboard.press("Escape");
+        await expect(review).toHaveCount(0);
       },
     );
     await context.close();

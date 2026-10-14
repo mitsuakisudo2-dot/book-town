@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
+import { expectNoKeyboard, expectTapWrites } from "./journey-keyboard.mjs";
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -1081,7 +1082,14 @@ try {
       await go("/walk/#mine");
       await page.getByRole("link", { name: /ひとことを書く/ }).click();
       await expect(page).toHaveURL(/\/my-shop\/#shop-words$/);
-      await expect(page.getByLabel("ひとこと")).toBeFocused();
+      // On a touch screen the words are shown open and wait for a tap: the
+      // keyboard does not rise over them, and the heading has the focus.
+      const words = page.locator("#shop-words");
+      await expect(words).toHaveAttribute("open", "");
+      await expect(words.getByLabel("ひとこと")).toBeInViewport();
+      await expectNoKeyboard(page, "the shop's words");
+      await expect(words.locator("summary")).toBeFocused();
+      await expectTapWrites(words.getByLabel("ひとこと"));
     },
   );
 

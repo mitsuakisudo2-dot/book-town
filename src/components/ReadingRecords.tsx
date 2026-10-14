@@ -199,7 +199,6 @@ export function RecordSheet({
     <Modal
       title={record ? "記録を見直す" : "読み終えた気持ち"}
       onClose={onClose}
-      writing
     >
       <div className="record-book">
         <BookJacket book={book} />

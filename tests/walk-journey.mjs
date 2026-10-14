@@ -2,6 +2,11 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
+import {
+  coarse,
+  expectNoKeyboard,
+  expectTapWrites,
+} from "./journey-keyboard.mjs";
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../work/walk-qa",
@@ -345,13 +350,13 @@ try {
         page.getByText("送信されないデモです。", { exact: false }),
       ).toBeVisible();
       const box = page.getByRole("textbox", { name: "店主に伝えたい言葉" });
-      // On a touch screen the sheet opens without the keyboard over it.
-      await expect(
-        page
-          .getByRole("dialog", { name: "店主に伝える" })
-          .getByRole("button", { name: "閉じる" }),
-      ).toBeFocused();
-      await expect(box).not.toBeFocused();
+      const sheet = page.getByRole("dialog", { name: "店主に伝える" });
+      // On a touch screen the sheet opens without the keyboard over it, and
+      // a tap on the field writes.
+      expect(await coarse(page)).toBe(true);
+      await expectNoKeyboard(page, "店主に伝える", sheet);
+      await expect(sheet.getByRole("button", { name: "閉じる" })).toBeFocused();
+      await expectTapWrites(box);
       const starters = page.getByRole("group", { name: "書き出しの例" });
       await starters.getByRole("button", { name: /^POPを読んで/ }).click();
       await starters.getByRole("button", { name: "また来ます。" }).click();

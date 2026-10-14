@@ -38,6 +38,7 @@ import { isDatabaseId, profilePath } from "../lib/paths";
 import { bookPath } from "../lib/books";
 import { recentlyFinished } from "../lib/records";
 import { uncoverHidden } from "../lib/hidden-words";
+import { focusField } from "../lib/coarse-pointer";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import {
   appendPostDraft,
@@ -166,7 +167,6 @@ export function ReadingView(props: Shared) {
         <Modal
           title={review.book ? `『${review.book.title}』の感想` : "感想を書く"}
           onClose={() => setReview(null)}
-          writing
         >
           {review.line && (
             <LineToAdd
@@ -393,7 +393,7 @@ function LineToAdd({
               reviewDraftKey(owner, book),
             )
           )
-            review?.focus();
+            focusField(review);
           else
             notify(
               "長くなりすぎるため、書き足せませんでした。言葉は読書のページに残しています",
@@ -848,7 +848,7 @@ function ReadingRoom({
           wordsLost={memo.trim() !== ""}
           onDiscard={() => {
             clear();
-            field.current?.focus();
+            focusField(field.current);
           }}
         />
         {together && <HiddenWordsHint body={memo} />}

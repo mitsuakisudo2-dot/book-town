@@ -18,7 +18,7 @@ import {
   useGoogleCoversShown,
 } from "../lib/covers";
 import { useBackLayer } from "../lib/back-layer";
-import { focusesFieldOnOpen } from "../lib/coarse-pointer";
+import { fieldTakesFocus, focusBack } from "../lib/coarse-pointer";
 import { imeKey } from "../lib/keys";
 import "./illustrated-jackets.css";
 const shapes: Record<string, ReactNode> = {
@@ -402,20 +402,13 @@ export function Modal({
   onClose,
   children,
   wide = false,
-  writing = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
-  /**
-   * A sheet mainly for writing. On a touch screen it opens without the
-   * keyboard over it: the focus starts on its first button, not its field.
-   */
-  writing?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const writingRef = useRef(writing);
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
@@ -458,8 +451,11 @@ export function Modal({
     const prev = document.activeElement as HTMLElement | null;
     const old = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // The focus goes into the dialog. With a mouse its first field is ready
+    // to type into; on a touch screen it starts on the first button (閉じる),
+    // so no keyboard rises over the sheet before the reader has seen it.
     (
-      (focusesFieldOnOpen(writingRef.current)
+      (fieldTakesFocus()
         ? ref.current?.querySelector<HTMLElement>("input,textarea,select")
         : null) ?? ref.current?.querySelector<HTMLElement>("button")
     )?.focus();
@@ -491,7 +487,7 @@ export function Modal({
     return () => {
       document.body.style.overflow = old;
       document.removeEventListener("keydown", key);
-      prev?.focus();
+      focusBack(prev);
     };
   }, []);
   return (

@@ -66,6 +66,18 @@ textarea:focus-visible {
   outline: 2px solid #7c986d;
   outline-offset: 4px;
 }
+/* A heading holds the focus only to tell keys and screen readers where a
+   step begins, while its field waits for a tap on a touch screen. */
+:is(h1, h2)[tabindex="-1"]:focus {
+  outline: none;
+}
+/* A field a check found wrong, shown without the focus on a touch screen
+   (markField). */
+input[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: #a2483a;
+  outline: 1px solid #a2483a;
+}
 button:active:not(:disabled) {
   transform: translateY(1px);
 }

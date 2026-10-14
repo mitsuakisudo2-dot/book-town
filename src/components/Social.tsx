@@ -73,6 +73,7 @@ import {
 import { useTownBackend } from "../lib/store";
 import { notePosted, postedJustNow } from "../lib/just-posted";
 import { coverSelection, splitHidden } from "../lib/hidden-words";
+import { focusField } from "../lib/coarse-pointer";
 import { useUrlParam } from "../lib/url-state";
 
 type Shared = {
@@ -563,7 +564,7 @@ export function PostComposer({
             onDiscard={() => {
               clear();
               setPicking(false);
-              field.current?.focus();
+              focusField(field.current);
             }}
           />
         ) : (
@@ -607,7 +608,7 @@ export function ComposeFab({
         <span>{draft.body || draft.bookId ? "下書き" : "投稿"}</span>
       </button>
       {open && (
-        <Modal title="投稿する" onClose={() => setOpen(false)} writing>
+        <Modal title="投稿する" onClose={() => setOpen(false)}>
           <PostComposer
             {...props}
             onDone={() => {
@@ -668,9 +669,12 @@ export function HideWordsButton({
           return;
         }
         onChange(covered.body);
+        // The covered words are chosen in the text box. On a touch screen
+        // only in one the reader was typing in: otherwise the keyboard would
+        // rise, and the button keeps the focus.
         requestAnimationFrame(() => {
-          text?.focus();
-          text?.setSelectionRange(covered.start, covered.end);
+          if (focusField(text, { instead: null }))
+            text?.setSelectionRange(covered.start, covered.end);
         });
       }}
     >

@@ -3,6 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
+import {
+  coarse,
+  expectNoKeyboard,
+  expectTapWrites,
+} from "./journey-keyboard.mjs";
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
   process.env.BOOK_TOWN_QA_OUTPUT ?? "../../outputs/phase2-customization-qa",
@@ -204,8 +209,8 @@ try {
       "キャンセルした店",
     );
     await expect(keptLine()).toContainText("書きかけを続けています");
-    // On a phone the editor opens scrolled to its first field, and the line
-    // that says the work goes on is still in view.
+    // With a mouse on a narrow screen the editor opens with its first field
+    // ready, and the line that says the work goes on is still in view.
     await dialog()
       .getByRole("button", { name: "キャンセル", exact: true })
       .click();
@@ -767,6 +772,70 @@ try {
         await other.evaluate(() => localStorage.getItem("book-town-walk-v1")),
       ).toBe(corrupt);
       await locked.close();
+    },
+  );
+  await check(
+    "393px phone: the store editor opens without the keyboard, and throwing work away keeps it down",
+    async () => {
+      const town = await page.evaluate(() =>
+        localStorage.getItem("book-town-v1"),
+      );
+      const walk = await page.evaluate(() =>
+        localStorage.getItem("book-town-walk-v1"),
+      );
+      const touch = await browser.newContext({
+        viewport: { width: 393, height: 793 },
+        isMobile: true,
+        hasTouch: true,
+        locale: "ja-JP",
+        storageState: {
+          cookies: [],
+          origins: [
+            {
+              origin: new URL(base).origin,
+              localStorage: [
+                { name: "book-town-v1", value: town },
+                ...(walk ? [{ name: "book-town-walk-v1", value: walk }] : []),
+              ],
+            },
+          ],
+        },
+      });
+      const finger = settleBeforeNavigating(await touch.newPage());
+      finger.on("pageerror", (e) => errors.push(e.message));
+      expect(await coarse(finger)).toBe(true);
+      await finger.goto(base + "/my-shop/");
+      const opener = finger.getByRole("button", {
+        name: "店内を飾りつける",
+        exact: true,
+      });
+      const editor = finger.getByRole("dialog", {
+        name: "店内を飾りつける",
+        exact: true,
+      });
+      const sign = editor.getByLabel("看板の店名");
+      await opener.tap();
+      await expectNoKeyboard(finger, "store editor", editor);
+      await expect(
+        editor.getByRole("button", { name: "閉じる" }),
+      ).toBeFocused();
+      await expectTapWrites(sign);
+      await finger.keyboard.type("指の店");
+      await finger.keyboard.press("Escape");
+      await expect(editor).toHaveCount(0);
+      await expect(opener).toBeFocused();
+      // Reopened with that work, thrown away: the keyboard stays down.
+      await opener.tap();
+      await expect(sign).toHaveValue(/指の店$/);
+      const kept = editor.locator(".scene-editor-kept");
+      await kept
+        .getByRole("button", { name: "書きかけを消す", exact: true })
+        .tap();
+      await kept.getByRole("button", { name: "消す", exact: true }).tap();
+      await expect(sign).not.toHaveValue(/指の店$/);
+      await expectNoKeyboard(finger, "store work thrown away", editor);
+      await expectTapWrites(sign);
+      await touch.close();
     },
   );
   await check(

@@ -56,6 +56,7 @@ import "./walk.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { replaceAddress } from "../lib/url-state";
 import { useLayerReturn } from "../lib/back-layer";
+import { fieldTakesFocus, takesText } from "../lib/coarse-pointer";
 
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
@@ -318,10 +319,13 @@ export function WalkView({
     setOverlay(null);
     // The book in hand and dialogs give focus back as they go; this catches
     // what they leave on the page itself (a dialog that saved no opener) or an
-    // opener that is gone.
-    focusNextFrame(() =>
-      focus.current?.isConnected ? focus.current : stage.current,
-    );
+    // opener that is gone. On a touch screen a field never takes it back.
+    focusNextFrame(() => {
+      const opener = focus.current;
+      return opener?.isConnected && (fieldTakesFocus() || !takesText(opener))
+        ? opener
+        : stage.current;
+    });
   }
   // Going past the last shop starts another round; say so once, quietly.
   const lastIndex = useRef<number | null>(null);
@@ -944,7 +948,7 @@ export function WalkView({
         </Modal>
       )}
       {overlay?.kind === "message" && delivers && (
-        <Modal title="店主にひとことを残す" onClose={close} writing>
+        <Modal title="店主にひとことを残す" onClose={close}>
           <p className="note-box">
             店主に届きます。読めるのは、店主とあなただけです。消して届け直すと、店主からも見えなくなります。
           </p>
@@ -979,7 +983,7 @@ export function WalkView({
         </Modal>
       )}
       {overlay?.kind === "message" && !delivers && (
-        <Modal title="店主に伝える" onClose={close} writing>
+        <Modal title="店主に伝える" onClose={close}>
           <MessageStarters
             starters={starters}
             onPick={(text) => setMessage(joinStarter(message, text))}

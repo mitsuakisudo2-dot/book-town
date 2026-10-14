@@ -50,6 +50,7 @@ import {
   type ShopSign,
 } from "../lib/shop-draft";
 import { booksBeforeSearch } from "../lib/book-lists";
+import { focusField } from "../lib/coarse-pointer";
 import "./editor.css";
 
 type ShopEditorProps = {
@@ -100,14 +101,19 @@ function ShopSettings({
     if (settings.current) settings.current.open = true;
     notify(SAVE_REFUSED);
   });
-  // The walk's "write your words" card opens these settings at the field.
+  // The walk's "write your words" card opens these settings at the field
+  // (on a touch screen the field waits for a tap; its heading has the focus).
   useEffect(() => {
     if (location.hash !== "#shop-words" || !settings.current) return;
     settings.current.open = true;
     settings.current.scrollIntoView({ block: "center" });
-    settings.current
-      .querySelector<HTMLInputElement>("input[name=tagline]")
-      ?.focus({ preventScroll: true });
+    focusField(
+      settings.current.querySelector<HTMLInputElement>("input[name=tagline]"),
+      {
+        instead: settings.current.querySelector("summary"),
+        preventScroll: true,
+      },
+    );
   }, []);
   // Words kept from before are shown open, where they were left.
   useEffect(() => {
@@ -169,7 +175,9 @@ function ShopSettings({
             kept.clear();
             setResumed(false);
             setRefused(false);
-            nameField.current?.focus();
+            focusField(nameField.current, {
+              instead: settings.current?.querySelector("summary"),
+            });
           }}
         />
         <div className="editor-settings-fields">
@@ -371,7 +379,6 @@ function AddBookPicker({
         <label className="editor-search-field">
           <Icon name="search" size={18} />
           <input
-            autoFocus
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -1158,7 +1165,6 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             <label className="editor-label">
               本棚の名前
               <input
-                autoFocus
                 value={newShelfName}
                 onChange={(event) => setNewShelfName(event.target.value)}
                 maxLength={SHELF_NAME_MAX_LENGTH}
