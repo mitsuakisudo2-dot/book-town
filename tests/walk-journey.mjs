@@ -358,6 +358,19 @@ try {
       // begin tapped leaves it there.
       expect(await coarse(page)).toBe(true);
       await expectKeyboardUp(page, box, "店主に伝える");
+      // Its button last, just above the keyboard; the note about the demo
+      // over it.
+      const sheet = page.getByRole("dialog", { name: "店主に伝える" });
+      expect(
+        await sheet.evaluate((element) => {
+          const note = element.querySelector(".walk-message-note");
+          const toolbar = element.querySelector(".writing-toolbar");
+          return (
+            note.getBoundingClientRect().bottom <=
+            toolbar.getBoundingClientRect().top
+          );
+        }),
+      ).toBe(true);
       const starters = page.getByRole("group", { name: "書き出しの例" });
       await starters.getByRole("button", { name: /^POPを読んで/ }).tap();
       await expect(box).toBeFocused();
@@ -460,6 +473,48 @@ try {
       await page.screenshot({
         path: path.join(output, "walk-table-short.png"),
       });
+    },
+  );
+  await check(
+    "with a mouse, the message sheet is as it always was: the button, then the note",
+    async () => {
+      const desk = await browser.newContext({
+        viewport: { width: 1280, height: 900 },
+      });
+      try {
+        const other = settleBeforeNavigating(await desk.newPage());
+        other.on("pageerror", (e) => errors.push(e.message));
+        await other.goto(base + "/walk/#shop-rain");
+        await expect(other.locator(".walk-owner")).toBeVisible();
+        expect(await coarse(other)).toBe(false);
+        await other
+          .getByRole("button", {
+            name: "店主に伝える（送信されないデモ）",
+            exact: true,
+          })
+          .click();
+        const sheet = other.getByRole("dialog", { name: "店主に伝える" });
+        await expect(
+          sheet.getByRole("textbox", { name: "店主に伝えたい言葉" }),
+        ).toBeFocused();
+        // No phone's toolbar: the sheet's own order, the note after the
+        // button, for the eye and for a screen reader alike.
+        await expect(
+          sheet.locator(".writing-toolbar, .modal-body"),
+        ).toHaveCount(0);
+        expect(
+          await sheet.evaluate((element) =>
+            [...element.children].slice(-2).map((child) => child.textContent),
+          ),
+        ).toEqual([
+          "手元に保存する",
+          "送信されないデモです。言葉はこのブラウザにだけ残ります。",
+        ]);
+        await other.keyboard.press("Escape");
+        await expect(sheet).toHaveCount(0);
+      } finally {
+        await desk.close();
+      }
     },
   );
   await check(

@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccountState } from "../lib/account-session";
+import { coarsePointer, focusField } from "../lib/coarse-pointer";
 import { draftOwner } from "../lib/draft-owner";
 import { usePersistenceStatus, useTownBackend } from "../lib/store";
+import { writingField } from "./useWritingSheet";
 import "./kept-draft.css";
 
 // What a reader writes or arranges is kept in this browser (src/lib/
@@ -60,10 +62,16 @@ export function DiscardDraft({
   const discard = useRef<HTMLButtonElement>(null);
   const keep = useRef<HTMLButtonElement>(null);
   const wasAsking = useRef(false);
-  // The focus goes to the answer that keeps the work, and back after it.
+  // The focus goes to the answer that keeps the work, and back after it. In
+  // a writing screen, with a finger, back is the text box, within the tap on
+  // 残す: the reader goes on writing, the keyboard up again.
   useEffect(() => {
     if (asking) keep.current?.focus();
-    else if (wasAsking.current) discard.current?.focus();
+    else if (wasAsking.current) {
+      const sheet = discard.current?.closest("[data-writing]");
+      if (!focusField(coarsePointer() ? writingField(sheet) : null))
+        discard.current?.focus();
+    }
     wasAsking.current = asking;
   }, [asking]);
   return asking ? (

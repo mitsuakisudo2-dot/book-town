@@ -6,6 +6,7 @@ import { expectReadable } from "./journey-contrast.mjs";
 import {
   expectKeyboardUp,
   expectNoKeyboard,
+  expectNoZoomOnFocus,
   expectTapWrites,
   forgetFocus,
   watchFocus,
@@ -867,6 +868,11 @@ try {
       // A review is a writing screen: on a touch screen it opens with its
       // text box ready, focused within the tap, and the keyboard up.
       await expectKeyboardUp(page, review.locator("textarea"), "感想を書く");
+      // In the town's shell still, at a phone's sizes: the text box at 16px,
+      // and the words around it readable.
+      await expectNoZoomOnFocus(review.locator("textarea"), "感想を書く");
+      await expectReadable(review.locator(".composer-tag-hint"), "タグの案内");
+      await expectReadable(review.locator(".composer-spoiler"), "ネタバレあり");
       await page.keyboard.type("時間どろぼうの話を、時間をかけて読んだ。");
       await review.getByRole("button", { name: "投稿する" }).tap();
       await expect(review).toHaveCount(0);

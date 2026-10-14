@@ -690,14 +690,15 @@ export function HideWordsButton({
           notify("文字数の上限に近いため、隠す印を付けられませんでした");
           return;
         }
-        onChange(covered.body);
-        // The covered words are chosen in the text box. On a touch screen
-        // only in one the reader was typing in, or in a writing screen:
-        // otherwise the keyboard would rise, and the button keeps the focus.
-        requestAnimationFrame(() => {
-          if (focusField(text, { instead: null }))
-            text?.setSelectionRange(covered.start, covered.end);
-        });
+        // The covered words are chosen in the text box, rendered first so
+        // that this happens within the tap: a phone gives its keyboard back
+        // only for a focus given then (a writing screen whose keyboard was
+        // put away). On a touch screen only in one the reader was typing
+        // in, or in a writing screen: otherwise the keyboard would rise, and
+        // the button keeps the focus.
+        flushSync(() => onChange(covered.body));
+        if (focusField(text, { instead: null }))
+          text?.setSelectionRange(covered.start, covered.end);
       }}
     >
       <Icon name="eye" size={15} />

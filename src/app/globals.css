@@ -955,8 +955,11 @@ input[type="checkbox"] {
     top: calc(var(--vv-top, 0px) + 12px);
   }
 }
-@media (pointer: coarse) and (max-width: 760px) {
-  /* A phone: the whole screen, as its own writing apps do. */
+@media (pointer: coarse) and (max-width: 760px),
+  (pointer: coarse) and (max-height: 500px) {
+  /* A phone, upright or on its side: the whole screen, as its own writing
+     apps do. (On its side a card would leave its text box no room over the
+     keyboard.) */
   .modal-backdrop.is-writing {
     padding: 0;
     background: var(--paper);
@@ -974,6 +977,17 @@ input[type="checkbox"] {
   .modal.is-writing > .modal-top {
     margin: 0;
     padding: max(8px, env(safe-area-inset-top)) 0 8px;
+  }
+}
+@media (pointer: coarse) and (max-height: 500px) {
+  /* On its side the keyboard leaves about 200px: a smaller title, so the
+     words being written show between it and the buttons. */
+  .modal.is-writing > .modal-top {
+    padding-block: 2px;
+  }
+  .modal.is-writing > .modal-top h2 {
+    font-size: 17px;
+    line-height: 1.5;
   }
 }
 .modal-top {

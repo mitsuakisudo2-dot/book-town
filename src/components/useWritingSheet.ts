@@ -20,10 +20,11 @@ import { coarsePointer, keyboardRoom, takesText } from "../lib/coarse-pointer";
 //   unmounts its search), the text box takes the focus back in the tap.
 // - With no field focused (the keyboard put away), a tap on blank space
 //   brings the text box and its keyboard back.
-// - A select, a file to choose ([data-may-blur]), and the question before a
-//   draft is thrown away (.kept-note) behave as anywhere: they may close the
-//   keyboard. So does any press while a kana conversion is open, which ends
-//   it; the text box takes the focus back as the tap ends.
+// - A select, a file to choose ([data-may-blur]), and the buttons of the
+//   question before a draft is thrown away (.kept-note) behave as anywhere:
+//   they may close the keyboard. (The note's words are blank space.) So does
+//   any press while a kana conversion is open, which ends it; the text box
+//   takes the focus back as the tap ends.
 // - With a finger the screen is as tall as what the keyboard leaves
 //   (--vv-top and --vv-height on the root, from visualViewport, and
 //   data-keyboard="up"): globals.css docks its toolbar on the keyboard.
@@ -36,7 +37,7 @@ const OWN_FOCUS = [
   "select",
   "[contenteditable]:not([contenteditable=false])",
   "[data-may-blur]",
-  ".kept-note",
+  ".kept-note button",
 ].join(", ");
 /** What a tap works on; a tap anywhere else is on blank space. */
 const CONTROL = [

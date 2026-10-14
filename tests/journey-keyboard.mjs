@@ -79,12 +79,14 @@ export async function expectTapWrites(field) {
 
 /**
  * Notes every focus() with whether it ran within a tap: from a touchend or
- * a click until the task ends. Installed before the context's first page.
- * A focus in an animation frame right after can count as within it.
+ * a click until the task ends, and not in an animation frame (which can
+ * come before that task is marked over, but a phone counts it as after the
+ * tap). Installed before the context's first page.
  */
 export const watchFocus = (context) =>
   context.addInitScript(() => {
     let inTap = false;
+    let inFrame = false;
     for (const type of ["touchend", "click"])
       addEventListener(
         type,
@@ -96,9 +98,22 @@ export const watchFocus = (context) =>
         },
         true,
       );
+    const frame = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) =>
+      frame.call(window, (time) => {
+        inFrame = true;
+        try {
+          callback(time);
+        } finally {
+          inFrame = false;
+        }
+      });
     const focus = HTMLElement.prototype.focus;
     HTMLElement.prototype.focus = function (...args) {
-      (window.__focusLog ??= []).push({ tag: this.tagName, inTap });
+      (window.__focusLog ??= []).push({
+        tag: this.tagName,
+        inTap: inTap && !inFrame,
+      });
       return focus.apply(this, args);
     };
   });
@@ -181,3 +196,15 @@ export const toolbarPlace = (dialog) =>
       seenTop: viewport.offsetTop,
     };
   });
+
+/**
+ * Fails when a text field's words are under 16px: a phone zooms in on such
+ * a field as it takes the focus, and a writing sheet zoomed in no longer
+ * fits what the keyboard leaves.
+ */
+export async function expectNoZoomOnFocus(field, label) {
+  const size = await field.evaluate((element) =>
+    parseFloat(getComputedStyle(element).fontSize),
+  );
+  expect(size, `${label}: its words are ${size}px`).toBeGreaterThanOrEqual(16);
+}

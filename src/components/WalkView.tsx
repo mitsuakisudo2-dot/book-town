@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -56,7 +57,11 @@ import "./walk.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { replaceAddress } from "../lib/url-state";
 import { useLayerReturn } from "../lib/back-layer";
-import { fieldTakesFocus, takesText } from "../lib/coarse-pointer";
+import {
+  fieldTakesFocus,
+  takesText,
+  useCoarsePointer,
+} from "../lib/coarse-pointer";
 
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
@@ -967,7 +972,7 @@ export function WalkView({
             maxLength={SHOP_MESSAGE_MAX_LENGTH}
             onChange={(e) => setMessage(e.target.value)}
           />
-          <div className="writing-toolbar walk-message-send">
+          <MessageSend>
             <button
               className="button"
               onClick={() => {
@@ -985,7 +990,7 @@ export function WalkView({
             >
               届ける
             </button>
-          </div>
+          </MessageSend>
         </Modal>
       )}
       {overlay?.kind === "message" && !delivers && (
@@ -1001,10 +1006,13 @@ export function WalkView({
             maxLength={SHOP_MESSAGE_MAX_LENGTH}
             onChange={(e) => setMessage(e.target.value)}
           />
-          <p className="walk-message-note">
-            送信されないデモです。言葉はこのブラウザにだけ残ります。
-          </p>
-          <div className="writing-toolbar walk-message-send">
+          <MessageSend
+            note={
+              <p className="walk-message-note">
+                送信されないデモです。言葉はこのブラウザにだけ残ります。
+              </p>
+            }
+          >
             <button
               className="button"
               onClick={() => {
@@ -1019,7 +1027,7 @@ export function WalkView({
             >
               手元に保存する
             </button>
-          </div>
+          </MessageSend>
         </Modal>
       )}
       {overlay?.kind === "menu" && shop && (
@@ -1090,6 +1098,31 @@ export function WalkView({
 function joinStarter(message: string, starter: string) {
   if (message.includes(starter)) return message;
   return message.trim() ? message.replace(/\s*$/, "\n") + starter : starter;
+}
+/**
+ * The button that sends words to an owner, and a line about it. With a
+ * finger the button is the writing sheet's toolbar, last, just above the
+ * keyboard, the line over it; with a mouse both stand as they always have,
+ * the line under the button.
+ */
+function MessageSend({
+  note,
+  children,
+}: {
+  note?: ReactNode;
+  children: ReactNode;
+}) {
+  return useCoarsePointer() ? (
+    <>
+      {note}
+      <div className="writing-toolbar">{children}</div>
+    </>
+  ) : (
+    <>
+      {children}
+      {note}
+    </>
+  );
 }
 function MessageStarters({
   starters,

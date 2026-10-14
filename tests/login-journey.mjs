@@ -3197,6 +3197,26 @@ try {
         await expect(name).toBeFocused();
         profile = signedIn;
 
+        // 店主にひとことを残す: ready to type into, and laid out as any
+        // sheet, with no phone's toolbar: 届ける is its last button.
+        await at.goto(base + "/walk/#shop-orbit");
+        await expect(at.locator(".walk-book-target").first()).toBeVisible();
+        await at
+          .getByRole("button", { name: "店主にひとことを伝える" })
+          .click();
+        const words = at.getByRole("dialog", { name: "店主にひとことを残す" });
+        await expect(
+          words.getByRole("textbox", { name: "店主に伝えたい言葉" }),
+        ).toBeFocused();
+        await expect(
+          words.locator(".writing-toolbar, .modal-body"),
+        ).toHaveCount(0);
+        expect(
+          await words.evaluate((sheet) => sheet.lastElementChild?.textContent),
+        ).toBe("届ける");
+        await at.keyboard.press("Escape");
+        await expect(words).toHaveCount(0);
+
         // 注釈モード: the sheet opens with its field ready.
         staff = true;
         const notesAsked = at.waitForResponse((response) =>

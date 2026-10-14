@@ -413,6 +413,16 @@ const WritingSheet = createContext(false);
 /** Whether this is inside a writing screen (Modal's `writing`). */
 export const useInWritingSheet = () => useContext(WritingSheet);
 
+/**
+ * Where a writing sheet goes with a finger: the end of the town's shell. It
+ * is then over the screen that opened it (a walk keeps its own layers, under
+ * the bottom bar), and still under the shell's rules that size words and
+ * fields for a phone (usability.css; a phone zooms in on a text box under
+ * 16px, and the sheet would no longer fit what the keyboard leaves).
+ */
+const writingHost = () =>
+  document.querySelector<HTMLElement>(".town-shell") ?? document.body;
+
 export function Modal({
   title,
   onClose,
@@ -435,7 +445,14 @@ export function Modal({
   const ref = useRef<HTMLDivElement>(null);
   const writingRef = useRef(writing);
   const writingHandlers = useWritingSheet(ref, writing);
+  // With a finger a writing sheet is laid out for the keyboard (is-writing in
+  // globals.css), in the town's shell; with a mouse it is the card any sheet
+  // is. Decided as it opens, and kept: moved while open (a tablet's keyboard
+  // taken off), the sheet would be made anew, the reader's place in it lost,
+  // and its fit to the keyboard with it.
   const finger = useCoarsePointer();
+  const [host] = useState(() => (writing && finger ? writingHost() : null));
+  const fitted = host !== null;
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
@@ -526,14 +543,14 @@ export function Modal({
   }, []);
   const sheet = (
     <div
-      className={"modal-backdrop" + (writing ? " is-writing" : "")}
+      className={"modal-backdrop" + (fitted ? " is-writing" : "")}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className={
-          "modal " + (wide ? "wide" : "") + (writing ? " is-writing" : "")
+          "modal " + (wide ? "wide" : "") + (fitted ? " is-writing" : "")
         }
         ref={ref}
         role="dialog"
@@ -550,7 +567,7 @@ export function Modal({
         </div>
         {writing ? (
           <WritingSheet.Provider value>
-            <div className="modal-body">{children}</div>
+            {fitted ? <div className="modal-body">{children}</div> : children}
           </WritingSheet.Provider>
         ) : (
           children
@@ -558,8 +575,5 @@ export function Modal({
       </div>
     </div>
   );
-  // With a finger a writing sheet is the whole screen: it goes at the end
-  // of the page, over whatever the screen that opened it sits beneath (a
-  // walk keeps its own layers, under the bottom bar).
-  return writing && finger ? createPortal(sheet, document.body) : sheet;
+  return host ? createPortal(sheet, host) : sheet;
 }
