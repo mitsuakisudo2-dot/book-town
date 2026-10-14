@@ -12,17 +12,20 @@ export const googleLookupUrl = (book: Named) =>
 
 /**
  * Safari's own search on the iPhone and iPad, with the engine chosen in
- * Settings > Safari.
+ * Settings > Safari. Only Safari answers this address (see iosSafari).
  */
 export const iosLookupUrl = (book: Named) =>
   "x-web-search://?" + encodeURIComponent(lookupQuery(book));
 
-/** The link's address and spoken name, on an iPhone or iPad or elsewhere. */
-export function bookLookup(book: Named, ios: boolean) {
-  return ios
+/**
+ * The link's address and spoken name, in Safari on an iPhone or iPad or
+ * elsewhere. The spoken name starts with the words on the link.
+ */
+export function bookLookup(book: Named, safari: boolean) {
+  return safari
     ? {
         href: iosLookupUrl(book),
-        label: "この本について、いつもの検索で調べる（新しいタブで開きます）",
+        label: "この本について調べる（いつもの検索で、新しいタブで開きます）",
       }
     : {
         href: googleLookupUrl(book),

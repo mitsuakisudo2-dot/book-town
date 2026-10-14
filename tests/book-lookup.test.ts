@@ -5,11 +5,11 @@ import {
   iosLookupUrl,
   lookupQuery,
 } from "../src/lib/book-lookup";
-import { iosDevice } from "../src/lib/ios-device";
+import { iosDevice, iosSafari } from "../src/lib/user-agent";
 
 // この本について調べる (book-lookup.ts): the words searched for, Google's
-// address, Safari's own search on the iPhone and iPad, and which device is
-// which (ios-device.ts).
+// address, Safari's own search on the iPhone and iPad, and which device and
+// browser is which (user-agent.ts).
 
 const UA = {
   iPhoneSafari:
@@ -19,6 +19,21 @@ const UA = {
   iPadSafari:
     "Mozilla/5.0 (iPad; CPU OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1",
   iPod: "Mozilla/5.0 (iPod touch; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1",
+  iPhoneFirefox:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/140.0 Mobile/15E148 Safari/605.1.15",
+  iPhoneEdge:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 EdgiOS/140.0.0.0 Mobile/15E148 Safari/605.1.15",
+  iPhoneLine:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari Line/15.12.0",
+  iPhoneInstagram:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0.0 (iPhone14,5; iOS 18_6; ja_JP)",
+  iPhoneFacebook:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/480.0.0.0;FBLC/ja_JP]",
+  // An app's own view names no browser.
+  iPhoneInApp:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+  iPadChrome:
+    "Mozilla/5.0 (iPad; CPU OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/140.0.0.0 Mobile/15E148 Safari/604.1",
   // iPadOS Safari, and every Mac's Safari, say this.
   macSafari:
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15",
@@ -26,6 +41,9 @@ const UA = {
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
   androidChrome:
     "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36",
+  // Chrome on Android asking for the computer's page.
+  androidDesktop:
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
   windowsEdge:
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",
 };
@@ -81,8 +99,11 @@ const PREFIX = "x-web-search://?";
   assert.equal(iPhone.href, iosLookupUrl(solaris));
   assert.equal(
     iPhone.label,
-    "この本について、いつもの検索で調べる（新しいタブで開きます）",
+    "この本について調べる（いつもの検索で、新しいタブで開きます）",
   );
+  // The spoken name holds the words on the link, so a spoken
+  // この本について調べる finds it.
+  assert.ok(iPhone.label.startsWith("この本について調べる"));
   const elsewhere = bookLookup(solaris, false);
   assert.equal(elsewhere.href, googleLookupUrl(solaris));
   assert.equal(
@@ -110,6 +131,35 @@ const PREFIX = "x-web-search://?";
   ];
   for (const [name, ua, touch, ios] of cases)
     assert.equal(iosDevice(ua, touch), ios, name);
+}
+
+{
+  // Only Safari itself answers x-web-search://. Another browser on an iPhone
+  // would hand it to Safari or refuse it, and an app's own view (LINE,
+  // Instagram) may drop it: they keep Google.
+  const cases: [string, string, number, boolean][] = [
+    ["iPhone Safari", UA.iPhoneSafari, 5, true],
+    ["iPad Safari asking for the iPad page", UA.iPadSafari, 5, true],
+    ["iPod touch Safari", UA.iPod, 5, true],
+    ["iPadOS Safari as a Mac", UA.macSafari, 5, true],
+    ["iPhone Chrome", UA.iPhoneChrome, 5, false],
+    ["iPhone Firefox", UA.iPhoneFirefox, 5, false],
+    ["iPhone Edge", UA.iPhoneEdge, 5, false],
+    ["iPhone LINE", UA.iPhoneLine, 5, false],
+    ["iPhone Instagram", UA.iPhoneInstagram, 5, false],
+    ["iPhone Facebook", UA.iPhoneFacebook, 5, false],
+    ["iPhone app's own view", UA.iPhoneInApp, 5, false],
+    ["iPad Chrome", UA.iPadChrome, 5, false],
+    ["Mac Safari without touch", UA.macSafari, 0, false],
+    ["Mac Chrome", UA.macChrome, 0, false],
+    ["Android", UA.androidChrome, 5, false],
+    ["Android asking for the computer's page", UA.androidDesktop, 5, false],
+    ["Windows", UA.windowsEdge, 0, false],
+    ["Windows with a touch screen", UA.windowsEdge, 10, false],
+    ["nothing known", "", 0, false],
+  ];
+  for (const [name, ua, touch, safari] of cases)
+    assert.equal(iosSafari(ua, touch), safari, name);
 }
 
 console.log("book-lookup ok");

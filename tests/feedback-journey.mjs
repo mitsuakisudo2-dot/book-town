@@ -119,7 +119,7 @@ try {
           ).toContain("ソラリス スタニスワフ・レム");
         }
         // Beside them, a way to read about the book first. This browser is
-        // no iPhone or iPad, so the search is Google's.
+        // no Safari on an iPhone or iPad, so the search is Google's.
         const lookup = dialog()
           .locator(".bh-book-intro")
           .getByRole("link", { name: /^この本についてGoogleで調べる/ });
@@ -420,7 +420,7 @@ try {
             encodeURIComponent("ソラリス　スタニスワフ・レム"),
         );
         await expect(lookup).toHaveAccessibleName(
-          "この本について、いつもの検索で調べる（新しいタブで開きます）",
+          "この本について調べる（いつもの検索で、新しいタブで開きます）",
         );
         await expect(lookup).toHaveAttribute("target", "_blank");
         await expect(lookup).toHaveAttribute("rel", "noopener noreferrer");

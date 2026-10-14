@@ -6,7 +6,7 @@
 // (scripts/copy-zxing.mjs puts it there at build), so it is always the
 // version the JavaScript was built for, and no outside address is asked.
 
-import { iosDevice } from "./ios-device";
+import { iosDevice } from "./user-agent";
 
 export interface DetectedCode {
   rawValue: string;
