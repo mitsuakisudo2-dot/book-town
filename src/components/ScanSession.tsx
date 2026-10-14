@@ -20,6 +20,13 @@ import {
   readerKind,
 } from "../lib/barcode-reader";
 import { imeKey } from "../lib/keys";
+import {
+  coarsePointer,
+  fieldTakesFocus,
+  focusBack,
+  focusField,
+  markField,
+} from "../lib/coarse-pointer";
 import { normalizeIsbn } from "../lib/books";
 import {
   heldItem,
@@ -78,8 +85,7 @@ const canRead = () =>
  * Linux, Firefox) starts typing: its camera, most often one that cannot
  * focus near, is asked for only on ［カメラで読む］.
  */
-const startsTyping = () =>
-  readerKind() === "wasm" && !window.matchMedia?.("(pointer: coarse)").matches;
+const startsTyping = () => readerKind() === "wasm" && !coarsePointer();
 /** This many reads failing in a row: the reader is not working. */
 const FAILS_TO_STOP = 5;
 
@@ -350,6 +356,11 @@ export function ScanSession({
   const guide = useRef<HTMLSpanElement>(null);
   const field = useRef<HTMLInputElement>(null);
   const shelf = useRef<HTMLOListElement>(null);
+  // What had the focus as the scanner opened, before anything in it took it.
+  const opener = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    opener.current = document.activeElement as HTMLElement | null;
+  }, []);
 
   // What the async camera loop and the sends read: the latest render's.
   const latest = useRef({ owner, ready, online, savedIn, manual, cards });
@@ -789,8 +800,9 @@ export function ScanSession({
           ? SCAN_COPY.typing.magazine
           : SCAN_COPY.typing.badIsbn,
     );
-    // Selected, so the next keystroke starts again.
-    requestAnimationFrame(() => field.current?.select());
+    // Selected, so the next keystroke starts again; on a touch screen, a
+    // field the reader is not typing in is shown and marked instead.
+    requestAnimationFrame(() => markField(field.current, { select: true }));
     return false;
   }
   useEffect(() => {
@@ -814,16 +826,32 @@ export function ScanSession({
     takeTyped(isbn ?? typed);
   }
   // The keyboard stays up: buttons beside the field never take the focus.
-  const keepFocus = (event: { preventDefault(): void }) =>
+  // On a touch screen they give it back only to a field the reader was
+  // typing in; anything else would raise the keyboard.
+  const typedIn = useRef(false);
+  const keepFocus = (event: { preventDefault(): void }) => {
+    typedIn.current = document.activeElement === field.current;
     event.preventDefault();
+  };
   const typing = input.kind === "typing";
   const refocus = () => {
-    if (typing) field.current?.focus();
+    if (typing && (fieldTakesFocus() || typedIn.current))
+      field.current?.focus();
+    typedIn.current = false;
   };
 
-  // The field gets the focus as the scanner opens, in the same tap.
+  // With a mouse the field gets the focus as typing starts, in the same
+  // click. On a touch screen it waits for a tap: the focus stays in the
+  // scanner (on 閉じる, when what had it is gone).
   useLayoutEffect(() => {
-    if (typing) field.current?.focus();
+    if (!typing) return;
+    const inside = layer.current?.contains(document.activeElement) ?? false;
+    focusField(field.current, {
+      instead: inside
+        ? null
+        : layer.current?.querySelector<HTMLElement>("button"),
+      preventScroll: true,
+    });
   }, [typing]);
 
   // While typing, the scanner is as tall as what the keyboard leaves.
@@ -968,7 +996,7 @@ export function ScanSession({
   // As a dialog: the page beneath stays still, Escape closes, Tab stays
   // inside, and the focus goes back where it was.
   useEffect(() => {
-    const before = document.activeElement as HTMLElement | null;
+    const before = opener.current;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     if (!field.current)
@@ -1001,7 +1029,7 @@ export function ScanSession({
     return () => {
       document.body.style.overflow = overflow;
       document.removeEventListener("keydown", key);
-      before?.focus({ preventScroll: true });
+      focusBack(before, { preventScroll: true });
     };
   }, []);
 

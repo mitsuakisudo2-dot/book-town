@@ -3,6 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ean13Modules, withCheckDigit } from "./ean13.mjs";
 import { restingBox, settleBeforeNavigating } from "./journey-layers.mjs";
+import {
+  coarse,
+  expectNoKeyboard,
+  expectTapWrites,
+} from "./journey-keyboard.mjs";
 
 // Registering books in the demo build, on a phone. First by hand, through
 // ［手で入力］ in the scanner: openBD that never answers, an ISBN typed but
@@ -295,6 +300,12 @@ const count = (on) => scanner(on).locator(".scan-count");
 const cardTitle = (on) => scanner(on).locator(".scan-card-title span");
 const cardStatus = (on) => scanner(on).locator(".scan-card-status");
 const field = (on) => scanner(on).getByLabel("ISBN", { exact: true });
+/**
+ * Typing begun on a phone: the field waits for a tap, with no keyboard over
+ * the scanner, and the focus stays in it (journey-keyboard.mjs).
+ */
+const waitsForTap = (on = page) =>
+  expectNoKeyboard(on, "typing ISBNs", scanner(on));
 /** The profile's own 「本を登録」, beside the reader's name. */
 async function openScanner(on = page) {
   if (await scanner(on).count()) return;
@@ -637,8 +648,10 @@ try {
       await expect(scanner()).not.toContainText("ISBNを続けて打");
       // The settings would not help here, so they are not mentioned.
       await expect(scanner()).not.toContainText("端末の設定");
-      // The field has the focus once the camera gives way: the keyboard is up.
-      await expect(field()).toBeFocused();
+      // Typing once the camera gives way: the keyboard waits for a tap on the
+      // field, which is the reader's then.
+      await waitsForTap();
+      await expectTapWrites(field());
       await page.screenshot({
         path: path.join(output, "scan-reader-failed.png"),
       });
@@ -648,7 +661,7 @@ try {
       await scanner().getByRole("button", { name: "カメラで読む" }).click();
       await expect.poll(() => readerAsked.length).toBeGreaterThan(asked);
       await expect(scanner().locator(".scan-notes")).toContainText(failed);
-      await expect(field()).toBeFocused();
+      await waitsForTap();
       // Thirteen digits register at once, and the field is ready for the next.
       const typed = isbnOf(41);
       await field().pressSequentially(typed);
@@ -677,6 +690,57 @@ try {
       expect(data.library).toHaveLength(6);
       await finishScanning();
       await expect(page.locator(".toast")).toContainText("2冊を登録しました");
+    },
+  );
+
+  await check(
+    "on a phone, the scanner's buttons and ［手で入力］ leave the keyboard down until a field is tapped",
+    async () => {
+      expect(await coarse(page)).toBe(true);
+      await openScanner();
+      await waitsForTap();
+      await expect(
+        scanner().getByRole("button", { name: "閉じる" }),
+      ).toBeFocused();
+      // ♪ beside a field not tapped yet does not put the keyboard up.
+      const sound = scanner().getByRole("button", { name: "音" });
+      await sound.tap();
+      await waitsForTap();
+      await sound.tap();
+      await expect(sound).toHaveAttribute("aria-pressed", "true");
+      // Typing in it, the field is the reader's: a code that does not check
+      // out is marked and chosen there, to be typed again.
+      await expectTapWrites(field());
+      const typed = isbnOf(43);
+      await page.keyboard.type(
+        typed.slice(0, 12) + ((Number(typed[12]) + 1) % 10),
+      );
+      await expect(scanner().locator(".scan-notes")).toContainText(
+        "ISBNとして読めませんでした",
+      );
+      await expect(field()).toBeFocused();
+      await expect(field()).toHaveAttribute("aria-invalid", "true");
+      await expect
+        .poll(() =>
+          field().evaluate(
+            (input) => input.selectionEnd - input.selectionStart,
+          ),
+        )
+        .toBe(13);
+      await page.keyboard.type("9");
+      await expect(field()).toHaveValue("9");
+      await expect(field()).not.toHaveAttribute("aria-invalid");
+      await field().fill("");
+      // The one-book form opens without the keyboard too, and closing it
+      // gives the focus back to the button that opened it.
+      const byHand = scanner().getByRole("button", { name: "手で入力" });
+      await byHand.tap();
+      await expectNoKeyboard(page, "本を登録", dialog());
+      await expectTapWrites(dialog().getByLabel("ISBN"));
+      await dialog().getByRole("button", { name: "閉じる" }).tap();
+      await expect(dialog()).toHaveCount(0);
+      await expect(byHand).toBeFocused();
+      await finishScanning();
     },
   );
 
@@ -877,7 +941,7 @@ try {
     // Typing, with the keyboard taking half the screen: the field, the card
     // and ［終わる］ stay in what is left.
     await scanner(scan).getByRole("button", { name: "ISBNを打つ" }).click();
-    await expect(field(scan)).toBeFocused();
+    await waitsForTap(scan);
     await expect(scanner(scan)).toContainText("13桁そろうと登録します");
     // On a phone nothing of the page shows past the sheet.
     expect(
@@ -947,6 +1011,9 @@ try {
       await scan.getByRole("button", { name: "書名を入れる" }).click();
       const titles = scan.getByRole("dialog", { name: "書名を入れる" });
       await expect(titles).toContainText("ISBN " + untitled);
+      // On a phone the sheet opens without the keyboard over it.
+      await expectNoKeyboard(scan, "書名を入れる", titles);
+      await expectTapWrites(titles.getByLabel("タイトル"));
       await titles.getByLabel("タイトル").fill("控えの本");
       await titles.getByRole("button", { name: "登録する" }).click();
       await expect(scan.locator(".toast")).toContainText(
@@ -1135,7 +1202,7 @@ try {
       await expect(
         scanner(refused).getByRole("button", { name: "カメラで読む" }),
       ).toHaveCount(0);
-      await expect(field(refused)).toBeFocused();
+      await waitsForTap(refused);
       // ［終わる］ is wide, and in the bottom third of the screen (plan 7-0).
       const end = await restingBox(
         scanner(refused).getByRole("button", { name: "終わる" }),
@@ -1209,7 +1276,7 @@ try {
       await expect(scanner(failing).locator(".scan-notes")).toContainText(
         "読み取りの準備ができませんでした",
       );
-      await expect(field(failing)).toBeFocused();
+      await waitsForTap(failing);
       await scanner(failing)
         .getByRole("button", { name: "カメラで読む" })
         .click();
@@ -1367,7 +1434,7 @@ try {
       await expect(
         scanner(on).getByRole("button", { name: "カメラで読む" }),
       ).toHaveCount(0);
-      await expect(field(on)).toBeFocused();
+      await waitsForTap(on);
       // The camera is not asked for, for nothing.
       expect(await on.evaluate(() => window.__asked)).toBe(0);
       await bare.close();
@@ -1557,7 +1624,7 @@ try {
       await openScanner(on);
       await expect.poll(cameras).toEqual(["ended", "live"]);
       await scanner(on).getByRole("button", { name: "ISBNを打つ" }).click();
-      await expect(field(on)).toBeFocused();
+      await waitsForTap(on);
       await expect.poll(cameras, { timeout: 2000 }).toEqual(["ended", "ended"]);
       // Taken by another app meanwhile: typed instead, then and there.
       await on.evaluate(() => (window.__takenAfter = 300));
