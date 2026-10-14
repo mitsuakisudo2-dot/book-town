@@ -43,6 +43,7 @@ import {
   appendPostDraft,
   carryPostDraft,
   clearPostDraft,
+  postDraftKey,
   readingDraftKey,
   usePostDraft,
   useReadingDrafts,
@@ -50,6 +51,7 @@ import {
 import {
   DiscardDraft,
   KeptDraftNote,
+  useDraftOwner,
   useNotTakenWords,
   useOpenedWithWork,
 } from "./KeptDraftNote";
@@ -93,15 +95,18 @@ const pick = (phrases: string[]) =>
   phrases[Math.floor(Math.random() * phrases.length)];
 
 /** The draft a review of the book read starts from (a new post without one). */
-const reviewDraftKey = (book?: Book) =>
-  book ? "review:" + book.id : "new-post";
+const reviewDraftKey = (owner: string, book?: Book) =>
+  postDraftKey(owner, { bookId: book?.id });
 
 /**
  * Carries the line written in a sitting into the review of its book, when
  * that has nothing written yet; otherwise the review shows it (LineToAdd).
  */
-const carryLine = (sessionId: string, book?: Book) =>
-  carryPostDraft(readingDraftKey(sessionId), reviewDraftKey(book));
+const carryLine = (owner: string, sessionId: string, book?: Book) =>
+  carryPostDraft(
+    readingDraftKey(owner, sessionId),
+    reviewDraftKey(owner, book),
+  );
 
 export function ReadingView(props: Shared) {
   const clock = useClock();
@@ -366,8 +371,11 @@ function LineToAdd({
   book?: Book;
   notify: Shared["notify"];
 }) {
-  const { draft } = usePostDraft(readingDraftKey(sessionId));
-  if (!draft.body.trim()) return null;
+  const owner = useDraftOwner();
+  const { draft } = usePostDraft(
+    owner === null ? null : readingDraftKey(owner, sessionId),
+  );
+  if (owner === null || !draft.body.trim()) return null;
   return (
     <div className="reading-unsent-line reading-line-to-add">
       <p>読みながら書いた言葉は、まだ感想に入れていません</p>
@@ -379,7 +387,12 @@ function LineToAdd({
           const review = event.currentTarget
             .closest(".modal")
             ?.querySelector("textarea");
-          if (appendPostDraft(readingDraftKey(sessionId), reviewDraftKey(book)))
+          if (
+            appendPostDraft(
+              readingDraftKey(owner, sessionId),
+              reviewDraftKey(owner, book),
+            )
+          )
             review?.focus();
           else
             notify(
@@ -402,7 +415,8 @@ function UnsentLines({
   state,
   onReview,
 }: Shared & { onReview: (book?: Book, line?: string) => void }) {
-  const drafts = useReadingDrafts();
+  const owner = useDraftOwner();
+  const drafts = useReadingDrafts(owner);
   const lines = drafts.flatMap(({ sessionId, draft }) => {
     const session = state.readingSessions.find(
       (entry) => entry.id === sessionId,
@@ -416,7 +430,7 @@ function UnsentLines({
       : undefined;
     return [{ sessionId, body: draft.body, book }];
   });
-  if (!lines.length) return null;
+  if (owner === null || !lines.length) return null;
   return (
     <section className="reading-unsent" aria-labelledby="reading-unsent-title">
       <h2 id="reading-unsent-title">読みながら書いて、送っていない言葉</h2>
@@ -435,7 +449,7 @@ function UnsentLines({
                 className="button secondary"
                 onClick={() => {
                   // It starts the review, unless one is already being written.
-                  carryLine(sessionId, book);
+                  carryLine(owner, sessionId, book);
                   onReview(book, sessionId);
                 }}
               >
@@ -444,7 +458,9 @@ function UnsentLines({
               </button>
               <DiscardDraft
                 wordsLost
-                onDiscard={() => clearPostDraft(readingDraftKey(sessionId))}
+                onDiscard={() =>
+                  clearPostDraft(readingDraftKey(owner, sessionId))
+                }
               />
             </div>
           </li>
@@ -646,7 +662,9 @@ function ReadingRoom({
   // The line being written is kept in this browser until it is sent, carried
   // into a review, or thrown away: leaving, a reload or closing the book
   // does not lose it.
-  const memoKey = session ? readingDraftKey(session.id) : null;
+  const owner = useDraftOwner();
+  const memoKey =
+    session && owner !== null ? readingDraftKey(owner, session.id) : null;
   const {
     draft: { body: memo, spoiler },
     kept,
@@ -932,7 +950,7 @@ function ReadingRoom({
                 onClick={() => {
                   actions.endReading(ending.finished);
                   // The line not sent starts the review, when that is empty.
-                  carryLine(session.id, book);
+                  if (owner !== null) carryLine(owner, session.id, book);
                   onReview(book, session.id);
                 }}
               >
