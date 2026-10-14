@@ -4,12 +4,21 @@ import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
+  allowList,
   authChanges,
   desiredAuth,
   redact,
   shown,
 } from "../scripts/supabase-auth.mjs";
-import { deploymentLine, logLines, validBranch } from "../scripts/vercel.mjs";
+import {
+  deploymentLine,
+  dnsPlan,
+  domainLine,
+  logLines,
+  recordLine,
+  relativeName,
+  validBranch,
+} from "../scripts/vercel.mjs";
 
 // The scripts that change the hosted Supabase and Vercel settings, without
 // calling either: what they ask for, and what they let into the public log.
@@ -113,12 +122,36 @@ async function main() {
     },
   );
 
-  await check("without a Resend key only the code settings change", () => {
-    assert.deepEqual(desiredAuth(settings, { template, resendKey: "" }), {
-      mailer_otp_length: 6,
-      mailer_otp_exp: 600,
-    });
-  });
+  await check(
+    "without a Resend key only the site and code settings change",
+    () => {
+      assert.deepEqual(desiredAuth(settings, { template, resendKey: "" }), {
+        site_url: "https://booktown.page",
+        mailer_otp_length: 6,
+        mailer_otp_exp: 600,
+      });
+    },
+  );
+
+  await check(
+    "login links may return to the site, and to every old address",
+    () => {
+      assert.deepEqual(settings.site.returnTo, ["https://booktown.page/**"]);
+      const old =
+        "https://book-town-851k.vercel.app/**,https://book-town-851k-git-claude-stage2-login-booktown1.vercel.app/**";
+      assert.equal(
+        allowList(old, settings.site.returnTo),
+        old + ",https://booktown.page/**",
+      );
+      // Already there: nothing changes, so nothing is sent.
+      assert.equal(
+        allowList(old + ",https://booktown.page/**", settings.site.returnTo),
+        old + ",https://booktown.page/**",
+      );
+      assert.equal(allowList(" a , ,b", ["b", "c"]), "a,b,c");
+      assert.equal(allowList(null, ["c"]), "c");
+    },
+  );
 
   await check("with a Resend key the email goes through Resend", () => {
     const wanted = desiredAuth(settings, { template, resendKey: KEY });
@@ -210,6 +243,7 @@ async function main() {
         mailer_otp_exp: 3600,
         smtp_pass: null,
         site_url: "https://book-town-851k.vercel.app",
+        uri_allow_list: "https://book-town-851k.vercel.app/**",
       };
       const api = await standIn(({ method, url, body }) => {
         assert.equal(url, "/projects/ref123/config/auth");
@@ -226,6 +260,10 @@ async function main() {
       const looked = await run("scripts/supabase-auth.mjs", ["check"], env);
       assert.equal(looked.code, 0, looked.output);
       assert.match(looked.output, /mailer_otp_exp: 3600 -> 600/);
+      assert.match(
+        looked.output,
+        /site_url: "https:\/\/book-town-851k\.vercel\.app" -> "https:\/\/booktown\.page"/,
+      );
       assert.match(looked.output, /RESEND_API_KEY is not set/);
       assert.deepEqual(
         api.seen.map((s) => s.method),
@@ -242,6 +280,11 @@ async function main() {
       assert.equal(patch.smtp_host, "smtp.resend.com");
       assert.equal(patch.mailer_templates_magic_link_content, template);
       assert.equal(patch.mailer_otp_exp, 600);
+      assert.equal(patch.site_url, "https://booktown.page");
+      assert.equal(
+        patch.uri_allow_list,
+        "https://book-town-851k.vercel.app/**,https://booktown.page/**",
+      );
       assert.equal(project.rate_limit_email_sent, 30);
       for (const output of [looked.output, applied.output]) {
         assert.ok(!output.includes(KEY));
@@ -435,6 +478,316 @@ async function main() {
       for (const output of [built.output, missed.output, stopped.output])
         assert.ok(!output.includes("vcp_token_for_tests"));
       await api.close();
+    },
+  );
+
+  await check(
+    "Resend's records become Vercel's, and nothing is overwritten",
+    () => {
+      const domain = "booktown.page";
+      assert.equal(
+        relativeName("resend._domainkey.booktown.page.", domain),
+        "resend._domainkey",
+      );
+      assert.equal(relativeName("send", domain), "send");
+      assert.equal(relativeName("@", domain), "");
+      assert.equal(relativeName("booktown.page", domain), "");
+      const resend = [
+        {
+          record: "SPF",
+          type: "MX",
+          name: "send",
+          value: "feedback-smtp.ap-northeast-1.amazonses.com",
+          priority: 10,
+        },
+        {
+          record: "SPF",
+          type: "TXT",
+          name: "send",
+          value: '"v=spf1 include:amazonses.com ~all"',
+        },
+        {
+          record: "DKIM",
+          type: "TXT",
+          name: "resend._domainkey",
+          value: "p=MIGf",
+        },
+        // Receiving would send the domain's own mail to Resend.
+        {
+          record: "Receiving",
+          type: "MX",
+          name: "@",
+          value: "inbound-smtp.ap-northeast-1.amazonaws.com",
+          priority: 10,
+        },
+      ];
+      const vercel = [
+        { type: "ALIAS", name: "", value: "cname.vercel-dns-017.com." },
+        { type: "CAA", name: "", value: '0 issue "letsencrypt.org"' },
+      ];
+      const { add, clash } = dnsPlan(resend, vercel, domain);
+      assert.deepEqual(clash, []);
+      assert.deepEqual(add.map(recordLine), [
+        "MX send 10 feedback-smtp.ap-northeast-1.amazonses.com",
+        "TXT send v=spf1 include:amazonses.com ~all",
+        "TXT resend._domainkey p=MIGf",
+        "TXT _dmarc v=DMARC1; p=none;",
+      ]);
+      // Run again once they are there: nothing more to add.
+      const after = dnsPlan(resend, [...vercel, ...add], domain);
+      assert.deepEqual(after, { add: [], clash: [] });
+      // Someone's own DMARC stays, and another key at the same name clashes.
+      const theirs = dnsPlan(
+        resend,
+        [
+          { type: "TXT", name: "_dmarc", value: "v=DMARC1; p=reject;" },
+          { type: "TXT", name: "resend._domainkey", value: "p=OLD" },
+          { type: "TXT", name: "send", value: "v=spf1 -all" },
+          { type: "TXT", name: "send", value: "google-site-verification=x" },
+        ],
+        domain,
+      );
+      assert.deepEqual(theirs.clash.map(recordLine), [
+        "TXT send v=spf1 include:amazonses.com ~all",
+        "TXT resend._domainkey p=MIGf",
+      ]);
+      assert.deepEqual(theirs.add.map(recordLine), [
+        "MX send 10 feedback-smtp.ap-northeast-1.amazonses.com",
+      ]);
+    },
+  );
+
+  await check("each address says where it goes and whether it works", () => {
+    assert.equal(
+      domainLine(
+        { name: "booktown.page", verified: true },
+        { misconfigured: false },
+      ),
+      "booktown.page verified DNS ok",
+    );
+    assert.equal(
+      domainLine(
+        {
+          name: "www.booktown.page",
+          verified: true,
+          redirect: "booktown.page",
+          redirectStatusCode: 308,
+        },
+        { misconfigured: true },
+      ),
+      "www.booktown.page verified -> booktown.page (308) DNS not pointing here",
+    );
+    assert.equal(
+      domainLine({ name: "book-town-851k.vercel.app", verified: true }, null),
+      "book-town-851k.vercel.app verified",
+    );
+  });
+
+  await check(
+    "mail-apply adds the domain to Resend, its records to Vercel, and waits",
+    async () => {
+      const ADMIN = "re_admin_key_for_tests_1";
+      let resendDomains: Record<string, unknown>[] = [];
+      let checks = 0;
+      const resend = await standIn(({ method, url, body }) => {
+        if (method === "GET" && url === "/domains")
+          return { body: { object: "list", data: resendDomains } };
+        if (method === "POST" && url === "/domains") {
+          resendDomains = [
+            { id: "d_1", name: body?.name, status: "not_started" },
+          ];
+          return { body: { ...resendDomains[0], region: body?.region } };
+        }
+        if (method === "POST" && url === "/domains/d_1/verify")
+          return { body: { object: "domain", id: "d_1" } };
+        if (method === "GET" && url === "/domains/d_1") {
+          checks += 1;
+          const status = checks >= 3 ? "verified" : "pending";
+          return {
+            body: {
+              id: "d_1",
+              name: "booktown.page",
+              status,
+              records: [
+                {
+                  record: "SPF",
+                  type: "MX",
+                  name: "send",
+                  value: "feedback-smtp.ap-northeast-1.amazonses.com",
+                  priority: 10,
+                  status,
+                },
+                {
+                  record: "SPF",
+                  type: "TXT",
+                  name: "send",
+                  value: "v=spf1 include:amazonses.com ~all",
+                  status,
+                },
+                {
+                  record: "DKIM",
+                  type: "TXT",
+                  name: "resend._domainkey",
+                  value: "p=MIGf",
+                  status,
+                },
+              ],
+            },
+          };
+        }
+        return { status: 404, body: {} };
+      });
+      const vercelRecords: Record<string, unknown>[] = [
+        { type: "ALIAS", name: "", value: "cname.vercel-dns-017.com." },
+      ];
+      const vercel = await standIn(({ method, url, body }) => {
+        const { pathname } = new URL(url, "http://x");
+        assert.match(url, /slug=booktown1/);
+        if (
+          method === "GET" &&
+          pathname === "/v4/domains/booktown.page/records"
+        )
+          return { body: { records: vercelRecords } };
+        if (
+          method === "POST" &&
+          pathname === "/v2/domains/booktown.page/records"
+        ) {
+          vercelRecords.push(body ?? {});
+          return { body: { uid: "rec_" + vercelRecords.length } };
+        }
+        if (pathname === "/v9/projects/book-town-851k/domains")
+          return {
+            body: {
+              domains: [
+                { name: "booktown.page", verified: true },
+                {
+                  name: "www.booktown.page",
+                  verified: true,
+                  redirect: "booktown.page",
+                  redirectStatusCode: 308,
+                },
+                { name: "book-town-851k.vercel.app", verified: true },
+              ],
+            },
+          };
+        if (pathname.startsWith("/v6/domains/"))
+          return { body: { misconfigured: false } };
+        return { status: 404, body: {} };
+      });
+      const env = {
+        VERCEL_API_URL: vercel.url,
+        RESEND_API_URL: resend.url,
+        VERCEL_TOKEN: "vcp_token_for_tests",
+        VERCEL_TEAM: "booktown1",
+        VERCEL_PROJECT: "book-town-851k",
+        MAIL_DOMAIN: "booktown.page",
+        RESEND_API_KEY: KEY,
+        RESEND_ADMIN_KEY: ADMIN,
+        MAIL_WAIT_SECONDS: "5",
+        MAIL_POLL_SECONDS: "0",
+      };
+
+      const looked = await run("scripts/vercel.mjs", ["mail", "main"], env);
+      assert.equal(looked.code, 0, looked.output);
+      assert.match(
+        looked.output,
+        /not in Resend yet; mail-apply adds it \(ap-northeast-1\)/,
+      );
+      assert.equal(resendDomains.length, 0);
+
+      const applied = await run(
+        "scripts/vercel.mjs",
+        ["mail-apply", "main"],
+        env,
+      );
+      assert.equal(applied.code, 0, applied.output);
+      const created = resend.seen.find(
+        (s) => s.method === "POST" && s.url === "/domains",
+      );
+      assert.deepEqual(created?.body, {
+        name: "booktown.page",
+        region: "ap-northeast-1",
+      });
+      assert.deepEqual(
+        vercelRecords.slice(1).map((r) => recordLine(r as never)),
+        [
+          "MX send 10 feedback-smtp.ap-northeast-1.amazonses.com",
+          "TXT send v=spf1 include:amazonses.com ~all",
+          "TXT resend._domainkey p=MIGf",
+          "TXT _dmarc v=DMARC1; p=none;",
+        ],
+      );
+      assert.ok(resend.seen.some((s) => s.url === "/domains/d_1/verify"));
+      assert.match(applied.output, /booktown\.page is verified/);
+
+      // A second run finds everything in place and changes nothing.
+      const posts = vercel.seen.filter((s) => s.method === "POST").length;
+      const again = await run(
+        "scripts/vercel.mjs",
+        ["mail-apply", "main"],
+        env,
+      );
+      assert.equal(again.code, 0, again.output);
+      assert.match(again.output, /already has every record/);
+      assert.equal(
+        vercel.seen.filter((s) => s.method === "POST").length,
+        posts,
+      );
+
+      const domains = await run("scripts/vercel.mjs", ["domains", "main"], env);
+      assert.equal(domains.code, 0, domains.output);
+      assert.match(
+        domains.output,
+        /www\.booktown\.page verified -> booktown\.page \(308\) DNS ok/,
+      );
+      assert.match(domains.output, /TXT _dmarc v=DMARC1; p=none;/);
+
+      // The admin key is used, and no key reaches the log.
+      const auth = resend.seen.length;
+      assert.ok(auth > 0);
+      for (const output of [
+        looked.output,
+        applied.output,
+        again.output,
+        domains.output,
+      ]) {
+        assert.ok(!output.includes(ADMIN));
+        assert.ok(!output.includes(KEY));
+        assert.ok(!output.includes("vcp_token_for_tests"));
+      }
+      await resend.close();
+      await vercel.close();
+    },
+  );
+
+  await check(
+    "a sending-only Resend key is reported, and nothing changes",
+    async () => {
+      const resend = await standIn(() => ({
+        status: 401,
+        body: {
+          statusCode: 401,
+          name: "restricted_api_key",
+          message: "This API key is restricted to only send emails",
+        },
+      }));
+      const vercel = await standIn(() => ({ body: { records: [] } }));
+      const out = await run("scripts/vercel.mjs", ["mail-apply", "main"], {
+        VERCEL_API_URL: vercel.url,
+        RESEND_API_URL: resend.url,
+        VERCEL_TOKEN: "vcp_token_for_tests",
+        VERCEL_TEAM: "booktown1",
+        VERCEL_PROJECT: "book-town-851k",
+        MAIL_DOMAIN: "booktown.page",
+        RESEND_API_KEY: KEY,
+      });
+      assert.equal(out.code, 1, out.output);
+      assert.match(out.output, /::error::This Resend key may only send email/);
+      assert.match(out.output, /RESEND_ADMIN_KEY/);
+      assert.ok(!out.output.includes(KEY));
+      assert.equal(vercel.seen.length, 0);
+      await resend.close();
+      await vercel.close();
     },
   );
 

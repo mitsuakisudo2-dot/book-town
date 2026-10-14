@@ -1,4 +1,8 @@
 {
+  "site": {
+    "url": "https://booktown.page",
+    "returnTo": ["https://booktown.page/**"]
+  },
   "code": {
     "length": 6,
     "expiresInSeconds": 600

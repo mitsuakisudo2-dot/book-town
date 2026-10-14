@@ -9,6 +9,15 @@
 //   node scripts/vercel.mjs ensure <branch>   after a push: waits for Vercel to
 //                                             start building DEPLOY_SHA, and
 //                                             builds it here when it does not
+//   node scripts/vercel.mjs domains main      the project's addresses, whether
+//                                             each one works, and the DNS of
+//                                             MAIL_DOMAIN
+//   node scripts/vercel.mjs mail main         what sending the login email
+//                                             from MAIL_DOMAIN still needs
+//   node scripts/vercel.mjs mail-apply main   adds MAIL_DOMAIN to Resend, puts
+//                                             Resend's DNS records (and DMARC)
+//                                             into Vercel's DNS, and waits for
+//                                             Resend to verify them
 //
 // Vercel sometimes stops a preview seconds after a push, before building; a
 // new build of the same branch is the fix. The logs are public, like the
@@ -20,7 +29,22 @@ import { pathToFileURL } from "node:url";
 const API = process.env.VERCEL_API_URL ?? "https://api.vercel.com";
 const LOG_LINES = 60;
 const WAIT_MINUTES = 20;
-const ACTIONS = new Set(["status", "deploy", "ensure"]);
+const ACTIONS = new Set([
+  "status",
+  "deploy",
+  "ensure",
+  "domains",
+  "mail",
+  "mail-apply",
+]);
+const RESEND_API = process.env.RESEND_API_URL ?? "https://api.resend.com";
+// Tokyo, nearest to the readers.
+const MAIL_REGION = "ap-northeast-1";
+// Reports only; it asks no mail server to refuse anything.
+const DMARC = "v=DMARC1; p=none;";
+// Resend's records for sending. A receiving MX would send the domain's
+// incoming mail to Resend, so it is left out.
+const SENDING_RECORDS = new Set(["SPF", "DKIM"]);
 
 /** Branch names as git allows them, without anything a URL would misread. */
 export function validBranch(name) {
@@ -58,12 +82,90 @@ export function logLines(events) {
     .reverse();
 }
 
+/** A DNS name as Vercel takes it: relative to the domain, "" for the domain. */
+export function relativeName(name, domain) {
+  const full = String(name ?? "")
+    .trim()
+    .replace(/\.$/, "")
+    .toLowerCase();
+  if (full === "" || full === "@" || full === domain) return "";
+  return full.endsWith("." + domain) ? full.slice(0, -domain.length - 1) : full;
+}
+
+const recordValue = (value) =>
+  String(value ?? "")
+    .trim()
+    .replace(/^"(.*)"$/s, "$1");
+
+/** One DNS record on one line. */
+export function recordLine(record) {
+  const priority = record.mxPriority != null ? ` ${record.mxPriority}` : "";
+  return `${record.type} ${record.name || "@"}${priority} ${record.value}`;
+}
+
+/**
+ * What the domain's DNS needs for Resend: the sending records it lacks, and
+ * DMARC when the domain has none. A record already there with another value
+ * is a clash, never overwritten.
+ */
+export function dnsPlan(resendRecords, existing, domain) {
+  const wanted = (resendRecords ?? [])
+    .filter((record) => SENDING_RECORDS.has(record.record))
+    .map((record) => ({
+      type: record.type,
+      name: relativeName(record.name, domain),
+      value: recordValue(record.value),
+      ...(record.type === "MX"
+        ? { mxPriority: Number(record.priority ?? 10) }
+        : {}),
+    }));
+  const have = (existing ?? []).map((record) => ({
+    type: record.type,
+    name: relativeName(record.name, domain),
+    value: recordValue(record.value),
+  }));
+  if (!have.some((r) => r.type === "TXT" && r.name === "_dmarc"))
+    wanted.push({ type: "TXT", name: "_dmarc", value: DMARC });
+  const add = [];
+  const clash = [];
+  for (const record of wanted) {
+    const same = have.filter(
+      (r) => r.type === record.type && r.name === record.name,
+    );
+    if (same.some((r) => r.value === record.value)) continue;
+    // A name can hold several MX records, and a TXT name several strings,
+    // except the ones that must be alone: SPF, DKIM and DMARC.
+    const spf = (value) => /^v=spf1\b/i.test(value);
+    const alone =
+      record.type !== "MX" &&
+      same.some(
+        (r) =>
+          (spf(r.value) && spf(record.value)) ||
+          record.name.endsWith("_domainkey") ||
+          record.name === "_dmarc",
+      );
+    (alone ? clash : add).push(record);
+  }
+  return { add, clash };
+}
+
+/** A project address on one line: where it goes and whether it works. */
+export function domainLine(domain, config) {
+  const parts = [domain.name, domain.verified ? "verified" : "not verified"];
+  if (domain.redirect)
+    parts.push(`-> ${domain.redirect} (${domain.redirectStatusCode ?? 307})`);
+  if (domain.gitBranch) parts.push(`branch ${domain.gitBranch}`);
+  if (config)
+    parts.push(config.misconfigured ? "DNS not pointing here" : "DNS ok");
+  return parts.join(" ");
+}
+
 const finished = (state) => ["READY", "ERROR", "CANCELED"].includes(state);
 
 async function main(action, branch) {
   if (!ACTIONS.has(action) || !validBranch(branch)) {
     console.error(
-      "Usage: node scripts/vercel.mjs status|deploy|ensure <branch>",
+      "Usage: node scripts/vercel.mjs status|deploy|ensure|domains|mail|mail-apply <branch>",
     );
     process.exit(2);
   }
@@ -107,6 +209,137 @@ async function main(action, branch) {
     console.log(`Last ${lines.length} lines of the build log:`);
     for (const line of lines) console.log("  " + line);
   };
+
+  const mailDomain = process.env.MAIL_DOMAIN ?? "";
+  const dnsRecords = async () => {
+    const { records } = await call(
+      "GET",
+      `/v4/domains/${encodeURIComponent(mailDomain)}/records`,
+      { limit: 100 },
+    );
+    return records ?? [];
+  };
+
+  if (action === "domains") {
+    const { domains } = await call(
+      "GET",
+      `/v9/projects/${encodeURIComponent(project)}/domains`,
+    );
+    console.log(`Addresses of ${project}:`);
+    for (const domain of domains ?? []) {
+      const config = domain.name.endsWith(".vercel.app")
+        ? null
+        : await call(
+            "GET",
+            `/v6/domains/${encodeURIComponent(domain.name)}/config`,
+          );
+      console.log("  " + domainLine(domain, config));
+    }
+    if (mailDomain) {
+      console.log(`DNS records of ${mailDomain}:`);
+      for (const record of await dnsRecords())
+        console.log("  " + recordLine(record));
+    }
+    return;
+  }
+
+  if (action === "mail" || action === "mail-apply") {
+    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(mailDomain))
+      throw new Error("MAIL_DOMAIN is not a domain.");
+    // Adding a domain needs a Full access key; the sending key in
+    // RESEND_API_KEY may only send.
+    const resendKey =
+      process.env.RESEND_ADMIN_KEY || process.env.RESEND_API_KEY || "";
+    if (!resendKey) {
+      console.log("::warning::No Resend key is set, so Resend was not asked.");
+      return;
+    }
+    const resend = async (method, route, body) => {
+      const response = await fetch(new URL(route, RESEND_API), {
+        method,
+        headers: {
+          Authorization: `Bearer ${resendKey}`,
+          "Content-Type": "application/json",
+        },
+        body: body && JSON.stringify(body),
+      });
+      const text = await response.text();
+      if (response.status === 401 && /restricted/i.test(text)) {
+        console.log(
+          "::error::This Resend key may only send email. Adding a domain needs a Full access key, kept as the RESEND_ADMIN_KEY secret.",
+        );
+        throw new Error("Resend refused the key.");
+      }
+      if (!response.ok)
+        throw new Error(
+          `Resend answered ${response.status} to ${method} ${route}: ` +
+            text.split(resendKey).join("***"),
+        );
+      return text ? JSON.parse(text) : null;
+    };
+    const apply = action === "mail-apply";
+
+    const { data } = await resend("GET", "/domains");
+    let found = (data ?? []).find((domain) => domain.name === mailDomain);
+    if (!found) {
+      if (!apply) {
+        console.log(
+          `${mailDomain} is not in Resend yet; mail-apply adds it (${MAIL_REGION}).`,
+        );
+        return;
+      }
+      found = await resend("POST", "/domains", {
+        name: mailDomain,
+        region: MAIL_REGION,
+      });
+      console.log(`Added ${mailDomain} to Resend (${MAIL_REGION}).`);
+    }
+    const path = `/domains/${encodeURIComponent(found.id)}`;
+    let domain = await resend("GET", path);
+    console.log(`Resend: ${mailDomain} is ${domain.status}`);
+
+    const { add, clash } = dnsPlan(
+      domain.records,
+      await dnsRecords(),
+      mailDomain,
+    );
+    for (const record of clash)
+      console.log(
+        `::error::${mailDomain} already has another ${record.type} at ${record.name || "@"}; wanted ${recordLine(record)}`,
+      );
+    if (clash.length)
+      throw new Error("The DNS records clash; nothing changed.");
+    if (!add.length) console.log("The DNS already has every record.");
+    for (const record of add)
+      console.log(`  ${apply ? "adding" : "would add"} ${recordLine(record)}`);
+    if (!apply) return;
+
+    for (const record of add)
+      await call(
+        "POST",
+        `/v2/domains/${encodeURIComponent(mailDomain)}/records`,
+        {},
+        { ...record, ttl: 60 },
+      );
+    if (domain.status !== "verified") await resend("POST", `${path}/verify`);
+    const wait = Number(process.env.MAIL_WAIT_SECONDS ?? 360) * 1000;
+    const poll = Number(process.env.MAIL_POLL_SECONDS ?? 20) * 1000;
+    const until = Date.now() + wait;
+    while (domain.status !== "verified" && Date.now() < until) {
+      await new Promise((resolve) => setTimeout(resolve, poll));
+      domain = await resend("GET", path);
+    }
+    for (const record of domain.records ?? [])
+      console.log(
+        `  ${record.record} ${record.type} ${record.name}: ${record.status}`,
+      );
+    console.log(`Resend: ${mailDomain} is ${domain.status}`);
+    if (domain.status !== "verified")
+      console.log(
+        "::warning::Not verified yet. DNS can take a while; run mail-apply again later.",
+      );
+    return;
+  }
 
   if (action === "status") {
     const { projects } = await call("GET", "/v10/projects", { limit: 20 });
