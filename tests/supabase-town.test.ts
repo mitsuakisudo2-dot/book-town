@@ -1071,6 +1071,303 @@ async function main() {
     },
   );
 
+  await check(
+    "an app without the library has its marks copied to the reader's rows, and the app that knows it writes its own",
+    async () => {
+      const lia = await reader("lia");
+      // The app that knows the library sends this header with every request.
+      const knowing = createClient<Database>(API_URL, PUBLISHABLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { headers: { "x-booktown-library": "1" } },
+      });
+      const session = (await lia.client.auth.getSession()).data.session!;
+      assert.ifError(
+        (
+          await knowing.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          })
+        ).error,
+      );
+      const [old, known] = [crypto.randomUUID(), crypto.randomUUID()];
+      assert.ifError(
+        (
+          await admin.from("books").insert([
+            { id: old, title: "古いアプリの本" },
+            { id: known, title: "新しいアプリの本" },
+          ])
+        ).error,
+      );
+      const rowOf = async (id: string) => {
+        const row = await lia.client
+          .from("library_entries")
+          .select("source, wanted_at, removed_at, updated_at")
+          .eq("book_id", id);
+        assert.ifError(row.error);
+        return row.data[0] ?? null;
+      };
+      const wish = (client: Client, book_id: string) =>
+        client
+          .from("book_marks")
+          .insert({ user_id: lia.id, book_id, kind: "wish" })
+          .select("created_at")
+          .single();
+      const unwish = (client: Client, book_id: string) =>
+        client
+          .from("book_marks")
+          .delete()
+          .eq("user_id", lia.id)
+          .eq("book_id", book_id)
+          .eq("kind", "wish");
+      // An old app's 読みたい makes the row, wanted since the mark.
+      const wished = await wish(lia.client, old);
+      assert.ifError(wished.error);
+      const copied = await rowOf(old);
+      assert.equal(copied?.source, "legacy");
+      assert.equal(
+        Date.parse(copied!.wanted_at!),
+        Date.parse(wished.data.created_at),
+      );
+      // The knowing app's marks change no row, not even its time.
+      assert.ifError((await wish(knowing, known)).error);
+      assert.equal(await rowOf(known), null);
+      assert.ifError((await unwish(knowing, old)).error);
+      assert.deepEqual(await rowOf(old), copied);
+      // The old app's taking it back takes the row, wanted and nothing else, out.
+      assert.ifError((await wish(lia.client, old)).error);
+      assert.ifError((await unwish(lia.client, old)).error);
+      const out = await rowOf(old);
+      assert.equal(out?.wanted_at, null);
+      assert.ok(out?.removed_at);
+    },
+  );
+
+  await check(
+    "the library is its reader's alone through the API, and is written as the app writes it",
+    async () => {
+      const noa = await reader("noa");
+      const untyped = (client: Client) => client as unknown as SupabaseClient;
+      const books = [1, 2, 3].map(() => crypto.randomUUID());
+      assert.ifError(
+        (
+          await admin
+            .from("books")
+            .insert(books.map((id, n) => ({ id, title: `ノアの本 ${n + 1}` })))
+        ).error,
+      );
+      const entry = (book_id: string) => ({
+        user_id: noa.id,
+        book_id,
+        status: null,
+        status_at: null,
+        wanted_at: null,
+        liked_at: null,
+        owned: null,
+        source: "scan",
+        batch_id: null,
+        added_at: new Date().toISOString(),
+        removed_at: null,
+        like_restored: false,
+      });
+      // New rows, inserted ignoring duplicates: sent again, none is new.
+      for (const expected of [3, 0]) {
+        const saved = await noa.client
+          .from("library_entries")
+          .upsert(books.map(entry), {
+            onConflict: "user_id,book_id",
+            ignoreDuplicates: true,
+          })
+          .select("book_id");
+        assert.ifError(saved.error);
+        assert.equal(saved.data.length, expected);
+      }
+      // The columns changed, for several books at once.
+      const finished = await noa.client
+        .from("library_entries")
+        .update({ status: "finished", status_at: new Date().toISOString() })
+        .eq("user_id", noa.id)
+        .in("book_id", books)
+        .select("book_id");
+      assert.ifError(finished.error);
+      assert.equal(finished.data.length, 3);
+      // Only the columns granted change, and a partial upsert is refused.
+      assert.equal(
+        (
+          await noa.client
+            .from("library_entries")
+            .update({ source: "isbn" })
+            .eq("user_id", noa.id)
+        ).error?.code,
+        "42501",
+      );
+      assert.ok(
+        (
+          await untyped(noa.client)
+            .from("library_entries")
+            .upsert({ user_id: noa.id, book_id: books[0], status: "reading" })
+        ).error,
+      );
+      // A shelf made and renamed; books put on it and one taken off. The
+      // shelf books' default upsert would update columns that may not be.
+      const shelf = crypto.randomUUID();
+      assert.ifError(
+        (
+          await noa.client.from("library_shelves").insert({
+            id: shelf,
+            user_id: noa.id,
+            name: "旅",
+            position: "a0",
+          })
+        ).error,
+      );
+      assert.ifError(
+        (
+          await noa.client
+            .from("library_shelves")
+            .update({ name: "旅の本" })
+            .eq("id", shelf)
+            .eq("user_id", noa.id)
+        ).error,
+      );
+      assert.equal(
+        (
+          await noa.client
+            .from("library_shelf_books")
+            .upsert({ shelf_id: shelf, user_id: noa.id, book_id: books[0] })
+        ).error?.code,
+        "42501",
+      );
+      for (const book_id of books.slice(0, 2))
+        assert.ifError(
+          (
+            await noa.client
+              .from("library_shelf_books")
+              .upsert(
+                { shelf_id: shelf, user_id: noa.id, book_id },
+                { onConflict: "shelf_id,book_id", ignoreDuplicates: true },
+              )
+          ).error,
+        );
+      const off = await noa.client
+        .from("library_shelf_books")
+        .delete()
+        .eq("user_id", noa.id)
+        .eq("shelf_id", shelf)
+        .in("book_id", [books[1]])
+        .select("book_id");
+      assert.ifError(off.error);
+      assert.equal(off.data.length, 1);
+      // Noa likes Aki's post: whose it was is the post's, whatever is sent,
+      // and only the memo and its taking back change afterwards.
+      const met = {
+        id: crypto.randomUUID(),
+        user_id: noa.id,
+        book_id: bookId,
+        kind: "like",
+        via: "post",
+        post_id: postId,
+        other_reader_id: noa.id,
+        memo: "炎の色",
+        memo_at: new Date().toISOString(),
+      };
+      assert.ifError(
+        (await noa.client.from("book_encounters").insert(met)).error,
+      );
+      const kept = await noa.client
+        .from("book_encounters")
+        .select("other_reader_id")
+        .eq("id", met.id)
+        .single();
+      assert.ifError(kept.error);
+      assert.equal(kept.data.other_reader_id, aki.id);
+      assert.ifError(
+        (
+          await noa.client
+            .from("book_encounters")
+            .update({ memo: "炎の色が忘れられない" })
+            .eq("id", met.id)
+        ).error,
+      );
+      assert.equal(
+        (
+          await noa.client
+            .from("book_encounters")
+            .update({ kind: "want" })
+            .eq("id", met.id)
+        ).error?.code,
+        "42501",
+      );
+      const nowhere = await noa.client.from("book_encounters").insert({
+        ...met,
+        id: crypto.randomUUID(),
+        post_id: crypto.randomUUID(),
+      });
+      assert.equal(nowhere.error?.code, "23503");
+      assert.equal(nowhere.error?.message, "the post met is not found");
+      // Nobody else reads or changes any of it: not Aki, whose post it met,
+      // nor Ben, nor anyone signed out.
+      for (const table of [
+        "library_entries",
+        "library_shelves",
+        "library_shelf_books",
+        "book_encounters",
+      ]) {
+        for (const client of [aki.client, ben.client]) {
+          const seen = await untyped(client)
+            .from(table)
+            .select("user_id")
+            .eq("user_id", noa.id);
+          assert.ifError(seen.error);
+          assert.deepEqual(seen.data, [], table);
+        }
+        const anonymous = await untyped(newClient())
+          .from(table)
+          .select("user_id");
+        assert.equal(anonymous.error?.code, "42501", table);
+      }
+      const theirs = await ben.client
+        .from("library_entries")
+        .update({ status: "tsundoku" })
+        .eq("user_id", noa.id)
+        .select("book_id");
+      assert.ifError(theirs.error);
+      assert.deepEqual(theirs.data, []);
+
+      // Deleting the account (the auth server deletes as supabase_auth_admin)
+      // takes all of it along, the marks copied to rows too.
+      assert.ifError(
+        (
+          await noa.client
+            .from("book_marks")
+            .insert({ user_id: noa.id, book_id: books[2], kind: "favorite" })
+        ).error,
+      );
+      assert.ifError(
+        (
+          await noa.client
+            .from("reader_settings")
+            .upsert({ user_id: noa.id, spoiler_display: "show_all" })
+        ).error,
+      );
+      assert.ifError((await admin.auth.admin.deleteUser(noa.id)).error);
+      for (const table of [
+        "library_entries",
+        "library_shelves",
+        "library_shelf_books",
+        "book_encounters",
+        "book_marks",
+        "reader_settings",
+      ]) {
+        const left = await admin
+          .from(table)
+          .select("user_id", { count: "exact", head: true })
+          .eq("user_id", noa.id);
+        assert.ifError(left.error);
+        assert.equal(left.count, 0, table);
+      }
+    },
+  );
+
   // Last, as its books fill the newest of the catalog.
   await check(
     "more than 1000 marks are read a page at a time, every one with its book",
