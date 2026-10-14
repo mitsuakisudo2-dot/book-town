@@ -36,6 +36,12 @@ async function go(page, route = "/") {
   await page.goto(`${baseURL}${route}`);
   await expect(page.locator("main")).toBeVisible();
   await page.waitForFunction(() => localStorage.getItem("book-town-v1"));
+  // Saved data can exist before this page hydrates; wait until React owns the page.
+  await page.waitForFunction(() =>
+    Object.keys(document.querySelector("main") ?? {}).some((key) =>
+      key.startsWith("__reactFiber"),
+    ),
+  );
 }
 async function noOverflow(page, label) {
   const size = await page.evaluate(() => ({
@@ -160,9 +166,86 @@ async function expectPopInView(pop) {
     .toBeLessThan(2);
 }
 
+/**
+ * Notes in the page each time the POP count turns: whether a finger had
+ * lifted from the track, whether the browser had said the scroll ended since,
+ * and how long the track had then been still. These listen on the document
+ * on the way down, so they hear the lift and each scroll before the page's
+ * own handlers do.
+ */
+async function watchCountTurns(pop) {
+  await pop.evaluate((card) => {
+    const track = card.querySelector(".bh-pop-track");
+    const count = card.querySelector(".bh-pop-page-count");
+    const stop = new AbortController();
+    const turns = [];
+    let lifted;
+    let scrolled;
+    let ended = false;
+    let shown = count.textContent;
+    const on = (type, heard) =>
+      document.addEventListener(
+        type,
+        (event) => {
+          if (track.contains(event.target)) heard(performance.now());
+        },
+        { capture: true, signal: stop.signal },
+      );
+    for (const type of ["touchend", "touchcancel"])
+      on(type, (now) => {
+        lifted = now;
+      });
+    on("scroll", (now) => {
+      scrolled = now;
+    });
+    on("scrollend", () => {
+      if (lifted !== undefined) ended = true;
+    });
+    const observer = new MutationObserver(() => {
+      if (count.textContent === shown) return;
+      shown = count.textContent;
+      turns.push({
+        to: shown,
+        lifted: lifted !== undefined,
+        ended,
+        still:
+          lifted === undefined
+            ? 0
+            : performance.now() - Math.max(lifted, scrolled ?? lifted),
+      });
+    });
+    observer.observe(count, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+    window.countTurns = () => {
+      stop.abort();
+      observer.disconnect();
+      return turns;
+    };
+  });
+}
+
+/**
+ * The count turned once, to `shown`, after the finger lifted, and only when
+ * the track had come to rest as the page judges it: the browser had said the
+ * scroll ended, or the track had been still for the short quiet the page
+ * waits for instead (120 ms; 100 here). A count that follows the glide turns
+ * a moment after one of its scrolls, or as the finger lifts.
+ */
+async function expectCountTurnedAtRest(pop, shown) {
+  const turns = await pop.evaluate(() => window.countTurns());
+  expect(turns.map((turn) => turn.to)).toEqual([shown]);
+  const [turn] = turns;
+  expect(turn.lifted, JSON.stringify(turn)).toBe(true);
+  expect(turn.ended || turn.still >= 100, JSON.stringify(turn)).toBe(true);
+}
+
 // A finger drawn through the DevTools protocol: the browser scrolls what is
 // under it as it would for a real touch. `held` runs before the finger lifts,
-// `lifted` at once after, given the protocol session.
+// `lifted` as it lifts, given the protocol session: what it sends follows the
+// lift at once, not a round trip later.
 async function fingerDrag(page, locator, dx, dy, held, lifted) {
   await locator.scrollIntoViewIfNeeded();
   const box = await locator.boundingBox();
@@ -186,11 +269,13 @@ async function fingerDrag(page, locator, dx, dy, held, lifted) {
       await page.waitForTimeout(16);
     }
     await held?.();
-    await cdp.send("Input.dispatchTouchEvent", {
-      type: "touchEnd",
-      touchPoints: [],
-    });
-    await lifted?.(cdp);
+    await Promise.all([
+      cdp.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+      }),
+      lifted?.(cdp),
+    ]);
   } finally {
     await cdp.detach();
   }
@@ -738,7 +823,10 @@ try {
       await tabs.getByRole("link", { name: "書店" }).click();
       await expect(page).toHaveURL(`${baseURL}/?show=following&lane=1`);
       await page.getByRole("button", { name: "すべて", exact: true }).click();
+      // The timeline is shown before its すべて is pressed: a slow page may
+      // still show the street a moment after the tab is tapped.
       await tabs.getByRole("link", { name: "タイムライン" }).click();
+      await expect(page).toHaveURL(/\/timeline\/\?show=following$/);
       await page.getByRole("button", { name: "すべて", exact: true }).click();
       await expect(page).toHaveURL(/\/timeline\/$/);
     },
@@ -1162,7 +1250,10 @@ try {
         const shopLink = pop.locator(".bh-shop-link");
         await restingBox(track);
         const page = await track.evaluate((element) => element.clientWidth);
-        // The POP moves under the finger; what it names waits until it rests.
+        // The POP moves under the finger; what it names waits until it
+        // rests, not only while the finger holds it but through the glide
+        // after it lifts.
+        await watchCountTurns(pop);
         await swipePop(phone, pop, -1, async () => {
           await expect
             .poll(() => track.evaluate((element) => element.scrollLeft))
@@ -1177,6 +1268,7 @@ try {
         });
         await expect(count).toHaveText("2 / 4");
         await expect(shopLink).toHaveText("雨と翻訳");
+        await expectCountTurnedAtRest(pop, "2 / 4");
         await expect(pop.locator(".bh-owner-link")).toHaveAttribute(
           "href",
           "/profiles/r-sumire/",
@@ -1201,7 +1293,18 @@ try {
         await like.tap();
         await expect(like).toHaveAttribute("aria-pressed", liked);
         // Pressed while the POP still glides in after the finger has left
-        // it, a reaction goes to that POP, not the one sliding away.
+        // it, a reaction goes to that POP, not the one sliding away. The
+        // finger rests before it lifts, so the POP glides in on its snap,
+        // not on a fling: a tap that stops a browser's fling is no click.
+        // The tap is sent with the lift, not a round trip after it: the snap
+        // lasts about a fifth of a second, which a slow runner's round trips
+        // can outlast. So the press comes as the glide begins; that the
+        // count waits through the rest of a glide is checked on the first
+        // swipe above. A starved machine can still hold the click until the
+        // POP has come to rest. Such a press shows nothing of the glide: it
+        // is checked as a press on the POP at rest and undone, and the swipe
+        // made again, a few times at most.
+        const rest = () => phone.waitForTimeout(150);
         const next = pop.getByRole("button", { name: "次のPOP" });
         await next.tap();
         await expect(count).toHaveText("3 / 4");
@@ -1209,42 +1312,73 @@ try {
         await pop.getByRole("button", { name: "前のPOP" }).tap();
         await expect(count).toHaveText("2 / 4");
         await expectPopInView(pop);
-        await like.scrollIntoViewIfNeeded();
-        await track.scrollIntoViewIfNeeded();
-        const likeBox = await like.boundingBox();
-        await like.evaluate((button) => {
-          const card = button.closest(".owner-pop");
-          const track = card.querySelector(".bh-pop-track");
-          button.addEventListener(
-            "click",
-            () => {
-              window.pressedDuringGlide = {
-                at: track.scrollLeft / track.clientWidth,
-                count: card.querySelector(".bh-pop-page-count").textContent,
-              };
-            },
-            { capture: true, once: true },
-          );
-        });
-        await swipePop(phone, pop, -1, undefined, async (cdp) => {
+        let pressed;
+        for (let attempt = 1; attempt <= 5; attempt++) {
+          // Measured each time: the presses that undo a late one can leave
+          // the book's page scrolled.
+          await like.scrollIntoViewIfNeeded();
+          await track.scrollIntoViewIfNeeded();
+          const likeBox = await like.boundingBox();
           const point = {
             x: likeBox.x + likeBox.width / 2,
             y: likeBox.y + likeBox.height / 2,
             id: 2,
           };
-          await cdp.send("Input.dispatchTouchEvent", {
-            type: "touchStart",
-            touchPoints: [point],
+          await like.evaluate((button) => {
+            const card = button.closest(".owner-pop");
+            const track = card.querySelector(".bh-pop-track");
+            window.pressedDuringGlide = undefined;
+            button.addEventListener(
+              "click",
+              () => {
+                window.pressedDuringGlide = {
+                  at: track.scrollLeft / track.clientWidth,
+                  count: card.querySelector(".bh-pop-page-count").textContent,
+                };
+              },
+              { capture: true, once: true },
+            );
           });
-          await cdp.send("Input.dispatchTouchEvent", {
-            type: "touchEnd",
-            touchPoints: [],
+          await swipePop(phone, pop, -1, rest, async (cdp) => {
+            await Promise.all([
+              cdp.send("Input.dispatchTouchEvent", {
+                type: "touchStart",
+                touchPoints: [point],
+              }),
+              cdp.send("Input.dispatchTouchEvent", {
+                type: "touchEnd",
+                touchPoints: [],
+              }),
+            ]);
           });
-        });
-        const pressed = await phone.evaluate(() => window.pressedDuringGlide);
-        expect(pressed.count).toBe("2 / 4");
+          // The browser answers for the tap before the click it makes of it
+          // has reached the page.
+          await expect
+            .poll(() => phone.evaluate(() => window.pressedDuringGlide), {
+              message: "the tap during the glide is a click",
+            })
+            .toBeDefined();
+          pressed = await phone.evaluate(() => window.pressedDuringGlide);
+          if (pressed.at < 1.98 || attempt === 5) break;
+          // Pressed once the POP had come to rest, it went to that POP.
+          await expect(count).toHaveText("3 / 4");
+          await expectPopInView(pop);
+          await expect(like).toHaveAttribute(
+            "aria-pressed",
+            arriving === "true" ? "false" : "true",
+          );
+          await like.tap();
+          await expect(like).toHaveAttribute("aria-pressed", arriving);
+          await pop.getByRole("button", { name: "前のPOP" }).tap();
+          await expect(count).toHaveText("2 / 4");
+          await expectPopInView(pop);
+          await expect(like).toHaveAttribute("aria-pressed", liked);
+        }
         expect(pressed.at).toBeGreaterThan(1.02);
-        expect(pressed.at).toBeLessThan(1.98);
+        expect(pressed.at, "pressed before the POP came to rest").toBeLessThan(
+          1.98,
+        );
+        expect(pressed.count).toBe("2 / 4");
         await expect(count).toHaveText("3 / 4");
         await expectPopInView(pop);
         await expect(like).toHaveAttribute(
@@ -1264,7 +1398,6 @@ try {
         // At either end the POP stays, and the book neither turns nor
         // closes: a finger drawn outward there is no swipe back through the
         // history. It rests before it lifts, so no fling eats the next tap.
-        const rest = () => phone.waitForTimeout(150);
         await pop.getByRole("button", { name: "前のPOP" }).tap();
         await expect(count).toHaveText("1 / 4");
         await expectPopInView(pop);

@@ -1394,7 +1394,7 @@ try {
             get: () => points,
           });
         }, device.touchPoints);
-        const tab = await other.newPage();
+        const tab = settleBeforeNavigating(await other.newPage());
         tab.on("pageerror", (error) =>
           errors.push(`${device.name}: ${error.message}`),
         );
