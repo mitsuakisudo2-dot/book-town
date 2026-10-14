@@ -818,6 +818,7 @@ try {
           .locator(".book-page-hero")
           .getByRole("link", { name: /^Amazonで探す/ }),
       ).toBeVisible();
+      // This browser is no iPhone or iPad: the lookup is Google's.
       await expect(
         page
           .locator(".book-page-hero")
@@ -1293,6 +1294,91 @@ try {
       await expect(page.locator(".street-shop")).toHaveCount(1);
       await top.fill("");
       await page.setViewportSize({ width: 390, height: 844 });
+    },
+  );
+
+  await check(
+    "on an iPhone or iPad the lookup is Safari's own search, elsewhere Google",
+    async () => {
+      const words = encodeURIComponent("ソラリス　スタニスワフ・レム");
+      const google = `https://google.com/search?q=${words}`;
+      const safari = `x-web-search://?${words}`;
+      // The page as served cannot know the device: Google's address.
+      const served = await (
+        await page.request.get(`${baseURL}/books/solaris/`)
+      ).text();
+      expect(served).toContain(`href="${google}"`);
+      expect(served).not.toContain("x-web-search:");
+      const MAC_SAFARI =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15";
+      const devices = [
+        {
+          name: "iPhone Safari",
+          userAgent:
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1",
+          viewport: { width: 390, height: 844 },
+          touchPoints: 5,
+          ios: true,
+        },
+        // iPadOS asks for the computer's page, as a Mac with a touch screen.
+        {
+          name: "iPadOS Safari",
+          userAgent: MAC_SAFARI,
+          viewport: { width: 820, height: 1180 },
+          touchPoints: 5,
+          ios: true,
+        },
+        {
+          name: "Mac Safari",
+          userAgent: MAC_SAFARI,
+          viewport: { width: 1280, height: 900 },
+          touchPoints: 0,
+          ios: false,
+        },
+      ];
+      for (const device of devices) {
+        const other = await browser.newContext({
+          userAgent: device.userAgent,
+          viewport: device.viewport,
+          isMobile: device.name === "iPhone Safari",
+          hasTouch: device.touchPoints > 0,
+        });
+        await other.addInitScript((points) => {
+          Object.defineProperty(Navigator.prototype, "maxTouchPoints", {
+            get: () => points,
+          });
+        }, device.touchPoints);
+        const tab = await other.newPage();
+        tab.on("pageerror", (error) =>
+          errors.push(`${device.name}: ${error.message}`),
+        );
+        tab.on("console", (message) => {
+          if (message.type() === "error")
+            errors.push(`${device.name}: ${message.text()}`);
+        });
+        await tab.goto(`${baseURL}/books/solaris/`);
+        await tab.waitForFunction(() =>
+          Object.keys(document.querySelector("main") ?? {}).some((key) =>
+            key.startsWith("__reactFiber"),
+          ),
+        );
+        const lookup = tab.locator(".book-page-hero .book-lookup");
+        await expect(lookup, device.name).toHaveAttribute(
+          "href",
+          device.ios ? safari : google,
+        );
+        await expect(lookup, device.name).toHaveAccessibleName(
+          device.ios
+            ? "この本について、いつもの検索で調べる（新しいタブで開きます）"
+            : "この本についてGoogleで調べる（新しいタブで開きます）",
+        );
+        // Still a plain link to a new tab, with the same words and icon.
+        await expect(lookup).toHaveAttribute("target", "_blank");
+        await expect(lookup).toHaveAttribute("rel", "noopener noreferrer");
+        await expect(lookup).toHaveText("この本について調べる↗");
+        await expect(lookup.locator("svg")).toHaveCount(1);
+        await other.close();
+      }
     },
   );
 

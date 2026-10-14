@@ -6,6 +6,8 @@
 // (scripts/copy-zxing.mjs puts it there at build), so it is always the
 // version the JavaScript was built for, and no outside address is asked.
 
+import { iosDevice } from "./ios-device";
+
 export interface DetectedCode {
   rawValue: string;
 }
@@ -44,9 +46,7 @@ export const READER_TIMEOUT_MS = 15_000;
  * BarcodeDetector, where one is turned on, reads nothing (WebKit bug 281848).
  */
 export function webKitOnly(userAgent: string, touchPoints: number): boolean {
-  if (/iPhone|iPad|iPod/.test(userAgent)) return true;
-  // An iPad asks for the computer's page, as a Mac with a touch screen.
-  if (/Macintosh/.test(userAgent) && touchPoints > 1) return true;
+  if (iosDevice(userAgent, touchPoints)) return true;
   return (
     /AppleWebKit/.test(userAgent) && !/Chrome|Chromium|Android/.test(userAgent)
   );

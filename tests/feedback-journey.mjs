@@ -118,7 +118,8 @@ try {
             url.searchParams.get("k") ?? url.searchParams.get("sitem"),
           ).toContain("ソラリス スタニスワフ・レム");
         }
-        // Beside them, a way to read about the book first.
+        // Beside them, a way to read about the book first. This browser is
+        // no iPhone or iPad, so the search is Google's.
         const lookup = dialog()
           .locator(".bh-book-intro")
           .getByRole("link", { name: /^この本についてGoogleで調べる/ });
@@ -386,6 +387,50 @@ try {
         await expect(dialog().locator(".bh-shop-card")).not.toContainText([
           "QA書店",
         ]);
+        await page.keyboard.press("Escape");
+      },
+    );
+    await context.close();
+  }
+  {
+    // On an iPhone the same link asks Safari's own search.
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+      locale: "ja-JP",
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1",
+    });
+    page = settleBeforeNavigating(await context.newPage());
+    page.on("pageerror", (e) => errors.push(`iPhone: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`iPhone: ${m.text()}`);
+    });
+    await go();
+    await check(
+      "iPhone: この本について調べる uses Safari's own search",
+      async () => {
+        await solarisTrigger().click();
+        await expectTitle("ソラリス");
+        const lookup = dialog().locator(".bh-book-intro .book-lookup");
+        await expect(lookup).toHaveAttribute(
+          "href",
+          "x-web-search://?" +
+            encodeURIComponent("ソラリス　スタニスワフ・レム"),
+        );
+        await expect(lookup).toHaveAccessibleName(
+          "この本について、いつもの検索で調べる（新しいタブで開きます）",
+        );
+        await expect(lookup).toHaveAttribute("target", "_blank");
+        await expect(lookup).toHaveAttribute("rel", "noopener noreferrer");
+        await expect(lookup).toHaveText("この本について調べる↗");
+        // The shop links beside it are the same as anywhere.
+        await expect(
+          dialog()
+            .locator(".bh-book-intro")
+            .getByRole("link", { name: /^Amazonで探す/ }),
+        ).toHaveAttribute("href", /^https:\/\/www\.amazon\.co\.jp\/s\?k=/);
         await page.keyboard.press("Escape");
       },
     );

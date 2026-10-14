@@ -2,6 +2,8 @@
 // from the page without touching it. Nothing here reads the DOM itself: the
 // screen hands in the elements it found (or plain objects, in the tests).
 
+import { iosDevice } from "./ios-device";
+
 /** The same limits as public.site_notes (tests check them against the migration). */
 export const SITE_NOTE_LIMITS = {
   body: 2000,
@@ -136,8 +138,7 @@ export function deviceLabel(userAgent: string, touchPoints = 0): string {
   const ua = userAgent;
   const system = /iPhone|iPod/.test(ua)
     ? "iPhone"
-    : // iPadOS Safari presents itself as a Mac, but a Mac has no touch screen.
-      /iPad/.test(ua) || (/Macintosh/.test(ua) && touchPoints > 1)
+    : iosDevice(ua, touchPoints)
       ? "iPad"
       : /Android/.test(ua)
         ? "Android"
