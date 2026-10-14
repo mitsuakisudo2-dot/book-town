@@ -579,6 +579,53 @@ try {
   );
 
   await check(
+    "a visitor who leaves a 便り's page to sign in starts at the top of the sign-in page",
+    async () => {
+      // Short enough that the sign-in page scrolls too.
+      await page.setViewportSize({ width: 390, height: 420 });
+      await page.goto(base + "/timeline/");
+      const times = page.locator("main article.letter .letter-time");
+      // The 見本 town's 便り are read in, then the reader scrolls down.
+      await expect(times.nth(6)).toBeAttached();
+      await page.evaluate(() => scrollTo(0, 900));
+      await expect
+        .poll(() => page.evaluate(() => scrollY))
+        .toBeGreaterThan(300);
+      const target = await times.evaluateAll((links) =>
+        links.findIndex((link) => {
+          const box = link.getBoundingClientRect();
+          return box.top > 60 && box.bottom < innerHeight - 100;
+        }),
+      );
+      expect(target).toBeGreaterThanOrEqual(0);
+      await times.nth(target).tap();
+      const letter = page.locator(".post-page.is-layer");
+      await expect(letter).toBeVisible();
+      await letter
+        .locator(".is-main")
+        .getByRole("button", { name: "いいね", exact: true })
+        .tap();
+      const invite = page.getByRole("dialog", {
+        name: "本の街の住人になりませんか",
+      });
+      await expect(invite).toBeVisible();
+      await invite.getByRole("link", { name: "ログインする" }).tap();
+      await expect(
+        page.getByRole("heading", { name: "本の街に入る" }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollHeight > innerHeight,
+        ),
+        "the sign-in page scrolls",
+      ).toBe(true);
+      await page.waitForTimeout(300);
+      expect(await page.evaluate(() => scrollY), "at its top").toBe(0);
+      await page.setViewportSize({ width: 390, height: 844 });
+    },
+  );
+
+  await check(
     "a signed-out visitor finds the sign-in link on a phone",
     async () => {
       await page.goto(base + "/");
