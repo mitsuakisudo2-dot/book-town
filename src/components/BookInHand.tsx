@@ -22,6 +22,7 @@ import { StoreStamp } from "./StoreCanvas";
 import { profilePath, shopPath } from "../lib/paths";
 import { useBackLayer } from "../lib/back-layer";
 import { focusBack } from "../lib/coarse-pointer";
+import { lockPageScroll } from "../lib/scroll-lock";
 
 /**
  * The book in hand, as one step of 戻る: the shop, the shelf (none for a
@@ -295,25 +296,9 @@ export function BookInHand({
     const dialog = dialogRef.current;
     if (!dialog) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    const position = { x: window.scrollX, y: window.scrollY };
-    const bodyStyle = document.body.style;
-    const previousBody = {
-      overflow: bodyStyle.overflow,
-      position: bodyStyle.position,
-      top: bodyStyle.top,
-      left: bodyStyle.left,
-      right: bodyStyle.right,
-      width: bodyStyle.width,
-    };
-
     // A modal native dialog makes the rest of the document inert, including AT.
     // Fixing the body also prevents the underlying street moving on mobile Safari.
-    bodyStyle.overflow = "hidden";
-    bodyStyle.position = "fixed";
-    bodyStyle.top = `-${position.y}px`;
-    bodyStyle.left = `-${position.x}px`;
-    bodyStyle.right = "0";
-    bodyStyle.width = "100%";
+    const release = lockPageScroll();
     // The dialog holds no field, so opening it raises no keyboard; the focus
     // starts on 閉じる.
     dialog.showModal();
@@ -321,16 +306,9 @@ export function BookInHand({
 
     return () => {
       dialog.close();
-      Object.assign(bodyStyle, previousBody);
-      if (restoreViewportRef.current) {
-        window.scrollTo({
-          left: position.x,
-          top: position.y,
-          behavior: "instant",
-        });
-        if (previouslyFocused?.isConnected) {
-          focusBack(previouslyFocused, { preventScroll: true });
-        }
+      release(restoreViewportRef.current);
+      if (restoreViewportRef.current && previouslyFocused?.isConnected) {
+        focusBack(previouslyFocused, { preventScroll: true });
       }
     };
   }, []);
