@@ -738,7 +738,10 @@ try {
       await tabs.getByRole("link", { name: "書店" }).click();
       await expect(page).toHaveURL(`${baseURL}/?show=following&lane=1`);
       await page.getByRole("button", { name: "すべて", exact: true }).click();
+      // The timeline is shown before its すべて is pressed: a slow page may
+      // still show the street a moment after the tab is tapped.
       await tabs.getByRole("link", { name: "タイムライン" }).click();
+      await expect(page).toHaveURL(/\/timeline\/\?show=following$/);
       await page.getByRole("button", { name: "すべて", exact: true }).click();
       await expect(page).toHaveURL(/\/timeline\/$/);
     },
