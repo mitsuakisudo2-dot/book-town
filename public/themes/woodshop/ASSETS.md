@@ -27,6 +27,16 @@ All files below are original. The user's reference mockups were only viewed and 
 - Cover art: a 24-panel procedural atlas was attempted and rejected by review (it looked flatter than `jackets-v2.webp`), so walk face-outs keep the 8 v2 paintings, cropped at their own proportions instead of squashed.
 
 Fonts in `public/fonts/` (SIL OFL 1.1, subsets of ASCII, kana, punctuation and the app's own text; licences shipped next to them):
+
 - `shop-sign-700.woff2` = Kaisei HarunoUmi Bold, `shop-hand-500.woff2` = Kaisei HarunoUmi Medium (`KaiseiHarunoUmi-OFL.txt`), source https://github.com/google/fonts/tree/main/ofl/kaiseiharunoumi
 - `jacket-mincho-600.woff2` = Zen Old Mincho SemiBold (`ZenOldMincho-OFL.txt`), source https://github.com/google/fonts/tree/main/ofl/zenoldmincho
 - Characters outside the subsets fall back to the same families from Google Fonts (unicode-range slices), then to the serif.
+
+## Home carousel art (`public/home/`, 2026-10-14)
+
+The home's 「今日の街」 slides and the 本棚をのぞく cards use two 16:10 crops of the room images above, cut with PIL (Lanczos, WebP quality 72) at 390, 780 and 1170px wide. No new pixels were drawn; nothing else was changed.
+
+- `shelves-{390,780,1170}-v1.webp`: `room-bokeh-v1.webp`, the box (0, 600)–(1080, 1275). Always the first slide's art, so the static page asks for it first.
+- `lamp-{390,780,1170}-v1.webp`: `room.webp`, the box (0, 0)–(940, 588), the lamp and the wall under it.
+
+They follow the same rule as `-vN` files here: kept a year (`vercel.json`, `/home/(.*-v\d+\.webp)`), their bytes recorded in `VERSIONED` in `tests/head.test.ts`. A new look is a new name (`-v2`).
