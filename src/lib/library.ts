@@ -96,7 +96,7 @@ export interface LibraryEntry {
   removedAt: string | null;
   /**
    * Brought back by a like and untouched since, so taking the like back
-   * takes it out again (4-10's way of writing likes: a proposal).
+   * takes it out again (4-10's way of writing likes, settled 2026-10-14).
    */
   likeRestored: boolean;
   /**
@@ -281,7 +281,7 @@ export type LibrarySet = Partial<{
   owned: Owned | null;
   /** A like or 私も好き！, and taking it back (4-10). */
   liked: boolean;
-  /** ☆ on and off: the mark lives in favorites; the row is made, brought back, or (proposal) taken out. */
+  /** ☆ on and off: the mark lives in favorites; the row is made, brought back, or taken out. */
   favorite: boolean;
   /** false: registered on purpose (scan, ISBN, by hand, ［＋登録］). */
   removed: boolean;
@@ -365,7 +365,7 @@ export interface LibrarySettings {
   libraryHidden: string[];
   /** Whether books only liked show in the library (いいねした本 shows them anyway). */
   likesInLibrary: boolean;
-  /** 「読み始めたら『読みたい』から外す」 (proposal): off unless chosen. */
+  /** 「読み始めたら『読みたい』から外す」: off unless chosen. */
   wantedClearsOnStatus: boolean;
   /** 「メモの案内を出す」: the small toast offering a memo after a like or 読みたい. */
   memoHint: boolean;
@@ -440,7 +440,7 @@ const sameEntry = (a: LibraryEntry, b: LibraryEntry) =>
 
 /**
  * The reader comes to the book again: a row is made, and one taken out comes
- * back (4-2's 戻す規則: a proposal).
+ * back (4-2's 戻す規則, settled 2026-10-14).
  */
 const meetsAgain = (s: LibrarySet) =>
   s.removed === false ||
@@ -568,10 +568,10 @@ export function applySet(
     // A like taken back: the row goes when nothing but the like kept it.
     const likeGone =
       s.liked === false && e?.likedAt != null && next.likedAt === null;
-    // A 読みたい or ☆ taken back (proposal, 4-2's last row): the row goes
-    // when nothing at all is left, however it came in. A use once made is
-    // left (everUsed), as for a like, so the order the reader takes a like
-    // and a 読みたい back in does not matter (N19).
+    // A 読みたい or ☆ taken back (4-2's last row, settled 2026-10-14): the
+    // row goes when nothing at all is left, however it came in. A use once
+    // made is left (everUsed), as for a like, so the order the reader takes a
+    // like and a 読みたい back in does not matter (N19).
     const favorite = s.favorite === false ? false : x.favorite;
     const markGone =
       (s.want === false && e?.wantedAt != null) ||
@@ -670,11 +670,11 @@ export const entryContext = (
 ): EntryContext => contextsOf(state, shopBooks)(bookId);
 
 /**
- * The books in the reader's own shop (4-1's お店の棚: that they are sorted is
- * decided, which places count is a proposal): every shelf of the shop's
- * page, private ones too, and its store scene (the account's sceneBookIds;
- * the demo keeps its scene in the walk's storage). After the shop's drafts
- * arrive (wave-1 PR5), the draft's books too.
+ * The books in the reader's own shop (4-1's お店の棚 and N19, settled
+ * 2026-10-14): every shelf of the shop's page, private ones too, and its
+ * store scene (the account's sceneBookIds; the demo keeps its scene in the
+ * walk's storage). After the shop's drafts arrive (wave-1 PR5), the draft's
+ * books too.
  */
 export function shopBookIds(
   shop: Shop | null,

@@ -258,9 +258,9 @@ alter table public.reader_settings
 -- library (いいねした本 shows them anyway).
 alter table public.reader_settings
   add column likes_in_library boolean not null default true;
--- 「読み始めたら『読みたい』から外す」. The owner allowed the setting (問い3);
--- keeping it here is a proposal not yet settled. Only the app reads it; the
--- trigger below copies an old app's marks the same way whatever it says.
+-- 「読み始めたら『読みたい』から外す」. The owner allowed the setting (問い3).
+-- Only the app reads it; the trigger below copies an old app's marks the same
+-- way whatever it says.
 alter table public.reader_settings
   add column wanted_clears_on_status boolean not null default false;
 -- 「メモの案内を出す」: the small note offering a memo after a いいね or a
@@ -383,7 +383,7 @@ begin
     values (r.user_id, r.book_id, 'legacy', r.created_at)
     on conflict (user_id, book_id) do nothing;
     -- library, wish and favorite bring a row taken out back, as in the app
-    -- (review doc 4-2's 戻す規則, a proposal). A mark the reader wrote is
+    -- (review doc 4-2's 戻す規則, settled 2026-10-14). A mark the reader wrote is
     -- their own doing, so a row brought back by a like is no longer only that.
     update public.library_entries e set
       removed_at = case when r.kind in ('library', 'wish', 'favorite') then null
@@ -413,10 +413,9 @@ begin
     -- owned, a like, a use once made (ever_used, N19), a shelf not put away,
     -- a library or favorite mark, the reader's own record, and a memo on any
     -- of their encounters of it (one taken back too). Shop shelves, posts,
-    -- posters and the nine themselves are not looked at. That a wish or
-    -- favorite taken off does it too, not only the library mark, is a
-    -- proposal not yet settled (review doc 4-2's last row); if it is not
-    -- taken, only r.kind = 'library' takes a row out.
+    -- posters and the nine themselves are not looked at. A wish or favorite
+    -- taken off does it too, not only the library mark (review doc 4-2's
+    -- last row, settled by the owner 2026-10-14).
     update public.library_entries e set removed_at = now()
     where e.user_id = r.user_id and e.book_id = r.book_id and e.removed_at is null
       and r.kind in ('library', 'wish', 'favorite')
