@@ -1083,12 +1083,13 @@ try {
       await page.getByRole("link", { name: /ひとことを書く/ }).click();
       await expect(page).toHaveURL(/\/my-shop\/#shop-words$/);
       // On a touch screen the words are shown open and wait for a tap: the
-      // keyboard does not rise over them, and the heading has the focus.
+      // keyboard does not rise over them, and their form has the focus.
       const words = page.locator("#shop-words");
       await expect(words).toHaveAttribute("open", "");
       await expect(words.getByLabel("ひとこと")).toBeInViewport();
-      await expectNoKeyboard(page, "the shop's words");
-      await expect(words.locator("summary")).toBeFocused();
+      const form = words.getByRole("form", { name: "書店の看板と紹介" });
+      await expect(form).toBeFocused();
+      await expectNoKeyboard(page, "the shop's words", form);
       await expectTapWrites(words.getByLabel("ひとこと"));
     },
   );

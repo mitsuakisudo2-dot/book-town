@@ -1070,11 +1070,33 @@ try {
         await expect(text).toBeFocused();
         await page.keyboard.press("Escape");
 
+        // A review thrown away on the book's page, outside any sheet: the
+        // keyboard stays down, and the focus stays with the review (its
+        // form), not back at the top of the page.
+        await go("/books/momo/");
+        const momo = page.locator(".book-reviews");
+        await momo.locator("textarea").fill("消える感想。");
+        await reload();
+        await momo.getByRole("button", { name: "書きかけを消す" }).tap();
+        await momo.getByRole("button", { name: "消す", exact: true }).tap();
+        await expect(momo.locator("textarea")).toHaveValue("");
+        await expectNoKeyboard(
+          page,
+          "review thrown away",
+          momo.locator("form.post-composer"),
+        );
+        await expectTapWrites(momo.locator("textarea"));
+
         // A review with words of its own, and a line written while reading.
         await go("/books/ten-nights/");
         const reviews = page.locator(".book-reviews");
         await reviews.locator("textarea").fill("前から書いていた感想。");
         await go("/reading/");
+        // A picker shown on the page is named by its search alone: it is
+        // not wrapped in a group of the same name.
+        await expect(
+          page.getByRole("group", { name: "読む本を探す" }),
+        ).toHaveCount(0);
         await page
           .getByRole("searchbox", { name: "読む本を探す" })
           .fill("夢十夜");
@@ -1091,7 +1113,11 @@ try {
         await page.getByRole("button", { name: "書きかけを消す" }).tap();
         await page.getByRole("button", { name: "消す", exact: true }).tap();
         await expect(memo).toHaveValue("");
-        await expectNoKeyboard(page, "memo thrown away");
+        await expectNoKeyboard(
+          page,
+          "memo thrown away",
+          page.locator("form.memo-composer"),
+        );
         await memo.fill("三夜目の一行。");
         await page.getByRole("button", { name: "読書を終える" }).tap();
         await page

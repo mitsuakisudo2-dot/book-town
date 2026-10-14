@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
   POP_MAX_LENGTH,
@@ -94,6 +94,7 @@ function ShopSettings({
   const [refused, setRefused] = useState(false);
   const settings = useRef<HTMLDetailsElement>(null);
   const nameField = useRef<HTMLInputElement>(null);
+  const title = useId();
   const saving = useKeptUntilSaved(() => {
     // Turned away by the account after all: the words come back, open.
     setResumed(true);
@@ -102,17 +103,14 @@ function ShopSettings({
     notify(SAVE_REFUSED);
   });
   // The walk's "write your words" card opens these settings at the field
-  // (on a touch screen the field waits for a tap; its heading has the focus).
+  // (on a touch screen the field waits for a tap; their form has the focus).
   useEffect(() => {
     if (location.hash !== "#shop-words" || !settings.current) return;
     settings.current.open = true;
     settings.current.scrollIntoView({ block: "center" });
     focusField(
       settings.current.querySelector<HTMLInputElement>("input[name=tagline]"),
-      {
-        instead: settings.current.querySelector("summary"),
-        preventScroll: true,
-      },
+      { preventScroll: true },
     );
   }, []);
   // Words kept from before are shown open, where they were left.
@@ -133,13 +131,16 @@ function ShopSettings({
   return (
     <details className="editor-settings" id="shop-words" ref={settings}>
       <summary>
-        <span>
+        <span id={title}>
           <Icon name="edit" size={17} />
           書店の看板と紹介
         </span>
         <Icon name="chevron" size={16} />
       </summary>
+      {/* Named: on a touch screen it holds the focus while its fields wait
+          for a tap (focusField). */}
       <form
+        aria-labelledby={title}
         onSubmit={(event) => {
           event.preventDefault();
           if (!name.trim()) return;
@@ -175,9 +176,7 @@ function ShopSettings({
             kept.clear();
             setResumed(false);
             setRefused(false);
-            focusField(nameField.current, {
-              instead: settings.current?.querySelector("summary"),
-            });
+            focusField(nameField.current);
           }}
         />
         <div className="editor-settings-fields">

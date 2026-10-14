@@ -27,7 +27,11 @@ const desk = () => screen("(pointer: fine)");
  * A stand-in for an element on a page: what it was asked to do is noted in
  * `did`, and `state.focused` is the element with the focus.
  */
-type Fake = HTMLInputElement & { did: string[]; typed(): void };
+type Fake = HTMLInputElement & {
+  did: string[];
+  typed(): void;
+  blurred(): void;
+};
 function page() {
   const state: { focused: unknown } = { focused: null };
   const element = (
@@ -36,15 +40,27 @@ function page() {
       type,
       editable = false,
       dialog = null,
-    }: { type?: string; editable?: boolean; dialog?: Fake | null } = {},
+      form = null,
+    }: {
+      type?: string;
+      editable?: boolean;
+      dialog?: Fake | null;
+      form?: Fake | null;
+    } = {},
   ): Fake => {
     const did: string[] = [];
     const attributes = new Map<string, string>();
-    const listeners: (() => void)[] = [];
+    const listeners = new Map<string, (() => void)[]>();
+    const fire = (type: string) => {
+      const now = listeners.get(type) ?? [];
+      listeners.delete(type);
+      now.forEach((listener) => listener());
+    };
     const fake = {
       did,
       tagName,
       type,
+      form,
       isContentEditable: editable,
       ownerDocument: {
         get activeElement() {
@@ -70,11 +86,14 @@ function page() {
         attributes.delete(name);
       },
       getAttribute: (name: string) => attributes.get(name) ?? null,
-      addEventListener(_: string, listener: () => void) {
-        listeners.push(listener);
+      hasAttribute: (name: string) => attributes.has(name),
+      addEventListener(type: string, listener: () => void) {
+        listeners.set(type, [...(listeners.get(type) ?? []), listener]);
       },
       // The reader changes the field.
-      typed: () => listeners.splice(0).forEach((listener) => listener()),
+      typed: () => fire("input"),
+      // The focus leaves the element.
+      blurred: () => fire("blur"),
     };
     return fake as unknown as Fake;
   };
@@ -180,7 +199,33 @@ function page() {
   const field = element("INPUT", { dialog });
   focusField(field, { view: phone() });
   assert.equal(state.focused, close);
-  // Outside any dialog, the focus is not moved.
+  // Outside any dialog (a draft thrown away on a page), the field's form
+  // holds the focus, so it is not dropped to the top of the page. The form
+  // takes the focus only while it holds it: a tap between its controls
+  // later does not land on it.
+  const form = element("FORM");
+  const memo = element("TEXTAREA", { form });
+  focusField(memo, { view: phone() });
+  assert.equal(state.focused, form);
+  assert.deepEqual(form.did, ["focus quietly"]);
+  assert.deepEqual(memo.did, ["into view nearest"]);
+  assert.equal(form.getAttribute("tabindex"), "-1");
+  form.blurred();
+  assert.equal(form.getAttribute("tabindex"), null);
+  // A form that takes the focus of its own keeps it as it was.
+  const own = element("FORM");
+  own.setAttribute("tabindex", "0");
+  focusField(element("INPUT", { form: own }), { view: phone() });
+  assert.equal(state.focused, own);
+  own.blurred();
+  assert.equal(own.getAttribute("tabindex"), "0");
+  // With a mouse the field takes the focus, and the form is left alone.
+  const signForm = element("FORM");
+  const name = element("INPUT", { form: signForm });
+  focusField(name, { view: desk() });
+  assert.equal(state.focused, name);
+  assert.equal(signForm.getAttribute("tabindex"), null);
+  // Outside any dialog or form, the focus is not moved.
   const loose = element("INPUT");
   const before = element("BUTTON");
   before.focus();

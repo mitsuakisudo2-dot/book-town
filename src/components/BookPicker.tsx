@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import type { Book } from "../lib/types";
-import { useFocusFieldOnShow } from "../lib/coarse-pointer";
+import { useCoarsePointer, useFocusFieldOnShow } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { BookJacket, Icon } from "./ui";
 
@@ -41,6 +41,9 @@ export function BookPicker({
   const picker = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   useFocusFieldOnShow(search, { instead: picker, when: autoFocus });
+  // Only a picker holding the focus for its search is a named group; any
+  // other is named by its search alone.
+  const standsIn = useCoarsePointer() && autoFocus;
   // The reader's own books come first among equals.
   const results = useBookSearch(books, query, {
     own: suggestions,
@@ -97,9 +100,9 @@ export function BookPicker({
     <div
       className="book-picker"
       ref={picker}
-      role="group"
-      aria-label={label}
-      tabIndex={autoFocus ? -1 : undefined}
+      role={standsIn ? "group" : undefined}
+      aria-label={standsIn ? label : undefined}
+      tabIndex={standsIn ? -1 : undefined}
     >
       <label className="picker-search" htmlFor={id}>
         <Icon name="search" size={15} />

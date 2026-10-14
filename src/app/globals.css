@@ -66,9 +66,10 @@ textarea:focus-visible {
   outline: 2px solid #7c986d;
   outline-offset: 4px;
 }
-/* A heading holds the focus only to tell keys and screen readers where a
-   step begins, while its field waits for a tap on a touch screen. */
-:is(h1, h2)[tabindex="-1"]:focus {
+/* A heading or a form holds the focus only to tell keys and screen readers
+   where a step begins or where they were, while its field waits for a tap on
+   a touch screen (focusField). */
+:is(h1, h2, form)[tabindex="-1"]:focus {
   outline: none;
 }
 /* A field a check found wrong, shown without the focus on a touch screen

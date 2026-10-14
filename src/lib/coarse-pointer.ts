@@ -89,13 +89,35 @@ const theirs = (field: HTMLElement) =>
   field.ownerDocument?.activeElement === field;
 
 /**
+ * Where the focus goes in place of a field, with a finger and nothing named:
+ * the first button of the dialog around it (閉じる), or else the field's
+ * form. A form takes the focus only for as long as it holds it, so a tap
+ * between its controls later does not land on it.
+ */
+function standIn(field: HTMLElement): HTMLElement | null {
+  const button = field
+    .closest?.('[role="dialog"], dialog')
+    ?.querySelector<HTMLElement>("button");
+  if (button) return button;
+  const form = (field as { form?: HTMLFormElement | null }).form;
+  if (!form) return null;
+  if (!form.hasAttribute("tabindex")) {
+    form.setAttribute("tabindex", "-1");
+    form.addEventListener("blur", () => form.removeAttribute("tabindex"), {
+      once: true,
+    });
+  }
+  return form;
+}
+
+/**
  * Hands a field to the reader as something opens or appears with it, or as a
  * step leads to it. With a mouse the field takes the focus. With a finger it
  * is brought into view and waits for a tap; the focus goes to `instead` (a
  * button or a heading by the field; by default the first button of the
- * dialog around it, null to leave the focus where it is). A field the reader
- * is typing in stays theirs either way. Returns whether the field has the
- * focus.
+ * dialog around it, or the field's form outside a dialog; null to leave the
+ * focus where it is). A field the reader is typing in stays theirs either
+ * way. Returns whether the field has the focus.
  */
 export function focusField(
   field: HTMLElement | null | undefined,
@@ -116,12 +138,7 @@ export function focusField(
     return true;
   }
   if (!preventScroll) field.scrollIntoView?.({ block: "nearest" });
-  const next =
-    instead === undefined
-      ? field
-          .closest?.('[role="dialog"], dialog')
-          ?.querySelector<HTMLElement>("button")
-      : instead;
+  const next = instead === undefined ? standIn(field) : instead;
   next?.focus({ preventScroll: true });
   return false;
 }

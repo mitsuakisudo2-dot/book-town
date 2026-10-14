@@ -1098,18 +1098,33 @@ try {
         newShelf.getByRole("textbox", { name: "本棚の名前" }),
       );
       await phone.keyboard.press("Escape");
-      // The sign's words thrown away: the field waits, the heading has the
-      // focus.
+      // The sign's words thrown away: the field waits, and the form of the
+      // words, named for keys and screen readers, has the focus.
       const sign = phone.locator(".editor-settings");
+      const words = sign.getByRole("form", { name: "書店の看板と紹介" });
       await sign.locator("summary").tap();
       await sign.getByLabel("書店の紹介").fill("指で書いた紹介。");
       await phone.reload();
       await sign.getByRole("button", { name: "書きかけを消す" }).tap();
       await sign.getByRole("button", { name: "消す", exact: true }).tap();
       await expect(sign.getByLabel("書店の紹介")).not.toHaveValue(/指で/);
-      await expectNoKeyboard(phone, "sign thrown away");
-      await expect(sign.locator("summary")).toBeFocused();
+      await expect(words).toBeFocused();
+      await expectNoKeyboard(phone, "sign thrown away", words);
       await expectTapWrites(sign.getByLabel("書店の名前"));
+      // Loaded afresh at the owner's words (the walk's link reloaded, or
+      // opened in a new tab): shown open with the field in view, the focus on
+      // their form, and no ring drawn around what only holds the focus.
+      await go(phone, "/");
+      await go(phone, "/my-shop/#shop-words");
+      await expect(words).toBeFocused();
+      await expect(sign).toHaveAttribute("open", "");
+      await expect(sign.getByLabel("ひとこと")).toBeInViewport();
+      await expectNoKeyboard(phone, "the shop's words loaded", words);
+      expect(
+        await words.evaluate((form) => getComputedStyle(form).outlineStyle),
+        "a ring around the form holding the focus",
+      ).toBe("none");
+      await expectTapWrites(sign.getByLabel("ひとこと"));
     },
   );
   await mobile.close();
