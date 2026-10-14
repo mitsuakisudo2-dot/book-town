@@ -73,3 +73,6 @@ export const noteOpened = (key: string) => {
   opened.add(key);
 };
 export const wasOpened = (key: string): boolean => opened.has(key);
+export const forgetOpened = (key: string) => {
+  opened.delete(key);
+};

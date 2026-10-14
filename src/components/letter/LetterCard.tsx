@@ -9,7 +9,12 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from "react";
-import { letterFeelings, postPageOf, spoilerBars } from "../../lib/letter";
+import {
+  letterFeelings,
+  letterPageOf,
+  postPageOf,
+  spoilerBars,
+} from "../../lib/letter";
 import { postedJustNow } from "../../lib/just-posted";
 import { isDatabaseId, postPath, profilePath } from "../../lib/paths";
 import {
@@ -37,7 +42,7 @@ import { LetterIcon } from "./icons";
 import { LetterMenu, hasMenuRows, type LetterMenuRows } from "./LetterMenu";
 import { LetterText, useLineFold } from "./LetterText";
 import { LikeButton, LikeUndo } from "./LikeButton";
-import { noteOpened, openPost, wasOpened } from "./post-layer";
+import { forgetOpened, noteOpened, openPost, wasOpened } from "./post-layer";
 import { SpoilerCover } from "./SpoilerCover";
 import "./letter.css";
 
@@ -147,11 +152,16 @@ export function LetterCard({
       : state.shops.find((entry) => entry.ownerId === post.authorId);
   const sample = !mine && !isDatabaseId(author.id);
   const profile = profilePath(author.id);
-  const pagePath = postPath(postPageOf(post));
+  const pageId = postPageOf(post);
+  const pagePath = postPath(pageId);
+  // A card leads to its page only when the page would open: a reply in a
+  // tag's list whose post is left out, or gone, has none to open.
+  const leads = !onPage && letterPageOf(state, pageId) !== null;
   const bookRow = Boolean(book && (showBook || onPage) && !covered);
-  // 読みたい on others' posts about a book; where the book row is not drawn
-  // (the book's own page), it sits under the words instead (仮, §4.2 #38).
-  const wantable = Boolean(book && !mine && !reply && !covered);
+  // 読みたい on others' posts that have a book, replies with the book they
+  // recommend too; where the book row is not drawn (the book's own page), it
+  // sits under the words instead (仮, §4.2 #38).
+  const wantable = Boolean(book && !mine && !covered);
   const want =
     wantable && book ? (
       <WantButton
@@ -175,10 +185,15 @@ export function LetterCard({
   };
   // Threads are one level: a reply is answered on its post's page. A note
   // kept to oneself takes no replies.
-  const replyable = !reply && !solo && !onPage;
+  const replyable = !reply && !solo && leads;
 
   function openPage() {
-    openPost(postPageOf(post), timeRef.current);
+    // Opened from behind the book page's spoiler door: the page shows it,
+    // and its replies, as the door did (and does again on the way back).
+    // Opened anywhere else, it is covered as that screen covers it.
+    if (revealed) noteOpened("door:" + pageId);
+    else forgetOpened("door:" + pageId);
+    openPost(pageId, timeRef.current);
   }
   function pointerDown(event: PointerEvent<HTMLElement>) {
     const target = event.target as Element;
@@ -201,7 +216,7 @@ export function LetterCard({
       setOpen(true);
       return;
     }
-    openPage();
+    if (leads) openPage();
   }
 
   const tags = !covered && (
@@ -228,7 +243,7 @@ export function LetterCard({
       <article
         className={
           "post-card letter" +
-          (onPage ? " is-page" : "") +
+          (onPage ? " is-page" : leads ? "" : " is-still") +
           (onPage && !isReply ? " is-main" : "") +
           (isReply ? " is-reply" : "") +
           (arriving ? " is-arriving" : "")
@@ -259,7 +274,7 @@ export function LetterCard({
           <p className="letter-meta">
             <span className="post-handle">@{author.handle}</span>
             {shop && <span className="letter-shop">{shop.name}の店主</span>}
-            {onPage ? (
+            {!leads ? (
               <time className="letter-when" dateTime={post.createdAt}>
                 {formatPostTime(post.createdAt)}
               </time>
