@@ -85,4 +85,8 @@
     sans-serif;
   --serif:
     "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif JP", serif;
+  /* A reader's poster looks the same on every device: its two typefaces are
+     the web fonts first, whatever letters the device has. */
+  --poster-mincho: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --poster-gothic: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
 }

@@ -79,11 +79,17 @@ check("no `text-wrap: pretty` in the town's CSS or components", () => {
   // walk.css keeps one, on a two-line shop name in the walk's header.
   const allowed: Record<string, number> = { "src/components/walk.css": 1 };
   for (const file of filesIn("src", [".css"])) {
-    const found = read(file).match(/text-wrap\s*:\s*pretty/g)?.length ?? 0;
+    const css = read(file);
+    // text-wrap: pretty, its longhand text-wrap-style, and with other words
+    // (text-wrap: wrap pretty).
+    const found =
+      css.match(/text-wrap(-style)?\s*:[^;}]*\bpretty\b/g)?.length ?? 0;
     assert.ok(
       found <= (allowed[file] ?? 0),
       `${file} uses text-wrap: pretty (${found})`,
     );
+    // Tailwind's class, applied from CSS.
+    assert.ok(!/\btext-pretty\b/.test(css), `${file} uses text-pretty`);
   }
   // Tailwind is imported, so a class or a style would emit it too.
   for (const file of filesIn("src", [".tsx", ".ts"])) {
@@ -91,6 +97,30 @@ check("no `text-wrap: pretty` in the town's CSS or components", () => {
     assert.ok(!/\btext-pretty\b/.test(text), `${file} uses text-pretty`);
     assert.ok(!/textWrap/.test(text), `${file} sets textWrap`);
   }
+});
+
+check("the town's own words take the device-first stack from --sans", () => {
+  // Only tokens.css names the stacks; a reader's poster pins its two
+  // typefaces there too (--poster-mincho, --poster-gothic).
+  for (const file of filesIn("src", [".css"])) {
+    if (file === path.join("src", "app", "tokens.css")) continue;
+    for (const [rule] of read(file).matchAll(/font-family\s*:[^;}]*/g))
+      assert.ok(
+        !/^font-family\s*:\s*"Noto Sans JP"/.test(rule),
+        `${file}: ${rule}`,
+      );
+  }
+  assert.match(tokens, /--poster-mincho:\s*"Noto Serif JP"/);
+  assert.match(tokens, /--poster-gothic:\s*"Noto Sans JP"/);
+  const poster = read("src/components/poster.css");
+  assert.match(
+    poster,
+    /\.poster-sheet\.is-mincho\s*\{\s*font-family:\s*var\(--poster-mincho\);/,
+  );
+  assert.match(
+    poster,
+    /\.poster-sheet\.is-gothic\s*\{\s*font-family:\s*var\(--poster-gothic\);/,
+  );
 });
 
 check("letter.css takes every colour from the tokens", () => {

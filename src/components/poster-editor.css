@@ -202,7 +202,7 @@
   border-radius: 50%;
   background: #e5ebdc;
   color: #4f6648;
-  font-family: "Noto Sans JP", sans-serif;
+  font-family: var(--sans);
   font-size: 11px;
 }
 .poster-step-note {
@@ -538,7 +538,10 @@
   color: var(--ink);
 }
 .poster-font.is-mincho span {
-  font-family: var(--serif);
+  font-family: var(--poster-mincho);
+}
+.poster-font.is-gothic span {
+  font-family: var(--poster-gothic);
 }
 .poster-font:has(input:checked) {
   border-color: var(--green);
