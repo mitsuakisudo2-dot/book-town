@@ -3114,13 +3114,20 @@ async function main() {
         );
       }
       // It only ever answers about the reader who asks. Ben's request to take
-      // down the book's cover (a report about it) is not a use of it.
+      // down the book's cover (a report about it, filed above) is not a use
+      // of it.
       const mine = (visitor: Visitor) =>
         as<{ mine: boolean }>(
           visitor,
           "select private.book_is_mine($1) as mine",
           [book.id],
         );
+      const covers = await db.query<{ n: number }>(
+        `select count(*)::int as n from reports
+         where reporter_id = $1 and target_kind = 'book' and target_id = $2`,
+        [BEN, book.id],
+      );
+      assert.equal(covers.rows[0].n, 1, "Ben's cover report is still there");
       assert.deepEqual(await mine(null), [{ mine: false }]);
       assert.deepEqual(await mine(AKI), [{ mine: true }]);
       assert.deepEqual(await mine(BEN), [{ mine: false }]);
