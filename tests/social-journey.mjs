@@ -734,7 +734,8 @@ try {
           ),
         ).toBeNull();
         // A line another reader on this browser left (another account's, or
-        // a visitor's) is never shown here, even for a sitting in this town.
+        // a visitor's) is never shown here, even for a sitting in this town;
+        // nor is the reader's own for a sitting not (or not yet) in it.
         const sitting = await page.evaluate(
           () =>
             JSON.parse(
@@ -755,6 +756,8 @@ try {
           ["visitor:reading:" + sitting]: line("ほかの人の言葉。"),
           ["6b0c1c3e-0000-4000-8000-000000000000:reading:" + sitting]:
             line("ほかの人の言葉。"),
+          ["demo:reading:6b0c1c3e-0000-4000-8000-000000000000"]:
+            line("ほかの座の言葉。"),
         });
         await reload();
         await expect(
@@ -762,6 +765,7 @@ try {
         ).toBeVisible();
         await expect(unsent).toHaveCount(0);
         await expect(page.getByText("ほかの人の言葉。")).toHaveCount(0);
+        await expect(page.getByText("ほかの座の言葉。")).toHaveCount(0);
         // A line kept before drafts had owners is the first reader's to come,
         // here the demo's, once: it leaves its old place.
         await keep({ ["reading:" + sitting]: line("前から残っていた言葉。") });

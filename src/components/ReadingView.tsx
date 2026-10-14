@@ -422,8 +422,8 @@ function UnsentLines({
       (entry) => entry.id === sessionId,
     );
     // Only this reader's sittings that are over: a running one's line is in
-    // the reading room, and a line from a sitting not in this town (another
-    // account's, on this browser) is never shown here.
+    // the reading room, and a line for a sitting not (or not yet) in this
+    // town is not shown here.
     if (!session || session.endedAt === null || !draft.body.trim()) return [];
     const book = session.bookId
       ? state.books.find((entry) => entry.id === session.bookId)
