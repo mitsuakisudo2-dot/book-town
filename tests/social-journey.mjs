@@ -83,6 +83,11 @@ const card = (author, text) =>
     .locator("main article.post-card:not(.is-reply)")
     .filter({ has: page.getByRole("link", { name: author, exact: true }) })
     .filter({ hasText: text });
+/** The sheet 「…」 opens on a card. */
+const menu = () => page.getByRole("dialog", { name: "その他の操作" });
+/** A 便り's page, open over the screen. */
+const letterPage = (author) =>
+  page.getByRole("dialog", { name: new RegExp("^" + author + "さんの便り") });
 async function pickBook(scope, title) {
   await scope.getByRole("searchbox").fill(title);
   await scope
@@ -183,12 +188,20 @@ try {
           book: "沈黙",
           spoiler: true,
         });
-        // On the timeline the post is there, covered until the reader chooses to see it.
+        // On the timeline the post is there, covered until the reader
+        // chooses to see it: the words are not on the page until then.
         await expect(page.getByText("ラストの一行で")).toHaveCount(0);
         const covered = card("あなた", "沈黙");
-        await expect(covered).toContainText("ネタバレを含むため、隠しています");
-        await covered.getByRole("button", { name: "表示する" }).click();
+        await expect(covered).toContainText("結末に触れています・押すと表示");
+        // The whole box is one button, named with its book.
+        const cover = covered.getByRole("button", {
+          name: /結末に触れています/,
+        });
+        await expect(cover).toHaveAttribute("aria-expanded", "false");
+        await expect(cover).toHaveAccessibleName(/『沈黙』/);
+        await cover.click();
         await expect(covered).toContainText("ラストの一行で");
+        await expect(cover).toHaveCount(0);
         await go("/books/silence/");
         await expect(page.getByText("ラストの一行で")).toHaveCount(0);
         const door = page.getByRole("button", {
@@ -251,19 +264,23 @@ try {
     );
 
     await check(
-      `${label} 読みたくなった saves the book and remembers who inspired it`,
+      `${label} 読みたい saves the book and remembers whose 便り it was`,
       async () => {
         await go("/timeline/");
         const post = card("すみれ", "どこから開いてもいい本");
-        const want = post.getByRole("button", { name: /読みたくなった/ });
+        // In the book's frame, beside the link to the book.
+        const frame = post.locator(".letter-book");
+        await expect(frame.locator(".post-book")).toBeVisible();
+        const want = frame.getByRole("button", { name: "読みたい" });
         await expect(want).toHaveAttribute("aria-pressed", "false");
         await want.click();
         await expect(want).toHaveAttribute("aria-pressed", "true");
-        // How many readers wanted it is the writer's to know, not ours.
-        await expect(want).toHaveText("読みたくなった");
-        await expect(post.getByRole("button", { name: /いいね/ })).toHaveText(
-          "いいね",
+        await expect(page.locator(".toast")).toHaveText(
+          "『見えない都市』を読みたいに入れました。すみれさんの便りで出会った本として残します。",
         );
+        // How many readers wanted it is the writer's to know, not ours.
+        await expect(want).toHaveText("読みたい");
+        await expect(post).not.toContainText(/\d+人/);
         await go("/books/invisible-cities/");
         await expect(
           page.getByText("すみれさんの感想で、読みたくなった本です。"),
@@ -279,19 +296,38 @@ try {
       async () => {
         await go("/timeline/");
         const post = card("すみれ", "二駅乗り過ごした");
-        const like = post.getByRole("button", { name: /いいね/ });
-        for (let press = 0; press < 3; press += 1) await like.click();
+        const like = post.getByRole("button", { name: "いいね", exact: true });
+        const pill = post.locator(".letter-like-pill");
+        await like.click();
         await expect(like).toHaveAttribute("aria-pressed", "true");
-        await expect(like).toHaveText("いいね3回");
-        for (let press = 0; press < 8; press += 1) await like.click();
-        await expect(like).toHaveText("いいね10回");
-        await expect(page.locator(".toast")).toHaveText(
-          "いいねは10回まで重ねられます",
-        );
-        await post.getByRole("button", { name: "その他の操作" }).click();
-        await post.getByRole("button", { name: "いいねを取り消す" }).click();
+        // 「1回」 for a moment above the heart, then no count at all.
+        await expect(pill).toHaveText("1回");
+        await expect(pill).toHaveCount(0);
+        await expect(post).not.toContainText("回");
+        for (let press = 1; press < 10; press += 1) await like.click();
+        await expect(pill).toHaveText("10回");
+        // The press after the tenth asks to take it back.
+        await like.click();
+        const ask = page.getByRole("dialog", {
+          name: "いいねを取り消しますか",
+        });
+        await ask.getByRole("button", { name: "そのまま" }).click();
+        await expect(ask).toHaveCount(0);
+        await expect(like).toHaveAttribute("aria-pressed", "true");
+        await like.click();
+        await ask.getByRole("button", { name: "取り消す" }).click();
         await expect(like).toHaveAttribute("aria-pressed", "false");
-        await expect(like).toHaveText("いいね");
+        await expect(page.locator(".toast")).toHaveText(
+          "いいねを取り消しました",
+        );
+        // Taken back from 「…」 too.
+        await like.click();
+        await expect(like).toHaveAttribute("aria-pressed", "true");
+        await post.getByRole("button", { name: "その他の操作" }).click();
+        await menu().getByRole("button", { name: "いいねを取り消す" }).click();
+        await expect(menu()).toHaveCount(0);
+        await expect(like).toHaveAttribute("aria-pressed", "false");
+        await expect(post).not.toContainText("回");
       },
     );
 
@@ -300,32 +336,43 @@ try {
       async () => {
         await go("/books/solaris/");
         const review = card("凪", "十年ぶりに再読");
-        await review.getByRole("button", { name: "返信 2件" }).click();
-        await expect(review.locator(".post-card.is-reply")).toHaveCount(2);
+        // No count of replies on the card: the reply icon opens its page.
+        await expect(review).not.toContainText(/件|返信を見る|返信\s*\d/);
+        await review.getByRole("button", { name: "返信", exact: true }).click();
+        const letter = letterPage("凪");
+        await expect(letter).toBeVisible();
+        const replies = letter.locator("article.post-card.is-reply");
+        await expect(replies).toHaveCount(2);
         await expect(
-          review
-            .locator(".post-card.is-reply")
-            .nth(1)
-            .getByRole("link", { name: /闇の左手/ }),
+          replies.nth(1).getByRole("link", { name: /闇の左手/ }),
         ).toBeVisible();
-        const reply = review.locator("form.post-composer.is-reply");
-        await reply.locator("textarea").fill("海の描写、わたしも好きです。");
-        await reply
+        await letter.getByRole("button", { name: "凪さんに返信" }).click();
+        const sheet = page.getByRole("dialog", { name: "返信", exact: true });
+        await expect(sheet.locator("textarea")).toBeFocused();
+        await sheet.locator("textarea").fill("海の描写、わたしも好きです。");
+        await sheet
           .getByRole("button", { name: "おすすめの本を添える" })
           .click();
-        await pickBook(reply, "見えない都市");
-        await reply.getByRole("button", { name: "返信する" }).click();
-        await expect(review.locator(".post-card.is-reply")).toHaveCount(3);
-        await expect(
-          review.getByRole("button", { name: "返信 3件" }),
-        ).toBeVisible();
+        await pickBook(sheet, "見えない都市");
+        await sheet.getByRole("button", { name: "返信する" }).click();
+        await expect(sheet).toHaveCount(0);
+        await expect(page.locator(".toast")).toHaveText("返信しました");
+        await expect(replies).toHaveCount(3);
+        await expect(replies.nth(2)).toContainText("海の描写");
+        await expect(replies.nth(2)).toBeInViewport();
+        await letter.getByRole("button", { name: "戻る" }).click();
+        await expect(letter).toHaveCount(0);
+        await expect(card("凪", "十年ぶりに再読")).not.toContainText(
+          /件|返信を見る|返信\s*\d/,
+        );
         await page.reload();
         await page.waitForFunction(() => localStorage.getItem("book-town-v1"));
-        const again = card("凪", "十年ぶりに再読");
-        await again.getByRole("button", { name: "返信 3件" }).click();
+        await card("凪", "十年ぶりに再読").locator(".letter-text").click();
         await expect(
-          again.getByText("海の描写、わたしも好きです。"),
+          letterPage("凪").getByText("海の描写、わたしも好きです。"),
         ).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(letterPage("凪")).toHaveCount(0);
       },
     );
 
@@ -339,11 +386,13 @@ try {
           post.getByRole("button", { name: "ネタバレでは？" }),
         ).toHaveCount(0);
         await post.getByRole("button", { name: "その他の操作" }).click();
-        await post.getByRole("button", { name: "ネタバレでは？" }).click();
+        await menu().getByRole("button", { name: "ネタバレでは？" }).click();
         await expect(card("栞", "美術館の帰りに")).toHaveCount(0);
         const reported = card("栞", "ネタバレの可能性を報告済み");
         await expect(
-          reported.getByRole("button", { name: "表示する" }),
+          reported.getByRole("button", {
+            name: /ネタバレの可能性を報告済み・押すと表示/,
+          }),
         ).toBeVisible();
         await go("/books/ways-of-seeing/");
         await page
@@ -353,7 +402,8 @@ try {
         await expect(
           hidden.getByText("ネタバレの可能性を報告済み"),
         ).toBeVisible();
-        await hidden.getByRole("button", { name: "報告を取り消す" }).click();
+        await hidden.getByRole("button", { name: "その他の操作" }).click();
+        await menu().getByRole("button", { name: "報告を取り消す" }).click();
         await expect(
           page.getByRole("button", { name: /ネタバレありのレビュー/ }),
         ).toHaveCount(0);
@@ -373,11 +423,19 @@ try {
         await go("/profiles/me/");
         await expect(card("あなた", "灰色の男たち")).toBeVisible();
         const own = card("あなた", "灰色の男たち");
-        await own.getByRole("button", { name: "削除", exact: true }).click();
-        await own.getByRole("button", { name: "やめる" }).click();
+        // Deleting is under 「…」, asked once more there.
+        await own.getByRole("button", { name: "その他の操作" }).click();
+        await menu().getByRole("button", { name: "削除する" }).click();
+        await expect(menu()).toContainText("この投稿を削除しますか？");
+        await menu().getByRole("button", { name: "やめる" }).click();
+        await page.keyboard.press("Escape");
+        await expect(menu()).toHaveCount(0);
         await expect(own).toBeVisible();
-        await own.getByRole("button", { name: "削除", exact: true }).click();
-        await own.getByRole("button", { name: "削除する" }).click();
+        await own.getByRole("button", { name: "その他の操作" }).click();
+        await menu().getByRole("button", { name: "削除する" }).click();
+        await menu().getByRole("button", { name: "削除する" }).click();
+        await expect(menu()).toHaveCount(0);
+        await expect(page.locator(".toast")).toHaveText("投稿を削除しました");
         await expect(card("あなた", "灰色の男たち")).toHaveCount(0);
         await noOverflow(`${label} profile`);
       },
@@ -404,7 +462,9 @@ try {
         await expect(page.locator(".social-note")).toContainText(
           "ネタバレの印が付いた投稿とポスター、3人以上が「ネタバレでは？」と言った投稿は、たたんでいます",
         );
-        await expect(page.locator("main .spoiler-cover").first()).toBeVisible();
+        await expect(
+          page.locator("main .letter-spoiler").first(),
+        ).toBeVisible();
         await go("/profiles/me/");
         await page.getByRole("button", { name: "設定" }).click();
         const settings = page.getByRole("dialog", { name: "設定" });
@@ -431,7 +491,7 @@ try {
           .getByLabel("ネタバレの印があるもの・可能性があるものは出さない")
           .check();
         await expect(page.locator(".toast")).toContainText(
-          "ネタバレの印があるもの・可能性があるものは、出さないようにします",
+          "ネタバレの印があるもの・可能性があるものは、出さないようにします（読み終えた本の投稿は出します）",
         );
         await noOverflow(`${label} settings`);
         await page.screenshot({
@@ -442,15 +502,15 @@ try {
         expect((await stored()).settings.spoilerDisplay).toBe("leave_out");
         await go("/timeline/");
         await expect(page.locator(".social-note")).toHaveText(
-          "ネタバレの印が付いた投稿とポスター、その可能性がある投稿は、設定により出していません。",
+          "ネタバレの印が付いた投稿とポスター、その可能性がある投稿は、設定により出していません。読み終えた本の投稿は出します。",
         );
         // Others' marked posts are left out; the reader's own never are.
         for (const title of ["闇の左手", "銀河鉄道の夜"])
           await expect(
-            page.locator("main .spoiler-cover", { hasText: title }),
+            page.locator("main .letter-spoiler", { hasText: title }),
           ).toHaveCount(0);
         await expect(
-          card("あなた", "").locator(".spoiler-cover").first(),
+          card("あなた", "").locator(".letter-spoiler").first(),
         ).toBeVisible();
         await expect(card("すみれ", "二駅乗り過ごした")).toBeVisible();
         // The book page has no door, and says once (no count) why.
@@ -1270,6 +1330,40 @@ try {
         await text.fill("");
         await page.keyboard.press("Escape");
         await expect(dialog).toHaveCount(0);
+      },
+    );
+    await check(
+      "393px phone: a 便り's reply sheet opens with its text box ready, its buttons just above the keyboard",
+      async () => {
+        await go("/timeline/");
+        // A tap on the card opens its page; the reply bar, the sheet.
+        await card("凪", "十年ぶりに再読").locator(".letter-text").tap();
+        const letter = letterPage("凪");
+        await expect(letter).toBeVisible();
+        await forgetFocus(page);
+        await letter.getByRole("button", { name: "凪さんに返信" }).tap();
+        const sheet = page.getByRole("dialog", { name: "返信", exact: true });
+        const reply = sheet.locator("textarea");
+        // The fifth writing screen: focused within the tap, at 16px.
+        await expectKeyboardUp(page, reply, "返信");
+        await expectNoZoomOnFocus(reply, "返信");
+        await page.keyboard.type("指で返信");
+        await expect(reply).toHaveValue("指で返信");
+        await page.evaluate(() => window.__keyboard(336, 120));
+        const place = await toolbarPlace(sheet);
+        expect(
+          Math.abs(place.bottom - 577),
+          "the buttons' bottom",
+        ).toBeLessThan(2);
+        expect(Math.abs(place.top - 120), "the sheet's top").toBeLessThan(2);
+        await page.evaluate(() => window.__keyboard(0));
+        await reply.fill("");
+        // One Escape closes the sheet; the 便り's page stays under it.
+        await page.keyboard.press("Escape");
+        await expect(sheet).toHaveCount(0);
+        await expect(letter).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(letter).toHaveCount(0);
       },
     );
     await check(

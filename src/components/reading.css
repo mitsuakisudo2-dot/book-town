@@ -630,7 +630,7 @@
   line-height: 1.7;
 }
 .reading-optional {
-  font-family: "Noto Sans JP", sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
   font-weight: 400;
   color: #7f8b74;

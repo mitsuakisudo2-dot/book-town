@@ -5,6 +5,15 @@ import { notLeftOut } from "./social";
 export const activeSession = (state: TownState): ReadingSession | undefined =>
   state.readingSessions.find((session) => session.endedAt === null);
 
+/**
+ * Whether the reader has finished the book. Read from finishedBooks today;
+ * the library's status (L1) takes its place here, and nothing else changes.
+ */
+export const hasFinished = (
+  state: Pick<TownState, "finishedBooks">,
+  bookId: string | null,
+): boolean => bookId !== null && state.finishedBooks.includes(bookId);
+
 /** The book a new session starts with: the one being read, else the last one left unfinished. */
 export function currentBookId(state: TownState): string | null {
   const active = activeSession(state);

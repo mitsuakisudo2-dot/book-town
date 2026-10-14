@@ -28,9 +28,9 @@ import {
   HiddenWordsHint,
   HideWordsButton,
   LengthNearLimit,
-  PostCard,
   PostComposer,
 } from "./Social";
+import { LetterCard } from "./letter/LetterCard";
 import { RecordSheet } from "./ReadingRecords";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { useClock } from "./useClock";
@@ -208,7 +208,7 @@ function ReadingFeed({
       <h2 id="reading-feed-title">みんなの読書中のつぶやき</h2>
       <div className="post-feed">
         {posts.map((post) => (
-          <PostCard
+          <LetterCard
             key={post.id}
             state={state}
             actions={actions}
@@ -865,7 +865,7 @@ function ReadingRoom({
         <section className="reading-mine" aria-label="今回書いたこと">
           <div className="post-feed">
             {written.map((post) => (
-              <PostCard
+              <LetterCard
                 key={post.id}
                 state={state}
                 actions={actions}

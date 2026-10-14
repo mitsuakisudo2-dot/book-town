@@ -1985,6 +1985,78 @@ check(
 );
 
 check(
+  "a reader who finished the book reads its spoilers, unless they asked about one",
+  () => {
+    const base = seedState.posts.find((post) => post.id === "p-3")!;
+    const kinds: Record<string, Post> = {
+      marked: { ...base, id: "x-marked", spoiler: true },
+      folded: { ...base, id: "x-folded", folded: true },
+      asked: { ...base, id: "x-asked" },
+      plain: { ...base, id: "x-plain" },
+    };
+    // Finished: the writer's mark and three readers' fold open, whatever the
+    // setting (出さない too); the reader's own 「ネタバレでは？」 still folds.
+    const finished: Record<SpoilerDisplay, Record<string, string>> = {
+      show_all: {
+        marked: "open",
+        folded: "open",
+        asked: "folded",
+        plain: "open",
+      },
+      fold_possible: {
+        marked: "open",
+        folded: "open",
+        asked: "folded",
+        plain: "open",
+      },
+      leave_out: {
+        marked: "open",
+        folded: "open",
+        asked: "left_out",
+        plain: "open",
+      },
+    };
+    for (const mode of SPOILER_DISPLAYS)
+      for (const [kind, post] of Object.entries(kinds)) {
+        const state = {
+          ...showing(mode),
+          spoilerReports: ["x-asked"],
+          posts: Object.values(kinds),
+        };
+        assert.equal(
+          spoilerViewOf({ ...state, finishedBooks: [base.bookId!] }, post),
+          finished[mode][kind],
+          "finished " + mode + " " + kind,
+        );
+        // Another book finished changes nothing: as before.
+        assert.equal(
+          spoilerViewOf({ ...state, finishedBooks: ["solaris"] }, post),
+          spoilerViewOf(state, post),
+          "not finished " + mode + " " + kind,
+        );
+      }
+    // A reply takes its post's book: a spoiler reply opens for whoever
+    // finished the book the post is about, and only for them.
+    const reply = seedState.posts.find((post) => post.id === "p-7-r1")!;
+    assert.equal(reply.bookId, null);
+    assert.equal(spoilerViewOf(seedState, reply), "folded");
+    const done = { ...seedState, finishedBooks: ["left-hand"] };
+    assert.equal(spoilerViewOf(done, reply), "open");
+    assert.equal(
+      spoilerViewOf({ ...seedState, finishedBooks: ["solaris"] }, reply),
+      "folded",
+    );
+    // On the book page, the marked review leaves the door for a finisher.
+    const ids = (posts: Post[]) => posts.map((post) => post.id);
+    assert.ok(
+      ids(bookReviews(seedState, "left-hand").spoilers).includes("p-7"),
+    );
+    assert.ok(ids(bookReviews(done, "left-hand").open).includes("p-7"));
+    assert.ok(!ids(bookReviews(done, "left-hand").spoilers).includes("p-7"));
+  },
+);
+
+check(
   "left-out spoilers leave every list, and the book page says so once",
   () => {
     const folded: TownState = {

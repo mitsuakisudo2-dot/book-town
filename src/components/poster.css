@@ -24,10 +24,10 @@
   text-size-adjust: none;
 }
 .poster-sheet.is-mincho {
-  font-family: var(--serif);
+  font-family: var(--poster-mincho);
 }
 .poster-sheet.is-gothic {
-  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+  font-family: var(--poster-gothic);
 }
 .poster-frame {
   position: absolute;
@@ -412,7 +412,10 @@ a.poster-cover:hover {
   background: #fffdf7;
 }
 .poster-fulltext.is-mincho {
-  font-family: var(--serif);
+  font-family: var(--poster-mincho);
+}
+.poster-fulltext.is-gothic {
+  font-family: var(--poster-gothic);
 }
 .poster-fulltext-heading {
   font-size: 15px;
@@ -641,15 +644,59 @@ a.poster-cover:hover {
   overflow-wrap: anywhere;
 }
 
-/* In the timeline, among the posts. */
+/* In the timeline, among the posts: as flat as a 便り (letter.css), the
+   face in a 40px column, the name at 15px. */
+.poster-card {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+.poster-card > .post-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -2px;
+}
+.poster-card > .post-main {
+  min-width: 0;
+}
+.poster-card .post-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  margin-bottom: 6px;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 1.5;
+}
+/* The name is 44px each way, as on a 便り: it reaches into the gap before
+   it and under the @ID after it, keeping its own left edge. */
+.poster-card .post-author {
+  display: inline-flex;
+  align-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -11px -18px -11px -12px;
+  padding: 0 18px 0 12px;
+  color: var(--ink);
+  font-size: var(--t-who);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
 .poster-tag {
   display: inline-block;
   margin-bottom: 8px;
   padding: 1px 8px;
   border-radius: 3px;
   background: #e8eedf;
-  color: #4f6a45;
-  font-size: 10px;
+  color: #3f5937;
+  font-size: 12px;
   letter-spacing: 0.08em;
 }
 .poster-card .poster-pages {
@@ -659,10 +706,10 @@ a.poster-cover:hover {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 8px;
-  padding: 4px 0;
-  font-size: 11px;
-  color: #5f6a55;
+  min-height: 44px;
+  margin-top: 2px;
+  font-size: 14px;
+  color: #4f5a46;
 }
 .poster-open:hover {
   color: var(--green);
@@ -670,7 +717,7 @@ a.poster-cover:hover {
 @media (max-width: 520px) {
   /* On a phone the poster takes the card's whole width, under the avatar. */
   .poster-card .poster-pages {
-    margin-left: -53px;
+    margin-left: -52px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

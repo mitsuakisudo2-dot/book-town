@@ -115,9 +115,10 @@ jobs:
 
   # The demo build again, for the pages that keep what a reader writes and
   # arranges: shelves, the profile and the shop sign (browser), posts,
-  # records and the reading memo (social), the Home tab's address (street)
-  # and opening a shop (app). A job of its own, so it runs beside the one
-  # above rather than after it (about five minutes of journeys).
+  # records and the reading memo (social), the Home tab's address (street),
+  # opening a shop (app) and the 便り's card and page on a phone (home). A job
+  # of its own, so it runs beside the one above rather than after it (about
+  # six minutes of journeys).
   demo-pages:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -152,6 +153,10 @@ jobs:
         if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
         env:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/app
+      - run: pnpm test:home
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/home
       # Screenshots of the demo town only; nothing secret is in them.
       - name: Keep the screenshots of a failed run
         if: failure()

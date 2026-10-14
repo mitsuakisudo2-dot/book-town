@@ -104,62 +104,6 @@
   line-height: 1.8;
 }
 
-.post-feed {
-  display: grid;
-  gap: 12px;
-}
-.post-card {
-  display: flex;
-  gap: 13px;
-  align-items: flex-start;
-  background: #fffdf7;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 17px 18px 12px;
-  min-width: 0;
-}
-.post-card.is-reply {
-  background: transparent;
-  border: 0;
-  border-left: 2px solid #e1e4d6;
-  border-radius: 0;
-  padding: 6px 0 4px 12px;
-}
-.post-avatar {
-  flex-shrink: 0;
-}
-.post-main {
-  flex: 1;
-  min-width: 0;
-}
-.post-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 9px;
-  margin-bottom: 6px;
-}
-.post-author {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--ink);
-}
-.post-author:hover {
-  text-decoration: underline;
-}
-.post-head .demo-tag {
-  font-size: 9px;
-}
-.post-head time {
-  font-size: 10px;
-  color: #a2ab95;
-}
-.post-text {
-  font-size: 13px;
-  line-height: 1.95;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 /* Only the writer sees why their post was folded, and how to mark it. */
 .spoiler-folded-note {
   display: flex;
@@ -194,7 +138,7 @@
 /* Words the writer covered: a dark slip over them until a reader taps. */
 .hidden-words {
   display: inline-block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.7;
   letter-spacing: 0.04em;
@@ -222,175 +166,6 @@ mark.hidden-words.is-open {
   vertical-align: baseline;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-}
-.spoiler-tag {
-  display: inline-block;
-  font-size: 10px;
-  color: #8a5f48;
-  background: #f3e4d8;
-  border-radius: 3px;
-  padding: 1px 7px;
-  margin-bottom: 6px;
-}
-.spoiler-cover {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 12px;
-  font-size: 12px;
-  color: #8a6f5c;
-  background: repeating-linear-gradient(
-    -45deg,
-    #f4ece2,
-    #f4ece2 8px,
-    #efe5d8 8px,
-    #efe5d8 16px
-  );
-  border-radius: 6px;
-  padding: 10px 12px;
-}
-.spoiler-cover > span {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.spoiler-cover small {
-  font-size: 11px;
-  color: #a2846f;
-}
-.spoiler-cover button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #7c5a46;
-  background: #fffaf2;
-  border: 1px solid #e3cfbb;
-  border-radius: 999px;
-  padding: 5px 13px;
-}
-.spoiler-cover button:hover {
-  background: #fff;
-}
-.post-book {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 11px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 9px 12px;
-  background: #f9f6ee;
-  color: var(--ink);
-  max-width: 360px;
-}
-.post-book:hover {
-  border-color: #c9d3bd;
-}
-.post-book .post-book-jacket {
-  width: 34px;
-  flex-shrink: 0;
-  container-type: normal;
-}
-.post-book .post-book-jacket > span:not(.jacket-edge):not(.jacket-art) {
-  display: none;
-}
-.post-book > span {
-  display: grid;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-.post-book b {
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 13px;
-}
-.post-book small {
-  font-size: 10px;
-  color: #95a084;
-}
-.post-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 6px;
-  margin: 9px 0 0 -8px;
-}
-.post-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: #8d9a80;
-  padding: 6px 8px;
-  border-radius: 5px;
-}
-.post-actions button:hover {
-  background: #eef1e6;
-  color: var(--green);
-}
-.post-actions button.is-active {
-  color: #a5543f;
-}
-.like-heart {
-  display: inline-flex;
-}
-.like-heart.is-popping {
-  animation: like-pop 0.42s ease-out;
-}
-@keyframes like-pop {
-  0% {
-    transform: scale(1);
-  }
-  35% {
-    transform: scale(1.45) rotate(-8deg);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .like-heart.is-popping {
-    animation: none;
-  }
-}
-.post-actions .like-button.is-active svg {
-  fill: currentColor;
-}
-.post-actions .want-button.is-active {
-  color: var(--green);
-  font-weight: 600;
-}
-.post-actions button span:empty {
-  display: none;
-}
-.post-actions .report-button {
-  margin-left: auto;
-  font-size: 10px;
-  color: #b0b6a4;
-}
-.post-actions .post-more-toggle {
-  padding: 4px 6px;
-}
-.post-more {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-top: 4px;
-}
-.post-more button {
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 11px;
-  color: #7f8a72;
-  background: #fffdf7;
 }
 .timeline-demo-note {
   margin: 0 0 12px;
@@ -473,16 +248,6 @@ mark.hidden-words.is-open {
   padding: 6px 12px;
   font-size: 11px;
 }
-.want-thanks {
-  font-size: 11px;
-  color: var(--green);
-  margin-top: 6px;
-}
-.post-thread {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
 
 .book-reviews {
   padding: 32px 0 10px;
@@ -538,8 +303,7 @@ mark.hidden-words.is-open {
 }
 
 @media (max-width: 760px) {
-  .post-composer,
-  .post-card {
+  .post-composer {
     padding: 14px 13px 10px;
     gap: 10px;
   }
@@ -643,21 +407,6 @@ mark.hidden-words.is-open {
   50% {
     opacity: 0.35;
   }
-}
-.reading-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: #4f6c58;
-  background: #e5ede0;
-  border-radius: 3px;
-  padding: 1px 7px;
-  margin: 0 6px 6px 0;
-}
-.reading-tag.is-private {
-  color: #7a6f5e;
-  background: #efe9dd;
 }
 
 /* Book picker */
@@ -814,11 +563,7 @@ mark.hidden-words.is-open {
   }
 }
 
-/* IDs, tags and the review preview */
-.post-handle {
-  font-size: 11px;
-  color: #98a38c;
-}
+/* Tags and the review preview */
 .post-tag {
   color: #3d6b52;
   font-weight: 500;
@@ -869,22 +614,7 @@ button.tag-chip:hover {
     0 0 0 2px var(--paper, #f7f4ee),
     0 0 8px 2px #e9b75a99;
 }
-/* The post just written glows once where it lands, then settles into the page. */
-@keyframes post-arrive {
-  from {
-    background-color: #f7edd2;
-    box-shadow: 0 0 0 4px #efe1b9;
-  }
-}
-.post-card.is-arriving {
-  animation: post-arrive 2.6s ease-out;
-}
-
-/* Folded by reports: quieter than a spoiler, and not striped like one. */
-.spoiler-cover.report-cover {
-  background: #f1f0ea;
-  color: #6c6f63;
-}
+/* Folded by reports: quieter than a spoiler. */
 .report-folded-note {
   background: #f3f2ec;
   border-color: #d8d6cb;

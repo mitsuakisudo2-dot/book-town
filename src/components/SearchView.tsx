@@ -31,7 +31,7 @@ import {
   takeRequestedSearch,
 } from "../lib/tags";
 import { readParam, replaceAddress, useUrlParam } from "../lib/url-state";
-import { PostCard } from "./Social";
+import { LetterCard } from "./letter/LetterCard";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./reading.css";
 import "./records.css";
@@ -226,7 +226,7 @@ export function SearchView({ state, actions, notify }: Shared) {
             {tagResults.length ? (
               <div className="post-feed">
                 {tagResults.map((post) => (
-                  <PostCard
+                  <LetterCard
                     key={post.id}
                     state={state}
                     actions={actions}

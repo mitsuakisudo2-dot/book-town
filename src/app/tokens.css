@@ -1,0 +1,92 @@
+/*
+ * The town's colours, type and corners, in one place (v37's day values).
+ * Components use these names and never a colour of their own, so the six
+ * palettes and the night can come later by redefining them here.
+ *
+ * Text on background, each pair at least 4.5:1 by day
+ * (checked by tests/tokens.test.ts):
+ * @pair --ink --paper
+ * @pair --ink --sheet
+ * @pair --ink --band
+ * @pair --ink --notice
+ * @pair --ink --pop
+ * @pair --ink --green-soft
+ * @pair --ink --lamp-soft
+ * @pair --ink-2 --paper
+ * @pair --ink-2 --sheet
+ * @pair --ink-2 --band
+ * @pair --ink-2 --notice
+ * @pair --ink-2 --green-soft
+ * @pair --green --paper
+ * @pair --green --sheet
+ * @pair --green --band
+ * @pair --green --green-soft
+ * @pair --on-green --green
+ * @pair --forest --paper
+ * @pair --forest --sheet
+ * @pair --forest --band
+ * @pair --lamp --paper
+ * @pair --lamp --sheet
+ * @pair --alert --paper
+ * @pair --alert --sheet
+ */
+:root {
+  color-scheme: light;
+
+  /* Paper, ink and lines */
+  --paper: #f8f3eb;
+  --sheet: #fffcf7;
+  --ink: #2e2823;
+  --ink-2: #64594f;
+  --line: #ebe2d6;
+  --line-2: #d4c7b6;
+  --field: #857767;
+  --band: #f1e8da;
+  --notice: #fbf4e2;
+  --cork: #c9a678;
+  --forest: #2f5a48;
+  --lamp: #9a6418;
+  --lamp-glow: #e9b75a;
+  --lamp-soft: #f7ecd8;
+  --alert: #a83c2a;
+  --pop: #fffaf0;
+  --pop-line: #eadfc8;
+
+  /* 深緑, the first of the palettes */
+  --green: #294b3e;
+  --on-green: #f7f4ee;
+  --green-soft: #e3ece6;
+  --on-photo: #294b3e;
+
+  /* Quieter words: the second ink */
+  --muted: var(--ink-2);
+
+  /* Type sizes. Nothing on screen is smaller than --t-cap. */
+  --t-cap: 12px;
+  --t-meta: 14px;
+  --t-ui: 14px;
+  --t-who: 15px;
+  --t-body: 15px;
+  --t-page: 16px;
+  --t-title: 18px;
+  --t-head: 22px;
+
+  /* Corners */
+  --r-tag: 4px;
+  --r-box: 12px;
+  --r-card: 16px;
+  --r-pill: 999px;
+
+  /* The device's own letters first (仮); Noto when it has none. Mincho only
+     for titles, shop names, headings, quotes and POPs. */
+  --sans:
+    -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo,
+    sans-serif;
+  --serif:
+    "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif JP", serif;
+  /* A reader's poster looks the same on every device: its two typefaces are
+     the web fonts first, whatever letters the device has. */
+  --poster-mincho: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --poster-gothic: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+}
