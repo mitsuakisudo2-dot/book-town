@@ -42,20 +42,22 @@ const memory = () => {
 check("a line written while reading is kept by its sitting", () => {
   const storage = memory();
   const drafts = createPostDraftStore(() => storage);
-  const key = readingDraftKey("me-reading-3");
-  assert.equal(key, "reading:me-reading-3");
+  const key = readingDraftKey("demo", "me-reading-3");
+  assert.equal(key, "demo:reading:me-reading-3");
   drafts.update(key, { body: "ここで一度、本を伏せた。" });
   const reopened = createPostDraftStore(() => storage);
   reopened.initialize();
   assert.equal(reopened.get(key)?.body, "ここで一度、本を伏せた。");
   // A spoiler mark set before any words is kept too; nothing at all is not.
-  reopened.update("review:momo", { spoiler: true });
-  assert.equal(reopened.get("review:momo")?.spoiler, true);
-  reopened.update("review:momo", { spoiler: false });
-  assert.equal(reopened.get("review:momo"), null);
-  // Keys of no composer are not kept.
-  reopened.update("reading:", { body: "x" });
-  reopened.update("draft:x", { body: "x" });
+  reopened.update("demo:review:momo", { spoiler: true });
+  assert.equal(reopened.get("demo:review:momo")?.spoiler, true);
+  reopened.update("demo:review:momo", { spoiler: false });
+  assert.equal(reopened.get("demo:review:momo"), null);
+  // Keys of no composer, or of no owner, are not kept.
+  reopened.update("demo:reading:", { body: "x" });
+  reopened.update("demo:draft:x", { body: "x" });
+  reopened.update("reading:me-reading-3", { body: "x" });
+  reopened.update(":new-post", { body: "x" });
   assert.deepEqual(Object.keys(reopened.getSnapshot().drafts), [key]);
   const stored = JSON.parse(storage.data.get(POST_DRAFT_KEY)!);
   assert.deepEqual(Object.keys(stored.drafts), [key]);
@@ -63,10 +65,10 @@ check("a line written while reading is kept by its sitting", () => {
 
 check("a reading line is carried into a review only when that is empty", () => {
   const drafts = createPostDraftStore(() => memory());
-  const line = readingDraftKey("s1");
+  const line = readingDraftKey("u-1", "s1");
   drafts.update(line, { body: "灰色の男たち。", spoiler: true });
-  assert.equal(drafts.carry(line, "review:momo"), true);
-  assert.deepEqual(drafts.get("review:momo"), {
+  assert.equal(drafts.carry(line, "u-1:review:momo"), true);
+  assert.deepEqual(drafts.get("u-1:review:momo"), {
     body: "灰色の男たち。",
     bookId: null,
     spoiler: true,
@@ -74,30 +76,30 @@ check("a reading line is carried into a review only when that is empty", () => {
   assert.equal(drafts.get(line), null);
   // A review already being written is not overwritten; the line stays.
   drafts.update(line, { body: "もうひとつ。" });
-  assert.equal(drafts.carry(line, "review:momo"), false);
-  assert.equal(drafts.get("review:momo")?.body, "灰色の男たち。");
+  assert.equal(drafts.carry(line, "u-1:review:momo"), false);
+  assert.equal(drafts.get("u-1:review:momo")?.body, "灰色の男たち。");
   assert.equal(drafts.get(line)?.body, "もうひとつ。");
   // A new post with only a book chosen keeps its book.
-  drafts.update("new-post", { bookId: "solaris" });
-  assert.equal(drafts.carry(line, "new-post"), true);
-  assert.deepEqual(drafts.get("new-post"), {
+  drafts.update("u-1:new-post", { bookId: "solaris" });
+  assert.equal(drafts.carry(line, "u-1:new-post"), true);
+  assert.deepEqual(drafts.get("u-1:new-post"), {
     body: "もうひとつ。",
     bookId: "solaris",
     spoiler: false,
   });
   // Nothing written, nothing carried.
   drafts.update(line, { spoiler: true });
-  assert.equal(drafts.carry(line, "review:silence"), false);
-  assert.equal(drafts.get("review:silence"), null);
+  assert.equal(drafts.carry(line, "u-1:review:silence"), false);
+  assert.equal(drafts.get("u-1:review:silence"), null);
 });
 
 check("a reading line can be added after a review's own words", () => {
   const drafts = createPostDraftStore(() => memory());
-  const line = readingDraftKey("s2");
-  drafts.update("review:momo", { body: "前から書いていた感想。\n" });
+  const line = readingDraftKey("u-1", "s2");
+  drafts.update("u-1:review:momo", { body: "前から書いていた感想。\n" });
   drafts.update(line, { body: " 時間の花。", spoiler: true });
-  assert.equal(drafts.carry(line, "review:momo", true), true);
-  assert.deepEqual(drafts.get("review:momo"), {
+  assert.equal(drafts.carry(line, "u-1:review:momo", true), true);
+  assert.deepEqual(drafts.get("u-1:review:momo"), {
     body: "前から書いていた感想。\n時間の花。",
     bookId: null,
     spoiler: true,
@@ -105,13 +107,13 @@ check("a reading line can be added after a review's own words", () => {
   assert.equal(drafts.get(line), null);
   // Into an empty review it goes as it is, the same as carrying it.
   drafts.update(line, { body: "ひとこと。" });
-  assert.equal(drafts.carry(line, "review:silence", true), true);
-  assert.equal(drafts.get("review:silence")?.body, "ひとこと。");
+  assert.equal(drafts.carry(line, "u-1:review:silence", true), true);
+  assert.equal(drafts.get("u-1:review:silence")?.body, "ひとこと。");
   // Too long for one post together: nothing moves, and the line stays.
-  drafts.update("review:solaris", { body: "海".repeat(995) });
+  drafts.update("u-1:review:solaris", { body: "海".repeat(995) });
   drafts.update(line, { body: "海の記憶。" });
-  assert.equal(drafts.carry(line, "review:solaris", true), false);
-  assert.equal(drafts.get("review:solaris")?.body.length, 995);
+  assert.equal(drafts.carry(line, "u-1:review:solaris", true), false);
+  assert.equal(drafts.get("u-1:review:solaris")?.body.length, 995);
   assert.equal(drafts.get(line)?.body, "海の記憶。");
 });
 
@@ -122,16 +124,20 @@ check("post drafts read back too long or misshapen are dropped", () => {
     JSON.stringify({
       version: 1,
       drafts: {
-        "reading:a": { body: "よし", bookId: null, spoiler: false },
-        "reading:b": { body: "あ".repeat(1001), bookId: null, spoiler: false },
-        "reading:c": { body: "x", bookId: 3, spoiler: false },
-        "reading:d": { body: "x", bookId: null },
+        "u-1:reading:a": { body: "よし", bookId: null, spoiler: false },
+        "u-1:reading:b": {
+          body: "あ".repeat(1001),
+          bookId: null,
+          spoiler: false,
+        },
+        "u-1:reading:c": { body: "x", bookId: 3, spoiler: false },
+        "u-1:reading:d": { body: "x", bookId: null },
       },
     }),
   );
   const drafts = createPostDraftStore(() => storage);
   drafts.initialize();
-  assert.deepEqual(Object.keys(drafts.getSnapshot().drafts), ["reading:a"]);
+  assert.deepEqual(Object.keys(drafts.getSnapshot().drafts), ["u-1:reading:a"]);
 });
 
 const work = (patch: Partial<RecordWork> = {}): RecordWork => ({

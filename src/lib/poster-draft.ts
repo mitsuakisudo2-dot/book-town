@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
+import { DRAFT_OWNER } from "./draft-owner";
+import {
+  createKeptDraftStore,
+  handOverDrafts,
+  useOwnedDraft,
+  type KeptDraftOptions,
+} from "./kept-draft";
 import {
   POSTER_FONTS,
   POSTER_LIMITS,
@@ -12,7 +19,7 @@ import {
 
 // A poster being made is kept in this browser while it is made, so a closed
 // tab or a slip of the 戻る button does not lose it. Cleared once it is kept
-// for real (put up, or left as a draft in the town).
+// for real (put up, or left as a draft in the town), or thrown away.
 
 export const POSTER_DRAFT_KEY = "book-town-poster-drafts-v1";
 
@@ -24,28 +31,32 @@ export type KeptPosterWork = PosterWork & {
   /** For a poster being changed: the mark of the poster it began from. */
   from?: string;
 };
-type Snapshot = { drafts: Record<string, KeptPosterWork>; saved: boolean };
-type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-const initial: Snapshot = { drafts: {}, saved: true };
 
-/** Which poster the work belongs to: a new one, one about a book, or one being changed. */
+/**
+ * Which poster the work belongs to, for its maker (see draftOwner): a new
+ * one, one about a book, or one being changed.
+ */
 export const posterWorkKey = (options: {
+  owner: string;
   posterId?: string;
   bookId?: string;
 }): string =>
-  options.posterId
+  options.owner +
+  ":" +
+  (options.posterId
     ? "poster:" + options.posterId
     : options.bookId
       ? "book:" + options.bookId
-      : "new";
+      : "new");
 
 /** Which poster a key's work belongs to, as posterWorkKey was told. */
 export function posterWorkFor(key: string): {
   posterId?: string;
   bookId?: string;
 } {
-  if (key.startsWith("poster:")) return { posterId: key.slice(7) };
-  if (key.startsWith("book:")) return { bookId: key.slice(5) };
+  const work = key.slice(key.indexOf(":") + 1);
+  if (work.startsWith("poster:")) return { posterId: work.slice(7) };
+  if (work.startsWith("book:")) return { bookId: work.slice(5) };
   return {};
 }
 
@@ -126,105 +137,57 @@ function readWork(value: unknown): KeptPosterWork | null {
   };
 }
 
-export function createPosterDraftStore(storage: () => DraftStorage) {
-  let snapshot = initial;
-  let initialized = false;
-  const listeners = new Set<() => void>();
-  const emit = () => listeners.forEach((listener) => listener());
+const WORK = "(new|book:.+|poster:.+)";
 
-  function initialize() {
-    if (initialized) return;
-    initialized = true;
-    try {
-      const raw = storage().getItem(POSTER_DRAFT_KEY);
-      const data = raw ? JSON.parse(raw) : null;
-      const drafts: Record<string, KeptPosterWork> = {};
-      if (
-        data?.version === 1 &&
-        data.drafts &&
-        typeof data.drafts === "object"
-      ) {
-        for (const [key, value] of Object.entries(data.drafts)) {
-          if (!/^(new|book:.+|poster:.+)$/.test(key)) continue;
-          const work = readWork(value);
-          if (work) drafts[key] = work;
-        }
-      }
-      snapshot = { drafts, saved: true };
-    } catch {
-      snapshot = { drafts: {}, saved: false };
-    }
-    emit();
-  }
+export const POSTER_DRAFT_OPTIONS: KeptDraftOptions<KeptPosterWork> = {
+  storageKey: POSTER_DRAFT_KEY,
+  keyPattern: new RegExp("^" + DRAFT_OWNER + ":" + WORK + "$"),
+  // Kept for everyone in this browser before keys began with their owner.
+  unowned: new RegExp("^" + WORK + "$"),
+  read: readWork,
+  // Work is let go only when the poster is kept for real or thrown away.
+  limit: Infinity,
+};
 
-  function write(drafts: Record<string, KeptPosterWork>) {
-    let saved = true;
-    try {
-      if (Object.keys(drafts).length)
-        storage().setItem(
-          POSTER_DRAFT_KEY,
-          JSON.stringify({ version: 1, drafts }),
-        );
-      else storage().removeItem(POSTER_DRAFT_KEY);
-    } catch {
-      // The work stays in memory even when browser storage is full or off.
-      saved = false;
-    }
-    snapshot = { drafts, saved };
-    emit();
-  }
+export const posterDrafts = createKeptDraftStore(POSTER_DRAFT_OPTIONS);
 
-  /** Keeps the work under `key`; `from` marks the poster it began from. */
-  function keep(key: string, work: PosterWork, from?: string) {
-    initialize();
-    const kept: KeptPosterWork = { ...work, at: new Date().toISOString() };
-    if (from) kept.from = from;
-    else delete kept.from;
-    write({ ...snapshot.drafts, [key]: kept });
-  }
-
-  function clear(key: string) {
-    initialize();
-    if (!(key in snapshot.drafts)) return;
-    const drafts = { ...snapshot.drafts };
-    delete drafts[key];
-    write(drafts);
-  }
-
-  return {
-    initialize,
-    keep,
-    clear,
-    getSnapshot: () => snapshot,
-    getServerSnapshot: () => initial,
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
-}
-
-const posterDraftStore = createPosterDraftStore(() => window.localStorage);
+/** A visitor's poster work, handed to the account they sign in to. */
+export const adoptVisitorPosters = (owner: string, store = posterDrafts) =>
+  handOverDrafts(store, owner);
 
 /**
- * The work kept under `key`, and how to keep or let go of it; `all` is every
- * piece of work kept in this browser, by key.
+ * The work in hand under `key`, what this browser keeps of it, and how to
+ * keep or let go of it; `all` is every piece of work its maker keeps here,
+ * by key. A null key (the maker is not known yet) keeps nothing: the work
+ * stays on the screen until the maker is known.
  */
-export function usePosterDraft(key: string) {
+export function usePosterDraft(key: string | null) {
+  const { draft, kept, saved, set, clear } = useOwnedDraft(posterDrafts, key);
   const snapshot = useSyncExternalStore(
-    posterDraftStore.subscribe,
-    posterDraftStore.getSnapshot,
-    posterDraftStore.getServerSnapshot,
+    posterDrafts.subscribe,
+    posterDrafts.getSnapshot,
+    posterDrafts.getServerSnapshot,
   );
-  useEffect(() => posterDraftStore.initialize(), []);
+  const mine = key === null ? null : key.slice(0, key.indexOf(":") + 1);
   return {
-    kept: snapshot.drafts[key] ?? null,
-    all: snapshot.drafts,
-    saved: snapshot.saved,
-    keep: (work: PosterWork, from?: string) =>
-      posterDraftStore.keep(key, work, from),
-    clear: () => posterDraftStore.clear(key),
+    work: draft,
+    kept,
+    all: Object.fromEntries(
+      Object.entries(snapshot.drafts).filter(
+        ([entry]) => mine !== null && entry.startsWith(mine),
+      ),
+    ),
+    saved,
+    /** Keeps the work; `from` marks the poster it began from. */
+    keep: (work: PosterWork, from?: string) => {
+      const stamped: KeptPosterWork = {
+        ...work,
+        at: new Date().toISOString(),
+      };
+      if (from) stamped.from = from;
+      else delete stamped.from;
+      set(stamped);
+    },
+    clear,
   };
 }
