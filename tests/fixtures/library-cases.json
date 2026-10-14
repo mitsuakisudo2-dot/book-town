@@ -768,7 +768,8 @@
       ],
       "expect": {
         "source": "legacy",
-        "addedAt": "2026-08-01T00:00:00.000Z"
+        "addedAt": "2026-08-01T00:00:00.000Z",
+        "everUsed": true
       }
     },
     {
@@ -784,7 +785,8 @@
       ],
       "expect": {
         "source": "legacy",
-        "addedAt": "2026-08-01T00:00:00.000Z"
+        "addedAt": "2026-08-01T00:00:00.000Z",
+        "everUsed": true
       }
     },
     {
@@ -801,7 +803,8 @@
       ],
       "expect": {
         "source": "legacy",
-        "addedAt": "2026-08-01T00:00:00.000Z"
+        "addedAt": "2026-08-01T00:00:00.000Z",
+        "everUsed": true
       }
     },
     {
@@ -817,7 +820,8 @@
       ],
       "expect": {
         "source": "legacy",
-        "addedAt": "2026-08-01T00:00:00.000Z"
+        "addedAt": "2026-08-01T00:00:00.000Z",
+        "everUsed": true
       }
     },
     {
@@ -833,7 +837,8 @@
       ],
       "expect": {
         "source": "legacy",
-        "addedAt": "2026-08-01T00:00:00.000Z"
+        "addedAt": "2026-08-01T00:00:00.000Z",
+        "everUsed": true
       }
     },
     {
@@ -850,7 +855,8 @@
       ],
       "expect": {
         "source": "legacy",
-        "addedAt": "2026-08-01T00:00:00.000Z"
+        "addedAt": "2026-08-01T00:00:00.000Z",
+        "everUsed": true
       }
     },
     {
@@ -866,7 +872,8 @@
       ],
       "expect": {
         "source": "legacy",
-        "addedAt": "2026-08-01T00:00:00.000Z"
+        "addedAt": "2026-08-01T00:00:00.000Z",
+        "everUsed": true
       }
     },
     {
@@ -886,7 +893,8 @@
       ],
       "expect": {
         "source": "legacy",
-        "addedAt": "2026-08-01T00:00:00.000Z"
+        "addedAt": "2026-08-01T00:00:00.000Z",
+        "everUsed": true
       }
     },
     {
@@ -908,7 +916,8 @@
       "expect": {
         "source": "legacy",
         "addedAt": "2026-08-03T00:00:00.000Z",
-        "wantedAt": "2026-08-03T00:00:00.000Z"
+        "wantedAt": "2026-08-03T00:00:00.000Z",
+        "everUsed": true
       }
     },
     {
@@ -939,6 +948,93 @@
         "wantedAt": "2026-08-01T00:00:00.000Z",
         "status": "reading",
         "statusAt": "2026-08-03T00:00:00.000Z"
+      }
+    },
+    {
+      "name": "B23 a library mark and a private shelf of the reader's shop: the mark's row, marked as used",
+      "marks": [
+        {
+          "kind": "library",
+          "at": "2026-08-03T00:00:00.000Z"
+        }
+      ],
+      "records": [],
+      "sessions": [],
+      "uses": [
+        {
+          "kind": "shelf",
+          "private": true,
+          "at": "2026-08-01T00:00:00.000Z"
+        }
+      ],
+      "expect": {
+        "source": "legacy",
+        "addedAt": "2026-08-03T00:00:00.000Z",
+        "everUsed": true
+      }
+    },
+    {
+      "name": "B24 a reading still running and the reader's own poster draft: reading, marked as used",
+      "marks": [],
+      "records": [],
+      "sessions": [
+        {
+          "startedAt": "2026-08-02T00:00:00.000Z",
+          "endedAt": null
+        }
+      ],
+      "uses": [
+        {
+          "kind": "poster",
+          "draft": true,
+          "at": "2026-08-01T00:00:00.000Z"
+        }
+      ],
+      "expect": {
+        "source": "legacy",
+        "addedAt": "2026-08-02T00:00:00.000Z",
+        "status": "reading",
+        "statusAt": "2026-08-02T00:00:00.000Z",
+        "everUsed": true
+      }
+    },
+    {
+      "name": "B25 the reader's own record and the nine: the record's row, marked as used",
+      "marks": [],
+      "records": ["2026-08-02T00:00:00.000Z"],
+      "sessions": [],
+      "uses": [
+        {
+          "kind": "nine",
+          "at": "2026-08-01T00:00:00.000Z"
+        }
+      ],
+      "expect": {
+        "source": "legacy",
+        "addedAt": "2026-08-02T00:00:00.000Z",
+        "everUsed": true
+      }
+    },
+    {
+      "name": "B26 a reading ended and the store scene of the reader's shop: marked as used",
+      "marks": [],
+      "records": [],
+      "sessions": [
+        {
+          "startedAt": "2026-08-02T00:00:00.000Z",
+          "endedAt": "2026-08-04T00:00:00.000Z"
+        }
+      ],
+      "uses": [
+        {
+          "kind": "scene",
+          "at": "2026-08-01T00:00:00.000Z"
+        }
+      ],
+      "expect": {
+        "source": "legacy",
+        "addedAt": "2026-08-02T00:00:00.000Z",
+        "everUsed": true
       }
     }
   ],
@@ -1654,6 +1750,23 @@
       }
     },
     {
+      "name": "4-10 condition 3: the reader's shop keeps a row a like brought in after it is taken off the shop (N19)",
+      "entry": {
+        "source": "like",
+        "likedAt": "2026-09-01T00:00:00.000Z",
+        "everUsed": true
+      },
+      "set": {
+        "liked": false
+      },
+      "via": "like",
+      "at": "2026-10-01T09:00:00.000Z",
+      "expect": {
+        "source": "like",
+        "everUsed": true
+      }
+    },
+    {
       "name": "4-10 condition 3: liked, then scanned (registered), stays",
       "entry": {
         "source": "like",
@@ -1687,6 +1800,23 @@
       "at": "2026-10-01T09:00:00.000Z",
       "expect": {
         "source": "like"
+      }
+    },
+    {
+      "name": "4-10 condition 4: the reader's own post, poster or nine keeps a row 私も好き！ brought in after it is gone (N20)",
+      "entry": {
+        "source": "pop",
+        "likedAt": "2026-09-01T00:00:00.000Z",
+        "everUsed": true
+      },
+      "set": {
+        "liked": false
+      },
+      "via": "pop",
+      "at": "2026-10-01T09:00:00.000Z",
+      "expect": {
+        "source": "pop",
+        "everUsed": true
       }
     },
     {
@@ -1730,6 +1860,25 @@
         "status": "tsundoku",
         "statusAt": "2026-08-01T00:00:00.000Z",
         "removedAt": "2026-10-01T09:00:00.000Z"
+      }
+    },
+    {
+      "name": "4-10 a row a like brought back goes again, though the reader used it before it was taken out",
+      "entry": {
+        "source": "like",
+        "likedAt": "2026-09-01T00:00:00.000Z",
+        "likeRestored": true,
+        "everUsed": true
+      },
+      "set": {
+        "liked": false
+      },
+      "via": "like",
+      "at": "2026-10-01T09:00:00.000Z",
+      "expect": {
+        "source": "like",
+        "removedAt": "2026-10-01T09:00:00.000Z",
+        "everUsed": true
       }
     },
     {
@@ -2300,7 +2449,7 @@
       "expect": "same"
     },
     {
-      "name": "N19 placing a book in the reader's shop makes a row",
+      "name": "N19 placing a book in the reader's shop makes a row, marked as used",
       "entry": null,
       "set": {
         "meet": true
@@ -2309,11 +2458,12 @@
       "at": "2026-10-01T09:00:00.000Z",
       "expect": {
         "source": "shop",
-        "addedAt": "2026-10-01T09:00:00.000Z"
+        "addedAt": "2026-10-01T09:00:00.000Z",
+        "everUsed": true
       }
     },
     {
-      "name": "N20 using a book in the reader's own post makes a row",
+      "name": "N20 using a book in the reader's own post makes a row, marked as used",
       "entry": null,
       "set": {
         "meet": true
@@ -2322,11 +2472,12 @@
       "at": "2026-10-01T09:00:00.000Z",
       "expect": {
         "source": "post",
-        "addedAt": "2026-10-01T09:00:00.000Z"
+        "addedAt": "2026-10-01T09:00:00.000Z",
+        "everUsed": true
       }
     },
     {
-      "name": "N20 putting a book on the reader's own poster makes a row",
+      "name": "N20 putting a book on the reader's own poster makes a row, marked as used",
       "entry": null,
       "set": {
         "meet": true
@@ -2335,11 +2486,12 @@
       "at": "2026-10-01T09:00:00.000Z",
       "expect": {
         "source": "poster",
-        "addedAt": "2026-10-01T09:00:00.000Z"
+        "addedAt": "2026-10-01T09:00:00.000Z",
+        "everUsed": true
       }
     },
     {
-      "name": "N20 choosing a book among the reader's nine makes a row",
+      "name": "N20 choosing a book among the reader's nine makes a row, marked as used",
       "entry": null,
       "set": {
         "meet": true
@@ -2348,11 +2500,12 @@
       "at": "2026-10-01T09:00:00.000Z",
       "expect": {
         "source": "nine",
-        "addedAt": "2026-10-01T09:00:00.000Z"
+        "addedAt": "2026-10-01T09:00:00.000Z",
+        "everUsed": true
       }
     },
     {
-      "name": "N20 using a book already in the library changes nothing",
+      "name": "N20 using a book already in the library marks it as used and changes nothing else",
       "entry": {
         "status": "tsundoku",
         "statusAt": "2026-09-01T00:00:00.000Z"
@@ -2362,10 +2515,14 @@
       },
       "via": "post",
       "at": "2026-10-01T09:00:00.000Z",
-      "expect": "same"
+      "expect": {
+        "status": "tsundoku",
+        "statusAt": "2026-09-01T00:00:00.000Z",
+        "everUsed": true
+      }
     },
     {
-      "name": "N19 placing a book taken out leaves it out",
+      "name": "N19 placing a book taken out leaves it out, marked as used",
       "entry": {
         "removedAt": "2026-09-05T00:00:00.000Z"
       },
@@ -2374,7 +2531,44 @@
       },
       "via": "shop",
       "at": "2026-10-01T09:00:00.000Z",
+      "expect": {
+        "removedAt": "2026-09-05T00:00:00.000Z",
+        "everUsed": true
+      }
+    },
+    {
+      "name": "N20 using a book already marked as used changes nothing",
+      "entry": {
+        "source": "shop",
+        "everUsed": true
+      },
+      "set": {
+        "meet": true
+      },
+      "via": "post",
+      "at": "2026-10-01T09:00:00.000Z",
       "expect": "same"
+    },
+    {
+      "name": "N19 placing a book a like brought back in the reader's shop ends that, and marks it as used",
+      "entry": {
+        "source": "like",
+        "likedAt": "2026-09-01T00:00:00.000Z",
+        "likeRestored": true
+      },
+      "context": {
+        "liked": true
+      },
+      "set": {
+        "meet": true
+      },
+      "via": "shop",
+      "at": "2026-10-01T09:00:00.000Z",
+      "expect": {
+        "source": "like",
+        "likedAt": "2026-09-01T00:00:00.000Z",
+        "everUsed": true
+      }
     },
     {
       "name": "taking a like back from a book not in the library makes nothing",
@@ -2417,6 +2611,263 @@
       "via": "search",
       "at": "2026-10-01T09:00:00.000Z",
       "expect": null
+    }
+  ],
+  "sequence": [
+    {
+      "name": "Q1 liked on a post, placed in the reader's shop, taken off it, unliked: stays (N19)",
+      "entry": null,
+      "steps": [
+        {
+          "does": "likes another reader's post about the book",
+          "set": {
+            "liked": true
+          },
+          "via": "like",
+          "at": "2026-10-01T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "places the book in their shop",
+          "context": {
+            "liked": true
+          },
+          "set": {
+            "meet": true
+          },
+          "via": "shop",
+          "at": "2026-10-02T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "takes it off the shop, then takes the like back",
+          "set": {
+            "liked": false
+          },
+          "via": "like",
+          "at": "2026-10-03T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "everUsed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Q2 私も好き！ on a POP, used in the reader's own post, the post deleted, taken back: stays (N20)",
+      "entry": null,
+      "steps": [
+        {
+          "does": "presses 私も好き！ on another reader's POP",
+          "set": {
+            "liked": true
+          },
+          "via": "pop",
+          "at": "2026-10-01T09:00:00.000Z",
+          "expect": {
+            "source": "pop",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "writes a post about the book",
+          "context": {
+            "liked": true
+          },
+          "set": {
+            "meet": true
+          },
+          "via": "post",
+          "at": "2026-10-02T09:00:00.000Z",
+          "expect": {
+            "source": "pop",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "deletes the post, then takes 私も好き！ back",
+          "set": {
+            "liked": false
+          },
+          "via": "pop",
+          "at": "2026-10-03T09:00:00.000Z",
+          "expect": {
+            "source": "pop",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "everUsed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Q3 liked on a post and unliked, never used: leaves, as before",
+      "entry": null,
+      "steps": [
+        {
+          "does": "likes another reader's post about the book",
+          "set": {
+            "liked": true
+          },
+          "via": "like",
+          "at": "2026-10-01T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "takes the like back",
+          "set": {
+            "liked": false
+          },
+          "via": "like",
+          "at": "2026-10-02T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "removedAt": "2026-10-02T09:00:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Q4 taken out and then placed in the reader's shop: stays out, marked as used; brought back on a theme shelf, then liked and unliked off the shelf and the shop, it stays (N19)",
+      "entry": {
+        "source": "like",
+        "removedAt": "2026-09-05T00:00:00.000Z"
+      },
+      "steps": [
+        {
+          "does": "places the book in their shop",
+          "set": {
+            "meet": true
+          },
+          "via": "shop",
+          "at": "2026-10-01T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "removedAt": "2026-09-05T00:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "puts it on a theme shelf",
+          "context": {
+            "inShop": true
+          },
+          "set": {
+            "addShelf": "00000000-0000-4000-8000-0000000000c1"
+          },
+          "via": "search",
+          "at": "2026-10-02T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "takes it off the theme shelf",
+          "context": {
+            "inShop": true,
+            "liveThemeCount": 1
+          },
+          "set": {
+            "removeShelf": "00000000-0000-4000-8000-0000000000c1"
+          },
+          "via": "search",
+          "at": "2026-10-03T09:00:00.000Z",
+          "expect": "same"
+        },
+        {
+          "does": "takes it off the shop, and likes another reader's post about it",
+          "set": {
+            "liked": true
+          },
+          "via": "like",
+          "at": "2026-10-04T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "likedAt": "2026-10-04T09:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "takes the like back",
+          "set": {
+            "liked": false
+          },
+          "via": "like",
+          "at": "2026-10-05T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "everUsed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Q5 brought back by a like, then placed in the reader's shop, taken off it, unliked: stays (N19)",
+      "entry": {
+        "source": "like",
+        "removedAt": "2026-09-05T00:00:00.000Z"
+      },
+      "steps": [
+        {
+          "does": "likes another reader's post about the book",
+          "set": {
+            "liked": true
+          },
+          "via": "like",
+          "at": "2026-10-01T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "likedAt": "2026-10-01T09:00:00.000Z",
+            "likeRestored": true
+          }
+        },
+        {
+          "does": "places the book in their shop",
+          "context": {
+            "liked": true
+          },
+          "set": {
+            "meet": true
+          },
+          "via": "shop",
+          "at": "2026-10-02T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "likedAt": "2026-10-01T09:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "takes it off the shop, then takes the like back",
+          "set": {
+            "liked": false
+          },
+          "via": "like",
+          "at": "2026-10-03T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "everUsed": true
+          }
+        }
+      ]
     }
   ]
 }

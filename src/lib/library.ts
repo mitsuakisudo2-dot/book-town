@@ -99,6 +99,13 @@ export interface LibraryEntry {
    * takes it out again (4-10's way of writing likes: a proposal).
    */
   likeRestored: boolean;
+  /**
+   * Placed in the reader's own shop, or used in their own post, poster or
+   * 人生の9冊, at least once, taken out or not; never cleared. Taking a like
+   * back then leaves the book in, though the shop or the post holds it no
+   * more (N19, N20).
+   */
+  everUsed: boolean;
 }
 
 /** A shelf the reader named (テーマ棚, library_shelves). */
@@ -263,8 +270,8 @@ export const DEFAULT_SHELVES: readonly DefaultShelf[] = [
 // ---------------------------------------------------------------- ops
 
 /**
- * A change to some books. Absent fields change nothing. `batchId` and `meet`
- * act only on a row the op makes.
+ * A change to some books. Absent fields change nothing. `batchId` acts only
+ * on a row the op makes.
  */
 export type LibrarySet = Partial<{
   status: ReadingStatus | null;
@@ -280,7 +287,11 @@ export type LibrarySet = Partial<{
   removeShelf: string;
   /** The scanning session a new row came in by. */
   batchId: string;
-  /** Used in the reader's shop, post, poster or nine: a row is made if there is none, nothing else (N19, N20). */
+  /**
+   * Used in the reader's shop, post, poster or nine: a row is made if there
+   * is none, and the row is marked as used (everUsed), even one taken out,
+   * which stays out; nothing else (N19, N20).
+   */
   meet: true;
 }>;
 
@@ -301,7 +312,10 @@ export interface LibraryOp {
 
 /** One book as an op found it: everything of it the op can change. */
 export interface OpBefore {
-  /** The row whole; null: there was none. */
+  /**
+   * The row whole; null: there was none. Undoing keeps everUsed as it then
+   * is: a use the reader made since is not taken back with the op.
+   */
   entry: LibraryEntry | null;
   /**
    * Its places on theme shelves, whole: one taken off goes back with the
@@ -403,6 +417,7 @@ const blankEntry = (
   addedAt,
   removedAt: null,
   likeRestored: false,
+  everUsed: false,
 });
 
 const ENTRY_FIELDS = [
@@ -416,6 +431,7 @@ const ENTRY_FIELDS = [
   "addedAt",
   "removedAt",
   "likeRestored",
+  "everUsed",
 ] as const;
 const sameEntry = (a: LibraryEntry, b: LibraryEntry) =>
   ENTRY_FIELDS.every((field) => a[field] === b[field]);
@@ -439,11 +455,11 @@ const likeOnlyOp = (s: LibrarySet) =>
  * 4-10's conditions 1 and 3 to 5, and the rest of condition 2 (no other
  * encounter stands, the memo review's 2章): nothing but a like keeps the row.
  * A row a like brought back counts nothing it held from before it was taken
- * out. The shop and the reader's own uses count as they stand when the like
- * is taken back, as condition 3 and 4 read: a book liked and then put in the
- * shop leaves with the like once it is off the shop, while one put in the
- * shop first stays (its source is shop). Whether N19's お店から下ろしても
- * 残る should cover the first is not settled yet.
+ * out. The shop and the reader's own uses keep it while they stand, and
+ * once the shop, a post, a poster or the nine has held it (everUsed), after
+ * that too: a book liked and then put in the shop stays when it is taken
+ * off and the like taken back, as one put in the shop first does (N19's
+ * お店から下ろしても残る, and N20, settled 2026-10-14).
  */
 function heldByLikeAlone(e: LibraryEntry, x: EntryContext): boolean {
   return (
@@ -452,6 +468,7 @@ function heldByLikeAlone(e: LibraryEntry, x: EntryContext): boolean {
       (e.status === null &&
         e.wantedAt === null &&
         e.owned === null &&
+        !e.everUsed &&
         !x.favorite &&
         x.liveThemeCount === 0 &&
         !x.wantMet)) &&
@@ -540,6 +557,8 @@ export function applySet(
   if (s.want === false) next.wantedAt = null;
   if (s.owned !== undefined && !(e && READ_VIAS.includes(via)))
     next.owned = s.owned;
+  // A use marks a row taken out too, without bringing it back (N19).
+  if (s.meet === true) next.everUsed = true;
   if (s.liked === true) next.likedAt = next.likedAt ?? at;
   if (s.liked === false && !x.liked) next.likedAt = null;
 
@@ -1461,6 +1480,7 @@ export interface LegacySources {
  * 4. readings ended;
  * 5. books used in the reader's own posts, posters, nine and shop: the
  *    earliest use.
+ * A book so used is marked as used (everUsed), whichever step made its row.
  * Likes are not copied (book_encounters starts empty, so no like stands).
  */
 export function legacyToLibrary(
@@ -1540,6 +1560,7 @@ export function legacyToLibrary(
     ),
   );
   make(firstBy(from.uses ?? []));
+  for (const use of from.uses ?? []) entries[use.bookId].everUsed = true;
   return entries;
 }
 
@@ -1686,6 +1707,7 @@ export function validateEntry(e: LibraryEntry): string | null {
   if (!isTime(e.addedAt)) return "addedAt";
   if (!isTimeOrNull(e.removedAt)) return "removedAt";
   if (typeof e.likeRestored !== "boolean") return "likeRestored";
+  if (typeof e.everUsed !== "boolean") return "everUsed";
   return null;
 }
 

@@ -1168,6 +1168,7 @@ async function main() {
         added_at: new Date().toISOString(),
         removed_at: null,
         like_restored: false,
+        ever_used: false,
       });
       // New rows, inserted ignoring duplicates: sent again, none is new.
       for (const expected of [3, 0]) {

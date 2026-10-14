@@ -3723,7 +3723,7 @@ async function main() {
     "book_encounters",
   ];
   const ENTRY_COLUMNS =
-    "user_id, book_id, status, status_at, wanted_at, liked_at, owned, source, batch_id, added_at, removed_at, like_restored";
+    "user_id, book_id, status, status_at, wanted_at, liked_at, owned, source, batch_id, added_at, removed_at, like_restored, ever_used";
   const SHELF_COLUMNS =
     "id, user_id, name, note, position, show_wanted, created_at, deleted_at";
   const SHELF_BOOK_COLUMNS = "shelf_id, user_id, book_id, added_at, position";
@@ -3780,6 +3780,7 @@ async function main() {
     addedAt: iso(row.added_at) as string,
     removedAt: iso(row.removed_at),
     likeRestored: row.like_restored as boolean,
+    everUsed: row.ever_used as boolean,
   });
   const rowsOf = (visitor: string, bookId: string) =>
     as(visitor, "select * from library_entries where book_id = $1", [bookId]);
@@ -3930,7 +3931,7 @@ async function main() {
           "library_entries",
           ENTRY_COLUMNS,
           "user_id, book_id",
-          rowOf(CHI, entryOf(akis, {})),
+          rowOf(CHI, entryOf(akis, { everUsed: true })),
         ],
         ["library_shelves", SHELF_COLUMNS, "id", shelfRow(deviceId())],
         [
@@ -3981,6 +3982,7 @@ async function main() {
       }
       for (const sql of [
         "update library_entries set status = 'finished' where user_id = $1",
+        "update library_entries set ever_used = true where user_id = $1",
         "update library_shelves set name = '横取り' where user_id = $1",
         "update library_shelf_books set position = 'a1' where user_id = $1",
         "update book_encounters set memo = '横取り' where user_id = $1",
@@ -3988,6 +3990,15 @@ async function main() {
         "delete from book_encounters where user_id = $1",
       ])
         assert.equal(await affects(AKI, sql, [CHI]), 0, sql);
+      // Nor marks one of Chi's books as used by an upsert merging onto it.
+      await refused(
+        AKI,
+        `insert into library_entries (${ENTRY_COLUMNS})
+         select ${ENTRY_COLUMNS} from json_populate_record(null::library_entries, $1)
+         on conflict (user_id, book_id) do update set ever_used = excluded.ever_used`,
+        [JSON.stringify(rowOf(CHI, entryOf(chis, { everUsed: true })))],
+        /row-level security/,
+      );
       // Nobody puts a book on another's shelf, or one outside their own
       // library on their own shelf.
       for (const [visitor, shelfId, bookId] of [
@@ -4159,7 +4170,7 @@ async function main() {
       [
         "library_entries",
         "UPDATE",
-        "status, status_at, wanted_at, liked_at, owned, removed_at, like_restored",
+        "status, status_at, wanted_at, liked_at, owned, removed_at, like_restored, ever_used",
       ],
       ["library_shelves", "INSERT", SHELF_COLUMNS],
       [
@@ -4251,6 +4262,7 @@ async function main() {
       { source: null },
       { added_at: null },
       { like_restored: null },
+      { ever_used: null },
     ])
       await assert.rejects(
         insertRows(CHI, "library_entries", ENTRY_COLUMNS, "user_id, book_id", [
@@ -4421,6 +4433,92 @@ async function main() {
       );
     },
   );
+
+  /**
+   * Chi's row of `b` changed from `before` to `after` as the app sends it: a
+   * new row whole, inserted ignoring duplicates, or the columns that changed,
+   * updated. Then it is read back.
+   */
+  const sendEntry = async (
+    b: string,
+    before: LibraryEntry | null,
+    after: LibraryEntry | null,
+    why?: string,
+  ) => {
+    if (before === null && after !== null)
+      assert.equal(
+        await insertRows(
+          CHI,
+          "library_entries",
+          ENTRY_COLUMNS,
+          "user_id, book_id",
+          [rowOf(CHI, after)],
+        ),
+        1,
+      );
+    else if (before !== null && after !== null) {
+      const changed = (Object.keys(after) as (keyof LibraryEntry)[]).filter(
+        (key) => after[key] !== before[key],
+      );
+      if (changed.length)
+        assert.equal(
+          await affects(
+            CHI,
+            `update library_entries
+             set ${changed.map((key, i) => `${snake(key)} = $${i + 3}`).join(", ")}
+             where user_id = $1 and book_id = $2`,
+            [CHI, b, ...changed.map((key) => after[key])],
+          ),
+          1,
+        );
+    }
+    assert.deepEqual(
+      (await rowsOf(CHI, b)).map(entryFrom),
+      after === null ? [] : [after],
+      why,
+    );
+  };
+
+  // Every write the library's rules make is one the table takes and keeps
+  // through the writes after it, a use marking a row already there
+  // (ever_used) among them (tests/fixtures/library-cases.json).
+  for (const c of LIBRARY_CASES.apply)
+    await check(
+      `library_entries takes the write of applySet: ${c.name}`,
+      async () => {
+        const b = await newBook(CHI, "規則の本");
+        const before = c.entry === null ? null : entryOf(b, c.entry);
+        if (c.entry !== null) await putEntry(CHI, b, c.entry);
+        await sendEntry(
+          b,
+          before,
+          c.expect === "same"
+            ? before
+            : c.expect === null
+              ? null
+              : entryOf(b, c.expect),
+        );
+      },
+    );
+  for (const c of LIBRARY_CASES.sequence)
+    await check(
+      `library_entries takes each step's write: ${c.name}`,
+      async () => {
+        const b = await newBook(CHI, "使った本");
+        let row = c.entry === null ? null : entryOf(b, c.entry);
+        if (c.entry !== null) await putEntry(CHI, b, c.entry);
+        for (const step of c.steps) {
+          const after =
+            step.expect === "same"
+              ? row
+              : step.expect === null
+                ? null
+                : entryOf(b, step.expect);
+          await sendEntry(b, row, after, step.does);
+          row = after;
+        }
+      },
+    );
 
   /** Chi's row of `b` after `change`, as a shared case expects it. */
   const followed = async (
@@ -5845,8 +5943,11 @@ async function main() {
           r.name,
         );
       assert.deepEqual(
-        (await entries(writer)).map((row) => row.book_id),
-        [posted, shelved],
+        (await entries(writer)).map((row) => [row.book_id, row.ever_used]),
+        [
+          [posted, true],
+          [shelved, true],
+        ],
       );
       assert.deepEqual(await entries(liker), []);
       assert.deepEqual(

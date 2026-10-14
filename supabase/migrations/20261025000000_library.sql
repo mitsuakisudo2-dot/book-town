@@ -47,6 +47,12 @@ create table public.library_entries (
   -- Brought back by a like and untouched since, so taking the like back
   -- takes it out again.
   like_restored boolean not null default false,
+  -- Placed in the reader's own shop, or used in their own post, poster or
+  -- 人生の9冊, at least once, taken out or not; never cleared. Taking a
+  -- like back then leaves the book in, though the shop or the post holds it
+  -- no more (N19, N20). Whether, not when: nothing is ordered by it, and the
+  -- nine keep no date to give it.
+  ever_used boolean not null default false,
   updated_at timestamptz not null default now(),
   primary key (user_id, book_id)
 );
@@ -299,9 +305,11 @@ grant select on public.library_entries, public.library_shelves,
   public.library_shelf_books, public.book_encounters
   to authenticated;
 grant insert (user_id, book_id, status, status_at, wanted_at, liked_at, owned, source,
-  batch_id, added_at, removed_at, like_restored) on public.library_entries to authenticated;
-grant update (status, status_at, wanted_at, liked_at, owned, removed_at, like_restored)
+  batch_id, added_at, removed_at, like_restored, ever_used)
   on public.library_entries to authenticated;
+-- A use marks a row already there, so ever_used is updated too.
+grant update (status, status_at, wanted_at, liked_at, owned, removed_at, like_restored,
+  ever_used) on public.library_entries to authenticated;
 grant insert (id, user_id, name, note, position, show_wanted, created_at, deleted_at)
   on public.library_shelves to authenticated;
 grant update (name, note, position, show_wanted, deleted_at)
@@ -435,8 +443,9 @@ create trigger book_marks_follow after insert or delete on public.book_marks
 -- guessed: only a finished mark or a reading still running gives a status,
 -- and owning is never set. Each step adds the books the steps before it did
 -- not, dated by its own earliest time, as legacyToLibrary in
--- src/lib/library.ts does. Likes are not copied, and no encounter is made:
--- the encounters start empty (memo review, 2章).
+-- src/lib/library.ts does; the last marks every row of a book so used as
+-- used (ever_used), whichever step made it. Likes are not copied, and no
+-- encounter is made: the encounters start empty (memo review, 2章).
 -- Run once here, after the trigger above holds book_marks, so the copy is
 -- consistent; running it again changes nothing (pnpm test:db runs it twice).
 create function private.library_backfill() returns void
@@ -465,8 +474,8 @@ language sql set search_path = '' as $$
   select user_id, book_id, 'legacy', min(started_at) from public.reading_sessions
   where ended_at is not null and book_id is not null group by user_id, book_id
   on conflict (user_id, book_id) do nothing;
-  insert into public.library_entries (user_id, book_id, source, added_at)
-  select user_id, book_id, 'legacy', min(at)
+  insert into public.library_entries (user_id, book_id, source, added_at, ever_used)
+  select user_id, book_id, 'legacy', min(at), true
   from (
     select p.author_id as user_id, p.book_id, p.created_at as at
     from public.posts p where p.book_id is not null
@@ -494,7 +503,8 @@ language sql set search_path = '' as $$
     join public.books b on b.id::text = placed.id
   ) uses
   group by user_id, book_id
-  on conflict (user_id, book_id) do nothing;
+  on conflict (user_id, book_id) do update set ever_used = true
+    where not public.library_entries.ever_used;
 $$;
 revoke all on function private.library_backfill() from public, anon, authenticated;
 select private.library_backfill();

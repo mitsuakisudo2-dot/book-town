@@ -12,8 +12,9 @@ import type {
 
 // The library's shared cases (library-cases.json), typed. test:library runs
 // them against src/lib/library.ts; test:db replays the follow and save cases
-// against the trigger private.library_follows_marks, so both say the same
-// thing.
+// against the trigger private.library_follows_marks, the backfill cases
+// against private.library_backfill, and the apply cases and sequences as
+// the writes the app sends, so both say the same thing.
 //
 // A row is written only by what differs from a row scanned at the start of
 // 2026 with nothing set (ENTRY_DEFAULTS), and a context only by what differs
@@ -101,6 +102,26 @@ export interface EncounterCase {
   accept: boolean;
 }
 
+/**
+ * Ops on one book's row one after another (applySet), each from the row the
+ * step before left, and the row after each.
+ */
+export interface SequenceCase {
+  name: string;
+  /** The row before the first step; null: none. */
+  entry: EntryPart | null;
+  steps: {
+    /** What the reader did, in words; the shop and posts change outside the row. */
+    does: string;
+    context?: Partial<EntryContext>;
+    set: LibrarySet;
+    via: EntrySource;
+    at: string;
+    /** "same": the row itself comes back; null: no row. */
+    expect: EntryPart | null | "same";
+  }[];
+}
+
 /** One op on one book's row (applySet), and the row after. */
 export interface ApplyCase {
   name: string;
@@ -121,6 +142,7 @@ export interface LibraryCases {
   backfill: BackfillCase[];
   encounter: EncounterCase[];
   apply: ApplyCase[];
+  sequence: SequenceCase[];
 }
 
 export const LIBRARY_CASES: LibraryCases = JSON.parse(
@@ -138,6 +160,7 @@ export const ENTRY_DEFAULTS: Omit<LibraryEntry, "bookId"> = {
   addedAt: "2026-01-01T00:00:00.000Z",
   removedAt: null,
   likeRestored: false,
+  everUsed: false,
 };
 
 export const CONTEXT_DEFAULTS: EntryContext = {

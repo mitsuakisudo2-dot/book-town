@@ -268,6 +268,7 @@ export type Database = {
           added_at: string;
           batch_id: string | null;
           book_id: string;
+          ever_used: boolean;
           like_restored: boolean;
           liked_at: string | null;
           owned: string | null;
@@ -284,6 +285,7 @@ export type Database = {
           added_at?: string;
           batch_id?: string | null;
           book_id: string;
+          ever_used?: boolean;
           like_restored?: boolean;
           liked_at?: string | null;
           owned?: string | null;
@@ -299,6 +301,7 @@ export type Database = {
           added_at?: string;
           batch_id?: string | null;
           book_id?: string;
+          ever_used?: boolean;
           like_restored?: boolean;
           liked_at?: string | null;
           owned?: string | null;

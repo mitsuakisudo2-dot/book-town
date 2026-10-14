@@ -316,6 +316,29 @@ for (const c of LIBRARY_CASES.apply)
     }
   });
 
+for (const c of LIBRARY_CASES.sequence)
+  check(`applySet, step by step: ${c.name}`, () => {
+    let e = c.entry === null ? null : entryOf("b", c.entry);
+    for (const step of c.steps) {
+      const after = applySet(
+        "b",
+        e,
+        step.set,
+        step.at,
+        step.via,
+        { wantedClearsOnStatus: false },
+        contextOf(step.context),
+      );
+      if (step.expect === "same") assert.equal(after, e, step.does);
+      else if (step.expect === null) assert.equal(after, null, step.does);
+      else {
+        assert.deepEqual(after, entryOf("b", step.expect), step.does);
+        assert.equal(validateEntry(after as LibraryEntry), null, step.does);
+      }
+      e = after;
+    }
+  });
+
 // ---------------------------------------------------------------- 問い2・3・5
 
 check(
@@ -1373,7 +1396,7 @@ check(
     const placed = applyOp(town(), ["b"], { meet: true }, AT, "shop", NONE);
     assert.deepEqual(
       placed.libraryEntries.b,
-      entryOf("b", { source: "shop", addedAt: AT }),
+      entryOf("b", { source: "shop", addedAt: AT, everUsed: true }),
     );
     const inShop = entryContext(placed, "b", new Set(["b"]));
     assert.equal(isUnsorted(placed.libraryEntries.b, inShop), false);
@@ -1385,6 +1408,67 @@ check(
     assert.equal(
       react(liked, onPost(P1), false, plus(1)).libraryEntries.b.removedAt,
       null,
+    );
+  },
+);
+
+check(
+  "N19 N20 a book liked, then placed in the reader's shop or used in their own post, poster or nine, stays when that is gone and the like is taken back",
+  () => {
+    const liked = react(town(), onPost(P1), true);
+    const uses: [
+      EntrySource,
+      (s: LibraryState) => LibraryState,
+      ReadonlySet<string>,
+    ][] = [
+      ["shop", (s) => s, new Set(["b"])],
+      ["post", (s) => ({ ...s, posts: [post(9, "b", ME_ID)] }), NONE],
+      ["poster", (s) => ({ ...s, posters: [poster(["b"], "draft")] }), NONE],
+      ["nine", (s) => ({ ...s, me: { lifeNine: ["b"] } }), NONE],
+    ];
+    for (const [via, use, shop] of uses) {
+      const used = applyOp(
+        use(liked),
+        ["b"],
+        { meet: true },
+        plus(1),
+        via,
+        shop,
+      );
+      assert.deepEqual(
+        used.libraryEntries.b,
+        { ...liked.libraryEntries.b, everUsed: true },
+        via,
+      );
+      // Off the shop, the post deleted: the town is as it was when liked,
+      // but for the row.
+      const gone = { ...liked, libraryEntries: used.libraryEntries };
+      // No longer a book only liked, so shown with likes_in_library off.
+      const off = {
+        ...gone,
+        settings: { ...LIBRARY_SETTINGS, likesInLibrary: false },
+      };
+      assert.equal(
+        inLibrary(gone.libraryEntries.b, entryContext(off, "b", NONE)),
+        true,
+        via,
+      );
+      const unliked = react(gone, onPost(P1), false, plus(2));
+      assert.deepEqual(
+        unliked.libraryEntries.b,
+        { ...used.libraryEntries.b, likedAt: null },
+        via,
+      );
+      assert.equal(
+        inLibrary(unliked.libraryEntries.b, entryContext(unliked, "b", NONE)),
+        true,
+        via,
+      );
+    }
+    // Never used, it goes with the like, as before.
+    assert.equal(
+      react(liked, onPost(P1), false, plus(2)).libraryEntries.b.removedAt,
+      plus(2),
     );
   },
 );
@@ -2261,6 +2345,7 @@ check(
       assert.equal(e.source, "legacy");
       assert.equal(e.owned, null);
       assert.equal(e.likedAt, null);
+      assert.equal(e.everUsed, false);
       assert.equal(validateEntry(e), null);
     }
     // Taken out, a finished book stays finished; a wanted one leaves the wishlist.
@@ -2666,6 +2751,7 @@ check(
     assert.equal(bad({ addedAt: null }), "addedAt");
     assert.equal(bad({ removedAt: "gone" }), "removedAt");
     assert.equal(bad({ likeRestored: "no" }), "likeRestored");
+    assert.equal(bad({ everUsed: null }), "everUsed");
   },
 );
 
@@ -2795,7 +2881,10 @@ check(
   },
 );
 
-/** Writes back what an op found, as undoing it will (10-6). */
+/**
+ * Writes back what an op found, as undoing it will (10-6), but for a use
+ * made since: everUsed stays.
+ */
 function undoFrom<S extends LibraryState>(
   state: S,
   before: Record<string, OpBefore>,
@@ -2808,10 +2897,17 @@ function undoFrom<S extends LibraryState>(
           ? list
           : [...list, bookId]
         : list.filter((id) => id !== bookId);
+    const everUsed = next.libraryEntries[bookId]?.everUsed ?? false;
     next = {
       ...next,
       libraryEntries: was.entry
-        ? { ...next.libraryEntries, [bookId]: was.entry }
+        ? {
+            ...next.libraryEntries,
+            [bookId]: {
+              ...was.entry,
+              everUsed: was.entry.everUsed || everUsed,
+            },
+          }
         : next.libraryEntries,
       favorites: put(next.favorites, was.favorite),
       library: put(next.library, was.registered),
@@ -2825,7 +2921,7 @@ function undoFrom<S extends LibraryState>(
 }
 
 check(
-  "10-6 what an op found is enough to undo it: the row, the registration, ☆ and each place on a theme shelf come back",
+  "10-6 what an op found is enough to undo it: the row, the registration, ☆ and each place on a theme shelf come back, and a use made since stays",
   () => {
     // Liked, then scanned (registered), then 外す, then undone: a like taken
     // back afterwards leaves the book in, as it would have before.
@@ -2844,6 +2940,23 @@ check(
       react(back, onPost(P1), false, plus(3)).libraryEntries.b.removedAt,
       null,
     );
+    // Taken out, placed in the shop while out, and the taking out undone:
+    // back in, still marked as used.
+    const kept = applyOp(town(), ["u"], { removed: false }, AT, "scan", NONE);
+    const wasKept = opBefore(kept, ["u"]);
+    const placed = applyOp(
+      applyOp(kept, ["u"], { removed: true }, plus(1), "search", NONE),
+      ["u"],
+      { meet: true },
+      plus(2),
+      "shop",
+      new Set(["u"]),
+    );
+    assert.equal(placed.libraryEntries.u.removedAt, plus(1));
+    assert.deepEqual(undoFrom(placed, wasKept).libraryEntries.u, {
+      ...kept.libraryEntries.u,
+      everUsed: true,
+    });
     // Taken off a theme shelf and put back: the shelf keeps its order.
     const shelved = town({
       libraryEntries: rows(
