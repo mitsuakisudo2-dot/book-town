@@ -1,20 +1,15 @@
 "use client";
 
 import {
+  Activity,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
-  type MouseEvent,
-  type ReactNode,
   type TouchEvent,
 } from "react";
-import Link from "next/link";
-import { bookPath } from "../lib/books";
-import type { TownActions, TownState } from "../lib/types";
-import { ComposeFab, TimelineView } from "./Social";
-import { BookJacket, Icon } from "./ui";
-import { bookToContinue } from "../lib/reading";
+import type { Notify, TownActions, TownState } from "../lib/types";
+import { ComposeFab } from "./Social";
 import { leaveLayers } from "../lib/back-layer";
 import { replaceAddress, useAddressPath } from "../lib/url-state";
 import {
@@ -27,25 +22,50 @@ import {
   tabOfPath,
   type HomeTab,
 } from "../lib/home-tab";
+import { HomeTabs, paneId, tabId } from "./home/HomeTabs";
+import { HomePane } from "./home/HomePane";
+import { LettersOnly } from "./home/LettersOnly";
+import { motion } from "./home/hooks";
+import "./home/home.css";
 
 type Shared = {
   state: TownState;
   actions: TownActions;
-  notify: (message: string) => void;
+  notify: Notify;
 };
 
+/** Each tab's page title, as its address's static page names it. */
+const TITLES: Record<HomeTab, string> = {
+  home: "Book Town | 本を読みたくなるSNS",
+  letters: "便りだけ | Book Town",
+};
+
+const toTop = () => window.scrollTo({ top: 0, behavior: motion() });
+
+/** A swipe starting this near either edge belongs to the browser (back). */
+const EDGE = 24;
+
 /**
- * A swipe that starts on something that scrolls sideways (a shelf, a row of chips) belongs
- * to that element. Only swipes that start elsewhere switch between the shelves and the timeline.
+ * A swipe that starts on something that scrolls sideways (a shelf, the
+ * carousel, a 特集's rail) belongs to that element; one in a dialog or in
+ * 注釈モード, to them. Only swipes that start elsewhere switch the tabs.
  */
-function startsOnSideways(target: EventTarget | null, root: Element): boolean {
+function startsOnSideways(
+  target: EventTarget | null,
+  root: Element,
+  x: number,
+): boolean {
   let element = target instanceof Element ? target : null;
-  // Dialogs (an open book, the compose sheet) handle their own gestures, even through portals.
   if (
     !element ||
     !root.contains(element) ||
+    x < EDGE ||
+    x > innerWidth - EDGE ||
+    document.querySelector(".modal-backdrop, .site-notes-mode") ||
+    // Dialogs (an open book, the compose sheet) handle their own gestures,
+    // even through portals.
     element.closest(
-      'dialog, [role="dialog"], [aria-modal="true"], input, textarea, select, .street-shelf, .wooden-shelf, .shelf-scroll',
+      'dialog, [role="dialog"], [aria-modal="true"], input, textarea, select, .street-shelf, .wooden-shelf, .shelf-scroll, .home-carousel-track, .home-rail',
     )
   )
     return true;
@@ -61,19 +81,16 @@ function startsOnSideways(target: EventTarget | null, root: Element): boolean {
   return false;
 }
 
-/** A plain click, not one meant to open the link in a new tab or window. */
-const plainClick = (event: MouseEvent) =>
-  event.button === 0 &&
-  !event.metaKey &&
-  !event.ctrlKey &&
-  !event.shiftKey &&
-  !event.altKey;
-
+/**
+ * Home: ホーム and 便りだけ, two panes under one row of tabs. The tab is the
+ * address's (`/` or `/timeline/`, rewritten in place: no step of 戻る), each
+ * pane keeps where it was scrolled to, and 便りだけ is made on its first
+ * visit, then kept.
+ */
 export function HomeView({
   tab: routeTab,
-  children,
   ...shared
-}: Shared & { tab: HomeTab; children: ReactNode }) {
+}: Shared & { tab: HomeTab }) {
   // The tab is the address's: a switch rewrites `/` ↔ `/timeline/` in place,
   // so 戻る to this address, or a reload, opens the same tab. While a page of
   // another address is drawn over Home, the tab shown last stays.
@@ -81,6 +98,20 @@ export function HomeView({
   const [shownTab, setShownTab] = useState<HomeTab>(routeTab);
   const tab = tabOfPath(path) ?? shownTab;
   if (tab !== shownTab) setShownTab(tab);
+  // A pane is made the first time it is shown, then kept.
+  const [mounted, setMounted] = useState<ReadonlySet<HomeTab>>(
+    () => new Set([routeTab]),
+  );
+  if (!mounted.has(tab)) setMounted(new Set([...mounted, tab]));
+  // A tap on the tab shown (or ホーム) asks each pane for what is new.
+  const [refresh, setRefresh] = useState<Record<HomeTab, number>>({
+    home: 0,
+    letters: 0,
+  });
+  const tabRef = useRef(tab);
+  const panes = useRef<Partial<Record<HomeTab, HTMLDivElement | null>>>({});
+  const view = useRef<HTMLDivElement>(null);
+  const bar = useRef<{ reset: () => void } | null>(null);
   // A fresh `/` opens on the tab shown last; the entry is marked as opened,
   // so 戻る and a reload come back to the tab its address names.
   useLayoutEffect(() => {
@@ -101,40 +132,62 @@ export function HomeView({
       replaceAddress({ path: HOME_TAB_PATHS[opening] });
   }, []);
   // The tab shown is kept for the next fresh `/`, and said on <html> for CSS
-  // (as the layout's boot script did before React).
+  // (as the layout's boot script did before React), and in the title.
   useLayoutEffect(() => {
+    tabRef.current = tab;
     saveHomeTab(tab);
     document.documentElement.dataset.homeTab = tab;
+    document.title = TITLES[tab];
   }, [tab]);
   useEffect(
     () => () => void delete document.documentElement.dataset.homeTab,
     [],
   );
-  // Each tab keeps where it was scrolled to, for coming back to it.
+  // Each tab keeps where it was scrolled to, for coming back to it,
   const scrolls = useRef<Partial<Record<HomeTab, number>>>({});
-  // And the rest of its address (how far it was walked: `rounds`).
+  // and the rest of its address (how far it was walked: `rounds`).
   const searches = useRef<Partial<Record<HomeTab, string>>>({});
-  const scrollBack = useRef<number | null>(null);
+  const switched = useRef<{ to: HomeTab; top: number } | null>(null);
   useLayoutEffect(() => {
-    if (scrollBack.current === null) return;
-    window.scrollTo({ top: scrollBack.current, behavior: "instant" });
-    scrollBack.current = null;
+    const change = switched.current;
+    if (!change || change.to !== tab) return;
+    switched.current = null;
+    window.scrollTo({ top: change.top, behavior: "instant" });
+    bar.current?.reset();
+    // The pane comes in from the side it was swiped from (v37: 40px, .28s).
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
+      panes.current[tab]?.animate(
+        [
+          {
+            transform: `translateX(${tab === "letters" ? 40 : -40}px)`,
+            opacity: 0.3,
+          },
+          { transform: "none", opacity: 1 },
+        ],
+        { duration: 280, easing: "cubic-bezier(.2,0,0,1)" },
+      );
   }, [tab]);
-  function toTop() {
-    window.scrollTo({
-      top: 0,
-      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "instant"
-        : "smooth",
-    });
-  }
-  useEffect(() => onHomeTop(toTop), []);
-  /** Shows `to` in place: no step of 戻る. The tab already open goes to its top. */
+  /** The pane shown goes to its top, and draws what came since. */
+  const renew = (which: HomeTab) => {
+    toTop();
+    setRefresh((counts) => ({ ...counts, [which]: counts[which] + 1 }));
+  };
+  // ホーム at the bottom (or the brand) while on Home: the same as the tab.
+  useEffect(
+    () =>
+      onHomeTop(() => {
+        toTop();
+        const which = tabRef.current;
+        setRefresh((counts) => ({ ...counts, [which]: counts[which] + 1 }));
+      }),
+    [],
+  );
+  /** Shows `to` in place: no step of 戻る. The tab already open renews. */
   function switchTo(to: HomeTab) {
-    if (to === tab) return toTop();
+    if (to === tab) return renew(tab);
     scrolls.current[tab] = window.scrollY;
     searches.current[tab] = location.search;
-    scrollBack.current = scrolls.current[to] ?? 0;
+    switched.current = { to, top: scrolls.current[to] ?? 0 };
     replaceAddress({
       path: HOME_TAB_PATHS[to],
       params: Object.fromEntries(
@@ -142,16 +195,56 @@ export function HomeView({
       ),
     });
   }
+  // On a phone the bars slide away while reading down, and come back on
+  // the way up (v37): more than 6px down past the first 80px, any 6px up.
+  useEffect(() => {
+    const shell = view.current?.closest<HTMLElement>(".town-shell");
+    if (!shell) return;
+    const phone = matchMedia("(max-width: 760px)");
+    let anchor = window.scrollY;
+    let hidden = false;
+    const hide = (next: boolean) => {
+      if (hidden === next) return;
+      hidden = next;
+      if (next) shell.dataset.bar = "hidden";
+      else delete shell.dataset.bar;
+    };
+    const onScroll = () => {
+      const y = window.scrollY;
+      // A sheet or a book in hand holds the page still beneath it.
+      if (!phone.matches || document.body.style.position === "fixed") {
+        anchor = y;
+        return;
+      }
+      if (y > anchor + 6) {
+        if (y > 80) hide(true);
+        anchor = y;
+      } else if (y < anchor - 6) {
+        hide(false);
+        anchor = y;
+      }
+    };
+    bar.current = {
+      reset: () => {
+        anchor = window.scrollY;
+        hide(false);
+      },
+    };
+    addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      removeEventListener("scroll", onScroll);
+      hide(false);
+      bar.current = null;
+    };
+  }, []);
+  // Today's swipe (≥ 70px, ≥ 1.8×|dy|, < 800ms), now switching in place.
   const start = useRef<{ x: number; y: number; time: number } | null>(null);
   function onTouchStart(event: TouchEvent<HTMLDivElement>) {
+    const touch = event.touches[0];
     start.current =
       event.touches.length === 1 &&
-      !startsOnSideways(event.target, event.currentTarget)
-        ? {
-            x: event.touches[0].clientX,
-            y: event.touches[0].clientY,
-            time: event.timeStamp,
-          }
+      !startsOnSideways(event.target, event.currentTarget, touch.clientX)
+        ? { x: touch.clientX, y: touch.clientY, time: event.timeStamp }
         : null;
   }
   function onTouchEnd(event: TouchEvent<HTMLDivElement>) {
@@ -170,89 +263,53 @@ export function HomeView({
     if (dx < 0 && tab === "home") switchTo("letters");
     if (dx > 0 && tab === "letters") switchTo("home");
   }
-  const tabLink = (to: HomeTab, label: string) => (
-    <Link
-      href={HOME_TAB_PATHS[to]}
-      aria-current={to === tab ? "page" : undefined}
-      onClick={(event) => {
-        if (!plainClick(event)) return;
-        event.preventDefault();
-        switchTo(to);
-      }}
-    >
-      {label}
-    </Link>
-  );
+  const pane = (which: HomeTab) =>
+    mounted.has(which) && (
+      <Activity mode={tab === which ? "visible" : "hidden"}>
+        <div
+          ref={(element) => {
+            panes.current[which] = element;
+          }}
+          role="tabpanel"
+          id={paneId(which)}
+          aria-labelledby={tabId(which)}
+          className="home-pane"
+          data-pane={which}
+        >
+          {which === "home" ? (
+            <HomePane
+              {...shared}
+              shown={tab === "home"}
+              refresh={refresh.home}
+              onLetters={() => switchTo("letters")}
+            />
+          ) : (
+            <LettersOnly
+              {...shared}
+              shown={tab === "letters"}
+              refresh={refresh.letters}
+              onHome={() => switchTo("home")}
+            />
+          )}
+        </div>
+      </Activity>
+    );
   return (
     <div
+      ref={view}
       className="home-view"
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       onTouchCancel={() => (start.current = null)}
     >
-      <nav className="home-tabs" aria-label="ホームの表示">
-        {tabLink("home", "書店")}
-        {tabLink("letters", "タイムライン")}
-      </nav>
-      {/* Until a book is saved, the way to the list lives on the profile. */}
-      {shared.state.wishlist.length > 0 && (
-        <div className="home-saved-books">
-          <Link href="/reading-list/">
-            <Icon name="bookmark" size={16} />
-            読みたい本
-            <span>{shared.state.wishlist.length}</span>
-            <Icon name="arrow" size={14} />
-          </Link>
-        </div>
-      )}
-      <ContinueReading state={shared.state} />
-      {tab === "letters" ? <TimelineView {...shared} /> : children}
+      <HomeTabs tab={tab} mounted={mounted} onSelect={switchTo} />
+      {pane("home")}
+      {pane("letters")}
       <ComposeFab
         {...shared}
-        onPosted={() => {
-          // The dialog's step comes off first; then the timeline is shown.
-          if (tab !== "letters") leaveLayers(() => switchTo("letters"));
-        }}
+        // Your own 便り comes in at the top of the pane shown, and glows.
+        onPosted={() => leaveLayers(toTop)}
       />
-    </div>
-  );
-}
-
-/** The book left unfinished, a tap away from its next reading. */
-function ContinueReading({ state }: { state: TownState }) {
-  const next = bookToContinue(state);
-  const book = next && state.books.find((entry) => entry.id === next.bookId);
-  if (!next || !book) return null;
-  // The jacket leads to the book's own page (where its cover is credited);
-  // the rest of the card, to reading on. Two links side by side, not nested.
-  return (
-    <div className="home-continue">
-      <Link
-        href={bookPath(book.id)}
-        className="home-continue-book"
-        aria-label={`『${book.title}』の作品ページへ`}
-      >
-        <BookJacket book={book} className="home-continue-jacket" />
-      </Link>
-      <Link
-        href="/reading/"
-        className="home-continue-main"
-        aria-label={`『${book.title}』の続きを読む`}
-      >
-        <span className="home-continue-text">
-          <small>読みかけの本</small>
-          <b>{book.title}</b>
-          {next.lastWords && (
-            <span className="home-continue-words">
-              前回のひとこと「{next.lastWords}」
-            </span>
-          )}
-        </span>
-        <span className="home-continue-go">
-          <Icon name="reading" size={16} />
-          続きを読む
-        </span>
-      </Link>
     </div>
   );
 }

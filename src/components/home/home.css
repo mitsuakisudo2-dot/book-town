@@ -1,0 +1,1006 @@
+/*
+ * Home (v37 app.css): ホーム and 便りだけ under one row of tabs, the carousel,
+ * the doors, the book being read, the 便り with 特集 and the 掲示板 between
+ * them, and the 路地. Colours, type and corners come from tokens.css only;
+ * a child that holds a rail never grows past its column (min-width: 0).
+ */
+
+/* On a desktop a centred column beside the sidebar; on a phone the bands
+   run from edge to edge, past the page's own gutter. */
+.home-view {
+  --home-gutter: 0px;
+  --home-bar: 76px;
+  max-width: 600px;
+  margin: 0 auto;
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .home-view {
+    --home-gutter: 19px;
+    --home-bar: 64px;
+    max-width: none;
+  }
+}
+@media (max-width: 450px) {
+  .home-view {
+    --home-gutter: 16px;
+  }
+}
+.home-pane,
+.home-pane-body,
+.home-letters,
+.home-alley,
+.home-alley .street-shop {
+  min-width: 0;
+}
+
+/* The tabs (v37 .views): under the top bar, the one shown underlined. */
+.home-tabs {
+  position: sticky;
+  top: var(--home-bar);
+  z-index: 12;
+  display: flex;
+  margin: -28px calc(-1 * var(--home-gutter)) 0;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 760px) {
+  .home-tabs {
+    margin-top: -17px;
+  }
+}
+.home-tab {
+  position: relative;
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--t-ui);
+  font-weight: 600;
+  touch-action: manipulation;
+}
+.home-tab[aria-selected="true"] {
+  color: var(--ink);
+  font-weight: 700;
+}
+.home-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: 56px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--green);
+  transform: translateX(-50%);
+}
+.home-tab:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: -4px;
+}
+/* Before React: the tab the layout's boot script chose (home-tab.ts). The
+   static page draws ホーム; a reader who left on 便りだけ never sees it. */
+html[data-home-tab="letters"] .home-pane[data-pane="home"] {
+  display: none;
+}
+html[data-home-tab="letters"] .home-tab[data-tab="home"][aria-selected="true"] {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+html[data-home-tab="letters"]
+  .home-tab[data-tab="home"][aria-selected="true"]::after {
+  display: none;
+}
+
+/* On a phone the top bar and the tabs slide away while reading down. */
+@media (max-width: 760px) {
+  .town-shell.is-home .town-topbar,
+  .home-tabs {
+    transition: transform 0.24s cubic-bezier(0.2, 0, 0, 1);
+  }
+  .town-shell.is-home .town-topbar {
+    -webkit-backdrop-filter: blur(14px);
+  }
+  .town-shell.is-home[data-bar="hidden"] .town-topbar {
+    transform: translateY(-100%);
+  }
+  .town-shell.is-home[data-bar="hidden"] .home-tabs {
+    transform: translateY(calc(-100% - var(--home-bar)));
+  }
+}
+
+/* 「今日の街」: one slide per snap, the next peeking in on a phone. */
+.home-carousel {
+  margin: 12px calc(-1 * var(--home-gutter)) 0;
+}
+.home-carousel-track {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  padding: 0 var(--home-gutter);
+  scroll-padding: 0 var(--home-gutter);
+  scrollbar-width: none;
+}
+.home-carousel-track::-webkit-scrollbar {
+  display: none;
+}
+.home-slide {
+  position: relative;
+  flex: 0 0 100%;
+  aspect-ratio: 16 / 10;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--ink);
+  color: var(--sheet);
+  scroll-snap-align: start;
+}
+.home-slide-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.home-slide::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--ink) 14%, transparent),
+    transparent 34%,
+    color-mix(in srgb, var(--ink) 72%, transparent)
+  );
+}
+.home-slide-text,
+.home-slide-show,
+.home-slide-go {
+  position: absolute;
+  z-index: 1;
+}
+.home-slide-text {
+  left: 16px;
+  right: 112px;
+  bottom: 14px;
+  min-width: 0;
+}
+.home-slide-label {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 4px;
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--ink) 58%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  font-size: var(--t-cap);
+  font-weight: 700;
+  line-height: 1.5;
+}
+.home-slide-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(18px, 5.6vw, var(--t-head));
+  font-weight: 600;
+  line-height: 1.4;
+  text-shadow: 0 1px 6px color-mix(in srgb, var(--ink) 60%, transparent);
+  word-break: auto-phrase;
+  overflow-wrap: anywhere;
+}
+.home-slide-meta {
+  margin: 2px 0 0;
+  font-size: var(--t-cap);
+  line-height: 1.55;
+  text-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 60%, transparent);
+  word-break: auto-phrase;
+}
+.home-slide-go {
+  right: 14px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 0 10px 0 16px;
+  border-radius: var(--r-box);
+  background: color-mix(in srgb, var(--sheet) 94%, transparent);
+  color: var(--on-photo);
+  font-size: var(--t-ui);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.home-slide.is-welcome .home-slide-text {
+  right: 16px;
+  bottom: 66px;
+}
+.home-slide.is-welcome .home-slide-go {
+  left: 16px;
+  right: auto;
+}
+.home-slide-show {
+  top: 14px;
+  right: 14px;
+  display: flex;
+  gap: 6px;
+}
+.home-slide-book {
+  display: block;
+  width: 40px;
+  flex: none;
+}
+.home-slide-show.is-poster {
+  width: 92px;
+}
+@media (max-width: 360px) {
+  .home-slide-book:nth-child(4) {
+    display: none;
+  }
+  .home-slide-show.is-poster {
+    width: 76px;
+  }
+}
+.home-slide .home-tag {
+  color: var(--sheet);
+  border-color: color-mix(in srgb, var(--sheet) 60%, transparent);
+}
+.home-carousel-nav {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 44px;
+}
+.home-carousel-dots {
+  display: flex;
+  gap: 6px;
+}
+.home-carousel-dots > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line-2);
+  transition:
+    width 0.2s cubic-bezier(0.2, 0, 0, 1),
+    background 0.2s;
+}
+.home-carousel-dots > span.is-on {
+  width: 18px;
+  background: var(--green);
+}
+.home-carousel-pause {
+  position: absolute;
+  top: 0;
+  right: max(4px, calc(var(--home-gutter) - 12px));
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-box);
+  background: none;
+  color: var(--ink-2);
+}
+
+/* The doors: what one can do here. */
+.home-entrances {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: 8px;
+  padding: 6px 0 4px;
+}
+.home-entrance {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  min-height: 84px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--t-cap);
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  word-break: auto-phrase;
+  touch-action: manipulation;
+}
+.home-entrance-icon {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+.home-entrance.is-read .home-entrance-icon {
+  background: var(--lamp-soft);
+  color: var(--lamp);
+}
+.home-entrance.is-board .home-entrance-icon {
+  background: color-mix(in srgb, var(--cork) 38%, var(--sheet));
+  color: var(--ink);
+}
+.home-entrance.is-scan .home-entrance-icon,
+.home-entrance.is-open .home-entrance-icon {
+  background: var(--band);
+  color: var(--forest);
+}
+
+/* The book being read, one line. */
+.home-reading {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 12px;
+  padding: 8px 8px 8px 12px;
+  border-radius: 14px;
+  background: var(--green-soft);
+}
+.home-reading-book {
+  display: block;
+  width: 34px;
+}
+.home-reading-text {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  line-height: 1.4;
+}
+.home-reading-text b {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-body);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-reading-go {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: var(--r-box);
+  background: var(--sheet);
+  color: var(--green);
+  font-size: var(--t-ui);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* The 便り and what comes between them. */
+.home-letters {
+  margin-top: 8px;
+}
+.home-town-head,
+.home-alley-head {
+  display: grid;
+  gap: 2px;
+  padding: 22px 0 10px;
+}
+.home-town-head h2,
+.home-alley-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  font-weight: 600;
+  line-height: 1.45;
+}
+.home-alley-head h2 {
+  font-size: var(--t-head);
+}
+.home-town-head p,
+.home-alley-head p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-ui);
+  line-height: 1.6;
+}
+.home-alley-head,
+.home-board {
+  scroll-margin-top: calc(var(--home-bar) + 56px);
+}
+.home-older {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 4px;
+  color: var(--green);
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+.home-skeletons {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+.home-skel {
+  height: 140px;
+  border-radius: var(--r-card);
+  background: linear-gradient(
+    90deg,
+    var(--line) 0 40%,
+    color-mix(in srgb, var(--line) 50%, var(--sheet)) 50%,
+    var(--line) 60% 100%
+  );
+  background-size: 300% 100%;
+  opacity: 0.6;
+  animation: home-skel 1.2s linear infinite;
+}
+@keyframes home-skel {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+.home-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--t-cap);
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+/* A 特集: a full-width band, so it never passes for a post. */
+.home-feature {
+  margin: 10px calc(-1 * var(--home-gutter));
+  padding: 14px 0;
+  border-block: 1px solid var(--line);
+  background: var(--band);
+}
+.feature-head {
+  display: grid;
+  gap: 2px;
+  padding: 0 max(16px, var(--home-gutter)) 10px;
+}
+.feature-kicker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: var(--forest);
+  font-size: var(--t-cap);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+}
+.feature-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  font-weight: 600;
+  line-height: 1.45;
+}
+.feature-head p:not(.feature-kicker) {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 1.55;
+}
+.home-rail {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+  padding: 2px max(16px, var(--home-gutter)) 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding: 0 max(16px, var(--home-gutter));
+  scrollbar-width: none;
+  list-style: none;
+}
+.home-rail::-webkit-scrollbar {
+  display: none;
+}
+.home-rail > li {
+  flex: 0 0 auto;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+.home-tile-book {
+  display: block;
+  width: 100%;
+}
+.home-poster-tile {
+  width: 132px;
+}
+.home-review {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  width: 116px;
+  color: var(--ink);
+}
+.home-review-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--t-meta);
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.home-review-words {
+  display: -webkit-box;
+  overflow: hidden;
+  font-family: var(--serif);
+  font-size: var(--t-meta);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+.home-review-by {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  line-height: 1.3;
+}
+.home-review-by .home-tag {
+  margin-left: 0;
+}
+.home-shopcard {
+  display: grid;
+  width: 236px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--sheet);
+  color: var(--ink);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.home-shopcard-wall {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  height: 132px;
+  padding: 0 16px 12px;
+  background: var(--ink) url("/home/lamp-390-v1.webp") center 35% / cover
+    no-repeat;
+}
+.home-shopcard-wall::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--lamp) 70%, var(--ink)),
+    color-mix(in srgb, var(--lamp) 40%, var(--ink))
+  );
+}
+.home-shopcard-book {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 46px;
+}
+.home-shopcard-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 14px 12px;
+}
+.home-shopcard-text b {
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.home-shopcard-text span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 1.5;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.home-shopcard-text small {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+.home-pop {
+  display: grid;
+  align-content: space-between;
+  gap: 12px;
+  width: 212px;
+  height: 100%;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--pop-line);
+  border-radius: 6px;
+  background: var(--pop);
+  color: var(--ink);
+  text-align: left;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.home-rail > li:nth-child(odd) > .home-pop {
+  transform: rotate(-0.6deg);
+}
+.home-rail > li:nth-child(even) > .home-pop {
+  transform: rotate(0.5deg);
+}
+.home-pop-words {
+  display: -webkit-box;
+  overflow: hidden;
+  font-family: var(--serif);
+  font-size: var(--t-who);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+}
+.home-pop-book {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.home-pop-jacket {
+  display: block;
+  width: 30px;
+}
+.home-pop-book b {
+  display: block;
+  font-size: var(--t-meta);
+  line-height: 1.4;
+}
+.home-pop-book small {
+  display: block;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  line-height: 1.4;
+}
+
+/* The 掲示板: papers pinned to cork. */
+.home-board {
+  display: grid;
+  gap: 18px;
+  margin: 10px calc(-1 * var(--home-gutter));
+  padding: 12px max(14px, var(--home-gutter)) 18px;
+  background-color: var(--cork);
+  background-image:
+    radial-gradient(
+      color-mix(in srgb, var(--ink) 22%, transparent) 1px,
+      transparent 1.3px
+    ),
+    radial-gradient(
+      color-mix(in srgb, var(--sheet) 20%, transparent) 1px,
+      transparent 1.3px
+    );
+  background-position:
+    0 0,
+    3px 5px;
+  background-size:
+    7px 7px,
+    11px 11px;
+  box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--ink) 25%, transparent);
+}
+.home-board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.home-board-head span {
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--t-cap);
+  font-weight: 400;
+}
+.home-notice {
+  position: relative;
+  padding: 22px 16px 16px;
+  border-radius: 3px;
+  background: var(--notice);
+  color: var(--ink);
+  box-shadow:
+    0 1px 1px color-mix(in srgb, var(--ink) 8%, transparent),
+    0 8px 16px color-mix(in srgb, var(--ink) 22%, transparent);
+  transform: rotate(-0.5deg);
+}
+.home-notice.is-tilted {
+  transform: rotate(0.4deg);
+}
+.home-notice-pin {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 35%,
+    color-mix(in srgb, var(--alert) 55%, var(--sheet)),
+    var(--alert) 60%,
+    color-mix(in srgb, var(--alert) 55%, var(--ink))
+  );
+  box-shadow: 0 2px 3px color-mix(in srgb, var(--ink) 35%, transparent);
+}
+.home-notice-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--forest);
+  font-size: var(--t-meta);
+  font-weight: 700;
+  line-height: 1.5;
+}
+.home-notice-kicker .home-tag {
+  margin-left: 0;
+}
+.home-notice-title {
+  margin: 4px 0 0;
+  font-family: var(--serif);
+  font-size: var(--t-head);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.home-notice-title.is-small {
+  font-size: var(--t-title);
+}
+.home-notice-text {
+  margin: 4px 0 0;
+  font-size: var(--t-body);
+  line-height: 1.7;
+}
+.home-notice-picks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.home-notice-picks button {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-align: center;
+}
+.home-notice-picks small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  line-height: 1.35;
+  word-break: auto-phrase;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.home-notice-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 12px;
+}
+.home-notice-quiet,
+.home-notice-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  font-size: var(--t-ui);
+  white-space: nowrap;
+}
+.home-notice-quiet {
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+}
+.home-notice-add {
+  padding: 0 18px;
+  border: 1px solid var(--green);
+  border-radius: var(--r-box);
+  background: none;
+  color: var(--green);
+  font-weight: 700;
+}
+
+/* The 路地 after its head: the shop fronts and their 特集. */
+.home-alley .street-shop {
+  margin-inline: 0;
+}
+
+/* 便りだけ: the end, and the empty pane. */
+.home-placeholder {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 64px 16px 32px;
+  color: var(--ink-2);
+  font-size: var(--t-ui);
+  line-height: 1.7;
+  text-align: center;
+}
+.home-placeholder b {
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  font-weight: 600;
+}
+.home-placeholder p {
+  margin: 0;
+  word-break: auto-phrase;
+}
+.home-placeholder .button {
+  min-height: 44px;
+}
+.home-letters-end {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 20px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: var(--t-ui);
+  text-align: center;
+}
+.home-letters-end b {
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-who);
+  font-weight: 600;
+}
+.home-letters-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--green);
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+
+/* 読書をはじめる: the book, then how to read it. */
+.home-sheet {
+  display: grid;
+  gap: 12px;
+}
+.home-sheet-lead {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-ui);
+}
+.home-sheet-books {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.home-sheet-books button {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 8px 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+}
+.home-sheet-books li:first-child button {
+  border-top: 0;
+}
+.home-sheet-jacket {
+  display: block;
+  width: 36px;
+}
+.home-sheet-books b,
+.home-sheet-chosen b {
+  display: block;
+  font-family: var(--serif);
+  font-size: var(--t-body);
+  font-weight: 600;
+  line-height: 1.45;
+}
+.home-sheet-books small,
+.home-sheet-chosen small {
+  display: block;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+.home-sheet-chosen {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.home-sheet-chosen .home-sheet-jacket {
+  width: 44px;
+}
+.home-sheet-mode,
+.home-sheet-search {
+  min-height: 44px;
+}
+.home-sheet-quiet,
+.home-sheet-all {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--green);
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-skel {
+    animation: none;
+  }
+  .town-shell.is-home .town-topbar,
+  .home-tabs,
+  .home-carousel-dots > span {
+    transition: none;
+  }
+  .home-rail > li > .home-pop,
+  .home-notice,
+  .home-notice.is-tilted {
+    transform: none;
+  }
+}

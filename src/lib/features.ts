@@ -203,3 +203,33 @@ export function popsFeature(
     ? { kind: "pops", pops: ordered }
     : null;
 }
+
+/** How many books the 見本 掲示板's お題 shows. */
+export const BOARD_PICKS = 4;
+
+/**
+ * The 見本 掲示板's お題: one book from each 見本 shop's public shelves, the
+ * day's pick, the shops in the day's order. Only 見本 shops: the board is a
+ * sample until the first real お題, and invents nobody's choice.
+ */
+export function boardPicks(
+  state: TownState,
+  now: number,
+  count = BOARD_PICKS,
+): PopPick[] {
+  const picks = state.shops
+    .filter((shop) => isSample(shop.id) && !isOwnShop(state, shop))
+    .flatMap((shop) => {
+      const placed = shop.shelves
+        .filter((shelf) => shelf.isPublic)
+        .flatMap((shelf) =>
+          shelf.items.flatMap((item) => {
+            const book = state.books.find((entry) => entry.id === item.bookId);
+            return book ? [{ shop, shelf, item, book }] : [];
+          }),
+        );
+      const pick = pickOfDay(placed, (entry) => entry.item.id, now, "board:");
+      return pick ? [pick] : [];
+    });
+  return dayOrder(picks, (pick) => pick.shop.id, now, "board:").slice(0, count);
+}

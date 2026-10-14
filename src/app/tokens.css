@@ -12,19 +12,23 @@
  * @pair --ink --pop
  * @pair --ink --green-soft
  * @pair --ink --lamp-soft
+ * @pair --ink --cork
  * @pair --ink-2 --paper
  * @pair --ink-2 --sheet
  * @pair --ink-2 --band
  * @pair --ink-2 --notice
  * @pair --ink-2 --green-soft
+ * @pair --ink-2 --pop
  * @pair --green --paper
  * @pair --green --sheet
  * @pair --green --band
  * @pair --green --green-soft
+ * @pair --green --notice
  * @pair --on-green --green
  * @pair --forest --paper
  * @pair --forest --sheet
  * @pair --forest --band
+ * @pair --forest --notice
  * @pair --lamp --paper
  * @pair --lamp --sheet
  * @pair --alert --paper

@@ -218,6 +218,18 @@ const shapes: Record<string, ReactNode> = {
       <path d="M5 4h11l-2 4 2 4H5" />
     </>
   ),
+  // The home's 掲示板 and 特集, and the carousel's pause.
+  pin: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M12 12v8.5" />
+    </>
+  ),
+  spark: (
+    <path d="M12 3.5 13.8 10 20.5 12l-6.7 2-1.8 6.5-1.8-6.5L3.5 12l6.7-2z" />
+  ),
+  pause: <path d="M9 6.5v11M15 6.5v11" />,
+  play: <path d="M8.5 6v12l9.5-6z" />,
 };
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return (

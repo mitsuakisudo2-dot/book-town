@@ -94,6 +94,31 @@ export function homeLetters(state: TownState, now: number): HomeLetters {
   return { followed, town };
 }
 
+/**
+ * A 便り a pane drew, read again from the town by its id: the post or poster
+ * as it is now (a like, a fold), or null once it is gone.
+ */
+export function letterOf(state: TownState, id: string): LetterEntry | null {
+  if (id.startsWith("poster:")) {
+    const poster = state.posters.find((entry) => "poster:" + entry.id === id);
+    return poster ? posterEntry(poster) : null;
+  }
+  const post = state.posts.find((entry) => entry.id === id);
+  return post ? postEntry(post) : null;
+}
+
+/**
+ * The reader's own 便り written after `since`, newest first: the one thing a
+ * list held still takes in at once, because the reader asked for it.
+ */
+export const ownLettersSince = (
+  state: TownState,
+  since: number,
+): LetterEntry[] =>
+  followedLetters(state).filter(
+    (entry) => authorOf(entry) === ME_ID && entry.at > since,
+  );
+
 export type Woven<L, F> =
   { kind: "letter"; letter: L } | { kind: "feature"; feature: F };
 

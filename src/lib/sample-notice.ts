@@ -8,12 +8,17 @@
 export const SAMPLE_NOTICE =
   "見本の書店と投稿には、いいねやフォローは届きません";
 
+/** The home's 見本 掲示板 says what it is when its buttons are pressed. */
+export const BOARD_NOTICE =
+  "見本の掲示板です。お題と募集は、これから始まります";
+
 let refusedAt = 0;
 const listeners = new Set<(message: string) => void>();
 
-export function refuseForSample() {
+/** Says, once, why nothing happened: `message`, or the 見本's own words. */
+export function refuseForSample(message: string = SAMPLE_NOTICE) {
   refusedAt = Date.now();
-  listeners.forEach((listener) => listener(SAMPLE_NOTICE));
+  listeners.forEach((listener) => listener(message));
 }
 
 /** Read at the moment of a change: whether it was just turned away. */

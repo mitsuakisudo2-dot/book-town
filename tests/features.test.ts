@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { seedState } from "../src/lib/data";
 import {
+  BOARD_PICKS,
   FEATURE_MIN,
+  boardPicks,
   exhibitionFeature,
   exhibitionPick,
   exhibitionPosters,
@@ -214,5 +216,35 @@ check("本屋のPOP: one public POP per shop, the day's, three or more", () => {
   });
   assert.equal(popsFeature(closed, NOW), null);
 });
+
+check(
+  "the 見本 掲示板 picks one book a 見本 shop shows, never a private shelf or a real shop",
+  () => {
+    const picks = boardPicks(town(), NOW);
+    assert.equal(picks.length, BOARD_PICKS);
+    assert.equal(new Set(picks.map((pick) => pick.shop.id)).size, BOARD_PICKS);
+    for (const pick of picks) {
+      assert.ok(pick.shelf.isPublic, pick.shelf.id);
+      assert.ok(pick.shelf.items.includes(pick.item));
+    }
+    // The same all day.
+    assert.deepEqual(
+      boardPicks(town(), NOW + 3 * 60 * 60 * 1000).map((pick) => pick.item.id),
+      picks.map((pick) => pick.item.id),
+    );
+    // Private shelves are never pinned up.
+    assert.deepEqual(
+      boardPicks(town({ shops: seedState.shops.map(privateShelves) }), NOW),
+      [],
+    );
+    // A real shop's choice is its own to make: the board takes none.
+    const real = seedState.shops.map((shop, at) => ({
+      ...shop,
+      id: `0000000${at}-0000-4000-8000-000000000000`,
+      demo: false,
+    }));
+    assert.deepEqual(boardPicks(town({ shops: real }), NOW), []);
+  },
+);
 
 console.log(`features ok (${passed})`);

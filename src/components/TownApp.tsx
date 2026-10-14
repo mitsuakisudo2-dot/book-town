@@ -34,7 +34,6 @@ import {
 import { WoodenShelf } from "./WoodenShelf";
 import { ShopEditor } from "./ShopEditor";
 import { ProfileView } from "./ProfileView";
-import { StreetView } from "./StreetView";
 import { BookInHand, heldBookOf } from "./BookInHand";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookReviews, FoldedWords } from "./Social";
@@ -191,24 +190,6 @@ export default function TownApp({
       ),
     [],
   );
-  useEffect(() => {
-    const load = () => {
-      if (location.hash.startsWith("#search="))
-        setSearch(decodeURIComponent(location.hash.slice(8)));
-    };
-    load();
-    window.addEventListener("hashchange", load);
-    return () => window.removeEventListener("hashchange", load);
-  }, [view]);
-  // On the street, what is typed in the top search stays in the address, so
-  // coming back finds the same shops.
-  useEffect(() => {
-    if (view !== "town") return;
-    if (!search && !location.hash.startsWith("#search=")) return;
-    replaceAddress({
-      hash: search ? "search=" + encodeURIComponent(search) : null,
-    });
-  }, [view, search]);
   // A dialog about something on the page does not follow the reader to the next one.
   useEffect(() => {
     closeReport();
@@ -248,8 +229,7 @@ export default function TownApp({
   useEffect(() => () => closePost(), []);
   const said = useAnnouncement();
   // Enter in the top search opens the search page for what was typed: books,
-  // readers and shops alike. On the street, what is typed also narrows the
-  // shops as it is typed, and stays there for coming back.
+  // readers and shops alike.
   const searchEverything = () => {
     const query = search.trim();
     if (!query) return;
@@ -262,7 +242,7 @@ export default function TownApp({
     }
     requestSearch(query);
     router.push(searchPath(query));
-    if (view !== "town") setSearch("");
+    setSearch("");
   };
   const section = sectionOf(
     view,
@@ -307,7 +287,13 @@ export default function TownApp({
     requestHomeTop();
   };
   return (
-    <div className={"town-shell" + (view === "walk" ? " is-walk" : "")}>
+    <div
+      className={
+        "town-shell" +
+        (view === "walk" ? " is-walk" : "") +
+        (view === "town" || view === "timeline" ? " is-home" : "")
+      }
+    >
       <aside className="town-sidebar" inert={layered}>
         <Link className="brand" href={homeHref} onClick={homeClick}>
           <span className="brand-mark">
@@ -453,9 +439,7 @@ export default function TownApp({
           ) : view === "walk" ? (
             <WalkView {...shared} />
           ) : view === "town" || view === "timeline" ? (
-            <HomeView {...shared} tab={view === "town" ? "home" : "letters"}>
-              <StreetView {...shared} search={search} setSearch={setSearch} />
-            </HomeView>
+            <HomeView {...shared} tab={view === "town" ? "home" : "letters"} />
           ) : view === "search" ? (
             <SearchView {...shared} />
           ) : view === "reading" ? (

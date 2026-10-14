@@ -8,6 +8,8 @@ import {
   homeLetters,
   isNewcomer,
   isQuiet,
+  letterOf,
+  ownLettersSince,
   weave,
 } from "../src/lib/home-feed";
 import { ME_ID, type Post, type TownState } from "../src/lib/types";
@@ -175,6 +177,41 @@ check(
       ),
       ["a", "b", "F1", "F2", "BOARD"],
     );
+  },
+);
+
+check(
+  "a held list reads its 便り again by id, and takes in only the reader's own new ones",
+  () => {
+    const state = town({ following: ["shop-orbit"] });
+    const drawn = followedLetters(state);
+    // Read again as they are now: a like changes the card, not the list.
+    const liked = town({
+      following: ["shop-orbit"],
+      posts: state.posts.map((entry) =>
+        entry.id === drawn[0].id ? { ...entry, likes: entry.likes + 1 } : entry,
+      ),
+    });
+    const again = letterOf(liked, drawn[0].id);
+    assert.ok(again?.kind === "post" && again.post.likes > 0);
+    assert.equal(
+      letterOf(state, "poster:poster-nagi-night-sf")?.kind,
+      "poster",
+    );
+    // Gone: nothing to draw.
+    assert.equal(letterOf(town({ posts: [] }), drawn[0].id), null);
+    // Another's new 便り waits; the reader's own comes in.
+    const since = NOW;
+    const later = town({
+      following: ["shop-orbit"],
+      posts: [
+        ...seedState.posts,
+        post("theirs", "r-nagi", NOW + 60_000),
+        post("mine", ME_ID, NOW + 60_000),
+        post("mine-before", ME_ID, NOW - 60_000),
+      ],
+    });
+    assert.deepEqual(ids(ownLettersSince(later, since)), ["mine"]);
   },
 );
 
