@@ -285,9 +285,10 @@ export default function TownApp({
   const reading = Boolean(activeSession(state));
   const unread = unreadCount(state);
   // ホーム returns to the Home tab open last, as it was left; on Home itself
-  // it stays the way back to the street's start.
+  // it stays the way back to the street's start. A 便り's page at its own
+  // address is read as part of Home, but is not one of its tabs.
   const lastHome = useLastHomeAddress();
-  const homeHref = section === "home" ? "/" : lastHome;
+  const homeHref = section === "home" && view !== "post" ? "/" : lastHome;
   const hrefOf = (link: (typeof links)[number]) =>
     link.section === "home" ? homeHref : link.href;
   return (

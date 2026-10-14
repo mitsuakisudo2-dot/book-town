@@ -12,17 +12,13 @@ import {
   type RefObject,
 } from "react";
 import { flushSync } from "react-dom";
-import { useBackLayer } from "../../lib/back-layer";
+import { afterLayerCloses, useBackLayer } from "../../lib/back-layer";
 import { canGoBackInTown, subscribeTrail } from "../../lib/in-town";
 import { imeKey } from "../../lib/keys";
+import { letterPageOf } from "../../lib/letter";
 import { lockPageScroll } from "../../lib/scroll-lock";
 import { usePersistenceStatus } from "../../lib/store";
-import {
-  findReader,
-  formatPostTime,
-  repliesOf,
-  spoilerViewOf,
-} from "../../lib/social";
+import { formatPostTime, repliesOf } from "../../lib/social";
 import type {
   Notify,
   Post,
@@ -39,6 +35,7 @@ import {
   focusReturn,
   postLayerName,
   usePostLayer,
+  wasOpened,
 } from "./post-layer";
 import { useSwipeBack } from "./useSwipeBack";
 import "./letter.css";
@@ -49,23 +46,8 @@ type Shared = {
   notify: Notify;
 };
 
-/**
- * The post a page shows, with its writer: a reply's page is its post's.
- * Nothing when it is not in the town, or the reader chose not to see it.
- */
-function pagePostOf(
-  state: TownState,
-  id: string,
-): { post: Post; author: Reader } | null {
-  const found = state.posts.find((entry) => entry.id === id);
-  const post = found?.parentId
-    ? state.posts.find((entry) => entry.id === found.parentId)
-    : found;
-  const author = post ? findReader(state, post.authorId) : undefined;
-  if (!post || !author || spoilerViewOf(state, post) === "left_out")
-    return null;
-  return { post, author };
-}
+/** The address as Next compares it: path, query and hash. */
+const address = () => location.pathname + location.search + location.hash;
 
 /** Elements the keyboard moves through, in order. */
 const focusables = (root: HTMLElement) =>
@@ -91,7 +73,7 @@ export function PostLayer(props: Shared) {
 
 function OpenLayer({ postId, ...props }: Shared & { postId: string }) {
   const router = useRouter();
-  const shown = pagePostOf(props.state, postId);
+  const shown = letterPageOf(props.state, postId);
   const root = useRef<HTMLDivElement>(null);
   const backButton = useRef<HTMLButtonElement>(null);
   // Closing puts the page beneath back where it was; leaving for another
@@ -105,10 +87,15 @@ function OpenLayer({ postId, ...props }: Shared & { postId: string }) {
   });
   useEffect(() => {
     const release = lockPageScroll();
+    const beneath = location.pathname + location.search;
     backButton.current?.focus({ preventScroll: true });
     return () => {
-      release(restore.current);
-      if (restore.current) focusReturn(postId);
+      // Gone with the page beneath (a sign-in invitation's ログインする): the
+      // next page starts at its own top, and the focus is its own.
+      const staying =
+        restore.current && location.pathname + location.search === beneath;
+      release(staying);
+      if (staying) focusReturn(postId);
     };
   }, [postId]);
   // Deleted, or no longer to be seen: the page closes.
@@ -139,6 +126,13 @@ function OpenLayer({ postId, ...props }: Shared & { postId: string }) {
         return;
       event.preventDefault();
       const href = link.pathname + link.search + link.hash;
+      // To the page already beneath (the book of a review opened on that
+      // book's page, the writer's name on their profile): the page closes,
+      // as 戻る would, and the page beneath stays where it was.
+      if (href === address()) {
+        closePost();
+        return;
+      }
       restore.current = false;
       stepRef.current.leave(() => router.push(href));
       closePost();
@@ -209,7 +203,20 @@ export function PostPageView({
   );
   // Until the town is read, a post not found may yet arrive.
   const loading = usePersistenceStatus() === "loading";
-  const shown = pagePostOf(props.state, postId);
+  const shown = letterPageOf(props.state, postId);
+  // Deleted here (by its writer, from 「…」): the page is left as 戻る leaves
+  // it, or for the town when it was opened directly, once the confirm's own
+  // step is off the history. The toast 「投稿を削除しました」 goes along.
+  const seen = useRef(false);
+  const showing = shown !== null;
+  const gone = !showing && !loading;
+  useEffect(() => {
+    if (showing) seen.current = true;
+    if (!gone || !seen.current) return;
+    afterLayerCloses(() =>
+      canGoBackInTown() ? router.back() : router.replace("/"),
+    );
+  }, [gone, showing, router]);
   return (
     <div className="post-page is-route">
       <PostPageHead
@@ -280,23 +287,36 @@ function PostPageContent({
 }) {
   const [replying, setReplying] = useState(false);
   const [landed, setLanded] = useState<string | null>(null);
+  const repliesRef = useRef<HTMLElement>(null);
   const headId = useId();
   const solo = post.readingMode === "solo";
   const replies = solo ? [] : repliesOf(state, post.id);
   const shared = { state, actions, notify };
+  // Opened from behind the book page's spoiler door: shown as the door shows.
+  const [revealed] = useState(() => wasOpened("door:" + post.id));
   // A reply just sent is brought into view where it landed.
   useEffect(() => {
     if (!landed) return;
-    document
-      .querySelector(`[data-post-id="${CSS.escape(landed)}"]`)
+    repliesRef.current
+      ?.querySelector(`[data-post-id="${CSS.escape(landed)}"]`)
       ?.scrollIntoView({ block: "nearest" });
     setLanded(null);
   }, [landed]);
   const body: ReactNode = (
     <>
-      <LetterCard {...shared} post={post} place="page" showBook />
+      <LetterCard
+        {...shared}
+        post={post}
+        place="page"
+        showBook
+        revealed={revealed}
+      />
       {!solo && (
-        <section className="post-page-replies" aria-labelledby={headId}>
+        <section
+          ref={repliesRef}
+          className="post-page-replies"
+          aria-labelledby={headId}
+        >
           <h3 id={headId} className="post-page-replies-head">
             返信
           </h3>
@@ -309,6 +329,7 @@ function PostPageContent({
                 place="page"
                 isReply
                 opAuthorId={post.authorId}
+                revealed={revealed}
               />
             ))
           ) : (

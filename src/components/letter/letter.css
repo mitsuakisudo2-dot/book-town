@@ -52,7 +52,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 /* Pressed, the card answers at once, unless a control is what is pressed. */
-.letter:not(.is-page):active:not(:has(:is(a, button):active)) {
+.letter:not(.is-page, .is-still):active:not(:has(:is(a, button):active)) {
   background: color-mix(in srgb, var(--sheet) 92%, var(--ink));
 }
 .letter > .post-avatar {
@@ -732,7 +732,22 @@
   position: sticky;
   bottom: 0;
 }
+/* On a wide screen the layer still covers it, but its words keep to the
+   same column as the page at its own address: inside that 640px card's
+   1px lines. */
 @media (min-width: 761px) {
+  .post-page.is-layer {
+    --post-column: max(0px, calc((100% - 640px) / 2 + 1px));
+  }
+  .post-page.is-layer .post-page-head {
+    padding-inline: calc(var(--post-column) + 6px);
+  }
+  .post-page.is-layer .post-page-scroll {
+    padding-inline: var(--post-column);
+  }
+  .post-page.is-layer .post-page-bar {
+    padding-inline: calc(var(--post-column) + 12px);
+  }
   .post-page.is-route {
     max-width: 640px;
     margin: 0 auto;
