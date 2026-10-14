@@ -8,7 +8,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/copy-zxing.mjs && next build --webpack",
-    "test:domain": "tsx tests/domain.test.ts && tsx tests/works.test.ts && tsx tests/library-journal.test.ts && tsx tests/kept-draft.test.ts && tsx tests/drafts-writing.test.ts && tsx tests/drafts-owner.test.ts && tsx tests/drafts-scene.test.ts && tsx tests/drafts-shop.test.ts && tsx tests/drafts-misc.test.ts && tsx tests/barcode-reader.test.ts && tsx tests/coarse-pointer.test.ts && tsx tests/book-lookup.test.ts",
+    "test:domain": "tsx tests/domain.test.ts && tsx tests/works.test.ts && tsx tests/library-journal.test.ts && tsx tests/kept-draft.test.ts && tsx tests/drafts-writing.test.ts && tsx tests/drafts-owner.test.ts && tsx tests/drafts-scene.test.ts && tsx tests/drafts-shop.test.ts && tsx tests/drafts-misc.test.ts && tsx tests/barcode-reader.test.ts && tsx tests/coarse-pointer.test.ts && tsx tests/book-lookup.test.ts && tsx tests/head.test.ts",
     "test:library": "tsx tests/library.test.ts",
     "test:walk-domain": "tsx tests/walk-domain.test.ts",
     "test:covers": "tsx tests/covers.test.ts",

@@ -102,6 +102,40 @@ const page = settleBeforeNavigating(await context.newPage());
 watch(page);
 try {
   await check(
+    "the town shows its text while Google's font CSS never answers",
+    async () => {
+      const stalled = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        locale: "ja-JP",
+      });
+      // A line that drops Google: the request is never answered.
+      await stalled.route("https://fonts.googleapis.com/**", () => {});
+      const reader = await stalled.newPage();
+      watch(reader);
+      try {
+        await reader.goto(`${baseURL}/`, { waitUntil: "commit" });
+        // Painted, not only parsed: a stylesheet that holds up rendering
+        // leaves the page without a first contentful paint.
+        const shownAt = await reader.waitForFunction(
+          () => {
+            const main = document.querySelector("main.town-main");
+            return performance.getEntriesByName("first-contentful-paint")
+              .length > 0 &&
+              main?.checkVisibility({ opacityProperty: true }) &&
+              main.innerText.trim() !== ""
+              ? performance.now()
+              : 0;
+          },
+          null,
+          { polling: 100, timeout: 3000 },
+        );
+        expect(await shownAt.jsonValue()).toBeLessThan(3000);
+      } finally {
+        await stalled.close();
+      }
+    },
+  );
+  await check(
     "an empty wishlist offers a few owners' POPs to start from",
     async () => {
       await go(page, "/reading-list/");
