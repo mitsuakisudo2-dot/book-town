@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { auto_explain } from "@electric-sql/pglite/contrib/auto_explain";
 import { demoBooks } from "../src/lib/data";
 import { sampleBookRowId } from "../src/lib/samples";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
@@ -3073,10 +3074,15 @@ async function main() {
   await check(
     "the two questions about a book are the policy's, not the API's",
     async () => {
-      for (const fn of [
-        "private.book_is_listed(uuid)",
-        "private.book_is_mine(uuid)",
-      ]) {
+      // book_is_listed is planned to use its indexes, however few shops
+      // there are (below).
+      for (const [fn, config] of [
+        [
+          "private.book_is_listed(uuid)",
+          ['search_path=""', "enable_seqscan=off"],
+        ],
+        ["private.book_is_mine(uuid)", ['search_path=""']],
+      ] as const) {
         const [about] = (
           await db.query<{
             definer: boolean;
@@ -3101,7 +3107,7 @@ async function main() {
           about,
           {
             definer: true,
-            config: ['search_path=""'],
+            config,
             grantees: ["anon", "authenticated"],
           },
           fn,
@@ -3118,6 +3124,163 @@ async function main() {
       assert.deepEqual(await mine(null), [{ mine: false }]);
       assert.deepEqual(await mine(AKI), [{ mine: true }]);
       assert.deepEqual(await mine(BEN), [{ mine: false }]);
+    },
+  );
+
+  await check(
+    "a book is asked about without searching every shop, nor every typed-in book",
+    async () => {
+      // The policy runs for each typed-in book a reader is not shown, so how
+      // the database plans its questions decides how long a town takes to
+      // load. What it plans follows the counts, so this is a town of its own,
+      // analyzed as the hosted database is: a dozen open shops, each with a
+      // public and a private shelf, and books its owner only scanned.
+      const town = new PGlite({ extensions: { auto_explain } });
+      await town.exec(supabase);
+      for (const file of files) await town.exec(migrate(file));
+      const id = (n: number) =>
+        "00000000-0000-4000-8000-" + String(n).padStart(12, "0");
+      const shelf = (name: string, isPublic: boolean, books: string[]) => ({
+        id: name,
+        name,
+        isPublic,
+        items: books.map((bookId, i) => ({
+          id: name + i,
+          bookId,
+          display: "face",
+          pop: "店主のひとこと".repeat(8),
+        })),
+      });
+      for (let n = 1; n <= 12; n++) {
+        const owner = id(n);
+        const books = Array.from({ length: 60 }, (_, i) => id(n * 1000 + i));
+        await town.query("insert into auth.users (id) values ($1)", [owner]);
+        await town.query(
+          "insert into profiles (id, handle, name) values ($1, $2, $2)",
+          [owner, "reader" + n],
+        );
+        await town.query(
+          `insert into books (id, title, created_by, created_at)
+           select book, '本', $2, now() - (at * 12 + $3) * interval '1 hour'
+           from unnest($1::uuid[]) with ordinality as listed (book, at)`,
+          [books, owner, n],
+        );
+        await town.query(
+          "insert into shops (id, owner_id, name, is_open) values ($1, $2, '本屋', true)",
+          [id(100 + n), owner],
+        );
+        await town.query(
+          "insert into shop_private (shop_id, shelves) values ($1, $2)",
+          [
+            id(100 + n),
+            JSON.stringify([
+              shelf("public", true, books.slice(0, 10)),
+              shelf("private", false, books.slice(10, 40)),
+            ]),
+          ],
+        );
+      }
+      await town.exec("analyze");
+      const asking = async (
+        visitor: Visitor,
+        sql: string,
+        params: unknown[] = [],
+      ) => {
+        await town.exec(
+          visitor
+            ? `set role authenticated; select set_config('request.jwt.claim.sub', '${visitor}', false);`
+            : "set role anon; select set_config('request.jwt.claim.sub', '', false);",
+        );
+        const plans: string[] = [];
+        try {
+          const { rows } = await town.query<Record<string, unknown>>(
+            sql,
+            params,
+            {
+              onNotice: (notice) => plans.push(notice.message ?? ""),
+            },
+          );
+          return { rows, plans };
+        } finally {
+          await town.exec("reset role");
+        }
+      };
+
+      // Someone asks about a book another reader only scanned: signed out,
+      // and as a reader with a shop of their own. No shop's shelves are
+      // searched one by one. Whether an open shop shows the book is asked of
+      // the shops indexes; the asker's own shop is found by its key, or by
+      // testing shop_id first, before its shelves are read. Asked with
+      // sequential scans off, as PGlite starts, and on, as the hosted
+      // database runs.
+      await town.exec(`
+        load 'auto_explain';
+        set auto_explain.log_min_duration = 0;
+        set auto_explain.log_nested_statements = on;
+        set auto_explain.log_analyze = on;
+        set auto_explain.log_level = notice;
+      `);
+      const scannedOnly = id(2 * 1000 + 50);
+      for (const seqscan of ["off", "on"])
+        for (const visitor of [null, id(1)]) {
+          await town.exec(`set enable_seqscan = ${seqscan}`);
+          const { rows, plans } = await asking(
+            visitor,
+            "select id from books where id = $1",
+            [scannedOnly],
+          );
+          assert.deepEqual(rows, []);
+          const lines = plans.join("\n").split("\n");
+          /** Each scan of a table, with its own lines up to the next node. */
+          const scansOf = (table: string) =>
+            lines.flatMap((line, at) => {
+              if (!line.includes(` on ${table} `)) return [];
+              const below = lines.slice(at + 1);
+              const end = below.findIndex((next) =>
+                /^\s*(->|InitPlan|SubPlan)/.test(next),
+              );
+              return [
+                [line, ...below.slice(0, end < 0 ? undefined : end)].join("\n"),
+              ];
+            });
+          const asked = `${visitor ? "a reader" : "anon"}, seqscan ${seqscan}`;
+          const shops = scansOf("shops");
+          assert.ok(
+            shops.some((scan) => /^\s*(Index|Recheck) Cond: .*@>/m.test(scan)),
+            `${asked}: open shops are searched through an index\n` +
+              shops.join("\n"),
+          );
+          for (const scan of shops)
+            assert.doesNotMatch(scan, /^\s*Filter: .*@>/m, asked);
+          const own = scansOf("shop_private");
+          assert.ok(own.length > 0, `${asked}: the asker's own shop`);
+          for (const scan of own)
+            assert.match(
+              scan,
+              /^\s*(Index Cond|Recheck Cond|Filter): \(+shop_id = /m,
+              `${asked}\n${scan}`,
+            );
+        }
+      await town.exec("set auto_explain.log_min_duration = -1");
+
+      // The town's newest books (booksFor, src/lib/supabase/town-backend.ts)
+      // are read newest first and stop at the 300th readable one, rather
+      // than asking about every typed-in book and then sorting. PGlite
+      // starts with sequential scans off; the hosted database has them on.
+      await town.exec("set enable_seqscan = on");
+      for (const visitor of [null, id(1)]) {
+        const plan = (
+          await asking(
+            visitor,
+            "explain select id from books order by created_at desc limit 300",
+          )
+        ).rows
+          .map((row) => Object.values(row).join(""))
+          .join("\n");
+        assert.match(plan, /Index Scan using books_created on books/, plan);
+        assert.doesNotMatch(plan, /Sort/, plan);
+      }
+      await town.close();
     },
   );
 

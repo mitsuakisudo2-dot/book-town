@@ -13,8 +13,8 @@
 -- migration that puts back "books are public" (using (true)).
 --
 -- A table or column that comes to refer to a book must be taught to these two
--- functions (create or replace), or the book goes missing from the screens
--- that show it. The policy itself stays as it is.
+-- functions (create or replace, keeping their set clauses), or the book goes
+-- missing from the screens that show it. The policy itself stays as it is.
 --
 -- What this does not hide, and why that is enough:
 -- * A foreign key is checked without row level security, so a reader who
@@ -35,8 +35,13 @@
 -- Blocks are left out: whoever is blocked can read the same rows signed out.
 -- 見本's book rows are listed like any other; the app shows the 見本's books
 -- from its own copy (townFromRows), whether or not their rows can be read.
+-- Planned with sequential scans off, so each question is an index lookup
+-- however few shops there are: the planner prices reading a few dozen shops
+-- one by one as cheap, not counting the unpacking of each one's shelves, and
+-- below a couple of hundred it searched every open shop for every book.
 create function private.book_is_listed(b uuid) returns boolean
-language sql stable security definer set search_path = '' as $$
+language sql stable security definer set search_path = ''
+set enable_seqscan = off as $$
   select
     -- 人生の9冊.
     exists (
@@ -119,10 +124,14 @@ language sql stable security definer set search_path = '' as $$
       join public.posters p on p.id = pb.poster_id
       where pb.book_id = b and p.author_id = (select auth.uid())
     )
+    -- Their shop's id is found first, so only its row of shop_private is
+    -- opened. Joined to shops instead, the planner may search every shop's
+    -- private shelves for each book and keep the reader's own afterwards.
     or exists (
-      select 1 from public.shops s
-      join public.shop_private sp on sp.shop_id = s.id
-      where s.owner_id = (select auth.uid())
+      select 1 from public.shop_private sp
+      where sp.shop_id = any (array(
+          select s.id from public.shops s where s.owner_id = (select auth.uid())
+        ))
         and (
           sp.scene_books @> jsonb_build_array(b::text)
           or sp.shelves @> jsonb_build_array(jsonb_build_object(
@@ -151,6 +160,11 @@ create index shops_public_shelves on public.shops
   using gin (public_shelves jsonb_path_ops);
 create index shops_public_scene_books on public.shops
   using gin (public_scene_books jsonb_path_ops);
+-- The town lists the newest 300 books a reader may read. Read newest first,
+-- the list stops at the 300th readable book; without this every typed-in
+-- book in the database was asked about before the sort. It still steps over
+-- each hidden book newer than the 300th.
+create index books_created on public.books (created_at desc);
 
 drop policy "books are public" on public.books;
 create policy "books are seen where they are used" on public.books
