@@ -23,13 +23,15 @@ const isPublic = (post: Post) => post.readingMode !== "solo";
  */
 export type SpoilerView = "open" | "folded" | "left_out";
 
-/** The book a post is about, for its spoilers: its own, else the post it answers. */
+/**
+ * The book a post's spoilers are about: its own; for a reply, always the
+ * book of the post it answers (a book it recommends is not what it spoils).
+ */
 export function spoilerBookOf(
   state: Pick<TownState, "posts">,
   post: Post,
 ): string | null {
-  if (post.bookId) return post.bookId;
-  if (!post.parentId) return null;
+  if (!post.parentId) return post.bookId;
   return (
     state.posts.find((entry) => entry.id === post.parentId)?.bookId ?? null
   );

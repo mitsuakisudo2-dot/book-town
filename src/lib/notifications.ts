@@ -10,7 +10,7 @@ import {
 } from "./types";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
 import { postPath, posterPath, profilePath, shopPath } from "./paths";
-import { postPageOf } from "./letter";
+import { letterPageOf, postPageOf } from "./letter";
 import { posterTitle, type Poster } from "./posters";
 import { coverHidden } from "./hidden-words";
 
@@ -42,7 +42,8 @@ export const monthDay = (at: string): string => {
 
 /**
  * A notice about a post leads to that post's page (a reply's is its post's)
- * when the post is in the town; otherwise, to where it led before.
+ * when that page would open for this reader (letterPageOf); otherwise, to
+ * where it led before.
  */
 const pageOr = (
   state: TownState,
@@ -50,9 +51,7 @@ const pageOr = (
   otherwise: string,
 ): string => {
   const page = postPageOf(post);
-  return state.posts.some((entry) => entry.id === page)
-    ? postPath(page)
-    : otherwise;
+  return letterPageOf(state, page) ? postPath(page) : otherwise;
 };
 
 const quote = (post: string) => {

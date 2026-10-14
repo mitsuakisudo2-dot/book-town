@@ -11,7 +11,7 @@ import {
   spoilerBars,
 } from "../src/lib/letter";
 import { notificationsFor } from "../src/lib/notifications";
-import { spoilerBookOf } from "../src/lib/social";
+import { spoilerBookOf, spoilerViewOf } from "../src/lib/social";
 import { LIKE_TAPS_MAX, ME_ID, type Post } from "../src/lib/types";
 
 let passed = 0;
@@ -30,16 +30,30 @@ check("いいね adds one per tap up to ten, then asks to take it back", () => {
   assert.equal(likeTapOutcome(10), "confirm");
 });
 
-check("a spoiler's book is the post's, else the one it answers", () => {
+check("a spoiler's book is the post's; a reply's, the one it answers", () => {
   assert.equal(spoilerBookOf(seedState, post("p-7")), "left-hand");
   // A reply without a book takes its post's.
   assert.equal(spoilerBookOf(seedState, post("p-7-r1")), "left-hand");
-  // A reply that recommends a book is about that book.
-  assert.equal(spoilerBookOf(seedState, post("p-1-r2")), "left-hand");
+  // A reply that recommends a book still spoils its post's book: p-1-r2
+  // recommends 闇の左手 under a post about ソラリス.
+  assert.equal(post("p-1-r2").bookId, "left-hand");
+  assert.equal(spoilerBookOf(seedState, post("p-1-r2")), "solaris");
   // Words with no book, and a reply to a post that is gone, have none.
   assert.equal(spoilerBookOf(seedState, post("p-2")), null);
   const orphan: Post = { ...post("p-7-r1"), parentId: "gone" };
   assert.equal(spoilerBookOf(seedState, orphan), null);
+  // So a marked reply opens for whoever finished its post's book, not the
+  // book it recommends.
+  const marked: Post = { ...post("p-1-r2"), spoiler: true };
+  const town = { ...seedState, posts: [...seedState.posts, marked] };
+  assert.equal(
+    spoilerViewOf({ ...town, finishedBooks: ["left-hand"] }, marked),
+    "folded",
+  );
+  assert.equal(
+    spoilerViewOf({ ...town, finishedBooks: ["solaris"] }, marked),
+    "open",
+  );
 });
 
 check("a post folds past eight lines, to six", () => {
@@ -143,6 +157,33 @@ check("notices about a post lead to its page while it is in the town", () => {
   assert.equal(href("like:m-3:r-sumire"), "/profiles/me/");
   // 軌道書房's owner (凪) wrote p-1.
   assert.equal(href("follow:p-1"), "/post/?id=p-1");
+  // Nor to a page that would not open: its post left out by 出さない, or
+  // written by a reader not in the town.
+  const hiddenPost = {
+    ...state,
+    posts: state.posts.map((entry) =>
+      entry.id === "p-1" ? { ...entry, spoiler: true } : entry,
+    ),
+    settings: { ...state.settings, spoilerDisplay: "leave_out" as const },
+  };
+  assert.equal(
+    notificationsFor(hiddenPost).find(
+      (notice) => notice.id === "like:m-2:r-sumire",
+    )?.href,
+    "/profiles/me/",
+  );
+  const stranger: Post = { ...post("p-1"), id: "s-1", authorId: "r-gone" };
+  const toStranger: Post = { ...myReply, id: "m-4", parentId: "s-1" };
+  const unknown = {
+    ...state,
+    posts: [...state.posts, stranger, toStranger],
+  };
+  assert.equal(
+    notificationsFor(unknown).find(
+      (notice) => notice.id === "like:m-4:r-sumire",
+    )?.href,
+    "/profiles/me/",
+  );
 });
 
 console.log(`letter ok (${passed})`);

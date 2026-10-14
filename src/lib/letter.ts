@@ -1,7 +1,9 @@
+import { findReader, spoilerViewOf } from "./social";
 import {
   FEELING_WORDS,
   LIKE_TAPS_MAX,
   type Post,
+  type Reader,
   type TownState,
 } from "./types";
 
@@ -63,3 +65,23 @@ export function letterFeelings(
 /** The post whose page shows this one: a reply lives on its post's page. */
 export const postPageOf = (post: Pick<Post, "id" | "parentId">): string =>
   post.parentId ?? post.id;
+
+/**
+ * What the page of the post `id` shows (a reply's page is its post's): the
+ * post and its writer. Nothing when that post is not in the town, its writer
+ * is not known, or the reader chose not to see it (出さない); then nothing
+ * leads to that page, as it would only close again.
+ */
+export function letterPageOf(
+  state: TownState,
+  id: string,
+): { post: Post; author: Reader } | null {
+  const found = state.posts.find((entry) => entry.id === id);
+  const post = found?.parentId
+    ? state.posts.find((entry) => entry.id === found.parentId)
+    : found;
+  const author = post ? findReader(state, post.authorId) : undefined;
+  if (!post || !author || spoilerViewOf(state, post) === "left_out")
+    return null;
+  return { post, author };
+}
