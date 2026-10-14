@@ -19,7 +19,18 @@ const FONTS_CSS =
 // as a print sheet, which holds up no paint, and this turns it on for the
 // screen once it has arrived, or at once if it already has. Until then the
 // text shows in the fallback font, as it does with swap until each file comes.
-const SHOW_FONTS = `(function(){var l=document.getElementById("web-fonts");function on(){l.media="all"}if(l.sheet)on();else l.addEventListener("load",on)})()`;
+//
+// A reader whose browser loaded this CSS within the last day most likely
+// still has it cached (Google sends max-age of a day and a week of
+// stale-while-revalidate), so it is turned on at once instead: the first
+// layout then asks for the cached font files and the town is drawn in its own
+// fonts almost from the first frame, as before. Waiting for load there kept a
+// slow phone on the fallback font for about a second on every visit. Chromium
+// holds no paint for a sheet turned on while it loads (browser-journey checks
+// it with Google stalled); a browser that does would wait as it always did
+// before, mostly for its cached copy (inferred for Safari, not run).
+const FONTS_LOADED = "book-town-fonts-at";
+const SHOW_FONTS = `(function(){var l=document.getElementById("web-fonts"),k="${FONTS_LOADED}",a=[];function on(){l.media="all"}function loaded(){on();try{localStorage.setItem(k,Date.now()+" "+l.href)}catch(x){}}try{a=(localStorage.getItem(k)||"").split(" ")}catch(x){}var d=Date.now()-Number(a[0]);if(a[1]===l.href&&d>=0&&d<864e5)on();if(l.sheet)loaded();else l.addEventListener("load",loaded)})()`;
 export default function RootLayout({
   children,
 }: {
