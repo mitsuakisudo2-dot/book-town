@@ -36,6 +36,12 @@ async function go(page, route = "/") {
   await page.goto(`${baseURL}${route}`);
   await expect(page.locator("main")).toBeVisible();
   await page.waitForFunction(() => localStorage.getItem("book-town-v1"));
+  // Saved data can exist before this page hydrates; wait until React owns the page.
+  await page.waitForFunction(() =>
+    Object.keys(document.querySelector("main") ?? {}).some((key) =>
+      key.startsWith("__reactFiber"),
+    ),
+  );
 }
 async function noOverflow(page, label) {
   const size = await page.evaluate(() => ({
