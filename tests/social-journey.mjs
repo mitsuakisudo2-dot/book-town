@@ -1115,7 +1115,11 @@ try {
         await dialog.getByRole("button", { name: /^モモ/ }).first().tap();
         await expectKeyboardUp(page, text, "a book picked");
         // ネタバレあり, by its words and by its box: it flips, and the text
-        // box keeps the focus.
+        // box keeps the focus. (The caret as typing leaves it: with words
+        // chosen in the box, a label would not move the focus anyway.)
+        await text.evaluate((field) =>
+          field.setSelectionRange(field.value.length, field.value.length),
+        );
         const before = await blurs();
         const spoiler = dialog.getByRole("checkbox", { name: "ネタバレあり" });
         const words = await dialog.locator(".composer-spoiler").boundingBox();
