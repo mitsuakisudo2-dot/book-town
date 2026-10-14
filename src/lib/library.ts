@@ -1537,11 +1537,15 @@ export function legacyToLibrary(
 }
 
 /**
- * What changed between two sets of lists, as marks: written first, then
- * deleted, each in the order library, wish, ☆, finished. The demo feeds it
- * the old lists against those it last wrote (6-2). The marks written to one
- * list are a millisecond apart in its order, the last at `at`, so the rows
- * keep the order the old tab added them in (legacyLists).
+ * What changed between two sets of lists, as marks: deleted first, then
+ * written, each in the order library, wish, ☆, finished. The demo feeds it
+ * the old lists against those it last wrote (6-2). Deleted first because
+ * an old app saves its marks so (planWrites in src/lib/town-remote.ts), and
+ * the trigger follows them one by one: a wish taken off and finished put on
+ * in one save takes out a row nothing else keeps, finished (a status set on
+ * a row taken out does not bring it back). The marks written to one list
+ * are a millisecond apart in its order, the last at `at`, so the rows keep
+ * the order the old tab added them in (legacyLists).
  */
 export function markChanges(
   before: MarkLists,
@@ -1550,7 +1554,7 @@ export function markChanges(
 ): MarkChange[] {
   const changes: MarkChange[] = [];
   const end = Date.parse(at);
-  for (const op of ["insert", "delete"] as const)
+  for (const op of ["delete", "insert"] as const)
     for (const { kind, list } of MARKS) {
       const [from, to] =
         op === "insert"
