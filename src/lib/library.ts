@@ -94,7 +94,10 @@ export interface LibraryEntry {
   addedAt: string;
   /** Taken out of the library: kept, with its status and shelves, so it can come back. */
   removedAt: string | null;
-  /** Brought back by a like and untouched since, so taking the like back takes it out again. */
+  /**
+   * Brought back by a like and untouched since, so taking the like back
+   * takes it out again (4-10's way of writing likes: a proposal).
+   */
   likeRestored: boolean;
 }
 
@@ -417,7 +420,10 @@ const ENTRY_FIELDS = [
 const sameEntry = (a: LibraryEntry, b: LibraryEntry) =>
   ENTRY_FIELDS.every((field) => a[field] === b[field]);
 
-/** The reader comes to the book again: a row is made, and one taken out comes back (4-2's 戻す規則). */
+/**
+ * The reader comes to the book again: a row is made, and one taken out comes
+ * back (4-2's 戻す規則: a proposal).
+ */
 const meetsAgain = (s: LibrarySet) =>
   s.removed === false ||
   s.want === true ||
@@ -466,9 +472,9 @@ export function inLibrary(e: LibraryEntry, x: EntryContext): boolean {
 }
 
 /**
- * 「まだ振り分けていない」(4-1's L): in the library, and sorted nowhere: no
- * status, not wanted, no ☆, on no theme shelf, not in the shop. Likes and
- * owning are no sorting.
+ * 「まだ振り分けていない」(4-1's L; the name is a proposal): in the
+ * library, and sorted nowhere: no status, not wanted, no ☆, on no theme
+ * shelf, not in the shop. Likes and owning are no sorting.
  */
 export const isUnsorted = (e: LibraryEntry, x: EntryContext): boolean =>
   inLibrary(e, x) &&
@@ -640,10 +646,11 @@ export const entryContext = (
 ): EntryContext => contextsOf(state, shopBooks)(bookId);
 
 /**
- * The books in the reader's own shop (4-1's お店の棚): every shelf of the
- * shop's page, private ones too, and its store scene (the account's
- * sceneBookIds; the demo keeps its scene in the walk's storage). After the
- * shop's drafts arrive (wave-1 PR5), the draft's books too.
+ * The books in the reader's own shop (4-1's お店の棚: that they are sorted is
+ * decided, which places count is a proposal): every shelf of the shop's
+ * page, private ones too, and its store scene (the account's sceneBookIds;
+ * the demo keeps its scene in the walk's storage). After the shop's drafts
+ * arrive (wave-1 PR5), the draft's books too.
  */
 export function shopBookIds(
   shop: Shop | null,
