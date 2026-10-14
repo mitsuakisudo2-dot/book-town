@@ -48,10 +48,12 @@ create table public.library_entries (
   -- takes it out again.
   like_restored boolean not null default false,
   -- Placed in the reader's own shop, or used in their own post, poster or
-  -- 人生の9冊, at least once, taken out or not; never cleared. Taking a
-  -- like back then leaves the book in, though the shop or the post holds it
-  -- no more (N19, N20). Whether, not when: nothing is ordered by it, and the
-  -- nine keep no date to give it.
+  -- 人生の9冊, at least once, taken out or not; never cleared
+  -- (library_entries_keep_used). Taking back a like, a 読みたい or a ☆
+  -- then leaves the book in, though the shop or the post holds it no more
+  -- (N19, N20), unless the reader took it out and only a like brought it
+  -- back since (like_restored), which counts nothing from before. Whether,
+  -- not when: nothing is ordered by it, and the nine keep no date to give it.
   ever_used boolean not null default false,
   updated_at timestamptz not null default now(),
   primary key (user_id, book_id)
@@ -62,6 +64,19 @@ create index library_entries_recent
   on public.library_entries (user_id, added_at desc, book_id);
 create trigger library_entries_touch before update on public.library_entries
   for each row execute function public.touch_updated_at();
+-- A use once made stays made: an update that says otherwise (an undo
+-- writing back the row as it was before the use) keeps it, and is not
+-- refused, so the changes sent with it are not lost.
+create function private.library_keep_used() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  new.ever_used := new.ever_used or old.ever_used;
+  return new;
+end;
+$$;
+revoke all on function private.library_keep_used() from public, anon, authenticated;
+create trigger library_entries_keep_used before update on public.library_entries
+  for each row execute function private.library_keep_used();
 
 create table public.library_shelves (
   -- Made by the device, so sending it again writes the same row.
@@ -395,17 +410,18 @@ begin
       and ((r.kind = 'wish' and e.wanted_at is not null)
            or (r.kind = 'finished' and e.status = 'finished'));
     -- A row with nothing left leaves the library. Kept by: a status, wanted,
-    -- owned, a like, a shelf not put away, a library or favorite mark, the
-    -- reader's own record, and a memo on any of their encounters of it (one
-    -- taken back too). Shop shelves, posts, posters and the nine are not
-    -- looked at. That a wish or favorite taken off does it too, not only the
-    -- library mark, is a proposal not yet settled (review doc 4-2's last
-    -- row); if it is not taken, only r.kind = 'library' takes a row out.
+    -- owned, a like, a use once made (ever_used, N19), a shelf not put away,
+    -- a library or favorite mark, the reader's own record, and a memo on any
+    -- of their encounters of it (one taken back too). Shop shelves, posts,
+    -- posters and the nine themselves are not looked at. That a wish or
+    -- favorite taken off does it too, not only the library mark, is a
+    -- proposal not yet settled (review doc 4-2's last row); if it is not
+    -- taken, only r.kind = 'library' takes a row out.
     update public.library_entries e set removed_at = now()
     where e.user_id = r.user_id and e.book_id = r.book_id and e.removed_at is null
       and r.kind in ('library', 'wish', 'favorite')
       and e.status is null and e.wanted_at is null and e.owned is null
-      and e.liked_at is null
+      and e.liked_at is null and not e.ever_used
       and not exists (
         select 1 from public.library_shelf_books s
         join public.library_shelves h on h.id = s.shelf_id and h.user_id = s.user_id
@@ -447,7 +463,13 @@ create trigger book_marks_follow after insert or delete on public.book_marks
 -- used (ever_used), whichever step made it. Likes are not copied, and no
 -- encounter is made: the encounters start empty (memo review, 2章).
 -- Run once here, after the trigger above holds book_marks, so the copy is
--- consistent; running it again changes nothing (pnpm test:db runs it twice).
+-- consistent; running it again changes nothing (pnpm test:db runs it twice)
+-- unless the reader did more since, and then it only adds: a row for a book
+-- with none, 読書中 on a row with no status while its reading runs, and
+-- ever_used on a row without it; it takes nothing out and brings nothing
+-- back. Until L2b no app sends the library's ops, so a use made meanwhile
+-- (N19, N20) makes no row and marks none: the L2b migration runs this again
+-- to catch them up (pnpm test:db checks that a second run does).
 create function private.library_backfill() returns void
 language sql set search_path = '' as $$
   insert into public.library_entries

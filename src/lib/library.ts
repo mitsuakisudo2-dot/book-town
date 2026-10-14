@@ -101,9 +101,11 @@ export interface LibraryEntry {
   likeRestored: boolean;
   /**
    * Placed in the reader's own shop, or used in their own post, poster or
-   * 人生の9冊, at least once, taken out or not; never cleared. Taking a like
-   * back then leaves the book in, though the shop or the post holds it no
-   * more (N19, N20).
+   * 人生の9冊, at least once, taken out or not; never cleared (the database
+   * keeps it if an update says otherwise). Taking back a like, a 読みたい or
+   * a ☆ then leaves the book in, though the shop or the post holds it no
+   * more (N19, N20), unless the reader took it out and only a like brought
+   * it back since (likeRestored): that counts nothing from before.
    */
   everUsed: boolean;
 }
@@ -298,7 +300,7 @@ export type LibrarySet = Partial<{
 /**
  * The unit of undo and of the device's journal. `opId` is a uuid made by the
  * device; `before` holds each book as the op found it (opBefore), so undoing
- * writes it back as it was (10-6).
+ * writes it back as it was (10-6), but for everUsed (OpBefore.entry).
  */
 export interface LibraryOp {
   opId: string;
@@ -567,7 +569,9 @@ export function applySet(
     const likeGone =
       s.liked === false && e?.likedAt != null && next.likedAt === null;
     // A 読みたい or ☆ taken back (proposal, 4-2's last row): the row goes
-    // when nothing at all is left, however it came in.
+    // when nothing at all is left, however it came in. A use once made is
+    // left (everUsed), as for a like, so the order the reader takes a like
+    // and a 読みたい back in does not matter (N19).
     const favorite = s.favorite === false ? false : x.favorite;
     const markGone =
       (s.want === false && e?.wantedAt != null) ||
@@ -579,6 +583,7 @@ export function applySet(
         next.wantedAt === null &&
         next.likedAt === null &&
         next.owned === null &&
+        !next.everUsed &&
         !x.liked &&
         !x.wantMet &&
         !favorite &&
@@ -1611,7 +1616,9 @@ export function markChanges(
  * there is none (from legacy), and brings back one taken out (library, wish,
  * ☆). A wish taken off clears 読みたい; finished taken off happens only when
  * the old app reads a book again (startReading), so it becomes 読書中. A
- * library, wish or ☆ taken off then takes out a row nothing keeps. `keeps`
+ * library, wish or ☆ taken off then takes out a row nothing keeps; a row
+ * once used in the shop, a post, a poster or the nine is kept (everUsed,
+ * N19), though the shop and those are not looked at themselves. `keeps`
  * tells the state after the change; `now` is the database's time. The
  * entries themselves come back when nothing changes.
  */
@@ -1671,6 +1678,7 @@ export function followMarks(
       e.wantedAt === null &&
       e.owned === null &&
       e.likedAt === null &&
+      !e.everUsed &&
       !kept.liveShelf &&
       !kept.library &&
       !kept.favorite &&

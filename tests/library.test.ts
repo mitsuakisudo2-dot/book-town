@@ -1474,6 +1474,55 @@ check(
 );
 
 check(
+  "N19 a book placed in the reader's shop and wanted stays when it is off the shop and 読みたい is taken back, whether a like is taken back before or after",
+  () => {
+    const inShop = new Set(["b"]);
+    // Placed first: 読みたい on its page, taken back once off the shop.
+    const placed = applyOp(town(), ["b"], { meet: true }, AT, "shop", inShop);
+    const wanted = react(placed, onPage("b"), true, plus(1), inShop);
+    const unwanted = react(wanted, onPage("b"), false, plus(2));
+    assert.deepEqual(unwanted.libraryEntries.b, placed.libraryEntries.b);
+    // Liked first, then placed and wanted; off the shop, the like and
+    // 読みたい taken back in either order end the same, in the library.
+    const used = react(
+      applyOp(
+        react(town(), onPost(P1), true),
+        ["b"],
+        { meet: true },
+        plus(1),
+        "shop",
+        inShop,
+      ),
+      onPage("b"),
+      true,
+      plus(2),
+      inShop,
+    );
+    const likeFirst = react(
+      react(used, onPost(P1), false, plus(3)),
+      onPage("b"),
+      false,
+      plus(4),
+    );
+    const wantFirst = react(
+      react(used, onPage("b"), false, plus(3)),
+      onPost(P1),
+      false,
+      plus(4),
+    );
+    assert.deepEqual(likeFirst.libraryEntries.b, wantFirst.libraryEntries.b);
+    assert.deepEqual(
+      likeFirst.libraryEntries.b,
+      entryOf("b", { source: "like", addedAt: AT, everUsed: true }),
+    );
+    assert.equal(
+      inLibrary(likeFirst.libraryEntries.b, entryContext(likeFirst, "b", NONE)),
+      true,
+    );
+  },
+);
+
+check(
   "N20 the reader's own post, poster (a draft too), nine and record count as uses; another reader's do not",
   () => {
     const s = town({

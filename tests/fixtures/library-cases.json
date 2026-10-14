@@ -504,6 +504,58 @@
         "source": "legacy",
         "wantedAt": "2026-09-01T00:00:00.000Z"
       }
+    },
+    {
+      "name": "F29 a wish deleted from a row the reader's shop once held leaves it in (N19)",
+      "entry": {
+        "source": "shop",
+        "wantedAt": "2026-09-01T00:00:00.000Z",
+        "everUsed": true
+      },
+      "marks": ["wish"],
+      "shelf": "none",
+      "record": false,
+      "change": {
+        "op": "delete",
+        "kind": "wish",
+        "at": "2026-09-01T00:00:00.000Z"
+      },
+      "expect": {
+        "source": "shop",
+        "everUsed": true
+      }
+    },
+    {
+      "name": "F30 library deleted from a row only registered, once used in the reader's own post, leaves it as it is (N20)",
+      "entry": {
+        "source": "legacy",
+        "everUsed": true
+      },
+      "marks": ["library"],
+      "shelf": "none",
+      "record": false,
+      "change": {
+        "op": "delete",
+        "kind": "library",
+        "at": "2026-09-01T00:00:00.000Z"
+      },
+      "expect": "same"
+    },
+    {
+      "name": "F31 a favorite deleted from a row only a favorite, once among the nine, leaves it as it is (N20)",
+      "entry": {
+        "source": "legacy",
+        "everUsed": true
+      },
+      "marks": ["favorite"],
+      "shelf": "none",
+      "record": false,
+      "change": {
+        "op": "delete",
+        "kind": "favorite",
+        "at": "2026-09-01T00:00:00.000Z"
+      },
+      "expect": "same"
     }
   ],
   "save": [
@@ -2101,6 +2153,39 @@
       }
     },
     {
+      "name": "4-2 taking 読みたい off leaves a book the reader's shop once held in, though it is off the shop (N19)",
+      "entry": {
+        "source": "shop",
+        "wantedAt": "2026-09-01T00:00:00.000Z",
+        "everUsed": true
+      },
+      "set": {
+        "want": false
+      },
+      "via": "want",
+      "at": "2026-10-01T09:00:00.000Z",
+      "expect": {
+        "source": "shop",
+        "everUsed": true
+      }
+    },
+    {
+      "name": "4-2 taking ☆ off leaves a book once used in the reader's own post in, though the post is gone (N20)",
+      "entry": {
+        "source": "favorite",
+        "everUsed": true
+      },
+      "context": {
+        "favorite": true
+      },
+      "set": {
+        "favorite": false
+      },
+      "via": "favorite",
+      "at": "2026-10-01T09:00:00.000Z",
+      "expect": "same"
+    },
+    {
       "name": "4-2 taking 読みたい off leaves a book with 所有 in",
       "entry": {
         "source": "legacy",
@@ -2864,6 +2949,178 @@
           "at": "2026-10-03T09:00:00.000Z",
           "expect": {
             "source": "like",
+            "everUsed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Q6 liked, placed in the reader's shop and wanted; off the shop, the like taken back and then 読みたい: stays (N19), as in Q7",
+      "entry": null,
+      "steps": [
+        {
+          "does": "likes another reader's post about the book",
+          "set": {
+            "liked": true
+          },
+          "via": "like",
+          "at": "2026-10-01T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "places the book in their shop",
+          "context": {
+            "liked": true
+          },
+          "set": {
+            "meet": true
+          },
+          "via": "shop",
+          "at": "2026-10-02T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "presses 読みたい on the book's page",
+          "context": {
+            "liked": true,
+            "inShop": true,
+            "wantMet": true
+          },
+          "set": {
+            "want": true
+          },
+          "via": "want",
+          "at": "2026-10-03T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z",
+            "wantedAt": "2026-10-03T09:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "takes it off the shop, then takes the like back",
+          "context": {
+            "wantMet": true
+          },
+          "set": {
+            "liked": false
+          },
+          "via": "like",
+          "at": "2026-10-04T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "wantedAt": "2026-10-03T09:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "takes 読みたい back on the book's page",
+          "set": {
+            "want": false
+          },
+          "via": "want",
+          "at": "2026-10-05T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "everUsed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Q7 liked, placed in the reader's shop and wanted; off the shop, 読みたい taken back and then the like: stays (N19), as in Q6",
+      "entry": null,
+      "steps": [
+        {
+          "does": "likes another reader's post about the book",
+          "set": {
+            "liked": true
+          },
+          "via": "like",
+          "at": "2026-10-01T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "places the book in their shop",
+          "context": {
+            "liked": true
+          },
+          "set": {
+            "meet": true
+          },
+          "via": "shop",
+          "at": "2026-10-02T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "presses 読みたい on the book's page",
+          "context": {
+            "liked": true,
+            "inShop": true,
+            "wantMet": true
+          },
+          "set": {
+            "want": true
+          },
+          "via": "want",
+          "at": "2026-10-03T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z",
+            "wantedAt": "2026-10-03T09:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "takes it off the shop, then takes 読みたい back on the book's page",
+          "context": {
+            "liked": true
+          },
+          "set": {
+            "want": false
+          },
+          "via": "want",
+          "at": "2026-10-04T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-01T09:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "takes the like back",
+          "set": {
+            "liked": false
+          },
+          "via": "like",
+          "at": "2026-10-05T09:00:00.000Z",
+          "expect": {
+            "source": "like",
+            "addedAt": "2026-10-01T09:00:00.000Z",
             "everUsed": true
           }
         }

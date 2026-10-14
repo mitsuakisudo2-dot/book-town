@@ -4204,6 +4204,7 @@ async function main() {
       for (const fn of [
         "private.check_book_encounter()",
         "private.library_clamp_times()",
+        "private.library_keep_used()",
         "private.encounter_clamp_times()",
         "private.library_follows_marks()",
         "private.library_backfill()",
@@ -4240,6 +4241,7 @@ async function main() {
       ["private.book_is_mine(uuid)", true],
       ["private.check_book_encounter()", false],
       ["private.library_clamp_times()", false],
+      ["private.library_keep_used()", false],
       ["private.encounter_clamp_times()", false],
       ["private.library_backfill()", false],
     ] as const)
@@ -4761,6 +4763,51 @@ async function main() {
         ahead,
       ]);
       assert.equal(await encounterInPast(), true);
+    },
+  );
+
+  await check(
+    "a use once made stays made: an update clearing ever_used keeps it, and the rest of the update is taken",
+    async () => {
+      const b = await newBook(CHI);
+      const used = entryOf(b, {
+        source: "shop",
+        status: "tsundoku",
+        statusAt: "2026-09-02T00:00:00.000Z",
+        everUsed: true,
+      });
+      await putEntry(CHI, b, used);
+      assert.equal(
+        await affects(
+          CHI,
+          "update library_entries set ever_used = false where user_id = $1 and book_id = $2",
+          [CHI, b],
+        ),
+        1,
+      );
+      assert.deepEqual((await rowsOf(CHI, b)).map(entryFrom), [used]);
+      // An undo writing back what an op found before the use, ever_used
+      // among it: the rest of it is taken.
+      assert.equal(
+        await affects(
+          CHI,
+          `update library_entries set status = null, status_at = null, ever_used = false
+           where user_id = $1 and book_id = $2`,
+          [CHI, b],
+        ),
+        1,
+      );
+      assert.deepEqual((await rowsOf(CHI, b)).map(entryFrom), [
+        { ...used, status: null, statusAt: null },
+      ]);
+      // A row not used yet is marked by an update, as before.
+      const fresh = await newBook(CHI);
+      await putEntry(CHI, fresh);
+      await sendEntry(
+        fresh,
+        entryOf(fresh, {}),
+        entryOf(fresh, { everUsed: true }),
+      );
     },
   );
 
@@ -5964,6 +6011,49 @@ async function main() {
       const once = await all();
       await earlier.exec("select private.library_backfill()");
       assert.deepEqual(await all(), once);
+      // Posts written since by an app that sends no library ops (every app
+      // until L2b) are caught up by running it again, as the L2b migration
+      // will: a row for a book with none, and ever_used on a row a like
+      // made and on one taken out, which stays out. Nothing else changes.
+      const [later, liked, takenOut] = [id(321), id(322), id(323)];
+      const [first, since] = [
+        "2026-09-01T00:00:00.000Z",
+        "2026-09-03T00:00:00.000Z",
+      ];
+      await earlier.exec(`
+        insert into books (id, title, source)
+          values ('${later}', '本', 'ndl'), ('${liked}', '本', 'ndl'), ('${takenOut}', '本', 'ndl');
+        insert into library_entries (user_id, book_id, source, added_at, liked_at, removed_at)
+          values ('${liker}', '${liked}', 'like', '${first}', '${first}', null),
+            ('${liker}', '${takenOut}', 'like', '${first}', null, '${first}');
+        insert into posts (id, author_id, body, book_id)
+          values ('${id(331)}', '${liker}', '感想', '${later}'),
+            ('${id(332)}', '${liker}', '感想', '${liked}'),
+            ('${id(333)}', '${liker}', '感想', '${takenOut}');
+        update posts set created_at = '${since}' where author_id = '${liker}';
+      `);
+      const others = async () =>
+        (await all()).filter(
+          (row) => (row as { user_id: string }).user_id !== liker,
+        );
+      const othersBefore = await others();
+      await earlier.exec("select private.library_backfill()");
+      assert.deepEqual(await others(), othersBefore);
+      assert.deepEqual((await entries(liker)).map(entryFrom), [
+        entryOf(later, { source: "legacy", addedAt: since, everUsed: true }),
+        entryOf(liked, {
+          source: "like",
+          addedAt: first,
+          likedAt: first,
+          everUsed: true,
+        }),
+        entryOf(takenOut, {
+          source: "like",
+          addedAt: first,
+          removedAt: first,
+          everUsed: true,
+        }),
+      ]);
       await earlier.close();
     },
   );
