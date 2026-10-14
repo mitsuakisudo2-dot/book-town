@@ -12,6 +12,9 @@
 //   node scripts/vercel.mjs domains main      the project's addresses, whether
 //                                             each one works, and the DNS of
 //                                             MAIL_DOMAIN
+//   node scripts/vercel.mjs domains-apply main
+//                                             adds SITE_DOMAIN to the project,
+//                                             with www sent on to it
 //   node scripts/vercel.mjs mail main         what sending the login email
 //                                             from MAIL_DOMAIN still needs
 //   node scripts/vercel.mjs mail-apply main   adds MAIL_DOMAIN to Resend, puts
@@ -34,6 +37,7 @@ const ACTIONS = new Set([
   "deploy",
   "ensure",
   "domains",
+  "domains-apply",
   "mail",
   "mail-apply",
 ]);
@@ -149,6 +153,30 @@ export function dnsPlan(resendRecords, existing, domain) {
   return { add, clash };
 }
 
+/**
+ * The project addresses the site needs: the domain itself, and www sent on to
+ * it for good (308). Returns the ones to add and the ones to correct.
+ */
+export function siteDomainPlan(existing, site) {
+  const wanted = [
+    { name: site },
+    { name: "www." + site, redirect: site, redirectStatusCode: 308 },
+  ];
+  const add = [];
+  const fix = [];
+  for (const domain of wanted) {
+    const found = (existing ?? []).find((d) => d.name === domain.name);
+    if (!found) add.push(domain);
+    else if (
+      (found.redirect ?? null) !== (domain.redirect ?? null) ||
+      (domain.redirect &&
+        found.redirectStatusCode !== domain.redirectStatusCode)
+    )
+      fix.push(domain);
+  }
+  return { add, fix };
+}
+
 /** A project address on one line: where it goes and whether it works. */
 export function domainLine(domain, config) {
   const parts = [domain.name, domain.verified ? "verified" : "not verified"];
@@ -165,7 +193,7 @@ const finished = (state) => ["READY", "ERROR", "CANCELED"].includes(state);
 async function main(action, branch) {
   if (!ACTIONS.has(action) || !validBranch(branch)) {
     console.error(
-      "Usage: node scripts/vercel.mjs status|deploy|ensure|domains|mail|mail-apply <branch>",
+      "Usage: node scripts/vercel.mjs status|deploy|ensure|domains|domains-apply|mail|mail-apply <branch>",
     );
     process.exit(2);
   }
@@ -220,11 +248,39 @@ async function main(action, branch) {
     return records ?? [];
   };
 
-  if (action === "domains") {
-    const { domains } = await call(
-      "GET",
-      `/v9/projects/${encodeURIComponent(project)}/domains`,
-    );
+  if (action === "domains" || action === "domains-apply") {
+    const route = `/v9/projects/${encodeURIComponent(project)}/domains`;
+    let { domains } = await call("GET", route);
+    if (action === "domains-apply") {
+      const site = process.env.SITE_DOMAIN ?? "";
+      if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(site))
+        throw new Error("SITE_DOMAIN is not a domain.");
+      const { add, fix } = siteDomainPlan(domains, site);
+      for (const domain of add) {
+        console.log(`Adding ${domain.name}`);
+        await call(
+          "POST",
+          `/v10/projects/${encodeURIComponent(project)}/domains`,
+          {},
+          domain,
+        );
+      }
+      for (const domain of fix) {
+        console.log(`Correcting ${domain.name}`);
+        await call(
+          "PATCH",
+          `${route}/${encodeURIComponent(domain.name)}`,
+          {},
+          {
+            redirect: domain.redirect ?? null,
+            redirectStatusCode: domain.redirectStatusCode ?? null,
+          },
+        );
+      }
+      if (!add.length && !fix.length)
+        console.log("The addresses are in place.");
+      ({ domains } = await call("GET", route));
+    }
     console.log(`Addresses of ${project}:`);
     for (const domain of domains ?? []) {
       const config = domain.name.endsWith(".vercel.app")

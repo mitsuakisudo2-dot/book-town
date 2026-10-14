@@ -5,7 +5,8 @@ name: Vercel
 # build of a branch when Vercel stopped before building. scripts/vercel.mjs
 # does the work. Pull requests that change it run a status check. A push to
 # main makes sure production gets built, since Vercel sometimes misses one.
-# domains shows the project's addresses; mail and mail-apply set up sending the
+# domains shows the project's addresses and domains-apply adds SITE_DOMAIN (www
+# sent on to it); mail and mail-apply set up sending the
 # login email from MAIL_DOMAIN through Resend (RESEND_ADMIN_KEY, a Full access
 # key, adds the domain; the sending key in RESEND_API_KEY cannot).
 
@@ -13,9 +14,9 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: status lists recent deployments; deploy builds the branch again; domains shows the addresses; mail shows what sending from MAIL_DOMAIN needs, mail-apply does it
+        description: status lists recent deployments; deploy builds the branch again; domains shows the addresses, domains-apply adds SITE_DOMAIN; mail shows what sending from MAIL_DOMAIN needs, mail-apply does it
         type: choice
-        options: [status, deploy, domains, mail, mail-apply]
+        options: [status, deploy, domains, domains-apply, mail, mail-apply]
         default: status
       branch:
         description: Branch to look at or build (main goes to production)
@@ -48,6 +49,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_TEAM: booktown1
           VERCEL_PROJECT: book-town-851k
+          SITE_DOMAIN: booktown.page
           MAIL_DOMAIN: booktown.page
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           RESEND_ADMIN_KEY: ${{ secrets.RESEND_ADMIN_KEY }}

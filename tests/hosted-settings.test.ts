@@ -14,6 +14,7 @@ import {
   deploymentLine,
   dnsPlan,
   domainLine,
+  siteDomainPlan,
   logLines,
   recordLine,
   relativeName,
@@ -557,6 +558,50 @@ async function main() {
     },
   );
 
+  await check("the site gets its domain, with www sent on to it", () => {
+    const vercelApp = { name: "book-town-851k.vercel.app", verified: true };
+    assert.deepEqual(siteDomainPlan([vercelApp], "booktown.page"), {
+      add: [
+        { name: "booktown.page" },
+        {
+          name: "www.booktown.page",
+          redirect: "booktown.page",
+          redirectStatusCode: 308,
+        },
+      ],
+      fix: [],
+    });
+    const done = siteDomainPlan(
+      [
+        vercelApp,
+        { name: "booktown.page", redirect: null },
+        {
+          name: "www.booktown.page",
+          redirect: "booktown.page",
+          redirectStatusCode: 308,
+        },
+      ],
+      "booktown.page",
+    );
+    assert.deepEqual(done, { add: [], fix: [] });
+    // Vercel's own suggestion sends the domain to www; turn it round.
+    const turned = siteDomainPlan(
+      [
+        {
+          name: "booktown.page",
+          redirect: "www.booktown.page",
+          redirectStatusCode: 308,
+        },
+        { name: "www.booktown.page" },
+      ],
+      "booktown.page",
+    );
+    assert.deepEqual(
+      turned.fix.map((d) => d.name),
+      ["booktown.page", "www.booktown.page"],
+    );
+  });
+
   await check("each address says where it goes and whether it works", () => {
     assert.equal(
       domainLine(
@@ -735,6 +780,11 @@ async function main() {
       );
 
       const domains = await run("scripts/vercel.mjs", ["domains", "main"], env);
+      // Only looking: the project's addresses are left alone.
+      assert.equal(
+        vercel.seen.filter((s) => s.url.startsWith("/v10/projects")).length,
+        0,
+      );
       assert.equal(domains.code, 0, domains.output);
       assert.match(
         domains.output,
@@ -759,6 +809,65 @@ async function main() {
       await vercel.close();
     },
   );
+
+  await check("domains-apply adds the site's addresses once", async () => {
+    let listed: Record<string, unknown>[] = [
+      { name: "book-town-851k.vercel.app", verified: true },
+    ];
+    const vercel = await standIn(({ method, url, body }) => {
+      const { pathname } = new URL(url, "http://x");
+      if (
+        method === "GET" &&
+        pathname === "/v9/projects/book-town-851k/domains"
+      )
+        return { body: { domains: listed } };
+      if (
+        method === "POST" &&
+        pathname === "/v10/projects/book-town-851k/domains"
+      ) {
+        listed = [...listed, { ...body, verified: true }];
+        return { body: { ...body, verified: true } };
+      }
+      if (pathname.startsWith("/v6/domains/"))
+        return { body: { misconfigured: false } };
+      if (pathname === "/v4/domains/booktown.page/records")
+        return { body: { records: [] } };
+      return { status: 404, body: {} };
+    });
+    const env = {
+      VERCEL_API_URL: vercel.url,
+      VERCEL_TOKEN: "vcp_token_for_tests",
+      VERCEL_TEAM: "booktown1",
+      VERCEL_PROJECT: "book-town-851k",
+      SITE_DOMAIN: "booktown.page",
+      MAIL_DOMAIN: "booktown.page",
+    };
+    const first = await run(
+      "scripts/vercel.mjs",
+      ["domains-apply", "main"],
+      env,
+    );
+    assert.equal(first.code, 0, first.output);
+    assert.match(first.output, /booktown\.page verified DNS ok/);
+    assert.match(
+      first.output,
+      /www\.booktown\.page verified -> booktown\.page \(308\) DNS ok/,
+    );
+    const second = await run(
+      "scripts/vercel.mjs",
+      ["domains-apply", "main"],
+      env,
+    );
+    assert.equal(second.code, 0, second.output);
+    assert.match(second.output, /The addresses are in place/);
+    assert.equal(vercel.seen.filter((s) => s.method === "POST").length, 2);
+    const odd = await run("scripts/vercel.mjs", ["domains-apply", "main"], {
+      ...env,
+      SITE_DOMAIN: "$(x)",
+    });
+    assert.equal(odd.code, 1);
+    await vercel.close();
+  });
 
   await check(
     "a sending-only Resend key is reported, and nothing changes",
