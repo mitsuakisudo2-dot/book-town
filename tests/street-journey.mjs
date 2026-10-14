@@ -1201,7 +1201,10 @@ try {
         await like.tap();
         await expect(like).toHaveAttribute("aria-pressed", liked);
         // Pressed while the POP still glides in after the finger has left
-        // it, a reaction goes to that POP, not the one sliding away.
+        // it, a reaction goes to that POP, not the one sliding away. The
+        // finger rests before it lifts, so the POP glides in on its snap,
+        // not on a fling: a tap that stops a browser's fling is no click.
+        const rest = () => phone.waitForTimeout(150);
         const next = pop.getByRole("button", { name: "次のPOP" });
         await next.tap();
         await expect(count).toHaveText("3 / 4");
@@ -1226,7 +1229,7 @@ try {
             { capture: true, once: true },
           );
         });
-        await swipePop(phone, pop, -1, undefined, async (cdp) => {
+        await swipePop(phone, pop, -1, rest, async (cdp) => {
           const point = {
             x: likeBox.x + likeBox.width / 2,
             y: likeBox.y + likeBox.height / 2,
@@ -1264,7 +1267,6 @@ try {
         // At either end the POP stays, and the book neither turns nor
         // closes: a finger drawn outward there is no swipe back through the
         // history. It rests before it lifts, so no fling eats the next tap.
-        const rest = () => phone.waitForTimeout(150);
         await pop.getByRole("button", { name: "前のPOP" }).tap();
         await expect(count).toHaveText("1 / 4");
         await expectPopInView(pop);
