@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { createKeptDraftStore } from "../src/lib/kept-draft";
+import { createKeptDraftStore, keepForOwner } from "../src/lib/kept-draft";
 import {
   adoptVisitorPosts,
   createPostDraftStore,
+  joinPostDrafts,
   POST_DRAFT_KEY,
   postDraftKey,
   readingDraftKey,
@@ -184,10 +185,8 @@ check("storage that throws does not lose the old drafts", () => {
   const old = { "new-post": words("前からの書きかけ") };
   const full = memory({ [POST_DRAFT_KEY]: old });
   const before = full.data.get(POST_DRAFT_KEY);
+  // A full browser turns writes away but still removes what it is told to.
   full.setItem = () => {
-    throw new Error("QuotaExceededError");
-  };
-  full.removeItem = () => {
     throw new Error("QuotaExceededError");
   };
   const posts = createPostDraftStore(() => full);
@@ -195,6 +194,9 @@ check("storage that throws does not lose the old drafts", () => {
   // The owner has them on this page; the browser still has them as they were.
   assert.equal(posts.get("u-1:new-post")?.body, "前からの書きかけ");
   assert.equal(posts.getSnapshot().saved, false);
+  assert.equal(full.data.get(POST_DRAFT_KEY), before);
+  posts.update("u-1:reply:p-1", { body: "返信" });
+  posts.clear("u-1:reply:p-1");
   assert.equal(full.data.get(POST_DRAFT_KEY), before);
   // Storage that cannot be read is not written over either.
   const unreadable = memory({ [POST_DRAFT_KEY]: old });
@@ -340,6 +342,82 @@ check(
     ]);
   },
 );
+
+check("a hand-over at the limit lets no other draft go", () => {
+  // The browser holds the most it keeps: the account's own drafts and a
+  // visitor's, oldest first. Handing over moves drafts, it adds none.
+  const drafts: Record<string, PostDraft> = {};
+  for (let index = 0; index < 25; index++) {
+    drafts["u-1:reply:p" + index] = words("Aの返信" + index);
+    drafts["visitor:review:b" + index] = words("訪問者の感想" + index);
+  }
+  const storage = memory({ [POST_DRAFT_KEY]: drafts });
+  const posts = createPostDraftStore(() => storage);
+  adoptVisitorPosts("u-1", posts);
+  // Each keeps its place: only the visitor's keys change.
+  assert.deepEqual(
+    storedKeys(storage, POST_DRAFT_KEY),
+    Object.keys(drafts).map((key) => key.replace(/^visitor:/, "u-1:")),
+  );
+  assert.equal(posts.get("u-1:reply:p0")?.body, "Aの返信0");
+  assert.equal(posts.get("u-1:review:b0")?.body, "訪問者の感想0");
+  // Written after the hand-over, a new draft lets the oldest go, as ever.
+  posts.update("u-1:new-post", { body: "新しい投稿" });
+  assert.equal(posts.get("u-1:reply:p0"), null);
+  assert.equal(Object.keys(posts.getSnapshot().drafts).length, 50);
+});
+
+check("words written before the owner was known lose nothing kept", () => {
+  const storage = memory({
+    [POST_DRAFT_KEY]: {
+      "new-post": words("アップデート前の書きかけ"),
+      "u-1:review:momo": words("前に残していた感想", { spoiler: true }),
+    },
+  });
+  const posts = createPostDraftStore(() => storage);
+  const keep = (key: string, draft: PostDraft) =>
+    keepForOwner(posts, key, draft, joinPostDrafts);
+  // Nothing kept there: kept as written.
+  assert.ok(keep("u-1:reply:p-1", words("返信の言葉")));
+  assert.equal(posts.get("u-1:reply:p-1")?.body, "返信の言葉");
+  // Kept there already: the new words go after it, on a new line.
+  assert.ok(keep("u-1:review:momo", words("確かめるあいだに書いた")));
+  assert.deepEqual(posts.get("u-1:review:momo"), {
+    body: "前に残していた感想\n確かめるあいだに書いた",
+    bookId: null,
+    spoiler: true,
+  });
+  // The old draft taken by the owner on the way is joined the same way.
+  assert.ok(keep("u-1:new-post", words("新しい言葉", { bookId: "momo" })));
+  assert.deepEqual(posts.get("u-1:new-post"), {
+    body: "アップデート前の書きかけ\n新しい言葉",
+    bookId: "momo",
+    spoiler: false,
+  });
+  // Nothing new written, or the same words: the kept draft stays as it is.
+  const before = storage.data.get(POST_DRAFT_KEY);
+  assert.ok(keep("u-1:new-post", words("")));
+  assert.ok(keep("u-1:reply:p-1", words("返信の言葉")));
+  assert.equal(storage.data.get(POST_DRAFT_KEY), before);
+  // Too long for one post together: nothing is kept, and the kept draft is
+  // as it was (the screen holds the new words).
+  assert.equal(keep("u-1:new-post", words("長".repeat(990))), false);
+  assert.equal(storage.data.get(POST_DRAFT_KEY), before);
+  // Up to the length of a post, with the new line.
+  const half = words("長".repeat(500));
+  assert.equal(
+    joinPostDrafts(half, words("続".repeat(499)))?.body.length,
+    1000,
+  );
+  assert.equal(joinPostDrafts(half, words("続".repeat(500))), null);
+  // Poster work cannot be joined: it is kept only where there is none.
+  const posters = posterDrafts(storage);
+  posters.set("u-1:new", posterWork("前のポスター"));
+  assert.equal(keepForOwner(posters, "u-1:new", posterWork("新しい")), false);
+  assert.equal(posters.get("u-1:new")?.pages[0].heading, "前のポスター");
+  assert.ok(keepForOwner(posters, "u-1:book:momo", posterWork("新しい")));
+  assert.equal(posters.get("u-1:book:momo")?.pages[0].heading, "新しい");
+});
 
 check("signing in first takes the old drafts for the account", () => {
   // Written signed out before drafts had owners, then signed in.

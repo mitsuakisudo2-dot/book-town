@@ -230,6 +230,26 @@ check("a visitor's new records go with them into the account", () => {
   ]);
 });
 
+check("handing over records at the limit lets no other record go", () => {
+  const storage = memory();
+  const drafts = createKeptDraftStore(RECORD_DRAFT_OPTIONS, () => storage);
+  // As many as are kept: the account's own and a visitor's, oldest first.
+  for (let index = 0; index < 15; index++) {
+    drafts.set("u-1:record-new:a" + index, { note: "A" + index });
+    drafts.set("visitor:record-new:b" + index, { note: "訪問者" + index });
+  }
+  const before = Object.keys(drafts.getSnapshot().drafts);
+  assert.equal(before.length, 30);
+  adoptVisitorRecords("u-1", drafts);
+  const reopened = createKeptDraftStore(RECORD_DRAFT_OPTIONS, () => storage);
+  reopened.initialize();
+  assert.deepEqual(
+    Object.keys(reopened.getSnapshot().drafts),
+    before.map((key) => key.replace(/^visitor:/, "u-1:")),
+  );
+  assert.deepEqual(reopened.get("u-1:record-new:a0"), { note: "A0" });
+});
+
 check("only what was changed is kept, so the rest follows the record", () => {
   // The order feelings were chosen in does not make it a change.
   assert.equal(

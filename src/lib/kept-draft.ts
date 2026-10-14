@@ -43,6 +43,12 @@ export interface KeptDraftStore<T> {
   set(key: string, value: T | null): void;
   clear(key: string): void;
   /**
+   * Moves the work under `from` to `to` where it is, in one write: it is not
+   * new work, so nothing else goes past the limit for it. Nothing moves when
+   * `to` holds work already.
+   */
+  move(from: string, to: string): void;
+  /**
    * Gives the work kept before keys had owners to `owner`, under its key
    * after `owner:`, and takes it out of storage, so it is given once. Work
    * the owner keeps under the same key already stays, and the old entry is
@@ -192,6 +198,17 @@ export function createKeptDraftStore<T>(
     write(trim(drafts));
   }
 
+  function move(from: string, to: string) {
+    initialize();
+    if (!belongs(from) || !belongs(to)) return;
+    claimFor(to);
+    if (!(from in snapshot.drafts) || to in snapshot.drafts) return;
+    const drafts: Record<string, T> = {};
+    for (const [key, value] of Object.entries(snapshot.drafts))
+      drafts[key === from ? to : key] = value;
+    write(drafts);
+  }
+
   return {
     initialize,
     get(key) {
@@ -201,6 +218,7 @@ export function createKeptDraftStore<T>(
     },
     set,
     clear: (key) => set(key, null),
+    move,
     claim,
     getSnapshot: () => snapshot,
     getServerSnapshot: () => server,
@@ -240,33 +258,73 @@ export function useKeptDraft<T>(store: KeptDraftStore<T>, key: string | null) {
 }
 
 /**
+ * Work done before its owner was known, kept for them now under `key`: as it
+ * is, or with what they keep there already when `join` can put the two
+ * together. False, and nothing kept, when it cannot.
+ */
+export function keepForOwner<T>(
+  store: KeptDraftStore<T>,
+  key: string,
+  work: T,
+  join?: (kept: T, work: T) => T | null,
+): boolean {
+  const kept = store.get(key);
+  const next = kept === null ? work : (join?.(kept, work) ?? null);
+  if (next === null) return false;
+  if (next !== kept) store.set(key, next);
+  return true;
+}
+
+/**
  * The work in hand for one key of a store whose keys begin with their owner
  * and ":" (see draftOwner). While the owner is not known yet (a null key)
  * nothing is kept or shown, but the screen still works: what is done
- * meanwhile stays on it, and is kept for the owner once known, unless they
- * keep work under the same key already. `kept` is what this browser keeps.
+ * meanwhile stays on it, and is kept for the owner once known (keepForOwner).
+ * Work that cannot be kept so stays in hand, on the screen and not saved,
+ * until it is sent or thrown away, and the owner's kept work stays as it
+ * was. `kept` is what this browser keeps of the work in hand.
  */
-export function useOwnedDraft<T>(store: KeptDraftStore<T>, key: string | null) {
+export function useOwnedDraft<T>(
+  store: KeptDraftStore<T>,
+  key: string | null,
+  join?: (kept: T, work: T) => T | null,
+) {
   const owned = useKeptDraft(store, key);
-  const [loose, setLoose] = useState<T | null>(null);
+  // `heldFor`: the owner it could not be kept for.
+  const [loose, setLoose] = useState<{ work: T; heldFor?: string } | null>(
+    null,
+  );
   const owner = key === null ? null : key.slice(0, key.indexOf(":"));
+  // Another reader is here now (signed in, in another tab): what was held
+  // for the last one goes.
+  if (loose?.heldFor !== undefined && owner !== null && owner !== loose.heldFor)
+    setLoose(null);
   useEffect(() => {
     if (owner !== null) store.claim(owner);
   }, [store, owner]);
   useEffect(() => {
-    if (key === null || loose === null) return;
-    if (store.get(key) === null) store.set(key, loose);
-    setLoose(null);
-  }, [store, key, loose]);
+    if (key === null || owner === null) return;
+    if (loose === null || loose.heldFor !== undefined) return;
+    if (keepForOwner(store, key, loose.work, join)) setLoose(null);
+    else setLoose({ work: loose.work, heldFor: owner });
+  }, [store, key, owner, loose, join]);
+  const held = loose?.heldFor !== undefined;
   return {
-    draft: key === null ? loose : (owned.draft ?? loose),
-    kept: owned.draft,
-    saved: owned.saved,
+    draft: loose?.work ?? owned.draft,
+    kept: held ? null : owned.draft,
+    saved: held ? false : owned.saved,
     /** Storage has been read for a known owner. */
     loaded: key !== null && owned.loaded,
-    set: (value: T | null) =>
-      key === null ? setLoose(value) : owned.set(value),
-    clear: () => (key === null ? setLoose(null) : owned.clear()),
+    /** The work on the screen is not the kept work (see above). */
+    inHand: loose !== null,
+    set: (value: T | null) => {
+      if (key !== null && loose === null) owned.set(value);
+      else setLoose(value === null ? null : { ...loose, work: value });
+    },
+    clear: () => {
+      if (key !== null && loose === null) owned.clear();
+      else setLoose(null);
+    },
   };
 }
 
@@ -274,18 +332,15 @@ export function useOwnedDraft<T>(store: KeptDraftStore<T>, key: string | null) {
  * A visitor's work, handed to the account they sign in to, in a store whose
  * keys begin with their owner and ":". Work the account already keeps under
  * the same key is not replaced; the visitor's then stays where it was, for
- * the next time no one is signed in.
+ * the next time no one is signed in. Moved, not written anew (see move), it
+ * makes no other work go past the limit.
  */
 export function handOverDrafts<T>(store: KeptDraftStore<T>, owner: string) {
   store.claim(owner);
   const visitor = "visitor:";
-  for (const [key, work] of Object.entries(store.getSnapshot().drafts)) {
-    if (!key.startsWith(visitor)) continue;
-    const mine = owner + ":" + key.slice(visitor.length);
-    if (store.get(mine) !== null) continue;
-    store.set(mine, work);
-    store.clear(key);
-  }
+  for (const key of Object.keys(store.getSnapshot().drafts))
+    if (key.startsWith(visitor))
+      store.move(key, owner + ":" + key.slice(visitor.length));
 }
 
 /**

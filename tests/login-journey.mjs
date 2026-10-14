@@ -985,6 +985,85 @@ try {
   );
 
   await check(
+    "words written while the account is still checked do not replace its kept draft, and the poster maker waits for it",
+    async () => {
+      const KEPT = "前に残していた書きかけ。";
+      const BEGUN = "確かめているあいだに続けた言葉。";
+      const KEPT_POSTER = "前に作りかけていたポスター";
+      const fab = page.locator(".compose-fab");
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      const text = compose.locator("textarea");
+      const heading = page.getByRole("textbox", { name: "見出し" });
+      const keptPosts = () =>
+        page.evaluate(
+          (key) => JSON.parse(localStorage.getItem(key) ?? "null")?.drafts,
+          POST_DRAFTS,
+        );
+      const post = (body) => ({
+        [user.id + ":new-post"]: { body, bookId: null, spoiler: false },
+      });
+      await page.goto(base + "/timeline/");
+      await fab.click();
+      await text.fill(KEPT);
+      await page.keyboard.press("Escape");
+      await expect(compose).toHaveCount(0);
+      await page.goto(base + "/posters/new/");
+      await heading.fill(KEPT_POSTER);
+      expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([user.id + ":new"]);
+      ownProfileDelay = 3000;
+      try {
+        await page.goto(base + "/timeline/");
+        await fab.click();
+        // Whose draft it is is not known yet, so the box is empty; what is
+        // written there goes after the kept words once it is.
+        await expect(text).toHaveValue("");
+        await text.fill(BEGUN);
+        await expect(text).toHaveValue(KEPT + "\n" + BEGUN, {
+          timeout: 10000,
+        });
+        expect(await keptPosts()).toEqual(post(KEPT + "\n" + BEGUN));
+        await page.keyboard.press("Escape");
+        await expect(compose).toHaveCount(0);
+
+        // Too long to join: the words written stay on the screen, not kept
+        // and said so, and the kept draft stays as it was.
+        const LONG = "続き".repeat(490);
+        await page.goto(base + "/timeline/");
+        await fab.click();
+        await expect(text).toHaveValue("");
+        await text.fill(LONG);
+        await expect(
+          compose.getByText("このブラウザに書きかけを残せませんでした"),
+        ).toBeVisible({ timeout: 10000 });
+        await expect(text).toHaveValue(LONG);
+        expect(await keptPosts()).toEqual(post(KEPT + "\n" + BEGUN));
+        await page.keyboard.press("Escape");
+        await expect(compose).toHaveCount(0);
+
+        // The poster maker opens once its maker is known, with the work kept.
+        await page.goto(base + "/posters/new/");
+        await expect(page.getByText("ポスターを開いています…")).toBeVisible();
+        await expect(heading).toHaveCount(0);
+        await expect(heading).toHaveValue(KEPT_POSTER, { timeout: 10000 });
+      } finally {
+        ownProfileDelay = 0;
+      }
+      const line = page.locator(".poster-editor-kept");
+      await line.getByRole("button", { name: "書きかけを消す" }).click();
+      await line.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(heading).toHaveValue("");
+      await page.goto(base + "/timeline/");
+      await fab.click();
+      await expect(text).toHaveValue(KEPT + "\n" + BEGUN);
+      await text.fill("");
+      await page.keyboard.press("Escape");
+      await expect(compose).toHaveCount(0);
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
+      expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([]);
+    },
+  );
+
+  await check(
     "a like for a 見本 says it reaches nobody, and nothing is sent",
     async () => {
       await page.goto(base + "/timeline/");

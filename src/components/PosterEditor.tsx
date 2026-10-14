@@ -83,10 +83,13 @@ export function PosterEditor({
   ...props
 }: Shared & { posterId?: string; bookId?: string }) {
   const persistence = usePersistenceStatus();
+  // Whose work this browser keeps is not known yet: work begun now could
+  // not be told from the maker's kept work, so the editor waits.
+  const owner = useDraftOwner();
   const poster = posterId
     ? props.state.posters.find((entry) => entry.id === posterId)
     : undefined;
-  if (posterId && !poster && persistence === "loading")
+  if (owner === null || (posterId && !poster && persistence === "loading"))
     return <p role="status">ポスターを開いています…</p>;
   if (posterId && !poster)
     return (

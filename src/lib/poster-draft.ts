@@ -158,8 +158,8 @@ export const adoptVisitorPosters = (owner: string, store = posterDrafts) =>
 /**
  * The work in hand under `key`, what this browser keeps of it, and how to
  * keep or let go of it; `all` is every piece of work its maker keeps here,
- * by key. A null key (the maker is not known yet) keeps nothing: the work
- * stays on the screen until the maker is known.
+ * by key. A null key (the maker is not known yet) keeps and shows nothing;
+ * the editor waits for the maker meanwhile.
  */
 export function usePosterDraft(key: string | null) {
   const { draft, kept, saved, set, clear } = useOwnedDraft(posterDrafts, key);

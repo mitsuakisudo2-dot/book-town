@@ -64,6 +64,39 @@ function readPostDraft(value: unknown): PostDraft | null {
   return { body: draft.body, bookId: draft.bookId, spoiler: draft.spoiler };
 }
 
+/** Words after others, on a new line; null when too long for one post. */
+function joinWords(before: string, after: string): string | null {
+  const body = before.trim() ? before.trimEnd() + "\n" + after.trim() : after;
+  return [...body].length > POST_MAX_LENGTH ? null : body;
+}
+
+/**
+ * A draft written before its owner was known, after what the owner kept for
+ * the same composer (see keepForOwner); null when the two are too long for
+ * one post.
+ */
+export function joinPostDrafts(
+  kept: PostDraft,
+  work: PostDraft,
+): PostDraft | null {
+  const body =
+    !work.body.trim() || work.body.trim() === kept.body.trim()
+      ? kept.body
+      : joinWords(kept.body, work.body);
+  if (body === null) return null;
+  const joined = {
+    body,
+    bookId: kept.bookId ?? work.bookId,
+    // A spoiler mark on either marks the whole, as when a line is carried.
+    spoiler: kept.spoiler || work.spoiler,
+  };
+  return joined.body === kept.body &&
+    joined.bookId === kept.bookId &&
+    joined.spoiler === kept.spoiler
+    ? kept
+    : joined;
+}
+
 /** Drafts have their own storage boundary, separate from the existing town data. */
 export function createPostDraftStore(storage: () => DraftStorage) {
   const store = createKeptDraftStore<PostDraft>(
@@ -94,10 +127,10 @@ export function createPostDraftStore(storage: () => DraftStorage) {
       const moving = store.get(from);
       const there = store.get(to);
       if (!moving?.body.trim()) return false;
-      const before = there?.body.trim() ? there.body.trimEnd() : "";
+      const before = there?.body.trim() ? there.body : "";
       if (before && !append) return false;
-      const body = before ? before + "\n" + moving.body.trim() : moving.body;
-      if ([...body].length > POST_MAX_LENGTH) return false;
+      const body = joinWords(before, moving.body);
+      if (body === null) return false;
       store.set(to, {
         body,
         bookId: there?.bookId ?? null,
@@ -114,12 +147,14 @@ const postDraftStore = createPostDraftStore(() => window.localStorage);
 
 /**
  * The draft of one composer. A null key (the owner is not known yet) keeps
- * nothing: the words stay on the screen until the owner is known.
+ * nothing: the words stay on the screen until the owner is known, and then
+ * go after what the owner kept for the composer (joinPostDrafts).
  */
 export function usePostDraft(key: string | null) {
-  const { draft, kept, saved, loaded, set, clear } = useOwnedDraft(
+  const { draft, kept, saved, loaded, inHand, set, clear } = useOwnedDraft(
     postDraftStore,
     key,
+    joinPostDrafts,
   );
   const words = draft ?? EMPTY_POST_DRAFT;
   return {
@@ -129,7 +164,7 @@ export function usePostDraft(key: string | null) {
     saved,
     loaded,
     update: (patch: Partial<PostDraft>) => {
-      if (key !== null) postDraftStore.update(key, patch);
+      if (key !== null && !inHand) postDraftStore.update(key, patch);
       else set({ ...words, ...patch });
     },
     clear,
