@@ -80,11 +80,16 @@
   font-size: var(--t-who);
   line-height: 1.45;
 }
+/* The name's target is 44px each way, a one-character name too: it
+   reaches into the gap before it and under 「見本」 after it, while the
+   name itself keeps the text's left edge. */
 .letter .post-author {
   display: inline-flex;
   align-items: center;
+  min-width: 44px;
   min-height: 44px;
-  margin-block: -11px;
+  margin: -11px -18px -11px -12px;
+  padding: 0 18px 0 12px;
   font-weight: 700;
   color: var(--ink);
   overflow-wrap: anywhere;
