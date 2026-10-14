@@ -1,14 +1,10 @@
 @import "tailwindcss";
+@import "./tokens.css";
+/* The colours, type and fonts are the tokens' (tokens.css). */
 :root {
-  --paper: #f7f4ee;
-  --ink: #303b33;
-  --green: #294b3e;
-  --muted: #8b917f;
-  --line: #e4e1d8;
-  --serif: "Noto Serif JP", "Yu Mincho", serif;
   background: var(--paper);
   color: var(--ink);
-  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+  font-family: var(--sans);
   font-size: 14px;
   font-synthesis: none;
 }

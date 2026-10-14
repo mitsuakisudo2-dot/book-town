@@ -1,7 +1,4 @@
 /* Comfortable reading and touch targets; keep decorative book-cover lettering intact. */
-.town-shell {
-  --muted: #66715d;
-}
 .town-shell .post-text,
 .town-shell .composer-text,
 .town-shell .bh-pop .bh-pop-text {
