@@ -25,6 +25,8 @@ import {
   likeOnly,
   markChanges,
   meetEncounter,
+  opBefore,
+  PLACEMENT_KEY_MAX_LENGTH,
   popEncounterKind,
   pressStatus,
   reactionSet,
@@ -32,6 +34,7 @@ import {
   shelvesOf,
   shopBookIds,
   shownShelves,
+  undoEncounter,
   validateEncounter,
   validateEntry,
   validateShelf,
@@ -50,6 +53,7 @@ import {
   type MarkKeeps,
   type MarkKind,
   type MarkLists,
+  type OpBefore,
   type ShelfBook,
 } from "../src/lib/library";
 import type { Poster } from "../src/lib/posters";
@@ -387,9 +391,7 @@ check(
         label: status,
         books: ["w"],
         set: { status },
-        before: {
-          w: { entry: state.libraryEntries.w, shelves: [], favorite: false },
-        },
+        before: opBefore(state, ["w"]),
         state: "pending",
       };
       const next = applyOp(state, op.books, op.set, op.at, "search", NONE);
@@ -753,6 +755,48 @@ check(
 );
 
 check(
+  "4-10 a second press of a like, 私も好き！ or 読みたくなった that stands writes nothing, even on a row taken out since",
+  () => {
+    const scanned = applyOp(
+      town(),
+      ["b"],
+      { removed: false },
+      AT,
+      "scan",
+      NONE,
+    );
+    for (const input of [
+      onPost(P1),
+      onPop("b", "love"),
+      onPost(P1, "want"),
+      onPop("b", "want"),
+    ]) {
+      const why = JSON.stringify(input);
+      const met = react(scanned, input, true, plus(1));
+      const out = applyOp(
+        met,
+        ["b"],
+        { removed: true },
+        plus(2),
+        "search",
+        NONE,
+      );
+      assert.equal(out.libraryEntries.b.removedAt, plus(2), why);
+      assert.equal(react(out, input, true, plus(3)), out, why);
+    }
+    // The book page's 読みたい goes by the row: with its 読みたい taken off
+    // by sorting, pressing it again sets 読みたい, though its encounter stands.
+    const page = react(town(), onPage("b"), true);
+    const sorted = applyOp(page, ["b"], { want: false }, plus(1), "want", NONE);
+    assert.equal(sorted.libraryEntries.b.wantedAt, null);
+    assert.equal(sorted.encounters.length, 1);
+    const again = react(sorted, onPage("b"), true, plus(2));
+    assert.equal(again.libraryEntries.b.wantedAt, plus(2));
+    assert.equal(again.encounters, sorted.encounters);
+  },
+);
+
+check(
   "4-10 a like refused (a 見本's post or shop, the reader's own, a post without a book) changes nothing",
   () => {
     const state = town({ libraryEntries: rows(entryOf("b", {})) });
@@ -804,6 +848,13 @@ check(
         .wantedAt,
       AT,
     );
+    // The book page's 読みたい takes it away, though the page met nothing:
+    // the row stays, held by the 読みたくなった that stands.
+    const offOnPage = react(fromPost, onPage("b"), false, plus(1));
+    assert.equal(offOnPage.libraryEntries.b.wantedAt, null);
+    assert.equal(offOnPage.libraryEntries.b.removedAt, null);
+    assert.equal(offOnPage.encounters, fromPost.encounters);
+    assert.equal(entryContext(offOnPage, "b", NONE).wantMet, true);
     // The book page's 読みたい goes both ways.
     const page = react(town(), onPage("b"), true);
     assert.equal(page.libraryEntries.b.wantedAt, AT);
@@ -1213,6 +1264,32 @@ check(
       ["love", "like"],
     );
     assert.equal(countsOf(s, NONE).shelves.liked, 2);
+  },
+);
+
+check(
+  "decision 4f いいねした本 goes by the likes that stand, not by likedAt",
+  () => {
+    const s = town({
+      libraryEntries: rows(
+        // likedAt with no like standing (an old app's like, 5-4).
+        entryOf("stale", { likedAt: BEFORE }),
+        // A like standing on a row whose likedAt is not written.
+        entryOf("standing", {}),
+      ),
+      encounters: [encounter(1, "standing")],
+    });
+    const x = contextsOf(s, NONE);
+    assert.deepEqual(shelvesOf(s.libraryEntries.stale, x("stale")), ["all"]);
+    assert.deepEqual(shelvesOf(s.libraryEntries.standing, x("standing")), [
+      "all",
+      "liked",
+    ]);
+    assert.equal(countsOf(s, NONE).shelves.liked, 1);
+    assert.deepEqual(
+      filterLibrary(s, { shelf: "liked", showWanted: true }, NONE),
+      ["standing"],
+    );
   },
 );
 
@@ -1742,6 +1819,95 @@ check(
 );
 
 check(
+  "5-6 読了・積読・読書中 go by when the status was set, 読みたい本 by when it was wanted, お気に入り in ☆'s order: not by when the books came in",
+  () => {
+    for (const status of READING_STATUSES) {
+      const s = town({
+        libraryEntries: rows(
+          entryOf("x", { addedAt: at("02-01"), status, statusAt: at("03-01") }),
+          entryOf("y", { addedAt: at("01-01"), status, statusAt: at("04-01") }),
+          entryOf("z", { addedAt: at("05-01") }),
+        ),
+      });
+      assert.deepEqual(filterLibrary(s, { showWanted: true }, NONE), [
+        "z",
+        "x",
+        "y",
+      ]);
+      assert.deepEqual(
+        filterLibrary(s, { shelf: status, showWanted: true }, NONE),
+        ["y", "x"],
+        status,
+      );
+    }
+    const s = town({
+      libraryEntries: rows(
+        entryOf("x", { addedAt: at("02-01"), wantedAt: at("03-01") }),
+        entryOf("y", { addedAt: at("01-01"), wantedAt: at("04-01") }),
+        entryOf("z", { addedAt: at("05-01") }),
+      ),
+      // Oldest first, unlike both when they came in and their ids.
+      favorites: ["y", "z", "x"],
+    });
+    assert.deepEqual(
+      filterLibrary(s, { shelf: "want", showWanted: true }, NONE),
+      ["y", "x"],
+    );
+    assert.deepEqual(
+      filterLibrary(s, { shelf: "favorite", showWanted: true }, NONE),
+      ["y", "z", "x"],
+    );
+  },
+);
+
+check(
+  "a row taken out leaves every default shelf, theme shelf and count, its status, 読みたい, ☆ and 所有 kept with it",
+  () => {
+    const s = town({
+      libraryEntries: rows(
+        ...READING_STATUSES.map((status) =>
+          entryOf("out-" + status, {
+            status,
+            statusAt: BEFORE,
+            wantedAt: BEFORE,
+            owned: "yes",
+            removedAt: BEFORE,
+          }),
+        ),
+        entryOf("out-no", { owned: "no", removedAt: BEFORE }),
+        entryOf("out-liked", {
+          source: "like",
+          likedAt: BEFORE,
+          removedAt: BEFORE,
+        }),
+      ),
+      favorites: READING_STATUSES.map((status) => "out-" + status),
+      encounters: [encounter(1, "out-liked")],
+      libraryShelves: [shelf(SHELF_SF)],
+      libraryShelfBooks: [onShelf(SHELF_SF, "out-finished")],
+    });
+    const x = contextsOf(s, NONE);
+    for (const e of Object.values(s.libraryEntries))
+      assert.deepEqual(shelvesOf(e, x(e.bookId)), [], e.bookId);
+    assert.deepEqual(countsOf(s, NONE), {
+      works: 0,
+      editions: 0,
+      owned: 0,
+      notOwned: 0,
+      unsorted: 0,
+      shelves: {},
+      themes: {},
+    });
+    for (const key of [...DEFAULT_SHELVES.map((shelf) => shelf.key), SHELF_SF])
+      assert.deepEqual(
+        filterLibrary(s, { shelf: key, showWanted: true }, NONE),
+        [],
+        key,
+      );
+  },
+);
+
+check(
   "4-5 the other filters: 所有, author, 未設定, read, sorted, and books only wanted hidden",
   () => {
     const f = (more: Omit<LibraryFilter, "showWanted">, showWanted = true) =>
@@ -1858,6 +2024,19 @@ check(
       filterParams({ showWanted: true, dateOf: "added" }),
       filterParams({ showWanted: true }),
     );
+    // A list left empty filters nothing, as the address cannot hold one.
+    const everything = filterLibrary(FILTER_TOWN, { showWanted: true }, NONE);
+    for (const f of [
+      { status: [], showWanted: true },
+      { met: [], showWanted: true },
+      { with: [], showWanted: true },
+    ] as LibraryFilter[]) {
+      const params = filterParams(f);
+      assert.deepEqual(params, filterParams({ showWanted: true }));
+      const back = filterFromParams((key) => params[key] ?? null, true);
+      assert.deepEqual(back, { showWanted: true });
+      assert.deepEqual(filterLibrary(FILTER_TOWN, f, NONE), everything);
+    }
     const typed: Record<string, string> = {
       shelf: "../etc",
       with: `${SHELF_SF},bad id`,
@@ -1901,6 +2080,8 @@ check(
         book("wanted"),
         book("liked"),
         book("fav"),
+        book("out-yes"),
+        book("out-no"),
       ],
       libraryEntries: rows(
         entryOf("w1-hard", { owned: "yes" }),
@@ -1911,6 +2092,9 @@ check(
         entryOf("liked", { source: "like", likedAt: BEFORE }),
         entryOf("fav", { source: "favorite" }),
         entryOf("unknown", {}),
+        // Taken out: counted nowhere, 所有 included.
+        entryOf("out-yes", { owned: "yes", removedAt: BEFORE }),
+        entryOf("out-no", { owned: "no", removedAt: BEFORE }),
       ),
       favorites: ["fav"],
       encounters: [encounter(1, "liked")],
@@ -2183,6 +2367,44 @@ check(
   },
 );
 
+check(
+  "6-2 wishes an old tab added between two loads keep its order in the rows",
+  () => {
+    const none: MarkLists = {
+      wishlist: [],
+      favorites: [],
+      library: [],
+      finishedBooks: [],
+    };
+    const before = { ...none, wishlist: ["a"] };
+    const after = { ...none, wishlist: ["a", "b6", "b0", "b3"] };
+    const changes = markChanges(before, after, AT);
+    assert.deepEqual(changes, [
+      { op: "insert", kind: "wish", bookId: "b6", at: plus(-2) },
+      { op: "insert", kind: "wish", bookId: "b0", at: plus(-1) },
+      { op: "insert", kind: "wish", bookId: "b3", at: AT },
+    ]);
+    const out = followMarks(
+      rows(entryOf("a", { source: "legacy", wantedAt: BEFORE })),
+      changes,
+      () => ({
+        library: false,
+        favorite: false,
+        liveShelf: false,
+        record: false,
+        memo: false,
+      }),
+      DB_NOW,
+    );
+    assert.deepEqual(legacyLists(out).wishlist, after.wishlist);
+    // Deleted marks keep `at`: the trigger takes them at its own time.
+    assert.deepEqual(
+      markChanges(after, before, AT).map((change) => change.at),
+      [AT, AT, AT],
+    );
+  },
+);
+
 // ---------------------------------------------------------------- what holds after every op (11-3)
 
 function invariants(s: LibraryState, step: string) {
@@ -2393,10 +2615,13 @@ check(
     assert.equal(bad({ bookId: "" }), "bookId");
     assert.equal(bad({ status: "done" }), "status");
     assert.equal(bad({ statusAt: "yesterday" }), "statusAt");
+    assert.equal(bad({ wantedAt: "someday" }), "wantedAt");
+    assert.equal(bad({ likedAt: 0 }), "likedAt");
     assert.equal(bad({ owned: "maybe" }), "owned");
     assert.equal(bad({ source: "camera" }), "source");
     assert.equal(bad({ batchId: "" }), "batchId");
     assert.equal(bad({ addedAt: null }), "addedAt");
+    assert.equal(bad({ removedAt: "gone" }), "removedAt");
     assert.equal(bad({ likeRestored: "no" }), "likeRestored");
   },
 );
@@ -2424,6 +2649,10 @@ check(
       "position",
     );
     assert.equal(validateShelf({ ...ok, position: "a-0" }), "position");
+    assert.equal(
+      validateShelf({ ...ok, showWanted: "yes" as unknown as boolean }),
+      "showWanted",
+    );
     assert.equal(validateShelf({ ...ok, deletedAt: "soon" }), "deletedAt");
   },
 );
@@ -2448,10 +2677,180 @@ check(
       validateEncounter({ ...like, placementKey: "" }),
       "placementKey",
     );
+    assert.equal(validateEncounter({ ...like, postId: "" }), "postId");
+    assert.equal(validateEncounter({ ...like, memoAt: "later" }), "memoAt");
     assert.equal(validateEncounter({ ...like, undoneAt: "later" }), "undoneAt");
+    assert.equal(
+      validateEncounter({ ...like, createdAt: null as unknown as string }),
+      "createdAt",
+    );
     // writeMemo refuses what the table would, and changes nothing.
     assert.deepEqual(writeMemo([like], like.id, max + "あ", AT), [like]);
     assert.deepEqual(writeMemo([like], "no-such-id", "メモ", AT), [like]);
+  },
+);
+
+check(
+  "10-0 a new encounter names its post, or its shop and the POP's place, as the insert trigger wants; one already there may have lost them",
+  () => {
+    const like = encounter(1, "b");
+    const pop = popEncounter(2, "b", "love");
+    const page = encounterOf(onPage("b"), uuid(0xe3), AT, true) as Encounter;
+    for (const c of [like, pop, page])
+      assert.equal(validateEncounter(c, { insert: true }), null, c.via);
+    const lost: [Encounter, string][] = [
+      [{ ...like, postId: null }, "postId"],
+      [{ ...pop, shopId: null }, "shopId"],
+      [{ ...pop, placementKey: null }, "placementKey"],
+    ];
+    for (const [c, field] of lost) {
+      assert.equal(validateEncounter(c), null, field);
+      assert.equal(validateEncounter(c, { insert: true }), field);
+    }
+  },
+);
+
+check(
+  "10-0 guards: a POP's place over 300 characters meets nothing, taking back twice changes nothing, a book given twice is one",
+  () => {
+    const place = (length: number) =>
+      encounterOf(
+        {
+          ...(onPop("b", "like") as Extract<EncounterInput, { via: "pop" }>),
+          placementKey: "𠮷".repeat(length),
+        },
+        uuid(0xe4),
+        AT,
+        true,
+      );
+    assert.notEqual(place(PLACEMENT_KEY_MAX_LENGTH), null);
+    assert.equal(place(PLACEMENT_KEY_MAX_LENGTH + 1), null);
+    // Taken back once with its memo kept; taken back again, it keeps its time.
+    const kept = encounter(1, "b", "like", { memo: "m", memoAt: BEFORE });
+    const once = undoEncounter([kept], kept, AT);
+    assert.equal(once[0].undoneAt, AT);
+    assert.equal(undoEncounter(once, kept, plus(1)), once);
+    let s = react(town(), onPost(P1), true);
+    s = {
+      ...s,
+      encounters: writeMemo(s.encounters, s.encounters[0].id, "m", AT),
+    };
+    const off = react(s, onPost(P1), false, plus(1));
+    assert.equal(react(off, onPost(P1), false, plus(2)), off);
+    // One op naming a book twice touches it once, at its first time.
+    const twice = applyOp(
+      town({ libraryShelves: [shelf(SHELF_SF)] }),
+      ["b", "b"],
+      { removed: false, addShelf: SHELF_SF },
+      AT,
+      "scan",
+      NONE,
+    );
+    assert.deepEqual(twice.libraryEntries.b, entryOf("b", { addedAt: AT }));
+    assert.deepEqual(twice.library, ["b"]);
+    assert.deepEqual(twice.libraryShelfBooks, [onShelf(SHELF_SF, "b", AT)]);
+  },
+);
+
+/** Writes back what an op found, as undoing it will (10-6). */
+function undoFrom<S extends LibraryState>(
+  state: S,
+  before: Record<string, OpBefore>,
+): S {
+  let next = state;
+  for (const [bookId, was] of Object.entries(before)) {
+    const put = (list: string[], on: boolean) =>
+      on
+        ? list.includes(bookId)
+          ? list
+          : [...list, bookId]
+        : list.filter((id) => id !== bookId);
+    next = {
+      ...next,
+      libraryEntries: was.entry
+        ? { ...next.libraryEntries, [bookId]: was.entry }
+        : next.libraryEntries,
+      favorites: put(next.favorites, was.favorite),
+      library: put(next.library, was.registered),
+      libraryShelfBooks: [
+        ...next.libraryShelfBooks.filter((book) => book.bookId !== bookId),
+        ...was.shelves,
+      ],
+    };
+  }
+  return next;
+}
+
+check(
+  "10-6 what an op found is enough to undo it: the row, the registration, ☆ and each place on a theme shelf come back",
+  () => {
+    // Liked, then scanned (registered), then 外す, then undone: a like taken
+    // back afterwards leaves the book in, as it would have before.
+    let s = react(town(), onPost(P1), true);
+    s = applyOp(s, ["b"], { removed: false }, plus(1), "scan", NONE);
+    assert.deepEqual(s.library, ["b"]);
+    const before = opBefore(s, ["b", "b"]);
+    assert.deepEqual(Object.keys(before), ["b"]);
+    assert.equal(before.b.registered, true);
+    const out = applyOp(s, ["b"], { removed: true }, plus(2), "search", NONE);
+    assert.deepEqual(out.library, []);
+    const back = undoFrom(out, before);
+    assert.deepEqual(back.library, s.library);
+    assert.deepEqual(back.libraryEntries, s.libraryEntries);
+    assert.equal(
+      react(back, onPost(P1), false, plus(3)).libraryEntries.b.removedAt,
+      null,
+    );
+    // Taken off a theme shelf and put back: the shelf keeps its order.
+    const shelved = town({
+      libraryEntries: rows(
+        entryOf("x", {}),
+        entryOf("y", {}),
+        entryOf("z", {}),
+      ),
+      favorites: ["x", "y"],
+      libraryShelves: [shelf(SHELF_SF)],
+      libraryShelfBooks: [
+        onShelf(SHELF_SF, "x", at("02-01")),
+        onShelf(SHELF_SF, "y", at("03-01")),
+        onShelf(SHELF_SF, "z", at("04-01"), "a0"),
+      ],
+    });
+    const order = (state: LibraryState) =>
+      filterLibrary(state, { shelf: SHELF_SF, showWanted: true }, NONE);
+    assert.deepEqual(order(shelved), ["z", "x", "y"]);
+    for (const id of ["x", "z"]) {
+      const was = opBefore(shelved, [id]);
+      const off = applyOp(
+        shelved,
+        [id],
+        { removeShelf: SHELF_SF },
+        AT,
+        "search",
+        NONE,
+      );
+      assert.notDeepEqual(order(off), order(shelved), id);
+      const undone = undoFrom(off, was);
+      assert.deepEqual(order(undone), ["z", "x", "y"], id);
+      assert.deepEqual(
+        new Set(undone.libraryShelfBooks),
+        new Set(shelved.libraryShelfBooks),
+        id,
+      );
+    }
+    // ☆ off and back.
+    const was = opBefore(shelved, ["x"]);
+    assert.equal(was.x.favorite, true);
+    const unstarred = applyOp(
+      shelved,
+      ["x"],
+      { favorite: false },
+      AT,
+      "favorite",
+      NONE,
+    );
+    assert.deepEqual(unstarred.favorites, ["y"]);
+    assert.deepEqual(undoFrom(unstarred, was).favorites, ["y", "x"]);
   },
 );
 

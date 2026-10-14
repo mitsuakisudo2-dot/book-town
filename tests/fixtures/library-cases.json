@@ -462,6 +462,48 @@
         "at": "2026-09-01T00:00:00.000Z"
       },
       "expect": null
+    },
+    {
+      "name": "F27 a favorite written brings back a row taken out, what it held kept",
+      "entry": {
+        "status": "tsundoku",
+        "statusAt": "2026-09-01T00:00:00.000Z",
+        "owned": "no",
+        "removedAt": "2026-09-05T00:00:00.000Z"
+      },
+      "marks": [],
+      "shelf": "none",
+      "record": false,
+      "change": {
+        "op": "insert",
+        "kind": "favorite",
+        "at": "2026-09-10T12:00:00.000Z"
+      },
+      "expect": {
+        "status": "tsundoku",
+        "statusAt": "2026-09-01T00:00:00.000Z",
+        "owned": "no"
+      }
+    },
+    {
+      "name": "F28 a wish written for a wanted row taken out brings it back and keeps when it was wanted",
+      "entry": {
+        "source": "legacy",
+        "wantedAt": "2026-09-01T00:00:00.000Z",
+        "removedAt": "2026-09-05T00:00:00.000Z"
+      },
+      "marks": [],
+      "shelf": "none",
+      "record": false,
+      "change": {
+        "op": "insert",
+        "kind": "wish",
+        "at": "2026-09-10T12:00:00.000Z"
+      },
+      "expect": {
+        "source": "legacy",
+        "wantedAt": "2026-09-01T00:00:00.000Z"
+      }
     }
   ],
   "backfill": [
@@ -817,6 +859,29 @@
       "records": [],
       "sessions": [],
       "expect": null
+    },
+    {
+      "name": "B22 a wish and a reading still running: reading and wanted, added with the mark",
+      "marks": [
+        {
+          "kind": "wish",
+          "at": "2026-08-01T00:00:00.000Z"
+        }
+      ],
+      "records": [],
+      "sessions": [
+        {
+          "startedAt": "2026-08-03T00:00:00.000Z",
+          "endedAt": null
+        }
+      ],
+      "expect": {
+        "source": "legacy",
+        "addedAt": "2026-08-01T00:00:00.000Z",
+        "wantedAt": "2026-08-01T00:00:00.000Z",
+        "status": "reading",
+        "statusAt": "2026-08-03T00:00:00.000Z"
+      }
     }
   ],
   "encounter": [
@@ -969,6 +1034,18 @@
         "statusAt": "2026-09-01T00:00:00.000Z",
         "wantedAt": "2026-10-01T09:00:00.000Z"
       }
+    },
+    {
+      "name": "4-2 読みたい on a book already wanted keeps when it was first wanted (the 読みたい本 shelf's order)",
+      "entry": {
+        "wantedAt": "2026-09-01T00:00:00.000Z"
+      },
+      "set": {
+        "want": true
+      },
+      "via": "want",
+      "at": "2026-10-01T09:00:00.000Z",
+      "expect": "same"
     },
     {
       "name": "4-2 読みたい off: a tsundoku book is no longer wanted and stays",

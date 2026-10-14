@@ -283,8 +283,8 @@ export type LibrarySet = Partial<{
 
 /**
  * The unit of undo and of the device's journal. `opId` is a uuid made by the
- * device; `before` holds each row whole, its shelves and its ☆, so undoing
- * writes them back as they were (10-6).
+ * device; `before` holds each book as the op found it (opBefore), so undoing
+ * writes it back as it was (10-6).
  */
 export interface LibraryOp {
   opId: string;
@@ -292,11 +292,46 @@ export interface LibraryOp {
   label: string;
   books: string[];
   set: LibrarySet;
-  before: Record<
-    string,
-    { entry: LibraryEntry | null; shelves: string[]; favorite: boolean }
-  >;
+  before: Record<string, OpBefore>;
   state: "pending" | "refused";
+}
+
+/** One book as an op found it: everything of it the op can change. */
+export interface OpBefore {
+  /** The row whole; null: there was none. */
+  entry: LibraryEntry | null;
+  /**
+   * Its places on theme shelves, whole: one taken off goes back with the
+   * added_at and position it had, so the shelf keeps its order (5-6, 10-6).
+   */
+  shelves: ShelfBook[];
+  /**
+   * ☆. It comes back as a new mark, last among ☆, as the database orders
+   * book_marks by when they were written.
+   */
+  favorite: boolean;
+  /**
+   * Registered on purpose (state.library, book_marks' library). 外す takes
+   * it away, so undoing gives it back; without it, a like taken back later
+   * would take the book out.
+   */
+  registered: boolean;
+}
+
+/** What an op on these books finds (LibraryOp.before), once each. */
+export function opBefore(
+  state: LibraryState,
+  books: string[],
+): Record<string, OpBefore> {
+  const before: Record<string, OpBefore> = {};
+  for (const bookId of books)
+    before[bookId] ??= {
+      entry: state.libraryEntries[bookId] ?? null,
+      shelves: state.libraryShelfBooks.filter((book) => book.bookId === bookId),
+      favorite: state.favorites.includes(bookId),
+      registered: state.library.includes(bookId),
+    };
+  return before;
 }
 
 /** Where a book stands in the reader's own shop draft (P1, L7a): a shape only for now. */
@@ -398,7 +433,11 @@ const likeOnlyOp = (s: LibrarySet) =>
  * 4-10's conditions 1 and 3 to 5, and the rest of condition 2 (no other
  * encounter stands, the memo review's 2章): nothing but a like keeps the row.
  * A row a like brought back counts nothing it held from before it was taken
- * out.
+ * out. The shop and the reader's own uses count as they stand when the like
+ * is taken back, as condition 3 and 4 read: a book liked and then put in the
+ * shop leaves with the like once it is off the shop, while one put in the
+ * shop first stays (its source is shop). Whether N19's お店から下ろしても
+ * 残る should cover the first is not settled yet.
  */
 function heldByLikeAlone(e: LibraryEntry, x: EntryContext): boolean {
   return (
@@ -930,8 +969,9 @@ export function reactionSet(
  * A reaction pressed (on) or taken back: its encounter first, then the row,
  * whose context then knows whether another like still stands and whether a
  * memo keeps the book. A press that makes no encounter changes nothing, and
- * a second tap only what the first left undone (the state itself comes back
- * when nothing changes).
+ * neither does a second press of a reaction that stands (4-10's 連打), even
+ * on a row taken out since: only the book page's 読みたい, which goes by the
+ * row, sets 読みたい again. The state itself comes back when nothing changes.
  */
 export function applyReaction<S extends LibraryState>(
   state: S,
@@ -943,8 +983,10 @@ export function applyReaction<S extends LibraryState>(
 ): S {
   const c = encounterOf(input, options.id, at, options.account);
   if (!c) return state;
-  const encounters = on
-    ? meetEncounter(state.encounters, c).encounters
+  const met = on ? meetEncounter(state.encounters, c) : null;
+  if (met && !met.met && c.via !== "book") return state;
+  const encounters = met
+    ? met.encounters
     : undoEncounter(state.encounters, c, at);
   // Taking back what does not stand does nothing, except the book page's
   // 読みたい: it takes 読みたい away whichever press brought it.
@@ -968,7 +1010,8 @@ export function applyReaction<S extends LibraryState>(
 
 /**
  * The library's filter (4-5): every field given narrows it further (and);
- * a field left out does not. It goes to and from the address (filterParams).
+ * a field left out, or a list left empty, does not, as the address has no
+ * empty list. It goes to and from the address (filterParams).
  */
 export interface LibraryFilter {
   /** A default shelf's key or a theme shelf's id; absent is ライブラリ（全部）. */
@@ -1077,7 +1120,8 @@ export function filterLibrary(
     if (!has(e, x)) return false;
     if (f.with && !f.with.every((id) => themes.books.get(id)?.has(e.bookId)))
       return false;
-    if (f.status && !f.status.includes(e.status ?? "none")) return false;
+    if (f.status?.length && !f.status.includes(e.status ?? "none"))
+      return false;
     if (
       f.read !== undefined &&
       f.read !== (e.status === "finished" || read.has(e.bookId))
@@ -1085,7 +1129,7 @@ export function filterLibrary(
       return false;
     if (f.unsorted !== undefined && f.unsorted !== isUnsorted(e, x))
       return false;
-    if (f.met && !f.met.includes(e.source)) return false;
+    if (f.met?.length && !f.met.includes(e.source)) return false;
     if (f.since !== undefined || f.until !== undefined) {
       const date = dateOf(e);
       if (date === null) return false;
@@ -1495,7 +1539,9 @@ export function legacyToLibrary(
 /**
  * What changed between two sets of lists, as marks: written first, then
  * deleted, each in the order library, wish, ☆, finished. The demo feeds it
- * the old lists against those it last wrote (6-2).
+ * the old lists against those it last wrote (6-2). The marks written to one
+ * list are a millisecond apart in its order, the last at `at`, so the rows
+ * keep the order the old tab added them in (legacyLists).
  */
 export function markChanges(
   before: MarkLists,
@@ -1503,14 +1549,25 @@ export function markChanges(
   at: string,
 ): MarkChange[] {
   const changes: MarkChange[] = [];
+  const end = Date.parse(at);
   for (const op of ["insert", "delete"] as const)
     for (const { kind, list } of MARKS) {
       const [from, to] =
         op === "insert"
           ? [before[list], after[list]]
           : [after[list], before[list]];
-      for (const bookId of new Set(to))
-        if (!from.includes(bookId)) changes.push({ op, kind, bookId, at });
+      const ids = [...new Set(to)].filter((bookId) => !from.includes(bookId));
+      ids.forEach((bookId, i) =>
+        changes.push({
+          op,
+          kind,
+          bookId,
+          at:
+            op === "insert"
+              ? new Date(end - (ids.length - 1 - i)).toISOString()
+              : at,
+        }),
+      );
     }
   return changes;
 }
@@ -1644,8 +1701,16 @@ export function validateShelf(shelf: LibraryShelf): string | null {
   return null;
 }
 
-/** The first field of an encounter the table would refuse, or null. */
-export function validateEncounter(c: Encounter): string | null {
+/**
+ * The first field of an encounter the table would refuse, or null. A new
+ * one (`insert`) must also name its post, or its shop and the POP's place,
+ * as the insert trigger wants; a row already there loses them only when
+ * the post or shop goes (on delete set null).
+ */
+export function validateEncounter(
+  c: Encounter,
+  options: { insert?: boolean } = {},
+): string | null {
   if (!isName(c.id)) return "id";
   if (!isName(c.bookId)) return "bookId";
   if (!ENCOUNTER_KINDS.includes(c.kind)) return "kind";
@@ -1654,7 +1719,11 @@ export function validateEncounter(c: Encounter): string | null {
   if (c.via === "book" && c.kind !== "want") return "kind";
   if (c.via === "post" && c.kind === "love") return "kind";
   if (!isNameOrNull(c.postId)) return "postId";
+  if (options.insert && c.via === "post" && c.postId === null) return "postId";
   if (!isNameOrNull(c.shopId)) return "shopId";
+  if (options.insert && c.via === "pop" && c.shopId === null) return "shopId";
+  if (options.insert && c.via === "pop" && c.placementKey === null)
+    return "placementKey";
   if (
     c.placementKey !== null &&
     (typeof c.placementKey !== "string" ||
