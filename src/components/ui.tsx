@@ -1,5 +1,7 @@
 "use client";
 import {
+  createContext,
+  useContext,
   useEffect,
   useRef,
   useState,
@@ -7,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import type { Book, Reader } from "../lib/types";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { bookArt } from "../lib/book-art";
@@ -18,8 +21,17 @@ import {
   useGoogleCoversShown,
 } from "../lib/covers";
 import { useBackLayer } from "../lib/back-layer";
-import { fieldTakesFocus, focusBack } from "../lib/coarse-pointer";
+import {
+  fieldTakesFocus,
+  focusBack,
+  useCoarsePointer,
+} from "../lib/coarse-pointer";
 import { imeKey } from "../lib/keys";
+import {
+  focusWritingField,
+  useWritingSheet,
+  writingField,
+} from "./useWritingSheet";
 import "./illustrated-jackets.css";
 const shapes: Record<string, ReactNode> = {
   book: (
@@ -397,18 +409,33 @@ export function ReaderAvatar({
     </span>
   );
 }
+const WritingSheet = createContext(false);
+/** Whether this is inside a writing screen (Modal's `writing`). */
+export const useInWritingSheet = () => useContext(WritingSheet);
+
 export function Modal({
   title,
   onClose,
   children,
   wide = false,
+  writing = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  /**
+   * A sheet for writing (useWritingSheet). It opens with its text box
+   * focused (on a phone the keyboard rises with it). Taps inside keep the
+   * keyboard up. With a finger it fits what the keyboard leaves, its
+   * buttons (a .writing-toolbar, last) just above the keyboard.
+   */
+  writing?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const writingRef = useRef(writing);
+  const writingHandlers = useWritingSheet(ref, writing);
+  const finger = useCoarsePointer();
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
@@ -451,14 +478,21 @@ export function Modal({
     const prev = document.activeElement as HTMLElement | null;
     const old = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    // The focus goes into the dialog. With a mouse its first field is ready
-    // to type into; on a touch screen it starts on the first button (閉じる),
-    // so no keyboard rises over the sheet before the reader has seen it.
-    (
-      (fieldTakesFocus()
-        ? ref.current?.querySelector<HTMLElement>("input,textarea,select")
-        : null) ?? ref.current?.querySelector<HTMLElement>("button")
-    )?.focus();
+    // The focus goes into the dialog. A sheet for writing opens with its
+    // text box ready on any screen: this runs within the tap that opened it,
+    // so a phone's keyboard rises with it. Otherwise, with a mouse its first
+    // field is ready to type into; on a touch screen it starts on the first
+    // button (閉じる), so no keyboard rises over the sheet before the reader
+    // has seen it. (Here, after `prev` is taken, so that the focus goes back
+    // to what had it before.)
+    const text = writingRef.current ? writingField(ref.current) : null;
+    if (text) focusWritingField(text);
+    else
+      (
+        (fieldTakesFocus()
+          ? ref.current?.querySelector<HTMLElement>("input,textarea,select")
+          : null) ?? ref.current?.querySelector<HTMLElement>("button")
+      )?.focus();
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         // One Escape closes one layer: a book in hand beneath (a native
@@ -490,19 +524,23 @@ export function Modal({
       focusBack(prev);
     };
   }, []);
-  return (
+  const sheet = (
     <div
-      className="modal-backdrop"
+      className={"modal-backdrop" + (writing ? " is-writing" : "")}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className={"modal " + (wide ? "wide" : "")}
+        className={
+          "modal " + (wide ? "wide" : "") + (writing ? " is-writing" : "")
+        }
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        data-writing={writing ? "" : undefined}
+        {...writingHandlers}
       >
         <div className="modal-top">
           <h2>{title}</h2>
@@ -510,8 +548,18 @@ export function Modal({
             <Icon name="close" />
           </button>
         </div>
-        {children}
+        {writing ? (
+          <WritingSheet.Provider value>
+            <div className="modal-body">{children}</div>
+          </WritingSheet.Provider>
+        ) : (
+          children
+        )}
       </div>
     </div>
   );
+  // With a finger a writing sheet is the whole screen: it goes at the end
+  // of the page, over whatever the screen that opened it sits beneath (a
+  // walk keeps its own layers, under the bottom bar).
+  return writing && finger ? createPortal(sheet, document.body) : sheet;
 }

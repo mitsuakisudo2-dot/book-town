@@ -5,6 +5,8 @@ import {
   fieldTakesFocus,
   focusBack,
   focusField,
+  KEYBOARD_MIN_HEIGHT,
+  keyboardRoom,
   markField,
   takesText,
 } from "../src/lib/coarse-pointer";
@@ -40,11 +42,14 @@ function page() {
       type,
       editable = false,
       dialog = null,
+      writing = null,
       form = null,
     }: {
       type?: string;
       editable?: boolean;
       dialog?: Fake | null;
+      /** The writing screen around it (data-writing). */
+      writing?: Fake | null;
       form?: Fake | null;
     } = {},
   ): Fake => {
@@ -77,7 +82,8 @@ function page() {
       scrollIntoView({ block }: ScrollIntoViewOptions) {
         did.push("into view " + block);
       },
-      closest: () => dialog,
+      closest: (selector: string) =>
+        selector === "[data-writing]" ? writing : dialog,
       querySelector: () => null as Fake | null,
       setAttribute(name: string, value: string) {
         attributes.set(name, value);
@@ -285,6 +291,99 @@ function page() {
   assert.deepEqual(box.did, ["focus"]);
   assert.equal(box.getAttribute("aria-invalid"), "true");
   markField(null, { view: phone() });
+}
+
+{
+  // A writing screen (a post, a review) opens to be written in: there a
+  // field takes the focus with a finger too, and the keyboard rises with
+  // it: a book's search after ［本を添える］, the text box after a draft is
+  // thrown away, the words covered by ［一部を隠す］.
+  const { state, element } = page();
+  const sheet = element("DIV");
+  const close = element("BUTTON");
+  sheet.querySelector = (() => close) as Fake["querySelector"];
+  const search = element("INPUT", {
+    type: "search",
+    dialog: sheet,
+    writing: sheet,
+  });
+  assert.equal(focusField(search, { view: phone() }), true);
+  assert.equal(state.focused, search);
+  assert.deepEqual(search.did, ["focus"]);
+  assert.deepEqual(close.did, []);
+  const text = element("TEXTAREA", { dialog: sheet, writing: sheet });
+  assert.equal(focusField(text, { instead: null, view: phone() }), true);
+  assert.equal(state.focused, text);
+  // Outside one, the same field waits for a tap (the dialog's 閉じる).
+  const plain = element("INPUT", { type: "search", dialog: sheet });
+  assert.equal(focusField(plain, { view: phone() }), false);
+  assert.equal(state.focused, close);
+  assert.deepEqual(plain.did, ["into view nearest"]);
+  // A field found wrong there is focused and selected as typing goes on.
+  const wrong = element("TEXTAREA", { writing: sheet });
+  markField(wrong, { select: true, view: phone() });
+  assert.equal(state.focused, wrong);
+  assert.deepEqual(wrong.did, ["focus", "select"]);
+  // A layer closing over it gives the focus back to its field.
+  const back = element("TEXTAREA", { writing: sheet });
+  assert.equal(focusBack(back, undefined, phone()), true);
+  assert.equal(state.focused, back);
+}
+
+{
+  // The reader asked for this one field in this tap (［ISBNを打つ］): it
+  // takes the focus with a finger too, outside any writing screen.
+  const { state, element } = page();
+  const close = element("BUTTON");
+  const field = element("INPUT");
+  assert.equal(
+    focusField(field, { asked: true, instead: close, view: phone() }),
+    true,
+  );
+  assert.equal(state.focused, field);
+  assert.deepEqual(close.did, []);
+  const quiet = element("INPUT");
+  focusField(quiet, { asked: true, preventScroll: true, view: phone() });
+  assert.deepEqual(quiet.did, ["focus quietly"]);
+  // Not asked, the same field waits for its tap.
+  const waits = element("INPUT");
+  assert.equal(focusField(waits, { instead: close, view: phone() }), false);
+  assert.equal(state.focused, close);
+}
+
+{
+  // What the keyboard leaves of the screen (visualViewport against the
+  // page's height), for a writing screen to sit in.
+  assert.equal(keyboardRoom(null, 793), null);
+  assert.equal(keyboardRoom(undefined, 793), null);
+  // Zoomed in, the visible part is small for another reason: not known.
+  assert.equal(
+    keyboardRoom({ height: 400, offsetTop: 0, scale: 1.5 }, 793),
+    null,
+  );
+  // No keyboard: the whole screen.
+  assert.deepEqual(keyboardRoom({ height: 793, offsetTop: 0, scale: 1 }, 793), {
+    top: 0,
+    height: 793,
+    up: false,
+  });
+  // A keyboard of 336px, the page scrolled 120px up by the browser.
+  assert.deepEqual(
+    keyboardRoom({ height: 457, offsetTop: 120, scale: 1 }, 793),
+    { top: 120, height: 457, up: true },
+  );
+  // iOS 26 reports a gap of about 24px with no keyboard up.
+  assert.equal(
+    keyboardRoom({ height: 769, offsetTop: 0, scale: 1 }, 793)?.up,
+    false,
+  );
+  assert.equal(
+    keyboardRoom(
+      { height: 793 - KEYBOARD_MIN_HEIGHT - 1, offsetTop: 0, scale: 1 },
+      793,
+    )?.up,
+    true,
+  );
 }
 
 {

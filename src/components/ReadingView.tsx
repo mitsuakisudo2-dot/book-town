@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type FormEvent } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import {
   ME_ID,
@@ -125,6 +126,11 @@ export function ReadingView(props: Shared) {
   const [finished, setFinished] = useState<Book | null>(null);
   // Closing the book leaves a small card of what this time was.
   const [closed, setClosed] = useState<Closed | null>(null);
+  // The review opens within the tap that asks for it, so a phone's keyboard
+  // rises with its text box (Modal's `writing`). From the reading room the
+  // sitting's end, asked for in the same tap, is rendered with it.
+  const openReview = (read?: Book, line?: string) =>
+    flushSync(() => setReview({ book: read, line }));
   return (
     <>
       {active ? (
@@ -133,7 +139,7 @@ export function ReadingView(props: Shared) {
           {...props}
           book={book}
           clock={clock}
-          onReview={(read, line) => setReview({ book: read, line })}
+          onReview={openReview}
           onFinished={setFinished}
           onClosed={setClosed}
         />
@@ -142,17 +148,16 @@ export function ReadingView(props: Shared) {
           {closed && (
             <ClosedCard
               closed={closed}
-              onReview={() => {
-                setReview({ book: closed.book });
-                setClosed(null);
-              }}
+              onReview={() =>
+                flushSync(() => {
+                  setReview({ book: closed.book });
+                  setClosed(null);
+                })
+              }
               onDismiss={() => setClosed(null)}
             />
           )}
-          <UnsentLines
-            {...props}
-            onReview={(read, line) => setReview({ book: read, line })}
-          />
+          <UnsentLines {...props} onReview={openReview} />
           <StartReading {...props} clock={clock} />
         </>
       )}
@@ -167,6 +172,7 @@ export function ReadingView(props: Shared) {
         <Modal
           title={review.book ? `『${review.book.title}』の感想` : "感想を書く"}
           onClose={() => setReview(null)}
+          writing
         >
           {review.line && (
             <LineToAdd
@@ -178,6 +184,7 @@ export function ReadingView(props: Shared) {
           <PostComposer
             {...props}
             fixedBook={review.book}
+            sheet
             onDone={() => setReview(null)}
           />
         </Modal>

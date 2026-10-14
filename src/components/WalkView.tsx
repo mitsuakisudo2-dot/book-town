@@ -9,7 +9,7 @@ import {
 } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { preload } from "react-dom";
+import { flushSync, preload } from "react-dom";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { BookInHand, heldBookOf } from "./BookInHand";
 import { DoodleIcon, StoreCanvas, StoreStamp } from "./StoreCanvas";
@@ -562,8 +562,12 @@ export function WalkView({
                   }
                   onClick={() => {
                     if (visitor) return requestAccount();
-                    setMessage(reaction.message);
-                    open({ kind: "message" });
+                    // The sheet opens within the tap, so a phone's keyboard
+                    // rises with its text box (Modal's `writing`).
+                    flushSync(() => {
+                      setMessage(reaction.message);
+                      open({ kind: "message" });
+                    });
                   }}
                 >
                   <i>
@@ -948,7 +952,7 @@ export function WalkView({
         </Modal>
       )}
       {overlay?.kind === "message" && delivers && (
-        <Modal title="店主にひとことを残す" onClose={close}>
+        <Modal title="店主にひとことを残す" onClose={close} writing>
           <p className="note-box">
             店主に届きます。読めるのは、店主とあなただけです。消して届け直すと、店主からも見えなくなります。
           </p>
@@ -963,27 +967,29 @@ export function WalkView({
             maxLength={SHOP_MESSAGE_MAX_LENGTH}
             onChange={(e) => setMessage(e.target.value)}
           />
-          <button
-            className="button"
-            onClick={() => {
-              const text = message.trim() ? message : "";
-              const persisted = editReaction({ message: text });
-              notify(
-                !persisted
-                  ? "届けられませんでした。言葉は再読み込みまで手元に残ります。"
-                  : text
-                    ? "ひとことを届けました。"
-                    : "ひとことを取り消しました。",
-              );
-              close();
-            }}
-          >
-            届ける
-          </button>
+          <div className="writing-toolbar walk-message-send">
+            <button
+              className="button"
+              onClick={() => {
+                const text = message.trim() ? message : "";
+                const persisted = editReaction({ message: text });
+                notify(
+                  !persisted
+                    ? "届けられませんでした。言葉は再読み込みまで手元に残ります。"
+                    : text
+                      ? "ひとことを届けました。"
+                      : "ひとことを取り消しました。",
+                );
+                close();
+              }}
+            >
+              届ける
+            </button>
+          </div>
         </Modal>
       )}
       {overlay?.kind === "message" && !delivers && (
-        <Modal title="店主に伝える" onClose={close}>
+        <Modal title="店主に伝える" onClose={close} writing>
           <MessageStarters
             starters={starters}
             onPick={(text) => setMessage(joinStarter(message, text))}
@@ -995,23 +1001,25 @@ export function WalkView({
             maxLength={SHOP_MESSAGE_MAX_LENGTH}
             onChange={(e) => setMessage(e.target.value)}
           />
-          <button
-            className="button"
-            onClick={() => {
-              const persisted = editReaction({ message });
-              notify(
-                persisted
-                  ? "言葉を手元に保存しました。店主には送信されません。"
-                  : "保存できませんでした。言葉は再読み込みまで手元に残ります。",
-              );
-              close();
-            }}
-          >
-            手元に保存する
-          </button>
           <p className="walk-message-note">
             送信されないデモです。言葉はこのブラウザにだけ残ります。
           </p>
+          <div className="writing-toolbar walk-message-send">
+            <button
+              className="button"
+              onClick={() => {
+                const persisted = editReaction({ message });
+                notify(
+                  persisted
+                    ? "言葉を手元に保存しました。店主には送信されません。"
+                    : "保存できませんでした。言葉は再読み込みまで手元に残ります。",
+                );
+                close();
+              }}
+            >
+              手元に保存する
+            </button>
+          </div>
         </Modal>
       )}
       {overlay?.kind === "menu" && shop && (

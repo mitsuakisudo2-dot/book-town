@@ -4,7 +4,7 @@ import { useId, useRef, useState } from "react";
 import type { Book } from "../lib/types";
 import { useCoarsePointer, useFocusFieldOnShow } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
-import { BookJacket, Icon } from "./ui";
+import { BookJacket, Icon, useInWritingSheet } from "./ui";
 
 /** Search the catalog by title, author, genre or ISBN, and pick one book. */
 export function BookPicker({
@@ -31,8 +31,9 @@ export function BookPicker({
   suggestionLabel?: string;
   /**
    * For a picker opened by a button: the reader is about to type a title.
-   * With a mouse the search takes the focus; on a touch screen it waits for
-   * a tap, and the focus goes to the picker itself (focusField).
+   * With a mouse the search takes the focus, as it does in a writing screen;
+   * elsewhere on a touch screen it waits for a tap, and the focus goes to
+   * the picker itself (focusField).
    */
   autoFocus?: boolean;
 }) {
@@ -43,7 +44,9 @@ export function BookPicker({
   useFocusFieldOnShow(search, { instead: picker, when: autoFocus });
   // Only a picker holding the focus for its search is a named group; any
   // other is named by its search alone.
-  const standsIn = useCoarsePointer() && autoFocus;
+  const finger = useCoarsePointer();
+  const writing = useInWritingSheet();
+  const standsIn = finger && autoFocus && !writing;
   // The reader's own books come first among equals.
   const results = useBookSearch(books, query, {
     own: suggestions,

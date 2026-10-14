@@ -4,8 +4,9 @@ import path from "node:path";
 import { settleBeforeNavigating } from "./journey-layers.mjs";
 import {
   coarse,
-  expectNoKeyboard,
-  expectTapWrites,
+  expectKeyboardUp,
+  forgetFocus,
+  watchFocus,
 } from "./journey-keyboard.mjs";
 const base = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
 const output = path.resolve(
@@ -23,6 +24,7 @@ const context = await browser.newContext({
   viewport: { width: 390, height: 884 },
   hasTouch: true,
 });
+await watchFocus(context);
 const page = settleBeforeNavigating(await context.newPage());
 page.on("pageerror", (e) => errors.push(e.message));
 async function check(name, run) {
@@ -340,26 +342,27 @@ try {
   await check(
     "message is explicitly unsent and saved only locally",
     async () => {
+      await forgetFocus(page);
       await page
         .getByRole("button", {
           name: "店主に伝える（送信されないデモ）",
           exact: true,
         })
-        .click();
+        .tap();
       await expect(
         page.getByText("送信されないデモです。", { exact: false }),
       ).toBeVisible();
       const box = page.getByRole("textbox", { name: "店主に伝えたい言葉" });
-      const sheet = page.getByRole("dialog", { name: "店主に伝える" });
-      // On a touch screen the sheet opens without the keyboard over it, and
-      // a tap on the field writes.
+      // A writing screen: on a touch screen it opens with the text box
+      // focused within the tap, so the keyboard rises with it, and a way to
+      // begin tapped leaves it there.
       expect(await coarse(page)).toBe(true);
-      await expectNoKeyboard(page, "店主に伝える", sheet);
-      await expect(sheet.getByRole("button", { name: "閉じる" })).toBeFocused();
-      await expectTapWrites(box);
+      await expectKeyboardUp(page, box, "店主に伝える");
       const starters = page.getByRole("group", { name: "書き出しの例" });
-      await starters.getByRole("button", { name: /^POPを読んで/ }).click();
-      await starters.getByRole("button", { name: "また来ます。" }).click();
+      await starters.getByRole("button", { name: /^POPを読んで/ }).tap();
+      await expect(box).toBeFocused();
+      await starters.getByRole("button", { name: "また来ます。" }).tap();
+      await expect(box).toBeFocused();
       await expect(box).toHaveValue(
         "POPを読んで、読みたくなりました。\nまた来ます。",
       );

@@ -10,8 +10,13 @@ import {
 import { expectReadable } from "./journey-contrast.mjs";
 import {
   coarse,
+  expectKeyboardUp,
   expectNoKeyboard,
   expectTapWrites,
+  fakeKeyboard,
+  forgetFocus,
+  toolbarPlace,
+  watchFocus,
 } from "./journey-keyboard.mjs";
 
 // Signs in with an emailed code and creates the first profile, in a real browser
@@ -178,6 +183,9 @@ await context.addInitScript(() => {
     navigator.mediaDevices.getUserMedia = () =>
       Promise.reject(new DOMException("none", "NotFoundError"));
 });
+// When a field takes the focus, and a keyboard stood in on the screen.
+await watchFocus(context);
+await fakeKeyboard(context);
 /** The stand-in for Supabase, for every context of this journey. */
 const standIn = async (route) => {
   const request = route.request();
@@ -1813,17 +1821,47 @@ try {
   );
 
   await check(
-    "on a phone, the sheet of words for an owner opens without the keyboard",
+    "on a phone, the sheet of words for an owner opens ready to write, with 届ける just above the keyboard",
     async () => {
+      expect(await coarse(page)).toBe(true);
       await page.goto(base + "/walk/#shop-orbit");
       await expect(page.locator(".walk-book-target").first()).toBeVisible();
+      // A writing screen: its text box is focused within the opening tap,
+      // so the keyboard rises with it.
+      await forgetFocus(page);
       await page.getByRole("button", { name: "店主にひとことを伝える" }).tap();
       const sheet = page.getByRole("dialog", { name: "店主にひとことを残す" });
-      await expect(sheet.getByRole("button", { name: "閉じる" })).toBeFocused();
       const box = sheet.getByRole("textbox", { name: "店主に伝えたい言葉" });
-      await expect(box).not.toBeFocused();
-      await box.tap();
+      await expectKeyboardUp(page, box, "店主にひとことを残す");
+      // A way to begin, tapped: written in, and the keyboard stays up.
+      const starters = sheet.getByRole("group", { name: "書き出しの例" });
+      await starters.getByRole("button").first().tap();
+      await expect(box).not.toHaveValue("");
       await expect(box).toBeFocused();
+      // With the keyboard up, 届ける sits on it and the title at the top.
+      await page.evaluate(() => window.__keyboard(336, 120));
+      const place = await toolbarPlace(sheet);
+      expect(Math.abs(place.bottom - place.seen)).toBeLessThan(2);
+      expect(Math.abs(place.top - place.seenTop)).toBeLessThan(2);
+      const send = sheet.getByRole("button", { name: "届ける" });
+      /** 届ける in what is seen, and what a tap there reaches. */
+      const reachable = () =>
+        send.evaluate((button) => {
+          const box = button.getBoundingClientRect();
+          const there = document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          );
+          const viewport = window.visualViewport;
+          return (
+            box.bottom <= viewport.offsetTop + viewport.height + 1 &&
+            Boolean(there && button.contains(there))
+          );
+        });
+      expect(await reachable(), "届ける on the keyboard").toBe(true);
+      // Put away, the sheet is the whole screen, over the bottom bar.
+      await page.evaluate(() => window.__keyboard(0));
+      expect(await reachable(), "届ける with no keyboard").toBe(true);
       await page.keyboard.press("Escape");
       await expect(sheet).toHaveCount(0);
     },

@@ -11,6 +11,11 @@ import { useEffect, useSyncExternalStore, type RefObject } from "react";
 // reader. A field the reader tapped is theirs as usual. With a mouse or a
 // trackpad a field is made ready to type into, as before. Screens use these
 // helpers in place of autoFocus or a bare focus() on a field.
+//
+// Writing screens are the one exception (Modal's `writing`, marked
+// data-writing: a post, a review, words for a shop's owner). They open to
+// be written in, so there the keyboard rises with them and stays up, and any
+// field in them may take the focus.
 
 /**
  * Whether the reader's main pointer is a finger. On a touch screen a text
@@ -88,6 +93,21 @@ export function takesText(element: unknown): boolean {
 const theirs = (field: HTMLElement) =>
   field.ownerDocument?.activeElement === field;
 
+/** A field inside a writing screen: the keyboard belongs up there. */
+const inWritingScreen = (field: HTMLElement) =>
+  Boolean(field.closest?.("[data-writing]"));
+
+/**
+ * Whether a field may take the focus now without a tap of its own: the
+ * reader's already, in a writing screen, away from a finger, or one that
+ * raises no keyboard.
+ */
+const mayFocus = (field: HTMLElement, view: Media) =>
+  theirs(field) ||
+  inWritingScreen(field) ||
+  fieldTakesFocus(view) ||
+  !takesText(field);
+
 /**
  * Where the focus goes in place of a field, with a finger and nothing named:
  * the first button of the dialog around it (閉じる), or else the field's
@@ -117,23 +137,33 @@ function standIn(field: HTMLElement): HTMLElement | null {
  * button or a heading by the field; by default the first button of the
  * dialog around it, or the field's form outside a dialog; null to leave the
  * focus where it is). A field the reader is typing in stays theirs either
- * way. Returns whether the field has the focus.
+ * way, and a field in a writing screen takes the focus on any screen.
+ * Returns whether the field has the focus.
  */
 export function focusField(
   field: HTMLElement | null | undefined,
   {
     instead,
     preventScroll = false,
+    asked = false,
     view = globalThis,
   }: {
     instead?: HTMLElement | null;
     /** The screen keeps the field in view itself. */
     preventScroll?: boolean;
+    /**
+     * The reader asked for this one field in this very tap (a button whose
+     * only job is to start typing in it, such as ［ISBNを打つ］): it takes
+     * the focus on any screen, and the keyboard rises with it. Called inside
+     * the tap, with the field already rendered (flushSync), since a phone
+     * raises its keyboard only for a focus within the tap itself.
+     */
+    asked?: boolean;
     view?: Media;
   } = {},
 ): boolean {
   if (!field) return false;
-  if (theirs(field) || fieldTakesFocus(view) || !takesText(field)) {
+  if (asked || mayFocus(field, view)) {
     field.focus(preventScroll ? { preventScroll } : undefined);
     return true;
   }
@@ -170,7 +200,8 @@ export function useFocusFieldOnShow(
  * selected when `select`, so typing starts again), as the browser's own check
  * does. With a finger the keyboard would rise over the reason given, so the
  * field is only brought into view. A field the reader is typing in stays
- * theirs, and is selected all the same; a check box takes the focus anyway.
+ * theirs, and is selected all the same, as is one in a writing screen; a
+ * check box takes the focus anyway.
  */
 export function markField(
   field: HTMLInputElement | HTMLTextAreaElement | null | undefined,
@@ -184,7 +215,7 @@ export function markField(
   field.addEventListener("input", () => field.removeAttribute("aria-invalid"), {
     once: true,
   });
-  if (theirs(field) || fieldTakesFocus(view) || !takesText(field)) {
+  if (mayFocus(field, view)) {
     field.focus();
     if (select && takesText(field)) field.select();
     return;
@@ -197,14 +228,44 @@ export function markField(
  * scanner, a book in hand). With a finger a field does not take it back: on
  * iOS a tapped button does not take the focus, so what had it before can be
  * a field the reader typed in, and its keyboard would rise as the layer
- * closes. Returns whether the focus went back.
+ * closes. A field in a writing screen does: the keyboard belongs up there.
+ * Returns whether the focus went back.
  */
 export function focusBack(
   element: HTMLElement | null | undefined,
   options?: FocusOptions,
   view: Media = globalThis,
 ): boolean {
-  if (!element || (takesText(element) && !fieldTakesFocus(view))) return false;
+  if (
+    !element ||
+    (takesText(element) && !inWritingScreen(element) && !fieldTakesFocus(view))
+  )
+    return false;
   element.focus(options);
   return true;
+}
+
+/**
+ * The fewest pixels the visible screen falls short of the page for the
+ * keyboard to count as up: iOS 26 reports a gap of about 24px with none.
+ */
+export const KEYBOARD_MIN_HEIGHT = 100;
+
+/**
+ * What the keyboard leaves of the screen, from the visual viewport: where
+ * it begins, how tall it is, and whether a keyboard is up. Null when it is
+ * not known or the reader has zoomed in; a writing screen then keeps the
+ * whole screen.
+ */
+export function keyboardRoom(
+  viewport:
+    { height: number; offsetTop: number; scale: number } | null | undefined,
+  layoutHeight: number,
+): { top: number; height: number; up: boolean } | null {
+  if (!viewport || Math.abs(viewport.scale - 1) > 0.01) return null;
+  return {
+    top: viewport.offsetTop,
+    height: viewport.height,
+    up: layoutHeight - viewport.height > KEYBOARD_MIN_HEIGHT,
+  };
 }
