@@ -1598,28 +1598,28 @@ check(
       },
     };
     const drafts = createPostDraftStore(() => storage);
-    drafts.update("new-post", {
+    drafts.update("demo:new-post", {
       body: "書きかけ #読書",
       bookId: "momo",
       spoiler: true,
     });
-    drafts.update("review:solaris", { body: "レビューの下書き" });
-    drafts.update("reply:sample", { body: "返信の下書き" });
+    drafts.update("demo:review:solaris", { body: "レビューの下書き" });
+    drafts.update("demo:reply:sample", { body: "返信の下書き" });
     const reopened = createPostDraftStore(() => storage);
     reopened.initialize();
-    assert.deepEqual(reopened.getSnapshot().drafts["new-post"], {
+    assert.deepEqual(reopened.getSnapshot().drafts["demo:new-post"], {
       body: "書きかけ #読書",
       bookId: "momo",
       spoiler: true,
     });
-    reopened.update("new-post", EMPTY_POST_DRAFT);
-    assert.equal(reopened.getSnapshot().drafts["new-post"], undefined);
+    reopened.update("demo:new-post", EMPTY_POST_DRAFT);
+    assert.equal(reopened.getSnapshot().drafts["demo:new-post"], undefined);
     assert.equal(
-      reopened.getSnapshot().drafts["review:solaris"].body,
+      reopened.getSnapshot().drafts["demo:review:solaris"].body,
       "レビューの下書き",
     );
     assert.equal(
-      reopened.getSnapshot().drafts["reply:sample"].body,
+      reopened.getSnapshot().drafts["demo:reply:sample"].body,
       "返信の下書き",
     );
     assert.equal(values.get("book-town-v1"), "existing town data");
@@ -1639,10 +1639,10 @@ check(
     const blocked = createPostDraftStore(() => {
       throw new Error("storage disabled");
     });
-    blocked.update("new-post", { body: "まだ失いたくない言葉" });
+    blocked.update("demo:new-post", { body: "まだ失いたくない言葉" });
     assert.equal(blocked.getSnapshot().saved, false);
     assert.equal(
-      blocked.getSnapshot().drafts["new-post"].body,
+      blocked.getSnapshot().drafts["demo:new-post"].body,
       "まだ失いたくない言葉",
     );
     const invalid = createPostDraftStore(() => ({
@@ -1651,8 +1651,12 @@ check(
           ? JSON.stringify({
               version: 1,
               drafts: {
-                "new-post": { body: 99, bookId: null, spoiler: false },
-                "review:momo": { body: "有効", bookId: null, spoiler: false },
+                "demo:new-post": { body: 99, bookId: null, spoiler: false },
+                "demo:review:momo": {
+                  body: "有効",
+                  bookId: null,
+                  spoiler: false,
+                },
               },
             })
           : null,
@@ -1660,8 +1664,8 @@ check(
       removeItem: () => {},
     }));
     invalid.initialize();
-    assert.equal(invalid.getSnapshot().drafts["new-post"], undefined);
-    assert.equal(invalid.getSnapshot().drafts["review:momo"].body, "有効");
+    assert.equal(invalid.getSnapshot().drafts["demo:new-post"], undefined);
+    assert.equal(invalid.getSnapshot().drafts["demo:review:momo"].body, "有効");
   },
 );
 

@@ -47,7 +47,7 @@ import {
 } from "../lib/social";
 import { currentBookId } from "../lib/reading";
 import { bookPath } from "../lib/books";
-import { usePostDraft } from "../lib/post-draft";
+import { postDraftKey, usePostDraft } from "../lib/post-draft";
 import {
   extractTags,
   requestSearch,
@@ -66,6 +66,7 @@ import { PosterCard } from "./PosterView";
 import { ReportButton } from "./Report";
 import {
   KeptDraftNote,
+  useDraftOwner,
   useNotTakenWords,
   useOpenedWithWork,
 } from "./KeptDraftNote";
@@ -381,6 +382,7 @@ export function PostComposer({
   onDone?: (postId: string) => void;
 }) {
   const id = useId();
+  const owner = useDraftOwner();
   const {
     draft: { body, bookId, spoiler },
     kept,
@@ -389,11 +391,9 @@ export function PostComposer({
     update,
     clear,
   } = usePostDraft(
-    parent
-      ? "reply:" + parent.id
-      : fixedBook
-        ? "review:" + fixedBook.id
-        : "new-post",
+    owner === null
+      ? null
+      : postDraftKey(owner, { parentId: parent?.id, bookId: fixedBook?.id }),
   );
   const continuing = useOpenedWithWork(loaded, kept);
   const notTaken = useNotTakenWords("下書き");
@@ -567,6 +567,7 @@ export function PostComposer({
             }}
           />
         ) : (
+          kept &&
           (body.trim() || bookId) && (
             <p className="draft-status">
               下書きはこのブラウザに保存しています。
@@ -590,7 +591,8 @@ export function ComposeFab({
   ...props
 }: Shared & { onPosted?: () => void }) {
   const [open, setOpen] = useState(false);
-  const { draft } = usePostDraft("new-post");
+  const owner = useDraftOwner();
+  const { draft } = usePostDraft(owner === null ? null : postDraftKey(owner));
   const icon = props.state.settings.composeIcon;
   const router = useRouter();
   return (
