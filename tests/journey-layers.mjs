@@ -19,8 +19,21 @@ export async function layersSettled(page) {
     .catch(() => {});
 }
 
-/** Makes the page's navigations wait for closed dialogs first. */
+// Every page asks Google Fonts for its stylesheet and then for the font files
+// it shows, and a navigation is done at "load", once they have come. A
+// journey that routes requests has the browser's cache off, and a new context
+// starts with it empty, so these come from the network again and again. A
+// slow moment on the runner's network can then hold "load" past Playwright's
+// 30 seconds while the page itself is long ready: a navigation is given
+// longer, and one that never loads still fails.
+const NAVIGATION_TIMEOUT = 90_000;
+
+/**
+ * Makes the page's navigations wait for closed dialogs first, and gives them
+ * as long as a slow network needs (see NAVIGATION_TIMEOUT).
+ */
 export function settleBeforeNavigating(page) {
+  page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT);
   for (const name of ["goto", "reload", "goBack", "goForward"]) {
     const navigate = page[name].bind(page);
     page[name] = async (...args) => {

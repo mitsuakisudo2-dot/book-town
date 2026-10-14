@@ -3214,7 +3214,7 @@ try {
           (route) => route.abort(),
         );
         await desk.route(supabase + "/**", standIn);
-        const at = await desk.newPage();
+        const at = settleBeforeNavigating(await desk.newPage());
         at.on("pageerror", (e) => errors.push(e.message));
         await at.goto(base + "/login/");
         expect(await coarse(at)).toBe(false);
@@ -3268,11 +3268,13 @@ try {
 
         // 注釈モード: the sheet opens with its field ready.
         staff = true;
-        const notesAsked = at.waitForResponse((response) =>
-          response.url().includes("/rest/v1/rpc/can_annotate"),
-        );
-        await at.goto(base + "/books/solaris/");
-        await (await notesAsked).finished();
+        const [notesAsked] = await Promise.all([
+          at.waitForResponse((response) =>
+            response.url().includes("/rest/v1/rpc/can_annotate"),
+          ),
+          at.goto(base + "/books/solaris/"),
+        ]);
+        await notesAsked.finished();
         await at.getByRole("button", { name: "注釈", exact: true }).click();
         await expect(
           at.getByText("メモしたい場所をタップしてください"),
