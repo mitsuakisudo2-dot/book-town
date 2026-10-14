@@ -101,6 +101,78 @@ const context = await browser.newContext({
 const page = settleBeforeNavigating(await context.newPage());
 watch(page);
 try {
+  // Painted, not only parsed: a stylesheet that holds up rendering leaves the
+  // page without a first contentful paint.
+  async function townTextShownAt(reader) {
+    const shownAt = await reader.waitForFunction(
+      () => {
+        const main = document.querySelector("main.town-main");
+        return performance.getEntriesByName("first-contentful-paint").length >
+          0 &&
+          main?.checkVisibility({ opacityProperty: true }) &&
+          main.innerText.trim() !== ""
+          ? performance.now()
+          : 0;
+      },
+      null,
+      { polling: 100, timeout: 3000 },
+    );
+    return shownAt.jsonValue();
+  }
+  await check(
+    "the town shows its text while Google's font CSS never answers",
+    async () => {
+      const stalled = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        locale: "ja-JP",
+      });
+      // A line that drops Google: the request is never answered.
+      await stalled.route("https://fonts.googleapis.com/**", () => {});
+      const reader = await stalled.newPage();
+      watch(reader);
+      try {
+        await reader.goto(`${baseURL}/`, { waitUntil: "commit" });
+        expect(await townTextShownAt(reader)).toBeLessThan(3000);
+      } finally {
+        await stalled.close();
+      }
+    },
+  );
+  await check(
+    "a reader back within a day turns the font CSS on before it arrives, and is not held up when it never does",
+    async () => {
+      const returning = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        locale: "ja-JP",
+      });
+      // Google answers the first visit.
+      let answer = (route) =>
+        route.fulfill({
+          contentType: "text/css",
+          headers: { "access-control-allow-origin": "*" },
+          body: "/* the font faces */",
+        });
+      await returning.route("https://fonts.googleapis.com/**", (route) =>
+        answer(route),
+      );
+      const reader = await returning.newPage();
+      watch(reader);
+      try {
+        await reader.goto(`${baseURL}/`);
+        const fonts = reader.locator("#web-fonts");
+        await expect(fonts).toHaveAttribute("media", "all");
+        // Back again, and Google never answers.
+        answer = () => {};
+        await reader.goto(`${baseURL}/`, { waitUntil: "commit" });
+        expect(await townTextShownAt(reader)).toBeLessThan(3000);
+        // On for the screen without having arrived: with a cached copy, the
+        // first layout asks for the font files.
+        await expect(fonts).toHaveAttribute("media", "all");
+      } finally {
+        await returning.close();
+      }
+    },
+  );
   await check(
     "an empty wishlist offers a few owners' POPs to start from",
     async () => {
