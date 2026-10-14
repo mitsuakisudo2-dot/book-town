@@ -733,32 +733,59 @@ try {
             localStorage.getItem("book-town-post-drafts-v1"),
           ),
         ).toBeNull();
-        // A line from a sitting not in this town (another account's, on this
-        // browser) is never shown here.
-        await page.evaluate(() =>
-          localStorage.setItem(
-            "book-town-post-drafts-v1",
-            JSON.stringify({
-              version: 1,
-              drafts: {
-                "reading:6b0c1c3e-0000-4000-8000-000000000000": {
-                  body: "ほかの人の言葉。",
-                  bookId: null,
-                  spoiler: false,
-                },
-              },
-            }),
-          ),
+        // A line another reader on this browser left (another account's, or
+        // a visitor's) is never shown here, even for a sitting in this town.
+        const sitting = await page.evaluate(
+          () =>
+            JSON.parse(
+              localStorage.getItem("book-town-v1"),
+            ).data.readingSessions.find((session) => session.endedAt).id,
         );
+        const keep = (drafts) =>
+          page.evaluate(
+            (drafts) =>
+              localStorage.setItem(
+                "book-town-post-drafts-v1",
+                JSON.stringify({ version: 1, drafts }),
+              ),
+            drafts,
+          );
+        const line = (body) => ({ body, bookId: null, spoiler: false });
+        await keep({
+          ["visitor:reading:" + sitting]: line("ほかの人の言葉。"),
+          ["6b0c1c3e-0000-4000-8000-000000000000:reading:" + sitting]:
+            line("ほかの人の言葉。"),
+        });
         await reload();
         await expect(
           page.getByRole("button", { name: /一人で読む/ }),
         ).toBeVisible();
         await expect(unsent).toHaveCount(0);
         await expect(page.getByText("ほかの人の言葉。")).toHaveCount(0);
-        await page.evaluate(() =>
-          localStorage.removeItem("book-town-post-drafts-v1"),
+        // A line kept before drafts had owners is the first reader's to come,
+        // here the demo's, once: it leaves its old place.
+        await keep({ ["reading:" + sitting]: line("前から残っていた言葉。") });
+        await reload();
+        await expect(unsent.locator("blockquote")).toHaveText(
+          "前から残っていた言葉。",
         );
+        expect(
+          Object.keys(
+            JSON.parse(
+              await page.evaluate(() =>
+                localStorage.getItem("book-town-post-drafts-v1"),
+              ),
+            ).drafts,
+          ),
+        ).toEqual(["demo:reading:" + sitting]);
+        await unsent.getByRole("button", { name: "書きかけを消す" }).click();
+        await unsent.getByRole("button", { name: "消す", exact: true }).click();
+        await expect(unsent).toHaveCount(0);
+        expect(
+          await page.evaluate(() =>
+            localStorage.getItem("book-town-post-drafts-v1"),
+          ),
+        ).toBeNull();
       },
     );
 
