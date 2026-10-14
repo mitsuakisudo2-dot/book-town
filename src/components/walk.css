@@ -252,7 +252,6 @@
   display: -webkit-box;
   -webkit-line-clamp: 2;
   word-break: auto-phrase;
-  text-wrap: pretty;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
