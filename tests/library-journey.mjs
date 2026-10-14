@@ -5,8 +5,10 @@ import { ean13Modules, withCheckDigit } from "./ean13.mjs";
 import { restingBox, settleBeforeNavigating } from "./journey-layers.mjs";
 import {
   coarse,
+  expectKeyboardUp,
   expectNoKeyboard,
   expectTapWrites,
+  watchFocus,
 } from "./journey-keyboard.mjs";
 
 // Registering books in the demo build, on a phone. First by hand, through
@@ -152,6 +154,7 @@ async function scanningPage() {
     permissions: ["camera"],
   });
   await answerOutside(context);
+  await watchFocus(context);
   await context.addInitScript(() => {
     window.__buzz = [];
     Object.defineProperty(navigator, "vibrate", {
@@ -938,11 +941,14 @@ try {
     for (const button of buttons)
       expect((await inside(button)).height).toBeGreaterThanOrEqual(44);
     await scan.screenshot({ path: path.join(output, "scan-390.png") });
+    // ［ISBNを打つ］ is the reader asking to type: the field takes the focus
+    // within the tap, so the keyboard rises with it. (Typing begun by the
+    // scanner itself waits for a tap: no camera, refused, no reader.)
+    await scanner(scan).getByRole("button", { name: "ISBNを打つ" }).tap();
+    await expectKeyboardUp(scan, field(scan), "ISBNを打つ");
+    await expect(scanner(scan)).toContainText("13桁そろうと登録します");
     // Typing, with the keyboard taking half the screen: the field, the card
     // and ［終わる］ stay in what is left.
-    await scanner(scan).getByRole("button", { name: "ISBNを打つ" }).click();
-    await waitsForTap(scan);
-    await expect(scanner(scan)).toContainText("13桁そろうと登録します");
     // On a phone nothing of the page shows past the sheet.
     expect(
       await scanner(scan).evaluate(
@@ -1624,7 +1630,7 @@ try {
       await openScanner(on);
       await expect.poll(cameras).toEqual(["ended", "live"]);
       await scanner(on).getByRole("button", { name: "ISBNを打つ" }).click();
-      await waitsForTap(on);
+      await expect(field(on)).toBeFocused();
       await expect.poll(cameras, { timeout: 2000 }).toEqual(["ended", "ended"]);
       // Taken by another app meanwhile: typed instead, then and there.
       await on.evaluate(() => (window.__takenAfter = 300));

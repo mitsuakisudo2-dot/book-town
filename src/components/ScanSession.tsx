@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
   type FormEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { useAccountState } from "../lib/account-session";
 import { useBackLayer } from "../lib/back-layer";
 import {
@@ -842,7 +843,8 @@ export function ScanSession({
 
   // With a mouse the field gets the focus as typing starts, in the same
   // click. On a touch screen it waits for a tap: the focus stays in the
-  // scanner (on 閉じる, when what had it is gone).
+  // scanner (on 閉じる, when what had it is gone). ［ISBNを打つ］ is the
+  // reader asking for the field, and gives it the focus itself (typeIsbn).
   useLayoutEffect(() => {
     if (!typing) return;
     const inside = layer.current?.contains(document.activeElement) ?? false;
@@ -873,6 +875,14 @@ export function ScanSession({
       element.style.removeProperty("--scan-top");
     };
   }, [typing]);
+
+  // ［ISBNを打つ］: the reader asks to type, so the field takes the focus
+  // within the tap, and a phone's keyboard rises with it. Falling into
+  // typing by itself (no camera, refused, no reader) still waits for a tap.
+  function typeIsbn() {
+    flushSync(() => setInput({ kind: "typing", why: "chosen" }));
+    focusField(field.current, { asked: true, preventScroll: true });
+  }
 
   const lastCard = cards.at(-1);
   function undo() {
@@ -1329,7 +1339,7 @@ export function ScanSession({
             <button
               type="button"
               className="button secondary"
-              onClick={() => setInput({ kind: "typing", why: "chosen" })}
+              onClick={typeIsbn}
             >
               ISBNを打つ
             </button>
