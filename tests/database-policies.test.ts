@@ -6058,6 +6058,100 @@ async function main() {
     },
   );
 
+  await check(
+    "the library's rollback, as its migration's header writes it, leaves the database as it was before, and the library can be added again",
+    async () => {
+      const earlier = new PGlite();
+      await earlier.exec(supabase);
+      // Found by its name's end: the date in front may change before it merges.
+      const library = files.findIndex((file) => file.endsWith("_library.sql"));
+      assert.ok(library > 0, "the library migration");
+      for (const file of files.slice(0, library))
+        await earlier.exec(migrate(file));
+      // Everything a migration makes or changes, by name: functions with
+      // their bodies and rights, relations (tables, indexes) with their
+      // rights and row security, columns with theirs, triggers, policies and
+      // constraints.
+      const catalog = async () =>
+        (
+          await earlier.query<{ kind: string; name: string; detail: string }>(
+            `select 'function' as kind, p.oid::regprocedure::text as name,
+                    md5(p.prosrc) || ' ' || coalesce(p.proacl::text, '') as detail
+             from pg_proc p
+             where p.pronamespace in ('public'::regnamespace, 'private'::regnamespace)
+             union all
+             select 'relation', c.oid::regclass::text,
+                    c.relkind::text || ' ' || coalesce(c.relacl::text, '') || ' ' || c.relrowsecurity::text
+             from pg_class c
+             where c.relnamespace in ('public'::regnamespace, 'private'::regnamespace)
+             union all
+             select 'column', a.attrelid::regclass::text || '.' || a.attname,
+                    format_type(a.atttypid, a.atttypmod) || ' ' || coalesce(a.attacl::text, '')
+             from pg_attribute a join pg_class c on c.oid = a.attrelid
+             where c.relnamespace in ('public'::regnamespace, 'private'::regnamespace)
+               and a.attnum > 0 and not a.attisdropped
+             union all
+             select 'trigger', t.tgrelid::regclass::text || '.' || t.tgname, t.tgfoid::regproc::text
+             from pg_trigger t where not t.tgisinternal
+             union all
+             select 'policy', p.polrelid::regclass::text || '.' || p.polname, ''
+             from pg_policy p
+             union all
+             select 'constraint', c.conrelid::regclass::text || '.' || c.conname,
+                    pg_get_constraintdef(c.oid)
+             from pg_constraint c
+             where c.connamespace in ('public'::regnamespace, 'private'::regnamespace)
+             order by 1, 2, 3`,
+          )
+        ).rows;
+      const before = await catalog();
+      const text = migrate(files[library]);
+      await earlier.exec(text);
+      // The rollback is the indented lines of the header, the comment
+      // before the file's first blank line.
+      const rollback = text
+        .slice(0, text.indexOf("\n\n"))
+        .split("\n")
+        .filter((line) => line.startsWith("--   "))
+        .map((line) => line.slice(3))
+        .join("\n");
+      assert.match(rollback, /drop trigger book_marks_follow/);
+      await earlier.exec(rollback);
+      // book_is_mine as the last migration before the library wrote it.
+      const mine = files
+        .slice(0, library)
+        .map(migrate)
+        .filter((sql) => /function private\.book_is_mine\(/.test(sql))
+        .at(-1);
+      assert.ok(mine, "a migration that writes book_is_mine");
+      const start = mine.search(
+        /create (or replace )?function private\.book_is_mine\(/,
+      );
+      const body = mine.indexOf("$$", start) + 2;
+      const end = mine.indexOf(";", mine.indexOf("$$", body)) + 1;
+      await earlier.exec(
+        mine
+          .slice(start, end)
+          .replace(
+            /^create (or replace )?function/,
+            "create or replace function",
+          ),
+      );
+      assert.deepEqual(await catalog(), before);
+      // A library corrected later comes back as this same file did.
+      await earlier.exec(text);
+      assert.equal(
+        (
+          await earlier.query<{ n: number }>(
+            "select count(*)::int as n from pg_trigger where tgname = 'book_marks_follow'",
+          )
+        ).rows[0].n,
+        1,
+      );
+      await earlier.close();
+    },
+  );
+
   console.log(passed + " database policy checks passed");
 }
 

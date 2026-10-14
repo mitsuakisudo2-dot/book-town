@@ -13,9 +13,20 @@
 -- write takes every unsent change with it (src/lib/supabase/sync.ts).
 --
 -- Rollback: until an app that reads these tables is live, a new migration
--- drops the trigger book_marks_follow, the four tables and the four columns
--- of reader_settings, and puts back book_is_mine as hide_registered_titles
--- wrote it. Once one is live, drop the trigger alone, and the tables only
+-- undoes this one with
+--   drop trigger book_marks_follow on public.book_marks;
+--   drop table public.library_shelf_books, public.book_encounters,
+--     public.library_shelves, public.library_entries;
+--   drop function private.library_follows_marks(), private.library_backfill(),
+--     private.library_keep_used(), private.check_book_encounter(),
+--     private.library_clamp_times(), private.encounter_clamp_times();
+--   alter table public.reader_settings drop column library_hidden,
+--     drop column likes_in_library, drop column wanted_clears_on_status,
+--     drop column memo_hint;
+-- and puts back book_is_mine as hide_registered_titles wrote it (pnpm
+-- test:db does exactly this, and then runs this file again). The tables take
+-- their own triggers with them; the functions are dropped after them. Once
+-- one is live, drop the trigger alone, and the tables and the functions only
 -- after production runs an app from before it again: a town that cannot read
 -- a table it expects does not load (review doc 6-3).
 
