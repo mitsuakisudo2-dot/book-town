@@ -116,6 +116,11 @@ async function main() {
         "./supabase/" + settings.magicLink.template,
         local("auth.email.template.magic_link", "content_path"),
       );
+      // The email comes from the site's own domain, which Resend verified.
+      assert.equal(
+        settings.email.sender,
+        "login@" + new URL(settings.site.url).host,
+      );
       // The email promises the code lasts ten minutes.
       assert.equal(settings.code.expiresInSeconds, 600);
       assert.match(template, /10分/);
