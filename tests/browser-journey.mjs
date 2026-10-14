@@ -52,6 +52,16 @@ async function go(page, route) {
     () => localStorage.getItem("book-town-v1") !== null,
   );
 }
+/** Opens Home on ホーム: a fresh `/` opens the tab shown last. */
+async function goHome(page) {
+  await go(page, "/");
+  const shelves = page
+    .getByRole("navigation", { name: "ホームの表示" })
+    .getByRole("link", { name: "書店" });
+  if ((await shelves.getAttribute("aria-current")) !== "page")
+    await shelves.click();
+  await expect(page).toHaveURL(`${baseURL}/`);
+}
 async function stored(page) {
   return page.evaluate(
     () => JSON.parse(localStorage.getItem("book-town-v1")).data,
@@ -188,7 +198,7 @@ try {
   await check(
     "Desktop town discovery and original bookstore signs",
     async () => {
-      await go(page, "/");
+      await goHome(page);
       await expect(page.locator(".street-shop")).toHaveCount(6);
       await expect(
         page.getByRole("heading", {
@@ -1026,7 +1036,7 @@ try {
       await expect(settings.getByLabel("書店の名前")).toBeFocused();
       // The walk's invitation to write the owner's words (a link here)
       // opens them ready.
-      await go(page, "/");
+      await goHome(page);
       await go(page, "/my-shop/#shop-words");
       await expect(settings.getByLabel("ひとこと")).toBeFocused();
     },
@@ -1263,6 +1273,58 @@ try {
     },
   );
   await check(
+    "A fresh ホーム opens the tab shown last; 戻る and a reload keep the address's own",
+    async () => {
+      const nav = page.getByRole("navigation", {
+        name: "メインナビゲーション",
+      });
+      const tabs = page.getByRole("navigation", { name: "ホームの表示" });
+      const letters = tabs.getByRole("link", { name: "タイムライン" });
+      const shelves = tabs.getByRole("link", { name: "書店" });
+      const keep = (tab) =>
+        page.evaluate(
+          (tab) => localStorage.setItem("book-town-home-tab-v1", tab),
+          tab,
+        );
+      await go(page, "/search/");
+      await keep("home");
+      await go(page, "/");
+      await expect(shelves).toHaveAttribute("aria-current", "page");
+      await letters.click();
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      // From another page, ホーム leads back to that tab.
+      await nav.getByRole("link", { name: "検索" }).click();
+      await expect(page).toHaveURL(/\/search\/$/);
+      await expect(nav.getByRole("link", { name: "ホーム" })).toHaveAttribute(
+        "href",
+        "/timeline/",
+      );
+      await nav.getByRole("link", { name: "ホーム" }).click();
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      await expect(letters).toHaveAttribute("aria-current", "page");
+      // So does a fresh `/`, before anything is painted.
+      await page.goto(`${baseURL}/`);
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      await expect(letters).toHaveAttribute("aria-current", "page");
+      // An address already opened keeps its own tab, whatever was shown since.
+      await shelves.click();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await nav.getByRole("link", { name: "検索" }).click();
+      await expect(page).toHaveURL(/\/search\/$/);
+      await keep("letters");
+      await page.goBack();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await expect(shelves).toHaveAttribute("aria-current", "page");
+      await page.reload();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await expect(shelves).toHaveAttribute("aria-current", "page");
+      expect(
+        await page.evaluate(() => document.documentElement.dataset.homeTab),
+      ).toBe("home");
+      await keep("home");
+    },
+  );
+  await check(
     "戻る returns to the tab, filter, search, lane and shop the reader left",
     async () => {
       await go(page, "/timeline/");
@@ -1319,7 +1381,7 @@ try {
 
       // The street keeps its lane, and a tap on a shop is not lost while
       // the street grows underneath it.
-      await go(page, "/");
+      await goHome(page);
       await page.getByRole("button", { name: "路地を変えてみる" }).click();
       await expect(page).toHaveURL(/lane=1/);
       const first = await page
@@ -1347,7 +1409,7 @@ try {
     async () => {
       const dialog = page.locator(".bh-dialog");
       const book = page.locator("main .shelf-book-button").first();
-      await go(page, "/");
+      await goHome(page);
       await page
         .locator(".street-shop")
         .filter({ has: page.getByRole("link", { name: "軌道書房に入る" }) })

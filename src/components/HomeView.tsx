@@ -16,11 +16,14 @@ import { ComposeFab, TimelineView } from "./Social";
 import { BookJacket, Icon } from "./ui";
 import { bookToContinue } from "../lib/reading";
 import { leaveLayers } from "../lib/back-layer";
-import { noteHomeAddress, useHomeAddress } from "../lib/last-address";
-import { replaceAddress, useAddressPath, useUrlParam } from "../lib/url-state";
+import { replaceAddress, useAddressPath } from "../lib/url-state";
 import {
+  HOME_SEEN,
   HOME_TAB_PATHS,
+  loadHomeTab,
   onHomeTop,
+  openingTab,
+  saveHomeTab,
   tabOfPath,
   type HomeTab,
 } from "../lib/home-tab";
@@ -78,16 +81,39 @@ export function HomeView({
   const [shownTab, setShownTab] = useState<HomeTab>(routeTab);
   const tab = tabOfPath(path) ?? shownTab;
   if (tab !== shownTab) setShownTab(tab);
-  // The other tab opens as it was left (its filter, the street's lane).
-  const other: HomeTab = tab === "home" ? "letters" : "home";
-  const otherAddress = useHomeAddress(HOME_TAB_PATHS[other]);
-  // This tab's choices are kept as they now are, however they changed: a
-  // filter, a switch of tabs, 戻る or 進む.
-  const [show] = useUrlParam("show");
-  const [lane] = useUrlParam("lane");
-  useEffect(() => noteHomeAddress(), [tab, show, lane]);
+  // A fresh `/` opens on the tab shown last; the entry is marked as opened,
+  // so 戻る and a reload come back to the tab its address names.
+  useLayoutEffect(() => {
+    const seen = Boolean(
+      (history.state as Record<string, unknown> | null)?.[HOME_SEEN],
+    );
+    const path = location.pathname;
+    const named = tabOfPath(path);
+    if (!named) return;
+    const opening = openingTab(path, seen, loadHomeTab());
+    if (!seen)
+      try {
+        history.replaceState({ ...history.state, [HOME_SEEN]: true }, "");
+      } catch {
+        // Unmarked, a reload opens on the kept tab: the one shown anyway.
+      }
+    if (opening && opening !== named)
+      replaceAddress({ path: HOME_TAB_PATHS[opening] });
+  }, []);
+  // The tab shown is kept for the next fresh `/`, and said on <html> for CSS
+  // (as the layout's boot script did before React).
+  useLayoutEffect(() => {
+    saveHomeTab(tab);
+    document.documentElement.dataset.homeTab = tab;
+  }, [tab]);
+  useEffect(
+    () => () => void delete document.documentElement.dataset.homeTab,
+    [],
+  );
   // Each tab keeps where it was scrolled to, for coming back to it.
   const scrolls = useRef<Partial<Record<HomeTab, number>>>({});
+  // And the rest of its address (how far it was walked: `rounds`).
+  const searches = useRef<Partial<Record<HomeTab, string>>>({});
   const scrollBack = useRef<number | null>(null);
   useLayoutEffect(() => {
     if (scrollBack.current === null) return;
@@ -107,11 +133,13 @@ export function HomeView({
   function switchTo(to: HomeTab) {
     if (to === tab) return toTop();
     scrolls.current[tab] = window.scrollY;
+    searches.current[tab] = location.search;
     scrollBack.current = scrolls.current[to] ?? 0;
-    const kept = new URL(otherAddress, location.href);
     replaceAddress({
       path: HOME_TAB_PATHS[to],
-      params: Object.fromEntries(kept.searchParams),
+      params: Object.fromEntries(
+        new URLSearchParams(searches.current[to] ?? ""),
+      ),
     });
   }
   const start = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -144,7 +172,7 @@ export function HomeView({
   }
   const tabLink = (to: HomeTab, label: string) => (
     <Link
-      href={to === tab ? HOME_TAB_PATHS[to] : otherAddress}
+      href={HOME_TAB_PATHS[to]}
       aria-current={to === tab ? "page" : undefined}
       onClick={(event) => {
         if (!plainClick(event)) return;

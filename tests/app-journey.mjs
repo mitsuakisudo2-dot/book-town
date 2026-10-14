@@ -44,6 +44,16 @@ async function go(route) {
     ),
   );
 }
+/** Opens Home on ホーム: a fresh `/` opens the tab shown last. */
+async function goHome() {
+  await go("/");
+  const shelves = page
+    .getByRole("navigation", { name: "ホームの表示" })
+    .getByRole("link", { name: "書店" });
+  if ((await shelves.getAttribute("aria-current")) !== "page")
+    await shelves.click();
+  await expect(page).toHaveURL(`${baseURL}/`);
+}
 async function noOverflow(label) {
   const size = await page.evaluate(() => ({
     width: innerWidth,
@@ -205,7 +215,7 @@ try {
   await check(
     "swipes on a shelf stay on the shelf; other swipes switch home",
     async () => {
-      await go("/");
+      await goHome();
       const shelf = page.locator(".street-shelf").first();
       await shelf.scrollIntoViewIfNeeded();
       await swipe(shelf, -160);
@@ -463,7 +473,7 @@ try {
       expect(data.readingSessions[0].endedAt).not.toBeNull();
       await expect(page.locator(".reading-log li")).toHaveCount(1);
       // Home keeps the unfinished book a tap away, with the last line written.
-      await go("/");
+      await goHome();
       const next = page.getByRole("link", {
         name: "『ソラリス』の続きを読む",
       });
@@ -1051,7 +1061,7 @@ try {
       await page.getByRole("button", { name: "棚を整える" }).click();
       await expect(page.locator(".editor-shelf-panel")).toHaveCount(1);
       // For a day, the street opens with the new shop and says it joined.
-      await go("/");
+      await goHome();
       const first = page.locator(".street-shop").first();
       await expect(first.locator(".street-new-own")).toContainText(
         "あなたの書店が、街に加わりました",
@@ -1291,7 +1301,7 @@ try {
       await page.goBack();
       await expect(page).toHaveURL(/\/timeline\/$/);
       // On the street the words narrow the shops as typed, and stay there.
-      await go("/");
+      await goHome();
       await top.fill("雨と翻訳");
       await expect(page.locator(".street-shop")).toHaveCount(1);
       await expect(page.locator(".street-search-result")).not.toContainText(

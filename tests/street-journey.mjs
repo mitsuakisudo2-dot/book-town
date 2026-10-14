@@ -772,7 +772,7 @@ try {
     },
   );
   await check(
-    "Home tabs and ホーム come back to the filter and lane left there",
+    "Home tabs come back to the filter and lane left there; ホーム from elsewhere opens the last tab at its start",
     async () => {
       await go(page);
       const tabs = page.getByRole("navigation", { name: "ホームの表示" });
@@ -789,46 +789,33 @@ try {
       await following.click();
       await expect(page).toHaveURL(/\?lane=1&show=following$/);
       await tabs.getByRole("link", { name: "タイムライン" }).click();
-      await expect(page).toHaveURL(/\/timeline\//);
+      await expect(page).toHaveURL(/\/timeline\/$/);
       await following.click();
       await expect(page).toHaveURL(/\/timeline\/\?show=following$/);
-      // The other tab opens as it was left; how far down the street the
-      // reader went is not kept.
+      // The other tab opens as it was left, in place.
       await tabs.getByRole("link", { name: "書店" }).click();
-      await expect(page).toHaveURL(`${baseURL}/?show=following&lane=1`);
+      await expect(page).toHaveURL(/\/\?lane=1&show=following$/);
       await expect(following).toHaveAttribute("aria-pressed", "true");
       await expect(page.locator(".street-shop")).toHaveCount(1);
       await tabs.getByRole("link", { name: "タイムライン" }).click();
       await expect(page).toHaveURL(/\/timeline\/\?show=following$/);
       await expect(following).toHaveAttribute("aria-pressed", "true");
-      // ホーム returns to the Home tab open last, after a reload too.
+      // ホーム from another page opens the tab shown last, from its start,
+      // after a reload too.
       await nav.getByRole("link", { name: "検索" }).click();
       await expect(page).toHaveURL(/\/search\/$/);
       await page.reload();
       await expect(nav.getByRole("link", { name: "ホーム" })).toHaveAttribute(
         "href",
-        "/timeline/?show=following",
+        "/timeline/",
       );
       await nav.getByRole("link", { name: "ホーム" }).click();
-      await expect(page).toHaveURL(/\/timeline\/\?show=following$/);
-      await expect(following).toHaveAttribute("aria-pressed", "true");
-      // On Home, ホーム and the tab already open stay the way to the start.
-      await expect(nav.getByRole("link", { name: "ホーム" })).toHaveAttribute(
-        "href",
-        "/",
-      );
-      await expect(
-        tabs.getByRole("link", { name: "タイムライン" }),
-      ).toHaveAttribute("href", "/timeline/");
-      await tabs.getByRole("link", { name: "書店" }).click();
-      await expect(page).toHaveURL(`${baseURL}/?show=following&lane=1`);
-      await page.getByRole("button", { name: "すべて", exact: true }).click();
-      // The timeline is shown before its すべて is pressed: a slow page may
-      // still show the street a moment after the tab is tapped.
-      await tabs.getByRole("link", { name: "タイムライン" }).click();
-      await expect(page).toHaveURL(/\/timeline\/\?show=following$/);
-      await page.getByRole("button", { name: "すべて", exact: true }).click();
       await expect(page).toHaveURL(/\/timeline\/$/);
+      await expect(
+        page.getByRole("button", { name: "すべて", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await tabs.getByRole("link", { name: "書店" }).click();
+      await expect(page).toHaveURL(`${baseURL}/`);
     },
   );
   await check(
@@ -867,16 +854,16 @@ try {
       // The other tab and back, in place: the street is kept as it was.
       await tabs.getByRole("link", { name: "タイムライン" }).click();
       await expect(page).toHaveURL(/\/timeline\/$/);
-      await expect(shelves).toHaveAttribute("href", "/?show=following&lane=1");
+      await expect(shelves).toHaveAttribute("href", "/");
       await shelves.click();
-      await expect(page).toHaveURL(`${baseURL}/?show=following&lane=1`);
+      await expect(page).toHaveURL(/\/\?lane=1&show=following$/);
       await expect(following).toHaveAttribute("aria-pressed", "true");
       expect(await page.evaluate(() => history.length)).toBe(steps);
       // 戻る from another page brings the filter and the lane back.
       await nav.getByRole("link", { name: "検索" }).click();
       await expect(page).toHaveURL(/\/search\/$/);
       await page.goBack();
-      await expect(page).toHaveURL(/\?show=following&lane=1$/);
+      await expect(page).toHaveURL(/\?lane=1&show=following$/);
       await expect(following).toHaveAttribute("aria-pressed", "true");
       await page.getByRole("button", { name: "すべて", exact: true }).click();
       await expect(page).toHaveURL(/\?lane=1$/);
