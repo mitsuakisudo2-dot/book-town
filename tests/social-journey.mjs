@@ -1079,6 +1079,13 @@ try {
         await expect(text).toHaveValue("");
         await expectKeyboardUp(page, text, "draft thrown away");
         await page.keyboard.type("犯人は庭師だった。");
+        // How often the text box lost the focus: each time, a phone's
+        // keyboard would go down, even for a moment.
+        await text.evaluate((field) => {
+          window.__blurs = 0;
+          field.addEventListener("blur", () => window.__blurs++);
+        });
+        const blurs = () => page.evaluate(() => window.__blurs);
         // A tag, and the title: the text box keeps the focus.
         await chip.tap();
         await expect(text).toBeFocused();
@@ -1090,6 +1097,7 @@ try {
         await dialog.getByRole("button", { name: "一部を隠す" }).tap();
         await expect(text).toHaveValue(/^犯人は\|\|庭師\|\|だった。/);
         await expect(text).toBeFocused();
+        expect(await blurs(), "the text box let the focus go").toBe(0);
         // ［本を添える］: its search takes the focus within the tap, with no
         // picker standing in for it; a book picked hands the focus back to
         // the text box within that tap.
@@ -1108,6 +1116,7 @@ try {
         await expectKeyboardUp(page, text, "a book picked");
         // ネタバレあり, by its words and by its box: it flips, and the text
         // box keeps the focus.
+        const before = await blurs();
         const spoiler = dialog.getByRole("checkbox", { name: "ネタバレあり" });
         const words = await dialog.locator(".composer-spoiler").boundingBox();
         await page.touchscreen.tap(
@@ -1125,6 +1134,7 @@ try {
           dialog.getByRole("button", { name: "本を添える" }),
         ).toBeVisible();
         await expect(text).toBeFocused();
+        expect(await blurs(), "the text box let the focus go").toBe(before);
         // With the keyboard put away, a tap on blank space (the title) brings
         // the text box and its keyboard back, within the tap.
         await text.evaluate((field) => field.blur());
