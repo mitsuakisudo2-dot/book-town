@@ -406,7 +406,6 @@ export interface LibraryState {
 
 // ---------------------------------------------------------------- the row's rules
 
-const LIKE_SOURCES: readonly EntrySource[] = ["like", "pop"];
 /** Registering reads a book; it never says the reader owns it (問い2). */
 const READ_VIAS: readonly EntrySource[] = ["scan", "isbn", "manual"];
 
@@ -475,15 +474,34 @@ const putsOn = (s: LibrarySet) =>
   s.addShelf !== undefined ||
   s.meet === true;
 
-/** Brought in by a like or 私も好き！, or back by one (4-10's condition 1). */
-const likeBrought = (e: LibraryEntry) =>
-  LIKE_SOURCES.includes(e.source) || e.likeRestored;
+/**
+ * What the reader gave the row: a status, 読みたい, 所有, a use once made
+ * (everUsed, N19), ☆, a theme shelf, or a 読みたくなった that stands (4-10's
+ * conditions 2 and 3, the memo review's 2章). `favorite` is ☆ after the op.
+ */
+const given = (e: LibraryEntry, x: EntryContext, favorite = x.favorite) =>
+  e.status !== null ||
+  e.wantedAt !== null ||
+  e.owned !== null ||
+  e.everUsed ||
+  favorite ||
+  x.liveThemeCount > 0 ||
+  x.wantMet;
 
 /**
- * 4-10's conditions 1 and 3 to 5, and the rest of condition 2 (no other
- * encounter stands, the memo review's 2章): a row a like brought in or back,
- * and nothing but a like keeps it. likes_in_library hides it while the like
- * stands (likeOnly), and taking the like back takes it out (applySet).
+ * What keeps any row while it stands, one a like brought back too (4-10's
+ * conditions 3 to 5): the reader's shop, registering on purpose, their own
+ * record, post, poster or nine, and a memo.
+ */
+const keptBy = (x: EntryContext) =>
+  x.inShop || x.registered || x.usedElsewhere || x.memo;
+
+/**
+ * Nothing but a like keeps the row, however it came in: taking the last
+ * like back takes it out (applySet), as taking back a 読みたい or a ☆ that
+ * alone kept a row does (settled 2026-10-14), and likes_in_library hides it
+ * while the like stands (likeOnly). One test for both, so the setting hides
+ * just the books taking the like back would take out.
  * A row a like brought back counts nothing it held before the like: what it
  * kept when it was taken out, nor a status, 所有 or use it was given while
  * out, which never brought it back. The shop and the reader's own uses keep
@@ -494,21 +512,7 @@ const likeBrought = (e: LibraryEntry) =>
  * 2026-10-14).
  */
 function heldByLikeAlone(e: LibraryEntry, x: EntryContext): boolean {
-  return (
-    likeBrought(e) &&
-    (e.likeRestored ||
-      (e.status === null &&
-        e.wantedAt === null &&
-        e.owned === null &&
-        !e.everUsed &&
-        !x.favorite &&
-        x.liveThemeCount === 0 &&
-        !x.wantMet)) &&
-    !x.inShop &&
-    !x.registered &&
-    !x.usedElsewhere &&
-    !x.memo
-  );
+  return (e.likeRestored || !given(e, x)) && !keptBy(x);
 }
 
 /** In the library only by a like that stands: hidden while likes_in_library is off (4-10). */
@@ -606,11 +610,10 @@ export function applySet(
   if (s.liked === false && !x.liked) next.likedAt = null;
 
   if (next.removedAt === null) {
-    // The last like taken back. A row a like brought in or back goes when
-    // nothing but the like kept it (heldByLikeAlone); any other goes as for
-    // a 読みたい or a ☆, when nothing at all is left (settled 2026-10-14), so
-    // a book 読みたい or ☆ brought in and then liked leaves whichever the
-    // reader takes back last.
+    // The last like taken back: the row goes when nothing but the like kept
+    // it, however it came in (heldByLikeAlone, which likes_in_library hides
+    // by), so a book 読みたい or ☆ brought in and then liked leaves
+    // whichever the reader takes back last.
     const likeGone =
       s.liked === false && e?.likedAt != null && next.likedAt === null;
     // A 読みたい or ☆ taken back (4-2's last row, settled 2026-10-14): the
@@ -623,23 +626,12 @@ export function applySet(
     // 読みたい and a ☆ back in does not matter.
     const favorite = s.favorite === false ? false : x.favorite;
     const nothingLeft =
-      next.status === null &&
-      next.wantedAt === null &&
       next.likedAt === null &&
-      next.owned === null &&
-      !next.everUsed &&
       !x.liked &&
-      !x.wantMet &&
-      !favorite &&
-      x.liveThemeCount === 0 &&
-      !x.inShop &&
-      !x.registered &&
-      !x.usedElsewhere &&
-      !x.memo;
+      !given(next, x, favorite) &&
+      !keptBy(x);
     if (
-      (likeGone &&
-        !x.liked &&
-        (likeBrought(next) ? heldByLikeAlone(next, x) : nothingLeft)) ||
+      (likeGone && !x.liked && heldByLikeAlone(next, x)) ||
       (markGone && nothingLeft)
     ) {
       next.removedAt = at;

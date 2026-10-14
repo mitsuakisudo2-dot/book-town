@@ -65,7 +65,12 @@ import {
   type ReadingSession,
   type Shop,
 } from "../src/lib/types";
-import { contextOf, entryOf, LIBRARY_CASES } from "./fixtures/library-cases";
+import {
+  contextOf,
+  entryOf,
+  LIBRARY_CASES,
+  type ApplyCase,
+} from "./fixtures/library-cases";
 
 // The library's rules (src/lib/library.ts) against the shared cases
 // (tests/fixtures/library-cases.json) and the acceptance list of L1d (review
@@ -1101,9 +1106,11 @@ check(
 check(
   "4-10 with likes_in_library off, likes still set likedAt and only a row a like alone holds leaves ライブラリ（全部）",
   () => {
+    // Scanned, so registered on purpose: the like is not all that holds it.
     let s = town({
       settings: { ...LIBRARY_SETTINGS, likesInLibrary: false },
       libraryEntries: rows(entryOf("scanned", {})),
+      library: ["scanned"],
     });
     s = react(s, onPost(post(1, "liked-only")), true);
     s = react(s, onPost(post(2, "scanned")), true, plus(1));
@@ -1124,6 +1131,113 @@ check(
     // With the setting on, the same row is in.
     const on = { ...s, settings: LIBRARY_SETTINGS };
     assert.equal(inLibrary(only, contextsOf(on, NONE)("liked-only")), true);
+  },
+);
+
+check(
+  "4-10 with likes_in_library off, a book only a like holds is hidden however it came in, and taking the like back takes out what was hidden",
+  () => {
+    const ids = ["like-first", "want-first", "star-first"];
+    let s = town({
+      settings: { ...LIBRARY_SETTINGS, likesInLibrary: false },
+      books: ids.map((id) => book(id)),
+    });
+    // Liked, then 読みたい on its page and off again.
+    s = react(s, onPost(post(1, "like-first")), true);
+    s = react(s, onPage("like-first"), true, plus(1));
+    s = react(s, onPage("like-first"), false, plus(2));
+    // 読みたい on its page, then liked, then 読みたい off.
+    s = react(s, onPage("want-first"), true);
+    s = react(s, onPost(post(2, "want-first")), true, plus(1));
+    s = react(s, onPage("want-first"), false, plus(2));
+    // ☆, then liked, then ☆ off.
+    s = applyOp(s, ["star-first"], { favorite: true }, AT, "favorite", NONE);
+    s = react(s, onPost(post(3, "star-first")), true, plus(1));
+    s = applyOp(
+      s,
+      ["star-first"],
+      { favorite: false },
+      plus(2),
+      "favorite",
+      NONE,
+    );
+    const x = contextsOf(s, NONE);
+    assert.deepEqual(
+      ids.map((id) => s.libraryEntries[id].source),
+      ["like", "want", "favorite"],
+    );
+    for (const id of ids) {
+      const e = s.libraryEntries[id];
+      assert.equal(e.removedAt, null, id);
+      assert.equal(likeOnly(e, x(id)), true, id);
+      assert.equal(inLibrary(e, x(id)), false, id);
+      assert.equal(isUnsorted(e, x(id)), false, id);
+    }
+    assert.deepEqual(filterLibrary(s, { showWanted: true }, NONE), []);
+    assert.equal(countsOf(s, NONE).works, 0);
+    assert.equal(countsOf(s, NONE).shelves.liked, 3);
+    let u = s;
+    for (const [n, id] of ids.entries())
+      u = react(u, onPost(post(n + 1, id)), false, plus(3));
+    for (const id of ids)
+      assert.equal(u.libraryEntries[id].removedAt, plus(3), id);
+  },
+);
+
+check(
+  "4-10 likes_in_library hides exactly the rows that taking the last like back takes out (the shared cases)",
+  () => {
+    let seen = 0;
+    /** A like taken back with no other standing: the row goes iff it was hidden. */
+    const lastLikeBack = (
+      name: string,
+      e: LibraryEntry | null,
+      step: Pick<ApplyCase, "context" | "set" | "via" | "at">,
+    ) => {
+      const x = contextOf(step.context);
+      if (
+        Object.keys(step.set).join() !== "liked" ||
+        step.set.liked !== false ||
+        x.liked ||
+        !e ||
+        e.likedAt === null ||
+        e.removedAt !== null
+      )
+        return;
+      seen += 1;
+      const after = applySet(
+        "b",
+        e,
+        step.set,
+        step.at,
+        step.via,
+        { wantedClearsOnStatus: false },
+        x,
+      );
+      assert.equal(
+        likeOnly(e, { ...x, liked: true }),
+        after?.removedAt !== null,
+        name,
+      );
+    };
+    for (const c of LIBRARY_CASES.apply)
+      lastLikeBack(c.name, c.entry === null ? null : entryOf("b", c.entry), c);
+    for (const c of LIBRARY_CASES.sequence) {
+      let e = c.entry === null ? null : entryOf("b", c.entry);
+      for (const step of c.steps) {
+        lastLikeBack(`${c.name}: ${step.does}`, e, step);
+        e = applySet(
+          "b",
+          e,
+          step.set,
+          step.at,
+          step.via,
+          { wantedClearsOnStatus: false },
+          contextOf(step.context),
+        );
+      }
+    }
+    assert.ok(seen >= 30, `only ${seen} cases`);
   },
 );
 
