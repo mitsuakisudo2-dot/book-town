@@ -1609,7 +1609,10 @@ try {
         .locator("article.post-card")
         .filter({ hasText: "これから通報される言葉。" });
       await post.getByRole("button", { name: "その他の操作" }).click();
-      await post.getByRole("button", { name: "この投稿を通報" }).click();
+      await page
+        .getByRole("dialog", { name: "その他の操作" })
+        .getByRole("button", { name: "この投稿を通報" })
+        .click();
       const dialog = page.getByRole("dialog", { name: "通報する" });
       await expect(dialog.locator("label:has(input[type=radio])")).toHaveText([
         "宣伝・スパム",
@@ -1631,7 +1634,10 @@ try {
       ]);
       await layersSettled(page);
       await post.getByRole("button", { name: "その他の操作" }).click();
-      await post.getByRole("button", { name: "この投稿を通報" }).click();
+      await page
+        .getByRole("dialog", { name: "その他の操作" })
+        .getByRole("button", { name: "この投稿を通報" })
+        .click();
       await expect(
         dialog.getByLabel("脅し・危害を加えるという言葉"),
       ).toBeChecked();
