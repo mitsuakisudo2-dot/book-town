@@ -1,31 +1,34 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode, type TouchEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+  type TouchEvent,
+} from "react";
 import Link from "next/link";
 import { bookPath } from "../lib/books";
-import { useRouter } from "next/navigation";
 import type { TownActions, TownState } from "../lib/types";
 import { ComposeFab, TimelineView } from "./Social";
 import { BookJacket, Icon } from "./ui";
 import { bookToContinue } from "../lib/reading";
 import { leaveLayers } from "../lib/back-layer";
+import { noteHomeAddress, useHomeAddress } from "../lib/last-address";
+import { replaceAddress, useAddressPath, useUrlParam } from "../lib/url-state";
 import {
-  noteHomeAddress,
-  useHomeAddress,
-  type HomePath,
-} from "../lib/last-address";
-import { useUrlParam } from "../lib/url-state";
+  HOME_TAB_PATHS,
+  onHomeTop,
+  tabOfPath,
+  type HomeTab,
+} from "../lib/home-tab";
 
 type Shared = {
   state: TownState;
   actions: TownActions;
   notify: (message: string) => void;
-};
-
-export type HomeTab = "shelves" | "timeline";
-const routes: Record<HomeTab, HomePath> = {
-  shelves: "/",
-  timeline: "/timeline/",
 };
 
 /**
@@ -55,22 +58,62 @@ function startsOnSideways(target: EventTarget | null, root: Element): boolean {
   return false;
 }
 
+/** A plain click, not one meant to open the link in a new tab or window. */
+const plainClick = (event: MouseEvent) =>
+  event.button === 0 &&
+  !event.metaKey &&
+  !event.ctrlKey &&
+  !event.shiftKey &&
+  !event.altKey;
+
 export function HomeView({
-  tab,
+  tab: routeTab,
   children,
   ...shared
 }: Shared & { tab: HomeTab; children: ReactNode }) {
-  const router = useRouter();
-  // The other tab opens as it was left (its filter, the street's lane); the
-  // tab already open stays a plain way back to its start.
-  const other: HomeTab = tab === "shelves" ? "timeline" : "shelves";
-  const otherAddress = useHomeAddress(routes[other]);
-  const href = (to: HomeTab) => (to === tab ? routes[to] : otherAddress);
+  // The tab is the address's: a switch rewrites `/` ↔ `/timeline/` in place,
+  // so 戻る to this address, or a reload, opens the same tab. While a page of
+  // another address is drawn over Home, the tab shown last stays.
+  const path = useAddressPath(HOME_TAB_PATHS[routeTab]);
+  const [shownTab, setShownTab] = useState<HomeTab>(routeTab);
+  const tab = tabOfPath(path) ?? shownTab;
+  if (tab !== shownTab) setShownTab(tab);
+  // The other tab opens as it was left (its filter, the street's lane).
+  const other: HomeTab = tab === "home" ? "letters" : "home";
+  const otherAddress = useHomeAddress(HOME_TAB_PATHS[other]);
   // This tab's choices are kept as they now are, however they changed: a
-  // filter, a link back to the start, 戻る or 進む.
+  // filter, a switch of tabs, 戻る or 進む.
   const [show] = useUrlParam("show");
   const [lane] = useUrlParam("lane");
   useEffect(() => noteHomeAddress(), [tab, show, lane]);
+  // Each tab keeps where it was scrolled to, for coming back to it.
+  const scrolls = useRef<Partial<Record<HomeTab, number>>>({});
+  const scrollBack = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (scrollBack.current === null) return;
+    window.scrollTo({ top: scrollBack.current, behavior: "instant" });
+    scrollBack.current = null;
+  }, [tab]);
+  function toTop() {
+    window.scrollTo({
+      top: 0,
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
+    });
+  }
+  useEffect(() => onHomeTop(toTop), []);
+  /** Shows `to` in place: no step of 戻る. The tab already open goes to its top. */
+  function switchTo(to: HomeTab) {
+    if (to === tab) return toTop();
+    scrolls.current[tab] = window.scrollY;
+    scrollBack.current = scrolls.current[to] ?? 0;
+    const kept = new URL(otherAddress, location.href);
+    replaceAddress({
+      path: HOME_TAB_PATHS[to],
+      params: Object.fromEntries(kept.searchParams),
+    });
+  }
   const start = useRef<{ x: number; y: number; time: number } | null>(null);
   function onTouchStart(event: TouchEvent<HTMLDivElement>) {
     start.current =
@@ -79,7 +122,7 @@ export function HomeView({
         ? {
             x: event.touches[0].clientX,
             y: event.touches[0].clientY,
-            time: Date.now(),
+            time: event.timeStamp,
           }
         : null;
   }
@@ -93,12 +136,25 @@ export function HomeView({
     if (
       Math.abs(dx) < 70 ||
       Math.abs(dx) < Math.abs(dy) * 1.8 ||
-      Date.now() - from.time > 800
+      event.timeStamp - from.time > 800
     )
       return;
-    if (dx < 0 && tab === "shelves") router.push(otherAddress);
-    if (dx > 0 && tab === "timeline") router.push(otherAddress);
+    if (dx < 0 && tab === "home") switchTo("letters");
+    if (dx > 0 && tab === "letters") switchTo("home");
   }
+  const tabLink = (to: HomeTab, label: string) => (
+    <Link
+      href={to === tab ? HOME_TAB_PATHS[to] : otherAddress}
+      aria-current={to === tab ? "page" : undefined}
+      onClick={(event) => {
+        if (!plainClick(event)) return;
+        event.preventDefault();
+        switchTo(to);
+      }}
+    >
+      {label}
+    </Link>
+  );
   return (
     <div
       className="home-view"
@@ -107,18 +163,8 @@ export function HomeView({
       onTouchCancel={() => (start.current = null)}
     >
       <nav className="home-tabs" aria-label="ホームの表示">
-        <Link
-          href={href("shelves")}
-          aria-current={tab === "shelves" ? "page" : undefined}
-        >
-          書店
-        </Link>
-        <Link
-          href={href("timeline")}
-          aria-current={tab === "timeline" ? "page" : undefined}
-        >
-          タイムライン
-        </Link>
+        {tabLink("home", "書店")}
+        {tabLink("letters", "タイムライン")}
       </nav>
       {/* Until a book is saved, the way to the list lives on the profile. */}
       {shared.state.wishlist.length > 0 && (
@@ -132,13 +178,12 @@ export function HomeView({
         </div>
       )}
       <ContinueReading state={shared.state} />
-      {tab === "timeline" ? <TimelineView {...shared} /> : children}
+      {tab === "letters" ? <TimelineView {...shared} /> : children}
       <ComposeFab
         {...shared}
         onPosted={() => {
-          // The dialog's step comes off first; 戻る from the timeline is home.
-          if (tab !== "timeline")
-            leaveLayers(() => router.push(routes.timeline));
+          // The dialog's step comes off first; then the timeline is shown.
+          if (tab !== "letters") leaveLayers(() => switchTo("letters"));
         }}
       />
     </div>

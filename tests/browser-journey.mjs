@@ -1201,6 +1201,68 @@ try {
   );
   await mobile.close();
   await check(
+    "Home's tabs switch in place, and 戻る from a book comes back to 便りだけ where it was",
+    async () => {
+      // Following every shop gives 便りだけ every owner's 便り to scroll through.
+      await go(page, "/");
+      await page.evaluate(() => {
+        const stored = JSON.parse(localStorage.getItem("book-town-v1"));
+        stored.data.following = [
+          "shop-orbit",
+          "shop-rain",
+          "shop-question",
+          "shop-window",
+          "shop-frame",
+          "shop-lamplight",
+        ];
+        localStorage.setItem("book-town-v1", JSON.stringify(stored));
+      });
+      await go(page, "/");
+      const tabs = page.getByRole("navigation", { name: "ホームの表示" });
+      const letters = tabs.getByRole("link", { name: "タイムライン" });
+      const steps = await page.evaluate(() => history.length);
+      await letters.click();
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      await expect(letters).toHaveAttribute("aria-current", "page");
+      // A switch is no step of 戻る.
+      expect(await page.evaluate(() => history.length)).toBe(steps);
+      // Down the 便り to a book further on, and to its page.
+      const book = page.locator("main .post-card a[href^='/books/']").nth(4);
+      await book.scrollIntoViewIfNeeded();
+      await page.mouse.move(720, 500);
+      await page.mouse.wheel(0, -120);
+      await expect
+        .poll(() => page.evaluate(() => scrollY))
+        .toBeGreaterThan(400);
+      await page.waitForTimeout(300);
+      const scrolled = await page.evaluate(() => scrollY);
+      const href = await book.getAttribute("href");
+      await book.click();
+      await expect(page).toHaveURL(`${baseURL}${href}`);
+      await page.goBack();
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      await expect(letters).toHaveAttribute("aria-current", "page");
+      await expect(book).toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => scrollY))
+        .toBeGreaterThan(scrolled - 3);
+      expect(await page.evaluate(() => scrollY)).toBeLessThan(scrolled + 3);
+      // Back on ホーム, also in place; the timeline's place is kept for it.
+      await tabs.getByRole("link", { name: "書店" }).click();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      expect(await page.evaluate(() => history.length)).toBe(steps + 1);
+      await letters.click();
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      expect(await page.evaluate(() => scrollY)).toBeGreaterThan(scrolled - 3);
+      await page.evaluate(() => {
+        const stored = JSON.parse(localStorage.getItem("book-town-v1"));
+        stored.data.following = [];
+        localStorage.setItem("book-town-v1", JSON.stringify(stored));
+      });
+      await page.reload();
+    },
+  );
+  await check(
     "戻る returns to the tab, filter, search, lane and shop the reader left",
     async () => {
       await go(page, "/timeline/");
@@ -1208,7 +1270,8 @@ try {
         .getByRole("button", { name: "フォロー中", exact: true })
         .click();
       await expect(page).toHaveURL(/show=following/);
-      await page.locator("main a[href^='/']").first().click();
+      // Home's tabs switch in place; another link leaves the page.
+      await page.locator("main a[href^='/']:not(.home-tabs a)").first().click();
       await expect(page).not.toHaveURL(/timeline/);
       await page.goBack();
       await expect(

@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -39,6 +39,7 @@ import { BookInHand, heldBookOf } from "./BookInHand";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookReviews, FoldedWords } from "./Social";
 import { HomeView } from "./HomeView";
+import { requestHomeTop } from "../lib/home-tab";
 import { SearchView } from "./SearchView";
 import { ReadingView } from "./ReadingView";
 import { NotificationsView } from "./NotificationsView";
@@ -291,10 +292,25 @@ export default function TownApp({
   const homeHref = section === "home" && view !== "post" ? "/" : lastHome;
   const hrefOf = (link: (typeof links)[number]) =>
     link.section === "home" ? homeHref : link.href;
+  // On Home itself, ホーム takes the tab shown back to its top, in place.
+  const onHome = section === "home" && view !== "post";
+  const homeClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      !onHome ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    requestHomeTop();
+  };
   return (
     <div className={"town-shell" + (view === "walk" ? " is-walk" : "")}>
       <aside className="town-sidebar" inert={layered}>
-        <Link className="brand" href={homeHref}>
+        <Link className="brand" href={homeHref} onClick={homeClick}>
           <span className="brand-mark">
             <Icon name="store" size={31} />
           </span>
@@ -308,6 +324,7 @@ export default function TownApp({
             <Link
               key={l.section}
               href={hrefOf(l)}
+              onClick={l.section === "home" ? homeClick : undefined}
               className={"side-link " + (section === l.section ? "active" : "")}
               aria-current={section === l.section ? "page" : undefined}
             >
@@ -357,7 +374,7 @@ export default function TownApp({
       </aside>
       <div className="town-workspace" inert={layered}>
         <header className="town-topbar">
-          <Link href={homeHref} className="mobile-brand">
+          <Link href={homeHref} className="mobile-brand" onClick={homeClick}>
             <Icon name="store" size={24} />
             <span>Book Town</span>
           </Link>
@@ -427,18 +444,18 @@ export default function TownApp({
         <div className="persistence-warning" role="status" hidden={!warning}>
           {warning}
         </div>
-        <main className={"town-main view-" + view} key={view + selectedId}>
+        <main
+          // Both of Home's addresses draw the same Home, whichever tab shows.
+          className={"town-main view-" + (view === "timeline" ? "town" : view)}
+          key={view + selectedId}
+        >
           {visitor && ownPage ? (
             <VisitorPage page={ownPage} />
           ) : view === "walk" ? (
             <WalkView {...shared} />
-          ) : view === "town" ? (
-            <HomeView {...shared} tab="shelves">
+          ) : view === "town" || view === "timeline" ? (
+            <HomeView {...shared} tab={view === "town" ? "home" : "letters"}>
               <StreetView {...shared} search={search} setSearch={setSearch} />
-            </HomeView>
-          ) : view === "timeline" ? (
-            <HomeView {...shared} tab="timeline">
-              {null}
             </HomeView>
           ) : view === "search" ? (
             <SearchView {...shared} />
@@ -482,6 +499,7 @@ export default function TownApp({
         {links.map((l) => (
           <Link
             href={hrefOf(l)}
+            onClick={l.section === "home" ? homeClick : undefined}
             key={l.section}
             className={
               (section === l.section ? "active" : "") +
