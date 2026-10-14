@@ -3763,6 +3763,192 @@
           }
         }
       ]
+    },
+    {
+      "name": "Q12 taken out and then placed in the reader's shop, brought back by a like and the like taken back: leaves again, the use made while out counted no more than one before (4-10), unlike Q4",
+      "entry": {
+        "source": "scan",
+        "removedAt": "2026-09-05T00:00:00.000Z"
+      },
+      "steps": [
+        {
+          "does": "places the book in their shop",
+          "set": {
+            "meet": true
+          },
+          "via": "shop",
+          "at": "2026-10-01T09:00:00.000Z",
+          "expect": {
+            "source": "scan",
+            "removedAt": "2026-09-05T00:00:00.000Z",
+            "everUsed": true
+          }
+        },
+        {
+          "does": "takes it off the shop, and likes another reader's post about it",
+          "set": {
+            "liked": true
+          },
+          "via": "like",
+          "at": "2026-10-02T09:00:00.000Z",
+          "expect": {
+            "source": "scan",
+            "likedAt": "2026-10-02T09:00:00.000Z",
+            "likeRestored": true,
+            "everUsed": true
+          }
+        },
+        {
+          "does": "takes the like back",
+          "set": {
+            "liked": false
+          },
+          "via": "like",
+          "at": "2026-10-03T09:00:00.000Z",
+          "expect": {
+            "source": "scan",
+            "removedAt": "2026-10-03T09:00:00.000Z",
+            "everUsed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Q13 came in by 読みたい and liked, never used; the like taken back and then 読みたい: leaves (4-2's last row)",
+      "entry": null,
+      "steps": [
+        {
+          "does": "presses 読みたい on the book's page",
+          "context": {
+            "wantMet": true
+          },
+          "set": {
+            "want": true
+          },
+          "via": "want",
+          "at": "2026-10-01T09:00:00.000Z",
+          "expect": {
+            "source": "want",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "wantedAt": "2026-10-01T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "likes another reader's post about it",
+          "context": {
+            "wantMet": true,
+            "liked": true
+          },
+          "set": {
+            "liked": true
+          },
+          "via": "like",
+          "at": "2026-10-02T09:00:00.000Z",
+          "expect": {
+            "source": "want",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "wantedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-02T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "takes the like back",
+          "context": {
+            "wantMet": true
+          },
+          "set": {
+            "liked": false
+          },
+          "via": "like",
+          "at": "2026-10-03T09:00:00.000Z",
+          "expect": {
+            "source": "want",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "wantedAt": "2026-10-01T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "takes 読みたい back on the book's page",
+          "set": {
+            "want": false
+          },
+          "via": "want",
+          "at": "2026-10-04T09:00:00.000Z",
+          "expect": {
+            "source": "want",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "removedAt": "2026-10-04T09:00:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Q14 came in by 読みたい and liked, never used; 読みたい taken back and then the like: stays, though nothing else holds it, as a like taken back takes out only a row a like brought in or back (4-10's condition 1), unlike Q13",
+      "entry": null,
+      "steps": [
+        {
+          "does": "presses 読みたい on the book's page",
+          "context": {
+            "wantMet": true
+          },
+          "set": {
+            "want": true
+          },
+          "via": "want",
+          "at": "2026-10-01T09:00:00.000Z",
+          "expect": {
+            "source": "want",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "wantedAt": "2026-10-01T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "likes another reader's post about it",
+          "context": {
+            "wantMet": true,
+            "liked": true
+          },
+          "set": {
+            "liked": true
+          },
+          "via": "like",
+          "at": "2026-10-02T09:00:00.000Z",
+          "expect": {
+            "source": "want",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "wantedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-02T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "takes 読みたい back on the book's page",
+          "context": {
+            "liked": true
+          },
+          "set": {
+            "want": false
+          },
+          "via": "want",
+          "at": "2026-10-03T09:00:00.000Z",
+          "expect": {
+            "source": "want",
+            "addedAt": "2026-10-01T09:00:00.000Z",
+            "likedAt": "2026-10-02T09:00:00.000Z"
+          }
+        },
+        {
+          "does": "takes the like back",
+          "set": {
+            "liked": false
+          },
+          "via": "like",
+          "at": "2026-10-04T09:00:00.000Z",
+          "expect": {
+            "source": "want",
+            "addedAt": "2026-10-01T09:00:00.000Z"
+          }
+        }
+      ]
     }
   ]
 }

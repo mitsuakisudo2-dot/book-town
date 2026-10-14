@@ -65,8 +65,9 @@ create table public.library_entries (
   -- (library_entries_keep_used). Taking back a like, a 読みたい or a ☆
   -- then leaves the book in, though the shop or the post holds it no more
   -- (N19, N20), unless the reader took it out and only a like brought it
-  -- back since (like_restored), which counts nothing from before. Whether,
-  -- not when: nothing is ordered by it, and the nine keep no date to give it.
+  -- back since (like_restored), which counts nothing from before that like,
+  -- a use made while the book was out among it. Whether, not when: nothing
+  -- is ordered by it, and the nine keep no date to give it.
   ever_used boolean not null default false,
   updated_at timestamptz not null default now(),
   primary key (user_id, book_id)

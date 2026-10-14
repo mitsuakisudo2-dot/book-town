@@ -108,7 +108,8 @@ export interface LibraryEntry {
    * keeps it if an update says otherwise). Taking back a like, a 読みたい or
    * a ☆ then leaves the book in, though the shop or the post holds it no
    * more (N19, N20), unless the reader took it out and only a like brought
-   * it back since (likeRestored): that counts nothing from before.
+   * it back since (likeRestored): that counts nothing from before the like,
+   * a use made while the book was out among it (whether, not when).
    */
   everUsed: boolean;
 }
@@ -473,12 +474,14 @@ const putsOn = (s: LibrarySet) =>
 /**
  * 4-10's conditions 1 and 3 to 5, and the rest of condition 2 (no other
  * encounter stands, the memo review's 2章): nothing but a like keeps the row.
- * A row a like brought back counts nothing it held from before it was taken
- * out. The shop and the reader's own uses keep it while they stand, and
- * once the shop, a post, a poster or the nine has held it (everUsed), after
- * that too: a book liked and then put in the shop stays when it is taken
- * off and the like taken back, as one put in the shop first does (N19's
- * お店から下ろしても残る, and N20, settled 2026-10-14).
+ * A row a like brought back counts nothing it held before the like: what it
+ * kept when it was taken out, nor a status, 所有 or use it was given while
+ * out, which never brought it back. The shop and the reader's own uses keep
+ * it while they stand, and once the shop, a post, a poster or the nine has
+ * held it (everUsed), after that too: a book liked and then put in the shop
+ * stays when it is taken off and the like taken back, as one put in the
+ * shop first does (N19's お店から下ろしても残る, and N20, settled
+ * 2026-10-14).
  */
 function heldByLikeAlone(e: LibraryEntry, x: EntryContext): boolean {
   return (
