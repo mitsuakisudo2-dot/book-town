@@ -1694,7 +1694,7 @@
       }
     },
     {
-      "name": "4-10 condition 1: a like taken back from a scanned row leaves it in",
+      "name": "4-10 a like taken back from a scanned row still registered leaves it in (registered on purpose)",
       "entry": {
         "source": "scan",
         "likedAt": "2026-09-01T00:00:00.000Z"
