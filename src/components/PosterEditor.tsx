@@ -46,7 +46,7 @@ import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { BackLink } from "./BackLink";
 import { PosterSheet } from "./PosterView";
 import { BookJacket, Icon } from "./ui";
-import { KeptDraftNote } from "./KeptDraftNote";
+import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import "./poster-editor.css";
 
 type Shared = {
@@ -83,10 +83,13 @@ export function PosterEditor({
   ...props
 }: Shared & { posterId?: string; bookId?: string }) {
   const persistence = usePersistenceStatus();
+  // Whose work this browser keeps is not known yet: work begun now could
+  // not be told from the maker's kept work, so the editor waits.
+  const owner = useDraftOwner();
   const poster = posterId
     ? props.state.posters.find((entry) => entry.id === posterId)
     : undefined;
-  if (posterId && !poster && persistence === "loading")
+  if (owner === null || (posterId && !poster && persistence === "loading"))
     return <p role="status">ポスターを開いています…</p>;
   if (posterId && !poster)
     return (
@@ -111,7 +114,7 @@ export function PosterEditor({
   return (
     <PosterMaker
       // The work of one poster never carries over into another's.
-      key={posterWorkKey({ posterId, bookId })}
+      key={(posterId ?? "") + "/" + (bookId ?? "")}
       {...props}
       poster={poster}
       bookId={bookId}
@@ -154,9 +157,9 @@ function EditorRefusal({
 }
 
 /**
- * Work kept in this browser for other posters, newest first, each named by
- * its heading or its book. Work on a poster that is gone, or changed since
- * elsewhere, would not open, so it is left out.
+ * The maker's work kept in this browser for other posters, newest first,
+ * each named by its heading or its book. Work on a poster that is gone, or
+ * changed since elsewhere, would not open, so it is left out.
  */
 function workElsewhere(
   all: Record<string, KeptPosterWork>,
@@ -164,10 +167,10 @@ function workElsewhere(
 ): { key: string; name: string; href: string }[] {
   const book = (id?: string) => state.books.find((entry) => entry.id === id);
   return Object.entries(all)
-    .filter(([key]) => key !== "new")
     .sort(([, a], [, b]) => Date.parse(b.at) - Date.parse(a.at))
     .flatMap(([key, work]) => {
       const { posterId, bookId } = posterWorkFor(key);
+      if (!posterId && !bookId) return [];
       if (posterId) {
         const poster = state.posters.find(
           (entry) => entry.id === posterId && entry.authorId === ME_ID,
@@ -206,25 +209,44 @@ function PosterMaker({
   bookId,
 }: Shared & { poster?: Poster; bookId?: string }) {
   const router = useRouter();
-  const key = posterWorkKey({ posterId: poster?.id, bookId });
-  const { kept, all, saved, keep, clear } = usePosterDraft(key);
+  const owner = useDraftOwner();
+  const {
+    work: inHand,
+    kept,
+    all,
+    saved,
+    keep,
+    clear,
+  } = usePosterDraft(
+    owner === null
+      ? null
+      : posterWorkKey({ owner, posterId: poster?.id, bookId }),
+  );
   // Work begun from another version of the poster (changed since, on
   // another device) is out of date.
   const from = poster ? posterMark(workOf(poster)) : undefined;
-  const keptFresh = kept && kept.from === from ? kept : null;
+  const fresh = (entry: KeptPosterWork | null) =>
+    entry && entry.from === from ? entry : null;
   const work: PosterWork =
-    keptFresh ?? (poster ? workOf(poster) : freshWork(bookId));
+    fresh(inHand) ?? (poster ? workOf(poster) : freshWork(bookId));
   const [pageIndex, setPageIndex] = useState(0);
   const at = Math.min(pageIndex, work.pages.length - 1);
   const page = work.pages[at];
   const [undo, setUndo] = useState<Undo | null>(null);
+  // Another reader signed in here (in another tab): the step back holds the
+  // last one's work, so it goes.
+  const [maker, setMaker] = useState(owner);
+  if (owner !== maker) {
+    setMaker(owner);
+    if (maker !== null) setUndo(null);
+  }
   const [asked, setAsked] = useState(false);
   const [failed, setFailed] = useState<keyof typeof FAILED | null>(null);
   // What a screen reader says when a press did nothing.
   const [said, setSaid] = useState({ words: "", times: 0 });
   const [confirming, setConfirming] = useState(false);
   const [enlarged, setEnlarged] = useState(false);
-  const elsewhere = key === "new" ? workElsewhere(all, state) : [];
+  const elsewhere = !poster && !bookId ? workElsewhere(all, state) : [];
   // Folded or held by reports: the maker is told here too, as on its page.
   const reviewNote = poster
     ? reviewNoteOf(state, "poster", poster.id, poster.authorId)
@@ -700,7 +722,7 @@ function PosterMaker({
                 not that it is being continued. */}
             <KeptDraftNote
               className="poster-editor-kept"
-              continuing={saved && keptFresh !== null}
+              continuing={saved && fresh(kept) !== null}
               saved={saved}
               wordsLost
               lead="書きかけは、このブラウザに残しています"

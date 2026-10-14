@@ -20,6 +20,8 @@ import {
 } from "../lib/account-draft";
 import { useKeptDraft } from "../lib/kept-draft";
 import { adoptVisitorRecords } from "../lib/record-draft";
+import { adoptVisitorPosts } from "../lib/post-draft";
+import { adoptVisitorPosters } from "../lib/poster-draft";
 import { libraryJournal, useJournal } from "../lib/library-journal";
 import { Icon } from "./ui";
 import { KeptDraftNote } from "./KeptDraftNote";
@@ -36,14 +38,18 @@ export default function AccountView() {
       sentCodeStore.initialize();
     else sentCodeStore.clear(SENT_CODE);
   }, [account.status]);
-  // What a visitor wrote about a finished book before being asked to sign in
-  // goes with them into the account (every sign-in ends on this page).
+  // What a visitor wrote (about a finished book, a post, a poster) before
+  // being asked to sign in goes with them into the account (every sign-in
+  // ends on this page).
   const userId =
     account.status === "signed-in" || account.status === "needs-profile"
       ? account.user.id
       : null;
   useEffect(() => {
-    if (userId) adoptVisitorRecords(userId);
+    if (!userId) return;
+    adoptVisitorRecords(userId);
+    adoptVisitorPosts(userId);
+    adoptVisitorPosters(userId);
   }, [userId]);
   return (
     <main className="account-page">

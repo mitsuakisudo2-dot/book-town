@@ -111,12 +111,10 @@ export function adoptVisitorRecords(
 ) {
   store.initialize();
   const visitor = "visitor:record-new:";
-  for (const [key, changes] of Object.entries(store.getSnapshot().drafts)) {
-    if (!key.startsWith(visitor)) continue;
-    const bookId = key.slice(visitor.length);
-    const mine = recordWorkKey({ owner, bookId });
-    if (store.get(mine) !== null) continue;
-    store.set(mine, changes);
-    store.clear(key);
-  }
+  for (const key of Object.keys(store.getSnapshot().drafts))
+    if (key.startsWith(visitor))
+      store.move(
+        key,
+        recordWorkKey({ owner, bookId: key.slice(visitor.length) }),
+      );
 }

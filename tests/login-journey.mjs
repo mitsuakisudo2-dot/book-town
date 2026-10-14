@@ -452,8 +452,22 @@ const keptRecordKeys = () =>
         ?.drafts ?? {},
     ),
   );
+/** The keys of the post or poster drafts this browser keeps. */
+const keptDraftKeys = (storageKey) =>
+  page.evaluate(
+    (key) =>
+      Object.keys(
+        JSON.parse(localStorage.getItem(key) ?? "null")?.drafts ?? {},
+      ),
+    storageKey,
+  );
+const POST_DRAFTS = "book-town-post-drafts-v1";
+const POSTER_DRAFTS = "book-town-poster-drafts-v1";
 /** What a visitor writes about a finished 見本 book before signing in. */
 const VISITOR_NOTE = "灰色の男たちのところで、時計を見た。";
+/** A post and a poster a visitor begins before signing in. */
+const VISITOR_POST = "ログインする前に書きはじめた投稿。";
+const VISITOR_POSTER = "ログインする前の見出し";
 // A dialog closed by hand takes its step off the history a moment later
 // (src/lib/back-layer.ts). A second Escape waits for that, as a reader's
 // next key would: pressed while the browser is still stepping back, it
@@ -525,6 +539,27 @@ try {
       await page.getByRole("button", { name: "このまま見る" }).click();
       await expect(invite).toHaveCount(0);
       expect(await keptRecordKeys()).toEqual(["visitor:record-new:momo"]);
+    },
+  );
+
+  await check(
+    "a visitor's post and poster being written are kept as theirs",
+    async () => {
+      await page.goto(base + "/timeline/");
+      const fab = page.locator(".compose-fab");
+      await fab.click();
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      await compose.locator("textarea").fill(VISITOR_POST);
+      await page.keyboard.press("Escape");
+      await expect(compose).toHaveCount(0);
+      await expect(fab).toContainText("下書き");
+      await page.goto(base + "/posters/new/");
+      await page.getByRole("textbox", { name: "見出し" }).fill(VISITOR_POSTER);
+      await expect(
+        page.getByText("書きかけは、このブラウザに残しています"),
+      ).toBeVisible();
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual(["visitor:new-post"]);
+      expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual(["visitor:new"]);
     },
   );
 
@@ -880,6 +915,151 @@ try {
       expect(await keptRecordKeys()).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(sheet).toHaveCount(0);
+    },
+  );
+
+  await check(
+    "the post and the poster a visitor began wait for them once signed in",
+    async () => {
+      await page.goto(base + "/timeline/");
+      const fab = page.locator(".compose-fab");
+      await expect(fab).toContainText("下書き");
+      await fab.click();
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      await expect(compose.locator("textarea")).toHaveValue(VISITOR_POST);
+      await expect(compose.getByText("書きかけを続けています")).toBeVisible();
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual([user.id + ":new-post"]);
+      // Thrown away here, so the rest of the journey starts without them.
+      await compose.getByRole("button", { name: "書きかけを消す" }).click();
+      await compose.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(compose.locator("textarea")).toHaveValue("");
+      await page.keyboard.press("Escape");
+      await expect(compose).toHaveCount(0);
+      await page.goto(base + "/posters/new/");
+      const heading = page.getByRole("textbox", { name: "見出し" });
+      await expect(heading).toHaveValue(VISITOR_POSTER);
+      expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([user.id + ":new"]);
+      const line = page.locator(".poster-editor-kept");
+      await line.getByRole("button", { name: "書きかけを消す" }).click();
+      await line.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(heading).toHaveValue("");
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
+      expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([]);
+    },
+  );
+
+  await check(
+    "a post begun while the account is still checked is kept for it once known",
+    async () => {
+      const BEGUN = "確かめているあいだに書きはじめた。";
+      ownProfileDelay = 3000;
+      try {
+        await page.goto(base + "/timeline/");
+        const fab = page.locator(".compose-fab");
+        await fab.click();
+        const compose = page.getByRole("dialog", { name: "投稿する" });
+        const text = compose.locator("textarea");
+        await text.fill(BEGUN);
+        // Whose it is is not known yet: the words stay on the screen, and
+        // nothing is kept in the browser or said to be.
+        await expect(text).toHaveValue(BEGUN);
+        expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
+        await expect(
+          compose.getByText("下書きはこのブラウザに保存しています。"),
+        ).toHaveCount(0);
+        await expect
+          .poll(() => keptDraftKeys(POST_DRAFTS), { timeout: 10000 })
+          .toEqual([user.id + ":new-post"]);
+        await expect(text).toHaveValue(BEGUN);
+        await expect(
+          compose.getByText("下書きはこのブラウザに保存しています。"),
+        ).toBeVisible();
+        await text.fill("");
+        await page.keyboard.press("Escape");
+        await expect(compose).toHaveCount(0);
+      } finally {
+        ownProfileDelay = 0;
+      }
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
+    },
+  );
+
+  await check(
+    "words written while the account is still checked do not replace its kept draft, and the poster maker waits for it",
+    async () => {
+      const KEPT = "前に残していた書きかけ。";
+      const BEGUN = "確かめているあいだに続けた言葉。";
+      const KEPT_POSTER = "前に作りかけていたポスター";
+      const fab = page.locator(".compose-fab");
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      const text = compose.locator("textarea");
+      const heading = page.getByRole("textbox", { name: "見出し" });
+      const keptPosts = () =>
+        page.evaluate(
+          (key) => JSON.parse(localStorage.getItem(key) ?? "null")?.drafts,
+          POST_DRAFTS,
+        );
+      const post = (body) => ({
+        [user.id + ":new-post"]: { body, bookId: null, spoiler: false },
+      });
+      await page.goto(base + "/timeline/");
+      await fab.click();
+      await text.fill(KEPT);
+      await page.keyboard.press("Escape");
+      await expect(compose).toHaveCount(0);
+      await page.goto(base + "/posters/new/");
+      await heading.fill(KEPT_POSTER);
+      expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([user.id + ":new"]);
+      ownProfileDelay = 3000;
+      try {
+        await page.goto(base + "/timeline/");
+        await fab.click();
+        // Whose draft it is is not known yet, so the box is empty; what is
+        // written there goes after the kept words once it is.
+        await expect(text).toHaveValue("");
+        await text.fill(BEGUN);
+        await expect(text).toHaveValue(KEPT + "\n" + BEGUN, {
+          timeout: 10000,
+        });
+        expect(await keptPosts()).toEqual(post(KEPT + "\n" + BEGUN));
+        await page.keyboard.press("Escape");
+        await expect(compose).toHaveCount(0);
+
+        // Too long to join: the words written stay on the screen, not kept
+        // and said so, and the kept draft stays as it was.
+        const LONG = "続き".repeat(490);
+        await page.goto(base + "/timeline/");
+        await fab.click();
+        await expect(text).toHaveValue("");
+        await text.fill(LONG);
+        await expect(
+          compose.getByText("このブラウザに書きかけを残せませんでした"),
+        ).toBeVisible({ timeout: 10000 });
+        await expect(text).toHaveValue(LONG);
+        expect(await keptPosts()).toEqual(post(KEPT + "\n" + BEGUN));
+        await page.keyboard.press("Escape");
+        await expect(compose).toHaveCount(0);
+
+        // The poster maker opens once its maker is known, with the work kept.
+        await page.goto(base + "/posters/new/");
+        await expect(page.getByText("ポスターを開いています…")).toBeVisible();
+        await expect(heading).toHaveCount(0);
+        await expect(heading).toHaveValue(KEPT_POSTER, { timeout: 10000 });
+      } finally {
+        ownProfileDelay = 0;
+      }
+      const line = page.locator(".poster-editor-kept");
+      await line.getByRole("button", { name: "書きかけを消す" }).click();
+      await line.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(heading).toHaveValue("");
+      await page.goto(base + "/timeline/");
+      await fab.click();
+      await expect(text).toHaveValue(KEPT + "\n" + BEGUN);
+      await text.fill("");
+      await page.keyboard.press("Escape");
+      await expect(compose).toHaveCount(0);
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
+      expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([]);
     },
   );
 
@@ -2750,6 +2930,117 @@ try {
       page.getByRole("heading", { name: "本の街に入る" }),
     ).toBeVisible();
   });
+
+  await check(
+    "an account's unsent post and poster are not shown to another account on this browser, and wait for its return",
+    async () => {
+      const signInByLink = async () => {
+        const link = session();
+        await page.goto("about:blank");
+        await page.goto(
+          base +
+            "/login/#" +
+            new URLSearchParams({
+              access_token: link.access_token,
+              expires_at: String(link.expires_at),
+              expires_in: "3600",
+              refresh_token: link.refresh_token,
+              token_type: "bearer",
+              type: "magiclink",
+            }),
+        );
+        await expect(
+          page.getByRole("heading", { name: "ログインしています" }),
+        ).toBeVisible();
+      };
+      const signOut = async () => {
+        await page.goto(base + "/login/");
+        await page.getByRole("button", { name: "ログアウト" }).click();
+        await expect(
+          page.getByRole("heading", { name: "本の街に入る" }),
+        ).toBeVisible();
+      };
+      const fab = page.locator(".compose-fab");
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      const text = compose.locator("textarea");
+      const heading = page.getByRole("textbox", { name: "見出し" });
+      const elsewhere = page.getByRole("region", {
+        name: "このブラウザに残している書きかけ",
+      });
+      const A_POST = "アキがまだ送っていない投稿。";
+      const A_POSTER = "アキの作りかけのポスター";
+      await signInByLink();
+      await page.goto(base + "/timeline/");
+      await fab.click();
+      await text.fill(A_POST);
+      await page.keyboard.press("Escape");
+      await expect(fab).toContainText("下書き");
+      await page.goto(base + "/posters/new/?book=momo");
+      await heading.fill(A_POSTER);
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual([user.id + ":new-post"]);
+      expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([
+        user.id + ":book:momo",
+      ]);
+      await signOut();
+
+      // Another account signs in on the same browser.
+      const aki = { id: user.id, email: user.email, profile };
+      user.id = "3c9d2e1f-6a7b-4c8d-9e0f-1a2b3c4d5e6f";
+      user.email = "mio@example.jp";
+      profile = {
+        ...aki.profile,
+        id: user.id,
+        handle: "mio_books",
+        name: "ミオ",
+      };
+      try {
+        await signInByLink();
+        await expect(page.getByText("ミオ（@mio_books）さん")).toBeVisible();
+        await page.goto(base + "/timeline/");
+        await expect(page.locator("main.town-main")).toBeVisible();
+        await expect(fab).not.toContainText("下書き");
+        await fab.click();
+        await expect(text).toHaveValue("");
+        await expect(compose.getByText("書きかけを続けています")).toHaveCount(
+          0,
+        );
+        await page.keyboard.press("Escape");
+        await page.goto(base + "/posters/new/");
+        await expect(heading).toHaveValue("");
+        await expect(elsewhere).toHaveCount(0);
+        await page.goto(base + "/posters/new/?book=momo");
+        await expect(heading).toHaveValue("");
+        await expect(page.getByText(A_POSTER)).toHaveCount(0);
+        await expect(page.locator(".poster-editor-kept")).toHaveCount(0);
+        // Still kept in the browser, for the account that wrote them.
+        expect(await keptDraftKeys(POST_DRAFTS)).toEqual([
+          aki.id + ":new-post",
+        ]);
+        expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([
+          aki.id + ":book:momo",
+        ]);
+        await signOut();
+      } finally {
+        user.id = aki.id;
+        user.email = aki.email;
+        profile = aki.profile;
+      }
+
+      // Back, the first account finds them where it left them.
+      await signInByLink();
+      await expect(page.getByText("アキ（@aki_books）さん")).toBeVisible();
+      await page.goto(base + "/timeline/");
+      await expect(fab).toContainText("下書き");
+      await fab.click();
+      await expect(text).toHaveValue(A_POST);
+      await page.keyboard.press("Escape");
+      await page.goto(base + "/posters/new/");
+      await expect(elsewhere).toContainText(A_POSTER);
+      await elsewhere.getByRole("link", { name: /つづきを書く/ }).click();
+      await expect(heading).toHaveValue(A_POSTER);
+      await signOut();
+    },
+  );
 
   if (errors.length) throw new Error("Page errors: " + errors.join(" | "));
   console.log(passed.length + " login journey checks passed");
