@@ -161,7 +161,10 @@ export function LiveBox({ slot, ...shared }: Shared & { slot: LiveSlot }) {
     if (!arrival.key || !element || still()) return;
     const count = Math.min(arrival.ids.length, LIVE_SHOWN);
     element.animate(
-      [{ transform: `translateY(${-count * LIVE_ROW}px)` }, { transform: "none" }],
+      [
+        { transform: `translateY(${-count * LIVE_ROW}px)` },
+        { transform: "none" },
+      ],
       { duration: 450, easing: "cubic-bezier(.2,0,0,1)" },
     );
     const glow = getComputedStyle(element)
@@ -170,10 +173,13 @@ export function LiveBox({ slot, ...shared }: Shared & { slot: LiveSlot }) {
     for (const id of arrival.ids)
       element
         .querySelector(`[data-post-id="${CSS.escape(id)}"]`)
-        ?.animate([{ backgroundColor: glow }, { backgroundColor: "transparent" }], {
-          duration: 800,
-          easing: "ease-out",
-        });
+        ?.animate(
+          [{ backgroundColor: glow }, { backgroundColor: "transparent" }],
+          {
+            duration: 800,
+            easing: "ease-out",
+          },
+        );
   }, [arrival]);
   const headId = useId();
   const boxId = useId();
@@ -230,9 +236,7 @@ export function LiveBox({ slot, ...shared }: Shared & { slot: LiveSlot }) {
               <button
                 type="button"
                 className="home-live-stop"
-                aria-label={
-                  isStopped ? "ひとことを動かす" : "ひとことを止める"
-                }
+                aria-label={isStopped ? "ひとことを動かす" : "ひとことを止める"}
                 onClick={() => setStopped(!isStopped)}
               >
                 <Icon name={isStopped ? "play" : "pause"} size={18} />
@@ -248,9 +252,9 @@ export function LiveBox({ slot, ...shared }: Shared & { slot: LiveSlot }) {
 
 /**
  * One line: the book's cover whole; beside it who, 『which book』 and when on
- * one line, then the words in two. A line about a book the reader is
- * reading waits behind a stand-in until DB-1 knows their page (仮); a
- * spoiler, in the spoiler box. A tap opens the 便り's page, as a card's does;
+ * one line, then the words in two. A line about a book on the reader's
+ * shelves and not finished waits behind a stand-in until DB-1 knows their
+ * page (guardedWorks); a spoiler, in the spoiler box. A tap opens the 便り's page, as a card's does;
  * the time is the way in by the keyboard.
  */
 function LiveLine({
@@ -360,7 +364,7 @@ function LiveLine({
               setFocusText(true);
             }}
           >
-            あなたが読んでいる本のひとことです。
+            あなたの本棚の、読み終えていない本のひとことです。
             <span className="home-live-show">表示する</span>
           </button>
         ) : covered ? (

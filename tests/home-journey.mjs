@@ -1796,9 +1796,9 @@ try {
           await tab("便りだけ").tap();
           await expect(pane("letters").locator(".home-live")).toHaveCount(0);
 
-          // Reading ソラリス, and すみれ's memo asked about as a spoiler:
-          // those lines wait behind a tap, the words not on the page until
-          // then.
+          // Reading ソラリス (on the reader's shelves, not finished), and
+          // すみれ's memo asked about as a spoiler: those lines wait behind
+          // a tap, the words not on the page until then.
           await editTown(`
             data.readingSessions = [{ id: "me-reading-1", bookId: "solaris",
               mode: "together", startedAt: "2026-10-12T10:00:00+09:00",
@@ -1807,7 +1807,7 @@ try {
           `);
           await goHome();
           const guards = live.getByRole("button", {
-            name: /あなたが読んでいる本のひとことです。/,
+            name: /あなたの本棚の、読み終えていない本のひとことです。/,
           });
           await expect(guards).toHaveCount(2);
           await expect(live).not.toContainText("海の描写のところで");

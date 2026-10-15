@@ -1,6 +1,7 @@
-import { hasFinished, readingFeed } from "./reading";
+import { readingFeed } from "./reading";
 import { findReader, reviewCoverOf, spoilerViewOf } from "./social";
-import { ME_ID, type Post, type TownState } from "./types";
+import { ME_ID, type Book, type Post, type TownState } from "./types";
+import { workOf, type WorkId } from "./works";
 
 // 読みながらのひとこと, Live (PR 2b; 決定 H:114-119): what other readers
 // wrote while reading together, in a box of its own on ホーム. Its lines are
@@ -72,28 +73,49 @@ export const togetherIds = (state: TownState): Set<string> =>
       .map((post) => post.id),
   );
 
-/**
- * The books the reader is reading and has not finished: those of their
- * reading sessions. Until the page they are on is known (DB-1), a line
- * about one of them is kept behind 「あなたが読んでいる本のひとことです。」
- * (仮).
- */
-export const booksBeingRead = (
-  state: Pick<TownState, "readingSessions" | "finishedBooks">,
-): Set<string> =>
-  new Set(
-    state.readingSessions.flatMap((session) =>
-      session.bookId !== null && !hasFinished(state, session.bookId)
-        ? [session.bookId]
-        : [],
-    ),
-  );
+/** The works of these editions, as far as the town knows them. */
+function worksOf(books: readonly Book[], ids: Iterable<string>): Set<WorkId> {
+  const byId = new Map(books.map((book) => [book.id, book]));
+  const works = new Set<WorkId>();
+  for (const id of ids) works.add(workOf(byId.get(id) ?? { id }));
+  return works;
+}
 
-/** Whether a line waits behind the stand-in for a book being read. */
-export const isGuarded = (
-  state: Pick<TownState, "readingSessions" | "finishedBooks">,
+type GuardState = Pick<
+  TownState,
+  "books" | "readingSessions" | "finishedBooks" | "wishlist" | "library"
+>;
+
+/**
+ * The works whose lines wait behind the stand-in (けにー 2026-10-15): those
+ * on the reader's shelves and not finished, being read (a reading session),
+ * wanted (読みたい) or registered (ライブラリ). Until DB-1 knows the page the
+ * reader is on, the whole book waits (仮); then only the lines past it.
+ * 積読 comes in with the library's shelves. Any edition finished frees the
+ * work, and any edition shelved holds it.
+ */
+export function guardedWorks(state: GuardState): Set<WorkId> {
+  const shelved = worksOf(state.books, [
+    ...state.wishlist,
+    ...state.library,
+    ...state.readingSessions.flatMap((session) =>
+      session.bookId === null ? [] : [session.bookId],
+    ),
+  ]);
+  for (const work of worksOf(state.books, state.finishedBooks))
+    shelved.delete(work);
+  return shelved;
+}
+
+/** Whether a line waits behind the stand-in. */
+export function isGuarded(
+  state: GuardState,
   post: Pick<Post, "bookId">,
-): boolean => post.bookId !== null && booksBeingRead(state).has(post.bookId);
+): boolean {
+  if (post.bookId === null) return false;
+  const [work] = worksOf(state.books, [post.bookId]);
+  return guardedWorks(state).has(work);
+}
 
 /**
  * The lines of the box as they are now: those that came in at its top

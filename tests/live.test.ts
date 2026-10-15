@@ -7,7 +7,7 @@ import {
   LIVE_DAYS,
   LIVE_MAX,
   LIVE_MIN,
-  booksBeingRead,
+  guardedWorks,
   isGuarded,
   isLiveLine,
   liveIds,
@@ -209,7 +209,7 @@ check("what Live knew when drawn: every memo read together", () => {
 });
 
 check(
-  "a book being read and not finished waits behind the stand-in; a finished one does not",
+  "a book on the reader's shelves and not finished waits behind the stand-in: being read, wanted or registered",
   () => {
     const session = (bookId: string | null, endedAt: string | null = null) => ({
       id: "s-" + bookId,
@@ -218,25 +218,53 @@ check(
       startedAt: "2026-10-12T10:00:00+09:00",
       endedAt,
     });
-    const reading = town({
+    const shelved = town({
       readingSessions: [
         session("solaris"),
         session("silence", "2026-10-11T10:00:00+09:00"),
         session(null),
       ],
+      wishlist: ["invisible-cities"],
+      library: ["left-hand"],
       finishedBooks: ["silence"],
     });
-    assert.deepEqual([...booksBeingRead(reading)], ["solaris"]);
-    assert.equal(isGuarded(reading, { bookId: "solaris" }), true);
-    assert.equal(isGuarded(reading, { bookId: "silence" }), false);
-    assert.equal(isGuarded(reading, { bookId: "invisible-cities" }), false);
-    assert.equal(isGuarded(reading, { bookId: null }), false);
-    // An ended session's book, not finished, still waits (仮, until DB-1).
+    assert.deepEqual([...guardedWorks(shelved)].sort(), [
+      "invisible-cities",
+      "left-hand",
+      "solaris",
+    ]);
+    for (const bookId of ["solaris", "invisible-cities", "left-hand"])
+      assert.equal(isGuarded(shelved, { bookId }), true, bookId);
+    // Finished, or not on the shelves at all: as it is.
+    assert.equal(isGuarded(shelved, { bookId: "silence" }), false);
+    assert.equal(isGuarded(shelved, { bookId: "momo" }), false);
+    assert.equal(isGuarded(shelved, { bookId: null }), false);
+    // An ended session's book, not finished, still waits (until DB-1).
     const ended = town({
       readingSessions: [session("solaris", "2026-10-11T10:00:00+09:00")],
     });
     assert.equal(isGuarded(ended, { bookId: "solaris" }), true);
     assert.equal(isGuarded(town(), { bookId: "solaris" }), false);
+    // By the work: another edition shelved holds it, one finished frees it.
+    const bunko = {
+      ...seedState.books.find((book) => book.id === "solaris")!,
+      id: "solaris-bunko",
+      workId: "solaris",
+    };
+    const editions = town({
+      books: [...seedState.books, bunko],
+      wishlist: ["solaris-bunko"],
+    });
+    assert.equal(isGuarded(editions, { bookId: "solaris" }), true);
+    assert.equal(
+      isGuarded(
+        { ...editions, finishedBooks: ["solaris"] },
+        {
+          bookId: "solaris-bunko",
+        },
+      ),
+      false,
+    );
   },
 );
 
