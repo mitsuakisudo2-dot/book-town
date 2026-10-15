@@ -2,8 +2,8 @@
  * 試作（claude/proto-colors）だけ: 画面の色と明るさを当てる仕組み。
  *
  * 明るさは day（昼）・lamp（灯り）・night（夜）・auto（端末に合わせる）・
- * time（時刻で替える）。time では、季節の日の出と日の入りに合わせて
- * 朝 → 昼 → 灯り →（数秒で切り替え）→ 宵 → 深夜 → 夜明け前 →（数秒で切り替え）→ 朝
+ * time（時刻で替える）。time では、その日その時の太陽の高さを計算し、空と同じに
+ * 朝 → 昼 → 灯り → 夕暮れ →（数秒で切り替え）→ 宵 → 深夜 → 夜明け前 →（切り替え）→ 朝
  * と移る。明るい側と暗い側の中では、1分ごとに色を少しずつずらす（OKLab で混ぜる）。
  * 明るい側から暗い側へは、紙と文字の明るさが入れ替わり、途中で読めない灰色を
  * 通るので、そこだけは数秒で切り替える。
@@ -60,11 +60,10 @@ export function protoEngine() {
     budo: { day: ["#584270", "#f6f3f9", "#e9e2f0"], lamp: ["#543e6b", "#f6f3f9", "#e4d8d6"], dusk: ["#2f203e", "#f6f3f9", "#b0a08f"], eve: ["#dfd0f2", "#1e1628", "#5f5148"], dark: ["#bfa8db", "#1e1628", "#2e2639"] },
     sumi: { day: ["#3e4347", "#f5f5f3", "#e6e6e2"], lamp: ["#3b3f43", "#f5f5f3", "#e3dccb"], dusk: ["#1f2225", "#f5f5f3", "#aea488"], eve: ["#e0e3e5", "#1a1c1e", "#5c5343"], dark: ["#c2c6c9", "#1a1c1e", "#2c2e30"] },
   };
-  // 日本の真ん中あたりの、月の半ばの日の出と日の入り（0時からの分、だいたい）
-  const SUN = [
-    [410, 1010], [390, 1040], [350, 1070], [310, 1095], [280, 1120], [265, 1140],
-    [280, 1135], [305, 1110], [330, 1070], [350, 1035], [380, 995], [405, 990],
-  ];
+  // 太陽の高さを求める場所: 日本の真ん中あたり（北緯36度、東経138度）。
+  // 位置情報の許可は求めない。
+  const LAT = 36;
+  const LON = 138;
 
   const toLinear = (c: number) =>
     c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
@@ -132,73 +131,85 @@ export function protoEngine() {
     return out;
   };
 
-  /** その日の日の出と日の入り（月の半ばの値を日でつなぐ） */
-  const sunOn = (date: Date) => {
-    const month = date.getMonth();
-    const t = (date.getDate() - 15) / 30;
-    const other = (month + (t < 0 ? 11 : 1)) % 12;
-    const w = Math.abs(t);
-    return [0, 1].map((i) => SUN[month][i] + (SUN[other][i] - SUN[month][i]) * w);
+  /**
+   * その時の太陽の高さ（度、地平線が0）と、昇っている途中か。
+   * 天文年鑑の簡単な式（誤差はおよそ1度、時刻にして数分）。
+   */
+  const sunAt = (date: Date) => {
+    const rad = Math.PI / 180;
+    const d = date.getTime() / 86400000 - 10957.5; // 2000年1月1日12時(UT)からの日
+    const g = (357.529 + 0.98560028 * d) * rad;
+    const q = 280.459 + 0.98564736 * d;
+    const L = (q + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * rad;
+    const e = (23.439 - 0.00000036 * d) * rad;
+    const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)) / rad;
+    const dec = Math.asin(Math.sin(e) * Math.sin(L));
+    const gmst = 18.697374558 + 24.06570982441908 * d;
+    let hour = (gmst * 15 + LON - ra) % 360;
+    if (hour > 180) hour -= 360;
+    if (hour < -180) hour += 360;
+    const altitude =
+      Math.asin(
+        Math.sin(LAT * rad) * Math.sin(dec) +
+          Math.cos(LAT * rad) * Math.cos(dec) * Math.cos(hour * rad),
+      ) / rad;
+    return { altitude, rising: hour < 0 };
   };
 
   /**
-   * 0時からの分と、その日の日の出・日の入りから、色と、暗い側かどうか。
-   * 明るい側: 夜明け（明）→ 朝 → 昼 → 灯り → 夕暮れ。
-   * 暗い側: 宵の始まり → 宵 → 深夜 → 夜明け前 → 夜明け（暗）。
+   * 太陽の高さから、色と、暗い側かどうか。空と同じに移る。
+   * 昼: 15度より上。夕方は15度から5度で灯りへ、5度から地平線の下4度で夕暮れへ。
+   * 下4度（市民薄明のなかほど）で暗い側へ切り替え、宵の始まりから、下10度で宵、
+   * 下18度（天文薄明の終わり）で深夜。朝はその逆を、青みのある色でたどる。
    * 夕暮れと宵の始まり、夜明け（暗）と夜明け（明）は、明るさの差がいちばん
    * 小さくなる所で、そこで切り替える。
    */
-  const tokensAt = (minute: number, rise: number, set: number, palette: string) => {
-    const lightFrom = rise - 20;
-    const morningAt = rise + 30;
-    const dayAt = rise + 120;
-    const lampFrom = set - 120;
-    const lampAt = set - 30;
-    const darkFrom = set + 50;
-    const eveningAt = set + 140;
-    const predawnFrom = rise - 150;
-    const predawnAt = rise - 80;
+  const tokensAt = (date: Date, palette: string) => {
+    const { altitude: h, rising } = sunAt(date);
     const of = (anchor: string, accent: string) => tokensOf(anchor, accent, palette);
-    // 区切りの時刻と色の並びを、at の所でつなぐ
-    const along = (
-      at: number,
-      stops: [number, Record<string, string>][],
-    ): Record<string, string> => {
+    // 高さの区切りと色の並び（高さの低い順）を、h の所でつなぐ
+    const along = (stops: [number, Record<string, string>][]) => {
+      if (h <= stops[0][0]) return stops[0][1];
       for (let i = 1; i < stops.length; i++) {
         const [to, b] = stops[i];
-        if (at < to) {
+        if (h < to) {
           const [from, a] = stops[i - 1];
-          return mixTokens(a, b, (at - from) / (to - from));
+          return mixTokens(a, b, (h - from) / (to - from));
         }
       }
       return stops[stops.length - 1][1];
     };
-    if (minute >= lightFrom && minute < darkFrom) {
-      const day = of("day", "day");
+    const FLIP = -4;
+    const day = of("day", "day");
+    if (h >= FLIP)
       return {
         dark: false,
-        tokens: along(minute, [
-          [lightFrom, of("dawnLight", "dusk")],
-          [morningAt, of("morning", "day")],
-          [dayAt, day],
-          [lampFrom, day],
-          [lampAt, of("lamp", "lamp")],
-          [darkFrom, of("dusk", "dusk")],
-        ]),
+        tokens: rising
+          ? along([
+              [FLIP, of("dawnLight", "dusk")],
+              [3, of("morning", "day")],
+              [15, day],
+            ])
+          : along([
+              [FLIP, of("dusk", "dusk")],
+              [5, of("lamp", "lamp")],
+              [15, day],
+            ]),
       };
-    }
-    // 暗い側は日をまたぐので、0時より後は 1440 を足して並べる
     const night = of("night", "dark");
     return {
       dark: true,
-      tokens: along(minute >= darkFrom ? minute : minute + 1440, [
-        [darkFrom, of("eve", "eve")],
-        [eveningAt, of("evening", "dark")],
-        [1440, night],
-        [1440 + predawnFrom, night],
-        [1440 + predawnAt, of("predawn", "dark")],
-        [1440 + lightFrom, of("dawnDark", "eve")],
-      ]),
+      tokens: rising
+        ? along([
+            [-18, night],
+            [-10, of("predawn", "dark")],
+            [FLIP, of("dawnDark", "eve")],
+          ])
+        : along([
+            [-18, night],
+            [-10, of("evening", "dark")],
+            [FLIP, of("eve", "eve")],
+          ]),
     };
   };
 
@@ -263,11 +274,10 @@ export function protoEngine() {
       mark("data-lamp", m === "lamp");
       return;
     }
-    const now = new Date();
     const preview = previewMinute();
-    const minute = preview ?? now.getHours() * 60 + now.getMinutes();
-    const [rise, set] = sunOn(now);
-    const { dark, tokens } = tokensAt(minute, rise, set, p);
+    const when = new Date();
+    if (preview !== null) when.setHours(Math.floor(preview / 60), preview % 60, 0, 0);
+    const { dark, tokens } = tokensAt(when, p);
     mark("data-timed", true);
     mark("data-lamp", false);
     const quiet = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -313,5 +323,5 @@ export function protoEngine() {
     });
   };
 
-  return { start, apply, tokensAt, sunOn, tokensOf };
+  return { start, apply, tokensAt, sunAt, tokensOf };
 }
