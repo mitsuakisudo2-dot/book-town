@@ -120,6 +120,33 @@ async function swipe(locator, dx, x) {
     { dx, x },
   );
 }
+/**
+ * A step of a finger drawn down Home from near its top, as synthetic
+ * touches: "start", a "move" to `dy` below (and `dx` aside), or "end".
+ */
+async function pull(stage, dy = 0, dx = 0) {
+  await page.locator(".home-view").evaluate(
+    (element, { stage, dy, dx }) => {
+      const box = element.getBoundingClientRect();
+      const top = box.top + 120;
+      const point = new Touch({
+        identifier: 1,
+        target: element,
+        clientX: box.left + box.width / 2 + dx,
+        clientY: top + dy,
+      });
+      const type = "touch" + stage;
+      element.dispatchEvent(
+        new TouchEvent(type, {
+          bubbles: true,
+          touches: stage === "end" ? [] : [point],
+          changedTouches: [point],
+        }),
+      );
+    },
+    { stage, dy, dx },
+  );
+}
 /** The demo town's six shops. */
 const DEMO_SHOPS = [
   "shop-orbit",
@@ -1229,6 +1256,82 @@ try {
         await swipe(pane("letters"), 160);
         await expect(page).toHaveURL(`${baseURL}/`);
         await expect(tab("ホーム")).toHaveAttribute("aria-selected", "true");
+      }),
+  );
+  await check(
+    "390px in the demo a pull at the top says nothing new came, nothing waits a minute later, and only a pull from the top reads",
+    () =>
+      withPage({}, async () => {
+        await goHome();
+        const letters = () =>
+          pane("home")
+            .locator(".home-letters > .post-feed > article.letter")
+            .evaluateAll((all) => all.map((card) => card.dataset.postId));
+        const drawn = await letters();
+        expect(drawn.length).toBeGreaterThan(0);
+        const words = page.locator(".home-pull");
+        // The clock stops a little ahead: Home is still settling.
+        const now = await page.evaluate(() => Date.now());
+        await page.clock.pauseAt(now + 2000);
+        await pull("start");
+        await pull("move", 60);
+        await expect(words).toHaveText("引っぱって新しい便りを読む");
+        await pull("move", 170);
+        await expect(words).toHaveText("離すと読み込みます");
+        await expect(words).toHaveAttribute("aria-hidden", "true");
+        await expectNoTinyWords(words, "the pull's words");
+        await expectReadable(words.locator("span"), "the pull's words");
+        await pull("end", 170);
+        await expect(words).toHaveText("新しい便りはまだありません");
+        await expect(page.locator(".town-said")).toHaveText(
+          "新しい便りはまだありません",
+        );
+        await page.clock.runFor(1000);
+        await expect(words).toHaveCount(0);
+        // The demo reads nothing after the town: no pill, no dot, nothing
+        // moved, and no zero.
+        await page.clock.runFor(5 * 60_000);
+        await expect(
+          page.getByRole("button", { name: "新しい便りを見る" }),
+        ).toHaveCount(0);
+        await expect(page.locator(".home-tab-dot")).toHaveCount(0);
+        await expect(tab("ホーム")).toBeVisible();
+        expect(await letters()).toEqual(drawn);
+        await expect(page.locator("main")).not.toContainText(ZERO);
+        // The tab tapped at the top only goes to the top: nothing to read.
+        await tab("ホーム").tap();
+        await expect(words).toHaveCount(0);
+        // Mostly sideways, or too short: no pull, and no switch.
+        await pull("start");
+        await pull("move", 40, 60);
+        await pull("end", 40, 60);
+        await pull("start");
+        await pull("move", 100);
+        await pull("end", 100);
+        await expect(words).toHaveCount(0);
+        await expect(page).toHaveURL(`${baseURL}/`);
+        // Read down the page, a finger drawn down only scrolls.
+        await page.evaluate(() => window.scrollTo(0, 300));
+        await pull("start");
+        await pull("move", 170);
+        await expect(words).toHaveCount(0);
+        await pull("end", 170);
+        await page.evaluate(() => window.scrollTo(0, 0));
+        // Under a sheet, the finger is the sheet's.
+        await page.locator(".compose-fab").tap();
+        const sheet = page.getByRole("dialog", { name: "投稿する" });
+        await expect(sheet).toBeVisible();
+        await pull("start");
+        await pull("move", 170);
+        await expect(words).toHaveCount(0);
+        await pull("end", 170);
+        // While Home shows, the browser's own pull and rubber band are off.
+        expect(
+          await page.evaluate(
+            () =>
+              getComputedStyle(document.documentElement).overscrollBehaviorY,
+          ),
+        ).toBe("none");
       }),
   );
   await check(
