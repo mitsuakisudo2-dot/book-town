@@ -1676,9 +1676,21 @@ try {
           );
         const before = await tops();
         expect(before.length).toBeGreaterThan(10);
-        // No 便り of 凪's (軌道書房) yet above 「街の便り」.
+        // No 便り of 凪's (軌道書房) yet above 「街の便り」: the first card is
+        // the town's (凪's may lead it, now Live holds the memos).
         const first = pane("home").locator("article.letter").first();
-        await expect(first).not.toContainText("十年ぶりに再読");
+        const townFirst = () =>
+          pane("home").evaluate((element) => {
+            const head = element.querySelector(".home-town-head");
+            const card = element.querySelector("article.letter");
+            return Boolean(
+              head &&
+              card &&
+              head.compareDocumentPosition(card) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+            );
+          });
+        expect(await townFirst()).toBe(true);
         await orbit
           .getByRole("button", { name: "軌道書房をフォロー", exact: true })
           .tap();
@@ -1693,10 +1705,198 @@ try {
         await expect(
           first.getByRole("link", { name: "凪", exact: true }),
         ).toBeVisible();
+        expect(await townFirst()).toBe(false);
         await expect(page.locator(".home-older")).toBeVisible();
         await expect(pane("home")).toContainText(
           "フォロー中の便りは、ここまでです。",
         );
+      }),
+  );
+
+  for (const width of [390, 320])
+    await check(
+      `${width}px 読みながらのひとこと: three lines of 104px with their covers, opened to all and closed, each memo once and none on 便りだけ, a tap or Enter on the time opens its 便り (a new-tab click is the browser's), and a spoiler or a book being read waits behind a tap that fits its line and keeps the focus`,
+      () =>
+        withPage({ viewport: { width, height: 844 } }, async () => {
+          // Two days after the demo's four memos.
+          await page.clock.setSystemTime(
+            Date.parse("2026-10-12T12:00:00+09:00"),
+          );
+          await goHome();
+          const live = pane("home").locator(".home-live");
+          await expect(
+            live.getByRole("heading", { name: "読みながらのひとこと" }),
+          ).toBeVisible();
+          const box = live.locator(".home-live-box");
+          await expect(box).toHaveAttribute("aria-live", "off");
+          const rows = box.locator(".home-live-line");
+          const MEMOS = ["p-m4", "p-m2", "p-m1", "p-m3"];
+          await expect(rows).toHaveCount(4);
+          expect(
+            await rows.evaluateAll((all) =>
+              all.map((row) => row.dataset.postId),
+            ),
+          ).toEqual(MEMOS);
+          const boxHeight = () =>
+            box.evaluate((element) => element.getBoundingClientRect().height);
+          expect(await boxHeight()).toBe(312);
+          for (const index of [0, 1, 2]) {
+            const row = rows.nth(index);
+            expect((await row.boundingBox()).height).toBe(104);
+            // The cover whole at 44px; who, 『the book』 and when on one
+            // line; the words in two lines at most.
+            expect(
+              (await row.locator(".home-live-jacket").boundingBox()).width,
+            ).toBe(44);
+            await expect(row.locator(".book-jacket")).toBeVisible();
+            expect(
+              (await row.locator(".home-live-meta").boundingBox()).height,
+            ).toBe(22);
+            expect(
+              await row
+                .locator(".home-live-text")
+                .evaluate((text) =>
+                  Math.round(
+                    text.getBoundingClientRect().height /
+                      parseFloat(getComputedStyle(text).lineHeight),
+                  ),
+                ),
+            ).toBeLessThanOrEqual(2);
+          }
+          // The fourth waits under the box, out of reach.
+          await expect(rows.nth(3)).toHaveAttribute("inert", "");
+          // Nothing comes to the demo: no 止める.
+          await expect(
+            live.getByRole("button", { name: /ひとことを(止める|動かす)/ }),
+          ).toHaveCount(0);
+          const more = live.getByRole("button", { name: "前のひとことも見る" });
+          expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(44);
+          await more.tap();
+          const fold = live.getByRole("button", { name: "たたむ" });
+          await expect(fold).toHaveAttribute("aria-expanded", "true");
+          await expect.poll(boxHeight).toBe(416);
+          await expect(rows.nth(3)).not.toHaveAttribute("inert", "");
+          await fold.tap();
+          await expect.poll(boxHeight).toBe(312);
+          await noOverflow(`${width}px ひとこと`);
+          // Each memo once: none among ホーム's 便り.
+          for (const id of MEMOS)
+            await expect(
+              pane("home").locator(`article.letter[data-post-id="${id}"]`),
+            ).toHaveCount(0);
+          // The time is the keyboard's way in; a tap on a line opens its 便り.
+          await expect(
+            rows.first().locator("a.home-live-time"),
+          ).toHaveAttribute("href", "/post/?id=p-m4");
+          await rows.first().locator(".home-live-text").tap();
+          await expect(letterPage("すみれ")).toBeVisible();
+          await page.goBack();
+          await expect(letterPage("すみれ")).toHaveCount(0);
+          // By the keyboard: Enter on the time, and 戻る gives the focus back.
+          const time = rows.first().locator("a.home-live-time");
+          await time.focus();
+          await page.keyboard.press("Enter");
+          await expect(letterPage("すみれ")).toBeVisible();
+          await page.goBack();
+          await expect(letterPage("すみれ")).toHaveCount(0);
+          await expect(time).toBeFocused();
+          // A click meant for a new tab or window is left to the browser.
+          expect(
+            await time.evaluate((link) => {
+              let prevented = null;
+              addEventListener(
+                "click",
+                (event) => {
+                  prevented = event.defaultPrevented;
+                  event.preventDefault();
+                },
+                { once: true },
+              );
+              link.dispatchEvent(
+                new MouseEvent("click", {
+                  bubbles: true,
+                  cancelable: true,
+                  button: 0,
+                  ctrlKey: true,
+                }),
+              );
+              return prevented;
+            }),
+          ).toBe(false);
+          await expect(letterPage("すみれ")).toHaveCount(0);
+          // 便りだけ has no ひとこと band.
+          await tab("便りだけ").tap();
+          await expect(pane("letters").locator(".home-live")).toHaveCount(0);
+
+          // Reading ソラリス (on the reader's shelves, not finished), and
+          // すみれ's memo asked about as a spoiler: those lines wait behind
+          // a tap, the words not on the page until then.
+          await editTown(`
+            data.readingSessions = [{ id: "me-reading-1", bookId: "solaris",
+              mode: "together", startedAt: "2026-10-12T10:00:00+09:00",
+              endedAt: null }];
+            data.spoilerReports = ["p-m4"];
+          `);
+          await goHome();
+          const guards = live.getByRole("button", {
+            name: /あなたの本棚の、読み終えていない本のひとことです。/,
+          });
+          await expect(guards).toHaveCount(2);
+          await expect(live).not.toContainText("海の描写のところで");
+          // Each stand-in fits its line, with room under it.
+          for (const index of [1, 2])
+            expect(
+              await rows.nth(index).evaluate((row) => {
+                const guard = row.querySelector(".home-live-guard");
+                return (
+                  row.getBoundingClientRect().bottom -
+                  guard.getBoundingClientRect().bottom
+                );
+              }),
+            ).toBeGreaterThanOrEqual(4);
+          expect(
+            (await guards.first().boundingBox()).height,
+          ).toBeGreaterThanOrEqual(44);
+          await guards.first().tap();
+          const opened = rows.nth(1).locator(".home-live-text");
+          await expect(opened).toContainText("凪さんと同じ本を");
+          await expect(opened).toBeFocused();
+          await expect(guards).toHaveCount(1);
+          const spoiler = rows.first().getByRole("button", {
+            name: /ネタバレの可能性を報告済み・押すと表示/,
+          });
+          await expect(live).not.toContainText("もう三つ目");
+          await spoiler.tap();
+          await expect(rows.first().locator(".home-live-text")).toContainText(
+            "もう三つ目",
+          );
+          await expect(rows.first().locator(".home-live-text")).toBeFocused();
+          await expectNoTinyWords(live, `${width}px ひとこと`);
+          await expectTargetsAndType(live, `${width}px ひとこと`);
+          // A line both on the shelves and a spoiler: 表示する gives the
+          // focus to its spoiler box.
+          await editTown(`data.spoilerReports = ["p-m4", "p-m2"];`);
+          await goHome();
+          await guards.first().tap();
+          await expect(
+            rows.nth(1).getByRole("button", {
+              name: /ネタバレの可能性を報告済み・押すと表示/,
+            }),
+          ).toBeFocused();
+        }),
+    );
+  await check(
+    "390px no ひとこと band below three memos in seven days, and no frame for it",
+    () =>
+      withPage({}, async () => {
+        // Eight days after the demo's memos: none is a line.
+        await page.clock.setSystemTime(Date.parse("2026-10-18T22:00:00+09:00"));
+        await goHome();
+        await expect(pane("home").locator(".home-live")).toHaveCount(0);
+        // Their 便り stay among the town's, as before.
+        await expect(
+          pane("home").locator('article.letter[data-post-id="p-m4"]'),
+        ).toHaveCount(1);
       }),
   );
 

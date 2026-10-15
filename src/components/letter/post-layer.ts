@@ -54,15 +54,22 @@ export const postOfLayer = (name: string): string | null =>
   name.startsWith("post:") ? name.slice("post:".length) : null;
 
 /**
- * Gives the focus back to the time link of the card the page opened from,
- * or, opened another way (戻る from a page it left for), to that post's
- * time link wherever it is on the screen.
+ * Gives the focus back to the time link of the card (or Live's line) the
+ * page opened from, or, opened another way (戻る from a page it left for),
+ * to that post's time link wherever it is on the screen.
  */
 export function focusReturn(id: string) {
+  const href = CSS.escape(postPath(id));
+  // The first on the screen: not in a pane hidden, nor in a line under Live.
   const link = returnTo?.isConnected
     ? returnTo
-    : document.querySelector<HTMLElement>(
-        `a.letter-time[href="${CSS.escape(postPath(id))}"]`,
+    : [
+        ...document.querySelectorAll<HTMLElement>(
+          `a.letter-time[href="${href}"], a.home-live-time[href="${href}"]`,
+        ),
+      ].find(
+        (element) =>
+          element.getClientRects().length > 0 && !element.closest("[inert]"),
       );
   returnTo = null;
   link?.focus({ preventScroll: true });

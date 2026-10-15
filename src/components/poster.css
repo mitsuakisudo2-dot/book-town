@@ -321,7 +321,7 @@ a.poster-cover:hover {
   border-radius: 999px;
   background: rgb(28 30 26 / 0.58);
   color: #fbf8f1;
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.7;
   letter-spacing: 0.06em;
   pointer-events: none;

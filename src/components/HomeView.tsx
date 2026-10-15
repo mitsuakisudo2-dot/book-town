@@ -25,8 +25,9 @@ import {
 } from "../lib/home-tab";
 import { HomeTabs, HOME_TABS, paneId, tabId } from "./home/HomeTabs";
 import { HomePane } from "./home/HomePane";
+import { liveSlotOf } from "./home/LiveBox";
 import { LettersOnly } from "./home/LettersOnly";
-import { motion, useNow } from "./home/hooks";
+import { motion, useHeld, useNow, useTownReading } from "./home/hooks";
 import { NewLettersPill } from "./home/NewLettersPill";
 import { PullSpace } from "./home/PullSpace";
 import {
@@ -218,9 +219,18 @@ export function HomeView({
   const waiting = useArrivals();
   const now = useNow();
   const { state } = shared;
+  // ホーム's Live (PR 2b), chosen here with the pane's drawing (the same
+  // reading and refresh), so the pill knows from the first render which
+  // memos come into its box: those are no new 便り there.
+  const reading = useTownReading();
+  const live = useHeld(
+    mounted.has("home") ? reading : null,
+    refresh.home,
+    (at) => liveSlotOf(state, at),
+  );
   const fresh = useMemo(
-    () => (now === null ? null : freshFor(state, waiting.arrived, now)),
-    [state, waiting.arrived, now],
+    () => (now === null ? null : freshFor(state, waiting.arrived, now, live)),
+    [state, waiting.arrived, now, live],
   );
   const [barHidden, setBarHidden] = useState(false);
   // A layer over Home (a 便り's page, a dialog) keeps the pill waiting.
@@ -267,7 +277,7 @@ export function HomeView({
    * keep a dot until renewed. Whether `renewed` has new ones to show.
    */
   function took(before: TownState, taken: Arrived, renewed: HomeTab | null) {
-    const got = freshFor(before, taken, Date.now());
+    const got = freshFor(before, taken, Date.now(), live);
     const behind = HOME_TABS.flatMap(([key]) =>
       key !== renewed && mounted.has(key) && got[key].length ? [key] : [],
     );
@@ -288,6 +298,16 @@ export function HomeView({
     renew(which);
     if (taken && took(before, taken, which))
       announce("新しい便りを上に出しました");
+  }
+  /**
+   * A line of Live tapped before it is in the town: that memo alone goes in,
+   * to open its page; the other panes made so far keep a dot for it.
+   */
+  function takeLine(id: string): boolean {
+    const before = getTownSnapshot();
+    const taken = townArrivals.takePost(id);
+    if (taken) took(before, taken, null);
+    return taken !== null;
   }
   /** A pull, or the tab tapped at the top: reads now, then shows all. */
   async function readNew(): Promise<PullOutcome> {
@@ -433,6 +453,8 @@ export function HomeView({
               shown={tab === "home"}
               refresh={refresh.home}
               onLetters={() => switchTo("letters")}
+              live={live}
+              onTakeLine={takeLine}
             />
           ) : (
             <LettersOnly

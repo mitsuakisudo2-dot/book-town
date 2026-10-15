@@ -6,6 +6,7 @@ import {
   type LetterEntry,
 } from "./home-feed";
 import type { HomeTab } from "./home-tab";
+import { isLiveLine } from "./live";
 import { isDatabaseId } from "./paths";
 import { OLDER_PAGE, type TownReads } from "./town-backend";
 import { ME_ID, type OlderRead, type TownState } from "./types";
@@ -104,13 +105,21 @@ export function sinceOf(
 /**
  * The new 便り each pane would show at its top once taken in: on ホーム, as
  * homeLetters would place them (followed, or among 「街の便り」 on a quiet
- * home); on 便りだけ, the followed ones. Replies and the reader's own are not
- * new 便り. The pill and the dot are for these only.
+ * home); on 便りだけ, the followed ones. Replies and the reader's own are
+ * not new 便り. The pill and the dot are for these only. When ホーム holds
+ * a Live box (`live`: its lines, the memos the town had then, and when it
+ * was drawn), what is in it or comes into it by itself (as newLines finds
+ * it) is not new 便り there, nor counted among them; without one, it is.
  */
 export function freshFor(
   state: TownState,
   arrived: Arrived | null,
   now: number,
+  live: {
+    ids: readonly string[];
+    known: ReadonlySet<string>;
+    at: number;
+  } | null = null,
 ): Record<HomeTab, LetterEntry[]> {
   if (!arrived) return { home: [], letters: [] };
   const fresh = unseen(arrived, state);
@@ -119,7 +128,22 @@ export function freshFor(
   );
   if (!ids.size) return { home: [], letters: [] };
   const town = takeIn(state, fresh);
-  const { followed, town: others } = homeLetters(town, now);
+  const leave = new Set(
+    live
+      ? [
+          ...live.ids,
+          ...town.posts
+            .filter(
+              (post) =>
+                !live.known.has(post.id) &&
+                !town.readAfter?.[post.id] &&
+                isLiveLine(town, post, live.at),
+            )
+            .map((post) => post.id),
+        ]
+      : [],
+  );
+  const { followed, town: others } = homeLetters(town, now, leave);
   return {
     home: [...followed, ...others].filter((entry) => ids.has(entry.id)),
     letters: followedLetters(town).filter((entry) => ids.has(entry.id)),
@@ -376,6 +400,27 @@ export function createArrivals(
     return reading;
   }
 
+  /**
+   * Takes one post of what waits into the town, the rest still waiting: a
+   * line of Live the reader tapped, to open its page. What was taken in
+   * (that post, with what goes with it), or null if it was not.
+   */
+  function takePost(id: string): Arrived | null {
+    const arrived = snapshot.arrived;
+    const from = generation;
+    const post = arrived?.posts.find((entry) => entry.id === id);
+    if (!arrived || !post || from === null) return null;
+    const taken = { ...arrived, posts: [post] };
+    if (!town.absorb(taken, from)) return null;
+    const rest = unseen(arrived, town.state());
+    if (rest.posts.length) emit({ ...snapshot, arrived: rest });
+    else {
+      resetPill();
+      emit({ arrived: null, retired: false });
+    }
+    return taken;
+  }
+
   /** Takes what waits into the town: the reader asked for it. */
   function take(): Arrived | null {
     const arrived = snapshot.arrived;
@@ -448,6 +493,7 @@ export function createArrivals(
     },
     read,
     take,
+    takePost,
     /** A pull, or the tab tapped at the top: reads now, then takes all. */
     async refresh(): Promise<Refreshed> {
       const outcome = await read();

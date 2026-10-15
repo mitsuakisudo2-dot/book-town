@@ -42,6 +42,7 @@ import { Alley } from "./Alley";
 import { CorkBoard } from "./CorkBoard";
 import { Entrances } from "./Entrances";
 import { FeatureView } from "./FeatureBand";
+import { LiveBox, type LiveSlot } from "./LiveBox";
 import { useHeld, useTownReading } from "./hooks";
 import { Letters, LetterSkeletons, type Shared } from "./Letters";
 import { ReadingLine } from "./ReadingLine";
@@ -49,8 +50,11 @@ import type { Picked } from "./ShopFront";
 import { StartReadingSheet } from "./StartReadingSheet";
 import { TopCarousel, type Slide } from "./TopCarousel";
 
-/** The 特集 slots in turn after every two 便り; the board keeps the third (仮). */
-type Slot = Feature | { kind: "board"; picks: PopPick[] };
+/**
+ * The 特集 slots in turn after every two 便り: Live first when it has a band
+ * (v37's place, PR 2b), then the rest, the board third among them (仮).
+ */
+type Slot = Feature | { kind: "board"; picks: PopPick[] } | LiveSlot;
 
 /**
  * A 特集 as the pane holds it: what it chose, by id, never the records
@@ -58,7 +62,8 @@ type Slot = Feature | { kind: "board"; picks: PopPick[] };
  */
 type HeldSlot =
   | { kind: "exhibition" | "shelves" | "reviews"; ids: string[] }
-  | { kind: "pops" | "board"; places: PlaceRef[] };
+  | { kind: "pops" | "board"; places: PlaceRef[] }
+  | LiveSlot;
 
 /** What the ホーム pane drew, held still until the reader asks for more. */
 type Drawn = {
@@ -86,6 +91,8 @@ function hold(slot: Slot | null): HeldSlot | null {
       return { kind: slot.kind, places: slot.pops.map(placeOf) };
     case "board":
       return { kind: slot.kind, places: slot.picks.map(placeOf) };
+    case "live":
+      return slot;
   }
 }
 
@@ -119,6 +126,9 @@ function resolve(
   switch (slot?.kind) {
     case undefined:
       return null;
+    // Live reads its lines again itself, with what polling brought.
+    case "live":
+      return slot;
     case "board":
       return {
         kind: "board",
@@ -165,6 +175,8 @@ export function HomePane({
   shown,
   refresh,
   onLetters,
+  live,
+  onTakeLine,
   ...shared
 }: Shared & {
   /** Whether this pane is the one shown. */
@@ -173,11 +185,20 @@ export function HomePane({
   refresh: number;
   /** Shows 便りだけ in place. */
   onLetters: () => void;
+  /** Live as HomeView chose it with this drawing (liveSlotOf), or none. */
+  live: LiveSlot | null;
+  /** Takes a line of Live into the town; whether it is there now. */
+  onTakeLine: (id: string) => boolean;
 }) {
   const { state } = shared;
   const reading = useTownReading();
   const drawn = useHeld<Drawn>(reading, refresh, (now) => {
-    const { followed, town } = homeLetters(state, now);
+    // Live's memos (PR 2b) leave the 便り, so none appears twice.
+    const { followed, town } = homeLetters(
+      state,
+      now,
+      new Set(live?.ids ?? []),
+    );
     const letters = [...followed, ...town];
     const pick = exhibitionPick(state);
     return {
@@ -189,6 +210,7 @@ export function HomePane({
       exhibition: pick?.id ?? null,
       slots: (
         [
+          ...(live ? [live] : []),
           reviewsFeature(
             state,
             now,
@@ -298,6 +320,7 @@ export function HomePane({
           slots={slots}
           mark={mark}
           onPick={setPicked}
+          onTakeLine={onTakeLine}
         />
       ) : (
         <LetterSkeletons />
@@ -365,6 +388,7 @@ function WovenLetters({
   slots,
   mark,
   onPick,
+  onTakeLine,
   ...shared
 }: Shared & {
   followed: LetterEntry[];
@@ -373,6 +397,7 @@ function WovenLetters({
   /** The 便り 「前に開いたのはここまで」 goes before. */
   mark: string | null;
   onPick: (picked: Picked) => void;
+  onTakeLine: (id: string) => boolean;
 }) {
   const firstTown = town[0]?.id;
   const parts: ReactNode[] = [];
@@ -406,7 +431,14 @@ function WovenLetters({
     flush();
     const feature = slot.feature;
     parts.push(
-      feature.kind === "board" ? (
+      feature.kind === "live" ? (
+        <LiveBox
+          {...shared}
+          key="live"
+          slot={feature}
+          onTakeLine={onTakeLine}
+        />
+      ) : feature.kind === "board" ? (
         <CorkBoard key="board" picks={feature.picks} onPick={onPick} />
       ) : (
         <FeatureView
