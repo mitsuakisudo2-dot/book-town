@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import type { Reader } from "../../lib/types";
 
 /**
@@ -10,16 +11,37 @@ import type { Reader } from "../../lib/types";
 export function NewLettersPill({
   writers,
   onTap,
+  onFocusChange,
+  onGone,
 }: {
   writers: Reader[];
   onTap: () => void;
+  /** Whether it has the focus. */
+  onFocusChange: (focused: boolean) => void;
+  /** It goes away with the focus on it: where the focus goes instead. */
+  onGone: () => void;
 }) {
+  const button = useRef<HTMLButtonElement>(null);
+  const gone = useRef(onGone);
+  useEffect(() => {
+    gone.current = onGone;
+  });
+  // Run before the button leaves the page, while it still has the focus.
+  useLayoutEffect(() => {
+    const element = button.current;
+    return () => {
+      if (element && document.activeElement === element) gone.current();
+    };
+  }, []);
   return (
     <button
+      ref={button}
       type="button"
       className="home-new"
       aria-label="新しい便りを見る"
       onClick={onTap}
+      onFocus={() => onFocusChange(true)}
+      onBlur={() => onFocusChange(false)}
     >
       {writers.length > 0 && (
         <span className="home-new-faces" aria-hidden="true">
@@ -27,7 +49,8 @@ export function NewLettersPill({
             <span
               key={writer.id}
               className="home-new-face"
-              style={{ background: writer.color }}
+              // A pale wash of the writer's colour, so the initial reads.
+              style={{ "--face": writer.color } as CSSProperties}
             >
               {writer.name.slice(0, 1)}
             </span>

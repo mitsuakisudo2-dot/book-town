@@ -11,7 +11,7 @@ import {
 } from "react";
 import type { Notify, Reader, TownActions, TownState } from "../lib/types";
 import { ComposeFab } from "./Social";
-import { leaveLayers } from "../lib/back-layer";
+import { leaveLayers, useLayerOpen } from "../lib/back-layer";
 import { replaceAddress, useAddressPath } from "../lib/url-state";
 import {
   HOME_SEEN,
@@ -28,17 +28,15 @@ import { HomePane } from "./home/HomePane";
 import { LettersOnly } from "./home/LettersOnly";
 import { motion, useNow } from "./home/hooks";
 import { NewLettersPill } from "./home/NewLettersPill";
+import { PullSpace } from "./home/PullSpace";
 import {
   townArrivals,
   useArrivals,
   useArrivalsWatch,
 } from "./home/useArrivals";
-import {
-  PULL_WORDS,
-  usePullToRefresh,
-  type PullOutcome,
-} from "./home/usePullToRefresh";
+import { usePullToRefresh, type PullOutcome } from "./home/usePullToRefresh";
 import { freshFor } from "../lib/arrivals";
+import type { Arrived } from "../lib/arrived";
 import { authorOf } from "../lib/home-feed";
 import { lastOpen } from "../lib/last-open";
 import { announce } from "../lib/live-region";
@@ -59,6 +57,12 @@ const TITLES: Record<HomeTab, string> = {
 };
 
 const toTop = () => window.scrollTo({ top: 0, behavior: motion() });
+
+/**
+ * What 「新しい便りがあります」 was said for: once for what came, however
+ * often the pill comes back (the bars, a layer, Home left and come back to).
+ */
+let toldFor: Arrived | null = null;
 
 /** A swipe starting this near either edge belongs to the browser (back). */
 const EDGE = 24;
@@ -185,10 +189,25 @@ export function HomeView({
         { duration: 280, easing: "cubic-bezier(.2,0,0,1)" },
       );
   }, [tab]);
+  // Panes made before new 便り were taken in at another, which still draw
+  // the town from before them: a dot says so until they are renewed. For
+  // the town they were taken into (its generation).
+  const [stale, setStale] = useState<{
+    generation: number;
+    tabs: ReadonlySet<HomeTab>;
+  } | null>(null);
   /** The pane shown goes to its top, and draws what came since. */
   const renew = (which: HomeTab) => {
     toTop();
     setRefresh((counts) => ({ ...counts, [which]: counts[which] + 1 }));
+    setStale((now) =>
+      now?.tabs.has(which)
+        ? {
+            ...now,
+            tabs: new Set([...now.tabs].filter((key) => key !== which)),
+          }
+        : now,
+    );
   };
 
   // New 便り (PR 2): read every minute while Home shows, kept outside the
@@ -204,22 +223,35 @@ export function HomeView({
     [state, waiting.arrived, now],
   );
   const [barHidden, setBarHidden] = useState(false);
+  // A layer over Home (a 便り's page, a dialog) keeps the pill waiting.
+  const layerOpen = useLayerOpen();
   const pillOn =
-    !!fresh && fresh[tab].length > 0 && !waiting.retired && !barHidden;
+    !!fresh &&
+    fresh[tab].length > 0 &&
+    !waiting.retired &&
+    !barHidden &&
+    !layerOpen;
+  // While it has the focus, its time stands still.
+  const [pillFocused, setPillFocused] = useState(false);
+  if (!pillOn && pillFocused) setPillFocused(false);
   // The pill's eight seconds count while it is on the screen.
-  useEffect(() => townArrivals.shown(pillOn), [pillOn]);
+  const counting = pillOn && !pillFocused;
+  useEffect(() => townArrivals.shown(counting), [counting]);
   useEffect(() => () => townArrivals.shown(false), []);
-  // Said once for what came, not each time the bars bring the pill back.
-  const told = useRef<unknown>(null);
   useEffect(() => {
-    if (!pillOn || told.current === waiting.arrived) return;
-    told.current = waiting.arrived;
+    if (!pillOn || toldFor === waiting.arrived) return;
+    toldFor = waiting.arrived;
     announce("新しい便りがあります");
   }, [pillOn, waiting.arrived]);
+  const generation = townStore.getGeneration();
+  const staleTabs =
+    stale?.generation === generation ? stale.tabs : new Set<HomeTab>();
   const dotted = new Set(
-    waiting.retired && fresh
-      ? HOME_TABS.flatMap(([key]) => (fresh[key].length ? [key] : []))
-      : [],
+    HOME_TABS.flatMap(([key]) =>
+      (waiting.retired && fresh?.[key].length) || staleTabs.has(key)
+        ? [key]
+        : [],
+    ),
   );
   const writers = pillOn
     ? [...new Set(fresh[tab].map(authorOf))].flatMap((id): Reader[] =>
@@ -229,11 +261,33 @@ export function HomeView({
         ].filter((reader) => reader !== undefined),
       )
     : [];
+  /**
+   * New 便り were taken into the town from `before`, and the pane `renewed`
+   * drew them: the other panes made so far, which would have shown some,
+   * keep a dot until renewed. Whether `renewed` has new ones to show.
+   */
+  function took(before: TownState, taken: Arrived, renewed: HomeTab | null) {
+    const got = freshFor(before, taken, Date.now());
+    const behind = HOME_TABS.flatMap(([key]) =>
+      key !== renewed && mounted.has(key) && got[key].length ? [key] : [],
+    );
+    if (behind.length)
+      setStale((now) => ({
+        generation,
+        tabs: new Set([
+          ...(now?.generation === generation ? now.tabs : []),
+          ...behind,
+        ]),
+      }));
+    return renewed !== null && got[renewed].length > 0;
+  }
   /** What waits goes in at the top of the pane shown, and it goes there. */
   function showNew(which: HomeTab) {
+    const before = getTownSnapshot();
     const taken = townArrivals.take();
     renew(which);
-    if (taken) announce("新しい便りを上に出しました");
+    if (taken && took(before, taken, which))
+      announce("新しい便りを上に出しました");
   }
   /** A pull, or the tab tapped at the top: reads now, then shows all. */
   async function readNew(): Promise<PullOutcome> {
@@ -244,9 +298,9 @@ export function HomeView({
     }
     const before = getTownSnapshot();
     const { failed, taken } = await townArrivals.refresh();
-    if (tabRef.current === which) renew(which);
-    if (taken && freshFor(before, taken, Date.now())[which].length)
-      return "arrived";
+    const renewed = tabRef.current === which ? which : null;
+    if (renewed) renew(renewed);
+    if (taken && took(before, taken, renewed)) return "arrived";
     return failed ? "failed" : "none";
   }
   const pull = usePullToRefresh(readNew);
@@ -417,20 +471,21 @@ export function HomeView({
       />
       {pillOn && (
         <div className="home-new-slot">
-          <NewLettersPill writers={writers} onTap={() => showNew(tab)} />
+          <NewLettersPill
+            writers={writers}
+            onTap={() => showNew(tab)}
+            onFocusChange={setPillFocused}
+            // Gone with the focus on it (taken, or its time up): the focus
+            // goes to the tab shown, never lost to the page.
+            onGone={() =>
+              document
+                .getElementById(tabId(tabRef.current))
+                ?.focus({ preventScroll: true })
+            }
+          />
         </div>
       )}
-      {pull.pull && (
-        // Said to a screen reader by the live region once it is read.
-        <div
-          className="home-pull"
-          aria-hidden="true"
-          data-phase={pull.pull.phase}
-          style={{ height: pull.pull.distance }}
-        >
-          <span>{PULL_WORDS[pull.pull.phase]}</span>
-        </div>
-      )}
+      <PullSpace space={pull.space} />
       {pane("home")}
       {pane("letters")}
       <ComposeFab

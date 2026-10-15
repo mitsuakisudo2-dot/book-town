@@ -1047,6 +1047,8 @@ html[data-home-tab] {
 .home-new-faces {
   display: inline-flex;
 }
+/* The writer's colour washed into the sheet, so the initial in ink reads
+   on any of them (black at worst, 5:1). The avatars elsewhere keep theirs. */
 .home-new-face {
   display: grid;
   place-items: center;
@@ -1054,6 +1056,7 @@ html[data-home-tab] {
   height: 26px;
   border: 2px solid var(--green);
   border-radius: 50%;
+  background: color-mix(in srgb, var(--face, var(--sheet)) 40%, var(--sheet));
   color: var(--ink);
   font-family: var(--serif);
   font-size: var(--t-cap);

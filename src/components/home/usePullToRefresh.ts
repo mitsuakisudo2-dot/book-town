@@ -44,12 +44,45 @@ const covered = () =>
 export type Pull = { phase: PullPhase; distance: number } | null;
 
 /**
- * The pull's touch handlers, the space it opens (null when shut) and `run`,
- * which reads as a pull does (the tab tapped at the top, for a desktop and
- * the keyboard). `refresh` reads and takes in, and says how it went.
+ * The space a pull opens, kept outside React's state of Home: a finger's
+ * every move redraws the space (PullSpace), never the panes beneath.
+ */
+export function createPullSpace() {
+  let pull: Pull = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: (): Pull => pull,
+    set(next: Pull) {
+      if (
+        next === pull ||
+        (next &&
+          pull &&
+          next.phase === pull.phase &&
+          next.distance === pull.distance)
+      )
+        return;
+      pull = next;
+      listeners.forEach((listener) => listener());
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+export type PullSpaceStore = ReturnType<typeof createPullSpace>;
+
+/**
+ * The pull's touch handlers, the space it opens (`space`, for PullSpace)
+ * and `run`, which reads as a pull does (the tab tapped at the top, for a
+ * desktop and the keyboard). `refresh` reads and takes in, and says how it
+ * went.
  */
 export function usePullToRefresh(refresh: () => Promise<PullOutcome>) {
-  const [pull, setPull] = useState<Pull>(null);
+  const [space] = useState(createPullSpace);
+  const setPull = space.set;
   const start = useRef<{ x: number; y: number; pulling: boolean } | null>(null);
   const distance = useRef(0);
   const busy = useRef(false);
@@ -79,6 +112,11 @@ export function usePullToRefresh(refresh: () => Promise<PullOutcome>) {
   }
   function onTouchStart(event: TouchEvent) {
     const touch = event.touches[0];
+    // A second finger while pulling: no pull, and the space closes.
+    if (start.current?.pulling && !busy.current) {
+      distance.current = 0;
+      setPull(null);
+    }
     start.current =
       !busy.current &&
       event.touches.length === 1 &&
@@ -122,5 +160,5 @@ export function usePullToRefresh(refresh: () => Promise<PullOutcome>) {
     distance.current = 0;
     if (from?.pulling && !busy.current) setPull(null);
   }
-  return { pull, run, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel };
+  return { space, run, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel };
 }
