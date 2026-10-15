@@ -76,9 +76,18 @@ export type HomeLetters = {
   town: LetterEntry[];
 };
 
-/** The 便り of ホーム. */
-export function homeLetters(state: TownState, now: number): HomeLetters {
-  const followed = followedLetters(state).slice(0, LETTERS_MAX);
+/**
+ * The 便り of ホーム. Those in `leave` are shown elsewhere on the pane (the
+ * memos Live holds, PR 2b) and are not 便り here, so none appears twice;
+ * the cap and the fortnight's count are of what is left.
+ */
+export function homeLetters(
+  state: TownState,
+  now: number,
+  leave: ReadonlySet<string> = new Set(),
+): HomeLetters {
+  const kept = (entry: LetterEntry) => !leave.has(entry.id);
+  const followed = followedLetters(state).filter(kept).slice(0, LETTERS_MAX);
   const recent = followed.filter(
     (entry) => entry.at >= now - RECENT_DAYS * DAY,
   ).length;
@@ -88,7 +97,7 @@ export function homeLetters(state: TownState, now: number): HomeLetters {
     ...timelinePosts(state).map(postEntry),
     ...timelinePosters(state).map(posterEntry),
   ]
-    .filter((entry) => !ids.has(entry.id))
+    .filter((entry) => !ids.has(entry.id) && kept(entry))
     .sort(newestFirst)
     .slice(0, TOWN_MAX);
   return { followed, town };

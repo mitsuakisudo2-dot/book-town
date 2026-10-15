@@ -53,7 +53,7 @@ type Shared = {
 };
 
 /** What the covered box says, by why it is covered (仮, §4.2 #8). */
-function spoilerWords(post: Post, askedByMe: boolean): string {
+export function spoilerWords(post: Post, askedByMe: boolean): string {
   if (post.spoiler) return "結末に触れています・押すと表示";
   if (askedByMe) return "ネタバレの可能性を報告済み・押すと表示";
   return "ネタバレかもしれません・押すと表示";

@@ -1193,6 +1193,206 @@ html[data-home-tab] {
   font-weight: 700;
 }
 
+/* 読みながらのひとこと (Live, PR 2b; v37 .lives): three lines of a fixed
+   height in a box that never scrolls, opened to six. New ones come in at its
+   top; the box keeps its height, so nothing around it moves. */
+.home-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lamp-glow);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lamp-glow) 30%, transparent);
+}
+.home-live-frame {
+  margin: 0 max(16px, var(--home-gutter));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--sheet);
+}
+/* Clipped, not hidden: nothing can scroll it, not even a script. */
+.home-live-box {
+  overflow: clip;
+  transition: height 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+.home-live-line {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  box-sizing: border-box;
+  height: 104px;
+  padding: 12px 14px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.home-live-line + .home-live-line {
+  border-top: 1px solid var(--line);
+}
+.home-live-jacket {
+  display: block;
+  width: 44px;
+}
+.home-live-jacket .book-jacket {
+  container-type: normal;
+}
+.home-live-jacket .book-jacket > span:not(.jacket-edge):not(.jacket-art) {
+  display: none;
+}
+.home-live-words {
+  min-width: 0;
+}
+/* Who, 『which book』 and when, on one line: what does not fit ends in …. */
+.home-live-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 22px;
+  white-space: nowrap;
+}
+.home-live-face {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--face, var(--sheet)) 40%, var(--sheet));
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-cap);
+  line-height: 1;
+}
+.home-live-name {
+  flex: 0 1 auto;
+  min-width: 2em;
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+.home-live-meta .home-tag {
+  flex: none;
+  margin-left: 0;
+}
+.home-live-book {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-live-time {
+  flex: none;
+  margin-left: auto;
+  padding-left: 4px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.home-live-time:hover {
+  text-decoration: underline;
+}
+.home-live-text {
+  display: -webkit-box;
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--t-body);
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.home-live-text:focus {
+  outline: none;
+}
+.home-live-hidden {
+  display: inline-block;
+  margin: 0 2px;
+  padding: 0 7px;
+  border-radius: var(--r-tag);
+  background: var(--ink-2);
+  color: var(--sheet);
+  font-size: var(--t-cap);
+  font-weight: 600;
+  line-height: 1.7;
+  vertical-align: 1px;
+}
+.home-live-line .letter-spoiler {
+  min-height: 48px;
+  padding: 17px 12px;
+}
+/* A book the reader is reading: the words wait for 表示する (仮, DB-1). */
+.home-live-guard {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 4px 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-box);
+  background: var(--paper);
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--t-meta);
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.home-live-show {
+  margin-left: 4px;
+  color: var(--green);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.home-live-foot {
+  display: flex;
+  min-height: 44px;
+  border-top: 1px solid var(--line);
+}
+.home-live-more,
+.home-live-stop {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  font-family: var(--sans);
+  font-size: var(--t-ui);
+}
+.home-live-more {
+  flex: 1;
+  justify-content: center;
+  gap: 2px;
+  color: var(--ink-2);
+}
+.home-live-more svg {
+  transform: rotate(90deg);
+  transition: transform 0.2s;
+}
+.home-live-more[aria-expanded="true"] svg {
+  transform: rotate(-90deg);
+}
+.home-live-stop {
+  flex: none;
+  gap: 4px;
+  margin-left: auto;
+  padding: 0 14px;
+  color: var(--green);
+  font-weight: 700;
+}
+.home-live-more:focus-visible,
+.home-live-stop:focus-visible,
+.home-live-guard:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: -4px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-skel {
     animation: none;
@@ -1206,5 +1406,9 @@ html[data-home-tab] {
   .home-notice,
   .home-notice.is-tilted {
     transform: none;
+  }
+  .home-live-box,
+  .home-live-more svg {
+    transition: none;
   }
 }
