@@ -209,9 +209,13 @@ export function HomeView({
   // The pill's eight seconds count while it is on the screen.
   useEffect(() => townArrivals.shown(pillOn), [pillOn]);
   useEffect(() => () => townArrivals.shown(false), []);
+  // Said once for what came, not each time the bars bring the pill back.
+  const told = useRef<unknown>(null);
   useEffect(() => {
-    if (pillOn) announce("新しい便りがあります");
-  }, [pillOn]);
+    if (!pillOn || told.current === waiting.arrived) return;
+    told.current = waiting.arrived;
+    announce("新しい便りがあります");
+  }, [pillOn, waiting.arrived]);
   const dotted = new Set(
     waiting.retired && fresh
       ? HOME_TABS.flatMap(([key]) => (fresh[key].length ? [key] : []))
