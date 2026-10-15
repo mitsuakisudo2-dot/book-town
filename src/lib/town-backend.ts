@@ -21,6 +21,15 @@ export interface TownBackend {
   save(state: TownState): PersistenceStatus;
   /** News from a backend that keeps working after save() returns. */
   watch?(listener: TownBackendListener): () => void;
+  /**
+   * Takes rows read after the town into it as the backend's own reading
+   * (arrived.ts), so they are never written back: `take` is handed the town
+   * and the one last saved. The town to show, or null while none is read.
+   * The demo has nothing to take in.
+   */
+  absorb?(
+    take: (state: TownState, saved: TownState) => TownState,
+  ): TownState | null;
   /** Stops background work once the store moves on to another backend. */
   close?(): void;
 }

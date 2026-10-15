@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { Tables } from "../src/lib/supabase/database.types";
 import {
+  bookFromRow,
   cleanShelves,
   emptyTown,
   placementKey,
@@ -19,11 +20,19 @@ import { isSampleBook, sampleBookRowId, withSamples } from "../src/lib/samples";
 import {
   all,
   allRows,
+  backgroundSync,
   RowsChangedError,
   TownSyncError,
   type Outcome,
 } from "../src/lib/supabase/sync";
-import { accountTownBackend, loadTown } from "../src/lib/supabase/town-backend";
+import {
+  accountTownBackend,
+  loadTown,
+  visitorTownBackend,
+} from "../src/lib/supabase/town-backend";
+import { emptyArrived, takeIn, type Arrived } from "../src/lib/arrived";
+import { createTownStore } from "../src/lib/store";
+import type { TownBackend } from "../src/lib/town-backend";
 import {
   ME_ID,
   OWN_SHOP_ID,
@@ -1781,6 +1790,237 @@ async function main() {
       [],
     );
   });
+
+  // 便り read after the town (PR 2): newer ones, older ones, one by its id.
+  // They join what the database is known to hold, never what is to be
+  // written: otherwise a book that came with one would be saved again as
+  // the reader's own (planWrites writes every book the base lacks).
+  const NEW_POST = "00000000-0000-4000-8000-0000000000e1";
+  const NEW_BOOK = "00000000-0000-4000-8000-000000000b0e";
+  const CAL = "00000000-0000-4000-8000-00000000000c";
+  /** Ben's 便り and a new reader's reply, about a book the town lacked. */
+  const arrivedNow = (): Arrived => ({
+    ...emptyArrived(),
+    posts: [
+      {
+        id: NEW_POST,
+        authorId: BEN,
+        body: "届いたばかりの便り。",
+        bookId: NEW_BOOK,
+        spoiler: false,
+        parentId: null,
+        createdAt: "2026-10-13T09:00:00Z",
+        likes: 0,
+        wants: 0,
+        readingMode: null,
+      },
+      {
+        id: NEW_POST.replace("e1", "e2"),
+        authorId: CAL,
+        body: "わたしも読みました。",
+        bookId: null,
+        spoiler: false,
+        parentId: NEW_POST,
+        createdAt: "2026-10-13T09:05:00Z",
+        likes: 0,
+        wants: 0,
+        readingMode: null,
+      },
+    ],
+    readers: [
+      {
+        id: CAL,
+        handle: "cal",
+        name: "CAL",
+        bio: "",
+        color: "#768281",
+        lifeNine: [],
+        nineNotes: {},
+        links: [],
+      },
+    ],
+    books: [bookFromRow(book(NEW_BOOK), false)],
+  });
+  const loadedTown = () =>
+    townFromRows(
+      rows({
+        shops: [shop(BEN_SHOP, BEN)],
+        follows: [{ shop_id: BEN_SHOP }],
+        posts: [post("00000000-0000-4000-8000-0000000000e0", BEN)],
+      }),
+      ids,
+    );
+  /** A sync of `town` whose writes are planned, not sent. */
+  const plannedSync = (town: TownState, hold?: Promise<void>) => {
+    const planned: Write[] = [];
+    let writes = 0;
+    const sync = backgroundSync<TownState>(
+      {
+        read: async () => town,
+        async write(base, target) {
+          planned.push(...planWrites(base, target, ids));
+          await hold;
+          writes += 1;
+        },
+      },
+      { delay: 0 },
+    );
+    return { sync, planned, writes: () => writes };
+  };
+  const settle = async (done: () => boolean) => {
+    for (let wait = 0; wait < 200 && !done(); wait += 1)
+      await new Promise((resume) => setTimeout(resume, 5));
+    assert.ok(done(), "the write was made");
+  };
+
+  await check(
+    "便り taken in after the town, with their books, are never written back",
+    async () => {
+      const town = loadedTown();
+      // Taken as a change of the reader's, the new book would be written as
+      // one they typed in: the bug that taking in avoids.
+      assert.ok(
+        kinds(planWrites(town, takeIn(town, arrivedNow()), ids)).includes(
+          "books",
+        ),
+      );
+      const { sync, planned, writes } = plannedSync(town);
+      assert.equal(
+        sync.absorb((value, saved) => takeIn(value, arrivedNow(), saved)),
+        null,
+        "nothing to take in before the town is read",
+      );
+      await sync.load();
+      const shown = sync.absorb((value, saved) =>
+        takeIn(value, arrivedNow(), saved),
+      );
+      assert.ok(shown);
+      assert.deepEqual(shown.posts.map((entry) => entry.id).slice(-2), [
+        NEW_POST,
+        NEW_POST.replace("e1", "e2"),
+      ]);
+      assert.ok(shown.books.some((entry) => entry.id === NEW_BOOK));
+      assert.ok(shown.readers.some((entry) => entry.id === CAL));
+      // Saving the town as shown writes nothing; a like of the new 便り
+      // later writes that like, and only it.
+      assert.equal(sync.save(shown), "saved");
+      sync.save({ ...shown, likedPosts: [NEW_POST] });
+      await settle(() => writes() === 1);
+      assert.deepEqual(kinds(planned), ["add:post_reactions"]);
+      sync.close();
+    },
+  );
+
+  await check(
+    "便り taken in while a save is on its way are not written when it lands",
+    async () => {
+      let land: () => void = () => {};
+      const landing = new Promise<void>((resume) => (land = resume));
+      const town = loadedTown();
+      const { sync, planned, writes } = plannedSync(town, landing);
+      await sync.load();
+      // The reader's like is being saved when the 便り arrive.
+      const liked = { ...town, likedPosts: [town.posts[0].id] };
+      sync.save(liked);
+      await settle(() => planned.length === 1);
+      const shown = sync.absorb((value, saved) =>
+        takeIn(value, arrivedNow(), saved),
+      );
+      assert.ok(shown?.books.some((entry) => entry.id === NEW_BOOK));
+      assert.deepEqual(shown?.likedPosts, liked.likedPosts);
+      land();
+      await settle(() => writes() >= 1);
+      // The save landed without the new book; the next one still knows
+      // the database has it.
+      sync.save({ ...shown!, likedPosts: [...liked.likedPosts, NEW_POST] });
+      await settle(() => kinds(planned).length >= 2);
+      await settle(() => writes() >= 2);
+      assert.deepEqual(kinds(planned), [
+        "add:post_reactions",
+        "add:post_reactions",
+      ]);
+      sync.close();
+    },
+  );
+
+  await check(
+    "a 便り the reader deleted here, not yet deleted there, is not taken back in",
+    async () => {
+      const MINE = "00000000-0000-4000-8000-0000000000f1";
+      const town = townFromRows(
+        rows({ posts: [post(MINE, AKI, { created_at: at })] }),
+        ids,
+      );
+      let land: () => void = () => {};
+      const landing = new Promise<void>((resume) => (land = resume));
+      const { sync, planned, writes } = plannedSync(town, landing);
+      await sync.load();
+      const deleted = { ...town, posts: [] };
+      sync.save(deleted);
+      await settle(() => planned.length === 1);
+      // Read again by its id (an old 便り's page) while the delete is out.
+      const again: Arrived = { ...emptyArrived(), posts: town.posts };
+      const shown = sync.absorb((value, saved) => takeIn(value, again, saved));
+      assert.deepEqual(shown?.posts, []);
+      land();
+      await settle(() => writes() === 1);
+      // Landed, the delete is not planned again: the database is known
+      // not to hold it.
+      await new Promise((resume) => setTimeout(resume, 30));
+      assert.equal(writes(), 1);
+      assert.deepEqual(kinds(planned), ["delete-posts"]);
+      sync.close();
+    },
+  );
+
+  await check(
+    "the store takes 便り in by the backend, never as a change to save",
+    async () => {
+      const town = loadedTown();
+      const { sync } = plannedSync(town);
+      let saves = 0;
+      const backend: TownBackend = {
+        kind: "account",
+        newId: () => crypto.randomUUID(),
+        load: async () => ({ state: await sync.load(), status: "saved" }),
+        save(state) {
+          saves += 1;
+          return sync.save(state);
+        },
+        absorb: sync.absorb,
+      };
+      const store = createTownStore(backend);
+      store.initialize();
+      await settle(() => store.getPersistenceSnapshot() === "saved");
+      const generation = store.getGeneration();
+      // Read for another town (a sign-out meanwhile): not taken.
+      assert.equal(store.absorb(arrivedNow(), generation + 1), false);
+      assert.equal(store.absorb(arrivedNow(), generation), true);
+      assert.ok(
+        store.getSnapshot().posts.some((entry) => entry.id === NEW_POST),
+      );
+      assert.equal(saves, 0);
+      // The same again changes nothing.
+      assert.equal(store.absorb(arrivedNow(), generation), false);
+      sync.close();
+      // A visitor's town takes them in too; nothing is saved there.
+      const visitor = createTownStore(
+        visitorTownBackend({} as Parameters<typeof visitorTownBackend>[0]),
+      );
+      visitor.initialize();
+      await settle(() => visitor.getPersistenceSnapshot() !== "loading");
+      const before = visitor.getSnapshot();
+      const ben = {
+        ...arrivedNow(),
+        readers: [
+          ...arrivedNow().readers,
+          { ...arrivedNow().readers[0], id: BEN },
+        ],
+      };
+      assert.equal(visitor.absorb(ben, visitor.getGeneration()), true);
+      assert.equal(visitor.getSnapshot().posts.length, before.posts.length + 2);
+    },
+  );
 
   console.log(passed + " town sync checks passed");
 }

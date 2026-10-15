@@ -10,6 +10,7 @@ import {
   type TownBackend,
 } from "./town-backend";
 import { emptyTown } from "./town-remote";
+import { takeIn, type Arrived } from "./arrived";
 import { supabaseConfigured } from "./supabase/config";
 import { followAccount } from "./town-session";
 import { accountStore } from "./account-session";
@@ -1011,6 +1012,23 @@ export function createTownStore(
      * database has, and what the old one had not written is gone.
      */
     getGeneration: () => generation,
+    /**
+     * Takes in what was read after the town (arrived.ts) as the backend's
+     * own reading, by the path a refused change comes back by: never
+     * through `commit`, so nothing of it is saved. `from` is the generation
+     * it was read in; a town since moved to another backend takes none.
+     * Whether the town changed.
+     */
+    absorb(arrived: Arrived, from: number): boolean {
+      if (loading || from !== generation || !backend.absorb) return false;
+      const next = backend.absorb((town, saved) =>
+        takeIn(town, arrived, saved),
+      );
+      if (!next || next === state) return false;
+      state = next;
+      notify();
+      return true;
+    },
     subscribe(listener: () => void) {
       listeners.add(listener);
       initialize();

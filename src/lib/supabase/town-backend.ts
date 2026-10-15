@@ -348,20 +348,32 @@ export async function loadPublicTown(client: Client): Promise<TownState> {
  * (store.ts), so nothing here is ever saved.
  */
 export function visitorTownBackend(client: Client): TownBackend {
+  // The town shown, for taking in what is read after it: nothing is saved.
+  let shown: TownState | null = null;
   return {
     kind: "visitor",
     newId: counterId,
     async load() {
       try {
         const state = withSamples(await loadPublicTown(client));
+        shown = state;
         return { state, status: "saved" as const };
       } catch {
         // The 見本 still make a town to walk through.
         const state = withSamples({ ...emptyTown(), me: visitorReader() });
+        shown = state;
         return { state, status: "unavailable" as const };
       }
     },
-    save: () => "saved",
+    save(state) {
+      shown = state;
+      return "saved";
+    },
+    absorb(take) {
+      if (!shown) return null;
+      shown = take(shown, shown);
+      return shown;
+    },
   };
 }
 
@@ -634,6 +646,7 @@ export function accountTownBackend(
     load: async () => ({ state: await sync.load(), status: "saved" as const }),
     save: sync.save,
     watch: sync.watch,
+    absorb: sync.absorb,
     close: sync.close,
   };
 }
