@@ -1,3 +1,4 @@
+import type { Arrived } from "./arrived";
 import type { RepositorySnapshot, TownRepository } from "./repository";
 import type { PersistenceStatus, TownState } from "./types";
 
@@ -30,9 +31,35 @@ export interface TownBackend {
   absorb?(
     take: (state: TownState, saved: TownState) => TownState,
   ): TownState | null;
+  /**
+   * 便り written since `since` (an ISO time; null: the newest), newest
+   * first, at most NEWER_MAX: what polling and a pull bring (arrivals.ts).
+   */
+  newer?(since: string | null): Promise<Arrived>;
+  /**
+   * Top-level 便り by `authors` ("me" for the reader) before `before`,
+   * newest first, at most OLDER_PAGE, with their replies: 便りだけ's next
+   * stretch past what the town read.
+   */
+  older?(before: string, authors: string[]): Promise<Arrived>;
+  /** One post with its replies (a reply brings its post): a page by its id. */
+  post?(id: string): Promise<Arrived>;
   /** Stops background work once the store moves on to another backend. */
   close?(): void;
 }
+
+/** The most 便り one read of the newer ones brings. */
+export const NEWER_MAX = 50;
+/** 便り one stretch of 便りだけ's older ones brings. */
+export const OLDER_PAGE = 20;
+
+/**
+ * What a town can read after it was read, from the backend it was read
+ * from (`generation`, as the store counts them). The demo has none.
+ */
+export type TownReads = Required<
+  Pick<TownBackend, "newer" | "older" | "post">
+> & { generation: number };
 
 export interface TownBackendListener {
   status(status: PersistenceStatus): void;

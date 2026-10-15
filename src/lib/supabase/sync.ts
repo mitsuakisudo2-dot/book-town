@@ -271,6 +271,8 @@ export function backgroundSync<T>(
       if (!writing) schedule(delay);
       return "saving";
     },
+    /** The value as it is now, or null while none is read. */
+    current: (): T | null => latest ?? synced,
     /**
      * Takes in what was read after the value (a 便り that arrived, an older
      * one): it joins both the value shown and the one the database is known

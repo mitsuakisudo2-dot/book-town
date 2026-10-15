@@ -8,6 +8,7 @@ import {
   unavailableBackend,
   type RecordKind,
   type TownBackend,
+  type TownReads,
 } from "./town-backend";
 import { emptyTown } from "./town-remote";
 import { takeIn, type Arrived } from "./arrived";
@@ -1013,6 +1014,18 @@ export function createTownStore(
      */
     getGeneration: () => generation,
     /**
+     * What the town can read after it was read, from the backend it was
+     * read from; null in the demo, and while the town is on its way.
+     */
+    reads(): TownReads | null {
+      const { newer, older, post } = backend;
+      if (loading || !newer || !older || !post) return null;
+      return { generation, newer, older, post };
+    },
+    /** Whether reads() has any: a build with the database, the town read. */
+    getReadsSnapshot: () => !loading && Boolean(backend.newer),
+    getServerReadsSnapshot: () => false,
+    /**
      * Takes in what was read after the town (arrived.ts) as the backend's
      * own reading, by the path a refused change comes back by: never
      * through `commit`, so nothing of it is saved. `from` is the generation
@@ -1077,6 +1090,15 @@ export function usePersistenceStatus(): PersistenceStatus {
     townStore.subscribe,
     townStore.getPersistenceSnapshot,
     townStore.getServerPersistenceSnapshot,
+  );
+}
+
+/** Whether the town can read 便り after it was read (not in the demo). */
+export function useTownReads(): boolean {
+  return useSyncExternalStore(
+    townStore.subscribe,
+    townStore.getReadsSnapshot,
+    townStore.getServerReadsSnapshot,
   );
 }
 

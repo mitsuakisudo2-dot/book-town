@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { Tables } from "../src/lib/supabase/database.types";
 import {
+  arrivedFromRows,
   bookFromRow,
   cleanShelves,
   emptyTown,
@@ -188,6 +189,8 @@ type AnyRow = Record<string, unknown>;
 interface FakeQuery extends PromiseLike<Outcome<AnyRow[]>> {
   eq(column: string, value: unknown): FakeQuery;
   neq(column: string, value: unknown): FakeQuery;
+  gte(column: string, value: string): FakeQuery;
+  lt(column: string, value: string): FakeQuery;
   is(column: string, value: unknown): FakeQuery;
   in(column: string, values: unknown[]): FakeQuery;
   order(column: string, options?: { ascending?: boolean }): FakeQuery;
@@ -209,15 +212,23 @@ function fakeReads(
   } = {},
 ) {
   const cap = options.cap ?? 1000;
-  const asked: { table: string; from: number; ids?: number }[] = [];
+  const asked: {
+    table: string;
+    from: number;
+    ids?: number;
+    /** The filters, as PostgREST would read them: "author_id=in.2". */
+    filters: string[];
+  }[] = [];
   const select = (table: string, counted: boolean): FakeQuery => {
     let rows = [...(tables[table] ?? [])];
     const orders: [string, boolean][] = [];
+    const filters: string[] = [];
     let from = 0;
     let size = Infinity;
     let ids: number | undefined;
     const answer = (): Outcome<AnyRow[]> => {
-      asked.push({ table, from, ids });
+      if (size !== Infinity) filters.push("limit=" + size);
+      asked.push({ table, from, ids, filters });
       const sorted = [...rows].sort((a, b) => {
         for (const [column, up] of orders) {
           const [x, y] = [String(a[column]), String(b[column])];
@@ -236,24 +247,41 @@ function fakeReads(
     };
     const query: FakeQuery = {
       eq(column, value) {
+        filters.push(`${column}=eq.${value}`);
         rows = rows.filter((row) => row[column] === value);
         return query;
       },
       neq(column, value) {
+        filters.push(`${column}=neq.${value}`);
         rows = rows.filter((row) => row[column] !== value);
         return query;
       },
+      gte(column, value) {
+        filters.push(`${column}=gte.${value}`);
+        rows = rows.filter((row) => String(row[column]) >= value);
+        return query;
+      },
+      lt(column, value) {
+        filters.push(`${column}=lt.${value}`);
+        rows = rows.filter((row) => String(row[column]) < value);
+        return query;
+      },
       is(column, value) {
+        filters.push(`${column}=is.${value}`);
         rows = rows.filter((row) => row[column] === value);
         return query;
       },
       in(column, values) {
         ids = values.length;
+        filters.push(`${column}=in.${values.length}`);
         rows = rows.filter((row) => values.includes(row[column]));
         return query;
       },
       order(column, order = {}) {
         orders.push([column, order.ascending ?? true]);
+        filters.push(
+          `order=${column}.${order.ascending === false ? "desc" : "asc"}`,
+        );
         return query;
       },
       limit(count) {
@@ -2019,6 +2047,241 @@ async function main() {
       };
       assert.equal(visitor.absorb(ben, visitor.getGeneration()), true);
       assert.equal(visitor.getSnapshot().posts.length, before.posts.length + 2);
+    },
+  );
+
+  await check("posts read after the town come in the town's shapes", () => {
+    const SAMPLE = demoBooks[0].id;
+    const arrived = arrivedFromRows(
+      {
+        posts: [
+          post(NEW_POST, BEN, {
+            book_id: NEW_BOOK,
+            created_at: "2026-10-13T09:00:00Z",
+          }),
+          // The reader's own, from another device, about a 見本's book.
+          post("00000000-0000-4000-8000-0000000000e3", AKI, {
+            book_id: sampleBookRowId(SAMPLE),
+            spoiler_folded: true,
+            reading_mode: "together",
+          }),
+          post(NEW_POST, BEN),
+        ],
+        profiles: [
+          profile(AKI, "aki"),
+          profile(BEN, "ben"),
+          profile(CAL, "cal"),
+        ],
+        books: [
+          book(NEW_BOOK),
+          book(OTHER_BOOK),
+          book(sampleBookRowId(SAMPLE)),
+        ],
+        postReactions: [
+          // Ben liked the reader's post three times; the reader liked his.
+          {
+            user_id: BEN,
+            post_id: "00000000-0000-4000-8000-0000000000e3",
+            kind: "like",
+            taps: 3,
+            created_at: at,
+          },
+          {
+            user_id: AKI,
+            post_id: NEW_POST,
+            kind: "like",
+            taps: 2,
+            created_at: at,
+          },
+          {
+            user_id: AKI,
+            post_id: NEW_POST,
+            kind: "want",
+            taps: 1,
+            created_at: at,
+          },
+          // On a post not read here: not taken.
+          {
+            user_id: AKI,
+            post_id: "p9",
+            kind: "like",
+            taps: 1,
+            created_at: at,
+          },
+        ],
+        spoilerReports: [{ post_id: NEW_POST }, { post_id: "p9" }],
+        folds: [
+          {
+            target_kind: "post",
+            target_id: NEW_POST,
+            state: "folded",
+            since: at,
+          },
+          { target_kind: "post", target_id: "p9", state: "folded", since: at },
+          {
+            target_kind: "shop",
+            target_id: NEW_POST,
+            state: "folded",
+            since: at,
+          },
+        ],
+      },
+      AKI,
+    );
+    assert.deepEqual(
+      arrived.posts.map((entry) => [entry.id, entry.authorId, entry.bookId]),
+      [
+        [NEW_POST, BEN, NEW_BOOK],
+        ["00000000-0000-4000-8000-0000000000e3", ME_ID, SAMPLE],
+      ],
+    );
+    const own = arrived.posts[1];
+    assert.equal(own.likes, 1);
+    assert.deepEqual(own.likers, [{ readerId: BEN, taps: 3, at }]);
+    assert.equal(own.folded, true);
+    assert.equal(own.readingMode, "together");
+    assert.equal(arrived.posts[0].likes, 0);
+    // Only the writers, never the reader; only their books, never a 見本's row.
+    assert.deepEqual(
+      arrived.readers.map((reader) => reader.id),
+      [BEN],
+    );
+    assert.deepEqual(arrived.readers[0].lifeNine, []);
+    assert.deepEqual(
+      arrived.books.map((entry) => entry.id),
+      [NEW_BOOK],
+    );
+    assert.deepEqual(arrived.likedPosts, [NEW_POST]);
+    assert.deepEqual(arrived.likeTaps, { [NEW_POST]: 2 });
+    assert.deepEqual(arrived.wantedPosts, [NEW_POST]);
+    assert.deepEqual(arrived.spoilerReports, [NEW_POST]);
+    assert.deepEqual(arrived.reviewFolds, {
+      ["post:" + NEW_POST]: { state: "folded", since: at },
+    });
+  });
+
+  await check(
+    "the reads after the town ask the database only for what the town lacks",
+    async () => {
+      const OLD = "00000000-0000-4000-8000-0000000000d0";
+      const REPLY = "00000000-0000-4000-8000-0000000000d1";
+      const tables: Record<string, AnyRow[]> = {
+        profiles: [profile(AKI, "aki"), profile(BEN, "ben")],
+        books: [book(BOOK)],
+        shops: [shop(BEN_SHOP, BEN)],
+        shop_follows: [{ follower_id: AKI, shop_id: BEN_SHOP }],
+        posts: [
+          post("00000000-0000-4000-8000-0000000000e0", BEN, {
+            created_at: "2026-10-12T09:00:00Z",
+          }),
+        ],
+      };
+      const fake = fakeReads(tables);
+      const backend = accountTownBackend(fake.client, AKI, { storage: false });
+      await backend.load();
+      // Then Cal signs up and writes about a new book, and Ben replies.
+      tables.profiles.push(profile(CAL, "cal"));
+      tables.books.push(book(NEW_BOOK));
+      tables.posts.push(
+        post(NEW_POST, CAL, {
+          book_id: NEW_BOOK,
+          created_at: "2026-10-13T09:00:00Z",
+        }),
+        post(NEW_POST.replace("e1", "e2"), BEN, {
+          parent_id: NEW_POST,
+          created_at: "2026-10-13T09:05:00Z",
+        }),
+        // Two old ones, past what the town read: a 便り of Ben's, a reply.
+        post(OLD, BEN, { created_at: "2026-09-01T09:00:00Z" }),
+        post(REPLY, AKI, {
+          parent_id: OLD,
+          created_at: "2026-09-02T09:00:00Z",
+        }),
+      );
+      fake.asked.length = 0;
+      const newer = await backend.newer!("2026-10-12T09:00:00Z");
+      assert.deepEqual(
+        newer.posts.map((entry) => entry.id),
+        [
+          NEW_POST.replace("e1", "e2"),
+          NEW_POST,
+          "00000000-0000-4000-8000-0000000000e0",
+        ],
+      );
+      const filtersOf = (table: string) =>
+        fake.asked
+          .filter((ask) => ask.table === table)
+          .map((ask) => ask.filters);
+      assert.deepEqual(filtersOf("posts"), [
+        [
+          "created_at=gte.2026-10-12T09:00:00Z",
+          "order=created_at.desc",
+          "limit=50",
+        ],
+      ]);
+      // Only Cal is asked for, only the new book.
+      assert.deepEqual(filtersOf("profiles"), [["id=in.1"]]);
+      assert.deepEqual(filtersOf("books"), [["id=in.1"]]);
+      assert.deepEqual(
+        newer.readers.map((reader) => reader.id),
+        [CAL],
+      );
+      assert.deepEqual(
+        newer.books.map((entry) => entry.id),
+        [NEW_BOOK],
+      );
+      assert.deepEqual(filtersOf("spoiler_reports"), [
+        ["reporter_id=eq." + AKI, "post_id=in.3"],
+      ]);
+
+      // 便りだけ's next stretch: the reader's and Ben's, before the oldest.
+      fake.asked.length = 0;
+      const older = await backend.older!("2026-10-12T09:00:00Z", [ME_ID, BEN]);
+      assert.deepEqual(filtersOf("posts")[0], [
+        "parent_id=is.null",
+        "author_id=in.2",
+        "created_at=lt.2026-10-12T09:00:00Z",
+        "order=created_at.desc",
+        "limit=20",
+      ]);
+      assert.deepEqual(
+        older.posts.map((entry) => [entry.id, entry.authorId]),
+        [
+          [OLD, BEN],
+          [REPLY, ME_ID],
+        ],
+      );
+      // Nobody followed, nothing asked.
+      fake.asked.length = 0;
+      assert.deepEqual((await backend.older!(at, [])).posts, []);
+      assert.equal(fake.asked.length, 0);
+
+      // A reply's page by its id: its post and every reply.
+      const page = await backend.post!(REPLY);
+      assert.deepEqual(
+        page.posts.map((entry) => entry.id).sort(),
+        [OLD, REPLY].sort(),
+      );
+      // Not a database id (a 見本's post): nothing is asked.
+      fake.asked.length = 0;
+      assert.deepEqual((await backend.post!("p-1")).posts, []);
+      assert.equal(fake.asked.length, 0);
+      assert.deepEqual((await backend.post!(uuid(0xdead))).posts, []);
+      backend.close?.();
+
+      // A visitor reads the same, and nothing of a reader's own.
+      const visitor = visitorTownBackend(fake.client);
+      await visitor.load();
+      fake.asked.length = 0;
+      const seen = await visitor.post!(REPLY);
+      assert.equal(seen.posts.length, 2);
+      assert.equal(
+        fake.asked.some(
+          (ask) =>
+            ask.table === "post_reactions" || ask.table === "spoiler_reports",
+        ),
+        false,
+      );
     },
   );
 
