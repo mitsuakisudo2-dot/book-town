@@ -1713,6 +1713,139 @@ try {
       }),
   );
 
+  for (const width of [390, 320])
+    await check(
+      `${width}px 読みながらのひとこと: three lines of 104px with their covers, opened to all and closed, each memo once and none on 便りだけ, a tap opens its 便り, and a spoiler or a book being read waits behind a tap`,
+      () =>
+        withPage({ viewport: { width, height: 844 } }, async () => {
+          // Two days after the demo's four memos.
+          await page.clock.setSystemTime(
+            Date.parse("2026-10-12T12:00:00+09:00"),
+          );
+          await goHome();
+          const live = pane("home").locator(".home-live");
+          await expect(
+            live.getByRole("heading", { name: "読みながらのひとこと" }),
+          ).toBeVisible();
+          const box = live.locator(".home-live-box");
+          await expect(box).toHaveAttribute("aria-live", "off");
+          const rows = box.locator(".home-live-line");
+          const MEMOS = ["p-m4", "p-m2", "p-m1", "p-m3"];
+          await expect(rows).toHaveCount(4);
+          expect(
+            await rows.evaluateAll((all) =>
+              all.map((row) => row.dataset.postId),
+            ),
+          ).toEqual(MEMOS);
+          const boxHeight = () =>
+            box.evaluate((element) => element.getBoundingClientRect().height);
+          expect(await boxHeight()).toBe(312);
+          for (const index of [0, 1, 2]) {
+            const row = rows.nth(index);
+            expect((await row.boundingBox()).height).toBe(104);
+            // The cover whole at 44px; who, 『the book』 and when on one
+            // line; the words in two lines at most.
+            expect(
+              (await row.locator(".home-live-jacket").boundingBox()).width,
+            ).toBe(44);
+            await expect(row.locator(".book-jacket")).toBeVisible();
+            expect(
+              (await row.locator(".home-live-meta").boundingBox()).height,
+            ).toBe(22);
+            expect(
+              await row
+                .locator(".home-live-text")
+                .evaluate((text) =>
+                  Math.round(
+                    text.getBoundingClientRect().height /
+                      parseFloat(getComputedStyle(text).lineHeight),
+                  ),
+                ),
+            ).toBeLessThanOrEqual(2);
+          }
+          // The fourth waits under the box, out of reach.
+          await expect(rows.nth(3)).toHaveAttribute("inert", "");
+          // Nothing comes to the demo: no 止める.
+          await expect(
+            live.getByRole("button", { name: /ひとことを(止める|動かす)/ }),
+          ).toHaveCount(0);
+          const more = live.getByRole("button", { name: "前のひとことも見る" });
+          expect((await more.boundingBox()).height).toBeGreaterThanOrEqual(44);
+          await more.tap();
+          const fold = live.getByRole("button", { name: "たたむ" });
+          await expect(fold).toHaveAttribute("aria-expanded", "true");
+          await expect.poll(boxHeight).toBe(416);
+          await expect(rows.nth(3)).not.toHaveAttribute("inert", "");
+          await fold.tap();
+          await expect.poll(boxHeight).toBe(312);
+          await noOverflow(`${width}px ひとこと`);
+          // Each memo once: none among ホーム's 便り.
+          for (const id of MEMOS)
+            await expect(
+              pane("home").locator(`article.letter[data-post-id="${id}"]`),
+            ).toHaveCount(0);
+          // The time is the keyboard's way in; a tap on a line opens its 便り.
+          await expect(
+            rows.first().locator("a.home-live-time"),
+          ).toHaveAttribute("href", "/post/?id=p-m4");
+          await rows.first().locator(".home-live-text").tap();
+          await expect(letterPage("すみれ")).toBeVisible();
+          await page.goBack();
+          await expect(letterPage("すみれ")).toHaveCount(0);
+          // 便りだけ has no ひとこと band.
+          await tab("便りだけ").tap();
+          await expect(pane("letters").locator(".home-live")).toHaveCount(0);
+
+          // Reading ソラリス, and すみれ's memo asked about as a spoiler:
+          // those lines wait behind a tap, the words not on the page until
+          // then.
+          await editTown(`
+            data.readingSessions = [{ id: "me-reading-1", bookId: "solaris",
+              mode: "together", startedAt: "2026-10-12T10:00:00+09:00",
+              endedAt: null }];
+            data.spoilerReports = ["p-m4"];
+          `);
+          await goHome();
+          const guards = live.getByRole("button", {
+            name: /あなたが読んでいる本のひとことです。/,
+          });
+          await expect(guards).toHaveCount(2);
+          await expect(live).not.toContainText("海の描写のところで");
+          expect(
+            (await guards.first().boundingBox()).height,
+          ).toBeGreaterThanOrEqual(44);
+          await guards.first().tap();
+          const opened = rows.nth(1).locator(".home-live-text");
+          await expect(opened).toContainText("凪さんと同じ本を");
+          await expect(opened).toBeFocused();
+          await expect(guards).toHaveCount(1);
+          const spoiler = rows.first().getByRole("button", {
+            name: /ネタバレの可能性を報告済み・押すと表示/,
+          });
+          await expect(live).not.toContainText("もう三つ目");
+          await spoiler.tap();
+          await expect(rows.first().locator(".home-live-text")).toContainText(
+            "もう三つ目",
+          );
+          await expect(rows.first().locator(".home-live-text")).toBeFocused();
+          await expectNoTinyWords(live, `${width}px ひとこと`);
+        }),
+    );
+  await check(
+    "390px no ひとこと band below three memos in seven days, and no frame for it",
+    () =>
+      withPage({}, async () => {
+        // Eight days after the demo's memos: none is a line.
+        await page.clock.setSystemTime(Date.parse("2026-10-18T22:00:00+09:00"));
+        await goHome();
+        await expect(pane("home").locator(".home-live")).toHaveCount(0);
+        // Their 便り stay among the town's, as before.
+        await expect(
+          pane("home").locator('article.letter[data-post-id="p-m4"]'),
+        ).toHaveCount(1);
+      }),
+  );
+
   await check(
     "390px 感想が面白い本: 見本 on each tile, a tap opens its 便り, no spoiler in the page, and a tile asked about as a spoiler leaves the band",
     () =>
