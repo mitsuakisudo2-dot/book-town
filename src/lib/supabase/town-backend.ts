@@ -14,6 +14,8 @@ import {
 import {
   counterId,
   NEWER_MAX,
+  NEWER_PAGES,
+  NEWER_SLACK,
   OLDER_PAGE,
   type RecordKind,
   type TownBackend,
@@ -443,14 +445,48 @@ function remoteReads(
   const complete = (rows: PostRow[]) =>
     arrivedFor(client, rows, town(), userId);
   const posts = () => client.from("posts").select("*");
+  /** Rows the town lacks, each once: never one it has, nor the reader's own. */
+  const lacking = (rows: PostRow[]) => {
+    const have = new Set(town()?.posts.map((post) => post.id));
+    return rows.filter(
+      (row) =>
+        row.author_id !== userId && !have.has(row.id) && have.add(row.id),
+    );
+  };
   return {
     async newer(since) {
-      const asked = since ? posts().gte("created_at", since) : posts();
-      return complete(
-        await all(
-          asked.order("created_at", { ascending: false }).limit(NEWER_MAX),
-        ),
-      );
+      if (!since)
+        return complete(
+          lacking(
+            await all(
+              posts()
+                .order("created_at", { ascending: false })
+                .limit(NEWER_MAX),
+            ),
+          ),
+        );
+      // Oldest first from a little before `since`, page after page, so
+      // what is read always joins on to what the town has: the next read
+      // goes on from the newest of it, and nothing in between is skipped.
+      // A post's time is when it was written, not when it was saved, so
+      // one saved late may be a little older than the newest known.
+      const at = Date.parse(since);
+      let from = Number.isNaN(at)
+        ? since
+        : new Date(at - NEWER_SLACK).toISOString();
+      const rows: PostRow[] = [];
+      for (let page = 0; page < NEWER_PAGES; page += 1) {
+        const found = await all(
+          posts()
+            .gte("created_at", from)
+            .order("created_at", { ascending: true })
+            .limit(NEWER_MAX),
+        );
+        rows.push(...found);
+        if (found.length < NEWER_MAX) break;
+        from = found[found.length - 1].created_at;
+      }
+      return complete(lacking(rows));
     },
     async older(before, authors) {
       const ids = [

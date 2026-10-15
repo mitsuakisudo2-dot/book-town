@@ -32,8 +32,10 @@ export interface TownBackend {
     take: (state: TownState, saved: TownState) => TownState,
   ): TownState | null;
   /**
-   * 便り written since `since` (an ISO time; null: the newest), newest
-   * first, at most NEWER_MAX: what polling and a pull bring (arrivals.ts).
+   * 便り the town lacks, written since `since` (an ISO time), oldest first,
+   * from NEWER_SLACK before it and at most NEWER_PAGES pages of NEWER_MAX;
+   * with no `since`, the newest NEWER_MAX. What polling and a pull bring
+   * (arrivals.ts). Never the reader's own.
    */
   newer?(since: string | null): Promise<Arrived>;
   /**
@@ -48,8 +50,15 @@ export interface TownBackend {
   close?(): void;
 }
 
-/** The most 便り one read of the newer ones brings. */
+/** 便り one page of the newer ones brings. */
 export const NEWER_MAX = 50;
+/** Pages one read of the newer ones goes on for, at most (仮). */
+export const NEWER_PAGES = 4;
+/**
+ * How far before the newest known 便り newer ones are read from (仮): a
+ * post's time is when it was written, and it may be saved a moment later.
+ */
+export const NEWER_SLACK = 10_000;
 /** 便り one stretch of 便りだけ's older ones brings. */
 export const OLDER_PAGE = 20;
 

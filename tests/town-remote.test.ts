@@ -2249,22 +2249,20 @@ async function main() {
       );
       fake.asked.length = 0;
       const newer = await backend.newer!("2026-10-12T09:00:00Z");
+      // Only what the town lacks, oldest first: not Ben's known 便り.
       assert.deepEqual(
         newer.posts.map((entry) => entry.id),
-        [
-          NEW_POST.replace("e1", "e2"),
-          NEW_POST,
-          "00000000-0000-4000-8000-0000000000e0",
-        ],
+        [NEW_POST, NEW_POST.replace("e1", "e2")],
       );
       const filtersOf = (table: string) =>
         fake.asked
           .filter((ask) => ask.table === table)
           .map((ask) => ask.filters);
+      // From a little before the newest known: one saved late joins on.
       assert.deepEqual(filtersOf("posts"), [
         [
-          "created_at=gte.2026-10-12T09:00:00Z",
-          "order=created_at.desc",
+          "created_at=gte.2026-10-12T08:59:50.000Z",
+          "order=created_at.asc",
           "limit=50",
         ],
       ]);
@@ -2280,7 +2278,7 @@ async function main() {
         [NEW_BOOK],
       );
       assert.deepEqual(filtersOf("spoiler_reports"), [
-        ["reporter_id=eq." + AKI, "post_id=in.3"],
+        ["reporter_id=eq." + AKI, "post_id=in.2"],
       ]);
 
       // 便りだけ's next stretch: the reader's and Ben's, before the oldest.
@@ -2331,6 +2329,78 @@ async function main() {
         ),
         false,
       );
+    },
+  );
+
+  await check(
+    "newer 便り are read page after page, joined on to the town, and an idle read asks once",
+    async () => {
+      const minute = (n: number) =>
+        new Date(Date.parse("2026-10-12T09:00:00Z") + n * 60_000).toISOString();
+      const KNOWN = uuid(0xe00);
+      const tables: Record<string, AnyRow[]> = {
+        profiles: [profile(AKI, "aki"), profile(BEN, "ben")],
+        books: [book(BOOK)],
+        shops: [shop(BEN_SHOP, BEN)],
+        shop_follows: [{ follower_id: AKI, shop_id: BEN_SHOP }],
+        posts: [post(KNOWN, BEN, { created_at: minute(0) })],
+      };
+      const fake = fakeReads(tables);
+      const backend = accountTownBackend(fake.client, AKI, { storage: false });
+      await backend.load();
+      const postsAsked = () =>
+        fake.asked.filter((ask) => ask.table === "posts");
+      // Nothing new: the one read of posts, and nothing else is asked.
+      fake.asked.length = 0;
+      assert.deepEqual((await backend.newer!(minute(0))).posts, []);
+      assert.deepEqual(
+        fake.asked.map((ask) => ask.table),
+        ["posts"],
+      );
+      // Saved late, a little older than the newest known: it joins on.
+      const LATE = uuid(0xe01);
+      tables.posts.push(post(LATE, BEN, { created_at: minute(-0.1) }));
+      assert.deepEqual(
+        (await backend.newer!(minute(0))).posts.map((entry) => entry.id),
+        [LATE],
+      );
+      // A night away: 230 new 便り, some the reader's own from elsewhere.
+      const night = Array.from({ length: 230 }, (_, n) =>
+        post(uuid(0x1000 + n), n % 10 ? BEN : AKI, {
+          created_at: minute(1 + n),
+        }),
+      );
+      tables.posts.push(...night);
+      fake.asked.length = 0;
+      const first = await backend.newer!(minute(0));
+      // Four pages of fifty at most, each from the last one's newest.
+      assert.deepEqual(
+        postsAsked().map((ask) => ask.filters[0]),
+        [
+          `created_at=gte.${new Date(Date.parse(minute(0)) - 10_000).toISOString()}`,
+          `created_at=gte.${minute(48)}`,
+          `created_at=gte.${minute(97)}`,
+          `created_at=gte.${minute(146)}`,
+        ],
+      );
+      // Oldest first and with no gap: every one up to the newest read.
+      const others = night.filter((row) => row.author_id === BEN);
+      const got = first.posts.map((entry) => entry.id);
+      assert.equal(got[0], LATE);
+      const last = others.findIndex((row) => row.id === got.at(-1));
+      assert.deepEqual(
+        got.slice(1),
+        others.slice(0, last + 1).map((row) => row.id),
+      );
+      assert.ok(first.posts.every((entry) => entry.authorId !== ME_ID));
+      // The next read goes on from the newest of them, and brings the rest.
+      backend.absorb!((value, saved) => takeIn(value, first, saved));
+      const second = await backend.newer!(others[last].created_at);
+      assert.deepEqual(
+        second.posts.map((entry) => entry.id),
+        others.slice(last + 1).map((row) => row.id),
+      );
+      backend.close?.();
     },
   );
 

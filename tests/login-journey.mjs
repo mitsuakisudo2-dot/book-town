@@ -117,10 +117,14 @@ function postsAsked(rows, params) {
     asked = asked.filter(holds(key, filter));
   }
   if (!filtered) asked = asked.filter((row) => !outsideLoad.has(row.id));
-  if (params.get("order") === "created_at.desc")
+  const order = params.get("order");
+  if (order === "created_at.desc" || order === "created_at.asc")
     asked = [...asked].sort(
-      (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+      (a, b) =>
+        (Date.parse(a.created_at) - Date.parse(b.created_at)) *
+        (order === "created_at.asc" ? 1 : -1),
     );
+  else if (order) throw new Error("not mocked: posts order " + order);
   return asked;
 }
 // 注釈モード: whether the database counts the reader as staff, the notes it
