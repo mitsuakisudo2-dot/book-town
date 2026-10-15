@@ -229,31 +229,3 @@
     padding: 24px 18px;
   }
 }
-
-/* The timeline: a way to make a poster beside the filters and in the compose sheet. */
-.timeline-filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-  margin-bottom: 16px;
-}
-.timeline-filter-row .timeline-filters {
-  margin: 0;
-}
-.timeline-make-poster {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 44px;
-  padding: 8px 16px;
-  border: 1px dashed #c6cfb9;
-  border-radius: 999px;
-  font-size: 13px;
-  color: #536448;
-}
-.timeline-make-poster:hover {
-  background: #eef1e6;
-  border-color: #809273;
-}

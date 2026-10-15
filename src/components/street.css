@@ -1345,7 +1345,7 @@
 }
 .street-shop.is-compact .street-shop-tagline {
   flex-basis: 100%;
-  font-family: "Kaisei HarunoUmi", var(--serif);
+  font-family: var(--serif);
   font-size: 13px;
   line-height: 1.7;
   color: var(--theme-deep);
@@ -1379,7 +1379,7 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-family: "Kaisei HarunoUmi", var(--serif);
+  font-family: var(--serif);
   font-size: 15px;
   line-height: 1.75;
 }

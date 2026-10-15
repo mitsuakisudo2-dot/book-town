@@ -140,31 +140,44 @@ function cacheControl(pathname: string) {
   return value;
 }
 
-// The bytes of every versioned theme file (sha256, first 16 hex digits).
+// The bytes of every versioned image under public/themes and public/home
+// (sha256, first 16 hex digits), named from public/.
 // Browsers keep a -vN file for a year without asking again, so its bytes
 // never change: a new look is a new name, -v(N+1), and the CSS or scene
 // points at it (public/themes/woodshop/ASSETS.md). A new file is added here.
 // A line stays when its file is removed, so the name cannot come back with
 // other bytes.
 const VERSIONED: Record<string, string> = {
-  "woodshop/chain-v1.svg": "6358aa666d2a980f",
-  "woodshop/daisy-vase-v1.svg": "4a858d967a99ac72",
-  "woodshop/fg-left-v1.webp": "82fb2c2c3de625cc",
-  "woodshop/fg-right-v1.webp": "35d267736179ef51",
-  "woodshop/globe-v1.svg": "9980300ea09f6189",
-  "woodshop/grain-chalk-v1.webp": "ed57ca2f4bf24b90",
-  "woodshop/grain-paper-v1.webp": "627e74baf9f78051",
-  "woodshop/ivy-clump-v1.svg": "df262aa08599cff9",
-  "woodshop/ivy-hang-v1.svg": "ee7c6f0b16dd9ee4",
-  "woodshop/ivy-pot-v1.svg": "6998ad857c85dbe7",
-  "woodshop/ivy-trail-v1.svg": "52621b232aad37be",
-  "woodshop/jackets-v2.webp": "cf31b8da745db2bd",
-  "woodshop/lamp-pendant-v1.svg": "f5c8827b4c9547ae",
-  "woodshop/planks-dark-v1.webp": "32ae191355a9f31f",
-  "woodshop/room-bokeh-v1.webp": "81e8e69f4a2f911e",
-  "woodshop/sign-plank-v1.webp": "e492097be980be54",
-  "woodshop/wood-v2.webp": "1fb65b6ac9a9a8e0",
+  "themes/woodshop/chain-v1.svg": "6358aa666d2a980f",
+  "themes/woodshop/daisy-vase-v1.svg": "4a858d967a99ac72",
+  "themes/woodshop/fg-left-v1.webp": "82fb2c2c3de625cc",
+  "themes/woodshop/fg-right-v1.webp": "35d267736179ef51",
+  "themes/woodshop/globe-v1.svg": "9980300ea09f6189",
+  "themes/woodshop/grain-chalk-v1.webp": "ed57ca2f4bf24b90",
+  "themes/woodshop/grain-paper-v1.webp": "627e74baf9f78051",
+  "themes/woodshop/ivy-clump-v1.svg": "df262aa08599cff9",
+  "themes/woodshop/ivy-hang-v1.svg": "ee7c6f0b16dd9ee4",
+  "themes/woodshop/ivy-pot-v1.svg": "6998ad857c85dbe7",
+  "themes/woodshop/ivy-trail-v1.svg": "52621b232aad37be",
+  "themes/woodshop/jackets-v2.webp": "cf31b8da745db2bd",
+  "themes/woodshop/lamp-pendant-v1.svg": "f5c8827b4c9547ae",
+  "themes/woodshop/planks-dark-v1.webp": "32ae191355a9f31f",
+  "themes/woodshop/room-bokeh-v1.webp": "81e8e69f4a2f911e",
+  "themes/woodshop/sign-plank-v1.webp": "e492097be980be54",
+  "themes/woodshop/wood-v2.webp": "1fb65b6ac9a9a8e0",
+  "home/lamp-1170-v1.webp": "af15ef867edd2336",
+  "home/lamp-390-v1.webp": "f37e7752bde5ac54",
+  "home/lamp-780-v1.webp": "a83a66bf92eba6fd",
+  "home/shelves-1170-v1.webp": "66e24d3ac5085555",
+  "home/shelves-390-v1.webp": "6703b32cbe91a434",
+  "home/shelves-780-v1.webp": "97761269cfc822e9",
 };
+
+/** Where versioned images live: the woodshop's, and the home's carousel. */
+const VERSIONED_FOLDERS = [
+  path.join("public", "themes"),
+  path.join("public", "home"),
+];
 
 const filesIn = (folder: string): string[] =>
   readdirSync(folder, { withFileTypes: true }).flatMap((entry) =>
@@ -302,11 +315,11 @@ async function main() {
   );
 
   await check(
-    "versioned theme images are kept a year; fonts and room.webp a week",
+    "versioned images are kept a year; fonts and room.webp a week",
     () => {
       const year = "public, max-age=31536000, immutable";
       const week = "public, max-age=604800";
-      for (const file of filesIn(path.join("public", "themes"))) {
+      for (const file of VERSIONED_FOLDERS.flatMap(filesIn)) {
         const pathname =
           "/" + path.relative("public", file).split(path.sep).join("/");
         if (/-v\d+\.(webp|svg)$/.test(pathname))
@@ -324,10 +337,9 @@ async function main() {
     },
   );
 
-  await check("a versioned theme file keeps its bytes under its name", () => {
-    const themes = path.join("public", "themes");
-    for (const file of filesIn(themes)) {
-      const name = path.relative(themes, file).split(path.sep).join("/");
+  await check("a versioned image keeps its bytes under its name", () => {
+    for (const file of VERSIONED_FOLDERS.flatMap(filesIn)) {
+      const name = path.relative("public", file).split(path.sep).join("/");
       if (!/-v\d+\.(webp|svg)$/.test(name)) continue;
       assert.ok(name in VERSIONED, `${name}: record its hash in VERSIONED`);
       assert.equal(

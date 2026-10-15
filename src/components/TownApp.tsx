@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -34,11 +34,11 @@ import {
 import { WoodenShelf } from "./WoodenShelf";
 import { ShopEditor } from "./ShopEditor";
 import { ProfileView } from "./ProfileView";
-import { StreetView } from "./StreetView";
 import { BookInHand, heldBookOf } from "./BookInHand";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookReviews, FoldedWords } from "./Social";
 import { HomeView } from "./HomeView";
+import { requestHomeTop } from "../lib/home-tab";
 import { SearchView } from "./SearchView";
 import { ReadingView } from "./ReadingView";
 import { NotificationsView } from "./NotificationsView";
@@ -190,24 +190,6 @@ export default function TownApp({
       ),
     [],
   );
-  useEffect(() => {
-    const load = () => {
-      if (location.hash.startsWith("#search="))
-        setSearch(decodeURIComponent(location.hash.slice(8)));
-    };
-    load();
-    window.addEventListener("hashchange", load);
-    return () => window.removeEventListener("hashchange", load);
-  }, [view]);
-  // On the street, what is typed in the top search stays in the address, so
-  // coming back finds the same shops.
-  useEffect(() => {
-    if (view !== "town") return;
-    if (!search && !location.hash.startsWith("#search=")) return;
-    replaceAddress({
-      hash: search ? "search=" + encodeURIComponent(search) : null,
-    });
-  }, [view, search]);
   // A dialog about something on the page does not follow the reader to the next one.
   useEffect(() => {
     closeReport();
@@ -247,8 +229,7 @@ export default function TownApp({
   useEffect(() => () => closePost(), []);
   const said = useAnnouncement();
   // Enter in the top search opens the search page for what was typed: books,
-  // readers and shops alike. On the street, what is typed also narrows the
-  // shops as it is typed, and stays there for coming back.
+  // readers and shops alike.
   const searchEverything = () => {
     const query = search.trim();
     if (!query) return;
@@ -261,7 +242,7 @@ export default function TownApp({
     }
     requestSearch(query);
     router.push(searchPath(query));
-    if (view !== "town") setSearch("");
+    setSearch("");
   };
   const section = sectionOf(
     view,
@@ -284,17 +265,37 @@ export default function TownApp({
             : null;
   const reading = Boolean(activeSession(state));
   const unread = unreadCount(state);
-  // ホーム returns to the Home tab open last, as it was left; on Home itself
-  // it stays the way back to the street's start. A 便り's page at its own
-  // address is read as part of Home, but is not one of its tabs.
-  const lastHome = useLastHomeAddress();
-  const homeHref = section === "home" && view !== "post" ? "/" : lastHome;
+  // ホーム returns to the Home tab shown last (home-tab.ts); on Home itself
+  // it takes the tab shown back to its top. A 便り's page at its own address
+  // is read as part of Home, but is not one of its tabs.
+  const homeHref = useLastHomeAddress();
   const hrefOf = (link: (typeof links)[number]) =>
     link.section === "home" ? homeHref : link.href;
+  // On Home itself, ホーム takes the tab shown back to its top, in place.
+  const onHome = section === "home" && view !== "post";
+  const homeClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      !onHome ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    requestHomeTop();
+  };
   return (
-    <div className={"town-shell" + (view === "walk" ? " is-walk" : "")}>
+    <div
+      className={
+        "town-shell" +
+        (view === "walk" ? " is-walk" : "") +
+        (view === "town" || view === "timeline" ? " is-home" : "")
+      }
+    >
       <aside className="town-sidebar" inert={layered}>
-        <Link className="brand" href={homeHref}>
+        <Link className="brand" href={homeHref} onClick={homeClick}>
           <span className="brand-mark">
             <Icon name="store" size={31} />
           </span>
@@ -308,6 +309,7 @@ export default function TownApp({
             <Link
               key={l.section}
               href={hrefOf(l)}
+              onClick={l.section === "home" ? homeClick : undefined}
               className={"side-link " + (section === l.section ? "active" : "")}
               aria-current={section === l.section ? "page" : undefined}
             >
@@ -357,7 +359,7 @@ export default function TownApp({
       </aside>
       <div className="town-workspace" inert={layered}>
         <header className="town-topbar">
-          <Link href={homeHref} className="mobile-brand">
+          <Link href={homeHref} className="mobile-brand" onClick={homeClick}>
             <Icon name="store" size={24} />
             <span>Book Town</span>
           </Link>
@@ -427,19 +429,17 @@ export default function TownApp({
         <div className="persistence-warning" role="status" hidden={!warning}>
           {warning}
         </div>
-        <main className={"town-main view-" + view} key={view + selectedId}>
+        <main
+          // Both of Home's addresses draw the same Home, whichever tab shows.
+          className={"town-main view-" + (view === "timeline" ? "town" : view)}
+          key={view + selectedId}
+        >
           {visitor && ownPage ? (
             <VisitorPage page={ownPage} />
           ) : view === "walk" ? (
             <WalkView {...shared} />
-          ) : view === "town" ? (
-            <HomeView {...shared} tab="shelves">
-              <StreetView {...shared} search={search} setSearch={setSearch} />
-            </HomeView>
-          ) : view === "timeline" ? (
-            <HomeView {...shared} tab="timeline">
-              {null}
-            </HomeView>
+          ) : view === "town" || view === "timeline" ? (
+            <HomeView {...shared} tab={view === "town" ? "home" : "letters"} />
           ) : view === "search" ? (
             <SearchView {...shared} />
           ) : view === "reading" ? (
@@ -482,6 +482,7 @@ export default function TownApp({
         {links.map((l) => (
           <Link
             href={hrefOf(l)}
+            onClick={l.section === "home" ? homeClick : undefined}
             key={l.section}
             className={
               (section === l.section ? "active" : "") +

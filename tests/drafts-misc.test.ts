@@ -11,7 +11,8 @@ import {
 } from "../src/lib/account-draft";
 import { NAME_MAX_LENGTH } from "../src/lib/account";
 import { imeKey } from "../src/lib/keys";
-import { homeAddressOf, readHomeAddresses } from "../src/lib/last-address";
+import { homeAddressOf } from "../src/lib/last-address";
+import { HOME_TAB_KEY, loadHomeTab, saveHomeTab } from "../src/lib/home-tab";
 import { enterPressed } from "../src/lib/search/use-book-search";
 
 const memory = () => {
@@ -141,59 +142,22 @@ const memory = () => {
 }
 
 {
-  // A Home tab keeps its filter and lane, not how far the street went.
-  assert.equal(
-    homeAddressOf("/", "?rounds=4&lane=2&show=following"),
-    "/?show=following&lane=2",
-  );
-  assert.equal(homeAddressOf("/", "?rounds=3"), "/");
-  assert.equal(homeAddressOf("/", ""), "/");
-  assert.equal(
-    homeAddressOf("/timeline/", "?show=following&utm=x"),
-    "/timeline/?show=following",
-  );
-  assert.equal(homeAddressOf("/search/", "?q=モモ"), null);
-  assert.equal(homeAddressOf("/timeline", "?show=following"), null);
+  // ホーム keeps only which tab: no filter, lane or length of the alley.
+  assert.equal(homeAddressOf("/"), "/");
+  assert.equal(homeAddressOf("/timeline/"), "/timeline/");
+  assert.equal(homeAddressOf("/search/"), null);
+  assert.equal(homeAddressOf("/timeline"), null);
 }
 
 {
-  // Kept addresses are read back only as this module writes them.
-  assert.deepEqual(
-    readHomeAddresses({
-      addresses: {
-        "/": "/?show=following&lane=1",
-        "/timeline/": "/timeline/?show=following",
-      },
-      last: "/timeline/",
-    }),
-    {
-      addresses: {
-        "/": "/?show=following&lane=1",
-        "/timeline/": "/timeline/?show=following",
-      },
-      last: "/timeline/",
-    },
-  );
-  assert.deepEqual(
-    readHomeAddresses({
-      addresses: {
-        "/": "https://elsewhere.example/?show=following",
-        "/timeline/": "/search/?show=following",
-      },
-      last: "/",
-    }),
-    { addresses: {}, last: "/" },
-  );
-  assert.deepEqual(
-    readHomeAddresses({
-      addresses: { "/": "/?rounds=9&show=following" },
-      last: "/",
-    }),
-    { addresses: {}, last: "/" },
-  );
-  assert.equal(readHomeAddresses({ addresses: {}, last: "/search/" }), null);
-  assert.equal(readHomeAddresses(null), null);
-  assert.equal(readHomeAddresses("/"), null);
+  // The Home tab shown last is kept in localStorage, under its own key.
+  const local = memory();
+  assert.equal(loadHomeTab(local), null);
+  saveHomeTab("letters", local);
+  assert.deepEqual([...local.data], [[HOME_TAB_KEY, "letters"]]);
+  assert.equal(loadHomeTab(local), "letters");
+  local.setItem(HOME_TAB_KEY, JSON.stringify({ last: "/timeline/" }));
+  assert.equal(loadHomeTab(local), null);
 }
 
 console.log("drafts-misc ok");

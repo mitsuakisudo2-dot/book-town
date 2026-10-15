@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { supabaseConfigured, supabaseUrl } from "../lib/supabase/config";
+import { HOME_TAB_BOOT } from "../lib/home-tab";
 import "./globals.css";
 export const metadata: Metadata = {
   title: {
@@ -37,7 +38,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ja">
+    // HOME_TAB_BOOT marks <html> with the Home tab that opens before React
+    // hydrates.
+    <html lang="ja" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -58,6 +61,9 @@ export default function RootLayout({
           suppressHydrationWarning
         />
         <script dangerouslySetInnerHTML={{ __html: SHOW_FONTS }} />
+        {/* Before the first paint: which Home tab opens, so the other tab's
+            blocks stay hidden while the town loads (home-tab.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: HOME_TAB_BOOT }} />
         <noscript>
           <link href={FONTS_CSS} rel="stylesheet" />
         </noscript>

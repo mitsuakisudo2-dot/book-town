@@ -22,12 +22,22 @@ function subscribe(listener: () => void) {
 export const readParam = (name: string): string | null =>
   new URLSearchParams(location.search).get(name);
 
-/** Rewrites the address in place; null or "" removes the value. */
+/**
+ * Rewrites the address in place; null or "" removes the value. A new `path`
+ * (Home's two tabs, `/` and `/timeline/`) leaves the other page's choices
+ * behind: only the `params` and `hash` given come along.
+ */
 export function replaceAddress(change: {
+  path?: string;
   params?: Record<string, string | null>;
   hash?: string | null;
 }) {
   const url = new URL(location.href);
+  if (change.path !== undefined && change.path !== url.pathname) {
+    url.pathname = change.path;
+    url.search = "";
+    url.hash = "";
+  }
   for (const [name, value] of Object.entries(change.params ?? {}))
     if (value === null || value === "") url.searchParams.delete(name);
     else url.searchParams.set(name, value);
@@ -46,6 +56,18 @@ export function replaceAddress(change: {
   }
   noteAddressChanged();
   emit();
+}
+
+/**
+ * The address's path, as it is rewritten in place too. The static page and
+ * its first render have the route's own path, `routePath`.
+ */
+export function useAddressPath(routePath: string): string {
+  return useSyncExternalStore(
+    subscribe,
+    () => location.pathname,
+    () => routePath,
+  );
 }
 
 /** A value kept in the address under `name`: null when absent. */

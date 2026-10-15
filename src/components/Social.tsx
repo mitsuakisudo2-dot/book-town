@@ -21,18 +21,14 @@ import {
   type Post,
   OWN_SHOP_ID,
   reviewKey,
-  type SpoilerDisplay,
   type TownActions,
   type TownState,
 } from "../lib/types";
 import {
   bookReviews,
   findReader,
-  followedTimelinePosts,
-  ownersToFollow,
   readerPosts,
   wordsFolded,
-  timelinePosts,
   wantSources,
 } from "../lib/social";
 import { currentBookId } from "../lib/reading";
@@ -43,10 +39,8 @@ import { booksBeforeSearch } from "../lib/book-lists";
 import { Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
 import "./poster-screen.css";
-import { isDatabaseId, posterNewPath, profilePath } from "../lib/paths";
-import { timelinePosters, type Poster } from "../lib/posters";
+import { posterNewPath } from "../lib/paths";
 import { leaveLayers } from "../lib/back-layer";
-import { PosterCard } from "./PosterView";
 import { LetterCard } from "./letter/LetterCard";
 import {
   KeptDraftNote,
@@ -54,194 +48,15 @@ import {
   useNotTakenWords,
   useOpenedWithWork,
 } from "./KeptDraftNote";
-import { useTownBackend } from "../lib/store";
 import { notePosted } from "../lib/just-posted";
 import { coverSelection, splitHidden } from "../lib/hidden-words";
 import { focusField } from "../lib/coarse-pointer";
-import { useUrlParam } from "../lib/url-state";
 
 type Shared = {
   state: TownState;
   actions: TownActions;
   notify: Notify;
 };
-
-/**
- * What the timeline says of spoilers, by the reader's 「ネタバレの表示」.
- * Posters carry only their maker's mark (no 「ネタバレでは？」), and follow it.
- */
-const SPOILER_NOTES: Record<SpoilerDisplay, string> = {
-  show_all:
-    "ネタバレの印が付いた投稿とポスターは、たたんでいます。押すと読めます。読み終えた本の投稿は、そのまま出します。",
-  fold_possible:
-    "ネタバレの印が付いた投稿とポスター、3人以上が「ネタバレでは？」と言った投稿は、たたんでいます。押すと読めます。読み終えた本の投稿は、そのまま出します。",
-  leave_out:
-    "ネタバレの印が付いた投稿とポスター、その可能性がある投稿は、設定により出していません。読み終えた本の投稿は出します。",
-};
-
-type FeedEntry =
-  | { kind: "post"; post: Post; at: number }
-  | { kind: "poster"; poster: Poster; at: number };
-
-export function TimelineView(props: Shared) {
-  const [show, setShow] = useUrlParam("show");
-  const followingOnly = show === "following";
-  const setFollowingOnly = (only: boolean) =>
-    setShow(only ? "following" : null);
-  const posts = followingOnly
-    ? followedTimelinePosts(props.state)
-    : timelinePosts(props.state);
-  // Words and posters in one stream, newest first: neither is ranked above the other.
-  const feed: FeedEntry[] = [
-    ...posts.map((post) => ({
-      kind: "post" as const,
-      post,
-      at: Date.parse(post.createdAt) || 0,
-    })),
-    ...timelinePosters(props.state, followingOnly).map((poster) => ({
-      kind: "poster" as const,
-      poster,
-      at: Date.parse(poster.createdAt) || 0,
-    })),
-  ].sort((a, b) => b.at - a.at);
-  return (
-    <div className="social-page">
-      <span className="eyebrow">READERS, IN THEIR OWN WORDS</span>
-      <h1 className="page-title">タイムライン</h1>
-      <p className="page-subtitle">
-        本のことも、そうでないことも。気になった人の好きな本へ。
-      </p>
-      <div className="timeline-filter-row">
-        <div
-          className="timeline-filters"
-          role="group"
-          aria-label="投稿の表示範囲"
-        >
-          <button
-            type="button"
-            aria-pressed={!followingOnly}
-            onClick={() => setFollowingOnly(false)}
-          >
-            すべて
-          </button>
-          <button
-            type="button"
-            aria-pressed={followingOnly}
-            onClick={() => setFollowingOnly(true)}
-          >
-            フォロー中
-          </button>
-        </div>
-        <Link href={posterNewPath()} className="timeline-make-poster">
-          <Icon name="grid" size={16} />
-          ポスターを作る
-        </Link>
-      </div>
-      {followingOnly && (
-        <p className="timeline-filter-note">
-          フォローしている書店の店主と、あなたの投稿。
-        </p>
-      )}
-      {followingOnly && !props.state.following.length && (
-        <FollowSuggestions {...props} />
-      )}
-      {feed.some((entry) => {
-        const author =
-          entry.kind === "post" ? entry.post.authorId : entry.poster.authorId;
-        return author !== ME_ID && !isDatabaseId(author);
-      }) && (
-        <p className="timeline-demo-note">
-          「見本」と付いた読書家と言葉は、街の雰囲気を伝えるための見本です。
-        </p>
-      )}
-      <div className="post-feed" aria-label="タイムラインの投稿">
-        {feed.map((entry) =>
-          entry.kind === "post" ? (
-            <LetterCard
-              key={entry.post.id}
-              {...props}
-              post={entry.post}
-              showBook
-            />
-          ) : (
-            <PosterCard
-              key={"poster:" + entry.poster.id}
-              poster={entry.poster}
-              state={props.state}
-            />
-          ),
-        )}
-        {!feed.length && (
-          <div className="empty-state">
-            <h2>
-              {followingOnly
-                ? "気になる人の言葉を、ここに。"
-                : "まだ、誰の声もありません。"}
-            </h2>
-            <p>
-              {followingOnly
-                ? "書店をフォローすると、店主の投稿をまとめて読めます。"
-                : "右下の「投稿」から、最初のひとことを。"}
-            </p>
-            {followingOnly && (
-              <Link href="/" className="button secondary">
-                書店を探す
-                <Icon name="arrow" size={16} />
-              </Link>
-            )}
-          </div>
-        )}
-      </div>
-      <p className="social-note">
-        {SPOILER_NOTES[props.state.settings.spoilerDisplay]}
-      </p>
-    </div>
-  );
-}
-
-/** Following nobody yet: a few owners, each with words of their own to read. */
-function FollowSuggestions({ state, actions, notify }: Shared) {
-  // With an account, only owners who can receive a follow are suggested.
-  const savedIn = useTownBackend();
-  const owners = ownersToFollow(state).filter(
-    ({ shop }) => savedIn !== "account" || isDatabaseId(shop.id),
-  );
-  if (!owners.length) return null;
-  return (
-    <section className="follow-suggestions" aria-labelledby="follow-first">
-      <h2 id="follow-first">フォローすると、その店主の投稿がここに届きます</h2>
-      <ul>
-        {owners.map(({ shop, owner, pop, book }) => (
-          <li key={shop.id}>
-            <Link href={profilePath(owner.id)} className="follow-owner">
-              <ReaderAvatar reader={owner} size={36} />
-              <span>
-                <b>{shop.name}</b>
-                <small>
-                  {owner.name}
-                  {!isDatabaseId(owner.id) && " · 見本"}
-                </small>
-              </span>
-            </Link>
-            <p className="follow-pop">
-              『{book.title}』に添えたPOP：{pop}
-            </p>
-            <button
-              type="button"
-              className="button secondary"
-              onClick={() => {
-                actions.toggleFollow(shop.id);
-                notify(shop.name + "をフォローしました");
-              }}
-            >
-              フォロー
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
 
 const REVIEW_PREVIEW = 3;
 
@@ -459,8 +274,8 @@ export function PostComposer({
         : spoiler
           ? "ネタバレを隠して投稿しました"
           : attached
-            ? "タイムラインと作品ページに投稿しました"
-            : "タイムラインに投稿しました",
+            ? "ホームと作品ページに投稿しました"
+            : "ホームに投稿しました",
     );
     onDone?.(created);
   }

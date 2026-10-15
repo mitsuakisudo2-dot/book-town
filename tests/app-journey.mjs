@@ -44,6 +44,15 @@ async function go(route) {
     ),
   );
 }
+/** Opens Home on ホーム: a fresh `/` opens the tab shown last. */
+async function goHome() {
+  await go("/");
+  const home = page
+    .getByRole("tablist", { name: "ホームの表示" })
+    .getByRole("tab", { name: "ホーム" });
+  if ((await home.getAttribute("aria-selected")) !== "true") await home.click();
+  await expect(page).toHaveURL(`${baseURL}/`);
+}
 async function noOverflow(label) {
   const size = await page.evaluate(() => ({
     width: innerWidth,
@@ -193,32 +202,35 @@ try {
         "page",
       );
       await expect(
-        page
-          .getByRole("navigation", { name: "ホームの表示" })
-          .getByRole("link"),
-      ).toHaveText(["書店", "タイムライン"]);
+        page.getByRole("tablist", { name: "ホームの表示" }).getByRole("tab"),
+      ).toHaveText(["ホーム", "便りだけ"]);
       await expect(page.getByRole("link", { name: "お知らせ" })).toBeVisible();
       await noOverflow("home");
     },
   );
 
   await check(
-    "swipes on a shelf stay on the shelf; other swipes switch home",
+    "swipes on a shelf stay on the shelf; other swipes switch the Home tabs",
     async () => {
-      await go("/");
+      await goHome();
       const shelf = page.locator(".street-shelf").first();
       await shelf.scrollIntoViewIfNeeded();
       await swipe(shelf, -160);
       await page.waitForTimeout(400);
       await expect(page).toHaveURL(`${baseURL}/`);
       await page.evaluate(() => window.scrollTo(0, 0));
-      await swipe(page.locator(".street-intro"), -160);
+      await swipe(page.getByRole("navigation", { name: "できること" }), -160);
       await expect(page).toHaveURL(/\/timeline\/$/);
-      await expect(
-        page.getByRole("heading", { name: "タイムライン" }),
-      ).toBeVisible();
-      await swipe(page.locator(".page-subtitle"), 160);
+      await expect(page.getByRole("tab", { name: "便りだけ" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await swipe(page.locator('[role="tabpanel"][data-pane="letters"]'), 160);
       await expect(page).toHaveURL(`${baseURL}/`);
+      await expect(page.getByRole("tab", { name: "ホーム" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
     },
   );
 
@@ -419,9 +431,11 @@ try {
   );
 
   await check("notifications show readers reading the same book", async () => {
-    await go("/timeline/");
-    // While a book is open, home does not offer to continue it.
-    await expect(page.locator(".home-continue")).toHaveCount(0);
+    await goHome();
+    // While a book is open, ホーム says it is being read, under the doors.
+    const reading = page.locator(".home-reading");
+    await expect(reading).toContainText("読書中");
+    await expect(reading).toContainText("ソラリス");
     await expect(
       page.getByRole("link", { name: "お知らせ（新しいお知らせがあります）" }),
     ).toBeVisible();
@@ -462,18 +476,22 @@ try {
       expect(data.readingSessions).toHaveLength(1);
       expect(data.readingSessions[0].endedAt).not.toBeNull();
       await expect(page.locator(".reading-log li")).toHaveCount(1);
-      // Home keeps the unfinished book a tap away, with the last line written.
-      await go("/");
+      // ホーム keeps the unfinished book a tap away, as 読みかけ, under the
+      // doors: one line, the book and 記録する.
+      await goHome();
+      const reading = page.locator(".home-reading");
+      await expect(reading).toContainText("読みかけ");
+      await expect(reading).not.toContainText("読書中");
       const next = page.getByRole("link", {
-        name: "『ソラリス』の続きを読む",
+        name: "『ソラリス』の読書を記録する",
       });
-      await expect(next).toContainText("ちょうど第二章。");
+      await expect(next).toHaveText("記録する");
       // The jacket is its own link, to the book's page (where its cover is
       // credited); the two links sit side by side, not nested.
       await expect(
         page.getByRole("link", { name: "『ソラリス』の作品ページへ" }),
       ).toHaveAttribute("href", "/books/solaris/");
-      await expect(page.locator(".home-continue a a")).toHaveCount(0);
+      await expect(page.locator(".home-reading a a")).toHaveCount(0);
       await next.click();
       await expect(page).toHaveURL(/\/reading\/$/);
       await expect(page.locator(".picker-chosen")).toContainText("ソラリス");
@@ -764,7 +782,8 @@ try {
   });
 
   await check("tags link to every post that shares them", async () => {
-    await go("/timeline/");
+    // 宗's 便り, on his page: the reader follows nobody yet.
+    await go("/profiles/r-sou/");
     await page.getByRole("link", { name: "#積読" }).first().click();
     await expect(page).toHaveURL(/\/search\//);
     await expect(
@@ -1051,7 +1070,7 @@ try {
       await page.getByRole("button", { name: "棚を整える" }).click();
       await expect(page.locator(".editor-shelf-panel")).toHaveCount(1);
       // For a day, the street opens with the new shop and says it joined.
-      await go("/");
+      await goHome();
       const first = page.locator(".street-shop").first();
       await expect(first.locator(".street-new-own")).toContainText(
         "あなたの書店が、街に加わりました",
@@ -1290,26 +1309,13 @@ try {
       ).toContainText("銀河鉄道の夜");
       await page.goBack();
       await expect(page).toHaveURL(/\/timeline\/$/);
-      // On the street the words narrow the shops as typed, and stay there.
-      await go("/");
+      // On ホーム too: the words do not narrow the alley as typed; Enter
+      // asks the search page, and 戻る comes back to the alley as it was.
+      await goHome();
+      const fronts = await page.locator(".street-shop").count();
+      expect(fronts).toBeGreaterThan(1);
       await top.fill("雨と翻訳");
-      await expect(page.locator(".street-shop")).toHaveCount(1);
-      await expect(page.locator(".street-search-result")).not.toContainText(
-        /\d/,
-      );
-      // When nothing matches, the status itself says so (the empty street
-      // below is not read out), still without a number.
-      await top.fill("量子力学");
-      await expect(page.locator(".street-shop")).toHaveCount(0);
-      await expect(
-        page.getByRole("status").filter({ hasText: "量子力学" }),
-      ).toContainText(
-        "「量子力学」からつながる書店は、まだ見つかりませんでした",
-      );
-      await top.fill("雨と翻訳");
-      await expect(page.locator(".street-search-result")).toContainText(
-        "「雨と翻訳」からつながる書店クリア",
-      );
+      await expect(page.locator(".street-shop")).toHaveCount(fronts);
       await top.press("Enter");
       await expect(page).toHaveURL(/\/search\/\?q=/);
       await expect(
@@ -1318,8 +1324,8 @@ try {
           .filter({ hasText: "雨と翻訳" }),
       ).toHaveCount(1);
       await page.goBack();
-      await expect(page).toHaveURL(/#search=/);
-      await expect(page.locator(".street-shop")).toHaveCount(1);
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await expect(page.locator(".street-shop")).toHaveCount(fronts);
       await top.fill("");
       await page.setViewportSize({ width: 390, height: 844 });
     },

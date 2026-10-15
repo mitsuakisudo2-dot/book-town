@@ -52,6 +52,15 @@ async function go(page, route) {
     () => localStorage.getItem("book-town-v1") !== null,
   );
 }
+/** Opens Home on ホーム: a fresh `/` opens the tab shown last. */
+async function goHome(page) {
+  await go(page, "/");
+  const home = page
+    .getByRole("tablist", { name: "ホームの表示" })
+    .getByRole("tab", { name: "ホーム" });
+  if ((await home.getAttribute("aria-selected")) !== "true") await home.click();
+  await expect(page).toHaveURL(`${baseURL}/`);
+}
 async function stored(page) {
   return page.evaluate(
     () => JSON.parse(localStorage.getItem("book-town-v1")).data,
@@ -188,39 +197,34 @@ try {
   await check(
     "Desktop town discovery and original bookstore signs",
     async () => {
-      await go(page, "/");
+      await goHome(page);
       await expect(page.locator(".street-shop")).toHaveCount(6);
       await expect(
-        page.getByRole("heading", {
-          name: /本を探していたら、\s*人に出会った。/,
-        }),
+        page.getByRole("heading", { name: "ここから、まだ知らない路地" }),
       ).toBeVisible();
+      // On a desktop, Home is one centred column of 600px beside the
+      // sidebar, with no aside of its own.
+      const column = await page.locator(".home-view").boundingBox();
+      expect(column.width).toBeLessThanOrEqual(600);
+      const main = await page.locator("main").boundingBox();
+      expect(
+        Math.abs(
+          column.x - main.x - (main.x + main.width - column.x - column.width),
+        ),
+      ).toBeLessThan(40);
+      await expect(page.locator(".street-aside")).toHaveCount(0);
       await noOverflow(page, "desktop town");
       await page.screenshot({
         path: path.join(output, "town-desktop.png"),
         fullPage: true,
         animations: "disabled",
       });
-      const before = await page
-        .locator(".street-shop-title a")
-        .first()
-        .getAttribute("aria-label");
-      await page.getByRole("button", { name: "路地を変えてみる" }).click();
-      expect(
-        await page
-          .locator(".street-shop-title a")
-          .first()
-          .getAttribute("aria-label"),
-      ).not.toBe(before);
+      // Followed from its front in the alley.
       await page
         .getByRole("button", { name: "軌道書房をフォロー", exact: true })
+        .first()
         .click();
       expect((await stored(page)).following).toContain("shop-orbit");
-      await page
-        .getByRole("button", { name: "フォロー中", exact: true })
-        .click();
-      await expect(page.locator(".street-shop")).toHaveCount(1);
-      await page.getByRole("button", { name: "すべて", exact: true }).click();
     },
   );
   await check(
@@ -1026,7 +1030,7 @@ try {
       await expect(settings.getByLabel("書店の名前")).toBeFocused();
       // The walk's invitation to write the owner's words (a link here)
       // opens them ready.
-      await go(page, "/");
+      await goHome(page);
       await go(page, "/my-shop/#shop-words");
       await expect(settings.getByLabel("ひとこと")).toBeFocused();
     },
@@ -1065,6 +1069,28 @@ try {
             animations: "disabled",
           });
       }
+    },
+  );
+  await check(
+    "Home's two tabs and a 便り's page fit 320, 390 and 549px",
+    async () => {
+      for (const width of [320, 390, 549]) {
+        // A phone widens the page to what is too wide for it: the page is
+        // also as wide as the screen.
+        const fits = async (name) => {
+          await noOverflow(phone, name);
+          expect(await phone.evaluate(() => innerWidth), name).toBe(width);
+        };
+        await phone.setViewportSize({ width, height: 844 });
+        await goHome(phone);
+        await fits(`${width}px ホーム`);
+        await go(phone, "/timeline/");
+        await fits(`${width}px 便りだけ`);
+        await go(phone, "/post/?id=p-1");
+        await expect(phone.locator("main")).toContainText("十年ぶりに再読");
+        await fits(`${width}px 便り`);
+      }
+      await phone.setViewportSize({ width: 390, height: 844 });
     },
   );
   await check(
@@ -1201,19 +1227,135 @@ try {
   );
   await mobile.close();
   await check(
-    "戻る returns to the tab, filter, search, lane and shop the reader left",
+    "Home's tabs switch in place, and 戻る from a book comes back to 便りだけ where it was",
+    async () => {
+      // Following every shop gives 便りだけ every owner's 便り to scroll through.
+      await go(page, "/");
+      await page.evaluate(() => {
+        const stored = JSON.parse(localStorage.getItem("book-town-v1"));
+        stored.data.following = [
+          "shop-orbit",
+          "shop-rain",
+          "shop-question",
+          "shop-window",
+          "shop-frame",
+          "shop-lamplight",
+        ];
+        localStorage.setItem("book-town-v1", JSON.stringify(stored));
+      });
+      await goHome(page);
+      const tabs = page.getByRole("tablist", { name: "ホームの表示" });
+      const letters = tabs.getByRole("tab", { name: "便りだけ" });
+      const steps = await page.evaluate(() => history.length);
+      await letters.click();
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      await expect(letters).toHaveAttribute("aria-selected", "true");
+      // A switch is no step of 戻る.
+      expect(await page.evaluate(() => history.length)).toBe(steps);
+      // Down the 便り to a book further on, and to its page.
+      const book = page
+        .locator('[role="tabpanel"][data-pane="letters"]')
+        .locator(".post-card a[href^='/books/']")
+        .nth(4);
+      await book.scrollIntoViewIfNeeded();
+      await page.mouse.move(720, 500);
+      await page.mouse.wheel(0, -120);
+      await expect
+        .poll(() => page.evaluate(() => scrollY))
+        .toBeGreaterThan(400);
+      await page.waitForTimeout(300);
+      const scrolled = await page.evaluate(() => scrollY);
+      const href = await book.getAttribute("href");
+      await book.click();
+      await expect(page).toHaveURL(`${baseURL}${href}`);
+      await page.goBack();
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      await expect(letters).toHaveAttribute("aria-selected", "true");
+      await expect(book).toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => scrollY))
+        .toBeGreaterThan(scrolled - 3);
+      expect(await page.evaluate(() => scrollY)).toBeLessThan(scrolled + 3);
+      // Back on ホーム, also in place; 便りだけ's place is kept for it.
+      await tabs.getByRole("tab", { name: "ホーム" }).click();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      expect(await page.evaluate(() => history.length)).toBe(steps + 1);
+      await letters.click();
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      expect(await page.evaluate(() => scrollY)).toBeGreaterThan(scrolled - 3);
+      await page.evaluate(() => {
+        const stored = JSON.parse(localStorage.getItem("book-town-v1"));
+        stored.data.following = [];
+        localStorage.setItem("book-town-v1", JSON.stringify(stored));
+      });
+      await page.reload();
+    },
+  );
+  await check(
+    "A fresh ホーム opens the tab shown last; 戻る and a reload keep the address's own",
+    async () => {
+      const nav = page.getByRole("navigation", {
+        name: "メインナビゲーション",
+      });
+      const tabs = page.getByRole("tablist", { name: "ホームの表示" });
+      const letters = tabs.getByRole("tab", { name: "便りだけ" });
+      const shelves = tabs.getByRole("tab", { name: "ホーム" });
+      const keep = (tab) =>
+        page.evaluate(
+          (tab) => localStorage.setItem("book-town-home-tab-v1", tab),
+          tab,
+        );
+      await go(page, "/search/");
+      await keep("home");
+      await go(page, "/");
+      await expect(shelves).toHaveAttribute("aria-selected", "true");
+      await letters.click();
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      // From another page, ホーム leads back to that tab.
+      await nav.getByRole("link", { name: "検索" }).click();
+      await expect(page).toHaveURL(/\/search\/$/);
+      await expect(nav.getByRole("link", { name: "ホーム" })).toHaveAttribute(
+        "href",
+        "/timeline/",
+      );
+      await nav.getByRole("link", { name: "ホーム" }).click();
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      await expect(letters).toHaveAttribute("aria-selected", "true");
+      // So does a fresh `/`, before anything is painted.
+      await page.goto(`${baseURL}/`);
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      await expect(letters).toHaveAttribute("aria-selected", "true");
+      // An address already opened keeps its own tab, whatever was shown since.
+      await shelves.click();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await nav.getByRole("link", { name: "検索" }).click();
+      await expect(page).toHaveURL(/\/search\/$/);
+      await keep("letters");
+      await page.goBack();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await expect(shelves).toHaveAttribute("aria-selected", "true");
+      await page.reload();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await expect(shelves).toHaveAttribute("aria-selected", "true");
+      expect(
+        await page.evaluate(() => document.documentElement.dataset.homeTab),
+      ).toBe("home");
+      await keep("home");
+    },
+  );
+  await check(
+    "戻る returns to the tab, search, filter, alley and shop the reader left",
     async () => {
       await go(page, "/timeline/");
-      await page
-        .getByRole("button", { name: "フォロー中", exact: true })
-        .click();
-      await expect(page).toHaveURL(/show=following/);
+      // Home's tabs switch in place; a link in the 便り leaves the page.
       await page.locator("main a[href^='/']").first().click();
       await expect(page).not.toHaveURL(/timeline/);
       await page.goBack();
-      await expect(
-        page.getByRole("button", { name: "フォロー中", exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
+      await expect(page).toHaveURL(`${baseURL}/timeline/`);
+      await expect(page.getByRole("tab", { name: "便りだけ" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
 
       await go(page, "/search/");
       await page.getByRole("searchbox").first().fill("夜");
@@ -1254,29 +1396,51 @@ try {
       await page.goBack();
       await expect(page).toHaveURL(walked);
 
-      // The street keeps its lane, and a tap on a shop is not lost while
-      // the street grows underneath it.
-      await go(page, "/");
-      await page.getByRole("button", { name: "路地を変えてみる" }).click();
-      await expect(page).toHaveURL(/lane=1/);
-      const first = await page
+      // Deep in the alley: how far it was walked stays in the address, so
+      // 戻る from a shop comes back to the same front, the alley as long.
+      await goHome(page);
+      for (const rounds of [2, 3]) {
+        await page.evaluate(() =>
+          window.scrollTo(0, document.body.scrollHeight),
+        );
+        await expect(page).toHaveURL(new RegExp(`/\\?rounds=${rounds}$`));
+      }
+      const fronts = page.locator(".street-shop");
+      const shops = (await fronts.count()) / 3;
+      expect(Number.isInteger(shops)).toBe(true);
+      // The second front of the third round, far from the alley's end.
+      const at = shops * 2 + 1;
+      const front = fronts.nth(at);
+      await front.evaluate((element) =>
+        element.scrollIntoView({ block: "start" }),
+      );
+      const name = await front
         .locator(".street-shop-title a")
-        .first()
         .getAttribute("aria-label");
-      await page
-        .locator(".street-shop")
-        .last()
-        .getByRole("link", { name: /^紹介と/ })
-        .click();
+      await expect(page).toHaveURL(/\/\?rounds=3$/);
+      await front.getByRole("link", { name: /^紹介と/ }).click();
       await expect(page).toHaveURL(/\/shops\//);
       await page.goBack();
-      await expect(page).toHaveURL(/lane=1/);
+      await expect(page).toHaveURL(/\/\?rounds=3$/);
+      await expect(fronts).toHaveCount(shops * 3);
+      // The same front is in sight (give or take the one beside it).
+      await expect
+        .poll(() =>
+          page.evaluate((at) => {
+            const fronts = document.querySelectorAll(".street-shop");
+            return [at - 1, at, at + 1].some((index) => {
+              const box = fronts[index]?.getBoundingClientRect();
+              return box && box.bottom > 0 && box.top < innerHeight;
+            });
+          }, at),
+        )
+        .toBe(true);
       expect(
-        await page
+        await fronts
+          .nth(at)
           .locator(".street-shop-title a")
-          .first()
           .getAttribute("aria-label"),
-      ).toBe(first);
+      ).toBe(name);
     },
   );
   await check(
@@ -1284,7 +1448,7 @@ try {
     async () => {
       const dialog = page.locator(".bh-dialog");
       const book = page.locator("main .shelf-book-button").first();
-      await go(page, "/");
+      await goHome(page);
       await page
         .locator(".street-shop")
         .filter({ has: page.getByRole("link", { name: "軌道書房に入る" }) })
