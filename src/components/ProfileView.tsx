@@ -97,6 +97,7 @@ import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import { useUrlParam } from "../lib/url-state";
 import { afterLayerCloses } from "../lib/back-layer";
+import { ProtoPaletteSettings } from "./ProtoPalette";
 import { focusField } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 
@@ -929,6 +930,7 @@ export function ProfileView({
       )}
       {sheet === "settings" && (
         <Modal title="設定" onClose={() => setSheet(null)}>
+          <ProtoPaletteSettings notify={notify} />
           <fieldset className="record-visibility">
             <legend>読み終えた本の記録（これから残す記録）</legend>
             <label>

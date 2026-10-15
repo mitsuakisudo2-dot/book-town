@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { supabaseConfigured, supabaseUrl } from "../lib/supabase/config";
 import { HOME_TAB_BOOT } from "../lib/home-tab";
 import { PROTO_PALETTE_BOOT } from "../lib/proto-palette";
-import { ProtoPalette } from "../components/ProtoPalette";
 import "./globals.css";
 export const metadata: Metadata = {
   title: {
@@ -72,10 +71,7 @@ export default function RootLayout({
           <link href={FONTS_CSS} rel="stylesheet" />
         </noscript>
       </head>
-      <body>
-        {children}
-        <ProtoPalette />
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

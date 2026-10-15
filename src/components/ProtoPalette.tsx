@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * 試作（claude/proto-colors）だけの、色を試す切り替え。6色と昼／夜を選ぶと、
- * <html> の data-palette と data-night を替え、このブラウザに残す。
- * 残した選びは PROTO_PALETTE_BOOT（src/lib/proto-palette.ts）が最初の描画の前に当てる。
- * このブランチは main に取り込まない。
+ * 試作（claude/proto-colors）だけの、画面の色の設定。プロフィールの「設定」の
+ * 中に出す。6色と昼／夜を選ぶと、<html> の data-palette と data-night を替え、
+ * このブラウザに残す。残した選びは PROTO_PALETTE_BOOT（src/lib/proto-palette.ts）
+ * が最初の描画の前に当てる。このブランチは main に取り込まない。
  */
 
 import { useEffect, useState } from "react";
@@ -22,7 +22,6 @@ export const PALETTES = [
 
 type Choice = { p: string; n: boolean };
 
-
 function apply({ p, n }: Choice) {
   const html = document.documentElement;
   if (p === "midori") html.removeAttribute("data-palette");
@@ -36,8 +35,11 @@ function apply({ p, n }: Choice) {
   }
 }
 
-export function ProtoPalette() {
-  const [open, setOpen] = useState(false);
+export function ProtoPaletteSettings({
+  notify,
+}: {
+  notify: (message: string) => void;
+}) {
   const [choice, setChoice] = useState<Choice>({ p: "midori", n: false });
 
   useEffect(() => {
@@ -48,93 +50,60 @@ export function ProtoPalette() {
     });
   }, []);
 
-  const choose = (next: Choice) => {
+  const choose = (next: Choice, told: string) => {
     setChoice(next);
     apply(next);
+    notify(told);
   };
-
-  const current = PALETTES.find((palette) => palette.value === choice.p);
 
   return (
     <>
-      <button
-        type="button"
-        className="proto-palette-tab"
-        aria-expanded={open}
-        onClick={() => setOpen((was) => !was)}
-      >
-        <span
-          className="proto-palette-dot"
-          style={{ background: choice.n ? current?.night : current?.day }}
-          aria-hidden="true"
-        />
-        試作の色
-      </button>
-      {open && (
-        <div
-          className="proto-palette-panel"
-          role="dialog"
-          aria-label="試作の色"
-        >
-          <div className="proto-palette-head">
-            <p className="proto-palette-title">試作の色</p>
-            <button
-              type="button"
-              className="proto-palette-close"
-              onClick={() => setOpen(false)}
-            >
-              閉じる
-            </button>
-          </div>
-          <div
-            className="proto-palette-swatches"
-            role="radiogroup"
-            aria-label="色"
-          >
-            {PALETTES.map((palette) => (
-              <button
-                key={palette.value}
-                type="button"
-                role="radio"
-                aria-checked={choice.p === palette.value}
-                className="proto-palette-swatch"
-                onClick={() => choose({ ...choice, p: palette.value })}
-              >
-                <span
-                  className="proto-palette-chip"
-                  style={{ background: choice.n ? palette.night : palette.day }}
-                  aria-hidden="true"
-                />
-                {palette.label}
-              </button>
-            ))}
-          </div>
-          <div
-            className="proto-palette-modes"
-            role="radiogroup"
-            aria-label="昼と夜"
-          >
-            {[
-              { n: false, label: "昼" },
-              { n: true, label: "夜" },
-            ].map((mode) => (
-              <button
-                key={mode.label}
-                type="button"
-                role="radio"
-                aria-checked={choice.n === mode.n}
-                className="proto-palette-mode"
-                onClick={() => choose({ ...choice, n: mode.n })}
-              >
-                {mode.label}
-              </button>
-            ))}
-          </div>
-          <p className="proto-palette-note">
-            試作です。本物の街にはつながっていない、このブラウザの中だけのデモの街です。
-          </p>
-        </div>
-      )}
+      <fieldset className="record-visibility proto-palette-choices">
+        <legend>画面の色（試作）</legend>
+        {PALETTES.map((palette) => (
+          <label key={palette.value}>
+            <input
+              type="radio"
+              name="proto-palette"
+              checked={choice.p === palette.value}
+              onChange={() =>
+                choose(
+                  { ...choice, p: palette.value },
+                  `画面の色を${palette.label}にしました`,
+                )
+              }
+            />
+            <span
+              className="proto-palette-chip"
+              style={{ background: choice.n ? palette.night : palette.day }}
+              aria-hidden="true"
+            />
+            {palette.label}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset className="record-visibility">
+        <legend>昼と夜（試作）</legend>
+        {[
+          { n: false, label: "昼" },
+          { n: true, label: "夜" },
+        ].map((mode) => (
+          <label key={mode.label}>
+            <input
+              type="radio"
+              name="proto-night"
+              checked={choice.n === mode.n}
+              onChange={() =>
+                choose({ ...choice, n: mode.n }, `${mode.label}の色にしました`)
+              }
+            />
+            {mode.label}
+          </label>
+        ))}
+        <p className="proto-palette-note">
+          試作です。本物の街にはつながっていない、このブラウザの中だけのデモの街です。
+        </p>
+      </fieldset>
     </>
   );
 }
