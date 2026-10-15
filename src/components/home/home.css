@@ -26,6 +26,17 @@
     --home-gutter: 16px;
   }
 }
+/* A front's follow button is as wide as its longer word either way. */
+.home-follow-words {
+  display: inline-grid;
+  justify-items: center;
+}
+.home-follow-words > span {
+  grid-area: 1 / 1;
+}
+.home-follow-words > .is-off {
+  visibility: hidden;
+}
 .home-pane,
 .home-pane-body,
 .home-letters,

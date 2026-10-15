@@ -134,7 +134,16 @@ export function ShopFront({
               }}
             >
               <Icon name={followed ? "check" : "plus"} size={14} />
-              {followed ? "フォロー済み" : "フォロー"}
+              {/* Both words keep their place, so a tap moves nothing on
+                  the page (決定 H:56-57). */}
+              <span className="home-follow-words">
+                <span className={followed ? "is-off" : undefined}>
+                  フォロー
+                </span>
+                <span className={followed ? undefined : "is-off"}>
+                  フォロー済み
+                </span>
+              </span>
             </button>
           )}
         </div>
