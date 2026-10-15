@@ -561,16 +561,21 @@ async function main() {
         fresh.letters.map((entry) => entry.id),
         ["followed"],
       );
-      // One more followed makes six of late: no 「街の便り」, so the other
-      // reader's would not show on ホーム.
+      // Two more followed make six of late (ナギ's memo is Live's, so it
+      // is not one of them): no 「街の便り」, so the other reader's would not
+      // show on ホーム.
       const busy = freshFor(
         town,
-        came(...arrived.posts, letter("followed2", "r-nagi", 5)),
+        came(
+          ...arrived.posts,
+          letter("followed2", "r-nagi", 5),
+          letter("followed3", "r-nagi", 6),
+        ),
         NOW,
       );
       assert.deepEqual(
         busy.home.map((entry) => entry.id),
-        ["followed2", "followed"],
+        ["followed3", "followed2", "followed"],
       );
       // Nothing new: nothing for either.
       assert.deepEqual(freshFor(town, came(seedState.posts[0]), NOW), {

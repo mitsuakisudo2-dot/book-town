@@ -1676,9 +1676,21 @@ try {
           );
         const before = await tops();
         expect(before.length).toBeGreaterThan(10);
-        // No 便り of 凪's (軌道書房) yet above 「街の便り」.
+        // No 便り of 凪's (軌道書房) yet above 「街の便り」: the first card is
+        // the town's (凪's may lead it, now Live holds the memos).
         const first = pane("home").locator("article.letter").first();
-        await expect(first).not.toContainText("十年ぶりに再読");
+        const townFirst = () =>
+          pane("home").evaluate((element) => {
+            const head = element.querySelector(".home-town-head");
+            const card = element.querySelector("article.letter");
+            return Boolean(
+              head &&
+              card &&
+              head.compareDocumentPosition(card) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+            );
+          });
+        expect(await townFirst()).toBe(true);
         await orbit
           .getByRole("button", { name: "軌道書房をフォロー", exact: true })
           .tap();
@@ -1693,6 +1705,7 @@ try {
         await expect(
           first.getByRole("link", { name: "凪", exact: true }),
         ).toBeVisible();
+        expect(await townFirst()).toBe(false);
         await expect(page.locator(".home-older")).toBeVisible();
         await expect(pane("home")).toContainText(
           "フォロー中の便りは、ここまでです。",
