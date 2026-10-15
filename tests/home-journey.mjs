@@ -281,6 +281,72 @@ async function expectTargetsAndType(scope, label) {
   expect(found.tiny, `${label}: words under 12px`).toEqual([]);
 }
 /**
+ * Every control in `selector`'s matches takes a finger 44px across: each
+ * scrolled to the middle of the screen, a point anywhere within 21px of its
+ * middle (corners too) lands on it, by its own box or by what reaches past
+ * its edges. A shelf's books are the books themselves, and left out.
+ */
+async function expectFingerTargets(selector, label) {
+  const missed = await page.evaluate((selector) => {
+    const missed = [];
+    const controls = [...document.querySelectorAll(selector)].flatMap((root) =>
+      [...root.querySelectorAll("a, button")].filter(
+        (control) =>
+          !control.closest(".shelf-scroll") && control.getClientRects().length,
+      ),
+    );
+    for (const control of controls) {
+      control.scrollIntoView({ block: "center" });
+      const box = control.getBoundingClientRect();
+      const x = box.left + box.width / 2;
+      const y = box.top + box.height / 2;
+      const miss = [-21, 0, 21]
+        .flatMap((dx) => [-21, 0, 21].map((dy) => [dx, dy]))
+        .find(([dx, dy]) => {
+          const hit = document.elementFromPoint(x + dx, y + dy);
+          return !hit || !control.contains(hit);
+        });
+      if (miss)
+        missed.push(
+          `${control.tagName} ${control.className} 「${control.textContent.trim().slice(0, 12)}」 ${Math.round(box.width)}×${Math.round(box.height)}, missed at ${miss}`,
+        );
+    }
+    return { missed, count: controls.length };
+  }, selector);
+  expect(missed.count, `${label}: controls found`).toBeGreaterThan(0);
+  expect(missed.missed, `${label}: points a finger misses`).toEqual([]);
+}
+/**
+ * No words in `scope` are under 12px, but for art that draws a thing at its
+ * size: a jacket, the spines on a shelf, a poster's sheet (its words scale
+ * with it, down to a miniature), the initial in an avatar.
+ */
+async function expectNoTinyWords(scope, label) {
+  const tiny = await scope.evaluateAll((roots) =>
+    roots.flatMap((root) =>
+      [root, ...root.querySelectorAll("*")].flatMap((element) => {
+        if (
+          element.closest(
+            ".book-jacket, .shelf-scroll, .poster-sheet, .reader-avatar",
+          ) ||
+          !element.getClientRects().length
+        )
+          return [];
+        const size = parseFloat(getComputedStyle(element).fontSize);
+        const words = [...element.childNodes].some(
+          (node) => node.nodeType === 3 && node.textContent.trim(),
+        );
+        return words && size < 12
+          ? [
+              `${element.tagName} ${element.className} 「${element.textContent.trim().slice(0, 12)}」 ${size}px`,
+            ]
+          : [];
+      }),
+    ),
+  );
+  expect(tiny, `${label}: words under 12px`).toEqual([]);
+}
+/**
  * For each line of a card's words but the last, how far it ends from the
  * column's right edge (the words' own boxes, not the boxes around them).
  */
@@ -1279,9 +1345,17 @@ try {
         const target = await record.boundingBox();
         expect(target.width).toBeGreaterThanOrEqual(44);
         expect(target.height).toBeGreaterThanOrEqual(44);
-        await expect(
-          line.getByRole("link", { name: "『モモ』の作品ページへ" }),
-        ).toHaveAttribute("href", "/books/momo/");
+        const jacket = line.getByRole("link", {
+          name: "『モモ』の作品ページへ",
+        });
+        await expect(jacket).toHaveAttribute("href", "/books/momo/");
+        // The jacket's link is a full target too, the jacket as it was.
+        const book = await jacket.boundingBox();
+        expect(book.width).toBeGreaterThanOrEqual(44);
+        expect(book.height).toBeGreaterThanOrEqual(44);
+        expect(
+          (await jacket.locator(".book-jacket").boundingBox()).width,
+        ).toBeCloseTo(34, 0);
         await expect(page.locator(".home-reading a a")).toHaveCount(0);
         const below = (await doors.boundingBox()).y;
         expect((await line.boundingBox()).y).toBeGreaterThan(below);
@@ -1333,6 +1407,16 @@ try {
         }
         // The first art is asked for first, whatever the slide will be.
         await page.goto(baseURL + "/");
+        // The doors that depend on who the reader is wait as shapes: no
+        // 本屋を開く that turns into 本を登録, no 掲示板 with no board yet.
+        const doors = page.getByRole("navigation", { name: "できること" });
+        for (const name of ["本屋を開く", "本を登録", "掲示板"])
+          await expect(doors.getByText(name)).toHaveCount(0);
+        await expect(doors.locator(".home-entrance")).toHaveCount(4);
+        await expect(doors.locator(".home-entrance.is-waiting")).toHaveCount(2);
+        await expect(
+          doors.getByRole("button", { name: "読書をはじめる" }),
+        ).toBeVisible();
         await expect(
           page.locator(".home-carousel.is-loading img.home-slide-art"),
         ).toHaveAttribute("fetchpriority", "high");
@@ -1478,6 +1562,214 @@ try {
         );
       }),
   );
+
+  await check(
+    "390px 感想が面白い本: 見本 on each tile, a tap opens its 便り, no spoiler in the page, and a tile asked about as a spoiler leaves the band",
+    () =>
+      withPage({}, async () => {
+        // A day when the reader's own six 便り of the morning fill the
+        // 便り, so no other's is among them: the band has every writer's
+        // newest review of the fortnight, one each.
+        await page.clock.setSystemTime(Date.parse("2026-10-13T12:00:00+09:00"));
+        await go("/");
+        await editTown(
+          `data.following = ["shop-lamplight"];
+           data.spoilerReports = ["p-3"];
+           data.posts = Array.from({ length: 6 }, (_, at) => ({
+             id: "me-post-" + (at + 1),
+             authorId: "me",
+             body: "今朝の一行、その" + (at + 1) + "。",
+             bookId: null,
+             spoiler: false,
+             parentId: null,
+             createdAt: new Date(
+               Date.parse("2026-10-13T11:00:00+09:00") - at * 600_000,
+             ).toISOString(),
+             likes: 0,
+             wants: 0,
+             readingMode: null,
+           }));`,
+        );
+        await goHome();
+        const band = pane("home").getByRole("region", {
+          name: "感想が面白い本",
+        });
+        const tiles = band.locator("a.home-review");
+        const links = () =>
+          tiles.evaluateAll((all) =>
+            all.map((tile) => tile.getAttribute("href")),
+          );
+        await expect(tiles).toHaveCount(4);
+        // 凪, 灯, 栞 and すみれ; not はる's, asked about as a spoiler.
+        expect(await links()).toEqual([
+          "/post/?id=p-1",
+          "/post/?id=p-4",
+          "/post/?id=p-6",
+          "/post/?id=p-8",
+        ]);
+        for (const tile of await tiles.all())
+          await expect(tile.locator(".home-tag")).toHaveText("見本");
+        // Not in the page at all: a spoiler (marked, or asked about).
+        const html = await page.content();
+        for (const words of [
+          "最後の数章を読んだ夜は眠れなかった",
+          "あの終わり方でなければいけなかった",
+          "遠くへ行かなくても旅はできる",
+        ])
+          expect(html, words).not.toContain(words);
+        // A tap opens the 便り's page. Asked about as a spoiler there, it
+        // has left the band when 戻る comes home.
+        await tiles.first().tap();
+        const letter = letterPage("凪");
+        await expect(letter).toBeVisible();
+        await slidIn(letter);
+        await expect(letter.locator(".letter.is-main")).toContainText(
+          "十年ぶりに再読",
+        );
+        await letter
+          .locator(".letter.is-main")
+          .getByRole("button", { name: "その他の操作" })
+          .tap();
+        const menu = page.getByRole("dialog", { name: "その他の操作" });
+        await menu.getByRole("button", { name: "ネタバレでは？" }).tap();
+        await expect(menu).toHaveCount(0);
+        await letter.getByRole("button", { name: "戻る" }).tap();
+        await expect(letter).toHaveCount(0);
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await expect(tiles).toHaveCount(3);
+        expect(await links()).toEqual([
+          "/post/?id=p-4",
+          "/post/?id=p-6",
+          "/post/?id=p-8",
+        ]);
+        expect(await page.content()).not.toContain("十年ぶりに再読");
+      }),
+  );
+  await check(
+    "390px the bars stay as they were when a 便り's page or a book in hand closes over a page read down, and go again on the way down",
+    () =>
+      withPage({}, async () => {
+        await goHome();
+        const shell = page.locator(".town-shell");
+        const scrolled = () => page.evaluate(() => Math.round(scrollY));
+        // Time for a scroll to be read (the page's own frames).
+        const settle = () => page.waitForTimeout(400);
+        /** Scrolls `target` to the middle of the screen, then a little up. */
+        const readDownTo = async (target) => {
+          await target.evaluate((element) =>
+            element.scrollIntoView({ block: "center" }),
+          );
+          await settle();
+          await expect(shell).toHaveAttribute("data-bar", "hidden");
+          const at = (await scrolled()) - 60;
+          await page.evaluate((y) => window.scrollTo(0, y), at);
+          await settle();
+          await expect(shell).not.toHaveAttribute("data-bar");
+          return at;
+        };
+        /** Closed, the page is back where it was, its bars as they were. */
+        const backAt = async (at) => {
+          await expect.poll(scrolled).toBe(at);
+          await settle();
+          await expect(shell).not.toHaveAttribute("data-bar");
+        };
+        // A 便り's page, and 戻る.
+        const card = pane("home").locator("article.letter").nth(3);
+        let at = await readDownTo(card);
+        await card.locator(".letter-time").tap();
+        const layer = page.getByRole("dialog", { name: /さんの便り/ });
+        await expect(layer).toBeVisible();
+        await slidIn(layer);
+        await layer.getByRole("button", { name: "戻る" }).tap();
+        await expect(layer).toHaveCount(0);
+        await backAt(at);
+        // A book in hand from the alley, put back.
+        const book = pane("home")
+          .locator(".home-alley .street-shop .shelf-book-button")
+          .first();
+        at = await readDownTo(book);
+        await book.tap();
+        const dialog = page.locator(".bh-dialog");
+        await expect(dialog).toBeVisible();
+        await dialog.getByRole("button", { name: "本を閉じて棚に戻る" }).tap();
+        await expect(dialog).toHaveCount(0);
+        await backAt(at);
+        // Read down from there, the bars go as ever.
+        await page.evaluate((y) => window.scrollTo(0, y), at + 200);
+        await expect(shell).toHaveAttribute("data-bar", "hidden");
+      }),
+  );
+  await check(
+    "On a desktop, 「今日の街」 holds while the focus is inside though the mouse leaves, and while the mouse is over it though the focus leaves",
+    () =>
+      withPage(
+        {
+          viewport: { width: 1280, height: 900 },
+          isMobile: false,
+          hasTouch: false,
+        },
+        async () => {
+          await goHome();
+          const carousel = page.getByRole("region", { name: "今日の街" });
+          const stop = carousel.getByRole("button", {
+            name: "自動の切り替えを止める",
+          });
+          const shown = () =>
+            carousel
+              .locator(".home-carousel-dots .is-on")
+              .evaluate((dot) => [...dot.parentElement.children].indexOf(dot));
+          const box = await carousel.boundingBox();
+          const over = () =>
+            page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          const away = () => page.mouse.move(box.x - 20, box.y + 20);
+          expect(box.x).toBeGreaterThan(40);
+          expect(await shown()).toBe(0);
+          // The focus inside, the mouse over it and away: it holds.
+          await stop.focus();
+          await over();
+          await away();
+          await page.clock.runFor(15_000);
+          expect(await shown()).toBe(0);
+          // The focus gone too: it turns.
+          await page.evaluate(() => document.activeElement?.blur());
+          await page.clock.runFor(10_000 + 1_200);
+          await expect.poll(shown).toBe(1);
+          // The mouse over it, the focus in and gone: it holds.
+          await over();
+          await stop.focus();
+          await page.evaluate(() => document.activeElement?.blur());
+          await page.clock.runFor(15_000);
+          expect(await shown()).toBe(1);
+          // The mouse away too: it turns.
+          await away();
+          await page.clock.runFor(10_000 + 1_200);
+          await expect.poll(shown).toBe(2);
+        },
+      ),
+  );
+  for (const width of [390, 320])
+    await check(
+      `${width}px every control on the alley's fronts and at its end takes a finger, and no words on Home are under 12px`,
+      () =>
+        withPage({ viewport: { width, height: 844 } }, async () => {
+          await goHome();
+          await expectNoTinyWords(pane("home"), `${width}px ホーム`);
+          await expectFingerTargets(
+            ".home-alley > .street-shop:not(.street-round ~ *)",
+            `${width}px the alley's first fronts`,
+          );
+          await expectFingerTargets(
+            ".home-alley > .street-end",
+            `${width}px the alley's end`,
+          );
+          // Following nobody, 便りだけ's shops to follow.
+          await tab("便りだけ").tap();
+          await expect(
+            pane("letters").locator(".follow-suggestions"),
+          ).toBeVisible();
+          await expectNoTinyWords(pane("letters"), `${width}px 便りだけ`);
+        }),
+    );
 
   await check(
     "On a desktop, the 便り's page keeps its column of the page at its address",

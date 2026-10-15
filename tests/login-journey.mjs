@@ -1687,6 +1687,261 @@ try {
     );
     return rows;
   };
+  // The home's 特集 (PR 1b): a town of its own for each check.
+  const homeId = (n) =>
+    "4b6c7d8e-9f0a-4b1c-8d2e-" + String(n).padStart(12, "0");
+  const profileRow = (id, handle, name) => ({
+    id,
+    handle,
+    name,
+    bio: "",
+    color: "#8a7f6a",
+    links: [],
+    compose_icon: "pen",
+    reading_visibility: "private",
+    created_at: ago(400),
+    updated_at: ago(400),
+  });
+  /** Six 便り of the reader's own this morning: the home needs no others. */
+  const ownMorning = () =>
+    Array.from({ length: 6 }, (_, at) =>
+      postRow(
+        homeId(30 + at),
+        user.id,
+        `今朝の一行、その${at + 1}。`,
+        ago(0.1 * (at + 1)),
+      ),
+    );
+  const bones = page.locator("main .home-skeletons");
+  const homeDoors = page.getByRole("navigation", { name: "できること" });
+
+  await check(
+    "the home never shows a shelf kept private nor covered words: not on 今夜の一軒, 本棚をのぞく, 本屋のPOP, 感想が面白い本 or the 掲示板",
+    async () => {
+      // ミナ's shop: a private shelf first (a book and a POP on it), as the
+      // database would never send it, then a public one of three books.
+      const MINA = homeId(1);
+      const MINA_SHOP = homeId(2);
+      const READERS = [
+        [homeId(3), "yu_reads", "ユウ"],
+        [homeId(4), "kai_reads", "カイ"],
+        [homeId(5), "sora_reads", "ソラ"],
+      ];
+      const CORNER = [homeId(11), homeId(12), homeId(13)];
+      const LOCKED = homeId(14);
+      const SECRET = {
+        shelf: "誰にも見せない奥の棚",
+        book: "鍵のかかった日記帳",
+        pop: "ここだけの内緒の言葉",
+        covered: "ひみつの結末",
+      };
+      town = {
+        profiles: [
+          profileRow(MINA, "mina_reads", "ミナ"),
+          ...READERS.map(([id, handle, name]) => profileRow(id, handle, name)),
+        ],
+        shops: [
+          {
+            id: MINA_SHOP,
+            owner_id: MINA,
+            name: "ミナの角の本屋",
+            description: "",
+            tagline: "",
+            theme: "sage",
+            is_open: true,
+            public_shelves: [
+              {
+                id: "locked",
+                name: SECRET.shelf,
+                capacity: 10,
+                isPublic: false,
+                items: [
+                  {
+                    id: "l1",
+                    bookId: LOCKED,
+                    display: "face",
+                    pop: SECRET.pop,
+                  },
+                ],
+              },
+              {
+                id: "corner",
+                name: "角の棚",
+                capacity: 10,
+                isPublic: true,
+                items: CORNER.map((bookId, at) => ({
+                  id: "c" + at,
+                  bookId,
+                  display: "spine",
+                  pop: "",
+                })),
+              },
+            ],
+            public_scene_books: [],
+          },
+        ],
+        books: [
+          ...CORNER.map((id, at) => bookRow(id, null, `角の本 その${at + 1}`)),
+          bookRow(LOCKED, null, SECRET.book),
+        ],
+        posts: [
+          ...ownMorning(),
+          // ミナ's newest, about a book, with words covered (||…||).
+          {
+            ...postRow(
+              homeId(20),
+              MINA,
+              `最後に||${SECRET.covered}||が待っていた。`,
+              ago(0.8),
+            ),
+            book_id: CORNER[0],
+          },
+          ...READERS.map(([id, , name], at) => ({
+            ...postRow(
+              homeId(21 + at),
+              id,
+              `${name}の感想。角の本を読んだ。`,
+              ago(1 + at),
+            ),
+            book_id: CORNER[at],
+          })),
+        ],
+      };
+      await openHome();
+      await expect(bones).toHaveCount(0, { timeout: 10000 });
+      // Each part drawn, so what is missing from it is left out, not undrawn.
+      await expect(
+        page.locator(".home-carousel .home-slide.is-tonight"),
+      ).toContainText("ミナの角の本屋");
+      await expect(
+        page.getByRole("region", { name: "本棚をのぞく" }).first(),
+      ).toContainText("ミナの角の本屋");
+      await expect(
+        page.getByRole("region", { name: "本屋のPOP" }).first(),
+      ).toBeVisible();
+      const reviews = page.getByRole("region", { name: "感想が面白い本" });
+      for (const [, , name] of READERS)
+        await expect(reviews).toContainText(`${name}の感想。`);
+      await expect(page.locator("#home-board")).toBeVisible();
+      const html = await page.content();
+      for (const [what, words] of Object.entries(SECRET))
+        expect(html, what).not.toContain(words);
+      town = null;
+    },
+  );
+
+  await check(
+    "a poster folded while the home holds 「今日の街」 leaves its 企画展 slide",
+    async () => {
+      // レン's newest poster is the 企画展 slide; his shop, unfolded here,
+      // is one the reader can follow from the alley.
+      const POSTER_OPEN = "a0b1c2d3-4e5f-4a6b-8c7d-8e9f0a1b2c05";
+      const rows = withPosters();
+      rows.moderation_folds = rows.moderation_folds.filter(
+        (entry) =>
+          entry.target_kind === "post" || entry.target_kind === "poster",
+      );
+      rows.posters.unshift(
+        posterRow(
+          POSTER_OPEN,
+          OTHER,
+          "夜更けの企画展",
+          "夜に読む本を集めました。",
+          COVER_BOOK,
+          ago(0.5),
+        ),
+      );
+      town = rows;
+      await openHome();
+      await expect(bones).toHaveCount(0, { timeout: 10000 });
+      const slide = page.locator(".home-carousel .home-slide.is-exhibition");
+      await expect(slide).toHaveCount(1);
+      await expect(slide).toContainText("夜更けの企画展");
+      const covers = page.locator("article.poster-card").filter({
+        hasText: "通報があったため、運営が確かめるまで、たたんでいます",
+      });
+      const folded = await covers.count();
+      // Folded by reports meanwhile. The follow below is refused (the
+      // stand-in answers no write of it), so the town is read again in
+      // place, the fold with it, while the home holds what it drew.
+      town.moderation_folds.push(fold(POSTER_OPEN, "folded"));
+      const writes = townWrites.length;
+      const reads = townReads.length;
+      await page
+        .getByRole("button", { name: "レンの夜の本屋をフォロー" })
+        .click();
+      await expect
+        .poll(() => townWrites.slice(writes))
+        .toContain("/rest/v1/shop_follows");
+      await expect
+        .poll(() => townReads.slice(reads))
+        .toContain("/rest/v1/moderation_folds");
+      await expect(
+        page.getByRole("button", { name: "レンの夜の本屋をフォロー" }),
+      ).toBeVisible();
+      // The slide is gone, and its card among the 便り is folded, as the
+      // poster now is: its title nowhere on the page.
+      await expect(slide).toHaveCount(0);
+      await expect(covers).toHaveCount(folded + 1);
+      await expect(page.getByText("夜更けの企画展")).toHaveCount(0);
+      town = null;
+    },
+  );
+
+  await check(
+    "while the town is read, the doors that depend on it wait: never 本屋を開く for a shop's owner, never a 掲示板 with no board",
+    async () => {
+      const OWN_SHOP = "0f1e2d3c-4b5a-4968-8776-655443322110";
+      const shelf = {
+        id: "first",
+        name: "はじめの本棚",
+        capacity: 20,
+        isPublic: true,
+        items: [{ id: "f1", bookId: COVER_BOOK, display: "face", pop: "" }],
+      };
+      town = {
+        shops: [
+          {
+            id: OWN_SHOP,
+            owner_id: user.id,
+            name: "アキの本屋",
+            description: "",
+            tagline: "",
+            theme: "sage",
+            is_open: true,
+            public_shelves: [shelf],
+            public_scene_books: [],
+          },
+        ],
+        shop_private: [{ shelves: [shelf], scene_books: [] }],
+        books: [bookRow(COVER_BOOK, OPENBD_ISBN, "こころの本")],
+      };
+      townDelay = 2500;
+      try {
+        await openHome();
+        await expect(bones).toHaveAttribute("aria-busy", "true");
+        for (const name of ["本屋を開く", "本を登録", "掲示板"])
+          await expect(homeDoors.getByText(name)).toHaveCount(0);
+        // Their places kept, as shapes.
+        await expect(homeDoors.locator(".home-entrance")).toHaveCount(4);
+        await expect(
+          homeDoors.locator(".home-entrance.is-waiting"),
+        ).toHaveCount(2);
+        await expect(bones).toHaveCount(0, { timeout: 10000 });
+      } finally {
+        townDelay = 0;
+      }
+      await expect(
+        homeDoors.getByRole("button", { name: "本を登録" }),
+      ).toBeVisible();
+      await expect(
+        homeDoors.getByRole("link", { name: "本屋を開く" }),
+      ).toHaveCount(0);
+      await homeDoors.getByRole("button", { name: "掲示板" }).click();
+      await expect(page.locator("#home-board")).toBeInViewport();
+      town = null;
+    },
+  );
 
   await check(
     "a post folded by reports opens with a tap; the writer is told gently",
@@ -3246,6 +3501,89 @@ try {
       );
       await page.keyboard.press("Escape");
       await expect(inHand).not.toBeVisible();
+      town = null;
+    },
+  );
+
+  await check(
+    "signed out in another tab, the home reads the town afresh: its bones meanwhile, never an empty town nor the account's 便り",
+    async () => {
+      // The reader follows レン's shop; his 便り are theirs above the alley.
+      town = {
+        profiles: [filled().profiles[0]],
+        shops: [{ ...filled().shops[0] }],
+        books: [bookRow(COVER_BOOK, OPENBD_ISBN, "こころの本")],
+        posts: [1, 2, 3].map((at) =>
+          postRow(
+            homeId(40 + at),
+            OTHER,
+            `レンの夜の一行、その${at}。`,
+            ago(at),
+          ),
+        ),
+        shop_follows: [{ shop_id: OTHER_SHOP }],
+      };
+      const theirs = page.getByText("フォロー中の便りは、ここまでです。");
+      await openHome();
+      await expect(bones).toHaveCount(0, { timeout: 10000 });
+      await expect(theirs).toBeVisible();
+      // Whatever the page shows from now on is noted.
+      await page.evaluate(() => {
+        window.sawEmptyTown = false;
+        new MutationObserver(() => {
+          if (document.body.textContent.includes("この街は、まだ朝です"))
+            window.sawEmptyTown = true;
+        }).observe(document.body, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+        });
+      });
+      const elsewhere = settleBeforeNavigating(await context.newPage());
+      elsewhere.on("pageerror", (e) => errors.push(e.message));
+      try {
+        await elsewhere.goto(base + "/login/");
+        await expect(
+          elsewhere.getByRole("heading", { name: "ログインしています" }),
+        ).toBeVisible();
+        townDelay = 2500;
+        await elsewhere.getByRole("button", { name: "ログアウト" }).click();
+        // The home, signed out there, reads the visitor's town.
+        await expect(bones).toHaveAttribute("aria-busy", "true");
+        await expect(theirs).toHaveCount(0);
+        await expect(bones).toHaveCount(0, { timeout: 10000 });
+      } finally {
+        townDelay = 0;
+        await elsewhere.close();
+      }
+      expect(await page.evaluate(() => window.sawEmptyTown)).toBe(false);
+      // The visitor's lists: レン's 便り among the town's, none followed.
+      await expect(
+        page.getByRole("heading", { name: "街の便り" }),
+      ).toBeVisible();
+      await expect(page.getByText("レンの夜の一行、その1。")).toBeVisible();
+      await expect(theirs).toHaveCount(0);
+      await expect(
+        page.locator(".home-alley .street-shop").first(),
+      ).toBeVisible();
+      // Signed in again for what follows.
+      const link = session();
+      await page.goto("about:blank");
+      await page.goto(
+        base +
+          "/login/#" +
+          new URLSearchParams({
+            access_token: link.access_token,
+            expires_at: String(link.expires_at),
+            expires_in: "3600",
+            refresh_token: link.refresh_token,
+            token_type: "bearer",
+            type: "magiclink",
+          }),
+      );
+      await expect(
+        page.getByRole("heading", { name: "ログインしています" }),
+      ).toBeVisible();
       town = null;
     },
   );
