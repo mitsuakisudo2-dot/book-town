@@ -407,6 +407,32 @@ check(
       ids(newLines(read, known, new Set([...DEMO, "n2"]), NOW + 5 * MIN)),
       ["n3", "n1"],
     );
+    // More than six at once: all of them, newest first, so the newest
+    // stay on top when they go in (the box keeps six).
+    const eight = withPosts(
+      ...Array.from({ length: 8 }, (_, n) =>
+        memo("w" + (n + 1), "r-haru", n + 1),
+      ),
+    );
+    const flood = newLines(eight, known, new Set(DEMO), NOW + 10 * MIN);
+    assert.deepEqual(ids(flood), [
+      "w8",
+      "w7",
+      "w6",
+      "w5",
+      "w4",
+      "w3",
+      "w2",
+      "w1",
+    ]);
+    assert.deepEqual(ids(liveRows(eight, DEMO, ids(flood)!, NOW)), [
+      "w8",
+      "w7",
+      "w6",
+      "w5",
+      "w4",
+      "w3",
+    ]);
     // What the town had when the box was drawn is not new.
     assert.deepEqual(
       ids(newLines(read, togetherIds(read), new Set(DEMO), NOW + 5 * MIN)),

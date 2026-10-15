@@ -182,12 +182,19 @@ export function LiveBox({
   useEffect(() => {
     const element = box.current;
     if (!drawn || !element) return;
-    // On the screen: half of it at least, not a sliver behind the bars (by
-    // the ratio: not every browser counts the threshold in isIntersecting).
+    // On the screen: half of it at least, or of the screen when the box
+    // opened is taller; not a sliver behind the bars.
     const watcher = new IntersectionObserver(
-      (entries) =>
-        setOnScreen(entries.some((entry) => entry.intersectionRatio >= 0.5)),
-      { threshold: 0.5 },
+      (entries) => {
+        const entry = entries[entries.length - 1];
+        const seen = entry.intersectionRect.height;
+        const whole = Math.min(
+          entry.boundingClientRect.height,
+          entry.rootBounds?.height ?? Infinity,
+        );
+        setOnScreen(seen > 0 && seen >= whole / 2);
+      },
+      { threshold: [0, 0.25, 0.5, 0.75, 1] },
     );
     watcher.observe(element);
     return () => {

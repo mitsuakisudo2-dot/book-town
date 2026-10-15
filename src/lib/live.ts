@@ -142,7 +142,8 @@ export function liveRows(
  * The lines that came since the box was drawn and are not in it yet,
  * newest first: memos that were not in the town then (`known`), in `town`
  * now (the town with what polling brought), and not read back by the
- * reader's asking (an older page, one by its id). They go in at the top.
+ * reader's asking (an older page, one by its id). They go in at the top,
+ * all at once (liveRows keeps the newest six), so the newest stay on top.
  */
 export function newLines(
   town: TownState,
@@ -158,6 +159,5 @@ export function newLines(
         !town.readAfter?.[post.id] &&
         isLiveLine(town, post, at),
     )
-    .sort((a, b) => time(b) - time(a))
-    .slice(0, LIVE_MAX);
+    .sort((a, b) => time(b) - time(a));
 }

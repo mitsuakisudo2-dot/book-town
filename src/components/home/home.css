@@ -1306,7 +1306,7 @@ html[data-home-tab] {
 .home-live-time:focus-visible time {
   border-radius: 4px;
   outline: 2px solid var(--green);
-  outline-offset: 2px;
+  outline-offset: 0;
 }
 .home-live-text {
   display: -webkit-box;
