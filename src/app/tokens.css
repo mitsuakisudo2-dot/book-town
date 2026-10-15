@@ -94,3 +94,102 @@
   --poster-mincho: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
   --poster-gothic: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
 }
+
+/*
+ * 試作（claude/proto-colors）: 6色と夜。名前は仮。
+ * <html data-palette="ai"> などで色を、<html data-night> で夜に替える。
+ * 何もなければ今までの昼の深緑。どの組み合わせも、上の @pair が 4.5:1 以上
+ * （試作の計算で確かめた。tokens.test.ts はまだ昼の深緑だけを見る）。
+ */
+:root[data-palette="ai"] {
+  /* 藍 */
+  --green: #2c4566;
+  --on-green: #f5f6f8;
+  --green-soft: #e2e8f0;
+  --on-photo: #2c4566;
+}
+:root[data-palette="odo"] {
+  /* 黄土 */
+  --green: #7a5220;
+  --on-green: #fbf6ee;
+  --green-soft: #f0e3cc;
+  --on-photo: #7a5220;
+}
+:root[data-palette="azuki"] {
+  /* あずき */
+  --green: #7a4446;
+  --on-green: #fbf3f2;
+  --green-soft: #f1e2e0;
+  --on-photo: #7a4446;
+}
+:root[data-palette="budo"] {
+  /* 葡萄 */
+  --green: #584270;
+  --on-green: #f6f3f9;
+  --green-soft: #e9e2f0;
+  --on-photo: #584270;
+}
+:root[data-palette="sumi"] {
+  /* 墨 */
+  --green: #3e4347;
+  --on-green: #f5f5f3;
+  --green-soft: #e6e6e2;
+  --on-photo: #3e4347;
+}
+
+/* 夜: 紙と墨を入れ替え、色は明るい側に寄せる。 */
+:root[data-night] {
+  color-scheme: dark;
+  --paper: #1c1a17;
+  --sheet: #25221e;
+  --ink: #ece4d6;
+  --ink-2: #b8ac9c;
+  --line: #36312b;
+  --line-2: #4a433b;
+  --field: #8f8372;
+  --band: #2b2723;
+  --notice: #2d2820;
+  --cork: #6e5a3c;
+  --forest: #93c4aa;
+  --lamp: #e3ad5f;
+  --lamp-glow: #c99545;
+  --lamp-soft: #3a3020;
+  --alert: #f0907a;
+  --pop: #2a2621;
+  --pop-line: #463e31;
+
+  --green: #8fc3a9;
+  --on-green: #16241d;
+  --green-soft: #25352d;
+  --on-photo: #8fc3a9;
+}
+:root[data-night][data-palette="ai"] {
+  --green: #9db8db;
+  --on-green: #141c28;
+  --green-soft: #232c3a;
+  --on-photo: #9db8db;
+}
+:root[data-night][data-palette="odo"] {
+  --green: #dcb070;
+  --on-green: #251a0c;
+  --green-soft: #352a1b;
+  --on-photo: #dcb070;
+}
+:root[data-night][data-palette="azuki"] {
+  --green: #dba2a2;
+  --on-green: #271516;
+  --green-soft: #372526;
+  --on-photo: #dba2a2;
+}
+:root[data-night][data-palette="budo"] {
+  --green: #bfa8db;
+  --on-green: #1e1628;
+  --green-soft: #2e2639;
+  --on-photo: #bfa8db;
+}
+:root[data-night][data-palette="sumi"] {
+  --green: #c2c6c9;
+  --on-green: #1a1c1e;
+  --green-soft: #2c2e30;
+  --on-photo: #c2c6c9;
+}

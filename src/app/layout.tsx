@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { supabaseConfigured, supabaseUrl } from "../lib/supabase/config";
 import { HOME_TAB_BOOT } from "../lib/home-tab";
+import { PROTO_PALETTE_BOOT } from "../lib/proto-palette";
+import { ProtoPalette } from "../components/ProtoPalette";
 import "./globals.css";
 export const metadata: Metadata = {
   title: {
@@ -64,11 +66,16 @@ export default function RootLayout({
         {/* Before the first paint: which Home tab opens, so the other tab's
             blocks stay hidden while the town loads (home-tab.ts). */}
         <script dangerouslySetInnerHTML={{ __html: HOME_TAB_BOOT }} />
+        {/* 試作: 残した色と昼／夜を、最初の描画の前に当てる。 */}
+        <script dangerouslySetInnerHTML={{ __html: PROTO_PALETTE_BOOT }} />
         <noscript>
           <link href={FONTS_CSS} rel="stylesheet" />
         </noscript>
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ProtoPalette />
+      </body>
     </html>
   );
 }
