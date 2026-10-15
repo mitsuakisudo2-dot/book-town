@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { emptyArrived } from "../src/lib/arrived";
 import { freshFor } from "../src/lib/arrivals";
 import { seedState } from "../src/lib/data";
-import { followedLetters, homeLetters } from "../src/lib/home-feed";
+import {
+  RECENT_DAYS,
+  RECENT_ENOUGH,
+  followedLetters,
+  homeLetters,
+} from "../src/lib/home-feed";
 import {
   LIVE_DAYS,
   LIVE_MAX,
@@ -200,7 +205,7 @@ check(
         memo("no-book", "r-nagi", 3, { bookId: null }),
       ],
     };
-    const drawn = { ids: DEMO, at: NOW };
+    const drawn = { ids: DEMO, known: togetherIds(state), at: NOW };
     const fresh = freshFor(state, arrived, NOW + 4 * MIN, drawn);
     assert.deepEqual(ids(fresh.home), ["no-book", "new-letter"]);
     // 便りだけ keeps memos as 便り.
@@ -224,9 +229,54 @@ check(
       ids(
         freshFor(quiet, one, NOW + 2 * MIN, {
           ids: ["p-m2", "p-m1", "p-m4"],
+          known: new Set(DEMO),
           at: NOW,
         }).home,
       ),
+      [],
+    );
+  },
+);
+
+check(
+  "a line taken into the town since the box was drawn is still the box's, so a quiet ホーム stays quiet",
+  () => {
+    // A reader who follows ナギ, one 便り of late short of a busy ホーム.
+    let state = town({ following: ["shop-orbit"] });
+    const late = (now: TownState) =>
+      homeLetters(now, NOW, liveIds(now, NOW)).followed.filter(
+        (entry) => entry.at >= NOW - RECENT_DAYS * DAY,
+      ).length;
+    for (let k = 0; late(state) < RECENT_ENOUGH - 1; k++)
+      state = {
+        ...state,
+        posts: [
+          ...state.posts,
+          memo("f" + k, "r-nagi", -100 - k, {
+            bookId: null,
+            readingMode: null,
+          }),
+        ],
+      };
+    const drawn = {
+      ids: [...liveIds(state, NOW)],
+      known: togetherIds(state),
+      at: NOW,
+    };
+    // ナギ's memo came into the box, and a tap on it took it into the town;
+    // then a 便り of someone not followed comes.
+    const taken = { ...state, posts: [...state.posts, memo("m", "r-nagi", 2)] };
+    const letter = {
+      ...emptyArrived(),
+      posts: [memo("l", "r-tou", 3, { bookId: null, readingMode: null })],
+    };
+    assert.deepEqual(ids(freshFor(taken, letter, NOW + 4 * MIN, drawn).home), [
+      "l",
+    ]);
+    // Read back by asking (an older page), it was never the box's.
+    const asked = { ...taken, readAfter: { m: "older" as const } };
+    assert.deepEqual(
+      ids(freshFor(asked, letter, NOW + 4 * MIN, drawn).home),
       [],
     );
   },

@@ -2698,7 +2698,7 @@ try {
   );
 
   await check(
-    "ひとこと: memos read together come in at Live's top while it is seen, never as new 便り; 止める (kept through a redraw), a 便り's page over it, the keyboard's focus in it and the box off the screen hold them; a line just come opens its 便り and 便りだけ gets a dot for it; each memo shows once; with less motion nothing moves",
+    "ひとこと: memos read together come in at Live's top while it is seen, never as new 便り; 止める (kept through a redraw and Home left, and 動かす by the keyboard too), a 便り's page over it, the keyboard's focus on a line and the box off the screen hold them; a memo waiting for the box is no new 便り when Home is come back to; a line just come opens its 便り and 便りだけ gets a dot for it; each memo shows once; with less motion nothing moves",
     async () => {
       // サク, followed: two 便り and three memos read together of late.
       const SAKU = homeId(300);
@@ -2761,6 +2761,14 @@ try {
         );
         // Every move Live makes, counted.
         await phone.addInitScript(() => {
+          // And all that is said to a screen reader.
+          window.liveSaid = [];
+          new MutationObserver((changes) => {
+            for (const change of changes)
+              if (change.target.classList?.contains("town-said"))
+                for (const node of change.addedNodes)
+                  window.liveSaid.push(node.textContent);
+          }).observe(document, { childList: true, subtree: true });
           window.liveMoves = 0;
           const animate = Element.prototype.animate;
           Element.prototype.animate = function (...args) {
@@ -2838,9 +2846,26 @@ try {
         await eachOnce();
 
         // 止める: what comes waits outside the box; 動かす lets it in. Home
-        // drawn again (the tab) keeps it stopped.
+        // left and come back to keeps it stopped, and the memo waiting for
+        // the box is no new 便り there: no pill, nothing said.
         await stop.tap();
         await expect(go).toBeVisible();
+        const said = await at.evaluate(() => window.liveSaid.length);
+        const nav = at.getByRole("navigation", {
+          name: "スマートフォンナビゲーション",
+        });
+        await nav.getByRole("link", { name: "検索" }).click();
+        await expect(at).toHaveURL(base + "/search/");
+        await nav.getByRole("link", { name: "ホーム" }).click();
+        await expect(go).toBeVisible();
+        await expect(pill).toBeHidden();
+        expect(
+          await at.evaluate((from) => window.liveSaid.slice(from), said),
+        ).not.toContain("新しい便りがあります");
+        // So does Home drawn again (the tab), which takes the memo in.
+        await box.evaluate((element) =>
+          element.scrollIntoView({ block: "center" }),
+        );
         await homeTab.click();
         await expect(go).toBeVisible();
         await expect.poll(() => top(4)).toEqual([first.id, ...MEMOS]);
@@ -2915,6 +2940,24 @@ try {
         await keyed.evaluate((link) => link.blur());
         await expect.poll(async () => (await lines())[0]).toBe(fifth.id);
 
+        // 止める and 動かす by the keyboard: the focus on them holds nothing,
+        // and 動かす lets in what waited.
+        await stop.focus();
+        await box.evaluate((element) =>
+          element.scrollIntoView({ block: "center" }),
+        );
+        await at.keyboard.press("Enter");
+        await expect(go).toBeFocused();
+        const seventh = arrive(7, "止めて、動かすまでに届いたひとこと。");
+        before = newReads();
+        await at.clock.runFor(61_000);
+        await expect.poll(newReads).toBe(before + 1);
+        await at.clock.runFor(1_000);
+        expect((await lines())[0]).toBe(fifth.id);
+        await at.keyboard.press("Enter");
+        await expect(stop).toBeFocused();
+        await expect.poll(async () => (await lines())[0]).toBe(seventh.id);
+
         // Off the screen: what comes waits, and goes in once the box is seen.
         await at.evaluate(() =>
           window.scrollTo(0, document.documentElement.scrollHeight),
@@ -2932,7 +2975,7 @@ try {
         await at.clock.runFor(61_000);
         await expect.poll(newReads).toBe(before + 1);
         await at.clock.runFor(1_000);
-        expect((await lines())[0]).toBe(fifth.id);
+        expect((await lines())[0]).toBe(seventh.id);
         await expect(pill).toBeHidden();
         await box.evaluate((element) =>
           element.scrollIntoView({ block: "center" }),

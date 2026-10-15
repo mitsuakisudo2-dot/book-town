@@ -20,8 +20,10 @@ import {
   LIVE_ROW,
   LIVE_SHOWN,
   isGuarded,
+  liveLines,
   liveRows,
   newLines,
+  togetherIds,
 } from "../../lib/live";
 import { postPath } from "../../lib/paths";
 import {
@@ -51,6 +53,19 @@ export type LiveSlot = {
   known: ReadonlySet<string>;
   at: number;
 };
+
+/** Live as ホーム draws it at `now`, or null: below three lines, no band. */
+export function liveSlotOf(state: TownState, now: number): LiveSlot | null {
+  const lines = liveLines(state, now);
+  return (
+    lines && {
+      kind: "live",
+      ids: lines.map((post) => post.id),
+      known: togetherIds(state),
+      at: now,
+    }
+  );
+}
 
 // 止める／動かす (WCAG 2.2.2): kept for the page, so Live stays stopped when
 // Home is drawn again or left and come back to.
@@ -144,7 +159,7 @@ export function LiveBox({
   const layerOpen = useLayerOpen();
   const pageShown = usePageShown();
   const canArrive = useTownReads();
-  // The keyboard's focus in the box: a line coming in would push the one it
+  // The keyboard's focus on a line: a line coming in would push the one it
   // is on under the box, out of reach, and the focus with it.
   const [keyed, setKeyed] = useState(false);
   // New lines go in at the top only while the box can be seen.
@@ -167,9 +182,11 @@ export function LiveBox({
   useEffect(() => {
     const element = box.current;
     if (!drawn || !element) return;
-    // On the screen: half of it at least, not a sliver behind the bars.
+    // On the screen: half of it at least, not a sliver behind the bars (by
+    // the ratio: not every browser counts the threshold in isIntersecting).
     const watcher = new IntersectionObserver(
-      (entries) => setOnScreen(entries.some((entry) => entry.isIntersecting)),
+      (entries) =>
+        setOnScreen(entries.some((entry) => entry.intersectionRatio >= 0.5)),
       { threshold: 0.5 },
     );
     watcher.observe(element);
@@ -211,17 +228,7 @@ export function LiveBox({
   const shown = Math.min(openRows ?? LIVE_SHOWN, rows.length);
   const more = rows.length > LIVE_SHOWN;
   return (
-    <section
-      className="home-feature home-live"
-      aria-labelledby={headId}
-      onFocus={(event) =>
-        setKeyed((event.target as Element).matches(":focus-visible"))
-      }
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
-          setKeyed(false);
-      }}
-    >
+    <section className="home-feature home-live" aria-labelledby={headId}>
       <div className="feature-head">
         <p className="feature-kicker">
           <span className="home-live-dot" aria-hidden="true" />
@@ -237,6 +244,19 @@ export function LiveBox({
           className="home-live-box"
           aria-live="off"
           style={{ height: shown * LIVE_ROW }}
+          onFocus={(event) =>
+            setKeyed((event.target as Element).matches(":focus-visible"))
+          }
+          onBlur={(event) => {
+            // The window left (another app, the address bar): the focus is
+            // still on the line, and comes back to it.
+            if (
+              !document.hasFocus() ||
+              event.currentTarget.contains(event.relatedTarget as Node | null)
+            )
+              return;
+            setKeyed(false);
+          }}
         >
           <div ref={list} className="home-live-list">
             {rows.map((post, index) => (

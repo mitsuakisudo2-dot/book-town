@@ -25,9 +25,9 @@ import {
 } from "../lib/home-tab";
 import { HomeTabs, HOME_TABS, paneId, tabId } from "./home/HomeTabs";
 import { HomePane } from "./home/HomePane";
-import type { LiveSlot } from "./home/LiveBox";
+import { liveSlotOf } from "./home/LiveBox";
 import { LettersOnly } from "./home/LettersOnly";
-import { motion, useNow } from "./home/hooks";
+import { motion, useHeld, useNow, useTownReading } from "./home/hooks";
 import { NewLettersPill } from "./home/NewLettersPill";
 import { PullSpace } from "./home/PullSpace";
 import {
@@ -219,9 +219,15 @@ export function HomeView({
   const waiting = useArrivals();
   const now = useNow();
   const { state } = shared;
-  // ホーム's Live as drawn (PR 2b): the memos that come into its box are no
-  // new 便り there.
-  const [live, setLive] = useState<LiveSlot | null>(null);
+  // ホーム's Live (PR 2b), chosen here with the pane's drawing (the same
+  // reading and refresh), so the pill knows from the first render which
+  // memos come into its box: those are no new 便り there.
+  const reading = useTownReading();
+  const live = useHeld(
+    mounted.has("home") ? reading : null,
+    refresh.home,
+    (at) => liveSlotOf(state, at),
+  );
   const fresh = useMemo(
     () => (now === null ? null : freshFor(state, waiting.arrived, now, live)),
     [state, waiting.arrived, now, live],
@@ -447,7 +453,7 @@ export function HomeView({
               shown={tab === "home"}
               refresh={refresh.home}
               onLetters={() => switchTo("letters")}
-              onLive={setLive}
+              live={live}
               onTakeLine={takeLine}
             />
           ) : (

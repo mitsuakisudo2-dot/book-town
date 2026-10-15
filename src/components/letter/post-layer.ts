@@ -60,10 +60,16 @@ export const postOfLayer = (name: string): string | null =>
  */
 export function focusReturn(id: string) {
   const href = CSS.escape(postPath(id));
+  // The first on the screen: not in a pane hidden, nor in a line under Live.
   const link = returnTo?.isConnected
     ? returnTo
-    : document.querySelector<HTMLElement>(
-        `a.letter-time[href="${href}"], a.home-live-time[href="${href}"]`,
+    : [
+        ...document.querySelectorAll<HTMLElement>(
+          `a.letter-time[href="${href}"], a.home-live-time[href="${href}"]`,
+        ),
+      ].find(
+        (element) =>
+          element.getClientRects().length > 0 && !element.closest("[inert]"),
       );
   returnTo = null;
   link?.focus({ preventScroll: true });

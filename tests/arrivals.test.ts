@@ -618,7 +618,11 @@ async function main() {
           letter("followed3", "r-nagi", 6),
         ),
         NOW,
-        { ids: ["p-m4", "p-m2", "p-m1", "p-m3"], at: NOW },
+        {
+          ids: ["p-m4", "p-m2", "p-m1", "p-m3"],
+          known: new Set(["p-m4", "p-m2", "p-m1", "p-m3"]),
+          at: NOW,
+        },
       );
       assert.deepEqual(
         busy.home.map((entry) => entry.id),

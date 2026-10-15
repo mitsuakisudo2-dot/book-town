@@ -107,14 +107,19 @@ export function sinceOf(
  * homeLetters would place them (followed, or among 「街の便り」 on a quiet
  * home); on 便りだけ, the followed ones. Replies and the reader's own are
  * not new 便り. The pill and the dot are for these only. When ホーム holds
- * a Live box (`live`: its lines and when it was drawn), the memos that come
- * into it by themselves are not new 便り there; without one, they are.
+ * a Live box (`live`: its lines, the memos the town had then, and when it
+ * was drawn), what is in it or comes into it by itself (as newLines finds
+ * it) is not new 便り there, nor counted among them; without one, it is.
  */
 export function freshFor(
   state: TownState,
   arrived: Arrived | null,
   now: number,
-  live: { ids: readonly string[]; at: number } | null = null,
+  live: {
+    ids: readonly string[];
+    known: ReadonlySet<string>;
+    at: number;
+  } | null = null,
 ): Record<HomeTab, LetterEntry[]> {
   if (!arrived) return { home: [], letters: [] };
   const fresh = unseen(arrived, state);
@@ -127,8 +132,13 @@ export function freshFor(
     live
       ? [
           ...live.ids,
-          ...fresh.posts
-            .filter((post) => isLiveLine(town, post, live.at))
+          ...town.posts
+            .filter(
+              (post) =>
+                !live.known.has(post.id) &&
+                !town.readAfter?.[post.id] &&
+                isLiveLine(town, post, live.at),
+            )
             .map((post) => post.id),
         ]
       : [],

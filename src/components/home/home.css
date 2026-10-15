@@ -1299,6 +1299,15 @@ html[data-home-tab] {
 .home-live-time:hover {
   text-decoration: underline;
 }
+/* The ring around the time itself: the 44px box reaches past the line. */
+.home-live-time:focus-visible {
+  outline: none;
+}
+.home-live-time:focus-visible time {
+  border-radius: 4px;
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
 .home-live-text {
   display: -webkit-box;
   margin: 4px 0 0;
@@ -1331,7 +1340,9 @@ html[data-home-tab] {
   padding: 17px 12px;
 }
 /* A book the reader is reading: the words wait for 表示する (仮, DB-1). */
+/* Positioned, so it takes its own taps over the time's 44px box. */
 .home-live-guard {
+  position: relative;
   display: block;
   width: 100%;
   min-height: 48px;

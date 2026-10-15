@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import {
   boardPicks,
@@ -31,7 +31,6 @@ import {
   type LetterEntry,
 } from "../../lib/home-feed";
 import { lastOpen } from "../../lib/last-open";
-import { liveLines, togetherIds } from "../../lib/live";
 import { isTonightShop, tonightsShop } from "../../lib/tonight";
 import type { Poster } from "../../lib/posters";
 import type { Post, Shop, TownState } from "../../lib/types";
@@ -176,7 +175,7 @@ export function HomePane({
   shown,
   refresh,
   onLetters,
-  onLive,
+  live,
   onTakeLine,
   ...shared
 }: Shared & {
@@ -186,8 +185,8 @@ export function HomePane({
   refresh: number;
   /** Shows 便りだけ in place. */
   onLetters: () => void;
-  /** Told the Live box as drawn, or that there is none. */
-  onLive: (live: LiveSlot | null) => void;
+  /** Live as HomeView chose it with this drawing (liveSlotOf), or none. */
+  live: LiveSlot | null;
   /** Takes a line of Live into the town; whether it is there now. */
   onTakeLine: (id: string) => boolean;
 }) {
@@ -195,13 +194,6 @@ export function HomePane({
   const reading = useTownReading();
   const drawn = useHeld<Drawn>(reading, refresh, (now) => {
     // Live's memos (PR 2b) leave the 便り, so none appears twice.
-    const lines = liveLines(state, now);
-    const live: LiveSlot | null = lines && {
-      kind: "live",
-      ids: lines.map((post) => post.id),
-      known: togetherIds(state),
-      at: now,
-    };
     const { followed, town } = homeLetters(
       state,
       now,
@@ -236,10 +228,6 @@ export function HomePane({
       ).map(hold),
     };
   });
-  const live =
-    drawn?.slots.find((slot): slot is LiveSlot => slot?.kind === "live") ??
-    null;
-  useEffect(() => onLive(live), [live, onLive]);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [sheet, setSheet] = useState<"read" | "scan" | null>(null);
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
