@@ -38,7 +38,7 @@ import { spoilerWords } from "../letter/LetterCard";
 import { forgetOpened, noteOpened, openPost } from "../letter/post-layer";
 import { SpoilerCover } from "../letter/SpoilerCover";
 import type { Shared } from "./Letters";
-import { townArrivals, useArrivals } from "./useArrivals";
+import { useArrivals } from "./useArrivals";
 
 /**
  * Live as ホーム holds it (PR 2b): the lines it was drawn with, by id, every
@@ -95,11 +95,20 @@ const OWN_TAPS = "a,button,[role=dialog],.modal-backdrop";
  * written while reading together, each with the book's cover, in a box of a
  * fixed three lines; 「前のひとことも見る」 opens it to six. New lines come
  * only from polling and go in at the top while the box is on the screen,
- * not stopped and under no layer; the box keeps its height, so nothing
- * around it moves. No scroll inside it. 止める stops them (WCAG 2.2.2);
- * with less motion asked for, the lines change without moving.
+ * not stopped, under no layer and with no keyboard focus in it; the box
+ * keeps its height, so nothing around it moves. No scroll inside it.
+ * 止める stops them (WCAG 2.2.2); with less motion asked for, the lines
+ * change without moving.
  */
-export function LiveBox({ slot, ...shared }: Shared & { slot: LiveSlot }) {
+export function LiveBox({
+  slot,
+  onTakeLine,
+  ...shared
+}: Shared & {
+  slot: LiveSlot;
+  /** Takes a line not in the town yet into it; whether it is there now. */
+  onTakeLine: (id: string) => boolean;
+}) {
   const { state } = shared;
   const waiting = useArrivals();
   // The town with what polling brought and the reader has not taken in.
@@ -135,18 +144,33 @@ export function LiveBox({ slot, ...shared }: Shared & { slot: LiveSlot }) {
   const layerOpen = useLayerOpen();
   const pageShown = usePageShown();
   const canArrive = useTownReads();
+  // The keyboard's focus in the box: a line coming in would push the one it
+  // is on under the box, out of reach, and the focus with it.
+  const [keyed, setKeyed] = useState(false);
   // New lines go in at the top only while the box can be seen.
-  if (onScreen && pageShown && !layerOpen && !isStopped && coming.length) {
+  if (
+    onScreen &&
+    pageShown &&
+    !layerOpen &&
+    !isStopped &&
+    !keyed &&
+    coming.length
+  ) {
     const ids = coming.map((post) => post.id);
     setEntered([...ids, ...entered]);
     setArrival({ ids, key: arrival.key + 1 });
   }
+  // Lines gone since (reported, left out) leave no empty row: the box
+  // opened is closed once all it has fit.
+  if (openRows !== null && rows.length <= LIVE_SHOWN) setOpenRows(null);
   const drawn = rows.length > 0;
   useEffect(() => {
     const element = box.current;
     if (!drawn || !element) return;
-    const watcher = new IntersectionObserver((entries) =>
-      setOnScreen(entries.some((entry) => entry.isIntersecting)),
+    // On the screen: half of it at least, not a sliver behind the bars.
+    const watcher = new IntersectionObserver(
+      (entries) => setOnScreen(entries.some((entry) => entry.isIntersecting)),
+      { threshold: 0.5 },
     );
     watcher.observe(element);
     return () => {
@@ -184,10 +208,20 @@ export function LiveBox({ slot, ...shared }: Shared & { slot: LiveSlot }) {
   const headId = useId();
   const boxId = useId();
   if (!drawn) return null;
-  const shown = openRows ?? LIVE_SHOWN;
+  const shown = Math.min(openRows ?? LIVE_SHOWN, rows.length);
   const more = rows.length > LIVE_SHOWN;
   return (
-    <section className="home-feature home-live" aria-labelledby={headId}>
+    <section
+      className="home-feature home-live"
+      aria-labelledby={headId}
+      onFocus={(event) =>
+        setKeyed((event.target as Element).matches(":focus-visible"))
+      }
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          setKeyed(false);
+      }}
+    >
       <div className="feature-head">
         <p className="feature-kicker">
           <span className="home-live-dot" aria-hidden="true" />
@@ -212,6 +246,7 @@ export function LiveBox({ slot, ...shared }: Shared & { slot: LiveSlot }) {
                 town={town}
                 post={post}
                 hidden={index >= shown}
+                onTakeLine={onTakeLine}
               />
             ))}
           </div>
@@ -262,18 +297,28 @@ function LiveLine({
   post,
   hidden,
   state,
-}: Shared & { town: TownState; post: Post; hidden: boolean }) {
+  onTakeLine,
+}: Shared & {
+  town: TownState;
+  post: Post;
+  hidden: boolean;
+  onTakeLine: (id: string) => boolean;
+}) {
   const author = findReader(town, post.authorId);
   const book = town.books.find((entry) => entry.id === post.bookId);
   const [guardOpen, setGuardOpen] = useState(false);
   const [spoilerOpen, setSpoilerOpen] = useState(false);
   const [focusText, setFocusText] = useState(false);
-  const text = useRef<HTMLParagraphElement>(null);
+  const words = useRef<HTMLDivElement>(null);
   const timeLink = useRef<HTMLAnchorElement>(null);
   const downHere = useRef(false);
+  // Opened, the focus goes to what took the stand-in's place: the words, or
+  // the spoiler box when they are a spoiler too.
   useEffect(() => {
     if (!focusText) return;
-    text.current?.focus({ preventScroll: true });
+    words.current
+      ?.querySelector<HTMLElement>(".home-live-text, .letter-spoiler")
+      ?.focus({ preventScroll: true });
     setFocusText(false);
   }, [focusText]);
   if (!author || !book) return null;
@@ -288,7 +333,7 @@ function LiveLine({
     // Brought by polling and not in the town yet: this one is taken in
     // first, as the reader asked for it; the rest still wait.
     const inTown = state.posts.some((entry) => entry.id === post.id);
-    if (!inTown && !townArrivals.takePost(post.id)) return;
+    if (!inTown && !onTakeLine(post.id)) return;
     forgetOpened("door:" + post.id);
     openPost(post.id, timeLink.current);
   }
@@ -319,7 +364,7 @@ function LiveLine({
       <span className="home-live-jacket" aria-hidden="true">
         <BookJacket book={book} sizes="44px" />
       </span>
-      <div className="home-live-words">
+      <div ref={words} className="home-live-words">
         <p className="home-live-meta">
           <span
             className="home-live-face"
@@ -379,7 +424,7 @@ function LiveLine({
             }}
           />
         ) : (
-          <p ref={text} className="home-live-text" tabIndex={-1}>
+          <p className="home-live-text" tabIndex={-1}>
             {splitHidden(post.body).map((part, index) =>
               part.hidden ? (
                 // The covered words stay off the page; its 便り opens them.

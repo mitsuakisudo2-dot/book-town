@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import {
   boardPicks,
@@ -176,6 +176,8 @@ export function HomePane({
   shown,
   refresh,
   onLetters,
+  onLive,
+  onTakeLine,
   ...shared
 }: Shared & {
   /** Whether this pane is the one shown. */
@@ -184,6 +186,10 @@ export function HomePane({
   refresh: number;
   /** Shows 便りだけ in place. */
   onLetters: () => void;
+  /** Told the Live box as drawn, or that there is none. */
+  onLive: (live: LiveSlot | null) => void;
+  /** Takes a line of Live into the town; whether it is there now. */
+  onTakeLine: (id: string) => boolean;
 }) {
   const { state } = shared;
   const reading = useTownReading();
@@ -230,6 +236,10 @@ export function HomePane({
       ).map(hold),
     };
   });
+  const live =
+    drawn?.slots.find((slot): slot is LiveSlot => slot?.kind === "live") ??
+    null;
+  useEffect(() => onLive(live), [live, onLive]);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [sheet, setSheet] = useState<"read" | "scan" | null>(null);
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
@@ -322,6 +332,7 @@ export function HomePane({
           slots={slots}
           mark={mark}
           onPick={setPicked}
+          onTakeLine={onTakeLine}
         />
       ) : (
         <LetterSkeletons />
@@ -389,6 +400,7 @@ function WovenLetters({
   slots,
   mark,
   onPick,
+  onTakeLine,
   ...shared
 }: Shared & {
   followed: LetterEntry[];
@@ -397,6 +409,7 @@ function WovenLetters({
   /** The 便り 「前に開いたのはここまで」 goes before. */
   mark: string | null;
   onPick: (picked: Picked) => void;
+  onTakeLine: (id: string) => boolean;
 }) {
   const firstTown = town[0]?.id;
   const parts: ReactNode[] = [];
@@ -431,7 +444,12 @@ function WovenLetters({
     const feature = slot.feature;
     parts.push(
       feature.kind === "live" ? (
-        <LiveBox {...shared} key="live" slot={feature} />
+        <LiveBox
+          {...shared}
+          key="live"
+          slot={feature}
+          onTakeLine={onTakeLine}
+        />
       ) : feature.kind === "board" ? (
         <CorkBoard key="board" picks={feature.picks} onPick={onPick} />
       ) : (

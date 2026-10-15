@@ -184,23 +184,53 @@ check(
   },
 );
 
-check("the pill counts no memo Live would hold", () => {
-  const following = seedState.shops.map((shop) => shop.id);
-  const state = town({ following });
-  const arrived = {
-    ...emptyArrived(),
-    posts: [
-      memo("new-memo", "r-nagi", 1),
-      memo("new-letter", "r-nagi", 2, {
-        readingMode: null,
-      }),
-    ],
-  };
-  const fresh = freshFor(state, arrived, NOW + 3 * MIN);
-  assert.deepEqual(ids(fresh.home), ["new-letter"]);
-  // 便りだけ keeps memos as 便り.
-  assert.deepEqual(ids(fresh.letters), ["new-letter", "new-memo"]);
-});
+check(
+  "the pill counts no memo the Live box drawn takes in; with no box, it counts them",
+  () => {
+    const following = seedState.shops.map((shop) => shop.id);
+    const state = town({ following });
+    const arrived = {
+      ...emptyArrived(),
+      posts: [
+        memo("new-memo", "r-nagi", 1),
+        memo("new-letter", "r-nagi", 2, {
+          readingMode: null,
+        }),
+        // Read together, but of no book: no line of Live, a 便り.
+        memo("no-book", "r-nagi", 3, { bookId: null }),
+      ],
+    };
+    const drawn = { ids: DEMO, at: NOW };
+    const fresh = freshFor(state, arrived, NOW + 4 * MIN, drawn);
+    assert.deepEqual(ids(fresh.home), ["no-book", "new-letter"]);
+    // 便りだけ keeps memos as 便り.
+    assert.deepEqual(ids(fresh.letters), ["no-book", "new-letter", "new-memo"]);
+    // ホーム drawn with two memos has no box: a third that comes is a new
+    // 便り there, not Live's (there is nothing to take it in).
+    const quiet = town({
+      following,
+      posts: seedState.posts.filter(
+        (post) => post.id !== "p-m3" && post.id !== "p-m4",
+      ),
+    });
+    assert.equal(liveLines(quiet, NOW), null);
+    const one = { ...emptyArrived(), posts: [memo("new-memo", "r-nagi", 1)] };
+    assert.deepEqual(ids(freshFor(quiet, one, NOW + 2 * MIN).home), [
+      "new-memo",
+    ]);
+    // A box drawn with three lines that has lost one since still takes in
+    // what comes.
+    assert.deepEqual(
+      ids(
+        freshFor(quiet, one, NOW + 2 * MIN, {
+          ids: ["p-m2", "p-m1", "p-m4"],
+          at: NOW,
+        }).home,
+      ),
+      [],
+    );
+  },
+);
 
 check("what Live knew when drawn: every memo read together", () => {
   const known = togetherIds(withPosts(memo("n1", "r-haru", -1)));
@@ -312,7 +342,11 @@ check(
       memo("old", "r-haru", -60),
       memo("reply", "r-haru", 4, { parentId: "p-m1" }),
     );
-    const read = { ...state, readAfter: { old: "older" as const } };
+    const read = {
+      ...state,
+      readAfter: { old: "older" as const, n4: "alone" as const },
+      posts: [...state.posts, memo("n4", "r-tou", 4)],
+    };
     assert.deepEqual(ids(newLines(read, known, new Set(DEMO), NOW + 5 * MIN)), [
       "n2",
       "n3",

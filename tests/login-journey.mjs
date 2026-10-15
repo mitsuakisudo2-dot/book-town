@@ -2698,7 +2698,7 @@ try {
   );
 
   await check(
-    "ひとこと: memos read together come in at Live's top while it is seen, never as new 便り; 止める holds them and 動かす lets them in; a line just come opens its 便り; each memo shows once; with less motion nothing moves",
+    "ひとこと: memos read together come in at Live's top while it is seen, never as new 便り; 止める (kept through a redraw), a 便り's page over it, the keyboard's focus in it and the box off the screen hold them; a line just come opens its 便り and 便りだけ gets a dot for it; each memo shows once; with less motion nothing moves",
     async () => {
       // サク, followed: two 便り and three memos read together of late.
       const SAKU = homeId(300);
@@ -2775,6 +2775,9 @@ try {
         const homeTab = at
           .getByRole("tablist", { name: "ホームの表示" })
           .getByRole("tab", { name: /^ホーム/ });
+        const lettersTab = at
+          .getByRole("tablist", { name: "ホームの表示" })
+          .getByRole("tab", { name: /^便りだけ/ });
         if ((await homeTab.getAttribute("aria-selected")) !== "true")
           await homeTab.click();
         const pane = at.locator('[role="tabpanel"][data-pane="home"]');
@@ -2834,9 +2837,20 @@ try {
         expect(await at.evaluate(() => window.liveMoves)).toBeGreaterThan(0);
         await eachOnce();
 
-        // 止める: what comes waits outside the box; 動かす lets it in.
+        // 止める: what comes waits outside the box; 動かす lets it in. Home
+        // drawn again (the tab) keeps it stopped.
         await stop.tap();
         await expect(go).toBeVisible();
+        await homeTab.click();
+        await expect(go).toBeVisible();
+        await expect.poll(() => top(4)).toEqual([first.id, ...MEMOS]);
+        // 便りだけ made now, from the town as it is: nothing behind there.
+        await lettersTab.click();
+        await homeTab.click();
+        await expect(lettersTab).toHaveAccessibleName("便りだけ");
+        await box.evaluate((element) =>
+          element.scrollIntoView({ block: "center" }),
+        );
         const second = arrive(2, "止めている間に届いたひとこと。");
         before = newReads();
         await at.clock.runFor(61_000);
@@ -2849,19 +2863,81 @@ try {
         await expect(stop).toBeVisible();
 
         // A line just come, not in the town yet, opens its 便り's page.
+        // What comes while it is open waits, and goes in once it is closed;
+        // 便りだけ, drawn before the memo was taken in, gets a dot for it.
         await rows.first().locator(".home-live-text").tap();
         const layer = at.getByRole("dialog", { name: /^サクさんの便り/ });
         await expect(layer).toBeVisible();
         await expect(layer).toContainText(second.body);
+        const fourth = arrive(4, "ページを読んでいる間に届いたひとこと。");
+        before = newReads();
+        await at.clock.runFor(61_000);
+        await expect.poll(newReads).toBe(before + 1);
+        await at.clock.runFor(1_000);
+        expect((await lines())[0]).toBe(second.id);
         await at.goBack();
         await expect(layer).toHaveCount(0);
+        await expect.poll(async () => (await lines())[0]).toBe(fourth.id);
+        await expect(lettersTab).toHaveAccessibleName(
+          "便りだけ（新しい便りがあります）",
+        );
+        await expect(pill).toBeHidden();
         await eachOnce();
         // Home drawn again: the memos stay Live's, none a 便り.
         await homeTab.click();
         await expect
-          .poll(() => top(5))
-          .toEqual([second.id, first.id, ...MEMOS]);
+          .poll(() => top(6))
+          .toEqual([fourth.id, second.id, first.id, ...MEMOS]);
         expect((await cardIds()).slice(0, 2)).toEqual(LETTERS);
+        await eachOnce();
+
+        // The keyboard's focus on a line: what comes waits until it leaves,
+        // so the line it is on never slips under the box.
+        await box.evaluate((element) =>
+          element.scrollIntoView({ block: "center" }),
+        );
+        await at.keyboard.press("Tab");
+        const keyed = rows.nth(2).locator("a.home-live-time");
+        await keyed.focus();
+        await box.evaluate((element) =>
+          element.scrollIntoView({ block: "center" }),
+        );
+        expect(
+          await keyed.evaluate((link) => link.matches(":focus-visible")),
+        ).toBe(true);
+        const fifth = arrive(5, "キーボードで読んでいる間に届いたひとこと。");
+        before = newReads();
+        await at.clock.runFor(61_000);
+        await expect.poll(newReads).toBe(before + 1);
+        await at.clock.runFor(1_000);
+        expect((await lines())[0]).toBe(fourth.id);
+        await expect(keyed).toBeFocused();
+        await keyed.evaluate((link) => link.blur());
+        await expect.poll(async () => (await lines())[0]).toBe(fifth.id);
+
+        // Off the screen: what comes waits, and goes in once the box is seen.
+        await at.evaluate(() =>
+          window.scrollTo(0, document.documentElement.scrollHeight),
+        );
+        await expect
+          .poll(() =>
+            box.evaluate((element) => {
+              const edges = element.getBoundingClientRect();
+              return edges.bottom <= 0 || edges.top >= innerHeight;
+            }),
+          )
+          .toBe(true);
+        const sixth = arrive(6, "見えないところに届いたひとこと。");
+        before = newReads();
+        await at.clock.runFor(61_000);
+        await expect.poll(newReads).toBe(before + 1);
+        await at.clock.runFor(1_000);
+        expect((await lines())[0]).toBe(fifth.id);
+        await expect(pill).toBeHidden();
+        await box.evaluate((element) =>
+          element.scrollIntoView({ block: "center" }),
+        );
+        await expect.poll(async () => (await lines())[0]).toBe(sixth.id);
         await eachOnce();
 
         // Less motion: a line comes in without moving.

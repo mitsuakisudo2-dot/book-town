@@ -494,6 +494,52 @@ async function main() {
   );
 
   await check(
+    "a line of Live tapped takes just that one into the town, the rest still waiting",
+    async () => {
+      const { arrivals, answers, time, absorbed, state, switchTown } = setUp();
+      arrivals.shown(true);
+      answers.push(
+        came(
+          letter("memo", "r-nagi", 1, {
+            bookId: "solaris",
+            readingMode: "together",
+          }),
+          letter("n1", "r-nagi", 2),
+        ),
+      );
+      await arrivals.read();
+      const taken = arrivals.takePost("memo");
+      assert.deepEqual(ids(taken), ["memo"]);
+      assert.equal(absorbed.length, 1);
+      assert.equal(
+        state().posts.some((post) => post.id === "memo"),
+        true,
+      );
+      // The other still waits, the pill's time going on.
+      assert.deepEqual(ids(arrivals.getSnapshot().arrived), ["n1"]);
+      // One not waiting, or already taken: nothing.
+      assert.equal(arrivals.takePost("memo"), null);
+      assert.equal(arrivals.takePost("no-such"), null);
+      assert.equal(absorbed.length, 1);
+      // The last one taken: nothing waits, and the pill starts over.
+      await time.advance(PILL_BUDGET);
+      assert.equal(arrivals.getSnapshot().retired, true);
+      assert.deepEqual(ids(arrivals.takePost("n1")), ["n1"]);
+      assert.deepEqual(arrivals.getSnapshot(), {
+        arrived: null,
+        retired: false,
+      });
+      // Another town: what waited for the last is not taken into it.
+      answers.push(came(letter("n2", "r-nagi", 3)));
+      await arrivals.read();
+      switchTown(home());
+      assert.equal(arrivals.takePost("n2"), null);
+      assert.equal(absorbed.length, 2);
+      arrivals.shown(false);
+    },
+  );
+
+  await check(
     "what waits for one town is let go when another comes",
     async () => {
       const { arrivals, answers, absorbed, switchTown, time } = setUp();
@@ -561,9 +607,9 @@ async function main() {
         fresh.letters.map((entry) => entry.id),
         ["followed"],
       );
-      // Two more followed make six of late (ナギ's memo is Live's, so it
-      // is not one of them): no 「街の便り」, so the other reader's would not
-      // show on ホーム.
+      // Two more followed make six of late (with ホーム's Live box drawn,
+      // ナギ's memo is Live's, so it is not one of them): no 「街の便り」, so
+      // the other reader's would not show on ホーム.
       const busy = freshFor(
         town,
         came(
@@ -572,6 +618,7 @@ async function main() {
           letter("followed3", "r-nagi", 6),
         ),
         NOW,
+        { ids: ["p-m4", "p-m2", "p-m1", "p-m3"], at: NOW },
       );
       assert.deepEqual(
         busy.home.map((entry) => entry.id),

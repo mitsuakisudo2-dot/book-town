@@ -1715,7 +1715,7 @@ try {
 
   for (const width of [390, 320])
     await check(
-      `${width}px 読みながらのひとこと: three lines of 104px with their covers, opened to all and closed, each memo once and none on 便りだけ, a tap opens its 便り, and a spoiler or a book being read waits behind a tap`,
+      `${width}px 読みながらのひとこと: three lines of 104px with their covers, opened to all and closed, each memo once and none on 便りだけ, a tap or Enter on the time opens its 便り (a new-tab click is the browser's), and a spoiler or a book being read waits behind a tap that fits its line and keeps the focus`,
       () =>
         withPage({ viewport: { width, height: 844 } }, async () => {
           // Two days after the demo's four memos.
@@ -1792,6 +1792,38 @@ try {
           await expect(letterPage("すみれ")).toBeVisible();
           await page.goBack();
           await expect(letterPage("すみれ")).toHaveCount(0);
+          // By the keyboard: Enter on the time, and 戻る gives the focus back.
+          const time = rows.first().locator("a.home-live-time");
+          await time.focus();
+          await page.keyboard.press("Enter");
+          await expect(letterPage("すみれ")).toBeVisible();
+          await page.goBack();
+          await expect(letterPage("すみれ")).toHaveCount(0);
+          await expect(time).toBeFocused();
+          // A click meant for a new tab or window is left to the browser.
+          expect(
+            await time.evaluate((link) => {
+              let prevented = null;
+              addEventListener(
+                "click",
+                (event) => {
+                  prevented = event.defaultPrevented;
+                  event.preventDefault();
+                },
+                { once: true },
+              );
+              link.dispatchEvent(
+                new MouseEvent("click", {
+                  bubbles: true,
+                  cancelable: true,
+                  button: 0,
+                  ctrlKey: true,
+                }),
+              );
+              return prevented;
+            }),
+          ).toBe(false);
+          await expect(letterPage("すみれ")).toHaveCount(0);
           // 便りだけ has no ひとこと band.
           await tab("便りだけ").tap();
           await expect(pane("letters").locator(".home-live")).toHaveCount(0);
@@ -1811,6 +1843,17 @@ try {
           });
           await expect(guards).toHaveCount(2);
           await expect(live).not.toContainText("海の描写のところで");
+          // Each stand-in fits its line, with room under it.
+          for (const index of [1, 2])
+            expect(
+              await rows.nth(index).evaluate((row) => {
+                const guard = row.querySelector(".home-live-guard");
+                return (
+                  row.getBoundingClientRect().bottom -
+                  guard.getBoundingClientRect().bottom
+                );
+              }),
+            ).toBeGreaterThanOrEqual(4);
           expect(
             (await guards.first().boundingBox()).height,
           ).toBeGreaterThanOrEqual(44);
@@ -1829,6 +1872,17 @@ try {
           );
           await expect(rows.first().locator(".home-live-text")).toBeFocused();
           await expectNoTinyWords(live, `${width}px ひとこと`);
+          await expectTargetsAndType(live, `${width}px ひとこと`);
+          // A line both on the shelves and a spoiler: 表示する gives the
+          // focus to its spoiler box.
+          await editTown(`data.spoilerReports = ["p-m4", "p-m2"];`);
+          await goHome();
+          await guards.first().tap();
+          await expect(
+            rows.nth(1).getByRole("button", {
+              name: /ネタバレの可能性を報告済み・押すと表示/,
+            }),
+          ).toBeFocused();
         }),
     );
   await check(
