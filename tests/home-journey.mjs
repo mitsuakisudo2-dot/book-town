@@ -1312,6 +1312,28 @@ try {
         await expect(words).toHaveText("引っぱって新しい便りを読む");
         await pull("end", 100);
         await expect(words).toHaveCount(0);
+        // A second finger while pulling (a pinch): no pull, and the space
+        // shuts at once, not left open when the fingers lift.
+        await pull("start");
+        await pull("move", 170);
+        await expect(words).toHaveText("離すと読み込みます");
+        await page.locator(".home-view").evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const finger = (identifier, x, y) =>
+            new Touch({ identifier, target: element, clientX: x, clientY: y });
+          const first = finger(1, box.left + box.width / 2, box.top + 290);
+          const second = finger(2, box.left + 60, box.top + 400);
+          element.dispatchEvent(
+            new TouchEvent("touchstart", {
+              bubbles: true,
+              touches: [first, second],
+              changedTouches: [second],
+            }),
+          );
+        });
+        await expect(words).toHaveCount(0);
+        await pull("end", 170);
+        await expect(words).toHaveCount(0);
         await expect(page).toHaveURL(`${baseURL}/`);
         // Read down the page, a finger drawn down only scrolls.
         await page.evaluate(() => window.scrollTo(0, 300));
@@ -1328,13 +1350,22 @@ try {
         await pull("move", 170);
         await expect(words).toHaveCount(0);
         await pull("end", 170);
-        // While Home shows, the browser's own pull and rubber band are off.
-        expect(
-          await page.evaluate(
+        // While Home shows, the browser's own pull and rubber band are off;
+        // on the town's other pages, they are the browser's again.
+        const overscroll = () =>
+          page.evaluate(
             () =>
               getComputedStyle(document.documentElement).overscrollBehaviorY,
-          ),
-        ).toBe("none");
+          );
+        expect(await overscroll()).toBe("none");
+        await page.keyboard.press("Escape");
+        await expect(sheet).toHaveCount(0);
+        await page
+          .getByRole("navigation", { name: "スマートフォンナビゲーション" })
+          .getByRole("link", { name: "検索" })
+          .tap();
+        await expect(page).toHaveURL(`${baseURL}/search/`);
+        expect(await overscroll()).toBe("auto");
       }),
   );
   await check(
