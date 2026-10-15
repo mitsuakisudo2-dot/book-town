@@ -111,11 +111,15 @@ export function TopCarousel({
   const still = useStill();
   const [at, setAt] = useState(0);
   const [stopped, setStopped] = useState(false);
-  const [held, setHeld] = useState(false);
+  // Focus and the mouse each hold it, apart: the mouse leaving does not let
+  // it turn while the focus is still inside, nor the reverse. Only a mouse
+  // hovers: a finger's tap leaves no hover behind it.
+  const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const stoppedRef = useRef(false);
   const count = slides?.length ?? 0;
   const turns = count > 1 && !still;
-  const auto = turns && !stopped && !held;
+  const auto = turns && !stopped && !focused && !hovered;
   const stop = (now: boolean) => {
     stoppedRef.current = now;
     setStopped(now);
@@ -152,7 +156,7 @@ export function TopCarousel({
   if (slides && !count) return null;
   const leave = (event: FocusEvent<HTMLElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null))
-      setHeld(false);
+      setFocused(false);
   };
   return (
     <section
@@ -160,10 +164,14 @@ export function TopCarousel({
       aria-roledescription="カルーセル"
       aria-label="今日の街"
       aria-busy={slides ? undefined : true}
-      onFocus={() => setHeld(true)}
+      onFocus={() => setFocused(true)}
       onBlur={leave}
-      onMouseEnter={() => setHeld(true)}
-      onMouseLeave={() => setHeld(false)}
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") setHovered(true);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") setHovered(false);
+      }}
     >
       <div
         ref={track}

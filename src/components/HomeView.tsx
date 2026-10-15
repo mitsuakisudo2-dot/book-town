@@ -203,6 +203,8 @@ export function HomeView({
     const phone = matchMedia("(max-width: 760px)");
     let anchor = window.scrollY;
     let hidden = false;
+    // Whether a layer held the page still since the last scroll read.
+    let held = false;
     const hide = (next: boolean) => {
       if (hidden === next) return;
       hidden = next;
@@ -211,8 +213,20 @@ export function HomeView({
     };
     const onScroll = () => {
       const y = window.scrollY;
-      // A sheet or a book in hand holds the page still beneath it.
-      if (!phone.matches || document.body.style.position === "fixed") {
+      if (!phone.matches) {
+        anchor = y;
+        return;
+      }
+      // A 便り's page or a book in hand holds the page still beneath it (the
+      // body fixed, the window at 0): no scroll of the reader's, so nothing
+      // to read. Let go, the page goes back where it was; that is no scroll
+      // of theirs either, so the bars stay as they were, from there.
+      if (document.body.style.position === "fixed") {
+        held = true;
+        return;
+      }
+      if (held) {
+        held = false;
         anchor = y;
         return;
       }
