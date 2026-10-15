@@ -1,7 +1,13 @@
 import { mergeArrived, takeIn, type Arrived } from "./arrived";
-import { followedLetters, homeLetters, type LetterEntry } from "./home-feed";
+import {
+  followedAuthors,
+  followedLetters,
+  homeLetters,
+  type LetterEntry,
+} from "./home-feed";
 import type { HomeTab } from "./home-tab";
-import type { TownReads } from "./town-backend";
+import { isDatabaseId } from "./paths";
+import { OLDER_PAGE, type TownReads } from "./town-backend";
 import { ME_ID, type TownState } from "./types";
 
 // New 便り arriving while Home is open (PR 2; 決定 H:56-57, H:120-123). They
@@ -117,6 +123,54 @@ export function freshFor(
   return {
     home: [...followed, ...others].filter((entry) => ids.has(entry.id)),
     letters: followedLetters(town).filter((entry) => ids.has(entry.id)),
+  };
+}
+
+/**
+ * Where 便りだけ's next older page starts: the oldest followed 便り the town
+ * read in order (its load, and the pages read before), never one read alone
+ * by its id (a link to an old 便り), which would skip what lies between. A
+ * town with none starts below the oldest post it read, or from now.
+ */
+export function olderFrom(
+  state: TownState,
+  alone: ReadonlySet<string>,
+  now: number,
+): string {
+  const authors = new Set(followedAuthors(state));
+  const read = state.posts.filter(
+    (post) => isDatabaseId(post.id) && !alone.has(post.id),
+  );
+  const followed = read.filter(
+    (post) => post.parentId === null && authors.has(post.authorId),
+  );
+  let from = new Date(now).toISOString();
+  let oldest = now;
+  for (const post of followed.length ? followed : read) {
+    const at = Date.parse(post.createdAt);
+    if (!(at < oldest)) continue;
+    oldest = at;
+    from = post.createdAt;
+  }
+  return from;
+}
+
+/**
+ * What an older page brought to 便りだけ once taken in: its 便り as the
+ * pane shows them (newest first), and whether it was the last page.
+ */
+export function olderPage(
+  state: TownState,
+  arrived: Arrived,
+): { entries: LetterEntry[]; done: boolean } {
+  const tops = new Set(
+    arrived.posts
+      .filter((post) => post.parentId === null)
+      .map((post) => post.id),
+  );
+  return {
+    entries: followedLetters(state).filter((entry) => tops.has(entry.id)),
+    done: tops.size < OLDER_PAGE,
   };
 }
 

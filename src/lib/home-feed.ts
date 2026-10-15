@@ -95,6 +95,37 @@ export function homeLetters(state: TownState, now: number): HomeLetters {
 }
 
 /**
+ * Whose 便り 便りだけ shows: the owners of the shops the reader follows, and
+ * the reader.
+ */
+export const followedAuthors = (state: TownState): string[] => [
+  ME_ID,
+  ...new Set(
+    state.shops
+      .filter((shop) => state.following.includes(shop.id))
+      .map((shop) => shop.ownerId),
+  ),
+];
+
+/**
+ * Where 「前に開いたのはここまで」 goes (仮; PR 2): before the first of
+ * `entries` (newest first) from before `since`, the last time Home was
+ * opened, when others' 便り came after it and some from before are left
+ * below. Null on a first opening, or when every 便り is on one side of it.
+ */
+export function sinceMark(
+  entries: LetterEntry[],
+  since: number | null,
+): string | null {
+  if (since === null) return null;
+  const at = entries.findIndex((entry) => entry.at <= since);
+  if (at === -1) return null;
+  return entries.slice(0, at).some((entry) => authorOf(entry) !== ME_ID)
+    ? entries[at].id
+    : null;
+}
+
+/**
  * A 便り a pane drew, read again from the town by its id: the post or poster
  * as it is now (a like, a fold), or null once it is gone.
  */

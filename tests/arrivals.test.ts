@@ -7,12 +7,14 @@ import {
   POLL_EVERY,
   createArrivals,
   freshFor,
+  olderFrom,
+  olderPage,
   sinceOf,
   type ArrivalsClock,
   type ArrivalsTown,
 } from "../src/lib/arrivals";
 import { seedState } from "../src/lib/data";
-import type { TownReads } from "../src/lib/town-backend";
+import { OLDER_PAGE, type TownReads } from "../src/lib/town-backend";
 import { ME_ID, type Post, type TownState } from "../src/lib/types";
 
 // The 便り that arrive while Home is open (PR 2): they wait outside the town
@@ -588,6 +590,60 @@ async function main() {
       );
       // The same twice changes nothing.
       assert.equal(takeIn(next, came(letter("ok", "r-nagi", 1))), next);
+    },
+  );
+
+  await check(
+    "便りだけ's older pages start below the oldest followed 便り read in order",
+    () => {
+      const uuid = (n: number) =>
+        `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+      const followed = letter(uuid(1), "r-nagi", -60);
+      const older = letter(uuid(2), "r-nagi", -120);
+      const others = letter(uuid(3), "r-tou", -600);
+      const linked = letter(uuid(4), "r-nagi", -60 * 24 * 90);
+      const reply = letter(uuid(5), "r-nagi", -900, { parentId: uuid(3) });
+      const town = home({
+        // The demo's own posts carry readable ids: never read from the
+        // database, so never where a page starts.
+        posts: [...seedState.posts, linked, others, reply, older, followed],
+      });
+      // Not the one opened by a link, nor others' or replies.
+      assert.equal(olderFrom(town, new Set([linked.id]), NOW), older.createdAt);
+      assert.equal(olderFrom(town, new Set(), NOW), linked.createdAt);
+      // Following nobody with 便り read: below the oldest post read.
+      assert.equal(
+        olderFrom(
+          home({ following: [], posts: [others, reply] }),
+          new Set(),
+          NOW,
+        ),
+        reply.createdAt,
+      );
+      // Nothing read: from now.
+      assert.equal(
+        olderFrom(home({ posts: [] }), new Set(), NOW),
+        new Date(NOW).toISOString(),
+      );
+
+      // A page: its 便り as 便りだけ shows them, the last when short.
+      const page = came(older, followed, others, reply);
+      const { entries, done } = olderPage(town, page);
+      assert.deepEqual(
+        entries.map((entry) => entry.id),
+        [followed.id, older.id],
+      );
+      assert.equal(done, true);
+      const full = came(
+        ...Array.from({ length: OLDER_PAGE }, (_, n) =>
+          letter(uuid(100 + n), "r-nagi", -1000 - n),
+        ),
+      );
+      assert.equal(olderPage(takeIn(town, full), full).done, false);
+      assert.equal(
+        olderPage(takeIn(town, full), full).entries.length,
+        OLDER_PAGE,
+      );
     },
   );
 

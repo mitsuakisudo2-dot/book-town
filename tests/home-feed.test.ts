@@ -4,14 +4,21 @@ import {
   LETTERS_MAX,
   TOWN_MAX,
   authorOf,
+  followedAuthors,
   followedLetters,
   homeLetters,
   isNewcomer,
   isQuiet,
   letterOf,
   ownLettersSince,
+  sinceMark,
   weave,
 } from "../src/lib/home-feed";
+import {
+  LAST_OPEN_KEY,
+  createLastOpen,
+  readOpened,
+} from "../src/lib/last-open";
 import { ME_ID, type Post, type TownState } from "../src/lib/types";
 
 let passed = 0;
@@ -247,6 +254,118 @@ check(
       ],
     });
     assert.deepEqual(ids(ownLettersSince(later, since)), ["mine"]);
+  },
+);
+
+check("便りだけ is the followed shops' owners' and the reader's", () => {
+  assert.deepEqual(followedAuthors(town()), [ME_ID]);
+  assert.deepEqual(
+    followedAuthors(town({ following: ["shop-orbit", "shop-question"] })),
+    [ME_ID, "r-nagi", "r-tou"],
+  );
+});
+
+check(
+  "「前に開いたのはここまで」 goes before the first 便り from before the last opening",
+  () => {
+    const HOUR = 60 * 60 * 1000;
+    const letters = followedLetters(
+      town({
+        following: ["shop-orbit"],
+        posts: [
+          ...seedState.posts,
+          post("new-1", "r-nagi", NOW + 2 * HOUR),
+          post("new-2", "r-nagi", NOW + HOUR),
+        ],
+      }),
+    );
+    assert.deepEqual(ids(letters).slice(0, 3), ["new-1", "new-2", "p-m1"]);
+    // Others' came since: the line is above the first from before.
+    assert.equal(sinceMark(letters, NOW), "p-m1");
+    // Exactly at the opening counts as before it.
+    assert.equal(sinceMark(letters, NOW + HOUR), "new-2");
+    // A first opening: no line.
+    assert.equal(sinceMark(letters, null), null);
+    // Everything came since, or nothing did: no line.
+    assert.equal(sinceMark(letters, 0), null);
+    assert.equal(sinceMark(letters, NOW + 3 * HOUR), null);
+    assert.equal(sinceMark([], NOW), null);
+    // Only the reader's own above it: nothing came from others.
+    const own = followedLetters(
+      town({
+        following: ["shop-orbit"],
+        posts: [...seedState.posts, post("mine", ME_ID, NOW + HOUR)],
+      }),
+    );
+    assert.equal(sinceMark(own, NOW), null);
+  },
+);
+
+check(
+  "the last opening is read once a page, and this one kept for the next",
+  () => {
+    const kept = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => kept.get(key) ?? null,
+      setItem: (key: string, value: string) => void kept.set(key, value),
+    };
+    let now = NOW;
+    const first = createLastOpen(
+      () => storage,
+      () => now,
+    );
+    assert.equal(first.opened(), null, "a first opening");
+    first.keep();
+    assert.equal(kept.get(LAST_OPEN_KEY), String(NOW));
+    now += 60_000;
+    // Back on Home in the same page: the same line, and kept once.
+    first.keep();
+    assert.equal(first.opened(), null);
+    assert.equal(kept.get(LAST_OPEN_KEY), String(NOW));
+    // The next page reads it.
+    const next = createLastOpen(
+      () => storage,
+      () => now,
+    );
+    assert.equal(next.opened(), NOW);
+    next.keep();
+    assert.equal(next.opened(), NOW);
+    assert.equal(kept.get(LAST_OPEN_KEY), String(now));
+    // Kept before the panes read it (they draw once the time is known):
+    // they still read the opening before.
+    const opening = now;
+    now += 60_000;
+    const third = createLastOpen(
+      () => storage,
+      () => now,
+    );
+    third.keep();
+    assert.equal(third.opened(), opening);
+    // What cannot be a past moment is as a first opening.
+    for (const value of ["", "abc", "-5", "1.5", String(NOW + 120_000)])
+      assert.equal(readOpened(value, NOW + 60_000), null, value);
+    assert.equal(readOpened(String(NOW), NOW), NOW);
+    // No storage, or one that throws: a first opening, and nothing breaks.
+    const blocked = createLastOpen(
+      () => ({
+        getItem: () => {
+          throw new Error("blocked");
+        },
+        setItem: () => {
+          throw new Error("blocked");
+        },
+      }),
+      () => now,
+    );
+    assert.equal(blocked.opened(), null);
+    blocked.keep();
+    assert.equal(
+      createLastOpen(
+        () => null,
+        () => now,
+      ).opened(),
+      null,
+    );
   },
 );
 
