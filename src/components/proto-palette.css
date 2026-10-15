@@ -13,7 +13,7 @@
   line-height: 1.6;
 }
 /* 選んだ印は、選んだ色の淡い地に。 */
-:root:is([data-palette], [data-night])
+:root:is([data-palette], [data-lamp], [data-night])
   .record-visibility
   label:has(input:checked) {
   background: var(--green-soft);
@@ -24,14 +24,14 @@
  * 何も選んでいない（昼の深緑）ときは、本番と同じ見た目のまま。
  * 本体に入れるときは、ここではなく元の CSS の色を tokens.css の名前に替える。
  */
-:root:is([data-palette], [data-night]) .town-bottom-nav a.active {
+:root:is([data-palette], [data-lamp], [data-night]) .town-bottom-nav a.active {
   color: var(--green);
 }
-:root:is([data-palette], [data-night]) .town-bottom-nav a.active svg {
+:root:is([data-palette], [data-lamp], [data-night]) .town-bottom-nav a.active svg {
   background: var(--green-soft);
   outline-color: var(--green-soft);
 }
-:root:is([data-palette], [data-night])
+:root:is([data-palette], [data-lamp], [data-night])
   .town-shell
   .top-actions
   button.demo-pill {
@@ -39,7 +39,7 @@
   background: var(--sheet);
   color: var(--ink-2);
 }
-:root:is([data-palette], [data-night])
+:root:is([data-palette], [data-lamp], [data-night])
   .town-shell
   .top-actions
   button.demo-pill::after {
@@ -47,16 +47,16 @@
   color: var(--green);
 }
 
-/* 夜だけ: 上下のバー */
-:root[data-night] .town-topbar {
+/* 灯りと夜: 上下のバー */
+:root:is([data-lamp], [data-night]) .town-topbar {
   background: color-mix(in srgb, var(--paper) 95%, transparent);
 }
-:root[data-night] .town-bottom-nav {
+:root:is([data-lamp], [data-night]) .town-bottom-nav {
   background: color-mix(in srgb, var(--sheet) 96%, transparent);
   border-top-color: var(--line);
   box-shadow: none;
 }
-:root[data-night] .town-shell .town-bottom-nav a:not(.active) {
+:root:is([data-lamp], [data-night]) .town-shell .town-bottom-nav a:not(.active) {
   color: var(--ink-2);
 }
 /* 夜だけ: 写真の上は、昼の紙と墨のまま */

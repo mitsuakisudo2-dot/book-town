@@ -96,8 +96,9 @@
 }
 
 /*
- * 試作（claude/proto-colors）: 6色と夜。名前は仮。
- * <html data-palette="ai"> などで色を、<html data-night> で夜に替える。
+ * 試作（claude/proto-colors）: 6色と、灯り・夜。名前は仮。
+ * <html data-palette="ai"> などで色を、<html data-lamp> で灯りに、
+ * <html data-night> で夜に替える（「自動」は端末に合わせて昼か夜）。
  * 何もなければ今までの昼の深緑。どの組み合わせも、上の @pair が 4.5:1 以上
  * （試作の計算で確かめた。tokens.test.ts はまだ昼の深緑だけを見る）。
  */
@@ -135,6 +136,60 @@
   --on-green: #f5f5f3;
   --green-soft: #e6e6e2;
   --on-photo: #3e4347;
+}
+
+/* 灯り: 昼と夜の間。ランプの下の紙のように暖かく、青みを抑える。 */
+:root[data-lamp] {
+  --paper: #f2e5cc;
+  --sheet: #f8eedb;
+  --ink: #33251a;
+  --ink-2: #5e4a38;
+  --line: #e4d2b0;
+  --line-2: #cfb68c;
+  --field: #7a6450;
+  --band: #eadab9;
+  --notice: #f4e6c6;
+  --forest: #2d5141;
+  --lamp: #7f4f10;
+  --lamp-soft: #efdcb6;
+  --alert: #97321f;
+  --pop: #f9f0de;
+  --pop-line: #e2cfa8;
+
+  --green: #294b3e;
+  --on-green: #f7f4ee;
+  --green-soft: #e1e3cf;
+  --on-photo: #294b3e;
+}
+:root[data-lamp][data-palette="ai"] {
+  --green: #2c4566;
+  --on-green: #f5f6f8;
+  --green-soft: #dfdcd2;
+  --on-photo: #2c4566;
+}
+:root[data-lamp][data-palette="odo"] {
+  --green: #6e4818;
+  --on-green: #fbf6ee;
+  --green-soft: #ecd8b2;
+  --on-photo: #6e4818;
+}
+:root[data-lamp][data-palette="azuki"] {
+  --green: #743f41;
+  --on-green: #fbf3f2;
+  --green-soft: #ecd6c9;
+  --on-photo: #743f41;
+}
+:root[data-lamp][data-palette="budo"] {
+  --green: #543e6b;
+  --on-green: #f6f3f9;
+  --green-soft: #e4d8d6;
+  --on-photo: #543e6b;
+}
+:root[data-lamp][data-palette="sumi"] {
+  --green: #3b3f43;
+  --on-green: #f5f5f3;
+  --green-soft: #e3dccb;
+  --on-photo: #3b3f43;
 }
 
 /* 夜: 紙と墨を入れ替え、色は明るい側に寄せる。 */

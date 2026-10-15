@@ -2,13 +2,13 @@
 
 /**
  * 試作（claude/proto-colors）だけの、画面の色の設定。プロフィールの「設定」の
- * 中に出す。6色と昼／夜を選ぶと、<html> の data-palette と data-night を替え、
- * このブラウザに残す。残した選びは PROTO_PALETTE_BOOT（src/lib/proto-palette.ts）
- * が最初の描画の前に当てる。このブランチは main に取り込まない。
+ * 中に出す。6色と明るさ（昼・灯り・夜・自動）を選ぶと、このブラウザに残し、
+ * PROTO_PALETTE_BOOT（src/lib/proto-palette.ts）と同じ手で <html> に当てる。
+ * このブランチは main に取り込まない。
  */
 
 import { useEffect, useState } from "react";
-import { PROTO_PALETTE_KEY as KEY } from "../lib/proto-palette";
+import { PROTO_PALETTE_KEY as KEY, type ProtoMode } from "../lib/proto-palette";
 import "./proto-palette.css";
 
 export const PALETTES = [
@@ -20,19 +20,44 @@ export const PALETTES = [
   { value: "sumi", label: "墨", day: "#3e4347", night: "#c2c6c9" },
 ] as const;
 
-type Choice = { p: string; n: boolean };
+type Choice = { p: string; m: ProtoMode };
 
-function apply({ p, n }: Choice) {
-  const html = document.documentElement;
-  if (p === "midori") html.removeAttribute("data-palette");
-  else html.setAttribute("data-palette", p);
-  if (n) html.setAttribute("data-night", "");
-  else html.removeAttribute("data-night");
-  try {
-    localStorage.setItem(KEY, JSON.stringify({ p, n }));
-  } catch {
-    // 残せなくても、この画面では替わる
+const MODES: { value: ProtoMode; label: string; told: string }[] = [
+  { value: "day", label: "昼", told: "昼の色にしました" },
+  { value: "lamp", label: "灯り", told: "灯りの色にしました" },
+  { value: "night", label: "夜", told: "夜の色にしました" },
+  {
+    value: "auto",
+    label: "自動（端末に合わせる）",
+    told: "端末の明るさの設定に合わせます",
+  },
+];
+
+declare global {
+  interface Window {
+    __protoPalette?: () => void;
   }
+}
+
+function read(): Choice {
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    return {
+      p: saved.p ?? "midori",
+      m: saved.m ?? (saved.n ? "night" : "day"),
+    };
+  } catch {
+    return { p: "midori", m: "day" };
+  }
+}
+
+function apply(choice: Choice) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(choice));
+  } catch {
+    // 残せなければ、この画面でも替えられない（試作）
+  }
+  window.__protoPalette?.();
 }
 
 export function ProtoPaletteSettings({
@@ -40,19 +65,18 @@ export function ProtoPaletteSettings({
 }: {
   notify: (message: string) => void;
 }) {
-  const [choice, setChoice] = useState<Choice>({ p: "midori", n: false });
+  const [choice, setChoice] = useState<Choice>({ p: "midori", m: "day" });
+  const [night, setNight] = useState(false);
 
   useEffect(() => {
-    const html = document.documentElement;
-    setChoice({
-      p: html.getAttribute("data-palette") ?? "midori",
-      n: html.hasAttribute("data-night"),
-    });
+    setChoice(read());
+    setNight(document.documentElement.hasAttribute("data-night"));
   }, []);
 
   const choose = (next: Choice, told: string) => {
     setChoice(next);
     apply(next);
+    setNight(document.documentElement.hasAttribute("data-night"));
     notify(told);
   };
 
@@ -75,7 +99,7 @@ export function ProtoPaletteSettings({
             />
             <span
               className="proto-palette-chip"
-              style={{ background: choice.n ? palette.night : palette.day }}
+              style={{ background: night ? palette.night : palette.day }}
               aria-hidden="true"
             />
             {palette.label}
@@ -83,19 +107,14 @@ export function ProtoPaletteSettings({
         ))}
       </fieldset>
       <fieldset className="record-visibility">
-        <legend>昼と夜（試作）</legend>
-        {[
-          { n: false, label: "昼" },
-          { n: true, label: "夜" },
-        ].map((mode) => (
-          <label key={mode.label}>
+        <legend>明るさ（試作）</legend>
+        {MODES.map((mode) => (
+          <label key={mode.value}>
             <input
               type="radio"
-              name="proto-night"
-              checked={choice.n === mode.n}
-              onChange={() =>
-                choose({ ...choice, n: mode.n }, `${mode.label}の色にしました`)
-              }
+              name="proto-mode"
+              checked={choice.m === mode.value}
+              onChange={() => choose({ ...choice, m: mode.value }, mode.told)}
             />
             {mode.label}
           </label>
