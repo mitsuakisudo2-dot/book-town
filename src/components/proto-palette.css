@@ -13,7 +13,7 @@
   line-height: 1.6;
 }
 /* 選んだ印は、選んだ色の淡い地に。 */
-:root:is([data-palette], [data-lamp], [data-night])
+:root:is([data-palette], [data-lamp], [data-night], [data-timed])
   .record-visibility
   label:has(input:checked) {
   background: var(--green-soft);
@@ -24,14 +24,14 @@
  * 何も選んでいない（昼の深緑）ときは、本番と同じ見た目のまま。
  * 本体に入れるときは、ここではなく元の CSS の色を tokens.css の名前に替える。
  */
-:root:is([data-palette], [data-lamp], [data-night]) .town-bottom-nav a.active {
+:root:is([data-palette], [data-lamp], [data-night], [data-timed]) .town-bottom-nav a.active {
   color: var(--green);
 }
-:root:is([data-palette], [data-lamp], [data-night]) .town-bottom-nav a.active svg {
+:root:is([data-palette], [data-lamp], [data-night], [data-timed]) .town-bottom-nav a.active svg {
   background: var(--green-soft);
   outline-color: var(--green-soft);
 }
-:root:is([data-palette], [data-lamp], [data-night])
+:root:is([data-palette], [data-lamp], [data-night], [data-timed])
   .town-shell
   .top-actions
   button.demo-pill {
@@ -39,7 +39,7 @@
   background: var(--sheet);
   color: var(--ink-2);
 }
-:root:is([data-palette], [data-lamp], [data-night])
+:root:is([data-palette], [data-lamp], [data-night], [data-timed])
   .town-shell
   .top-actions
   button.demo-pill::after {
@@ -48,15 +48,15 @@
 }
 
 /* 灯りと夜: 上下のバー */
-:root:is([data-lamp], [data-night]) .town-topbar {
+:root:is([data-lamp], [data-night], [data-timed]) .town-topbar {
   background: color-mix(in srgb, var(--paper) 95%, transparent);
 }
-:root:is([data-lamp], [data-night]) .town-bottom-nav {
+:root:is([data-lamp], [data-night], [data-timed]) .town-bottom-nav {
   background: color-mix(in srgb, var(--sheet) 96%, transparent);
   border-top-color: var(--line);
   box-shadow: none;
 }
-:root:is([data-lamp], [data-night]) .town-shell .town-bottom-nav a:not(.active) {
+:root:is([data-lamp], [data-night], [data-timed]) .town-shell .town-bottom-nav a:not(.active) {
   color: var(--ink-2);
 }
 /* 夜だけ: 写真の上は、昼の紙と墨のまま */
@@ -65,4 +65,34 @@
   --sheet: #fffcf7;
   --paper: #f8f3eb;
   --on-photo: var(--on-green);
+}
+
+.proto-time-preview {
+  flex-basis: 100%;
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+.proto-time-preview input {
+  width: 100%;
+  min-height: 44px;
+  accent-color: var(--green);
+}
+.proto-time-preview button {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  color: var(--ink);
+}
+.record-visibility .proto-time-preview label {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ink-2);
+  cursor: default;
 }
