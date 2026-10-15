@@ -4,11 +4,12 @@ import {
   Activity,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type TouchEvent,
 } from "react";
-import type { Notify, TownActions, TownState } from "../lib/types";
+import type { Notify, Reader, TownActions, TownState } from "../lib/types";
 import { ComposeFab } from "./Social";
 import { leaveLayers } from "../lib/back-layer";
 import { replaceAddress, useAddressPath } from "../lib/url-state";
@@ -22,10 +23,27 @@ import {
   tabOfPath,
   type HomeTab,
 } from "../lib/home-tab";
-import { HomeTabs, paneId, tabId } from "./home/HomeTabs";
+import { HomeTabs, HOME_TABS, paneId, tabId } from "./home/HomeTabs";
 import { HomePane } from "./home/HomePane";
 import { LettersOnly } from "./home/LettersOnly";
-import { motion } from "./home/hooks";
+import { motion, useNow } from "./home/hooks";
+import { NewLettersPill } from "./home/NewLettersPill";
+import {
+  townArrivals,
+  useArrivals,
+  useArrivalsWatch,
+} from "./home/useArrivals";
+import {
+  PULL_WORDS,
+  usePullToRefresh,
+  type PullOutcome,
+} from "./home/usePullToRefresh";
+import { freshFor } from "../lib/arrivals";
+import { authorOf } from "../lib/home-feed";
+import { lastOpen } from "../lib/last-open";
+import { announce } from "../lib/live-region";
+import { findReader } from "../lib/social";
+import { getTownSnapshot, townStore } from "../lib/store";
 import "./home/home.css";
 
 type Shared = {
@@ -172,19 +190,79 @@ export function HomeView({
     toTop();
     setRefresh((counts) => ({ ...counts, [which]: counts[which] + 1 }));
   };
-  // ホーム at the bottom (or the brand) while on Home: the same as the tab.
-  useEffect(
-    () =>
-      onHomeTop(() => {
-        toTop();
-        const which = tabRef.current;
-        setRefresh((counts) => ({ ...counts, [which]: counts[which] + 1 }));
-      }),
-    [],
+
+  // New 便り (PR 2): read every minute while Home shows, kept outside the
+  // town until the reader asks: the pill, the tab shown, or a pull.
+  useArrivalsWatch();
+  // 「前に開いたのはここまで」 is drawn from the opening before this one.
+  useEffect(() => lastOpen.keep(), []);
+  const waiting = useArrivals();
+  const now = useNow();
+  const { state } = shared;
+  const fresh = useMemo(
+    () => (now === null ? null : freshFor(state, waiting.arrived, now)),
+    [state, waiting.arrived, now],
   );
+  const [barHidden, setBarHidden] = useState(false);
+  const pillOn =
+    !!fresh && fresh[tab].length > 0 && !waiting.retired && !barHidden;
+  // The pill's eight seconds count while it is on the screen.
+  useEffect(() => townArrivals.shown(pillOn), [pillOn]);
+  useEffect(() => () => townArrivals.shown(false), []);
+  useEffect(() => {
+    if (pillOn) announce("新しい便りがあります");
+  }, [pillOn]);
+  const dotted = new Set(
+    waiting.retired && fresh
+      ? HOME_TABS.flatMap(([key]) => (fresh[key].length ? [key] : []))
+      : [],
+  );
+  const writers = pillOn
+    ? [...new Set(fresh[tab].map(authorOf))].flatMap((id): Reader[] =>
+        [
+          findReader(state, id) ??
+            waiting.arrived?.readers.find((reader) => reader.id === id),
+        ].filter((reader) => reader !== undefined),
+      )
+    : [];
+  /** What waits goes in at the top of the pane shown, and it goes there. */
+  function showNew(which: HomeTab) {
+    const taken = townArrivals.take();
+    renew(which);
+    if (taken) announce("新しい便りを上に出しました");
+  }
+  /** A pull, or the tab tapped at the top: reads now, then shows all. */
+  async function readNew(): Promise<PullOutcome> {
+    const which = tabRef.current;
+    if (!townStore.reads()) {
+      renew(which);
+      return "none";
+    }
+    const before = getTownSnapshot();
+    const { failed, taken } = await townArrivals.refresh();
+    if (tabRef.current === which) renew(which);
+    if (taken && freshFor(before, taken, Date.now())[which].length)
+      return "arrived";
+    return failed ? "failed" : "none";
+  }
+  const pull = usePullToRefresh(readNew);
+  /**
+   * The tab shown tapped again (or ホーム at the bottom): what waits goes in
+   * at the top. At the top already, it reads as a pull does.
+   */
+  const again = (which: HomeTab) => {
+    if (window.scrollY <= 0 && townStore.reads()) pull.run();
+    else showNew(which);
+  };
+  const againRef = useRef(again);
+  useLayoutEffect(() => {
+    againRef.current = again;
+  });
+  // ホーム at the bottom (or the brand) while on Home: the same as the tab.
+  useEffect(() => onHomeTop(() => againRef.current(tabRef.current)), []);
   /** Shows `to` in place: no step of 戻る. The tab already open renews. */
   function switchTo(to: HomeTab) {
-    if (to === tab) return renew(tab);
+    if (to === tab) return again(tab);
     scrolls.current[tab] = window.scrollY;
     searches.current[tab] = location.search;
     switched.current = { to, top: scrolls.current[to] ?? 0 };
@@ -208,6 +286,7 @@ export function HomeView({
     const hide = (next: boolean) => {
       if (hidden === next) return;
       hidden = next;
+      setBarHidden(next);
       if (next) shell.dataset.bar = "hidden";
       else delete shell.dataset.bar;
     };
@@ -312,11 +391,42 @@ export function HomeView({
     <div
       ref={view}
       className="home-view"
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-      onTouchCancel={() => (start.current = null)}
+      onTouchStart={(event) => {
+        onTouchStart(event);
+        pull.onTouchStart(event);
+      }}
+      onTouchMove={pull.onTouchMove}
+      onTouchEnd={(event) => {
+        onTouchEnd(event);
+        pull.onTouchEnd();
+      }}
+      onTouchCancel={() => {
+        start.current = null;
+        pull.onTouchCancel();
+      }}
     >
-      <HomeTabs tab={tab} mounted={mounted} onSelect={switchTo} />
+      <HomeTabs
+        tab={tab}
+        mounted={mounted}
+        waiting={dotted}
+        onSelect={switchTo}
+      />
+      {pillOn && (
+        <div className="home-new-slot">
+          <NewLettersPill writers={writers} onTap={() => showNew(tab)} />
+        </div>
+      )}
+      {pull.pull && (
+        // Said to a screen reader by the live region once it is read.
+        <div
+          className="home-pull"
+          aria-hidden="true"
+          data-phase={pull.pull.phase}
+          style={{ height: pull.pull.distance }}
+        >
+          <span>{PULL_WORDS[pull.pull.phase]}</span>
+        </div>
+      )}
       {pane("home")}
       {pane("letters")}
       <ComposeFab

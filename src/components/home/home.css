@@ -986,6 +986,126 @@ html[data-home-tab="letters"]
   font-weight: 700;
 }
 
+/* 便りだけ: older 便り on their way, or a read that failed. */
+.home-letters-more {
+  display: grid;
+  justify-items: center;
+  padding: 16px;
+  color: var(--ink-2);
+  font-size: var(--t-ui);
+}
+.home-letters-more .button {
+  min-height: 44px;
+}
+
+/* New 便り (PR 2): the pill under the tabs, a tab's dot, the pull, and
+   「前に開いたのはここまで」. While Home shows, a pull at the top is
+   Home's own: no rubber band, and no reload of the browser's. */
+html[data-home-tab] {
+  overscroll-behavior-y: none;
+}
+.home-new-slot {
+  position: sticky;
+  top: calc(var(--home-bar) + 45px);
+  z-index: 11;
+  display: flex;
+  justify-content: center;
+  height: 0;
+}
+.home-new {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  margin-top: 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--green);
+  color: var(--on-green);
+  font-family: var(--sans);
+  font-size: var(--t-ui);
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 24%, transparent);
+  touch-action: manipulation;
+}
+.home-new:has(.home-new-faces) {
+  padding-left: 4px;
+}
+/* 34px to the eye, 44px to a finger. */
+.home-new::before {
+  content: "";
+  position: absolute;
+  inset: -5px 0;
+}
+.home-new:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+.home-new-faces {
+  display: inline-flex;
+}
+.home-new-face {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--green);
+  border-radius: 50%;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-cap);
+  line-height: 1;
+}
+.home-new-face + .home-new-face {
+  margin-left: -8px;
+}
+.home-tab-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 0 8px 4px;
+  border-radius: 50%;
+  background: var(--green);
+  vertical-align: middle;
+}
+.home-pull {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--t-ui);
+  font-weight: 600;
+}
+.home-pull > span {
+  padding-bottom: 14px;
+  white-space: nowrap;
+}
+.home-pull[data-phase="arrived"] {
+  color: var(--green);
+}
+.home-since {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  font-weight: 600;
+}
+.home-since::before,
+.home-since::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line-2);
+}
+
 /* 読書をはじめる: the book, then how to read it. */
 .home-sheet {
   display: grid;

@@ -17,7 +17,7 @@ import { canGoBackInTown, subscribeTrail } from "../../lib/in-town";
 import { imeKey } from "../../lib/keys";
 import { letterPageOf } from "../../lib/letter";
 import { lockPageScroll } from "../../lib/scroll-lock";
-import { usePersistenceStatus } from "../../lib/store";
+import { usePersistenceStatus, useTownReads } from "../../lib/store";
 import { formatPostTime, repliesOf } from "../../lib/social";
 import type {
   Notify,
@@ -27,6 +27,7 @@ import type {
   TownState,
 } from "../../lib/types";
 import { PostComposer } from "../Social";
+import { readPost } from "../home/useArrivals";
 import { Modal, ReaderAvatar } from "../ui";
 import { LetterIcon } from "./icons";
 import { LetterCard } from "./LetterCard";
@@ -209,7 +210,28 @@ export function PostPageView({
   // step is off the history. The toast 「投稿を削除しました」 goes along.
   const seen = useRef(false);
   const showing = shown !== null;
-  const gone = !showing && !loading;
+  // One the town did not read (an old 便り, from a link or a notice) is
+  // read by its id (PR 2); never again once it was shown and deleted here.
+  const reads = useTownReads();
+  const [wasShown, setWasShown] = useState(false);
+  if (showing && !wasShown) setWasShown(true);
+  const [asked, setAsked] = useState<{ id: string; done: boolean } | null>(
+    null,
+  );
+  const asking =
+    !showing && !loading && reads && !wasShown && asked?.id !== postId;
+  const reading = asking || (asked?.id === postId && !asked.done);
+  useEffect(() => {
+    if (!asking) return;
+    setAsked({ id: postId, done: false });
+    // Read or not, it is asked once: a 便り that did not come cannot be opened.
+    const done = () =>
+      setAsked((now) =>
+        now?.id === postId ? { id: postId, done: true } : now,
+      );
+    readPost(postId).then(done, done);
+  }, [asking, postId]);
+  const gone = !showing && !loading && !reading;
   useEffect(() => {
     if (showing) seen.current = true;
     if (!gone || !seen.current) return;
@@ -226,7 +248,7 @@ export function PostPageView({
       />
       {shown ? (
         <PostPageContent {...props} post={shown.post} author={shown.author} />
-      ) : loading ? (
+      ) : loading || reading ? (
         <p className="post-page-none" role="status">
           便りを開いています…
         </p>
