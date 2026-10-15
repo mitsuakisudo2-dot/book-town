@@ -986,6 +986,11 @@ html[data-home-tab="letters"]
   font-weight: 700;
 }
 
+/* 便りだけ: what is left to read. The focus waits here, unringed, while an
+   older page asked for again is read. */
+.home-letters-further:focus {
+  outline: none;
+}
 /* 便りだけ: older 便り on their way, or a read that failed. */
 .home-letters-more {
   display: grid;

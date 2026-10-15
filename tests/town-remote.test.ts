@@ -2085,14 +2085,14 @@ async function main() {
       const store = createTownStore(backend);
       store.initialize();
       await settle(() => store.getPersistenceSnapshot() === "saved");
-      const read = store.getReading();
+      const read = store.getReadCount();
       // Taking 便り in is no new reading.
       assert.equal(store.absorb(arrivedNow(), store.getGeneration()), true);
-      assert.equal(store.getReading(), read);
+      assert.equal(store.getReadCount(), read);
       // Read again: what was read after the town is gone, and screens that
       // read it (a 便り's page, 便りだけ's older pages) can tell.
       listener!.replace(town, "recovered");
-      assert.equal(store.getReading(), read + 1);
+      assert.equal(store.getReadCount(), read + 1);
       assert.ok(
         !store.getSnapshot().posts.some((entry) => entry.id === NEW_POST),
       );

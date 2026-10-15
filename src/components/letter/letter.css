@@ -724,6 +724,16 @@
   font-size: var(--t-page);
   text-align: center;
 }
+/* At its own address, what the page shows, laid out as the page is. The
+   focus waits here, unringed, while a 便り asked for again is read. */
+.post-page-body {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+.post-page-body:focus {
+  outline: none;
+}
 /* At its own address, in the page: the bar stays above the bottom tabs. */
 .post-page.is-route {
   margin: -24px -19px 0;

@@ -17,7 +17,11 @@ import { canGoBackInTown, subscribeTrail } from "../../lib/in-town";
 import { imeKey } from "../../lib/keys";
 import { letterPageOf } from "../../lib/letter";
 import { lockPageScroll } from "../../lib/scroll-lock";
-import { usePersistenceStatus, useTownReads } from "../../lib/store";
+import {
+  usePersistenceStatus,
+  useTownReadCount,
+  useTownReads,
+} from "../../lib/store";
 import { formatPostTime, repliesOf } from "../../lib/social";
 import type {
   Notify,
@@ -211,27 +215,37 @@ export function PostPageView({
   const seen = useRef(false);
   const showing = shown !== null;
   // One the town did not read (an old 便り, from a link or a notice) is
-  // read by its id (PR 2); never again once it was shown and deleted here.
+  // read by its id (PR 2), once for each reading of the town (one read
+  // again after a refused change has none of it); never again once it was
+  // shown and deleted here.
   const reads = useTownReads();
-  const [wasShown, setWasShown] = useState(false);
-  if (showing && !wasShown) setWasShown(true);
-  const [asked, setAsked] = useState<{ id: string; done: boolean } | null>(
-    null,
-  );
+  const key = `${postId}:${useTownReadCount()}`;
+  const [shownFor, setShownFor] = useState<string | null>(null);
+  if (showing && shownFor !== key) setShownFor(key);
+  const [asked, setAsked] = useState<{
+    key: string;
+    state: "reading" | "read" | "failed";
+  } | null>(null);
   const asking =
-    !showing && !loading && reads && !wasShown && asked?.id !== postId;
-  const reading = asking || (asked?.id === postId && !asked.done);
+    !showing && !loading && reads && shownFor !== key && asked?.key !== key;
+  const reading = asking || (asked?.key === key && asked.state === "reading");
+  const failed = !showing && asked?.key === key && asked.state === "failed";
   useEffect(() => {
     if (!asking) return;
-    setAsked({ id: postId, done: false });
-    // Read or not, it is asked once: a 便り that did not come cannot be opened.
-    const done = () =>
-      setAsked((now) =>
-        now?.id === postId ? { id: postId, done: true } : now,
-      );
-    readPost(postId).then(done, done);
-  }, [asking, postId]);
-  const gone = !showing && !loading && !reading;
+    setAsked({ key, state: "reading" });
+    // Read or not, it is asked once: a 便り that did not come cannot be
+    // opened. A read the network failed can be asked again.
+    const settle = (state: "read" | "failed") => () =>
+      setAsked((now) => (now?.key === key ? { key, state } : now));
+    readPost(postId).then(settle("read"), settle("failed"));
+  }, [asking, key, postId]);
+  // Asked again: the focus waits on the page while it is read.
+  const body = useRef<HTMLDivElement>(null);
+  const askAgain = () => {
+    body.current?.focus({ preventScroll: true });
+    setAsked(null);
+  };
+  const gone = !showing && !loading && !reading && !failed;
   useEffect(() => {
     if (showing) seen.current = true;
     if (!gone || !seen.current) return;
@@ -246,20 +260,33 @@ export function PostPageView({
         label={canGoBack ? "戻る" : "本の街へ"}
         onBack={() => (canGoBack ? router.back() : router.push("/"))}
       />
-      {shown ? (
-        <PostPageContent {...props} post={shown.post} author={shown.author} />
-      ) : loading || reading ? (
-        <p className="post-page-none" role="status">
-          便りを開いています…
-        </p>
-      ) : (
-        <div className="post-page-missing">
-          <p>この便りは、いまは開けません</p>
-          <Link href="/" className="button secondary">
-            本の街へ
-          </Link>
-        </div>
-      )}
+      <div ref={body} className="post-page-body" tabIndex={-1}>
+        {shown ? (
+          <PostPageContent {...props} post={shown.post} author={shown.author} />
+        ) : loading || reading ? (
+          <p className="post-page-none" role="status">
+            便りを開いています…
+          </p>
+        ) : failed ? (
+          <div className="post-page-missing">
+            <p role="status">つながらないため、開けませんでした</p>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={askAgain}
+            >
+              もう一度読む
+            </button>
+          </div>
+        ) : (
+          <div className="post-page-missing">
+            <p>この便りは、いまは開けません</p>
+            <Link href="/" className="button secondary">
+              本の街へ
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

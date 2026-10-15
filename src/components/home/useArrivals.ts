@@ -57,7 +57,7 @@ const letterReads = createLetterReads({
   reads: () => townStore.reads(),
   state: () => townStore.getSnapshot(),
   absorb: (arrived, from) => townStore.absorb(arrived, from),
-  reading: () => townStore.getReading(),
+  reading: () => townStore.getReadCount(),
 });
 
 /**

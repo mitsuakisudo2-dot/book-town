@@ -8,7 +8,7 @@ import {
   sinceMark,
 } from "../../lib/home-feed";
 import { lastOpen } from "../../lib/last-open";
-import { useTownReads } from "../../lib/store";
+import { useTownReadCount, useTownReads } from "../../lib/store";
 import { Icon } from "../ui";
 import { FollowSuggestions } from "./FollowSuggestions";
 import { useHeld, usePaneParam, useTownReading } from "./hooks";
@@ -20,10 +20,8 @@ const PAGE = 20;
 
 /** Where 便りだけ's older pages are: read, on their way, failed, or all read. */
 type Older = {
-  /** The town's reading they were read for. */
-  reading: number | null;
-  /** The 便り they brought, by id, oldest page last. */
-  ids: string[];
+  /** The town's reading they were read for, and its count of readings. */
+  key: string;
   state: "idle" | "reading" | "failed" | "done";
 };
 
@@ -47,9 +45,14 @@ export function LettersOnly({
 }) {
   const { state } = shared;
   const reading = useTownReading();
+  // A 便り opened alone by its id (a link to an old one) waits for the
+  // older pages to reach it, in its place.
+  const letters = followedLetters(state).filter(
+    (entry) => state.readAfter?.[entry.id] !== "alone",
+  );
   const drawn = useHeld(reading, refresh, (now) => ({
     at: now,
-    ids: followedLetters(state).map((entry) => entry.id),
+    ids: letters.map((entry) => entry.id),
   }));
   // Held still like ホーム's; but a pane that drew none has nothing to keep
   // in place, so 便り followed from it come at once (仮).
@@ -63,20 +66,19 @@ export function LettersOnly({
           ),
           ...drawn.ids.flatMap((id) => letterOf(state, id) ?? []),
         ]
-      : followedLetters(state);
-  // Older pages, read for this reading of the town, go after what it holds.
+      : letters;
+  // Older pages go after what it holds, in order: those the town has read
+  // back (its readAfter), gone with a town read again.
   const reads = useTownReads();
-  const [older, setOlder] = useState<Older>({
-    reading,
-    ids: [],
-    state: "idle",
-  });
-  if (older.reading !== reading) setOlder({ reading, ids: [], state: "idle" });
+  const key = `${reading}:${useTownReadCount()}`;
+  const [older, setOlder] = useState<Older>({ key, state: "idle" });
+  if (older.key !== key) setOlder({ key, state: "idle" });
   const heldIds = new Set(held.map((entry) => entry.id));
   const entries = [
     ...held,
-    ...older.ids.flatMap((id) =>
-      heldIds.has(id) ? [] : (letterOf(state, id) ?? []),
+    ...letters.filter(
+      (entry) =>
+        state.readAfter?.[entry.id] === "older" && !heldIds.has(entry.id),
     ),
   ];
   const [roundsParam, setRoundsParam] = usePaneParam("rounds", shown);
@@ -89,27 +91,18 @@ export function LettersOnly({
     reads && drawn !== null && entries.length > 0 && older.state === "idle";
   const next = more ? "page" : readable ? "older" : null;
   function readOlderPage() {
-    const from = reading;
+    const from = key;
     setOlder((now) => ({ ...now, state: "reading" }));
     readOlder().then(
       (page) =>
         setOlder((now) =>
-          now.reading !== from
+          now.key !== from
             ? now
-            : {
-                ...now,
-                ids: [
-                  ...now.ids,
-                  ...(page?.entries ?? [])
-                    .map((entry) => entry.id)
-                    .filter((id) => !now.ids.includes(id)),
-                ],
-                state: !page || page.done ? "done" : "idle",
-              },
+            : { ...now, state: !page || page.done ? "done" : "idle" },
         ),
       () =>
         setOlder((now) =>
-          now.reading !== from ? now : { ...now, state: "failed" },
+          now.key !== from ? now : { ...now, state: "failed" },
         ),
     );
   }
@@ -163,23 +156,29 @@ export function LettersOnly({
         entries={visible}
         mark={sinceMark(entries, lastOpen.opened())}
       />
-      <div ref={further} />
-      {!more && older.state === "reading" && (
-        <p className="home-letters-more" role="status">
-          前の便りを読んでいます
-        </p>
-      )}
-      {!more && older.state === "failed" && (
-        <div className="home-letters-more">
-          <button
-            type="button"
-            className="button secondary"
-            onClick={readOlderPage}
-          >
-            前の便りをもう一度読む
-          </button>
-        </div>
-      )}
+      {/* What is left to read, kept on the page: the focus waits here while
+          a page asked for again is read. */}
+      <div ref={further} className="home-letters-further" tabIndex={-1}>
+        {!more && older.state === "reading" && (
+          <p className="home-letters-more" role="status">
+            前の便りを読んでいます
+          </p>
+        )}
+        {!more && older.state === "failed" && (
+          <div className="home-letters-more">
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => {
+                further.current?.focus({ preventScroll: true });
+                readOlderPage();
+              }}
+            >
+              前の便りをもう一度読む
+            </button>
+          </div>
+        )}
+      </div>
       {end && (
         <div className="home-letters-end">
           <Icon name="leaf" size={22} />
