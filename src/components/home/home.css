@@ -365,9 +365,14 @@ html[data-home-tab="letters"]
   border-radius: 14px;
   background: var(--green-soft);
 }
+/* The jacket's link is a full target: 44px wide around the 34px jacket,
+   reaching into the line's padding and gap, so nothing else moves. */
 .home-reading-book {
   display: block;
-  width: 34px;
+  box-sizing: border-box;
+  width: 44px;
+  margin-inline: -5px;
+  padding-inline: 5px;
 }
 .home-reading-text {
   display: grid;
@@ -543,6 +548,12 @@ html[data-home-tab="letters"]
 .home-tile-book {
   display: block;
   width: 100%;
+}
+/* A poster's maker and its pages under its tile, readable on Home. */
+.home-pane .poster-thumb-caption,
+.home-pane .poster-thumb-note,
+.home-view .follow-owner small {
+  font-size: var(--t-cap);
 }
 .home-poster-tile {
   width: 132px;
@@ -870,6 +881,55 @@ html[data-home-tab="letters"]
 /* The 路地 after its head: the shop fronts and their 特集. */
 .home-alley .street-shop {
   margin-inline: 0;
+}
+/* Every control of a front is a 44px target (the books on its shelves are
+   the books themselves), and no words are under 12px; the front looks as
+   it did. The name, the owner and the footer's links stand 44px tall, their
+   rows closer together for it (the shop's line no longer tucked up into
+   the owner's); the follow button and a shelf's arrows keep their size and
+   reach the rest of the way past their edges (from inside their 1px
+   border: 28px and 26px, and 8px and 9px on each side). */
+.home-alley .street-shop.is-compact .street-shop-header {
+  row-gap: 0;
+  padding-top: 5px;
+}
+.home-alley .street-shop.is-compact .street-shop-tagline {
+  margin-top: 0;
+}
+.home-alley .street-shop.is-compact .street-shop-title > a,
+.home-alley .street-shop.is-compact .street-shop-owner > a:first-child {
+  min-height: 44px;
+}
+.home-alley .street-shop.is-compact .street-shop-owner > a:first-child,
+.home-alley .street-shop-owner small,
+.home-alley .street-shop-voice small,
+.home-alley .street-own-tag,
+.home-alley .street-end > small {
+  font-size: var(--t-cap);
+}
+.home-alley .street-shop.is-compact .street-follow,
+.home-alley .street-shop.is-compact .street-shelf-controls button {
+  position: relative;
+}
+.home-alley .street-shop.is-compact .street-follow::after {
+  content: "";
+  position: absolute;
+  inset: -8px 0;
+}
+.home-alley .street-shop.is-compact .street-shelf > header {
+  min-height: 44px;
+  margin: -6px 0 0;
+}
+.home-alley .street-shop.is-compact .street-shelf-controls {
+  gap: 16px;
+}
+.home-alley .street-shop.is-compact .street-shelf-controls button::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+}
+.home-alley .street-shop.is-compact .street-shop-footer > a {
+  min-height: 44px;
 }
 
 /* 便りだけ: the end, and the empty pane. */
