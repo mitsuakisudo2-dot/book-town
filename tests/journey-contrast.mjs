@@ -7,7 +7,13 @@ import { expect } from "@playwright/test";
 export const contrastsOf = (locator) =>
   locator.evaluateAll((elements) =>
     elements.map((element) => {
-      const rgb = (value) => value.match(/[\d.]+/g).map(Number);
+      // rgb(0–255), or color(srgb 0–1) from a color-mix() of tokens.
+      const rgb = (value) => {
+        const parts = value.match(/[\d.]+/g).map(Number);
+        return value.startsWith("color(")
+          ? parts.slice(0, 3).map((part) => part * 255)
+          : parts;
+      };
       const lum = ([r, g, b]) => {
         const c = [r, g, b].map((v) => {
           const x = v / 255;

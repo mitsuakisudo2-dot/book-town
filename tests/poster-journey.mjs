@@ -5,7 +5,7 @@ import { settleBeforeNavigating } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
 
 // A reader makes a poster about a book, puts it up, finds it on the
-// timeline, their profile and the book's page, changes it and takes it down;
+// home, their profile and the book's page, changes it and takes it down;
 // and reads others' posters page by page, a spoiler only when they choose to.
 
 const baseURL = process.env.BOOK_TOWN_URL ?? "http://127.0.0.1:5173";
@@ -45,6 +45,15 @@ async function noOverflow(label) {
   expect(size.document, `${label}: root overflow`).toBeLessThanOrEqual(
     size.width + 1,
   );
+}
+/** Opens Home on ホーム (a fresh `/` opens the tab shown last). */
+async function goHome() {
+  await go("/");
+  const home = page
+    .getByRole("tablist", { name: "ホームの表示" })
+    .getByRole("tab", { name: "ホーム" });
+  if ((await home.getAttribute("aria-selected")) !== "true") await home.click();
+  await expect(page).toHaveURL(`${baseURL}/`);
 }
 const toast = (text) =>
   expect(page.getByText(text, { exact: true }).first()).toBeVisible();
@@ -215,9 +224,9 @@ try {
     );
 
     await check(
-      `${at}: the poster is on the timeline, the profile and the book`,
+      `${at}: the poster is on Home, the profile and the book`,
       async () => {
-        await go("/timeline/");
+        await goHome();
         const card = page
           .getByRole("article", { name: "あなたのポスター" })
           .filter({ hasText: "海を前にした夜に" });
@@ -260,8 +269,13 @@ try {
     await check(
       `${at}: a lineup kept as a draft is the maker's alone`,
       async () => {
-        await go("/timeline/");
-        await page.locator(".timeline-make-poster").click();
+        // From the writing sheet, as the timeline's own button is gone.
+        await goHome();
+        await page.locator(".compose-fab").click();
+        await page
+          .getByRole("dialog", { name: "投稿する" })
+          .getByRole("button", { name: "ポスターを作る" })
+          .click();
         await expect(page).toHaveURL(/\/posters\/new\/$/);
         await page.getByRole("radio", { name: /^並べる/ }).check();
         await editor()
@@ -285,8 +299,8 @@ try {
         await expect(
           page.getByRole("link", { name: /（下書き）$/ }),
         ).toBeVisible();
-        // A draft is not on the timeline.
-        await go("/timeline/");
+        // A draft is not on Home.
+        await goHome();
         await expect(
           page.getByRole("article", { name: "あなたのポスター" }),
         ).toHaveCount(1);
@@ -355,18 +369,19 @@ try {
         };
         const spoilerThumb = () =>
           page.getByRole("link", { name: /^ネタバレを含むポスター/ });
-        // By default a spoiler poster is listed, behind its door.
-        await go("/timeline/");
+        // By default a spoiler poster is listed among 「街の便り」, behind
+        // its door.
+        await goHome();
         await expect(
           page.getByRole("article", { name: "はるのポスター" }),
         ).toBeVisible();
         await setting("ネタバレの印があるもの・可能性があるものは出さない");
-        await go("/timeline/");
+        await goHome();
         await expect(
           page.getByRole("article", { name: "はるのポスター" }),
         ).toHaveCount(0);
         await expect(
-          page.getByRole("article", { name: "凪のポスター" }),
+          page.getByRole("article", { name: "栞のポスター" }),
         ).toBeVisible();
         await go("/profiles/r-haru/");
         await expect(spoilerThumb()).toHaveCount(0);

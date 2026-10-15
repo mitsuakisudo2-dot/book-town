@@ -43,14 +43,100 @@ async function go(route) {
     ),
   );
 }
+// Only what is shown: Home keeps the tab not shown on the page, hidden.
 const card = (author, text) =>
   page
-    .locator("main article.letter")
+    .locator("main article.letter:visible")
     .filter({ has: page.getByRole("link", { name: author, exact: true }) })
     .filter({ hasText: text });
 /** A 便り's page, open over the screen. */
 const letterPage = (author) =>
   page.getByRole("dialog", { name: new RegExp("^" + author + "さんの便り") });
+// Home itself (PR 1b): its two tabs, ホーム and 便りだけ.
+const tabs = () => page.getByRole("tablist", { name: "ホームの表示" });
+const tab = (name) => tabs().getByRole("tab", { name, exact: true });
+const pane = (which) => page.locator(`[role="tabpanel"][data-pane="${which}"]`);
+/** Words that count nothing, which the town never shows (CLAUDE.md). */
+const ZERO = /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/;
+/** Opens Home on ホーム (a fresh `/` opens the tab shown last), drawn. */
+async function goHome() {
+  await go("/");
+  if ((await tab("ホーム").getAttribute("aria-selected")) !== "true")
+    await tab("ホーム").tap();
+  await expect(page).toHaveURL(`${baseURL}/`);
+  await expect(page.locator(".home-skeletons")).toHaveCount(0);
+}
+/** Opens a page of its own on the browser for a check, then closes it. */
+async function withPage(options, run) {
+  const reader = page;
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    ...options,
+  });
+  await context.clock.install();
+  page = settleBeforeNavigating(await context.newPage());
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  try {
+    await run();
+  } finally {
+    await context.close();
+    page = reader;
+  }
+}
+/**
+ * A one-finger sideways swipe as synthetic touches (as the app journey's),
+ * starting on `locator`: at its middle, or `x` from the left of the screen.
+ */
+async function swipe(locator, dx, x) {
+  await locator.evaluate(
+    (element, { dx, x }) => {
+      const box = element.getBoundingClientRect();
+      const start = {
+        identifier: 1,
+        target: element,
+        clientX: x ?? box.left + box.width / 2,
+        clientY: box.top + Math.min(box.height / 2, 40),
+      };
+      const first = new Touch(start);
+      const last = new Touch({ ...start, clientX: start.clientX + dx });
+      for (const [type, touches, changed] of [
+        ["touchstart", [first], [first]],
+        ["touchmove", [last], [last]],
+        ["touchend", [], [last]],
+      ])
+        element.dispatchEvent(
+          new TouchEvent(type, {
+            bubbles: true,
+            touches,
+            changedTouches: changed,
+          }),
+        );
+    },
+    { dx, x },
+  );
+}
+/** The demo town's six shops. */
+const DEMO_SHOPS = [
+  "shop-orbit",
+  "shop-rain",
+  "shop-question",
+  "shop-window",
+  "shop-frame",
+  "shop-lamplight",
+];
+/**
+ * Follows every shop of the demo town. Every demo 便り is by one of their
+ * owners, so 便りだけ (`/timeline/`) then has them all.
+ */
+async function followEveryShop() {
+  await go("/");
+  await editTown(`data.following = ${JSON.stringify(DEMO_SHOPS)};`);
+}
 /** Changes the saved town, as another device or the database would. */
 async function editTown(change) {
   await page.evaluate((source) => {
@@ -273,6 +359,7 @@ try {
       if (message.type() === "error") errors.push(message.text());
     });
     const label = `${width}px`;
+    await followEveryShop();
 
     await check(
       `${label} card geometry: one left edge, いいね in the middle`,
@@ -991,6 +1078,407 @@ try {
     await context.close();
   }
 
+  // Home itself (PR 1b): one browser per check, a reader new to the town
+  // unless the check says otherwise.
+  await check(
+    "390px Home's tabs: roles and keys, a switch in place that keeps each pane, and the tab a reload or a fresh ホーム opens",
+    () =>
+      withPage({}, async () => {
+        await go("/");
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await expect(tabs().getByRole("tab")).toHaveText([
+          "ホーム",
+          "便りだけ",
+        ]);
+        await expect(tab("ホーム")).toHaveAttribute("aria-selected", "true");
+        await expect(tab("ホーム")).toHaveAttribute(
+          "aria-controls",
+          "home-pane-home",
+        );
+        await expect(tab("便りだけ")).toHaveAttribute("aria-selected", "false");
+        await expect(tab("便りだけ")).toHaveAttribute("tabindex", "-1");
+        await expect(page.getByRole("tabpanel")).toHaveAttribute(
+          "aria-labelledby",
+          "home-tab-home",
+        );
+        // 便りだけ is made on its first visit, then kept.
+        await expect(pane("letters")).toHaveCount(0);
+        await expect(page).toHaveTitle("Book Town | 本を読みたくなるSNS");
+        await pane("home").evaluate((element) => {
+          element.dataset.kept = "yes";
+        });
+        const steps = await page.evaluate(() => history.length);
+        await tab("ホーム").focus();
+        await page.keyboard.press("ArrowRight");
+        await expect(tab("便りだけ")).toBeFocused();
+        await expect(tab("便りだけ")).toHaveAttribute("aria-selected", "true");
+        await expect(page).toHaveURL(`${baseURL}/timeline/`);
+        await expect(page).toHaveTitle("便りだけ | Book Town");
+        await expect(page.getByRole("tabpanel")).toHaveAttribute(
+          "aria-labelledby",
+          "home-tab-letters",
+        );
+        // The ホーム pane is the same, only hidden.
+        await expect(pane("home")).toBeHidden();
+        await expect(pane("home")).toHaveAttribute("data-kept", "yes");
+        await page.keyboard.press("ArrowLeft");
+        await expect(tab("ホーム")).toBeFocused();
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await expect(pane("home")).toBeVisible();
+        await expect(pane("home")).toHaveAttribute("data-kept", "yes");
+        await expect(pane("letters")).toBeHidden();
+        await tab("便りだけ").tap();
+        await expect(page).toHaveURL(`${baseURL}/timeline/`);
+        // No switch is a step of 戻る.
+        expect(await page.evaluate(() => history.length)).toBe(steps);
+        // A reload opens the address's tab; a fresh `/`, the one shown last.
+        await page.reload();
+        await expect(tab("便りだけ")).toHaveAttribute("aria-selected", "true");
+        await go("/");
+        await expect(page).toHaveURL(`${baseURL}/timeline/`);
+        await expect(tab("便りだけ")).toHaveAttribute("aria-selected", "true");
+        await tab("ホーム").tap();
+        await expect(page).toHaveURL(`${baseURL}/`);
+      }),
+  );
+  await check(
+    "390px a swipe switches the tabs in place, but not one from the carousel, a 特集's rail or the screen's edges",
+    () =>
+      withPage({}, async () => {
+        await goHome();
+        const doors = page.getByRole("navigation", { name: "できること" });
+        // A start the browser keeps for 戻る (24px from either edge).
+        await swipe(doors, -160, 380);
+        await swipe(doors, -160, 10);
+        // A start on what scrolls sideways belongs to it.
+        await swipe(page.locator(".home-carousel-track"), -160);
+        await swipe(page.locator(".home-rail").first(), -160);
+        await page.waitForTimeout(300);
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await expect(tab("ホーム")).toHaveAttribute("aria-selected", "true");
+        // Anywhere else, left to 便りだけ and right back.
+        await swipe(doors, -160);
+        await expect(page).toHaveURL(`${baseURL}/timeline/`);
+        await expect(tab("便りだけ")).toHaveAttribute("aria-selected", "true");
+        await swipe(pane("letters"), 160);
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await expect(tab("ホーム")).toHaveAttribute("aria-selected", "true");
+      }),
+  );
+  await check(
+    "390px 「今日の街」 turns every ten seconds until a finger or 止める stops it, and never under less motion",
+    () =>
+      withPage({}, async () => {
+        await goHome();
+        const carousel = page.getByRole("region", { name: "今日の街" });
+        await expect(carousel).toHaveAttribute(
+          "aria-roledescription",
+          "カルーセル",
+        );
+        // A reader new to the town: the welcome, 今夜の一軒 and 企画展.
+        const slides = carousel.getByRole("group");
+        await expect(slides).toHaveCount(3);
+        await expect(slides.first()).toHaveAttribute("aria-label", "1 / 3");
+        await expect(slides.first()).toHaveAttribute(
+          "aria-roledescription",
+          "スライド",
+        );
+        await expect(slides.nth(1)).toContainText("今夜の一軒");
+        await expect(slides.nth(2)).toContainText("企画展");
+        const art = carousel.locator("img.home-slide-art").first();
+        await expect(art).toHaveAttribute("fetchpriority", "high");
+        await expect(art).toHaveAttribute("srcset", /390w.*780w.*1170w/);
+        const stop = carousel.getByRole("button", {
+          name: "自動の切り替えを止める",
+        });
+        const restart = carousel.getByRole("button", {
+          name: "自動の切り替えを再開する",
+        });
+        const button = await stop.boundingBox();
+        expect(button.width).toBeGreaterThanOrEqual(44);
+        expect(button.height).toBeGreaterThanOrEqual(44);
+        const track = carousel.locator(".home-carousel-track");
+        await expect(track).toHaveAttribute("aria-live", "off");
+        const shown = () =>
+          carousel
+            .locator(".home-carousel-dots .is-on")
+            .evaluate((dot) => [...dot.parentElement.children].indexOf(dot));
+        expect(await shown()).toBe(0);
+        await page.clock.runFor(10_000 + 1_200);
+        await expect.poll(shown).toBe(1);
+        // 止める holds the slide, and lets a screen reader hear it.
+        await stop.tap();
+        await expect(restart).toBeVisible();
+        await expect(track).toHaveAttribute("aria-live", "polite");
+        await page.clock.runFor(30_000);
+        expect(await shown()).toBe(1);
+        await restart.tap();
+        // Focus inside holds it too, until it leaves.
+        await page.evaluate(() => document.activeElement?.blur());
+        await page.clock.runFor(10_000 + 1_200);
+        await expect.poll(shown).toBe(2);
+        // A finger drawn 200px across: the next slide, and it stops for good.
+        await goHome();
+        await track.scrollIntoViewIfNeeded();
+        const box = await track.boundingBox();
+        const y = box.y + box.height / 2;
+        await drag(
+          { x: box.x + box.width - 60, y },
+          { x: box.x + box.width - 260, y },
+        );
+        await expect.poll(shown).toBe(1);
+        await expect(restart).toBeVisible();
+        await page.clock.runFor(30_000);
+        expect(await shown()).toBe(1);
+        // Less motion: it never turns by itself, and there is no button.
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await goHome();
+        await expect(slides).toHaveCount(3);
+        await expect(carousel.locator(".home-carousel-pause")).toHaveCount(0);
+        await page.clock.runFor(30_000);
+        expect(await shown()).toBe(0);
+      }),
+  );
+  await check(
+    "390px 読書をはじめる asks for a book, then how; the book being read then sits under the doors, 記録する a full target, no link in a link",
+    () =>
+      withPage({}, async () => {
+        await goHome();
+        await expect(page.locator(".home-reading")).toHaveCount(0);
+        const doors = page.getByRole("navigation", { name: "できること" });
+        // Where in the history Home is (the Navigation API's index, which
+        // entries ahead of it leave alone).
+        const at = () => page.evaluate(() => navigation.currentEntry.index);
+        const home = await at();
+        await doors.getByRole("button", { name: "読書をはじめる" }).tap();
+        const sheet = page.getByRole("dialog", { name: "読書をはじめる" });
+        await sheet.getByRole("button", { name: "本を探す" }).tap();
+        await sheet
+          .getByRole("searchbox", { name: "読む本を探す" })
+          .fill("モモ");
+        await sheet.getByRole("button", { name: /^モモ/ }).first().tap();
+        await sheet
+          .getByRole("button", { name: "ひとりで読む（記録は自分だけ）" })
+          .tap();
+        await expect(page).toHaveURL(/\/reading\/$/);
+        await expect(page.locator(".toast")).toContainText(
+          "一人で読み始めました",
+        );
+        // 戻る comes home, the sheet gone: it left no step of its own.
+        await page.goBack();
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await expect(sheet).toHaveCount(0);
+        expect(await at()).toBe(home);
+        const line = page.locator(".home-reading");
+        await expect(line).toContainText("読書中");
+        await expect(line).toContainText("モモ");
+        const record = line.getByRole("link", {
+          name: "『モモ』の読書を記録する",
+        });
+        await expect(record).toHaveAttribute("href", "/reading/");
+        const target = await record.boundingBox();
+        expect(target.width).toBeGreaterThanOrEqual(44);
+        expect(target.height).toBeGreaterThanOrEqual(44);
+        await expect(
+          line.getByRole("link", { name: "『モモ』の作品ページへ" }),
+        ).toHaveAttribute("href", "/books/momo/");
+        await expect(page.locator(".home-reading a a")).toHaveCount(0);
+        const below = (await doors.boundingBox()).y;
+        expect((await line.boundingBox()).y).toBeGreaterThan(below);
+        // 読みたい本をぜんぶ見る leaves the sheet first, too: 戻る from the
+        // list comes home in one step.
+        await editTown(`data.wishlist = ["solaris"];`);
+        await goHome();
+        const before = await at();
+        await doors.getByRole("button", { name: "読書をはじめる" }).tap();
+        await sheet.getByRole("link", { name: "読みたい本をぜんぶ見る" }).tap();
+        await expect(page).toHaveURL(/\/reading-list\/$/);
+        await page.goBack();
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await expect(sheet).toHaveCount(0);
+        expect(await at()).toBe(before);
+      }),
+  );
+  await check(
+    "390px following nobody, 便りだけ says so, and ホームに戻る switches back in place",
+    () =>
+      withPage({}, async () => {
+        await goHome();
+        await tab("便りだけ").tap();
+        await expect(pane("letters")).toContainText("まだ便りがありません");
+        const home = pane("letters").getByRole("button", {
+          name: "ホームに戻る",
+        });
+        expect((await home.boundingBox()).height).toBeGreaterThanOrEqual(44);
+        const steps = await page.evaluate(() => history.length);
+        await home.tap();
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await expect(tab("ホーム")).toHaveAttribute("aria-selected", "true");
+        expect(await page.evaluate(() => history.length)).toBe(steps);
+      }),
+  );
+  await check(
+    "Before the town is read, Home shows the bones of its 便り, never an empty line or a zero",
+    () =>
+      withPage({ javaScriptEnabled: false }, async () => {
+        for (const route of ["/", "/timeline/"]) {
+          await page.goto(baseURL + route);
+          const bones = page.locator("main .home-skeletons");
+          await expect(bones).toHaveAttribute("aria-busy", "true");
+          await expect(bones.locator(".home-skel")).toHaveCount(3);
+          await expect(page.locator("main")).not.toContainText(
+            "まだ便りがありません",
+          );
+          await expect(page.locator("main")).not.toContainText(ZERO);
+        }
+        // The first art is asked for first, whatever the slide will be.
+        await page.goto(baseURL + "/");
+        await expect(
+          page.locator(".home-carousel.is-loading img.home-slide-art"),
+        ).toHaveAttribute("fetchpriority", "high");
+      }),
+  );
+  for (const width of [390, 320])
+    await check(
+      `${width}px the alley grows as it is walked, a 特集 after every two shops, never wider than the screen`,
+      () =>
+        withPage({ viewport: { width, height: 844 } }, async () => {
+          await goHome();
+          for (const rounds of [2, 3, 4]) {
+            await page.evaluate(() =>
+              window.scrollTo(0, document.body.scrollHeight),
+            );
+            await expect(page).toHaveURL(new RegExp(`/\\?rounds=${rounds}$`));
+            await noOverflow(`${width}px alley, ${rounds} rounds`);
+            // A phone widens the page to what is too wide for it.
+            expect(await page.evaluate(() => innerWidth)).toBe(width);
+          }
+          const alley = page.locator(".home-alley");
+          const parts = await alley.evaluate((element) =>
+            [...element.children].flatMap((child) =>
+              child.matches(".street-shop")
+                ? ["shop"]
+                : child.matches(".home-feature")
+                  ? [child.querySelector("h2").textContent]
+                  : [],
+            ),
+          );
+          expect(parts.filter((part) => part === "shop")).toHaveLength(24);
+          let run = 0;
+          const bands = [];
+          for (const part of parts)
+            if (part === "shop") run += 1;
+            else {
+              expect(run, "shops before a 特集").toBe(2);
+              run = 0;
+              bands.push(part);
+            }
+          expect(bands).toHaveLength(12);
+          // 企画展 and 本棚をのぞく by turns; once the posters not yet on
+          // the page run out, 本棚をのぞく.
+          const out = bands.findIndex(
+            (band, index) => index % 2 === 0 && band !== "企画展",
+          );
+          bands.forEach((band, index) =>
+            expect(band, `特集 ${index + 1}`).toBe(
+              index % 2 === 0 && (out === -1 || index < out)
+                ? "企画展"
+                : "本棚をのぞく",
+            ),
+          );
+        }),
+    );
+  await check(
+    "390px Home shows no zeros: for a reader new to the town, a usual one, and on a quiet day",
+    () =>
+      withPage({}, async () => {
+        const look = async (state) => {
+          await goHome();
+          await expect(page.locator("main"), state).not.toContainText(ZERO);
+          await go("/timeline/");
+          await expect(page.locator(".home-skeletons")).toHaveCount(0);
+          await expect(page.locator("main"), state).not.toContainText(ZERO);
+        };
+        await look("new to the town");
+        await editTown(`data.following = ${JSON.stringify(DEMO_SHOPS)};`);
+        await goHome();
+        await compose("今日の一行。");
+        await look("usual");
+        // Seven weeks on, nothing new from those followed: a quiet day.
+        await page.clock.setSystemTime(Date.parse("2026-12-01T12:00:00+09:00"));
+        await look("quiet");
+      }),
+  );
+  await check(
+    "390px the tabs, the 特集's kicker and the board's heading are readable",
+    () =>
+      withPage({}, async () => {
+        await goHome();
+        await expectReadable(tabs().getByRole("tab"), "the tabs");
+        await expectReadable(tabs().locator("span"), "the tabs' words");
+        await expectReadable(page.locator(".feature-kicker"), "特集");
+        await expectReadable(page.locator(".home-board-head"), "掲示板");
+        await expectReadable(
+          page.locator(".home-board-head span"),
+          "掲示板's line",
+        );
+      }),
+  );
+  await check(
+    "390px following a shop in the alley moves nothing on the page; its 便り come when the tab is tapped",
+    () =>
+      withPage({}, async () => {
+        await goHome();
+        // The browser's own scroll anchoring would hide a card moving.
+        await page.addStyleTag({
+          content: "* { overflow-anchor: none !important; }",
+        });
+        const orbit = page
+          .locator(".street-shop")
+          .filter({
+            has: page.getByRole("link", {
+              name: "軌道書房に入る",
+              exact: true,
+            }),
+          })
+          .first();
+        await orbit.evaluate((element) =>
+          element.scrollIntoView({ block: "center" }),
+        );
+        const tops = () =>
+          pane("home").evaluate((element) =>
+            [
+              ...element.querySelectorAll(
+                "article.letter, .home-feature, .home-board, .street-shop",
+              ),
+            ].map((part) => part.getBoundingClientRect().top),
+          );
+        const before = await tops();
+        expect(before.length).toBeGreaterThan(10);
+        // No 便り of 凪's (軌道書房) yet above 「街の便り」.
+        const first = pane("home").locator("article.letter").first();
+        await expect(first).not.toContainText("十年ぶりに再読");
+        await orbit
+          .getByRole("button", { name: "軌道書房をフォロー", exact: true })
+          .tap();
+        await expect(
+          orbit.getByRole("button", { name: "軌道書房のフォローを解除" }),
+        ).toBeVisible();
+        expect(await tops()).toEqual(before);
+        await expect(page.locator(".home-older")).toHaveCount(0);
+        // A tap on the tab: the top, and what came since.
+        await tab("ホーム").tap();
+        await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+        await expect(
+          first.getByRole("link", { name: "凪", exact: true }),
+        ).toBeVisible();
+        await expect(page.locator(".home-older")).toBeVisible();
+        await expect(pane("home")).toContainText(
+          "フォロー中の便りは、ここまでです。",
+        );
+      }),
+  );
+
   await check(
     "On a desktop, the 便り's page keeps its column of the page at its address",
     async () => {
@@ -1002,6 +1490,7 @@ try {
       page.on("console", (message) => {
         if (message.type() === "error") errors.push(message.text());
       });
+      await followEveryShop();
       const column = () =>
         page.locator(".post-page .letter.is-main").evaluate((element) => {
           const box = element.getBoundingClientRect();

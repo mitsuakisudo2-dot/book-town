@@ -78,11 +78,35 @@ async function noOverflow(label) {
     size.width + 1,
   );
 }
+// Only what is shown: Home keeps the tab not shown on the page, hidden.
 const card = (author, text) =>
   page
-    .locator("main article.post-card:not(.is-reply)")
+    .locator("main article.post-card:not(.is-reply):visible")
     .filter({ has: page.getByRole("link", { name: author, exact: true }) })
     .filter({ hasText: text });
+/** The demo town's six shops. */
+const DEMO_SHOPS = [
+  "shop-orbit",
+  "shop-rain",
+  "shop-question",
+  "shop-window",
+  "shop-frame",
+  "shop-lamplight",
+];
+/**
+ * Follows every shop of the demo town. Every demo 便り is by one of their
+ * owners, so 便りだけ (`/timeline/`) then has them all, as the timeline of
+ * everyone's posts did before.
+ */
+async function followEveryShop() {
+  await go("/");
+  await page.evaluate((shops) => {
+    const saved = JSON.parse(localStorage.getItem("book-town-v1"));
+    saved.data.following = shops;
+    localStorage.setItem("book-town-v1", JSON.stringify(saved));
+  }, DEMO_SHOPS);
+  await reload();
+}
 /** The sheet 「…」 opens on a card. */
 const menu = () => page.getByRole("dialog", { name: "その他の操作" });
 /** A 便り's page, open over the screen. */
@@ -123,9 +147,10 @@ try {
       if (message.type() === "error") errors.push(message.text());
     });
     const label = `${viewport.width}px`;
+    await followEveryShop();
 
     await check(
-      `${label} timeline is in the navigation and hides spoilers`,
+      `${label} 便りだけ is a tab of Home and hides spoilers`,
       async () => {
         await go("/timeline/");
         const nav = page.locator(
@@ -134,16 +159,20 @@ try {
         await expect(nav.getByRole("link", { name: "ホーム" })).toHaveClass(
           /active/,
         );
+        const tabs = page.getByRole("tablist", { name: "ホームの表示" });
+        await expect(tabs.getByRole("tab")).toHaveText(["ホーム", "便りだけ"]);
         await expect(
-          page
-            .getByRole("navigation", { name: "ホームの表示" })
-            .getByRole("link", { name: "タイムライン" }),
-        ).toHaveAttribute("aria-current", "page");
+          tabs.getByRole("tab", { name: "便りだけ" }),
+        ).toHaveAttribute("aria-selected", "true");
+        await expect(page.getByRole("tabpanel")).toHaveAttribute(
+          "aria-labelledby",
+          "home-tab-letters",
+        );
         await expect(card("すみれ", "二駅乗り過ごした")).toBeVisible();
         await expect(card("凪", "十年ぶりに再読")).toBeVisible();
         await expect(page.getByText("最後の数章を読んだ夜は")).toHaveCount(0);
         await expect(page.getByText("あの終わり方でなければ")).toHaveCount(0);
-        await noOverflow(`${label} timeline`);
+        await noOverflow(`${label} 便りだけ`);
         await page.screenshot({
           caret: "initial",
           path: path.join(output, `timeline-${viewport.width}.png`),
@@ -153,16 +182,21 @@ try {
     );
 
     await check(
-      `${label} a post with a book reaches the timeline and the book page`,
+      `${label} a post with a book reaches Home and the book page`,
       async () => {
-        // Posted from home, it lands on the timeline with its toast.
+        // Posted from ホーム, it stays there, at the top, with its toast.
         await go("/");
+        await page
+          .getByRole("tablist", { name: "ホームの表示" })
+          .getByRole("tab", { name: "ホーム" })
+          .click();
+        await expect(page).toHaveURL(/\/$/);
         await compose("灰色の男たちが怖かった。時間の使い方を考え直した。", {
           book: "モモ",
         });
-        await expect(page).toHaveURL(/\/timeline\/$/);
+        await expect(page).toHaveURL(/\/$/);
         await expect(page.locator(".toast")).toHaveText(
-          "タイムラインと作品ページに投稿しました",
+          "ホームと作品ページに投稿しました",
         );
         const mine = card("あなた", "灰色の男たち");
         await expect(mine).toBeVisible();
@@ -170,7 +204,7 @@ try {
         await expect(mine).toHaveClass(/is-arriving/);
         await expect(mine.getByRole("link", { name: /モモ/ })).toBeVisible();
         await expect(
-          page.locator("main article.post-card").first(),
+          page.locator("main article.post-card:visible").first(),
         ).toContainText("灰色の男たち");
         await mine.getByRole("link", { name: /モモ/ }).click();
         await expect(
@@ -181,14 +215,14 @@ try {
     );
 
     await check(
-      `${label} spoiler posts are covered on the timeline and wait behind the book page door`,
+      `${label} spoiler posts are covered on 便りだけ and wait behind the book page door`,
       async () => {
         await go("/timeline/");
         await compose("ラストの一行で、すべての章がつながった。", {
           book: "沈黙",
           spoiler: true,
         });
-        // On the timeline the post is there, covered until the reader
+        // On 便りだけ the post is there, covered until the reader
         // chooses to see it: the words are not on the page until then.
         await expect(page.getByText("ラストの一行で")).toHaveCount(0);
         const covered = card("あなた", "沈黙");
@@ -377,7 +411,7 @@ try {
     );
 
     await check(
-      `${label} reporting a possible spoiler covers it on the timeline`,
+      `${label} reporting a possible spoiler covers it on 便りだけ`,
       async () => {
         await go("/timeline/");
         const post = card("栞", "美術館の帰りに");
@@ -458,10 +492,9 @@ try {
             () => JSON.parse(localStorage.getItem("book-town-v1")).data,
           );
         await go("/timeline/");
-        // By default a marked post or poster is folded, in its place.
-        await expect(page.locator(".social-note")).toContainText(
-          "ネタバレの印が付いた投稿とポスター、3人以上が「ネタバレでは？」と言った投稿は、たたんでいます",
-        );
+        // By default a marked post or poster is folded, in its place. The
+        // words on how are in the setting alone: no footnote under the 便り.
+        await expect(page.locator(".social-note")).toHaveCount(0);
         await expect(
           page.locator("main .letter-spoiler").first(),
         ).toBeVisible();
@@ -501,9 +534,6 @@ try {
         await page.keyboard.press("Escape");
         expect((await stored()).settings.spoilerDisplay).toBe("leave_out");
         await go("/timeline/");
-        await expect(page.locator(".social-note")).toHaveText(
-          "ネタバレの印が付いた投稿とポスター、その可能性がある投稿は、設定により出していません。読み終えた本の投稿は出します。",
-        );
         // Others' marked posts are left out; the reader's own never are.
         for (const title of ["闇の左手", "銀河鉄道の夜"])
           await expect(
@@ -987,25 +1017,39 @@ try {
     );
 
     await check(
-      `${label} following nobody yet, the timeline suggests owners with POPs`,
+      `${label} following nobody yet, 便りだけ suggests owners with POPs`,
       async () => {
-        await go("/timeline/");
-        await page
-          .getByRole("group", { name: "投稿の表示範囲" })
-          .getByRole("button", { name: "フォロー中" })
-          .click();
-        const suggestions = page.getByRole("region", {
-          name: "フォローすると、その店主の投稿がここに届きます",
+        // A reader new to the town: no follows, nothing written yet.
+        const reader = page;
+        const fresh = await browser.newContext({ viewport });
+        page = settleBeforeNavigating(await fresh.newPage());
+        page.on("pageerror", (error) => errors.push(error.message));
+        page.on("console", (message) => {
+          if (message.type() === "error") errors.push(message.text());
         });
-        await expect(suggestions.getByRole("listitem")).toHaveCount(3);
-        await expect(suggestions).toContainText("POP：");
-        await expect(suggestions).not.toContainText(/\d+人/);
-        await suggestions
-          .getByRole("button", { name: "フォロー" })
-          .first()
-          .click();
-        await expect(suggestions).toHaveCount(0);
-        await expect(page.locator(".post-card").first()).toBeVisible();
+        try {
+          await go("/timeline/");
+          const empty = page.getByRole("tabpanel");
+          await expect(empty).toContainText("まだ便りがありません");
+          const suggestions = page.getByRole("region", {
+            name: "フォローすると、その店主の投稿がここに届きます",
+          });
+          await expect(suggestions.getByRole("listitem")).toHaveCount(3);
+          await expect(suggestions).toContainText("POP：");
+          await expect(suggestions).not.toContainText(/\d+人/);
+          await suggestions
+            .getByRole("button", { name: "フォロー" })
+            .first()
+            .click();
+          // The first follow brings that owner's 便り at once: nothing was
+          // drawn to keep in place.
+          await expect(suggestions).toHaveCount(0);
+          await expect(empty).not.toContainText("まだ便りがありません");
+          await expect(page.locator(".post-card").first()).toBeVisible();
+        } finally {
+          await fresh.close();
+          page = reader;
+        }
       },
     );
     await check(
@@ -1087,6 +1131,7 @@ try {
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(message.text());
     });
+    await followEveryShop();
     const fab = page.locator(".compose-fab");
     const dialog = page.getByRole("dialog", { name: "投稿する" });
     const text = dialog.locator("textarea");
@@ -1694,6 +1739,7 @@ try {
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(message.text());
     });
+    await followEveryShop();
     await check(
       "852px phone on its side: with the keyboard up, the words being written and 投稿する are both in sight",
       async () => {
