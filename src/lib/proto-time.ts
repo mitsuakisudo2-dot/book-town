@@ -41,16 +41,24 @@ export function protoEngine() {
     lamp: ["#f2e5cc", "#f8eedb", "#33251a", "#5e4a38", "#e4d2b0", "#cfb68c", "#7a6450", "#eadab9", "#f4e6c6", "#c9a678", "#2d5141", "#7f4f10", "#e9b75a", "#efdcb6", "#97321f", "#f9f0de", "#e2cfa8"],
     evening: ["#231e19", "#2c2620", "#efe4d2", "#bfae98", "#3b342c", "#50473c", "#958470", "#302a23", "#322b21", "#75603f", "#98c7ab", "#e8b263", "#cc9848", "#3e3322", "#f2967f", "#2f2922", "#4b4133"],
     night: ["#1c1a17", "#25221e", "#ece4d6", "#b8ac9c", "#36312b", "#4a433b", "#8f8372", "#2b2723", "#2d2820", "#6e5a3c", "#93c4aa", "#e3ad5f", "#c99545", "#3a3020", "#f0907a", "#2a2621", "#463e31"],
+    // 夕暮れ: 濃い文字のまま、紙がいちばん暗くなる所。ここで宵へ切り替わる
+    dusk: ["#bea47e", "#c6ad88", "#140d07", "#2a1d12", "#ad946f", "#957c58", "#3a2c20", "#b49b75", "#bfa37a", "#937a59", "#12291f", "#3d2506", "#c79040", "#b79d74", "#4c150b", "#c9b18d", "#a98f69"],
+    // 宵の始まり: 明るい文字になって、紙がいちばん明るい所
+    eve: ["#4b3d2f", "#544636", "#fffaf2", "#efe2cf", "#635342", "#776653", "#c2ae95", "#574838", "#5a4935", "#3a2f23", "#c3ead4", "#ffd593", "#e0aa58", "#625037", "#ffc3b2", "#584a3a", "#736250"],
+    // 夜明け: 宵の始まりと夕暮れを、青みに寄せたもの
+    dawnDark: ["#3e4043", "#47494b", "#f6fbff", "#e1e4e7", "#555659", "#68696b", "#b0b2b3", "#494b4d", "#4b4c4e", "#2f3134", "#c3ead4", "#ffd593", "#bbb4a9", "#525354", "#ffc3b2", "#4b4d4f", "#646568"],
+    dawnLight: ["#a8a8a6", "#b1b1af", "#0c0f12", "#1f2023", "#989896", "#81807f", "#2e2f32", "#9f9f9d", "#a8a8a5", "#7f7f7e", "#12291f", "#3d2506", "#a29b91", "#a1a19f", "#4c150b", "#b4b5b4", "#949391"],
     predawn: ["#1b1d21", "#23262b", "#e6e8ec", "#aeb2ba", "#33363c", "#464a52", "#868a93", "#292c32", "#2b2d31", "#5f5a50", "#93c4aa", "#dcae6a", "#c49a55", "#33302a", "#f0907a", "#272a2f", "#41444b"],
   };
-  // 色ごとの [--green, --on-green, --green-soft]。昼と朝は day、灯りは lamp、暗い側は dark。
+  // 色ごとの [--green, --on-green, --green-soft]。昼と朝は day、灯りは lamp、
+  // 夕暮れと夜明けの明るい側は dusk、宵の始まりと夜明けの暗い側は eve、夜は dark。
   const ACCENT: Record<string, Record<string, string[]>> = {
-    midori: { day: ["#294b3e", "#f7f4ee", "#e3ece6"], lamp: ["#294b3e", "#f7f4ee", "#e1e3cf"], dark: ["#8fc3a9", "#16241d", "#25352d"] },
-    ai: { day: ["#2c4566", "#f5f6f8", "#e2e8f0"], lamp: ["#2c4566", "#f5f6f8", "#dfdcd2"], dark: ["#9db8db", "#141c28", "#232c3a"] },
-    odo: { day: ["#7a5220", "#fbf6ee", "#f0e3cc"], lamp: ["#6e4818", "#fbf6ee", "#ecd8b2"], dark: ["#dcb070", "#251a0c", "#352a1b"] },
-    azuki: { day: ["#7a4446", "#fbf3f2", "#f1e2e0"], lamp: ["#743f41", "#fbf3f2", "#ecd6c9"], dark: ["#dba2a2", "#271516", "#372526"] },
-    budo: { day: ["#584270", "#f6f3f9", "#e9e2f0"], lamp: ["#543e6b", "#f6f3f9", "#e4d8d6"], dark: ["#bfa8db", "#1e1628", "#2e2639"] },
-    sumi: { day: ["#3e4347", "#f5f5f3", "#e6e6e2"], lamp: ["#3b3f43", "#f5f5f3", "#e3dccb"], dark: ["#c2c6c9", "#1a1c1e", "#2c2e30"] },
+    midori: { day: ["#294b3e", "#f7f4ee", "#e3ece6"], lamp: ["#294b3e", "#f7f4ee", "#e1e3cf"], dusk: ["#132a21", "#f7f4ee", "#b3aa86"], eve: ["#c0e6d1", "#16241d", "#57503d"], dark: ["#8fc3a9", "#16241d", "#25352d"] },
+    ai: { day: ["#2c4566", "#f5f6f8", "#e2e8f0"], lamp: ["#2c4566", "#f5f6f8", "#dfdcd2"], dusk: ["#16263d", "#f5f6f8", "#afa894"], eve: ["#cadcf3", "#141c28", "#544e41"], dark: ["#9db8db", "#141c28", "#232c3a"] },
+    odo: { day: ["#7a5220", "#fbf6ee", "#f0e3cc"], lamp: ["#6e4818", "#fbf6ee", "#ecd8b2"], dusk: ["#3b2508", "#fbf6ee", "#b39a6c"], eve: ["#f3d29d", "#251a0c", "#645038"], dark: ["#dcb070", "#251a0c", "#352a1b"] },
+    azuki: { day: ["#7a4446", "#fbf3f2", "#f1e2e0"], lamp: ["#743f41", "#fbf3f2", "#ecd6c9"], dusk: ["#3f1f21", "#fbf3f2", "#b69983"], eve: ["#f3caca", "#271516", "#644b3e"], dark: ["#dba2a2", "#271516", "#372526"] },
+    budo: { day: ["#584270", "#f6f3f9", "#e9e2f0"], lamp: ["#543e6b", "#f6f3f9", "#e4d8d6"], dusk: ["#2f203e", "#f6f3f9", "#b0a08f"], eve: ["#dfd0f2", "#1e1628", "#5f5148"], dark: ["#bfa8db", "#1e1628", "#2e2639"] },
+    sumi: { day: ["#3e4347", "#f5f5f3", "#e6e6e2"], lamp: ["#3b3f43", "#f5f5f3", "#e3dccb"], dusk: ["#1f2225", "#f5f5f3", "#aea488"], eve: ["#e0e3e5", "#1a1c1e", "#5c5343"], dark: ["#c2c6c9", "#1a1c1e", "#2c2e30"] },
   };
   // 日本の真ん中あたりの、月の半ばの日の出と日の入り（0時からの分、だいたい）
   const SUN = [
@@ -133,33 +141,65 @@ export function protoEngine() {
     return [0, 1].map((i) => SUN[month][i] + (SUN[other][i] - SUN[month][i]) * w);
   };
 
-  /** 0時からの分と、その日の日の出・日の入りから、色と、暗い側かどうか */
+  /**
+   * 0時からの分と、その日の日の出・日の入りから、色と、暗い側かどうか。
+   * 明るい側: 夜明け（明）→ 朝 → 昼 → 灯り → 夕暮れ。
+   * 暗い側: 宵の始まり → 宵 → 深夜 → 夜明け前 → 夜明け（暗）。
+   * 夕暮れと宵の始まり、夜明け（暗）と夜明け（明）は、明るさの差がいちばん
+   * 小さくなる所で、そこで切り替える。
+   */
   const tokensAt = (minute: number, rise: number, set: number, palette: string) => {
-    const lightFrom = rise - 30;
-    const morningTo = rise + 120;
+    const lightFrom = rise - 20;
+    const morningAt = rise + 30;
+    const dayAt = rise + 120;
     const lampFrom = set - 120;
-    const lampTo = set - 30;
-    const darkFrom = set + 90;
+    const lampAt = set - 30;
+    const darkFrom = set + 50;
+    const eveningAt = set + 140;
     const predawnFrom = rise - 150;
-    const at = (from: number, to: number) => (minute - from) / (to - from);
+    const predawnAt = rise - 80;
+    const of = (anchor: string, accent: string) => tokensOf(anchor, accent, palette);
+    // 区切りの時刻と色の並びを、at の所でつなぐ
+    const along = (
+      at: number,
+      stops: [number, Record<string, string>][],
+    ): Record<string, string> => {
+      for (let i = 1; i < stops.length; i++) {
+        const [to, b] = stops[i];
+        if (at < to) {
+          const [from, a] = stops[i - 1];
+          return mixTokens(a, b, (at - from) / (to - from));
+        }
+      }
+      return stops[stops.length - 1][1];
+    };
     if (minute >= lightFrom && minute < darkFrom) {
-      const morning = tokensOf("morning", "day", palette);
-      const day = tokensOf("day", "day", palette);
-      const lamp = tokensOf("lamp", "lamp", palette);
-      if (minute < morningTo)
-        return { dark: false, tokens: mixTokens(morning, day, at(lightFrom, morningTo)) };
-      if (minute < lampFrom) return { dark: false, tokens: day };
-      if (minute < lampTo)
-        return { dark: false, tokens: mixTokens(day, lamp, at(lampFrom, lampTo)) };
-      return { dark: false, tokens: lamp };
+      const day = of("day", "day");
+      return {
+        dark: false,
+        tokens: along(minute, [
+          [lightFrom, of("dawnLight", "dusk")],
+          [morningAt, of("morning", "day")],
+          [dayAt, day],
+          [lampFrom, day],
+          [lampAt, of("lamp", "lamp")],
+          [darkFrom, of("dusk", "dusk")],
+        ]),
+      };
     }
-    const evening = tokensOf("evening", "dark", palette);
-    const night = tokensOf("night", "dark", palette);
-    const predawn = tokensOf("predawn", "dark", palette);
-    if (minute >= darkFrom)
-      return { dark: true, tokens: mixTokens(evening, night, at(darkFrom, 1440)) };
-    if (minute < predawnFrom) return { dark: true, tokens: night };
-    return { dark: true, tokens: mixTokens(night, predawn, at(predawnFrom, lightFrom)) };
+    // 暗い側は日をまたぐので、0時より後は 1440 を足して並べる
+    const night = of("night", "dark");
+    return {
+      dark: true,
+      tokens: along(minute >= darkFrom ? minute : minute + 1440, [
+        [darkFrom, of("eve", "eve")],
+        [eveningAt, of("evening", "dark")],
+        [1440, night],
+        [1440 + predawnFrom, night],
+        [1440 + predawnAt, of("predawn", "dark")],
+        [1440 + lightFrom, of("dawnDark", "eve")],
+      ]),
+    };
   };
 
   const read = () => {
@@ -186,6 +226,7 @@ export function protoEngine() {
   let fading = 0;
   let lastDark: boolean | null = null;
   let lastTokens: Record<string, string> | null = null;
+  let lastInput = 0;
 
   const paint = (tokens: Record<string, string>) => {
     const style = document.documentElement.style;
@@ -230,12 +271,19 @@ export function protoEngine() {
     mark("data-timed", true);
     mark("data-lamp", false);
     const quiet = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (lastTokens && lastDark !== null && lastDark !== dark && preview === null) {
+      // 明るい側と暗い側の入れ替わりは、読んだり触ったりしている間は待ち、
+      // 手が止まってから6秒でふわっと（動きを減らす設定ではすぐに）
+      if (Date.now() - lastInput < 4000) {
+        timer = setTimeout(apply, 2000);
+        return;
+      }
+    }
     if (lastTokens && lastDark !== null && lastDark !== dark && !quiet) {
-      // 明るい側と暗い側の入れ替わりは、数秒でふわっと
       const from = lastTokens;
       const start = performance.now();
       const step = (time: number) => {
-        const t = Math.min(1, (time - start) / 2400);
+        const t = Math.min(1, (time - start) / 6000);
         paint(mixTokens(from, tokens, t));
         if (t >= 0.5) mark("data-night", dark);
         if (t < 1) fading = requestAnimationFrame(step);
@@ -255,6 +303,11 @@ export function protoEngine() {
     (window as unknown as { __protoPalette?: () => void }).__protoPalette = apply;
     apply();
     matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", apply);
+    for (const type of ["pointerdown", "keydown", "wheel", "touchmove", "scroll"])
+      addEventListener(type, () => (lastInput = Date.now()), {
+        passive: true,
+        capture: true,
+      });
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) apply();
     });
