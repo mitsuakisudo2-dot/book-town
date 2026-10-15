@@ -1301,12 +1301,15 @@ try {
         // The tab tapped at the top only goes to the top: nothing to read.
         await tab("ホーム").tap();
         await expect(words).toHaveCount(0);
-        // Mostly sideways, or too short: no pull, and no switch.
+        // More sideways than down: no pull, and no switch.
         await pull("start");
-        await pull("move", 40, 60);
-        await pull("end", 40, 60);
+        await pull("move", 60, 80);
+        await expect(words).toHaveCount(0);
+        await pull("end", 60, 80);
+        // Too short: it shuts again, and reads nothing.
         await pull("start");
         await pull("move", 100);
+        await expect(words).toHaveText("引っぱって新しい便りを読む");
         await pull("end", 100);
         await expect(words).toHaveCount(0);
         await expect(page).toHaveURL(`${baseURL}/`);

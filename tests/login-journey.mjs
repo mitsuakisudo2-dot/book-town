@@ -2088,6 +2088,15 @@ try {
         const pill = at.getByRole("button", { name: "新しい便りを見る" });
         const said = at.locator(".town-said");
         const writes = townWrites.length;
+        /**
+         * Nothing of what came was written back: a change would be on its
+         * way after the save's short wait (400ms on the page's clock).
+         */
+        const nothingWritten = async (paused = true) => {
+          if (paused) await at.clock.runFor(1_000);
+          await new Promise((done) => setTimeout(done, 1_500));
+          expect(townWrites.slice(writes)).toEqual([]);
+        };
         const now = await at.evaluate(() => Date.now());
         await at.clock.pauseAt(now + 100);
 
@@ -2145,8 +2154,11 @@ try {
 
         // Down the page and back up a little, the tab shown is tapped: the
         // new 便り goes in at the top, and the page goes there.
+        const shell = at.locator(".town-shell");
         await at.evaluate(() => window.scrollTo(0, 600));
+        await expect(shell).toHaveAttribute("data-bar", "hidden");
         await at.evaluate(() => window.scrollTo(0, 560));
+        await expect(shell).not.toHaveAttribute("data-bar", "hidden");
         await expect(dotted).toBeInViewport();
         await dotted.tap();
         await expect(cards.first()).toHaveAttribute("data-post-id", first.id);
@@ -2161,7 +2173,7 @@ try {
         expect(await order()).toEqual([first.id, ...followed]);
         await expect(cards.first()).toContainText("届いたばかりの本");
         // Taken in as the town's own reading: nothing of it is written back.
-        expect(townWrites.slice(writes)).toEqual([]);
+        await nothingWritten();
 
         // The next one: a tap on the pill.
         const second = arrive(2, "もうひとつ届いた、ミナの便り。");
@@ -2232,7 +2244,7 @@ try {
         await pull("end", 100);
         await expect(words).toHaveCount(0);
         expect(postReads.length).toBe(reads);
-        expect(townWrites.slice(writes)).toEqual([]);
+        await nothingWritten();
         await at.clock.resume();
 
         // An old 便り, not in the town's read, opens by its id; its reply
@@ -2290,7 +2302,7 @@ try {
           path: path.join(output, "2a-older.png"),
           fullPage: true,
         });
-        expect(townWrites.slice(writes)).toEqual([]);
+        await nothingWritten(false);
       } finally {
         await phone.close();
         outsideLoad.clear();
