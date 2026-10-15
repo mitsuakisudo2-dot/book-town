@@ -8,7 +8,7 @@ import {
 } from "../../lib/home-feed";
 import { Icon } from "../ui";
 import { FollowSuggestions } from "./FollowSuggestions";
-import { useHeld, usePaneParam, useTownRead } from "./hooks";
+import { useHeld, usePaneParam, useTownReading } from "./hooks";
 import { LetterSkeletons, Letters, type Shared } from "./Letters";
 
 /** 便り drawn at a time; more come as the reader nears the end. */
@@ -31,8 +31,8 @@ export function LettersOnly({
   onHome: () => void;
 }) {
   const { state } = shared;
-  const read = useTownRead();
-  const drawn = useHeld(read, refresh, (now) => ({
+  const reading = useTownReading();
+  const drawn = useHeld(reading, refresh, (now) => ({
     at: now,
     ids: followedLetters(state).map((entry) => entry.id),
   }));

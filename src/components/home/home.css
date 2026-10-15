@@ -348,6 +348,11 @@ html[data-home-tab="letters"]
   background: var(--band);
   color: var(--forest);
 }
+/* A door that waits for the town: its shape only, as the 便り's bones. */
+.home-entrance.is-waiting .home-entrance-icon {
+  background: var(--line);
+  opacity: 0.6;
+}
 
 /* The book being read, one line. */
 .home-reading {
