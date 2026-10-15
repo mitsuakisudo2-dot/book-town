@@ -159,6 +159,9 @@ export function createTownStore(
   // so nothing meant for an account is written into this browser's demo.
   let loading = Boolean(options.follow);
   let generation = 0;
+  // Counts the town's readings: each load, and each reading again after a
+  // refused change, which leaves out what was read after the town.
+  let reading = 0;
   let unwatch: (() => void) | null = null;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
@@ -179,12 +182,14 @@ export function createTownStore(
         },
         replace(update, updateStatus) {
           if (!current()) return;
+          reading += 1;
           state = update;
           status = updateStatus;
           notify();
         },
       }) ?? null;
     const result = next.load();
+    reading += 1;
     if ("then" in result) {
       loading = true;
       state = emptyTown();
@@ -194,6 +199,7 @@ export function createTownStore(
         (snapshot) => {
           if (!current()) return;
           loading = false;
+          reading += 1;
           state = snapshot.state;
           status = snapshot.status;
           notify();
@@ -1014,6 +1020,11 @@ export function createTownStore(
      */
     getGeneration: () => generation,
     /**
+     * Counts the town's readings. A town read again (after a refused change)
+     * has none of what was read after it: older 便り, one read by its id.
+     */
+    getReading: () => reading,
+    /**
      * What the town can read after it was read, from the backend it was
      * read from; null in the demo, and while the town is on its way.
      */
@@ -1099,6 +1110,15 @@ export function useTownReads(): boolean {
     townStore.subscribe,
     townStore.getReadsSnapshot,
     townStore.getServerReadsSnapshot,
+  );
+}
+
+/** Counts the town's readings (store.getReading). */
+export function useTownReading(): number {
+  return useSyncExternalStore(
+    townStore.subscribe,
+    townStore.getReading,
+    () => 0,
   );
 }
 

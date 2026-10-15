@@ -6,14 +6,17 @@ import {
   PILL_BUDGET,
   POLL_EVERY,
   createArrivals,
+  createLetterReads,
   freshFor,
   olderFrom,
   olderPage,
   sinceOf,
   type ArrivalsClock,
   type ArrivalsTown,
+  type LetterReadsTown,
 } from "../src/lib/arrivals";
 import { seedState } from "../src/lib/data";
+import { notificationsFor } from "../src/lib/notifications";
 import { OLDER_PAGE, type TownReads } from "../src/lib/town-backend";
 import { ME_ID, type Post, type TownState } from "../src/lib/types";
 
@@ -111,6 +114,17 @@ function fakeTown(start: TownState) {
   /** What the next reads answer; an empty queue answers nothing new. */
   const answers: Answer[] = [];
   const absorbed: Arrived[] = [];
+  /** What each older read asked for, and what older and by-id reads answer. */
+  const olderAsked: { before: string; authors: string[] }[] = [];
+  const olderAnswers: Answer[] = [];
+  const postAnswers: Answer[] = [];
+  let readings = 1;
+  const answer = (queue: Answer[]) => {
+    const next = queue.shift() ?? emptyArrived();
+    return next === "fail"
+      ? Promise.reject(new Error("offline"))
+      : Promise.resolve(next);
+  };
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
   const reads = (): TownReads | null =>
@@ -123,13 +137,17 @@ function fakeTown(start: TownState) {
             if (answer === "fail") return Promise.reject(new Error("offline"));
             return Promise.resolve(answer);
           },
-          older: () => Promise.resolve(emptyArrived()),
-          post: () => Promise.resolve(emptyArrived()),
+          older(before, authors) {
+            olderAsked.push({ before, authors });
+            return answer(olderAnswers);
+          },
+          post: () => answer(postAnswers),
         }
       : null;
-  const town: ArrivalsTown = {
+  const town: ArrivalsTown & LetterReadsTown = {
     reads,
     state: () => state,
+    reading: () => readings,
     absorb(arrived, from) {
       if (from !== generation) return false;
       const next = takeIn(state, arrived);
@@ -151,7 +169,21 @@ function fakeTown(start: TownState) {
     asked,
     answers,
     absorbed,
+    olderAsked,
+    olderAnswers,
+    postAnswers,
     state: () => state,
+    /** The reader changes the town (a follow): kept, as a commit would. */
+    change(next: TownState) {
+      state = next;
+      notify();
+    },
+    /** The same town read again (after a refused change). */
+    reread(next: TownState) {
+      readings += 1;
+      state = next;
+      notify();
+    },
     /** A sign-in or sign-out: another town, read again. */
     switchTown(next: TownState) {
       generation += 1;
@@ -608,21 +640,25 @@ async function main() {
         // database, so never where a page starts.
         posts: [...seedState.posts, linked, others, reply, older, followed],
       });
-      // Not the one opened by a link, nor others' or replies.
-      assert.equal(olderFrom(town, new Set([linked.id]), NOW), older.createdAt);
-      assert.equal(olderFrom(town, new Set(), NOW), linked.createdAt);
+      // Not one read after the town (opened by a link, or an older page),
+      // nor others' or replies.
+      assert.equal(
+        olderFrom({ ...town, readAfter: { [linked.id]: "alone" } }, NOW),
+        older.createdAt,
+      );
+      assert.equal(
+        olderFrom({ ...town, readAfter: { [linked.id]: "older" } }, NOW),
+        older.createdAt,
+      );
+      assert.equal(olderFrom(town, NOW), linked.createdAt);
       // Following nobody with 便り read: below the oldest post read.
       assert.equal(
-        olderFrom(
-          home({ following: [], posts: [others, reply] }),
-          new Set(),
-          NOW,
-        ),
+        olderFrom(home({ following: [], posts: [others, reply] }), NOW),
         reply.createdAt,
       );
       // Nothing read: from now.
       assert.equal(
-        olderFrom(home({ posts: [] }), new Set(), NOW),
+        olderFrom(home({ posts: [] }), NOW),
         new Date(NOW).toISOString(),
       );
 
@@ -644,6 +680,210 @@ async function main() {
         olderPage(takeIn(town, full), full).entries.length,
         OLDER_PAGE,
       );
+    },
+  );
+
+  await check(
+    "posts read after the town by the reader's asking make no notices",
+    () => {
+      const uuid = (n: number) =>
+        `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+      const DAY = 60 * 24;
+      const town = home();
+      const ids = (state: TownState) =>
+        notificationsFor(state).map((notice) => notice.id);
+      // An older page: the reader's own old 便り with a like and a 読みたい,
+      // a reply to it, and a followed writer's old 便り.
+      const mine = letter(uuid(10), ME_ID, -60 * DAY, {
+        wants: 2,
+        likers: [
+          {
+            readerId: "r-nagi",
+            taps: 1,
+            at: letter("x", ME_ID, -59 * DAY).createdAt,
+          },
+        ],
+      });
+      const reply = letter(uuid(11), "r-tou", -59 * DAY, {
+        parentId: mine.id,
+      });
+      const theirs = letter(uuid(12), "r-nagi", -61 * DAY);
+      const page = came(mine, reply, theirs);
+      const paged = takeIn(town, { ...page, how: "older" });
+      assert.deepEqual(paged.readAfter, {
+        [mine.id]: "older",
+        [reply.id]: "older",
+        [theirs.id]: "older",
+      });
+      assert.deepEqual(ids(paged), ids(town));
+      // Taken in unmarked, the same posts would each make one: the marks
+      // are what keep them out.
+      const unmarked = ids(takeIn(town, page)).filter(
+        (id) => !ids(town).includes(id),
+      );
+      assert.deepEqual(unmarked.sort(), [
+        "follow:" + theirs.id,
+        `like:${mine.id}:r-nagi`,
+        "reply:" + reply.id,
+        `wants:${mine.id}:2`,
+      ]);
+
+      // One 便り opened by its id: it and its old replies are marked, a
+      // reply written since the town was read is new, and tells.
+      const linked = letter(uuid(13), ME_ID, -90 * DAY);
+      const oldReply = letter(uuid(14), "r-tou", -89 * DAY, {
+        parentId: linked.id,
+      });
+      const newReply = letter(uuid(15), "r-tou", 30, { parentId: linked.id });
+      const alone = takeIn(town, {
+        ...came(linked, oldReply, newReply),
+        how: "alone",
+      });
+      assert.deepEqual(alone.readAfter, {
+        [linked.id]: "alone",
+        [oldReply.id]: "alone",
+      });
+      const told = ids(alone).filter((id) => !ids(town).includes(id));
+      assert.deepEqual(told, ["reply:" + newReply.id]);
+      // An older page bringing it again takes it in order.
+      const later = takeIn(alone, { ...came(linked), how: "older" });
+      assert.equal(later.readAfter?.[linked.id], "older");
+      assert.equal(takeIn(later, { ...came(linked), how: "older" }), later);
+    },
+  );
+
+  await check(
+    "older pages go on from the last, start again for a writer followed since, and stop when done",
+    async () => {
+      const uuid = (n: number) =>
+        `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+      const floor = letter(uuid(1), "r-nagi", -60 * 24 * 10);
+      const start = home({ posts: [...seedState.posts, floor] });
+      const t = fakeTown(start);
+      const letters = createLetterReads(t.town);
+      const page = (from: number, count: number, author = "r-nagi") =>
+        came(
+          ...Array.from({ length: count }, (_, n) =>
+            letter(uuid(from + n), author, -60 * 24 * 11 - (from + n)),
+          ),
+        );
+      const first = page(100, OLDER_PAGE);
+      t.olderAnswers.push(first);
+      const one = await letters.older(NOW);
+      assert.deepEqual(t.olderAsked[0], {
+        before: floor.createdAt,
+        authors: [ME_ID, "r-nagi"],
+      });
+      assert.equal(one?.done, false);
+      assert.equal(one?.entries.length, OLDER_PAGE);
+      const oldest = first.posts.at(-1)!.createdAt;
+      assert.deepEqual(t.state().olderRead, {
+        authors: [ME_ID, "r-nagi"],
+        before: oldest,
+        done: false,
+      });
+      // The next goes on below the last page, not from the town's floor.
+      t.olderAnswers.push(page(200, 3));
+      const two = await letters.older(NOW);
+      assert.equal(t.olderAsked[1].before, oldest);
+      assert.equal(two?.done, true);
+      assert.equal(two?.entries.length, 3);
+      // Done: nothing more is asked.
+      assert.deepEqual(await letters.older(NOW), { entries: [], done: true });
+      assert.equal(t.olderAsked.length, 2);
+      // Following another shop since: from the town's own reading again,
+      // for all the writers, so none of the new writer's are skipped.
+      t.change({ ...t.state(), following: ["shop-orbit", "shop-rain"] });
+      t.olderAnswers.push(page(300, 2, "r-sumire"));
+      await letters.older(NOW);
+      assert.deepEqual(t.olderAsked[2], {
+        before: floor.createdAt,
+        authors: [ME_ID, "r-nagi", "r-sumire"],
+      });
+      // Following fewer goes on as before (it was done).
+      t.change({ ...t.state(), following: ["shop-orbit"] });
+      assert.deepEqual(await letters.older(NOW), { entries: [], done: true });
+      assert.equal(t.olderAsked.length, 3);
+    },
+  );
+
+  await check(
+    "older and by-id reads are dropped when the town is read again meanwhile",
+    async () => {
+      const uuid = (n: number) =>
+        `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+      const t = fakeTown(home());
+      const letters = createLetterReads(t.town);
+      const old = letter(uuid(1), "r-nagi", -60 * 24 * 40);
+      const reply = letter(uuid(2), "r-tou", -60 * 24 * 39, {
+        parentId: old.id,
+      });
+      // One by its id: taken in, marked as read alone.
+      t.postAnswers.push(came(old, reply));
+      assert.equal(await letters.post(old.id), true);
+      assert.equal(t.state().readAfter?.[old.id], "alone");
+      assert.equal(t.state().readAfter?.[reply.id], "alone");
+      // The town read again (a refused change) while a read was on its way:
+      // what came is not put into the new reading.
+      const fresh = home();
+      let resolve: (arrived: Arrived) => void = () => {};
+      t.postAnswers.push(new Promise<Arrived>((done) => (resolve = done)));
+      const asked = letters.post(old.id);
+      t.reread(fresh);
+      resolve(came(old, reply));
+      assert.equal(await asked, false);
+      assert.equal(t.state(), fresh);
+      t.olderAnswers.push(new Promise<Arrived>((done) => (resolve = done)));
+      const page = letters.older(NOW);
+      t.reread(home());
+      resolve(came(old));
+      assert.equal(await page, null);
+      assert.equal(t.state().olderRead, undefined);
+      // Another town (a sign-out) likewise.
+      t.olderAnswers.push(new Promise<Arrived>((done) => (resolve = done)));
+      const other = letters.older(NOW);
+      t.switchTown(home());
+      resolve(came(old));
+      assert.equal(await other, null);
+      assert.equal(t.state().posts.includes(old), false);
+      // A failed read says so; nothing changes.
+      t.postAnswers.push("fail");
+      await assert.rejects(letters.post(old.id));
+      t.olderAnswers.push("fail");
+      await assert.rejects(letters.older(NOW));
+      // The demo reads none.
+      t.setReading(false);
+      assert.equal(await letters.post(old.id), false);
+      assert.equal(await letters.older(NOW), null);
+    },
+  );
+
+  await check(
+    "what waited for a town left is gone before Home shows again",
+    async () => {
+      const { arrivals, answers, time, switchTown, setReading } = setUp();
+      let stop = arrivals.watch();
+      answers.push(came(letter("n1", "r-nagi", 1)));
+      await time.advance(POLL_EVERY);
+      assert.ok(arrivals.getSnapshot().arrived);
+      stop();
+      // Signed in as another, away from Home: nobody heard it.
+      switchTown(home({ following: ["shop-rain"] }));
+      assert.ok(arrivals.getSnapshot().arrived);
+      // Back on Home within the minute: nothing of the other town waits.
+      stop = arrivals.watch();
+      assert.equal(arrivals.getSnapshot().arrived, null);
+      stop();
+      // Likewise while a town is on its way.
+      answers.push(came(letter("n2", "r-sumire", 2)));
+      stop = arrivals.watch();
+      await time.advance(POLL_EVERY);
+      assert.ok(arrivals.getSnapshot().arrived);
+      stop();
+      setReading(false);
+      stop = arrivals.watch();
+      assert.equal(arrivals.getSnapshot().arrived, null);
+      stop();
     },
   );
 

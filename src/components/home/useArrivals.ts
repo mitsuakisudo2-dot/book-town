@@ -3,11 +3,10 @@
 import { useEffect, useSyncExternalStore } from "react";
 import {
   createArrivals,
-  olderFrom,
-  olderPage,
+  createLetterReads,
   type ArrivalsSnapshot,
 } from "../../lib/arrivals";
-import { followedAuthors, type LetterEntry } from "../../lib/home-feed";
+import type { LetterEntry } from "../../lib/home-feed";
 import { townStore } from "../../lib/store";
 
 // The town's arrivals (src/lib/arrivals.ts) and its other reads after the
@@ -54,41 +53,26 @@ export function useArrivalsWatch() {
   }, []);
 }
 
-/** 便り read alone by their id: never where an older page starts. */
-const alone = new Set<string>();
+const letterReads = createLetterReads({
+  reads: () => townStore.reads(),
+  state: () => townStore.getSnapshot(),
+  absorb: (arrived, from) => townStore.absorb(arrived, from),
+  reading: () => townStore.getReading(),
+});
 
 /**
  * Reads one 便り by its id, with its replies, into the town: a page of one
- * the town did not read (an old one, from a link). Whether it was read; a
- * town with nothing to read (the demo) has none to read.
+ * the town did not read (an old one, from a link). Whether it was read for
+ * the town as it is. A failed read throws.
  */
-export async function readPost(id: string): Promise<boolean> {
-  const reads = townStore.reads();
-  if (!reads) return false;
-  const arrived = await reads.post(id);
-  const had = new Set(townStore.getSnapshot().posts.map((post) => post.id));
-  for (const post of arrived.posts) if (!had.has(post.id)) alone.add(post.id);
-  townStore.absorb(arrived, reads.generation);
-  return true;
-}
+export const readPost = (id: string): Promise<boolean> => letterReads.post(id);
 
 /**
  * Reads 便りだけ's next older page into the town: its 便り as the pane shows
  * them, and whether it was the last. Null when there is nothing to read
  * (the demo), or the town changed meanwhile. A failed read throws.
  */
-export async function readOlder(): Promise<{
+export const readOlder = (): Promise<{
   entries: LetterEntry[];
   done: boolean;
-} | null> {
-  const reads = townStore.reads();
-  if (!reads) return null;
-  const state = townStore.getSnapshot();
-  const arrived = await reads.older(
-    olderFrom(state, alone, Date.now()),
-    followedAuthors(state),
-  );
-  if (townStore.reads()?.generation !== reads.generation) return null;
-  townStore.absorb(arrived, reads.generation);
-  return olderPage(townStore.getSnapshot(), arrived);
-}
+} | null> => letterReads.older();

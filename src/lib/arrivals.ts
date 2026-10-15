@@ -8,7 +8,7 @@ import {
 import type { HomeTab } from "./home-tab";
 import { isDatabaseId } from "./paths";
 import { OLDER_PAGE, type TownReads } from "./town-backend";
-import { ME_ID, type TownState } from "./types";
+import { ME_ID, type OlderRead, type TownState } from "./types";
 
 // New 便り arriving while Home is open (PR 2; 決定 H:56-57, H:120-123). They
 // wait here, outside the town, until the reader asks for them: a tap on the
@@ -127,19 +127,15 @@ export function freshFor(
 }
 
 /**
- * Where 便りだけ's next older page starts: the oldest followed 便り the town
- * read in order (its load, and the pages read before), never one read alone
- * by its id (a link to an old 便り), which would skip what lies between. A
- * town with none starts below the oldest post it read, or from now.
+ * Where 便りだけ's older pages start: the oldest followed 便り of the town's
+ * own reading, never one read after it (an older page, or one alone by its
+ * id: a link to an old 便り, which would skip what lies between). A town
+ * with none starts below the oldest post it read, or from now.
  */
-export function olderFrom(
-  state: TownState,
-  alone: ReadonlySet<string>,
-  now: number,
-): string {
+export function olderFrom(state: TownState, now: number): string {
   const authors = new Set(followedAuthors(state));
   const read = state.posts.filter(
-    (post) => isDatabaseId(post.id) && !alone.has(post.id),
+    (post) => isDatabaseId(post.id) && !state.readAfter?.[post.id],
   );
   const followed = read.filter(
     (post) => post.parentId === null && authors.has(post.authorId),
@@ -171,6 +167,78 @@ export function olderPage(
   return {
     entries: followedLetters(state).filter((entry) => tops.has(entry.id)),
     done: tops.size < OLDER_PAGE,
+  };
+}
+
+/** The town as the reads asked for by the reader see it. */
+export interface LetterReadsTown {
+  reads(): TownReads | null;
+  state(): TownState;
+  absorb(arrived: Arrived, generation: number): boolean;
+  /** Counts the town's readings: one read again leaves out what was read after. */
+  reading(): number;
+}
+
+/**
+ * The reads the reader asks for, after the town was read: 便りだけ's older
+ * pages, and one 便り by its id. What they bring is marked as read after the
+ * town (takeIn), so it makes no notices and is never where a page starts.
+ */
+export function createLetterReads(town: LetterReadsTown) {
+  /** Whether the town is still the one a read started from. */
+  const still = (reads: TownReads, reading: number) =>
+    town.reads()?.generation === reads.generation && town.reading() === reading;
+  return {
+    /**
+     * Reads one 便り by its id, with its replies, into the town: a page of
+     * one the town did not read (an old one, from a link). Whether it was
+     * read for the town as it is; none in the demo. A failed read throws.
+     */
+    async post(id: string): Promise<boolean> {
+      const reads = town.reads();
+      if (!reads) return false;
+      const reading = town.reading();
+      const arrived = await reads.post(id);
+      if (!still(reads, reading)) return false;
+      town.absorb({ ...arrived, how: "alone" }, reads.generation);
+      return true;
+    },
+    /**
+     * Reads 便りだけ's next older page into the town: its 便り as the pane
+     * shows them, and whether it was the last. Pages go on from the last
+     * one read while the writers are the same or fewer; a writer followed
+     * since starts them again from the town's own reading, so none of that
+     * writer's are skipped. Null when there is nothing to read (the demo)
+     * or the town changed meanwhile. A failed read throws.
+     */
+    async older(
+      now: number = Date.now(),
+    ): Promise<{ entries: LetterEntry[]; done: boolean } | null> {
+      const reads = town.reads();
+      if (!reads) return null;
+      const reading = town.reading();
+      const state = town.state();
+      const authors = followedAuthors(state);
+      const read = state.olderRead;
+      const goOn =
+        read && authors.every((author) => read.authors.includes(author));
+      if (goOn && read.done) return { entries: [], done: true };
+      const before = goOn ? read.before : olderFrom(state, now);
+      const arrived = await reads.older(before, authors);
+      if (!still(reads, reading)) return null;
+      const tops = arrived.posts.filter((post) => post.parentId === null);
+      let next = before;
+      for (const post of tops)
+        if (Date.parse(post.createdAt) < Date.parse(next))
+          next = post.createdAt;
+      const olderRead: OlderRead = {
+        authors,
+        before: next,
+        done: tops.length < OLDER_PAGE,
+      };
+      town.absorb({ ...arrived, how: "older", olderRead }, reads.generation);
+      return olderPage(town.state(), arrived);
+    },
   };
 }
 
@@ -321,8 +389,13 @@ export function createArrivals(
 
   function onTown() {
     const reads = town.reads();
-    if (reads && generation !== null && reads.generation !== generation)
-      forget(reads.generation);
+    // Another town, or one on its way (nothing waits for a town being read).
+    if (
+      reads
+        ? generation !== null && reads.generation !== generation
+        : snapshot.arrived || snapshot.retired
+    )
+      forget(reads?.generation ?? null);
     schedule();
   }
 
@@ -339,6 +412,9 @@ export function createArrivals(
       watchers += 1;
       if (watchers === 1) {
         unsubscribe = town.subscribe(onTown);
+        // What waits may be for a town left meanwhile (a sign-out, another
+        // account): let it go before it shows.
+        onTown();
         // The town was just read when Home first opens; back on Home after
         // a while elsewhere, what came meanwhile is read at once.
         if (lastRead === -Infinity) lastRead = clock.now();

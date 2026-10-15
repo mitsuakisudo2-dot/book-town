@@ -2,6 +2,7 @@ import {
   ME_ID,
   reviewKey,
   type Book,
+  type OlderRead,
   type Post,
   type Reader,
   type TownState,
@@ -26,6 +27,14 @@ export interface Arrived {
   spoilerReports: string[];
   /** What reports folded among those posts. */
   reviewFolds: TownState["reviewFolds"];
+  /**
+   * Read by the reader's asking, and old: an older page of 便りだけ, or one
+   * 便り by its id. Its posts are marked so (TownState.readAfter). New ones
+   * (polling, a pull) carry none.
+   */
+  how?: "older" | "alone";
+  /** For an older page: how far 便りだけ has now read back. */
+  olderRead?: OlderRead;
 }
 
 export const emptyArrived = (): Arrived => ({
@@ -59,6 +68,35 @@ export function mergeArrived(a: Arrived, b: Arrived): Arrived {
     spoilerReports: [...new Set([...a.spoilerReports, ...b.spoilerReports])],
     reviewFolds: { ...a.reviewFolds, ...b.reviewFolds },
   };
+}
+
+/**
+ * The marks of what was read after the town by the reader's asking: the
+ * posts `arrived` brought that are `fresh` here, as `how` it was read; an
+ * older page also takes in order the posts it brought that were read alone.
+ * A post read alone that is newer than all the town had read (a reply
+ * written since, under an old 便り) is new, and goes unmarked.
+ */
+function marksAfter(
+  state: TownState,
+  arrived: Arrived,
+  fresh: ReadonlySet<string>,
+): TownState["readAfter"] {
+  const how = arrived.how;
+  if (!how) return state.readAfter;
+  const newest = Math.max(-Infinity, ...state.posts.map(time));
+  const marks = { ...state.readAfter };
+  let changed = false;
+  for (const post of arrived.posts) {
+    const mark = marks[post.id];
+    const due = fresh.has(post.id)
+      ? mark !== how && (how === "older" || time(post) <= newest)
+      : how === "older" && mark === "alone";
+    if (!due) continue;
+    marks[post.id] = how;
+    changed = true;
+  }
+  return changed ? marks : state.readAfter;
 }
 
 /**
@@ -109,7 +147,17 @@ export function takeIn(
   // Readers and books only for the posts taken, so nothing comes unused.
   const usedReaders = new Set(posts.map((post) => post.authorId));
   const usedBooks = new Set(posts.flatMap((post) => post.bookId ?? []));
-  if (!posts.length) return state;
+  const fresh = new Set(posts.map((post) => post.id));
+  const readAfter = marksAfter(state, arrived, fresh);
+  const olderRead =
+    arrived.olderRead &&
+    JSON.stringify(arrived.olderRead) !== JSON.stringify(state.olderRead)
+      ? arrived.olderRead
+      : state.olderRead;
+  if (!posts.length)
+    return readAfter === state.readAfter && olderRead === state.olderRead
+      ? state
+      : { ...state, readAfter, olderRead };
   const newReaders = readers.filter((reader) => usedReaders.has(reader.id));
   const newBooks = books.filter((book) => usedBooks.has(book.id));
 
@@ -119,7 +167,6 @@ export function takeIn(
     const at = merged.findIndex((entry) => time(entry) > time(post));
     merged.splice(at === -1 ? merged.length : at, 0, post);
   }
-  const fresh = new Set(posts.map((post) => post.id));
   const plus = (list: string[], more: string[]) => {
     const added = more.filter((id) => fresh.has(id) && !list.includes(id));
     return added.length ? [...list, ...added] : list;
@@ -148,5 +195,7 @@ export function takeIn(
     reviewFolds: folds.length
       ? { ...state.reviewFolds, ...Object.fromEntries(folds) }
       : state.reviewFolds,
+    readAfter,
+    olderRead,
   };
 }

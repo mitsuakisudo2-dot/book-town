@@ -355,6 +355,25 @@ export interface TownState {
   myReports: FiledReport[];
   /** The viewer's own posters, drafts too, and others' put up. */
   posters: Poster[];
+  /**
+   * Posts read after the town by the reader's asking (PR 2), never saved
+   * and gone with the next reading: an older page of 便りだけ ("older"),
+   * or one opened alone by its id ("alone"). They are old: no notice is
+   * made of them, and one alone may stand far from the rest.
+   */
+  readAfter?: Record<string, "older" | "alone">;
+  /** How far 便りだけ has read back, and for whose 便り (PR 2). */
+  olderRead?: OlderRead;
+}
+
+/** 便りだけ's older pages read so far, for these writers. */
+export interface OlderRead {
+  /** The writers the pages were read for: the reader (ME_ID) and others. */
+  authors: string[];
+  /** The next page is from before this time. */
+  before: string;
+  /** The last page was short: there is nothing older. */
+  done: boolean;
 }
 
 /** A toast's way back: a text button that undoes what the toast says was done. */

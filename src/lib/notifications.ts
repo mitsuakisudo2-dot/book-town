@@ -78,10 +78,13 @@ const ownPosterWords = (
  * to the viewer's posts, posts by followed readers, reviews of books on the wishlist,
  * words left at the viewer's shop, how many stopped by it this week, readers
  * who finished a book the viewer finished, and readers reading the same book together.
- * Nothing is invented to fill the list.
+ * Nothing is invented to fill the list. Posts read after the town by the
+ * reader's asking (an older page of 便りだけ, one 便り by its id) are old, and
+ * make none: only the town's reading and the new 便り taken in do.
  */
 export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
   const notices: Notice[] = [];
+  const old = (post: Post) => Boolean(state.readAfter?.[post.id]);
   const name = (id: string) => findReader(state, id)?.name ?? "";
   const title = (id: string | null) =>
     state.books.find((book) => book.id === id)?.title ?? "";
@@ -97,7 +100,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
     reviewFoldOf(state, "post", post.id) === null;
   for (const post of state.posts) {
     const parent = post.parentId ? mine.get(post.parentId) : undefined;
-    if (parent && post.authorId !== ME_ID)
+    if (parent && post.authorId !== ME_ID && !old(post))
       notices.push({
         id: "reply:" + post.id,
         readerId: post.authorId,
@@ -115,7 +118,8 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
   }
   // Folded by readers' 「ネタバレでは？」: told once and gently, never by whom.
   for (const post of state.posts) {
-    if (post.authorId !== ME_ID || !post.folded || post.spoiler) continue;
+    if (post.authorId !== ME_ID || !post.folded || post.spoiler || old(post))
+      continue;
     const bookId =
       post.bookId ??
       state.posts.find((entry) => entry.id === post.parentId)?.bookId;
@@ -132,7 +136,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
     });
   }
   for (const post of mine.values())
-    if (post.wants > 0)
+    if (post.wants > 0 && !old(post))
       notices.push({
         id: `wants:${post.id}:${post.wants}`,
         readerId: ME_ID,
@@ -142,7 +146,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
       });
   // いいね: one notice per reader and post, with how many times they pressed.
   for (const post of state.posts) {
-    if (post.authorId !== ME_ID) continue;
+    if (post.authorId !== ME_ID || old(post)) continue;
     for (const liker of post.likers ?? []) {
       const who = name(liker.readerId);
       if (!who) continue;
@@ -169,7 +173,8 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
       post.authorId === ME_ID ||
       post.parentId !== null ||
       post.readingMode === "solo" ||
-      !quotable(post)
+      !quotable(post) ||
+      old(post)
     )
       continue;
     if (followed.has(post.authorId))

@@ -2047,6 +2047,55 @@ async function main() {
       };
       assert.equal(visitor.absorb(ben, visitor.getGeneration()), true);
       assert.equal(visitor.getSnapshot().posts.length, before.posts.length + 2);
+      // The visitor's backend takes arrivals into the town as last shown to
+      // it, never the one it read: a town handed to save is not undone.
+      const look = visitorTownBackend(
+        {} as Parameters<typeof visitorTownBackend>[0],
+      );
+      const { state: read } = await look.load();
+      const shown = { ...read, seenNotifications: ["follow:seen-here"] };
+      look.save(shown);
+      let given: TownState | null = null;
+      look.absorb!((value) => (given = value));
+      assert.equal(given, shown);
+    },
+  );
+
+  await check(
+    "a town read again after a refused change counts as a new reading",
+    async () => {
+      const town = loadedTown();
+      let listener: Parameters<NonNullable<TownBackend["watch"]>>[0] | null =
+        null;
+      let shown = town;
+      const backend: TownBackend = {
+        kind: "account",
+        newId: () => crypto.randomUUID(),
+        load: async () => ({ state: town, status: "saved" }),
+        save: () => "saved",
+        watch(next) {
+          listener = next;
+          return () => undefined;
+        },
+        absorb(take) {
+          shown = take(shown, shown);
+          return shown;
+        },
+      };
+      const store = createTownStore(backend);
+      store.initialize();
+      await settle(() => store.getPersistenceSnapshot() === "saved");
+      const read = store.getReading();
+      // Taking 便り in is no new reading.
+      assert.equal(store.absorb(arrivedNow(), store.getGeneration()), true);
+      assert.equal(store.getReading(), read);
+      // Read again: what was read after the town is gone, and screens that
+      // read it (a 便り's page, 便りだけ's older pages) can tell.
+      listener!.replace(town, "recovered");
+      assert.equal(store.getReading(), read + 1);
+      assert.ok(
+        !store.getSnapshot().posts.some((entry) => entry.id === NEW_POST),
+      );
     },
   );
 
