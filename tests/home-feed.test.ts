@@ -131,6 +131,41 @@ check(
   },
 );
 
+check("a memo read alone is the reader's own: never among the 便り", () => {
+  // Written while reading alone (solo): by someone followed, by someone
+  // not, and by the reader; a memo read together stays, with its tag.
+  const memos = [
+    post("solo-followed", "r-nagi", NOW - 60_000, {
+      bookId: "solaris",
+      readingMode: "solo",
+    }),
+    post("solo-other", "r-sou", NOW - 60_000, {
+      bookId: "silence",
+      readingMode: "solo",
+    }),
+    post("solo-mine", ME_ID, NOW - 60_000, {
+      bookId: "momo",
+      readingMode: "solo",
+    }),
+    post("together", "r-sou", NOW - 120_000, {
+      bookId: "silence",
+      readingMode: "together",
+    }),
+  ];
+  const state = town({
+    following: ["shop-orbit"],
+    posts: [...seedState.posts, ...memos],
+  });
+  const { followed, town: others } = homeLetters(state, NOW);
+  const shown = ids([...followed, ...others]);
+  assert.ok(others.length > 0, "a quiet day is topped up");
+  for (const id of ["solo-followed", "solo-other", "solo-mine"])
+    assert.ok(!shown.includes(id), id);
+  assert.ok(shown.includes("together"));
+  assert.ok(!ids(followedLetters(state)).includes("solo-followed"));
+  assert.ok(!ids(followedLetters(state)).includes("solo-mine"));
+});
+
 check("posters ride in the 便り beside posts, by their time", () => {
   const following = town({ following: ["shop-orbit", "shop-rain"] });
   const letters = followedLetters(following);

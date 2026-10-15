@@ -78,17 +78,21 @@ export function realFirst<T>(items: T[], idOf: (item: T) => string): T[] {
 export const TONIGHT_MIN_BOOKS = 3;
 
 /**
- * 今夜の一軒: a shop that is not the reader's own, with at least three books
- * on its public shelves, chosen for the day.
+ * Whether a shop may be 今夜の一軒: not the reader's own, with at least three
+ * books on its public shelves. Checked again while the slide is held.
  */
+export const isTonightShop = (
+  state: Pick<TownState, "ownShop" | "books">,
+  shop: Shop,
+): boolean =>
+  !isOwnShop(state, shop) &&
+  publicItems(shop).filter((item) =>
+    state.books.some((book) => book.id === item.bookId),
+  ).length >= TONIGHT_MIN_BOOKS;
+
+/** 今夜の一軒: one of the shops that may be (isTonightShop), chosen for the day. */
 export function tonightsShop(state: TownState, now: number): Shop | null {
-  const open = state.shops.filter(
-    (shop) =>
-      !isOwnShop(state, shop) &&
-      publicItems(shop).filter((item) =>
-        state.books.some((book) => book.id === item.bookId),
-      ).length >= TONIGHT_MIN_BOOKS,
-  );
+  const open = state.shops.filter((shop) => isTonightShop(state, shop));
   return pickOfDay(
     realFirst(open, (shop) => shop.id),
     (shop) => shop.id,

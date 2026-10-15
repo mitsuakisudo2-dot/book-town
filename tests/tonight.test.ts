@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { seedState } from "../src/lib/data";
-import { dayOrder, jstDay, tonightsShop } from "../src/lib/tonight";
+import {
+  dayOrder,
+  isTonightShop,
+  jstDay,
+  tonightsShop,
+} from "../src/lib/tonight";
 import { ME_ID, type Shop, type TownState } from "../src/lib/types";
 
 let passed = 0;
@@ -81,6 +86,42 @@ check("never the reader's own, never a shop without three public books", () => {
   };
   assert.equal(tonightsShop(town({ shops: [thin] }), now), null);
 });
+
+check(
+  "a shop with a public and a private shelf counts its public books only",
+  () => {
+    const now = at("2026-10-14T20:00:00+09:00");
+    const base = seedState.shops[2];
+    const known = base.shelves
+      .flatMap((shelf) => shelf.items)
+      .filter((item) =>
+        seedState.books.some((book) => book.id === item.bookId),
+      );
+    assert.ok(known.length >= 5);
+    // Two books on its public shelf, three more on a private one.
+    const mixed = (open: number): Shop => ({
+      ...base,
+      shelves: [
+        {
+          ...base.shelves[0],
+          id: "secret",
+          isPublic: false,
+          items: known.slice(open, open + 3),
+        },
+        { ...base.shelves[0], isPublic: true, items: known.slice(0, open) },
+      ],
+    });
+    for (let day = 0; day < 7; day += 1)
+      assert.equal(
+        tonightsShop(town({ shops: [mixed(2)] }), now + day * 24 * HOUR),
+        null,
+      );
+    assert.equal(isTonightShop(town(), mixed(2)), false);
+    // Three public books: its night comes, whatever is kept private.
+    assert.equal(tonightsShop(town({ shops: [mixed(3)] }), now)?.id, base.id);
+    assert.equal(isTonightShop(town(), mixed(3)), true);
+  },
+);
 
 check("a real shop comes before every 見本", () => {
   const now = at("2026-10-14T20:00:00+09:00");
