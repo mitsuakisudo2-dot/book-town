@@ -8,8 +8,10 @@ import {
   unavailableBackend,
   type RecordKind,
   type TownBackend,
+  type TownReads,
 } from "./town-backend";
 import { emptyTown } from "./town-remote";
+import { takeIn, type Arrived } from "./arrived";
 import { supabaseConfigured } from "./supabase/config";
 import { followAccount } from "./town-session";
 import { accountStore } from "./account-session";
@@ -157,6 +159,9 @@ export function createTownStore(
   // so nothing meant for an account is written into this browser's demo.
   let loading = Boolean(options.follow);
   let generation = 0;
+  // Counts the town's readings: each load, and each reading again after a
+  // refused change, which leaves out what was read after the town.
+  let readCount = 0;
   let unwatch: (() => void) | null = null;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
@@ -177,12 +182,14 @@ export function createTownStore(
         },
         replace(update, updateStatus) {
           if (!current()) return;
+          readCount += 1;
           state = update;
           status = updateStatus;
           notify();
         },
       }) ?? null;
     const result = next.load();
+    readCount += 1;
     if ("then" in result) {
       loading = true;
       state = emptyTown();
@@ -192,6 +199,7 @@ export function createTownStore(
         (snapshot) => {
           if (!current()) return;
           loading = false;
+          readCount += 1;
           state = snapshot.state;
           status = snapshot.status;
           notify();
@@ -1011,6 +1019,40 @@ export function createTownStore(
      * database has, and what the old one had not written is gone.
      */
     getGeneration: () => generation,
+    /**
+     * Counts the town's readings. A town read again (after a refused change)
+     * has none of what was read after it: older 便り, one read by its id.
+     */
+    getReadCount: () => readCount,
+    /**
+     * What the town can read after it was read, from the backend it was
+     * read from; null in the demo, and while the town is on its way.
+     */
+    reads(): TownReads | null {
+      const { newer, older, post } = backend;
+      if (loading || !newer || !older || !post) return null;
+      return { generation, newer, older, post };
+    },
+    /** Whether reads() has any: a build with the database, the town read. */
+    getReadsSnapshot: () => !loading && Boolean(backend.newer),
+    getServerReadsSnapshot: () => false,
+    /**
+     * Takes in what was read after the town (arrived.ts) as the backend's
+     * own reading, by the path a refused change comes back by: never
+     * through `commit`, so nothing of it is saved. `from` is the generation
+     * it was read in; a town since moved to another backend takes none.
+     * Whether the town changed.
+     */
+    absorb(arrived: Arrived, from: number): boolean {
+      if (loading || from !== generation || !backend.absorb) return false;
+      const next = backend.absorb((town, saved) =>
+        takeIn(town, arrived, saved),
+      );
+      if (!next || next === state) return false;
+      state = next;
+      notify();
+      return true;
+    },
     subscribe(listener: () => void) {
       listeners.add(listener);
       initialize();
@@ -1059,6 +1101,24 @@ export function usePersistenceStatus(): PersistenceStatus {
     townStore.subscribe,
     townStore.getPersistenceSnapshot,
     townStore.getServerPersistenceSnapshot,
+  );
+}
+
+/** Whether the town can read 便り after it was read (not in the demo). */
+export function useTownReads(): boolean {
+  return useSyncExternalStore(
+    townStore.subscribe,
+    townStore.getReadsSnapshot,
+    townStore.getServerReadsSnapshot,
+  );
+}
+
+/** Counts the town's readings (store.getReadCount). */
+export function useTownReadCount(): number {
+  return useSyncExternalStore(
+    townStore.subscribe,
+    townStore.getReadCount,
+    () => 0,
   );
 }
 

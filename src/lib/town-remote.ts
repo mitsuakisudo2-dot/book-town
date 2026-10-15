@@ -46,6 +46,7 @@ import { demoBooks } from "./data";
 import { isDatabaseId } from "./paths";
 import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
 import { filedReportFrom } from "./supabase/reports";
+import type { Arrived } from "./arrived";
 
 /**
  * The signed-in town, translated between database rows and the TownState the
@@ -295,6 +296,49 @@ function withSampleBookIds(rows: RemoteRows): RemoteRows {
   };
 }
 
+/**
+ * A post as the town keeps it. The reader's own (by "me") carries what others
+ * did to it: how many liked and wanted it, and who liked it how many times.
+ */
+function postFromRow(
+  row: Tables<"posts">,
+  userId: string | null,
+  reactions: Tables<"post_reactions">[],
+): Post {
+  const mine = row.author_id === userId;
+  const others = (kind: "like" | "want") =>
+    reactions.filter(
+      (reaction) =>
+        reaction.post_id === row.id &&
+        reaction.kind === kind &&
+        reaction.user_id !== userId,
+    );
+  return {
+    id: row.id,
+    authorId: mine ? ME_ID : row.author_id,
+    body: row.body,
+    bookId: row.book_id,
+    spoiler: row.spoiler,
+    ...(row.spoiler_folded && !row.spoiler ? { folded: true } : {}),
+    parentId: row.parent_id,
+    createdAt: row.created_at,
+    likes: mine ? others("like").length : 0,
+    wants: mine ? others("want").length : 0,
+    ...(mine
+      ? {
+          likers: others("like").map((reaction) => ({
+            readerId: reaction.user_id,
+            taps: reaction.taps,
+            at: reaction.created_at,
+          })),
+        }
+      : {}),
+    readingMode: READING_MODES.includes(row.reading_mode as ReadingMode)
+      ? (row.reading_mode as ReadingMode)
+      : null,
+  };
+}
+
 /** Builds the town the signed-in person sees from what the database let them read. */
 export function townFromRows(
   rows: RemoteRows,
@@ -405,47 +449,9 @@ export function townFromRows(
   const topLevel = new Set(
     visible.filter((row) => row.parent_id === null).map((row) => row.id),
   );
-  const reactionCount = (postId: string, kind: "like" | "want") =>
-    rows.postReactions.filter(
-      (row) =>
-        row.post_id === postId && row.kind === kind && row.user_id !== userId,
-    ).length;
   const posts: Post[] = visible
     .filter((row) => row.parent_id === null || topLevel.has(row.parent_id))
-    .map((row) => {
-      const mine = row.author_id === userId;
-      return {
-        id: row.id,
-        authorId: readerId(row.author_id),
-        body: row.body,
-        bookId: row.book_id,
-        spoiler: row.spoiler,
-        ...(row.spoiler_folded && !row.spoiler ? { folded: true } : {}),
-        parentId: row.parent_id,
-        createdAt: row.created_at,
-        likes: mine ? reactionCount(row.id, "like") : 0,
-        wants: mine ? reactionCount(row.id, "want") : 0,
-        ...(mine
-          ? {
-              likers: rows.postReactions
-                .filter(
-                  (reaction) =>
-                    reaction.post_id === row.id &&
-                    reaction.kind === "like" &&
-                    reaction.user_id !== userId,
-                )
-                .map((reaction) => ({
-                  readerId: readerId(reaction.user_id),
-                  taps: reaction.taps,
-                  at: reaction.created_at,
-                })),
-            }
-          : {}),
-        readingMode: READING_MODES.includes(row.reading_mode as ReadingMode)
-          ? (row.reading_mode as ReadingMode)
-          : null,
-      };
-    })
+    .map((row) => postFromRow(row, userId, rows.postReactions))
     .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   const postIds = new Set(posts.map((post) => post.id));
   const reacted = (kind: "like" | "want") =>
@@ -655,6 +661,93 @@ export function townFromRows(
           ? [poster]
           : [];
       }),
+  };
+}
+
+/** What a read of posts after the town brought, as the database sent it. */
+export interface ArrivedRows {
+  posts: Tables<"posts">[];
+  /** Writers of those posts the town did not know. */
+  profiles: Tables<"profiles">[];
+  /** Books of those posts the town did not know. */
+  books: BookRow[];
+  /** The reader's own reactions to them, and others' to the reader's own. */
+  postReactions: Tables<"post_reactions">[];
+  /** The reader's own 「ネタバレでは？」 among them. */
+  spoilerReports: Pick<Tables<"spoiler_reports">, "post_id">[];
+  folds: Pick<
+    Tables<"moderation_folds">,
+    "target_kind" | "target_id" | "state" | "since"
+  >[];
+}
+
+/**
+ * Posts read after the town (newer, older, or one by its id), in the town's
+ * shapes, as townFromRows makes them: the reader's own as "me", a 見本's book
+ * by its own name. Their writers come without their nine, which the town
+ * reads with it next time. Which of them the town takes is takeIn's
+ * (arrived.ts) to decide.
+ */
+export function arrivedFromRows(
+  rows: ArrivedRows,
+  userId: string | null,
+): Arrived {
+  const seen = new Set<string>();
+  const posts = rows.posts
+    .filter((row) => !seen.has(row.id) && seen.add(row.id))
+    .map((row) =>
+      row.book_id === null
+        ? row
+        : { ...row, book_id: sampleBookOfRow(row.book_id) ?? row.book_id },
+    );
+  const ids = new Set(posts.map((row) => row.id));
+  const authors = new Set(posts.map((row) => row.author_id));
+  const books = new Set(posts.flatMap((row) => row.book_id ?? []));
+  const own = (kind: "like" | "want") =>
+    rows.postReactions.filter(
+      (row) =>
+        row.user_id === userId && row.kind === kind && ids.has(row.post_id),
+    );
+  return {
+    posts: posts.map((row) => postFromRow(row, userId, rows.postReactions)),
+    readers: rows.profiles
+      .filter((row) => row.id !== userId && authors.has(row.id))
+      .map((row) => ({
+        id: row.id,
+        handle: row.handle,
+        name: row.name,
+        bio: row.bio,
+        color: row.color,
+        links: cleanLinks(row.links),
+        lifeNine: [],
+        nineNotes: {},
+      })),
+    books: rows.books
+      .filter((row) => books.has(row.id) && !sampleBookOfRow(row.id))
+      .map((row) => bookFromRow(row, false)),
+    likedPosts: own("like").map((row) => row.post_id),
+    likeTaps: Object.fromEntries(
+      own("like")
+        .filter((row) => row.taps > 1)
+        .map((row) => [row.post_id, row.taps]),
+    ),
+    wantedPosts: own("want").map((row) => row.post_id),
+    spoilerReports: rows.spoilerReports
+      .map((row) => row.post_id)
+      .filter((id) => ids.has(id)),
+    reviewFolds: Object.fromEntries(
+      rows.folds
+        .filter(
+          (row) =>
+            row.target_kind === "post" &&
+            ids.has(row.target_id) &&
+            (row.state === "folded" || row.state === "held"),
+        )
+        .map((row): [string, ReviewFold] => [
+          reviewKey("post", row.target_id),
+          { state: row.state as ReviewFold["state"], since: row.since },
+        ]),
+    ),
   };
 }
 

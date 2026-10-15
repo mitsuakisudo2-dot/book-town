@@ -26,9 +26,11 @@ import {
   isNewcomer,
   letterOf,
   ownLettersSince,
+  sinceMark,
   weave,
   type LetterEntry,
 } from "../../lib/home-feed";
+import { lastOpen } from "../../lib/last-open";
 import { isTonightShop, tonightsShop } from "../../lib/tonight";
 import type { Poster } from "../../lib/posters";
 import type { Post, Shop, TownState } from "../../lib/types";
@@ -231,6 +233,11 @@ export function HomePane({
       ]
     : [];
   const town = drawn ? resolveLetters(drawn.town) : [];
+  // 「前に開いたのはここまで」: among the followed 便り, or the town's on a
+  // home that has none.
+  const mark = drawn
+    ? sinceMark(followed.length ? followed : town, lastOpen.opened())
+    : null;
   // The slides and the 特集 as they are now: what fails its test is dropped.
   const slots = drawn
     ? drawn.slots.map((slot) => resolve(state, slot, drawn.at))
@@ -289,6 +296,7 @@ export function HomePane({
           followed={followed}
           town={town}
           slots={slots}
+          mark={mark}
           onPick={setPicked}
         />
       ) : (
@@ -355,12 +363,15 @@ function WovenLetters({
   followed,
   town,
   slots,
+  mark,
   onPick,
   ...shared
 }: Shared & {
   followed: LetterEntry[];
   town: LetterEntry[];
   slots: (Slot | null)[];
+  /** The 便り 「前に開いたのはここまで」 goes before. */
+  mark: string | null;
   onPick: (picked: Picked) => void;
 }) {
   const firstTown = town[0]?.id;
@@ -369,7 +380,12 @@ function WovenLetters({
   const flush = () => {
     if (!run.length) return;
     parts.push(
-      <Letters {...shared} key={"letters:" + parts.length} entries={run} />,
+      <Letters
+        {...shared}
+        key={"letters:" + parts.length}
+        entries={run}
+        mark={mark}
+      />,
     );
     run = [];
   };

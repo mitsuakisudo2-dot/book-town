@@ -160,6 +160,10 @@ export function backgroundSync<T>(
   let writing = false;
   let failures = 0;
   let closed = false;
+  // Rows taken in while a write was on its way: the value it saves lacks
+  // them, so they are taken into it again once it is saved (against what
+  // was saved before, so a row the write removed stays removed).
+  let absorbedWhileWriting: ((value: T) => T)[] = [];
 
   const report = (status: PersistenceStatus) => {
     if (!closed) listener?.status(status);
@@ -190,6 +194,7 @@ export function backgroundSync<T>(
     try {
       await spec.write(base, target);
       synced = target;
+      for (const take of absorbedWhileWriting) synced = take(synced);
       failures = 0;
       report(pending() ? "saving" : "saved");
     } catch (error) {
@@ -210,6 +215,7 @@ export function backgroundSync<T>(
       return;
     } finally {
       writing = false;
+      absorbedWhileWriting = [];
     }
     if (pending()) schedule(delay);
   }
@@ -264,6 +270,24 @@ export function backgroundSync<T>(
       if (!pending()) return "saved";
       if (!writing) schedule(delay);
       return "saving";
+    },
+    /** The value as it is now, or null while none is read. */
+    current: (): T | null => latest ?? synced,
+    /**
+     * Takes in what was read after the value (a 便り that arrived, an older
+     * one): it joins both the value shown and the one the database is known
+     * to hold, so it is never written back as a change. `take` is handed
+     * the value and the one last saved, to tell what was removed here and
+     * not yet written. The value to show, or null while none is read.
+     */
+    absorb(take: (value: T, saved: T) => T): T | null {
+      if (closed || synced === null) return null;
+      const saved = synced;
+      const shown = latest ?? saved;
+      synced = take(saved, saved);
+      latest = shown === saved ? synced : take(shown, saved);
+      if (writing) absorbedWhileWriting.push((value) => take(value, saved));
+      return latest;
     },
     watch(next: SyncListener<T>) {
       listener = next;

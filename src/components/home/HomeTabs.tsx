@@ -13,15 +13,20 @@ export const tabId = (tab: HomeTab) => "home-tab-" + tab;
 
 /**
  * The two tabs at the top of Home (決定 H:89-93). The arrow keys move between
- * them; a pane is named as theirs only once it is on the page.
+ * them; a pane is named as theirs only once it is on the page. A tab with
+ * new 便り waiting, once the pill has had its time, carries a small green
+ * dot (never red, H:54) and says so in its name.
  */
 export function HomeTabs({
   tab,
   mounted,
+  waiting,
   onSelect,
 }: {
   tab: HomeTab;
   mounted: ReadonlySet<HomeTab>;
+  /** The tabs with new 便り waiting for the dot. */
+  waiting: ReadonlySet<HomeTab>;
   onSelect: (to: HomeTab) => void;
 }) {
   const buttons = useRef<Partial<Record<HomeTab, HTMLButtonElement | null>>>(
@@ -66,9 +71,15 @@ export function HomeTabs({
           aria-selected={key === tab}
           aria-controls={mounted.has(key) ? paneId(key) : undefined}
           tabIndex={key === tab ? 0 : -1}
+          aria-label={
+            waiting.has(key) ? label + "（新しい便りがあります）" : undefined
+          }
           onClick={() => onSelect(key)}
         >
           <span>{label}</span>
+          {waiting.has(key) && (
+            <span className="home-tab-dot" aria-hidden="true" />
+          )}
         </button>
       ))}
     </div>

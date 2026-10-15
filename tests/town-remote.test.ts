@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import type { Tables } from "../src/lib/supabase/database.types";
 import {
+  arrivedFromRows,
+  bookFromRow,
   cleanShelves,
   emptyTown,
   placementKey,
@@ -19,11 +21,19 @@ import { isSampleBook, sampleBookRowId, withSamples } from "../src/lib/samples";
 import {
   all,
   allRows,
+  backgroundSync,
   RowsChangedError,
   TownSyncError,
   type Outcome,
 } from "../src/lib/supabase/sync";
-import { accountTownBackend, loadTown } from "../src/lib/supabase/town-backend";
+import {
+  accountTownBackend,
+  loadTown,
+  visitorTownBackend,
+} from "../src/lib/supabase/town-backend";
+import { emptyArrived, takeIn, type Arrived } from "../src/lib/arrived";
+import { createTownStore } from "../src/lib/store";
+import type { TownBackend } from "../src/lib/town-backend";
 import {
   ME_ID,
   OWN_SHOP_ID,
@@ -179,6 +189,8 @@ type AnyRow = Record<string, unknown>;
 interface FakeQuery extends PromiseLike<Outcome<AnyRow[]>> {
   eq(column: string, value: unknown): FakeQuery;
   neq(column: string, value: unknown): FakeQuery;
+  gte(column: string, value: string): FakeQuery;
+  lt(column: string, value: string): FakeQuery;
   is(column: string, value: unknown): FakeQuery;
   in(column: string, values: unknown[]): FakeQuery;
   order(column: string, options?: { ascending?: boolean }): FakeQuery;
@@ -200,15 +212,23 @@ function fakeReads(
   } = {},
 ) {
   const cap = options.cap ?? 1000;
-  const asked: { table: string; from: number; ids?: number }[] = [];
+  const asked: {
+    table: string;
+    from: number;
+    ids?: number;
+    /** The filters, as PostgREST would read them: "author_id=in.2". */
+    filters: string[];
+  }[] = [];
   const select = (table: string, counted: boolean): FakeQuery => {
     let rows = [...(tables[table] ?? [])];
     const orders: [string, boolean][] = [];
+    const filters: string[] = [];
     let from = 0;
     let size = Infinity;
     let ids: number | undefined;
     const answer = (): Outcome<AnyRow[]> => {
-      asked.push({ table, from, ids });
+      if (size !== Infinity) filters.push("limit=" + size);
+      asked.push({ table, from, ids, filters });
       const sorted = [...rows].sort((a, b) => {
         for (const [column, up] of orders) {
           const [x, y] = [String(a[column]), String(b[column])];
@@ -227,24 +247,41 @@ function fakeReads(
     };
     const query: FakeQuery = {
       eq(column, value) {
+        filters.push(`${column}=eq.${value}`);
         rows = rows.filter((row) => row[column] === value);
         return query;
       },
       neq(column, value) {
+        filters.push(`${column}=neq.${value}`);
         rows = rows.filter((row) => row[column] !== value);
         return query;
       },
+      gte(column, value) {
+        filters.push(`${column}=gte.${value}`);
+        rows = rows.filter((row) => String(row[column]) >= value);
+        return query;
+      },
+      lt(column, value) {
+        filters.push(`${column}=lt.${value}`);
+        rows = rows.filter((row) => String(row[column]) < value);
+        return query;
+      },
       is(column, value) {
+        filters.push(`${column}=is.${value}`);
         rows = rows.filter((row) => row[column] === value);
         return query;
       },
       in(column, values) {
         ids = values.length;
+        filters.push(`${column}=in.${values.length}`);
         rows = rows.filter((row) => values.includes(row[column]));
         return query;
       },
       order(column, order = {}) {
         orders.push([column, order.ascending ?? true]);
+        filters.push(
+          `order=${column}.${order.ascending === false ? "desc" : "asc"}`,
+        );
         return query;
       },
       limit(count) {
@@ -1781,6 +1818,591 @@ async function main() {
       [],
     );
   });
+
+  // 便り read after the town (PR 2): newer ones, older ones, one by its id.
+  // They join what the database is known to hold, never what is to be
+  // written: otherwise a book that came with one would be saved again as
+  // the reader's own (planWrites writes every book the base lacks).
+  const NEW_POST = "00000000-0000-4000-8000-0000000000e1";
+  const NEW_BOOK = "00000000-0000-4000-8000-000000000b0e";
+  const CAL = "00000000-0000-4000-8000-00000000000c";
+  /** Ben's 便り and a new reader's reply, about a book the town lacked. */
+  const arrivedNow = (): Arrived => ({
+    ...emptyArrived(),
+    posts: [
+      {
+        id: NEW_POST,
+        authorId: BEN,
+        body: "届いたばかりの便り。",
+        bookId: NEW_BOOK,
+        spoiler: false,
+        parentId: null,
+        createdAt: "2026-10-13T09:00:00Z",
+        likes: 0,
+        wants: 0,
+        readingMode: null,
+      },
+      {
+        id: NEW_POST.replace("e1", "e2"),
+        authorId: CAL,
+        body: "わたしも読みました。",
+        bookId: null,
+        spoiler: false,
+        parentId: NEW_POST,
+        createdAt: "2026-10-13T09:05:00Z",
+        likes: 0,
+        wants: 0,
+        readingMode: null,
+      },
+    ],
+    readers: [
+      {
+        id: CAL,
+        handle: "cal",
+        name: "CAL",
+        bio: "",
+        color: "#768281",
+        lifeNine: [],
+        nineNotes: {},
+        links: [],
+      },
+    ],
+    books: [bookFromRow(book(NEW_BOOK), false)],
+  });
+  const loadedTown = () =>
+    townFromRows(
+      rows({
+        shops: [shop(BEN_SHOP, BEN)],
+        follows: [{ shop_id: BEN_SHOP }],
+        posts: [post("00000000-0000-4000-8000-0000000000e0", BEN)],
+      }),
+      ids,
+    );
+  /** A sync of `town` whose writes are planned, not sent. */
+  const plannedSync = (town: TownState, hold?: Promise<void>) => {
+    const planned: Write[] = [];
+    let writes = 0;
+    const sync = backgroundSync<TownState>(
+      {
+        read: async () => town,
+        async write(base, target) {
+          planned.push(...planWrites(base, target, ids));
+          await hold;
+          writes += 1;
+        },
+      },
+      { delay: 0 },
+    );
+    return { sync, planned, writes: () => writes };
+  };
+  const settle = async (done: () => boolean) => {
+    for (let wait = 0; wait < 200 && !done(); wait += 1)
+      await new Promise((resume) => setTimeout(resume, 5));
+    assert.ok(done(), "the write was made");
+  };
+
+  await check(
+    "便り taken in after the town, with their books, are never written back",
+    async () => {
+      const town = loadedTown();
+      // Taken as a change of the reader's, the new book would be written as
+      // one they typed in: the bug that taking in avoids.
+      assert.ok(
+        kinds(planWrites(town, takeIn(town, arrivedNow()), ids)).includes(
+          "books",
+        ),
+      );
+      const { sync, planned, writes } = plannedSync(town);
+      assert.equal(
+        sync.absorb((value, saved) => takeIn(value, arrivedNow(), saved)),
+        null,
+        "nothing to take in before the town is read",
+      );
+      await sync.load();
+      const shown = sync.absorb((value, saved) =>
+        takeIn(value, arrivedNow(), saved),
+      );
+      assert.ok(shown);
+      assert.deepEqual(shown.posts.map((entry) => entry.id).slice(-2), [
+        NEW_POST,
+        NEW_POST.replace("e1", "e2"),
+      ]);
+      assert.ok(shown.books.some((entry) => entry.id === NEW_BOOK));
+      assert.ok(shown.readers.some((entry) => entry.id === CAL));
+      // Saving the town as shown writes nothing; a like of the new 便り
+      // later writes that like, and only it.
+      assert.equal(sync.save(shown), "saved");
+      sync.save({ ...shown, likedPosts: [NEW_POST] });
+      await settle(() => writes() === 1);
+      assert.deepEqual(kinds(planned), ["add:post_reactions"]);
+      sync.close();
+    },
+  );
+
+  await check(
+    "便り taken in while a save is on its way are not written when it lands",
+    async () => {
+      let land: () => void = () => {};
+      const landing = new Promise<void>((resume) => (land = resume));
+      const town = loadedTown();
+      const { sync, planned, writes } = plannedSync(town, landing);
+      await sync.load();
+      // The reader's like is being saved when the 便り arrive.
+      const liked = { ...town, likedPosts: [town.posts[0].id] };
+      sync.save(liked);
+      await settle(() => planned.length === 1);
+      const shown = sync.absorb((value, saved) =>
+        takeIn(value, arrivedNow(), saved),
+      );
+      assert.ok(shown?.books.some((entry) => entry.id === NEW_BOOK));
+      assert.deepEqual(shown?.likedPosts, liked.likedPosts);
+      land();
+      await settle(() => writes() >= 1);
+      // The save landed without the new book; the next one still knows
+      // the database has it.
+      sync.save({ ...shown!, likedPosts: [...liked.likedPosts, NEW_POST] });
+      await settle(() => kinds(planned).length >= 2);
+      await settle(() => writes() >= 2);
+      assert.deepEqual(kinds(planned), [
+        "add:post_reactions",
+        "add:post_reactions",
+      ]);
+      sync.close();
+    },
+  );
+
+  await check(
+    "a 便り the reader deleted here, not yet deleted there, is not taken back in",
+    async () => {
+      const MINE = "00000000-0000-4000-8000-0000000000f1";
+      const town = townFromRows(
+        rows({ posts: [post(MINE, AKI, { created_at: at })] }),
+        ids,
+      );
+      let land: () => void = () => {};
+      const landing = new Promise<void>((resume) => (land = resume));
+      const { sync, planned, writes } = plannedSync(town, landing);
+      await sync.load();
+      const deleted = { ...town, posts: [] };
+      sync.save(deleted);
+      await settle(() => planned.length === 1);
+      // Read again by its id (an old 便り's page) while the delete is out.
+      const again: Arrived = { ...emptyArrived(), posts: town.posts };
+      const shown = sync.absorb((value, saved) => takeIn(value, again, saved));
+      assert.deepEqual(shown?.posts, []);
+      land();
+      await settle(() => writes() === 1);
+      // Landed, the delete is not planned again: the database is known
+      // not to hold it.
+      await new Promise((resume) => setTimeout(resume, 30));
+      assert.equal(writes(), 1);
+      assert.deepEqual(kinds(planned), ["delete-posts"]);
+      sync.close();
+    },
+  );
+
+  await check(
+    "the store takes 便り in by the backend, never as a change to save",
+    async () => {
+      const town = loadedTown();
+      const { sync } = plannedSync(town);
+      let saves = 0;
+      const backend: TownBackend = {
+        kind: "account",
+        newId: () => crypto.randomUUID(),
+        load: async () => ({ state: await sync.load(), status: "saved" }),
+        save(state) {
+          saves += 1;
+          return sync.save(state);
+        },
+        absorb: sync.absorb,
+      };
+      const store = createTownStore(backend);
+      store.initialize();
+      await settle(() => store.getPersistenceSnapshot() === "saved");
+      const generation = store.getGeneration();
+      // Read for another town (a sign-out meanwhile): not taken.
+      assert.equal(store.absorb(arrivedNow(), generation + 1), false);
+      assert.equal(store.absorb(arrivedNow(), generation), true);
+      assert.ok(
+        store.getSnapshot().posts.some((entry) => entry.id === NEW_POST),
+      );
+      assert.equal(saves, 0);
+      // The same again changes nothing.
+      assert.equal(store.absorb(arrivedNow(), generation), false);
+      sync.close();
+      // A visitor's town takes them in too; nothing is saved there.
+      const visitor = createTownStore(
+        visitorTownBackend({} as Parameters<typeof visitorTownBackend>[0]),
+      );
+      visitor.initialize();
+      await settle(() => visitor.getPersistenceSnapshot() !== "loading");
+      const before = visitor.getSnapshot();
+      const ben = {
+        ...arrivedNow(),
+        readers: [
+          ...arrivedNow().readers,
+          { ...arrivedNow().readers[0], id: BEN },
+        ],
+      };
+      assert.equal(visitor.absorb(ben, visitor.getGeneration()), true);
+      assert.equal(visitor.getSnapshot().posts.length, before.posts.length + 2);
+      // The visitor's backend takes arrivals into the town as last shown to
+      // it, never the one it read: a town handed to save is not undone.
+      const look = visitorTownBackend(
+        {} as Parameters<typeof visitorTownBackend>[0],
+      );
+      const { state: read } = await look.load();
+      const shown = { ...read, seenNotifications: ["follow:seen-here"] };
+      look.save(shown);
+      let given: TownState | null = null;
+      look.absorb!((value) => (given = value));
+      assert.equal(given, shown);
+    },
+  );
+
+  await check(
+    "a town read again after a refused change counts as a new reading",
+    async () => {
+      const town = loadedTown();
+      let listener: Parameters<NonNullable<TownBackend["watch"]>>[0] | null =
+        null;
+      let shown = town;
+      const backend: TownBackend = {
+        kind: "account",
+        newId: () => crypto.randomUUID(),
+        load: async () => ({ state: town, status: "saved" }),
+        save: () => "saved",
+        watch(next) {
+          listener = next;
+          return () => undefined;
+        },
+        absorb(take) {
+          shown = take(shown, shown);
+          return shown;
+        },
+      };
+      const store = createTownStore(backend);
+      store.initialize();
+      await settle(() => store.getPersistenceSnapshot() === "saved");
+      const read = store.getReadCount();
+      // Taking 便り in is no new reading.
+      assert.equal(store.absorb(arrivedNow(), store.getGeneration()), true);
+      assert.equal(store.getReadCount(), read);
+      // Read again: what was read after the town is gone, and screens that
+      // read it (a 便り's page, 便りだけ's older pages) can tell.
+      listener!.replace(town, "recovered");
+      assert.equal(store.getReadCount(), read + 1);
+      assert.ok(
+        !store.getSnapshot().posts.some((entry) => entry.id === NEW_POST),
+      );
+    },
+  );
+
+  await check("posts read after the town come in the town's shapes", () => {
+    const SAMPLE = demoBooks[0].id;
+    const arrived = arrivedFromRows(
+      {
+        posts: [
+          post(NEW_POST, BEN, {
+            book_id: NEW_BOOK,
+            created_at: "2026-10-13T09:00:00Z",
+          }),
+          // The reader's own, from another device, about a 見本's book.
+          post("00000000-0000-4000-8000-0000000000e3", AKI, {
+            book_id: sampleBookRowId(SAMPLE),
+            spoiler_folded: true,
+            reading_mode: "together",
+          }),
+          post(NEW_POST, BEN),
+        ],
+        profiles: [
+          profile(AKI, "aki"),
+          profile(BEN, "ben"),
+          profile(CAL, "cal"),
+        ],
+        books: [
+          book(NEW_BOOK),
+          book(OTHER_BOOK),
+          book(sampleBookRowId(SAMPLE)),
+        ],
+        postReactions: [
+          // Ben liked the reader's post three times; the reader liked his.
+          {
+            user_id: BEN,
+            post_id: "00000000-0000-4000-8000-0000000000e3",
+            kind: "like",
+            taps: 3,
+            created_at: at,
+          },
+          {
+            user_id: AKI,
+            post_id: NEW_POST,
+            kind: "like",
+            taps: 2,
+            created_at: at,
+          },
+          {
+            user_id: AKI,
+            post_id: NEW_POST,
+            kind: "want",
+            taps: 1,
+            created_at: at,
+          },
+          // On a post not read here: not taken.
+          {
+            user_id: AKI,
+            post_id: "p9",
+            kind: "like",
+            taps: 1,
+            created_at: at,
+          },
+        ],
+        spoilerReports: [{ post_id: NEW_POST }, { post_id: "p9" }],
+        folds: [
+          {
+            target_kind: "post",
+            target_id: NEW_POST,
+            state: "folded",
+            since: at,
+          },
+          { target_kind: "post", target_id: "p9", state: "folded", since: at },
+          {
+            target_kind: "shop",
+            target_id: NEW_POST,
+            state: "folded",
+            since: at,
+          },
+        ],
+      },
+      AKI,
+    );
+    assert.deepEqual(
+      arrived.posts.map((entry) => [entry.id, entry.authorId, entry.bookId]),
+      [
+        [NEW_POST, BEN, NEW_BOOK],
+        ["00000000-0000-4000-8000-0000000000e3", ME_ID, SAMPLE],
+      ],
+    );
+    const own = arrived.posts[1];
+    assert.equal(own.likes, 1);
+    assert.deepEqual(own.likers, [{ readerId: BEN, taps: 3, at }]);
+    assert.equal(own.folded, true);
+    assert.equal(own.readingMode, "together");
+    assert.equal(arrived.posts[0].likes, 0);
+    // Only the writers, never the reader; only their books, never a 見本's row.
+    assert.deepEqual(
+      arrived.readers.map((reader) => reader.id),
+      [BEN],
+    );
+    assert.deepEqual(arrived.readers[0].lifeNine, []);
+    assert.deepEqual(
+      arrived.books.map((entry) => entry.id),
+      [NEW_BOOK],
+    );
+    assert.deepEqual(arrived.likedPosts, [NEW_POST]);
+    assert.deepEqual(arrived.likeTaps, { [NEW_POST]: 2 });
+    assert.deepEqual(arrived.wantedPosts, [NEW_POST]);
+    assert.deepEqual(arrived.spoilerReports, [NEW_POST]);
+    assert.deepEqual(arrived.reviewFolds, {
+      ["post:" + NEW_POST]: { state: "folded", since: at },
+    });
+  });
+
+  await check(
+    "the reads after the town ask the database only for what the town lacks",
+    async () => {
+      const OLD = "00000000-0000-4000-8000-0000000000d0";
+      const REPLY = "00000000-0000-4000-8000-0000000000d1";
+      const tables: Record<string, AnyRow[]> = {
+        profiles: [profile(AKI, "aki"), profile(BEN, "ben")],
+        books: [book(BOOK)],
+        shops: [shop(BEN_SHOP, BEN)],
+        shop_follows: [{ follower_id: AKI, shop_id: BEN_SHOP }],
+        posts: [
+          post("00000000-0000-4000-8000-0000000000e0", BEN, {
+            created_at: "2026-10-12T09:00:00Z",
+          }),
+        ],
+      };
+      const fake = fakeReads(tables);
+      const backend = accountTownBackend(fake.client, AKI, { storage: false });
+      await backend.load();
+      // Then Cal signs up and writes about a new book, and Ben replies.
+      tables.profiles.push(profile(CAL, "cal"));
+      tables.books.push(book(NEW_BOOK));
+      tables.posts.push(
+        post(NEW_POST, CAL, {
+          book_id: NEW_BOOK,
+          created_at: "2026-10-13T09:00:00Z",
+        }),
+        post(NEW_POST.replace("e1", "e2"), BEN, {
+          parent_id: NEW_POST,
+          created_at: "2026-10-13T09:05:00Z",
+        }),
+        // Two old ones, past what the town read: a 便り of Ben's, a reply.
+        post(OLD, BEN, { created_at: "2026-09-01T09:00:00Z" }),
+        post(REPLY, AKI, {
+          parent_id: OLD,
+          created_at: "2026-09-02T09:00:00Z",
+        }),
+      );
+      fake.asked.length = 0;
+      const newer = await backend.newer!("2026-10-12T09:00:00Z");
+      // Only what the town lacks, oldest first: not Ben's known 便り.
+      assert.deepEqual(
+        newer.posts.map((entry) => entry.id),
+        [NEW_POST, NEW_POST.replace("e1", "e2")],
+      );
+      const filtersOf = (table: string) =>
+        fake.asked
+          .filter((ask) => ask.table === table)
+          .map((ask) => ask.filters);
+      // From a little before the newest known: one saved late joins on.
+      assert.deepEqual(filtersOf("posts"), [
+        [
+          "created_at=gte.2026-10-12T08:59:50.000Z",
+          "order=created_at.asc",
+          "limit=50",
+        ],
+      ]);
+      // Only Cal is asked for, only the new book.
+      assert.deepEqual(filtersOf("profiles"), [["id=in.1"]]);
+      assert.deepEqual(filtersOf("books"), [["id=in.1"]]);
+      assert.deepEqual(
+        newer.readers.map((reader) => reader.id),
+        [CAL],
+      );
+      assert.deepEqual(
+        newer.books.map((entry) => entry.id),
+        [NEW_BOOK],
+      );
+      assert.deepEqual(filtersOf("spoiler_reports"), [
+        ["reporter_id=eq." + AKI, "post_id=in.2"],
+      ]);
+
+      // 便りだけ's next stretch: the reader's and Ben's, before the oldest.
+      fake.asked.length = 0;
+      const older = await backend.older!("2026-10-12T09:00:00Z", [ME_ID, BEN]);
+      assert.deepEqual(filtersOf("posts")[0], [
+        "parent_id=is.null",
+        "author_id=in.2",
+        "created_at=lt.2026-10-12T09:00:00Z",
+        "order=created_at.desc",
+        "limit=20",
+      ]);
+      assert.deepEqual(
+        older.posts.map((entry) => [entry.id, entry.authorId]),
+        [
+          [OLD, BEN],
+          [REPLY, ME_ID],
+        ],
+      );
+      // Nobody followed, nothing asked.
+      fake.asked.length = 0;
+      assert.deepEqual((await backend.older!(at, [])).posts, []);
+      assert.equal(fake.asked.length, 0);
+
+      // A reply's page by its id: its post and every reply.
+      const page = await backend.post!(REPLY);
+      assert.deepEqual(
+        page.posts.map((entry) => entry.id).sort(),
+        [OLD, REPLY].sort(),
+      );
+      // Not a database id (a 見本's post): nothing is asked.
+      fake.asked.length = 0;
+      assert.deepEqual((await backend.post!("p-1")).posts, []);
+      assert.equal(fake.asked.length, 0);
+      assert.deepEqual((await backend.post!(uuid(0xdead))).posts, []);
+      backend.close?.();
+
+      // A visitor reads the same, and nothing of a reader's own.
+      const visitor = visitorTownBackend(fake.client);
+      await visitor.load();
+      fake.asked.length = 0;
+      const seen = await visitor.post!(REPLY);
+      assert.equal(seen.posts.length, 2);
+      assert.equal(
+        fake.asked.some(
+          (ask) =>
+            ask.table === "post_reactions" || ask.table === "spoiler_reports",
+        ),
+        false,
+      );
+    },
+  );
+
+  await check(
+    "newer 便り are read page after page, joined on to the town, and an idle read asks once",
+    async () => {
+      const minute = (n: number) =>
+        new Date(Date.parse("2026-10-12T09:00:00Z") + n * 60_000).toISOString();
+      const KNOWN = uuid(0xe00);
+      const tables: Record<string, AnyRow[]> = {
+        profiles: [profile(AKI, "aki"), profile(BEN, "ben")],
+        books: [book(BOOK)],
+        shops: [shop(BEN_SHOP, BEN)],
+        shop_follows: [{ follower_id: AKI, shop_id: BEN_SHOP }],
+        posts: [post(KNOWN, BEN, { created_at: minute(0) })],
+      };
+      const fake = fakeReads(tables);
+      const backend = accountTownBackend(fake.client, AKI, { storage: false });
+      await backend.load();
+      const postsAsked = () =>
+        fake.asked.filter((ask) => ask.table === "posts");
+      // Nothing new: the one read of posts, and nothing else is asked.
+      fake.asked.length = 0;
+      assert.deepEqual((await backend.newer!(minute(0))).posts, []);
+      assert.deepEqual(
+        fake.asked.map((ask) => ask.table),
+        ["posts"],
+      );
+      // Saved late, a little older than the newest known: it joins on.
+      const LATE = uuid(0xe01);
+      tables.posts.push(post(LATE, BEN, { created_at: minute(-0.1) }));
+      assert.deepEqual(
+        (await backend.newer!(minute(0))).posts.map((entry) => entry.id),
+        [LATE],
+      );
+      // A night away: 230 new 便り, some the reader's own from elsewhere.
+      const night = Array.from({ length: 230 }, (_, n) =>
+        post(uuid(0x1000 + n), n % 10 ? BEN : AKI, {
+          created_at: minute(1 + n),
+        }),
+      );
+      tables.posts.push(...night);
+      fake.asked.length = 0;
+      const first = await backend.newer!(minute(0));
+      // Four pages of fifty at most, each from the last one's newest.
+      assert.deepEqual(
+        postsAsked().map((ask) => ask.filters[0]),
+        [
+          `created_at=gte.${new Date(Date.parse(minute(0)) - 10_000).toISOString()}`,
+          `created_at=gte.${minute(48)}`,
+          `created_at=gte.${minute(97)}`,
+          `created_at=gte.${minute(146)}`,
+        ],
+      );
+      // Oldest first and with no gap: every one up to the newest read.
+      const others = night.filter((row) => row.author_id === BEN);
+      const got = first.posts.map((entry) => entry.id);
+      assert.equal(got[0], LATE);
+      const last = others.findIndex((row) => row.id === got.at(-1));
+      assert.deepEqual(
+        got.slice(1),
+        others.slice(0, last + 1).map((row) => row.id),
+      );
+      assert.ok(first.posts.every((entry) => entry.authorId !== ME_ID));
+      // The next read goes on from the newest of them, and brings the rest.
+      backend.absorb!((value, saved) => takeIn(value, first, saved));
+      const second = await backend.newer!(others[last].created_at);
+      assert.deepEqual(
+        second.posts.map((entry) => entry.id),
+        others.slice(last + 1).map((row) => row.id),
+      );
+      backend.close?.();
+    },
+  );
 
   console.log(passed + " town sync checks passed");
 }

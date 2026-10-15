@@ -86,6 +86,52 @@ const inserted = [];
 const codeRequests = [];
 const townReads = [];
 const townWrites = [];
+// The posts the town's own read leaves out, as older than the newest 500
+// it reads; and the query of each read of posts.
+const outsideLoad = new Set();
+const postReads = [];
+// Set to fail the next read of older 便り, or of one post by its id, as a
+// read the network keeps dropping ends, once the client's own retries are
+// spent (a 500, which it does not retry).
+let failOlderOnce = false;
+let failPostOnce = null;
+/**
+ * Like PostgREST, the posts a read's filters ask for (eq, in, is, gte, lt
+ * and newest first), as the reads after the town make them. The town's
+ * own read, with no filter, never has those outside its load.
+ */
+function postsAsked(rows, params) {
+  const bare = (value) => value.replace(/^"|"$/g, "");
+  const holds = (column, filter) => (row) => {
+    const op = filter.slice(0, filter.indexOf("."));
+    const arg = filter.slice(op.length + 1);
+    const cell = row[column];
+    if (op === "eq") return String(cell) === bare(arg);
+    if (op === "in")
+      return arg.slice(1, -1).split(",").map(bare).includes(String(cell));
+    if (op === "is") return arg === "null" ? cell === null : true;
+    if (op === "gte") return Date.parse(cell) >= Date.parse(bare(arg));
+    if (op === "lt") return Date.parse(cell) < Date.parse(bare(arg));
+    throw new Error("not mocked: posts filter " + column + "=" + filter);
+  };
+  let asked = rows;
+  let filtered = false;
+  for (const [key, filter] of params) {
+    if (["select", "order", "limit", "offset"].includes(key)) continue;
+    filtered = true;
+    asked = asked.filter(holds(key, filter));
+  }
+  if (!filtered) asked = asked.filter((row) => !outsideLoad.has(row.id));
+  const order = params.get("order");
+  if (order === "created_at.desc" || order === "created_at.asc")
+    asked = [...asked].sort(
+      (a, b) =>
+        (Date.parse(a.created_at) - Date.parse(b.created_at)) *
+        (order === "created_at.asc" ? 1 : -1),
+    );
+  else if (order) throw new Error("not mocked: posts order " + order);
+  return asked;
+}
 // 注釈モード: whether the database counts the reader as staff, the notes it
 // holds, what was sent, and every request for them.
 let staff = false;
@@ -371,7 +417,21 @@ const standIn = async (route) => {
     townReads.push(url.pathname);
     if (townDelay) await new Promise((done) => setTimeout(done, townDelay));
     const table = url.pathname.slice("/rest/v1/".length);
-    const rows = town?.[table] ?? [];
+    if (table === "posts") {
+      postReads.push(url.search);
+      const failing =
+        (failOlderOnce && url.search.includes("created_at=lt.")) ||
+        (failPostOnce && url.searchParams.get("id") === "eq." + failPostOnce);
+      if (failing) {
+        failOlderOnce = false;
+        failPostOnce = null;
+        return json(500, { message: "unavailable" });
+      }
+    }
+    const rows =
+      table === "posts"
+        ? postsAsked(town?.posts ?? [], url.searchParams)
+        : (town?.[table] ?? []);
     const from = Number(url.searchParams.get("offset") ?? 0);
     const page = rows.slice(
       from,
@@ -1940,6 +2000,699 @@ try {
       await homeDoors.getByRole("button", { name: "掲示板" }).click();
       await expect(page.locator("#home-board")).toBeInViewport();
       town = null;
+    },
+  );
+
+  await check(
+    "new 便り wait above until a tap or a pull: the pill, its eight seconds and the dot, the tab, a pull, an old 便り's page and 便りだけ's older 便り",
+    async () => {
+      // ミナ, followed: five 便り read with the town, and three older than
+      // the town's read. New ones come while Home is open.
+      const MINA = homeId(40);
+      const MINA_SHOP = homeId(41);
+      const NEW_BOOK = homeId(42);
+      const minas = [1, 2, 3, 4, 5].map((hours) =>
+        postRow(
+          homeId(50 + hours),
+          MINA,
+          `ミナの便り、${hours}時間前。`,
+          ago(hours),
+        ),
+      );
+      const old = [30, 31, 32].map((days) =>
+        postRow(
+          homeId(60 + days),
+          MINA,
+          `ミナの前の便り、${days}日前。`,
+          ago(days * 24),
+        ),
+      );
+      const OLD_REPLY = homeId(99);
+      town = {
+        profiles: [profileRow(MINA, "mina_reads", "ミナ")],
+        shops: [
+          {
+            id: MINA_SHOP,
+            owner_id: MINA,
+            name: "ミナの角の本屋",
+            description: "",
+            tagline: "",
+            theme: "sage",
+            is_open: true,
+            public_shelves: [],
+            public_scene_books: [],
+          },
+        ],
+        shop_follows: [{ shop_id: MINA_SHOP }],
+        books: [],
+        posts: [
+          ...minas,
+          ...old,
+          {
+            ...postRow(
+              OLD_REPLY,
+              MINA,
+              "前の便りへの、ミナの返事。",
+              ago(30 * 24 - 1),
+            ),
+            parent_id: old[0].id,
+          },
+        ],
+      };
+      for (const row of [...old, town.posts.at(-1)]) outsideLoad.add(row.id);
+      const arrive = (n, words, extra = {}) => {
+        const row = {
+          ...postRow(homeId(70 + n), MINA, words, new Date().toISOString()),
+          ...extra,
+        };
+        town.posts.push(row);
+        return row;
+      };
+      // A phone of its own, signed in as the reader, whose clock the test
+      // keeps.
+      const phone = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
+        reducedMotion: "reduce",
+        storageState: await context.storageState(),
+      });
+      try {
+        await phone.route(supabase + "/**", standIn);
+        await phone.route(
+          (url) => !url.href.startsWith(base) && !url.href.startsWith(supabase),
+          (route) => route.abort(),
+        );
+        await phone.clock.install();
+        const at = settleBeforeNavigating(await phone.newPage());
+        at.on("pageerror", (e) => errors.push(e.message));
+        await at.goto(base + "/");
+        const homeTab = at
+          .getByRole("tablist", { name: "ホームの表示" })
+          .getByRole("tab", { name: /^ホーム/ });
+        if ((await homeTab.getAttribute("aria-selected")) !== "true")
+          await homeTab.click();
+        const pane = at.locator('[role="tabpanel"][data-pane="home"]');
+        // The 便り themselves, not a 特集's cards between them.
+        const cards = pane.locator(
+          ".home-letters > .post-feed > article.letter",
+        );
+        await expect(cards.first()).toHaveAttribute(
+          "data-post-id",
+          minas[0].id,
+          { timeout: 10000 },
+        );
+        const order = () =>
+          cards.evaluateAll((all) => all.map((card) => card.dataset.postId));
+        const drawn = await order();
+        const pill = at.getByRole("button", { name: "新しい便りを見る" });
+        const said = at.locator(".town-said");
+        const writes = townWrites.length;
+        /**
+         * Nothing of what came was written back: a change would be on its
+         * way after the save's short wait (400ms on the page's clock).
+         */
+        const nothingWritten = async (paused = true) => {
+          if (paused) await at.clock.runFor(1_000);
+          await new Promise((done) => setTimeout(done, 1_500));
+          expect(townWrites.slice(writes)).toEqual([]);
+        };
+        // The clock stops a little ahead: Home is still settling.
+        const now = await at.evaluate(() => Date.now());
+        await at.clock.pauseAt(now + 2000);
+
+        // A minute later the town reads what came; nothing moves.
+        const first = arrive(1, "新しく届いた、ミナの便り。", {
+          book_id: NEW_BOOK,
+        });
+        town.books.push(bookRow(NEW_BOOK, null, "届いたばかりの本"));
+        const asked = postReads.length;
+        await at.clock.runFor(30_000);
+        expect(postReads.length, "not before the minute").toBe(asked);
+        await at.clock.runFor(31_000);
+        await expect(pill).toBeVisible();
+        expect(postReads.slice(asked).join(" ")).toContain("created_at=gte.");
+        await expect(said).toHaveText("新しい便りがあります");
+        await expect(pill).toContainText("新しい便り");
+        await expect(pill.locator(".home-new-face")).toHaveText("ミ");
+        // ミナ's colour is washed pale, so the ink of her initial reads.
+        await expectReadable(pill.locator(".home-new-face"), "her initial");
+        expect(await order()).toEqual(drawn);
+        await expect(at.getByText(first.body)).toHaveCount(0);
+        await expectReadable(pill, "the pill");
+        // 34px to the eye, a finger's 44px to a tap.
+        const box = await pill.boundingBox();
+        expect(Math.round(box.height)).toBe(34);
+        const missed = await pill.evaluate((button) => {
+          const { left, top, width, height } = button.getBoundingClientRect();
+          const x = left + width / 2;
+          const y = top + height / 2;
+          return [-21, 0, 21]
+            .flatMap((dx) => [-21, 0, 21].map((dy) => [dx, dy]))
+            .filter(([dx, dy]) => {
+              const hit = document.elementFromPoint(x + dx, y + dy);
+              return !hit || !button.contains(hit);
+            });
+        });
+        expect(missed, "points a finger misses").toEqual([]);
+        await at.screenshot({ path: path.join(output, "2a-new-pill.png") });
+
+        // Eight seconds on the screen, then a small dot says it instead.
+        await at.clock.runFor(7_900);
+        await expect(pill).toBeVisible();
+        await at.clock.runFor(200);
+        await expect(pill).toHaveCount(0);
+        const dotted = at.getByRole("tab", {
+          name: "ホーム（新しい便りがあります）",
+        });
+        await expect(dotted).toBeVisible();
+        await expect(dotted.locator(".home-tab-dot")).toBeVisible();
+        await expect(
+          at.getByRole("tab", { name: "便りだけ（新しい便りがあります）" }),
+        ).toBeVisible();
+        expect(await order()).toEqual(drawn);
+        await expect(at.locator("main")).not.toContainText(
+          /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+        );
+
+        // Down the page and back up a little, the tab shown is tapped: the
+        // new 便り goes in at the top, and the page goes there.
+        const shell = at.locator(".town-shell");
+        await at.evaluate(() => window.scrollTo(0, 600));
+        await expect(shell).toHaveAttribute("data-bar", "hidden");
+        await at.evaluate(() => window.scrollTo(0, 560));
+        await expect(shell).not.toHaveAttribute("data-bar", "hidden");
+        await expect(dotted).toBeInViewport();
+        await dotted.tap();
+        await expect(cards.first()).toHaveAttribute("data-post-id", first.id);
+        expect(await at.evaluate(() => scrollY)).toBe(0);
+        await expect(said).toHaveText("新しい便りを上に出しました");
+        await expect(
+          at.getByRole("tab", { name: "ホーム", exact: true }),
+        ).toBeVisible();
+        // Six followed of late now: no 「街の便り」 below them any more.
+        const followed = minas.map((row) => row.id);
+        expect(drawn.slice(0, 5)).toEqual(followed);
+        expect(await order()).toEqual([first.id, ...followed]);
+        await expect(cards.first()).toContainText("届いたばかりの本");
+        // Taken in as the town's own reading: nothing of it is written back.
+        await nothingWritten();
+
+        // The next one: a tap on the pill.
+        const second = arrive(2, "もうひとつ届いた、ミナの便り。");
+        await at.clock.runFor(61_000);
+        await expect(pill).toBeVisible();
+        expect(await order()).toEqual([first.id, ...followed]);
+        await pill.tap();
+        await expect(pill).toHaveCount(0);
+        await expect(cards.first()).toHaveAttribute("data-post-id", second.id);
+        expect(await at.evaluate(() => scrollY)).toBe(0);
+
+        // A pull at the top: v37's words in turn, and what came is on top.
+        const view = at.locator(".home-view");
+        const pull = (stage, dy) =>
+          view.evaluate(
+            (element, { stage, dy }) => {
+              const box = element.getBoundingClientRect();
+              const point = (y) =>
+                new Touch({
+                  identifier: 1,
+                  target: element,
+                  clientX: box.left + box.width / 2,
+                  clientY: y,
+                });
+              const fire = (type, touch) =>
+                element.dispatchEvent(
+                  new TouchEvent(type, {
+                    bubbles: true,
+                    touches: type === "touchend" ? [] : [touch],
+                    changedTouches: [touch],
+                  }),
+                );
+              const top = box.top + 120;
+              if (stage === "start") fire("touchstart", point(top));
+              if (stage === "move") fire("touchmove", point(top + dy));
+              if (stage === "end") fire("touchend", point(top + dy));
+            },
+            { stage, dy },
+          );
+        const words = at.locator(".home-pull");
+        const third = arrive(3, "引っぱって届いた、ミナの便り。");
+        await pull("start", 0);
+        await pull("move", 60);
+        await expect(words).toHaveText("引っぱって新しい便りを読む");
+        await pull("move", 170);
+        await expect(words).toHaveText("離すと読み込みます");
+        expect((await words.boundingBox()).height).toBeCloseTo(85, 0);
+        await expect(words).toHaveAttribute("aria-hidden", "true");
+        await pull("end", 170);
+        await expect(words).toHaveText("新しい便りが届きました");
+        await expect(said).toHaveText("新しい便りが届きました");
+        await expect(cards.first()).toHaveAttribute("data-post-id", third.id);
+        await expectReadable(words.locator("span"), "the pull's words");
+        await at.clock.runFor(1_000);
+        await expect(words).toHaveCount(0);
+        // Again, with nothing new.
+        await pull("start", 0);
+        await pull("move", 170);
+        await pull("end", 170);
+        await expect(words).toHaveText("新しい便りはまだありません");
+        await expect(said).toHaveText("新しい便りはまだありません");
+        await at.clock.runFor(1_000);
+        await expect(words).toHaveCount(0);
+        // A short pull reads nothing.
+        const reads = postReads.length;
+        await pull("start", 0);
+        await pull("move", 100);
+        await pull("end", 100);
+        await expect(words).toHaveCount(0);
+        expect(postReads.length).toBe(reads);
+        await nothingWritten();
+        await at.clock.resume();
+
+        // An old 便り, not in the town's read, opens by its id; its reply
+        // comes along. One that is not there says so.
+        await at.goto(base + "/post/?id=" + old[0].id);
+        await expect(at.getByText(old[0].body)).toBeVisible();
+        await expect(at.getByText("前の便りへの、ミナの返事。")).toBeVisible();
+        expect(postReads.join(" ")).toContain("id=eq." + old[0].id);
+        await at.goto(base + "/post/?id=" + homeId(98));
+        await expect(
+          at.getByText("この便りは、いまは開けません"),
+        ).toBeVisible();
+
+        // 便りだけ: past the 便り the town read, the older ones come a page
+        // at a time; then the end. Opened last two and a half hours ago,
+        // 「前に開いたのはここまで」 stands above the first from before.
+        await at.evaluate(
+          (key) =>
+            localStorage.setItem(key, String(Date.now() - 2.5 * 3600_000)),
+          "book-town-home-opened-v1",
+        );
+        await at.goto(base + "/timeline/");
+        const letters = at.locator('[role="tabpanel"][data-pane="letters"]');
+        await expect(letters.getByText("便りは、ここまでです")).toBeVisible({
+          timeout: 10000,
+        });
+        expect(
+          await letters
+            .locator("article.letter")
+            .evaluateAll((all) => all.map((card) => card.dataset.postId)),
+        ).toEqual([
+          third.id,
+          second.id,
+          first.id,
+          ...minas.map((row) => row.id),
+          ...old.map((row) => row.id),
+        ]);
+        const older = postReads.find((query) =>
+          query.includes("created_at=lt."),
+        );
+        expect(older).toContain("author_id=in.");
+        expect(older).toContain("parent_id=is.null");
+        const line = letters.locator(".home-since");
+        await expect(line).toHaveText("前に開いたのはここまで");
+        expect(
+          await line.evaluate(
+            (element) => element.nextElementSibling?.dataset.postId,
+          ),
+        ).toBe(minas[2].id);
+        await expectReadable(line, "「前に開いたのはここまで」");
+        await expect(at.locator("main")).not.toContainText(
+          /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+        );
+        await at.screenshot({
+          path: path.join(output, "2a-older.png"),
+          fullPage: true,
+        });
+        await nothingWritten(false);
+      } finally {
+        await phone.close();
+        outsideLoad.clear();
+        town = null;
+      }
+    },
+  );
+
+  await check(
+    "new 便り wait under a layer, keep the focus, dot a pane left behind and are said once; 便り read by id or back stay in order, tell nothing and survive a town read again",
+    async () => {
+      // ミナ, followed: three 便り of late and ten from weeks ago, read with
+      // the town; three older than its read, one with a reply. レン is not
+      // followed: his 便り tops up ホーム as 「街の便り」.
+      const MINA = homeId(200);
+      const MINA_SHOP = homeId(201);
+      const REN = homeId(202);
+      const recent = [1, 2, 3].map((hours) =>
+        postRow(
+          homeId(210 + hours),
+          MINA,
+          `ミナの近ごろ、${hours}時間前。`,
+          ago(hours),
+        ),
+      );
+      const weeks = Array.from({ length: 10 }, (_, n) =>
+        postRow(
+          homeId(220 + n),
+          MINA,
+          `ミナの数週前、${20 + n}日前。`,
+          ago((20 + n) * 24),
+        ),
+      );
+      const old = [40, 41, 42].map((days) =>
+        postRow(
+          homeId(200 + days),
+          MINA,
+          `ミナの昔の便り、${days}日前。`,
+          ago(days * 24),
+        ),
+      );
+      const oldReply = {
+        ...postRow(homeId(250), MINA, "昔の便りへの返事。", ago(41 * 24 - 1)),
+        parent_id: old[1].id,
+      };
+      town = {
+        profiles: [
+          profileRow(MINA, "mina_reads", "ミナ"),
+          profileRow(REN, "ren_reads", "レン"),
+        ],
+        shops: [
+          {
+            id: MINA_SHOP,
+            owner_id: MINA,
+            name: "ミナの角の本屋",
+            description: "",
+            tagline: "",
+            theme: "sage",
+            is_open: true,
+            public_shelves: [],
+            public_scene_books: [],
+          },
+        ],
+        shop_follows: [{ shop_id: MINA_SHOP }],
+        books: [],
+        posts: [...recent, ...weeks, ...old, oldReply],
+      };
+      for (const row of [...old, oldReply]) outsideLoad.add(row.id);
+      const arrive = (n, author, words) => {
+        const row = postRow(
+          homeId(260 + n),
+          author,
+          words,
+          new Date().toISOString(),
+        );
+        town.posts.push(row);
+        return row;
+      };
+      const phone = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
+        reducedMotion: "reduce",
+        storageState: await context.storageState(),
+      });
+      try {
+        await phone.route(supabase + "/**", standIn);
+        await phone.route(
+          (url) => !url.href.startsWith(base) && !url.href.startsWith(supabase),
+          (route) => route.abort(),
+        );
+        await phone.clock.install();
+        const at = settleBeforeNavigating(await phone.newPage());
+        at.on("pageerror", (e) => errors.push(e.message));
+        // Every notice so far read: the bell has no light.
+        await at.goto(base + "/notifications/");
+        const bell = at.getByRole("link", { name: "お知らせ", exact: true });
+        await expect(bell).toHaveCount(1, { timeout: 10000 });
+        // Kept in this browser once saved, for the pages opened next.
+        await expect
+          .poll(() =>
+            at.evaluate(
+              (key) => localStorage.getItem(key) ?? "",
+              "book-town-seen-v1:" + user.id,
+            ),
+          )
+          .toContain("follow:" + recent[0].id);
+
+        // An old 便り by its id, the network dropping the first read: it
+        // says so, and reads again when asked, the focus kept on the page.
+        failPostOnce = old[1].id;
+        await at.goto(base + "/post/?id=" + old[1].id);
+        await expect(
+          at.getByText("つながらないため、開けませんでした"),
+        ).toBeVisible();
+        await at.getByRole("button", { name: "もう一度読む" }).click();
+        await expect(at.getByText(old[1].body)).toBeVisible();
+        await expect(at.getByText(oldReply.body)).toBeVisible();
+        expect(await at.evaluate(() => document.activeElement?.className)).toBe(
+          "post-page-body",
+        );
+        // A change refused there (the stand-in answers no いいね): the town
+        // is read again without it, and the page reads it again, staying.
+        const reads = postReads.length;
+        await at
+          .locator(".post-page .letter.is-main")
+          .getByRole("button", { name: "いいね" })
+          .click();
+        await expect
+          .poll(
+            () =>
+              postReads
+                .slice(reads)
+                .filter(
+                  (query) =>
+                    new URLSearchParams(query).get("id") === "eq." + old[1].id,
+                ).length,
+          )
+          .toBeGreaterThan(0);
+        await expect(at.getByText(old[1].body)).toBeVisible();
+        await expect(at).toHaveURL(base + "/post/?id=" + old[1].id);
+
+        // On to the town in place: 便りだけ reads back past the town's read,
+        // the first page dropped once and read again when asked; the 便り
+        // opened by its id stands in its own place, and none of the old
+        // ones lights the bell.
+        failOlderOnce = true;
+        await at.getByRole("button", { name: "本の街へ" }).click();
+        await expect(at).toHaveURL(/\/(timeline\/)?$/);
+        const tabs = at.getByRole("tablist", { name: "ホームの表示" });
+        const tab = (name) => tabs.getByRole("tab", { name });
+        if ((await tab(/^便りだけ/).getAttribute("aria-selected")) !== "true")
+          await tab(/^便りだけ/).click();
+        const letters = at.locator('[role="tabpanel"][data-pane="letters"]');
+        const again = letters.getByRole("button", {
+          name: "前の便りをもう一度読む",
+        });
+        // Near the end, the next page is read.
+        const toEnd = () =>
+          at.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        await expect(letters.locator("article.letter")).toHaveCount(13, {
+          timeout: 10000,
+        });
+        await toEnd();
+        await again.click();
+        await expect(letters.getByText("便りは、ここまでです")).toBeVisible({
+          timeout: 10000,
+        });
+        expect(await at.evaluate(() => document.activeElement?.className)).toBe(
+          "home-letters-further",
+        );
+        const lettersOrder = () =>
+          letters
+            .locator("article.letter")
+            .evaluateAll((all) => all.map((card) => card.dataset.postId));
+        const inOrder = [...recent, ...weeks, ...old].map((row) => row.id);
+        expect(await lettersOrder()).toEqual(inOrder);
+        await expect(bell).toHaveCount(1);
+        // A change refused here too: read again, 便りだけ reads back again,
+        // never saying it is all there with the old ones gone.
+        const backReads = postReads.length;
+        await letters
+          .locator(`article.letter[data-post-id="${weeks[0].id}"]`)
+          .getByRole("button", { name: "いいね" })
+          .click();
+        await expect
+          .poll(async () => {
+            await toEnd();
+            return postReads
+              .slice(backReads)
+              .filter((query) => query.includes("created_at=lt.")).length;
+          })
+          .toBe(1);
+        await expect(
+          letters.locator(`article.letter[data-post-id="${old[2].id}"]`),
+        ).toHaveCount(1);
+        expect(await lettersOrder()).toEqual(inOrder);
+        await expect(at.locator("main")).not.toContainText(
+          /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+        );
+
+        // What the town says is counted from here, each time it says it.
+        await at.evaluate(() => {
+          window.townSaid = [];
+          new MutationObserver((changes) => {
+            for (const change of changes)
+              if (change.target.classList?.contains("town-said"))
+                for (const node of change.addedNodes)
+                  window.townSaid.push(node.textContent);
+          }).observe(document.body, { childList: true, subtree: true });
+        });
+        const saidSoFar = () => at.evaluate(() => [...window.townSaid]);
+        await tab(/^ホーム/).click();
+        await at.evaluate(() => window.scrollTo(0, 0));
+        const home = at.locator('[role="tabpanel"][data-pane="home"]');
+        const homeCards = home.locator(
+          ".home-letters > .post-feed > article.letter",
+        );
+        const pill = at.getByRole("button", { name: "新しい便りを見る" });
+        const now = await at.evaluate(() => Date.now());
+        await at.clock.pauseAt(now + 2000);
+        const newReads = () =>
+          postReads.filter((query) => query.includes("created_at=gte.")).length;
+
+        // A 便り's page open over Home when one comes: the pill waits under
+        // it, and its eight seconds with it.
+        await homeCards.first().locator(".letter-time").click();
+        const layer = at.locator(".post-page.is-layer");
+        await expect(layer).toBeVisible();
+        const first = arrive(1, MINA, "ページを開いている間に届いた便り。");
+        let before = newReads();
+        await at.clock.runFor(61_000);
+        await expect.poll(newReads).toBe(before + 1);
+        // Not drawn at all (the page beneath is out of a screen reader's
+        // reach under the layer, so asked by its class), nor said.
+        const drawn = at.locator(".home-new");
+        await at.waitForTimeout(500);
+        await expect(drawn).toHaveCount(0);
+        await at.clock.runFor(10_000);
+        await expect(drawn).toHaveCount(0);
+        expect(await saidSoFar()).toEqual([]);
+        await layer.getByRole("button", { name: "戻る" }).click();
+        await expect(layer).toHaveCount(0);
+        await expect(pill).toBeVisible();
+        expect(await saidSoFar()).toEqual(["新しい便りがあります"]);
+        await at.clock.runFor(4_000);
+        await expect(pill).toBeVisible();
+
+        // With the focus on it, its time stands still; taken with Enter,
+        // the focus goes to the tab shown.
+        await pill.focus();
+        await at.clock.runFor(9_000);
+        await expect(pill).toBeVisible();
+        await at.keyboard.press("Enter");
+        await expect(pill).toHaveCount(0);
+        await expect(homeCards.first()).toHaveAttribute(
+          "data-post-id",
+          first.id,
+        );
+        expect(await at.evaluate(() => document.activeElement?.id)).toBe(
+          "home-tab-home",
+        );
+        expect((await saidSoFar()).at(-1)).toBe("新しい便りを上に出しました");
+        // 便りだけ, made before, still draws the town from before: a dot
+        // says so until it is renewed.
+        const behind = tab("便りだけ（新しい便りがあります）");
+        await expect(behind).toBeVisible();
+        await behind.click();
+        await expect(behind).toHaveAttribute("aria-selected", "true");
+        await expect(letters.locator("article.letter").first()).toHaveAttribute(
+          "data-post-id",
+          recent[0].id,
+        );
+        await at.evaluate(() => window.scrollTo(0, 0));
+        await behind.click();
+        await expect(letters.locator("article.letter").first()).toHaveAttribute(
+          "data-post-id",
+          first.id,
+        );
+        await expect(tab("便りだけ")).toHaveAttribute("aria-selected", "true");
+
+        // Down 便りだけ, レン's 便り comes: nothing for 便りだけ. Its tab
+        // tapped takes it in without a word, and ホーム, where it would
+        // show, keeps a dot until renewed.
+        const ren = arrive(2, REN, "レンの、街に届いた便り。");
+        before = newReads();
+        await at.clock.runFor(61_000);
+        await expect.poll(newReads).toBe(before + 1);
+        await expect(pill).toHaveCount(0);
+        const saidBefore = (await saidSoFar()).length;
+        // Down 便りだけ, then a little back up: the bars come back.
+        const shell = at.locator(".town-shell");
+        const down = await at.evaluate(() => {
+          const y = Math.min(900, document.body.scrollHeight - innerHeight);
+          window.scrollTo(0, y);
+          return y;
+        });
+        expect(down).toBeGreaterThan(200);
+        await expect(shell).toHaveAttribute("data-bar", "hidden");
+        await at.evaluate((y) => window.scrollTo(0, y - 40), down);
+        await expect(shell).not.toHaveAttribute("data-bar", "hidden");
+        await tab("便りだけ").click();
+        await expect(tab("ホーム（新しい便りがあります）")).toBeVisible();
+        expect((await saidSoFar()).length).toBe(saidBefore);
+        await tab("ホーム（新しい便りがあります）").click();
+        await expect(home.getByText(ren.body)).toHaveCount(0);
+        await at.evaluate(() => window.scrollTo(0, 0));
+        await tab("ホーム（新しい便りがあります）").click();
+        await expect(home.getByText(ren.body)).toBeVisible();
+        await expect(tab("ホーム")).toBeVisible();
+
+        // Said once for what came: not again when the bars bring the pill
+        // back, nor when Home is left and come back to.
+        await at.evaluate(() => window.scrollTo(0, 0));
+        const fourth = arrive(3, MINA, "四つめに届いた、ミナの便り。");
+        await at.clock.runFor(61_000);
+        await expect(pill).toBeVisible();
+        const told = (await saidSoFar()).length;
+        expect((await saidSoFar()).at(-1)).toBe("新しい便りがあります");
+        await at.evaluate(() => window.scrollTo(0, 600));
+        await expect(shell).toHaveAttribute("data-bar", "hidden");
+        await expect(pill).toHaveCount(0);
+        await at.evaluate(() => window.scrollTo(0, 0));
+        await expect(shell).not.toHaveAttribute("data-bar", "hidden");
+        await expect(pill).toBeVisible();
+        const nav = at.getByRole("navigation", {
+          name: "スマートフォンナビゲーション",
+        });
+        await nav.getByRole("link", { name: "検索" }).click();
+        await expect(at).toHaveURL(base + "/search/");
+        await nav.getByRole("link", { name: "ホーム" }).click();
+        await expect(pill).toBeVisible();
+        expect((await saidSoFar()).length).toBe(told);
+
+        // Off Home, and with the page out of view, nothing is read; back in
+        // view, at once.
+        const away = newReads();
+        await nav.getByRole("link", { name: "検索" }).click();
+        await expect(at).toHaveURL(base + "/search/");
+        await at.clock.runFor(3 * 60_000);
+        expect(newReads()).toBe(away);
+        await nav.getByRole("link", { name: "ホーム" }).click();
+        await expect.poll(newReads).toBe(away + 1);
+        const seen = (state) =>
+          at.evaluate((state) => {
+            Object.defineProperty(document, "visibilityState", {
+              value: state,
+              configurable: true,
+            });
+            document.dispatchEvent(new Event("visibilitychange"));
+          }, state);
+        await seen("hidden");
+        await at.clock.runFor(3 * 60_000);
+        expect(newReads()).toBe(away + 1);
+        await seen("visible");
+        await expect.poll(newReads).toBe(away + 2);
+        await pill.tap();
+        await expect(homeCards.first()).toHaveAttribute(
+          "data-post-id",
+          fourth.id,
+        );
+        await at.clock.resume();
+      } finally {
+        await phone.close();
+        outsideLoad.clear();
+        failOlderOnce = false;
+        failPostOnce = null;
+        town = null;
+      }
     },
   );
 

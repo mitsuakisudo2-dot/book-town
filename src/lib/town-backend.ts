@@ -1,3 +1,4 @@
+import type { Arrived } from "./arrived";
 import type { RepositorySnapshot, TownRepository } from "./repository";
 import type { PersistenceStatus, TownState } from "./types";
 
@@ -21,9 +22,53 @@ export interface TownBackend {
   save(state: TownState): PersistenceStatus;
   /** News from a backend that keeps working after save() returns. */
   watch?(listener: TownBackendListener): () => void;
+  /**
+   * Takes rows read after the town into it as the backend's own reading
+   * (arrived.ts), so they are never written back: `take` is handed the town
+   * and the one last saved. The town to show, or null while none is read.
+   * The demo has nothing to take in.
+   */
+  absorb?(
+    take: (state: TownState, saved: TownState) => TownState,
+  ): TownState | null;
+  /**
+   * 便り the town lacks, written since `since` (an ISO time), oldest first,
+   * from NEWER_SLACK before it and at most NEWER_PAGES pages of NEWER_MAX;
+   * with no `since`, the newest NEWER_MAX. What polling and a pull bring
+   * (arrivals.ts). Never the reader's own.
+   */
+  newer?(since: string | null): Promise<Arrived>;
+  /**
+   * Top-level 便り by `authors` ("me" for the reader) before `before`,
+   * newest first, at most OLDER_PAGE, with their replies: 便りだけ's next
+   * stretch past what the town read.
+   */
+  older?(before: string, authors: string[]): Promise<Arrived>;
+  /** One post with its replies (a reply brings its post): a page by its id. */
+  post?(id: string): Promise<Arrived>;
   /** Stops background work once the store moves on to another backend. */
   close?(): void;
 }
+
+/** 便り one page of the newer ones brings. */
+export const NEWER_MAX = 50;
+/** Pages one read of the newer ones goes on for, at most (仮). */
+export const NEWER_PAGES = 4;
+/**
+ * How far before the newest known 便り newer ones are read from (仮): a
+ * post's time is when it was written, and it may be saved a moment later.
+ */
+export const NEWER_SLACK = 10_000;
+/** 便り one stretch of 便りだけ's older ones brings. */
+export const OLDER_PAGE = 20;
+
+/**
+ * What a town can read after it was read, from the backend it was read
+ * from (`generation`, as the store counts them). The demo has none.
+ */
+export type TownReads = Required<
+  Pick<TownBackend, "newer" | "older" | "post">
+> & { generation: number };
 
 export interface TownBackendListener {
   status(status: PersistenceStatus): void;

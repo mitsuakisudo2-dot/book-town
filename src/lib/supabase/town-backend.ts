@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  arrivedFromRows,
   emptyTown,
   planWrites,
   visitorReader,
@@ -10,10 +11,20 @@ import {
   type RemoteRows,
   type Write,
 } from "../town-remote";
-import { counterId, type RecordKind, type TownBackend } from "../town-backend";
-import { withSamples } from "../samples";
-import type { TownState } from "../types";
-import type { Database, Json } from "./database.generated";
+import {
+  counterId,
+  NEWER_MAX,
+  NEWER_PAGES,
+  NEWER_SLACK,
+  OLDER_PAGE,
+  type RecordKind,
+  type TownBackend,
+} from "../town-backend";
+import { emptyArrived, type Arrived } from "../arrived";
+import { isDatabaseId } from "../paths";
+import { sampleBookOfRow, withSamples } from "../samples";
+import { ME_ID, type TownState } from "../types";
+import type { Database, Json, Tables } from "./database.generated";
 import { REPORT_COLUMNS } from "./reports";
 import {
   all,
@@ -23,6 +34,7 @@ import {
   settled,
   shouldRetry,
   TownSyncError,
+  type Outcome,
   type SyncOptions,
 } from "./sync";
 
@@ -342,26 +354,206 @@ export async function loadPublicTown(client: Client): Promise<TownState> {
   );
 }
 
+type PostRow = Tables<"posts">;
+
+/** Rows matching `ids`, read 100 ids at a time. */
+async function byIds<T>(
+  ids: string[],
+  read: (some: string[]) => PromiseLike<Outcome<T[]>>,
+): Promise<T[]> {
+  const pages = await Promise.all(
+    chunks(ids, 100).map((some) => all(read(some))),
+  );
+  return pages.flat();
+}
+
+/**
+ * Posts read after the town, with what the town needs to show them: their
+ * writers and books it does not know yet, the reader's own reactions to
+ * them (and others' to the reader's own), their 「ネタバレでは？」 and folds.
+ */
+async function arrivedFor(
+  client: Client,
+  rows: PostRow[],
+  town: TownState | null,
+  userId: string | null,
+): Promise<Arrived> {
+  if (!rows.length) return emptyArrived();
+  const ids = [...new Set(rows.map((row) => row.id))];
+  const readers = new Set(town?.readers.map((reader) => reader.id));
+  const authors = [...new Set(rows.map((row) => row.author_id))].filter(
+    (id) => id !== userId && !readers.has(id),
+  );
+  const books = new Set(town?.books.map((book) => book.id));
+  const missing = [...new Set(rows.flatMap((row) => row.book_id ?? []))].filter(
+    (id) => isDatabaseId(id) && !sampleBookOfRow(id) && !books.has(id),
+  );
+  const [profiles, bookRows, postReactions, spoilerReports, folds] =
+    await Promise.all([
+      byIds(authors, (some) =>
+        client.from("profiles").select("*").in("id", some),
+      ),
+      byIds(missing, (some) =>
+        client.from("books").select(BOOK_COLUMNS).in("id", some),
+      ),
+      userId
+        ? byIds(ids, (some) =>
+            client.from("post_reactions").select("*").in("post_id", some),
+          )
+        : [],
+      userId
+        ? byIds(ids, (some) =>
+            client
+              .from("spoiler_reports")
+              .select("post_id")
+              .eq("reporter_id", userId)
+              .in("post_id", some),
+          )
+        : [],
+      byIds(ids, (some) =>
+        client
+          .from("moderation_folds")
+          .select(FOLD_COLUMNS)
+          .eq("target_kind", "post")
+          .in("target_id", some),
+      ),
+    ]);
+  return arrivedFromRows(
+    {
+      posts: rows,
+      profiles,
+      books: bookRows,
+      postReactions,
+      spoilerReports,
+      folds,
+    },
+    userId,
+  );
+}
+
+/**
+ * What a town reads after it was read (PR 2): newer 便り for polling and a
+ * pull, older ones for 便りだけ, one post by its id. The database decides
+ * what may be read, as for the town itself; `town` is the town as it is
+ * now, so only what it lacks is asked for.
+ */
+function remoteReads(
+  client: Client,
+  userId: string | null,
+  town: () => TownState | null,
+): Required<Pick<TownBackend, "newer" | "older" | "post">> {
+  const complete = (rows: PostRow[]) =>
+    arrivedFor(client, rows, town(), userId);
+  const posts = () => client.from("posts").select("*");
+  /** Rows the town lacks, each once: never one it has, nor the reader's own. */
+  const lacking = (rows: PostRow[]) => {
+    const have = new Set(town()?.posts.map((post) => post.id));
+    return rows.filter(
+      (row) =>
+        row.author_id !== userId && !have.has(row.id) && have.add(row.id),
+    );
+  };
+  return {
+    async newer(since) {
+      if (!since)
+        return complete(
+          lacking(
+            await all(
+              posts()
+                .order("created_at", { ascending: false })
+                .limit(NEWER_MAX),
+            ),
+          ),
+        );
+      // Oldest first from a little before `since`, page after page, so
+      // what is read always joins on to what the town has: the next read
+      // goes on from the newest of it, and nothing in between is skipped.
+      // A post's time is when it was written, not when it was saved, so
+      // one saved late may be a little older than the newest known.
+      const at = Date.parse(since);
+      let from = Number.isNaN(at)
+        ? since
+        : new Date(at - NEWER_SLACK).toISOString();
+      const rows: PostRow[] = [];
+      for (let page = 0; page < NEWER_PAGES; page += 1) {
+        const found = await all(
+          posts()
+            .gte("created_at", from)
+            .order("created_at", { ascending: true })
+            .limit(NEWER_MAX),
+        );
+        rows.push(...found);
+        if (found.length < NEWER_MAX) break;
+        from = found[found.length - 1].created_at;
+      }
+      return complete(lacking(rows));
+    },
+    async older(before, authors) {
+      const ids = [
+        ...new Set(authors.map((id) => (id === ME_ID ? userId : id))),
+      ].filter((id): id is string => !!id && isDatabaseId(id));
+      if (!ids.length) return emptyArrived();
+      const found = await all(
+        posts()
+          .is("parent_id", null)
+          .in("author_id", ids)
+          .lt("created_at", before)
+          .order("created_at", { ascending: false })
+          .limit(OLDER_PAGE),
+      );
+      const replies = await byIds(
+        found.map((row) => row.id),
+        (some) => posts().in("parent_id", some),
+      );
+      return complete([...found, ...replies]);
+    },
+    async post(id) {
+      if (!isDatabaseId(id)) return emptyArrived();
+      const [found] = await all(posts().eq("id", id));
+      if (!found) return emptyArrived();
+      const top = found.parent_id ?? found.id;
+      const [heads, replies] = await Promise.all([
+        found.parent_id ? all(posts().eq("id", top)) : [found],
+        all(posts().eq("parent_id", top)),
+      ]);
+      return complete([...heads, ...replies, found]);
+    },
+  };
+}
+
 /**
  * The town for someone who is not signed in: real shops and posts beside the
  * 見本, to look at only. The store asks them to sign in before any change
  * (store.ts), so nothing here is ever saved.
  */
 export function visitorTownBackend(client: Client): TownBackend {
+  // The town shown, for taking in what is read after it: nothing is saved.
+  let shown: TownState | null = null;
   return {
     kind: "visitor",
     newId: counterId,
     async load() {
       try {
         const state = withSamples(await loadPublicTown(client));
+        shown = state;
         return { state, status: "saved" as const };
       } catch {
         // The 見本 still make a town to walk through.
         const state = withSamples({ ...emptyTown(), me: visitorReader() });
+        shown = state;
         return { state, status: "unavailable" as const };
       }
     },
-    save: () => "saved",
+    save(state) {
+      shown = state;
+      return "saved";
+    },
+    absorb(take) {
+      if (!shown) return null;
+      shown = take(shown, shown);
+      return shown;
+    },
+    ...remoteReads(client, null, () => shown),
   };
 }
 
@@ -634,6 +826,8 @@ export function accountTownBackend(
     load: async () => ({ state: await sync.load(), status: "saved" as const }),
     save: sync.save,
     watch: sync.watch,
+    absorb: sync.absorb,
+    ...remoteReads(client, userId, sync.current),
     close: sync.close,
   };
 }

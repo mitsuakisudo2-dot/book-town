@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 
 // A layer drawn over the page (a dialog, a book held in hand) is one step of
 // 戻る: opening it adds a step to the browser's history, 戻る closes it, and
@@ -80,6 +80,26 @@ const closing = new Set<Layer>();
 const shutting = new Set<string>();
 /** Layers open now. */
 const opened = new Set<Layer>();
+/** Those told when a layer opens or closes over the page. */
+const watching = new Set<() => void>();
+const openedChanged = () => watching.forEach((listener) => listener());
+
+/**
+ * Whether a layer is open over the page (a dialog, a 便り's page, a book in
+ * hand, 注釈モード): what the page beneath shows for a moment waits.
+ */
+export function useLayerOpen(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      watching.add(listener);
+      return () => {
+        watching.delete(listener);
+      };
+    },
+    () => opened.size > 0,
+    () => false,
+  );
+}
 
 /**
  * The layer was closed and its step has yet to come off. A step the browser
@@ -277,6 +297,7 @@ export function useBackLayer(onBack: () => void, name?: string) {
     }
 
     opened.add(layer);
+    openedChanged();
     const onPop = () => {
       if (!layer.open || !layer.recorded || stack().includes(layer.token))
         return;
@@ -287,6 +308,7 @@ export function useBackLayer(onBack: () => void, name?: string) {
     return () => {
       removeEventListener("popstate", onPop);
       opened.delete(layer);
+      openedChanged();
       // Set aside while still open: its step comes off, unless another layer
       // takes it over or the page has already moved on.
       if (!layer.open || layer.left) return;

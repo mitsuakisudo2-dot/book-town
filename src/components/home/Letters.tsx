@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import type { Notify, TownActions, TownState } from "../../lib/types";
 import type { LetterEntry } from "../../lib/home-feed";
 import { LetterCard } from "../letter/LetterCard";
@@ -11,25 +12,30 @@ export type Shared = {
   notify: Notify;
 };
 
-/** 便り one under another: posts as cards from 1a, posters flat beside them. */
+/**
+ * 便り one under another: posts as cards from 1a, posters flat beside them.
+ * 「前に開いたのはここまで」 goes before `mark` (sinceMark, home-feed.ts).
+ */
 export function Letters({
   entries,
   label,
+  mark = null,
   ...shared
-}: Shared & { entries: LetterEntry[]; label?: string }) {
+}: Shared & { entries: LetterEntry[]; label?: string; mark?: string | null }) {
   return (
     <div className="post-feed" aria-label={label}>
-      {entries.map((entry) =>
-        entry.kind === "post" ? (
-          <LetterCard key={entry.id} {...shared} post={entry.post} showBook />
-        ) : (
-          <PosterCard
-            key={entry.id}
-            poster={entry.poster}
-            state={shared.state}
-          />
-        ),
-      )}
+      {entries.map((entry) => (
+        <Fragment key={entry.id}>
+          {entry.id === mark && (
+            <p className="home-since">前に開いたのはここまで</p>
+          )}
+          {entry.kind === "post" ? (
+            <LetterCard {...shared} post={entry.post} showBook />
+          ) : (
+            <PosterCard poster={entry.poster} state={shared.state} />
+          )}
+        </Fragment>
+      ))}
     </div>
   );
 }
