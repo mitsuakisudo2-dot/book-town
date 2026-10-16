@@ -1,7 +1,17 @@
 "use client";
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+// First, so the CSS keeps its order (screen-styles.ts).
+import "./screen-styles";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   journalTown,
@@ -11,6 +21,7 @@ import {
 } from "../lib/store";
 import { useJournalSender } from "../lib/library-journal";
 import { saveWarning } from "../lib/persistence";
+import { playTabMove, tabStep } from "../lib/tab-motion";
 import { useAccountState } from "../lib/account-session";
 import {
   ME_ID,
@@ -32,23 +43,17 @@ import {
   ReaderAvatar,
 } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
-import { ShopEditor } from "./ShopEditor";
-import { ProfileView } from "./ProfileView";
 import { BookInHand, heldBookOf } from "./BookInHand";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookReviews, FoldedWords } from "./Social";
 import { HomeView } from "./HomeView";
 import { requestHomeTop } from "../lib/home-tab";
-import { SearchView } from "./SearchView";
-import { ReadingView } from "./ReadingView";
-import { NotificationsView } from "./NotificationsView";
 import { activeSession } from "../lib/reading";
 import { unreadCount } from "../lib/notifications";
 import { bookPath } from "../lib/books";
 import "./usability.css";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
-import { WalkView } from "./WalkView";
 import {
   isDatabaseId,
   posterNewPath,
@@ -81,8 +86,6 @@ import { useLastHomeAddress } from "../lib/last-address";
 import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
 import { findReader, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { PosterThumb } from "./PosterView";
-import { PosterEditor } from "./PosterEditor";
-import { PosterScreen } from "./PosterScreen";
 import "./poster-screen.css";
 import { useLayerReturn } from "../lib/back-layer";
 import { PostLayer, PostPageView } from "./letter/PostPage";
@@ -94,6 +97,35 @@ import {
   usePostLayer,
 } from "./letter/post-layer";
 import { useAnnouncement } from "../lib/live-region";
+
+// Every screen but Home comes in its own file, read when it is first shown
+// (and after Home is drawn, below), so a phone opening the town reads and
+// runs only Home's code before the first 便り. Each is still drawn into the
+// page's HTML at build time.
+const ShopEditor = dynamic(() =>
+  import("./ShopEditor").then((file) => file.ShopEditor),
+);
+const ProfileView = dynamic(() =>
+  import("./ProfileView").then((file) => file.ProfileView),
+);
+const SearchView = dynamic(() =>
+  import("./SearchView").then((file) => file.SearchView),
+);
+const ReadingView = dynamic(() =>
+  import("./ReadingView").then((file) => file.ReadingView),
+);
+const NotificationsView = dynamic(() =>
+  import("./NotificationsView").then((file) => file.NotificationsView),
+);
+const WalkView = dynamic(() =>
+  import("./WalkView").then((file) => file.WalkView),
+);
+const PosterEditor = dynamic(() =>
+  import("./PosterEditor").then((file) => file.PosterEditor),
+);
+const PosterScreen = dynamic(() =>
+  import("./PosterScreen").then((file) => file.PosterScreen),
+);
 
 type View =
   | "town"
@@ -227,7 +259,10 @@ export default function TownApp({
   // When a visitor's change became an invitation to sign in, nothing was done,
   // so the message saying it was done stays quiet.
   // A like or a follow meant for a 見本 says why nothing happened.
-  useEffect(() => onSampleRefusal((message) => setToast({ message, at: Date.now() })), []);
+  useEffect(
+    () => onSampleRefusal((message) => setToast({ message, at: Date.now() })),
+    [],
+  );
   const notify = useCallback<Notify>((message, undo) => {
     if (accountRequested() || refusedForSample()) return;
     noteToast(message);
@@ -327,6 +362,21 @@ export default function TownApp({
     if (books === "library") replaceAddress({ params: { books: null } });
     window.scrollTo({ top: 0 });
   };
+  // Moving to another tab of the bottom bar slides its page in from that
+  // side and springs its icon (tab-motion.ts). Only where the bar shows.
+  const mainRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const index = links.findIndex((l) => l.section === section);
+    const step = tabStep(index < 0 ? null : index);
+    const nav = navRef.current;
+    if (!nav || getComputedStyle(nav).display === "none") return;
+    playTabMove(
+      step,
+      mainRef.current,
+      nav.querySelector('a[aria-current="page"] svg'),
+    );
+  }, [section]);
   const clickOf = (link: (typeof links)[number]) =>
     link.section === "home"
       ? homeClick
@@ -482,6 +532,7 @@ export default function TownApp({
           // Both of Home's addresses draw the same Home, whichever tab shows.
           className={"town-main view-" + (view === "timeline" ? "town" : view)}
           key={view + selectedId}
+          ref={mainRef}
         >
           {visitor && ownPage ? (
             <VisitorPage page={ownPage} />
@@ -525,6 +576,7 @@ export default function TownApp({
       </div>
       <nav
         className="town-bottom-nav"
+        ref={navRef}
         aria-label="スマートフォンナビゲーション"
         inert={layered}
       >

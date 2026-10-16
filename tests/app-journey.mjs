@@ -1124,6 +1124,59 @@ try {
   );
 
   await check(
+    "on a slow phone, 戻る from another page returns to the step left",
+    async () => {
+      // A slow phone may hold the page it leaves for seconds before letting
+      // go of its steps: 戻る from Home still finds the sign as it was, and
+      // each 戻る after that goes back one step.
+      const sign = page.getByLabel("書店の名前");
+      const slow = { timeout: 20_000 };
+      await go("/my-shop/");
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
+      try {
+        await page.getByRole("button", { name: /たった1冊の本屋/ }).click();
+        await page
+          .getByRole("searchbox", { name: "棚に並べる本" })
+          .fill("ソラリス");
+        await page
+          .getByRole("list", { name: "棚に並べる本の候補" })
+          .getByRole("button", { name: /ソラリス/ })
+          .click();
+        await page.getByRole("button", { name: "看板を決める" }).click();
+        await sign.fill("遠回り書房", slow);
+        await page
+          .getByRole("navigation", { name: "スマートフォンナビゲーション" })
+          .getByRole("link", { name: "ホーム" })
+          .click();
+        await expect(page).toHaveURL(
+          (url) => url.pathname === "/" || url.pathname === "/timeline/",
+          slow,
+        );
+        await page.goBack();
+        await expect(sign).toHaveValue("遠回り書房", slow);
+        await page.goBack();
+        await expect(page.locator(".open-shelf-book")).toContainText(
+          "ソラリス",
+          slow,
+        );
+        await page.goBack();
+        await expect(
+          page.getByRole("button", { name: /たった1冊の本屋/ }),
+        ).toBeVisible(slow);
+        await expect(page).toHaveURL(/\/my-shop\/$/);
+      } finally {
+        await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+        await cdp.detach();
+      }
+      // The next shop starts afresh.
+      await page.evaluate(() =>
+        localStorage.removeItem("book-town-open-shop-drafts-v1"),
+      );
+    },
+  );
+
+  await check(
     "a shop opens in three minutes: the nine, a sign, the lights",
     async () => {
       await go("/my-shop/");

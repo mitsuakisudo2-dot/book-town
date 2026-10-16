@@ -683,9 +683,11 @@ try {
         await expect(empty).toHaveCount(0);
         await expect(bones).toHaveCount(0, { timeout: 10000 });
         await expect(empty).toBeVisible();
-        await page.evaluate(() =>
-          localStorage.setItem("book-town-home-tab-v1", "home"),
-        );
+        // ホーム, opened for the first time: nothing kept from last time.
+        await page.evaluate(() => {
+          localStorage.setItem("book-town-home-tab-v1", "home");
+          localStorage.removeItem("book-town-home-snapshot-v1");
+        });
         await page.goto(base + "/");
         await expect(bones).toHaveAttribute("aria-busy", "true");
         await expect(page.locator(".home-carousel")).toHaveAttribute(
@@ -713,6 +715,32 @@ try {
         for (const each of found)
           await expect(each, part).toContainText("見本");
       }
+    },
+  );
+
+  await check(
+    "a visitor's Home opened again draws the 便り kept from last time, read-only, until the town is read",
+    async () => {
+      const kept = page.locator("main .home-kept");
+      const words = await page.evaluate(() =>
+        localStorage.getItem("book-town-home-snapshot-v1"),
+      );
+      expect(JSON.parse(words ?? "null")?.owner).toBe("visitor");
+      townDelay = 2500;
+      try {
+        await page.goto(base + "/");
+        await expect(kept).toHaveAttribute("aria-busy", "true");
+        await expect(kept).toHaveAttribute("inert", "");
+        await expect(kept.locator("article.letter").first()).toBeVisible();
+        await expect(page.locator("main .home-skeletons")).toHaveCount(0);
+        await expect(page.locator("main")).not.toContainText(
+          /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+        );
+        await expect(kept).toHaveCount(0, { timeout: 10000 });
+      } finally {
+        townDelay = 0;
+      }
+      await expect(page.locator("main article.letter").first()).toBeVisible();
     },
   );
 
@@ -1126,7 +1154,9 @@ try {
       // Home and the 便り drawn, not their bones, before nothing is looked
       // for.
       if (path === "/" || path === "/timeline/")
-        await expect(page.locator("main .home-skeletons")).toHaveCount(0);
+        await expect(
+          page.locator("main .home-skeletons, main .home-kept"),
+        ).toHaveCount(0);
       if (path.startsWith("/post/")) {
         await expect(page.locator("main")).toContainText("十年ぶりに再読");
         await expect(
@@ -1839,7 +1869,8 @@ try {
         ago(0.1 * (at + 1)),
       ),
     );
-  const bones = page.locator("main .home-skeletons");
+  // Until the town is read: the bones, or the 便り kept from last time.
+  const bones = page.locator("main .home-skeletons, main .home-kept");
   const homeDoors = page.getByRole("navigation", { name: "できること" });
 
   await check(
@@ -4766,6 +4797,15 @@ try {
       await openHome();
       await expect(bones).toHaveCount(0, { timeout: 10000 });
       await expect(theirs).toBeVisible();
+      // Kept for the next opening, as this account's.
+      const keptOwner = () =>
+        page.evaluate(
+          () =>
+            JSON.parse(
+              localStorage.getItem("book-town-home-snapshot-v1") ?? "null",
+            )?.owner ?? null,
+        );
+      await expect.poll(keptOwner).toBe(user.id);
       // Whatever the page shows from now on is noted.
       await page.evaluate(() => {
         window.sawEmptyTown = false;
@@ -4790,6 +4830,9 @@ try {
         // The home, signed out there, reads the visitor's town.
         await expect(bones).toHaveAttribute("aria-busy", "true");
         await expect(theirs).toHaveCount(0);
+        // The account's kept 便り went with it, never drawn for a visitor.
+        expect(await keptOwner()).not.toBe(user.id);
+        await expect(page.getByText("レンの夜の一行、その1。")).toHaveCount(0);
         await expect(bones).toHaveCount(0, { timeout: 10000 });
       } finally {
         townDelay = 0;

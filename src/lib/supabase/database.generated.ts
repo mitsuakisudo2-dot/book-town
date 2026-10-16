@@ -205,6 +205,7 @@ export type Database = {
           source: string;
           title: string;
           updated_at: string;
+          work_id: string;
         };
         ComputedFields: never;
         Insert: {
@@ -218,6 +219,7 @@ export type Database = {
           source?: string;
           title: string;
           updated_at?: string;
+          work_id: string;
         };
         Update: {
           author?: string;
@@ -230,6 +232,7 @@ export type Database = {
           source?: string;
           title?: string;
           updated_at?: string;
+          work_id?: string;
         };
         Relationships: [
           {
@@ -237,6 +240,20 @@ export type Database = {
             columns: ["created_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "books_isbn_fkey";
+            columns: ["isbn"];
+            isOneToOne: false;
+            referencedRelation: "editions";
+            referencedColumns: ["isbn"];
+          },
+          {
+            foreignKeyName: "books_work_id_fkey";
+            columns: ["work_id"];
+            isOneToOne: false;
+            referencedRelation: "works";
             referencedColumns: ["id"];
           },
         ];
@@ -262,6 +279,33 @@ export type Database = {
           source?: string;
         };
         Relationships: [];
+      };
+      editions: {
+        Row: {
+          created_at: string;
+          isbn: string;
+          work_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          isbn: string;
+          work_id: string;
+        };
+        Update: {
+          created_at?: string;
+          isbn?: string;
+          work_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "editions_work_id_fkey";
+            columns: ["work_id"];
+            isOneToOne: false;
+            referencedRelation: "works";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       library_entries: {
         Row: {
@@ -1319,6 +1363,33 @@ export type Database = {
             columns: ["reporter_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      works: {
+        Row: {
+          created_at: string;
+          id: string;
+          merged_into: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          id?: string;
+          merged_into?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          merged_into?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "works_merged_into_fkey";
+            columns: ["merged_into"];
+            isOneToOne: false;
+            referencedRelation: "works";
             referencedColumns: ["id"];
           },
         ];

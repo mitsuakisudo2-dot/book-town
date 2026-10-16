@@ -7,6 +7,7 @@ import {
 import { supabaseAccountBackend } from "./supabase/account-backend";
 import { getSupabase } from "./supabase/client";
 import { supabaseConfigured } from "./supabase/config";
+import { forgetAccountSnapshot } from "./home-snapshot";
 
 const LEAVING_KEY = "book-town-leaving-v1";
 
@@ -43,6 +44,13 @@ export const accountStore = createAccountStore(
 );
 
 export const accountActions = accountStore.actions;
+
+// Signed out: Home's 便り kept for the account are not left in this browser.
+if (typeof window !== "undefined" && supabaseConfigured)
+  accountStore.subscribe(() => {
+    if (accountStore.getSnapshot().status === "signed-out")
+      forgetAccountSnapshot();
+  });
 
 export function useAccountState(): AccountState {
   return useAccount(accountStore);

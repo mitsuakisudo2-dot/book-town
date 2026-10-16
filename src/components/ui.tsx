@@ -1,4 +1,5 @@
 "use client";
+import { avatarInk } from "../lib/avatar-ink";
 import {
   createContext,
   useContext,
@@ -418,7 +419,10 @@ export function ReaderAvatar({
 }) {
   return (
     <span
-      className="reader-avatar"
+      className={
+        "reader-avatar" +
+        (avatarInk(reader.color) === "light" ? " is-light-ink" : "")
+      }
       style={{
         width: size,
         height: size,

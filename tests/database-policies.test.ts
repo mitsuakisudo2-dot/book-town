@@ -2969,7 +2969,9 @@ async function main() {
       // Every column that keeps a book's id as a foreign key. A new one must
       // be taught to private.book_is_listed and private.book_is_mine (create
       // or replace), or its books go missing from the screens; so must a new
-      // jsonb column with book ids in it, which this list cannot see.
+      // jsonb column with book ids in it, which this list cannot see. How
+      // books came to share a work (private.work_changes) is no reader's use
+      // of a book, and nobody reads it through the API.
       const keys = await db.query<{ ref: string }>(
         `select c.conrelid::regclass::text || '.' || a.attname as ref
          from pg_constraint c
@@ -2985,6 +2987,7 @@ async function main() {
           "library_entries.book_id",
           "poster_books.book_id",
           "posts.book_id",
+          "private.work_changes.book_id",
           "profile_nine.book_id",
           "reading_entries.book_id",
           "reading_sessions.book_id",
@@ -5661,18 +5664,20 @@ async function main() {
       assert.equal(await left(table, column), 0, table);
     // Nothing anywhere still names him, in any column of any table (text and
     // json included), but what account-tables.ts says stays for the operator.
-    const relations = await db.query<{ table: string }>(
-      `select n.nspname || '.' || c.relname as table
+    // Copies taken by migrations (keep) have names that need quoting.
+    const relations = await db.query<{ table: string; quoted: string }>(
+      `select n.nspname || '.' || c.relname as table,
+         quote_ident(n.nspname) || '.' || quote_ident(c.relname) as quoted
        from pg_class c join pg_namespace n on n.oid = c.relnamespace
        where c.relkind in ('r', 'm') and ${ACCOUNT_SCHEMAS_SQL}`,
     );
     const naming: string[] = [];
-    for (const { table } of relations.rows) {
+    for (const { table, quoted } of relations.rows) {
       const stays = Object.entries(ACCOUNT_TABLES[table]?.targets ?? {})
         .filter(([, target]) => "stays" in target)
         .map(([column]) => column);
       const named = await db.query<{ n: number }>(
-        `select count(*)::int as n from ${table} t
+        `select count(*)::int as n from ${quoted} t
          where (to_jsonb(t) - $2::text[])::text like '%' || $1 || '%'`,
         [BEN, stays],
       );
@@ -5875,8 +5880,13 @@ async function main() {
         (await read(null, "select id from shops")).length,
         (await read(null, "select profile_id as id from profile_nine")).length,
       ];
+      // Every column but the work, which a later migration adds to each book.
       const catalog = () =>
-        earlier.query("select * from books order by id").then((r) => r.rows);
+        earlier
+          .query(
+            "select to_jsonb(b) - 'work_id' as row from books b order by id",
+          )
+          .then((r) => r.rows);
       const before = {
         counts: await counts(),
         rows: await catalog(),
@@ -6043,8 +6053,12 @@ async function main() {
           "books",
           "book_marks",
         ])
+          // Every column but a book's work, which a later migration adds.
           out[table] = (
-            await earlier.query(`select * from ${table} t order by t::text`)
+            await earlier.query(
+              `select to_jsonb(t) - 'work_id' as row from ${table} t
+               order by (to_jsonb(t) - 'work_id')::text`,
+            )
           ).rows;
         return out;
       };

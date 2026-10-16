@@ -834,7 +834,7 @@ export function ProfileView({
         {shop ? (
           <>
             <Link
-              className={`profile-shop-sign profile-shop-${shop.theme}`}
+              className={`profile-shop-sign theme-${shop.theme}`}
               href={shopPath(shop.id)}
             >
               <div className="profile-shop-mark">

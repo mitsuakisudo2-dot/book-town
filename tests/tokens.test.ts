@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { FIRST_PALETTE, PALETTES } from "../src/lib/appearance";
+import { AVATAR_INKS, avatarInkContrast } from "../src/lib/avatar-ink";
 import { countStyles, type StyleCounts } from "./style-count";
 
 // The town's colours and type live in src/app/tokens.css. These checks keep
@@ -126,7 +127,13 @@ check(
     // The night redefines the paper, the ink, the lines and the palette:
     // every name the day sets except the swatches, the fonts' companions
     // and the colours that stay the same day and night.
-    const stays = new Set(["--on-dark", "--on-photo", "--muted"]);
+    const stays = new Set([
+      "--on-dark",
+      "--on-photo",
+      "--muted",
+      "--avatar-ink",
+      "--avatar-ink-light",
+    ]);
     for (const name of Object.keys(base))
       if (!name.startsWith("--palette-") && !stays.has(name))
         assert.ok(night[name], `the night sets ${name}`);
@@ -207,6 +214,25 @@ check(
   },
 );
 
+check("a reader's initial stands out on every colour a demo reader has", () => {
+  assert.deepEqual(AVATAR_INKS, {
+    light: base["--avatar-ink-light"],
+    dark: base["--avatar-ink"],
+  });
+  const colours = new Set(
+    [...read("src/lib/data.ts").matchAll(/color: "(#[0-9a-f]{6})"/gi)].map(
+      ([, hex]) => hex,
+    ),
+  );
+  assert.ok(colours.size > 10);
+  // A picture's letters, at a 14px or larger initial beside the name: 3:1.
+  for (const colour of colours)
+    assert.ok(
+      avatarInkContrast(colour) >= 3,
+      `${colour}: ${avatarInkContrast(colour).toFixed(2)}:1`,
+    );
+});
+
 check("the six palettes are the decided ones, each in tokens.css", () => {
   // 深緑・煉瓦・藍・藤・山吹・墨, 深緑 first (けにー 2026-10-14).
   assert.deepEqual(
@@ -238,6 +264,44 @@ check("the six palettes are the decided ones, each in tokens.css", () => {
       `--palette-${id} is ${id}'s --green`,
     );
   }
+});
+
+check("every screen's CSS is read on every page, in one order", () => {
+  // The screens come in files of their own (TownApp's next/dynamic); their
+  // CSS must not, or a page opened first would miss rules another screen's
+  // file gives it (the bottom bar, a cover), and the order would change.
+  const listed = [
+    ...read("src/components/screen-styles.ts").matchAll(
+      /^import "\.\/(.+\.css)";$/gm,
+    ),
+  ].map(([, file]) => path.join("src/components", file));
+  assert.equal(new Set(listed).size, listed.length, "each file once");
+  // Their own: the annotations' notes (read only by those who annotate) and
+  // the account's page, outside the town.
+  const own = [
+    "src/components/SiteNotes.tsx",
+    "src/components/AccountView.tsx",
+  ];
+  for (const file of filesIn("src/components", [".tsx", ".ts"]))
+    if (!own.includes(file))
+      for (const [, css] of read(file).matchAll(
+        /^import "(\.[^"]+\.css)";$/gm,
+      )) {
+        const imported = path.join(path.dirname(file), css);
+        assert.ok(
+          listed.includes(imported),
+          `${file} imports ${css}: add it to screen-styles.ts`,
+        );
+      }
+  const town = read("src/components/TownApp.tsx").split("\n");
+  assert.equal(town[0], '"use client";');
+  assert.ok(
+    town
+      .slice(1)
+      .find((line) => line.startsWith("import"))
+      ?.includes("./screen-styles"),
+    "TownApp reads screen-styles before anything else",
+  );
 });
 
 check("globals.css reads the tokens first", () => {

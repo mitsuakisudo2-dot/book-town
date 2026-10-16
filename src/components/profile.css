@@ -33,7 +33,7 @@
   overflow-wrap: anywhere;
 }
 .profile-eyebrow {
-  font-size: 10px;
+  font-size: var(--t-cap);
   letter-spacing: 0.17em;
   color: var(--ink-2);
   line-height: 1.7;
@@ -259,11 +259,11 @@
   grid-template-columns: 64px 1fr auto;
   gap: 23px;
   align-items: center;
-  border: 1px solid #d9d3c3;
+  border: 1px solid var(--theme-light);
   border-radius: 3px;
   margin: 23px 0 27px;
   padding: 32px;
-  background: linear-gradient(135deg, #e7e9df, #f0eee4);
+  background: linear-gradient(135deg, var(--theme-pale), var(--sheet));
   text-decoration: none;
   color: inherit;
   transition:
@@ -271,35 +271,26 @@
     transform 0.2s;
 }
 .profile-shop-sign:hover {
-  border-color: #8a9d87;
+  border-color: var(--theme);
   transform: translateY(-2px);
-}
-.profile-shop-ink {
-  background: linear-gradient(135deg, #e3e8e8, #eeeee5);
-}
-.profile-shop-ochre {
-  background: linear-gradient(135deg, #eee5ce, #f1eee3);
-}
-.profile-shop-rose {
-  background: linear-gradient(135deg, #ede1dc, #f1ece3);
 }
 .profile-shop-mark {
   height: 64px;
   display: grid;
   place-items: center;
-  border: 1px solid #91a28b;
+  border: 1px solid var(--theme);
   border-radius: 50%;
-  color: #537253;
+  color: var(--theme-deep);
 }
 .profile-shop-mark svg {
   width: 25px;
   height: 25px;
 }
 .profile-shop-tagline {
-  font-size: 10px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   letter-spacing: 0.08em;
-  color: #788170;
+  color: var(--theme-deep);
   margin: 0 0 9px;
 }
 .profile-shop-sign h3 {
@@ -311,9 +302,9 @@
   margin: 0 0 10px;
 }
 .profile-shop-description {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.9;
-  color: #687060;
+  color: var(--ink-2);
   max-width: 570px;
   margin: 0;
   white-space: pre-wrap;
@@ -322,8 +313,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #486149;
-  font-size: 11px;
+  color: var(--theme-deep);
+  font-size: var(--t-cap);
   white-space: nowrap;
 }
 .profile-public-shelves > h3 {
@@ -699,7 +690,6 @@
     line-height: 1.9;
   }
   .profile-eyebrow {
-    font-size: 8px;
     letter-spacing: 0.12em;
   }
   .profile-reader .profile-eyebrow {
@@ -811,18 +801,13 @@
     height: 21px;
   }
   .profile-shop-tagline {
-    font-size: 9px;
     letter-spacing: 0.02em;
   }
   .profile-shop-sign h3 {
     font-size: 20px;
   }
-  .profile-shop-description {
-    font-size: 11px;
-  }
   .profile-shop-enter {
     grid-column: 2;
-    font-size: 10px;
     justify-content: flex-end;
     margin-top: 1px;
   }
