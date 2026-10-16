@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   COMPOSE_ICONS,
@@ -90,6 +91,7 @@ import {
 import { postersOf } from "../lib/posters";
 import { PosterThumb } from "./PosterView";
 import "./poster-screen.css";
+import "./leave.css";
 import { ReportButton } from "./Report";
 import { BlockButton, BlockedList, BlockedNote } from "./BlockReader";
 import { RecordShelf } from "./ReadingRecords";
@@ -105,7 +107,7 @@ import {
 } from "../lib/appearance-store";
 import { useUrlParam } from "../lib/url-state";
 import { onShelfRequest, takeShelfRequest } from "../lib/shelf-tab";
-import { afterLayerCloses } from "../lib/back-layer";
+import { afterLayerCloses, leaveLayers } from "../lib/back-layer";
 import { focusField } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 
@@ -126,6 +128,7 @@ export function ProfileView({
   notify,
 }: ProfileViewProps) {
   const isSelf = readerId === state.me.id;
+  const router = useRouter();
   const savedIn = useTownBackend();
   const reader = isSelf
     ? state.me
@@ -1118,6 +1121,18 @@ export function ProfileView({
             ))}
           </fieldset>
           <BlockedList state={state} actions={actions} notify={notify} />
+          {account.status === "signed-in" && (
+            <fieldset className="leave-entry">
+              <legend>アカウント</legend>
+              <button
+                type="button"
+                className="btn quiet"
+                onClick={() => leaveLayers(() => router.push("/leave/"))}
+              >
+                退会する
+              </button>
+            </fieldset>
+          )}
         </Modal>
       )}
       {sheet === "scan" && (

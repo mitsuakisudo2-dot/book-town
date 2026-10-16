@@ -1,0 +1,53 @@
+/* 退会 (LeaveView): what goes and what stays, then the one button. */
+.leave-heading {
+  margin-top: 6px;
+  font-size: var(--t-ui);
+  font-weight: 700;
+  color: var(--ink);
+}
+.leave-list {
+  margin: 0;
+  padding-left: 1.3em;
+  font-size: var(--t-ui);
+  line-height: 1.9;
+  color: var(--ink);
+  list-style: disc;
+}
+.leave-note {
+  font-size: var(--t-ui);
+  line-height: 1.9;
+  color: var(--ink-2);
+}
+.leave-buttons {
+  margin-top: 12px;
+}
+
+/* 設定「アカウント」: the way to 退会, last and quiet. */
+.leave-entry {
+  margin: 18px 0 0;
+  padding: 0;
+  border: 0;
+}
+.leave-entry legend {
+  margin-bottom: 4px;
+  padding: 0;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+.leave-entry .btn {
+  margin-left: -18px;
+}
+
+/* ログインの画面: 退会 beside ログアウト, in the same quiet words. */
+.account-leave {
+  padding: 6px 0;
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The ID field: words at 16px, so a phone does not zoom in on it. */
+.leave-card .profile-form input {
+  font-size: var(--t-page);
+}

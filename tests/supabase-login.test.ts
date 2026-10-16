@@ -208,6 +208,53 @@ async function main() {
     assert.equal(users.at(-1), null);
   });
 
+  await check(
+    "退会 deletes the reader's own account, and only with a session",
+    async () => {
+      const fay = await invite("fay");
+      const own = browserClient();
+      const leaving = supabaseAccountBackend(own);
+      const seen: (string | null)[] = [];
+      leaving.onUserChange((user) => seen.push(user?.id ?? null));
+      assert.equal(await leaving.sendCode(fay.email), null);
+      const { code } = await mailedCode(fay.email);
+      assert.equal(await leaving.verifyCode(fay.email, code), null);
+      assert.ok(
+        "profile" in
+          (await leaving.createProfile({
+            id: fay.id,
+            handle: `fay_${run}`.slice(0, 20),
+            name: "フェイ",
+          })),
+      );
+      // Without a session, the database refuses and nothing goes. The app
+      // cannot tell that from a deletion whose session ended with it, so it
+      // keeps the account marked as leaving (not "nothing went").
+      assert.equal(
+        await supabaseAccountBackend(browserClient()).deleteAccount(),
+        "network",
+      );
+      assert.ok((await admin.auth.admin.getUserById(fay.id)).data.user);
+      assert.equal(await leaving.deleteAccount(), null);
+      assert.equal((await own.auth.getSession()).data.session, null);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.equal(seen.at(-1), null);
+      assert.equal(
+        (await admin.auth.admin.getUserById(fay.id)).data.user,
+        null,
+      );
+      const { data: rows } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("id", fay.id);
+      assert.deepEqual(rows, []);
+      // The address is no longer let in.
+      assert.equal(await leaving.sendCode(fay.email), "not-invited");
+      // Others are still there.
+      assert.ok((await admin.auth.admin.getUserById(aki.id)).data.user);
+    },
+  );
+
   console.log(passed + " Supabase login checks passed");
 }
 

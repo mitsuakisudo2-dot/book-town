@@ -25,3 +25,4 @@ import "./usability.css";
 import "./shop-journey.css";
 import "./visitor.css";
 import "./poster-editor.css";
+import "./leave.css";

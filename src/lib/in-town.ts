@@ -56,3 +56,6 @@ export function subscribeTrail(listener: () => void) {
 
 /** True when going back returns to another page of the town. */
 export const canGoBackInTown = () => trail.length > 1;
+
+/** True when this tab came from a page of the town (a page outside it, like 退会, steps back there). */
+export const cameFromTown = () => trail.length > 0;

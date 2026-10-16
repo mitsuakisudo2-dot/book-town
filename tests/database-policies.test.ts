@@ -5645,6 +5645,89 @@ async function main() {
       if (rows[0].n > 0) seen.push(`${table}: ${rows[0].n}`);
     }
     assert.deepEqual(seen, [], "Chi reads Ben's rows across their block");
+    /** Nothing of Ben's is left (run after each way of deleting him). */
+    const gone = async () => {
+      for (const [table, column] of owned)
+        assert.equal(await left(table, column), 0, table);
+      // Nothing anywhere still names him, in any column of any table (text and
+      // json included), but what account-tables.ts says stays for the operator.
+      // Copies taken by migrations (keep) have names that need quoting.
+      const relations = await db.query<{ table: string; quoted: string }>(
+        `select n.nspname || '.' || c.relname as table,
+           quote_ident(n.nspname) || '.' || quote_ident(c.relname) as quoted
+         from pg_class c join pg_namespace n on n.oid = c.relnamespace
+         where c.relkind in ('r', 'm') and ${ACCOUNT_SCHEMAS_SQL}`,
+      );
+      const naming: string[] = [];
+      for (const { table, quoted } of relations.rows) {
+        const stays = Object.entries(ACCOUNT_TABLES[table]?.targets ?? {})
+          .filter(([, target]) => "stays" in target)
+          .map(([column]) => column);
+        const named = await db.query<{ n: number }>(
+          `select count(*)::int as n from ${quoted} t
+           where (to_jsonb(t) - $2::text[])::text like '%' || $1 || '%'`,
+          [BEN, stays],
+        );
+        if (named.rows[0].n > 0) naming.push(table);
+      }
+      assert.deepEqual(naming, [], "these still name Ben");
+      assert.deepEqual(await chisOfBen(), [
+        { post: false, shop: false, other_reader_id: null, memo: "ベンのPOP" },
+        { post: false, shop: false, other_reader_id: null, memo: "ベンの言葉" },
+      ]);
+      // The books Ben typed in stay in the catalog without an owner. The one
+      // he only scanned is used nowhere, so nobody reads it any more.
+      const orphan = await db.query<{ n: number }>(
+        "select count(*)::int as n from books where created_by is null",
+      );
+      assert.equal(orphan.rows[0].n, 2);
+      assert.deepEqual(await readersOf(scanned), [false, false, false, false]);
+    };
+    // 退会 from the web: Ben deletes his own account, as the app does. Undone
+    // after the checks, so the deletion below starts from the same rows.
+    // Only signed-in readers may ask, and without a session it refuses.
+    await refused(null, "select public.delete_my_account()");
+    assert.deepEqual(
+      await as(
+        null,
+        `select has_function_privilege('anon', 'public.delete_my_account()', 'EXECUTE') as anon,
+           has_function_privilege('authenticated', 'public.delete_my_account()', 'EXECUTE') as reader`,
+      ),
+      [{ anon: false, reader: true }],
+    );
+    await db.exec(
+      "set role authenticated; select set_config('request.jwt.claim.sub', '', false);",
+    );
+    try {
+      await assert.rejects(
+        db.query("select public.delete_my_account()"),
+        /sign in to delete an account/,
+      );
+    } finally {
+      await db.exec("reset role");
+    }
+    await db.exec("begin");
+    try {
+      await as(BEN, "select public.delete_my_account()");
+      await gone();
+      const accounts = await db.query<{ id: string }>(
+        "select id from auth.users order by id",
+      );
+      assert.ok(accounts.rows.some((row) => row.id === AKI));
+      assert.ok(accounts.rows.some((row) => row.id === CHI));
+      // Asked again once gone (the answer was lost), it deletes nothing more.
+      await as(BEN, "select public.delete_my_account()");
+      assert.equal(
+        (await db.query("select id from auth.users")).rows.length,
+        accounts.rows.length,
+      );
+    } finally {
+      await db.exec("rollback");
+    }
+    assert.ok(
+      (await db.query("select 1 from auth.users where id = $1", [BEN])).rows
+        .length,
+    );
     // Supabase deletes an account as supabase_auth_admin, who owns auth.users
     // and has no rights in public. The cascades run as each table's owner;
     // the after triggers they fire run at the end of the statement, as
@@ -5660,41 +5743,7 @@ async function main() {
     } finally {
       await db.exec("reset role");
     }
-    for (const [table, column] of owned)
-      assert.equal(await left(table, column), 0, table);
-    // Nothing anywhere still names him, in any column of any table (text and
-    // json included), but what account-tables.ts says stays for the operator.
-    // Copies taken by migrations (keep) have names that need quoting.
-    const relations = await db.query<{ table: string; quoted: string }>(
-      `select n.nspname || '.' || c.relname as table,
-         quote_ident(n.nspname) || '.' || quote_ident(c.relname) as quoted
-       from pg_class c join pg_namespace n on n.oid = c.relnamespace
-       where c.relkind in ('r', 'm') and ${ACCOUNT_SCHEMAS_SQL}`,
-    );
-    const naming: string[] = [];
-    for (const { table, quoted } of relations.rows) {
-      const stays = Object.entries(ACCOUNT_TABLES[table]?.targets ?? {})
-        .filter(([, target]) => "stays" in target)
-        .map(([column]) => column);
-      const named = await db.query<{ n: number }>(
-        `select count(*)::int as n from ${quoted} t
-         where (to_jsonb(t) - $2::text[])::text like '%' || $1 || '%'`,
-        [BEN, stays],
-      );
-      if (named.rows[0].n > 0) naming.push(table);
-    }
-    assert.deepEqual(naming, [], "these still name Ben");
-    assert.deepEqual(await chisOfBen(), [
-      { post: false, shop: false, other_reader_id: null, memo: "ベンのPOP" },
-      { post: false, shop: false, other_reader_id: null, memo: "ベンの言葉" },
-    ]);
-    // The books Ben typed in stay in the catalog without an owner. The one
-    // he only scanned is used nowhere, so nobody reads it any more.
-    const orphan = await db.query<{ n: number }>(
-      "select count(*)::int as n from books where created_by is null",
-    );
-    assert.equal(orphan.rows[0].n, 2);
-    assert.deepEqual(await readersOf(scanned), [false, false, false, false]);
+    await gone();
   });
 
   await check(

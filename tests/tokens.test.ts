@@ -280,10 +280,11 @@ check("every screen's CSS is read on every page, in one order", () => {
   ].map(([, file]) => path.join("src/components", file));
   assert.equal(new Set(listed).size, listed.length, "each file once");
   // Their own: the annotations' notes (read only by those who annotate) and
-  // the account's page, outside the town.
+  // the account's pages (signing in, 退会), outside the town.
   const own = [
     "src/components/SiteNotes.tsx",
     "src/components/AccountView.tsx",
+    "src/components/LeaveView.tsx",
   ];
   for (const file of filesIn("src/components", [".tsx", ".ts"]))
     if (!own.includes(file))
