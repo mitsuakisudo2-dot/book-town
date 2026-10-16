@@ -245,8 +245,8 @@
   padding: 26px 22px;
   border-radius: 8px;
   text-align: center;
-  background: var(--theme-deep);
-  color: #f7f3e8;
+  background: var(--theme-fill);
+  color: var(--on-dark);
   box-shadow:
     inset 0 0 0 4px #ffffff1c,
     0 10px 24px #2e3a2e22;
@@ -325,8 +325,8 @@
   letter-spacing: 0.08em;
   padding: 10px 12px;
   border-radius: 6px 6px 0 0;
-  background: var(--theme-deep);
-  color: #f7f3e8;
+  background: var(--theme-fill);
+  color: var(--on-dark);
   overflow-wrap: anywhere;
 }
 .open-storefront-window {
