@@ -78,6 +78,13 @@
   /* Quieter words: the second ink */
   --muted: var(--ink-2);
 
+  /* Shadows, a photo's darkening and the veil behind a sheet: mixed with
+     transparent where they are used. The ink by day, but black at night,
+     when the ink turns light. */
+  --shade: #2e2823;
+  /* Words on a photo or on that veil: light by day and at night. */
+  --on-dark: #fffcf7;
+
   /* Type sizes. Nothing on screen is smaller than --t-cap. */
   --t-cap: 12px;
   --t-meta: 14px;
