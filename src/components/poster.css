@@ -290,8 +290,8 @@ a.poster-cover:hover {
   display: flex;
   border-radius: 3px;
   box-shadow:
-    0 1px 2px #29362614,
-    0 8px 22px #2936261c;
+    0 1px 2px color-mix(in srgb, var(--shade) 8%, transparent),
+    0 8px 22px color-mix(in srgb, var(--shade) 11%, transparent);
 }
 .poster-track.is-many {
   overflow-x: auto;
@@ -304,7 +304,7 @@ a.poster-cover:hover {
   display: none;
 }
 .poster-track:focus-visible {
-  outline: 2px solid #7c986d;
+  outline: 2px solid var(--green);
   outline-offset: 4px;
 }
 .poster-slide {
@@ -319,8 +319,8 @@ a.poster-cover:hover {
   right: 10px;
   padding: 2px 9px;
   border-radius: 999px;
-  background: rgb(28 30 26 / 0.58);
-  color: #fbf8f1;
+  background: color-mix(in srgb, var(--shade) 58%, transparent);
+  color: var(--on-dark);
   font-size: var(--t-cap);
   line-height: 1.7;
   letter-spacing: 0.06em;
@@ -340,11 +340,11 @@ a.poster-cover:hover {
   height: 32px;
   border-radius: 50%;
   border: 1px solid var(--line);
-  background: #fffdf7;
-  color: #6f7c64;
+  background: var(--sheet);
+  color: var(--ink-2);
 }
 .poster-turn:hover:not([aria-disabled="true"]) {
-  background: #eef1e6;
+  background: var(--green-soft);
   color: var(--green);
 }
 /* At either end the button stays focusable (aria-disabled), only quiet. */
@@ -374,7 +374,7 @@ a.poster-cover:hover {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #cfd5c3;
+  background: var(--line-2);
   transition:
     width 0.2s,
     background 0.2s;
@@ -390,10 +390,10 @@ a.poster-cover:hover {
   padding: 6px 11px;
   border-radius: 999px;
   font-size: 11px;
-  color: #8a6f5c;
+  color: var(--ink-2);
 }
 .poster-rehide:hover {
-  background: #f4ece2;
+  background: var(--band);
 }
 .poster-more > button {
   font-size: 12px;
@@ -409,7 +409,7 @@ a.poster-cover:hover {
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fffdf7;
+  background: var(--sheet);
 }
 .poster-fulltext.is-mincho {
   font-family: var(--poster-mincho);
@@ -475,8 +475,8 @@ a.poster-cover:hover {
   gap: 10px;
   padding: 24px;
   box-shadow:
-    0 1px 2px #29362614,
-    0 8px 22px #2936261c;
+    0 1px 2px color-mix(in srgb, var(--shade) 8%, transparent),
+    0 8px 22px color-mix(in srgb, var(--shade) 11%, transparent);
 }
 .poster-door-mark {
   display: grid;
@@ -547,9 +547,9 @@ a.poster-cover:hover {
 /* Folded by reports: the town's quiet grey, nothing of the poster's look. */
 .poster-door.is-report,
 .poster-thumb-door.is-report {
-  --poster-paper: #f1f0ea;
-  --poster-ink: #4f554a;
-  --poster-accent: #767a6b;
+  --poster-paper: var(--band);
+  --poster-ink: var(--ink-2);
+  --poster-accent: var(--field);
 }
 .poster-door.is-report p {
   font-family: inherit;
@@ -574,8 +574,8 @@ a.poster-cover:hover {
   display: block;
   border-radius: 3px;
   box-shadow:
-    0 1px 2px #29362614,
-    0 4px 12px #2936261a;
+    0 1px 2px color-mix(in srgb, var(--shade) 8%, transparent),
+    0 4px 12px color-mix(in srgb, var(--shade) 10%, transparent);
   transition:
     transform 0.2s,
     box-shadow 0.2s;
@@ -583,8 +583,8 @@ a.poster-cover:hover {
 .poster-thumb:hover .poster-thumb-tile {
   transform: translateY(-2px);
   box-shadow:
-    0 2px 4px #29362618,
-    0 8px 18px #29362622;
+    0 2px 4px color-mix(in srgb, var(--shade) 9%, transparent),
+    0 8px 18px color-mix(in srgb, var(--shade) 13%, transparent);
 }
 .poster-thumb-door {
   gap: 5cqw;
@@ -608,7 +608,7 @@ a.poster-cover:hover {
   overflow: hidden;
   font-size: 11px;
   line-height: 1.6;
-  color: #5f6a55;
+  color: var(--ink-2);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -623,13 +623,13 @@ a.poster-cover:hover {
   gap: 4px 6px;
   margin-top: 6px;
   font-size: 10px;
-  color: #5f6a55;
+  color: var(--ink-2);
 }
 .poster-thumb-badge {
   padding: 1px 8px;
   border-radius: 999px;
-  background: #f3ead9;
-  color: #7c5a46;
+  background: var(--band);
+  color: var(--ink-2);
 }
 /* The maker's own, folded or held by reports: what others get, in a word. */
 .poster-thumb-review {
@@ -637,10 +637,10 @@ a.poster-cover:hover {
   margin-top: 6px;
   padding: 4px 8px;
   border-radius: 6px;
-  background: #f3f2ec;
+  background: var(--band);
   font-size: 10px;
   line-height: 1.6;
-  color: #5f6357;
+  color: var(--ink-2);
   overflow-wrap: anywhere;
 }
 
@@ -694,8 +694,8 @@ a.poster-cover:hover {
   margin-bottom: 8px;
   padding: 1px 8px;
   border-radius: 3px;
-  background: #e8eedf;
-  color: #3f5937;
+  background: var(--green-soft);
+  color: var(--green);
   font-size: 12px;
   letter-spacing: 0.08em;
 }
@@ -709,7 +709,7 @@ a.poster-cover:hover {
   min-height: 44px;
   margin-top: 2px;
   font-size: 14px;
-  color: #4f5a46;
+  color: var(--ink-2);
 }
 .poster-open:hover {
   color: var(--green);

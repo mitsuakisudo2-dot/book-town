@@ -18,7 +18,7 @@
 }
 .record-book small {
   font-size: 11px;
-  color: #8a947d;
+  color: var(--ink-2);
 }
 
 .feeling-picker {
@@ -28,7 +28,7 @@
 }
 .feeling-picker legend {
   font-size: 12px;
-  color: #6f7f63;
+  color: var(--ink-2);
   margin-bottom: 10px;
 }
 .feeling-picker > div {
@@ -41,9 +41,9 @@
   line-height: 1.5;
   padding: 7px 12px;
   border-radius: 999px;
-  border: 1px solid #d5dccb;
-  background: #fffdf7;
-  color: #4f6249;
+  border: 1px solid var(--line-2);
+  background: var(--sheet);
+  color: var(--ink);
   cursor: pointer;
   transition:
     background 0.15s,
@@ -51,7 +51,7 @@
     color 0.15s;
 }
 .feeling-chip:hover {
-  border-color: #a9bc9c;
+  border-color: color-mix(in srgb, var(--green) 40%, var(--sheet));
 }
 .feeling-chip[aria-pressed="true"] {
   background: var(--green);
@@ -59,7 +59,7 @@
   color: var(--on-green);
 }
 .feeling-chip:focus-visible {
-  outline: 2px solid #8fac80;
+  outline: 2px solid var(--green);
   outline-offset: 2px;
 }
 
@@ -70,7 +70,7 @@
   gap: 12px;
   margin: 8px 0 16px;
   font-size: 12px;
-  color: #6f7f63;
+  color: var(--ink-2);
 }
 .record-options label {
   display: inline-flex;
@@ -81,7 +81,7 @@
 .record-count {
   margin-left: auto;
   font-size: 12px;
-  color: #626e59;
+  color: var(--ink-2);
 }
 .record-visibility {
   border: 0;
@@ -123,7 +123,7 @@
   align-items: center;
   gap: 6px 8px;
   font-size: 12px;
-  color: #5f7a62;
+  color: var(--ink-2);
 }
 .record-going .text-button {
   font-size: 12px;
@@ -137,7 +137,7 @@
 .record-delete {
   margin-left: auto;
   font-size: 11px;
-  color: #a3735f;
+  color: var(--alert);
 }
 
 /* 気持ちから探す */
@@ -153,7 +153,7 @@
   margin: 42px 0;
   padding: 28px 26px;
   border-radius: 10px;
-  background: #fffdf7;
+  background: var(--sheet);
   border: 1px solid var(--line);
 }
 .book-feelings h2 {
@@ -178,20 +178,20 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #b9c6ad;
+  background: var(--line-2);
   margin: 0 20px 0 -12px;
   vertical-align: middle;
 }
 .book-feelings-empty {
   font-size: 12px;
   line-height: 2;
-  color: #7d8a73;
+  color: var(--ink-2);
   margin-bottom: 16px;
 }
 .book-talkers h3 {
   font-size: 12px;
   font-weight: 500;
-  color: #6f7f63;
+  color: var(--ink-2);
   margin-bottom: 10px;
 }
 .book-talkers ul {
@@ -207,7 +207,7 @@
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #3f4d3b;
+  color: var(--ink);
 }
 .book-feelings-own {
   display: flex;
@@ -215,7 +215,7 @@
   flex-wrap: wrap;
   gap: 4px 14px;
   font-size: 12px;
-  color: #5f7a62;
+  color: var(--ink-2);
 }
 .book-feelings-own-actions {
   display: inline-flex;
@@ -246,7 +246,7 @@
   padding: 16px;
   border-radius: 9px;
   border: 1px solid var(--line);
-  background: #fffdf7;
+  background: var(--sheet);
 }
 .record-card-book {
   width: 56px;
@@ -274,13 +274,13 @@
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #e8eee1;
-  color: #3f5c45;
+  background: var(--green-soft);
+  color: var(--ink);
 }
 .record-card-note {
   font-size: 12px;
   line-height: 1.9;
-  color: #4d5948;
+  color: var(--ink);
   overflow-wrap: anywhere;
 }
 .record-card-meta {
@@ -290,7 +290,7 @@
   gap: 10px;
   margin-top: 8px;
   font-size: 10px;
-  color: #9aa58f;
+  color: var(--ink-2);
 }
 .record-card-meta span {
   display: inline-flex;
@@ -334,9 +334,10 @@
 .spoiler-display-note {
   margin: 2px 0 0;
   font-size: 11px;
-  color: #5f6a55;
+  color: var(--ink-2);
 }
-/* 設定: the six palettes, each named in words beside its colour. */
+/* 設定: the six palettes, each named in words beside its colour, and the
+   three brightnesses (明るさ), each a row for the finger. */
 .palette-choices label {
   min-height: 44px;
 }

@@ -6,7 +6,7 @@
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: #203b2d55;
+  background: color-mix(in srgb, var(--shade) 33%, transparent);
 }
 /* On a phone the sheet is the whole width: nothing of the page shows past it
    (under ［終わる］ while typing, above the keyboard). */
@@ -51,10 +51,10 @@
   border: 0;
   border-radius: 50%;
   background: none;
-  color: #536448;
+  color: var(--green);
 }
 .scan-icon-button:hover {
-  background: #eef2e8;
+  background: var(--green-soft);
 }
 .scan-sound {
   position: relative;
@@ -62,7 +62,7 @@
   line-height: 1;
 }
 .scan-sound.is-off > span {
-  color: #9aa58f;
+  color: var(--ink-2);
   text-decoration: line-through;
   text-decoration-thickness: 2px;
 }
@@ -72,7 +72,7 @@
   left: 0;
   right: 0;
   font-size: 10px;
-  color: #5e6b55;
+  color: var(--ink-2);
 }
 .scan-count {
   text-align: center;
@@ -84,8 +84,8 @@
   flex: none;
   padding: 8px 12px;
   border-radius: 6px;
-  background: #f6edce;
-  color: #5b4a22;
+  background: var(--notice);
+  color: var(--ink);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -95,7 +95,7 @@
   min-height: 160px;
   border-radius: 8px;
   overflow: hidden;
-  background: #1f2a23;
+  background: var(--shade);
 }
 .scan-camera video {
   width: 100%;
@@ -109,9 +109,9 @@
   right: 10%;
   top: 38%;
   height: 24%;
-  border: 2px solid #fffdf3cc;
+  border: 2px solid color-mix(in srgb, var(--on-dark) 80%, transparent);
   border-radius: 8px;
-  box-shadow: 0 0 0 999px #0000002e;
+  box-shadow: 0 0 0 999px color-mix(in srgb, var(--shade) 18%, transparent);
 }
 /* ［ライト］, over the picture's top corner, clear of the guide. */
 .scan-torch {
@@ -120,17 +120,17 @@
   right: 8px;
   min-height: 44px;
   padding: 0 16px;
-  border: 1px solid #fffdf380;
+  border: 1px solid color-mix(in srgb, var(--on-dark) 50%, transparent);
   border-radius: 22px;
-  background: #1f2a23b3;
-  color: #fffdf3;
+  background: color-mix(in srgb, var(--shade) 70%, transparent);
+  color: var(--on-dark);
   font-size: 13px;
   font-weight: 600;
 }
 .scan-torch.is-on {
-  border-color: #e8cf8a;
-  background: #f6edce;
-  color: #5b4a22;
+  border-color: var(--lamp-glow);
+  background: var(--notice);
+  color: var(--ink);
 }
 .scan-guide,
 .scan-camera-note {
@@ -139,10 +139,10 @@
   right: 12px;
   bottom: 12px;
   text-align: center;
-  color: #fffdf3;
+  color: var(--on-dark);
   font-size: 12px;
   line-height: 1.6;
-  text-shadow: 0 1px 2px #0008;
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--shade) 53%, transparent);
 }
 /* A hint for a barcode that is not the book's: told apart from the guide. */
 .scan-guide.is-hint {
@@ -153,8 +153,8 @@
   transform: translateX(-50%);
   padding: 4px 10px;
   border-radius: 6px;
-  background: #f6edce;
-  color: #5b4a22;
+  background: var(--notice);
+  color: var(--ink);
   font-weight: 600;
   text-shadow: none;
 }
@@ -177,7 +177,7 @@
 }
 .scan-typing-label {
   font-size: 12px;
-  color: #536448;
+  color: var(--ink-2);
 }
 .scan-typing-row {
   flex: none;
@@ -201,7 +201,7 @@
   overflow: hidden;
   font-size: 11px;
   line-height: 1.6;
-  color: #5e6b55;
+  color: var(--ink-2);
 }
 .scan-notes p + p {
   margin-top: 2px;
@@ -217,26 +217,26 @@
   border: 1px solid var(--line);
   border-left: 3px solid var(--line);
   border-radius: 8px;
-  background: #fffdf8;
+  background: var(--sheet);
 }
 /* Typing: the card, the shelf and ［終わる］ stay at the bottom, in reach. */
 .scan-sheet.is-typing .scan-card {
   margin-top: auto;
 }
 .scan-card.is-kept {
-  border-left-color: #c9a54f;
+  border-left-color: var(--lamp-glow);
 }
 .scan-card.is-flash {
   animation: scan-flash 600ms ease;
 }
 @keyframes scan-flash {
   0% {
-    box-shadow: 0 0 0 4px #e8cf8a;
-    background: #fbf3dc;
+    box-shadow: 0 0 0 4px var(--lamp-glow);
+    background: var(--notice);
   }
   100% {
-    box-shadow: 0 0 0 0 #e8cf8a00;
-    background: #fffdf8;
+    box-shadow: 0 0 0 0 transparent;
+    background: var(--sheet);
   }
 }
 .scan-card-cover .book-jacket {
@@ -247,10 +247,10 @@
   place-items: center;
   width: 48px;
   height: 64px;
-  border: 1px dashed #c8c2b2;
+  border: 1px dashed var(--line-2);
   border-radius: 3px;
-  color: #8b917f;
-  background: #f7f4ee;
+  color: var(--ink-2);
+  background: var(--paper);
 }
 .scan-card-text {
   min-width: 0;
@@ -276,12 +276,12 @@
   text-overflow: ellipsis;
   font-size: 11px;
   font-weight: 400;
-  color: #6b7262;
+  color: var(--ink-2);
 }
 .scan-card-status {
   font-size: 12px;
   line-height: 1.5;
-  color: #536448;
+  color: var(--ink-2);
   overflow-wrap: anywhere;
 }
 .scan-undo {
@@ -370,11 +370,11 @@ body:has(.scan-session) .toast {
   }
   .scan-card.is-flash {
     animation: none;
-    background: #fbf3dc;
+    background: var(--notice);
   }
 }
 @media (min-width: 760px) {
   .scan-sheet {
-    box-shadow: 0 0 40px #203b2d33;
+    box-shadow: 0 0 40px color-mix(in srgb, var(--shade) 20%, transparent);
   }
 }

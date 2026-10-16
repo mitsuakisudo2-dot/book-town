@@ -8,7 +8,7 @@
 }
 .report-reasons legend {
   font-size: 12px;
-  color: #6f7f63;
+  color: var(--ink-2);
   margin-bottom: 10px;
 }
 .report-reasons label {
@@ -16,7 +16,7 @@
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: #50604a;
+  color: var(--ink);
   padding: 11px 13px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -24,7 +24,7 @@
 }
 .report-reasons label:has(input:checked) {
   border-color: var(--green);
-  background: #eef2e8;
+  background: var(--green-soft);
   color: var(--green);
 }
 .report-reasons input {
@@ -49,7 +49,7 @@
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  color: #9aa58f;
+  color: var(--ink-2);
   background: none;
   border: 0;
   padding: 6px 0;
@@ -57,7 +57,7 @@
 }
 .report-link:hover,
 .report-link:focus-visible {
-  color: #6f7f63;
+  color: var(--ink);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -71,7 +71,7 @@
   padding: 3px 0;
   font-size: 12px;
   line-height: 1.5;
-  color: #626e59;
+  color: var(--ink-2);
   background: none;
   border: 0;
   cursor: pointer;
@@ -79,7 +79,7 @@
 }
 .cover-removal-link:hover,
 .cover-removal-link:focus-visible {
-  color: #4f5a47;
+  color: var(--ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
