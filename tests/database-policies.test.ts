@@ -11,6 +11,7 @@ import {
   type MarkKind,
 } from "../src/lib/library";
 import { sampleBookRowId } from "../src/lib/samples";
+import { ACCOUNT_SCHEMAS_SQL, ACCOUNT_TABLES } from "./fixtures/account-tables";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
 import { pagePattern } from "../src/lib/supabase/site-notes";
 import { emptyTown, planWrites } from "../src/lib/town-remote";
@@ -5555,6 +5556,24 @@ async function main() {
       { post: false, shop: true, other_reader_id: BEN, memo: "ベンのPOP" },
       { post: true, shop: false, other_reader_id: BEN, memo: "ベンの言葉" },
     ]);
+    // And the rest of what a reader can leave: blocks both ways, follows
+    // both ways, a fold on his profile, reading, a shop followed, and the
+    // notes and staff row of an annotator.
+    await operator(`
+      insert into blocks (blocker_id, blocked_id)
+        values ('${BEN}', '${CHI}'), ('${CHI}', '${BEN}') on conflict do nothing;
+      insert into profile_follows (follower_id, followee_id)
+        values ('${BEN}', '${AKI}'), ('${AKI}', '${BEN}') on conflict do nothing;
+      insert into shop_follows (follower_id, shop_id)
+        values ('${BEN}', '${akiShop.id}') on conflict do nothing;
+      insert into moderation_folds (target_kind, target_id, state, owner_id)
+        values ('profile', '${BEN}', 'folded', '${BEN}') on conflict do nothing;
+      insert into reading_sessions (user_id, book_id, mode)
+        values ('${BEN}', '${bens}', 'solo');
+      insert into private.staff (user_id) values ('${BEN}') on conflict do nothing;
+      insert into site_notes (user_id, page, x, y, viewport_w, viewport_h, scroll_y, body)
+        values ('${BEN}', '/', 1, 1, 390, 844, 0, 'ベンの注釈');
+    `);
     const kept: [string, string][] = [
       ["library_entries", "user_id"],
       ["library_shelves", "user_id"],
@@ -5585,6 +5604,44 @@ async function main() {
       ).rows[0].n;
     for (const [table, column] of kept)
       assert.ok((await left(table, column)) > 0, "before: " + table);
+    // Every column that names a person (tests/fixtures/account-tables.ts)
+    // names Ben somewhere, so the scan below covers every table.
+    const unnamed: string[] = [];
+    for (const [table, rule] of Object.entries(ACCOUNT_TABLES))
+      for (const column of [
+        ...Object.keys(rule.people),
+        ...Object.entries(rule.targets ?? {})
+          .filter(([, target]) => "goes" in target)
+          .map(([column]) => column),
+      ])
+        if ((await left(table, column)) === 0)
+          unnamed.push(`${table}.${column}`);
+    assert.deepEqual(unnamed, [], "give Ben rows here before his account goes");
+    // Chi and Ben block each other, so none of Ben's rows that the list
+    // keeps to their people or hides from blocked people reach her. (A
+    // table she may not read at all is closed already.)
+    const seen: string[] = [];
+    for (const [table, rule] of Object.entries(ACCOUNT_TABLES)) {
+      const columns = Object.keys(rule.people);
+      if (columns.length === 0) continue;
+      if (rule.readers !== "own" && rule.readers !== "blocks") continue;
+      let rows: { n: number }[];
+      try {
+        rows = await as<{ n: number }>(
+          CHI,
+          `select count(*)::int as n from ${table}
+           where $1::uuid in (${columns.join(", ")})
+             and not ($2::uuid in (${columns.map((c) => `coalesce(${c}, $1)`).join(", ")}))`,
+          [BEN, CHI],
+        );
+      } catch (error) {
+        if (error instanceof Error && /permission denied/.test(error.message))
+          continue;
+        throw error;
+      }
+      if (rows[0].n > 0) seen.push(`${table}: ${rows[0].n}`);
+    }
+    assert.deepEqual(seen, [], "Chi reads Ben's rows across their block");
     // Supabase deletes an account as supabase_auth_admin, who owns auth.users
     // and has no rights in public. The cascades run as each table's owner;
     // the after triggers they fire run at the end of the statement, as
@@ -5602,6 +5659,26 @@ async function main() {
     }
     for (const [table, column] of owned)
       assert.equal(await left(table, column), 0, table);
+    // Nothing anywhere still names him, in any column of any table (text and
+    // json included), but what account-tables.ts says stays for the operator.
+    const relations = await db.query<{ table: string }>(
+      `select n.nspname || '.' || c.relname as table
+       from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where c.relkind in ('r', 'm') and ${ACCOUNT_SCHEMAS_SQL}`,
+    );
+    const naming: string[] = [];
+    for (const { table } of relations.rows) {
+      const stays = Object.entries(ACCOUNT_TABLES[table]?.targets ?? {})
+        .filter(([, target]) => "stays" in target)
+        .map(([column]) => column);
+      const named = await db.query<{ n: number }>(
+        `select count(*)::int as n from ${table} t
+         where (to_jsonb(t) - $2::text[])::text like '%' || $1 || '%'`,
+        [BEN, stays],
+      );
+      if (named.rows[0].n > 0) naming.push(table);
+    }
+    assert.deepEqual(naming, [], "these still name Ben");
     assert.deepEqual(await chisOfBen(), [
       { post: false, shop: false, other_reader_id: null, memo: "ベンのPOP" },
       { post: false, shop: false, other_reader_id: null, memo: "ベンの言葉" },
