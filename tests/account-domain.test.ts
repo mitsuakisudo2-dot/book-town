@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   createAccountStore,
   failureMessages,
+  LEAVE_HANDLE_MISMATCH,
   linkFailure,
   normalizeCode,
   profileDraftIssue,
@@ -11,6 +12,7 @@ import {
   type AccountBackend,
   type AccountFailure,
   type AccountUser,
+  type Leaving,
 } from "../src/lib/account";
 import { RESERVED_HANDLES } from "../src/lib/handles";
 import { authFailure } from "../src/lib/supabase/account-backend";
@@ -38,12 +40,22 @@ const profileOf = (id: string, handle: string, name: string): ProfileRow => ({
 function fakeBackend() {
   let listener: (user: AccountUser | null) => void = () => {};
   const profiles = new Map<string, ProfileRow>();
-  const calls = { sendCode: 0, verifyCode: 0, loadProfile: 0 };
+  const calls = {
+    sendCode: 0,
+    verifyCode: 0,
+    loadProfile: 0,
+    deleteAccount: 0,
+  };
   const control = {
     calls,
     profiles,
     invited: new Set([AKI.email]),
     loadFails: false,
+    deleteFails: null as AccountFailure | null,
+    /** The deletion is done, but its answer is lost on the way. */
+    deleteButLose: false,
+    /** The sign-out is told before the call returns. */
+    signOutAtOnce: false,
     /** Resolves profile reads only when release() is called. */
     holdLoads: false,
     held: [] as (() => void)[],
@@ -70,6 +82,16 @@ function fakeBackend() {
     },
     async signOut() {
       listener(null);
+    },
+    async deleteAccount() {
+      calls.deleteAccount += 1;
+      if (control.deleteFails) return control.deleteFails;
+      profiles.clear();
+      if (control.deleteButLose) return "network";
+      // Supabase tells of the sign-out after its call returns, or before.
+      if (control.signOutAtOnce) listener(null);
+      else setTimeout(() => listener(null), 0);
+      return null;
     },
     async loadProfile(userId) {
       calls.loadProfile += 1;
@@ -265,6 +287,140 @@ async function main() {
     await store.actions.signOut();
     assert.equal(store.getSnapshot().status, "signed-out");
   });
+
+  /** A browser's memory of 退会, as account-session.ts keeps it. */
+  const leavingHere = (store: () => ReturnType<typeof createAccountStore>) => {
+    const memory = {
+      marked: null as string | null,
+      forgotten: [] as string[],
+      /** The account's state each time it was let go of. */
+      seenAs: [] as string[],
+    };
+    const leaving: Leaving = {
+      pending: () => memory.marked,
+      mark: (id) => void (memory.marked = id),
+      async forget(id) {
+        memory.seenAs.push(store().getSnapshot().status);
+        memory.forgotten.push(id);
+      },
+    };
+    return { memory, leaving };
+  };
+
+  await check(
+    "退会 asks for the reader's own ID, then forgets them here",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      const { memory, leaving } = leavingHere(() => store);
+      const store = createAccountStore(() => backend, true, leaving);
+      const seen: string[] = [];
+      store.subscribe(() => seen.push(store.getSnapshot().status));
+      control.emit(AKI);
+      await settle();
+      assert.deepEqual(await store.actions.deleteAccount("akii"), {
+        ok: false,
+        message: LEAVE_HANDLE_MISMATCH,
+      });
+      assert.equal(control.calls.deleteAccount, 0);
+      control.deleteFails = "leave-failed";
+      assert.deepEqual(await store.actions.deleteAccount(" @Aki "), {
+        ok: false,
+        message: failureMessages["leave-failed"],
+      });
+      assert.equal(store.getSnapshot().status, "signed-in");
+      assert.equal(memory.marked, null);
+      assert.deepEqual(memory.forgotten, []);
+      control.deleteFails = null;
+      // Supabase may tell of the sign-out before the call returns: the
+      // page still goes straight from signed in to signed out, after the
+      // browser has let go of them and the page was told.
+      control.signOutAtOnce = true;
+      let told = "";
+      seen.length = 0;
+      assert.deepEqual(
+        await store.actions.deleteAccount("aki", () => {
+          told = store.getSnapshot().status;
+        }),
+        { ok: true },
+      );
+      await settle();
+      assert.equal(told, "signed-in");
+      assert.deepEqual(memory.forgotten, [AKI.id]);
+      assert.deepEqual(memory.seenAs, ["signed-in"]);
+      assert.deepEqual(seen, ["signed-out"]);
+      assert.equal(memory.marked, null);
+      assert.equal(store.getSnapshot().status, "signed-out");
+      assert.equal(control.calls.deleteAccount, 2);
+      // Signed out, there is no one to delete.
+      assert.equal((await store.actions.deleteAccount("aki")).ok, false);
+      assert.equal(control.calls.deleteAccount, 2);
+    },
+  );
+
+  await check(
+    "a 退会 whose answer was lost is finished once the account is found gone",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      const { memory, leaving } = leavingHere(() => store);
+      const store = createAccountStore(() => backend, true, leaving);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      // Done in the database, but no answer came back.
+      control.deleteButLose = true;
+      assert.deepEqual(await store.actions.deleteAccount("aki"), {
+        ok: false,
+        message: failureMessages.network,
+      });
+      assert.equal(memory.marked, AKI.id);
+      assert.deepEqual(memory.forgotten, []);
+      // Read again (a reload): no profile any more, so it went through.
+      await store.actions.retry();
+      assert.deepEqual(memory.forgotten, [AKI.id]);
+      assert.equal(memory.marked, null);
+      assert.equal(store.getSnapshot().status, "signed-out");
+
+      // Not done, no answer, then the session ends (the account is gone,
+      // or the reader signed out): let go of here all the same.
+      control.deleteButLose = false;
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      control.emit(AKI);
+      await settle();
+      control.deleteFails = "network";
+      await store.actions.deleteAccount("aki");
+      assert.equal(memory.marked, AKI.id);
+      control.emit(null);
+      await settle();
+      assert.deepEqual(memory.forgotten, [AKI.id, AKI.id]);
+      assert.equal(memory.marked, null);
+
+      // Not done, and the account is still there: the mark goes, nothing else.
+      control.emit(AKI);
+      await settle();
+      await store.actions.deleteAccount("aki");
+      assert.equal(memory.marked, AKI.id);
+      await store.actions.retry();
+      assert.equal(memory.marked, null);
+      assert.equal(store.getSnapshot().status, "signed-in");
+      assert.deepEqual(memory.forgotten, [AKI.id, AKI.id]);
+    },
+  );
+
+  await check(
+    "a reader with no profile yet can leave without an ID",
+    async () => {
+      const { backend, control } = fakeBackend();
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      assert.equal(store.getSnapshot().status, "needs-profile");
+      assert.deepEqual(await store.actions.deleteAccount(""), { ok: true });
+      assert.equal(store.getSnapshot().status, "signed-out");
+    },
+  );
 
   await check("an unreadable profile can be retried", async () => {
     const { backend, control } = fakeBackend();
