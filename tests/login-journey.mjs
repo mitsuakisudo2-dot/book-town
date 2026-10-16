@@ -12,6 +12,7 @@ import {
   coarse,
   expectKeyboardUp,
   expectNoKeyboard,
+  expectNoZoomOnFocus,
   expectTapWrites,
   fakeKeyboard,
   forgetFocus,
@@ -159,6 +160,9 @@ const notesTakenBack = [];
 const siteNoteRequests = [];
 // Set to refuse every note as the hourly limit does.
 let refuseNotes = false;
+// 退会: each call to delete the account, and whether the database refuses it.
+const leaveRequests = [];
+let refuseLeave = false;
 // The columns a staff member may send, and the database's checks on them
 // (supabase/migrations/*_site_notes.sql): what it refuses, this refuses.
 const chars = (text) => [...text].length;
@@ -330,6 +334,13 @@ const standIn = async (route) => {
   if (url.pathname === "/rest/v1/rpc/can_annotate") {
     annotateAsks.push(staff);
     return json(200, staff);
+  }
+  if (url.pathname === "/rest/v1/rpc/delete_my_account") {
+    leaveRequests.push(request.method());
+    if (refuseLeave)
+      return json(500, { code: "XX000", message: "could not delete" });
+    profile = null;
+    return route.fulfill({ status: 204, body: "" });
   }
   // Like the database: staff read and write only their own notes, and to
   // anyone else the table is empty and closed.
@@ -5094,6 +5105,145 @@ try {
         profile = signedIn;
         staff = false;
         await desk.close();
+      }
+    },
+  );
+
+  await check(
+    "退会 from 設定: the reader's ID first, then everything of theirs goes, here too",
+    async () => {
+      const signedIn = profile;
+      const link = session();
+      try {
+        await page.goto("about:blank");
+        await page.goto(
+          base +
+            "/login/#" +
+            new URLSearchParams({
+              access_token: link.access_token,
+              expires_at: String(link.expires_at),
+              expires_in: "3600",
+              refresh_token: link.refresh_token,
+              token_type: "bearer",
+              type: "magiclink",
+            }),
+        );
+        await expect(
+          page.getByRole("heading", { name: "ログインしています" }),
+        ).toBeVisible();
+        // What this browser keeps for them, and for no one in particular.
+        await page.evaluate((id) => {
+          localStorage.setItem(
+            "book-town-post-drafts-v1",
+            JSON.stringify({
+              version: 1,
+              drafts: {
+                [id + ":new-post"]: {
+                  body: "退会する前の書きかけ",
+                  bookId: null,
+                  spoiler: false,
+                },
+                "visitor:new-post": {
+                  body: "ログインしていない人の書きかけ",
+                  bookId: null,
+                  spoiler: false,
+                },
+              },
+            }),
+          );
+          localStorage.setItem("book-town-seen-v1:" + id, "[]");
+        }, user.id);
+        // Next to ログアウト on the sign-in page, too.
+        await expect(
+          page.getByRole("link", { name: "退会する" }),
+        ).toHaveAttribute("href", "/leave/");
+
+        await page.goto(base + "/profiles/me/");
+        await page.getByRole("button", { name: "設定" }).click();
+        const settings = page.getByRole("dialog", { name: "設定" });
+        // Last in the settings, and quiet.
+        await settings
+          .getByRole("button", { name: "退会する" })
+          .scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: path.join(output, "leave-settings.png"),
+        });
+        await settings.getByRole("button", { name: "退会する" }).click();
+        await expect(page).toHaveURL(base + "/leave/");
+        const heading = page.getByRole("heading", { name: "退会する" });
+        await expect(heading).toBeVisible();
+        // On a phone the keyboard waits for a tap.
+        await expect(heading).toBeFocused();
+        await expect(page.getByText("消えるもの")).toBeVisible();
+        await noOverflow("退会");
+        await shotBoth("leave");
+        // The narrowest phone too.
+        await page.setViewportSize({ width: 320, height: 568 });
+        await noOverflow("退会 at 320");
+        await shot("leave-320");
+        await page.setViewportSize({ width: 390, height: 844 });
+        // やめる goes back where they were, the settings closed.
+        await page.getByRole("button", { name: "やめる" }).click();
+        await expect(page).toHaveURL(base + "/profiles/me/");
+        await expect(settings).toHaveCount(0);
+
+        await page.getByRole("button", { name: "設定" }).click();
+        await settings.getByRole("button", { name: "退会する" }).click();
+        await expect(page).toHaveURL(base + "/leave/");
+        const leave = page.getByRole("button", { name: "退会する" });
+        const field = page.getByLabel(/確かめるため/);
+        await expect(leave).toBeDisabled();
+        await expectNoKeyboard(page, "退会");
+        await expectNoZoomOnFocus(field, "退会の ID");
+        await field.fill("someone_else");
+        await expect(leave).toBeDisabled();
+        await field.fill("@" + signedIn.handle.toUpperCase());
+        await expect(leave).toBeEnabled();
+        // Refused: nothing went, and they are told so.
+        refuseLeave = true;
+        await leave.click();
+        await expect(page.locator("#leave-error")).toContainText(
+          "何も消えていません",
+        );
+        expect(leaveRequests).toHaveLength(1);
+        expect(await keptDraftKeys(POST_DRAFTS)).toContain(
+          user.id + ":new-post",
+        );
+        refuseLeave = false;
+        await leave.click();
+        await expect(
+          page.getByRole("heading", { name: "退会しました" }),
+        ).toBeVisible();
+        expect(leaveRequests).toEqual(["POST", "POST"]);
+        await shot("leave-done-390");
+        // Nothing of theirs is left in this browser; the visitor's stays.
+        expect(await keptDraftKeys(POST_DRAFTS)).toEqual(["visitor:new-post"]);
+        const left = await page.evaluate((id) => {
+          const found = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (
+              key.includes(id) ||
+              (localStorage.getItem(key) ?? "").includes(id)
+            )
+              found.push(key);
+          }
+          return found;
+        }, user.id);
+        expect(left).toEqual([]);
+        await page.getByRole("link", { name: "本の街へ" }).click();
+        await page.goto(base + "/login/");
+        await expect(
+          page.getByRole("heading", { name: "本の街に入る" }),
+        ).toBeVisible();
+        // Signed out, the page asks them to sign in to the account to delete.
+        await page.goto(base + "/leave/");
+        await expect(
+          page.getByRole("link", { name: "ログインする" }),
+        ).toBeVisible();
+      } finally {
+        profile = signedIn;
+        refuseLeave = false;
       }
     },
   );

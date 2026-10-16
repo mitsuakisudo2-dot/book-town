@@ -55,9 +55,22 @@ export interface KeptDraftStore<T> {
    * dropped. Done the first time an owner reads or writes the store.
    */
   claim(owner: string): void;
+  /**
+   * Lets go of all the work kept for `owner` (its keys are the owner, or
+   * begin with the owner and ":"), for a reader who left Booktown.
+   */
+  forget(owner: string): void;
   getSnapshot(): KeptDraftSnapshot<T>;
   getServerSnapshot(): KeptDraftSnapshot<T>;
   subscribe(listener: () => void): () => void;
+}
+
+/** Every store made, so a reader's work can be let go of in all of them. */
+const everyStore = new Set<Pick<KeptDraftStore<unknown>, "forget">>();
+
+/** Lets go of the work kept for `owner` in every store (see forget). */
+export function forgetOwnerEverywhere(owner: string) {
+  for (const store of everyStore) store.forget(owner);
 }
 
 export function createKeptDraftStore<T>(
@@ -209,7 +222,46 @@ export function createKeptDraftStore<T>(
     write(drafts);
   }
 
-  return {
+  function forget(owner: string) {
+    initialize();
+    const theirs = (key: string) =>
+      key === owner || key.startsWith(owner + ":");
+    const without = <V>(entries: Record<string, V>) =>
+      Object.fromEntries(
+        Object.entries(entries).filter(([key]) => !theirs(key)),
+      );
+    // What storage holds now, other tabs' work and the entries from before
+    // keys had owners included; only theirs goes.
+    let entries: Record<string, unknown>;
+    try {
+      entries = stored();
+    } catch {
+      if (Object.keys(snapshot.drafts).some(theirs))
+        write(without(snapshot.drafts));
+      return;
+    }
+    if (
+      !Object.keys(entries).some(theirs) &&
+      !Object.keys(snapshot.drafts).some(theirs)
+    )
+      return;
+    const left = without(entries);
+    let saved = true;
+    try {
+      if (Object.keys(left).length)
+        storage().setItem(
+          options.storageKey,
+          JSON.stringify({ version: 1, drafts: left }),
+        );
+      else storage().removeItem(options.storageKey);
+    } catch {
+      saved = false;
+    }
+    snapshot = { drafts: readAll(left), saved, loaded: true };
+    emit();
+  }
+
+  const store: KeptDraftStore<T> = {
     initialize,
     get(key) {
       initialize();
@@ -220,6 +272,7 @@ export function createKeptDraftStore<T>(
     clear: (key) => set(key, null),
     move,
     claim,
+    forget,
     getSnapshot: () => snapshot,
     getServerSnapshot: () => server,
     subscribe(listener) {
@@ -229,6 +282,8 @@ export function createKeptDraftStore<T>(
       };
     },
   };
+  everyStore.add(store);
+  return store;
 }
 
 /**

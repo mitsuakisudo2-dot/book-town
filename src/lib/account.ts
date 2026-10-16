@@ -34,7 +34,8 @@ export type AccountFailure =
   | "invalid-profile"
   | "network"
   | "misconfigured"
-  | "server";
+  | "server"
+  | "leave-failed";
 
 export const failureMessages: Record<AccountFailure, string> = {
   "invalid-email": "メールアドレスの形を確かめてください。",
@@ -53,7 +54,13 @@ export const failureMessages: Record<AccountFailure, string> = {
     "サイトの設定に問題があり、いまはログインできません。運営にお知らせください。",
   server:
     "ログインの仕組みが応えませんでした。しばらくしてから、もう一度お試しください。",
+  "leave-failed":
+    "退会できませんでした。何も消えていません。しばらくしてから、もう一度お試しください。",
 };
+
+/** The ID typed to confirm 退会 is not the reader's. */
+export const LEAVE_HANDLE_MISMATCH =
+  "IDが違います。@のあとの、あなたのユーザーIDを入れてください。";
 
 export type AccountResult = { ok: true } | { ok: false; message: string };
 
@@ -64,6 +71,11 @@ export interface AccountBackend {
   sendCode(email: string): Promise<AccountFailure | null>;
   verifyCode(email: string, code: string): Promise<AccountFailure | null>;
   signOut(): Promise<void>;
+  /**
+   * Deletes the signed-in account and everything it owns (the database
+   * takes it all along, docs/09 「アカウント削除の型」), then signs out here.
+   */
+  deleteAccount(): Promise<AccountFailure | null>;
   /** Null when the person has no profile yet; throws when it cannot be read. */
   loadProfile(userId: string): Promise<ProfileRow | null>;
   createProfile(
@@ -246,6 +258,34 @@ export function createAccountStore(
       generation += 1;
       await backend?.signOut();
       set({ status: "signed-out" });
+    },
+    /**
+     * 退会: only for the reader signed in now, and only when `confirm` is
+     * their ID as they typed it to say so (a reader with no profile yet has
+     * none to type). On success, `forget` lets go of what this browser
+     * keeps for them before the page shows them signed out.
+     */
+    async deleteAccount(
+      confirm: string,
+      forget: (userId: string) => void = () => {},
+    ): Promise<AccountResult> {
+      start();
+      if (state.status !== "signed-in" && state.status !== "needs-profile")
+        return failed("network");
+      if (
+        state.status === "signed-in" &&
+        normalizeHandle(confirm) !== state.profile.handle
+      )
+        return { ok: false, message: LEAVE_HANDLE_MISMATCH };
+      if (!backend) return failed("network");
+      const user = state.user;
+      const failure = await backend.deleteAccount();
+      if (failure) return failed(failure);
+      // A profile read still running for them must not bring them back.
+      generation += 1;
+      forget(user.id);
+      set({ status: "signed-out" });
+      return { ok: true };
     },
   };
 

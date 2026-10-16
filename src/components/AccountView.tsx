@@ -36,6 +36,7 @@ import { KeptDraftNote } from "./KeptDraftNote";
 import "./profile.css";
 import "./reading.css";
 import "./account.css";
+import "./leave.css";
 
 /** Sign-in with a code from email, then the first profile. One page for both. */
 export default function AccountView() {
@@ -418,7 +419,7 @@ function SignedIn({ handle, name }: { handle: string; name: string }) {
       <Link className="button primary" href="/">
         本の街へ
       </Link>
-      <SignOut />
+      <SignOut leave />
     </>
   );
 }
@@ -428,7 +429,7 @@ function SignedIn({ handle, name }: { handle: string; name: string }) {
  * device keeps nothing of theirs), saying first when books still wait in it.
  * A sign-out the reader did not press (a failed token refresh) keeps it.
  */
-function SignOut() {
+function SignOut({ leave = false }: { leave?: boolean }) {
   const account = useAccountState();
   const userId = "user" in account ? account.user.id : null;
   const waiting = useJournal(userId).length;
@@ -449,6 +450,11 @@ function SignOut() {
       >
         ログアウト
       </button>
+      {leave && (
+        <Link className="account-leave" href="/leave/">
+          退会する
+        </Link>
+      )}
     </div>
   );
 }

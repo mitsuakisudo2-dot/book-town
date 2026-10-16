@@ -797,7 +797,7 @@ export async function applyWrite(
   }
 }
 
-const SEEN_KEY = "book-town-seen-v1:";
+export const SEEN_KEY = "book-town-seen-v1:";
 
 function readSeen(userId: string): string[] {
   try {

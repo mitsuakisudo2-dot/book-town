@@ -70,6 +70,18 @@ export function supabaseAccountBackend(
     async signOut() {
       await client.auth.signOut();
     },
+    async deleteAccount() {
+      // One statement in the database: either all of it goes or nothing
+      // does. Asked again after an answer that was lost, it deletes nothing
+      // more and succeeds.
+      const { error } = await client.rpc("delete_my_account");
+      // No code: no answer came (offline), so it may be tried again.
+      if (error) return error.code ? "leave-failed" : "network";
+      // The account is gone, so its session is let go of here only; the
+      // server has no session left to end.
+      await client.auth.signOut({ scope: "local" });
+      return null;
+    },
     async loadProfile(userId) {
       const { data, error } = await client
         .from("profiles")

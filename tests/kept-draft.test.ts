@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   createKeptDraftStore,
+  forgetOwnerEverywhere,
   isKeptNotice,
   keptIds,
   keptText,
@@ -143,6 +144,58 @@ const options = {
     "控えから外しました",
   ])
     assert.equal(isKeptNotice(done), false, done);
+}
+
+{
+  // 退会: one owner's work goes, in every store, from storage as well as
+  // this tab; other owners' work, and work from before keys had owners,
+  // stays.
+  const storage = memory();
+  const owned = {
+    storageKey: "test-owned-v1",
+    keyPattern: /^[\w-]+:note:.+$|^[\w-]+$/,
+    unowned: /^note:.+$/,
+    read: options.read,
+    isEmpty: options.isEmpty,
+  };
+  const store = createKeptDraftStore<Note>(owned, () => storage);
+  store.set("u-1:note:a", { text: "私の", ids: [] });
+  store.set("u-1", { text: "名前", ids: [] });
+  store.set("u-12:note:a", { text: "別の人", ids: [] });
+  // Another tab kept more for them, and old work waits for its owner.
+  const raw = JSON.parse(storage.getItem("test-owned-v1")!);
+  raw.drafts["u-1:note:b"] = { text: "別のタブ", ids: [] };
+  raw.drafts["note:old"] = { text: "前の", ids: [] };
+  storage.setItem("test-owned-v1", JSON.stringify(raw));
+  const other = createKeptDraftStore<Note>(
+    { ...options, storageKey: "test-other-v1", keyPattern: /^[\w-]+:.+$/ },
+    () => storage,
+  );
+  other.set("u-1:x", { text: "ほか", ids: [] });
+  forgetOwnerEverywhere("u-1");
+  assert.equal(store.get("u-1:note:a"), null);
+  assert.equal(store.get("u-1"), null);
+  assert.deepEqual(store.get("u-12:note:a"), { text: "別の人", ids: [] });
+  assert.deepEqual(
+    Object.keys(JSON.parse(storage.getItem("test-owned-v1")!).drafts).sort(),
+    ["note:old", "u-12:note:a"],
+  );
+  assert.equal(other.get("u-1:x"), null);
+  assert.equal(storage.data.has("test-other-v1"), false);
+  // Nothing of theirs: nothing is written.
+  let writes = 0;
+  const counted = createKeptDraftStore<Note>(
+    { ...owned, storageKey: "test-counted-v1" },
+    () => ({
+      ...storage,
+      setItem: (key, value) => {
+        writes += 1;
+        storage.setItem(key, value);
+      },
+    }),
+  );
+  counted.forget("u-9");
+  assert.equal(writes, 0);
 }
 
 console.log("kept-draft ok");

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   createAccountStore,
   failureMessages,
+  LEAVE_HANDLE_MISMATCH,
   linkFailure,
   normalizeCode,
   profileDraftIssue,
@@ -38,12 +39,18 @@ const profileOf = (id: string, handle: string, name: string): ProfileRow => ({
 function fakeBackend() {
   let listener: (user: AccountUser | null) => void = () => {};
   const profiles = new Map<string, ProfileRow>();
-  const calls = { sendCode: 0, verifyCode: 0, loadProfile: 0 };
+  const calls = {
+    sendCode: 0,
+    verifyCode: 0,
+    loadProfile: 0,
+    deleteAccount: 0,
+  };
   const control = {
     calls,
     profiles,
     invited: new Set([AKI.email]),
     loadFails: false,
+    deleteFails: null as AccountFailure | null,
     /** Resolves profile reads only when release() is called. */
     holdLoads: false,
     held: [] as (() => void)[],
@@ -70,6 +77,14 @@ function fakeBackend() {
     },
     async signOut() {
       listener(null);
+    },
+    async deleteAccount() {
+      calls.deleteAccount += 1;
+      if (control.deleteFails) return control.deleteFails;
+      profiles.clear();
+      // Supabase tells of the sign-out after its call returns.
+      setTimeout(() => listener(null), 0);
+      return null;
     },
     async loadProfile(userId) {
       calls.loadProfile += 1;
@@ -265,6 +280,63 @@ async function main() {
     await store.actions.signOut();
     assert.equal(store.getSnapshot().status, "signed-out");
   });
+
+  await check(
+    "退会 asks for the reader's own ID, then forgets them here",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      const forgotten: string[] = [];
+      const forget = (id: string) => {
+        // Let go of before the page reads them signed out.
+        assert.equal(store.getSnapshot().status, "signed-in");
+        forgotten.push(id);
+      };
+      assert.deepEqual(await store.actions.deleteAccount("akii", forget), {
+        ok: false,
+        message: LEAVE_HANDLE_MISMATCH,
+      });
+      assert.equal(control.calls.deleteAccount, 0);
+      control.deleteFails = "leave-failed";
+      assert.deepEqual(await store.actions.deleteAccount(" @Aki ", forget), {
+        ok: false,
+        message: failureMessages["leave-failed"],
+      });
+      assert.equal(store.getSnapshot().status, "signed-in");
+      assert.deepEqual(forgotten, []);
+      control.deleteFails = null;
+      assert.deepEqual(await store.actions.deleteAccount("aki", forget), {
+        ok: true,
+      });
+      assert.deepEqual(forgotten, [AKI.id]);
+      assert.equal(store.getSnapshot().status, "signed-out");
+      assert.equal(control.calls.deleteAccount, 2);
+      // Signed out, there is no one to delete.
+      assert.equal(
+        (await store.actions.deleteAccount("aki", forget)).ok,
+        false,
+      );
+      assert.equal(control.calls.deleteAccount, 2);
+    },
+  );
+
+  await check(
+    "a reader with no profile yet can leave without an ID",
+    async () => {
+      const { backend, control } = fakeBackend();
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      assert.equal(store.getSnapshot().status, "needs-profile");
+      assert.deepEqual(await store.actions.deleteAccount(""), { ok: true });
+      assert.equal(store.getSnapshot().status, "signed-out");
+    },
+  );
 
   await check("an unreadable profile can be retried", async () => {
     const { backend, control } = fakeBackend();
