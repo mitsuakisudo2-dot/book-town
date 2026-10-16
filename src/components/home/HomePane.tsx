@@ -182,8 +182,17 @@ const ScanSession = dynamic(
 
 const still = () => () => {};
 
-/** Whether the 路地 has been drawn on this page before. */
-let alleyDrawn = false;
+/**
+ * How much of Home has been drawn on this page before: 0 nothing yet, 1 all
+ * the 便り, 2 the 路地 as well.
+ */
+let homeDrawn = 0;
+
+/**
+ * The parts of the 便り (a run of cards, a 特集, 「街の便り」) drawn in the
+ * first frame: a phone's first screen and a little more.
+ */
+const FIRST_PARTS = 3;
 
 const plainClick = (event: MouseEvent) =>
   event.button === 0 &&
@@ -253,25 +262,27 @@ export function HomePane({
       ).map(hold),
     };
   });
-  // The first time Home is drawn on a page, the 路地 (below the screen, and
-  // as much again as everything above it) comes in the frame after the
-  // first 便り, so a slow phone lays out and paints those first. Back on
-  // Home later, it is there with the rest, where the reader left it.
-  const [alleyReady, setAlleyReady] = useState(alleyDrawn);
+  // The first time Home is drawn on a page, it comes in three frames: the
+  // first screen of 便り, then the rest of them, then the 路地 (below the
+  // screen, and as much again as everything above it). A slow phone lays
+  // out and paints the first screen before the rest, which took it as long
+  // again as everything before (docs/09 「速さ」). Back on Home later, it is
+  // all there at once, where the reader left it.
+  const [stage, setStage] = useState(homeDrawn);
   useEffect(() => {
-    if (!drawn || alleyReady) return;
+    if (!drawn || stage >= 2) return;
     let timer = 0;
     const frame = requestAnimationFrame(() => {
       timer = window.setTimeout(() => {
-        alleyDrawn = true;
-        setAlleyReady(true);
+        homeDrawn = Math.max(homeDrawn, stage + 1);
+        setStage(stage + 1);
       });
     });
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(timer);
     };
-  }, [drawn, alleyReady]);
+  }, [drawn, stage]);
   // Whose Home this is, for the 便り kept from the last time (home-snapshot):
   // null while the account is being checked or cannot be.
   const account = useAccountState();
@@ -287,6 +298,15 @@ export function HomePane({
     supabaseConfigured && !drawn && now !== null
       ? snapshotFor(kept, account.status === "loading" ? null : owner, now)
       : null;
+  // Where the 便り kept from last time were drawn, the page is already that
+  // tall: the town's own come in all at once, so it never grows shorter.
+  const [keptShown, setKeptShown] = useState(false);
+  const keptDrawn = snapshot !== null;
+  useEffect(() => {
+    if (keptDrawn) setKeptShown(true);
+  }, [keptDrawn]);
+  // Only the first screen of 便り is drawn yet: what comes after them waits.
+  const partial = !!drawn && stage < 1 && !keptShown;
   // Home as drawn is kept for the next time; the town of a demo is not.
   useEffect(() => {
     if (!supabaseConfigured || !drawn || owner === null) return;
@@ -385,6 +405,7 @@ export function HomePane({
           mark={mark}
           onPick={setPicked}
           onTakeLine={onTakeLine}
+          parts={partial ? FIRST_PARTS : undefined}
         />
       ) : snapshot ? (
         // The 便り kept from last time, read-only until the town is read.
@@ -407,7 +428,7 @@ export function HomePane({
       ) : (
         <LetterSkeletons />
       )}
-      {followed.length > 0 && (
+      {!partial && followed.length > 0 && (
         <Link
           href="/timeline/"
           className="home-older"
@@ -420,11 +441,13 @@ export function HomePane({
           前の便りは『便りだけ』で
         </Link>
       )}
-      <header className="home-alley-head" id="home-alley">
-        <h2>ここから、まだ知らない路地</h2>
-        {followed.length > 0 && <p>フォロー中の便りは、ここまでです。</p>}
-      </header>
-      {drawn && alleyReady && (
+      {!partial && (
+        <header className="home-alley-head" id="home-alley">
+          <h2>ここから、まだ知らない路地</h2>
+          {followed.length > 0 && <p>フォロー中の便りは、ここまでです。</p>}
+        </header>
+      )}
+      {drawn && stage >= 2 && (
         <Alley
           {...shared}
           now={drawn.at}
@@ -471,6 +494,7 @@ function WovenLetters({
   mark,
   onPick,
   onTakeLine,
+  parts: drawnParts,
   ...shared
 }: Shared & {
   followed: LetterEntry[];
@@ -480,6 +504,8 @@ function WovenLetters({
   mark: string | null;
   onPick: (picked: Picked) => void;
   onTakeLine: (id: string) => boolean;
+  /** How many of the parts to draw, or all of them. */
+  parts?: number;
 }) {
   const firstTown = town[0]?.id;
   const parts: ReactNode[] = [];
@@ -533,5 +559,9 @@ function WovenLetters({
     );
   }
   flush();
-  return <div className="home-letters">{parts}</div>;
+  return (
+    <div className="home-letters">
+      {drawnParts === undefined ? parts : parts.slice(0, drawnParts)}
+    </div>
+  );
 }
