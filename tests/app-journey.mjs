@@ -1482,6 +1482,8 @@ try {
       // On ホーム too: the words do not narrow the alley as typed; Enter
       // asks the search page, and 戻る comes back to the alley as it was.
       await goHome();
+      // The alley comes a frame or two after the first 便り.
+      await expect(page.locator(".street-shop").nth(1)).toBeAttached();
       const fronts = await page.locator(".street-shop").count();
       expect(fronts).toBeGreaterThan(1);
       await top.fill("雨と翻訳");
