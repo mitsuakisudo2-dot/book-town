@@ -420,7 +420,9 @@ begin
     from unnest(cols) with ordinality as x (col, ord);
     -- The rows to write back, narrowed below until every link they keep
     -- points at a row that is there or is coming back.
-    drop table if exists pg_temp.restore_rows;
+    if to_regclass('pg_temp.restore_rows') is not null then
+      drop table pg_temp.restore_rows;
+    end if;
     execute format('create temp table restore_rows on commit drop as table keep.%I',
       copy.copy_name);
     get diagnostics total = row_count;
