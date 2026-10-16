@@ -229,7 +229,15 @@
   }
   .shop-journey .shop-hero-bottom .btn {
     flex: 1 1 0;
+    min-width: 0;
     margin-left: 0;
+    padding-inline: 10px;
     justify-content: center;
+  }
+}
+/* On the narrowest phones the two still share a row: the words, not the icons. */
+@media (max-width: 360px) {
+  .shop-journey .shop-hero-bottom .btn svg {
+    display: none;
   }
 }
