@@ -60,15 +60,24 @@ const SHOP_COLUMNS =
 // Everything folded for everyone; the person's own held things too.
 const FOLD_COLUMNS = "target_kind, target_id, state, since";
 
-/** The newest books the reader may read, and every book the rows refer to. */
-async function booksFor(client: Client, rows: Omit<RemoteRows, "books">) {
-  const catalog = await all(
+/** The newest books the reader may read. Asked for with the town's other
+    rows, not after them: on a slow line every step in turn is a wait. */
+const catalogOf = (client: Client) =>
+  all(
     client
       .from("books")
       .select(BOOK_COLUMNS)
       .order("created_at", { ascending: false })
       .limit(CATALOG),
   );
+
+/** The catalog, and every book the rows refer to that it leaves out. */
+async function booksFor(
+  client: Client,
+  rows: Omit<RemoteRows, "books">,
+  reading: ReturnType<typeof catalogOf>,
+) {
+  const catalog = await reading;
   const have = new Set(catalog.map((book) => book.id));
   const missing = referencedBookIds(rows).filter((id) => !have.has(id));
   const more = await Promise.all(
@@ -86,6 +95,7 @@ export async function loadTown(
   seenNotifications: string[] = [],
   newShopId: () => string = () => crypto.randomUUID(),
 ): Promise<{ state: TownState; ids: RemoteIds }> {
+  const catalog = catalogOf(client);
   const [
     someProfiles,
     ownNine,
@@ -292,7 +302,10 @@ export async function loadTown(
   };
   const ids: RemoteIds = { userId, shopId: own?.id ?? newShopId() };
   return {
-    state: townFromRows({ ...rows, books: await booksFor(client, rows) }, ids),
+    state: townFromRows(
+      { ...rows, books: await booksFor(client, rows, catalog) },
+      ids,
+    ),
     ids,
   };
 }
@@ -303,6 +316,7 @@ export async function loadTown(
  * database decides what is public (supabase/migrations); this only asks.
  */
 export async function loadPublicTown(client: Client): Promise<TownState> {
+  const catalog = catalogOf(client);
   const [profiles, nine, shops, posts, together, records, folds, posters] =
     await Promise.all([
       all(client.from("profiles").select("*").limit(LIMIT)),
@@ -371,7 +385,7 @@ export async function loadPublicTown(client: Client): Promise<TownState> {
     readerSettings: null,
   };
   return townFromRows(
-    { ...rows, books: await booksFor(client, rows) },
+    { ...rows, books: await booksFor(client, rows, catalog) },
     { userId: null, shopId: "" },
   );
 }
