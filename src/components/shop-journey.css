@@ -5,7 +5,7 @@
   gap: 12px;
   margin-bottom: 16px;
   font-size: 12px;
-  color: #365242;
+  color: var(--green);
 }
 .shop-journey-nav :is(a, button) {
   display: flex;
@@ -23,7 +23,7 @@
   gap: 3px;
 }
 .shop-journey-home small {
-  color: #696d62;
+  color: var(--ink-2);
   font-size: 10px;
 }
 .shop-journey-nav :is(a, button):hover {
@@ -60,7 +60,7 @@
   align-items: center;
   gap: 7px;
   font-size: 11px;
-  color: #696d62;
+  color: var(--ink-2);
   margin: 16px 0 8px;
   touch-action: pan-y;
 }
@@ -80,7 +80,6 @@
   margin-top: 16px;
 }
 .shop-journey .store-shelf-label,
-.shop-journey .shelf-under-note,
 .shop-about,
 .shop-journey .shop-owner-footer {
   touch-action: pan-y;
@@ -103,7 +102,7 @@
 .shop-about {
   margin-top: 28px;
   padding-top: 20px;
-  border-top: 1px solid #e2e5d9;
+  border-top: 1px solid var(--line);
 }
 .shop-about h2 {
   font-family: var(--serif);
@@ -111,11 +110,11 @@
   font-weight: 500;
 }
 .shop-about .shop-introduction {
-  color: #59614f;
+  color: var(--ink-2);
   margin-top: 10px;
 }
 .shop-about .shop-social-note {
-  color: #696d62;
+  color: var(--ink-2);
   margin: 10px 0 0;
   font-size: 11px;
 }
@@ -166,11 +165,11 @@
   width: 100%;
   padding: 11px 16px 9px;
   text-align: left;
-  background: #fffaf0;
-  border: 1px solid #eadfc4;
+  background: var(--pop);
+  border: 1px solid var(--pop-line);
   border-radius: 3px;
-  box-shadow: 2px 3px 0 #e9e1cc80;
-  color: #3a2e22;
+  box-shadow: 2px 3px 0 color-mix(in srgb, var(--pop-line) 50%, transparent);
+  color: var(--ink);
   cursor: pointer;
   transition:
     transform 0.2s,
@@ -184,7 +183,7 @@
 }
 .store-shelf-pops button:hover {
   transform: translateY(-1px);
-  box-shadow: 3px 5px 0 #e9e1cc;
+  box-shadow: 3px 5px 0 var(--pop-line);
 }
 .store-shelf-pop-words {
   display: -webkit-box;
@@ -199,7 +198,7 @@
   display: block;
   margin-top: 4px;
   font-size: 11px;
-  color: #7b7262;
+  color: var(--ink-2);
 }
 @media (min-width: 900px) {
   .store-shelf-body:has(.store-shelf-pops) {

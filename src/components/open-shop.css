@@ -3,10 +3,10 @@
   max-width: 760px;
   margin: 8px auto 40px;
   padding: 40px 38px 44px;
-  border: 1px solid #e1dfd0;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fbf8ef;
-  color: #374e3e;
+  background: var(--sheet);
+  color: var(--ink);
 }
 .open-shop h1 {
   font-family: var(--serif);
@@ -18,7 +18,7 @@
 .open-lead {
   font-size: 12px;
   line-height: 2;
-  color: #7f8572;
+  color: var(--ink-2);
   margin-bottom: 26px;
 }
 .open-back {
@@ -42,8 +42,8 @@
   text-align: left;
   padding: 22px 18px 20px;
   border-radius: 10px;
-  border: 1px solid #dcdcc9;
-  background: #fffdf7;
+  border: 1px solid var(--line-2);
+  background: var(--sheet);
   color: inherit;
   cursor: pointer;
   transition:
@@ -54,8 +54,8 @@
 .open-kind:hover,
 .open-kind:focus-visible {
   transform: translateY(-3px);
-  border-color: #a9bc9c;
-  box-shadow: 0 10px 22px #334d3214;
+  border-color: var(--green);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--shade) 8%, transparent);
 }
 .open-kind b {
   font-family: var(--serif);
@@ -65,7 +65,7 @@
 .open-kind small {
   font-size: 11px;
   line-height: 1.9;
-  color: #7f8572;
+  color: var(--ink-2);
 }
 .open-kind-shelf {
   display: flex;
@@ -174,15 +174,15 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 1px solid #d7d5c4;
-  background: #fffdf7;
-  color: #6b7563;
+  border: 1px solid var(--line-2);
+  background: var(--sheet);
+  color: var(--ink-2);
   cursor: pointer;
 }
 .open-shelf-slot {
   flex: 0 0 56px;
   height: 82px;
-  border: 1px dashed #c9c2a8;
+  border: 1px dashed var(--line-2);
   border-bottom: 0;
   border-radius: 3px 3px 0 0;
 }
@@ -195,7 +195,7 @@
 .open-subtitle {
   font-size: 12px;
   font-weight: 500;
-  color: #6f7f63;
+  color: var(--ink-2);
   margin: 0 0 10px;
 }
 .open-candidates {
@@ -224,7 +224,7 @@
 .open-candidates small {
   font-size: 10px;
   line-height: 1.5;
-  color: #5d6a56;
+  color: var(--ink-2);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -277,14 +277,14 @@
   box-sizing: border-box;
   margin-top: 7px;
   padding: 12px 13px;
-  border: 1px solid #dbddd1;
+  border: 1px solid var(--field);
   border-radius: 5px;
-  background: #fffdf8;
-  color: #2c4135;
+  background: var(--sheet);
+  color: var(--ink);
   font: inherit;
 }
 .open-sign-form input:focus-visible {
-  outline: 2px solid #8fac80;
+  outline: 2px solid var(--green);
   outline-offset: 1px;
 }
 .open-name .editor-button {
@@ -371,7 +371,7 @@
 .open-done p {
   font-size: 13px;
   line-height: 2;
-  color: #5f6a58;
+  color: var(--ink-2);
 }
 .open-next {
   display: flex;

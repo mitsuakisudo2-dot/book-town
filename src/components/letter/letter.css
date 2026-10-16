@@ -180,13 +180,13 @@
   overflow: hidden;
   -webkit-mask-image: linear-gradient(
     to bottom,
-    black calc(100% - 1.6em),
-    rgb(0 0 0 / 0.35)
+    var(--shade) calc(100% - 1.6em),
+    color-mix(in srgb, var(--shade) 35%, transparent)
   );
   mask-image: linear-gradient(
     to bottom,
-    black calc(100% - 1.6em),
-    rgb(0 0 0 / 0.35)
+    var(--shade) calc(100% - 1.6em),
+    color-mix(in srgb, var(--shade) 35%, transparent)
   );
 }
 .letter-more,

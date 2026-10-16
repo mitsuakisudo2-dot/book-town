@@ -9,7 +9,7 @@
   margin: 10px 0 0;
   font-size: 12px;
   line-height: 1.8;
-  color: #5d6858;
+  color: var(--ink-2);
 }
 /* A long unbroken name wraps inside the line, never past the page. */
 .kept-note > span {
@@ -26,9 +26,9 @@
   margin: -10px 0;
   padding: 0;
   font-size: 12px;
-  color: #4f6145;
+  color: var(--green);
   text-decoration: underline;
-  text-decoration-color: #c9d3bd;
+  text-decoration-color: var(--line-2);
   text-underline-offset: 3px;
 }
 .kept-note button:hover,
@@ -45,7 +45,7 @@
   gap: 2px 14px;
   font-size: 12px;
   line-height: 1.8;
-  color: #7a5a35;
+  color: var(--ink-2);
 }
 .kept-note.kept-note-confirm {
   display: flex;

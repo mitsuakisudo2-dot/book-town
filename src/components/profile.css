@@ -1,14 +1,14 @@
 .profile-view {
   max-width: 1050px;
   margin: 0 auto;
-  color: var(--ink, #2f342e);
+  color: var(--ink);
 }
 .profile-view .profile-back {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   font-size: 13px;
-  color: var(--muted, #6d746b);
+  color: var(--ink-2);
   text-decoration: none;
   margin-bottom: 34px;
 }
@@ -35,7 +35,7 @@
 .profile-eyebrow {
   font-size: 10px;
   letter-spacing: 0.17em;
-  color: var(--muted, #758075);
+  color: var(--ink-2);
   line-height: 1.7;
   margin: 0 0 11px;
 }
@@ -43,11 +43,11 @@
   display: inline-block;
   font-size: 10px;
   letter-spacing: 0;
-  background: #edeae0;
+  background: var(--band);
   padding: 2px 7px;
   margin-left: 8px;
   border-radius: 4px;
-  color: #7a786c;
+  color: var(--ink-2);
 }
 .profile-reader h1 {
   font-family: var(--serif, "Noto Serif JP", serif);
@@ -63,7 +63,7 @@
   max-width: 640px;
   white-space: pre-wrap;
   margin: 0;
-  color: #596153;
+  color: var(--ink-2);
 }
 .profile-reader-actions {
   display: flex;
@@ -76,12 +76,12 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: #355948;
+  color: var(--green);
   font-size: 13px;
   text-decoration: none;
 }
 .profile-text-link:hover {
-  color: #143b28;
+  color: var(--ink);
 }
 .profile-section-heading {
   display: flex;
@@ -103,7 +103,7 @@
 }
 .profile-section-description {
   font-size: 13px;
-  color: #788071;
+  color: var(--ink-2);
   line-height: 1.8;
   margin: 0 0 24px;
 }
@@ -115,10 +115,11 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 27px 34px;
   padding: 30px 38px 28px;
-  background: #eeeadf;
-  border: 1px solid #e5dfd1;
+  background: var(--band);
+  border: 1px solid var(--line);
   border-radius: 3px;
-  box-shadow: inset 0 1px 1px #fff9;
+  box-shadow: inset 0 1px 1px
+    color-mix(in srgb, var(--on-dark) 60%, transparent);
 }
 .profile-nine-item {
   text-align: center;
@@ -149,13 +150,13 @@
   right: 0;
   height: 4px;
   background: #b99a74;
-  box-shadow: 0 5px 8px #5b45291b;
+  box-shadow: 0 5px 8px color-mix(in srgb, var(--shade) 11%, transparent);
 }
 .profile-nine-book > .book-jacket {
   width: 120px;
   max-width: 100%;
   aspect-ratio: 2/3;
-  box-shadow: 5px 5px 11px #32241025;
+  box-shadow: 5px 5px 11px color-mix(in srgb, var(--shade) 15%, transparent);
   transition: transform 0.25s ease;
 }
 .profile-nine-book:hover > .book-jacket {
@@ -167,10 +168,10 @@
   left: 2px;
   font-size: 10px;
   letter-spacing: 0.12em;
-  color: #a89980;
+  color: var(--ink-2);
 }
 .profile-nine-title {
-  color: #343e32;
+  color: var(--ink);
   text-decoration: none;
   line-height: 1.6;
   font-size: 13px;
@@ -179,7 +180,7 @@
 }
 .profile-nine-author {
   font-size: 11px;
-  color: #8a8c7d;
+  color: var(--ink-2);
   line-height: 1.6;
   margin: 3px 0 0;
 }
@@ -189,7 +190,7 @@
   gap: 4px;
   background: none;
   border: none;
-  color: #557060;
+  color: var(--green);
   font-size: 10px;
   line-height: 1.6;
   margin-top: 7px;
@@ -218,11 +219,11 @@
   width: 135px;
   max-width: 100%;
   aspect-ratio: 2/3;
-  background: #f4f1e899;
-  border: 1px dashed #cfc7b8;
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  border: 1px dashed var(--line-2);
   border-radius: 2px;
   position: relative;
-  color: #a39d8b;
+  color: var(--ink-2);
 }
 .profile-nine-empty > button {
   cursor: pointer;
@@ -231,9 +232,9 @@
     border-color 0.2s;
 }
 .profile-nine-empty > button:hover {
-  background: #fbf8ef;
-  border-color: #94aa96;
-  color: #52735b;
+  background: var(--sheet);
+  border-color: var(--green);
+  color: var(--green);
 }
 .profile-nine-empty span {
   position: absolute;
@@ -342,9 +343,9 @@
   justify-content: space-between;
   gap: 16px;
   text-decoration: none;
-  color: #3e513d;
+  color: var(--ink);
   padding: 19px 0;
-  border-bottom: 1px solid #e5e0d3;
+  border-bottom: 1px solid var(--line);
   transition: padding 0.2s;
 }
 .profile-shelf-link:hover {
@@ -362,7 +363,7 @@
 }
 .profile-shelf-preview {
   font-size: 11px;
-  color: #858674;
+  color: var(--ink-2);
   line-height: 1.7;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -377,20 +378,20 @@
 .profile-muted {
   font-size: 13px;
   line-height: 1.8;
-  color: #838476;
+  color: var(--ink-2);
   margin: 17px 0 25px;
 }
 .profile-no-shop {
   padding: 32px;
-  border: 1px dashed #d5d2c3;
-  background: #f3f0e6;
+  border: 1px dashed var(--line-2);
+  background: var(--band);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 14px;
   margin-top: 23px;
-  color: #788374;
+  color: var(--ink-2);
 }
 .profile-no-shop > svg {
   width: 28px;
@@ -415,11 +416,11 @@
 .profile-form textarea,
 .profile-editor-book-info input,
 .profile-book-search {
-  border: 1px solid #d9d5c9;
-  background: #fbf9f3;
+  border: 1px solid var(--field);
+  background: var(--sheet);
   border-radius: 4px;
   padding: 11px 13px;
-  color: #364333;
+  color: var(--ink);
   font: inherit;
   font-size: 13px;
   line-height: 1.6;
@@ -432,12 +433,12 @@
 .profile-form textarea:focus,
 .profile-editor-book-info input:focus,
 .profile-book-search:focus {
-  outline: 2px solid #aabca5;
+  outline: 2px solid var(--green);
   outline-offset: 2px;
 }
 .profile-form-hint {
   font-size: 12px;
-  color: #7d8475;
+  color: var(--ink-2);
   line-height: 1.8;
   margin: 4px 0 14px;
 }
@@ -461,13 +462,13 @@
   gap: 12px;
   align-items: center;
   padding: 12px;
-  border: 1px solid #e2ded0;
-  background: #f5f2e8;
+  border: 1px solid var(--line);
+  background: var(--paper);
   border-radius: 3px;
 }
 .profile-editor-order {
   font-size: 12px;
-  color: #859080;
+  color: var(--ink-2);
 }
 .profile-editor-jacket {
   width: 39px;
@@ -491,7 +492,7 @@
 }
 .profile-editor-book-info > span {
   font-size: 10px;
-  color: #8b8c7a;
+  color: var(--ink-2);
 }
 .profile-editor-book-info input {
   margin-top: 3px;
@@ -509,14 +510,14 @@
   height: 40px;
   display: grid;
   place-items: center;
-  border: 1px solid #d8d6c8;
-  color: #53684c;
-  background: #fffaf1;
+  border: 1px solid var(--line-2);
+  color: var(--green);
+  background: var(--sheet);
   border-radius: 3px;
   cursor: pointer;
 }
 .profile-order-controls button:hover {
-  background: #e7eadc;
+  background: var(--green-soft);
 }
 .profile-order-controls button:disabled {
   opacity: 0.3;
@@ -530,7 +531,7 @@
 .profile-picker-limit {
   font-size: 12px;
   line-height: 1.8;
-  color: #7d8475;
+  color: var(--ink-2);
   padding: 13px 0;
 }
 .profile-nine-picker-heading {
@@ -546,7 +547,7 @@
 }
 .profile-nine-picker-heading span {
   font-size: 11px;
-  color: #7d8475;
+  color: var(--ink-2);
 }
 .profile-book-search {
   width: 100%;
@@ -571,11 +572,11 @@
   transition:
     background 0.2s,
     border-color 0.2s;
-  color: #45543f;
+  color: var(--ink);
 }
 .profile-picker-book:hover {
-  background: #ecebdd;
-  border-color: #b7c2ac;
+  background: var(--green-soft);
+  border-color: var(--line-2);
 }
 .profile-picker-book > .book-jacket {
   width: 65px;
@@ -591,7 +592,7 @@
 }
 .profile-picker-book > span {
   font-size: 9px;
-  color: #888c7c;
+  color: var(--ink-2);
   line-height: 1.7;
   margin-top: 2px;
 }
@@ -599,7 +600,7 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  color: #607358;
+  color: var(--green);
   font-size: 10px;
   margin-top: 7px;
 }
@@ -614,9 +615,9 @@
 .profile-nine-save {
   position: sticky;
   bottom: -24px;
-  background: #fcfaf4;
+  background: var(--sheet);
   padding: 16px 0 6px;
-  border-top: 1px solid #e3dfd2;
+  border-top: 1px solid var(--line);
   z-index: 2;
 }
 .profile-note-detail {
@@ -626,7 +627,7 @@
 .profile-note-detail > svg {
   width: 24px;
   height: 24px;
-  color: #78946b;
+  color: var(--ink-2);
 }
 .profile-note-detail blockquote {
   font-family: var(--serif, "Noto Serif JP", serif);
@@ -634,11 +635,11 @@
   line-height: 2;
   white-space: pre-wrap;
   margin: 20px 0 13px;
-  color: #475741;
+  color: var(--ink);
 }
 .profile-note-detail p {
   font-size: 12px;
-  color: #8b8f7b;
+  color: var(--ink-2);
   margin-bottom: 25px;
 }
 .profile-not-found {
@@ -907,7 +908,7 @@
 .profile-collections {
   margin: 50px 0;
   padding-top: 30px;
-  border-top: 1px solid #e1dcd0;
+  border-top: 1px solid var(--line);
   /* Opened by 本棚, the list starts just under the bar at the top. */
   scroll-margin-top: 80px;
 }
@@ -915,14 +916,14 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #787b6a;
+  color: var(--ink-2);
   font-size: 11px;
 }
 .profile-collection-tabs {
   display: flex;
   gap: 20px;
   margin: 25px 0 14px;
-  border-bottom: 1px solid #deded0;
+  border-bottom: 1px solid var(--line);
 }
 .profile-collection-tabs button {
   display: flex;
@@ -932,15 +933,15 @@
   min-height: 48px;
   border-bottom: 2px solid transparent;
   font-size: 13px;
-  color: #7a7b6e;
+  color: var(--ink-2);
 }
 .profile-collection-tabs button[aria-pressed="true"] {
-  border-color: #365242;
-  color: #365242;
+  border-color: var(--green);
+  color: var(--green);
 }
 .profile-collection-tabs span {
   font-size: 10px;
-  background: #eceee4;
+  background: var(--band);
   border-radius: 12px;
   padding: 2px 7px;
 }
@@ -974,7 +975,7 @@
   font-weight: 500;
 }
 .profile-saved-book small {
-  color: #7b7c6f;
+  color: var(--ink-2);
   font-size: 10px;
   margin-top: 4px;
 }
@@ -984,11 +985,11 @@
   gap: 4px;
   min-height: 44px;
   font-size: 10px;
-  color: #7b7c6f;
+  color: var(--ink-2);
 }
 .profile-collection-empty {
   padding: 28px 0;
-  color: #757c6c;
+  color: var(--ink-2);
   font-size: 13px;
 }
 .profile-collection-empty a,
@@ -996,7 +997,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #365242;
+  color: var(--green);
   margin-top: 14px;
   min-height: 44px;
 }
@@ -1014,7 +1015,7 @@
 .profile-saved-shops {
   margin: 50px 0;
   padding-top: 30px;
-  border-top: 1px solid #e1dcd0;
+  border-top: 1px solid var(--line);
 }
 .saved-shop-list {
   display: grid;
@@ -1030,15 +1031,15 @@
   gap: 12px;
   min-height: 56px;
   padding: 10px 14px;
-  border: 1px solid var(--theme-light, #d9d9cd);
-  border-top: 3px solid var(--theme, #6b845e);
+  border: 1px solid var(--theme-light);
+  border-top: 3px solid var(--theme);
   border-radius: 5px;
-  background: linear-gradient(135deg, var(--theme-pale, #f1f3e9), #fffdf6);
-  color: var(--theme-deep, #435b3f);
+  background: linear-gradient(135deg, var(--theme-pale), var(--sheet));
+  color: var(--theme-deep);
 }
 .saved-shop > svg:first-child {
   flex: none;
-  color: var(--theme, #6b845e);
+  color: var(--theme);
 }
 .saved-shop > span {
   display: grid;
@@ -1052,7 +1053,7 @@
 }
 .saved-shop small {
   font-size: 12px;
-  color: #6a7365;
+  color: var(--ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1080,10 +1081,10 @@
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 12px;
-  color: #536448;
+  color: var(--ink-2);
 }
 .profile-minor-actions .text-button:hover {
-  background: #eef2e8;
+  background: var(--green-soft);
 }
 @media (max-width: 600px) {
   /* Buttons that wrap fill their row, so a stacked pair lines up. */
@@ -1121,21 +1122,21 @@
   justify-content: space-between;
   gap: 8px 12px;
   padding: 10px 12px;
-  border-left: 3px solid #c9a54f;
+  border-left: 3px solid var(--lamp-glow);
   border-radius: 6px;
-  background: #fbf6e6;
+  background: var(--notice);
 }
 .journal-note p,
 .journal-title-about {
   display: grid;
   gap: 2px;
   font-size: 13px;
-  color: #3f4a39;
+  color: var(--ink);
 }
 .journal-note small,
 .journal-title-about small {
   font-size: 11px;
-  color: #6b7262;
+  color: var(--ink-2);
 }
 .journal-note-actions {
   display: flex;
