@@ -15,17 +15,15 @@
     "src/components/walk.css": 169
   },
   "sizes": {
-    "src/app/globals.css": 7,
+    "src/app/globals.css": 6,
     "src/components/poster.css": 2,
     "src/components/profile.css": 2,
     "src/components/street.css": 5,
-    "src/components/usability.css": 4,
-    "src/components/walk.css": 7
+    "src/components/walk.css": 6
   },
   "smallText": {
-    "src/app/globals.css": 7,
+    "src/app/globals.css": 6,
     "src/components/street.css": 4,
-    "src/components/usability.css": 2,
-    "src/components/walk.css": 2
+    "src/components/walk.css": 1
   }
 }

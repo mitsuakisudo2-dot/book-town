@@ -63,11 +63,11 @@
     row-gap: 0;
   }
   .town-shell .town-bottom-nav a {
-    font-size: 12px;
+    font-size: var(--t-cap);
     color: var(--ink-2);
   }
   .town-shell .town-bottom-nav span {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
 }
 @media (max-width: 420px) {
@@ -134,14 +134,14 @@
     min-width: 0;
   }
   .town-shell .town-bottom-nav span {
-    font-size: 10.5px;
+    font-size: var(--t-cap);
     letter-spacing: -0.03em;
     white-space: nowrap;
   }
 }
 @media (max-width: 340px) {
   .town-shell .town-bottom-nav span {
-    font-size: 9.5px;
+    font-size: var(--t-cap);
     letter-spacing: -0.05em;
   }
 }

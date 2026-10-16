@@ -1664,7 +1664,7 @@ div.book-jacket:hover {
     color: var(--green);
   }
   .town-bottom-nav span {
-    font-size: 10px;
+    font-size: var(--t-cap);
   }
   .toast {
     left: 50%;
