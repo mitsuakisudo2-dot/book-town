@@ -71,7 +71,7 @@
   display: flex;
   flex-direction: column;
   background: #1d0c05;
-  color: #f6e9cf;
+  color: var(--on-dark);
   isolation: isolate;
   --walk-light: #ffd293;
   --walk-brush: "Yohaku Brush", "Kaisei HarunoUmi", var(--serif);
@@ -188,7 +188,7 @@
   align-items: start;
   gap: 4px 8px;
   padding: calc(4px + env(safe-area-inset-top)) 10px 5px 11px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 60%, transparent);
   --walk-avatar: clamp(48px, 14.9vw, 60px);
 }
 .walk-identity {
@@ -205,7 +205,7 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  color: #f2ede4;
+  color: var(--on-dark);
 }
 .walk-owner .reader-avatar {
   width: var(--walk-avatar) !important;
@@ -213,8 +213,8 @@
   font-size: calc(var(--walk-avatar) * 0.36) !important;
   flex: none;
   box-shadow:
-    0 0 0 2px #fdf6ee,
-    0 2px 8px rgba(0, 0, 0, 0.55);
+    0 0 0 2px var(--on-dark),
+    0 2px 8px color-mix(in srgb, var(--shade) 55%, transparent);
 }
 .walk-owner span {
   display: flex;
@@ -234,7 +234,7 @@
   font-family: var(--serif);
   font-size: clamp(8px, 2.15vw, 9.5px);
   line-height: 1.3;
-  color: #e8e0d6;
+  color: color-mix(in srgb, var(--on-dark) 90%, transparent);
 }
 .walk-owner-bio {
   position: absolute;
@@ -248,7 +248,7 @@
   font-size: 11px;
   line-height: 1.45;
   letter-spacing: 0.04em;
-  color: #efe8de;
+  color: color-mix(in srgb, var(--on-dark) 92%, transparent);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   word-break: auto-phrase;
@@ -272,9 +272,9 @@
   place-items: center;
   padding: 0;
   border-radius: 50%;
-  color: #fff;
-  background: rgba(20, 8, 2, 0.5);
-  border: 1px solid rgba(255, 225, 200, 0.3);
+  color: var(--on-dark);
+  background: color-mix(in srgb, var(--shade) 50%, transparent);
+  border: 1px solid color-mix(in srgb, var(--on-dark) 30%, transparent);
   backdrop-filter: blur(6px);
 }
 /* Each circle says what it does underneath, like the rail beside the shelf. */
@@ -288,7 +288,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: #fff;
+  color: var(--on-dark);
 }
 .walk-header-tools button small {
   font-family: var(--sans);
@@ -296,7 +296,7 @@
   line-height: 1.2;
   letter-spacing: 0.04em;
   white-space: nowrap;
-  color: #efe5d6;
+  color: color-mix(in srgb, var(--on-dark) 90%, transparent);
 }
 .walk-header-tools button:after,
 .walk-journey-controls button:after {
@@ -309,8 +309,8 @@
   height: 14px;
 }
 .walk-header-tools button[aria-pressed="true"] i {
-  color: #3a2616;
-  background: #fbf1dd;
+  color: var(--shade);
+  background: var(--on-dark);
 }
 .walk-journey-controls {
   grid-area: journey;
@@ -346,12 +346,12 @@
   font-family: var(--sans);
   font-size: 9px;
   letter-spacing: 0.1em;
-  color: #e8dccb;
+  color: color-mix(in srgb, var(--on-dark) 88%, transparent);
 }
 .walk-journey-hint {
   display: none;
   font-size: 11px;
-  color: #dccbac;
+  color: color-mix(in srgb, var(--on-dark) 80%, transparent);
   letter-spacing: 0.08em;
 }
 
@@ -370,8 +370,8 @@
   font-size: 12px;
   letter-spacing: 0.06em;
   white-space: nowrap;
-  color: #fbf1dd;
-  background: rgba(20, 8, 2, 0.74);
+  color: var(--on-dark);
+  background: color-mix(in srgb, var(--shade) 74%, transparent);
   backdrop-filter: blur(6px);
   pointer-events: none;
   transform: translateX(-50%);
@@ -461,9 +461,9 @@
   font-size: calc(var(--walk-u) * 2.2);
   letter-spacing: 0.04em;
   white-space: nowrap;
-  color: #f3ece4;
-  background: rgba(20, 10, 4, 0.38);
-  border: 1px solid rgba(255, 225, 200, 0.35);
+  color: var(--on-dark);
+  background: color-mix(in srgb, var(--shade) 38%, transparent);
+  border: 1px solid color-mix(in srgb, var(--on-dark) 35%, transparent);
   backdrop-filter: blur(6px) saturate(1.2);
 }
 .walk-chips button svg {
@@ -477,11 +477,11 @@
   inset: -8px -1px;
 }
 .walk-chips button[aria-pressed="true"] {
-  color: #2b2520;
-  background: #fdf1e5;
-  border-color: #fdf1e5;
+  color: var(--shade);
+  background: var(--on-dark);
+  border-color: var(--on-dark);
   box-shadow: 0 calc(var(--walk-u) * 0.4) calc(var(--walk-u) * 1.2)
-    rgba(0, 0, 0, 0.35);
+    color-mix(in srgb, var(--shade) 35%, transparent);
 }
 .walk-chips button:focus-visible {
   outline-offset: -3px;
@@ -993,9 +993,9 @@
   height: 24px;
   display: grid;
   place-items: center;
-  color: #f1e2c4;
+  color: var(--on-dark);
   z-index: 9;
-  background: #1b120b70;
+  background: color-mix(in srgb, var(--shade) 44%, transparent);
   border-radius: 50%;
 }
 
@@ -1057,7 +1057,7 @@
   text-align: inherit;
 }
 .walk-book-target:focus-visible {
-  outline: 3px solid #ffeb98;
+  outline: 3px solid var(--lamp-glow);
   outline-offset: 3px;
   z-index: auto;
 }
@@ -1465,7 +1465,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 0;
-  color: #fbf0da;
+  color: var(--on-dark);
   background: none;
   border: 0;
   border-radius: 0;
@@ -1479,10 +1479,10 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #1b120b8c;
-  border: 1px solid #f3dcb045;
+  background: color-mix(in srgb, var(--shade) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--on-dark) 27%, transparent);
   backdrop-filter: blur(6px);
-  box-shadow: 0 3px 8px #0007;
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--shade) 47%, transparent);
 }
 .walk-actions :is(button, a) > span svg {
   width: 56%;
@@ -1490,9 +1490,10 @@
 }
 .walk-actions :is(button, a) small {
   font-size: clamp(7px, 2.4cqw, 11px);
-  text-shadow: 0 1px 3px #000;
+  text-shadow: 0 1px 3px var(--shade);
 }
 .walk-actions :is(button, a)[aria-pressed="true"] > span {
+  /* The heart on the scene: the same by day and at night. */
   color: #b5452f;
   background: #fbf1dd;
   border-color: #fbf1dd;
@@ -1512,7 +1513,7 @@
   height: calc(var(--walk-u) * 11.7);
   min-height: 0;
   gap: calc(var(--walk-u) * 1.2);
-  color: #fcf8f7;
+  color: var(--on-dark);
 }
 .walk-actions.is-rail :is(button, a):after {
   /* The tap area grows outward, never over the books. */
@@ -1535,17 +1536,19 @@
   width: calc(var(--walk-u) * 4.7);
   height: calc(var(--walk-u) * 4.7);
   stroke-width: 1.7;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.75));
+  filter: drop-shadow(
+    0 1px 2px color-mix(in srgb, var(--shade) 75%, transparent)
+  );
 }
 .walk-actions.is-rail :is(button, a) small {
   font-family: var(--sans);
   font-size: calc(var(--walk-u) * 2.3);
   line-height: 1;
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  color: var(--on-dark);
+  text-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 80%, transparent);
 }
 .walk-actions.is-rail :is(button, a)[aria-pressed="true"] > span {
-  color: #fff;
+  color: var(--on-dark);
   background: none;
 }
 .walk-view .modal {
@@ -1574,7 +1577,7 @@
 .walk-end h1 {
   font-size: 24px;
   line-height: 1.8;
-  color: #f1dfbd;
+  color: var(--on-dark);
   word-break: auto-phrase;
   text-wrap: balance;
 }
@@ -1583,7 +1586,7 @@
 }
 .walk-end a {
   font-size: 13px;
-  color: #e4d1ac;
+  color: color-mix(in srgb, var(--on-dark) 85%, transparent);
   text-decoration: underline;
 }
 .walk-save-warning {
@@ -1595,8 +1598,8 @@
   width: calc(100% - 28px);
   max-width: 520px;
   margin: 0 0 6px;
-  background: #fff3d9;
-  color: #614327;
+  background: var(--notice);
+  color: var(--ink);
   padding: 8px;
   font-size: 11px;
 }
@@ -1616,16 +1619,16 @@
   border-radius: 8px;
   font-size: 12px;
   line-height: 1.6;
-  color: #f6ead6;
-  background: rgba(20, 8, 2, 0.72);
+  color: var(--on-dark);
+  background: color-mix(in srgb, var(--shade) 72%, transparent);
   backdrop-filter: blur(6px);
 }
 .walk-own-missing a {
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 12px;
-  color: #3a2616;
-  background: #fbf1dd;
+  color: var(--shade);
+  background: var(--on-dark);
 }
 .walk-own-missing button {
   position: absolute;
@@ -1636,7 +1639,7 @@
   width: 26px;
   height: 26px;
   padding: 0;
-  color: #f6ead6;
+  color: var(--on-dark);
   background: none;
   border: 0;
 }
@@ -1646,8 +1649,8 @@
   font-size: 18px;
   line-height: 2.2;
   padding: 20px;
-  background: #f5eedb;
-  color: #433b2b;
+  background: var(--pop);
+  color: var(--ink);
 }
 .walk-close-shelf {
   display: flex;
@@ -1724,18 +1727,18 @@
 }
 .walk-starters button {
   padding: 6px 11px;
-  border: 1px solid #d9c7a6;
+  border: 1px solid var(--line-2);
   border-radius: 999px;
   font-size: 12px;
   line-height: 1.4;
   text-align: left;
-  color: #5b4126;
-  background: #fbf4e6;
+  color: var(--ink);
+  background: var(--sheet);
 }
 .walk-message-note {
   margin: 10px 0 0;
   font-size: 11px;
-  color: #8a7660;
+  color: var(--ink-2);
 }
 /* A book's POP ends with the book, one tap from taking it in hand. */
 .walk-pop-book {
@@ -1745,11 +1748,11 @@
   width: 100%;
   margin-top: 16px;
   padding: 10px 12px;
-  border: 1px solid #e3d5bb;
+  border: 1px solid var(--line);
   border-radius: 10px;
   text-align: left;
-  color: #3f2e1d;
-  background: #fbf6ec;
+  color: var(--ink);
+  background: var(--sheet);
 }
 .walk-pop-book .book-jacket {
   flex: none;
@@ -1770,7 +1773,7 @@
 }
 .walk-pop-book small {
   font-size: 11px;
-  color: #7d6a55;
+  color: var(--ink-2);
 }
 .walk-pop-book em {
   display: inline-flex;
@@ -1779,7 +1782,7 @@
   margin-top: 4px;
   font-style: normal;
   font-size: 12px;
-  color: #6a4f2d;
+  color: var(--green);
 }
 .walk-history-list {
   padding: 12px 0;
@@ -1794,7 +1797,7 @@
 }
 .walk-history-list time {
   font-size: 11px;
-  color: #89917e;
+  color: var(--ink-2);
 }
 /* A real cover is shown whole, as its source serves it: never cropped. */
 .jacket-image {
@@ -1810,7 +1813,7 @@
   display: none;
 }
 .nav-walk svg {
-  color: #765a31;
+  color: var(--lamp);
 }
 .town-bottom-nav .nav-walk {
   position: relative;
@@ -1842,17 +1845,17 @@
     height: calc(100dvh - 74px - env(safe-area-inset-bottom));
   }
   .town-bottom-nav .nav-walk {
-    color: #6b5636;
+    color: var(--lamp);
   }
   .town-bottom-nav .nav-walk.active svg {
-    background: #6a4f2d;
-    color: #fff7dc;
+    background: var(--lamp);
+    color: var(--sheet);
     border-radius: 50%;
     padding: 7px;
     width: 42px;
     height: 42px;
     margin-top: -14px;
-    box-shadow: 0 3px 9px #3b2a1820;
+    box-shadow: 0 3px 9px color-mix(in srgb, var(--shade) 13%, transparent);
   }
   .town-bottom-nav .nav-walk.active {
     gap: 1px;

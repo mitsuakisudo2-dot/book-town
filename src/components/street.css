@@ -1,244 +1,17 @@
 /* The street is a sequence of complete, owner-curated bookshops. */
-.street-experience {
-  --street-text: #32463d;
-  --street-quiet: #6e766b;
-  --street-rule: #deddd2;
-  color: var(--street-text);
-}
-.street-intro {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 28px;
-  padding: 18px 0 35px;
-}
-.street-kicker {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 10px;
-  letter-spacing: 2.2px;
-  color: #6b7d68;
-  margin-bottom: 22px;
-}
-.street-kicker i,
-.street-route-label > span > i {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #6b845e;
-}
-.street-intro h1 {
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: clamp(29px, 2.8vw, 43px);
-  line-height: 1.65;
-  letter-spacing: 2px;
-}
-.street-intro h1 em {
-  font-style: normal;
-  color: #4e705c;
-}
-.street-intro p {
-  font-size: 13px;
-  line-height: 2.1;
-  margin-top: 17px;
-  color: var(--street-quiet);
-}
-.street-intro-note {
-  width: 205px;
-  flex-shrink: 0;
-  padding: 26px 12px 23px;
-  text-align: center;
-  transform: rotate(3deg);
-  background: #eeeadd;
-  border: 1px solid #e3dfcf;
-  box-shadow: 3px 4px 0 #e7e4d766;
-}
-.street-intro-note > svg {
-  margin: 0 auto 16px;
-  color: #71846a;
-}
-.street-intro-note > span {
-  font-family: var(--serif);
-  font-size: 13px;
-  line-height: 2.1;
-}
-.street-intro-note > i {
-  display: block;
-  font:
-    italic 14px Georgia,
-    serif;
-  margin-top: 14px;
-  color: #8a917c;
-}
-.street-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--street-rule);
-  gap: 10px;
-}
-.street-tabs {
-  display: flex;
-  gap: 29px;
-}
-.street-tabs button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 16px 0;
-  color: #757c70;
-  border-bottom: 2px solid transparent;
-  font-size: 14px;
-}
-.street-tabs button[aria-pressed="true"] {
-  color: #2e513e;
-  border-bottom-color: #365941;
-  font-weight: 600;
-}
-.street-directory {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  font-size: 12px;
-  color: #687661;
-  min-height: 44px;
-  padding: 4px 0;
-}
-.street-filters {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  margin: 21px 0 27px;
-  min-width: 0;
-}
-.street-genres {
-  display: flex;
-  overflow-x: auto;
-  gap: 8px;
-  scrollbar-width: none;
-  flex: 1;
-  padding: 3px;
-  min-width: 0;
-}
-.street-genres button {
-  border: 1px solid #dfdfd3;
-  white-space: nowrap;
-  flex-shrink: 0;
-  padding: 8px 15px;
-  min-height: 36px;
-  border-radius: 4px;
-  font-size: 12px;
-  background: #fcfaf4;
-  color: #6c7565;
-}
-.street-genres button[aria-pressed="true"] {
-  background: #e6ebdf;
-  border-color: #c3cdb8;
-  color: #3e5941;
-}
-.street-follow-filter {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  flex-shrink: 0;
-  min-height: 40px;
-  font-size: 12px;
-  color: #6c7565;
-  padding: 6px 0 6px 14px;
-  border-left: 1px solid var(--street-rule);
-}
-.street-follow-filter[aria-pressed="true"] {
-  font-weight: 600;
-  color: #2e593c;
-}
-.street-search-result {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin: 0 0 20px;
-  font-size: 13px;
-}
-.street-search-result button {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 5px;
-  min-height: 40px;
-  color: #657a60;
-  white-space: nowrap;
-}
-.street-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 245px;
-  gap: 33px;
-  align-items: start;
-}
-.street-walk {
-  min-width: 0;
-}
-.street-route-label {
-  display: flex;
-  gap: 15px;
-  justify-content: space-between;
-  align-items: center;
-  margin: 0 0 19px;
-  color: #64745e;
-  font-size: 11px;
-  line-height: 1.8;
-}
-.street-route-label > span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.street-route-label small {
-  font-size: 10px;
-  color: #818678;
-}
-.street-route-label button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  white-space: nowrap;
-  padding: 0;
-  font-size: 11px;
-}
 .street-shop {
-  border: 1px solid #d9d9cd;
+  border: 1px solid var(--line-2);
   border-radius: 5px;
   margin-bottom: 36px;
-  background: #fffdf6;
-  box-shadow: 0 5px 15px #2b443305;
+  background: var(--sheet);
+  box-shadow: 0 5px 15px color-mix(in srgb, var(--shade) 2%, transparent);
   overflow: clip;
   scroll-margin-top: 100px;
 }
 .street-shop-header {
   padding: 22px 28px 17px;
   border-top: 5px solid var(--theme);
-  background: linear-gradient(135deg, var(--theme-pale), #fffdf6);
-}
-.street-shop-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  color: var(--theme);
-  font-size: 9px;
-  letter-spacing: 1.8px;
-  margin-bottom: 14px;
-}
-.street-shop-label small {
-  font-size: 10px;
-  letter-spacing: 0.4px;
-  border: 1px solid var(--theme-light);
-  padding: 2px 7px;
-  border-radius: 2px;
-  color: #6d7766;
-  background: #fffdf659;
+  background: linear-gradient(135deg, var(--theme-pale), var(--sheet));
 }
 .street-shop-title > a {
   display: flex;
@@ -267,13 +40,7 @@
   font-size: 12px;
   letter-spacing: 0.7px;
   margin-top: 6px;
-  color: var(--theme);
-}
-.street-shop-description {
-  font-size: 12px;
-  line-height: 1.95;
-  color: #6a7365;
-  margin: 12px 0 15px;
+  color: var(--theme-deep);
 }
 .street-shop-owner {
   display: flex;
@@ -290,7 +57,7 @@
 }
 .street-shop-owner small {
   font-size: 10px;
-  color: #757f6a;
+  color: var(--ink-2);
   margin-right: 3px;
 }
 .street-follow {
@@ -299,20 +66,20 @@
   gap: 5px;
   justify-content: center;
   min-height: 38px;
-  border: 1px solid #cad3c0;
+  border: 1px solid var(--line-2);
   padding: 6px 12px;
   font-size: 11px;
   border-radius: 3px;
-  background: #fffdf89e;
+  background: color-mix(in srgb, var(--sheet) 62%, transparent);
   white-space: nowrap;
 }
 .street-follow[aria-pressed="true"] {
-  background: #e6eddc;
-  color: #365a3a;
+  background: var(--green-soft);
+  color: var(--green);
 }
 .street-shop-shelves {
   padding: 12px 22px 7px;
-  background: #f6f2e8;
+  background: var(--paper);
 }
 .street-shelf {
   margin-bottom: 18px;
@@ -335,13 +102,13 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 1.7;
-  color: #5c674f;
+  color: var(--ink-2);
 }
 .street-shelf h3 > span {
   font:
     italic 14px Georgia,
     serif;
-  color: #929980;
+  color: var(--ink-2);
   flex-shrink: 0;
 }
 .street-shelf-controls {
@@ -352,12 +119,12 @@
 .street-shelf-controls button {
   display: grid;
   place-items: center;
-  border: 1px solid #dcdcc9;
+  border: 1px solid var(--line-2);
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #fbf9f1;
-  color: #687658;
+  background: var(--sheet);
+  color: var(--ink-2);
 }
 .street-shelf-controls button:disabled {
   opacity: 0.25;
@@ -443,8 +210,8 @@
   align-items: center;
   gap: 10px;
   padding: 13px 25px;
-  background: #fcfaf3;
-  color: #747e69;
+  background: var(--sheet);
+  color: var(--ink-2);
   font-size: 10px;
 }
 .street-shop-footer > a {
@@ -452,118 +219,9 @@
   align-items: center;
   gap: 6px;
   min-height: 32px;
-  color: #4c6547;
+  color: var(--green);
 }
-.street-aside {
-  position: sticky;
-  top: 108px;
-  padding-top: 7px;
-  min-width: 0;
-}
-.street-aside-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  letter-spacing: 1px;
-  color: #64725a;
-  border-bottom: 1px solid #d9ddcf;
-  padding-bottom: 13px;
-}
-.street-aside-lead {
-  font-family: var(--serif);
-  font-size: 16px;
-  line-height: 1.9;
-  margin: 17px 0 5px;
-}
-.street-pop-invite {
-  display: block;
-  text-align: left;
-  width: 100%;
-  padding: 21px 0;
-  border-bottom: 1px solid #dedfd3;
-}
-.street-pop-invite > div {
-  display: flex;
-  gap: 13px;
-  align-items: center;
-}
-.street-pop-invite .book-jacket {
-  width: 48px;
-  flex-shrink: 0;
-  box-shadow: 3px 3px 5px #34452d18;
-}
-.street-pop-invite .jacket-title {
-  font-size: 8px;
-}
-.street-pop-invite .jacket-author,
-.street-pop-invite .jacket-footer {
-  display: none;
-}
-.street-pop-invite small {
-  display: block;
-  font-size: 10px;
-  color: #78806d;
-  margin-bottom: 7px;
-}
-.street-pop-invite b {
-  display: block;
-  font-family: var(--serif);
-  font-size: 15px;
-  font-weight: 500;
-}
-.street-pop-invite > p {
-  font-family: var(--serif);
-  font-size: 12px;
-  line-height: 1.95;
-  color: #69735f;
-  margin-top: 13px;
-}
-.street-pop-open {
-  display: flex;
-  gap: 9px;
-  align-items: center;
-  font-size: 10px;
-  color: #627854;
-  margin-top: 12px;
-}
-.street-pop-invite:hover .street-pop-open {
-  color: #304e38;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-}
-.street-start-own {
-  display: block;
-  margin-top: 29px;
-  padding: 24px 20px;
-  background: #e9ecdf;
-  border: 1px solid #dadfcc;
-  border-radius: 4px;
-}
-.street-start-own > svg {
-  color: #6d805a;
-  margin-bottom: 15px;
-}
-.street-start-own h3 {
-  font-family: var(--serif);
-  font-size: 19px;
-  line-height: 1.7;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-}
-.street-start-own p {
-  font-size: 11px;
-  line-height: 2;
-  color: #708063;
-  margin-top: 12px;
-}
-.street-start-own > span {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  margin-top: 22px;
-}
+
 /* Between two rounds of the street: a resting place, not an end. */
 .street-round {
   display: flex;
@@ -573,7 +231,7 @@
   margin: 8px 0 26px;
   font-family: var(--serif);
   font-size: 13px;
-  color: #7c8a6b;
+  color: var(--ink-2);
 }
 .street-round::before,
 .street-round::after {
@@ -581,7 +239,7 @@
   flex: 1;
   max-width: 120px;
   height: 1px;
-  background: #d3d8c6;
+  background: var(--line-2);
 }
 .street-end {
   padding: 9px 15px 30px;
@@ -591,12 +249,12 @@
   display: block;
   width: 1px;
   height: 32px;
-  background: #c9cdbb;
+  background: var(--line-2);
   margin: 0 auto 23px;
 }
 .street-end > svg {
   margin: 0 auto 15px;
-  color: #8a9a73;
+  color: var(--ink-2);
 }
 .street-end h2 {
   font-family: var(--serif);
@@ -608,7 +266,7 @@
   font-size: 12px;
   line-height: 2;
   margin-top: 13px;
-  color: #6b7861;
+  color: var(--ink-2);
 }
 .street-end > div {
   display: flex;
@@ -625,21 +283,21 @@
   padding: 10px 13px;
   min-height: 44px;
   font-size: 12px;
-  border: 1px solid #cbd2bc;
+  border: 1px solid var(--line-2);
   border-radius: 3px;
 }
 .street-end > div > a {
-  background: #e6ebdf;
+  background: var(--green-soft);
 }
 .street-end > small {
   font-size: 10px;
-  color: #7e8675;
+  color: var(--ink-2);
 }
 .street-empty,
 .street-empty-shelf {
   text-align: center;
   padding: 40px 15px;
-  color: #687961;
+  color: var(--ink-2);
 }
 .street-empty > svg,
 .street-empty-shelf > svg {
@@ -655,54 +313,13 @@
   font-size: 13px;
   margin: 13px 0 22px;
 }
-.street-book-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 35px 28px;
-  margin: 15px 0 40px;
-}
-.street-book-grid h2 {
-  font-family: var(--serif);
-  font-size: 15px;
-  line-height: 1.7;
-  font-weight: 500;
-  margin-top: 17px;
-}
-.street-book-grid p {
-  font-size: 11px;
-  color: #747e6a;
-  line-height: 1.7;
-  margin-top: 5px;
-}
-.street-book-grid button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #4e6b43;
-  min-height: 44px;
-  margin-top: 5px;
-  padding: 0;
-}
-.street-book-grid > .street-empty {
-  grid-column: 1/-1;
-}
-.street-return {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  min-height: 44px;
-  margin-bottom: 15px;
-  color: #4e705c;
-}
 
 /* Keep the shared shell quiet, readable, and consistent across the journey. */
 .town-shell {
   max-width: 1580px;
 }
 .town-topbar {
-  background: #f7f4eef5;
+  background: color-mix(in srgb, var(--paper) 96%, transparent);
   backdrop-filter: blur(14px);
 }
 .town-main {
@@ -719,10 +336,10 @@
   overscroll-behavior-x: contain;
 }
 .side-caption {
-  color: #737d6c;
+  color: var(--ink-2);
 }
 .town-bottom-nav a {
-  color: #717d66;
+  color: var(--ink-2);
 }
 .town-bottom-nav a.active {
   color: var(--green);
@@ -734,12 +351,6 @@
 }
 .town-bottom-nav a.active span {
   font-weight: 600;
-}
-.view-shop .shop-introduction,
-.view-shop .owner-profile-link,
-.view-shop .shelf-under-note > span,
-.view-book .book-page-author {
-  color: #6f7c63;
 }
 @media (min-width: 761px) {
   .town-topbar {
@@ -759,29 +370,12 @@
   }
 }
 @media (min-width: 1500px) {
-  .street-layout {
-    grid-template-columns: minmax(0, 1fr) 265px;
-    gap: 43px;
-  }
   .street-shop-header {
     padding-left: 32px;
     padding-right: 32px;
   }
 }
 @media (max-width: 1200px) {
-  .street-layout {
-    grid-template-columns: minmax(0, 1fr) 205px;
-    gap: 24px;
-  }
-  .street-route-label small {
-    display: none;
-  }
-  .street-intro-note {
-    width: 173px;
-  }
-  .street-intro-note > span {
-    font-size: 12px;
-  }
   .street-shop-header {
     padding: 20px;
   }
@@ -797,18 +391,6 @@
   }
 }
 @media (max-width: 1030px) {
-  .street-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .street-aside {
-    display: none;
-  }
-  .street-intro-note {
-    width: 161px;
-  }
-  .street-intro h1 {
-    font-size: 31px;
-  }
   .street-shop-header {
     padding: 23px 26px 17px;
   }
@@ -827,70 +409,6 @@
   }
 }
 @media (max-width: 760px) {
-  .street-intro {
-    padding: 7px 1px 24px;
-  }
-  .street-intro-note {
-    display: none;
-  }
-  .street-kicker {
-    font-size: 8px;
-    letter-spacing: 1.9px;
-    margin-bottom: 16px;
-  }
-  .street-intro h1 {
-    font-size: 31px;
-    letter-spacing: 1.2px;
-    line-height: 1.65;
-  }
-  .street-intro p {
-    font-size: 12px;
-    margin-top: 12px;
-    line-height: 2;
-  }
-  .street-tabs {
-    gap: 25px;
-  }
-  .street-tabs button {
-    font-size: 13px;
-    gap: 7px;
-    min-height: 48px;
-    padding: 12px 0;
-  }
-  .street-directory {
-    font-size: 11px;
-    gap: 5px;
-  }
-  .street-filters {
-    display: block;
-    margin: 14px -3px 18px;
-    position: relative;
-  }
-  .street-genres {
-    gap: 7px;
-    padding-bottom: 8px;
-  }
-  .street-genres button {
-    font-size: 11px;
-    min-height: 38px;
-    padding: 8px 13px;
-  }
-  .street-follow-filter {
-    border: 0;
-    padding: 3px 4px 0;
-    min-height: 36px;
-    font-size: 11px;
-    margin-left: auto;
-  }
-  .street-route-label {
-    margin-bottom: 13px;
-    gap: 8px;
-    font-size: 10px;
-  }
-  .street-route-label button {
-    font-size: 10px;
-    min-height: 40px;
-  }
   .street-shop {
     margin-left: -4px;
     margin-right: -4px;
@@ -900,14 +418,6 @@
     padding: 17px 18px 13px;
     border-top-width: 4px;
   }
-  .street-shop-label {
-    margin-bottom: 11px;
-    font-size: 8px;
-    letter-spacing: 1.5px;
-  }
-  .street-shop-label small {
-    font-size: 9px;
-  }
   .street-shop-title h2 {
     font-size: 27px;
     letter-spacing: 1.6px;
@@ -915,10 +425,6 @@
   .street-shop-title > p {
     font-size: 11px;
     margin-top: 5px;
-  }
-  .street-shop-description {
-    font-size: 12px;
-    margin: 10px 0 12px;
   }
   .street-shop-owner > a:first-child {
     font-size: 12px;
@@ -998,59 +504,14 @@
   .street-end p {
     font-size: 12px;
   }
-  .street-book-grid {
-    gap: 28px 20px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin-top: 7px;
-  }
-  .street-book-grid h2 {
-    font-size: 13px;
-    margin-top: 13px;
-  }
-  .street-book-grid p {
-    font-size: 10px;
-  }
-  .street-book-grid button {
-    font-size: 11px;
-  }
-  .street-search-result {
-    font-size: 12px;
-    justify-content: space-between;
-    gap: 5px;
-  }
 }
 @media (max-width: 360px) {
-  .street-intro h1 {
-    font-size: 27px;
-  }
-  .street-intro p {
-    font-size: 11px;
-  }
-  .street-tabs {
-    gap: 18px;
-  }
-  .street-tabs button {
-    font-size: 12px;
-    gap: 5px;
-  }
-  .street-directory {
-    font-size: 10px;
-  }
-  .street-directory > svg {
-    display: none;
-  }
   .street-shop-title h2 {
     font-size: 24px;
   }
   .street-shop-header {
     padding-left: 14px;
     padding-right: 14px;
-  }
-  .street-shop-description {
-    font-size: 11px;
-  }
-  .street-book-grid {
-    gap: 24px 13px;
   }
   .street-shelf h3 {
     font-size: 12px;
@@ -1060,136 +521,20 @@
     height: 36px;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .street-experience * {
-    transition: none !important;
-    scroll-behavior: auto !important;
-  }
-}
 
 /* Let the first shelf enter the opening viewport, even on a small phone. */
-.street-intro {
-  padding-top: 0;
-  padding-bottom: 15px;
-}
-.street-kicker {
-  margin-bottom: 9px;
-}
-.street-intro h1 {
-  font-size: 32px;
-  line-height: 1.6;
-  letter-spacing: 1px;
-}
-.street-intro p {
-  margin-top: 10px;
-  font-size: 12px;
-}
-.street-intro-note {
-  width: 156px;
-  padding: 15px 9px;
-}
-.street-intro-note > svg {
-  width: 22px;
-  height: 22px;
-  margin-bottom: 9px;
-}
-.street-intro-note > span {
-  font-size: 10px;
-}
-.street-intro-note > i {
-  font-size: 11px;
-  margin-top: 9px;
-}
-.street-title-break {
-  display: none;
-}
-.street-toolbar .street-tabs button {
-  padding-block: 12px;
-}
-.street-filters {
-  margin-top: 12px;
-  margin-bottom: 12px;
-}
-.street-route-label {
-  margin-bottom: 10px;
-}
-.street-route-label button {
-  min-height: 32px;
-}
 .street-shop-header {
   padding-top: 16px;
   padding-bottom: 14px;
 }
-.street-shop-label {
-  margin-bottom: 8px;
-}
 .street-shop-title > p {
   display: none;
 }
-.street-shop-description {
-  margin-top: 8px;
-  margin-bottom: 9px;
-}
-@media (max-width: 1390px) {
-  .street-intro-note {
-    display: none;
-  }
-}
-@media (min-width: 761px) {
-  .street-desktop-break {
-    display: none;
-  }
-}
 @media (max-width: 760px) {
-  .view-town.town-main {
-    padding-top: 17px;
-  }
-  .street-title-break {
-    display: initial;
-  }
-  .street-intro {
-    padding-bottom: 17px;
-  }
-  .street-intro h1 {
-    font-size: 27px;
-    line-height: 1.55;
-  }
-  .street-kicker {
-    display: none;
-  }
-  .street-intro p {
-    font-size: 11px;
-    line-height: 1.9;
-    margin-top: 9px;
-  }
-  .street-tabs button {
-    min-height: 44px;
-    padding-top: 10px;
-    padding-bottom: 10px;
-  }
-  .street-filters {
-    display: flex;
-    gap: 9px;
-    margin-top: 11px;
-    margin-bottom: 6px;
-  }
-  .street-follow-filter {
-    font-size: 10px;
-    padding: 0 2px 8px;
-    gap: 4px;
-  }
-  .street-route-label {
-    margin-bottom: 8px;
-  }
   .street-shop-header {
     padding-top: 14px;
   }
   .street-shop-title h2 {
-    font-size: 25px;
-  }
-}
-@media (max-width: 360px) {
-  .street-intro h1 {
     font-size: 25px;
   }
 }
@@ -1226,7 +571,7 @@
   border: 1px solid var(--theme-light);
   padding: 1px 7px;
   border-radius: 2px;
-  color: #6d7766;
+  color: var(--ink-2);
   white-space: nowrap;
 }
 .street-shop.is-compact .street-shop-owner {
@@ -1290,40 +635,7 @@
   padding: 6px 18px;
 }
 
-/* The genre chips are gone; the follow filter sits alone at the end of the row. */
-.street-filters {
-  display: flex;
-  justify-content: flex-end;
-  margin: 10px 0 14px;
-}
-.street-follow-filter {
-  border-left: 0;
-  padding-left: 0;
-}
-
 /* Each shop shows its face on the street: the owner's words come first. */
-.street-filters {
-  justify-content: flex-start;
-  gap: 8px;
-}
-.street-filters button {
-  min-height: 40px;
-  padding: 6px 16px;
-  border: 1px solid #d1d8c7;
-  border-radius: 999px;
-  font-size: 13px;
-  color: #536448;
-  background: #fffdf7;
-}
-.street-filters button[aria-pressed="true"] {
-  background: #e3ebdb;
-  border-color: #809273;
-  color: #364e32;
-  font-weight: 600;
-}
-.street-route-label small[role="status"] {
-  transition: color 0.3s;
-}
 .street-shop.is-arriving {
   animation: street-arrive 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
@@ -1360,19 +672,19 @@
   margin: 12px 18px 4px;
   padding: 11px 16px 9px;
   text-align: left;
-  background: #fffaf0;
-  border: 1px solid #eadfc4;
+  background: var(--pop);
+  border: 1px solid var(--pop-line);
   border-radius: 3px;
-  box-shadow: 2px 3px 0 #e9e1cc80;
+  box-shadow: 2px 3px 0 color-mix(in srgb, var(--pop-line) 50%, transparent);
   transform: rotate(-0.6deg);
-  color: #3a2e22;
+  color: var(--ink);
   transition:
     transform 0.2s,
     box-shadow 0.2s;
 }
 .street-shop-voice:hover {
   transform: rotate(0deg) translateY(-1px);
-  box-shadow: 3px 5px 0 #e9e1cc;
+  box-shadow: 3px 5px 0 var(--pop-line);
 }
 .street-shop-voice-words {
   display: -webkit-box;
@@ -1387,15 +699,15 @@
   display: block;
   margin-top: 4px;
   font-size: 11px;
-  color: #7b7262;
+  color: var(--ink-2);
 }
 .street-new-own {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 9px 18px;
-  background: #f6ead2;
-  color: #7a5114;
+  background: var(--lamp-soft);
+  color: var(--ink);
   font-size: 13px;
   font-weight: 600;
 }
@@ -1407,38 +719,23 @@
   min-height: 40px;
 }
 .street-shop.is-compact .street-shop-footer > a:first-child {
-  color: #6c7766;
+  color: var(--ink-2);
   text-decoration: underline;
-  text-decoration-color: #c9cdbf;
+  text-decoration-color: var(--line-2);
   text-underline-offset: 3px;
 }
 .street-shop.is-compact .street-shop-footer > .street-enter {
   margin-left: auto;
   padding: 4px 14px;
   border-radius: 999px;
-  background: var(--theme-deep);
-  color: #fffdf6;
+  background: var(--theme-fill);
+  color: var(--on-dark);
   font-weight: 600;
 }
 .street-empty .button {
   display: inline-flex;
 }
 @media (max-width: 760px) {
-  .street-intro h1 {
-    font-size: 23px;
-    line-height: 1.55;
-  }
-  .street-intro {
-    padding-bottom: 10px;
-  }
-  .street-filters {
-    margin: 4px 0 8px;
-  }
-  .street-filters button {
-    min-height: 40px;
-    padding: 4px 14px;
-    font-size: 12px;
-  }
   .street-shop-voice {
     width: calc(100% - 28px);
     margin: 10px 14px 2px;
@@ -1455,5 +752,10 @@
   .street-shop-voice,
   .street-shop-voice:hover {
     transform: none;
+  }
+}
+@media (max-width: 760px) {
+  .view-town.town-main {
+    padding-top: 17px;
   }
 }

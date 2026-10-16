@@ -1504,6 +1504,7 @@ export function createInitialState(): TownState {
     },
     ownShop: null,
     following: [],
+    blocked: [],
     wishlist: [],
     favorites: [],
     popReactions: {},

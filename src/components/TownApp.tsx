@@ -186,7 +186,7 @@ export default function TownApp({
   const router = useRouter();
   const [toast, setToast] = useState<ShownToast | null>(() => {
     const message = carriedToast();
-    return message ? { message } : null;
+    return message ? { message, at: Date.now() } : null;
   });
   const [search, setSearch] = useState("");
   const [about, setAbout] = useState(false);
@@ -194,6 +194,17 @@ export default function TownApp({
   // A tap on 本棚 is for the page it opened; the profile has taken it by now
   // (its effects run first), and no other page keeps it.
   useEffect(() => void takeShelfRequest(), [view, selectedId]);
+  // A message about what was just done does not follow the reader to the next
+  // page, where it would sit over that page's buttons. One that moved there
+  // with the reader (said as the page changed) stays, as does one that
+  // carries an undo, the only way back.
+  useEffect(() => {
+    setToast((shown) =>
+      shown && !shown.undo && !shown.held && Date.now() - (shown.at ?? 0) > 1000
+        ? null
+        : shown,
+    );
+  }, [view, selectedId]);
   useEffect(() => {
     if (!toast || toast.held) return;
     // A toast that can be undone stays long enough to be undone, and stays
@@ -216,11 +227,11 @@ export default function TownApp({
   // When a visitor's change became an invitation to sign in, nothing was done,
   // so the message saying it was done stays quiet.
   // A like or a follow meant for a 見本 says why nothing happened.
-  useEffect(() => onSampleRefusal((message) => setToast({ message })), []);
+  useEffect(() => onSampleRefusal((message) => setToast({ message, at: Date.now() })), []);
   const notify = useCallback<Notify>((message, undo) => {
     if (accountRequested() || refusedForSample()) return;
     noteToast(message);
-    setToast({ message, undo });
+    setToast({ message, undo, at: Date.now() });
   }, []);
   // Books the scanner kept on this device are sent once the town can take
   // them, here on every page (library-journal.ts).
@@ -899,7 +910,12 @@ function ShopView({
  * A book opened in hand sits in the browser's top layer, above everything else on the
  * page. While one is open the toast is placed inside it, so it is seen and read aloud.
  */
-type ShownToast = { message: string; undo?: ToastUndo; held?: boolean };
+type ShownToast = {
+  message: string;
+  undo?: ToastUndo;
+  held?: boolean;
+  at?: number;
+};
 /**
  * With an undo, the toast carries one text button; pressing it undoes and the
  * toast says so. It never takes the focus from where the reader is, but a

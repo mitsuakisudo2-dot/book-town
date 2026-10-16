@@ -11,10 +11,10 @@
   gap: 10px;
   margin-top: 18px;
   padding: 13px 16px;
-  border: 1px solid #d9ddce;
+  border: 1px solid var(--line-2);
   border-radius: 10px;
-  background: #fffdf7;
-  color: #7f8f72;
+  background: var(--sheet);
+  color: var(--ink-2);
 }
 .search-box input {
   flex: 1;
@@ -23,6 +23,11 @@
   outline: none;
   background: transparent;
   font-size: 14px;
+  text-overflow: ellipsis;
+}
+/* The hint names five kinds of search; a phone's width takes it at 12px. */
+.search-box input::placeholder {
+  font-size: 12px;
 }
 .search-genres {
   display: flex;
@@ -35,8 +40,8 @@
   padding: 5px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  color: #6f7f63;
-  background: #fbf9f3;
+  color: var(--ink-2);
+  background: var(--sheet);
 }
 .search-genres button[aria-pressed="true"] {
   background: var(--green);
@@ -61,7 +66,7 @@
 }
 .search-discover section > p {
   font-size: 11px;
-  color: #98a38c;
+  color: var(--ink-2);
   margin: 4px 0 10px;
 }
 .search-list {
@@ -78,13 +83,13 @@
   gap: 13px;
   padding: 9px 12px;
   border-radius: 8px;
-  background: #fffdf7;
+  background: var(--sheet);
   border: 1px solid var(--line);
   color: var(--ink);
 }
 .search-book:hover,
 .search-shop:hover {
-  border-color: #c9d3bd;
+  border-color: var(--line-2);
 }
 .search-book > span,
 .search-shop > span {
@@ -107,12 +112,12 @@
 .search-book small,
 .search-shop small {
   font-size: 10px;
-  color: #95a084;
+  color: var(--ink-2);
 }
 .search-book em {
   font-style: normal;
   font-size: 10px;
-  color: #5f7a62;
+  color: var(--ink-2);
 }
 .book-jacket.search-jacket {
   width: 38px;
@@ -122,17 +127,17 @@
   display: none;
 }
 .search-shop > svg:first-child {
-  color: var(--theme-ink, #5d7a62);
+  color: var(--theme-ink, var(--ink-2));
 }
 .search-empty,
 .reading-muted {
   font-size: 12px;
-  color: #98a38c;
+  color: var(--ink-2);
   line-height: 1.8;
 }
 .search-note {
   font-size: 10px;
-  color: #a5ad97;
+  color: var(--ink-2);
   text-align: center;
   line-height: 1.8;
   margin-top: 8px;
@@ -147,7 +152,7 @@
   margin-top: 26px;
 }
 .reading-start {
-  background: #fffdf7;
+  background: var(--sheet);
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 18px;
@@ -165,9 +170,9 @@
   text-align: left;
   padding: 15px;
   border-radius: 9px;
-  border: 1px solid #d4ddc8;
-  background: #f4f6ee;
-  color: #4b5d4c;
+  border: 1px solid var(--line-2);
+  background: var(--green-soft);
+  color: var(--ink);
 }
 .reading-mode b {
   font-size: 14px;
@@ -177,7 +182,7 @@
 .reading-mode small {
   font-size: 11px;
   line-height: 1.7;
-  color: #7f8b74;
+  color: var(--ink-2);
 }
 /* Neither way of reading is the recommended one; they look alike. */
 .reading-mode:disabled {
@@ -191,7 +196,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #c2603f;
+  background: var(--alert);
   animation: live-pulse 1.6s ease-in-out infinite;
 }
 .readers-now ul,
@@ -213,7 +218,7 @@
 .readers-now li {
   padding: 8px 10px;
   border-radius: 8px;
-  background: #fbf9f3;
+  background: var(--sheet);
 }
 .readers-now a > span,
 .people-list a > span {
@@ -231,7 +236,7 @@
 .readers-now small,
 .people-list small {
   font-size: 10px;
-  color: #95a084;
+  color: var(--ink-2);
 }
 .readers-now .demo-tag {
   font-size: 9px;
@@ -244,7 +249,7 @@
 .readers-now-finished h3 {
   font-size: 11px;
   font-weight: 500;
-  color: #7d8a73;
+  color: var(--ink-2);
   margin: 18px 0 0;
 }
 .readers-now .readers-now-finished ul {
@@ -281,7 +286,7 @@
   flex-wrap: wrap;
   gap: 6px;
   font-size: 12px;
-  color: #6f7f63;
+  color: var(--ink-2);
   margin: 10px 0;
 }
 .reading-total b {
@@ -315,12 +320,12 @@
 }
 .reading-log li small {
   font-size: 10px;
-  color: #98a38c;
+  color: var(--ink-2);
 }
 .reading-log li em {
   font-style: normal;
   font-variant-numeric: tabular-nums;
-  color: #5f7a62;
+  color: var(--ink-2);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -330,7 +335,7 @@
   align-items: center;
   padding: 22px;
   border-radius: 12px;
-  background: #fffdf7;
+  background: var(--sheet);
   border: 1px solid var(--line);
 }
 .book-jacket.reading-jacket {
@@ -348,7 +353,7 @@
   margin-top: 8px;
 }
 .reading-now-main > p {
-  color: #8a947d;
+  color: var(--ink-2);
   font-size: 12px;
 }
 .reading-mode-tag {
@@ -358,12 +363,12 @@
   font-size: 10px;
   padding: 2px 9px;
   border-radius: 999px;
-  background: #efe9dd;
-  color: #7a6f5e;
+  background: var(--band);
+  color: var(--ink-2);
 }
 .reading-mode-tag.is-together {
-  background: #e1ebdc;
-  color: #3f6150;
+  background: var(--green-soft);
+  color: var(--green);
 }
 .reading-now-main .reading-timer {
   font-family: var(--serif);
@@ -382,7 +387,7 @@
 .memo-composer label {
   display: block;
   font-size: 12px;
-  color: #6f7f63;
+  color: var(--ink-2);
   margin-bottom: 7px;
 }
 .memo-composer .composer-tools {
@@ -411,15 +416,15 @@
   align-items: flex-start;
   padding: 12px 14px;
   border-radius: 9px;
-  background: #fffdf7;
+  background: var(--sheet);
   border: 1px solid var(--line);
   color: var(--ink);
   font-size: 12px;
   line-height: 1.8;
 }
 .notice-list li.is-new a {
-  border-color: #c7d6bd;
-  background: #f3f7ee;
+  border-color: color-mix(in srgb, var(--green) 30%, var(--sheet));
+  background: var(--green-soft);
 }
 .notice-list a > span {
   display: grid;
@@ -429,13 +434,13 @@
 }
 .notice-list small {
   font-size: 10px;
-  color: #98a38c;
+  color: var(--ink-2);
   display: flex;
   gap: 6px;
   align-items: center;
 }
 .notice-new {
-  color: #b0553d;
+  color: var(--alert);
   font-weight: 600;
 }
 
@@ -446,7 +451,7 @@
   gap: 6px 18px;
   margin-top: 14px;
   font-size: 12px;
-  color: #7f8b74;
+  color: var(--ink-2);
 }
 .profile-stats > * {
   display: inline-flex;
@@ -525,7 +530,7 @@
 }
 .register-message {
   font-size: 12px;
-  color: #5f7a62;
+  color: var(--ink-2);
   margin-top: 12px;
   line-height: 1.8;
 }
@@ -539,7 +544,7 @@
   aspect-ratio: 4 / 3;
   object-fit: cover;
   border-radius: 10px;
-  background: #1f2a23;
+  background: var(--shade);
 }
 
 @media (max-width: 760px) {
@@ -573,15 +578,15 @@
   gap: 5px;
   max-width: 100%;
   padding: 4px 11px;
-  border: 1px solid #d4ddc8;
+  border: 1px solid var(--line-2);
   border-radius: 999px;
-  background: #f6f8f0;
-  color: #3f5f4c;
+  background: var(--sheet);
+  color: var(--green);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 .profile-links a:hover {
-  background: #e9eedf;
+  background: var(--green-soft);
 }
 .profile-link-fields {
   border: 0;
@@ -610,11 +615,11 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  color: #8d9a80;
+  color: var(--ink-2);
   flex-shrink: 0;
 }
 .profile-link-remove:hover {
-  background: #e9eedf;
+  background: var(--green-soft);
 }
 .profile-link-add {
   justify-self: start;
@@ -622,19 +627,19 @@
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  color: #4c6547;
+  color: var(--green);
 }
 .profile-link-error {
   font-size: 12px;
-  color: #a2483a;
+  color: var(--alert);
   line-height: 1.7;
 }
 .reading-optional {
   font-family: var(--sans);
   font-size: 10px;
   font-weight: 400;
-  color: #7f8b74;
-  background: #eef1e6;
+  color: var(--ink-2);
+  background: var(--green-soft);
   border-radius: 999px;
   padding: 2px 9px;
 }
@@ -644,9 +649,9 @@
   aspect-ratio: 0.675;
   max-width: 100%;
   border-radius: 3px;
-  border: 1px dashed #c9d3bd;
-  background: #f4f6ee;
-  color: #7f9173;
+  border: 1px dashed var(--line-2);
+  background: var(--green-soft);
+  color: var(--ink-2);
 }
 .reading-confirm {
   display: grid;
@@ -658,7 +663,7 @@
   font-family: var(--serif);
   font-size: 19px;
   line-height: 1.8;
-  color: #2f4a3a;
+  color: var(--ink);
   word-break: auto-phrase;
   text-wrap: balance;
 }
@@ -668,7 +673,7 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #7f8b74;
+  color: var(--ink-2);
 }
 .reading-confirm-actions {
   display: flex;
@@ -690,11 +695,11 @@
 }
 .search-tags .tag-chip small {
   font-size: 10px;
-  color: #7f9173;
+  color: var(--ink-2);
 }
 .profile-handle {
   font-size: 13px;
-  color: #8a947d;
+  color: var(--ink-2);
   margin-top: -4px;
   font-variant-numeric: tabular-nums;
 }
@@ -705,7 +710,7 @@
 }
 .profile-handle-field > span {
   font-size: 15px;
-  color: #8a947d;
+  color: var(--ink-2);
 }
 .profile-handle-field input {
   flex: 1;
@@ -722,7 +727,7 @@
   gap: 6px;
   padding: 14px 2px;
   font-size: 13px;
-  color: #6f7c64;
+  color: var(--ink-2);
   cursor: pointer;
   list-style: none;
 }
@@ -742,7 +747,7 @@
   gap: 6px;
   margin: 0 2px 12px;
   font-size: 11px;
-  color: #8a9580;
+  color: var(--ink-2);
 }
 .reading-mine {
   margin-top: 14px;
@@ -756,9 +761,9 @@
   max-width: 720px;
   margin: 0 auto 8px;
   padding: 18px 20px;
-  border: 1px solid #dfe5d2;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: #f7f8f0;
+  background: var(--sheet);
   animation: reading-closed-in 0.35s ease-out;
 }
 .reading-closed-jacket {
@@ -770,7 +775,7 @@
 .reading-closed-time {
   margin: 0;
   font-size: 13px;
-  color: #6f7c64;
+  color: var(--ink-2);
 }
 .reading-closed-time b {
   font-family: var(--serif);
@@ -787,10 +792,10 @@
 .reading-closed-memo {
   margin: 10px 0 0;
   padding-left: 12px;
-  border-left: 2px solid #cfd8bf;
+  border-left: 2px solid var(--line-2);
   font-size: 13px;
   line-height: 1.8;
-  color: #55604b;
+  color: var(--ink);
   white-space: pre-wrap;
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -811,23 +816,23 @@
   justify-items: center;
   gap: 8px;
   padding: 12px 14px;
-  border: 1px dashed #cfd8bf;
+  border: 1px dashed var(--line-2);
   border-radius: 8px;
-  background: #fbfaf4;
+  background: var(--sheet);
 }
 .reading-unsent-line p {
   margin: 0;
   font-size: 12px;
-  color: #6f7c64;
+  color: var(--ink-2);
 }
 .reading-unsent-line blockquote,
 .reading-unsent blockquote {
   margin: 0;
   padding-left: 12px;
-  border-left: 2px solid #cfd8bf;
+  border-left: 2px solid var(--line-2);
   font-size: 13px;
   line-height: 1.8;
-  color: #55604b;
+  color: var(--ink);
   text-align: left;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -844,9 +849,9 @@
   max-width: 720px;
   margin: 0 auto 8px;
   padding: 16px 20px;
-  border: 1px solid #dfe5d2;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: #f7f8f0;
+  background: var(--sheet);
 }
 .reading-unsent h2 {
   margin: 0;
@@ -866,7 +871,7 @@
   display: block;
   margin-top: 4px;
   font-size: 11px;
-  color: #6f7c64;
+  color: var(--ink-2);
 }
 .reading-unsent-actions {
   display: flex;
@@ -895,7 +900,7 @@
 .own-reports h2 {
   font-size: 14px;
   margin: 0 0 10px;
-  color: #50604a;
+  color: var(--ink);
 }
 .own-reports ul {
   list-style: none;
@@ -907,10 +912,10 @@
 .own-reports li {
   font-size: 12px;
   line-height: 1.8;
-  color: #5f6a55;
+  color: var(--ink-2);
   padding: 7px 12px;
   border-radius: 6px;
-  background: #f6f4ec;
+  background: var(--paper);
 }
 /* A jacket that can show an outside cover leads to the book's own page. */
 .reading-jacket-link {

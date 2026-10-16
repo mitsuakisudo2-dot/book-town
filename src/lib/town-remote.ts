@@ -44,6 +44,7 @@ import {
 import type { Tables, TablesInsert } from "./supabase/database.types";
 import { demoBooks } from "./data";
 import { isDatabaseId } from "./paths";
+import { withoutReaders } from "./blocks";
 import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
 import { filedReportFrom } from "./supabase/reports";
 import type { Arrived } from "./arrived";
@@ -101,6 +102,8 @@ export interface RemoteRows {
   /** Readers who stopped by the person's own shop in the 7 days before `at`. */
   ownShopVisitors: { count: number; at: string } | null;
   follows: Pick<Tables<"shop_follows">, "shop_id">[];
+  /** Whom the person blocked (only the blocker reads their blocks). */
+  blocks: Pick<Tables<"blocks">, "blocked_id">[];
   marks: Tables<"book_marks">[];
   posts: Tables<"posts">[];
   /** The person's own reactions, and other people's reactions to their posts. */
@@ -441,6 +444,11 @@ export function townFromRows(
     .map((row) => shopFrom(row, row.public_shelves, row.public_scene_books, 0));
   const shopIds = new Set(shops.map((shop) => shop.id));
 
+  // What a blocked reader did to the person's posts is not shown to them.
+  const blockedIds = new Set(rows.blocks.map((row) => row.blocked_id));
+  const reactionsShown = rows.postReactions.filter(
+    (row) => !blockedIds.has(row.user_id),
+  );
   const visible = rows.posts.filter(
     (row) =>
       (row.book_id === null || bookIds.has(row.book_id)) &&
@@ -451,7 +459,7 @@ export function townFromRows(
   );
   const posts: Post[] = visible
     .filter((row) => row.parent_id === null || topLevel.has(row.parent_id))
-    .map((row) => postFromRow(row, userId, rows.postReactions))
+    .map((row) => postFromRow(row, userId, reactionsShown))
     .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   const postIds = new Set(posts.map((post) => post.id));
   const reacted = (kind: "like" | "want") =>
@@ -531,7 +539,7 @@ export function townFromRows(
       ),
     }));
 
-  return {
+  const town: TownState = {
     books,
     readers,
     shops,
@@ -540,6 +548,14 @@ export function townFromRows(
     following: [
       ...new Set(
         rows.follows.map((row) => row.shop_id).filter((id) => shopIds.has(id)),
+      ),
+    ],
+    // A blocked reader's profile stays readable, so the block can be lifted.
+    blocked: [
+      ...new Set(
+        rows.blocks
+          .map((row) => row.blocked_id)
+          .filter((id) => id !== userId && known.has(id)),
       ),
     ],
     ...lists,
@@ -662,6 +678,9 @@ export function townFromRows(
           : [];
       }),
   };
+  // The database keeps the blocked away already; the town does not count on
+  // it.
+  return withoutReaders(town, town.blocked);
 }
 
 /** What a read of posts after the town brought, as the database sent it. */
@@ -858,6 +877,7 @@ const posterFields = (poster: Poster): PosterFields => ({
 
 export type RelationTable =
   | "shop_follows"
+  | "blocks"
   | "book_marks"
   | "pop_reactions"
   | "post_reactions"
@@ -880,6 +900,10 @@ function relations(state: TownState, ids: RemoteIds) {
     shop_follows: state.following.map((shop_id) => ({
       follower_id: user_id,
       shop_id: realShop(shop_id),
+    })),
+    blocks: state.blocked.map((blocked_id) => ({
+      blocker_id: user_id,
+      blocked_id,
     })),
     book_marks: MARK_KINDS.flatMap((kind) =>
       state[MARK_LISTS[kind]].map((book_id) => ({ user_id, book_id, kind })),
@@ -1183,7 +1207,8 @@ function withSampleRows(writes: Write[], user: string): Write[] {
     row.book_id ? { ...row, book_id: keep(row.book_id) } : row;
   const real = (row: Pair) =>
     (row.shop_id === undefined || isDatabaseId(row.shop_id)) &&
-    (row.post_id === undefined || isDatabaseId(row.post_id));
+    (row.post_id === undefined || isDatabaseId(row.post_id)) &&
+    (row.blocked_id === undefined || isDatabaseId(row.blocked_id));
   const mapped = writes.flatMap((write): Write[] => {
     switch (write.kind) {
       case "nine":
@@ -1277,6 +1302,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     },
     ownShop: null,
     following: [],
+    blocked: [],
     wishlist: [],
     favorites: [],
     popReactions: {},

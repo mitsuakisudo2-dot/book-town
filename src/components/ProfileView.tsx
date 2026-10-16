@@ -91,12 +91,18 @@ import { postersOf } from "../lib/posters";
 import { PosterThumb } from "./PosterView";
 import "./poster-screen.css";
 import { ReportButton } from "./Report";
+import { BlockButton, BlockedList, BlockedNote } from "./BlockReader";
 import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
-import { PALETTES } from "../lib/appearance";
-import { setPalette, usePalette } from "../lib/appearance-store";
+import { BRIGHTNESSES, PALETTES } from "../lib/appearance";
+import {
+  setBrightness,
+  setPalette,
+  useBrightness,
+  usePalette,
+} from "../lib/appearance-store";
 import { useUrlParam } from "../lib/url-state";
 import { onShelfRequest, takeShelfRequest } from "../lib/shelf-tab";
 import { afterLayerCloses } from "../lib/back-layer";
@@ -136,6 +142,7 @@ export function ProfileView({
     setBooks(next === "wishlist" ? null : next);
   const peekOpen = useReadingPeekOpen();
   const palette = usePalette();
+  const brightness = useBrightness();
   const [sheet, setSheet] = useState<
     "following" | "followers" | "settings" | "scan" | "titles" | null
   >(null);
@@ -438,6 +445,24 @@ export function ProfileView({
     notify("人生の9冊を保存しました");
   }
 
+  // Someone the reader blocked: only who they are, and the way to lift it.
+  if (!isSelf && state.blocked.includes(reader.id))
+    return (
+      <div className="profile-view">
+        <BackLink className="profile-back" />
+        <section className="profile-reader" aria-labelledby="profile-name">
+          <div className="profile-reader-avatar">
+            <ReaderAvatar reader={reader} />
+          </div>
+          <div className="profile-reader-text">
+            <h1 id="profile-name">{reader.name}</h1>
+            <p className="profile-handle">@{reader.handle}</p>
+            <BlockedNote reader={reader} actions={actions} notify={notify} />
+          </div>
+        </section>
+      </div>
+    );
+
   return (
     <div className="profile-view">
       {/* One's own profile is a place of its own in the navigation. */}
@@ -576,6 +601,9 @@ export function ProfileView({
                 <Icon name="flag" size={13} />
                 通報
               </ReportButton>
+            )}
+            {!isSelf && (
+              <BlockButton reader={reader} actions={actions} notify={notify} />
             )}
           </div>
         </div>
@@ -975,6 +1003,31 @@ export function ProfileView({
               表紙や写真の色は変わりません。変わるのはボタンや印の色です。
             </p>
           </fieldset>
+          <fieldset className="record-visibility palette-choices">
+            <legend>明るさ</legend>
+            {BRIGHTNESSES.map((choice) => (
+              <label key={choice.id}>
+                <input
+                  type="radio"
+                  name="brightness"
+                  value={choice.id}
+                  checked={brightness === choice.id}
+                  onChange={() => {
+                    setBrightness(choice.id);
+                    notify(
+                      choice.id === "system"
+                        ? "明るさを端末に合わせます"
+                        : `明るさを${choice.name}にしました`,
+                    );
+                  }}
+                />
+                {choice.name}
+              </label>
+            ))}
+            <p className="palette-note">
+              端末に合わせると、端末を暗い表示にしている間は夜の色になります。
+            </p>
+          </fieldset>
           <fieldset className="record-visibility">
             <legend>読み終えた本の記録（これから残す記録）</legend>
             <label>
@@ -1064,6 +1117,7 @@ export function ProfileView({
               </label>
             ))}
           </fieldset>
+          <BlockedList state={state} actions={actions} notify={notify} />
         </Modal>
       )}
       {sheet === "scan" && (
