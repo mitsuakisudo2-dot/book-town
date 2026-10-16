@@ -10,10 +10,12 @@
 --
 -- How books come together. The same ISBN is the same edition, always: a book
 -- registered with an ISBN joins that edition, and so the edition's work, at
--- once. Registering never waits on anything and never compares titles or
--- authors, so nothing another reader registered, hidden or not, changes
--- what happens, and nothing tells a reader whether anyone else registered
--- that ISBN. ISBN-10s are stored as their ISBN-13 (the app turns them, and
+-- once. Registering never waits for the operator or a check and never
+-- compares titles or authors; it waits only while another registration of
+-- the same ISBN is being saved, and it waits for that alike whether the
+-- edition is there or not. So nothing another reader registered, hidden or
+-- not, changes what a reader gets back, and their wait does not tell
+-- whether anyone else registered that ISBN. ISBN-10s are stored as their ISBN-13 (the app turns them, and
 -- isbn13_valid refuses anything else), so equal means equal. A reader who
 -- edits a book's ISBN moves it to that edition. Two editions become one work
 -- only when the operator joins them; work_candidates lists the editions
@@ -369,28 +371,39 @@ create index books_work on public.books (work_id);
 -- A new book's work ------------------------------------------------------------------
 
 -- The work of the edition of this ISBN, made with its edition the first time
--- the ISBN is registered. Every registration of an ISBN takes the same lock
--- of that ISBN, whether its edition is there or not, so two first
--- registrations at once meet in one edition, and how long a registration
--- waits says nothing about whether anyone registered the ISBN before: a lock
--- taken only for a new ISBN would let a reader time it. The lock is the
--- ISBN's own, so a reader holding it holds up nobody else's books. A
--- statement of several books takes their locks one by one; should two meet
--- the same new ISBNs in the other order, Postgres ends one of them with a
--- deadlock, and the app sends it again.
--- Security definer: readers can neither read nor make editions and works.
+-- the ISBN is registered. A registration holds the edition's row until it is
+-- saved: it locks the row when the edition is there, and the row is its own
+-- when it makes it. So a second registration of the ISBN in flight waits for
+-- the first alike either way (on the lock, or on the new row's key), and two
+-- first registrations at once meet in one edition. Waiting only for a new
+-- ISBN would let a reader time whether anyone registered it. Row locks, not
+-- advisory ones: a reader sending thousands of books holds no more of the
+-- database's shared lock table than one book does, and holds up only those
+-- ISBNs. Should two statements of several books meet the same ISBNs in the
+-- other order, Postgres ends one with a deadlock, and the app sends it
+-- again. Security definer: readers can neither read nor make editions and
+-- works.
 create function private.edition_work(isbn text) returns uuid
 language plpgsql security definer set search_path = '' as $$
 declare
   found_work uuid;
+  made uuid;
 begin
-  perform pg_advisory_xact_lock(hashtextextended('book-town.edition:' || edition_work.isbn, 0));
-  select e.work_id into found_work from public.editions e where e.isbn = edition_work.isbn;
+  select e.work_id into found_work from public.editions e
+  where e.isbn = edition_work.isbn for no key update;
   if found then
     return found_work;
   end if;
-  insert into public.works default values returning id into found_work;
-  insert into public.editions (isbn, work_id) values (edition_work.isbn, found_work);
+  insert into public.works default values returning id into made;
+  insert into public.editions (isbn, work_id) values (edition_work.isbn, made)
+  on conflict on constraint editions_pkey do nothing;
+  if found then
+    return made;
+  end if;
+  -- Another registration made the edition meanwhile: its work, not this one.
+  delete from public.works w where w.id = made;
+  select e.work_id into found_work from public.editions e
+  where e.isbn = edition_work.isbn for no key update;
   return found_work;
 end;
 $$;
@@ -399,10 +412,10 @@ revoke all on function private.edition_work(text) from public, anon, authenticat
 -- Before a book is inserted, it is given its work: its edition's, or for a
 -- book without an ISBN a work of its own. A book sent again (the app's
 -- upsert passes over duplicates) meets its own row and is given that row's
--- work, so no work is made for nothing; two sends of one book at once wait
--- for each other, on a lock of that book's id alone. Whatever work_id an
--- insert names is replaced: only this decides a book's work. What it writes
--- is a work id, which shows nothing.
+-- work, so no work is made for nothing (two sends of one book at once, from
+-- two requests, may leave one work without a book, which nobody reads).
+-- Whatever work_id an insert names is replaced: only this decides a book's
+-- work. What it writes is a work id, which shows nothing.
 create function private.book_work() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -412,7 +425,6 @@ begin
     new.work_id := private.edition_work(new.isbn);
     return new;
   end if;
-  perform pg_advisory_xact_lock(hashtextextended('book-town.book:' || new.id::text, 0));
   select b.work_id into found_work from public.books b where b.id = new.id;
   if not found then
     insert into public.works default values returning id into found_work;
@@ -613,7 +625,8 @@ $$;
 revoke all on function private.part_books(uuid[]) from public, anon, authenticated;
 
 -- Marks the works of two books as different works, so work_candidates
--- leaves the pair out. Undo: delete the row from private.works_apart.
+-- leaves the pair out. Undo: delete its row from private.works_apart, found
+-- by the works its two ids lead to (docs/09 has the statement).
 --   select private.keep_apart('<book>', '<book>');
 create function private.keep_apart(book_a uuid, book_b uuid) returns void
 language plpgsql security definer set search_path = '' as $$

@@ -260,7 +260,7 @@ async function catalog(db: PGlite) {
          and a.attnum > 0 and not a.attisdropped
        union all
        select 'trigger', t.tgrelid::regclass::text || '.' || t.tgname,
-              t.tgfoid::regproc::text || ' ' || t.tgenabled::text
+              pg_get_triggerdef(t.oid) || ' ' || t.tgenabled::text
        from pg_trigger t where not t.tgisinternal
        union all
        select 'policy', p.polrelid::regclass::text || '.' || p.polname, ''
@@ -459,27 +459,44 @@ async function main() {
       const nobody = await probe(3, unused(1));
       assert.deepEqual(hidden, { together: true, others: 0 });
       assert.deepEqual(nobody, hidden);
-      // Nor can he time it: registering takes the same lock, the ISBN's own,
-      // whether its edition is there or not, so nothing makes him wait
-      // longer for one than for the other.
-      const locks = async (book: string, probed: string) => {
+      // Nor can he time it: until his registration is saved, it holds the
+      // edition's row, whether the edition was there (he locked it) or not
+      // (he made it), so another registration of the ISBN waits for him
+      // alike. What it holds is rows, not the shared lock table: sending
+      // three hundred books takes no more locks than sending one. (Making
+      // an edition also writes the works table, a lock nobody's
+      // registration waits on.)
+      const held = async (probed: string[]) => {
         await db.exec("begin");
         try {
-          await as(
-            BEN,
-            "insert into books (id, isbn, title, author, created_by) values ($1, $2, '鍵', '', $3)",
-            [book, probed, BEN],
+          for (const [n, isbn] of probed.entries())
+            await as(
+              BEN,
+              "insert into books (id, isbn, title, author, created_by) values ($1, $2, '鍵', '', $3)",
+              [id(6, 100 + n), isbn, BEN],
+            );
+          const [{ mine }] = await rows<{ mine: number }>(
+            `select count(*)::int as mine from editions
+             where isbn = any ($1::text[])
+               and pg_current_xact_id()::text in (xmin::text, xmax::text)`,
+            [probed],
           );
-          return await rows<{ n: number }>(
-            "select count(*)::int as n from pg_locks where locktype = 'advisory'",
+          const [{ locks }] = await rows<{ locks: number }>(
+            "select count(*)::int as locks from pg_locks where locktype not in ('virtualxid', 'transactionid')",
           );
+          return { mine, locks };
         } finally {
           await db.exec("rollback");
         }
       };
-      const lockedHidden = await locks(id(6, 5), X3);
-      assert.deepEqual(lockedHidden, [{ n: 1 }]);
-      assert.deepEqual(await locks(id(6, 6), unused(15)), lockedHidden);
+      const heldHidden = await held([X3]);
+      const heldNew = await held([unused(15)]);
+      assert.equal(heldHidden.mine, 1);
+      assert.equal(heldNew.mine, 1);
+      const many = Array.from({ length: 300 }, (_, n) => unused(1000 + n));
+      const heldMany = await held(many);
+      assert.equal(heldMany.mine, 300);
+      assert.ok(heldMany.locks <= heldNew.locks, `${heldMany.locks} locks`);
       // In truth his books joined Chi's edition, which only she reads.
       assert.equal(await workOf(id(6, 1)), await workOf(SECRET));
       assert.deepEqual(
@@ -819,6 +836,23 @@ async function main() {
         ],
       );
       assert.equal(again[0].reviews, 3);
+      // A review the operator hid weighs nothing either.
+      await db.query(
+        `insert into moderation_hides (target_kind, target_id)
+         select 'post', id from posts where author_id = $1 and book_id = $2`,
+        [CHI, river1],
+      );
+      const river = pair(await workOf(river1), await workOf(river2));
+      assert.deepEqual(
+        (await candidates(db))
+          .filter((found) => found.works === river)
+          .map((found) => found.reviews),
+        [2],
+      );
+      await db.query(
+        "delete from moderation_hides where target_id in (select id from posts where book_id = $1)",
+        [river1],
+      );
       await db.query("delete from posts where book_id = any ($1::uuid[])", [
         [river1, river2],
       ]);
