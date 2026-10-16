@@ -259,11 +259,13 @@
   grid-template-columns: 64px 1fr auto;
   gap: 23px;
   align-items: center;
-  border: 1px solid var(--theme-light);
+  border: 1px solid color-mix(in srgb, var(--theme) 35%, var(--theme-light));
   border-radius: 3px;
   margin: 23px 0 27px;
   padding: 32px;
-  background: linear-gradient(135deg, var(--theme-pale), var(--sheet));
+  /* The shop's own colour, from deeper to pale: its words are checked on
+     both ends, by day and at night (tests/tokens.test.ts). */
+  background: linear-gradient(135deg, var(--theme-light), var(--theme-pale));
   text-decoration: none;
   color: inherit;
   transition:

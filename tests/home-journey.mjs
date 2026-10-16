@@ -2316,6 +2316,44 @@ try {
       }),
   );
   await check(
+    "On a short phone, 投稿 steps aside while Home's doors lie under it, and is back once they move up; on a tall one it stays",
+    async () => {
+      for (const [width, height] of [
+        [320, 568],
+        [390, 568],
+        [390, 844],
+      ])
+        await withPage({ viewport: { width, height } }, async () => {
+          await go("/");
+          const fab = page.locator(".compose-fab");
+          const doors = page.locator(".home-entrances");
+          await expect(doors.locator("button, a")).toHaveCount(4);
+          const under = async () => {
+            const [a, b] = await Promise.all([
+              doors.boundingBox(),
+              fab.boundingBox(),
+            ]);
+            return a.y + a.height > b.y - 8 && a.y < b.y + b.height;
+          };
+          if (!(await under())) {
+            await expect(fab, `${width}x${height}`).toBeVisible();
+            return;
+          }
+          await expect(fab, `${width}x${height}`).toBeHidden();
+          // The door it stood on takes the finger.
+          await doors.getByText("本屋を開く").tap({ trial: true });
+          await page.mouse.wheel(0, 200);
+          await page.clock.runFor(100);
+          expect(await under()).toBe(false);
+          await expect(fab).toBeVisible();
+          await page.evaluate(() => scrollTo(0, 0));
+          await page.clock.runFor(100);
+          await expect(fab).toBeHidden();
+        });
+    },
+  );
+
+  await check(
     "With less motion asked for, moving along the bottom bar does not slide",
     () =>
       withPage({ reducedMotion: "reduce" }, async () => {

@@ -251,6 +251,11 @@ html[data-home-tab="letters"]
   width: 92px;
 }
 @media (max-width: 360px) {
+  /* Narrow, the words wrap to more lines: the slides grow to keep them off
+     the top edge (通し確認 2026-10-16). */
+  .home-slide {
+    aspect-ratio: 4 / 3;
+  }
   .home-slide-book:nth-child(4) {
     display: none;
   }
