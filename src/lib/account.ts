@@ -146,9 +146,30 @@ const failed = (reason: AccountFailure): AccountResult => ({
   message: failureMessages[reason],
 });
 
+/**
+ * What a deletion (退会) leaves to do in this browser. Its answer can be lost
+ * on the way back, so the account it was asked for is marked until the answer
+ * is known: a later page that finds the account gone (signed out, or no
+ * profile any more) finishes it.
+ */
+export interface Leaving {
+  /** The account a deletion was asked for, whose answer is not known. */
+  pending(): string | null;
+  mark(userId: string | null): void;
+  /** Lets go of everything this browser keeps for them. */
+  forget(userId: string): Promise<void> | void;
+}
+
+const NO_LEAVING: Leaving = {
+  pending: () => null,
+  mark: () => {},
+  forget: () => {},
+};
+
 export function createAccountStore(
   connect: () => AccountBackend | null,
   configured: boolean,
+  leaving: Leaving = NO_LEAVING,
 ) {
   const initial: AccountState = configured
     ? { status: "loading" }
@@ -158,6 +179,10 @@ export function createAccountStore(
   let started = false;
   // A newer sign-in or sign-out wins over a profile read that is still running.
   let generation = 0;
+  // While a deletion is asked, a sign-out it brings waits for its answer, so
+  // the page goes from 退会する to 退会しました with nothing between.
+  let deleting = false;
+  let outWhileDeleting = false;
   const listeners = new Set<() => void>();
 
   const set = (next: AccountState) => {
@@ -179,14 +204,35 @@ export function createAccountStore(
       (state.status === "signed-in" || state.status === "needs-profile")
     )
       return;
+    if (!user && deleting) {
+      outWhileDeleting = true;
+      return;
+    }
     const mine = ++generation;
     if (!user) {
-      set({ status: "signed-out" });
+      // Signed out after a deletion whose answer was lost: it went through
+      // (the session ended with the account), or the reader gave up on it.
+      const left = leaving.pending();
+      if (left) {
+        leaving.mark(null);
+        await leaving.forget(left);
+      }
+      if (mine === generation) set({ status: "signed-out" });
       return;
     }
     try {
       const profile = await backend.loadProfile(user.id);
       if (mine !== generation) return;
+      if (leaving.pending() === user.id) {
+        leaving.mark(null);
+        // The profile is gone: the deletion went through.
+        if (!profile) {
+          await leaving.forget(user.id);
+          await backend.signOut();
+          if (mine === generation) set({ status: "signed-out" });
+          return;
+        }
+      }
       set(
         profile
           ? { status: "signed-in", user, profile }
@@ -262,12 +308,12 @@ export function createAccountStore(
     /**
      * 退会: only for the reader signed in now, and only when `confirm` is
      * their ID as they typed it to say so (a reader with no profile yet has
-     * none to type). On success, `forget` lets go of what this browser
-     * keeps for them before the page shows them signed out.
+     * none to type). On success, what this browser keeps for them goes, and
+     * `onLeft` is told, before the page shows them signed out.
      */
     async deleteAccount(
       confirm: string,
-      forget: (userId: string) => void = () => {},
+      onLeft: () => void = () => {},
     ): Promise<AccountResult> {
       start();
       if (state.status !== "signed-in" && state.status !== "needs-profile")
@@ -277,14 +323,30 @@ export function createAccountStore(
         normalizeHandle(confirm) !== state.profile.handle
       )
         return { ok: false, message: LEAVE_HANDLE_MISMATCH };
-      if (!backend) return failed("network");
+      if (!backend || deleting) return failed("network");
       const user = state.user;
-      const failure = await backend.deleteAccount();
-      if (failure) return failed(failure);
+      deleting = true;
+      outWhileDeleting = false;
+      leaving.mark(user.id);
+      let failure: AccountFailure | null;
+      try {
+        failure = await backend.deleteAccount();
+      } catch {
+        failure = "network";
+      }
+      deleting = false;
+      if (failure) {
+        // Refused, nothing went; with no answer it may have, and stays marked.
+        if (failure !== "network") leaving.mark(null);
+        if (outWhileDeleting) void adopt(null);
+        return failed(failure);
+      }
       // A profile read still running for them must not bring them back.
-      generation += 1;
-      forget(user.id);
-      set({ status: "signed-out" });
+      const mine = ++generation;
+      leaving.mark(null);
+      await leaving.forget(user.id);
+      onLeft();
+      if (mine === generation) set({ status: "signed-out" });
       return { ok: true };
     },
   };

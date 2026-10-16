@@ -5,7 +5,6 @@ import { useRef, useState, type FormEvent } from "react";
 import { normalizeHandle } from "../lib/handles";
 import { accountActions, useAccountState } from "../lib/account-session";
 import { HANDLE_FIELD_MAX_LENGTH } from "../lib/account-draft";
-import { forgetReaderHere } from "../lib/leave";
 import { cameFromTown } from "../lib/in-town";
 import {
   markField,
@@ -108,11 +107,8 @@ function LeaveForm({
     if (busy) return;
     setBusy(true);
     setError("");
-    const result = await accountActions.deleteAccount(typed, (userId) => {
-      forgetReaderHere(userId);
-      // Said before the account reads signed out, so that never shows.
-      onLeft();
-    });
+    // Told before the account reads signed out, so that never shows.
+    const result = await accountActions.deleteAccount(typed, onLeft);
     if (result.ok) return;
     setBusy(false);
     setError(result.message);

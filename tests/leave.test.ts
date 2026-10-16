@@ -42,7 +42,10 @@ async function main() {
     setItem: (key: string, value: string) => void store.set(key, value),
     removeItem: (key: string) => void store.delete(key),
   };
-  Object.assign(globalThis, { window: { localStorage: memory } });
+  // A window that hears other tabs (the storage event).
+  const tab = new EventTarget();
+  Object.assign(tab, { localStorage: memory });
+  Object.assign(globalThis, { window: tab });
   const { PER_ACCOUNT_KEYS, forgetReaderHere } =
     await import("../src/lib/leave");
   const perAccount = new Set<string>();
@@ -78,6 +81,17 @@ async function main() {
       },
     }),
   );
+  // A shop's sign is kept as owner/shop (and a shelf's name as owner/shop/shelf).
+  store.set(
+    "book-town-shop-sign-drafts-v1",
+    JSON.stringify({
+      version: 1,
+      drafts: {
+        [ben + "/shop-1"]: { name: "ベンの看板" },
+        [chi + "/shop-2"]: { name: "チーの看板" },
+      },
+    }),
+  );
   forgetReaderHere(ben);
   for (const key of PER_ACCOUNT_KEYS) {
     assert.equal(store.has(key + ben), false, key);
@@ -85,7 +99,44 @@ async function main() {
   }
   const kept = JSON.parse(store.get("book-town-post-drafts-v1") ?? "{}");
   assert.deepEqual(Object.keys(kept.drafts), [chi + ":timeline"]);
+  assert.deepEqual(
+    Object.keys(
+      JSON.parse(store.get("book-town-shop-sign-drafts-v1") ?? "{}").drafts,
+    ),
+    [chi + "/shop-2"],
+  );
   assert.ok(![...store.values()].some((value) => value.includes(ben)));
+  assert.ok(![...store.keys()].some((key) => key.includes(ben)));
+
+  // Another tab still holding their work lets go of it when told, so its
+  // next change does not write it back.
+  const { createKeptDraftStore } = await import("../src/lib/kept-draft");
+  const other = createKeptDraftStore<string>(
+    {
+      storageKey: "test-other-tab-v1",
+      keyPattern: /^[\w-]+:.+$/,
+      read: (value) => (typeof value === "string" ? value : null),
+    },
+    () => memory,
+  );
+  other.set(chi + ":a", "チーの");
+  other.set(ben + ":a", "ベンの");
+  // The tab that left cleared storage; this one only hears the word.
+  store.set(
+    "test-other-tab-v1",
+    JSON.stringify({ version: 1, drafts: { [chi + ":a"]: "チーの" } }),
+  );
+  const told = Object.assign(new Event("storage"), {
+    key: "book-town-left-v1",
+    newValue: JSON.stringify({ owner: ben, at: 1 }),
+  });
+  tab.dispatchEvent(told);
+  other.set(chi + ":b", "チーの2");
+  assert.deepEqual(
+    Object.keys(JSON.parse(store.get("test-other-tab-v1") ?? "{}").drafts),
+    [chi + ":a", chi + ":b"],
+  );
+  assert.equal(other.get(ben + ":a"), null);
 
   console.log("leave ok");
 }

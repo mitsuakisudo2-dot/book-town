@@ -68,10 +68,38 @@ export interface KeptDraftStore<T> {
 /** Every store made, so a reader's work can be let go of in all of them. */
 const everyStore = new Set<Pick<KeptDraftStore<unknown>, "forget">>();
 
+/**
+ * Told to other tabs when a reader leaves: each lets go of their work too,
+ * so a tab still holding it does not write it back with its next change.
+ * Written and taken out at once, so it keeps no one's id.
+ */
+const LEFT_KEY = "book-town-left-v1";
+
 /** Lets go of the work kept for `owner` in every store (see forget). */
 export function forgetOwnerEverywhere(owner: string) {
   for (const store of everyStore) store.forget(owner);
+  try {
+    window.localStorage.setItem(
+      LEFT_KEY,
+      JSON.stringify({ owner, at: Date.now() }),
+    );
+    window.localStorage.removeItem(LEFT_KEY);
+  } catch {
+    // No storage, or no other tab to tell.
+  }
 }
+
+if (typeof window !== "undefined")
+  window.addEventListener?.("storage", (event) => {
+    if (event.key !== LEFT_KEY || !event.newValue) return;
+    try {
+      const { owner } = JSON.parse(event.newValue);
+      if (typeof owner === "string" && owner)
+        for (const store of everyStore) store.forget(owner);
+    } catch {
+      // Not a message this version wrote.
+    }
+  });
 
 export function createKeptDraftStore<T>(
   options: KeptDraftOptions<T>,
@@ -224,8 +252,11 @@ export function createKeptDraftStore<T>(
 
   function forget(owner: string) {
     initialize();
+    // An owner ends at ":" or "/" (draftOwner), or is the whole key.
     const theirs = (key: string) =>
-      key === owner || key.startsWith(owner + ":");
+      key === owner ||
+      key.startsWith(owner + ":") ||
+      key.startsWith(owner + "/");
     const without = <V>(entries: Record<string, V>) =>
       Object.fromEntries(
         Object.entries(entries).filter(([key]) => !theirs(key)),
@@ -257,7 +288,12 @@ export function createKeptDraftStore<T>(
     } catch {
       saved = false;
     }
-    snapshot = { drafts: readAll(left), saved, loaded: true };
+    // Work this tab could not store is still only here: it stays.
+    snapshot = {
+      drafts: snapshot.saved ? readAll(left) : without(snapshot.drafts),
+      saved: saved && snapshot.saved,
+      loaded: true,
+    };
     emit();
   }
 
