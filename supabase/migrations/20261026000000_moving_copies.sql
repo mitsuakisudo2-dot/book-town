@@ -30,7 +30,7 @@
 --   drop function private.forget_in_copies(), private.keep_copy(text, regclass[]),
 --     private.check_copy(text, regclass[]), private.restore_copy(text, regclass[], boolean),
 --     private.drop_copy(text), private.copy_columns(regclass, text),
---     private.copy_key(regclass);
+--     private.copy_key(regclass), private.copy_owners(regclass, text, integer);
 --   drop schema keep cascade;
 
 create schema keep;
@@ -51,12 +51,24 @@ create table keep.copies (
   -- Columns that pointed at a person and become null (rather than the row
   -- going) when that person's account is deleted, as on the source table.
   forget_columns text[] not null default '{}',
+  -- Columns that were part of a foreign key when the copy was taken: the
+  -- links check_copy counts.
+  link_columns text[] not null default '{}',
   -- What check_copy found: rows and links lost, rows after.
   checked jsonb,
   primary key (label, source)
 );
 alter table keep.copies enable row level security;
 revoke all on keep.copies from public, anon, authenticated;
+-- Supabase's own API role is kept out as well (only it has the role).
+do $$
+begin
+  if exists (select 1 from pg_catalog.pg_roles where rolname = 'service_role') then
+    revoke all on schema keep from service_role;
+    revoke all on keep.copies from service_role;
+  end if;
+end;
+$$;
 
 -- The columns a copy can give back to its source: those both have, minus the
 -- ones the database computes (generated). In column order of the source.
@@ -89,6 +101,48 @@ language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function private.copy_key(regclass) from public, anon, authenticated;
 
+-- An expression for the people a row of source goes with when their account
+-- is deleted: its own cascading links to a person, and through each other
+-- cascading link, the people of the row it points at (a reply goes with the
+-- post's writer, a shop's private shelves with the shop's owner). alias is
+-- the row's name in the query; depth bounds the way up.
+create function private.copy_owners(source regclass, alias text, depth integer)
+returns text
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  parts text[] := '{}';
+  fk record;
+  up text := 'owner_' || depth;
+begin
+  for fk in
+    select f.confrelid::regclass as parent,
+      array(select a.attname::text from unnest(f.conkey) with ordinality k (n, o)
+        join pg_catalog.pg_attribute a on a.attrelid = f.conrelid and a.attnum = k.n
+        order by k.o) as child_cols,
+      array(select a.attname::text from unnest(f.confkey) with ordinality k (n, o)
+        join pg_catalog.pg_attribute a on a.attrelid = f.confrelid and a.attnum = k.n
+        order by k.o) as parent_cols
+    from pg_catalog.pg_constraint f
+    where f.conrelid = source and f.contype = 'f' and f.confdeltype = 'c'
+    order by f.conname
+  loop
+    if fk.parent in ('auth.users'::regclass, 'public.profiles'::regclass) then
+      parts := parts || format('array[%I.%I]', alias, fk.child_cols[1]);
+    elsif depth > 0 then
+      parts := parts || format('coalesce((select %s from %s %I where %s), ''{}'')',
+        private.copy_owners(fk.parent, up, depth - 1), fk.parent, up,
+        (select string_agg(format('%I.%I = %I.%I', up, fk.parent_cols[j], alias, fk.child_cols[j]), ' and ')
+         from generate_subscripts(fk.child_cols, 1) j));
+    end if;
+  end loop;
+  if cardinality(parts) = 0 then
+    return '''{}''::uuid[]';
+  end if;
+  return '(' || array_to_string(parts, ' || ') || ')::uuid[]';
+end;
+$$;
+revoke all on function private.copy_owners(regclass, text, integer) from public, anon, authenticated;
+
 create function private.keep_copy(label text, tables regclass[]) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -96,6 +150,8 @@ declare
   name text;
   copied bigint;
   forget text[];
+  links text[];
+  api text;
 begin
   if label !~ '^[0-9]{14}_[a-z0-9_]+$' then
     raise exception 'name a copy after its migration, like 20261101000000_works';
@@ -108,10 +164,18 @@ begin
     -- the check all see the same rows. Reading goes on.
     execute format('lock table %s in exclusive mode', source);
     name := left(left(label, 14) || '_' || replace(source::text, '.', '_'), 63);
-    execute format('create table keep.%I as table %s', name, source);
+    -- keep_owners: who the row goes with (forget_in_copies).
+    execute format('create table keep.%I as select t.*, %s as keep_owners from %s t',
+      name, private.copy_owners(source, 't', 3), source);
     get diagnostics copied = row_count;
     execute format('alter table keep.%I enable row level security', name);
-    execute format('revoke all on table keep.%I from public, anon, authenticated', name);
+    execute format('revoke all on table keep.%I from public', name);
+    for api in
+      select rolname from pg_catalog.pg_roles
+      where rolname in ('anon', 'authenticated', 'service_role')
+    loop
+      execute format('revoke all on table keep.%I from %I', name, api);
+    end loop;
     select coalesce(array_agg(a.attname::text order by a.attnum), '{}')
       into forget
     from pg_catalog.pg_constraint c
@@ -120,8 +184,12 @@ begin
       and c.contype = 'f'
       and c.confdeltype = 'n'
       and c.confrelid in ('auth.users'::regclass, 'public.profiles'::regclass);
-    insert into keep.copies (label, source, copy_name, row_count, forget_columns)
-    values (label, source::text, name, copied, forget);
+    select coalesce(array_agg(distinct a.attname::text), '{}') into links
+    from pg_catalog.pg_constraint c
+    join pg_catalog.pg_attribute a on a.attrelid = c.conrelid and a.attnum = any (c.conkey)
+    where c.conrelid = source and c.contype = 'f';
+    insert into keep.copies (label, source, copy_name, row_count, forget_columns, link_columns)
+    values (label, source::text, name, copied, forget, links);
   end loop;
 end;
 $$;
@@ -159,7 +227,7 @@ begin
       continue;
     end if;
     key := private.copy_key(source);
-    select string_agg(format('l.%1$I is not distinct from c.%1$I', k), ' and ')
+    select string_agg(format('l.%1$I = c.%1$I', k), ' and ')
       into match from unnest(key) k;
     execute format('select count(*) from %s', source) into rows_after;
     execute format(
@@ -167,31 +235,16 @@ begin
       copy.copy_name, source, match
     ) into lost_rows;
     lost_links := 0;
-    -- Every column of the copy that a foreign key of the source names now,
-    -- or named when the copy was taken and has since been dropped.
+    -- Every column that was part of a foreign key when the copy was taken,
+    -- and whether the source still has it.
     for link in
-      select distinct c.attname::text as name,
+      select l.name,
         exists (
           select 1 from pg_catalog.pg_attribute a
-          where a.attrelid = source and a.attname = c.attname
+          where a.attrelid = source and a.attname = l.name
             and a.attnum > 0 and not a.attisdropped
         ) as kept
-      from pg_catalog.pg_attribute c
-      where c.attrelid = format('keep.%I', copy.copy_name)::regclass
-        and c.attnum > 0
-        and not c.attisdropped
-        and (
-          exists (
-            select 1 from pg_catalog.pg_constraint f
-            join pg_catalog.pg_attribute a on a.attrelid = f.conrelid and a.attnum = any (f.conkey)
-            where f.conrelid = source and f.contype = 'f' and a.attname = c.attname
-          )
-          or not exists (
-            select 1 from pg_catalog.pg_attribute a
-            where a.attrelid = source and a.attname = c.attname
-              and a.attnum > 0 and not a.attisdropped
-          )
-        )
+      from unnest(copy.link_columns) l (name)
     loop
       if link.kept then
         execute format(
@@ -300,11 +353,17 @@ begin
       where c.label = restore_copy.label and c.source = ordered[i];
       live := to_regclass(copy.source);
       key := private.copy_key(live);
-      execute format(
-        'delete from %s l where not exists (select 1 from keep.%I c where %s)',
-        live, copy.copy_name,
-        (select string_agg(format('l.%1$I = c.%1$I', k), ' and ') from unnest(key) k)
-      );
+      begin
+        execute format(
+          'delete from %s l where not exists (select 1 from keep.%I c where %s)',
+          live, copy.copy_name,
+          (select string_agg(format('l.%1$I = c.%1$I', k), ' and ') from unnest(key) k)
+        );
+      exception when others then
+        -- Postgres's own message can quote a row; Actions logs are public.
+        raise exception 'rows added since the copy of % could not be removed (%)',
+          copy.source, sqlstate;
+      end;
       get diagnostics n = row_count;
       gone := gone || jsonb_build_object(copy.source, n);
     end loop;
@@ -376,15 +435,21 @@ begin
     end if;
     select string_agg(format('%1$I = excluded.%1$I', col), ', ') into sets
     from unnest(cols) col where not col = any (key);
-    execute format(
-      'insert into %s (%s) select %s from pg_temp.restore_rows c on conflict (%s) do %s',
-      live,
-      (select string_agg(format('%I', col), ', ') from unnest(cols) col),
-      array_to_string(exprs, ', '),
-      (select string_agg(format('%I', k), ', ') from unnest(key) k),
-      case when sets is null then 'nothing' else 'update set ' || sets end
-    );
-    get diagnostics n = row_count;
+    begin
+      execute format(
+        'insert into %s (%s) select %s from pg_temp.restore_rows c on conflict (%s) do %s',
+        live,
+        (select string_agg(format('%I', col), ', ') from unnest(cols) col),
+        array_to_string(exprs, ', '),
+        (select string_agg(format('%I', k), ', ') from unnest(key) k),
+        case when sets is null then 'nothing' else 'update set ' || sets end
+      );
+      get diagnostics n = row_count;
+    exception when others then
+      -- A unique or check violation names the row in its detail; say only
+      -- which table, since the message lands in public Actions logs.
+      raise exception 'the copy of % could not be put back (%)', name, sqlstate;
+    end;
     drop table pg_temp.restore_rows;
     source := name;
     restored := n;
@@ -416,33 +481,28 @@ end;
 $$;
 revoke all on function private.drop_copy(text) from public, anon, authenticated;
 
--- An account deleted takes its rows out of every copy too: a row naming the
--- person in any uuid column goes, except where the source would only have
--- forgotten them (a set-null link), which becomes null. Rows that pointed
--- only at the person's rows (a reply to their post, say) stay, nameless, until
--- the copy is dropped; restore_copy leaves them out, as their parent is gone.
+-- An account deleted takes its rows out of every copy too, as the cascades
+-- take them out of the tables: each row that goes with the person
+-- (keep_owners, worked out when the copy was taken) goes, and a column that
+-- the source would only clear (a set-null link to them) becomes null. What
+-- the tables keep on purpose (a report about them, for the operator) stays.
 create function private.forget_in_copies() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
   copy record;
   col text;
-  others text;
 begin
   for copy in select c.copy_name, c.forget_columns from keep.copies c loop
+    -- A copy dropped by hand must not stop accounts from being deleted.
+    if to_regclass(format('keep.%I', copy.copy_name)) is null then
+      continue;
+    end if;
     foreach col in array copy.forget_columns loop
       execute format('update keep.%1$I set %2$I = null where %2$I = $1', copy.copy_name, col)
         using old.id;
     end loop;
-    select string_agg(format('%I', a.attname), ', ') into others
-    from pg_catalog.pg_attribute a
-    where a.attrelid = format('keep.%I', copy.copy_name)::regclass
-      and a.attnum > 0 and not a.attisdropped
-      and a.atttypid = 'uuid'::regtype
-      and not a.attname::text = any (copy.forget_columns);
-    if others is not null then
-      execute format('delete from keep.%I where $1 in (%s)', copy.copy_name, others)
-        using old.id;
-    end if;
+    execute format('delete from keep.%I where $1 = any (keep_owners)', copy.copy_name)
+      using old.id;
   end loop;
   return null;
 end;

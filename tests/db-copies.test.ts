@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { ACCOUNT_TABLES } from "./fixtures/account-tables";
 import {
   deleteAccounts,
   migratedDatabase,
@@ -23,12 +24,14 @@ const P3 = "00000000-0000-4000-8000-0000000000f3";
 const P4 = "00000000-0000-4000-8000-0000000000f4";
 const P5 = "00000000-0000-4000-8000-0000000000f5";
 const SHOP = "00000000-0000-4000-8000-0000000000c1";
+const BEN_SHOP = "00000000-0000-4000-8000-0000000000c2";
 
 const TABLES = [
   "public.books",
   "public.posts",
   "public.post_reactions",
   "public.shops",
+  "public.shop_private",
   "public.reports",
 ];
 const COPIED = `array['${TABLES.join("', '")}']::regclass[]`;
@@ -108,7 +111,10 @@ async function main() {
       ('${B2}', null, 'ベンの手書きの本', 'manual', '${BEN}'),
       ('${B3}', null, 'チーの手書きの本', 'manual', '${CHI}');
     insert into shops (id, owner_id, name, is_open, public_scene) values
-      ('${SHOP}', '${AKI}', '軌道書房', true, '{"books": []}');
+      ('${SHOP}', '${AKI}', '軌道書房', true, '{"books": []}'),
+      ('${BEN_SHOP}', '${BEN}', 'ベンの店', false, null);
+    insert into shop_private (shop_id, shelves) values
+      ('${BEN_SHOP}', '[{"name": "ベンだけの棚", "books": []}]');
     insert into posts (id, author_id, body, book_id) values
       ('${P1}', '${AKI}', '面白かった', '${B1}'),
       ('${P2}', '${BEN}', '自分で入れた本', '${B2}'),
@@ -234,14 +240,15 @@ async function main() {
           ["public.post_reactions", 3, 0, 0],
           ["public.posts", 4, 0, 0],
           ["public.reports", 1, 0, 0],
-          ["public.shops", 1, 0, 0],
+          ["public.shop_private", 1, 0, 0],
+          ["public.shops", 2, 0, 0],
         ],
       );
       assert.deepEqual(
         copies.find((c) => c.source === "public.books")?.forget_columns,
         ["created_by"],
       );
-      assert.equal((await keepTables()).length, 6);
+      assert.equal((await keepTables()).length, 7);
       assert.equal(
         (
           await rows<{ title: string }>(
@@ -345,65 +352,75 @@ async function main() {
   });
 
   await check(
-    "an account deleted leaves no row naming it in any copy",
+    "an account deleted takes everything that went with it out of every copy",
     async () => {
       await deleteAccounts(db, [BEN]);
-      const columns = await rows<{ table: string; column: string }>(
-        `select c.relname as table, a.attname as column
-       from pg_attribute a join pg_class c on c.oid = a.attrelid
-       where c.relnamespace = 'keep'::regnamespace and c.relkind = 'r'
-         and a.attnum > 0 and not a.attisdropped and a.atttypid = 'uuid'::regtype`,
+      // Nothing in any copy names him, in any column, but what the tables
+      // themselves keep for the operator (tests/fixtures/account-tables.ts).
+      const copies = await rows<{ copy_name: string; source: string }>(
+        "select copy_name, source from keep.copies where label = $1",
+        [LABEL],
       );
-      assert.ok(columns.length > 5);
-      for (const { table, column } of columns) {
+      assert.equal(copies.length, TABLES.length);
+      for (const { copy_name, source } of copies) {
+        const stays = Object.entries(ACCOUNT_TABLES[source]?.targets ?? {})
+          .filter(([, target]) => "stays" in target)
+          .map(([column]) => column);
         const named = await rows(
-          `select 1 from keep.${JSON.stringify(table)} where ${JSON.stringify(column)} = $1`,
-          [BEN],
+          `select 1 from keep.${JSON.stringify(copy_name)} t
+           where (to_jsonb(t) - $2::text[])::text like '%' || $1 || '%'`,
+          [BEN, stays],
         );
-        assert.equal(
-          named.length,
-          0,
-          `keep.${table}.${column} still names Ben`,
-        );
+        assert.equal(named.length, 0, `the copy of ${source} still names Ben`);
       }
-      // The book he typed in stays in the copy, as in the catalog, unsigned.
-      const copyOf = async (source: string) =>
-        (
-          await rows<{ copy_name: string }>(
-            "select copy_name from keep.copies where label = $1 and source = $2",
-            [LABEL, source],
-          )
-        )[0].copy_name;
-      const books = await rows<{ id: string; created_by: string | null }>(
-        `select id, created_by from keep.${JSON.stringify(await copyOf("public.books"))} order by id`,
+      const copyOf = (source: string) =>
+        JSON.stringify(copies.find((c) => c.source === source)?.copy_name);
+      // What went with him through his rows went too: his shop's private
+      // shelves, Chi's reply to his post and Aki's like of it.
+      assert.deepEqual(
+        await rows(`select shop_id from keep.${copyOf("public.shop_private")}`),
+        [],
       );
-      assert.deepEqual(books, [
-        { id: B1, created_by: null },
-        { id: B2, created_by: null },
-        { id: B3, created_by: CHI },
-      ]);
+      assert.deepEqual(
+        await rows(`select id from keep.${copyOf("public.posts")} order by id`),
+        [{ id: P1 }, { id: P4 }],
+      );
+      assert.deepEqual(
+        await rows(
+          `select user_id from keep.${copyOf("public.post_reactions")} order by user_id`,
+        ),
+        [{ user_id: CHI }],
+      );
+      // The book he typed in stays in the copy, as in the catalog, unsigned.
+      assert.deepEqual(
+        await rows(
+          `select id, created_by from keep.${copyOf("public.books")} order by id`,
+        ),
+        [
+          { id: B1, created_by: null },
+          { id: B2, created_by: null },
+          { id: B3, created_by: CHI },
+        ],
+      );
+      // Chi's report about him stays, in the copy as in the table.
+      assert.equal(
+        (await rows(`select 1 from keep.${copyOf("public.reports")}`)).length,
+        1,
+      );
     },
   );
 
   await check(
     "restoring after an account went leaves the account out",
     async () => {
-      // Chi's reply went with Ben's post; it stays out, as its parent is gone.
-      const result = await rows<{
-        source: string;
-        restored: number;
-        skipped: number;
-      }>(
-        `select source, restored::int, skipped::int from private.restore_copy('${LABEL}')`,
+      await db.exec(`delete from posts where id = '${P1}'`);
+      const result = await rows<{ source: string; skipped: number }>(
+        `select source, skipped::int from private.restore_copy('${LABEL}')`,
       );
-      assert.equal(result.find((r) => r.source === "public.posts")?.skipped, 1);
+      assert.ok(result.every((r) => r.skipped === 0));
       assert.equal(
-        (await rows("select 1 from posts where id = $1", [P3])).length,
-        0,
-      );
-      assert.equal(
-        (await rows("select 1 from posts where id = $1", [P2])).length,
-        0,
+        (await rows("select 1 from posts where id = $1", [P1])).length,
+        1,
       );
       for (const table of TABLES)
         assert.equal(
@@ -419,40 +436,89 @@ async function main() {
     },
   );
 
+  await check("a failed restore says which table, never what row", async () => {
+    // Another catalog entry took the ISBN while the copy's book was gone.
+    await db.exec("begin");
+    try {
+      await db.exec(`
+        delete from posts where book_id = '${B1}';
+        delete from books where id = '${B1}';
+        insert into books (isbn, title, source) values ('9784101010014', '別の坊っちゃん', 'ndl');
+      `);
+      let message = "";
+      let detail = "";
+      try {
+        await rows(
+          `select * from private.restore_copy('${LABEL}', array['public.books']::regclass[])`,
+        );
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+        detail = (error as { detail?: string }).detail ?? "";
+      }
+      assert.equal(
+        message,
+        "the copy of public.books could not be put back (23505)",
+      );
+      assert.doesNotMatch(detail, /9784101010014|坊っちゃん/);
+    } finally {
+      await db.exec("rollback");
+    }
+  });
+
+  await check(
+    "an account still goes when a copy was dropped by hand",
+    async () => {
+      await db.exec("begin");
+      try {
+        const [first] = await rows<{ copy_name: string }>(
+          "select copy_name from keep.copies order by copy_name limit 1",
+        );
+        await db.exec(`drop table keep.${JSON.stringify(first.copy_name)}`);
+        await deleteAccounts(db, [CHI]);
+        assert.equal(
+          (await rows("select 1 from auth.users where id = $1", [CHI])).length,
+          0,
+        );
+      } finally {
+        await db.exec("rollback");
+      }
+    },
+  );
+
   await check(
     "a link whose row is gone since is cleared or left out, as its key says",
     async () => {
       await db.exec("begin");
       try {
         await db.exec(`
-        create table public.zz_shelf (id int, owner int, primary key (id, owner));
-        create table public.zz_place (
-          id int primary key,
-          shelf int, owner int,
-          next_to int references public.zz_place (id) on delete set null,
-          foreign key (shelf, owner) references public.zz_shelf (id, owner) on delete cascade
-        );
-        create table public.zz_note (
-          id int primary key,
-          place int references public.zz_place (id) on delete set null
-        );
-        insert into public.zz_shelf values (1, 1), (2, 1);
-        insert into public.zz_place values (10, 1, 1, null), (11, 2, 1, 10), (12, 1, 1, 11);
-        insert into public.zz_note values (100, 10), (101, 11);
-        select private.keep_copy('20990101000000_shelves',
-          array['public.zz_shelf', 'public.zz_place', 'public.zz_note']::regclass[]);
-        select private.check_copy('20990101000000_shelves');
-        delete from public.zz_place;
-        delete from public.zz_shelf where id = 2;
-      `);
+          create table public.zz_shelf (id int, owner int, primary key (id, owner));
+          create table public.zz_place (
+            id int primary key,
+            shelf int, owner int,
+            next_to int references public.zz_place (id) on delete set null,
+            foreign key (shelf, owner) references public.zz_shelf (id, owner) on delete cascade
+          );
+          create table public.zz_note (
+            id int primary key,
+            place int references public.zz_place (id) on delete set null
+          );
+          insert into public.zz_shelf values (1, 1), (2, 1);
+          insert into public.zz_place values (10, 1, 1, null), (11, 2, 1, 10), (12, 1, 1, 11);
+          insert into public.zz_note values (100, 10), (101, 11);
+          select private.keep_copy('20990101000000_shelves',
+            array['public.zz_shelf', 'public.zz_place', 'public.zz_note']::regclass[]);
+          select private.check_copy('20990101000000_shelves');
+          delete from public.zz_place;
+          delete from public.zz_shelf where id = 2;
+        `);
         const result = await rows<{
           source: string;
           restored: number;
           skipped: number;
         }>(
           `select source, restored::int, skipped::int from private.restore_copy(
-           '20990101000000_shelves',
-           array['public.zz_place', 'public.zz_note']::regclass[])`,
+             '20990101000000_shelves',
+             array['public.zz_place', 'public.zz_note']::regclass[])`,
         );
         assert.deepEqual(result, [
           { source: "public.zz_place", restored: 2, skipped: 1 },
