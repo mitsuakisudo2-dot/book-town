@@ -189,6 +189,8 @@ check(
       ] as const) {
         for (const back of [
           theme["--theme-pale"],
+          // The deeper end of the profile's 「〇〇さんの書店」 sign.
+          theme["--theme-light"],
           town["--sheet"],
           town["--paper"],
         ]) {
@@ -198,13 +200,14 @@ check(
             `${id} ${when}: its words on ${back} are ${ratio.toFixed(2)}:1`,
           );
         }
-        for (const words of [town["--ink"], town["--ink-2"]]) {
-          const ratio = contrast(words, theme["--theme-pale"]);
-          assert.ok(
-            ratio >= 4.5,
-            `${id} ${when}: ${words} on its pale is ${ratio.toFixed(2)}:1`,
-          );
-        }
+        for (const words of [town["--ink"], town["--ink-2"]])
+          for (const back of [theme["--theme-pale"], theme["--theme-light"]]) {
+            const ratio = contrast(words, back);
+            assert.ok(
+              ratio >= 4.5,
+              `${id} ${when}: ${words} on ${back} is ${ratio.toFixed(2)}:1`,
+            );
+          }
         const sign = contrast(town["--on-dark"], theme["--theme-fill"]);
         assert.ok(
           sign >= 4.5,
