@@ -30,7 +30,7 @@
   border-radius: 6px;
   overflow: hidden;
   background: #2c1d12;
-  color: #ead9b9;
+  color: var(--on-dark);
 }
 .scene-preview .walk-artboard {
   width: 100%;
@@ -177,7 +177,7 @@
   overflow-wrap: anywhere;
 }
 .scene-placement-list button[aria-pressed="true"] {
-  background: #c3bd9b30;
+  background: var(--green-soft);
   border-color: var(--green);
 }
 .scene-placement-list small {
@@ -249,7 +249,7 @@
 .scene-error {
   font-size: 12px;
   line-height: 1.7;
-  color: #a34534;
+  color: var(--alert);
   margin-bottom: 10px;
 }
 .editor-immersive-entry {
@@ -261,7 +261,11 @@
   border-radius: 8px;
   padding: 18px 20px;
   margin: 20px 0;
-  background: linear-gradient(120deg, #e5d4b730, #d1c7ac18);
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--cork) 15%, transparent),
+    color-mix(in srgb, var(--cork) 6%, transparent)
+  );
 }
 .editor-immersive-entry h2 {
   font-family: var(--serif);

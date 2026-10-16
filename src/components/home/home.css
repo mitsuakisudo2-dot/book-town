@@ -149,8 +149,8 @@ html[data-home-tab="letters"]
   min-width: 0;
   overflow: hidden;
   border-radius: 20px;
-  background: var(--ink);
-  color: var(--sheet);
+  background: var(--shade);
+  color: var(--on-dark);
   scroll-snap-align: start;
 }
 .home-slide-art {
@@ -166,9 +166,9 @@ html[data-home-tab="letters"]
   inset: 0;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--ink) 14%, transparent),
+    color-mix(in srgb, var(--shade) 14%, transparent),
     transparent 34%,
-    color-mix(in srgb, var(--ink) 72%, transparent)
+    color-mix(in srgb, var(--shade) 72%, transparent)
   );
 }
 .home-slide-text,
@@ -189,7 +189,7 @@ html[data-home-tab="letters"]
   margin-bottom: 4px;
   padding: 2px 10px;
   border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--ink) 58%, transparent);
+  background: color-mix(in srgb, var(--shade) 58%, transparent);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   font-size: var(--t-cap);
@@ -202,7 +202,7 @@ html[data-home-tab="letters"]
   font-size: clamp(18px, 5.6vw, var(--t-head));
   font-weight: 600;
   line-height: 1.4;
-  text-shadow: 0 1px 6px color-mix(in srgb, var(--ink) 60%, transparent);
+  text-shadow: 0 1px 6px color-mix(in srgb, var(--shade) 60%, transparent);
   word-break: auto-phrase;
   overflow-wrap: anywhere;
 }
@@ -210,7 +210,7 @@ html[data-home-tab="letters"]
   margin: 2px 0 0;
   font-size: var(--t-cap);
   line-height: 1.55;
-  text-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 60%, transparent);
+  text-shadow: 0 1px 4px color-mix(in srgb, var(--shade) 60%, transparent);
   word-break: auto-phrase;
 }
 .home-slide-go {
@@ -222,7 +222,7 @@ html[data-home-tab="letters"]
   min-height: 44px;
   padding: 0 10px 0 16px;
   border-radius: var(--r-box);
-  background: color-mix(in srgb, var(--sheet) 94%, transparent);
+  background: color-mix(in srgb, var(--on-dark) 94%, transparent);
   color: var(--on-photo);
   font-size: var(--t-ui);
   font-weight: 700;
@@ -259,8 +259,8 @@ html[data-home-tab="letters"]
   }
 }
 .home-slide .home-tag {
-  color: var(--sheet);
-  border-color: color-mix(in srgb, var(--sheet) 60%, transparent);
+  color: var(--on-dark);
+  border-color: color-mix(in srgb, var(--on-dark) 60%, transparent);
 }
 .home-carousel-nav {
   position: relative;
@@ -603,7 +603,7 @@ html[data-home-tab="letters"]
   border-radius: var(--r-card);
   background: var(--sheet);
   color: var(--ink);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 7%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--shade) 7%, transparent);
 }
 .home-shopcard-wall {
   position: relative;
@@ -675,7 +675,7 @@ html[data-home-tab="letters"]
   background: var(--pop);
   color: var(--ink);
   text-align: left;
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--ink) 7%, transparent);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--shade) 7%, transparent);
 }
 .home-rail > li:nth-child(odd) > .home-pop {
   transform: rotate(-0.6deg);
@@ -724,7 +724,7 @@ html[data-home-tab="letters"]
   background-color: var(--cork);
   background-image:
     radial-gradient(
-      color-mix(in srgb, var(--ink) 22%, transparent) 1px,
+      color-mix(in srgb, var(--shade) 22%, transparent) 1px,
       transparent 1.3px
     ),
     radial-gradient(
@@ -737,7 +737,7 @@ html[data-home-tab="letters"]
   background-size:
     7px 7px,
     11px 11px;
-  box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--ink) 25%, transparent);
+  box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--shade) 25%, transparent);
 }
 .home-board-head {
   display: flex;
@@ -764,8 +764,8 @@ html[data-home-tab="letters"]
   background: var(--notice);
   color: var(--ink);
   box-shadow:
-    0 1px 1px color-mix(in srgb, var(--ink) 8%, transparent),
-    0 8px 16px color-mix(in srgb, var(--ink) 22%, transparent);
+    0 1px 1px color-mix(in srgb, var(--shade) 8%, transparent),
+    0 8px 16px color-mix(in srgb, var(--shade) 22%, transparent);
   transform: rotate(-0.5deg);
 }
 .home-notice.is-tilted {
@@ -785,7 +785,7 @@ html[data-home-tab="letters"]
     var(--alert) 60%,
     color-mix(in srgb, var(--alert) 55%, var(--ink))
   );
-  box-shadow: 0 2px 3px color-mix(in srgb, var(--ink) 35%, transparent);
+  box-shadow: 0 2px 3px color-mix(in srgb, var(--shade) 35%, transparent);
 }
 .home-notice-kicker {
   display: flex;
@@ -1033,7 +1033,7 @@ html[data-home-tab] {
   font-size: var(--t-ui);
   font-weight: 700;
   white-space: nowrap;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 24%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--shade) 24%, transparent);
   touch-action: manipulation;
 }
 .home-new:has(.home-new-faces) {

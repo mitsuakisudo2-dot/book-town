@@ -20,13 +20,13 @@
   padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fffdf7;
+  background: var(--sheet);
 }
 .poster-editor-elsewhere h2 {
   margin: 0 0 4px;
   font-size: 12px;
   font-weight: 500;
-  color: #5f6f55;
+  color: var(--ink-2);
 }
 .poster-editor-elsewhere ul {
   list-style: none;
@@ -116,10 +116,10 @@
   min-width: 34px;
   height: 34px;
   padding: 0 9px;
-  border: 1px solid #d5dccb;
+  border: 1px solid var(--line-2);
   border-radius: 6px;
-  background: #fffdf7;
-  color: #5d6f52;
+  background: var(--sheet);
+  color: var(--ink-2);
   font-size: 12px;
 }
 .poster-page-tabs button[aria-pressed="true"] {
@@ -132,12 +132,12 @@
   align-items: center;
   gap: 4px;
   border-style: dashed;
-  color: #5f7354;
+  color: var(--ink-2);
   font-size: 11px;
 }
 .poster-page-add:hover,
 .poster-page-tabs button:hover:not([aria-pressed="true"]) {
-  background: #eef2e6;
+  background: var(--green-soft);
 }
 .poster-page-remove,
 .poster-preview-size,
@@ -147,9 +147,9 @@
   gap: 5px;
   padding: 4px 0;
   font-size: 11px;
-  color: #5f7354;
+  color: var(--ink-2);
   text-decoration: underline;
-  text-decoration-color: #c9d3bd;
+  text-decoration-color: var(--line-2);
   text-underline-offset: 3px;
 }
 .poster-page-remove:hover,
@@ -200,22 +200,22 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #e5ebdc;
-  color: #4f6648;
+  background: var(--green-soft);
+  color: var(--green);
   font-family: var(--sans);
   font-size: 11px;
 }
 .poster-step-note {
   font-size: 11px;
   line-height: 1.8;
-  color: #5f6f55;
+  color: var(--ink-2);
   margin: -4px 0 12px;
 }
 .poster-editor-quiet {
   display: block;
   font-size: 11px;
   line-height: 1.8;
-  color: #5f6f55;
+  color: var(--ink-2);
   margin: 6px 0;
 }
 
@@ -233,7 +233,7 @@
 .poster-template:has(input:focus-visible),
 .poster-theme:has(input:focus-visible),
 .poster-font:has(input:focus-visible) {
-  outline: 2px solid #7c986d;
+  outline: 2px solid var(--green);
   outline-offset: 3px;
 }
 
@@ -251,7 +251,7 @@
   padding: 12px 8px 11px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fffdf7;
+  background: var(--sheet);
   text-align: center;
   cursor: pointer;
   transition:
@@ -259,11 +259,11 @@
     background 0.15s;
 }
 .poster-template:hover {
-  border-color: #b9c8ad;
+  border-color: var(--line-2);
 }
 .poster-template:has(input:checked) {
   border-color: var(--green);
-  background: #eef2e8;
+  background: var(--green-soft);
 }
 .poster-template b {
   font-family: var(--serif);
@@ -274,7 +274,7 @@
 .poster-template small {
   font-size: 10px;
   line-height: 1.6;
-  color: #5f6f55;
+  color: var(--ink-2);
 }
 
 /* A drawing of each layout: frames and lines, no covers. */
@@ -285,23 +285,23 @@
   width: 44px;
   aspect-ratio: 4 / 5;
   padding: 5px;
-  border: 1px solid #cfd8c3;
+  border: 1px solid var(--line-2);
   border-radius: 2px;
-  background: #f5f1e6;
+  background: var(--band);
 }
 .poster-sketch i {
   display: block;
   border-radius: 1px;
-  background: #b9c6ad;
+  background: color-mix(in srgb, var(--green) 30%, var(--band));
 }
 .poster-sketch .sketch-cover {
   aspect-ratio: 0.675;
-  background: #9fb090;
+  background: color-mix(in srgb, var(--green) 45%, var(--band));
 }
 .poster-sketch .sketch-heading {
   height: 3px;
   width: 70%;
-  background: #7d9170;
+  background: color-mix(in srgb, var(--green) 60%, var(--band));
 }
 .poster-sketch .sketch-line {
   height: 2px;
@@ -344,7 +344,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 10px;
-  color: #5f6f55;
+  color: var(--ink-2);
 }
 .poster-chosen-tools {
   display: flex;
@@ -356,10 +356,10 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  color: #7d8f70;
+  color: var(--ink-2);
 }
 .poster-chosen-tools button:hover:not(:disabled) {
-  background: #e9eedf;
+  background: var(--green-soft);
 }
 .poster-chosen-tools button:disabled {
   opacity: 0.3;
@@ -372,9 +372,9 @@
   justify-items: start;
   max-width: 420px;
   padding: 8px 10px;
-  border: 1px solid #d4ddc8;
+  border: 1px solid var(--line-2);
   border-radius: 8px;
-  background: #f4f6ee;
+  background: var(--green-soft);
 }
 .poster-chosen.is-one .poster-chosen-jacket {
   width: 48px;
@@ -389,7 +389,7 @@
 }
 .poster-cover-note {
   font-size: 10px;
-  color: #5f6f55;
+  color: var(--ink-2);
   line-height: 1.7;
   margin: 2px 0 10px;
 }
@@ -417,11 +417,11 @@
   text-align: left;
 }
 .poster-book-offer button:hover {
-  background: #eef1e6;
+  background: var(--green-soft);
 }
 .poster-book-offer button[aria-pressed="true"] {
   border-color: var(--green);
-  background: #eef2e8;
+  background: var(--green-soft);
 }
 .poster-offer-jacket {
   width: 100%;
@@ -440,7 +440,7 @@
 }
 .poster-book-offer small {
   font-size: 9px;
-  color: #5f6f55;
+  color: var(--ink-2);
 }
 .poster-offer-on {
   display: inline-flex;
@@ -457,7 +457,7 @@
 .poster-field label {
   display: block;
   font-size: 12px;
-  color: #5f6f55;
+  color: var(--ink-2);
   margin-bottom: 6px;
 }
 .poster-field textarea {
@@ -468,7 +468,7 @@
   display: block;
   text-align: right;
   font-size: 10px;
-  color: #6e6146;
+  color: var(--ink-2);
   margin-top: 4px;
 }
 
@@ -488,12 +488,12 @@
   border: 1px solid transparent;
   border-radius: 8px;
   font-size: 11px;
-  color: #5f6f55;
+  color: var(--ink-2);
   cursor: pointer;
 }
 .poster-theme:has(input:checked) {
   border-color: var(--green);
-  background: #eef2e8;
+  background: var(--green-soft);
   color: var(--green);
 }
 .poster-swatch {
@@ -506,7 +506,7 @@
   border-bottom: 3px solid;
   font-family: var(--serif);
   font-size: 15px;
-  box-shadow: inset 0 0 0 1px #00000014;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--shade) 8%, transparent);
 }
 .poster-swatch i {
   position: absolute;
@@ -528,9 +528,9 @@
   padding: 8px 14px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #fffdf7;
+  background: var(--sheet);
   font-size: 11px;
-  color: #5f6f55;
+  color: var(--ink-2);
   cursor: pointer;
 }
 .poster-font span {
@@ -545,7 +545,7 @@
 }
 .poster-font:has(input:checked) {
   border-color: var(--green);
-  background: #eef2e8;
+  background: var(--green-soft);
   color: var(--green);
 }
 
@@ -568,7 +568,7 @@
   display: block;
   font-size: 10px;
   line-height: 1.7;
-  color: #5f6f55;
+  color: var(--ink-2);
   margin-top: 2px;
 }
 
@@ -591,7 +591,7 @@
   margin: 12px 0 4px;
   font-size: 12px;
   line-height: 1.8;
-  color: #6e6146;
+  color: var(--ink-2);
 }
 .poster-editor-problem svg {
   flex-shrink: 0;
@@ -600,8 +600,8 @@
 .poster-editor-problem.is-asked {
   padding: 9px 12px;
   border-radius: 6px;
-  background: #f5eedf;
-  color: #7a5a35;
+  background: var(--notice);
+  color: var(--ink);
 }
 .poster-editor-undo {
   display: flex;
@@ -611,8 +611,8 @@
   margin: 0 0 20px;
   padding: 10px 13px;
   border-radius: 6px;
-  background: #e9eedf;
-  color: #556a4b;
+  background: var(--green-soft);
+  color: var(--ink-2);
   font-size: 12px;
   line-height: 1.7;
 }
