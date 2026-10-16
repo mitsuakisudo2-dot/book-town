@@ -2047,6 +2047,10 @@ try {
         },
         async () => {
           await goHome();
+          // The page's clock runs while the browser is driven; on a slow
+          // runner the ten seconds can pass before the first look. Stop it
+          // so the slide turns only when the test says.
+          await stopClock();
           const carousel = page.getByRole("region", { name: "今日の街" });
           const stop = carousel.getByRole("button", {
             name: "自動の切り替えを止める",
