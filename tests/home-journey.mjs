@@ -2322,14 +2322,12 @@ try {
         await expect(page.locator(".nav-mark")).toHaveCount(0);
         await bar.getByRole("link", { name: "本棚" }).tap();
         expect(await page.locator(".nav-mark").count()).toBe(0);
-        // The page itself does not slide.
+        // The page itself does not move as it opens: no slide, no rise.
+        await bar.getByRole("link", { name: "検索" }).tap();
+        await expect(page).toHaveURL(/\/search\//);
         expect(
           await page.evaluate(
-            () =>
-              document
-                .querySelector("main")
-                .getAnimations()
-                .filter((a) => !(a instanceof CSSAnimation)).length,
+            () => document.querySelector("main").getAnimations().length,
           ),
         ).toBe(0);
       }),
