@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
+import { pageinspect } from "@electric-sql/pglite/contrib/pageinspect";
 import {
   SUPABASE_STANDIN,
   deleteAccounts,
@@ -80,9 +81,19 @@ const SEED = `
   select private.join_works('${NOTE1}', '${NOTE2}');
 `;
 
-/** A database migrated up to the file before this one, with books and joins in it. */
-async function beforeEditions(): Promise<PGlite> {
-  const db = new PGlite();
+/**
+ * A database migrated up to the file before this one, with books and joins
+ * in it. With inspect, pageinspect too (in a schema of its own), to read the
+ * locks a registration leaves on a row.
+ */
+async function beforeEditions(inspect = false): Promise<PGlite> {
+  const db = inspect
+    ? new PGlite({ extensions: { pageinspect } })
+    : new PGlite();
+  if (inspect)
+    await db.exec(
+      "create schema inspect; create extension pageinspect schema inspect;",
+    );
   await db.exec(SUPABASE_STANDIN);
   for (const file of FILES.filter((file) => file < EDITIONS))
     await db.exec(migrationText(file));
@@ -177,7 +188,13 @@ function helpers(db: PGlite) {
       what + ": books in their edition's work",
     );
   }
-  return { rows, as, refused, count, placeOf, holds };
+  /** The kinds of a book's changes of work, in order, and the joins they belong to. */
+  const history = (book: string) =>
+    rows<{ kind: string; join_id: string | null }>(
+      "select kind, join_id from private.work_changes where book_id = $1 order by changed_at, id",
+      [book],
+    );
+  return { rows, as, refused, count, placeOf, holds, history };
 }
 
 /**
@@ -302,8 +319,8 @@ async function main() {
 
   // The move ---------------------------------------------------------------------
 
-  const db = await beforeEditions();
-  const { rows, as, refused, count, placeOf, holds } = helpers(db);
+  const db = await beforeEditions(true);
+  const { rows, as, refused, count, placeOf, holds, history } = helpers(db);
   const before = await everyRow(db);
   const seenBefore = await seenBooks(db);
   const editionsBefore = await count("select count(*) from editions");
@@ -357,6 +374,20 @@ async function main() {
           "select count(*) from editions e where exists (select 1 from books b where b.id = e.id) or exists (select 1 from works w where w.id = e.id)",
         ),
         0,
+      );
+      // The old way of placing a book is gone, and an edition with books
+      // cannot be deleted.
+      assert.equal(
+        await count(
+          "select count(*) from pg_proc where oid = to_regprocedure('private.edition_work(text)')",
+        ),
+        0,
+      );
+      const used = (await placeOf(NOTE1)).edition;
+      await refused(
+        () => rows("delete from editions where id = $1", [used]),
+        /violates foreign key constraint "books_edition_id_fkey"/,
+        "deleting an edition with a book",
       );
       await holds("after the move");
     },
@@ -451,7 +482,10 @@ async function main() {
       assert.equal(place.isbn, unused(1));
       assert.equal(await count("select count(*) from editions"), editions + 1);
       assert.equal(await count("select count(*) from works"), works + 1);
-      // Two first registrations of one ISBN in one statement meet in one edition.
+      // Two first registrations of one ISBN in one statement meet in one
+      // edition. (Two at once from two connections take the other branch of
+      // isbn_edition, which one PGlite connection cannot reach; it is
+      // edition_work's, step for step.)
       const [a, b] = [id(4, 3), id(4, 4)];
       await as(
         BEN,
@@ -466,7 +500,7 @@ async function main() {
   );
 
   await check(
-    "a book without an ISBN gets an edition and a work of its own, never shared, and sent again, even twice at once, it makes nothing",
+    "a book without an ISBN gets an edition and a work of its own, never shared, and sent again, even twice in one statement, it makes nothing",
     async () => {
       const editions = await count("select count(*) from editions");
       const works = await count("select count(*) from works");
@@ -500,6 +534,10 @@ async function main() {
   await check(
     "until it is saved, a registration holds its edition's row, whether the edition was there or it made it",
     async () => {
+      // Whether the row is this registration's own (it made it), and the
+      // lock it left on the row otherwise. The book's foreign key alone
+      // leaves a key-share lock, which another registration of the ISBN does
+      // not wait for; the edition's row is held only by an exclusive one.
       const held = async (n: number, probed: string) => {
         await db.exec("begin");
         try {
@@ -508,17 +546,28 @@ async function main() {
             "insert into books (id, isbn, title, author, created_by) values ($1, $2, '鍵', '', $3)",
             [id(6, n), probed, BEN],
           );
-          return await count(
-            `select count(*) from editions
-             where isbn = $1 and pg_current_xact_id()::text in (xmin::text, xmax::text)`,
-            [probed],
-          );
+          return (
+            await rows<{ made: boolean; locks: string[] }>(
+              `select e.xmin::text = pg_current_xact_id()::text as made,
+                 array(select flag from unnest(f.raw_flags) flag
+                   where flag like 'HEAP_XMAX_%LOCK%' order by 1) as locks
+               from editions e,
+                 lateral inspect.heap_page_items(
+                   inspect.get_raw_page('public.editions', (e.ctid::text::point)[0]::int)) h,
+                 lateral inspect.heap_tuple_infomask_flags(h.t_infomask, h.t_infomask2) f
+               where e.isbn = $1 and h.lp = (e.ctid::text::point)[1]::int`,
+              [probed],
+            )
+          )[0];
         } finally {
           await db.exec("rollback");
         }
       };
-      assert.equal(await held(1, X2), 1);
-      assert.equal(await held(2, unused(3)), 1);
+      assert.deepEqual(await held(1, X2), {
+        made: false,
+        locks: ["HEAP_XMAX_EXCL_LOCK", "HEAP_XMAX_LOCK_ONLY"],
+      });
+      assert.equal((await held(2, unused(3))).made, true);
     },
   );
 
@@ -544,6 +593,40 @@ async function main() {
           ]),
         /permission denied/,
         "a reader moves their book to another edition",
+      );
+      // Nor read the one the database gave, through their own statement.
+      await refused(
+        () =>
+          as(
+            BEN,
+            "insert into books (title, created_by) values ('読む', $1) returning edition_id",
+            [BEN],
+          ),
+        /permission denied/,
+        "a reader reads back the edition of a new book",
+      );
+      await refused(
+        () =>
+          as(
+            BEN,
+            `insert into books (id, title, created_by) values ($1, '読む', $2)
+             on conflict (id) do update set title = excluded.edition_id::text`,
+            [NOTE2, BEN],
+          ),
+        /permission denied/,
+        "a reader reads an edition through an upsert",
+      );
+      await refused(
+        () =>
+          as(
+            BEN,
+            `insert into books (id, title, created_by) values ($1, '読む', $2)
+             on conflict (id) do update set title = books.title
+             where excluded.edition_id = $3`,
+            [NOTE2, BEN, edition],
+          ),
+        /permission denied/,
+        "a reader tests an edition through an upsert",
       );
       const named = id(4, 8);
       await db.query(
@@ -647,6 +730,23 @@ async function main() {
         await rows("select private.undo_join($1) as n", [first.id]),
         [{ n: 2 }],
       );
+      // Each move back is written down under its join, and each pair is
+      // kept apart.
+      assert.deepEqual(await history(NOTE2), [
+        { kind: "join", join_id: second.id },
+        { kind: "unjoin", join_id: second.id },
+      ]);
+      for (const book of [ORWELL2, later])
+        assert.deepEqual((await history(book)).slice(-1), [
+          { kind: "unjoin", join_id: first.id },
+        ]);
+      assert.equal(
+        await count(
+          `select count(*) from private.works_apart a join private.work_joins j
+           on a.work_a = least(j.kept, j.gone) and a.work_b = greatest(j.kept, j.gone)`,
+        ),
+        2,
+      );
       assert.equal((await placeOf(ORWELL2)).work, (await placeOf(later)).work);
       assert.notEqual((await placeOf(ORWELL2)).work, joined);
       assert.equal((await placeOf(ORWELL1)).work, joined);
@@ -679,6 +779,7 @@ async function main() {
         { editions: [(await placeOf(NOTE1)).edition], isbns: [] },
       );
       assert.equal((await placeOf(NOTE1)).work, (await placeOf(WOOD)).work);
+      assert.deepEqual(await history(NOTE1), [{ kind: "join", join_id: made }]);
       await holds("a join of a book without an ISBN");
       // A book of the work registered since stays where it went.
       const since = id(4, 12);
@@ -693,6 +794,11 @@ async function main() {
       );
       assert.notEqual((await placeOf(NOTE1)).work, (await placeOf(WOOD)).work);
       assert.equal((await placeOf(since)).work, (await placeOf(WOOD)).work);
+      assert.deepEqual(await history(NOTE1), [
+        { kind: "join", join_id: made },
+        { kind: "unjoin", join_id: made },
+      ]);
+      assert.deepEqual(await history(since), []);
       await holds("undoing a join of a book without an ISBN");
     },
   );
@@ -723,6 +829,26 @@ async function main() {
         await count(
           "select count(*) from editions where work_id = $1 and isbn is null",
           [fresh],
+        ),
+        1,
+      );
+      // Each book parted is written down, and the two works kept apart.
+      for (const book of [ORWELL2, NOTE2])
+        assert.deepEqual((await history(book)).slice(-2), [
+          { kind: "join", join_id: (await history(book)).at(-2)?.join_id },
+          { kind: "part", join_id: null },
+        ]);
+      assert.equal(
+        await count(
+          "select count(*) from private.work_changes where kind = 'part' and to_work = $1 and from_work = $2",
+          [fresh, whole],
+        ),
+        3,
+      );
+      assert.equal(
+        await count(
+          "select count(*) from private.works_apart where work_a = least($1::uuid, $2::uuid) and work_b = greatest($1::uuid, $2::uuid)",
+          [fresh, whole],
         ),
         1,
       );

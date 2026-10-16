@@ -153,7 +153,9 @@ revoke all on function private.isbn_edition(text) from public, anon, authenticat
 -- Before a book is inserted, it is given its edition and work: its ISBN's,
 -- or for a book without one, an edition and a work of its own. A book sent
 -- again (the app's upsert passes over duplicates) meets its own row and is
--- given that row's, so nothing is made for nothing. Whatever edition_id or
+-- given that row's, so nothing is made for nothing (two sends of one book at
+-- once, from two requests, may leave an edition and a work without a book,
+-- which nobody reads). Whatever edition_id or
 -- work_id an insert names is replaced: only this decides them. What it
 -- writes is ids, which show nothing.
 create or replace function private.book_work() returns trigger
