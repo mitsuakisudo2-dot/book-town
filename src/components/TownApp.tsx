@@ -21,7 +21,7 @@ import {
 } from "../lib/store";
 import { useJournalSender } from "../lib/library-journal";
 import { saveWarning } from "../lib/persistence";
-import { playTabMove, tabStep } from "../lib/tab-motion";
+import { playTabMove, tabMove } from "../lib/tab-motion";
 import { useAccountState } from "../lib/account-session";
 import {
   ME_ID,
@@ -362,20 +362,15 @@ export default function TownApp({
     if (books === "library") replaceAddress({ params: { books: null } });
     window.scrollTo({ top: 0 });
   };
-  // Moving to another tab of the bottom bar slides its page in from that
-  // side and springs its icon (tab-motion.ts). Only where the bar shows.
-  const mainRef = useRef<HTMLElement>(null);
+  // Moving to another tab of the bottom bar slides the round mark behind
+  // the chosen tab along the bar to it (tab-motion.ts). Only where it shows.
   const navRef = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     const index = links.findIndex((l) => l.section === section);
-    const step = tabStep(index < 0 ? null : index);
+    const move = tabMove(index < 0 ? null : index);
     const nav = navRef.current;
     if (!nav || getComputedStyle(nav).display === "none") return;
-    playTabMove(
-      step,
-      mainRef.current,
-      nav.querySelector('a[aria-current="page"] svg'),
-    );
+    playTabMove(move, nav);
   }, [section]);
   const clickOf = (link: (typeof links)[number]) =>
     link.section === "home"
@@ -532,7 +527,6 @@ export default function TownApp({
           // Both of Home's addresses draw the same Home, whichever tab shows.
           className={"town-main view-" + (view === "timeline" ? "town" : view)}
           key={view + selectedId}
-          ref={mainRef}
         >
           {visitor && ownPage ? (
             <VisitorPage page={ownPage} />
