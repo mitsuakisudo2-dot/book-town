@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -43,7 +49,15 @@ import { CorkBoard } from "./CorkBoard";
 import { Entrances } from "./Entrances";
 import { FeatureView } from "./FeatureBand";
 import { LiveBox, type LiveSlot } from "./LiveBox";
-import { useHeld, useTownReading } from "./hooks";
+import { useHeld, useNow, useTownReading } from "./hooks";
+import { useAccountState } from "../../lib/account-session";
+import { supabaseConfigured } from "../../lib/supabase/config";
+import {
+  keepSnapshot,
+  readKeptSnapshot,
+  snapshotFor,
+  snapshotOf,
+} from "../../lib/home-snapshot";
 import { Letters, LetterSkeletons, type Shared } from "./Letters";
 import { ReadingLine } from "./ReadingLine";
 import type { Picked } from "./ShopFront";
@@ -166,6 +180,8 @@ const ScanSession = dynamic(
   { ssr: false },
 );
 
+const still = () => () => {};
+
 /** Whether the 路地 has been drawn on this page before. */
 let alleyDrawn = false;
 
@@ -256,6 +272,26 @@ export function HomePane({
       clearTimeout(timer);
     };
   }, [drawn, alleyReady]);
+  // Whose Home this is, for the 便り kept from the last time (home-snapshot):
+  // null while the account is being checked or cannot be.
+  const account = useAccountState();
+  const owner =
+    account.status === "signed-in"
+      ? account.user.id
+      : account.status === "signed-out"
+        ? "visitor"
+        : null;
+  const kept = useSyncExternalStore(still, readKeptSnapshot, () => null);
+  const now = useNow();
+  const snapshot =
+    supabaseConfigured && !drawn && now !== null
+      ? snapshotFor(kept, account.status === "loading" ? null : owner, now)
+      : null;
+  // Home as drawn is kept for the next time; the town of a demo is not.
+  useEffect(() => {
+    if (!supabaseConfigured || !drawn || owner === null) return;
+    keepSnapshot(snapshotOf(state, drawn, owner, drawn.at));
+  }, [state, drawn, owner]);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [sheet, setSheet] = useState<"read" | "scan" | null>(null);
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
@@ -350,6 +386,24 @@ export function HomePane({
           onPick={setPicked}
           onTakeLine={onTakeLine}
         />
+      ) : snapshot ? (
+        // The 便り kept from last time, read-only until the town is read.
+        <div className="home-kept" inert aria-busy="true">
+          <WovenLetters
+            {...shared}
+            state={snapshot.state}
+            followed={snapshot.followed.flatMap(
+              (id) => letterOf(snapshot.state, id) ?? [],
+            )}
+            town={snapshot.town.flatMap(
+              (id) => letterOf(snapshot.state, id) ?? [],
+            )}
+            slots={[]}
+            mark={null}
+            onPick={() => undefined}
+            onTakeLine={() => false}
+          />
+        </div>
       ) : (
         <LetterSkeletons />
       )}
