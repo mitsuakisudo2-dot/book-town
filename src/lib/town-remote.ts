@@ -443,6 +443,11 @@ export function townFromRows(
     .map((row) => shopFrom(row, row.public_shelves, row.public_scene_books, 0));
   const shopIds = new Set(shops.map((shop) => shop.id));
 
+  // What a blocked reader did to the person's posts is not shown to them.
+  const blockedIds = new Set(rows.blocks.map((row) => row.blocked_id));
+  const reactionsShown = rows.postReactions.filter(
+    (row) => !blockedIds.has(row.user_id),
+  );
   const visible = rows.posts.filter(
     (row) =>
       (row.book_id === null || bookIds.has(row.book_id)) &&
@@ -453,7 +458,7 @@ export function townFromRows(
   );
   const posts: Post[] = visible
     .filter((row) => row.parent_id === null || topLevel.has(row.parent_id))
-    .map((row) => postFromRow(row, userId, rows.postReactions))
+    .map((row) => postFromRow(row, userId, reactionsShown))
     .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   const postIds = new Set(posts.map((post) => post.id));
   const reacted = (kind: "like" | "want") =>

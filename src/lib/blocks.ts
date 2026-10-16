@@ -1,5 +1,5 @@
 import { isDatabaseId } from "./paths";
-import { ME_ID, type Reader, type TownState } from "./types";
+import { ME_ID, type Post, type Reader, type TownState } from "./types";
 
 // A block works both ways (supabase/migrations/20261012000000_initial_schema
 // .sql): neither person reads the other's shop, 便り, records or posters, and
@@ -44,8 +44,11 @@ export function withoutReaders(
   const shopsGone = new Set(
     state.shops.filter((shop) => gone.has(shop.ownerId)).map((shop) => shop.id),
   );
+  const likedByThem = (post: Post) =>
+    post.likers?.some((liker) => gone.has(liker.readerId)) ?? false;
   const changed =
     postsGone.size > 0 ||
+    state.posts.some(likedByThem) ||
     shopsGone.size > 0 ||
     state.readingRecords.some((record) => gone.has(record.readerId)) ||
     state.readingNow.some((entry) => gone.has(entry.readerId)) ||
@@ -54,12 +57,20 @@ export function withoutReaders(
   if (!changed) return state;
   return {
     ...state,
-    posts: state.posts.filter(
-      (post) =>
-        post.authorId === ME_ID ||
-        (!postsGone.has(post.id) &&
-          !(post.parentId !== null && postsGone.has(post.parentId))),
-    ),
+    posts: state.posts
+      .filter(
+        (post) =>
+          post.authorId === ME_ID ||
+          (!postsGone.has(post.id) &&
+            !(post.parentId !== null && postsGone.has(post.parentId))),
+      )
+      // Who liked the viewer's own 便り, less them (the next reading leaves
+      // their 読みたい out of the count too).
+      .map((post) => {
+        if (!post.likers || !likedByThem(post)) return post;
+        const likers = post.likers.filter((liker) => !gone.has(liker.readerId));
+        return { ...post, likers, likes: likers.length };
+      }),
     shops: state.shops.filter((shop) => !shopsGone.has(shop.id)),
     following: state.following.filter((id) => !shopsGone.has(id)),
     readingRecords: state.readingRecords.filter(

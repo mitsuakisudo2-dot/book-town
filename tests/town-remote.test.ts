@@ -2489,6 +2489,26 @@ async function main() {
     assert.deepEqual(town.blocked, [BEN]);
     // Their profile stays, so the block can be lifted from it.
     assert.ok(town.readers.some((reader) => reader.id === BEN));
+    // What they did to the person's own 便り is not shown.
+    const own = post("00000000-0000-4000-8000-0000000000e1", AKI);
+    const reacted = townFromRows(
+      rows({
+        posts: [own],
+        postReactions: (["like", "want"] as const).map((kind) => ({
+          user_id: BEN,
+          post_id: own.id,
+          kind,
+          taps: 1,
+          created_at: at,
+        })),
+        blocks: [{ blocked_id: BEN }],
+      }),
+      ids,
+    );
+    assert.deepEqual(
+      reacted.posts.map((entry) => [entry.likes, entry.wants, entry.likers]),
+      [[0, 0, []]],
+    );
     const unknown = townFromRows(
       rows({
         blocks: [{ blocked_id: "00000000-0000-4000-8000-0000000000c0" }],
@@ -2576,6 +2596,13 @@ async function main() {
             post(myReply, AKI, { parent_id: benPost }),
             post(calPost, CAL),
           ],
+          postReactions: [BEN, CAL].map((user_id) => ({
+            user_id,
+            post_id: myReply,
+            kind: "like",
+            taps: 2,
+            created_at: at,
+          })),
           records: [
             {
               id: uuid(0x4001),
@@ -2619,6 +2646,12 @@ async function main() {
       assert.deepEqual(
         blocked.posts.map((entry) => entry.id),
         [myReply, calPost],
+      );
+      // Their like of the reader's reply is no longer shown.
+      const reply = blocked.posts[0];
+      assert.deepEqual(
+        [reply.likes, reply.likers?.map((liker) => liker.readerId)],
+        [1, [CAL]],
       );
       assert.deepEqual(blocked.shops, []);
       assert.deepEqual(blocked.following, []);
