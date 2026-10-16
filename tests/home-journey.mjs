@@ -2381,6 +2381,42 @@ try {
   );
 
   await check(
+    "Into and out of 書店めぐり, whose page holds the screen still while drawn, the round mark still slides rather than jumps",
+    () =>
+      withPage({}, async () => {
+        const bar = page.locator(".town-bottom-nav");
+        /** Starts noting, frame by frame, where the moving mark is. */
+        const note = () =>
+          page.evaluate(() => {
+            window.__markAt = [];
+            const start = performance.now();
+            const frame = () => {
+              const mark = document.querySelector(".nav-mark");
+              if (mark)
+                window.__markAt.push(
+                  Math.round(mark.getBoundingClientRect().left),
+                );
+              if (performance.now() - start < 2500)
+                requestAnimationFrame(frame);
+            };
+            requestAnimationFrame(frame);
+          });
+        const places = () => page.evaluate(() => new Set(window.__markAt).size);
+        await go("/profiles/me/");
+        for (const [name, address] of [
+          ["書店めぐり", /\/walk\//],
+          ["わたし", /\/profiles\/me\//],
+        ]) {
+          await note();
+          await bar.getByRole("link", { name }).tap();
+          await expect(page).toHaveURL(address);
+          await expect(page.locator(".nav-mark")).toHaveCount(0);
+          // Seen at its start, on its way and near its end: it slid.
+          expect(await places()).toBeGreaterThanOrEqual(3);
+        }
+      }),
+  );
+  await check(
     "With less motion asked for, the bottom bar's mark does not slide",
     () =>
       withPage({ reducedMotion: "reduce" }, async () => {
