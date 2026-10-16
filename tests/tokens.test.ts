@@ -63,6 +63,28 @@ const coloursWith = (palette: string): Record<string, string> => ({
   ...base,
   ...(paletteBlocks[palette] ?? {}),
 });
+const night = coloursOf(
+  blocks.find(
+    ([, selector]) => selector.trim() === ':root[data-theme="dark"]',
+  )?.[2] ?? "",
+);
+/** Each palette's night: `:root[data-palette="…"][data-theme="dark"]`. */
+const nightPaletteBlocks = Object.fromEntries(
+  blocks
+    .map(([, selector, body]) => [
+      selector.match(
+        /^:root\[data-palette="([\w-]+)"\]\[data-theme="dark"\]\s*$/,
+      )?.[1],
+      coloursOf(body),
+    ])
+    .filter(([id]) => id),
+) as Record<string, Record<string, string>>;
+/** The colours at night with `palette` chosen, in the cascade's order. */
+const nightColoursWith = (palette: string): Record<string, string> => ({
+  ...coloursWith(palette),
+  ...night,
+  ...(nightPaletteBlocks[palette] ?? {}),
+});
 const luminance = (hex: string) => {
   const [r, g, b] = [1, 3, 5].map((at) => {
     const channel = parseInt(hex.slice(at, at + 2), 16) / 255;
@@ -94,6 +116,94 @@ check(
         );
       }
     }
+  },
+);
+
+check(
+  "every listed pair is at least 4.5:1 at night too, in each of the six palettes",
+  () => {
+    const pairs = [...tokens.matchAll(/@pair (--[\w-]+) (--[\w-]+)/g)];
+    // The night redefines the paper, the ink, the lines and the palette:
+    // every name the day sets except the swatches, the fonts' companions
+    // and the colours that stay the same day and night.
+    const stays = new Set(["--on-dark", "--on-photo", "--muted"]);
+    for (const name of Object.keys(base))
+      if (!name.startsWith("--palette-") && !stays.has(name))
+        assert.ok(night[name], `the night sets ${name}`);
+    for (const { id } of PALETTES) {
+      const colours = nightColoursWith(id);
+      for (const [, text, back] of pairs) {
+        const ratio = contrast(colours[text], colours[back]);
+        assert.ok(
+          ratio >= 4.5,
+          `${id} at night: ${text} on ${back} is ${ratio.toFixed(2)}:1, under 4.5:1`,
+        );
+      }
+    }
+    assert.deepEqual(
+      Object.keys(nightPaletteBlocks).sort(),
+      Object.keys(paletteBlocks).sort(),
+      "a night block for every palette that has a day block",
+    );
+    for (const [id, colours] of Object.entries(nightPaletteBlocks))
+      assert.deepEqual(
+        Object.keys(colours).sort(),
+        ["--green", "--green-soft", "--on-green"],
+        `${id}'s night sets only the palette's colours`,
+      );
+  },
+);
+
+check(
+  "a shop's own colour keeps its words readable, by day and at night",
+  () => {
+    const shopThemes = (prefix: string) =>
+      Object.fromEntries(
+        [
+          ...tokens
+            .replace(/\/\*[\s\S]*?\*\//g, "")
+            .matchAll(/(^|\n)([^{}\n]*)\.theme-([\w-]+)\s*\{([^}]*)\}/g),
+        ]
+          .filter(([, , selector]) => selector.trim() === prefix)
+          .map(([, , , id, body]) => [id, coloursOf(body)]),
+      );
+    const day = shopThemes("");
+    const atNight = shopThemes(':root[data-theme="dark"]');
+    assert.deepEqual(Object.keys(day).sort(), ["ink", "ochre", "rose", "sage"]);
+    assert.deepEqual(Object.keys(atNight).sort(), Object.keys(day).sort());
+    for (const [id, own] of Object.entries(day))
+      for (const [when, town, theme] of [
+        ["by day", coloursWith(FIRST_PALETTE), own],
+        [
+          "at night",
+          nightColoursWith(FIRST_PALETTE),
+          { ...own, ...atNight[id] },
+        ],
+      ] as const) {
+        for (const back of [
+          theme["--theme-pale"],
+          town["--sheet"],
+          town["--paper"],
+        ]) {
+          const ratio = contrast(theme["--theme-deep"], back);
+          assert.ok(
+            ratio >= 4.5,
+            `${id} ${when}: its words on ${back} are ${ratio.toFixed(2)}:1`,
+          );
+        }
+        for (const words of [town["--ink"], town["--ink-2"]]) {
+          const ratio = contrast(words, theme["--theme-pale"]);
+          assert.ok(
+            ratio >= 4.5,
+            `${id} ${when}: ${words} on its pale is ${ratio.toFixed(2)}:1`,
+          );
+        }
+        const sign = contrast(town["--on-dark"], theme["--theme-fill"]);
+        assert.ok(
+          sign >= 4.5,
+          `${id} ${when}: its sign is ${sign.toFixed(2)}:1`,
+        );
+      }
   },
 );
 

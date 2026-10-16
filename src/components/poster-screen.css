@@ -34,7 +34,7 @@
 }
 .poster-screen-author small {
   font-size: 11px;
-  color: #929c84;
+  color: var(--ink-2);
 }
 .poster-screen-kind {
   display: flex;
@@ -43,7 +43,7 @@
   gap: 4px 10px;
   margin-top: 24px;
   font-size: 11px;
-  color: #929c84;
+  color: var(--ink-2);
 }
 .poster-screen-kind .poster-tag {
   margin-bottom: 0;
@@ -63,8 +63,8 @@
   margin-top: 16px;
   padding: 9px 13px;
   border-radius: 5px;
-  background: #f3ead9;
-  color: #7c5a46;
+  background: var(--band);
+  color: var(--ink-2);
   font-size: 12px;
   line-height: 1.7;
 }
@@ -74,7 +74,7 @@
 .poster-screen-fact {
   margin-top: 12px;
   font-size: 11px;
-  color: #929c84;
+  color: var(--ink-2);
 }
 .poster-screen-actions {
   display: flex;
@@ -108,10 +108,10 @@
   gap: 14px;
   padding: 8px 6px;
   border-radius: 5px;
-  color: #8d9a80;
+  color: var(--ink-2);
 }
 .poster-screen-books a:hover {
-  background: #eef1e6;
+  background: var(--green-soft);
 }
 .poster-screen-books .poster-screen-jacket {
   width: 42px;
@@ -129,7 +129,7 @@
 }
 .poster-screen-books small {
   font-size: 11px;
-  color: #95a084;
+  color: var(--ink-2);
 }
 @media (max-width: 760px) {
   .poster-screen-layout {
@@ -171,7 +171,7 @@
   margin: 10px 0 0;
   font-size: 12px;
   line-height: 1.8;
-  color: #5f6a55;
+  color: var(--ink-2);
 }
 @media (max-width: 640px) {
   .book-posters-row {
@@ -206,10 +206,10 @@
   align-items: center;
   gap: 16px;
   padding: 30px 24px;
-  border: 1px dashed #d5d2c3;
-  background: #f3f0e6;
+  border: 1px dashed var(--line-2);
+  background: var(--band);
   text-align: center;
-  color: #788374;
+  color: var(--ink-2);
 }
 .profile-posters-empty p {
   max-width: 30em;

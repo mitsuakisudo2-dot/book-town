@@ -5,48 +5,43 @@
   line-height: 1.85;
 }
 .town-shell .page-subtitle,
-.town-shell .street-intro p,
 .town-shell .reading-optional,
 .town-shell .reading-mode small,
 .town-shell .reading-muted,
 .town-shell .social-note,
 .town-shell .empty-state p {
   font-size: 14px;
-  color: #626e59;
+  color: var(--ink-2);
 }
 .town-shell .book-page-hero .book-summary,
 .town-shell .book-page-author,
 .town-shell .book-path-heading p {
   font-size: 14px;
-  color: #626e59;
+  color: var(--ink-2);
   line-height: 1.85;
 }
 .town-shell .book-page-hero .jacket-disclaimer {
   font-size: 12px;
-  color: #626e59;
+  color: var(--ink-2);
   line-height: 1.8;
 }
 .town-shell .search-box input {
   font-size: 16px;
-}
-.town-shell .reading-mode.is-together small {
-  color: #f0f5eb;
 }
 .town-shell .composer-count,
 .town-shell .picker-chosen small,
 .town-shell .demo-tag,
 .town-shell .street-shop-footer {
   font-size: 12px;
-  color: #626e59;
+  color: var(--ink-2);
 }
 .town-shell .composer-book,
 .town-shell .composer-poster,
 .town-shell .composer-spoiler,
-.town-shell .street-follow,
-.town-shell .street-follow-filter {
+.town-shell .street-follow {
   min-height: 44px;
   font-size: 13px;
-  color: #536448;
+  color: var(--green);
 }
 .town-shell .field,
 .town-shell .picker-search input {
@@ -69,16 +64,10 @@
   }
   .town-shell .town-bottom-nav a {
     font-size: 12px;
-    color: #626e59;
+    color: var(--ink-2);
   }
   .town-shell .town-bottom-nav span {
     font-size: 12px;
-  }
-  .town-shell .social-page > .eyebrow {
-    display: none;
-  }
-  .town-shell .social-page .page-subtitle {
-    margin-bottom: 16px;
   }
 }
 @media (max-width: 420px) {
@@ -167,7 +156,7 @@
   font-size: 17px;
   font-weight: 500;
   margin-bottom: 12px;
-  color: #3e5941;
+  color: var(--forest);
 }
 .wishlist-invitations ul {
   display: grid;
@@ -180,15 +169,15 @@
   gap: 14px;
   align-items: center;
   padding: 12px 14px;
-  border: 1px solid #eadfc4;
+  border: 1px solid var(--pop-line);
   border-radius: 6px;
-  background: #fffaf0;
-  color: #3a2e22;
+  background: var(--pop);
+  color: var(--ink);
 }
 .wishlist-invitations .book-jacket {
   width: 48px;
   flex: none;
-  box-shadow: 1px 2px 5px #0002;
+  box-shadow: 1px 2px 5px color-mix(in srgb, var(--shade) 13%, transparent);
 }
 .wishlist-invitations a > span {
   display: grid;
@@ -217,5 +206,5 @@
 }
 .wishlist-invitations small {
   font-size: 11px;
-  color: #7b7262;
+  color: var(--ink-2);
 }

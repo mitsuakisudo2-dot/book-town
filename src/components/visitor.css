@@ -8,7 +8,7 @@
 .visitor-page {
   max-width: 460px;
   margin: 0 auto;
-  color: #7d8e70;
+  color: var(--ink-2);
 }
 .visitor-page > .button {
   margin-bottom: 18px;
@@ -16,10 +16,10 @@
 .visitor-page .visitor-page-note {
   font-size: 11px;
   line-height: 2;
-  color: #98a88a;
+  color: var(--ink-2);
 }
 .visitor-page .visitor-page-note a {
-  color: #5f7b55;
+  color: var(--green);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -29,7 +29,7 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  border: 1px dashed #b9c4ab;
-  color: #7d8e70;
+  border: 1px dashed var(--line-2);
+  color: var(--ink-2);
   flex-shrink: 0;
 }

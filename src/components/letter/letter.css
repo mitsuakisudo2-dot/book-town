@@ -180,13 +180,13 @@
   overflow: hidden;
   -webkit-mask-image: linear-gradient(
     to bottom,
-    black calc(100% - 1.6em),
-    rgb(0 0 0 / 0.35)
+    var(--shade) calc(100% - 1.6em),
+    color-mix(in srgb, var(--shade) 35%, transparent)
   );
   mask-image: linear-gradient(
     to bottom,
-    black calc(100% - 1.6em),
-    rgb(0 0 0 / 0.35)
+    var(--shade) calc(100% - 1.6em),
+    color-mix(in srgb, var(--shade) 35%, transparent)
   );
 }
 .letter-more,
@@ -610,7 +610,7 @@
   inset: 0;
   z-index: 60;
   height: 100dvh;
-  box-shadow: -8px 0 24px color-mix(in srgb, var(--ink) 12%, transparent);
+  box-shadow: -8px 0 24px color-mix(in srgb, var(--shade) 12%, transparent);
   touch-action: pan-y pinch-zoom;
   animation: post-page-in 0.18s cubic-bezier(0.2, 0, 0, 1);
   transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);

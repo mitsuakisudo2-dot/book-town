@@ -2255,6 +2255,190 @@ try {
   );
 
   await check(
+    "The night: 端末に合わせる follows a dark device before the first paint, and every word on the main screens is readable",
+    () =>
+      withPage({ colorScheme: "dark" }, async () => {
+        await page.addInitScript(() => {
+          new MutationObserver((_, observer) => {
+            if (!document.body) return;
+            window.__themeAtBody =
+              document.documentElement.dataset.theme ?? "none";
+            observer.disconnect();
+          }).observe(document, { childList: true, subtree: true });
+        });
+        /** Words under 4.5:1 on what is behind them, outside the pictures
+            (wood, spines, covers, posters, the walk's scenery, avatars),
+            which keep their day colours at night. */
+        const unreadable = () =>
+          page.evaluate(() => {
+            const rgb = (value) => {
+              const parts = (value.match(/[\d.]+/g) ?? []).map(Number);
+              return value.startsWith("color(")
+                ? [
+                    parts[0] * 255,
+                    parts[1] * 255,
+                    parts[2] * 255,
+                    parts[3] ?? 1,
+                  ]
+                : [parts[0], parts[1], parts[2], parts[3] ?? 1];
+            };
+            const lum = ([r, g, b]) => {
+              const c = [r, g, b].map((v) => {
+                const x = v / 255;
+                return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+              });
+              return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+            };
+            const pictures =
+              ".reader-avatar, .book-spine, .book-jacket, .shelf-scroll, .street-shelf, .poster-sheet, .poster-swatch, .walk-view, .store-canvas, .scan-shelf, .profile-shop-sign, img, svg";
+            const found = [];
+            for (const element of document.querySelectorAll("main *, nav *")) {
+              const own = [...element.childNodes].some(
+                (node) => node.nodeType === 3 && node.textContent.trim(),
+              );
+              if (!own || element.closest(pictures)) continue;
+              const style = getComputedStyle(element);
+              const box = element.getBoundingClientRect();
+              if (!box.width || style.visibility === "hidden") continue;
+              if (Number(style.opacity) <= 0.5) continue;
+              let back = element;
+              let bg = "rgba(0, 0, 0, 0)";
+              let image = false;
+              while (back && rgb(bg)[3] === 0) {
+                const backStyle = getComputedStyle(back);
+                bg = backStyle.backgroundColor;
+                if (backStyle.backgroundImage.includes("url(")) image = true;
+                back = back.parentElement;
+              }
+              // Words on a photo are checked by their own veil, not here.
+              if (image) continue;
+              const a = lum(rgb(style.color));
+              const b = lum(rgb(bg));
+              const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+              if (ratio < 4.5)
+                found.push(
+                  `${ratio.toFixed(2)} ${element.className} "${element.textContent.trim().slice(0, 20)}"`,
+                );
+            }
+            return [...new Set(found)];
+          });
+        const routes = [
+          "/",
+          "/timeline/",
+          "/search/",
+          "/books/walden/",
+          "/shops/shop-rain/",
+          "/profiles/me/",
+          "/profiles/r-haru/",
+          "/posters/",
+          "/notifications/",
+          "/reading/",
+        ];
+        for (const route of routes) {
+          await go(route);
+          expect(await page.evaluate(() => window.__themeAtBody)).toBe("dark");
+          await page.waitForTimeout(400);
+          expect(await unreadable(), `${route} at night`).toEqual([]);
+        }
+        await page.screenshot({ path: path.join(output, "night-home.png") });
+        // Each palette's night, on the screens with the most of its colour.
+        for (const palette of ["brick", "ai", "fuji", "yamabuki", "sumi"]) {
+          await page.evaluate(
+            (palette) =>
+              localStorage.setItem(
+                "book-town-appearance-v1",
+                JSON.stringify({ palette }),
+              ),
+            palette,
+          );
+          for (const route of ["/", "/books/walden/", "/profiles/me/"]) {
+            await go(route);
+            await page.waitForTimeout(400);
+            expect(await unreadable(), `${route} at night, ${palette}`).toEqual(
+              [],
+            );
+          }
+        }
+
+        // The device turns light while the town is open: it follows.
+        await page.emulateMedia({ colorScheme: "light" });
+        await expect(page.locator("html")).not.toHaveAttribute(
+          "data-theme",
+          /./,
+        );
+        await page.emulateMedia({ colorScheme: "dark" });
+        await expect(page.locator("html")).toHaveAttribute(
+          "data-theme",
+          "dark",
+        );
+        // 昼 stays the day on a dark device; 夜 stays the night on a light one.
+        await page.evaluate(() =>
+          localStorage.setItem(
+            "book-town-appearance-v1",
+            JSON.stringify({ palette: "green", brightness: "day" }),
+          ),
+        );
+        await page.reload();
+        await expect(page.locator("main")).toBeVisible();
+        expect(await page.evaluate(() => window.__themeAtBody)).toBe("none");
+        await page.evaluate(() =>
+          localStorage.setItem(
+            "book-town-appearance-v1",
+            JSON.stringify({ palette: "green", brightness: "night" }),
+          ),
+        );
+        await page.emulateMedia({ colorScheme: "light" });
+        await page.reload();
+        await expect(page.locator("main")).toBeVisible();
+        expect(await page.evaluate(() => window.__themeAtBody)).toBe("dark");
+
+        // 設定's 明るさ: three choices, each a whole row, kept with the
+        // palette; the page changes at once.
+        await go("/profiles/me/");
+        await page
+          .locator(".profile-minor-actions")
+          .getByRole("button", { name: "設定" })
+          .tap();
+        const brightness = page
+          .getByRole("dialog", { name: "設定" })
+          .getByRole("group", { name: "明るさ" });
+        await expect(brightness.getByRole("radio")).toHaveCount(3);
+        await expect(
+          brightness.getByRole("radio", { name: "夜", exact: true }),
+        ).toBeChecked();
+        await expectReadable(brightness.locator("label"), "明るさ at night");
+        for (const height of await brightness
+          .locator("label")
+          .evaluateAll((labels) =>
+            labels.map((label) => label.getBoundingClientRect().height),
+          ))
+          expect(height).toBeGreaterThanOrEqual(44);
+        await brightness.getByText("昼", { exact: true }).tap();
+        await expect(page.locator("html")).not.toHaveAttribute(
+          "data-theme",
+          /./,
+        );
+        await expectReadable(brightness.locator("label"), "明るさ by day");
+        await brightness.getByText("端末に合わせる", { exact: true }).tap();
+        await expect(page.locator("html")).not.toHaveAttribute(
+          "data-theme",
+          /./,
+        );
+        await page.emulateMedia({ colorScheme: "dark" });
+        await expect(page.locator("html")).toHaveAttribute(
+          "data-theme",
+          "dark",
+        );
+        expect(
+          await page.evaluate(() =>
+            JSON.parse(localStorage.getItem("book-town-appearance-v1")),
+          ),
+        ).toEqual({ palette: "green", brightness: "system" });
+        await page.keyboard.press("Escape");
+      }),
+  );
+
+  await check(
     "No hydration errors, uncaught exceptions or console errors",
     async () => {
       expect(errors).toEqual([]);
