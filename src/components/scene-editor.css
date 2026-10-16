@@ -239,7 +239,7 @@
   background: var(--paper);
   padding: 15px 0 8px;
   border-top: 1px solid var(--line);
-  z-index: 12;
+  z-index: var(--layer-sticky);
 }
 .scene-editor-footer > div {
   display: flex;

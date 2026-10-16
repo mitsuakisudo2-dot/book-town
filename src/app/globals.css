@@ -104,7 +104,7 @@ input[type="checkbox"] {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  z-index: 20;
+  z-index: var(--layer-sidebar);
 }
 .brand {
   display: flex;
@@ -255,7 +255,7 @@ input[type="checkbox"] {
   gap: 20px;
   position: sticky;
   top: 0;
-  z-index: 16;
+  z-index: var(--layer-topbar);
   background: color-mix(in srgb, var(--paper) 95%, transparent);
   backdrop-filter: blur(12px);
 }
@@ -459,7 +459,7 @@ input[type="checkbox"] {
   inset: 0;
   background: color-mix(in srgb, var(--shade) 33%, transparent);
   backdrop-filter: blur(4px);
-  z-index: 80;
+  z-index: var(--layer-modal);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -598,7 +598,7 @@ input[type="checkbox"] {
   bottom: 25px;
   left: calc(50% + 65px);
   transform: translateX(-50%);
-  z-index: 120;
+  z-index: var(--layer-toast);
   background: var(--green);
   color: var(--on-green);
   box-shadow: 0 8px 30px color-mix(in srgb, var(--shade) 15%, transparent);
@@ -1654,7 +1654,7 @@ div.book-jacket:hover {
     bottom: 0;
     left: 0;
     right: 0;
-    z-index: 35;
+    z-index: var(--layer-tabbar);
     display: flex;
     justify-content: space-around;
     align-items: center;

@@ -305,7 +305,7 @@ mark.hidden-words.is-open {
   position: fixed;
   right: max(28px, env(safe-area-inset-right, 0px));
   bottom: calc(28px + env(safe-area-inset-bottom, 0px));
-  z-index: 34;
+  z-index: var(--layer-float);
   display: grid;
   place-items: center;
   width: 60px;

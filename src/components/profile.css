@@ -611,7 +611,7 @@
   background: var(--sheet);
   padding: 16px 0 6px;
   border-top: 1px solid var(--line);
-  z-index: 2;
+  z-index: var(--layer-sticky);
 }
 .profile-note-detail {
   text-align: center;
