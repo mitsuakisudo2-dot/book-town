@@ -193,7 +193,7 @@ async function main() {
         await db.exec(
           `select private.keep_copy('20990101000000_merges', ${COPIED});
          delete from posts where id = '${P4}';
-         select private.check_copy('20990101000000_merges', array['public.posts']::regclass[]);`,
+         select private.check_copy('20990101000000_merges', '{}', array['public.posts']::regclass[]);`,
         );
         const [posts] = await rows<{ checked: Record<string, unknown> }>(
           "select checked from keep.copies where label = '20990101000000_merges' and source = 'public.posts'",
@@ -204,6 +204,14 @@ async function main() {
       } finally {
         await db.exec("rollback");
       }
+      // Links allowed to go do not let rows go.
+      await refused(
+        `select private.keep_copy('20990101000000_relinks', ${COPIED});
+         delete from posts where id = '${P4}';
+         select private.check_copy('20990101000000_relinks', array['public.posts']::regclass[]);`,
+        /public\.posts: 1 rows and 0 links lost/,
+      );
+      assert.deepEqual(await snapshot(), before);
     },
   );
 
@@ -322,10 +330,19 @@ async function main() {
     await db.exec(`
       update books set title = '別の題' where id = '${B1}';
       delete from post_reactions where user_id = '${CHI}';
+      alter table books disable trigger books_touch;
     `);
     await rows(
       `select * from private.restore_copy('${LABEL}', array['public.books']::regclass[])`,
     );
+    // A trigger someone had turned off stays off.
+    assert.deepEqual(
+      await rows(
+        "select tgenabled from pg_trigger where tgname = 'books_touch'",
+      ),
+      [{ tgenabled: "D" }],
+    );
+    await db.exec("alter table books enable trigger books_touch");
     assert.equal(
       (
         await rows<{ title: string }>("select title from books where id = $1", [
@@ -502,13 +519,21 @@ async function main() {
             id int primary key,
             place int references public.zz_place (id) on delete set null
           );
+          create table public.zz_tag (
+            id int primary key,
+            shelf int, owner int,
+            foreign key (shelf, owner) references public.zz_shelf (id, owner)
+              on delete set null (shelf)
+          );
           insert into public.zz_shelf values (1, 1), (2, 1);
           insert into public.zz_place values (10, 1, 1, null), (11, 2, 1, 10), (12, 1, 1, 11);
           insert into public.zz_note values (100, 10), (101, 11);
+          insert into public.zz_tag values (1000, 2, 1);
           select private.keep_copy('20990101000000_shelves',
-            array['public.zz_shelf', 'public.zz_place', 'public.zz_note']::regclass[]);
+            array['public.zz_shelf', 'public.zz_place', 'public.zz_note', 'public.zz_tag']::regclass[]);
           select private.check_copy('20990101000000_shelves');
           delete from public.zz_place;
+          delete from public.zz_tag;
           delete from public.zz_shelf where id = 2;
         `);
         const result = await rows<{
@@ -540,6 +565,56 @@ async function main() {
             { id: 101, place: null },
           ],
         );
+        // A key that clears only some of its columns clears only those.
+        await rows(
+          `select * from private.restore_copy(
+             '20990101000000_shelves', array['public.zz_tag']::regclass[])`,
+        );
+        assert.deepEqual(
+          await rows("select id, shelf, owner from public.zz_tag"),
+          [{ id: 1000, shelf: null, owner: 1 }],
+        );
+      } finally {
+        await db.exec("rollback");
+      }
+    },
+  );
+
+  await check(
+    "a row that goes with a person through too many links is refused",
+    async () => {
+      await db.exec("begin");
+      try {
+        await db.exec(`
+          create table public.zz_d0 (
+            id int primary key,
+            owner uuid references auth.users (id) on delete cascade
+          );
+          insert into public.zz_d0 values (1, '${AKI}');
+        `);
+        for (let n = 1; n <= 6; n++) {
+          await db.exec(`
+            create table public.zz_d${n} (
+              id int primary key,
+              up int references public.zz_d${n - 1} (id) on delete cascade
+            );
+            insert into public.zz_d${n} values (1, 1);
+          `);
+        }
+        // Five links up to the person are followed.
+        await db.exec(
+          "select private.keep_copy('20990101000000_deep', array['public.zz_d5']::regclass[])",
+        );
+        assert.deepEqual(
+          await rows(
+            'select keep_owners from keep."20990101000000_public_zz_d5"',
+          ),
+          [{ keep_owners: [AKI] }],
+        );
+        await refused(
+          "select private.keep_copy('20990101000000_deeper', array['public.zz_d6']::regclass[])",
+          /public\.zz_d6 goes with its person through more links than a copy follows/,
+        );
       } finally {
         await db.exec("rollback");
       }
@@ -547,7 +622,7 @@ async function main() {
   );
 
   await check("nobody reaches the copies through the API", async () => {
-    for (const role of ["anon", "authenticated"]) {
+    for (const role of ["anon", "authenticated", "service_role"]) {
       const [schema] = await rows<{ ok: boolean }>(
         "select has_schema_privilege($1, 'keep', 'USAGE') as ok",
         [role],
@@ -555,7 +630,8 @@ async function main() {
       assert.equal(schema.ok, false, role);
       for (const fn of [
         "private.keep_copy(text, regclass[])",
-        "private.check_copy(text, regclass[])",
+        "private.check_copy(text, regclass[], regclass[])",
+        "private.copy_owners(regclass, text, integer)",
         "private.restore_copy(text, regclass[], boolean)",
         "private.drop_copy(text)",
         "private.forget_in_copies()",

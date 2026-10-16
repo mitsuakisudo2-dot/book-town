@@ -28,7 +28,7 @@
 -- migration undoes this one with
 --   drop trigger forget_in_copies on auth.users;
 --   drop function private.forget_in_copies(), private.keep_copy(text, regclass[]),
---     private.check_copy(text, regclass[]), private.restore_copy(text, regclass[], boolean),
+--     private.check_copy(text, regclass[], regclass[]), private.restore_copy(text, regclass[], boolean),
 --     private.drop_copy(text), private.copy_columns(regclass, text),
 --     private.copy_key(regclass), private.copy_owners(regclass, text, integer);
 --   drop schema keep cascade;
@@ -105,7 +105,9 @@ revoke all on function private.copy_key(regclass) from public, anon, authenticat
 -- is deleted: its own cascading links to a person, and through each other
 -- cascading link, the people of the row it points at (a reply goes with the
 -- post's writer, a shop's private shelves with the shop's owner). alias is
--- the row's name in the query; depth bounds the way up.
+-- the row's name in the query; depth bounds the way up. A chain longer than
+-- that is refused, so no row outlives its person in a copy unnoticed, except
+-- a table pointing at itself (a reply to a reply), which stops at the bound.
 create function private.copy_owners(source regclass, alias text, depth integer)
 returns text
 language plpgsql stable security definer set search_path = '' as $$
@@ -128,7 +130,11 @@ begin
   loop
     if fk.parent in ('auth.users'::regclass, 'public.profiles'::regclass) then
       parts := parts || format('array[%I.%I]', alias, fk.child_cols[1]);
-    elsif depth > 0 then
+    elsif depth = 0 then
+      if fk.parent <> source then
+        raise exception 'too many links up to a person' using errcode = 'KP001';
+      end if;
+    else
       parts := parts || format('coalesce((select %s from %s %I where %s), ''{}'')',
         private.copy_owners(fk.parent, up, depth - 1), fk.parent, up,
         (select string_agg(format('%I.%I = %I.%I', up, fk.parent_cols[j], alias, fk.child_cols[j]), ' and ')
@@ -152,6 +158,8 @@ declare
   forget text[];
   links text[];
   api text;
+  waited text;
+  owners text;
 begin
   if label !~ '^[0-9]{14}_[a-z0-9_]+$' then
     raise exception 'name a copy after its migration, like 20261101000000_works';
@@ -160,14 +168,27 @@ begin
     if private.copy_key(source) is null then
       raise exception '% has no primary key, so its copy could not be put back', source;
     end if;
-    -- Nobody writes to it until the migration ends, so the copy, the move and
-    -- the check all see the same rows. Reading goes on.
-    execute format('lock table %s in exclusive mode', source);
+  end loop;
+  -- Nobody writes to them until the migration ends, so the copies, the move
+  -- and the check all see the same rows. Reading goes on. All at once, and
+  -- not waiting long, so a reader's write in between cannot deadlock it.
+  waited := current_setting('lock_timeout');
+  perform set_config('lock_timeout', '10s', true);
+  execute format('lock table %s in exclusive mode',
+    (select string_agg(t::text, ', ') from unnest(tables) t));
+  perform set_config('lock_timeout', waited, true);
+  foreach source in array tables loop
     name := left(left(label, 14) || '_' || replace(source::text, '.', '_'), 63);
     -- keep_owners: who the row goes with (forget_in_copies).
+    begin
+      owners := private.copy_owners(source, 't', 5);
+    exception when sqlstate 'KP001' then
+      raise exception '% goes with its person through more links than a copy follows', source;
+    end;
     execute format('create table keep.%I as select t.*, %s as keep_owners from %s t',
-      name, private.copy_owners(source, 't', 3), source);
+      name, owners, source);
     get diagnostics copied = row_count;
+    execute format('create index on keep.%I using gin (keep_owners)', name);
     execute format('alter table keep.%I enable row level security', name);
     execute format('revoke all on table keep.%I from public', name);
     for api in
@@ -197,10 +218,15 @@ revoke all on function private.keep_copy(text, regclass[]) from public, anon, au
 
 -- Compares each table copied under label with its copy. A row is lost when
 -- its primary key is gone; a link is lost when a column that is part of a
--- foreign key was set in the copy and is null (or gone) now. Tables named in
--- changing are only measured: a move may mean to change them (say, to drop
--- a column once its links live elsewhere).
-create function private.check_copy(label text, changing regclass[] default '{}')
+-- foreign key was set in the copy and is null (or gone) now. A move that
+-- means to lose some names the tables: links_may_go (say, a column dropped
+-- once its links live elsewhere) and rows_may_go (rows merged away). Those
+-- are measured and recorded, not refused.
+create function private.check_copy(
+  label text,
+  links_may_go regclass[] default '{}',
+  rows_may_go regclass[] default '{}'
+)
 returns void
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -227,6 +253,10 @@ begin
       continue;
     end if;
     key := private.copy_key(source);
+    if key is null then
+      failed := failed || (copy.source || ': its primary key is gone, so its rows cannot be matched');
+      continue;
+    end if;
     select string_agg(format('l.%1$I = c.%1$I', k), ' and ')
       into match from unnest(key) k;
     execute format('select count(*) from %s', source) into rows_after;
@@ -263,7 +293,8 @@ begin
       'at', now(), 'rows_before', copy.row_count, 'rows_after', rows_after,
       'lost_rows', lost_rows, 'lost_links', lost_links)
     where c.label = copy.label and c.source = copy.source;
-    if (lost_rows > 0 or lost_links > 0) and not source = any (changing) then
+    if (lost_rows > 0 and not source = any (rows_may_go))
+       or (lost_links > 0 and not source = any (links_may_go)) then
       failed := failed || format('%s: %s rows and %s links lost', copy.source, lost_rows, lost_links);
     end if;
   end loop;
@@ -273,7 +304,7 @@ begin
   end if;
 end;
 $$;
-revoke all on function private.check_copy(text, regclass[]) from public, anon, authenticated;
+revoke all on function private.check_copy(text, regclass[], regclass[]) from public, anon, authenticated;
 
 -- Puts the rows of copies back: each row the copy has is written again as it
 -- was (inserted if gone, overwritten if changed). Rows added since stay,
@@ -281,7 +312,9 @@ revoke all on function private.check_copy(text, regclass[]) from public, anon, a
 -- Tables run parents first. The tables' own triggers are off meanwhile, so
 -- nothing is stamped or recounted; copy the tables they keep up as well.
 -- A row whose parent is gone since (an account deleted, say) is left out,
--- or loses just the link when the foreign key would set it null.
+-- or loses just the link when the foreign key would set it null. Rows go back
+-- one by one, so a move that swapped unique values between two rows needs
+-- the undoing migration to clear them first. Triggers that were off stay off.
 create function private.restore_copy(
   label text,
   tables regclass[] default null,
@@ -306,6 +339,7 @@ declare
   n bigint;
   total bigint;
   gone jsonb := '{}';
+  idle text[];
 begin
   select array_agg(c.source order by c.source) into chosen
   from keep.copies c
@@ -343,6 +377,10 @@ begin
     if live is null then
       raise exception '% is gone; make it again before restoring it', name;
     end if;
+    -- Triggers someone switched off stay off afterwards.
+    idle := idle || array(
+      select format('%s %I', live, t.tgname) from pg_catalog.pg_trigger t
+      where t.tgrelid = live and not t.tgisinternal and t.tgenabled = 'D');
     execute format('alter table %s disable trigger user', live);
   end loop;
 
@@ -382,12 +420,17 @@ begin
     from unnest(cols) with ordinality as x (col, ord);
     -- The rows to write back, narrowed below until every link they keep
     -- points at a row that is there or is coming back.
+    drop table if exists pg_temp.restore_rows;
     execute format('create temp table restore_rows on commit drop as table keep.%I',
       copy.copy_name);
     get diagnostics total = row_count;
     conds := '{}';
     for fk in
       select f.confrelid::regclass as parent, f.confdeltype as on_delete,
+        -- on delete set null (a, b) clears only those columns (Postgres 15).
+        array(select a.attname::text from unnest(coalesce(f.confdelsetcols, f.conkey)) k (n)
+          join pg_catalog.pg_attribute a on a.attrelid = f.conrelid and a.attnum = k.n)
+          as cleared,
         f.conrelid = f.confrelid as self,
         array(select a.attname::text from unnest(f.conkey) with ordinality k (n, o)
           join pg_catalog.pg_attribute a on a.attrelid = f.conrelid and a.attnum = k.n
@@ -415,7 +458,7 @@ begin
       cond := cond || ')';
       if fk.on_delete = 'n' then
         for i in 1..cardinality(cols) loop
-          if cols[i] = any (fk.child_cols) then
+          if cols[i] = any (fk.cleared) then
             exprs[i] := format('case when %s then %s end', cond, exprs[i]);
           end if;
         end loop;
@@ -460,6 +503,10 @@ begin
 
   foreach name in array ordered loop
     execute format('alter table %s enable trigger user', to_regclass(name));
+  end loop;
+  for i in 1..coalesce(cardinality(idle), 0) loop
+    execute format('alter table %s disable trigger %s', split_part(idle[i], ' ', 1),
+      substr(idle[i], length(split_part(idle[i], ' ', 1)) + 2));
   end loop;
 end;
 $$;
