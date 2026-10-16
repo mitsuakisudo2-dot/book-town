@@ -1677,11 +1677,6 @@ div.book-jacket:hover {
   .town-bottom-nav a.active {
     color: var(--green);
   }
-  /* A tab's page slides in from the side (tab-motion.ts) without the
-     screen growing sideways while it does. */
-  .town-workspace {
-    overflow-x: clip;
-  }
   .town-bottom-nav span {
     font-size: 10px;
   }

@@ -344,10 +344,30 @@
 .town-bottom-nav a.active {
   color: var(--green);
 }
+.town-bottom-nav a {
+  position: relative;
+  z-index: 1;
+}
 .town-bottom-nav a.active svg {
   background: var(--green-soft);
-  border-radius: 7px;
-  outline: 6px solid var(--green-soft);
+  border-radius: 50%;
+  box-shadow: 0 0 0 7px var(--green-soft);
+}
+/* Moving to another tab, the round mark slides along the bar to it
+   (tab-motion.ts); the chosen tab's own mark waits until it arrives. */
+.town-bottom-nav .nav-mark {
+  position: absolute;
+  z-index: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--green-soft);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.town-bottom-nav.is-moving a.active:not(.nav-walk) svg {
+  background: transparent;
+  box-shadow: none;
 }
 .town-bottom-nav a.active span {
   font-weight: 600;
