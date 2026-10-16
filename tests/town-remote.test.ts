@@ -2644,11 +2644,14 @@ async function main() {
       await settle(() => store.getSnapshot().posts.length === 3);
 
       // A 見本, or someone the town does not know, cannot be blocked.
-      store.actions.blockReader(demoPosts[0].authorId);
-      store.actions.blockReader("00000000-0000-4000-8000-0000000000c0");
+      assert.equal(store.actions.blockReader(demoPosts[0].authorId), false);
+      assert.equal(
+        store.actions.blockReader("00000000-0000-4000-8000-0000000000c0"),
+        false,
+      );
       assert.deepEqual(store.getSnapshot().blocked, []);
 
-      store.actions.blockReader(BEN);
+      assert.equal(store.actions.blockReader(BEN), true);
       const blocked = store.getSnapshot();
       assert.deepEqual(blocked.blocked, [BEN]);
       // Their 便り, their shop and their records go; the follow ends; their

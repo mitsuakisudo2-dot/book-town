@@ -421,8 +421,9 @@ export interface TownActions {
   /**
    * Blocks a reader: their 便り, shop, records and posters leave the town at
    * once, and following ends both ways. Only a reader in the database.
+   * False when nothing was blocked (refused, or the town is still loading).
    */
-  blockReader(readerId: string): void;
+  blockReader(readerId: string): boolean;
   /** Lifts a block. What it kept away comes back with the next reading. */
   unblockReader(readerId: string): void;
   toggleWish(bookId: string): void;

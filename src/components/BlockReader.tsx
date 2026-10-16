@@ -51,8 +51,13 @@ export function BlockQuestion({
           className="btn danger fill"
           onClick={() => {
             onDone();
-            actions.blockReader(reader.id);
-            notify(`${reader.name}さんをブロックしました`);
+            // Said only when it was done: never a block that did not happen.
+            if (actions.blockReader(reader.id))
+              notify(`${reader.name}さんをブロックしました`);
+            else
+              notify(
+                "ブロックできませんでした。少し待ってから、もう一度お試しください",
+              );
           }}
         >
           ブロックする

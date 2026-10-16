@@ -138,6 +138,7 @@ const reachesSample = (name: string, args: unknown[]) => {
 /** Actions that answer whether they did anything. */
 const ANSWERING_ACTIONS = new Set<keyof TownActions>([
   "addShelfBook",
+  "blockReader",
   "changeDisplay",
   "deletePoster",
   "updateRecord",
@@ -476,8 +477,8 @@ export function createTownStore(
         state.blocked.includes(readerId) ||
         !blockable(state, readerId)
       )
-        return;
-      commit({
+        return false;
+      return commit({
         ...withoutReaders(state, [readerId]),
         blocked: [...state.blocked, readerId],
       });
