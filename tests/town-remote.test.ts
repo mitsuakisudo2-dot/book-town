@@ -42,6 +42,7 @@ import {
   type TownState,
 } from "../src/lib/types";
 import { cleanVisibilities } from "../src/lib/visibility";
+import { sameWork, workOf } from "../src/lib/works";
 
 // Checks, without a database, how the signed-in town is built from rows and
 // what is written back. Everything runs inside main() because tsx compiles this
@@ -53,6 +54,7 @@ const AKI_SHOP = "00000000-0000-4000-8000-0000000000a5";
 const BEN_SHOP = "00000000-0000-4000-8000-0000000000b5";
 const BOOK = "00000000-0000-4000-8000-000000000b01";
 const OTHER_BOOK = "00000000-0000-4000-8000-000000000b02";
+const WORK = "00000000-0000-4000-8000-000000000a01";
 const ids: RemoteIds = { userId: AKI, shopId: AKI_SHOP };
 const at = "2026-10-12T09:00:00Z";
 
@@ -69,7 +71,8 @@ const profile = (id: string, handle: string): Tables<"profiles"> => ({
   updated_at: at,
 });
 
-const book = (id: string): BookRow => ({
+/** A book row; the database gives each book a work, its own unless joined. */
+const book = (id: string, work = "w" + id.slice(1)): BookRow => ({
   id,
   isbn: null,
   title: "華氏451度",
@@ -77,6 +80,7 @@ const book = (id: string): BookRow => ({
   publisher: "",
   price: null,
   source: "manual",
+  work_id: work,
   created_at: at,
   updated_at: at,
 });
@@ -423,6 +427,29 @@ async function main() {
     const theirs = town.books.find((entry) => entry.id === OTHER_BOOK);
     assert.notEqual(mine?.summary, theirs?.summary);
     assert.match(theirs?.summary ?? "", /あらすじは登録されていません/);
+  });
+
+  await check("books carry the work the database put them in", () => {
+    // Two registrations of one ISBN share their edition's work; the 見本 and
+    // the demo's books have none, so each is its own work.
+    const SAME = "00000000-0000-4000-8000-000000000b03";
+    const town = townFromRows(
+      rows({
+        books: [
+          { ...book(BOOK, WORK), isbn: "9784150119553" },
+          { ...book(SAME, WORK), isbn: "9784150119553" },
+          book(OTHER_BOOK),
+          { ...book(sampleBookRowId(demoBooks[0].id), WORK) },
+        ],
+      }),
+      ids,
+    );
+    const byId = (id: string) => town.books.find((entry) => entry.id === id)!;
+    assert.equal(byId(BOOK).workId, WORK);
+    assert.ok(sameWork(byId(BOOK), byId(SAME)));
+    assert.ok(!sameWork(byId(BOOK), byId(OTHER_BOOK)));
+    assert.equal(byId(demoBooks[0].id).workId, undefined);
+    assert.equal(workOf(byId(demoBooks[0].id)), demoBooks[0].id);
   });
 
   await check("posts: own ones are 'me', counts only on own posts", () => {

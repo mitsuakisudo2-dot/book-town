@@ -57,7 +57,7 @@ const CATALOG = 300;
 
 // Everything but who typed the book in, which the database does not show.
 const BOOK_COLUMNS =
-  "id, isbn, title, author, publisher, price, source, created_at, updated_at";
+  "id, isbn, title, author, publisher, price, source, work_id, created_at, updated_at";
 
 const SHOP_COLUMNS =
   "id, owner_id, name, description, tagline, theme, is_open, public_shelves, public_scene_books";

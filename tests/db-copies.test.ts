@@ -107,10 +107,14 @@ async function main() {
   ) => (await db.query<T>(sql, params)).rows;
   // The copies the migrations themselves took (of an empty database here)
   // go first, so these checks start from an empty keep. Those moves have
-  // checks of their own (tests/db-works.test.ts).
-  for (const { label } of await rows<{ label: string }>(
+  // checks of their own (tests/db-works.test.ts). The ones checked in
+  // production were dropped by a later migration already.
+  const kept = await rows<{ label: string }>(
     "select distinct label from keep.copies order by label",
-  ))
+  );
+  for (const gone of ["20261027000000_works", "20261029000000_visibility"])
+    assert.ok(!kept.some(({ label }) => label === gone), gone);
+  for (const { label } of kept)
     await db.query("select private.drop_copy($1)", [label]);
 
   let passed = 0;
