@@ -79,8 +79,12 @@ export type ShopRow = Pick<
   | "public_scene_books"
 >;
 
-/** Who typed a book in is not readable, so a book row comes without it. */
-export type BookRow = Omit<Tables<"books">, "created_by">;
+/**
+ * Who typed a book in is not readable, so a book row comes without it. Its
+ * work (work_id) is not read yet: the app reads it once the database has it
+ * in production (plan item 4).
+ */
+export type BookRow = Omit<Tables<"books">, "created_by" | "work_id">;
 
 export interface RemoteRows {
   profiles: Tables<"profiles">[];
@@ -809,7 +813,8 @@ type Pair = Record<string, string>;
 
 /** One step of saving. Each one can be run again safely after a failure. */
 export type Write =
-  | { kind: "books"; rows: TablesInsert<"books">[] }
+  // The database gives a book its work; a reader may not name one.
+  | { kind: "books"; rows: Omit<TablesInsert<"books">, "work_id">[] }
   | {
       kind: "profile";
       patch: Partial<

@@ -13,33 +13,6 @@ export type Database = {
   graphql_public: {
     Tables: {
       [_ in never]: never;
-      works: {
-        Row: {
-          created_at: string;
-          id: string;
-          merged_into: string | null;
-        };
-        ComputedFields: never;
-        Insert: {
-          created_at?: string;
-          id?: string;
-          merged_into?: string | null;
-        };
-        Update: {
-          created_at?: string;
-          id?: string;
-          merged_into?: string | null;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "works_merged_into_fkey";
-            columns: ["merged_into"];
-            isOneToOne: false;
-            referencedRelation: "works";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
     };
     Views: {
       [_ in never]: never;
@@ -1356,6 +1329,33 @@ export type Database = {
             columns: ["reporter_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      works: {
+        Row: {
+          created_at: string;
+          id: string;
+          merged_into: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          id?: string;
+          merged_into?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          merged_into?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "works_merged_into_fkey";
+            columns: ["merged_into"];
+            isOneToOne: false;
+            referencedRelation: "works";
             referencedColumns: ["id"];
           },
         ];
