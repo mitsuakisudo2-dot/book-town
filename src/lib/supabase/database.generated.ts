@@ -243,6 +243,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "books_isbn_fkey";
+            columns: ["isbn"];
+            isOneToOne: false;
+            referencedRelation: "editions";
+            referencedColumns: ["isbn"];
+          },
+          {
             foreignKeyName: "books_work_id_fkey";
             columns: ["work_id"];
             isOneToOne: false;
@@ -272,6 +279,33 @@ export type Database = {
           source?: string;
         };
         Relationships: [];
+      };
+      editions: {
+        Row: {
+          created_at: string;
+          isbn: string;
+          work_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          isbn: string;
+          work_id: string;
+        };
+        Update: {
+          created_at?: string;
+          isbn?: string;
+          work_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "editions_work_id_fkey";
+            columns: ["work_id"];
+            isOneToOne: false;
+            referencedRelation: "works";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       library_entries: {
         Row: {

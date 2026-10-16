@@ -46,7 +46,23 @@ function sqlWithoutComments(text: string): string {
  * own begin and their semicolons never read as statements of the file.
  */
 function sqlWithoutBodies(sql: string): string {
-  return sql.replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/g, " $$$$ ");
+  return sql.replace(/\$([A-Za-z_][A-Za-z_0-9]*)?\$[\s\S]*?\$\1\$/g, " $$$$ ");
+}
+
+/**
+ * A statement of any migration that `supabase db push` refuses: it sends a
+ * file without BEGIN, and Postgres takes a bare LOCK only in a transaction
+ * block. In a do block the lock holds to the end of the file.
+ */
+function pushProblems(name: string, text: string): string[] {
+  return sqlWithoutBodies(sqlWithoutComments(text))
+    .split(";")
+    .map((statement) => statement.trim().toUpperCase())
+    .filter((head) => /^LOCK\b/.test(head))
+    .map(
+      (head) =>
+        `${name} runs "${head.split(/\s+/).slice(0, 3).join(" ")}" outside a block; put it in a do block`,
+    );
 }
 
 /**
@@ -693,6 +709,25 @@ async function main() {
     assert.equal((await rows("select 1 from keep.copies")).length, 0);
     await refused(`select private.drop_copy('${LABEL}')`, /no copy is kept/);
   });
+
+  await check(
+    "no migration locks a table where supabase db push refuses it",
+    async () => {
+      for (const file of migrationFiles())
+        assert.deepEqual(pushProblems(file, migrationText(file)), [], file);
+      assert.deepEqual(
+        pushProblems(
+          "x.sql",
+          `lock table public.books in access exclusive mode;
+         do $$ begin lock table public.posts in exclusive mode; end $$;
+         do $do1$ begin lock table public.shops; end $do1$;`,
+        ),
+        [
+          'x.sql runs "LOCK TABLE PUBLIC.BOOKS" outside a block; put it in a do block',
+        ],
+      );
+    },
+  );
 
   await check(
     "every migration that keeps a copy checks it in one transaction",
