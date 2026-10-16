@@ -2487,6 +2487,16 @@ async function main() {
       ids,
     );
     assert.deepEqual(town.blocked, [BEN]);
+    // Whatever the rows say, their 便り and shop stay out of the town.
+    const leaked = townFromRows(
+      rows({
+        shops: [shop(BEN_SHOP, BEN)],
+        posts: [post("00000000-0000-4000-8000-0000000000e9", BEN)],
+        blocks: [{ blocked_id: BEN }],
+      }),
+      ids,
+    );
+    assert.deepEqual([leaked.posts, leaked.shops], [[], []]);
     // Their profile stays, so the block can be lifted from it.
     assert.ok(town.readers.some((reader) => reader.id === BEN));
     // What they did to the person's own 便り is not shown.

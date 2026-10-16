@@ -44,6 +44,7 @@ import {
 import type { Tables, TablesInsert } from "./supabase/database.types";
 import { demoBooks } from "./data";
 import { isDatabaseId } from "./paths";
+import { withoutReaders } from "./blocks";
 import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
 import { filedReportFrom } from "./supabase/reports";
 import type { Arrived } from "./arrived";
@@ -538,7 +539,7 @@ export function townFromRows(
       ),
     }));
 
-  return {
+  const town: TownState = {
     books,
     readers,
     shops,
@@ -677,6 +678,9 @@ export function townFromRows(
           : [];
       }),
   };
+  // The database keeps the blocked away already; the town does not count on
+  // it.
+  return withoutReaders(town, town.blocked);
 }
 
 /** What a read of posts after the town brought, as the database sent it. */

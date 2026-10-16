@@ -217,7 +217,9 @@ export async function loadTown(
   const profiles = unread.length
     ? [
         ...someProfiles,
-        ...(await all(client.from("profiles").select("*").in("id", unread))),
+        ...(
+          await all(client.from("profiles").select("*").in("id", unread))
+        ).filter((row) => unread.includes(row.id)),
       ]
     : someProfiles;
 
