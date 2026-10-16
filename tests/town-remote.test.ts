@@ -32,6 +32,7 @@ import {
   visitorTownBackend,
 } from "../src/lib/supabase/town-backend";
 import { emptyArrived, takeIn, type Arrived } from "../src/lib/arrived";
+import { createLetterReads } from "../src/lib/arrivals";
 import { createTownStore } from "../src/lib/store";
 import type { TownBackend } from "../src/lib/town-backend";
 import {
@@ -191,6 +192,7 @@ interface FakeQuery extends PromiseLike<Outcome<AnyRow[]>> {
   neq(column: string, value: unknown): FakeQuery;
   gte(column: string, value: string): FakeQuery;
   lt(column: string, value: string): FakeQuery;
+  lte(column: string, value: string): FakeQuery;
   is(column: string, value: unknown): FakeQuery;
   in(column: string, values: unknown[]): FakeQuery;
   order(column: string, options?: { ascending?: boolean }): FakeQuery;
@@ -264,6 +266,11 @@ function fakeReads(
       lt(column, value) {
         filters.push(`${column}=lt.${value}`);
         rows = rows.filter((row) => String(row[column]) < value);
+        return query;
+      },
+      lte(column, value) {
+        filters.push(`${column}=lte.${value}`);
+        rows = rows.filter((row) => String(row[column]) <= value);
         return query;
       },
       is(column, value) {
@@ -2287,9 +2294,10 @@ async function main() {
       assert.deepEqual(filtersOf("posts")[0], [
         "parent_id=is.null",
         "author_id=in.2",
-        "created_at=lt.2026-10-12T09:00:00Z",
+        "created_at=lte.2026-10-12T09:00:00Z",
         "order=created_at.desc",
-        "limit=20",
+        // One more for Ben's 便り the town has at that moment, left out.
+        "limit=21",
       ]);
       assert.deepEqual(
         older.posts.map((entry) => [entry.id, entry.authorId]),
@@ -2329,6 +2337,72 @@ async function main() {
         ),
         false,
       );
+    },
+  );
+
+  await check(
+    "older pages skip no 便り written at the same moment, on a page's edge or the town's",
+    async () => {
+      const second = (n: number) =>
+        new Date(Date.parse(at) - n * 1000).toISOString();
+      const KNOWN = uuid(0xf00);
+      const tables: Record<string, AnyRow[]> = {
+        profiles: [profile(AKI, "aki"), profile(BEN, "ben")],
+        books: [book(BOOK)],
+        shops: [shop(BEN_SHOP, BEN)],
+        shop_follows: [{ follower_id: AKI, shop_id: BEN_SHOP }],
+        posts: [post(KNOWN, BEN, { created_at: second(0) })],
+      };
+      const fake = fakeReads(tables);
+      const backend = accountTownBackend(fake.client, AKI, { storage: false });
+      let state = (await backend.load()).state;
+      // Older 便り the town did not read: two at the very moment of its
+      // oldest (its reading stopped among them), then 45, of which 12 at
+      // one moment that falls on the first page's edge.
+      const older = [
+        uuid(0xf01),
+        uuid(0xf02),
+        ...Array.from({ length: 45 }, (_, n) => uuid(0xf10 + n)),
+      ];
+      const times = [
+        second(0),
+        second(0),
+        ...older
+          .slice(2)
+          .map((_, n) => second(n < 10 ? n + 1 : n < 22 ? 11 : n)),
+      ];
+      tables.posts.push(
+        ...older.map((id, n) => post(id, BEN, { created_at: times[n] })),
+      );
+      const letters = createLetterReads({
+        reads: () => ({
+          generation: 1,
+          newer: backend.newer!,
+          older: backend.older!,
+          post: backend.post!,
+        }),
+        state: () => state,
+        absorb(arrived) {
+          const next = backend.absorb!((town, saved) =>
+            takeIn(town, arrived, saved),
+          );
+          if (!next || next === state) return false;
+          state = next;
+          return true;
+        },
+        reading: () => 1,
+      });
+      const read: string[] = [];
+      for (let page = 0; page < 10; page += 1) {
+        const got = await letters.older(Date.parse(at));
+        assert.ok(got);
+        read.push(...got.entries.map((entry) => entry.id));
+        if (got.done) break;
+      }
+      // Every one, each once, newest first, and the last page says so.
+      assert.equal(new Set(read).size, read.length);
+      assert.deepEqual([...read].sort(), [...older].sort());
+      assert.equal(state.olderRead?.done, true);
     },
   );
 

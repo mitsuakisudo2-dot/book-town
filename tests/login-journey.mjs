@@ -62,6 +62,17 @@ const session = () => {
 let profile = null;
 // How long the stand-in takes to read the signed-in person's own profile.
 let ownProfileDelay = 0;
+// Holds the own-profile answer until released, so a test that needs the
+// account "still being checked" does not race a timer on a slow runner.
+let ownProfileHold = null;
+const holdOwnProfile = () => {
+  let release;
+  ownProfileHold = new Promise((done) => (release = done));
+  return () => {
+    ownProfileHold = null;
+    release();
+  };
+};
 // The rest of the town, once a test fills it: rows by table.
 let town = null;
 // How long the stand-in takes to read the rest of the town.
@@ -112,6 +123,7 @@ function postsAsked(rows, params) {
     if (op === "is") return arg === "null" ? cell === null : true;
     if (op === "gte") return Date.parse(cell) >= Date.parse(bare(arg));
     if (op === "lt") return Date.parse(cell) < Date.parse(bare(arg));
+    if (op === "lte") return Date.parse(cell) <= Date.parse(bare(arg));
     throw new Error("not mocked: posts filter " + column + "=" + filter);
   };
   let asked = rows;
@@ -268,8 +280,11 @@ const standIn = async (route) => {
   if (url.pathname === "/auth/v1/user") return json(200, user);
   if (url.pathname === "/rest/v1/profiles") {
     if (request.method() === "GET") {
-      if (ownProfileDelay && url.searchParams.get("id") === "eq." + user.id)
-        await new Promise((done) => setTimeout(done, ownProfileDelay));
+      if (url.searchParams.get("id") === "eq." + user.id) {
+        if (ownProfileHold) await ownProfileHold;
+        if (ownProfileDelay)
+          await new Promise((done) => setTimeout(done, ownProfileDelay));
+      }
       const own = profile ? [profile] : [];
       return json(
         200,
@@ -420,7 +435,7 @@ const standIn = async (route) => {
     if (table === "posts") {
       postReads.push(url.search);
       const failing =
-        (failOlderOnce && url.search.includes("created_at=lt.")) ||
+        (failOlderOnce && url.search.includes("created_at=lte.")) ||
         (failPostOnce && url.searchParams.get("id") === "eq." + failPostOnce);
       if (failing) {
         failOlderOnce = false;
@@ -1204,7 +1219,7 @@ try {
     "a post begun while the account is still checked is kept for it once known",
     async () => {
       const BEGUN = "確かめているあいだに書きはじめた。";
-      ownProfileDelay = 3000;
+      const release = holdOwnProfile();
       try {
         await page.goto(base + "/timeline/");
         const fab = page.locator(".compose-fab");
@@ -1216,6 +1231,7 @@ try {
         // nothing is kept in the browser.
         await expect(text).toHaveValue(BEGUN);
         expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
+        release();
         await expect
           .poll(() => keptDraftKeys(POST_DRAFTS), { timeout: 10000 })
           .toEqual([user.id + ":new-post"]);
@@ -1226,7 +1242,7 @@ try {
         await page.keyboard.press("Escape");
         await expect(compose).toHaveCount(0);
       } finally {
-        ownProfileDelay = 0;
+        release();
       }
       expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
     },
@@ -1258,7 +1274,7 @@ try {
       await page.goto(base + "/posters/new/");
       await heading.fill(KEPT_POSTER);
       expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([user.id + ":new"]);
-      ownProfileDelay = 3000;
+      let release = holdOwnProfile();
       try {
         await page.goto(base + "/timeline/");
         await fab.click();
@@ -1266,6 +1282,7 @@ try {
         // written there goes after the kept words once it is.
         await expect(text).toHaveValue("");
         await text.fill(BEGUN);
+        release();
         await expect(text).toHaveValue(KEPT + "\n" + BEGUN, {
           timeout: 10000,
         });
@@ -1276,10 +1293,12 @@ try {
         // Too long to join: the words written stay on the screen, not kept
         // and said so, and the kept draft stays as it was.
         const LONG = "続き".repeat(490);
+        release = holdOwnProfile();
         await page.goto(base + "/timeline/");
         await fab.click();
         await expect(text).toHaveValue("");
         await text.fill(LONG);
+        release();
         await expect(
           compose.getByText("このブラウザに書きかけを残せませんでした"),
         ).toBeVisible({ timeout: 10000 });
@@ -1289,12 +1308,14 @@ try {
         await expect(compose).toHaveCount(0);
 
         // The poster maker opens once its maker is known, with the work kept.
+        release = holdOwnProfile();
         await page.goto(base + "/posters/new/");
         await expect(page.getByText("ポスターを開いています…")).toBeVisible();
         await expect(heading).toHaveCount(0);
+        release();
         await expect(heading).toHaveValue(KEPT_POSTER, { timeout: 10000 });
       } finally {
-        ownProfileDelay = 0;
+        release();
       }
       const line = page.locator(".poster-editor-kept");
       await line.getByRole("button", { name: "書きかけを消す" }).click();
@@ -2306,7 +2327,7 @@ try {
           ...old.map((row) => row.id),
         ]);
         const older = postReads.find((query) =>
-          query.includes("created_at=lt."),
+          query.includes("created_at=lte."),
         );
         expect(older).toContain("author_id=in.");
         expect(older).toContain("parent_id=is.null");
@@ -2515,7 +2536,7 @@ try {
             await toEnd();
             return postReads
               .slice(backReads)
-              .filter((query) => query.includes("created_at=lt.")).length;
+              .filter((query) => query.includes("created_at=lte.")).length;
           })
           .toBe(1);
         await expect(

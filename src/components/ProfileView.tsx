@@ -95,6 +95,8 @@ import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
+import { PALETTES } from "../lib/appearance";
+import { setPalette, usePalette } from "../lib/appearance-store";
 import { useUrlParam } from "../lib/url-state";
 import { onShelfRequest, takeShelfRequest } from "../lib/shelf-tab";
 import { afterLayerCloses } from "../lib/back-layer";
@@ -133,6 +135,7 @@ export function ProfileView({
   const setCollection = (next: Collection) =>
     setBooks(next === "wishlist" ? null : next);
   const peekOpen = useReadingPeekOpen();
+  const palette = usePalette();
   const [sheet, setSheet] = useState<
     "following" | "followers" | "settings" | "scan" | "titles" | null
   >(null);
@@ -946,6 +949,32 @@ export function ProfileView({
       )}
       {sheet === "settings" && (
         <Modal title="設定" onClose={() => setSheet(null)}>
+          <fieldset className="record-visibility palette-choices">
+            <legend>画面の色</legend>
+            {PALETTES.map((choice) => (
+              <label key={choice.id}>
+                <input
+                  type="radio"
+                  name="palette"
+                  value={choice.id}
+                  checked={palette === choice.id}
+                  onChange={() => {
+                    setPalette(choice.id);
+                    notify(`画面の色を${choice.name}にしました`);
+                  }}
+                />
+                <span
+                  className="palette-swatch"
+                  style={{ background: choice.swatch }}
+                  aria-hidden="true"
+                />
+                {choice.name}
+              </label>
+            ))}
+            <p className="palette-note">
+              表紙や写真の色は変わりません。変わるのはボタンや印の色です。
+            </p>
+          </fieldset>
           <fieldset className="record-visibility">
             <legend>読み終えた本の記録（これから残す記録）</legend>
             <label>
