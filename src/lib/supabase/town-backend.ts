@@ -87,11 +87,12 @@ export async function loadTown(
   newShopId: () => string = () => crypto.randomUUID(),
 ): Promise<{ state: TownState; ids: RemoteIds }> {
   const [
-    profiles,
+    someProfiles,
     ownNine,
     othersNine,
     shops,
     follows,
+    blocks,
     marks,
     posts,
     postReactions,
@@ -121,6 +122,7 @@ export async function loadTown(
     all(
       client.from("shop_follows").select("shop_id").eq("follower_id", userId),
     ),
+    all(client.from("blocks").select("blocked_id").eq("blocker_id", userId)),
     allRows(
       (count) =>
         client.from("book_marks").select("*", { count }).eq("user_id", userId),
@@ -203,6 +205,24 @@ export async function loadTown(
     ),
   ]);
 
+  // Whoever the person blocked is named in their list, even past the
+  // profiles read for the town.
+  const unread = [
+    ...new Set(
+      blocks
+        .map((row) => row.blocked_id)
+        .filter((id) => !someProfiles.some((row) => row.id === id)),
+    ),
+  ];
+  const profiles = unread.length
+    ? [
+        ...someProfiles,
+        ...(
+          await all(client.from("profiles").select("*").in("id", unread))
+        ).filter((row) => unread.includes(row.id)),
+      ]
+    : someProfiles;
+
   const own = shops.find((shop) => shop.owner_id === userId);
   let ownShelves: Json = [];
   let ownSceneBooks: Json = [];
@@ -256,6 +276,7 @@ export async function loadTown(
     ownShopVisitors,
     shopMessages,
     follows,
+    blocks,
     marks,
     posts,
     postReactions,
@@ -334,6 +355,7 @@ export async function loadPublicTown(client: Client): Promise<TownState> {
     ownShopVisitors: null,
     shopMessages: [],
     follows: [],
+    blocks: [],
     marks: [],
     posts,
     postReactions: [],
@@ -583,6 +605,7 @@ export function visitorTownBackend(client: Client): TownBackend {
 
 const KEYS: Record<RelationTable, string> = {
   shop_follows: "follower_id,shop_id",
+  blocks: "blocker_id,blocked_id",
   book_marks: "user_id,book_id,kind",
   pop_reactions: "user_id,shop_id,placement_key,reaction",
   post_reactions: "user_id,post_id,kind",

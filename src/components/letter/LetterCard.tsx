@@ -182,6 +182,10 @@ export function LetterCard({
       isDatabaseId(post.id) &&
       (savedIn === "account" || savedIn === "visitor"),
     remove: mine,
+    block:
+      !mine &&
+      isDatabaseId(author.id) &&
+      (savedIn === "account" || savedIn === "visitor"),
   };
   // Threads are one level: a reply is answered on its post's page. A note
   // kept to oneself takes no replies.

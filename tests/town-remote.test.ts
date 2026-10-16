@@ -34,7 +34,7 @@ import {
 import { emptyArrived, takeIn, type Arrived } from "../src/lib/arrived";
 import { createLetterReads } from "../src/lib/arrivals";
 import { createTownStore } from "../src/lib/store";
-import type { TownBackend } from "../src/lib/town-backend";
+import { counterId, type TownBackend } from "../src/lib/town-backend";
 import {
   ME_ID,
   OWN_SHOP_ID,
@@ -134,6 +134,7 @@ function rows(extra: Partial<RemoteRows> = {}): RemoteRows {
     ownShopVisitors: null,
     shopMessages: [],
     follows: [],
+    blocks: [],
     marks: [],
     posts: [],
     postReactions: [],
@@ -2475,6 +2476,232 @@ async function main() {
         others.slice(last + 1).map((row) => row.id),
       );
       backend.close?.();
+    },
+  );
+
+  await check("a block comes in for a reader the town knows", () => {
+    const town = townFromRows(
+      rows({
+        blocks: [{ blocked_id: BEN }, { blocked_id: BEN }, { blocked_id: AKI }],
+      }),
+      ids,
+    );
+    assert.deepEqual(town.blocked, [BEN]);
+    // Whatever the rows say, their 便り and shop stay out of the town.
+    const leaked = townFromRows(
+      rows({
+        shops: [shop(BEN_SHOP, BEN)],
+        posts: [post("00000000-0000-4000-8000-0000000000e9", BEN)],
+        blocks: [{ blocked_id: BEN }],
+      }),
+      ids,
+    );
+    assert.deepEqual([leaked.posts, leaked.shops], [[], []]);
+    // Their profile stays, so the block can be lifted from it.
+    assert.ok(town.readers.some((reader) => reader.id === BEN));
+    // What they did to the person's own 便り is not shown.
+    const own = post("00000000-0000-4000-8000-0000000000e1", AKI);
+    const reacted = townFromRows(
+      rows({
+        posts: [own],
+        postReactions: (["like", "want"] as const).map((kind) => ({
+          user_id: BEN,
+          post_id: own.id,
+          kind,
+          taps: 1,
+          created_at: at,
+        })),
+        blocks: [{ blocked_id: BEN }],
+      }),
+      ids,
+    );
+    assert.deepEqual(
+      reacted.posts.map((entry) => [entry.likes, entry.wants, entry.likers]),
+      [[0, 0, []]],
+    );
+    const unknown = townFromRows(
+      rows({
+        blocks: [{ blocked_id: "00000000-0000-4000-8000-0000000000c0" }],
+      }),
+      ids,
+    );
+    assert.deepEqual(unknown.blocked, []);
+  });
+
+  await check(
+    "the blocked are read by name, even past the profiles read",
+    async () => {
+      const CAL = "00000000-0000-4000-8000-00000000000c";
+      const fake = fakeReads(
+        {
+          profiles: [
+            profile(AKI, "aki"),
+            profile(BEN, "ben"),
+            profile(CAL, "cal"),
+          ],
+          blocks: [{ blocker_id: AKI, blocked_id: CAL, created_at: at }],
+        },
+        { cap: 2 },
+      );
+      const { state } = await loadTown(fake.client, AKI, [], () => AKI_SHOP);
+      assert.deepEqual(state.blocked, [CAL]);
+      assert.deepEqual(
+        fake.asked
+          .filter((ask) => ask.table === "blocks")
+          .map((ask) => ask.filters),
+        [["blocker_id=eq." + AKI]],
+      );
+      assert.equal(
+        fake.asked.filter((ask) => ask.table === "profiles").length,
+        2,
+      );
+    },
+  );
+
+  await check("a block and its lifting are written as the person's own", () => {
+    const before = townFromRows(
+      rows({ shops: [shop(BEN_SHOP, BEN)], follows: [{ shop_id: BEN_SHOP }] }),
+      ids,
+    );
+    const blocked: TownState = { ...before, following: [], blocked: [BEN] };
+    const writes = planWrites(before, blocked, ids);
+    // Following ends (the database ends it too), then the block.
+    assert.deepEqual(kinds(writes), ["remove:shop_follows", "add:blocks"]);
+    assert.deepEqual((writes[1] as Extract<Write, { kind: "add" }>).rows, [
+      { blocker_id: AKI, blocked_id: BEN },
+    ]);
+    const lifted = planWrites(blocked, { ...blocked, blocked: [] }, ids);
+    assert.deepEqual(lifted, [
+      {
+        kind: "remove",
+        table: "blocks",
+        rows: [{ blocker_id: AKI, blocked_id: BEN }],
+      },
+    ]);
+    // A 見本 is nobody to block: nothing is written for one.
+    assert.deepEqual(
+      planWrites(before, { ...before, blocked: [demoPosts[0].authorId] }, ids),
+      [],
+    );
+  });
+
+  await check(
+    "blocking takes the reader out of the town at once, and keeps them out",
+    async () => {
+      const CAL = "00000000-0000-4000-8000-00000000000c";
+      const benPost = "00000000-0000-4000-8000-0000000000e0";
+      const myReply = "00000000-0000-4000-8000-0000000000e3";
+      const calPost = "00000000-0000-4000-8000-0000000000e4";
+      const town = townFromRows(
+        rows({
+          profiles: [
+            profile(AKI, "aki"),
+            profile(BEN, "ben"),
+            profile(CAL, "cal"),
+          ],
+          shops: [shop(BEN_SHOP, BEN)],
+          follows: [{ shop_id: BEN_SHOP }],
+          posts: [
+            post(benPost, BEN),
+            post(myReply, AKI, { parent_id: benPost }),
+            post(calPost, CAL),
+          ],
+          postReactions: [BEN, CAL].map((user_id) => ({
+            user_id,
+            post_id: myReply,
+            kind: "like",
+            taps: 2,
+            created_at: at,
+          })),
+          records: [
+            {
+              id: uuid(0x4001),
+              user_id: BEN,
+              book_id: BOOK,
+              kind: "finished",
+              body: "",
+              feelings: ["warm"],
+              spoiler: false,
+              is_public: true,
+              created_at: at,
+              updated_at: at,
+            },
+          ],
+        }),
+        ids,
+      );
+      assert.equal(town.readingRecords.length, 1);
+      const { sync, planned, writes } = plannedSync(town);
+      const backend: TownBackend = {
+        kind: "account",
+        newId: counterId,
+        load: async () => ({ state: await sync.load(), status: "saved" }),
+        save: sync.save,
+        absorb: sync.absorb,
+      };
+      const store = createTownStore(backend);
+      store.initialize();
+      await settle(() => store.getSnapshot().posts.length === 3);
+
+      // A 見本, or someone the town does not know, cannot be blocked.
+      assert.equal(store.actions.blockReader(demoPosts[0].authorId), false);
+      assert.equal(
+        store.actions.blockReader("00000000-0000-4000-8000-0000000000c0"),
+        false,
+      );
+      assert.deepEqual(store.getSnapshot().blocked, []);
+
+      assert.equal(store.actions.blockReader(BEN), true);
+      const blocked = store.getSnapshot();
+      assert.deepEqual(blocked.blocked, [BEN]);
+      // Their 便り, their shop and their records go; the follow ends; their
+      // profile stays. The reader's own reply to them stays, never deleted.
+      assert.deepEqual(
+        blocked.posts.map((entry) => entry.id),
+        [myReply, calPost],
+      );
+      // Their like of the reader's reply is no longer shown.
+      const reply = blocked.posts[0];
+      assert.deepEqual(
+        [reply.likes, reply.likers?.map((liker) => liker.readerId)],
+        [1, [CAL]],
+      );
+      assert.deepEqual(blocked.shops, []);
+      assert.deepEqual(blocked.following, []);
+      assert.deepEqual(blocked.readingRecords, []);
+      assert.ok(blocked.readers.some((reader) => reader.id === BEN));
+      await settle(() => writes() === 1);
+      assert.deepEqual(kinds(planned), ["remove:shop_follows", "add:blocks"]);
+
+      // A 便り of theirs read before the block reached the database stays out.
+      const late: Arrived = {
+        ...emptyArrived(),
+        posts: [
+          {
+            id: "00000000-0000-4000-8000-0000000000e5",
+            authorId: BEN,
+            body: "まだ届く？",
+            bookId: null,
+            spoiler: false,
+            parentId: null,
+            createdAt: "2026-10-13T09:00:00Z",
+            likes: 0,
+            wants: 0,
+            readingMode: null,
+          },
+        ],
+      };
+      store.absorb(late, store.getGeneration());
+      assert.deepEqual(
+        store.getSnapshot().posts.map((entry) => entry.id),
+        [myReply, calPost],
+      );
+
+      store.actions.unblockReader(BEN);
+      assert.deepEqual(store.getSnapshot().blocked, []);
+      await settle(() => writes() === 2);
+      assert.deepEqual(kinds(planned).slice(2), ["remove:blocks"]);
+      sync.close();
     },
   );
 
