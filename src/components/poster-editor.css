@@ -125,7 +125,7 @@
 .poster-page-tabs button[aria-pressed="true"] {
   background: var(--green);
   border-color: var(--green);
-  color: #fffdf3;
+  color: var(--on-green);
 }
 .poster-page-tabs .poster-page-add {
   display: inline-flex;

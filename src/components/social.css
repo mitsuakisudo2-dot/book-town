@@ -319,7 +319,7 @@ mark.hidden-words.is-open {
   height: 60px;
   border-radius: 50%;
   background: var(--green);
-  color: #fffdf3;
+  color: var(--on-green);
   box-shadow:
     0 6px 18px #22403236,
     inset 0 0 0 3px #ffffff1c;
@@ -538,18 +538,18 @@ mark.hidden-words.is-open {
   font-size: 11px;
   padding: 3px 9px;
   border-radius: 999px;
-  border: 1px dashed #c9d3bd;
-  color: #5f7a62;
+  border: 1px dashed var(--line-2);
+  color: var(--green);
   background: transparent;
 }
 button.tag-chip:hover {
-  background: #eef1e6;
+  background: var(--green-soft);
 }
 .tag-chip.is-set {
   border-style: solid;
-  border-color: #b7c9ac;
-  background: #e5ede0;
-  color: #2f5a42;
+  border-color: color-mix(in srgb, var(--green) 30%, transparent);
+  background: var(--green-soft);
+  color: var(--green);
 }
 .reviews-more {
   justify-self: center;

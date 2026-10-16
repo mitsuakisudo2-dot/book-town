@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "./tokens.css";
-/* The colours, type and fonts are the tokens' (tokens.css). */
+@import "./parts.css";
+/* The colours, type and fonts are the tokens' (tokens.css); the shared
+   buttons and chips are parts.css. docs/色と部品の決まり.md has the rules. */
 :root {
   background: var(--paper);
   color: var(--ink);
@@ -59,7 +61,7 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #7c986d;
+  outline: 2px solid var(--green);
   outline-offset: 4px;
 }
 /* A heading or a form holds the focus only to tell keys and screen readers
@@ -72,8 +74,8 @@ textarea:focus-visible {
    (markField). */
 input[aria-invalid="true"],
 textarea[aria-invalid="true"] {
-  border-color: #a2483a;
-  outline: 1px solid #a2483a;
+  border-color: var(--alert);
+  outline: 1px solid var(--alert);
 }
 button:active:not(:disabled) {
   transform: translateY(1px);
@@ -792,7 +794,7 @@ input[type="checkbox"] {
   justify-content: center;
   gap: 8px;
   background: var(--green);
-  color: #fffdf3;
+  color: var(--on-green);
   border: 1px solid var(--green);
   padding: 11px 18px;
   border-radius: 5px;
@@ -801,19 +803,19 @@ input[type="checkbox"] {
   white-space: nowrap;
 }
 .button:hover:not(:disabled) {
-  background: #3a604c;
+  background: color-mix(in srgb, var(--green) 88%, var(--ink));
 }
 .button.secondary {
   background: transparent;
-  color: #6e8761;
-  border-color: #d4ddc8;
+  color: var(--green);
+  border-color: var(--line-2);
 }
 .button.secondary:hover:not(:disabled) {
-  background: #e8eedd;
+  background: var(--green-soft);
 }
 .button.primary {
   background: var(--green);
-  color: #fffdf3;
+  color: var(--on-green);
 }
 .ghost {
   display: inline-flex;
@@ -821,23 +823,23 @@ input[type="checkbox"] {
   align-items: center;
   padding: 8px 12px;
   border-radius: 5px;
-  color: #829473;
+  color: var(--ink-2);
   font-size: 11px;
 }
 .ghost:hover {
-  background: #e9eedf;
+  background: var(--green-soft);
 }
 .icon-button {
   display: grid;
   place-items: center;
   width: 34px;
   height: 34px;
-  color: #859578;
+  color: var(--ink-2);
   border-radius: 50%;
   flex-shrink: 0;
 }
 .icon-button:hover {
-  background: #e9eedf;
+  background: var(--green-soft);
 }
 /* Quiet, but readable on the paper (AA, 4.5:1 and more). */
 .muted {
