@@ -2255,6 +2255,88 @@ try {
   );
 
   await check(
+    "Moving along the bottom bar slides the page in from that side and springs the tab, without moving the 投稿 button or the screen sideways",
+    () =>
+      withPage({}, async () => {
+        const bar = page.locator(".town-bottom-nav");
+        /** The page's slide and the tapped tab's spring, as they start. */
+        const moves = () =>
+          page.evaluate(() => {
+            const main = document.querySelector("main");
+            const icon = document.querySelector(
+              '.town-bottom-nav a[aria-current="page"] svg',
+            );
+            const of = (element) =>
+              element
+                .getAnimations()
+                .filter((a) => !(a instanceof CSSAnimation))
+                .map((a) => a.effect.getKeyframes()[0]);
+            return {
+              page: of(main).map((frame) => frame.left ?? null),
+              icon: of(icon).map((frame) => frame.transform ?? null),
+              wide: document.documentElement.scrollWidth > innerWidth,
+            };
+          });
+        await go("/");
+        const fab = page.locator(".compose-fab");
+        const rest = await fab.boundingBox();
+        await bar.getByRole("link", { name: "書店めぐり" }).tap();
+        await expect(page).toHaveURL(/\/walk\//);
+        await bar.getByRole("link", { name: "検索" }).tap();
+        await expect(page).toHaveURL(/\/search\//);
+        // From 書店めぐり to 検索, the tab to the left: in from the left.
+        expect(await moves()).toEqual({
+          page: ["-24px"],
+          icon: ["scale(0.82)"],
+          wide: false,
+        });
+        await bar.getByRole("link", { name: "ホーム" }).tap();
+        await expect(fab).toBeVisible();
+        expect((await moves()).page).toEqual(["-24px"]);
+        // The page moves by its offset: its fixed 投稿 button stays put.
+        expect(await fab.boundingBox()).toEqual(rest);
+        // 本棚 and わたし switch the same page in place, and still slide.
+        await bar.getByRole("link", { name: "本棚" }).tap();
+        await expect(page).toHaveURL(/books=library/);
+        // The page reads 本棚 from its address a moment late: still one
+        // slide, from the right.
+        expect((await moves()).page).toEqual(["24px"]);
+        await page.waitForTimeout(400);
+        await bar.getByRole("link", { name: "わたし" }).tap();
+        await expect(page).not.toHaveURL(/books=library/);
+        expect(await moves()).toEqual({
+          page: ["24px"],
+          icon: ["scale(0.82)"],
+          wide: false,
+        });
+        // A page within a tab, or the same tab again, does not slide.
+        await page.waitForTimeout(400);
+        await bar.getByRole("link", { name: "わたし" }).tap();
+        expect((await moves()).page).toEqual([]);
+      }),
+  );
+  await check(
+    "With less motion asked for, moving along the bottom bar does not slide",
+    () =>
+      withPage({ reducedMotion: "reduce" }, async () => {
+        await go("/search/");
+        await page
+          .locator(".town-bottom-nav")
+          .getByRole("link", { name: "記録" })
+          .tap();
+        await expect(page).toHaveURL(/\/reading\//);
+        expect(
+          await page.evaluate(
+            () =>
+              document
+                .getAnimations()
+                .filter((a) => !(a instanceof CSSAnimation)).length,
+          ),
+        ).toBe(0);
+      }),
+  );
+
+  await check(
     "The night: 端末に合わせる follows a dark device before the first paint, and every word on the main screens is readable",
     () =>
       withPage({ colorScheme: "dark" }, async () => {

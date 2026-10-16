@@ -312,6 +312,9 @@ input[type="checkbox"] {
   min-height: 65vh;
   animation: page-in 0.24s ease;
   min-width: 0;
+  /* The page moves in by its offset, not a transform: a transform would
+     carry its fixed parts (the 投稿 button) away while it moves. */
+  position: relative;
 }
 .eyebrow {
   display: block;
@@ -1493,11 +1496,11 @@ div.book-jacket:hover {
 @keyframes page-in {
   from {
     opacity: 0;
-    transform: translateY(5px);
+    top: 5px;
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    top: 0;
   }
 }
 @keyframes fade-in {
@@ -1677,6 +1680,11 @@ div.book-jacket:hover {
   }
   .town-bottom-nav a.active {
     color: var(--green);
+  }
+  /* A tab's page slides in from the side (tab-motion.ts) without the
+     screen growing sideways while it does. */
+  .town-workspace {
+    overflow-x: clip;
   }
   .town-bottom-nav span {
     font-size: 10px;
