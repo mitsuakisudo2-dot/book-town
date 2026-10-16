@@ -42,6 +42,14 @@ function sqlWithoutComments(text: string): string {
 }
 
 /**
+ * Bodies of functions and do blocks ($$ … $$, $tag$ … $tag$) out too, so their
+ * own begin and their semicolons never read as statements of the file.
+ */
+function sqlWithoutBodies(sql: string): string {
+  return sql.replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/g, " $$$$ ");
+}
+
+/**
  * What is wrong with a migration that moves data: it keeps a copy but never
  * checks it, or holds a statement `supabase db push` runs outside the file's
  * transaction, so a failed check could not roll the whole move back.
@@ -57,7 +65,7 @@ function movingProblems(name: string, text: string): string[] {
   ];
   if (!checks.some((match) => (match.index ?? 0) > lastKeep))
     problems.push(`${name} keeps a copy but never checks it after the move`);
-  for (const statement of sql.split(";")) {
+  for (const statement of sqlWithoutBodies(sql).split(";")) {
     const head = statement.trim().toUpperCase();
     if (
       /^(CREATE\s+(UNIQUE\s+)?INDEX\s+CONCURRENTLY|DROP\s+INDEX\s+CONCURRENTLY|REINDEX\b[\s\S]*\bCONCURRENTLY|VACUUM\b|ALTER\s+SYSTEM\b|CLUSTER\b)/.test(
@@ -81,6 +89,13 @@ async function main() {
     sql: string,
     params: unknown[] = [],
   ) => (await db.query<T>(sql, params)).rows;
+  // The copies the migrations themselves took (of an empty database here)
+  // go first, so these checks start from an empty keep. Those moves have
+  // checks of their own (tests/db-works.test.ts).
+  for (const { label } of await rows<{ label: string }>(
+    "select distinct label from keep.copies order by label",
+  ))
+    await db.query("select private.drop_copy($1)", [label]);
 
   let passed = 0;
   async function check(name: string, run: () => Promise<void>) {
@@ -706,6 +721,19 @@ async function main() {
           'y.sql runs "CREATE INDEX CONCURRENTLY" outside its transaction; move it to a file of its own',
           "y.sql ends its own transaction with COMMIT",
         ],
+      );
+      // A function's or a do block's own begin is not the file's.
+      assert.deepEqual(
+        movingProblems(
+          "z.sql",
+          `select private.keep_copy('20990101000000_z', array['public.books']::regclass[]);
+         create function private.z() returns void language plpgsql as $$
+         declare n int; begin n := 1; end; $$;
+         do $body$ declare n int; begin commit; end $body$;
+         select private.check_copy('20990101000000_z');
+         begin;`,
+        ),
+        ["z.sql ends its own transaction with BEGIN"],
       );
     },
   );

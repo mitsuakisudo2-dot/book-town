@@ -159,7 +159,12 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     people: { reporter_id: "delete" },
     readers: "own",
   },
+  "public.works": { people: {}, readers: "nobody" },
   "private.staff": { people: { user_id: "delete" }, readers: "nobody" },
+  // How books came to share a work, and the works the operator found to be
+  // different (works); they name no one.
+  "private.work_changes": { people: {}, readers: "nobody" },
+  "private.works_apart": { people: {}, readers: "nobody" },
   // A copy's own rows are cleared by forget_in_copies (moving_copies).
   "keep.copies": { people: {}, readers: "nobody" },
 };
