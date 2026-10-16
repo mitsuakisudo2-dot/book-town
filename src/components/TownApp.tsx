@@ -1,4 +1,6 @@
 "use client";
+// First, so the CSS keeps its order (screen-styles.ts).
+import "./screen-styles";
 import {
   useCallback,
   useEffect,
@@ -9,6 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   journalTown,
@@ -40,23 +43,17 @@ import {
   ReaderAvatar,
 } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
-import { ShopEditor } from "./ShopEditor";
-import { ProfileView } from "./ProfileView";
 import { BookInHand, heldBookOf } from "./BookInHand";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookReviews, FoldedWords } from "./Social";
 import { HomeView } from "./HomeView";
 import { requestHomeTop } from "../lib/home-tab";
-import { SearchView } from "./SearchView";
-import { ReadingView } from "./ReadingView";
-import { NotificationsView } from "./NotificationsView";
 import { activeSession } from "../lib/reading";
 import { unreadCount } from "../lib/notifications";
 import { bookPath } from "../lib/books";
 import "./usability.css";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
-import { WalkView } from "./WalkView";
 import {
   isDatabaseId,
   posterNewPath,
@@ -89,8 +86,6 @@ import { useLastHomeAddress } from "../lib/last-address";
 import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
 import { findReader, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { PosterThumb } from "./PosterView";
-import { PosterEditor } from "./PosterEditor";
-import { PosterScreen } from "./PosterScreen";
 import "./poster-screen.css";
 import { useLayerReturn } from "../lib/back-layer";
 import { PostLayer, PostPageView } from "./letter/PostPage";
@@ -102,6 +97,35 @@ import {
   usePostLayer,
 } from "./letter/post-layer";
 import { useAnnouncement } from "../lib/live-region";
+
+// Every screen but Home comes in its own file, read when it is first shown
+// (and after Home is drawn, below), so a phone opening the town reads and
+// runs only Home's code before the first 便り. Each is still drawn into the
+// page's HTML at build time.
+const ShopEditor = dynamic(() =>
+  import("./ShopEditor").then((file) => file.ShopEditor),
+);
+const ProfileView = dynamic(() =>
+  import("./ProfileView").then((file) => file.ProfileView),
+);
+const SearchView = dynamic(() =>
+  import("./SearchView").then((file) => file.SearchView),
+);
+const ReadingView = dynamic(() =>
+  import("./ReadingView").then((file) => file.ReadingView),
+);
+const NotificationsView = dynamic(() =>
+  import("./NotificationsView").then((file) => file.NotificationsView),
+);
+const WalkView = dynamic(() =>
+  import("./WalkView").then((file) => file.WalkView),
+);
+const PosterEditor = dynamic(() =>
+  import("./PosterEditor").then((file) => file.PosterEditor),
+);
+const PosterScreen = dynamic(() =>
+  import("./PosterScreen").then((file) => file.PosterScreen),
+);
 
 type View =
   | "town"

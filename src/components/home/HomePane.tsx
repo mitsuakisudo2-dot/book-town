@@ -1,7 +1,14 @@
 "use client";
 
-import { useState, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   boardPicks,
   exhibitionFeature,
@@ -37,13 +44,20 @@ import type { Post, Shop, TownState } from "../../lib/types";
 import { findReader } from "../../lib/social";
 import { useLayerReturn } from "../../lib/back-layer";
 import { BookInHand, heldBookOf } from "../BookInHand";
-import { ScanSession } from "../ScanSession";
 import { Alley } from "./Alley";
 import { CorkBoard } from "./CorkBoard";
 import { Entrances } from "./Entrances";
 import { FeatureView } from "./FeatureBand";
 import { LiveBox, type LiveSlot } from "./LiveBox";
-import { useHeld, useTownReading } from "./hooks";
+import { useHeld, useNow, useTownReading } from "./hooks";
+import { useAccountState } from "../../lib/account-session";
+import { supabaseConfigured } from "../../lib/supabase/config";
+import {
+  keepSnapshot,
+  readKeptSnapshot,
+  snapshotFor,
+  snapshotOf,
+} from "../../lib/home-snapshot";
 import { Letters, LetterSkeletons, type Shared } from "./Letters";
 import { ReadingLine } from "./ReadingLine";
 import type { Picked } from "./ShopFront";
@@ -160,6 +174,17 @@ function resolve(
 }
 
 /** A plain click, not one meant to open the link in a new tab or window. */
+// The camera's scanning comes in its own file, read when it is opened.
+const ScanSession = dynamic(
+  () => import("../ScanSession").then((file) => file.ScanSession),
+  { ssr: false },
+);
+
+const still = () => () => {};
+
+/** Whether the 路地 has been drawn on this page before. */
+let alleyDrawn = false;
+
 const plainClick = (event: MouseEvent) =>
   event.button === 0 &&
   !event.metaKey &&
@@ -228,6 +253,45 @@ export function HomePane({
       ).map(hold),
     };
   });
+  // The first time Home is drawn on a page, the 路地 (below the screen, and
+  // as much again as everything above it) comes in the frame after the
+  // first 便り, so a slow phone lays out and paints those first. Back on
+  // Home later, it is there with the rest, where the reader left it.
+  const [alleyReady, setAlleyReady] = useState(alleyDrawn);
+  useEffect(() => {
+    if (!drawn || alleyReady) return;
+    let timer = 0;
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => {
+        alleyDrawn = true;
+        setAlleyReady(true);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [drawn, alleyReady]);
+  // Whose Home this is, for the 便り kept from the last time (home-snapshot):
+  // null while the account is being checked or cannot be.
+  const account = useAccountState();
+  const owner =
+    account.status === "signed-in"
+      ? account.user.id
+      : account.status === "signed-out"
+        ? "visitor"
+        : null;
+  const kept = useSyncExternalStore(still, readKeptSnapshot, () => null);
+  const now = useNow();
+  const snapshot =
+    supabaseConfigured && !drawn && now !== null
+      ? snapshotFor(kept, account.status === "loading" ? null : owner, now)
+      : null;
+  // Home as drawn is kept for the next time; the town of a demo is not.
+  useEffect(() => {
+    if (!supabaseConfigured || !drawn || owner === null) return;
+    keepSnapshot(snapshotOf(state, drawn, owner, drawn.at));
+  }, [state, drawn, owner]);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [sheet, setSheet] = useState<"read" | "scan" | null>(null);
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
@@ -322,6 +386,24 @@ export function HomePane({
           onPick={setPicked}
           onTakeLine={onTakeLine}
         />
+      ) : snapshot ? (
+        // The 便り kept from last time, read-only until the town is read.
+        <div className="home-kept" inert aria-busy="true">
+          <WovenLetters
+            {...shared}
+            state={snapshot.state}
+            followed={snapshot.followed.flatMap(
+              (id) => letterOf(snapshot.state, id) ?? [],
+            )}
+            town={snapshot.town.flatMap(
+              (id) => letterOf(snapshot.state, id) ?? [],
+            )}
+            slots={[]}
+            mark={null}
+            onPick={() => undefined}
+            onTakeLine={() => false}
+          />
+        </div>
       ) : (
         <LetterSkeletons />
       )}
@@ -342,7 +424,7 @@ export function HomePane({
         <h2>ここから、まだ知らない路地</h2>
         {followed.length > 0 && <p>フォロー中の便りは、ここまでです。</p>}
       </header>
-      {drawn && (
+      {drawn && alleyReady && (
         <Alley
           {...shared}
           now={drawn.at}
