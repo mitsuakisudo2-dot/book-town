@@ -1030,7 +1030,7 @@ function BookView({
     ) : (
       <div className="empty-state">
         <h1>この本は見つかりませんでした。</h1>
-        <p>登録した本は、登録したときと同じブラウザで開いてください。</p>
+        <p>この本のページは、いまは見られません。</p>
         <Link href="/profiles/me/" className="btn">
           保存した本を見る
         </Link>
