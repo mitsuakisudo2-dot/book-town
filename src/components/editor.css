@@ -32,61 +32,13 @@
   line-height: 1.9;
   margin: 0;
 }
-.editor-button {
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.4;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background 0.2s,
-    transform 0.2s,
-    box-shadow 0.2s;
-}
-.editor-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-.editor-button.primary {
-  background: var(--green);
-  color: var(--on-green);
-}
-.editor-button.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--green) 85%, var(--shade));
-  box-shadow: 0 3px 8px color-mix(in srgb, var(--shade) 9%, transparent);
-}
-.editor-button.secondary {
-  background: var(--sheet);
-  color: var(--green);
-  border-color: var(--line-2);
-}
-.editor-button.secondary:hover:not(:disabled) {
-  background: var(--green-soft);
-}
-.editor-button.danger {
-  background: var(--alert);
-  color: var(--sheet);
-}
-.editor-button:disabled,
 .editor-segment button:disabled {
   opacity: 0.38;
   cursor: not-allowed;
   transform: none;
 }
-.editor-button:focus-visible,
 .editor-theme-option:focus-visible,
-.editor-icon-button:focus-visible,
 .editor-book-choice:focus-visible,
-.editor-text-button:focus-visible,
 .editor-privacy:focus-visible,
 .editor-remove-book:focus-visible,
 .editor-segment button:focus-visible {
@@ -105,7 +57,7 @@
 .editor-search-field input {
   display: block;
   border: 1px solid var(--field);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   background: var(--sheet);
   color: var(--ink);
   font: inherit;
@@ -141,7 +93,7 @@
   font-size: 9px;
   margin-left: 5px;
   padding: 2px 5px;
-  border-radius: 2px;
+  border-radius: var(--r-edge);
   font-weight: 400;
 }
 .editor-optional {
@@ -168,7 +120,7 @@
   align-items: center;
   gap: 5px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   background: transparent;
   padding: 5px 7px 5px 4px;
   font-size: 11px;
@@ -192,7 +144,7 @@
 }
 .editor-settings {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-box);
   background: var(--band);
   margin-bottom: 35px;
 }
@@ -271,7 +223,7 @@
 .editor-shelf-panel {
   padding: 24px 24px 19px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-box);
   background: var(--sheet);
   overflow: hidden;
 }
@@ -309,7 +261,7 @@
   padding: 6px 2px;
   border: 1px solid transparent;
   background: transparent;
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   font-family: var(--font-serif, "Noto Serif JP"), "Yu Mincho", serif;
   color: var(--ink);
   font-size: 17px;
@@ -337,7 +289,7 @@
   border: 1px solid var(--line);
   background: var(--green-soft);
   color: var(--ink-2);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   font: inherit;
   font-size: 10px;
   min-height: 34px;
@@ -349,25 +301,7 @@
   background: var(--band);
   color: var(--ink-2);
 }
-.editor-icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--ink-2);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.editor-icon-button:hover {
-  background: var(--band);
-}
-.editor-icon-button.subtle {
-  color: var(--ink-2);
-}
+
 .editor-space-row {
   display: flex;
   align-items: center;
@@ -392,7 +326,7 @@
 .editor-capacity-track {
   height: 3px;
   width: 100%;
-  border-radius: 9px;
+  border-radius: var(--r-box);
   background: var(--band);
   overflow: hidden;
   margin-bottom: 20px;
@@ -402,7 +336,7 @@
   display: block;
   background: var(--green);
   transition: width 0.35s;
-  border-radius: 9px;
+  border-radius: var(--r-box);
 }
 .editor-shelf-below {
   display: flex;
@@ -420,17 +354,12 @@
   line-height: 1.7;
   margin: 0;
 }
-.editor-shelf-below .editor-button {
-  min-height: 36px;
-  font-size: 11px;
-  padding: 8px 12px;
-}
 .editor-selected-book {
   margin-top: 19px;
   background: var(--band);
   border: 1px solid var(--line);
   padding: 22px;
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   animation: editor-fade-in 0.22s ease-out;
 }
 .editor-selected-heading {
@@ -477,7 +406,7 @@
   padding: 3px;
   border: 1px solid var(--line-2);
   background: var(--band);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   gap: 2px;
 }
 .editor-segment button {
@@ -490,7 +419,7 @@
   padding: 7px 12px;
   background: transparent;
   color: var(--ink-2);
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   font: inherit;
   font-size: 11px;
   cursor: pointer;
@@ -501,7 +430,7 @@
 .editor-segment button.is-active {
   background: var(--sheet);
   color: var(--green);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--shade) 7%, transparent);
+  box-shadow: var(--lift-1);
 }
 .editor-segment small {
   font-size: 9px;
@@ -511,11 +440,6 @@
 .editor-move-buttons {
   display: flex;
   gap: 6px;
-}
-.editor-move-buttons .editor-button {
-  min-height: 40px;
-  padding: 8px 11px;
-  font-size: 11px;
 }
 .editor-pop-label textarea {
   background: var(--pop);
@@ -528,34 +452,6 @@
   margin-top: 18px;
   padding-top: 15px;
   border-top: 1px solid var(--line);
-}
-.editor-text-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--green);
-  font-family: inherit;
-  font-size: 11px;
-  border: 0;
-  background: transparent;
-  text-decoration: none;
-  cursor: pointer;
-  padding: 6px 0;
-}
-.editor-text-button:hover {
-  text-decoration: underline;
-}
-.editor-remove-book {
-  border: 0;
-  background: transparent;
-  padding: 8px 0;
-  font-family: inherit;
-  font-size: 10px;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-.editor-remove-book:hover {
-  color: var(--alert);
 }
 .editor-bottom-note {
   display: flex;
@@ -592,7 +488,7 @@
   text-align: center;
   border: 1px dashed var(--line-2);
   padding: 45px 20px;
-  border-radius: 9px;
+  border-radius: var(--r-box);
   color: var(--ink-2);
   background: var(--sheet);
 }
@@ -629,7 +525,7 @@
   padding: 0 13px;
   border: 1px solid var(--field);
   background: var(--sheet);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   color: var(--ink-2);
 }
 .editor-search-field input {
@@ -653,7 +549,7 @@
 }
 .editor-capacity-warning {
   padding: 10px 12px;
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   background: var(--lamp-soft);
   color: var(--ink);
   font-size: 11px;
@@ -677,7 +573,7 @@
   text-align: left;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   padding: 15px 10px 11px;
   cursor: pointer;
   transition:
@@ -802,7 +698,7 @@
   .editor-page-heading {
     align-items: flex-start;
   }
-  .editor-page-heading > .editor-button {
+  .editor-page-heading > .btn {
     margin-top: 25px;
   }
   .editor-shelf-panel {
@@ -830,11 +726,8 @@
     font-size: 11px;
     line-height: 1.9;
   }
-  .editor-page-heading > .editor-button {
+  .editor-page-heading > .btn {
     margin-top: 16px;
-    min-height: 37px;
-    font-size: 11px;
-    padding: 8px 12px;
   }
   .editor-settings {
     margin-bottom: 28px;
@@ -866,18 +759,12 @@
     max-width: 200px;
     line-height: 1.8;
   }
-  .editor-shelves-heading > .editor-button {
+  .editor-shelves-heading > .btn {
     margin-top: 2px;
-    min-height: 37px;
-    font-size: 10px;
-    padding: 8px 10px;
-  }
-  .editor-shelves-heading > .editor-button svg {
-    width: 15px;
   }
   .editor-shelf-panel {
     padding: 16px 12px 14px;
-    border-radius: 7px;
+    border-radius: var(--r-tag);
   }
   .editor-shelf-title-wrap {
     gap: 5px;
@@ -903,10 +790,7 @@
   .editor-privacy svg {
     width: 13px;
   }
-  .editor-icon-button {
-    width: 30px;
-    height: 34px;
-  }
+
   .editor-space-row {
     font-size: 9px;
     margin-top: 15px;
@@ -931,11 +815,6 @@
     flex-shrink: 0;
     margin-top: 2px;
   }
-  .editor-shelf-below .editor-button {
-    font-size: 10px;
-    min-height: 36px;
-    padding: 8px 9px;
-  }
   .editor-selected-book {
     padding: 16px 13px;
   }
@@ -951,16 +830,10 @@
     font-size: 10px;
     min-height: 36px;
   }
-  .editor-move-buttons .editor-button {
-    min-height: 44px;
-    padding: 9px 11px;
-  }
+
   .editor-selected-footer {
     align-items: flex-start;
     font-size: 10px;
-  }
-  .editor-remove-book {
-    font-size: 9px;
   }
   .editor-bottom-note {
     font-size: 9px;
@@ -1016,7 +889,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .editor-button,
   .editor-capacity-track > span,
   .editor-segment button,
   .editor-book-choice {
@@ -1046,5 +918,5 @@
   color: var(--on-green);
   font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 20%, transparent);
+  box-shadow: var(--lift-1);
 }

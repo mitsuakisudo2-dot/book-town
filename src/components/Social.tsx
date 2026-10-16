@@ -92,7 +92,7 @@ export function BookReviews({ book, ...props }: Shared & { book: Book }) {
         {open.length > shown.length && (
           <button
             type="button"
-            className="reviews-more"
+            className="btn reviews-more"
             onClick={() => setShowAll(true)}
           >
             残りのレビューをすべて表示（{open.length - shown.length}件）
@@ -158,7 +158,7 @@ export function ProfilePosts({
           <div className="empty-state">
             <p>{self ? "まだ投稿していません。" : "まだ投稿はありません。"}</p>
             {self && (
-              <Link href="/timeline/" className="button secondary">
+              <Link href="/timeline/" className="btn">
                 タイムラインで書く
               </Link>
             )}
@@ -317,7 +317,7 @@ export function PostComposer({
       )}
       <span className="composer-send">
         <LengthNearLimit length={body.length} max={POST_MAX_LENGTH} />
-        <button className="button" type="submit" disabled={!body.trim()}>
+        <button className="btn fill" type="submit" disabled={!body.trim()}>
           {isReply ? "返信する" : "投稿する"}
         </button>
       </span>

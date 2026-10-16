@@ -1,10 +1,10 @@
 /* The street is a sequence of complete, owner-curated bookshops. */
 .street-shop {
   border: 1px solid var(--line-2);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   margin-bottom: 36px;
   background: var(--sheet);
-  box-shadow: 0 5px 15px color-mix(in srgb, var(--shade) 2%, transparent);
+  box-shadow: var(--lift-2);
   overflow: clip;
   scroll-margin-top: 100px;
 }
@@ -69,7 +69,7 @@
   border: 1px solid var(--line-2);
   padding: 6px 12px;
   font-size: 11px;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   background: color-mix(in srgb, var(--sheet) 62%, transparent);
   white-space: nowrap;
 }
@@ -131,7 +131,7 @@
 }
 .street-shelf .shelf-scroll {
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--r-edge);
   background: #dfcfb7;
   scrollbar-width: thin;
   overscroll-behavior-x: contain;
@@ -284,7 +284,7 @@
   min-height: 44px;
   font-size: 12px;
   border: 1px solid var(--line-2);
-  border-radius: 3px;
+  border-radius: var(--r-edge);
 }
 .street-end > div > a {
   background: var(--green-soft);
@@ -590,7 +590,7 @@
   font-size: 10px;
   border: 1px solid var(--theme-light);
   padding: 1px 7px;
-  border-radius: 2px;
+  border-radius: var(--r-edge);
   color: var(--ink-2);
   white-space: nowrap;
 }
@@ -694,7 +694,7 @@
   text-align: left;
   background: var(--pop);
   border: 1px solid var(--pop-line);
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   box-shadow: 2px 3px 0 color-mix(in srgb, var(--pop-line) 50%, transparent);
   transform: rotate(-0.6deg);
   color: var(--ink);
@@ -747,12 +747,12 @@
 .street-shop.is-compact .street-shop-footer > .street-enter {
   margin-left: auto;
   padding: 4px 14px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--theme-fill);
   color: var(--on-dark);
   font-weight: 600;
 }
-.street-empty .button {
+.street-empty .btn {
   display: inline-flex;
 }
 @media (max-width: 760px) {

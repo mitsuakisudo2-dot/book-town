@@ -27,7 +27,7 @@
 .scene-preview {
   position: sticky;
   top: 0;
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   overflow: hidden;
   background: #2c1d12;
   color: var(--on-dark);
@@ -82,7 +82,7 @@
   min-width: 0;
   min-height: 44px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   background: var(--paper);
   color: var(--ink);
   font: inherit;
@@ -115,7 +115,7 @@
   text-align: left;
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   gap: 5px;
   min-height: 44px;
 }
@@ -172,7 +172,7 @@
   padding: 10px;
   text-align: left;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -216,7 +216,7 @@
   min-height: 44px;
   padding: 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   font-size: 12px;
 }
 .scene-order-buttons button:disabled,
@@ -258,7 +258,7 @@
   justify-content: space-between;
   gap: 20px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-box);
   padding: 18px 20px;
   margin: 20px 0;
   background: linear-gradient(
@@ -285,7 +285,7 @@
 }
 .editor-messages {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-box);
   padding: 18px 20px;
   margin: 20px 0;
   scroll-margin-top: 80px;
@@ -358,9 +358,6 @@
     align-items: stretch;
     flex-direction: column;
     padding: 18px;
-  }
-  .scene-editor-footer .editor-button {
-    padding: 10px 12px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

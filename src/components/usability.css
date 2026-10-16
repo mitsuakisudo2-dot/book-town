@@ -120,12 +120,10 @@
     align-self: center;
   }
 }
-.town-shell .stockist-bottom .text-button {
+.town-shell .stockist-bottom .text-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 40px;
-  font-size: 12px;
 }
 
 /* Narrow phones: the six labels keep to one line and inside the screen. */
@@ -170,7 +168,7 @@
   align-items: center;
   padding: 12px 14px;
   border: 1px solid var(--pop-line);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   background: var(--pop);
   color: var(--ink);
 }

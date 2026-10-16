@@ -19,7 +19,7 @@
   color: var(--ink);
   padding: 11px 13px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-box);
   cursor: pointer;
 }
 .report-reasons label:has(input:checked) {

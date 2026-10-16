@@ -18,15 +18,11 @@ export function AccountInvite() {
       </p>
       <div className="note-box">{INVITE_NOTE}</div>
       <div className="visitor-invite-actions">
-        <Link
-          className="button primary"
-          href="/login/"
-          onClick={closeAccountRequest}
-        >
+        <Link className="btn fill" href="/login/" onClick={closeAccountRequest}>
           ログインする
           <Icon name="arrow" size={16} />
         </Link>
-        <button className="button secondary" onClick={closeAccountRequest}>
+        <button className="btn" onClick={closeAccountRequest}>
           このまま見る
         </button>
       </div>
@@ -65,7 +61,7 @@ export function VisitorPage({ page }: { page: keyof typeof PAGES }) {
       <Icon name={copy.icon} size={34} />
       <h1>{copy.title}</h1>
       <p>{copy.text}</p>
-      <Link className="button primary" href="/login/">
+      <Link className="btn fill" href="/login/">
         ログインする
         <Icon name="arrow" size={16} />
       </Link>

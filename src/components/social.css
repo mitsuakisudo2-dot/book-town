@@ -12,7 +12,7 @@
   align-items: flex-start;
   background: var(--sheet);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-box);
   padding: 17px 18px;
   margin-bottom: 20px;
 }
@@ -52,7 +52,7 @@
   width: 100%;
   max-width: 300px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   padding: 6px 8px;
   font-size: 11px;
   background: var(--sheet);
@@ -86,9 +86,8 @@
   font-size: 10px;
   color: var(--ink-2);
 }
-.composer-tools .button:disabled {
+.composer-tools .btn:disabled {
   opacity: 0.45;
-  cursor: not-allowed;
 }
 .composer-hint {
   font-size: 11px;
@@ -105,7 +104,7 @@
   gap: 8px 12px;
   margin-top: 8px;
   padding: 9px 12px;
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   background: var(--band);
   border: 1px dashed var(--line-2);
 }
@@ -121,7 +120,7 @@
   color: var(--ink-2);
   background: var(--sheet);
   border: 1px solid var(--line-2);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 5px 13px;
 }
 .spoiler-folded-note button:hover {
@@ -137,7 +136,7 @@
   letter-spacing: 0.04em;
   color: var(--paper);
   background: var(--ink);
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   padding: 0 9px;
   margin: 0 2px;
   vertical-align: 1px;
@@ -153,7 +152,7 @@ mark.hidden-words.is-open {
   letter-spacing: inherit;
   color: inherit;
   background: var(--band);
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   padding: 1px 2px;
   margin: 0;
   vertical-align: baseline;
@@ -164,7 +163,7 @@ mark.hidden-words.is-open {
   margin: 0 0 18px;
   padding: 16px 18px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-box);
   background: var(--sheet);
 }
 .follow-suggestions h2 {
@@ -217,11 +216,9 @@ mark.hidden-words.is-open {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.follow-suggestions .button {
+.follow-suggestions .btn {
   grid-row: 1;
   grid-column: 2;
-  padding: 6px 14px;
-  font-size: 12px;
 }
 .delete-confirm {
   display: flex;
@@ -231,10 +228,6 @@ mark.hidden-words.is-open {
   margin-top: 8px;
   font-size: 12px;
   color: var(--alert);
-}
-.delete-confirm .button {
-  padding: 6px 12px;
-  font-size: 11px;
 }
 
 .book-reviews {
@@ -253,7 +246,7 @@ mark.hidden-words.is-open {
   font-size: 12px;
   color: var(--green);
   background: var(--green-soft);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   padding: 10px 13px;
   margin-bottom: 16px;
   max-width: 760px;
@@ -273,7 +266,7 @@ mark.hidden-words.is-open {
   color: var(--ink-2);
   background: var(--band);
   border: 1px solid var(--line-2);
-  border-radius: 8px;
+  border-radius: var(--r-box);
   padding: 15px 17px;
   margin-bottom: 12px;
 }
@@ -376,7 +369,7 @@ mark.hidden-words.is-open {
   align-items: center;
   gap: 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   padding: 8px 11px;
   background: var(--sheet);
   color: var(--ink-2);
@@ -410,7 +403,7 @@ mark.hidden-words.is-open {
   width: 100%;
   text-align: left;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--r-tag);
 }
 .picker-results button:hover {
   background: var(--green-soft);
@@ -445,23 +438,12 @@ mark.hidden-words.is-open {
 .book-jacket.picker-jacket > span:not(.jacket-edge):not(.jacket-art) {
   display: none;
 }
-.picker-clear {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  color: var(--ink-2);
-}
-.picker-clear:hover {
-  background: var(--green-soft);
-}
 .post-composer :is(.composer-book, .composer-poster) {
   flex: 0 1 auto;
   gap: 4px;
   font-size: 11px;
   border: 1px dashed var(--line-2);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 5px 9px;
 }
 /* Close enough for 隠す, which comes and goes as words are chosen, to join
@@ -525,7 +507,7 @@ mark.hidden-words.is-open {
   align-items: center;
   font-size: 11px;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px dashed var(--line-2);
   color: var(--green);
   background: transparent;
@@ -541,15 +523,6 @@ button.tag-chip:hover {
 }
 .reviews-more {
   justify-self: center;
-  font-size: 12px;
-  color: var(--green);
-  padding: 9px 18px;
-  border: 1px solid var(--line-2);
-  border-radius: 999px;
-  background: var(--sheet);
-}
-.reviews-more:hover {
-  background: var(--green-soft);
 }
 .bell-light {
   position: absolute;
@@ -579,7 +552,7 @@ button.tag-chip:hover {
   gap: 6px 12px;
   margin: 6px 0;
   padding: 9px 12px;
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   background: var(--band);
   color: var(--ink-2);
   font-size: 12px;
@@ -591,7 +564,7 @@ button.tag-chip:hover {
   color: var(--ink);
   background: var(--sheet);
   border: 1px solid var(--line-2);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 4px 12px;
 }
 .words-folded-note {

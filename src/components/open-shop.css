@@ -4,7 +4,7 @@
   margin: 8px auto 40px;
   padding: 40px 38px 44px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-box);
   background: var(--sheet);
   color: var(--ink);
 }
@@ -41,7 +41,7 @@
   gap: 8px;
   text-align: left;
   padding: 22px 18px 20px;
-  border-radius: 10px;
+  border-radius: var(--r-box);
   border: 1px solid var(--line-2);
   background: var(--sheet);
   color: inherit;
@@ -55,7 +55,7 @@
 .open-kind:focus-visible {
   transform: translateY(-3px);
   border-color: var(--green);
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--shade) 8%, transparent);
+  box-shadow: var(--lift-2);
 }
 .open-kind b {
   font-family: var(--serif);
@@ -120,7 +120,7 @@
 .open-kind.is-one .open-kind-shelf i {
   width: 34px;
   height: 50px;
-  border-radius: 2px;
+  border-radius: var(--r-edge);
   background: linear-gradient(160deg, #6e8c74, #3f5a4a);
   box-shadow: 2px 2px 0 #00000018;
 }
@@ -243,7 +243,7 @@
 .open-sign {
   margin: 18px 0 26px;
   padding: 26px 22px;
-  border-radius: 8px;
+  border-radius: var(--r-box);
   text-align: center;
   background: var(--theme-fill);
   color: var(--on-dark);
@@ -278,7 +278,7 @@
   margin-top: 7px;
   padding: 12px 13px;
   border: 1px solid var(--field);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   background: var(--sheet);
   color: var(--ink);
   font: inherit;
@@ -287,7 +287,7 @@
   outline: 2px solid var(--green);
   outline-offset: 1px;
 }
-.open-name .editor-button {
+.open-name .btn {
   margin-top: 7px;
 }
 .open-name {
@@ -298,7 +298,7 @@
   flex: 1;
   min-width: 0;
 }
-.open-name .editor-button {
+.open-name .btn {
   flex-shrink: 0;
 }
 .open-sign-form .editor-label {

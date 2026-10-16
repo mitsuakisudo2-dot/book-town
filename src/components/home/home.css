@@ -85,7 +85,7 @@
   bottom: -1px;
   width: 56px;
   height: 3px;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   background: var(--green);
   transform: translateX(-50%);
 }
@@ -148,7 +148,7 @@ html[data-home-tab="letters"]
   aspect-ratio: 16 / 10;
   min-width: 0;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: var(--r-card);
   background: var(--shade);
   color: var(--on-dark);
   scroll-snap-align: start;
@@ -281,7 +281,7 @@ html[data-home-tab="letters"]
 .home-carousel-dots > span {
   width: 6px;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   background: var(--line-2);
   transition:
     width 0.2s cubic-bezier(0.2, 0, 0, 1),
@@ -336,7 +336,7 @@ html[data-home-tab="letters"]
   place-items: center;
   width: 54px;
   height: 54px;
-  border-radius: 18px;
+  border-radius: var(--r-card);
   background: var(--green-soft);
   color: var(--green);
 }
@@ -367,7 +367,7 @@ html[data-home-tab="letters"]
   gap: 12px;
   margin: 6px 0 12px;
   padding: 8px 8px 8px 12px;
-  border-radius: 14px;
+  border-radius: var(--r-box);
   background: var(--green-soft);
 }
 /* The jacket's link is a full target: 44px wide around the 34px jacket,
@@ -608,7 +608,7 @@ html[data-home-tab="letters"]
   border-radius: var(--r-card);
   background: var(--sheet);
   color: var(--ink);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--shade) 7%, transparent);
+  box-shadow: var(--lift-2);
 }
 .home-shopcard-wall {
   position: relative;
@@ -676,11 +676,11 @@ html[data-home-tab="letters"]
   height: 100%;
   padding: 14px 14px 12px;
   border: 1px solid var(--pop-line);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   background: var(--pop);
   color: var(--ink);
   text-align: left;
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--shade) 7%, transparent);
+  box-shadow: var(--lift-1);
 }
 .home-rail > li:nth-child(odd) > .home-pop {
   transform: rotate(-0.6deg);
@@ -765,7 +765,7 @@ html[data-home-tab="letters"]
 .home-notice {
   position: relative;
   padding: 22px 16px 16px;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   background: var(--notice);
   color: var(--ink);
   box-shadow:
@@ -790,7 +790,7 @@ html[data-home-tab="letters"]
     var(--alert) 60%,
     color-mix(in srgb, var(--alert) 55%, var(--ink))
   );
-  box-shadow: 0 2px 3px color-mix(in srgb, var(--shade) 35%, transparent);
+  box-shadow: var(--lift-1);
 }
 .home-notice-kicker {
   display: flex;
@@ -861,26 +861,8 @@ html[data-home-tab="letters"]
 }
 .home-notice-quiet,
 .home-notice-add {
-  display: inline-flex;
-  align-items: center;
   gap: 4px;
-  min-height: 44px;
-  font-size: var(--t-ui);
   white-space: nowrap;
-}
-.home-notice-quiet {
-  padding: 0 12px;
-  border: 0;
-  background: none;
-  color: var(--ink-2);
-}
-.home-notice-add {
-  padding: 0 18px;
-  border: 1px solid var(--green);
-  border-radius: var(--r-box);
-  background: none;
-  color: var(--green);
-  font-weight: 700;
 }
 
 /* The 路地 after its head: the shop fronts and their 特集. */
@@ -958,9 +940,6 @@ html[data-home-tab="letters"]
   margin: 0;
   word-break: auto-phrase;
 }
-.home-placeholder .button {
-  min-height: 44px;
-}
 .home-letters-end {
   display: grid;
   justify-items: center;
@@ -979,16 +958,7 @@ html[data-home-tab="letters"]
   font-weight: 600;
 }
 .home-letters-home {
-  display: inline-flex;
-  align-items: center;
   gap: 2px;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 0;
-  background: none;
-  color: var(--green);
-  font-size: var(--t-ui);
-  font-weight: 700;
 }
 
 /* 便りだけ: what is left to read. The focus waits here, unringed, while an
@@ -1003,9 +973,6 @@ html[data-home-tab="letters"]
   padding: 16px;
   color: var(--ink-2);
   font-size: var(--t-ui);
-}
-.home-letters-more .button {
-  min-height: 44px;
 }
 
 /* New 便り (PR 2): the pill under the tabs, a tab's dot, the pull, and
@@ -1038,7 +1005,7 @@ html[data-home-tab] {
   font-size: var(--t-ui);
   font-weight: 700;
   white-space: nowrap;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--shade) 24%, transparent);
+  box-shadow: var(--lift-2);
   touch-action: manipulation;
 }
 .home-new:has(.home-new-faces) {
@@ -1185,17 +1152,8 @@ html[data-home-tab] {
 }
 .home-sheet-quiet,
 .home-sheet-all {
-  display: inline-flex;
-  align-items: center;
   justify-self: start;
   gap: 4px;
-  min-height: 44px;
-  padding: 0 4px;
-  border: 0;
-  background: none;
-  color: var(--green);
-  font-size: var(--t-ui);
-  font-weight: 700;
 }
 
 /* 読みながらのひとこと (Live, PR 2b; v37 .lives): three lines of a fixed
@@ -1309,7 +1267,7 @@ html[data-home-tab] {
   outline: none;
 }
 .home-live-time:focus-visible time {
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   outline: 2px solid var(--green);
   outline-offset: 0;
 }

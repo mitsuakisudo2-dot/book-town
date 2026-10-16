@@ -16,9 +16,6 @@
   border-bottom: 0;
 }
 .post-feed > .reviews-more {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
   margin: 12px auto;
 }
 .post-feed > .empty-state {
@@ -188,19 +185,6 @@
     var(--shade) calc(100% - 1.6em),
     color-mix(in srgb, var(--shade) 35%, transparent)
   );
-}
-.letter-more,
-.letter-text-button {
-  display: inline-flex;
-  align-items: center;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--green);
-  font-size: var(--t-ui);
-  font-weight: 700;
 }
 .letter-more {
   margin-bottom: -6px;
@@ -577,15 +561,6 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.letter-confirm .button {
-  min-height: 44px;
-  padding: 0 18px;
-  font-size: var(--t-ui);
-}
-.letter-confirm .button.secondary {
-  border-color: var(--line-2);
-  color: var(--ink);
-}
 
 /* The post written a moment ago glows once where it lands. */
 @keyframes letter-arrive {
@@ -644,17 +619,6 @@
   line-height: 1.4;
   text-align: center;
 }
-.post-page-back {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r-box);
-  background: none;
-  color: var(--ink);
-}
 .post-page-scroll {
   flex: 1;
   min-height: 0;
@@ -709,7 +673,7 @@
   min-height: 48px;
   padding: 0 14px 0 6px;
   border: 1px solid var(--line-2);
-  border-radius: 24px;
+  border-radius: var(--r-pill);
   background: var(--paper);
   color: var(--ink-2);
   font-size: var(--t-ui);

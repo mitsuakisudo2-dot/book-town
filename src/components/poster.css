@@ -10,7 +10,7 @@
   aspect-ratio: 4 / 5;
   container-type: inline-size;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   color: var(--poster-ink);
   background:
     radial-gradient(
@@ -288,7 +288,7 @@ a.poster-cover:hover {
 }
 .poster-track {
   display: flex;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--shade) 8%, transparent),
     0 8px 22px color-mix(in srgb, var(--shade) 11%, transparent);
@@ -318,7 +318,7 @@ a.poster-cover:hover {
   top: 10px;
   right: 10px;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--shade) 58%, transparent);
   color: var(--on-dark);
   font-size: var(--t-cap);
@@ -373,7 +373,7 @@ a.poster-cover:hover {
   content: "";
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--line-2);
   transition:
     width 0.2s,
@@ -388,7 +388,7 @@ a.poster-cover:hover {
   align-items: center;
   gap: 5px;
   padding: 6px 11px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: 11px;
   color: var(--ink-2);
 }
@@ -408,7 +408,7 @@ a.poster-cover:hover {
   margin-top: 8px;
   padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-box);
   background: var(--sheet);
 }
 .poster-fulltext.is-mincho {
@@ -460,7 +460,7 @@ a.poster-cover:hover {
   place-content: center;
   justify-items: center;
   aspect-ratio: 4 / 5;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   color: var(--poster-ink);
   text-align: center;
   background:
@@ -505,7 +505,7 @@ a.poster-cover:hover {
   gap: 6px;
   margin-top: 8px;
   padding: 8px 20px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--poster-accent);
   font-size: 13px;
   font-weight: 600;
@@ -572,7 +572,7 @@ a.poster-cover:hover {
 }
 .poster-thumb-tile {
   display: block;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--shade) 8%, transparent),
     0 4px 12px color-mix(in srgb, var(--shade) 10%, transparent);
@@ -627,7 +627,7 @@ a.poster-cover:hover {
 }
 .poster-thumb-badge {
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--band);
   color: var(--ink-2);
 }
@@ -636,7 +636,7 @@ a.poster-cover:hover {
   display: block;
   margin-top: 6px;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   background: var(--band);
   font-size: 10px;
   line-height: 1.6;
@@ -693,7 +693,7 @@ a.poster-cover:hover {
   display: inline-block;
   margin-bottom: 8px;
   padding: 1px 8px;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   background: var(--green-soft);
   color: var(--green);
   font-size: 12px;

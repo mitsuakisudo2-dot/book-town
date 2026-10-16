@@ -99,10 +99,16 @@
   --t-head: 22px;
 
   /* Corners */
+  --r-edge: 2px;
   --r-tag: 4px;
   --r-box: 12px;
   --r-card: 16px;
   --r-pill: 999px;
+
+  /* Lifts: how far a thing stands off the paper. --shade stays dark at night. */
+  --lift-1: 0 1px 4px color-mix(in srgb, var(--shade) 10%, transparent);
+  --lift-2: 0 4px 14px color-mix(in srgb, var(--shade) 10%, transparent);
+  --lift-3: 0 16px 48px color-mix(in srgb, var(--shade) 18%, transparent);
 
   /* The device's own letters first (仮); Noto when it has none. Mincho only
      for titles, shop names, headings, quotes and POPs. */

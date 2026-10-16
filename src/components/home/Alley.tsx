@@ -157,7 +157,7 @@ export function Alley({
           <Icon name="leaf" size={28} />
           <h2>この街は、まだ朝です。</h2>
           <p>最初の一軒になりませんか。好きな本を一冊並べれば開店です。</p>
-          <Link className="button" href="/my-shop/">
+          <Link className="btn fill" href="/my-shop/">
             書店をひらく
           </Link>
         </div>

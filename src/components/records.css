@@ -36,32 +36,6 @@
   flex-wrap: wrap;
   gap: 7px;
 }
-.feeling-chip {
-  font-size: 12px;
-  line-height: 1.5;
-  padding: 7px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line-2);
-  background: var(--sheet);
-  color: var(--ink);
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    border-color 0.15s,
-    color 0.15s;
-}
-.feeling-chip:hover {
-  border-color: color-mix(in srgb, var(--green) 40%, var(--sheet));
-}
-.feeling-chip[aria-pressed="true"] {
-  background: var(--green);
-  border-color: var(--green);
-  color: var(--on-green);
-}
-.feeling-chip:focus-visible {
-  outline: 2px solid var(--green);
-  outline-offset: 2px;
-}
 
 .record-options {
   display: flex;
@@ -103,7 +77,7 @@
   font-size: 12px;
   padding: 8px 13px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   cursor: pointer;
 }
 .record-visibility label:has(input:checked) {
@@ -124,9 +98,6 @@
   gap: 6px 8px;
   font-size: 12px;
   color: var(--ink-2);
-}
-.record-going .text-button {
-  font-size: 12px;
 }
 .record-actions {
   display: flex;
@@ -152,7 +123,7 @@
 .book-feelings {
   margin: 42px 0;
   padding: 28px 26px;
-  border-radius: 10px;
+  border-radius: var(--r-box);
   background: var(--sheet);
   border: 1px solid var(--line);
 }
@@ -244,7 +215,7 @@
   display: flex;
   gap: 14px;
   padding: 16px;
-  border-radius: 9px;
+  border-radius: var(--r-box);
   border: 1px solid var(--line);
   background: var(--sheet);
 }
@@ -273,7 +244,7 @@
 .record-card-feelings span {
   font-size: 10px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--green-soft);
   color: var(--ink);
 }
@@ -297,9 +268,6 @@
   align-items: center;
   gap: 4px;
 }
-.record-card-meta .text-button {
-  font-size: 11px;
-}
 
 @media (max-width: 600px) {
   .book-feelings {
@@ -312,18 +280,14 @@
     grid-template-columns: 1fr;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .feeling-chip {
-    transition: none;
-  }
-}
+
 /* 「ネタバレの表示」: three longer choices, one to a line. */
 .record-visibility.spoiler-display {
   flex-direction: column;
   align-items: stretch;
 }
 .record-visibility.spoiler-display label {
-  border-radius: 10px;
+  border-radius: var(--r-box);
   align-items: flex-start;
   line-height: 1.6;
 }

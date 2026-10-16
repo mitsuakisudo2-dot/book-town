@@ -3,7 +3,8 @@ import path from "node:path";
 
 // Counts, file by file, what a screen holds of its own instead of the
 // tokens: colours written out (#hex, rgb() and the like, white and black)
-// and text set under --t-cap (12px). tests/style-baseline.json keeps the
+// text set under --t-cap (12px), corners written in px instead of the
+// --r-* steps, and shadows that are not one of the --lift-* steps. tests/style-baseline.json keeps the
 // counts of the screens made before the rules (docs/色と部品の決まり.md);
 // tokens.test.ts stops any count that grows and asks for a smaller number
 // when one shrinks, so the old screens only ever move towards the tokens.
@@ -50,20 +51,45 @@ export const smallTextIn = (text: string) =>
     ...uncommented(text).matchAll(/font-?size\s*:\s*["']?(\d+(?:\.\d+)?)px/gi),
   ].filter(([, size]) => Number(size) < 12).length;
 
+/** Corners written out in px or em instead of --r-edge … --r-pill (0 and
+    50%, a circle, are shapes, not sizes). */
+export const cornersIn = (text: string) =>
+  [...uncommented(text).matchAll(/border-?radius\s*:\s*["']?([^;"'}]*)/gi)]
+    .map(([, value]) => value.replace(/var\([^)]*\)/g, ""))
+    .filter((value) => /(?<![\d.])(?:[1-9]\d*|\d*\.\d+)(?:px|r?em)/.test(value))
+    .length;
+
+/** Shadows other than the --lift-* steps (none is no shadow). */
+export const shadowsIn = (text: string) =>
+  [...uncommented(text).matchAll(/box-?shadow\s*:\s*["']?([^;"'}]*)/gi)]
+    .map(([, value]) => value.trim())
+    .filter((value) => !/^(?:none|var\(--lift-[123]\))$/.test(value)).length;
+
 export type StyleCounts = {
   colours: Record<string, number>;
   smallText: Record<string, number>;
+  corners: Record<string, number>;
+  shadows: Record<string, number>;
 };
 
 /** Today's counts, leaving out files with none. */
 export function countStyles(): StyleCounts {
-  const counts: StyleCounts = { colours: {}, smallText: {} };
+  const counts: StyleCounts = {
+    colours: {},
+    smallText: {},
+    corners: {},
+    shadows: {},
+  };
   for (const file of styledFiles()) {
     const text = readFileSync(path.join(root, file), "utf8");
     const colours = coloursIn(text);
     const small = smallTextIn(text);
     if (colours) counts.colours[file] = colours;
+    const corners = cornersIn(text);
+    const shadows = shadowsIn(text);
     if (small) counts.smallText[file] = small;
+    if (corners) counts.corners[file] = corners;
+    if (shadows) counts.shadows[file] = shadows;
   }
   return counts;
 }

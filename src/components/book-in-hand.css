@@ -26,10 +26,10 @@
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-box);
   background: var(--sheet);
   color: var(--bh-text);
-  box-shadow: 0 24px 100px color-mix(in srgb, var(--shade) 22%, transparent);
+  box-shadow: var(--lift-3);
 }
 .bh-dialog[open] {
   display: flex;
@@ -66,15 +66,7 @@
   white-space: nowrap;
 }
 .bh-close {
-  display: grid;
-  place-items: center;
   flex: 0 0 auto;
-  min-width: 44px;
-  min-height: 44px;
-  border-radius: 50%;
-}
-.bh-close:hover {
-  background: var(--green-soft);
 }
 .bh-content {
   overflow-y: auto;
@@ -99,7 +91,7 @@
 }
 .bh-cover {
   display: block;
-  border-radius: 4px;
+  border-radius: var(--r-tag);
 }
 .bh-cover .book-jacket {
   box-shadow: 5px 8px 12px color-mix(in srgb, var(--shade) 11%, transparent);
@@ -169,7 +161,7 @@
 .bh-pop-label small {
   font-size: 9px;
   border: 1px solid var(--line-2);
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   padding: 1px 4px;
 }
 .bh-pop .bh-pop-text {
@@ -317,29 +309,8 @@
   text-align: center;
 }
 .bh-save {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  min-height: 48px;
   width: 100%;
-  padding: 12px 20px;
-  border: 1px solid var(--green);
-  border-radius: 5px;
-  background: var(--green);
-  color: var(--on-green);
-  font-size: 13px;
-}
-.bh-save:hover {
-  background: color-mix(in srgb, var(--green) 85%, var(--shade));
-}
-.bh-save.bh-saved {
-  background: var(--green-soft);
-  color: var(--green);
-  border-color: color-mix(in srgb, var(--green) 30%, var(--sheet));
-}
-.bh-save.bh-saved:hover {
-  background: color-mix(in srgb, var(--green) 10%, var(--green-soft));
+  min-height: 48px;
 }
 .bh-cover-note {
   display: block;
@@ -365,7 +336,7 @@
   gap: 10px;
   min-height: 46px;
   padding: 8px;
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   font-size: 12px;
 }
 .bh-adjacent:hover:not(:disabled) {
@@ -415,7 +386,7 @@
   .bh-dialog {
     width: calc(100% - 20px);
     max-height: calc(100dvh - 24px);
-    border-radius: 9px;
+    border-radius: var(--r-box);
   }
   .bh-topbar {
     padding: 6px 8px 6px 17px;
@@ -536,7 +507,7 @@
   min-height: 44px;
   padding: 7px 8px;
   border: 1px solid var(--line-2);
-  border-radius: 24px;
+  border-radius: var(--r-pill);
   background: var(--sheet);
   font-size: 12px;
   color: var(--ink-2);
@@ -559,7 +530,7 @@
     flex-direction: column;
     gap: 3px;
     padding: 6px 3px;
-    border-radius: 14px;
+    border-radius: var(--r-box);
   }
 }
 /* A finger leaves no hover behind to hold one reaction above the others. */
@@ -586,16 +557,7 @@
   padding-inline: 10px;
 }
 .bh-favorite {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 7px;
   min-height: 48px;
-  padding: 10px 14px;
-  border: 1px solid var(--line-2);
-  border-radius: 5px;
-  color: var(--green);
-  font-size: 12px;
 }
 .bh-favorite.is-active {
   background: var(--lamp-soft);
@@ -625,7 +587,7 @@
   min-height: 34px;
   padding: 5px 9px;
   border: 1px solid var(--line-2);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--sheet);
   color: var(--green);
   font-size: 12px;
@@ -764,7 +726,7 @@
   zoom: 0.85;
   padding: 20px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   background: var(--paper);
 }
 .bh-shop-card-heading {
@@ -804,7 +766,7 @@
   color: var(--green);
   padding: 10px;
   border: 1px solid var(--line-2);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   flex: 0 0 auto;
   margin-left: auto;
 }
@@ -829,14 +791,7 @@
   white-space: pre-wrap;
 }
 .bh-shops-more {
-  display: block;
-  min-height: 44px;
   margin-top: 14px;
-  padding: 8px 12px;
-  border: 1px solid var(--line-2);
-  border-radius: 5px;
-  color: var(--green);
-  font-size: 12px;
 }
 .bh-discovery-empty {
   color: var(--ink-2);
@@ -889,7 +844,7 @@
   min-height: 38px;
   padding: 6px 16px;
   border: 1px solid var(--green);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--sheet);
   color: var(--green);
   font-size: 12px;

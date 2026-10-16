@@ -213,7 +213,7 @@ export function BookDiscovery({
         )}
         {otherShelves.length > 3 && (
           <button
-            className="bh-shops-more"
+            className="btn bh-shops-more"
             aria-expanded={expandedBookId === bookId}
             onClick={() =>
               setExpandedBookId(expandedBookId === bookId ? null : bookId)

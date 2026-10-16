@@ -359,7 +359,7 @@ export function LetterCard({
               {(book || post.parentId) && (
                 <button
                   type="button"
-                  className="letter-text-button"
+                  className="text-btn"
                   onClick={() => {
                     actions.markSpoiler(post.id);
                     notify("ネタバレの印を付けました");

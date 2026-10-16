@@ -351,11 +351,11 @@ function ClosedCard({
           <blockquote className="reading-closed-memo">{closed.memo}</blockquote>
         )}
         <div className="reading-closed-actions">
-          <button type="button" className="button secondary" onClick={onReview}>
+          <button type="button" className="btn" onClick={onReview}>
             <Icon name="pen" size={15} />
             感想を書く
           </button>
-          <button type="button" className="text-button" onClick={onDismiss}>
+          <button type="button" className="text-btn" onClick={onDismiss}>
             閉じる
           </button>
         </div>
@@ -389,7 +389,7 @@ function LineToAdd({
       <blockquote>{uncoverHidden(draft.body)}</blockquote>
       <button
         type="button"
-        className="button secondary"
+        className="btn"
         onClick={(event) => {
           const review = event.currentTarget
             .closest(".modal")
@@ -453,7 +453,7 @@ function UnsentLines({
             <div className="reading-unsent-actions">
               <button
                 type="button"
-                className="button secondary"
+                className="btn"
                 onClick={() => {
                   // It starts the review, unless one is already being written.
                   carryLine(owner, sessionId, book);
@@ -628,14 +628,14 @@ function StartReading({
             <div className="reading-confirm-actions">
               <button
                 type="button"
-                className="button secondary"
+                className="btn"
                 onClick={() => setConfirm(null)}
               >
                 もう少し準備する
               </button>
               <button
                 type="button"
-                className="button"
+                className="btn fill"
                 onClick={() => start(confirm.mode)}
               >
                 はじめる
@@ -781,7 +781,7 @@ function ReadingRoom({
           <div className="reading-end">
             <button
               type="button"
-              className="button secondary"
+              className="btn"
               onClick={() =>
                 setEnding({ finished: false, phrase: pick(END_PHRASES) })
               }
@@ -791,7 +791,7 @@ function ReadingRoom({
             {book && (
               <button
                 type="button"
-                className="button"
+                className="btn fill"
                 onClick={() =>
                   setEnding({ finished: true, phrase: pick(FINISH_PHRASES) })
                 }
@@ -844,7 +844,7 @@ function ReadingRoom({
           )}
           <span className="composer-send">
             <LengthNearLimit length={memo.length} max={POST_MAX_LENGTH} />
-            <button className="button" type="submit" disabled={!memo.trim()}>
+            <button className="btn fill" type="submit" disabled={!memo.trim()}>
               {together ? "つぶやく" : "メモする"}
             </button>
           </span>
@@ -932,7 +932,7 @@ function ReadingRoom({
                 <blockquote>{uncoverHidden(memo)}</blockquote>
                 <button
                   type="button"
-                  className="button secondary"
+                  className="btn"
                   onClick={() => {
                     const line = uncoverHidden(memo).trim();
                     if (send()) close(ending.finished, line);
@@ -946,14 +946,14 @@ function ReadingRoom({
             <div className="reading-confirm-actions">
               <button
                 type="button"
-                className="button secondary"
+                className="btn"
                 onClick={() => setEnding(null)}
               >
                 もう少し読む
               </button>
               <button
                 type="button"
-                className="button secondary"
+                className="btn"
                 onClick={() => {
                   actions.endReading(ending.finished);
                   // The line not sent starts the review, when that is empty.
@@ -966,7 +966,7 @@ function ReadingRoom({
               </button>
               <button
                 type="button"
-                className="button"
+                className="btn fill"
                 onClick={() => close(ending.finished)}
               >
                 {ending.finished ? "読み終えた" : "本を閉じる"}

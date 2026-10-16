@@ -1143,7 +1143,7 @@ export function ScanSession({
         <div className="scan-top">
           <button
             type="button"
-            className="scan-icon-button"
+            className="icon-btn"
             aria-label="閉じる"
             onClick={finish}
           >
@@ -1154,9 +1154,7 @@ export function ScanSession({
           </p>
           <button
             type="button"
-            className={
-              "scan-icon-button scan-sound" + (sound.on ? "" : " is-off")
-            }
+            className={"icon-btn scan-sound" + (sound.on ? "" : " is-off")}
             aria-label="音"
             aria-pressed={sound.on}
             onPointerDown={typing ? keepFocus : undefined}
@@ -1194,7 +1192,7 @@ export function ScanSession({
               />
               <button
                 type="submit"
-                className="button secondary"
+                className="btn"
                 disabled={!owner}
                 onPointerDown={keepFocus}
                 onClick={refocus}
@@ -1247,7 +1245,7 @@ export function ScanSession({
                 {input.phase === "hidden" && (
                   <button
                     type="button"
-                    className="button"
+                    className="btn fill"
                     onClick={() =>
                       setInput({ kind: "camera", phase: "starting" })
                     }
@@ -1289,7 +1287,7 @@ export function ScanSession({
           {canUndo && (
             <button
               type="button"
-              className="button secondary scan-undo"
+              className="btn scan-undo"
               aria-label={`${undoName}の登録を取り消す`}
               onPointerDown={typing ? keepFocus : undefined}
               onClick={undo}
@@ -1336,11 +1334,7 @@ export function ScanSession({
         </div>
         <div className="scan-bottom">
           {input.kind === "camera" ? (
-            <button
-              type="button"
-              className="button secondary"
-              onClick={typeIsbn}
-            >
+            <button type="button" className="btn" onClick={typeIsbn}>
               ISBNを打つ
             </button>
           ) : (
@@ -1351,21 +1345,17 @@ export function ScanSession({
             input.why !== "no-camera" && (
               <button
                 type="button"
-                className="button secondary"
+                className="btn"
                 onClick={() => setInput({ kind: "camera", phase: "starting" })}
               >
                 カメラで読む
               </button>
             )
           )}
-          <button
-            type="button"
-            className="button secondary"
-            onClick={openManual}
-          >
+          <button type="button" className="btn" onClick={openManual}>
             手で入力
           </button>
-          <button type="button" className="button primary" onClick={finish}>
+          <button type="button" className="btn fill" onClick={finish}>
             終わる
           </button>
         </div>

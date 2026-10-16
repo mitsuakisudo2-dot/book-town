@@ -403,7 +403,7 @@ check("covers are shown whole: no object-fit: cover on a jacket", () => {
 });
 
 check(
-  "no screen writes more colours or small text of its own than before",
+  "no screen writes more colours, small text, corners or shadows of its own than before",
   () => {
     // The screens made before the rules keep what they had, counted in
     // tests/style-baseline.json, and lose it as each is worked on. A new file
@@ -416,8 +416,16 @@ check(
     const what = {
       colours: "colours of its own (use the tokens)",
       smallText: "font sizes under 12px (use --t-cap or larger)",
+      corners:
+        "corners of its own (use --r-edge, --r-tag, --r-box, --r-card or --r-pill)",
+      shadows: "shadows of its own (use --lift-1, --lift-2 or --lift-3)",
     };
-    for (const kind of ["colours", "smallText"] as const) {
+    for (const kind of [
+      "colours",
+      "smallText",
+      "corners",
+      "shadows",
+    ] as const) {
       const files = new Set([
         ...Object.keys(baseline[kind]),
         ...Object.keys(now[kind]),
@@ -436,5 +444,25 @@ check(
     assert.deepEqual(problems, [], problems.join("\n"));
   },
 );
+
+check("the old buttons stay gone: every button is a part", () => {
+  // .button, .text-button, .icon-button and the editor's own buttons were
+  // folded into parts.css (.btn, .text-btn, .icon-btn, .chip) on 2026-10-17.
+  const old =
+    /(?<![\w-])(?:button(?: (?:primary|secondary))?|text-button|icon-button|editor-button|editor-text-button|editor-icon-button|scan-icon-button|letter-text-button|poster-editor-text-button|feeling-chip)(?![\w-])/;
+  const problems: string[] = [];
+  for (const file of filesIn("src", [".tsx"]))
+    for (const [value] of read(file).matchAll(
+      /className=(?:"[^"]*"|\{[^}]*\})/g,
+    ))
+      for (const [, words] of value.matchAll(/["'`]([^"'`]*)["'`]/g))
+        if (old.test(words)) problems.push(`${file}: "${words}"`);
+  for (const file of filesIn("src", [".css"]))
+    for (const [, name] of read(file).matchAll(
+      /\.(button|text-button|icon-button|editor-button|editor-text-button|editor-icon-button|scan-icon-button|letter-text-button|poster-editor-text-button|feeling-chip)(?![\w-])/g,
+    ))
+      problems.push(`${file}: .${name}`);
+  assert.deepEqual(problems, [], problems.join("\n"));
+});
 
 console.log(`tokens ok (${passed})`);

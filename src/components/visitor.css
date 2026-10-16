@@ -10,7 +10,7 @@
   margin: 0 auto;
   color: var(--ink-2);
 }
-.visitor-page > .button {
+.visitor-page > .btn {
   margin-bottom: 18px;
 }
 .visitor-page .visitor-page-note {
