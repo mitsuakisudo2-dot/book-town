@@ -2342,12 +2342,20 @@ try {
           await expect(fab, `${width}x${height}`).toBeHidden();
           // The door it stood on takes the finger.
           await doors.getByText("本屋を開く").tap({ trial: true });
-          await page.mouse.wheel(0, 200);
-          await page.clock.runFor(100);
+          // The page's clock is held: the frames after each scroll are let
+          // run while waiting.
+          const settled = async () => {
+            await page.clock.runFor(50);
+            return page.evaluate(() =>
+              document.documentElement.hasAttribute("data-fab-aside"),
+            );
+          };
+          await page.evaluate(() => scrollTo(0, 200));
+          await expect.poll(settled).toBe(false);
           expect(await under()).toBe(false);
           await expect(fab).toBeVisible();
           await page.evaluate(() => scrollTo(0, 0));
-          await page.clock.runFor(100);
+          await expect.poll(settled).toBe(true);
           await expect(fab).toBeHidden();
         });
     },
