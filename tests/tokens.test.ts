@@ -240,6 +240,44 @@ check("the six palettes are the decided ones, each in tokens.css", () => {
   }
 });
 
+check("every screen's CSS is read on every page, in one order", () => {
+  // The screens come in files of their own (TownApp's next/dynamic); their
+  // CSS must not, or a page opened first would miss rules another screen's
+  // file gives it (the bottom bar, a cover), and the order would change.
+  const listed = [
+    ...read("src/components/screen-styles.ts").matchAll(
+      /^import "\.\/(.+\.css)";$/gm,
+    ),
+  ].map(([, file]) => path.join("src/components", file));
+  assert.equal(new Set(listed).size, listed.length, "each file once");
+  // Their own: the annotations' notes (read only by those who annotate) and
+  // the account's page, outside the town.
+  const own = [
+    "src/components/SiteNotes.tsx",
+    "src/components/AccountView.tsx",
+  ];
+  for (const file of filesIn("src/components", [".tsx", ".ts"]))
+    if (!own.includes(file))
+      for (const [, css] of read(file).matchAll(
+        /^import "(\.[^"]+\.css)";$/gm,
+      )) {
+        const imported = path.join(path.dirname(file), css);
+        assert.ok(
+          listed.includes(imported),
+          `${file} imports ${css}: add it to screen-styles.ts`,
+        );
+      }
+  const town = read("src/components/TownApp.tsx").split("\n");
+  assert.equal(town[0], '"use client";');
+  assert.ok(
+    town
+      .slice(1)
+      .find((line) => line.startsWith("import"))
+      ?.includes("./screen-styles"),
+    "TownApp reads screen-styles before anything else",
+  );
+});
+
 check("globals.css reads the tokens first", () => {
   const globals = read("src/app/globals.css");
   const lines = globals.split("\n");

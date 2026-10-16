@@ -1,4 +1,6 @@
 "use client";
+// First, so the CSS keeps its order (screen-styles.ts).
+import "./screen-styles";
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
