@@ -75,10 +75,16 @@ export function supabaseAccountBackend(
       // does. Asked again after an answer that was lost, it deletes nothing
       // more and succeeds.
       const { error } = await client.rpc("delete_my_account");
-      // No code: no answer came (offline), so it may be tried again.
-      if (error) return error.code ? "leave-failed" : "network";
-      // The account is gone, so its session is let go of here only; the
-      // server has no session left to end.
+      // No code: no answer came (offline), so it may be tried again. 42501:
+      // the call went without a session, which a deletion that went through
+      // ends (its refresh token went with the account). Neither says nothing
+      // went, so the account stays marked as leaving (account.ts, Leaving).
+      if (error)
+        return !error.code || error.code === "42501"
+          ? "network"
+          : "leave-failed";
+      // Lets go of the session here. The server has none left to end, and
+      // says so; supabase-js takes that as done.
       await client.auth.signOut({ scope: "local" });
       return null;
     },

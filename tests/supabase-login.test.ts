@@ -227,10 +227,12 @@ async function main() {
             name: "フェイ",
           })),
       );
-      // Without a session, the database refuses and nothing goes.
+      // Without a session, the database refuses and nothing goes. The app
+      // cannot tell that from a deletion whose session ended with it, so it
+      // keeps the account marked as leaving (not "nothing went").
       assert.equal(
         await supabaseAccountBackend(browserClient()).deleteAccount(),
-        "leave-failed",
+        "network",
       );
       assert.ok((await admin.auth.admin.getUserById(fay.id)).data.user);
       assert.equal(await leaving.deleteAccount(), null);
