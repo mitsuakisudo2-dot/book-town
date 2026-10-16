@@ -11,6 +11,7 @@ import {
   type MarkKind,
 } from "../src/lib/library";
 import { sampleBookRowId } from "../src/lib/samples";
+import { ACCOUNT_SCHEMAS, ACCOUNT_TABLES } from "./fixtures/account-tables";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
 import { pagePattern } from "../src/lib/supabase/site-notes";
 import { emptyTown, planWrites } from "../src/lib/town-remote";
@@ -5555,6 +5556,24 @@ async function main() {
       { post: false, shop: true, other_reader_id: BEN, memo: "ベンのPOP" },
       { post: true, shop: false, other_reader_id: BEN, memo: "ベンの言葉" },
     ]);
+    // And the rest of what a reader can leave: blocks both ways, follows
+    // both ways, a fold on his profile, reading, a shop followed, and the
+    // notes and staff row of an annotator.
+    await operator(`
+      insert into blocks (blocker_id, blocked_id)
+        values ('${BEN}', '${CHI}'), ('${CHI}', '${BEN}') on conflict do nothing;
+      insert into profile_follows (follower_id, followee_id)
+        values ('${BEN}', '${AKI}'), ('${AKI}', '${BEN}') on conflict do nothing;
+      insert into shop_follows (follower_id, shop_id)
+        values ('${BEN}', '${akiShop.id}') on conflict do nothing;
+      insert into moderation_folds (target_kind, target_id, state, owner_id)
+        values ('profile', '${BEN}', 'folded', '${BEN}') on conflict do nothing;
+      insert into reading_sessions (user_id, book_id, mode)
+        values ('${BEN}', '${bens}', 'solo');
+      insert into private.staff (user_id) values ('${BEN}') on conflict do nothing;
+      insert into site_notes (user_id, page, x, y, viewport_w, viewport_h, scroll_y, body)
+        values ('${BEN}', '/', 1, 1, 390, 844, 0, 'ベンの注釈');
+    `);
     const kept: [string, string][] = [
       ["library_entries", "user_id"],
       ["library_shelves", "user_id"],
@@ -5585,6 +5604,14 @@ async function main() {
       ).rows[0].n;
     for (const [table, column] of kept)
       assert.ok((await left(table, column)) > 0, "before: " + table);
+    // Every column that names a person (tests/fixtures/account-tables.ts)
+    // names Ben somewhere, so the scan below covers every table.
+    const unnamed: string[] = [];
+    for (const [table, rule] of Object.entries(ACCOUNT_TABLES))
+      for (const column of Object.keys(rule.people))
+        if ((await left(table, column)) === 0)
+          unnamed.push(`${table}.${column}`);
+    assert.deepEqual(unnamed, [], "give Ben rows here before his account goes");
     // Supabase deletes an account as supabase_auth_admin, who owns auth.users
     // and has no rights in public. The cascades run as each table's owner;
     // the after triggers they fire run at the end of the statement, as
@@ -5602,6 +5629,28 @@ async function main() {
     }
     for (const [table, column] of owned)
       assert.equal(await left(table, column), 0, table);
+    // Nothing anywhere still names him, but what account-tables.ts says
+    // stays for the operator.
+    const uuidColumns = await db.query<{ table: string; column: string }>(
+      `select n.nspname || '.' || c.relname as table, a.attname::text as column
+       from pg_attribute a
+       join pg_class c on c.oid = a.attrelid
+       join pg_namespace n on n.oid = c.relnamespace
+       where c.relkind = 'r' and n.nspname = any ($1)
+         and a.attnum > 0 and not a.attisdropped
+         and a.atttypid in ('uuid'::regtype, 'uuid[]'::regtype)`,
+      [ACCOUNT_SCHEMAS],
+    );
+    for (const { table, column } of uuidColumns.rows) {
+      const target = ACCOUNT_TABLES[table]?.targets?.[column];
+      if (target && "stays" in target) continue;
+      const named = await db.query<{ n: number }>(
+        `select count(*)::int as n from ${table}
+         where $1::uuid = any (array[${column}]::uuid[])`,
+        [BEN],
+      );
+      assert.equal(named.rows[0].n, 0, `${table}.${column} still names Ben`);
+    }
     assert.deepEqual(await chisOfBen(), [
       { post: false, shop: false, other_reader_id: null, memo: "ベンのPOP" },
       { post: false, shop: false, other_reader_id: null, memo: "ベンの言葉" },
