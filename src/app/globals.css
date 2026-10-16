@@ -226,10 +226,14 @@ input[type="checkbox"] {
   flex-shrink: 0;
   border-radius: 50%;
   font-family: var(--serif);
-  color: #5b684d;
+  /* A picture: the letters keep their colour at night (avatar-ink.ts). */
+  color: var(--avatar-ink);
   border: 3px solid #fffdf75c;
   overflow: hidden;
   line-height: 1;
+}
+.reader-avatar.is-light-ink {
+  color: var(--avatar-ink-light);
 }
 .reader-avatar i {
   height: 35%;
@@ -315,8 +319,8 @@ input[type="checkbox"] {
 }
 .eyebrow {
   display: block;
-  font-size: 8px;
-  letter-spacing: 2px;
+  font-size: var(--t-cap);
+  letter-spacing: 1.5px;
   color: var(--ink-2);
   font-weight: 500;
   margin-bottom: 9px;
@@ -366,10 +370,10 @@ input[type="checkbox"] {
 }
 .town-footer > span {
   font-family: var(--serif);
-  font-size: 10px;
+  font-size: var(--t-cap);
 }
 .town-footer > small {
-  font-size: 7px;
+  font-size: var(--t-cap);
   letter-spacing: 0.7px;
 }
 .button {
@@ -941,10 +945,8 @@ div.book-jacket:hover {
   background: var(--theme);
 }
 .shop-hero .eyebrow {
-  font-size: 7px;
   color: var(--theme-deep);
   margin-bottom: 16px;
-  letter-spacing: 1.5px;
 }
 .shop-hero h1 {
   font-family: var(--serif);
@@ -1644,12 +1646,6 @@ div.book-jacket:hover {
     padding: 22px 0 105px;
     text-align: center;
   }
-  .town-footer > span {
-    font-size: 10px;
-  }
-  .town-footer > small {
-    font-size: 7px;
-  }
   .town-bottom-nav {
     position: fixed;
     bottom: 0;
@@ -1750,7 +1746,6 @@ div.book-jacket:hover {
     letter-spacing: 1px;
   }
   .shop-hero .eyebrow {
-    font-size: 6px;
     letter-spacing: 1.1px;
     margin-bottom: 14px;
   }
@@ -1870,7 +1865,6 @@ div.book-jacket:hover {
     margin: 9px 0 6px;
   }
   .book-page-hero .eyebrow {
-    font-size: 6px;
     letter-spacing: 1.1px;
   }
   .book-page-author {
