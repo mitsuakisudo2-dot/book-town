@@ -75,7 +75,8 @@ import {
 } from "../lib/sample-notice";
 import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
-import { replaceAddress } from "../lib/url-state";
+import { replaceAddress, useUrlParam } from "../lib/url-state";
+import { requestShelf, takeShelfRequest } from "../lib/shelf-tab";
 import { useLastHomeAddress } from "../lib/last-address";
 import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
 import { findReader, reviewCoverOf, reviewNoteOf } from "../lib/social";
@@ -114,30 +115,43 @@ type Shared = {
   actions: TownActions;
   notify: Notify;
 };
-type Section = "home" | "search" | "walk" | "reading" | "profile";
+type Section = "home" | "search" | "walk" | "shelf" | "reading" | "profile";
+// Six for now, while けにー alone uses the town and the final row is decided
+// (10-16). 本棚 opens the 登録 list on the reader's own profile until the
+// library has a page of its own; 記録 opens 読書を開始 as it is.
 const links: { href: string; icon: string; label: string; section: Section }[] =
   [
     { href: "/", icon: "home", label: "ホーム", section: "home" },
     { href: "/search/", icon: "search", label: "検索", section: "search" },
     { href: "/walk/", icon: "store", label: "書店めぐり", section: "walk" },
     {
-      href: "/reading/",
-      icon: "reading",
-      label: "読書を開始",
-      section: "reading",
+      href: "/profiles/me/?books=library",
+      icon: "shelf",
+      label: "本棚",
+      section: "shelf",
     },
+    { href: "/reading/", icon: "reading", label: "記録", section: "reading" },
     {
       href: "/profiles/me/",
       icon: "user",
-      label: "プロフィール",
+      label: "わたし",
       section: "profile",
     },
   ];
+/** A plain click on a link: not one that opens another tab or window. */
+const plainClick = (event: MouseEvent<HTMLAnchorElement>) =>
+  event.button === 0 &&
+  !event.metaKey &&
+  !event.ctrlKey &&
+  !event.shiftKey &&
+  !event.altKey;
 /** Which item of the main navigation a view belongs to. */
 function sectionOf(
   view: View,
   selectedId?: string,
   ownPoster = false,
+  /** The own profile shows its 登録 list (`?books=library`): 本棚. */
+  shelf = false,
 ): Section | null {
   if (view === "walk") return "walk";
   // A shop's page is part of walking the shops, wherever it was opened from.
@@ -150,7 +164,8 @@ function sectionOf(
   // What the viewer makes lives on their profile, as their posters do.
   if (view === "poster-new" || (view === "poster" && ownPoster))
     return "profile";
-  if (view === "profile" && (selectedId ?? "me") === "me") return "profile";
+  if (view === "profile" && (selectedId ?? "me") === "me")
+    return shelf ? "shelf" : "profile";
   return null;
 }
 export default function TownApp({
@@ -176,6 +191,9 @@ export default function TownApp({
   const [search, setSearch] = useState("");
   const [about, setAbout] = useState(false);
   useEffect(() => notePageShown(), [view, selectedId]);
+  // A tap on 本棚 is for the page it opened; the profile has taken it by now
+  // (its effects run first), and no other page keeps it.
+  useEffect(() => void takeShelfRequest(), [view, selectedId]);
   useEffect(() => {
     if (!toast || toast.held) return;
     // A toast that can be undone stays long enough to be undone, and stays
@@ -244,12 +262,14 @@ export default function TownApp({
     router.push(searchPath(query));
     setSearch("");
   };
+  const [books] = useUrlParam("books");
   const section = sectionOf(
     view,
     selectedId,
     state.posters.some(
       (poster) => poster.id === selectedId && poster.authorId === ME_ID,
     ),
+    books === "library",
   );
   // A visitor who is not signed in has no pages of their own yet.
   const visitor = savedIn === "visitor";
@@ -274,18 +294,36 @@ export default function TownApp({
   // On Home itself, ホーム takes the tab shown back to its top, in place.
   const onHome = section === "home" && view !== "post";
   const homeClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (
-      !onHome ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
+    if (!onHome || !plainClick(event)) return;
     event.preventDefault();
     requestHomeTop();
   };
+  // 本棚 and わたし are the same page for now. On it, each switches the
+  // list in place (as its own buttons do), and 本棚 brings the list into view,
+  // here or once the profile opens (shelf-tab.ts).
+  const onOwnProfile = view === "profile" && (selectedId || "me") === "me";
+  const shelfClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!plainClick(event)) return;
+    if (onOwnProfile) {
+      event.preventDefault();
+      replaceAddress({ params: { books: "library" } });
+    }
+    requestShelf();
+  };
+  const meClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!onOwnProfile || !plainClick(event)) return;
+    event.preventDefault();
+    if (books === "library") replaceAddress({ params: { books: null } });
+    window.scrollTo({ top: 0 });
+  };
+  const clickOf = (link: (typeof links)[number]) =>
+    link.section === "home"
+      ? homeClick
+      : link.section === "shelf"
+        ? shelfClick
+        : link.section === "profile"
+          ? meClick
+          : undefined;
   return (
     <div
       className={
@@ -309,7 +347,7 @@ export default function TownApp({
             <Link
               key={l.section}
               href={hrefOf(l)}
-              onClick={l.section === "home" ? homeClick : undefined}
+              onClick={clickOf(l)}
               className={"side-link " + (section === l.section ? "active" : "")}
               aria-current={section === l.section ? "page" : undefined}
             >
@@ -482,7 +520,7 @@ export default function TownApp({
         {links.map((l) => (
           <Link
             href={hrefOf(l)}
-            onClick={l.section === "home" ? homeClick : undefined}
+            onClick={clickOf(l)}
             key={l.section}
             className={
               (section === l.section ? "active" : "") +

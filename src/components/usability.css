@@ -139,7 +139,7 @@
   font-size: 12px;
 }
 
-/* Narrow phones: the five labels keep to one line and inside the screen. */
+/* Narrow phones: the six labels keep to one line and inside the screen. */
 @media (max-width: 380px) {
   .town-shell .town-bottom-nav a {
     min-width: 0;

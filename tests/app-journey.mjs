@@ -184,7 +184,7 @@ try {
   );
 
   await check(
-    "bottom bar reads home, search, walk, reading, profile",
+    "bottom bar reads home, search, walk, shelf, record, me",
     async () => {
       await go("/");
       const nav = page.getByRole("navigation", {
@@ -194,8 +194,9 @@ try {
         "ホーム",
         "検索",
         "書店めぐり",
-        "読書を開始",
-        "プロフィール",
+        "本棚",
+        "記録",
+        "わたし",
       ]);
       await expect(nav.getByRole("link", { name: "ホーム" })).toHaveAttribute(
         "aria-current",
@@ -206,6 +207,122 @@ try {
       ).toHaveText(["ホーム", "便りだけ"]);
       await expect(page.getByRole("link", { name: "お知らせ" })).toBeVisible();
       await noOverflow("home");
+    },
+  );
+
+  await check(
+    "本棚 opens the 登録 list and わたし the profile, each lit on its own",
+    async () => {
+      const nav = page.getByRole("navigation", {
+        name: "スマートフォンナビゲーション",
+      });
+      const shelfTab = nav.getByRole("link", { name: "本棚" });
+      const meTab = nav.getByRole("link", { name: "わたし" });
+      const collection = (name) =>
+        page
+          .locator(".profile-collection-tabs")
+          .getByRole("button", { name: new RegExp("^" + name) });
+      // The list's heading is in view, clear of the bar at the top.
+      const listInView = () =>
+        expect
+          .poll(() =>
+            page.evaluate(() => {
+              const bar = document
+                .querySelector(".town-topbar")
+                .getBoundingClientRect();
+              const title = document
+                .getElementById("profile-collection-title")
+                .getBoundingClientRect();
+              return title.top >= bar.bottom - 1 && title.bottom <= innerHeight;
+            }),
+          )
+          .toBe(true);
+      const lit = async (on, off) => {
+        await expect(on).toHaveAttribute("aria-current", "page");
+        await expect(on).toHaveClass(/active/);
+        await expect(off).not.toHaveAttribute("aria-current");
+        await expect(off).not.toHaveClass(/active/);
+      };
+
+      // From another page, 本棚 opens the profile on the 登録 list.
+      await go("/reading/");
+      await lit(nav.getByRole("link", { name: "記録" }), shelfTab);
+      await expect(
+        page.getByRole("heading", { name: "読書を開始" }),
+      ).toBeVisible();
+      await shelfTab.click();
+      await expect(page).toHaveURL(`${baseURL}/profiles/me/?books=library`);
+      await lit(shelfTab, meTab);
+      await expect(collection("登録")).toHaveAttribute("aria-pressed", "true");
+      await listInView();
+
+      // On the profile, わたし and 本棚 switch in place: no step of 戻る.
+      const steps = await page.evaluate(() => history.length);
+      await meTab.click();
+      await expect(page).toHaveURL(`${baseURL}/profiles/me/`);
+      await lit(meTab, shelfTab);
+      await expect(collection("読みたい")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+      await shelfTab.click();
+      await expect(page).toHaveURL(`${baseURL}/profiles/me/?books=library`);
+      await lit(shelfTab, meTab);
+      await listInView();
+      expect(await page.evaluate(() => history.length)).toBe(steps);
+      // The list's own buttons move the light with the address.
+      await collection("お気に入り").click();
+      await expect(page).toHaveURL(`${baseURL}/profiles/me/?books=favorites`);
+      await lit(meTab, shelfTab);
+      await collection("登録").click();
+      await lit(shelfTab, meTab);
+
+      // A reload keeps 本棚 lit, and 戻る returns to 記録.
+      await page.reload();
+      await lit(shelfTab, meTab);
+      await page.goBack();
+      await expect(page).toHaveURL(`${baseURL}/reading/`);
+      await lit(nav.getByRole("link", { name: "記録" }), shelfTab);
+
+      // The six labels keep to one line, inside their own tab and the screen.
+      await go("/profiles/me/");
+      for (const width of [375, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        const tabs = await nav.evaluate((bar) =>
+          [...bar.querySelectorAll("a")].map((tab) => {
+            const box = tab.getBoundingClientRect();
+            const label = tab.querySelector("span");
+            const words = label.getBoundingClientRect();
+            const size = parseFloat(getComputedStyle(label).fontSize);
+            return {
+              name: label.textContent,
+              fits:
+                words.left >= box.left - 0.5 &&
+                words.right <= box.right + 0.5 &&
+                box.left >= -0.5 &&
+                box.right <= innerWidth + 0.5 &&
+                words.height < size * 2,
+            };
+          }),
+        );
+        expect(tabs.map((tab) => tab.name)).toEqual([
+          "ホーム",
+          "検索",
+          "書店めぐり",
+          "本棚",
+          "記録",
+          "わたし",
+        ]);
+        for (const tab of tabs)
+          expect(tab.fits, `${width}px: ${tab.name} fits`).toBe(true);
+        await noOverflow(`${width}px profile`);
+        await page.screenshot({
+          path: path.join(output, `bottom-bar-${width}.png`),
+          clip: { x: 0, y: 844 - 90, width, height: 90 },
+        });
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
     },
   );
 

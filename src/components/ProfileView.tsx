@@ -96,6 +96,7 @@ import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import { useUrlParam } from "../lib/url-state";
+import { onShelfRequest, takeShelfRequest } from "../lib/shelf-tab";
 import { afterLayerCloses } from "../lib/back-layer";
 import { focusField } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
@@ -153,6 +154,21 @@ export function ProfileView({
       });
     });
   }, [landing, setBooks]);
+  // 本棚 in the main navigation opens this list (shelf-tab.ts): it comes
+  // into view, under the bar at the top.
+  useEffect(() => {
+    if (!isSelf) return;
+    const show = () => {
+      if (!takeShelfRequest()) return;
+      requestAnimationFrame(() =>
+        document
+          .getElementById("profile-collections")
+          ?.scrollIntoView({ block: "start" }),
+      );
+    };
+    show();
+    return onShelfRequest(show);
+  }, [isSelf]);
   const clock = useClock(60_000);
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingNine, setEditingNine] = useState(false);
@@ -645,6 +661,7 @@ export function ProfileView({
 
       {isSelf && (
         <section
+          id="profile-collections"
           className="profile-collections"
           aria-labelledby="profile-collection-title"
         >
