@@ -138,10 +138,10 @@ export type ShopRow = Pick<
 
 /**
  * Who typed a book in is not readable, so a book row comes without it. Its
- * work (work_id) is not read yet: the app reads it once the database has it
- * in production (plan item 4).
+ * work (work_id) comes with it: the database places every book in the work of
+ * its edition (plan item 4), and the app never writes it.
  */
-export type BookRow = Omit<Tables<"books">, "created_by" | "work_id">;
+export type BookRow = Omit<Tables<"books">, "created_by">;
 
 export interface RemoteRows {
   profiles: Tables<"profiles">[];
@@ -232,12 +232,15 @@ const text = (value: unknown, limit: number): value is string =>
  * demo. `registered`: the book is among the reader's own registered books.
  */
 export function bookFromRow(row: BookRow, registered: boolean): Book {
-  const book = createRegisteredBook(row.id, {
-    title: row.title,
-    author: row.author,
-    ...(row.isbn ? { isbn: row.isbn } : {}),
-    ...(row.price ? { price: row.price } : {}),
-  });
+  const book = {
+    ...createRegisteredBook(row.id, {
+      title: row.title,
+      author: row.author,
+      ...(row.isbn ? { isbn: row.isbn } : {}),
+      ...(row.price ? { price: row.price } : {}),
+    }),
+    workId: row.work_id,
+  };
   return registered
     ? book
     : {

@@ -2,8 +2,10 @@ import type { Book } from "./types";
 
 // A book row is one edition; a work gathers the editions of the same text.
 // Reviews and posts will meet at the work, while a shelf shows the edition the
-// owner holds. Until the operators join two editions, each book is its own
-// work, so workOf falls back to the book's own ID.
+// owner holds. The database places each book in its edition's work (books of
+// one ISBN share it, and the operators join editions), and the app reads it as
+// workId. A book without one (the demo's, the 見本) is its own work, so workOf
+// falls back to the book's own ID.
 // Not the search's "work key" (a guess from title and author): that one only
 // groups results and is never written here.
 
