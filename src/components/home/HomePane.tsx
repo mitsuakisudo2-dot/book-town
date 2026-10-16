@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   boardPicks,
   exhibitionFeature,
@@ -37,7 +38,6 @@ import type { Post, Shop, TownState } from "../../lib/types";
 import { findReader } from "../../lib/social";
 import { useLayerReturn } from "../../lib/back-layer";
 import { BookInHand, heldBookOf } from "../BookInHand";
-import { ScanSession } from "../ScanSession";
 import { Alley } from "./Alley";
 import { CorkBoard } from "./CorkBoard";
 import { Entrances } from "./Entrances";
@@ -160,6 +160,15 @@ function resolve(
 }
 
 /** A plain click, not one meant to open the link in a new tab or window. */
+// The camera's scanning comes in its own file, read when it is opened.
+const ScanSession = dynamic(
+  () => import("../ScanSession").then((file) => file.ScanSession),
+  { ssr: false },
+);
+
+/** Whether the 路地 has been drawn on this page before. */
+let alleyDrawn = false;
+
 const plainClick = (event: MouseEvent) =>
   event.button === 0 &&
   !event.metaKey &&
@@ -228,6 +237,25 @@ export function HomePane({
       ).map(hold),
     };
   });
+  // The first time Home is drawn on a page, the 路地 (below the screen, and
+  // as much again as everything above it) comes in the frame after the
+  // first 便り, so a slow phone lays out and paints those first. Back on
+  // Home later, it is there with the rest, where the reader left it.
+  const [alleyReady, setAlleyReady] = useState(alleyDrawn);
+  useEffect(() => {
+    if (!drawn || alleyReady) return;
+    let timer = 0;
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => {
+        alleyDrawn = true;
+        setAlleyReady(true);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [drawn, alleyReady]);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [sheet, setSheet] = useState<"read" | "scan" | null>(null);
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
@@ -342,7 +370,7 @@ export function HomePane({
         <h2>ここから、まだ知らない路地</h2>
         {followed.length > 0 && <p>フォロー中の便りは、ここまでです。</p>}
       </header>
-      {drawn && (
+      {drawn && alleyReady && (
         <Alley
           {...shared}
           now={drawn.at}
