@@ -23,6 +23,11 @@
   outline: none;
   background: transparent;
   font-size: 14px;
+  text-overflow: ellipsis;
+}
+/* The hint names five kinds of search; a phone's width takes it at 12px. */
+.search-box input::placeholder {
+  font-size: 12px;
 }
 .search-genres {
   display: flex;
