@@ -39,9 +39,10 @@ export interface TownBackend {
    */
   newer?(since: string | null): Promise<Arrived>;
   /**
-   * Top-level 便り by `authors` ("me" for the reader) before `before`,
-   * newest first, at most OLDER_PAGE, with their replies: 便りだけ's next
-   * stretch past what the town read.
+   * Top-level 便り by `authors` ("me" for the reader) at or before
+   * `before` that the town lacks, newest first, at most OLDER_PAGE, with
+   * their replies: 便りだけ's next stretch past what the town read. Ones
+   * written at the same moment as `before` are never skipped.
    */
   older?(before: string, authors: string[]): Promise<Arrived>;
   /** One post with its replies (a reply brings its post): a page by its id. */

@@ -123,6 +123,7 @@ function postsAsked(rows, params) {
     if (op === "is") return arg === "null" ? cell === null : true;
     if (op === "gte") return Date.parse(cell) >= Date.parse(bare(arg));
     if (op === "lt") return Date.parse(cell) < Date.parse(bare(arg));
+    if (op === "lte") return Date.parse(cell) <= Date.parse(bare(arg));
     throw new Error("not mocked: posts filter " + column + "=" + filter);
   };
   let asked = rows;
@@ -434,7 +435,7 @@ const standIn = async (route) => {
     if (table === "posts") {
       postReads.push(url.search);
       const failing =
-        (failOlderOnce && url.search.includes("created_at=lt.")) ||
+        (failOlderOnce && url.search.includes("created_at=lte.")) ||
         (failPostOnce && url.searchParams.get("id") === "eq." + failPostOnce);
       if (failing) {
         failOlderOnce = false;
@@ -2326,7 +2327,7 @@ try {
           ...old.map((row) => row.id),
         ]);
         const older = postReads.find((query) =>
-          query.includes("created_at=lt."),
+          query.includes("created_at=lte."),
         );
         expect(older).toContain("author_id=in.");
         expect(older).toContain("parent_id=is.null");
@@ -2535,7 +2536,7 @@ try {
             await toEnd();
             return postReads
               .slice(backReads)
-              .filter((query) => query.includes("created_at=lt.")).length;
+              .filter((query) => query.includes("created_at=lte.")).length;
           })
           .toBe(1);
         await expect(
