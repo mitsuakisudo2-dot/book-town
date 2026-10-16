@@ -314,11 +314,7 @@ input[type="checkbox"] {
   max-width: 1270px;
   margin: auto;
   min-height: 65vh;
-  animation: page-in 0.24s ease;
   min-width: 0;
-  /* The page moves in by its offset, not a transform: a transform would
-     carry its fixed parts (the 投稿 button) away while it moves. */
-  position: relative;
 }
 .eyebrow {
   display: block;
@@ -1494,16 +1490,6 @@ div.book-jacket:hover {
 .mobile-brand,
 .town-bottom-nav {
   display: none;
-}
-@keyframes page-in {
-  from {
-    opacity: 0;
-    top: 5px;
-  }
-  to {
-    opacity: 1;
-    top: 0;
-  }
 }
 @keyframes fade-in {
   from {

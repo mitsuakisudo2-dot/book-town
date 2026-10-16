@@ -515,7 +515,7 @@ try {
         .fill("ソラリス");
       await page.getByRole("button", { name: /^ソラリス/ }).click();
       await page.getByRole("button", { name: /みんなで読む/ }).click();
-      await confirmIn("読書をはじめますか？", "はじめる");
+      await confirmIn("読書をはじめますか？", "本を開く");
       await expect(
         page.getByRole("heading", { name: "ソラリス" }),
       ).toBeVisible();
@@ -619,7 +619,7 @@ try {
     "reading alone keeps memos private and off the timeline",
     async () => {
       await page.getByRole("button", { name: /一人で読む/ }).click();
-      await confirmIn("読書をはじめますか？", "はじめる");
+      await confirmIn("読書をはじめますか？", "本を開く");
       // Reading alone, the town's readers and words wait behind a fold.
       const others = page.getByRole("heading", {
         name: /同じ本を、いま2人が読んでいます/,
@@ -1003,7 +1003,7 @@ try {
       await page.getByRole("searchbox", { name: "読む本を探す" }).fill("モモ");
       await page.getByRole("button", { name: /^モモ/ }).click();
       await page.getByRole("button", { name: /一人で読む/ }).click();
-      await confirmIn("読書をはじめますか？", "はじめる");
+      await confirmIn("読書をはじめますか？", "本を開く");
       await page.getByRole("button", { name: "読書を終える" }).click();
       await forgetFocus(page);
       await page

@@ -793,7 +793,7 @@ try {
         await page.getByRole("button", { name: /一人で読む/ }).click();
         await page
           .getByRole("dialog", { name: "読書をはじめますか？" })
-          .getByRole("button", { name: "はじめる", exact: true })
+          .getByRole("button", { name: "本を開く", exact: true })
           .click();
         const memo = page.getByLabel("読書メモ（自分だけ）");
         await memo.fill("百年待っていてください。");
@@ -870,7 +870,7 @@ try {
           await page.getByRole("button", { name: /一人で読む/ }).click();
           await page
             .getByRole("dialog", { name: "読書をはじめますか？" })
-            .getByRole("button", { name: "はじめる", exact: true })
+            .getByRole("button", { name: /^(本を開く|はじめる)$/ })
             .click();
         };
         await startSolo();
@@ -1688,7 +1688,7 @@ try {
           await page.getByRole("button", { name: /一人で読む/ }).tap();
           await page
             .getByRole("dialog", { name: "読書をはじめますか？" })
-            .getByRole("button", { name: "はじめる", exact: true })
+            .getByRole("button", { name: "本を開く", exact: true })
             .tap();
         };
         await read();
