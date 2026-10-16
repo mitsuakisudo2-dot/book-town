@@ -79,9 +79,9 @@ try {
       await expect(page.locator(".walk-first-hint")).toHaveCount(0);
     },
   );
-  await check("five mobile destinations with walk in center", async () => {
+  await check("six mobile destinations with walk third", async () => {
     const links = page.locator(".town-bottom-nav a");
-    await expect(links).toHaveCount(5);
+    await expect(links).toHaveCount(6);
     await expect(links.nth(2)).toHaveAttribute("href", "/walk/");
     await expect(page.locator(".town-bottom-nav")).toBeVisible();
   });

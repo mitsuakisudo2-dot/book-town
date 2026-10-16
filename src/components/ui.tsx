@@ -187,6 +187,14 @@ const shapes: Record<string, ReactNode> = {
     </>
   ),
   bookmark: <path d="M6 3h12v18l-6-4-6 4z" />,
+  // Books standing on a shelf, one leaning: 本棚 in the main navigation.
+  shelf: (
+    <>
+      <path d="M5 4h3.5v15H5zM9.5 6H13v13H9.5z" />
+      <path d="m14.6 6.3 3.3-.9 3 13-3.3.9z" />
+      <path d="M3 20h18" />
+    </>
+  ),
   mail: (
     <>
       <rect x="3" y="5.5" width="18" height="13" rx="2" />
