@@ -122,7 +122,9 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   },
   "public.profiles": {
     people: { id: "delete" },
-    readers: { open: SIGNED_OUT },
+    readers: {
+      open: "left visible on purpose, so whoever blocked someone can still find them in their list to unblock (docs/09)",
+    },
   },
   "public.reader_settings": { people: { user_id: "delete" }, readers: "own" },
   "public.reading_entries": {
