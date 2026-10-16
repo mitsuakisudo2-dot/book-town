@@ -1,0 +1,43 @@
+/* 見せる範囲 in 設定 (VisibilitySettings.tsx): tokens and parts.css only. */
+
+/* Each choice a row for the finger, its few words under its name. */
+.visibility-choices {
+  flex-direction: column;
+  align-items: stretch;
+}
+.visibility-choices label {
+  min-height: 44px;
+  border-radius: var(--r-box);
+  align-items: flex-start;
+  line-height: 1.6;
+}
+.visibility-choices input {
+  margin-top: 4px;
+  flex: none;
+}
+.visibility-choices small {
+  display: block;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+
+/* The question a wider choice asks, in place of the note under the choices. */
+.visibility-question {
+  padding: 14px 16px;
+  border: 1px solid var(--green);
+  border-radius: var(--r-box);
+  background: var(--paper);
+}
+.visibility-question-title {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: var(--t-body);
+  font-weight: 700;
+  line-height: 1.6;
+}
+.visibility-question-words {
+  margin: 0 0 12px;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  line-height: 1.8;
+}

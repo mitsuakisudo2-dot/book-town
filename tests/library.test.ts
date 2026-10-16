@@ -193,7 +193,7 @@ const record = (
   feelings: [],
   note: "",
   spoiler: false,
-  isPublic: false,
+  audience: "private",
   createdAt,
 });
 

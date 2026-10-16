@@ -38,6 +38,7 @@ import {
   useOpenedWithWork,
 } from "./KeptDraftNote";
 import { LengthNearLimit } from "./Social";
+import { shownToOthers, type Audience } from "../lib/visibility";
 import "./records.css";
 
 type Shared = {
@@ -61,18 +62,26 @@ function told(
   actions: TownActions,
   notify: Notify,
   recordId: string,
-  isPublic: boolean,
+  audience: Audience,
 ) {
-  if (isPublic) {
+  if (shownToOthers(audience)) {
     notify("公開しました。同じ本を読んだ人に届きます", {
       label: "自分だけに戻す",
       run: () => {
-        actions.updateRecord(recordId, { isPublic: false });
+        actions.updateRecord(recordId, { audience: "private" });
         notify("自分だけに戻しました");
       },
     });
   } else notify("自分だけにしました");
 }
+
+/**
+ * The other of the two choices a record offers until フォロワー限定 comes
+ * (item 51): shown to others goes back to the reader, the reader's own goes
+ * public.
+ */
+const flipped = (audience: Audience): Audience =>
+  shownToOthers(audience) ? "private" : "everyone";
 
 /** The quiet one-tap publish (or the way back) beside 「見直す」. */
 function PublishButton({
@@ -85,11 +94,12 @@ function PublishButton({
       type="button"
       className="text-button record-publish"
       onClick={() => {
-        actions.updateRecord(record.id, { isPublic: !record.isPublic });
-        told(actions, notify, record.id, !record.isPublic);
+        const audience = flipped(record.audience);
+        actions.updateRecord(record.id, { audience });
+        told(actions, notify, record.id, audience);
       }}
     >
-      {record.isPublic ? "自分だけにする" : "公開する"}
+      {shownToOthers(record.audience) ? "自分だけにする" : "公開する"}
     </button>
   );
 }
@@ -137,17 +147,18 @@ export function RecordSheet({
         feelings: record.feelings,
         note: record.note,
         spoiler: record.spoiler,
-        isPublic: record.isPublic,
+        audience: record.audience,
       }
     : {
         feelings: [],
         note: "",
         spoiler: false,
-        isPublic: state.settings.readingPublic,
+        audience: state.settings.visibility.records.audience,
       };
   // Only the changes are kept, over the record as it is now.
   const work: RecordWork = { ...base, ...draft };
-  const { feelings, note, spoiler, isPublic } = work;
+  const { feelings, note, spoiler, audience } = work;
+  const isPublic = shownToOthers(audience);
   // Words written that are not in the record yet, lost if thrown away.
   const wordsLost = note.trim() !== base.note.trim();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -172,8 +183,8 @@ export function RecordSheet({
         return;
       }
       clear();
-      if (isPublic !== record.isPublic)
-        told(actions, notify, record.id, isPublic);
+      if (audience !== record.audience)
+        told(actions, notify, record.id, audience);
       else notify("記録を書き直しました");
     } else {
       const id = actions.recordReading({ ...work, bookId: book.id });
@@ -182,7 +193,7 @@ export function RecordSheet({
         return;
       }
       clear();
-      if (isPublic) told(actions, notify, id, true);
+      if (isPublic) told(actions, notify, id, audience);
       else notify(pick(KEPT));
     }
     onClose();
@@ -262,7 +273,7 @@ export function RecordSheet({
         <button
           type="button"
           className="text-button"
-          onClick={() => change({ isPublic: !isPublic })}
+          onClick={() => change({ audience: flipped(audience) })}
         >
           {isPublic ? "自分だけにする" : "公開にする"}
         </button>
@@ -365,7 +376,10 @@ export function BookFeelings({
       {own ? (
         <div className="book-feelings-own">
           <p>
-            <Icon name={own.isPublic ? "users" : "lock"} size={13} />
+            <Icon
+              name={shownToOthers(own.audience) ? "users" : "lock"}
+              size={13}
+            />
             あなたの記録
             {own.feelings.length > 0 &&
               "：" +
@@ -473,7 +487,7 @@ export function RecordShelf({
                   <time dateTime={record.createdAt}>
                     {new Date(record.createdAt).toLocaleDateString("ja-JP")}
                   </time>
-                  {mine && !record.isPublic && (
+                  {mine && !shownToOthers(record.audience) && (
                     <span>
                       <Icon name="lock" size={12} />
                       自分だけ

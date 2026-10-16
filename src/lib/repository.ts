@@ -1,6 +1,7 @@
 import { createInitialState } from "./data";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
+import { cleanVisibilities } from "./visibility";
 import { restorePoster, type Poster } from "./posters";
 import { DEFAULT_HANDLE, handleProblem } from "./handles";
 import { createRegisteredBook, normalizeIsbn, REGISTERED_GENRE } from "./books";
@@ -262,7 +263,13 @@ function restoreRecords(value: unknown, bookIds: Set<string>): ReadingRecord[] {
       Number.isNaN(Date.parse(entry.createdAt))
     )
       return [];
-    const fields = cleanRecord(entry as Partial<ReadingRecord>);
+    // Saved before 見せる範囲, a record was public or not.
+    const fields = cleanRecord({
+      ...(entry as Partial<ReadingRecord>),
+      ...(entry.audience === undefined && entry.isPublic === true
+        ? { audience: "everyone" as const }
+        : {}),
+    });
     if (!fields) return [];
     ids.add(entry.id);
     return [
@@ -470,11 +477,14 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
           )
             ? (settings.composeIcon as ComposeIcon)
             : initial.settings.composeIcon,
-          // A choice already saved in this browser was the reader's own.
-          readingPublic:
-            typeof settings.readingPublic === "boolean"
-              ? settings.readingPublic
-              : initial.settings.readingPublic,
+          // A choice already saved in this browser was the reader's own;
+          // before 見せる範囲 it was only whether records start public.
+          visibility: cleanVisibilities(
+            settings.visibility ??
+              (settings.readingPublic === true
+                ? { records: { audience: "everyone" } }
+                : initial.settings.visibility),
+          ),
           spoilerDisplay: SPOILER_DISPLAYS.includes(
             settings.spoilerDisplay as SpoilerDisplay,
           )

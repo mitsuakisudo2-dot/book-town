@@ -1,6 +1,7 @@
 import { isDatabaseId } from "./paths";
 import { isPublished, posterBookIds } from "./posters";
 import { ME_ID, type Book, type TownState } from "./types";
+import { shownToOthers } from "./visibility";
 
 // A list of the town's books shown before anything is typed (棚の隅の本, a
 // picker's first books, the 見本's shelves in the walk), or found by a genre
@@ -53,7 +54,7 @@ function publicBookIds(state: TownState): (string | null)[] {
       .filter((post) => post.readingMode !== "solo")
       .map((post) => post.bookId),
     ...state.readingRecords
-      .filter((record) => record.isPublic)
+      .filter((record) => shownToOthers(record.audience))
       .map((record) => record.bookId),
     ...state.readers.flatMap((reader) => reader.lifeNine),
     ...state.posters.filter(isPublished).flatMap(posterBookIds),

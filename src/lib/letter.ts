@@ -6,6 +6,7 @@ import {
   type Reader,
   type TownState,
 } from "./types";
+import { shownToOthers } from "./visibility";
 
 // The rules of a 便り's card that need no screen: what a tap on いいね does,
 // when a long post folds, how tall a covered spoiler looks, and which of the
@@ -54,7 +55,7 @@ export function letterFeelings(
       (entry) =>
         entry.readerId === post.authorId &&
         entry.bookId === post.bookId &&
-        entry.isPublic,
+        shownToOthers(entry.audience),
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
   return (record?.feelings ?? [])

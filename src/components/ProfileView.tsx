@@ -110,6 +110,7 @@ import { onShelfRequest, takeShelfRequest } from "../lib/shelf-tab";
 import { afterLayerCloses, leaveLayers } from "../lib/back-layer";
 import { focusField } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
+import { VisibilitySettings } from "./VisibilitySettings";
 
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
 type Collection = (typeof COLLECTIONS)[number];
@@ -1031,37 +1032,7 @@ export function ProfileView({
               端末に合わせると、端末を暗い表示にしている間は夜の色になります。
             </p>
           </fieldset>
-          <fieldset className="record-visibility">
-            <legend>読み終えた本の記録（これから残す記録）</legend>
-            <label>
-              <input
-                type="radio"
-                name="reading-public"
-                checked={!state.settings.readingPublic}
-                onChange={() => {
-                  actions.setReadingPublic(false);
-                  notify(
-                    "これから残す記録は、自分だけになります。今までの記録はそのままです",
-                  );
-                }}
-              />
-              自分だけ
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="reading-public"
-                checked={state.settings.readingPublic}
-                onChange={() => {
-                  actions.setReadingPublic(true);
-                  notify(
-                    "これから残す記録は、公開になります。今までの記録はそのままです",
-                  );
-                }}
-              />
-              公開
-            </label>
-          </fieldset>
+          <VisibilitySettings state={state} actions={actions} notify={notify} />
           <fieldset className="record-visibility spoiler-display">
             <legend>ネタバレの表示</legend>
             {SPOILER_CHOICES.map((choice) => (
