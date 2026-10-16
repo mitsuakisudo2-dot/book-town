@@ -219,7 +219,7 @@ export type Database = {
           source?: string;
           title: string;
           updated_at?: string;
-          work_id?: string;
+          work_id: string;
         };
         Update: {
           author?: string;
