@@ -1,0 +1,94 @@
+/* Blocking a reader (BlockReader.tsx): tokens and parts.css only. */
+
+.block-question-title {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: var(--t-page);
+  font-weight: 700;
+  line-height: 1.6;
+}
+.block-question-words {
+  margin: 0 0 16px;
+  color: var(--ink-2);
+  font-size: var(--t-body);
+  line-height: 1.8;
+}
+
+/* Beside 通報 on a profile: as quiet, but big enough for a finger. */
+.block-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  cursor: pointer;
+}
+
+/* On the profile of someone blocked, in place of their shop and words. */
+.blocked-note {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  background: var(--band);
+}
+.blocked-note p {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-body);
+  line-height: 1.8;
+}
+
+/* 設定「ブロックした読書家」 */
+.blocked-list ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.blocked-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.blocked-list li:last-child {
+  border-bottom: 0;
+}
+.blocked-list-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.blocked-list-who > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+.blocked-list-who b,
+.blocked-list-who small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blocked-list-who b {
+  color: var(--ink);
+  font-size: var(--t-ui);
+}
+.blocked-list-who small {
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+}
+.blocked-list-note {
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+}

@@ -91,6 +91,7 @@ import { postersOf } from "../lib/posters";
 import { PosterThumb } from "./PosterView";
 import "./poster-screen.css";
 import { ReportButton } from "./Report";
+import { BlockButton, BlockedList, BlockedNote } from "./BlockReader";
 import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
@@ -435,6 +436,24 @@ export function ProfileView({
     notify("人生の9冊を保存しました");
   }
 
+  // Someone the reader blocked: only who they are, and the way to lift it.
+  if (!isSelf && state.blocked.includes(reader.id))
+    return (
+      <div className="profile-view">
+        <BackLink className="profile-back" />
+        <section className="profile-reader" aria-labelledby="profile-name">
+          <div className="profile-reader-avatar">
+            <ReaderAvatar reader={reader} />
+          </div>
+          <div className="profile-reader-text">
+            <h1 id="profile-name">{reader.name}</h1>
+            <p className="profile-handle">@{reader.handle}</p>
+            <BlockedNote reader={reader} actions={actions} notify={notify} />
+          </div>
+        </section>
+      </div>
+    );
+
   return (
     <div className="profile-view">
       {/* One's own profile is a place of its own in the navigation. */}
@@ -573,6 +592,9 @@ export function ProfileView({
                 <Icon name="flag" size={13} />
                 通報
               </ReportButton>
+            )}
+            {!isSelf && (
+              <BlockButton reader={reader} actions={actions} notify={notify} />
             )}
           </div>
         </div>
@@ -1035,6 +1057,7 @@ export function ProfileView({
               </label>
             ))}
           </fieldset>
+          <BlockedList state={state} actions={actions} notify={notify} />
         </Modal>
       )}
       {sheet === "scan" && (
