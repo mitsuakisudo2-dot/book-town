@@ -52,6 +52,9 @@
 --     private.undo_join(uuid), private.part_books(uuid[]),
 --     private.keep_apart(uuid, uuid), private.work_candidates();
 --   drop table private.works_apart, private.work_changes, private.work_joins;
+--   drop trigger books_touch on public.books;
+--   create trigger books_touch before update on public.books
+--     for each row execute function public.touch_updated_at();
 --   alter table public.books drop constraint books_isbn_fkey, drop column work_id;
 --   drop table public.editions, public.works;
 --   drop function private.titles_agree(text, text),
@@ -270,19 +273,24 @@ revoke all on public.editions from public, anon, authenticated;
 
 alter table public.books add column work_id uuid;
 
+-- A book's updated_at says when it was last changed as a book. Being moved
+-- to another work (the move below, the operator's tools) is not that, so it
+-- keeps its updated_at; an edited ISBN still counts, since books_touch fires
+-- before books_work_edited moves the book.
+drop trigger books_touch on public.books;
+create trigger books_touch before update on public.books
+  for each row when (old.work_id is not distinct from new.work_id)
+  execute function public.touch_updated_at();
+
 -- The operator's joins, with what each changed, so it can be undone exactly:
--- the editions that moved, the works that had led to the one that went (and
--- now lead to the one that stayed), the works the one that went was kept
--- apart from, and which of those the one that stayed is kept apart from
--- because of the join.
+-- the editions that moved, and the works that had led to the one that went
+-- (and now lead to the one that stayed).
 create table private.work_joins (
   id uuid primary key default gen_random_uuid(),
   kept uuid not null references public.works (id),
   gone uuid not null references public.works (id),
   isbns text[] not null default '{}',
   led_here uuid[] not null default '{}',
-  apart_from uuid[] not null default '{}',
-  apart_carried uuid[] not null default '{}',
   joined_at timestamptz not null default now(),
   undone_at timestamptz,
   check (kept <> gone)
@@ -310,7 +318,10 @@ alter table private.work_changes enable row level security;
 revoke all on private.work_changes from public, anon, authenticated;
 
 -- Two works the operator found to be different, so the candidates leave
--- them out. One row a pair, the smaller id first.
+-- them out. One row a pair, the smaller id first. A row keeps the works it
+-- was decided about; a work joined into another since is read as the one it
+-- went into (merged_into), so the decision follows a join and its undoing
+-- without the row changing.
 create table private.works_apart (
   work_a uuid not null references public.works (id),
   work_b uuid not null references public.works (id),
@@ -322,9 +333,7 @@ alter table private.works_apart enable row level security;
 revoke all on private.works_apart from public, anon, authenticated;
 
 -- The books there are now: an edition and a work for each ISBN, as old as
--- its oldest book, and a work for each book without one. They keep their
--- updated_at: their own data is as it was.
-alter table public.books disable trigger books_touch;
+-- its oldest book, and a work for each book without one.
 do $$
 declare
   b record;
@@ -345,7 +354,6 @@ begin
   end loop;
 end;
 $$;
-alter table public.books enable trigger books_touch;
 
 -- A book is never without a work, nor an ISBN without its edition; a work
 -- or an edition with books is never deleted (the operator's joins leave the
@@ -361,19 +369,22 @@ create index books_work on public.books (work_id);
 -- A new book's work ------------------------------------------------------------------
 
 -- The work of the edition of this ISBN, made with its edition the first time
--- the ISBN is registered. Two first registrations at once wait for each
--- other, so they meet in one edition. Security definer: readers can neither
--- read nor make editions and works.
+-- the ISBN is registered. Every registration of an ISBN takes the same lock
+-- of that ISBN, whether its edition is there or not, so two first
+-- registrations at once meet in one edition, and how long a registration
+-- waits says nothing about whether anyone registered the ISBN before: a lock
+-- taken only for a new ISBN would let a reader time it. The lock is the
+-- ISBN's own, so a reader holding it holds up nobody else's books. A
+-- statement of several books takes their locks one by one; should two meet
+-- the same new ISBNs in the other order, Postgres ends one of them with a
+-- deadlock, and the app sends it again.
+-- Security definer: readers can neither read nor make editions and works.
 create function private.edition_work(isbn text) returns uuid
 language plpgsql security definer set search_path = '' as $$
 declare
   found_work uuid;
 begin
-  select e.work_id into found_work from public.editions e where e.isbn = edition_work.isbn;
-  if found then
-    return found_work;
-  end if;
-  perform pg_advisory_xact_lock(hashtext('book-town.works'));
+  perform pg_advisory_xact_lock(hashtextextended('book-town.edition:' || edition_work.isbn, 0));
   select e.work_id into found_work from public.editions e where e.isbn = edition_work.isbn;
   if found then
     return found_work;
@@ -389,8 +400,9 @@ revoke all on function private.edition_work(text) from public, anon, authenticat
 -- book without an ISBN a work of its own. A book sent again (the app's
 -- upsert passes over duplicates) meets its own row and is given that row's
 -- work, so no work is made for nothing; two sends of one book at once wait
--- for each other. Whatever work_id an insert names is replaced: only this
--- decides a book's work. What it writes is a work id, which shows nothing.
+-- for each other, on a lock of that book's id alone. Whatever work_id an
+-- insert names is replaced: only this decides a book's work. What it writes
+-- is a work id, which shows nothing.
 create function private.book_work() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -400,7 +412,7 @@ begin
     new.work_id := private.edition_work(new.isbn);
     return new;
   end if;
-  perform pg_advisory_xact_lock(hashtext('book-town.works'));
+  perform pg_advisory_xact_lock(hashtextextended('book-town.book:' || new.id::text, 0));
   select b.work_id into found_work from public.books b where b.id = new.id;
   if not found then
     insert into public.works default values returning id into found_work;
@@ -468,7 +480,6 @@ declare
   kept uuid;
   gone uuid;
   made uuid;
-  carried uuid[];
   n integer;
 begin
   lock table public.books in share row exclusive mode;
@@ -480,34 +491,19 @@ begin
   if kept = gone then
     raise exception 'the two books are one work already';
   end if;
-  -- What was decided about the work that goes is about the one that stays.
-  carried := array(
-    select o.other from (
-      select case when a.work_a = gone then a.work_b else a.work_a end as other
-      from private.works_apart a where gone in (a.work_a, a.work_b)
-    ) o
-    where o.other <> kept and not exists (
-      select 1 from private.works_apart x
-      where x.work_a = least(kept, o.other) and x.work_b = greatest(kept, o.other))
-    order by o.other);
-  insert into private.work_joins (kept, gone, isbns, led_here, apart_from, apart_carried)
+  insert into private.work_joins (kept, gone, isbns, led_here)
   values (kept, gone,
     array(select e.isbn from public.editions e where e.work_id = gone order by e.isbn),
-    array(select w.id from public.works w where w.merged_into = gone order by w.id),
-    array(select case when a.work_a = gone then a.work_b else a.work_a end
-      from private.works_apart a where gone in (a.work_a, a.work_b) order by 1),
-    carried)
+    array(select w.id from public.works w where w.merged_into = gone order by w.id))
   returning id into made;
   insert into private.work_changes (book_id, from_work, to_work, kind, join_id)
   select b.id, gone, kept, 'join', made from public.books b where b.work_id = gone;
   update public.editions e set work_id = kept where e.work_id = gone;
   update public.books b set work_id = kept where b.work_id = gone;
   get diagnostics n = row_count;
-  -- Works joined into the one that goes now lead to the one that stays.
+  -- Works joined into the one that goes now lead to the one that stays, and
+  -- so does what was decided about them (works_apart).
   update public.works w set merged_into = kept where w.id = gone or w.merged_into = gone;
-  insert into private.works_apart (work_a, work_b)
-  select least(kept, x.other), greatest(kept, x.other) from unnest(carried) x (other);
-  delete from private.works_apart a where gone in (a.work_a, a.work_b);
   return query select made, n;
 end;
 $$;
@@ -516,8 +512,8 @@ revoke all on function private.join_works(uuid, uuid) from public, anon, authent
 -- Undoes a join exactly: the editions it moved go back, with every book of
 -- their ISBNs still in the work that stayed (those registered since too),
 -- and so do the books without an ISBN it moved; the works that led to the
--- one that went lead there again, and what was decided about it is as
--- before. The two works are then kept apart. A join whose work was joined
+-- one that went lead there again, and with them what was decided about
+-- them. The two works are then kept apart. A join whose work was joined
 -- into another since waits until that join is undone. Returns how many
 -- books moved back.
 --   select private.undo_join('<private.work_joins.id>');
@@ -556,12 +552,6 @@ begin
   update public.works w set merged_into = null where w.id = j.gone;
   update public.works w set merged_into = j.gone
   where w.id = any (j.led_here) and w.merged_into = j.kept;
-  delete from private.works_apart a
-  where (a.work_a, a.work_b) in (
-    select least(j.kept, x.other), greatest(j.kept, x.other) from unnest(j.apart_carried) x (other));
-  insert into private.works_apart (work_a, work_b)
-  select least(j.gone, x.other), greatest(j.gone, x.other) from unnest(j.apart_from) x (other)
-  on conflict do nothing;
   insert into private.works_apart (work_a, work_b)
   values (least(j.kept, j.gone), greatest(j.kept, j.gone))
   on conflict do nothing;
@@ -631,6 +621,7 @@ declare
   a uuid;
   b uuid;
 begin
+  lock table public.books in share row exclusive mode;
   select x.work_id into a from public.books x where x.id = book_a;
   select x.work_id into b from public.books x where x.id = book_b;
   if a is null or b is null then
@@ -652,9 +643,11 @@ revoke all on function private.keep_apart(uuid, uuid) from public, anon, authent
 -- that agree (titles_agree), by authors that agree (authors_agree), neither
 -- blank. Many works of one title and author come as one pair each beside the
 -- one most touched, not every pair among them. Pairs kept apart are left out.
--- Those that touch the most come first: the readers with either in their
--- library, the public reviews of either, and the open shops showing either
--- on a public shelf or in their scene. Nothing is joined by it.
+-- Those that touch the most come first: the readers with a public record
+-- of either, the public reviews of either, and the open shops showing
+-- either on a public shelf or in their scene, all of it what anyone may see
+-- (never a library, a hidden post or anything else kept private). Nothing
+-- is joined by it.
 --   select * from private.work_candidates();
 create function private.work_candidates()
 returns table (
@@ -687,21 +680,27 @@ language sql stable security definer set search_path = '' as $$
   ),
   weight as (
     select w.work_id,
-      (select count(distinct l.user_id) from public.library_entries l
-       join public.books e on e.id = l.book_id
-       where e.work_id = w.work_id and l.removed_at is null) as readers,
+      (select count(distinct r.user_id) from public.reading_entries r
+       join public.books e on e.id = r.book_id
+       where e.work_id = w.work_id
+         and r.is_public and not private.is_hidden('profile', r.user_id)) as readers,
       (select count(*) from public.posts p
        join public.books e on e.id = p.book_id
        where e.work_id = w.work_id
-         and p.parent_id is null and p.reading_mode is distinct from 'solo') as reviews,
+         and p.parent_id is null and p.reading_mode is distinct from 'solo'
+         and not private.is_hidden('post', p.id)
+         and not private.is_hidden('profile', p.author_id)) as reviews,
       (select count(*) from public.shops s
-       where s.is_open and exists (
-         select 1 from public.books e
-         where e.work_id = w.work_id
-           and (s.public_scene_books @> jsonb_build_array(e.id::text)
-             or s.public_shelves @> jsonb_build_array(jsonb_build_object(
-               'items', jsonb_build_array(jsonb_build_object('bookId', e.id::text)))))
-       )) as shops
+       where s.is_open
+         and not private.is_hidden('shop', s.id)
+         and not private.is_hidden('profile', s.owner_id)
+         and exists (
+           select 1 from public.books e
+           where e.work_id = w.work_id
+             and (s.public_scene_books @> jsonb_build_array(e.id::text)
+               or s.public_shelves @> jsonb_build_array(jsonb_build_object(
+                 'items', jsonb_build_array(jsonb_build_object('bookId', e.id::text)))))
+         )) as shops
     from (select distinct h.work_id from heads h) w
   ),
   ranked as (
@@ -726,11 +725,20 @@ language sql stable security definer set search_path = '' as $$
       and private.titles_agree(a.title_key, b.title_key)
       and private.authors_agree(a.author_keys, a.author_key, b.author_keys, b.author_key)
   ),
+  -- Pairs kept apart, as the works they are now.
+  apart as (
+    select
+      least(coalesce(wa.merged_into, wa.id), coalesce(wb.merged_into, wb.id)) as work_a,
+      greatest(coalesce(wa.merged_into, wa.id), coalesce(wb.merged_into, wb.id)) as work_b
+    from private.works_apart x
+    join public.works wa on wa.id = x.work_a
+    join public.works wb on wb.id = x.work_b
+  ),
   chosen as (
     select distinct on (least(p.a_work, p.b_work), greatest(p.a_work, p.b_work)) p.*
     from pairs p
     where p.a_work <> p.b_work and not exists (
-      select 1 from private.works_apart x
+      select 1 from apart x
       where x.work_a = least(p.a_work, p.b_work) and x.work_b = greatest(p.a_work, p.b_work)
     )
     order by least(p.a_work, p.b_work), greatest(p.a_work, p.b_work), p.a_id, p.b_id
@@ -763,10 +771,7 @@ begin
   where c.label = '20261027000000_works' and c.source = 'public.books';
   execute format(
     'select count(*) from keep.%I c join public.books b on b.id = c.id
-     where (b.isbn, b.title, b.author, b.publisher, b.price, b.source, b.created_by,
-            b.created_at, b.updated_at)
-       is distinct from (c.isbn, c.title, c.author, c.publisher, c.price, c.source,
-            c.created_by, c.created_at, c.updated_at)',
+     where to_jsonb(b) - ''work_id'' is distinct from to_jsonb(c) - ''keep_owners''',
     copy_table) into changed;
   if changed > 0 then
     raise exception 'the move changed % books', changed;

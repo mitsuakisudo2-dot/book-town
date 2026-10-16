@@ -459,6 +459,27 @@ async function main() {
       const nobody = await probe(3, unused(1));
       assert.deepEqual(hidden, { together: true, others: 0 });
       assert.deepEqual(nobody, hidden);
+      // Nor can he time it: registering takes the same lock, the ISBN's own,
+      // whether its edition is there or not, so nothing makes him wait
+      // longer for one than for the other.
+      const locks = async (book: string, probed: string) => {
+        await db.exec("begin");
+        try {
+          await as(
+            BEN,
+            "insert into books (id, isbn, title, author, created_by) values ($1, $2, '鍵', '', $3)",
+            [book, probed, BEN],
+          );
+          return await rows<{ n: number }>(
+            "select count(*)::int as n from pg_locks where locktype = 'advisory'",
+          );
+        } finally {
+          await db.exec("rollback");
+        }
+      };
+      const lockedHidden = await locks(id(6, 5), X3);
+      assert.deepEqual(lockedHidden, [{ n: 1 }]);
+      assert.deepEqual(await locks(id(6, 6), unused(15)), lockedHidden);
       // In truth his books joined Chi's edition, which only she reads.
       assert.equal(await workOf(id(6, 1)), await workOf(SECRET));
       assert.deepEqual(
@@ -599,9 +620,19 @@ async function main() {
         book,
       ]);
       assert.equal(await workOf(book), alone);
-      // An ISBN given: the book joins that edition.
+      // An ISBN given: the book joins that edition, and it is an edit of
+      // the book, so its updated_at moves.
+      const [{ t: before }] = await rows<{ t: Date }>(
+        "select updated_at as t from books where id = $1",
+        [book],
+      );
       await as(BEN, "update books set isbn = $2 where id = $1", [book, X4]);
       assert.equal(await workOf(book), orwell);
+      const [{ t: after }] = await rows<{ t: Date }>(
+        "select updated_at as t from books where id = $1",
+        [book],
+      );
+      assert.ok(after > before);
       // Taken off again: a work of its own, not the one it had.
       await as(BEN, "update books set isbn = null where id = $1", [book]);
       const own = await workOf(book);
@@ -751,6 +782,26 @@ async function main() {
         [found[0].reviews, found[0].shops, found[0].readers],
         [1, 1, 0],
       );
+      // What is kept private never weighs: Dai's library and a record he
+      // keeps to himself count for nothing, the same record made public for
+      // one reader.
+      await db.exec(`
+        insert into library_entries (user_id, book_id, source, status)
+          values ('${DAI}', '${NOTE2}', 'manual', null);
+        insert into reading_entries (user_id, book_id, is_public, body)
+          values ('${DAI}', '${NOTE2}', false, 'メモ');
+      `);
+      const readers = async () =>
+        (await candidates(db)).map((found) => found.readers);
+      assert.deepEqual(await readers(), [0]);
+      await db.exec(
+        `update reading_entries set is_public = true where user_id = '${DAI}' and book_id = '${NOTE2}'`,
+      );
+      assert.deepEqual(await readers(), [1]);
+      await db.exec(`
+        delete from reading_entries where user_id = '${DAI}' and book_id = '${NOTE2}';
+        delete from library_entries where user_id = '${DAI}' and book_id = '${NOTE2}';
+      `);
       // Two catalog rows of one book with three reviews come first.
       const [river1, river2] = [id(5, 1), id(5, 2)];
       await add(river1, "銀河鉄道の夜", "宮沢賢治", unused(4));
@@ -966,6 +1017,21 @@ async function main() {
   await check(
     "parting takes whole editions out of one work, kept apart and written down, and a join puts them back",
     async () => {
+      // No reader changed these books: being joined, undone and parted keeps
+      // their updated_at (Aki's and Ben's are as the seed wrote them).
+      const stamps = () =>
+        rows(
+          "select id, updated_at from books where id = any ($1::uuid[]) order by id",
+          [[ORWELL1, ORWELL2, later]],
+        );
+      const stamped = await stamps();
+      assert.equal(
+        await count(
+          "select count(*) from books where id = any ($1::uuid[]) and updated_at = '2026-10-06'",
+          [[ORWELL1, ORWELL2]],
+        ),
+        2,
+      );
       await rows("select * from private.join_works($1, $2)", [
         ORWELL1,
         ORWELL2,
@@ -1009,13 +1075,16 @@ async function main() {
       ]);
       assert.equal(await workOf(ORWELL2), kept);
       assert.equal(await workOf(later), kept);
+      // The mark stays as it was decided; the work that was parted out is
+      // read as the one it went back into, so it marks nothing now.
       assert.equal(
         await count(
           "select count(*) from private.works_apart where $1 in (work_a, work_b)",
           [fresh],
         ),
-        0,
+        1,
       );
+      assert.deepEqual(await stamps(), stamped);
     },
   );
 
@@ -1051,6 +1120,53 @@ async function main() {
           pair(await workOf(NOTE1), await workOf(chis)),
         ),
       );
+    },
+  );
+
+  await check(
+    "a mark of two works follows them through joins and their undoing",
+    async () => {
+      const [a, b, c, d] = [id(8, 1), id(8, 2), id(8, 3), id(8, 4)];
+      await add(a, "印の本", "某", unused(16));
+      await add(b, "印の本", "某", unused(17));
+      await add(c, "印の本", "某", unused(18));
+      await add(d, "印の本", "某", unused(19));
+      const works = await Promise.all([a, b, c, d].map(workOf));
+      const [wa, wb, , wd] = works;
+      const listed = async () =>
+        (await candidates(db))
+          .map((found) => found.works)
+          .filter((found) => works.some((work) => found.includes(work)));
+      await db.query("select private.keep_apart($1, $2)", [b, c]);
+      const [first] = await rows<{ join_id: string }>(
+        "select * from private.join_works($1, $2)",
+        [a, b],
+      );
+      await rows("select * from private.join_works($1, $2)", [d, c]);
+      // B's mark is now about A, and C's about D: the two are kept apart.
+      assert.deepEqual(await listed(), []);
+      await rows("select private.undo_join($1)", [first.join_id]);
+      // Undone, the mark is B's again: B and D are kept apart, and so are
+      // A and B, but A and D are not.
+      const review = async (book: string) =>
+        db.query(
+          "insert into posts (author_id, body, book_id) values ($1, 'いい', $2)",
+          [AKI, book],
+        );
+      await review(a);
+      assert.deepEqual(await listed(), [pair(wa, wd)]);
+      await db.query("delete from posts where book_id = $1", [a]);
+      await review(b);
+      assert.deepEqual(await listed(), []);
+      await db.query("delete from posts where book_id = $1", [b]);
+      assert.equal(await workOf(b), wb);
+      await db.query(
+        "delete from private.works_apart where $1 in (work_a, work_b) or $2 in (work_a, work_b)",
+        [wa, wb],
+      );
+      await db.query("delete from books where id = any ($1::uuid[])", [
+        [a, b, c, d],
+      ]);
     },
   );
 

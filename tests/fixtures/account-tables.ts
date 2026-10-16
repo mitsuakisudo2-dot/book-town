@@ -169,7 +169,7 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   "private.work_joins": {
     people: {},
     // Works' ids, kept so a join can be undone exactly.
-    notPeople: ["led_here", "apart_from", "apart_carried"],
+    notPeople: ["led_here"],
     readers: "nobody",
   },
   "private.works_apart": { people: {}, readers: "nobody" },
