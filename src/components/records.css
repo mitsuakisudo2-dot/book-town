@@ -346,6 +346,8 @@
   height: 14px;
   border-radius: 50%;
   flex: none;
+  /* A ring, so 深緑 and 墨 stand out from the night's dark sheet too. */
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 45%, transparent);
 }
 .palette-note {
   flex-basis: 100%;

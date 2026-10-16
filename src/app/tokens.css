@@ -83,6 +83,10 @@
   --shade: #2e2823;
   /* Words on a photo or on that veil: light by day and at night. */
   --on-dark: #fffcf7;
+  /* The initial on a reader's round avatar, dark or light by the colour
+     they chose (src/lib/avatar-ink.ts): a picture, the same at night. */
+  --avatar-ink: #2e2823;
+  --avatar-ink-light: #fffcf7;
 
   /* Type sizes. Nothing on screen is smaller than --t-cap. */
   --t-cap: 12px;

@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 
 // A layer drawn over the page (a dialog, a book held in hand) is one step of
 // 戻る: opening it adds a step to the browser's history, 戻る closes it, and
@@ -72,7 +77,23 @@ type Layer = {
   recorded: boolean;
   left: boolean;
   closing: ReturnType<typeof setTimeout> | null;
+  /** The step of the history it was set aside on (see `moves`). */
+  asideAt: number;
 };
+
+// The browser's moves through the history, counted. A layer set aside takes
+// its step off a moment later, but a slow phone can hold that moment for
+// seconds: long enough for the reader to have gone on to another page and
+// come back with 戻る to the very step the layer was on. The page coming back
+// opens the layer there again, so a layer set aside before a move leaves the
+// history as it is, and hands nothing over.
+let moves = 0;
+if (typeof window !== "undefined")
+  addEventListener("popstate", () => {
+    moves += 1;
+  });
+/** Set aside since the browser last moved: its step is still to come off. */
+const goingNow = (layer: Layer) => layer.asideAt === moves;
 
 /** Layers set aside in the last moment, whose step is about to come off. */
 const closing = new Set<Layer>();
@@ -107,7 +128,8 @@ export function useLayerOpen(): boolean {
  * and does not open it again.
  */
 const closed = (token: string) =>
-  shutting.has(token) || [...closing].some((layer) => layer.token === token);
+  shutting.has(token) ||
+  [...closing].some((layer) => layer.token === token && goingNow(layer));
 
 /**
  * Steps back, and settles once the browser is there. Going back takes a
@@ -230,12 +252,21 @@ function record(layer: Layer) {
   if (!layer.open || layer.recorded) return;
   layer.recorded = true;
   const layers = stack();
-  const before = [...closing].find((other) => other.token === layers.at(-1));
+  const recorded = layers.includes(layer.token);
+  // The same layer mounted again takes its own step back; another takes over
+  // the step on top.
+  const before = [...closing].find(
+    (other) =>
+      goingNow(other) &&
+      (recorded ? other.token === layer.token : other.token === layers.at(-1)),
+  );
   if (before) {
     clearTimeout(before.closing!);
     before.closing = null;
     before.open = false;
     closing.delete(before);
+  }
+  if (before && !recorded)
     history.replaceState(
       {
         ...layerState(),
@@ -243,7 +274,7 @@ function record(layer: Layer) {
       },
       "",
     );
-  } else if (!layers.includes(layer.token))
+  else if (!recorded)
     // Coming back to a step that recorded this layer opens no second one.
     history.pushState(
       {
@@ -277,9 +308,15 @@ export function useBackLayer(onBack: () => void, name?: string) {
     recorded: false,
     left: false,
     closing: null,
+    asideAt: 0,
   });
 
-  useEffect(() => {
+  // A layout effect, so that the layer is set aside in the same moment the
+  // page lets it go. Leaving a page is a transition, and React may hold its
+  // passive cleanups until the next update: on a slow phone that can be the
+  // 戻る that returns to this step, and a layer set aside only then would take
+  // the step back off from under the page coming back to it.
+  useLayoutEffect(() => {
     const layer = ref.current;
     if (layer.closing) {
       // Mounted again at once (React does this while developing): the same
@@ -317,10 +354,12 @@ export function useBackLayer(onBack: () => void, name?: string) {
         return;
       }
       closing.add(layer);
+      layer.asideAt = moves;
       layer.closing = setTimeout(() => {
         layer.closing = null;
         closing.delete(layer);
-        close(layer);
+        if (goingNow(layer)) close(layer);
+        else layer.open = false;
       }, 0);
     };
     // One step per mount; a layer that is renamed keeps it (below).
