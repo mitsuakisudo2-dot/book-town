@@ -24,7 +24,12 @@ import { emptyArrived, type Arrived } from "../arrived";
 import { isDatabaseId } from "../paths";
 import { sampleBookOfRow, withSamples } from "../samples";
 import { ME_ID, type TownState } from "../types";
-import type { Database, Json, Tables } from "./database.generated";
+import type {
+  Database,
+  Json,
+  Tables,
+  TablesInsert,
+} from "./database.generated";
 import { REPORT_COLUMNS } from "./reports";
 import {
   all,
@@ -621,10 +626,13 @@ export async function applyWrite(
   const ignore = { ignoreDuplicates: true } as const;
   switch (write.kind) {
     case "books":
+      // The database gives each new book its work (the books_work trigger);
+      // a reader has no grant to send one, so the rows come without it.
       await settled(
-        client
-          .from("books")
-          .upsert(write.rows, { onConflict: "id", ...ignore }),
+        client.from("books").upsert(write.rows as TablesInsert<"books">[], {
+          onConflict: "id",
+          ...ignore,
+        }),
       );
       return;
     case "profile":
