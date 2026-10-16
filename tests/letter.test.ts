@@ -88,7 +88,7 @@ check("the book row carries the writer's public feelings, two at most", () => {
     ...seedState,
     readingRecords: seedState.readingRecords.map((record) =>
       record.id === "record-sumire-cities"
-        ? { ...record, isPublic: false }
+        ? { ...record, audience: "private" as const }
         : record,
     ),
   };

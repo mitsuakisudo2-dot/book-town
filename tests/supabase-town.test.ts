@@ -669,26 +669,26 @@ async function main() {
     "a reading record is kept, and only a public one reaches others",
     async () => {
       const store = await townOf(aki);
-      store.actions.setReadingPublic(true);
+      store.actions.setVisibility("records", "everyone");
       const shared = store.actions.recordReading({
         bookId,
         feelings: ["talk", "quiet"],
         note: "誰かと話したい。",
         spoiler: false,
-        isPublic: true,
+        audience: "everyone",
       });
       const secret = store.actions.recordReading({
         bookId,
         feelings: ["cried"],
         note: "",
         spoiler: false,
-        isPublic: false,
+        audience: "private",
       });
       assert.ok(shared && secret);
       await settled(store);
 
       const akiAgain = (await townOf(aki)).getSnapshot();
-      assert.equal(akiAgain.settings.readingPublic, true);
+      assert.equal(akiAgain.settings.visibility.records.audience, "everyone");
       const own = akiAgain.readingRecords.filter(
         (record) => record.readerId === ME_ID,
       );
@@ -709,7 +709,7 @@ async function main() {
       assert.deepEqual(await fromBen(), [shared]);
 
       const akiStore = await townOf(aki);
-      akiStore.actions.updateRecord(secret, { isPublic: true });
+      akiStore.actions.updateRecord(secret, { audience: "everyone" });
       akiStore.actions.deleteRecord(shared);
       await settled(akiStore);
       assert.deepEqual(await fromBen(), [secret]);

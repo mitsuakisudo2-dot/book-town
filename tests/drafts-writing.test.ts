@@ -144,7 +144,7 @@ const work = (patch: Partial<RecordWork> = {}): RecordWork => ({
   feelings: ["warm", "again"],
   note: "読み終えた夜、窓を開けた。",
   spoiler: false,
-  isPublic: false,
+  audience: "private",
   ...patch,
 });
 
@@ -172,7 +172,7 @@ check("a record's changes are kept per reader and book, or per record", () => {
   const storage = memory();
   const drafts = createKeptDraftStore(RECORD_DRAFT_OPTIONS, () => storage);
   drafts.set("u-1:record-new:momo", { note: "灰色の男たち。" });
-  drafts.set("u-1:record:r-2", { isPublic: true });
+  drafts.set("u-1:record:r-2", { audience: "everyone" });
   drafts.set("record-new:momo", { note: "誰のものでもない" });
   drafts.set("u-1:review:momo", { note: "x" });
   drafts.set("u-1:record:r-3", {});
@@ -266,15 +266,23 @@ check("only what was changed is kept, so the rest follows the record", () => {
   assert.deepEqual(changes, { feelings: ["quiet"], note: "豆畑。" });
   // Made public elsewhere since: the note changed, and the record stays public.
   assert.deepEqual(
-    { ...work({ isPublic: true }), ...changes },
-    work({ isPublic: true, note: "豆畑。", feelings: ["quiet"] }),
+    { ...work({ audience: "everyone" }), ...changes },
+    work({ audience: "everyone", note: "豆畑。", feelings: ["quiet"] }),
   );
 });
 
 check("a record's changes read back must be ones the sheet could make", () => {
   assert.deepEqual(readRecordChanges(work()), work());
+  assert.deepEqual(readRecordChanges({ audience: "followers" }), {
+    audience: "followers",
+  });
+  // Kept before 見せる範囲, when a record was public or not.
+  assert.deepEqual(readRecordChanges({ isPublic: true, note: "x" }), {
+    audience: "everyone",
+    note: "x",
+  });
   assert.deepEqual(readRecordChanges({ isPublic: false }), {
-    isPublic: false,
+    audience: "private",
   });
   assert.deepEqual(readRecordChanges({ feelings: ["warm", "warm"] }), {
     feelings: ["warm"],
@@ -293,6 +301,8 @@ check("a record's changes read back must be ones the sheet could make", () => {
     { feelings: "warm" },
     { spoiler: "yes" },
     { isPublic: undefined },
+    { audience: "friends" },
+    { audience: true },
     { note: "x", stars: 5 },
   ])
     assert.equal(readRecordChanges(bad), null);

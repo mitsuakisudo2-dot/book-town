@@ -27,6 +27,12 @@ import {
 } from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
+import {
+  choicesFor,
+  visibilityOf,
+  VISIBILITY_KINDS,
+  withVisibility,
+} from "./visibility";
 import { cleanPosterDraft, posterProblem, type Poster } from "./posters";
 import { handleProblem, normalizeHandle } from "./handles";
 import { tapsOf } from "./social";
@@ -857,13 +863,14 @@ export function createTownStore(
         ),
       });
     },
-    setReadingPublic(value) {
+    setVisibility(kind, choice, past = false) {
       initialize();
-      if (state.settings.readingPublic === value) return;
-      commit({
-        ...state,
-        settings: { ...state.settings, readingPublic: value === true },
-      });
+      if (
+        !VISIBILITY_KINDS.includes(kind) ||
+        !choicesFor(kind).includes(choice)
+      )
+        return;
+      commit(withVisibility(state, kind, visibilityOf(choice), past));
     },
     setSpoilerDisplay(value) {
       initialize();

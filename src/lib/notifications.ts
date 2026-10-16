@@ -13,6 +13,7 @@ import { postPath, posterPath, profilePath, shopPath } from "./paths";
 import { letterPageOf, postPageOf } from "./letter";
 import { posterTitle, type Poster } from "./posters";
 import { coverHidden } from "./hidden-words";
+import { shownToOthers } from "./visibility";
 
 export interface Notice {
   id: string;
@@ -290,7 +291,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
   for (const record of state.readingRecords)
     if (
       record.readerId !== ME_ID &&
-      record.isPublic &&
+      shownToOthers(record.audience) &&
       finished.has(record.bookId)
     )
       notices.push({

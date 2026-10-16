@@ -11,6 +11,7 @@ import {
   type TownState,
 } from "./types";
 import type { Poster } from "./posters";
+import { cleanVisibilities } from "./visibility";
 
 // Every cover and spine is drawn by the app from these original design tokens.
 // The summaries and shop-owner notes are original demo copy, not quoted text.
@@ -1345,7 +1346,7 @@ export const readingRecords: ReadingRecord[] = [
     feelings: ["quiet", "again", "talk"],
     note: "海の描写を読むたび、わからないものと暮らす練習をしている気がする。",
     spoiler: false,
-    isPublic: true,
+    audience: "everyone",
     createdAt: "2026-10-02T22:10:00Z",
   },
   {
@@ -1355,7 +1356,7 @@ export const readingRecords: ReadingRecord[] = [
     feelings: ["sleepless", "shaken", "talk"],
     note: "",
     spoiler: false,
-    isPublic: true,
+    audience: "everyone",
     createdAt: "2026-10-05T01:40:00Z",
   },
   {
@@ -1365,7 +1366,7 @@ export const readingRecords: ReadingRecord[] = [
     feelings: ["lingering", "again"],
     note: "どの都市も、どこかで見たことがある。",
     spoiler: false,
-    isPublic: true,
+    audience: "everyone",
     createdAt: "2026-10-06T12:00:00Z",
   },
   {
@@ -1375,7 +1376,7 @@ export const readingRecords: ReadingRecord[] = [
     feelings: ["cried", "shaken", "recommend"],
     note: "",
     spoiler: false,
-    isPublic: true,
+    audience: "everyone",
     createdAt: "2026-10-08T21:30:00Z",
   },
   {
@@ -1385,7 +1386,7 @@ export const readingRecords: ReadingRecord[] = [
     feelings: ["warm", "cried", "again"],
     note: "子どものころと、読み終えたあとの気持ちが違った。",
     spoiler: false,
-    isPublic: true,
+    audience: "everyone",
     createdAt: "2026-10-09T23:05:00Z",
   },
   {
@@ -1395,7 +1396,7 @@ export const readingRecords: ReadingRecord[] = [
     feelings: ["warm", "recommend", "talk"],
     note: "",
     spoiler: false,
-    isPublic: true,
+    audience: "everyone",
     createdAt: "2026-10-10T09:15:00Z",
   },
 ];
@@ -1521,7 +1522,7 @@ export function createInitialState(): TownState {
     // Records stay the reader's own until they choose to publish them.
     settings: {
       composeIcon: "pen",
-      readingPublic: false,
+      visibility: cleanVisibilities(null),
       spoilerDisplay: "fold_possible",
     },
     seenNotifications: [],

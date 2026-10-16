@@ -516,7 +516,7 @@ try {
         );
         // Records start private: 自分だけ is the first choice, and chosen.
         const records = settings.getByRole("group", {
-          name: "読み終えた本の記録（これから残す記録）",
+          name: "読み終えた本の記録",
         });
         await expect(records.getByRole("radio").first()).toBeChecked();
         await expect(records.getByLabel("自分だけ")).toBeChecked();
@@ -605,7 +605,7 @@ try {
         await expect(toast).toContainText(
           "公開しました。同じ本を読んだ人に届きます",
         );
-        expect((await own()).isPublic).toBe(true);
+        expect((await own()).audience).toBe("everyone");
         await noOverflow(`${label} publish toast`);
         await page.screenshot({
           caret: "initial",
@@ -620,12 +620,12 @@ try {
         await toast.getByRole("button", { name: "自分だけに戻す" }).click();
         await expect(toast).toContainText("自分だけに戻しました");
         await expect(toast.getByRole("button")).toHaveCount(0);
-        expect((await own()).isPublic).toBe(false);
+        expect((await own()).audience).toBe("private");
         // Publishing one record later is one quiet tap on the book page.
         const mine = page.locator(".book-feelings-own");
         await mine.getByRole("button", { name: "公開する" }).click();
         await expect(toast).toContainText("公開しました");
-        expect((await own()).isPublic).toBe(true);
+        expect((await own()).audience).toBe("everyone");
         // A reader who goes to the undo by keyboard keeps it past its 8 s,
         // and it goes its way once they leave it.
         await toast.getByRole("button", { name: "自分だけに戻す" }).focus();
@@ -637,7 +637,57 @@ try {
         await expect(toast).toHaveCount(0, { timeout: 10000 });
         await mine.getByRole("button", { name: "自分だけにする" }).click();
         await expect(toast).toContainText("自分だけにしました");
-        expect((await own()).isPublic).toBe(false);
+        expect((await own()).audience).toBe("private");
+        // 見せる範囲 in 設定: widening asks once about the records kept so
+        // far, the narrower answer under the finger; narrowing takes them too.
+        const setting = async (choice) => {
+          await go("/profiles/me/");
+          await page.getByRole("button", { name: "設定" }).click();
+          await page
+            .getByRole("dialog", { name: "設定" })
+            .getByRole("group", { name: "読み終えた本の記録" })
+            .getByLabel(choice)
+            .check();
+        };
+        const stored = () =>
+          page.evaluate(
+            () => JSON.parse(localStorage.getItem("book-town-v1")).data,
+          );
+        const question = page.getByRole("dialog", { name: "見せる範囲" });
+        await setting("公開");
+        await expect(question).toContainText("今までの記録も公開にしますか？");
+        await expect(
+          question.getByRole("button", { name: "これからの記録だけ" }),
+        ).toBeFocused();
+        await noOverflow(`${label} visibility question`);
+        await page.screenshot({
+          caret: "initial",
+          path: path.join(output, `visibility-question-${viewport.width}.png`),
+        });
+        await question.getByRole("button", { name: "これからの記録だけ" }).click();
+        await expect(toast).toContainText(
+          "これからの読み終えた本の記録は公開になります。今までの記録はそのままです",
+        );
+        expect((await own()).audience).toBe("private");
+        expect((await stored()).settings.visibility.records.audience).toBe(
+          "everyone",
+        );
+        await page.keyboard.press("Escape");
+        await setting("自分だけ");
+        await expect(toast).toContainText(
+          "読み終えた本の記録を自分だけにしました。今までの記録も自分だけです",
+        );
+        await page.keyboard.press("Escape");
+        await setting("公開");
+        await question
+          .getByRole("button", { name: "今までの記録も公開にする" })
+          .click();
+        await expect(toast).toContainText("今までの記録も公開にしました");
+        expect((await own()).audience).toBe("everyone");
+        await page.keyboard.press("Escape");
+        await setting("自分だけ");
+        expect((await own()).audience).toBe("private");
+        await page.keyboard.press("Escape");
       },
     );
 
@@ -991,8 +1041,8 @@ try {
         expect(
           saved
             .filter((entry) => entry.bookId === "walden")
-            .map(({ note, isPublic }) => ({ note, isPublic })),
-        ).toEqual([{ note: "湖の音と、豆畑。", isPublic: true }]);
+            .map(({ note, audience }) => ({ note, audience })),
+        ).toEqual([{ note: "湖の音と、豆畑。", audience: "everyone" }]);
         // やめる throws a change away, asked once.
         await own.getByRole("button", { name: "見直す" }).click();
         await expect(edit.getByText("書きかけを続けています")).toHaveCount(0);

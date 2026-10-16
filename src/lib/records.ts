@@ -8,10 +8,11 @@ import {
   type RecordDraft,
   type TownState,
 } from "./types";
+import { isAudience, shownToOthers } from "./visibility";
 
 type RecordFields = Pick<
   ReadingRecord,
-  "feelings" | "note" | "spoiler" | "isPublic"
+  "feelings" | "note" | "spoiler" | "audience"
 >;
 
 /**
@@ -28,7 +29,7 @@ export function cleanRecord(
     feelings: FEELINGS.filter((feeling) => chosen.includes(feeling)),
     note,
     spoiler: draft.spoiler === true && note.length > 0,
-    isPublic: draft.isPublic === true,
+    audience: isAudience(draft.audience) ? draft.audience : "private",
   };
 }
 
@@ -38,7 +39,7 @@ export function recordsOf(state: TownState, readerId: string): ReadingRecord[] {
     .filter(
       (record) =>
         record.readerId === readerId &&
-        (record.isPublic || record.readerId === ME_ID),
+        (shownToOthers(record.audience) || record.readerId === ME_ID),
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
@@ -68,7 +69,7 @@ const publicRecordsOf = (state: TownState, bookId: string) =>
   state.readingRecords.filter(
     (record) =>
       record.bookId === bookId &&
-      (record.isPublic || record.readerId === ME_ID),
+      (shownToOthers(record.audience) || record.readerId === ME_ID),
   );
 
 /**
@@ -114,7 +115,9 @@ export function talkersOf(state: TownState, bookId: string): Reader[] {
 /** Every record the viewer may see, newest first. */
 const visibleRecords = (state: TownState) =>
   state.readingRecords
-    .filter((record) => record.isPublic || record.readerId === ME_ID)
+    .filter(
+      (record) => shownToOthers(record.audience) || record.readerId === ME_ID,
+    )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
 const uniqueBooks = (records: ReadingRecord[], state: TownState) =>

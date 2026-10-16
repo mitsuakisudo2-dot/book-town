@@ -41,6 +41,7 @@ import {
   popReactionKey,
   type TownState,
 } from "../src/lib/types";
+import { cleanVisibilities } from "../src/lib/visibility";
 
 // Checks, without a database, how the signed-in town is built from rows and
 // what is written back. Everything runs inside main() because tsx compiles this
@@ -1271,21 +1272,19 @@ async function main() {
     body: "",
     feelings: ["quiet"],
     spoiler: false,
-    is_public: true,
+    is_public: extra.is_public ?? true,
+    audience: (extra.is_public ?? true) ? "everyone" : "private",
     created_at: at,
     updated_at: at,
     ...extra,
   });
 
   await check(
-    "reading records: own ones always, others' only in public",
+    "reading records: own ones always, others' only as far as they let",
     () => {
       const town = townFromRows(
         rows({
-          profiles: [
-            { ...profile(AKI, "aki"), reading_visibility: "public" },
-            profile(BEN, "ben"),
-          ],
+          readerSettings: { records_audience: "everyone" },
           records: [
             entry("00000000-0000-4000-8000-0000000000c1", AKI, {
               is_public: false,
@@ -1312,6 +1311,12 @@ async function main() {
             entry("00000000-0000-4000-8000-0000000000c6", BEN, {
               kind: "opened",
             }),
+            // One for followers comes when the database lets it.
+            entry("00000000-0000-4000-8000-0000000000ca", BEN, {
+              is_public: false,
+              audience: "followers",
+              created_at: "2026-10-12T07:00:00Z",
+            }),
           ],
         }),
         ids,
@@ -1319,16 +1324,34 @@ async function main() {
       assert.deepEqual(
         town.readingRecords.map((record) => [record.id, record.readerId]),
         [
+          ["00000000-0000-4000-8000-0000000000ca", BEN],
           ["00000000-0000-4000-8000-0000000000c2", BEN],
           ["00000000-0000-4000-8000-0000000000c1", ME_ID],
         ],
       );
-      const own = town.readingRecords[1];
+      const own = town.readingRecords[2];
       assert.equal(own.note, "夜が長かった。");
       assert.deepEqual(own.feelings, ["cried", "talk"]);
-      assert.equal(own.isPublic, false);
-      assert.equal(town.settings.readingPublic, true);
-      assert.equal(townFromRows(rows(), ids).settings.readingPublic, false);
+      assert.equal(own.audience, "private");
+      assert.equal(town.readingRecords[0].audience, "followers");
+      assert.equal(town.settings.visibility.records.audience, "everyone");
+      assert.deepEqual(
+        townFromRows(rows(), ids).settings.visibility,
+        cleanVisibilities(null),
+      );
+      // A database a migration behind sends is_public alone.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { audience: _, ...behind } = entry(
+        "00000000-0000-4000-8000-0000000000cb",
+        BEN,
+      );
+      assert.equal(
+        townFromRows(
+          rows({ records: [behind as Tables<"reading_entries">] }),
+          ids,
+        ).readingRecords[0].audience,
+        "everyone",
+      );
       assert.deepEqual(
         referencedBookIds(
           rows({
@@ -1353,7 +1376,7 @@ async function main() {
       feelings: ["warm" as const],
       note: "",
       spoiler: false,
-      isPublic: true,
+      audience: "everyone" as const,
       createdAt: at,
     };
     const others = {
@@ -1364,12 +1387,21 @@ async function main() {
     const added: TownState = {
       ...before,
       readingRecords: [record, others],
-      settings: { ...before.settings, readingPublic: true },
+      settings: {
+        ...before.settings,
+        visibility: {
+          ...before.settings.visibility,
+          records: { audience: "everyone", detail: "content" },
+        },
+      },
     };
     const writes = planWrites(before, added, ids);
-    assert.deepEqual(kinds(writes), ["profile", "records"]);
-    assert.deepEqual((writes[0] as Extract<Write, { kind: "profile" }>).patch, {
-      reading_visibility: "public",
+    // The starting choice goes first: a narrower one narrows the records
+    // the database has, never one written after it.
+    assert.deepEqual(kinds(writes), ["reader-settings", "records"]);
+    assert.deepEqual(writes[0], {
+      kind: "reader-settings",
+      row: { user_id: AKI, records_audience: "everyone" },
     });
     // Someone else's record on screen is never written, and the database
     // dates the new one itself.
@@ -1382,29 +1414,43 @@ async function main() {
         body: "",
         feelings: ["warm"],
         spoiler: false,
-        is_public: true,
+        audience: "everyone",
       },
     ]);
 
     const rewritten: TownState = {
       ...added,
       readingRecords: [
-        { ...record, note: "また読む", isPublic: false },
+        { ...record, note: "また読む", audience: "private" },
         { ...others, note: "変わった" },
       ],
     };
+    // Only what changed: a device a change behind sends no audience with a
+    // new note, and puts back none narrowed elsewhere.
     assert.deepEqual(planWrites(added, rewritten, ids), [
       {
         kind: "update-record",
         id: record.id,
-        patch: {
-          body: "また読む",
-          feelings: ["warm"],
-          spoiler: false,
-          is_public: false,
-        },
+        patch: { body: "また読む", audience: "private" },
       },
     ]);
+    assert.deepEqual(
+      planWrites(
+        added,
+        {
+          ...added,
+          readingRecords: [{ ...record, note: "ひとことだけ" }, others],
+        },
+        ids,
+      ),
+      [
+        {
+          kind: "update-record",
+          id: record.id,
+          patch: { body: "ひとことだけ" },
+        },
+      ],
+    );
     assert.deepEqual(
       planWrites(added, { ...added, readingRecords: [others] }, ids),
       [{ kind: "delete-records", ids: [record.id] }],
@@ -1791,7 +1837,7 @@ async function main() {
     );
     const empty = emptyTown();
     assert.equal(empty.settings.spoilerDisplay, "fold_possible");
-    assert.equal(empty.settings.readingPublic, false);
+    assert.deepEqual(empty.settings.visibility, cleanVisibilities(null));
     assert.deepEqual(empty.reviewFolds, {});
     assert.deepEqual(empty.myReports, []);
   });
@@ -1824,6 +1870,47 @@ async function main() {
     assert.deepEqual(
       planWrites(before, { ...next, settings: before.settings }, ids),
       [],
+    );
+    // A starting choice is sent alone, as is 読書の状態's detail.
+    const status: TownState = {
+      ...before,
+      settings: {
+        ...before.settings,
+        visibility: {
+          ...before.settings.visibility,
+          status: { audience: "everyone", detail: "content" },
+          shelves: { audience: "followers", detail: "content" },
+        },
+      },
+    };
+    assert.deepEqual(planWrites(before, status, ids), [
+      {
+        kind: "reader-settings",
+        row: {
+          user_id: AKI,
+          status_detail: "content",
+          shelves_audience: "followers",
+        },
+      },
+    ]);
+    // Read back, each column is its kind's choice; unknown ones fall back.
+    assert.deepEqual(
+      townFromRows(
+        rows({
+          readerSettings: {
+            status_audience: "private",
+            status_detail: "content",
+            stats_audience: "followers",
+            saves_audience: "nobody",
+          },
+        }),
+        ids,
+      ).settings.visibility,
+      {
+        ...cleanVisibilities(null),
+        status: { audience: "private", detail: "content" },
+        stats: { audience: "followers", detail: "content" },
+      },
     );
   });
 
@@ -2623,6 +2710,7 @@ async function main() {
               feelings: ["warm"],
               spoiler: false,
               is_public: true,
+              audience: "everyone",
               created_at: at,
               updated_at: at,
             },
