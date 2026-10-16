@@ -336,7 +336,8 @@
   font-size: 11px;
   color: var(--ink-2);
 }
-/* 設定: the six palettes, each named in words beside its colour. */
+/* 設定: the six palettes, each named in words beside its colour, and the
+   three brightnesses (明るさ), each a row for the finger. */
 .palette-choices label {
   min-height: 44px;
 }

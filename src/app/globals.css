@@ -333,30 +333,6 @@ input[type="checkbox"] {
 .text-button:hover {
   color: var(--green);
 }
-.theme-sage {
-  --theme: #61795d;
-  --theme-light: #e3e8d8;
-  --theme-deep: #435b3f;
-  --theme-pale: #f1f3e9;
-}
-.theme-ink {
-  --theme: #657d87;
-  --theme-light: #dce5e4;
-  --theme-deep: #395563;
-  --theme-pale: #edf1ef;
-}
-.theme-ochre {
-  --theme: #a18b69;
-  --theme-light: #e9dfca;
-  --theme-deep: #7b6240;
-  --theme-pale: #f2edde;
-}
-.theme-rose {
-  --theme: #a08278;
-  --theme-light: #eadbd3;
-  --theme-deep: #805f52;
-  --theme-pale: #f3eae2;
-}
 .shop-window {
   margin: 17px auto 0;
   width: 85%;

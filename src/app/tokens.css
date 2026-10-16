@@ -5,7 +5,7 @@
  * for using them, and the shared parts in parts.css, are in
  * docs/色と部品の決まり.md.
  *
- * Text on background, each pair at least 4.5:1 by day
+ * Text on background, each pair at least 4.5:1 by day and at night
  * (checked by tests/tokens.test.ts):
  * @pair --ink --paper
  * @pair --ink --sheet
@@ -27,8 +27,7 @@
  * @pair --green --green-soft
  * @pair --green --notice
  * @pair --on-green --green
- * @pair --on-photo --sheet
- * @pair --on-photo --paper
+ * @pair --on-photo --on-dark
  * @pair --forest --paper
  * @pair --forest --sheet
  * @pair --forest --band
@@ -150,4 +149,121 @@
   --on-green: #f7f6f3;
   --green-soft: #e7e8ea;
   --on-photo: #3b3f45;
+}
+
+/*
+ * The night (v37 app.css, 決定: 端末に合わせる・昼・夜). appearance.ts marks
+ * <html> with data-theme="dark" before the first paint, for 夜 and for
+ * 端末に合わせる on a device set to dark. Every @pair above holds here too,
+ * in each palette. Pictures (wood, spines, the walk's scenery, covers,
+ * poster inks) keep their day colours; covers get no filter.
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #1a1613;
+  --sheet: #241f1b;
+  --ink: #efe7dc;
+  --ink-2: #c7bbad;
+  --line: #352e28;
+  --line-2: #4c4239;
+  --field: #8a7e72;
+  --band: #211c18;
+  --notice: #2c271f;
+  --cork: #4d3b28;
+  --forest: #8fd0b3;
+  --lamp: #e6b65c;
+  --lamp-glow: #f0c46a;
+  --lamp-soft: #332a1c;
+  --alert: #ee8f7b;
+  --pop: #26241d;
+  --pop-line: #3c382c;
+  --shade: #000000;
+  --green: #9cc7b0;
+  --on-green: #12201a;
+  --green-soft: #24342c;
+}
+:root[data-palette="brick"][data-theme="dark"] {
+  --green: #f0a07c;
+  --on-green: #2a130a;
+  --green-soft: #3a2519;
+}
+:root[data-palette="ai"][data-theme="dark"] {
+  --green: #a9c0ea;
+  --on-green: #111a2a;
+  --green-soft: #222c3e;
+}
+:root[data-palette="fuji"][data-theme="dark"] {
+  --green: #c3b1e6;
+  --on-green: #1d1528;
+  --green-soft: #2e2640;
+}
+:root[data-palette="yamabuki"][data-theme="dark"] {
+  --green: #e6b85c;
+  --on-green: #2a1d00;
+  --green-soft: #3a2e14;
+}
+:root[data-palette="sumi"][data-theme="dark"] {
+  --green: #d0d3d8;
+  --on-green: #15171a;
+  --green-soft: #2c2f33;
+}
+
+/*
+ * A shop's own colour (its 看板の色), chosen by its keeper: `.theme-…` on the
+ * shop. --theme-deep is its words, on --theme-pale, --sheet and --paper;
+ * --theme-fill is the painted sign, under light words, the same by day and
+ * at night. At night the pale and the lines turn dark and the words light,
+ * keeping the shop's hue. Checked by tests/tokens.test.ts.
+ */
+.theme-sage {
+  --theme: #61795d;
+  --theme-light: #e3e8d8;
+  --theme-deep: #435b3f;
+  --theme-pale: #f1f3e9;
+  --theme-fill: #435b3f;
+}
+.theme-ink {
+  --theme: #657d87;
+  --theme-light: #dce5e4;
+  --theme-deep: #395563;
+  --theme-pale: #edf1ef;
+  --theme-fill: #395563;
+}
+.theme-ochre {
+  --theme: #a18b69;
+  --theme-light: #e9dfca;
+  --theme-deep: #7b6240;
+  --theme-pale: #f2edde;
+  --theme-fill: #7b6240;
+}
+.theme-rose {
+  --theme: #a08278;
+  --theme-light: #eadbd3;
+  --theme-deep: #805f52;
+  --theme-pale: #f3eae2;
+  --theme-fill: #805f52;
+}
+:root[data-theme="dark"] .theme-sage {
+  --theme: #7d8f76;
+  --theme-light: #3b4134;
+  --theme-deep: #a3ae9b;
+  --theme-pale: #2e2d26;
+}
+:root[data-theme="dark"] .theme-ink {
+  --theme: #819298;
+  --theme-light: #3d4344;
+  --theme-deep: #a5b0b2;
+  --theme-pale: #2e2e2c;
+}
+:root[data-theme="dark"] .theme-ochre {
+  --theme: #b19d80;
+  --theme-light: #544839;
+  --theme-deep: #c6b8a1;
+  --theme-pale: #383027;
+}
+:root[data-theme="dark"] .theme-rose {
+  --theme: #b0968c;
+  --theme-light: #53453e;
+  --theme-deep: #c6b3aa;
+  --theme-pale: #382f2a;
 }

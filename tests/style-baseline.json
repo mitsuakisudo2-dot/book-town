@@ -1,11 +1,11 @@
 {
   "colours": {
-    "src/app/globals.css": 60,
+    "src/app/globals.css": 44,
     "src/components/OpenShop.tsx": 4,
     "src/components/StoreCanvas.tsx": 33,
     "src/components/WalkView.tsx": 3,
     "src/components/illustrated-jackets.css": 3,
-    "src/components/open-shop.css": 25,
+    "src/components/open-shop.css": 23,
     "src/components/poster.css": 4,
     "src/components/profile.css": 18,
     "src/components/scan.css": 8,

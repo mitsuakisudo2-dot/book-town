@@ -613,7 +613,7 @@ html[data-home-tab="letters"]
   gap: 8px;
   height: 132px;
   padding: 0 16px 12px;
-  background: var(--ink) url("/home/lamp-390-v1.webp") center 35% / cover
+  background: var(--shade) url("/home/lamp-390-v1.webp") center 35% / cover
     no-repeat;
 }
 .home-shopcard-wall::after {
@@ -625,8 +625,8 @@ html[data-home-tab="letters"]
   height: 12px;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--lamp) 70%, var(--ink)),
-    color-mix(in srgb, var(--lamp) 40%, var(--ink))
+    color-mix(in srgb, var(--lamp) 70%, var(--shade)),
+    color-mix(in srgb, var(--lamp) 40%, var(--shade))
   );
 }
 .home-shopcard-book {
