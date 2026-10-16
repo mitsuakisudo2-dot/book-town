@@ -96,8 +96,13 @@ import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
-import { PALETTES } from "../lib/appearance";
-import { setPalette, usePalette } from "../lib/appearance-store";
+import { BRIGHTNESSES, PALETTES } from "../lib/appearance";
+import {
+  setBrightness,
+  setPalette,
+  useBrightness,
+  usePalette,
+} from "../lib/appearance-store";
 import { useUrlParam } from "../lib/url-state";
 import { onShelfRequest, takeShelfRequest } from "../lib/shelf-tab";
 import { afterLayerCloses } from "../lib/back-layer";
@@ -137,6 +142,7 @@ export function ProfileView({
     setBooks(next === "wishlist" ? null : next);
   const peekOpen = useReadingPeekOpen();
   const palette = usePalette();
+  const brightness = useBrightness();
   const [sheet, setSheet] = useState<
     "following" | "followers" | "settings" | "scan" | "titles" | null
   >(null);
@@ -995,6 +1001,31 @@ export function ProfileView({
             ))}
             <p className="palette-note">
               表紙や写真の色は変わりません。変わるのはボタンや印の色です。
+            </p>
+          </fieldset>
+          <fieldset className="record-visibility palette-choices">
+            <legend>明るさ</legend>
+            {BRIGHTNESSES.map((choice) => (
+              <label key={choice.id}>
+                <input
+                  type="radio"
+                  name="brightness"
+                  value={choice.id}
+                  checked={brightness === choice.id}
+                  onChange={() => {
+                    setBrightness(choice.id);
+                    notify(
+                      choice.id === "system"
+                        ? "明るさを端末に合わせます"
+                        : `明るさを${choice.name}にしました`,
+                    );
+                  }}
+                />
+                {choice.name}
+              </label>
+            ))}
+            <p className="palette-note">
+              端末に合わせると、端末を暗い表示にしている間は夜の色になります。
             </p>
           </fieldset>
           <fieldset className="record-visibility">

@@ -2391,6 +2391,50 @@ try {
         await page.reload();
         await expect(page.locator("main")).toBeVisible();
         expect(await page.evaluate(() => window.__themeAtBody)).toBe("dark");
+
+        // 設定's 明るさ: three choices, each a whole row, kept with the
+        // palette; the page changes at once.
+        await go("/profiles/me/");
+        await page
+          .locator(".profile-minor-actions")
+          .getByRole("button", { name: "設定" })
+          .tap();
+        const brightness = page
+          .getByRole("dialog", { name: "設定" })
+          .getByRole("group", { name: "明るさ" });
+        await expect(brightness.getByRole("radio")).toHaveCount(3);
+        await expect(
+          brightness.getByRole("radio", { name: "夜", exact: true }),
+        ).toBeChecked();
+        await expectReadable(brightness.locator("label"), "明るさ at night");
+        for (const height of await brightness
+          .locator("label")
+          .evaluateAll((labels) =>
+            labels.map((label) => label.getBoundingClientRect().height),
+          ))
+          expect(height).toBeGreaterThanOrEqual(44);
+        await brightness.getByText("昼", { exact: true }).tap();
+        await expect(page.locator("html")).not.toHaveAttribute(
+          "data-theme",
+          /./,
+        );
+        await expectReadable(brightness.locator("label"), "明るさ by day");
+        await brightness.getByText("端末に合わせる", { exact: true }).tap();
+        await expect(page.locator("html")).not.toHaveAttribute(
+          "data-theme",
+          /./,
+        );
+        await page.emulateMedia({ colorScheme: "dark" });
+        await expect(page.locator("html")).toHaveAttribute(
+          "data-theme",
+          "dark",
+        );
+        expect(
+          await page.evaluate(() =>
+            JSON.parse(localStorage.getItem("book-town-appearance-v1")),
+          ),
+        ).toEqual({ palette: "green", brightness: "system" });
+        await page.keyboard.press("Escape");
       }),
   );
 
