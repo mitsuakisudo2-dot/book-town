@@ -493,14 +493,38 @@ function remoteReads(
         ...new Set(authors.map((id) => (id === ME_ID ? userId : id))),
       ].filter((id): id is string => !!id && isDatabaseId(id));
       if (!ids.length) return emptyArrived();
-      const found = await all(
-        posts()
-          .is("parent_id", null)
-          .in("author_id", ids)
-          .lt("created_at", before)
-          .order("created_at", { ascending: false })
-          .limit(OLDER_PAGE),
+      // From `before` itself, not only below it: 便り written at the same
+      // moment may lie on both sides of the last page, or of the town's own
+      // reading, and none of them may be skipped. What the town has of
+      // these writers at that moment is left out, and asked for that many
+      // more, so a page is still full when there is more. One read alone
+      // by its id is not: the page brings it to its place in 便りだけ.
+      const state = town();
+      const at = Date.parse(before);
+      const writers = new Set(authors);
+      const have = new Set(
+        (state?.posts ?? [])
+          .filter(
+            (post) =>
+              post.parentId === null &&
+              writers.has(post.authorId) &&
+              state?.readAfter?.[post.id] !== "alone" &&
+              !(Date.parse(post.createdAt) > at),
+          )
+          .map((post) => post.id),
       );
+      const found = (
+        await all(
+          posts()
+            .is("parent_id", null)
+            .in("author_id", ids)
+            .lte("created_at", before)
+            .order("created_at", { ascending: false })
+            .limit(OLDER_PAGE + have.size),
+        )
+      )
+        .filter((row) => !have.has(row.id))
+        .slice(0, OLDER_PAGE);
       const replies = await byIds(
         found.map((row) => row.id),
         (some) => posts().in("parent_id", some),
