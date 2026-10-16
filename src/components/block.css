@@ -23,7 +23,7 @@
   border: 0;
   background: none;
   color: var(--ink-2);
-  font-size: var(--t-meta);
+  font-size: var(--t-cap);
   cursor: pointer;
 }
 
@@ -45,7 +45,18 @@
   line-height: 1.8;
 }
 
-/* 設定「ブロックした読書家」 */
+/* 設定「ブロックした読書家」, after the settings above it */
+.blocked-list {
+  margin: 18px 0 0;
+  padding: 0;
+  border: 0;
+}
+.blocked-list legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
 .blocked-list ul {
   display: grid;
   margin: 0;

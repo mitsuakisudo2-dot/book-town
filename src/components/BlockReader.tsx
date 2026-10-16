@@ -169,7 +169,7 @@ export function BlockedList({
   const readers = blockedReaders(state);
   if (!readers.length) return null;
   return (
-    <fieldset className="record-visibility blocked-list">
+    <fieldset className="blocked-list">
       <legend>ブロックした読書家</legend>
       <ul>
         {readers.map((reader) => (

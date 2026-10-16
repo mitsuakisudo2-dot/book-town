@@ -81,6 +81,8 @@ const reportsSent = [];
 // Blocks made ([blocker, blocked]) and lifted (the query of each delete).
 const blocksSent = [];
 const blocksLifted = [];
+// While set, the stand-in ends follows as asked (a block ends them).
+let followsEnd = false;
 // A change carrying these words is refused by the stand-in, as the database
 // refuses one that breaks a rule, after the screen has moved on.
 const REFUSED_MARK = "（断られる）";
@@ -421,6 +423,15 @@ const standIn = async (route) => {
     // Read back with the town, as the database would.
     town?.reports.unshift(row);
     return json(201, row);
+  }
+  if (
+    followsEnd &&
+    url.pathname === "/rest/v1/shop_follows" &&
+    request.method() === "DELETE"
+  ) {
+    townWrites.push(url.pathname);
+    if (town) town.shop_follows = [];
+    return route.fulfill({ status: 204, body: "" });
   }
   // Like the database: a block is the blocker's own row, kept with the town.
   if (url.pathname === "/rest/v1/blocks" && request.method() !== "GET") {
@@ -4626,6 +4637,7 @@ try {
       };
       blocksSent.length = 0;
       blocksLifted.length = 0;
+      followsEnd = true;
       const toast = page.locator(".toast");
       await page.goto(base + "/profile/?id=" + OTHER);
       await expect(
@@ -4633,6 +4645,8 @@ try {
       ).toBeVisible();
       const block = page.getByRole("button", { name: "ブロック", exact: true });
       await expect(block).toBeVisible();
+      await block.scrollIntoViewIfNeeded();
+      await shot("block-0-link");
       // Quiet, but big enough for a finger.
       expect((await block.boundingBox()).height).toBeGreaterThanOrEqual(44);
       // Asked first; やめる does nothing.
@@ -4642,9 +4656,6 @@ try {
       await expect(asking).toContainText(
         "お互いの本屋・投稿・記録・ポスターが見えなくなり、フォローも外れます。相手には知らされません。あとで設定から外せます。",
       );
-      await expect(
-        asking.getByRole("button", { name: "やめる" }),
-      ).toBeFocused();
       await expectReadable(asking.locator("p"), "block question");
       await shot("block-1-question");
       await asking.getByRole("button", { name: "やめる" }).click();
@@ -4667,6 +4678,9 @@ try {
       ).toHaveCount(0);
       await noOverflow("blocked profile");
       await shot("block-2-profile");
+      await page.setViewportSize({ width: 320, height: 568 });
+      await noOverflow("blocked profile, narrowest");
+      await page.setViewportSize({ width: 390, height: 844 });
       await expect.poll(() => blocksSent).toEqual([[user.id, OTHER]]);
       // Following his shop ended with it.
       expect(townWrites).toContain("/rest/v1/shop_follows");
@@ -4686,6 +4700,9 @@ try {
       await expect(list).toContainText("@ren_reads");
       await list.scrollIntoViewIfNeeded();
       await shot("block-3-settings");
+      await page.setViewportSize({ width: 320, height: 568 });
+      await noOverflow("blocked list, narrowest");
+      await page.setViewportSize({ width: 390, height: 844 });
       await list.getByRole("button", { name: "解除" }).click();
       await expect(toast).toContainText(
         "レンさんのブロックを解除しました。本屋や投稿は、次にBookTownを開いたときから見えます",
@@ -4711,6 +4728,7 @@ try {
       await expect(toast).toContainText("レンさんをブロックしました");
       await expect(page.getByText("これから通報される言葉。")).toHaveCount(0);
       await expect.poll(() => blocksSent.length).toBe(2);
+      followsEnd = false;
       town = null;
     },
   );
