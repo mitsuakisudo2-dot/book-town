@@ -71,9 +71,10 @@ jobs:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/login-qa
 
   # The demo build (no Supabase) in a real browser: the walk, the store
-  # editor and registering a book, without an account. The pages that keep
-  # what a reader writes and arranges are checked in demo-pages beside it.
-  # feedback and poster-journey are still run by hand.
+  # editor, registering a book, reacting to a shop's books (feedback) and
+  # making a poster, without an account. The pages that keep what a reader
+  # writes and arranges are checked in demo-pages beside it, which takes
+  # longer, so these two more do not lengthen the run.
   demo-journeys:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -104,6 +105,14 @@ jobs:
         if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
         env:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/library
+      - run: pnpm test:feedback
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/feedback
+      - run: pnpm test:poster-journey
+        if: ${{ !cancelled() && steps.serve.outcome == 'success' }}
+        env:
+          BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/qa/poster
       # Screenshots of the demo town only; nothing secret is in them.
       - name: Keep the screenshots of a failed run
         if: failure()
