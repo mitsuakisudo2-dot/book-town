@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { hasReplies } from "../../lib/social";
 import type { Notify, Post, TownActions, TownState } from "../../lib/types";
+import { BlockQuestion } from "../BlockReader";
 import { ReportButton } from "../Report";
+import { useTownBackend } from "../../lib/store";
+import { requestAccount } from "../../lib/visitor";
 import { Modal } from "../ui";
 
 /** What 「…」 offers on a 便り, for this reader. */
@@ -16,10 +19,12 @@ export type LetterMenuRows = {
   report: boolean;
   /** 削除する, for the writer */
   remove: boolean;
+  /** 〇〇さんをブロック (only a reader in the database, with an account) */
+  block?: boolean;
 };
 
 export const hasMenuRows = (rows: LetterMenuRows): boolean =>
-  rows.unlike || rows.spoiler || rows.report || rows.remove;
+  rows.unlike || rows.spoiler || rows.report || rows.remove || !!rows.block;
 
 /**
  * The sheet 「…」 opens: the quieter things to do with a 便り, each a row
@@ -43,7 +48,21 @@ export function LetterMenu({
   onClose: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const [blocking, setBlocking] = useState(false);
+  const savedIn = useTownBackend();
   const reported = state.spoilerReports.includes(post.id);
+  if (blocking)
+    return (
+      <Modal title="その他の操作" onClose={onClose}>
+        <BlockQuestion
+          reader={{ id: post.authorId, name: authorName }}
+          actions={actions}
+          notify={notify}
+          onDone={onClose}
+          onCancel={() => setBlocking(false)}
+        />
+      </Modal>
+    );
   if (deleting)
     return (
       <Modal title="その他の操作" onClose={onClose}>
@@ -121,6 +140,19 @@ export function LetterMenu({
           >
             この投稿を通報
           </ReportButton>
+        )}
+        {rows.block && (
+          <button
+            type="button"
+            className="is-alert"
+            onClick={() => {
+              if (savedIn !== "visitor") return setBlocking(true);
+              onClose();
+              requestAccount();
+            }}
+          >
+            {authorName}さんをブロック
+          </button>
         )}
         {rows.remove && (
           <button
