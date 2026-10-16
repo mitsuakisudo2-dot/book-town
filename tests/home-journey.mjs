@@ -2255,68 +2255,87 @@ try {
   );
 
   await check(
-    "Moving along the bottom bar slides the page in from that side and springs the tab, without moving the 投稿 button or the screen sideways",
+    "Moving along the bottom bar slides the round mark from the tab shown to the tab tapped",
     () =>
       withPage({}, async () => {
         const bar = page.locator(".town-bottom-nav");
-        /** The page's slide and the tapped tab's spring, as they start. */
-        const moves = () =>
+        /** Where the moving mark starts and ends, beside the icons' centres. */
+        const marks = () =>
           page.evaluate(() => {
-            const main = document.querySelector("main");
-            const icon = document.querySelector(
-              '.town-bottom-nav a[aria-current="page"] svg',
+            const bar = document.querySelector(".town-bottom-nav");
+            const box = bar.getBoundingClientRect();
+            const centre = (svg) => {
+              const r = svg.getBoundingClientRect();
+              return Math.round(r.left + r.width / 2 - box.left);
+            };
+            const icons = [...bar.querySelectorAll(":scope > a svg")].map(
+              centre,
             );
-            const of = (element) =>
-              element
-                .getAnimations()
-                .filter((a) => !(a instanceof CSSAnimation))
-                .map((a) => a.effect.getKeyframes()[0]);
+            const mark = bar.querySelector(".nav-mark");
+            if (!mark) return { icons, moving: false };
+            const animation = mark.getAnimations()[0];
+            const [from] = animation.effect.getKeyframes();
+            const dx = Number(
+              /translate\((-?[\d.]+)px/.exec(
+                from.transform.replace("translate(-50%, -50%) ", ""),
+              )[1],
+            );
+            const end = parseFloat(mark.style.left);
             return {
-              page: of(main).map((frame) => frame.left ?? null),
-              icon: of(icon).map((frame) => frame.transform ?? null),
-              wide: document.documentElement.scrollWidth > innerWidth,
+              icons,
+              moving: bar.classList.contains("is-moving"),
+              from: Math.round(end + dx),
+              to: Math.round(end),
             };
           });
-        await go("/");
-        const fab = page.locator(".compose-fab");
-        const rest = await fab.boundingBox();
-        await bar.getByRole("link", { name: "書店めぐり" }).tap();
-        await expect(page).toHaveURL(/\/walk\//);
-        await bar.getByRole("link", { name: "検索" }).tap();
-        await expect(page).toHaveURL(/\/search\//);
-        // From 書店めぐり to 検索, the tab to the left: in from the left.
-        expect(await moves()).toEqual({
-          page: ["-24px"],
-          icon: ["scale(0.82)"],
-          wide: false,
+        await go("/profiles/me/");
+        await bar.getByRole("link", { name: "記録" }).tap();
+        await expect(page).toHaveURL(/\/reading\//);
+        const move = await marks();
+        // From わたし (6th) to 記録 (5th): the mark slides left.
+        expect(move).toMatchObject({
+          moving: true,
+          from: move.icons[5],
+          to: move.icons[4],
         });
+        // The chosen tab's mark is round.
+        expect(
+          await bar
+            .locator('a[aria-current="page"] svg')
+            .evaluate((svg) => getComputedStyle(svg).borderRadius),
+        ).toBe("50%");
+        // It arrives and the moving mark goes.
+        await expect(page.locator(".nav-mark")).toHaveCount(0);
+        await expect(bar).not.toHaveClass(/is-moving/);
+        // ホーム to 本棚: one slide, though the page names 本棚 a moment late.
         await bar.getByRole("link", { name: "ホーム" }).tap();
-        await expect(fab).toBeVisible();
-        expect((await moves()).page).toEqual(["-24px"]);
-        // The page moves by its offset: its fixed 投稿 button stays put.
-        expect(await fab.boundingBox()).toEqual(rest);
-        // 本棚 and わたし switch the same page in place, and still slide.
+        await expect(page.locator(".nav-mark")).toHaveCount(0);
         await bar.getByRole("link", { name: "本棚" }).tap();
         await expect(page).toHaveURL(/books=library/);
-        // The page reads 本棚 from its address a moment late: still one
-        // slide, from the right.
-        expect((await moves()).page).toEqual(["24px"]);
-        await page.waitForTimeout(400);
-        await bar.getByRole("link", { name: "わたし" }).tap();
-        await expect(page).not.toHaveURL(/books=library/);
-        expect(await moves()).toEqual({
-          page: ["24px"],
-          icon: ["scale(0.82)"],
-          wide: false,
+        const shelf = await marks();
+        expect(shelf).toMatchObject({
+          from: shelf.icons[0],
+          to: shelf.icons[3],
         });
-        // A page within a tab, or the same tab again, does not slide.
-        await page.waitForTimeout(400);
-        await bar.getByRole("link", { name: "わたし" }).tap();
-        expect((await moves()).page).toEqual([]);
+        expect(await page.locator(".nav-mark").count()).toBe(1);
+        // The same tab again does not move it.
+        await expect(page.locator(".nav-mark")).toHaveCount(0);
+        await bar.getByRole("link", { name: "本棚" }).tap();
+        expect(await page.locator(".nav-mark").count()).toBe(0);
+        // The page itself does not slide.
+        expect(
+          await page.evaluate(
+            () =>
+              document
+                .querySelector("main")
+                .getAnimations()
+                .filter((a) => !(a instanceof CSSAnimation)).length,
+          ),
+        ).toBe(0);
       }),
   );
   await check(
-    "With less motion asked for, moving along the bottom bar does not slide",
+    "With less motion asked for, the bottom bar's mark does not slide",
     () =>
       withPage({ reducedMotion: "reduce" }, async () => {
         await go("/search/");
