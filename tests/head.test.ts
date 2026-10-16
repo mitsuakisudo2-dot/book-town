@@ -72,33 +72,36 @@ const NOW = Date.UTC(2026, 9, 14, 9);
 const HOUR = 60 * 60 * 1000;
 
 /**
- * Runs the head's inline scripts on a page holding `link`, in a browser that
- * kept `stored` from earlier visits (or refuses storage, as some private
- * windows do) and whose clock reads `now`. `load()` finishes the CSS.
+ * Runs the head's inline scripts in a browser that kept `stored` from
+ * earlier visits (or refuses storage, as some private windows do), whose
+ * clock reads `now`, on a page still loading or already loaded. `element()`
+ * is the font CSS the scripts added to the head, if they have; `pageLoad()`
+ * finishes loading the page, and `load()` the CSS.
  */
 function runScripts(
   html: string,
-  link: Attributes,
   {
-    sheet = null,
     stored = new Map(),
     now = NOW,
+    readyState = "loading",
   }: {
-    sheet?: object | null;
     stored?: Map<string, string> | "refused";
     now?: number;
+    readyState?: "loading" | "complete";
   } = {},
 ) {
   const listeners = new Map<string, () => void>();
-  const element = {
-    href: link.href,
-    media: link.media,
-    sheet,
-    addEventListener: (type: string, listener: () => void) =>
-      listeners.set(type, listener),
-  };
+  const pageListeners = new Map<string, () => void>();
+  const added: Attributes[] = [];
   const document = {
-    getElementById: (id: string) => (id === link.id ? element : null),
+    readyState,
+    getElementById: () => null,
+    createElement: (tag: string) => ({
+      tag,
+      addEventListener: (type: string, listener: () => void) =>
+        listeners.set(type, listener),
+    }),
+    head: { appendChild: (element: Attributes) => added.push(element) },
   };
   const refused = () => {
     throw new Error("SecurityError");
@@ -112,14 +115,16 @@ function runScripts(
             stored.set(key, String(value)),
         };
   for (const body of inlineScripts(html))
-    new Function("document", "localStorage", "Date", body)(
+    new Function("document", "localStorage", "Date", "addEventListener", body)(
       document,
       localStorage,
       { now: () => now },
+      (type: string, listener: () => void) => pageListeners.set(type, listener),
     );
+  assert.ok(added.length <= 1, "the font CSS is added once");
   return {
-    element,
-    listeners,
+    element: (): Attributes | undefined => added[0],
+    pageLoad: () => pageListeners.get("load")?.(),
     load: () => listeners.get("load")?.(),
   };
 }
@@ -197,104 +202,103 @@ async function main() {
   const demo = layoutHtml(false);
   const hosted = layoutHtml(true);
 
+  // The font CSS as the noscript fallback asks for it: the same address
+  // the script asks for.
+  const fonts = noscripts(demo)
+    .flatMap((inner) => tags(inner, "link"))
+    .filter(fromAnotherOrigin);
+
   await check(
     "no stylesheet from another origin is drawn without a media that holds up nothing",
     () => {
       for (const html of [demo, hosted]) {
-        const links = tags(scripted(html), "link").filter(fromAnotherOrigin);
-        assert.ok(links.length > 0, "the web fonts are still asked for");
-        for (const link of links) {
-          assert.equal(link.media, "print", link.href);
-          // A font that has not arrived yet leaves its text in the fallback
-          // font, never blank.
-          assert.match(link.href, /[?&]display=swap(&|$)/);
-        }
+        // Only the scripts add one, as a print sheet first.
+        assert.deepEqual(
+          tags(scripted(html), "link").filter(fromAnotherOrigin),
+          [],
+        );
+        const added = runScripts(html, { readyState: "complete" }).element();
+        assert.ok(added, "the web fonts are still asked for");
+        assert.equal(added.rel, "stylesheet");
+        assert.equal(added.media, "print");
+        // A font that has not arrived yet leaves its text in the fallback
+        // font, never blank.
+        assert.match(added.href, /[?&]display=swap(&|$)/);
       }
     },
   );
 
-  const [fontsLink] = tags(scripted(demo), "link").filter(fromAnotherOrigin);
-
   await check(
-    "the font CSS turns on for the screen when it arrives, or at once if it has",
+    "on a first visit the font CSS is asked for once the page has loaded, and turns on for the screen when it arrives",
     () => {
-      const waiting = runScripts(demo, fontsLink);
-      assert.equal(waiting.element.media, "print");
-      waiting.load();
-      assert.equal(waiting.element.media, "all");
-      // The CSS came before the script ran (from the cache, or while the
-      // page's own CSS held the script back).
-      const arrived = runScripts(demo, fontsLink, { sheet: {} });
-      assert.equal(arrived.element.media, "all");
-      assert.equal(arrived.listeners.size, 0);
+      const first = runScripts(demo);
+      // Not while the town's own scripts are on their way.
+      assert.equal(first.element(), undefined);
+      first.pageLoad();
+      assert.equal(first.element()?.media, "print");
+      first.load();
+      assert.equal(first.element()?.media, "all");
+      // The scripts ran after the page loaded: asked for at once.
+      const late = runScripts(demo, { readyState: "complete" });
+      assert.equal(late.element()?.media, "print");
     },
   );
 
   await check(
-    "a reader back within a day of loading the font CSS turns it on before it arrives",
+    "a reader back within a day of loading the font CSS asks for it and turns it on at once",
     () => {
       const stored = new Map<string, string>();
-      runScripts(demo, fontsLink, { stored }).load();
+      const first = runScripts(demo, { stored });
+      first.pageLoad();
+      first.load();
       assert.equal(stored.size, 1);
       // Most likely still in the HTTP cache: the first layout asks for the
       // font files instead of drawing frames without them.
-      const soon = runScripts(demo, fontsLink, {
-        stored,
-        now: NOW + 23 * HOUR,
-      });
-      assert.equal(soon.element.media, "all");
+      const soon = runScripts(demo, { stored, now: NOW + 23 * HOUR });
+      assert.equal(soon.element()?.media, "all");
+      assert.equal(soon.element()?.href, fonts[0].href);
       // Loaded again (from the cache, or after Google revalidated it): the
       // day starts again.
       soon.load();
       assert.equal(
-        runScripts(demo, fontsLink, { stored, now: NOW + 46 * HOUR }).element
-          .media,
+        runScripts(demo, { stored, now: NOW + 46 * HOUR }).element()?.media,
         "all",
       );
-      const later = runScripts(demo, fontsLink, {
-        stored,
-        now: NOW + 48 * HOUR,
-      });
-      assert.equal(later.element.media, "print");
+      const later = runScripts(demo, { stored, now: NOW + 48 * HOUR });
+      assert.equal(later.element(), undefined);
+      later.pageLoad();
       later.load();
-      assert.equal(later.element.media, "all");
+      assert.equal(later.element()?.media, "all");
       // Another CSS address (the fonts changed), a clock set back, or
-      // storage refused: wait for it as on a first visit.
+      // storage refused: wait for the page as on a first visit.
       const [key] = stored.keys();
       for (const [kept, now] of [
         [
-          `${NOW} ${fontsLink.href.replace("display=swap", "display=block")}`,
+          `${NOW} ${fonts[0].href.replace("display=swap", "display=block")}`,
           NOW + HOUR,
         ],
-        [`${NOW} ${fontsLink.href}`, NOW - HOUR],
+        [`${NOW} ${fonts[0].href}`, NOW - HOUR],
       ] as const)
         assert.equal(
-          runScripts(demo, fontsLink, {
-            stored: new Map([[key, kept]]),
-            now,
-          }).element.media,
-          "print",
+          runScripts(demo, { stored: new Map([[key, kept]]), now }).element(),
+          undefined,
           kept,
         );
-      const refused = runScripts(demo, fontsLink, { stored: "refused" });
-      assert.equal(refused.element.media, "print");
+      const refused = runScripts(demo, { stored: "refused" });
+      assert.equal(refused.element(), undefined);
+      refused.pageLoad();
       refused.load();
-      assert.equal(refused.element.media, "all");
+      assert.equal(refused.element()?.media, "all");
     },
   );
 
   await check("without scripts the same CSS still loads", () => {
-    const scriptedHrefs = tags(scripted(demo), "link")
-      .filter(fromAnotherOrigin)
-      .map((link) => link.href);
-    const fallback = noscripts(demo)
-      .flatMap((inner) => tags(inner, "link"))
-      .filter(fromAnotherOrigin);
-    assert.deepEqual(
-      fallback.map((link) => link.href),
-      scriptedHrefs,
+    assert.equal(fonts.length, 1);
+    assert.equal(
+      runScripts(demo, { readyState: "complete" }).element()?.href,
+      fonts[0].href,
     );
-    for (const link of fallback) assert.equal(link.media, undefined);
+    for (const link of fonts) assert.equal(link.media, undefined);
   });
 
   await check(
