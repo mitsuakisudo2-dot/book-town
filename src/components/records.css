@@ -56,7 +56,7 @@
 .feeling-chip[aria-pressed="true"] {
   background: var(--green);
   border-color: var(--green);
-  color: #f7f4ee;
+  color: var(--on-green);
 }
 .feeling-chip:focus-visible {
   outline: 2px solid #8fac80;
@@ -93,7 +93,7 @@
 }
 .record-visibility legend {
   font-size: 12px;
-  color: #6f7f63;
+  color: var(--ink-2);
   margin-bottom: 8px;
 }
 .record-visibility label {
@@ -108,7 +108,7 @@
 }
 .record-visibility label:has(input:checked) {
   border-color: var(--green);
-  background: #eef2e8;
+  background: var(--green-soft);
   color: var(--green);
 }
 .record-visibility input {
@@ -335,4 +335,20 @@
   margin: 2px 0 0;
   font-size: 11px;
   color: #5f6a55;
+}
+/* 設定: the six palettes, each named in words beside its colour. */
+.palette-choices label {
+  min-height: 44px;
+}
+.palette-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex: none;
+}
+.palette-note {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: var(--t-cap);
+  color: var(--ink-2);
 }

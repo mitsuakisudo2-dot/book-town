@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { FIRST_PALETTE, PALETTES } from "../src/lib/appearance";
+import { countStyles, type StyleCounts } from "./style-count";
 
 // The town's colours and type live in src/app/tokens.css. These checks keep
 // them readable, and keep the rules the screens were promised: Japanese text
@@ -31,11 +33,36 @@ function filesIn(dir: string, ends: string[]): string[] {
 }
 
 const tokens = read("src/app/tokens.css");
-const value = (name: string): string => {
-  const found = tokens.match(new RegExp(`\\s${name}:\\s*(#[0-9a-f]{6});`, "i"));
-  assert.ok(found, `${name} has a colour in tokens.css`);
-  return found[1];
-};
+
+/** The colours a block of tokens.css sets, by name. */
+const coloursOf = (block: string) =>
+  Object.fromEntries(
+    [...block.matchAll(/(--[\w-]+):\s*(#[0-9a-f]{6});/gi)].map(
+      ([, name, hex]) => [name, hex.toLowerCase()],
+    ),
+  );
+const blocks = [
+  ...tokens
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .matchAll(/(:root[^{]*)\{([^}]*)\}/g),
+];
+const base = coloursOf(
+  blocks.find(([, selector]) => selector.trim() === ":root")![2],
+);
+/** Each palette's own block: `:root[data-palette="…"]`. */
+const paletteBlocks = Object.fromEntries(
+  blocks
+    .map(([, selector, body]) => [
+      selector.match(/^:root\[data-palette="([\w-]+)"\]\s*$/)?.[1],
+      coloursOf(body),
+    ])
+    .filter(([id]) => id),
+) as Record<string, Record<string, string>>;
+/** The colours by day with `palette` chosen (the first is :root alone). */
+const coloursWith = (palette: string): Record<string, string> => ({
+  ...base,
+  ...(paletteBlocks[palette] ?? {}),
+});
 const luminance = (hex: string) => {
   const [r, g, b] = [1, 3, 5].map((at) => {
     const channel = parseInt(hex.slice(at, at + 2), 16) / 255;
@@ -50,14 +77,55 @@ const contrast = (a: string, b: string) => {
   return (x + 0.05) / (y + 0.05);
 };
 
-check("every listed text and background pair is at least 4.5:1 by day", () => {
-  const pairs = [...tokens.matchAll(/@pair (--[\w-]+) (--[\w-]+)/g)];
-  assert.ok(pairs.length >= 10, "tokens.css lists its pairs");
-  for (const [, text, back] of pairs) {
-    const ratio = contrast(value(text), value(back));
-    assert.ok(
-      ratio >= 4.5,
-      `${text} on ${back} is ${ratio.toFixed(2)}:1, under 4.5:1`,
+check(
+  "every listed text and background pair is at least 4.5:1 by day, in each of the six palettes",
+  () => {
+    const pairs = [...tokens.matchAll(/@pair (--[\w-]+) (--[\w-]+)/g)];
+    assert.ok(pairs.length >= 10, "tokens.css lists its pairs");
+    for (const { id } of PALETTES) {
+      const colours = coloursWith(id);
+      for (const [, text, back] of pairs) {
+        assert.ok(colours[text], `${text} has a colour in tokens.css`);
+        assert.ok(colours[back], `${back} has a colour in tokens.css`);
+        const ratio = contrast(colours[text], colours[back]);
+        assert.ok(
+          ratio >= 4.5,
+          `${id}: ${text} on ${back} is ${ratio.toFixed(2)}:1, under 4.5:1`,
+        );
+      }
+    }
+  },
+);
+
+check("the six palettes are the decided ones, each in tokens.css", () => {
+  // 深緑・煉瓦・藍・藤・山吹・墨, 深緑 first (けにー 2026-10-14).
+  assert.deepEqual(
+    PALETTES.map((palette) => palette.name),
+    ["深緑", "煉瓦", "藍", "藤", "山吹", "墨"],
+  );
+  assert.equal(FIRST_PALETTE, PALETTES[0].id);
+  assert.deepEqual(
+    Object.keys(paletteBlocks).sort(),
+    PALETTES.map((palette) => palette.id)
+      .filter((id) => id !== FIRST_PALETTE)
+      .sort(),
+    "a block for every palette but the first, and no other",
+  );
+  // A palette changes the palette's four names only; the paper, the ink
+  // and the lines stay the town's.
+  for (const [id, colours] of Object.entries(paletteBlocks))
+    assert.deepEqual(
+      Object.keys(colours).sort(),
+      ["--green", "--green-soft", "--on-green", "--on-photo"],
+      `${id} sets only the palette's colours`,
+    );
+  // Each swatch in 設定 shows its own palette's colour.
+  for (const { id, swatch } of PALETTES) {
+    assert.equal(swatch, `var(--palette-${id})`);
+    assert.equal(
+      base[`--palette-${id}`],
+      coloursWith(id)["--green"],
+      `--palette-${id} is ${id}'s --green`,
     );
   }
 });
@@ -155,5 +223,40 @@ check("covers are shown whole: no object-fit: cover on a jacket", () => {
       );
   }
 });
+
+check(
+  "no screen writes more colours or small text of its own than before",
+  () => {
+    // The screens made before the rules keep what they had, counted in
+    // tests/style-baseline.json, and lose it as each is worked on. A new file
+    // starts with none (docs/色と部品の決まり.md).
+    const baseline = JSON.parse(
+      read("tests/style-baseline.json"),
+    ) as StyleCounts;
+    const now = countStyles();
+    const problems: string[] = [];
+    const what = {
+      colours: "colours of its own (use the tokens)",
+      smallText: "font sizes under 12px (use --t-cap or larger)",
+    };
+    for (const kind of ["colours", "smallText"] as const) {
+      const files = new Set([
+        ...Object.keys(baseline[kind]),
+        ...Object.keys(now[kind]),
+      ]);
+      for (const file of [...files].sort()) {
+        const had = baseline[kind][file] ?? 0;
+        const has = now[kind][file] ?? 0;
+        if (has > had)
+          problems.push(`${file} has ${has} ${what[kind]}, ${had} allowed`);
+        else if (has < had)
+          problems.push(
+            `${file} is down to ${has} ${kind}: set it to ${has} in tests/style-baseline.json${has ? "" : " (or remove the line)"}, so it stays there`,
+          );
+      }
+    }
+    assert.deepEqual(problems, [], problems.join("\n"));
+  },
+);
 
 console.log(`tokens ok (${passed})`);

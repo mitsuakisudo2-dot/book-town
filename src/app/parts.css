@@ -1,0 +1,121 @@
+/*
+ * The town's shared parts (v37's shapes): buttons, chips and the round icon
+ * button. A new screen uses these and the tokens, never a colour, size or
+ * corner of its own, so it follows the reader's palette and the night when it
+ * comes. Every part is at least 44px to the finger. docs/色と部品の決まり.md
+ * says which to use where.
+ *
+ * Older screens still use .button, .ghost and .icon-button in globals.css;
+ * they move to these parts when that screen is worked on.
+ */
+
+/* A button: an outline in the palette colour, words at --t-ui. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--green);
+  border-radius: var(--r-box);
+  background: transparent;
+  color: var(--green);
+  font-size: var(--t-ui);
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+/* The one thing the screen is for: filled. At most one on a screen. */
+.btn.fill {
+  background: var(--green);
+  color: var(--on-green);
+}
+/* A second way that still matters: a soft fill, no line. */
+.btn.soft {
+  border-color: transparent;
+  background: var(--green-soft);
+  color: var(--green);
+}
+/* A way out or aside (やめる, あとで): words only. */
+.btn.quiet {
+  border-color: transparent;
+  color: var(--ink-2);
+  font-weight: 400;
+}
+/* Something that cannot be taken back (消す). */
+.btn.danger {
+  border-color: var(--alert);
+  color: var(--alert);
+}
+.btn.danger.fill {
+  background: var(--alert);
+  color: var(--sheet);
+}
+.btn svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+/* A row of buttons that wraps on a narrow phone. */
+.btns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A choice among a few (絞り込み, 並び順). Chosen with aria-pressed or
+   aria-checked, so the state is read out too. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: var(--t-ui);
+  white-space: nowrap;
+}
+.chip:is([aria-pressed="true"], [aria-checked="true"]) {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+  font-weight: 700;
+}
+
+/* An icon alone (閉じる, 戻る, …): it needs an aria-label. */
+.icon-btn {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-box);
+  color: var(--ink);
+}
+.icon-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* A button made of words in a line of text (もっと見る). */
+.text-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  color: var(--green);
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+
+/* Pressed: the part fades a little under the finger, as in v37. */
+:is(.btn, .chip, .icon-btn, .text-btn):active:not(:disabled) {
+  opacity: 0.6;
+}
