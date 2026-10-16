@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { FIRST_PALETTE, PALETTES } from "../src/lib/appearance";
+import { AVATAR_INKS, avatarInkContrast } from "../src/lib/avatar-ink";
 import { countStyles, type StyleCounts } from "./style-count";
 
 // The town's colours and type live in src/app/tokens.css. These checks keep
@@ -126,7 +127,13 @@ check(
     // The night redefines the paper, the ink, the lines and the palette:
     // every name the day sets except the swatches, the fonts' companions
     // and the colours that stay the same day and night.
-    const stays = new Set(["--on-dark", "--on-photo", "--muted"]);
+    const stays = new Set([
+      "--on-dark",
+      "--on-photo",
+      "--muted",
+      "--avatar-ink",
+      "--avatar-ink-light",
+    ]);
     for (const name of Object.keys(base))
       if (!name.startsWith("--palette-") && !stays.has(name))
         assert.ok(night[name], `the night sets ${name}`);
@@ -206,6 +213,25 @@ check(
       }
   },
 );
+
+check("a reader's initial stands out on every colour a demo reader has", () => {
+  assert.deepEqual(AVATAR_INKS, {
+    light: base["--avatar-ink-light"],
+    dark: base["--avatar-ink"],
+  });
+  const colours = new Set(
+    [...read("src/lib/data.ts").matchAll(/color: "(#[0-9a-f]{6})"/gi)].map(
+      ([, hex]) => hex,
+    ),
+  );
+  assert.ok(colours.size > 10);
+  // A picture's letters, at a 14px or larger initial beside the name: 3:1.
+  for (const colour of colours)
+    assert.ok(
+      avatarInkContrast(colour) >= 3,
+      `${colour}: ${avatarInkContrast(colour).toFixed(2)}:1`,
+    );
+});
 
 check("the six palettes are the decided ones, each in tokens.css", () => {
   // 深緑・煉瓦・藍・藤・山吹・墨, 深緑 first (けにー 2026-10-14).
