@@ -41,7 +41,7 @@
 .search-genres button[aria-pressed="true"] {
   background: var(--green);
   border-color: var(--green);
-  color: #fffdf3;
+  color: var(--on-green);
 }
 .search-discover,
 .search-results {
@@ -474,7 +474,7 @@
 }
 .icon-choices legend {
   font-size: 12px;
-  color: #6f7f63;
+  color: var(--ink-2);
   margin-bottom: 12px;
 }
 .icon-choices label {
@@ -482,7 +482,7 @@
   justify-items: center;
   gap: 8px;
   font-size: 11px;
-  color: #6f7f63;
+  color: var(--ink-2);
   padding: 12px 6px;
   border-radius: 10px;
   border: 1px solid var(--line);
@@ -490,7 +490,7 @@
 }
 .icon-choices label:has(input:checked) {
   border-color: var(--green);
-  background: #eef2e8;
+  background: var(--green-soft);
   color: var(--green);
 }
 .icon-choices input {
@@ -499,7 +499,7 @@
   pointer-events: none;
 }
 .icon-choices label:has(input:focus-visible) {
-  outline: 2px solid #8fac80;
+  outline: 2px solid var(--green);
 }
 .icon-choice-face {
   display: grid;
@@ -508,7 +508,7 @@
   height: 48px;
   border-radius: 50%;
   background: var(--green);
-  color: #fffdf3;
+  color: var(--on-green);
 }
 .register-form {
   display: grid;

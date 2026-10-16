@@ -725,12 +725,12 @@
   color: #717d66;
 }
 .town-bottom-nav a.active {
-  color: #31533e;
+  color: var(--green);
 }
 .town-bottom-nav a.active svg {
-  background: #e3e9db;
+  background: var(--green-soft);
   border-radius: 7px;
-  outline: 6px solid #e3e9db;
+  outline: 6px solid var(--green-soft);
 }
 .town-bottom-nav a.active span {
   font-weight: 600;
