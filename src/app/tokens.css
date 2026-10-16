@@ -1,7 +1,9 @@
 /*
  * The town's colours, type and corners, in one place (v37's day values).
  * Components use these names and never a colour of their own, so the six
- * palettes and the night can come later by redefining them here.
+ * palettes (below) and the night (later) only redefine them here. The rules
+ * for using them, and the shared parts in parts.css, are in
+ * docs/色と部品の決まり.md.
  *
  * Text on background, each pair at least 4.5:1 by day
  * (checked by tests/tokens.test.ts):
@@ -25,6 +27,8 @@
  * @pair --green --green-soft
  * @pair --green --notice
  * @pair --on-green --green
+ * @pair --on-photo --sheet
+ * @pair --on-photo --paper
  * @pair --forest --paper
  * @pair --forest --sheet
  * @pair --forest --band
@@ -56,11 +60,20 @@
   --pop: #fffaf0;
   --pop-line: #eadfc8;
 
-  /* 深緑, the first of the palettes */
+  /* The palette: the colour of buttons, marks and what is chosen. The name
+     stays --green whichever palette the reader picks; 深緑 is the first. */
   --green: #294b3e;
   --on-green: #f7f4ee;
   --green-soft: #e3ece6;
   --on-photo: #294b3e;
+
+  /* Each palette's own colour, for its swatch in 設定 whatever is chosen. */
+  --palette-green: #294b3e;
+  --palette-brick: #a5482a;
+  --palette-ai: #2c4a78;
+  --palette-fuji: #5e4a86;
+  --palette-yamabuki: #7a5600;
+  --palette-sumi: #3b3f45;
 
   /* Quieter words: the second ink */
   --muted: var(--ink-2);
@@ -93,4 +106,41 @@
      the web fonts first, whatever letters the device has. */
   --poster-mincho: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
   --poster-gothic: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+}
+
+/*
+ * The six palettes by day (v37 app.css). The reader picks one in 設定 and
+ * src/lib/appearance.ts marks <html> with it before the first paint; 深緑 is
+ * :root itself, with no mark. Only these four names change, so every
+ * @pair above is checked again for each palette.
+ */
+:root[data-palette="brick"] {
+  --green: #a5482a;
+  --on-green: #fffcf7;
+  --green-soft: #f6e4da;
+  --on-photo: #8f3c22;
+}
+:root[data-palette="ai"] {
+  --green: #2c4a78;
+  --on-green: #f7f6f2;
+  --green-soft: #e2e8f3;
+  --on-photo: #2c4a78;
+}
+:root[data-palette="fuji"] {
+  --green: #5e4a86;
+  --on-green: #f7f4fb;
+  --green-soft: #ece6f5;
+  --on-photo: #5e4a86;
+}
+:root[data-palette="yamabuki"] {
+  --green: #7a5600;
+  --on-green: #fffaf0;
+  --green-soft: #f3e8cc;
+  --on-photo: #7a5600;
+}
+:root[data-palette="sumi"] {
+  --green: #3b3f45;
+  --on-green: #f7f6f3;
+  --green-soft: #e7e8ea;
+  --on-photo: #3b3f45;
 }

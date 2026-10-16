@@ -2160,6 +2160,97 @@ try {
   );
 
   await check(
+    "設定's 画面の色: six palettes by name, kept, and on <html> before the first paint",
+    () =>
+      withPage({}, async () => {
+        // When <body> first appears, nothing is drawn yet: the palette must
+        // already be on <html> then (appearance.ts's head script).
+        await page.addInitScript(() => {
+          new MutationObserver((_, observer) => {
+            if (!document.body) return;
+            window.__paletteAtBody =
+              document.documentElement.dataset.palette ?? "none";
+            observer.disconnect();
+          }).observe(document, { childList: true, subtree: true });
+        });
+        await go("/profiles/me/");
+        expect(await page.evaluate(() => window.__paletteAtBody)).toBe("none");
+        await page
+          .locator(".profile-minor-actions")
+          .getByRole("button", { name: "設定" })
+          .tap();
+        const colours = page
+          .getByRole("dialog", { name: "設定" })
+          .getByRole("group", { name: "画面の色" });
+        await expect(colours.getByRole("radio")).toHaveCount(6);
+        for (const name of ["深緑", "煉瓦", "藍", "藤", "山吹", "墨"])
+          await expect(
+            colours.getByRole("radio", { name, exact: true }),
+          ).toBeVisible();
+        await expect(
+          colours.getByRole("radio", { name: "深緑", exact: true }),
+        ).toBeChecked();
+        // Each choice is a whole row for the finger, 44px or more.
+        for (const height of await colours
+          .locator("label")
+          .evaluateAll((labels) =>
+            labels.map((label) => label.getBoundingClientRect().height),
+          ))
+          expect(height).toBeGreaterThanOrEqual(44);
+        await colours.getByText("藍", { exact: true }).tap();
+        await expect(
+          colours.getByRole("radio", { name: "藍", exact: true }),
+        ).toBeChecked();
+        await expect(page.locator("html")).toHaveAttribute(
+          "data-palette",
+          "ai",
+        );
+        await expectReadable(colours.locator("label"), "palette choices, 藍");
+        await page.keyboard.press("Escape");
+
+        await page.reload();
+        await expect(page.locator("main")).toBeVisible();
+        expect(await page.evaluate(() => window.__paletteAtBody)).toBe("ai");
+        expect(
+          await page.evaluate(() =>
+            getComputedStyle(document.documentElement)
+              .getPropertyValue("--green")
+              .trim(),
+          ),
+        ).toBe("#2c4a78");
+        await goHome();
+        await expect(page.locator("html")).toHaveAttribute(
+          "data-palette",
+          "ai",
+        );
+        await expectReadable(tabs().getByRole("tab"), "the tabs, 藍");
+        await expectReadable(
+          page.locator(".town-bottom-nav a.active"),
+          "the bottom bar's tab, 藍",
+        );
+        await page.screenshot({
+          path: path.join(output, "palette-ai-home.png"),
+        });
+
+        // Back to 深緑: the mark goes, and stays gone after a reload.
+        await go("/profiles/me/");
+        await page
+          .locator(".profile-minor-actions")
+          .getByRole("button", { name: "設定" })
+          .tap();
+        await colours.getByText("深緑", { exact: true }).tap();
+        await expect(page.locator("html")).not.toHaveAttribute(
+          "data-palette",
+          /./,
+        );
+        await page.keyboard.press("Escape");
+        await page.reload();
+        await expect(page.locator("main")).toBeVisible();
+        expect(await page.evaluate(() => window.__paletteAtBody)).toBe("none");
+      }),
+  );
+
+  await check(
     "No hydration errors, uncaught exceptions or console errors",
     async () => {
       expect(errors).toEqual([]);
