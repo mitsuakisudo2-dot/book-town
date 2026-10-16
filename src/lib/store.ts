@@ -30,6 +30,7 @@ import { cleanRecord } from "./records";
 import { cleanPosterDraft, posterProblem, type Poster } from "./posters";
 import { handleProblem, normalizeHandle } from "./handles";
 import { tapsOf } from "./social";
+import { blockable, withoutReaders } from "./blocks";
 import {
   COMPOSE_ICONS,
   SPOILER_DISPLAYS,
@@ -121,6 +122,7 @@ const QUIET_ACTIONS = new Set<keyof TownActions>(["markNotificationsSeen"]);
  */
 const REACHING: Partial<Record<string, (args: unknown[]) => unknown>> = {
   toggleFollow: ([shopId]) => shopId,
+  blockReader: ([readerId]) => readerId,
   togglePopReaction: ([shopId]) => shopId,
   toggleLike: ([postId]) => postId,
   tapLike: ([postId]) => postId,
@@ -136,6 +138,7 @@ const reachesSample = (name: string, args: unknown[]) => {
 /** Actions that answer whether they did anything. */
 const ANSWERING_ACTIONS = new Set<keyof TownActions>([
   "addShelfBook",
+  "blockReader",
   "changeDisplay",
   "deletePoster",
   "updateRecord",
@@ -464,6 +467,28 @@ export function createTownStore(
         following: state.following.includes(shopId)
           ? state.following.filter((id) => id !== shopId)
           : [...state.following, shopId],
+      });
+    },
+    blockReader(readerId) {
+      initialize();
+      // Only an account keeps a block; the demo has nobody to keep away.
+      if (
+        backend.kind !== "account" ||
+        state.blocked.includes(readerId) ||
+        !blockable(state, readerId)
+      )
+        return false;
+      return commit({
+        ...withoutReaders(state, [readerId]),
+        blocked: [...state.blocked, readerId],
+      });
+    },
+    unblockReader(readerId) {
+      initialize();
+      if (!state.blocked.includes(readerId)) return;
+      commit({
+        ...state,
+        blocked: state.blocked.filter((id) => id !== readerId),
       });
     },
     toggleWish(bookId) {
@@ -1045,8 +1070,9 @@ export function createTownStore(
      */
     absorb(arrived: Arrived, from: number): boolean {
       if (loading || from !== generation || !backend.absorb) return false;
+      // A 便り read before a block was saved still stays away.
       const next = backend.absorb((town, saved) =>
-        takeIn(town, arrived, saved),
+        withoutReaders(takeIn(town, arrived, saved), town.blocked),
       );
       if (!next || next === state) return false;
       state = next;
