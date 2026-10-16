@@ -40,9 +40,6 @@ export type AccountTable = {
   readers: Readers;
 };
 
-const SIGNED_OUT =
-  "anyone can read it signed out, so a block would not keep it from them (decide in plan item 43)";
-
 export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   "public.blocks": {
     people: { blocker_id: "delete", blocked_id: "delete" },
@@ -118,7 +115,9 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   },
   "public.profile_nine": {
     people: { profile_id: "delete" },
-    readers: { open: SIGNED_OUT },
+    readers: {
+      open: "a known gap: shown to people its reader blocked, unlike posts (decide in plan item 43)",
+    },
   },
   "public.profiles": {
     people: { id: "delete" },
@@ -165,5 +164,9 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   "keep.copies": { people: {}, readers: "nobody" },
 };
 
-/** The schemas whose tables are listed above. Copies in keep are made later. */
-export const ACCOUNT_SCHEMAS = ["public", "private", "keep"];
+/**
+ * Where the tables above live: every schema but Postgres's own and auth, so a
+ * table in a new schema has to be listed too. A condition on pg_namespace n.
+ */
+export const ACCOUNT_SCHEMAS_SQL =
+  "n.nspname not in ('pg_catalog', 'information_schema', 'auth') and n.nspname not like 'pg\\_%'";

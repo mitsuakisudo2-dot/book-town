@@ -11,7 +11,7 @@ import {
   type MarkKind,
 } from "../src/lib/library";
 import { sampleBookRowId } from "../src/lib/samples";
-import { ACCOUNT_SCHEMAS, ACCOUNT_TABLES } from "./fixtures/account-tables";
+import { ACCOUNT_SCHEMAS_SQL, ACCOUNT_TABLES } from "./fixtures/account-tables";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
 import { pagePattern } from "../src/lib/supabase/site-notes";
 import { emptyTown, planWrites } from "../src/lib/town-remote";
@@ -5608,10 +5608,40 @@ async function main() {
     // names Ben somewhere, so the scan below covers every table.
     const unnamed: string[] = [];
     for (const [table, rule] of Object.entries(ACCOUNT_TABLES))
-      for (const column of Object.keys(rule.people))
+      for (const column of [
+        ...Object.keys(rule.people),
+        ...Object.entries(rule.targets ?? {})
+          .filter(([, target]) => "goes" in target)
+          .map(([column]) => column),
+      ])
         if ((await left(table, column)) === 0)
           unnamed.push(`${table}.${column}`);
     assert.deepEqual(unnamed, [], "give Ben rows here before his account goes");
+    // Chi and Ben block each other, so none of Ben's rows that the list
+    // keeps to their people or hides from blocked people reach her. (A
+    // table she may not read at all is closed already.)
+    const seen: string[] = [];
+    for (const [table, rule] of Object.entries(ACCOUNT_TABLES)) {
+      const columns = Object.keys(rule.people);
+      if (columns.length === 0) continue;
+      if (rule.readers !== "own" && rule.readers !== "blocks") continue;
+      let rows: { n: number }[];
+      try {
+        rows = await as<{ n: number }>(
+          CHI,
+          `select count(*)::int as n from ${table}
+           where $1::uuid in (${columns.join(", ")})
+             and not ($2::uuid in (${columns.map((c) => `coalesce(${c}, $1)`).join(", ")}))`,
+          [BEN, CHI],
+        );
+      } catch (error) {
+        if (error instanceof Error && /permission denied/.test(error.message))
+          continue;
+        throw error;
+      }
+      if (rows[0].n > 0) seen.push(`${table}: ${rows[0].n}`);
+    }
+    assert.deepEqual(seen, [], "Chi reads Ben's rows across their block");
     // Supabase deletes an account as supabase_auth_admin, who owns auth.users
     // and has no rights in public. The cascades run as each table's owner;
     // the after triggers they fire run at the end of the statement, as
@@ -5629,28 +5659,26 @@ async function main() {
     }
     for (const [table, column] of owned)
       assert.equal(await left(table, column), 0, table);
-    // Nothing anywhere still names him, but what account-tables.ts says
-    // stays for the operator.
-    const uuidColumns = await db.query<{ table: string; column: string }>(
-      `select n.nspname || '.' || c.relname as table, a.attname::text as column
-       from pg_attribute a
-       join pg_class c on c.oid = a.attrelid
-       join pg_namespace n on n.oid = c.relnamespace
-       where c.relkind = 'r' and n.nspname = any ($1)
-         and a.attnum > 0 and not a.attisdropped
-         and a.atttypid in ('uuid'::regtype, 'uuid[]'::regtype)`,
-      [ACCOUNT_SCHEMAS],
+    // Nothing anywhere still names him, in any column of any table (text and
+    // json included), but what account-tables.ts says stays for the operator.
+    const relations = await db.query<{ table: string }>(
+      `select n.nspname || '.' || c.relname as table
+       from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where c.relkind in ('r', 'm') and ${ACCOUNT_SCHEMAS_SQL}`,
     );
-    for (const { table, column } of uuidColumns.rows) {
-      const target = ACCOUNT_TABLES[table]?.targets?.[column];
-      if (target && "stays" in target) continue;
+    const naming: string[] = [];
+    for (const { table } of relations.rows) {
+      const stays = Object.entries(ACCOUNT_TABLES[table]?.targets ?? {})
+        .filter(([, target]) => "stays" in target)
+        .map(([column]) => column);
       const named = await db.query<{ n: number }>(
-        `select count(*)::int as n from ${table}
-         where $1::uuid = any (array[${column}]::uuid[])`,
-        [BEN],
+        `select count(*)::int as n from ${table} t
+         where (to_jsonb(t) - $2::text[])::text like '%' || $1 || '%'`,
+        [BEN, stays],
       );
-      assert.equal(named.rows[0].n, 0, `${table}.${column} still names Ben`);
+      if (named.rows[0].n > 0) naming.push(table);
     }
+    assert.deepEqual(naming, [], "these still name Ben");
     assert.deepEqual(await chisOfBen(), [
       { post: false, shop: false, other_reader_id: null, memo: "ベンのPOP" },
       { post: false, shop: false, other_reader_id: null, memo: "ベンの言葉" },

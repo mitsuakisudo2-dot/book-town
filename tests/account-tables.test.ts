@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { PGlite } from "@electric-sql/pglite";
 import {
-  ACCOUNT_SCHEMAS,
+  ACCOUNT_SCHEMAS_SQL,
   ACCOUNT_TABLES,
   type AccountTable,
 } from "./fixtures/account-tables";
@@ -25,17 +25,20 @@ async function audit(
     (await db.query<T>(sql, params)).rows;
   const problems: string[] = [];
 
-  // Copies in keep (other than its list of them) come and go with moves.
-  const tables = (
-    await rows<{ name: string }>(
-      `select n.nspname || '.' || c.relname as name
-       from pg_class c join pg_namespace n on n.oid = c.relnamespace
-       where c.relkind in ('r', 'p') and n.nspname = any ($1)
-         and (n.nspname <> 'keep' or c.relname = 'copies')
-       order by 1`,
-      [ACCOUNT_SCHEMAS],
-    )
-  ).map((row) => row.name);
+  // Tables, views and materialized views in every schema but Postgres's own
+  // and auth. Copies in keep (other than its list of them) come and go with
+  // moves.
+  const relations = await rows<{ name: string; kind: string }>(
+    `select n.nspname || '.' || c.relname as name, c.relkind::text as kind
+     from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where c.relkind in ('r', 'p', 'v', 'm') and ${ACCOUNT_SCHEMAS_SQL}
+       and (n.nspname <> 'keep' or c.relname = 'copies')
+     order by 1`,
+  );
+  const tables = relations.map((row) => row.name);
+  const views = relations
+    .filter((row) => row.kind === "v" || row.kind === "m")
+    .map((row) => row.name);
   for (const name of tables)
     if (!(name in listed))
       problems.push(`${name} is not in tests/fixtures/account-tables.ts`);
@@ -63,8 +66,7 @@ async function audit(
      from pg_constraint f
      join pg_class c on c.oid = f.conrelid
      join pg_namespace n on n.oid = c.relnamespace
-     where f.contype = 'f' and n.nspname = any ($1)`,
-    [ACCOUNT_SCHEMAS],
+     where f.contype = 'f' and ${ACCOUNT_SCHEMAS_SQL}`,
   );
 
   // Every link to a person: deleted or forgotten with them, as listed.
@@ -92,6 +94,37 @@ async function audit(
         `${where} is ${does === "delete" ? "deleted" : "forgotten"} with its person; list it so`,
       );
   }
+  // Every link into a table whose rows go with a person (directly, or by a
+  // cascade from such a table) must let those rows go: a link that neither
+  // cascades nor sets null would stop the account from being deleted.
+  const owned = new Set(
+    Object.entries(listed)
+      .filter(([, rule]) => Object.values(rule.people).includes("delete"))
+      .map(([table]) => table),
+  );
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const link of links)
+      if (
+        link.on_delete === "c" &&
+        owned.has(qualified(link.target)) &&
+        !owned.has(link.table)
+      ) {
+        owned.add(link.table);
+        grew = true;
+      }
+  }
+  for (const link of links)
+    if (
+      !PEOPLE.includes(link.target) &&
+      owned.has(qualified(link.target)) &&
+      link.on_delete !== "c" &&
+      link.on_delete !== "n"
+    )
+      problems.push(
+        `${link.table}.${link.columns.join(",")} would stop an account from being deleted: ${qualified(link.target)} rows go with their person, so make it on delete cascade or set null`,
+      );
+
   // Every column listed as a person's: some link takes it along with them,
   // directly or, inside a cascading link, through another table's column
   // that goes with them.
@@ -120,20 +153,21 @@ async function audit(
         );
     }
 
-  // Every other uuid column: a link, a key, or listed as not a person's.
+  // Every other uuid column: a link, a row's own id, or listed as not a
+  // person's. Only a key of its own named id counts as the row's id: a
+  // person's id can be a key too (user_id uuid primary key).
   const columns = await rows<{ table: string; column: string; key: boolean }>(
     `select n.nspname || '.' || c.relname as table, a.attname::text as column,
-       exists (
+       a.attname = 'id' and exists (
          select 1 from pg_constraint p
-         where p.conrelid = c.oid and p.contype = 'p' and a.attnum = any (p.conkey)
+         where p.conrelid = c.oid and p.contype = 'p' and p.conkey = array[a.attnum]
        ) as key
      from pg_attribute a
      join pg_class c on c.oid = a.attrelid
      join pg_namespace n on n.oid = c.relnamespace
-     where c.relkind in ('r', 'p') and n.nspname = any ($1)
+     where c.relkind in ('r', 'p', 'v', 'm') and ${ACCOUNT_SCHEMAS_SQL}
        and a.attnum > 0 and not a.attisdropped
        and a.atttypid in ('uuid'::regtype, 'uuid[]'::regtype)`,
-    [ACCOUNT_SCHEMAS],
   );
   for (const { table, column, key } of columns) {
     const rule = listed[table];
@@ -221,7 +255,8 @@ async function audit(
         [table],
       )
     )[0].on;
-    if (!secured) problems.push(`${table} has no row level security`);
+    if (!secured && !views.includes(table))
+      problems.push(`${table} has no row level security`);
     if (readers === "own") {
       if (using.length === 0)
         problems.push(`${table} has no policy to read by`);
@@ -244,10 +279,14 @@ async function audit(
           `${table} is read through ${readers.via}, which does not hide from blocked people`,
         );
       const name = readers.via.replace(/^public\./, "");
+      const own = table.replace(/^public\./, "");
       if (using.length === 0)
         problems.push(`${table} has no policy to read by`);
       for (const expression of using)
-        if (!new RegExp(`FROM ${name}\\b`).test(expression))
+        if (
+          !new RegExp(`FROM ${name}\\b`).test(expression) ||
+          !expression.includes(`= ${own}.`)
+        )
           problems.push(
             `${table} is listed as read through ${readers.via}, but a policy does not look there`,
           );
@@ -327,6 +366,49 @@ async function main() {
     );
     assert.deepEqual(problems, [
       "public.bookmarks.user_id is forgotten with its person; list it so",
+    ]);
+  });
+
+  await check(
+    "a link to rows that go with a person, that would hold them, stops it",
+    async () => {
+      const problems = await caught(
+        `create table public.post_notes (
+           post_id uuid references public.posts (id),
+           note text
+         );
+         alter table public.post_notes enable row level security;`,
+        { "public.post_notes": { people: {}, readers: "nobody" } },
+      );
+      assert.deepEqual(problems, [
+        "public.post_notes.post_id would stop an account from being deleted: public.posts rows go with their person, so make it on delete cascade or set null",
+      ]);
+    },
+  );
+
+  await check(
+    "a person's id kept as a key, with no link, stops it",
+    async () => {
+      const problems = await caught(
+        `create table public.prefs (user_id uuid primary key, theme text);
+       alter table public.prefs enable row level security;
+       create policy own on public.prefs for select using (user_id = auth.uid());`,
+        { "public.prefs": { people: {}, readers: "own" } },
+      );
+      assert.deepEqual(problems, [
+        "public.prefs.user_id may hold a person's id: give it a foreign key, or list it",
+      ]);
+    },
+  );
+
+  await check("a table in a new schema has to be listed too", async () => {
+    const problems = await caught(
+      `create schema audit;
+       create table audit.events (id uuid primary key, note text);`,
+      {},
+    );
+    assert.deepEqual(problems, [
+      "audit.events is not in tests/fixtures/account-tables.ts",
     ]);
   });
 
