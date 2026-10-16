@@ -236,14 +236,14 @@
 .theme-ochre {
   --theme: #a18b69;
   --theme-light: #e9dfca;
-  --theme-deep: #7b6240;
+  --theme-deep: #735a39;
   --theme-pale: #f2edde;
   --theme-fill: #7b6240;
 }
 .theme-rose {
   --theme: #a08278;
   --theme-light: #eadbd3;
-  --theme-deep: #805f52;
+  --theme-deep: #755548;
   --theme-pale: #f3eae2;
   --theme-fill: #805f52;
 }

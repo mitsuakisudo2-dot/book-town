@@ -316,10 +316,20 @@ mark.hidden-words.is-open {
   box-shadow:
     0 6px 18px color-mix(in srgb, var(--shade) 21%, transparent),
     inset 0 0 0 3px color-mix(in srgb, var(--on-dark) 11%, transparent);
-  transition: transform 0.15s;
+  transition:
+    transform 0.15s,
+    opacity 0.2s,
+    visibility 0.2s;
 }
 .compose-fab:hover {
   transform: translateY(-2px) rotate(-6deg);
+}
+/* Aside while Home's doors lie under it (Entrances.tsx). It keeps its place,
+   so the page can tell when they have moved up from under it. */
+:root[data-fab-aside] .compose-fab {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 .compose-fab:focus-visible {
   outline: 3px solid var(--green);

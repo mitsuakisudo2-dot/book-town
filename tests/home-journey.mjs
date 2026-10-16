@@ -2335,6 +2335,52 @@ try {
       }),
   );
   await check(
+    "On a short phone, 投稿 steps aside while Home's doors lie under it, and is back once they move up; on a tall one it stays",
+    async () => {
+      for (const [width, height] of [
+        [320, 568],
+        [390, 568],
+        [390, 844],
+      ])
+        await withPage({ viewport: { width, height } }, async () => {
+          await go("/");
+          const fab = page.locator(".compose-fab");
+          const doors = page.locator(".home-entrances");
+          await expect(doors.locator("button, a")).toHaveCount(4);
+          const under = async () => {
+            const [a, b] = await Promise.all([
+              doors.boundingBox(),
+              fab.boundingBox(),
+            ]);
+            return a.y + a.height > b.y - 8 && a.y < b.y + b.height;
+          };
+          if (!(await under())) {
+            await expect(fab, `${width}x${height}`).toBeVisible();
+            return;
+          }
+          await expect(fab, `${width}x${height}`).toBeHidden();
+          // The door it stood on takes the finger.
+          await doors.getByText("本屋を開く").tap({ trial: true });
+          // The page's clock is held: the frames after each scroll are let
+          // run while waiting.
+          const settled = async () => {
+            await page.clock.runFor(50);
+            return page.evaluate(() =>
+              document.documentElement.hasAttribute("data-fab-aside"),
+            );
+          };
+          await page.evaluate(() => scrollTo(0, 200));
+          await expect.poll(settled).toBe(false);
+          expect(await under()).toBe(false);
+          await expect(fab).toBeVisible();
+          await page.evaluate(() => scrollTo(0, 0));
+          await expect.poll(settled).toBe(true);
+          await expect(fab).toBeHidden();
+        });
+    },
+  );
+
+  await check(
     "With less motion asked for, the bottom bar's mark does not slide",
     () =>
       withPage({ reducedMotion: "reduce" }, async () => {
