@@ -854,29 +854,53 @@ export type Database = {
       };
       reader_settings: {
         Row: {
+          encounters_audience: string;
           library_hidden: string[];
+          likes_audience: string;
           likes_in_library: boolean;
           memo_hint: boolean;
+          records_audience: string;
+          saves_audience: string;
+          shelves_audience: string;
           spoiler_display: string;
+          stats_audience: string;
+          status_audience: string;
+          status_detail: string;
           updated_at: string;
           user_id: string;
           wanted_clears_on_status: boolean;
         };
         ComputedFields: never;
         Insert: {
+          encounters_audience?: string;
           library_hidden?: string[];
+          likes_audience?: string;
           likes_in_library?: boolean;
           memo_hint?: boolean;
+          records_audience?: string;
+          saves_audience?: string;
+          shelves_audience?: string;
           spoiler_display?: string;
+          stats_audience?: string;
+          status_audience?: string;
+          status_detail?: string;
           updated_at?: string;
           user_id: string;
           wanted_clears_on_status?: boolean;
         };
         Update: {
+          encounters_audience?: string;
           library_hidden?: string[];
+          likes_audience?: string;
           likes_in_library?: boolean;
           memo_hint?: boolean;
+          records_audience?: string;
+          saves_audience?: string;
+          shelves_audience?: string;
           spoiler_display?: string;
+          stats_audience?: string;
+          status_audience?: string;
+          status_detail?: string;
           updated_at?: string;
           user_id?: string;
           wanted_clears_on_status?: boolean;
@@ -893,6 +917,7 @@ export type Database = {
       };
       reading_entries: {
         Row: {
+          audience: string;
           body: string;
           book_id: string;
           created_at: string;
@@ -906,6 +931,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          audience: string;
           body?: string;
           book_id: string;
           created_at?: string;
@@ -918,6 +944,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          audience?: string;
           body?: string;
           book_id?: string;
           created_at?: string;

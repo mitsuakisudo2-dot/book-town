@@ -9,6 +9,7 @@ import {
 } from "./kept-draft";
 import { DRAFT_OWNER } from "./draft-owner";
 import { FEELINGS, RECORD_NOTE_MAX_LENGTH, type Feeling } from "./types";
+import { isAudience, type Audience } from "./visibility";
 
 // How a finished book felt, kept while it is chosen and written: a tap outside
 // the sheet, Escape, 戻る or あとで leave it for the next time the sheet opens.
@@ -20,7 +21,7 @@ export type RecordWork = {
   feelings: Feeling[];
   note: string;
   spoiler: boolean;
-  isPublic: boolean;
+  audience: Audience;
 };
 
 /**
@@ -60,7 +61,7 @@ export function recordChanges(
     changes.feelings = next.feelings;
   if (next.note !== base.note) changes.note = next.note;
   if (next.spoiler !== base.spoiler) changes.spoiler = next.spoiler;
-  if (next.isPublic !== base.isPublic) changes.isPublic = next.isPublic;
+  if (next.audience !== base.audience) changes.audience = next.audience;
   return Object.keys(changes).length ? changes : null;
 }
 
@@ -82,9 +83,16 @@ export function readRecordChanges(value: unknown): RecordChanges | null {
     } else if (name === "note") {
       if (!keptText(entry, RECORD_NOTE_MAX_LENGTH)) return null;
       changes.note = entry;
-    } else if (name === "spoiler" || name === "isPublic") {
+    } else if (name === "spoiler") {
       if (typeof entry !== "boolean") return null;
-      changes[name] = entry;
+      changes.spoiler = entry;
+    } else if (name === "audience") {
+      if (!isAudience(entry)) return null;
+      changes.audience = entry;
+    } else if (name === "isPublic") {
+      // Kept before 見せる範囲, when a record was public or not.
+      if (typeof entry !== "boolean") return null;
+      changes.audience ??= entry ? "everyone" : "private";
     } else return null;
   }
   return Object.keys(changes).length ? changes : null;

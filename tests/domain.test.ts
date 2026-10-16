@@ -255,7 +255,7 @@ check("finishing a book keeps how it felt, in the offered order", () => {
     feelings: ["talk", "cried", "cried"],
     note: "  時間の花  ",
     spoiler: true,
-    isPublic: true,
+    audience: "everyone",
   });
   assert.ok(id);
   const record = fresh
@@ -266,19 +266,19 @@ check("finishing a book keeps how it felt, in the offered order", () => {
   assert.equal(record?.readerId, "me");
   assert.ok(fresh.getSnapshot().finishedBooks.includes("momo"));
   // A spoiler needs words to hide; an unknown book or a long note is refused.
-  fresh.actions.updateRecord(id!, { note: "", isPublic: false });
+  fresh.actions.updateRecord(id!, { note: "", audience: "private" });
   const changed = fresh
     .getSnapshot()
     .readingRecords.find((entry) => entry.id === id);
   assert.equal(changed?.spoiler, false);
-  assert.equal(changed?.isPublic, false);
+  assert.equal(changed?.audience, "private");
   assert.equal(
     fresh.actions.recordReading({
       bookId: "no-such-book",
       feelings: [],
       note: "",
       spoiler: false,
-      isPublic: true,
+      audience: "everyone",
     }),
     null,
   );
@@ -288,7 +288,7 @@ check("finishing a book keeps how it felt, in the offered order", () => {
       feelings: [],
       note: "あ".repeat(256),
       spoiler: false,
-      isPublic: true,
+      audience: "everyone",
     }),
     null,
   );
@@ -311,13 +311,13 @@ check(
   () => {
     const repo = createMemoryRepository();
     const first = createTownStore(repo);
-    first.actions.setReadingPublic(false);
+    first.actions.setVisibility("records", "everyone");
     const id = first.actions.recordReading({
       bookId: "solaris",
       feelings: ["quiet"],
       note: "海",
       spoiler: false,
-      isPublic: false,
+      audience: "private",
     });
     const saved = JSON.parse(serializeTown(first.getSnapshot()));
     assert.ok(
@@ -334,10 +334,13 @@ check(
       (entry) => entry.readerId === "me",
     );
     assert.deepEqual(
-      own.map((entry) => [entry.id, entry.feelings, entry.isPublic]),
-      [[id, ["quiet"], false]],
+      own.map((entry) => [entry.id, entry.feelings, entry.audience]),
+      [[id, ["quiet"], "private"]],
     );
-    assert.equal(loaded.state.settings.readingPublic, false);
+    assert.deepEqual(loaded.state.settings.visibility.records, {
+      audience: "everyone",
+      detail: "content",
+    });
   },
 );
 
@@ -348,7 +351,7 @@ check("the book page shows feelings as words and who wants to talk", () => {
     feelings: ["quiet", "talk"],
     note: "",
     spoiler: false,
-    isPublic: false,
+    audience: "private",
   });
   const state = town.getSnapshot();
   // Demo readers chose quiet, again, talk / sleepless, shaken, talk.
@@ -361,7 +364,7 @@ check("the book page shows feelings as words and who wants to talk", () => {
     talkersOf(state, "solaris").map((reader) => reader.id),
     ["r-haru", "r-nagi"],
   );
-  assert.equal(ownRecordFor(state, "solaris")?.isPublic, false);
+  assert.equal(ownRecordFor(state, "solaris")?.audience, "private");
   assert.deepEqual(
     recordsOf(state, "r-nagi").map((entry) => entry.bookId),
     ["solaris"],
@@ -404,7 +407,7 @@ check("the town's finished books and feelings show without any zero", () => {
     feelings: [],
     note: "",
     spoiler: false,
-    isPublic: false,
+    audience: "private",
   });
   const finished = notificationsFor(town.getSnapshot()).filter((notice) =>
     notice.id.startsWith("finished:"),
@@ -1895,7 +1898,7 @@ check("the writer learns who liked their post and how many times", () => {
 });
 
 check("records start private: saving one does not publish it", () => {
-  assert.equal(seedState.settings.readingPublic, false);
+  assert.equal(seedState.settings.visibility.records.audience, "private");
   assert.equal(seedState.settings.spoilerDisplay, "fold_possible");
   const town = createTownStore(createMemoryRepository());
   const state = town.getSnapshot();
@@ -1905,21 +1908,21 @@ check("records start private: saving one does not publish it", () => {
     feelings: ["warm"],
     note: "",
     spoiler: false,
-    isPublic: state.settings.readingPublic,
+    audience: state.settings.visibility.records.audience,
   })!;
   const record = () =>
     town.getSnapshot().readingRecords.find((entry) => entry.id === id)!;
-  assert.equal(record().isPublic, false);
+  assert.equal(record().audience, "private");
   assert.ok(
     !recordsOf({ ...town.getSnapshot(), me: state.me }, ME_ID).every(
-      (entry) => entry.isPublic,
+      (entry) => entry.audience === "everyone",
     ),
   );
   // Publishing is its own step, and taking it back is one more.
-  town.actions.updateRecord(id, { isPublic: true });
-  assert.equal(record().isPublic, true);
-  town.actions.updateRecord(id, { isPublic: false });
-  assert.equal(record().isPublic, false);
+  town.actions.updateRecord(id, { audience: "everyone" });
+  assert.equal(record().audience, "everyone");
+  town.actions.updateRecord(id, { audience: "private" });
+  assert.equal(record().audience, "private");
   assert.equal(record().feelings[0], "warm");
 });
 
@@ -2434,10 +2437,12 @@ check("the spoiler setting and filed reports are kept as the store's", () => {
     "fold_possible",
   );
   // A reader who chose 公開 in this browser before keeps that choice.
+  delete saved.data.settings.visibility;
   saved.data.settings.readingPublic = true;
   assert.equal(
-    deserializeTown(JSON.stringify(saved)).state.settings.readingPublic,
-    true,
+    deserializeTown(JSON.stringify(saved)).state.settings.visibility.records
+      .audience,
+    "everyone",
   );
   town.actions.noteReport(filed({}));
   town.actions.noteReport(filed({ status: "checking" }));
@@ -2480,7 +2485,7 @@ check("words are not taken while the town loads or cannot be kept", () => {
       feelings: ["warm"],
       note: "",
       spoiler: false,
-      isPublic: false,
+      audience: "private",
     }),
     null,
   );
@@ -2516,7 +2521,7 @@ check("words are not taken while the town loads or cannot be kept", () => {
     feelings: ["warm"],
     note: "",
     spoiler: false,
-    isPublic: false,
+    audience: "private",
   });
   assert.ok(recordId);
   assert.equal(

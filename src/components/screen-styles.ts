@@ -18,6 +18,7 @@ import "./profile.css";
 import "./reading.css";
 import "./poster.css";
 import "./records.css";
+import "./visibility.css";
 import "./book-in-hand.css";
 import "./street.css";
 import "./home/home.css";

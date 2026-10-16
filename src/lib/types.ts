@@ -1,5 +1,11 @@
 import type { Poster, PosterDraft } from "./posters";
 import type { FiledReport } from "./supabase/reports";
+import type {
+  Audience,
+  Choice,
+  Visibilities,
+  VisibilityKind,
+} from "./visibility";
 
 export type { FiledReport };
 
@@ -210,8 +216,11 @@ export type SpoilerDisplay = (typeof SPOILER_DISPLAYS)[number];
 
 export interface Settings {
   composeIcon: ComposeIcon;
-  /** Whether new reading records start public. Chosen when signing up; starts false (自分だけ). */
-  readingPublic: boolean;
+  /**
+   * 見せる範囲: each kind's starting choice (src/lib/visibility.ts). Records
+   * start 自分だけ, chosen again when signing up.
+   */
+  visibility: Visibilities;
   /** 「ネタバレの表示」: the reader's own. */
   spoilerDisplay: SpoilerDisplay;
 }
@@ -271,14 +280,14 @@ export interface ReadingRecord {
   note: string;
   /** The note gives the story away; others open it on purpose. */
   spoiler: boolean;
-  /** Seen by others, or kept to the reader. */
-  isPublic: boolean;
+  /** Who may read it besides the reader (見せる範囲). */
+  audience: Audience;
   createdAt: string;
 }
 
 export type RecordDraft = Pick<
   ReadingRecord,
-  "bookId" | "feelings" | "note" | "spoiler" | "isPublic"
+  "bookId" | "feelings" | "note" | "spoiler" | "audience"
 >;
 
 export interface NewBook {
@@ -479,7 +488,11 @@ export interface TownActions {
     patch: Partial<Omit<RecordDraft, "bookId">>,
   ): boolean;
   deleteRecord(recordId: string): void;
-  setReadingPublic(value: boolean): void;
+  /**
+   * A kind's starting choice. Narrowing narrows what was kept before at
+   * once; widening widens it only when `past` (「これまでの分も広げますか？」).
+   */
+  setVisibility(kind: VisibilityKind, choice: Choice, past?: boolean): void;
   setSpoilerDisplay(value: SpoilerDisplay): void;
   /** Remembers a report just filed (fileReport writes it; the sync does not). */
   noteReport(report: FiledReport): void;

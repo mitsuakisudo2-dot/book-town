@@ -48,6 +48,63 @@ import { withoutReaders } from "./blocks";
 import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
 import { filedReportFrom } from "./supabase/reports";
 import type { Arrived } from "./arrived";
+import {
+  cleanVisibilities,
+  isAudience,
+  shownToOthers,
+  VISIBILITY_KINDS,
+  type Audience,
+  type Visibilities,
+} from "./visibility";
+
+// 見せる範囲 in the database (supabase/migrations/*_visibility.sql): each
+// kind's starting choice is a column <kind>_audience of reader_settings, and
+// 読書の状態 also has status_detail.
+type SettingsVisibilityColumn =
+  `${(typeof VISIBILITY_KINDS)[number]}_audience` | "status_detail";
+
+/** The starting choices a settings row holds, the defaults for the rest. */
+function visibilitiesFromRow(
+  row: Partial<Tables<"reader_settings">> | null,
+): Visibilities {
+  return cleanVisibilities(
+    Object.fromEntries(
+      VISIBILITY_KINDS.map((kind) => [
+        kind,
+        {
+          audience: row?.[`${kind}_audience`],
+          detail: kind === "status" ? row?.status_detail : undefined,
+        },
+      ]),
+    ),
+  );
+}
+
+/** The settings columns whose starting choice changed. */
+function visibilityChanges(
+  base: Visibilities,
+  next: Visibilities,
+): Partial<Record<SettingsVisibilityColumn, string>> {
+  const changed: Partial<Record<SettingsVisibilityColumn, string>> = {};
+  for (const kind of VISIBILITY_KINDS) {
+    if (next[kind].audience !== base[kind].audience)
+      changed[`${kind}_audience`] = next[kind].audience;
+    if (kind === "status" && next.status.detail !== base.status.detail)
+      changed.status_detail = next.status.detail;
+  }
+  return changed;
+}
+
+/**
+ * Who may read a record. A database a migration behind sends only
+ * is_public, which meant the same as everyone.
+ */
+function recordAudience(
+  row: Pick<Tables<"reading_entries">, "is_public"> & { audience?: string },
+): Audience {
+  if (isAudience(row.audience)) return row.audience;
+  return row.is_public ? "everyone" : "private";
+}
 
 /**
  * The signed-in town, translated between database rows and the TownState the
@@ -137,8 +194,11 @@ export interface RemoteRows {
     | "created_at"
     | "status_at"
   >[];
-  /** The person's own settings; none until they change one. */
-  readerSettings: Pick<Tables<"reader_settings">, "spoiler_display"> | null;
+  /**
+   * The person's own settings; none until they change one. Read whole, so a
+   * database a column behind still loads the town (the defaults stand in).
+   */
+  readerSettings: Partial<Tables<"reader_settings">> | null;
 }
 
 const REVIEW_KINDS: ReviewKind[] = ["post", "shop", "profile", "poster"];
@@ -588,14 +648,16 @@ export function townFromRows(
         (row) =>
           row.kind === "finished" &&
           bookIds.has(row.book_id) &&
-          (row.user_id === userId || (row.is_public && known.has(row.user_id))),
+          // Others' come only as far as their readers let them (the policy).
+          (row.user_id === userId ||
+            (shownToOthers(recordAudience(row)) && known.has(row.user_id))),
       )
       .flatMap((row): ReadingRecord[] => {
         const fields = cleanRecord({
           feelings: row.feelings as Feeling[],
           note: row.body,
           spoiler: row.spoiler,
-          isPublic: row.is_public,
+          audience: recordAudience(row),
         });
         return fields
           ? [
@@ -616,7 +678,7 @@ export function townFromRows(
       )
         ? (ownProfile?.compose_icon as ComposeIcon)
         : "pen",
-      readingPublic: ownProfile?.reading_visibility === "public",
+      visibility: visibilitiesFromRow(rows.readerSettings),
       spoilerDisplay: SPOILER_DISPLAYS.includes(
         rows.readerSettings?.spoiler_display as SpoilerDisplay,
       )
@@ -820,13 +882,7 @@ export type Write =
       patch: Partial<
         Pick<
           Tables<"profiles">,
-          | "handle"
-          | "name"
-          | "bio"
-          | "links"
-          | "color"
-          | "compose_icon"
-          | "reading_visibility"
+          "handle" | "name" | "bio" | "links" | "color" | "compose_icon"
         >
       >;
     }
@@ -850,14 +906,22 @@ export type Write =
   | {
       kind: "update-record";
       id: string;
-      patch: Pick<
-        Tables<"reading_entries">,
-        "body" | "feelings" | "spoiler" | "is_public"
+      patch: Partial<
+        Pick<
+          Tables<"reading_entries">,
+          "body" | "feelings" | "spoiler" | "audience"
+        >
       >;
     }
   | {
       kind: "reader-settings";
-      row: Pick<TablesInsert<"reader_settings">, "user_id" | "spoiler_display">;
+      row: Pick<TablesInsert<"reader_settings">, "user_id"> &
+        Partial<
+          Pick<
+            TablesInsert<"reader_settings">,
+            "spoiler_display" | SettingsVisibilityColumn
+          >
+        >;
     }
   | { kind: "delete-posters"; ids: string[] }
   | { kind: "posters"; rows: TablesInsert<"posters">[] }
@@ -981,18 +1045,24 @@ export function planWrites(
     profile.links = next.me.links ?? [];
   if (next.settings.composeIcon !== base.settings.composeIcon)
     profile.compose_icon = next.settings.composeIcon;
-  if (next.settings.readingPublic !== base.settings.readingPublic)
-    profile.reading_visibility = next.settings.readingPublic
-      ? "public"
-      : "private";
   if (Object.keys(profile).length)
     writes.push({ kind: "profile", patch: profile });
   // The reader's own settings; folds and reports are never written from here.
+  // Only the columns changed: an upsert sets every column it sends, and a
+  // device a choice behind must not undo one made elsewhere. Sent before the
+  // records, so a narrower starting choice (which the database applies to
+  // the records kept before) never narrows a record widened after it.
+  const settingsRow: Extract<Write, { kind: "reader-settings" }>["row"] = {
+    user_id: user,
+  };
   if (next.settings.spoilerDisplay !== base.settings.spoilerDisplay)
-    writes.push({
-      kind: "reader-settings",
-      row: { user_id: user, spoiler_display: next.settings.spoilerDisplay },
-    });
+    settingsRow.spoiler_display = next.settings.spoilerDisplay;
+  Object.assign(
+    settingsRow,
+    visibilityChanges(base.settings.visibility, next.settings.visibility),
+  );
+  if (Object.keys(settingsRow).length > 1)
+    writes.push({ kind: "reader-settings", row: settingsRow });
 
   if (
     !sameJson(next.me.lifeNine, base.me.lifeNine) ||
@@ -1111,11 +1181,13 @@ export function planWrites(
   );
   if (droppedRecords.length)
     writes.push({ kind: "delete-records", ids: droppedRecords });
+  // The new app sends audience and never is_public, which the database
+  // keeps equal to it for apps from before.
   const fields = (record: ReadingRecord) => ({
     body: record.note,
     feelings: record.feelings,
     spoiler: record.spoiler,
-    is_public: record.isPublic,
+    audience: record.audience,
   });
   const newRecords = [...nextRecords.values()].filter(
     (record) => !baseRecords.has(record.id),
@@ -1131,14 +1203,20 @@ export function planWrites(
         ...fields(record),
       })),
     });
+  // Only the fields changed, so a device a change behind never puts back a
+  // record's audience narrowed elsewhere.
   for (const record of nextRecords.values()) {
     const before = baseRecords.get(record.id);
-    if (before && !sameJson(fields(before), fields(record)))
-      writes.push({
-        kind: "update-record",
-        id: record.id,
-        patch: fields(record),
-      });
+    if (!before) continue;
+    const was = fields(before);
+    const now = fields(record);
+    const patch = Object.fromEntries(
+      (Object.keys(now) as (keyof typeof now)[])
+        .filter((key) => !sameJson(was[key], now[key]))
+        .map((key) => [key, now[key]]),
+    );
+    if (Object.keys(patch).length)
+      writes.push({ kind: "update-record", id: record.id, patch });
   }
 
   const ownPosters = (state: TownState) =>
@@ -1323,7 +1401,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     readingRecords: [],
     settings: {
       composeIcon: "pen",
-      readingPublic: false,
+      visibility: cleanVisibilities(null),
       spoilerDisplay: "fold_possible",
     },
     seenNotifications: [],

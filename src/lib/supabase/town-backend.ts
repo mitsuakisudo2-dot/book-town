@@ -204,12 +204,7 @@ export async function loadTown(
         .order("created_at", { ascending: false })
         .limit(200),
     ),
-    all(
-      client
-        .from("reader_settings")
-        .select("spoiler_display")
-        .eq("user_id", userId),
-    ),
+    all(client.from("reader_settings").select("*").eq("user_id", userId)),
     // The person's own posters, drafts too, and others' put up.
     all(
       client

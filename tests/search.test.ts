@@ -913,7 +913,7 @@ async function main() {
         id,
         readerId,
         bookId,
-        isPublic,
+        audience: isPublic ? ("everyone" as const) : ("private" as const),
       });
       state.readingRecords.push(
         record("t-public", "r-nagi", idOf("public record"), true),
