@@ -639,7 +639,7 @@ try {
         await expect(toast).toContainText("自分だけにしました");
         expect((await own()).audience).toBe("private");
         // 見せる範囲 in 設定: widening asks once about the records kept so
-        // far, the narrower answer under the finger; narrowing takes them too.
+        // far; narrowing takes them too.
         const setting = async (choice) => {
           await go("/profiles/me/");
           await page.getByRole("button", { name: "設定" }).click();
@@ -647,18 +647,35 @@ try {
             .getByRole("dialog", { name: "設定" })
             .getByRole("group", { name: "読み終えた本の記録" })
             .getByLabel(choice)
-            .check();
+            // A wider choice waits on the question, so the radio is clicked.
+            .click();
         };
         const stored = () =>
           page.evaluate(
             () => JSON.parse(localStorage.getItem("book-town-v1")).data,
           );
-        const question = page.getByRole("dialog", { name: "見せる範囲" });
+        const question = page
+          .getByRole("dialog", { name: "設定" })
+          .getByRole("group", { name: /^今までの記録も公開にするか/ });
         await setting("公開");
         await expect(question).toContainText("今までの記録も公開にしますか？");
+        // Nothing changes until it is answered; やめる leaves it all as it was.
         await expect(
-          question.getByRole("button", { name: "これからの記録だけ" }),
-        ).toBeFocused();
+          page
+            .getByRole("dialog", { name: "設定" })
+            .getByRole("group", { name: "読み終えた本の記録" })
+            .getByLabel("自分だけ"),
+        ).toBeChecked();
+        await question.getByRole("button", { name: "やめる" }).click();
+        await expect(question).toHaveCount(0);
+        expect((await stored()).settings.visibility.records.audience).toBe(
+          "private",
+        );
+        await page
+          .getByRole("dialog", { name: "設定" })
+          .getByRole("group", { name: "読み終えた本の記録" })
+          .getByLabel("公開")
+          .click();
         await noOverflow(`${label} visibility question`);
         await page.screenshot({
           caret: "initial",

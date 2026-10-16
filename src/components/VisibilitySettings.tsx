@@ -15,7 +15,6 @@ import {
   type Choice,
   type VisibilityKind,
 } from "../lib/visibility";
-import { Modal } from "./ui";
 
 /**
  * The kinds shown in 設定 now. Only reading records reach others today; the
@@ -41,6 +40,10 @@ const CHOICE_HINTS: Record<Choice, string> = {
   private: "ほかの人には見えません",
 };
 
+/** The question in sight as it comes, 設定 being long on a phone. */
+const showQuestion = (box: HTMLDivElement | null) =>
+  box?.scrollIntoView({ block: "nearest" });
+
 /** How many of the reader's own things would widen with the past. */
 function pastAt(state: TownState, kind: VisibilityKind): number {
   if (kind !== "records") return 0;
@@ -53,8 +56,9 @@ function pastAt(state: TownState, kind: VisibilityKind): number {
 /**
  * 見せる範囲 in 設定: each kind's starting choice. A narrower one is taken
  * at once, the reader's earlier things with it (said in the toast); a wider
- * one asks once whether the earlier ones widen too
- * (「これまでの分も広げますか？」), and only when there are some.
+ * one asks, under the choices, whether the earlier ones widen too
+ * (「これまでの分も広げますか？」), and only when there are some. Until it
+ * is answered nothing changes.
  */
 export function VisibilitySettings({
   state,
@@ -103,9 +107,11 @@ export function VisibilitySettings({
     <>
       {SHOWN_KINDS.map((kind) => {
         const current = choiceOf(state.settings.visibility[kind]);
+        const words = KIND_WORDS[kind];
+        const asked = asking?.kind === kind ? asking.choice : null;
         return (
           <fieldset key={kind} className="record-visibility visibility-choices">
-            <legend>{KIND_WORDS[kind].label}</legend>
+            <legend>{words.label}</legend>
             {choicesFor(kind).map((choice) => (
               <label key={choice}>
                 <input
@@ -120,51 +126,56 @@ export function VisibilitySettings({
                 </span>
               </label>
             ))}
-            <p className="palette-note">
-              狭めると、今までの{KIND_WORDS[kind].things}
-              もすぐ狭まります。1つずつ変えることもできます。
-            </p>
+            {asked ? (
+              // Asked here, in 設定 itself: a dialog over 設定 would be a
+              // second layer for one question.
+              <div
+                className="visibility-question"
+                role="group"
+                aria-label={`今までの${words.things}も${CHOICE_NAMES[asked]}にするか`}
+                ref={showQuestion}
+              >
+                <p className="visibility-question-title">
+                  今までの{words.things}も{CHOICE_NAMES[asked]}にしますか？
+                </p>
+                <p className="visibility-question-words">
+                  これからの{words.label}は{CHOICE_NAMES[asked]}
+                  になります。1つずつ別の範囲にした{words.things}
+                  は、そのままです。
+                </p>
+                <div className="btns">
+                  <button
+                    type="button"
+                    className="btn fill"
+                    onClick={() => answer(true)}
+                  >
+                    今までの{words.things}も{CHOICE_NAMES[asked]}にする
+                  </button>
+                  <button
+                    type="button"
+                    className="btn soft"
+                    onClick={() => answer(false)}
+                  >
+                    これからの{words.things}だけ
+                  </button>
+                  <button
+                    type="button"
+                    className="btn quiet"
+                    onClick={() => setAsking(null)}
+                  >
+                    やめる
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="palette-note">
+                狭めると、今までの{words.things}
+                もすぐ狭まります。1つずつ変えることもできます。
+              </p>
+            )}
           </fieldset>
         );
       })}
-      {asking && (
-        <Modal title="見せる範囲" onClose={() => setAsking(null)}>
-          <div
-            className="visibility-question"
-            role="group"
-            aria-label="今までの分も広げるか"
-          >
-            <p className="visibility-question-title">
-              今までの{KIND_WORDS[asking.kind].things}も
-              {CHOICE_NAMES[asking.choice]}にしますか？
-            </p>
-            <p className="visibility-question-words">
-              これからの{KIND_WORDS[asking.kind].label}は
-              {CHOICE_NAMES[asking.choice]}になります。1つずつ別の範囲にした
-              {KIND_WORDS[asking.kind].things}は、そのままです。
-            </p>
-            <div className="btns">
-              <button
-                type="button"
-                className="btn fill"
-                onClick={() => answer(true)}
-              >
-                今までの{KIND_WORDS[asking.kind].things}も
-                {CHOICE_NAMES[asking.choice]}にする
-              </button>
-              {/* The narrower answer waits under the finger. */}
-              <button
-                type="button"
-                className="btn quiet"
-                autoFocus
-                onClick={() => answer(false)}
-              >
-                これからの{KIND_WORDS[asking.kind].things}だけ
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </>
   );
 }
