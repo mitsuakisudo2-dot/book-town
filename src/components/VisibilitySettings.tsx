@@ -40,9 +40,14 @@ const CHOICE_HINTS: Record<Choice, string> = {
   private: "ほかの人には見えません",
 };
 
-/** The question in sight as it comes, 設定 being long on a phone. */
-const showQuestion = (box: HTMLDivElement | null) =>
-  box?.scrollIntoView({ block: "nearest" });
+/**
+ * The question in sight as it comes, 設定 being long on a phone, and read
+ * out: the focus goes to it.
+ */
+const showQuestion = (title: HTMLParagraphElement | null) => {
+  title?.scrollIntoView({ block: "nearest" });
+  title?.focus({ preventScroll: true });
+};
 
 /** How many of the reader's own things would widen with the past. */
 function pastAt(state: TownState, kind: VisibilityKind): number {
@@ -73,6 +78,16 @@ export function VisibilitySettings({
     kind: VisibilityKind;
     choice: Choice;
   } | null>(null);
+  // Where the focus goes back to once the question is answered: the choice
+  // now taken, not the page, the button pressed having gone.
+  const backToChoice = (kind: VisibilityKind) =>
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLInputElement>(
+          `input[name="visibility-${kind}"]:checked`,
+        )
+        ?.focus(),
+    );
 
   function choose(kind: VisibilityKind, choice: Choice) {
     const before = state.settings.visibility[kind];
@@ -96,6 +111,7 @@ export function VisibilitySettings({
     const name = CHOICE_NAMES[choice];
     setAsking(null);
     actions.setVisibility(kind, choice, past);
+    backToChoice(kind);
     notify(
       past
         ? `今までの${things}も${name}にしました`
@@ -117,7 +133,7 @@ export function VisibilitySettings({
                 <input
                   type="radio"
                   name={`visibility-${kind}`}
-                  checked={current === choice}
+                  checked={(asked ?? current) === choice}
                   onChange={() => choose(kind, choice)}
                 />
                 <span>
@@ -133,15 +149,19 @@ export function VisibilitySettings({
                 className="visibility-question"
                 role="group"
                 aria-label={`今までの${words.things}も${CHOICE_NAMES[asked]}にするか`}
-                ref={showQuestion}
               >
-                <p className="visibility-question-title">
+                <p
+                  className="visibility-question-title"
+                  tabIndex={-1}
+                  ref={showQuestion}
+                >
                   今までの{words.things}も{CHOICE_NAMES[asked]}にしますか？
                 </p>
                 <p className="visibility-question-words">
                   これからの{words.label}は{CHOICE_NAMES[asked]}
-                  になります。1つずつ別の範囲にした{words.things}
-                  は、そのままです。
+                  になります。今までの分も、と答えると、今
+                  {CHOICE_NAMES[current]}の{words.things}がすべて
+                  {CHOICE_NAMES[asked]}になります。
                 </p>
                 <div className="btns">
                   <button
@@ -161,7 +181,10 @@ export function VisibilitySettings({
                   <button
                     type="button"
                     className="btn quiet"
-                    onClick={() => setAsking(null)}
+                    onClick={() => {
+                      setAsking(null);
+                      backToChoice(kind);
+                    }}
                   >
                     やめる
                   </button>

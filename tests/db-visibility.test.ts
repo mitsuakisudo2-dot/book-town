@@ -390,6 +390,7 @@ async function main() {
         `insert into moderation_hides (target_kind, target_id) values ('profile', '${AKI}')`,
       );
       assert.deepEqual(await seen(BEN, AKI), []);
+      assert.equal(await readsBook(BEN, AKI_SECRET_BOOK), false);
       assert.deepEqual(await seen(null, AKI), []);
       assert.deepEqual(await seen(AKI, AKI), [AKI_OPEN, AKI_SECRET]);
       await db.exec("delete from moderation_hides");

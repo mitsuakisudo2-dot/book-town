@@ -931,7 +931,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
-          audience?: string;
+          audience: string;
           body?: string;
           book_id: string;
           created_at?: string;

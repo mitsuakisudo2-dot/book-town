@@ -659,15 +659,19 @@ try {
           .getByRole("group", { name: /^今までの記録も公開にするか/ });
         await setting("公開");
         await expect(question).toContainText("今までの記録も公開にしますか？");
-        // Nothing changes until it is answered; やめる leaves it all as it was.
+        // The question is read out where it comes. Nothing changes until it
+        // is answered; やめる leaves it all as it was, the focus on the choice.
+        await expect(
+          question.getByText("今までの記録も公開にしますか？"),
+        ).toBeFocused();
+        await question.getByRole("button", { name: "やめる" }).click();
+        await expect(question).toHaveCount(0);
         await expect(
           page
             .getByRole("dialog", { name: "設定" })
             .getByRole("group", { name: "読み終えた本の記録" })
             .getByLabel("自分だけ"),
-        ).toBeChecked();
-        await question.getByRole("button", { name: "やめる" }).click();
-        await expect(question).toHaveCount(0);
+        ).toBeFocused();
         expect((await stored()).settings.visibility.records.audience).toBe(
           "private",
         );
@@ -681,7 +685,9 @@ try {
           caret: "initial",
           path: path.join(output, `visibility-question-${viewport.width}.png`),
         });
-        await question.getByRole("button", { name: "これからの記録だけ" }).click();
+        await question
+          .getByRole("button", { name: "これからの記録だけ" })
+          .click();
         await expect(toast).toContainText(
           "これからの読み終えた本の記録は公開になります。今までの記録はそのままです",
         );
