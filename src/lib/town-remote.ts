@@ -101,6 +101,8 @@ export interface RemoteRows {
   /** Readers who stopped by the person's own shop in the 7 days before `at`. */
   ownShopVisitors: { count: number; at: string } | null;
   follows: Pick<Tables<"shop_follows">, "shop_id">[];
+  /** Whom the person blocked (only the blocker reads their blocks). */
+  blocks: Pick<Tables<"blocks">, "blocked_id">[];
   marks: Tables<"book_marks">[];
   posts: Tables<"posts">[];
   /** The person's own reactions, and other people's reactions to their posts. */
@@ -542,6 +544,14 @@ export function townFromRows(
         rows.follows.map((row) => row.shop_id).filter((id) => shopIds.has(id)),
       ),
     ],
+    // A blocked reader's profile stays readable, so the block can be lifted.
+    blocked: [
+      ...new Set(
+        rows.blocks
+          .map((row) => row.blocked_id)
+          .filter((id) => id !== userId && known.has(id)),
+      ),
+    ],
     ...lists,
     popReactions,
     posts,
@@ -858,6 +868,7 @@ const posterFields = (poster: Poster): PosterFields => ({
 
 export type RelationTable =
   | "shop_follows"
+  | "blocks"
   | "book_marks"
   | "pop_reactions"
   | "post_reactions"
@@ -880,6 +891,10 @@ function relations(state: TownState, ids: RemoteIds) {
     shop_follows: state.following.map((shop_id) => ({
       follower_id: user_id,
       shop_id: realShop(shop_id),
+    })),
+    blocks: state.blocked.map((blocked_id) => ({
+      blocker_id: user_id,
+      blocked_id,
     })),
     book_marks: MARK_KINDS.flatMap((kind) =>
       state[MARK_LISTS[kind]].map((book_id) => ({ user_id, book_id, kind })),
@@ -1183,7 +1198,8 @@ function withSampleRows(writes: Write[], user: string): Write[] {
     row.book_id ? { ...row, book_id: keep(row.book_id) } : row;
   const real = (row: Pair) =>
     (row.shop_id === undefined || isDatabaseId(row.shop_id)) &&
-    (row.post_id === undefined || isDatabaseId(row.post_id));
+    (row.post_id === undefined || isDatabaseId(row.post_id)) &&
+    (row.blocked_id === undefined || isDatabaseId(row.blocked_id));
   const mapped = writes.flatMap((write): Write[] => {
     switch (write.kind) {
       case "nine":
@@ -1277,6 +1293,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     },
     ownShop: null,
     following: [],
+    blocked: [],
     wishlist: [],
     favorites: [],
     popReactions: {},
