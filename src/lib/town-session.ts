@@ -36,7 +36,10 @@ interface Backends<B> {
  * Keeps a store on the right backend as the account changes: the signed-in
  * person's data in Supabase, the public town to look at when nobody is signed
  * in, or the demo in this browser when the site has no Supabase. Waits while
- * the account is still being checked.
+ * the account is still being checked, until it knows whose session this is:
+ * that person's town starts loading while their profile is read, so the two
+ * answers come back together, not one after the other (docs/09 「速さ」). A
+ * session without a profile then moves on to the public town.
  */
 function followAccountWith<B>(
   switchTo: (backend: B) => void,
@@ -45,11 +48,17 @@ function followAccountWith<B>(
   let current = "";
   const sync = () => {
     const account = accountStore.getSnapshot();
-    if (account.status === "loading") return;
+    const user =
+      account.status === "signed-in"
+        ? account.user
+        : account.status === "loading"
+          ? account.pending
+          : undefined;
+    if (account.status === "loading" && !user) return;
     const client = getSupabase();
     const key =
-      account.status === "signed-in" && client
-        ? "account:" + account.user.id
+      user && client
+        ? "account:" + user.id
         : account.status === "unavailable"
           ? "unavailable"
           : client
@@ -57,8 +66,7 @@ function followAccountWith<B>(
             : "local";
     if (key === current) return;
     current = key;
-    if (account.status === "signed-in" && client)
-      switchTo(backends.account(client, account.user.id));
+    if (user && client) switchTo(backends.account(client, user.id));
     else if (account.status === "unavailable") switchTo(backends.unavailable());
     else if (client) switchTo(backends.visitor(client));
     else switchTo(backends.local());

@@ -43,7 +43,8 @@ import {
   ReaderAvatar,
 } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
-import { BookInHand, heldBookOf } from "./BookInHand";
+import { BookInHand, readBookInHandAhead } from "./book-in-hand-later";
+import { heldBookOf } from "../lib/held-book";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookReviews, FoldedWords } from "./Social";
 import { HomeView } from "./HomeView";
@@ -671,6 +672,7 @@ function ShopView({
     setSelected({ item, shelf });
     return true;
   }, Boolean(shop));
+  useEffect(() => readBookInHandAhead(), []);
   const publicShops = [
     ...state.shops,
     ...(state.ownShop ? [state.ownShop] : []),
