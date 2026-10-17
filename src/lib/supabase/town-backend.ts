@@ -141,6 +141,8 @@ async function readTown(
     readerSettings,
     posters,
     libraryEntries,
+    libraryShelves,
+    libraryShelfBooks,
   ] = await Promise.all([
     // In the order they joined.
     allRows<Tables<"profiles">>(
@@ -276,6 +278,27 @@ async function readTown(
         ["book_id"],
       ),
     ),
+    // The shelves the person made in their library, and their books.
+    own((id) =>
+      allRows(
+        (count) =>
+          client
+            .from("library_shelves")
+            .select("*", { count })
+            .eq("user_id", id),
+        ["id"],
+      ),
+    ),
+    own((id) =>
+      allRows(
+        (count) =>
+          client
+            .from("library_shelf_books")
+            .select("*", { count })
+            .eq("user_id", id),
+        ["shelf_id", "book_id"],
+      ),
+    ),
   ]);
 
   const ownShop =
@@ -337,6 +360,8 @@ async function readTown(
     blocks,
     marks,
     libraryEntries,
+    libraryShelves,
+    libraryShelfBooks,
     posts,
     postReactions,
     spoilerReports,
@@ -842,6 +867,41 @@ export async function applyWrite(
         );
       return;
     }
+    case "library-shelves": {
+      // New shelves in, ignoring one already there (an earlier try whose
+      // answer was lost); then what the reader changed of the others.
+      for (const some of chunks(write.rows, 500))
+        await settled(
+          client
+            .from("library_shelves")
+            .upsert(some, { onConflict: "id", ...ignore }),
+        );
+      for (const row of write.patches)
+        await settled(
+          client
+            .from("library_shelves")
+            .update(row.patch)
+            .eq("id", row.id)
+            .eq("user_id", ids.userId),
+        );
+      return;
+    }
+    case "shelf-books":
+      for (const row of write.remove)
+        await settled(
+          client
+            .from("library_shelf_books")
+            .delete()
+            .match({ user_id: ids.userId, ...row }),
+        );
+      for (const some of chunks(write.add, 500))
+        await settled(
+          client.from("library_shelf_books").upsert(some, {
+            onConflict: "user_id,shelf_id,book_id",
+            ...ignore,
+          }),
+        );
+      return;
     case "remove":
       for (const row of write.rows)
         await settled(client.from(write.table).delete().match(row));

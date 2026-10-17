@@ -2,6 +2,8 @@ import { isSampleId } from "./record-kind";
 import { posterBookIds, type Poster } from "./posters";
 import type { ShopLayout } from "./shop-layout";
 import {
+  LIBRARY_SHELF_NAME_MAX_LENGTH,
+  LIBRARY_SHELF_NOTE_MAX_LENGTH,
   ME_ID,
   type Book,
   type PopReaction,
@@ -1358,9 +1360,9 @@ export interface LibraryCounts {
   /** Works on each default shelf; a shelf with none is left out. */
   shelves: Record<string, number>;
   /**
-   * Works on each theme shelf not put away, and, while its view hides the
-   * books only wanted, how many of them it hides; a shelf or a number that
-   * would be 0 is left out.
+   * Works each theme shelf not put away shows, and, while its view hides
+   * the books only wanted, how many of them it hides; a shelf with no books
+   * at all, or a hidden number that would be 0, is left out.
    */
   themes: Record<string, { works: number; hiddenWanted?: number }>;
 }
@@ -1454,11 +1456,18 @@ export function countsOf(
     const members = shown.filter(({ e }) => on?.has(e.bookId));
     const n = works(members);
     if (n === 0) continue;
-    const hidden = shelf.showWanted
-      ? 0
-      : works(members.filter(({ e }) => wantedOnly(e)));
+    if (shelf.showWanted) {
+      counts.themes[id] = { works: n };
+      continue;
+    }
+    // The number is what the shelf shows; the books only wanted that it
+    // hides are counted apart.
+    const hidden = works(members.filter(({ e }) => wantedOnly(e)));
+    const showing = works(members.filter(({ e }) => !wantedOnly(e)));
     counts.themes[id] =
-      hidden > 0 ? { works: n, hiddenWanted: hidden } : { works: n };
+      hidden > 0
+        ? { works: showing, hiddenWanted: hidden }
+        : { works: showing };
   }
   return counts;
 }
@@ -1791,13 +1800,55 @@ const SHELF_POSITION = /^[0-9A-Za-z]{1,64}$/;
 /** Postgres' btrim takes off only spaces; JavaScript's trim would also take a full-width one. */
 const btrim = (text: string) => text.replace(/^ +| +$/g, "");
 
+const POSITION_DIGITS =
+  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+/**
+ * A position after every one given, as the database compares them (collate
+ * "C"): the time in base 62, so shelves made on two devices still come in
+ * the order they were made, or, when one given is later still (a clock
+ * behind), that one with a digit more.
+ */
+export function positionAfter(
+  positions: readonly string[],
+  at: string,
+): string {
+  let n = Math.max(0, Date.parse(at) || 0);
+  let key = "";
+  do {
+    key = POSITION_DIGITS[n % 62] + key;
+    n = Math.floor(n / 62);
+  } while (n > 0);
+  const last = positions.reduce<string | null>(
+    (max, p) => (max === null || p > max ? p : max),
+    null,
+  );
+  if (last === null || key > last) return key;
+  return last.length < 64 ? last + "V" : last;
+}
+
+/** The shelves the reader made, not put away, in their order. */
+export const liveShelves = (shelves: readonly LibraryShelf[]): LibraryShelf[] =>
+  shelves
+    .filter((shelf) => shelf.deletedAt === null)
+    .sort((a, b) =>
+      a.position === b.position
+        ? byId(a.id, b.id)
+        : a.position < b.position
+          ? -1
+          : 1,
+    );
+
 /** The first field of a theme shelf the database would refuse, or null. */
 export function validateShelf(shelf: LibraryShelf): string | null {
   if (!isName(shelf.id)) return "id";
   const name =
     typeof shelf.name === "string" ? codePoints(btrim(shelf.name)) : 0;
-  if (name < 1 || name > 40) return "name";
-  if (typeof shelf.note !== "string" || codePoints(shelf.note) > 500)
+  if (name < 1 || name > LIBRARY_SHELF_NAME_MAX_LENGTH) return "name";
+  if (
+    typeof shelf.note !== "string" ||
+    codePoints(shelf.note) > LIBRARY_SHELF_NOTE_MAX_LENGTH
+  )
     return "note";
   if (
     typeof shelf.position !== "string" ||

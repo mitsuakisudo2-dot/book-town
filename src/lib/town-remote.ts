@@ -11,7 +11,14 @@ import {
   type PosterPageRow,
 } from "./posters";
 import { tapsOf } from "./social";
-import { blankEntry, validateEntry, type LibraryEntry } from "./library";
+import {
+  blankEntry,
+  validateEntry,
+  validateShelf,
+  type LibraryEntry,
+  type LibraryShelf,
+  type ShelfBook,
+} from "./library";
 import { entriesOf } from "./library-town";
 import {
   COMPOSE_ICONS,
@@ -171,6 +178,9 @@ export interface RemoteRows {
   marks: Tables<"book_marks">[];
   /** The person's own library rows; none in a visitor's town. */
   libraryEntries?: Tables<"library_entries">[];
+  /** The shelves the person made in their library, and their books; none in a visitor's town. */
+  libraryShelves?: Tables<"library_shelves">[];
+  libraryShelfBooks?: Tables<"library_shelf_books">[];
   posts: Tables<"posts">[];
   /** The person's own reactions, and other people's reactions to their posts. */
   postReactions: Tables<"post_reactions">[];
@@ -366,6 +376,7 @@ function withSampleBookIds(rows: RemoteRows): RemoteRows {
     nine: rows.nine.map(named),
     marks: rows.marks.map(named),
     libraryEntries: rows.libraryEntries?.map(named),
+    libraryShelfBooks: rows.libraryShelfBooks?.map(named),
     posts: rows.posts.map(named),
     sessions: rows.sessions.map(named),
     records: rows.records.map(named),
@@ -399,6 +410,48 @@ function entriesFromRows(
     if (validateEntry(entry) === null) entries[row.book_id] = entry;
   }
   return entries;
+}
+
+/** The person's own shelves in the library, as the rules keep them. */
+function shelvesFromRows(
+  rows: Tables<"library_shelves">[],
+  userId: string | null,
+): LibraryShelf[] {
+  return rows.flatMap((row): LibraryShelf[] => {
+    if (row.user_id !== userId) return [];
+    const shelf: LibraryShelf = {
+      id: row.id,
+      name: row.name,
+      note: row.note,
+      position: row.position,
+      showWanted: row.show_wanted,
+      createdAt: row.created_at,
+      deletedAt: row.deleted_at,
+    };
+    return validateShelf(shelf) === null ? [shelf] : [];
+  });
+}
+
+/** The books on those shelves, of books the library keeps a row for. */
+function shelfBooksFromRows(
+  rows: Tables<"library_shelf_books">[],
+  userId: string | null,
+  shelves: LibraryShelf[],
+  entries: Record<string, LibraryEntry>,
+): ShelfBook[] {
+  const shelfIds = new Set(shelves.map((shelf) => shelf.id));
+  return rows.flatMap((row): ShelfBook[] =>
+    row.user_id === userId && shelfIds.has(row.shelf_id) && entries[row.book_id]
+      ? [
+          {
+            shelfId: row.shelf_id,
+            bookId: row.book_id,
+            addedAt: row.added_at,
+            position: row.position,
+          },
+        ]
+      : [],
+  );
 }
 
 /**
@@ -641,6 +694,12 @@ export function townFromRows(
       ),
     }));
 
+  const libraryEntries = entriesFromRows(
+    rows.libraryEntries ?? [],
+    userId,
+    bookIds,
+  );
+  const libraryShelves = shelvesFromRows(rows.libraryShelves ?? [], userId);
   const town: TownState = {
     books,
     readers,
@@ -661,7 +720,14 @@ export function townFromRows(
       ),
     ],
     ...lists,
-    libraryEntries: entriesFromRows(rows.libraryEntries ?? [], userId, bookIds),
+    libraryEntries,
+    libraryShelves,
+    libraryShelfBooks: shelfBooksFromRows(
+      rows.libraryShelfBooks ?? [],
+      userId,
+      libraryShelves,
+      libraryEntries,
+    ),
     popReactions,
     posts,
     likedPosts: reacted("like"),
@@ -974,6 +1040,20 @@ export type Write =
   | { kind: "remove"; table: RelationTable; rows: Pair[] }
   | { kind: "add"; table: RelationTable; rows: Pair[] }
   | {
+      kind: "library-shelves";
+      /** Shelves new to the database: inserted, one already there kept as it is. */
+      rows: TablesInsert<"library_shelves">[];
+      /** What the reader changed of each shelf already there, and only that. */
+      patches: { id: string; patch: LibraryShelfPatch }[];
+    }
+  | {
+      kind: "shelf-books";
+      /** Books put on shelves; one already there is kept as it is. */
+      add: TablesInsert<"library_shelf_books">[];
+      /** Books taken off, by their key. */
+      remove: { shelf_id: string; book_id: string }[];
+    }
+  | {
       kind: "library-entries";
       /** Rows new to the database: inserted, a row already there kept as it is. */
       rows: TablesInsert<"library_entries">[];
@@ -984,6 +1064,14 @@ export type Write =
        */
       patches: { book_id: string; made: boolean; patch: LibraryPatch }[];
     };
+
+/** The columns of a shelf the reader changes. */
+export type LibraryShelfPatch = Partial<
+  Pick<
+    Tables<"library_shelves">,
+    "name" | "note" | "position" | "show_wanted" | "deleted_at"
+  >
+>;
 
 /** The columns of a library row the reader changes. */
 export type LibraryPatch = Partial<
@@ -1161,6 +1249,81 @@ export function planWrites(
   }
   if (rows.length || patches.length)
     writes.push({ kind: "library-entries", rows, patches });
+
+  // The shelves the reader made, then the books on them: a book goes on a
+  // shelf only after its row and its shelf are there.
+  const shelfColumns = (shelf: LibraryShelf) => ({
+    name: shelf.name,
+    note: shelf.note,
+    position: shelf.position,
+    show_wanted: shelf.showWanted,
+    deleted_at: shelf.deletedAt,
+  });
+  const baseShelves = new Map(
+    base.libraryShelves.map((shelf) => [shelf.id, shelf]),
+  );
+  const shelfRows: TablesInsert<"library_shelves">[] = [];
+  const shelfPatches: { id: string; patch: LibraryShelfPatch }[] = [];
+  for (const shelf of next.libraryShelves) {
+    const was = baseShelves.get(shelf.id);
+    if (was === shelf) continue;
+    if (!was) {
+      shelfRows.push({
+        id: shelf.id,
+        user_id: user,
+        created_at: shelf.createdAt,
+        ...shelfColumns(shelf),
+      });
+      continue;
+    }
+    const from = shelfColumns(was);
+    const to = shelfColumns(shelf);
+    const patch = Object.fromEntries(
+      (Object.keys(to) as (keyof typeof to)[])
+        .filter((key) => from[key] !== to[key])
+        .map((key) => [key, to[key]]),
+    ) as LibraryShelfPatch;
+    if (Object.keys(patch).length) shelfPatches.push({ id: shelf.id, patch });
+  }
+  if (shelfRows.length || shelfPatches.length)
+    writes.push({
+      kind: "library-shelves",
+      rows: shelfRows,
+      patches: shelfPatches,
+    });
+  const shelfKey = (book: ShelfBook) =>
+    JSON.stringify([book.shelfId, book.bookId]);
+  // A book whose place on a shelf changed (an undo puts back when it was
+  // put on) is taken off and put on again: added_at has no update grant.
+  const samePlace = (a: ShelfBook, b: ShelfBook | undefined) =>
+    b !== undefined && a.addedAt === b.addedAt && a.position === b.position;
+  const baseOn = new Map(
+    base.libraryShelfBooks.map((book) => [shelfKey(book), book]),
+  );
+  const nextOn = new Map(
+    next.libraryShelfBooks.map((book) => [shelfKey(book), book]),
+  );
+  const putOn = next.libraryShelfBooks.filter(
+    (book) => !samePlace(book, baseOn.get(shelfKey(book))),
+  );
+  const takenOff = base.libraryShelfBooks.filter(
+    (book) => !samePlace(book, nextOn.get(shelfKey(book))),
+  );
+  if (putOn.length || takenOff.length)
+    writes.push({
+      kind: "shelf-books",
+      add: putOn.map((book) => ({
+        user_id: user,
+        shelf_id: book.shelfId,
+        book_id: book.bookId,
+        added_at: book.addedAt,
+        position: book.position,
+      })),
+      remove: takenOff.map((book) => ({
+        shelf_id: book.shelfId,
+        book_id: book.bookId,
+      })),
+    });
 
   const profile: Extract<Write, { kind: "profile" }>["patch"] = {};
   if (next.me.handle !== base.me.handle) profile.handle = next.me.handle;
@@ -1467,6 +1630,22 @@ function withSampleRows(writes: Write[], user: string): Write[] {
             })),
           },
         ];
+      case "shelf-books":
+        return [
+          {
+            ...write,
+            add: write.add.map((row) => ({
+              ...row,
+              book_id: keep(row.book_id),
+            })),
+            remove: write.remove.map((row) => ({
+              ...row,
+              book_id: isSampleBook(row.book_id)
+                ? sampleBookRowId(row.book_id)
+                : row.book_id,
+            })),
+          },
+        ];
       case "add":
       case "remove": {
         const rows = write.rows.filter(real).map((row) =>
@@ -1540,6 +1719,8 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     finishedBooks: [],
     library: [],
     libraryEntries: {},
+    libraryShelves: [],
+    libraryShelfBooks: [],
     readingRecords: [],
     settings: {
       composeIcon: "pen",

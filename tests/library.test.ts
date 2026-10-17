@@ -2410,7 +2410,8 @@ check(
       ],
     });
     assert.deepEqual(countsOf(state, NONE).themes, {
-      [SHELF_SF]: { works: 3, hiddenWanted: 1 },
+      // The number is what the shelf shows: the book only wanted is apart.
+      [SHELF_SF]: { works: 2, hiddenWanted: 1 },
       [SHELF_SHOWN]: { works: 1 },
     });
     // The shelf's own order: books moved by hand by their keys, then the rest as they were put on.

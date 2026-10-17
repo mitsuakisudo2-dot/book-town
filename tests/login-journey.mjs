@@ -2789,8 +2789,15 @@ try {
         await expect(at).toHaveURL(base + "/search/");
         await at.clock.runFor(3 * 60_000);
         expect(newReads()).toBe(away);
+        // The read back on Home is let finish before the page goes out of
+        // view: one still on its way when it comes back is the read it
+        // gets, and on a slow runner none more would be made.
+        const backOnHome = at.waitForResponse((response) =>
+          response.url().includes("created_at=gte."),
+        );
         await nav.getByRole("link", { name: "ホーム" }).click();
         await expect.poll(newReads).toBe(away + 1);
+        await (await backOnHome).finished();
         const seen = (state) =>
           at.evaluate((state) => {
             Object.defineProperty(document, "visibilityState", {

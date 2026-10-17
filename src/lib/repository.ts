@@ -3,7 +3,13 @@ import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
 import { cleanVisibilities } from "./visibility";
 import { restorePoster, type Poster } from "./posters";
-import { validateEntry, type LibraryEntry } from "./library";
+import {
+  validateEntry,
+  validateShelf,
+  type LibraryEntry,
+  type LibraryShelf,
+  type ShelfBook,
+} from "./library";
 import { DEFAULT_HANDLE, handleProblem } from "./handles";
 import { createRegisteredBook, normalizeIsbn, REGISTERED_GENRE } from "./books";
 import {
@@ -70,6 +76,9 @@ type PersonalData = Pick<
   posters?: Poster[];
   /** The library's rows; none in a save from before the library. */
   libraryEntries?: TownState["libraryEntries"];
+  /** The shelves the reader made, and their books; none in a save from before them. */
+  libraryShelves?: TownState["libraryShelves"];
+  libraryShelfBooks?: TownState["libraryShelfBooks"];
   /** Only books the viewer registered; their jackets are redrawn on load. */
   addedBooks: Pick<Book, "id" | "title" | "author" | "isbn" | "price">[];
 };
@@ -284,6 +293,56 @@ function restoreEntries(
   return entries;
 }
 
+/** The shelves kept, as the database would take them. */
+function restoreShelves(value: unknown): LibraryShelf[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
+  return value.flatMap((shelf: unknown): LibraryShelf[] => {
+    if (!object(shelf)) return [];
+    const row = {
+      id: shelf.id,
+      name: shelf.name,
+      note: shelf.note,
+      position: shelf.position,
+      showWanted: shelf.showWanted,
+      createdAt: shelf.createdAt,
+      deletedAt: shelf.deletedAt,
+    } as LibraryShelf;
+    if (validateShelf(row) !== null || ids.has(row.id)) return [];
+    ids.add(row.id);
+    return [row];
+  });
+}
+
+/** The books on those shelves, once each, of books the library keeps a row for. */
+function restoreShelfBooks(
+  value: unknown,
+  shelves: LibraryShelf[],
+  entries: Record<string, LibraryEntry>,
+): ShelfBook[] {
+  if (!Array.isArray(value)) return [];
+  const shelfIds = new Set(shelves.map((shelf) => shelf.id));
+  const seen = new Set<string>();
+  return value.flatMap((book: unknown): ShelfBook[] => {
+    if (!object(book)) return [];
+    const { shelfId, bookId, addedAt, position } = book;
+    if (
+      typeof shelfId !== "string" ||
+      typeof bookId !== "string" ||
+      !shelfIds.has(shelfId) ||
+      !entries[bookId] ||
+      typeof addedAt !== "string" ||
+      Number.isNaN(Date.parse(addedAt)) ||
+      !(position === null || typeof position === "string")
+    )
+      return [];
+    const key = JSON.stringify([shelfId, bookId]);
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ shelfId, bookId, addedAt, position }];
+  });
+}
+
 function restoreRecords(value: unknown, bookIds: Set<string>): ReadingRecord[] {
   if (!Array.isArray(value)) return [];
   const ids = new Set<string>();
@@ -465,6 +524,8 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
           })
         : [];
     const likedPosts = postList(data.likedPosts, () => true);
+    const libraryEntries = restoreEntries(data.libraryEntries, bookIds);
+    const libraryShelves = restoreShelves(data.libraryShelves);
     return {
       state: {
         ...initial,
@@ -503,7 +564,13 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
         readingSessions: restoreSessions(data.readingSessions, bookIds),
         finishedBooks: knownBooks(data.finishedBooks),
         library: knownBooks(data.library),
-        libraryEntries: restoreEntries(data.libraryEntries, bookIds),
+        libraryEntries,
+        libraryShelves,
+        libraryShelfBooks: restoreShelfBooks(
+          data.libraryShelfBooks,
+          libraryShelves,
+          libraryEntries,
+        ),
         readingRecords: [
           ...initial.readingRecords,
           ...restoreRecords(data.readingRecords, bookIds),
@@ -564,6 +631,8 @@ export function serializeTown(state: TownState): string {
       finishedBooks: state.finishedBooks,
       library: state.library,
       libraryEntries: state.libraryEntries,
+      libraryShelves: state.libraryShelves,
+      libraryShelfBooks: state.libraryShelfBooks,
       readingRecords: state.readingRecords.filter(
         (record) => record.readerId === ME_ID,
       ),
