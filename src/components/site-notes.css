@@ -146,7 +146,7 @@ body:has(.modal-backdrop) .site-notes-button {
 .site-notes-pin.is-draft {
   background: var(--lamp-glow);
   border-color: var(--lamp);
-  animation: site-notes-pulse 1.6s ease-in-out infinite;
+  animation: site-notes-pulse var(--dur-pulse) ease-in-out infinite;
 }
 @keyframes site-notes-pulse {
   0%,

@@ -24,6 +24,7 @@ import { useBackLayer } from "../lib/back-layer";
 import { focusBack } from "../lib/coarse-pointer";
 import { lockPageScroll } from "../lib/scroll-lock";
 import { heldBookName } from "../lib/held-book";
+import { reducedMotion } from "../lib/motion";
 
 export interface SceneReading {
   entries: ReadEntry[];
@@ -193,9 +194,7 @@ export function BookInHand({
   function glidePop(track: HTMLDivElement, page: number) {
     track.scrollTo({
       left: page * track.clientWidth,
-      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "instant"
-        : "smooth",
+      behavior: reducedMotion() ? "instant" : "smooth",
     });
   }
   // The page the track rests on or is gliding to: where a button sent it,

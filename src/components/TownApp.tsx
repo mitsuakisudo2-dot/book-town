@@ -98,6 +98,7 @@ import {
   usePostLayer,
 } from "./letter/post-layer";
 import { useAnnouncement } from "../lib/live-region";
+import { reducedMotion } from "../lib/motion";
 
 // Every screen but Home comes in its own file, read when it is first shown
 // (and after Home is drawn, below), so a phone opening the town reads and
@@ -818,9 +819,7 @@ function ShopView({
               if (!shelf) return;
               event.preventDefault();
               shelf.scrollIntoView({
-                behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-                  ? "auto"
-                  : "smooth",
+                behavior: reducedMotion() ? "auto" : "smooth",
               });
               replaceAddress({ hash: "shelf-" + s.id });
             }}

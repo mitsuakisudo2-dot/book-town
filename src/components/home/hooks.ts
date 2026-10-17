@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { usePersistenceStatus } from "../../lib/store";
+import { scrollBehavior } from "../../lib/motion";
 import { useUrlParam } from "../../lib/url-state";
 
 const MINUTE = 60_000;
@@ -87,8 +88,7 @@ export function usePaneParam(
 }
 
 /** Scrolls smoothly, unless the reader asked for less motion. */
-export const motion = (): ScrollBehavior =>
-  matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
+export const motion = scrollBehavior;
 
 /** Brings `id` under the bars at the top, as the entrances do. */
 export function scrollToPart(id: string) {

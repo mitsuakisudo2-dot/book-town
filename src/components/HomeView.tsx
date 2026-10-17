@@ -43,6 +43,7 @@ import { lastOpen } from "../lib/last-open";
 import { announce } from "../lib/live-region";
 import { findReader } from "../lib/social";
 import { getTownSnapshot, townStore } from "../lib/store";
+import { DUR_MS, EASE, reducedMotion } from "../lib/motion";
 import "./home/home.css";
 
 type Shared = {
@@ -178,7 +179,7 @@ export function HomeView({
     window.scrollTo({ top: change.top, behavior: "instant" });
     bar.current?.reset();
     // The pane comes in from the side it was swiped from (v37: 40px, .28s).
-    if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
+    if (!reducedMotion())
       panes.current[tab]?.animate(
         [
           {
@@ -187,7 +188,7 @@ export function HomeView({
           },
           { transform: "none", opacity: 1 },
         ],
-        { duration: 280, easing: "cubic-bezier(.2,0,0,1)" },
+        { duration: DUR_MS.tab, easing: EASE.standard },
       );
   }, [tab]);
   // Panes made before new 便り were taken in at another, which still draw
