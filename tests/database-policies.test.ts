@@ -12,6 +12,7 @@ import {
 } from "../src/lib/library";
 import { sampleBookRowId } from "../src/lib/samples";
 import { ACCOUNT_SCHEMAS_SQL, ACCOUNT_TABLES } from "./fixtures/account-tables";
+import { EXTENSIONS_STANDIN } from "./fixtures/pglite-supabase";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
 import { pagePattern } from "../src/lib/supabase/site-notes";
 import { emptyTown, planWrites } from "../src/lib/town-remote";
@@ -46,6 +47,7 @@ async function main() {
     alter default privileges in schema public grant all on tables to anon, authenticated;
     alter default privileges in schema public grant all on sequences to anon, authenticated;
     alter default privileges in schema public grant execute on functions to anon, authenticated;
+    ${EXTENSIONS_STANDIN}
   `;
   await db.exec(supabase);
 
@@ -2970,8 +2972,9 @@ async function main() {
       // be taught to private.book_is_listed and private.book_is_mine (create
       // or replace), or its books go missing from the screens; so must a new
       // jsonb column with book ids in it, which this list cannot see. How
-      // books came to share a work (private.work_changes) is no reader's use
-      // of a book, and nobody reads it through the API.
+      // books came to share a work (private.work_changes) and when a book was
+      // placed in its edition (private.book_checks) are no reader's use of a
+      // book, and nobody reads them through the API.
       const keys = await db.query<{ ref: string }>(
         `select c.conrelid::regclass::text || '.' || a.attname as ref
          from pg_constraint c
@@ -2987,6 +2990,7 @@ async function main() {
           "library_entries.book_id",
           "poster_books.book_id",
           "posts.book_id",
+          "private.book_checks.book_id",
           "private.work_changes.book_id",
           "profile_nine.book_id",
           "reading_entries.book_id",

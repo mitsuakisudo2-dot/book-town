@@ -174,13 +174,26 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     readers: "nobody",
   },
   "private.works_apart": { people: {}, readers: "nobody" },
+  // The bibliographic master (bibliography): what each source said about an
+  // edition, the operator's corrections, when each book was placed in its
+  // edition, and the operator's list of what to look at. They name no one.
+  "private.edition_sources": { people: {}, readers: "nobody" },
+  "private.edition_fixes": { people: {}, readers: "nobody" },
+  "private.book_checks": { people: {}, readers: "nobody" },
+  "private.bibliography_review": {
+    people: {},
+    // A book of the edition, for the operator's tools.
+    notPeople: ["a_book"],
+    readers: "nobody",
+  },
   // A copy's own rows are cleared by forget_in_copies (moving_copies).
   "keep.copies": { people: {}, readers: "nobody" },
 };
 
 /**
- * Where the tables above live: every schema but Postgres's own and auth, so a
- * table in a new schema has to be listed too. A condition on pg_namespace n.
+ * Where the tables above live: every schema but Postgres's own, auth, and
+ * pg_net's and pg_cron's (net, cron), so a table in a new schema has to be
+ * listed too. A condition on pg_namespace n.
  */
 export const ACCOUNT_SCHEMAS_SQL =
-  "n.nspname not in ('pg_catalog', 'information_schema', 'auth') and n.nspname not like 'pg\\_%'";
+  "n.nspname not in ('pg_catalog', 'information_schema', 'auth', 'net', 'cron') and n.nspname not like 'pg\\_%'";
