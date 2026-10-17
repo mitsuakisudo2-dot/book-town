@@ -1,3 +1,4 @@
+import type { Bibliography } from "./bibliography";
 import type { Book } from "./types";
 
 // How a book is named on screen, in one place. Every screen reads a book's
@@ -52,6 +53,132 @@ export function authorWords(author: string): string {
         : family + given;
     })
     .join("、");
+}
+
+// The bibliographic master's name for a book (src/lib/bibliography.ts),
+// where a screen shows it: the book's page. What the reader typed stays
+// theirs on their own shelf.
+
+/** The master's title with its volume: "進撃の巨人 2", "ノルウェイの森 下". */
+export function masterTitle(bib: Pick<Bibliography, "title" | "volume">): string {
+  const volume = bib.volume;
+  if (!volume) return bib.title;
+  // openBD's title may carry the volume already ("進撃の巨人(2)", "… 2"),
+  // set apart from the title's own last word ("2001" is not volume 1).
+  const escaped = volume.normalize("NFKC").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[\\s(])${escaped}\\)?$`).test(bib.title.normalize("NFKC"))
+    ? bib.title
+    : `${bib.title} ${volume}`;
+}
+
+/** The line under the title: the subtitle and the edition (新訳版), if any. */
+export const masterSubtitle = (
+  bib: Pick<Bibliography, "subtitle" | "edition">,
+): string | undefined =>
+  [bib.subtitle, bib.edition].filter(Boolean).join(" ") || undefined;
+
+/** openBD's ONIX role codes this names (the rest go unnamed). */
+const ONIX_ROLES: Record<string, string> = {
+  A01: "著",
+  A12: "絵",
+  A38: "原作",
+  B01: "編",
+  B06: "訳",
+};
+
+/** What a person did, as a word: 著, 訳, 他訳; nothing when the source says nothing. */
+function roleWord(role: string | undefined): string {
+  if (!role) return "";
+  if (/^[A-Z][0-9]{2}(,[A-Z][0-9]{2})*$/.test(role))
+    return role.split(",").map((code) => ONIX_ROLES[code]).find(Boolean) ?? "";
+  return role.replace(/[[\]［］]/g, "").trim();
+}
+
+/**
+ * The people of the master, in the book's order: "宮沢賢治", "ジェーン・ドウ、
+ * 山田花子". What they did is said when it is not all 著: "ジェーン・ドウ 著／
+ * 山田一郎 訳", one role after the names that share it.
+ */
+export function masterAuthor(bib: Pick<Bibliography, "creators">): string {
+  const people = bib.creators.map((person) => ({
+    name: person.name,
+    role: roleWord(person.role),
+  }));
+  if (people.every((person) => person.role === "" || person.role === "著"))
+    return people.map((person) => person.name).join("、");
+  const groups: { role: string; names: string[] }[] = [];
+  for (const person of people) {
+    const last = groups.at(-1);
+    if (last && last.role === person.role) last.names.push(person.name);
+    else groups.push({ role: person.role, names: [person.name] });
+  }
+  return groups
+    // A no-break space: the role stays on the line of its last name.
+    .map(({ role, names }) => names.join("、") + (role ? "\u00a0" + role : ""))
+    .join("／");
+}
+
+/** "2014年6月" for "2014-06", "2014年" for "2014". */
+const issuedWords = (issued: string): string => {
+  const [year, month] = issued.split("-");
+  return month ? `${year}年${Number(month)}月` : `${year}年`;
+};
+
+/** Who published it, in which series, and when: 早川書房, ハヤカワ文庫SF, 2003年9月. */
+export const masterPublicationParts = (
+  bib: Pick<Bibliography, "publisher" | "series" | "issued">,
+): string[] =>
+  [
+    bib.publisher,
+    bib.series[0]?.name,
+    bib.issued && issuedWords(bib.issued),
+  ].filter((part): part is string => Boolean(part));
+
+/** The same in a line: "早川書房・ハヤカワ文庫SF・2003年9月". */
+export const masterPublication = (
+  bib: Pick<Bibliography, "publisher" | "series" | "issued">,
+): string | undefined => masterPublicationParts(bib).join("・") || undefined;
+
+/**
+ * The book as its page shows it: named by the master, where it has one, so
+ * that the 装丁カード, the cover's lookup and the shop links read as the
+ * heading does. The people go by name only ("ジェーン・ドウ、山田一郎").
+ */
+export function bookNamedBy<T extends Named>(
+  book: T,
+  master: Bibliography | null,
+): T {
+  if (!master) return book;
+  const names = master.creators.map((person) => person.name).join("、");
+  return { ...book, title: masterTitle(master), author: names || book.author };
+}
+
+/** What a book's page heads it with: the master's, where it has one. */
+export interface BookHeading {
+  title: string;
+  /** The subtitle and the edition. */
+  subtitle?: string;
+  author: string;
+  /** The publisher, the series and the date, each kept whole on a line. */
+  publication: string[];
+}
+
+/**
+ * The heading of a book's page: the master's title, people and publication
+ * once there is one, else what the reader typed, as before.
+ */
+export function bookHeading(
+  book: Named,
+  master: Bibliography | null,
+): BookHeading {
+  if (!master)
+    return { title: bookTitle(book), author: bookAuthor(book), publication: [] };
+  return {
+    title: masterTitle(master),
+    subtitle: masterSubtitle(master),
+    author: masterAuthor(master) || bookAuthor(book),
+    publication: masterPublicationParts(master),
+  };
 }
 
 /** The book with this ID, if the town has it. */

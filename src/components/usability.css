@@ -15,6 +15,7 @@
 }
 .town-shell .book-page-hero .book-summary,
 .town-shell .book-page-author,
+.town-shell .book-page-publication,
 .town-shell .book-path-heading p {
   font-size: var(--t-meta);
   color: var(--ink-2);
@@ -68,6 +69,27 @@
   }
   .town-shell .town-bottom-nav span {
     font-size: var(--t-cap);
+  }
+}
+
+/* The master's subtitle sits close under the title, in its letters; who
+   published the book and when, under the people. */
+.town-shell .book-page-subtitle {
+  margin: -4px 0 6px;
+  font-family: var(--serif);
+  font-size: var(--t-page);
+  line-height: 1.7;
+}
+.town-shell .book-page-publication {
+  margin-top: 2px;
+}
+/* A line breaks between the publisher, the series and the date, not in them. */
+.town-shell .book-page-publication span {
+  display: inline-block;
+}
+@media (max-width: 640px) {
+  .town-shell .book-page-subtitle {
+    font-size: var(--t-meta);
   }
 }
 

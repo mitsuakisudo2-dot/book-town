@@ -1,0 +1,24 @@
+/* The credits page: a short read, at the width of a book's page text. */
+.credits-page {
+  max-width: 680px;
+}
+.credits-page > p,
+.credits-page section p {
+  margin-top: 14px;
+  font-size: var(--t-body);
+  line-height: 1.9;
+}
+.credits-page section {
+  margin-top: 30px;
+}
+.credits-page h2 {
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  font-weight: 500;
+}
+.credits-page a {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}

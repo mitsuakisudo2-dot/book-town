@@ -2,6 +2,7 @@
 // First, so the CSS keeps its order (screen-styles.ts).
 import "./screen-styles";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -98,7 +99,16 @@ import {
 } from "./letter/post-layer";
 import { useAnnouncement } from "../lib/live-region";
 import { reducedMotion } from "../lib/motion";
-import { bookAuthor, bookById, bookTitle, quotedTitle } from "../lib/book-name";
+import {
+  bookAuthor,
+  bookById,
+  bookHeading,
+  bookNamedBy,
+  bookTitle,
+  quotedTitle,
+} from "../lib/book-name";
+import { SOURCE_NAMES, type Bibliography } from "../lib/bibliography";
+import { useBibliography } from "../lib/bibliography-session";
 import { counted, whenSome } from "../lib/words";
 
 // Every screen but Home comes in its own file, read when it is first shown
@@ -116,6 +126,9 @@ const SearchView = dynamic(() =>
 );
 const ReadingView = dynamic(() =>
   import("./ReadingView").then((file) => file.ReadingView),
+);
+const CreditsView = dynamic(() =>
+  import("./CreditsView").then((file) => file.CreditsView),
 );
 const NotificationsView = dynamic(() =>
   import("./NotificationsView").then((file) => file.NotificationsView),
@@ -148,7 +161,8 @@ type View =
   | "library"
   | "poster"
   | "poster-new"
-  | "post";
+  | "post"
+  | "credits";
 type Shared = {
   state: TownState;
   actions: TownActions;
@@ -553,6 +567,8 @@ export default function TownApp({
             />
           ) : view === "library" ? (
             <LibraryView {...shared} />
+          ) : view === "credits" ? (
+            <CreditsView />
           ) : (
             <Wishlist {...shared} />
           )}
@@ -1014,6 +1030,50 @@ function shelfPops(shelf: Shelf, books: Book[]) {
     .filter((entry): entry is { item: ShelfItem; book: Book } => !!entry.book)
     .slice(0, 3);
 }
+/**
+ * The title and the people of a book's page, and under them who published
+ * it and when: the master's once there is one (docs/09「書誌マスタ」).
+ */
+function BookHeadingLines({
+  book,
+  master,
+}: {
+  book: Book;
+  master: Bibliography | null;
+}) {
+  const { title, subtitle, author, publication } = bookHeading(book, master);
+  return (
+    <>
+      <h1>{title}</h1>
+      {subtitle && <p className="book-page-subtitle">{subtitle}</p>}
+      <p className="book-page-author">{author}</p>
+      {publication.length > 0 && (
+        <p className="book-page-publication">
+          {publication.map((part, at) => (
+            <Fragment key={at}>
+              {at > 0 && "・"}
+              <span>{part}</span>
+            </Fragment>
+          ))}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Where the heading came from, beside the cover's credit; the credits page has the rest. */
+function BibliographyCredit({ master }: { master: Bibliography | null }) {
+  if (!master?.from.length) return null;
+  return (
+    <span className="cover-credit">
+      書誌:{" "}
+      <Link href="/credits/">
+        {master.from.map((source) => SOURCE_NAMES[source]).join("・")}
+      </Link>
+    </span>
+  );
+}
+
 function BookView({
   state,
   actions,
@@ -1022,6 +1082,7 @@ function BookView({
 }: Shared & { bookId: string }) {
   const persistence = usePersistenceStatus();
   const book = bookById(state.books, bookId);
+  const master = useBibliography(bookId);
   if (!book)
     return persistence === "loading" ? (
       <p role="status">本を開いています…</p>
@@ -1033,6 +1094,8 @@ function BookView({
         </Link>
       </div>
     );
+  // The cover, its lookup and the shop links go by the heading's name.
+  const named = bookNamedBy(book, master);
   const matches = [
     ...state.shops,
     ...(state.ownShop ? [state.ownShop] : []),
@@ -1049,16 +1112,16 @@ function BookView({
     <>
       <BackLink className="back-link" />
       <section className="book-page-hero">
-        <BookJacket book={book} />
+        <BookJacket book={named} />
         <div className="book-hero-head">
           <span className="eyebrow">ONE BOOK, MANY WORLDS</span>
           <span className="genre-tag">{book.genre}</span>
-          <h1>{bookTitle(book)}</h1>
-          <p className="book-page-author">{bookAuthor(book)}</p>
+          <BookHeadingLines book={book} master={master} />
           <BookPrice book={book} />
-          <BookPurchase book={book} />
-          <CoverCredit book={book} />
-          <CoverRemovalLink book={book} />
+          <BookPurchase book={named} />
+          <CoverCredit book={named} />
+          <BibliographyCredit master={master} />
+          <CoverRemovalLink book={named} />
         </div>
         <div className="book-hero-body">
           <p className="book-summary">{book.summary}</p>
