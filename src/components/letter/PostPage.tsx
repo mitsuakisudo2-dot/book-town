@@ -270,18 +270,14 @@ export function PostPageView({
         ) : failed ? (
           <div className="post-page-missing">
             <p role="status">つながらないため、開けませんでした</p>
-            <button
-              type="button"
-              className="button secondary"
-              onClick={askAgain}
-            >
+            <button type="button" className="btn" onClick={askAgain}>
               もう一度読む
             </button>
           </div>
         ) : (
           <div className="post-page-missing">
             <p>この便りは、いまは開けません</p>
-            <Link href="/" className="button secondary">
+            <Link href="/" className="btn">
               本の街へ
             </Link>
           </div>
@@ -309,7 +305,7 @@ function PostPageHead({
       <button
         ref={backRef}
         type="button"
-        className="post-page-back"
+        className="icon-btn post-page-back"
         aria-label={label}
         onClick={onBack}
       >

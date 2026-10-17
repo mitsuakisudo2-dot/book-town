@@ -333,7 +333,7 @@ export function SearchView({ state, actions, notify }: Shared) {
                   <button
                     type="button"
                     key={entry}
-                    className="feeling-chip"
+                    className="chip"
                     aria-pressed={feeling === entry}
                     onClick={() =>
                       setFeelingParam(feeling === entry ? null : entry)

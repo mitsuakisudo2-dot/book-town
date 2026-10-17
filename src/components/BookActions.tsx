@@ -100,7 +100,7 @@ export function BookActions({
       <div className="bh-save-row">
         <button
           type="button"
-          className={`bh-save${wished ? " bh-saved" : ""}`}
+          className={`btn bh-save ${wished ? "soft bh-saved" : "fill"}`}
           aria-pressed={wished}
           onClick={() => {
             actions.toggleWish(book.id);
@@ -116,7 +116,7 @@ export function BookActions({
         </button>
         <button
           type="button"
-          className={`bh-favorite${favorite ? " is-active" : ""}`}
+          className={`btn bh-favorite${favorite ? " is-active" : ""}`}
           aria-pressed={favorite}
           onClick={() => {
             actions.toggleFavorite(book.id);
