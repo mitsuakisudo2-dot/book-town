@@ -1,5 +1,5 @@
 .social-note {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   line-height: 1.9;
   text-align: center;
@@ -29,7 +29,7 @@
 .composer-text {
   resize: vertical;
   line-height: 1.8;
-  font-size: 13px;
+  font-size: var(--t-meta);
 }
 .composer-tools {
   display: flex;
@@ -54,21 +54,21 @@
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 6px 8px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   background: var(--sheet);
 }
 .composer-spoiler {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .composer-hide {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .composer-hide:hover {
@@ -83,7 +83,7 @@
   margin-left: auto;
 }
 .composer-count {
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .composer-tools .button:disabled {
@@ -91,7 +91,7 @@
   cursor: not-allowed;
 }
 .composer-hint {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-top: 9px;
   line-height: 1.8;
@@ -111,12 +111,12 @@
 }
 .spoiler-folded-note p {
   flex: 1 1 220px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink-2);
 }
 .spoiler-folded-note button {
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 600;
   color: var(--ink-2);
   background: var(--sheet);
@@ -131,7 +131,7 @@
 /* Words the writer covered: a dark slip over them until a reader taps. */
 .hidden-words {
   display: inline-block;
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 600;
   line-height: 1.7;
   letter-spacing: 0.04em;
@@ -170,7 +170,7 @@ mark.hidden-words.is-open {
 .follow-suggestions h2 {
   margin: 0 0 12px;
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: var(--t-body);
   font-weight: 600;
   color: var(--ink);
 }
@@ -200,16 +200,16 @@ mark.hidden-words.is-open {
   min-width: 0;
 }
 .follow-owner b {
-  font-size: 13px;
+  font-size: var(--t-meta);
 }
 .follow-owner small {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .follow-pop {
   grid-column: 1 / -1;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink);
   display: -webkit-box;
@@ -221,7 +221,7 @@ mark.hidden-words.is-open {
   grid-row: 1;
   grid-column: 2;
   padding: 6px 14px;
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .delete-confirm {
   display: flex;
@@ -229,12 +229,12 @@ mark.hidden-words.is-open {
   align-items: center;
   gap: 8px 10px;
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--alert);
 }
 .delete-confirm .button {
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 
 .book-reviews {
@@ -250,7 +250,7 @@ mark.hidden-words.is-open {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--green);
   background: var(--green-soft);
   border-radius: 6px;
@@ -269,7 +269,7 @@ mark.hidden-words.is-open {
   gap: 6px 10px;
   width: 100%;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--t-meta);
   color: var(--ink-2);
   background: var(--band);
   border: 1px solid var(--line-2);
@@ -278,7 +278,7 @@ mark.hidden-words.is-open {
   margin-bottom: 12px;
 }
 .spoiler-door-button span {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-left: auto;
 }
@@ -387,10 +387,10 @@ mark.hidden-words.is-open {
   border: 0;
   outline: none;
   background: transparent;
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .picker-caption {
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin: 8px 0 4px;
   line-height: 1.7;
@@ -431,11 +431,11 @@ mark.hidden-words.is-open {
 .picker-chosen b {
   font-family: var(--serif);
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .picker-results small,
 .picker-chosen small {
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .book-jacket.picker-jacket {
@@ -459,7 +459,7 @@ mark.hidden-words.is-open {
 .post-composer :is(.composer-book, .composer-poster) {
   flex: 0 1 auto;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   border: 1px dashed var(--line-2);
   border-radius: 999px;
   padding: 5px 9px;
@@ -523,7 +523,7 @@ mark.hidden-words.is-open {
 .tag-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
+  font-size: var(--t-cap);
   padding: 3px 9px;
   border-radius: 999px;
   border: 1px dashed var(--line-2);
@@ -541,7 +541,7 @@ button.tag-chip:hover {
 }
 .reviews-more {
   justify-self: center;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--green);
   padding: 9px 18px;
   border: 1px solid var(--line-2);
@@ -582,11 +582,11 @@ button.tag-chip:hover {
   border-radius: 6px;
   background: var(--band);
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.7;
 }
 .words-folded button {
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 600;
   color: var(--ink);
   background: var(--sheet);
@@ -596,7 +596,7 @@ button.tag-chip:hover {
 }
 .words-folded-note {
   margin: 6px 0;
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink-2);
 }

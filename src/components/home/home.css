@@ -199,7 +199,7 @@ html[data-home-tab="letters"]
 .home-slide-title {
   margin: 0;
   font-family: var(--serif);
-  font-size: clamp(18px, 5.6vw, var(--t-head));
+  font-size: clamp(var(--t-title), 5.6vw, var(--t-head));
   font-weight: 600;
   line-height: 1.4;
   text-shadow: 0 1px 6px color-mix(in srgb, var(--shade) 60%, transparent);

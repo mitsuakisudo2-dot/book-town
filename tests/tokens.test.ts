@@ -308,6 +308,19 @@ check("every screen's CSS is read on every page, in one order", () => {
   );
 });
 
+check("the type steps grow together from --t-scale, none under 12px", () => {
+  const steps = [...tokens.matchAll(/(--t-[\w-]+):\s*([^;]+);/g)].filter(
+    ([, name]) => name !== "--t-scale",
+  );
+  assert.ok(steps.length >= 10, "tokens.css names its type steps");
+  for (const [, name, value] of steps) {
+    const px = value.match(/^calc\((\d+)px \* var\(--t-scale\)\)$/)?.[1];
+    assert.ok(px, `${name} is calc(…px * var(--t-scale)): ${value}`);
+    assert.ok(Number(px) >= 12, `${name} is ${px}px, under 12px`);
+  }
+  assert.match(tokens, /--t-scale:\s*1;/);
+});
+
 check("globals.css reads the tokens first", () => {
   const globals = read("src/app/globals.css");
   const lines = globals.split("\n");
@@ -403,7 +416,7 @@ check("covers are shown whole: no object-fit: cover on a jacket", () => {
 });
 
 check(
-  "no screen writes more colours or small text of its own than before",
+  "no screen writes more colours, font sizes or small text of its own than before",
   () => {
     // The screens made before the rules keep what they had, counted in
     // tests/style-baseline.json, and lose it as each is worked on. A new file
@@ -415,9 +428,10 @@ check(
     const problems: string[] = [];
     const what = {
       colours: "colours of its own (use the tokens)",
+      sizes: "font sizes written in px (use var(--t-cap) … var(--t-clock))",
       smallText: "font sizes under 12px (use --t-cap or larger)",
     };
-    for (const kind of ["colours", "smallText"] as const) {
+    for (const kind of ["colours", "sizes", "smallText"] as const) {
       const files = new Set([
         ...Object.keys(baseline[kind]),
         ...Object.keys(now[kind]),

@@ -88,15 +88,24 @@
   --avatar-ink: #2e2823;
   --avatar-ink-light: #fffcf7;
 
-  /* Type sizes. Nothing on screen is smaller than --t-cap. */
-  --t-cap: 12px;
-  --t-meta: 14px;
-  --t-ui: 14px;
-  --t-who: 15px;
-  --t-body: 15px;
-  --t-page: 16px;
-  --t-title: 18px;
-  --t-head: 22px;
+  /* Type sizes: the only sizes a screen's words take (font-size:
+     var(--t-…)). Nothing on screen is smaller than --t-cap. --t-scale
+     grows them all at once, for a setting that makes the words larger. */
+  --t-scale: 1;
+  --t-cap: calc(12px * var(--t-scale));
+  --t-meta: calc(14px * var(--t-scale));
+  --t-ui: calc(14px * var(--t-scale));
+  --t-who: calc(15px * var(--t-scale));
+  --t-body: calc(15px * var(--t-scale));
+  --t-page: calc(16px * var(--t-scale));
+  --t-title: calc(18px * var(--t-scale));
+  --t-head: calc(22px * var(--t-scale));
+  /* Headings that are a page's face: a shop's or a book's name. */
+  --t-big: calc(26px * var(--t-scale));
+  --t-hero: calc(30px * var(--t-scale));
+  --t-display: calc(36px * var(--t-scale));
+  /* The reading timer's numbers. */
+  --t-clock: calc(44px * var(--t-scale));
 
   /* Corners */
   --r-tag: 4px;

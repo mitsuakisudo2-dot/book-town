@@ -389,14 +389,14 @@ a.poster-cover:hover {
   gap: 5px;
   padding: 6px 11px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .poster-rehide:hover {
   background: var(--band);
 }
 .poster-more > button {
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 600;
   color: var(--green);
   padding: 2px 0;
@@ -418,7 +418,7 @@ a.poster-cover:hover {
   font-family: var(--poster-gothic);
 }
 .poster-fulltext-heading {
-  font-size: 15px;
+  font-size: var(--t-body);
   font-weight: 600;
   line-height: 1.7;
   margin-bottom: 6px;
@@ -427,7 +427,7 @@ a.poster-cover:hover {
   text-wrap: balance;
 }
 .poster-fulltext-text {
-  font-size: 13px;
+  font-size: var(--t-meta);
   line-height: 1.95;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -490,12 +490,12 @@ a.poster-cover:hover {
 }
 .poster-door p {
   font-family: var(--serif);
-  font-size: 17px;
+  font-size: var(--t-page);
   letter-spacing: 0.06em;
 }
 .poster-door small {
   font-family: var(--serif);
-  font-size: 12px;
+  font-size: var(--t-cap);
   opacity: 0.8;
   overflow-wrap: anywhere;
 }
@@ -507,7 +507,7 @@ a.poster-cover:hover {
   padding: 8px 20px;
   border-radius: 999px;
   border: 1px solid var(--poster-accent);
-  font-size: 13px;
+  font-size: var(--t-meta);
   font-weight: 600;
   color: var(--poster-ink);
 }
@@ -528,7 +528,7 @@ a.poster-cover:hover {
   margin: 0;
 }
 .poster-door.is-compact p {
-  font-size: 14px;
+  font-size: var(--t-meta);
   letter-spacing: 0.02em;
   word-break: auto-phrase;
 }
@@ -553,13 +553,13 @@ a.poster-cover:hover {
 }
 .poster-door.is-report p {
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--t-meta);
   line-height: 1.8;
   letter-spacing: 0.02em;
   word-break: auto-phrase;
 }
 .poster-door.is-report.is-compact p {
-  font-size: 13px;
+  font-size: var(--t-meta);
   letter-spacing: 0;
 }
 
@@ -606,7 +606,7 @@ a.poster-cover:hover {
   display: block;
   margin-top: 8px;
   overflow: hidden;
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.6;
   color: var(--ink-2);
   text-overflow: ellipsis;
@@ -622,7 +622,7 @@ a.poster-cover:hover {
   align-items: center;
   gap: 4px 6px;
   margin-top: 6px;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .poster-thumb-badge {
@@ -638,7 +638,7 @@ a.poster-cover:hover {
   padding: 4px 8px;
   border-radius: 6px;
   background: var(--band);
-  font-size: 10px;
+  font-size: var(--t-cap);
   line-height: 1.6;
   color: var(--ink-2);
   overflow-wrap: anywhere;
@@ -696,7 +696,7 @@ a.poster-cover:hover {
   border-radius: 3px;
   background: var(--green-soft);
   color: var(--green);
-  font-size: 12px;
+  font-size: var(--t-cap);
   letter-spacing: 0.08em;
 }
 .poster-card .poster-pages {
@@ -708,7 +708,7 @@ a.poster-cover:hover {
   gap: 5px;
   min-height: 44px;
   margin-top: 2px;
-  font-size: 14px;
+  font-size: var(--t-meta);
   color: var(--ink-2);
 }
 .poster-open:hover {
