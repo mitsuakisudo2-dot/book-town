@@ -11,12 +11,12 @@
 .open-shop h1 {
   font-family: var(--serif);
   font-weight: 500;
-  font-size: clamp(22px, 3vw, 28px);
+  font-size: clamp(var(--t-head), 3vw, var(--t-hero));
   line-height: 1.6;
   margin: 10px 0 8px;
 }
 .open-lead {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 2;
   color: var(--ink-2);
   margin-bottom: 26px;
@@ -25,7 +25,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   margin-bottom: 18px;
 }
 
@@ -59,11 +59,11 @@
 }
 .open-kind b {
   font-family: var(--serif);
-  font-size: 16px;
+  font-size: var(--t-page);
   font-weight: 500;
 }
 .open-kind small {
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.9;
   color: var(--ink-2);
 }
@@ -127,7 +127,7 @@
 .open-free {
   display: block;
   margin: 22px auto 0;
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 /* Until the town is read, the kinds wait (kept work is checked against it). */
 .open-kind:disabled,
@@ -193,7 +193,7 @@
   }
 }
 .open-subtitle {
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 500;
   color: var(--ink-2);
   margin: 0 0 10px;
@@ -222,7 +222,7 @@
   cursor: default;
 }
 .open-candidates small {
-  font-size: 10px;
+  font-size: var(--t-cap);
   line-height: 1.5;
   color: var(--ink-2);
   overflow: hidden;
@@ -254,7 +254,7 @@
 .open-sign b {
   display: block;
   font-family: var(--serif);
-  font-size: clamp(22px, 4vw, 30px);
+  font-size: clamp(var(--t-head), 4vw, var(--t-hero));
   font-weight: 500;
   letter-spacing: 0.08em;
   line-height: 1.5;
@@ -266,7 +266,7 @@
 .open-sign small {
   display: block;
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   opacity: 0.85;
   overflow-wrap: anywhere;
@@ -321,7 +321,7 @@
 }
 .open-storefront-sign {
   font-family: var(--serif);
-  font-size: 17px;
+  font-size: var(--t-page);
   letter-spacing: 0.08em;
   padding: 10px 12px;
   border-radius: 6px 6px 0 0;
@@ -369,7 +369,7 @@
   margin-top: 4px;
 }
 .open-done p {
-  font-size: 13px;
+  font-size: var(--t-meta);
   line-height: 2;
   color: var(--ink-2);
 }

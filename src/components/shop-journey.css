@@ -4,7 +4,7 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--green);
 }
 .shop-journey-nav :is(a, button) {
@@ -24,7 +24,7 @@
 }
 .shop-journey-home small {
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: var(--t-cap);
 }
 .shop-journey-nav :is(a, button):hover {
   text-decoration: underline;
@@ -35,7 +35,7 @@
   touch-action: pan-y;
 }
 .shop-journey .shop-hero h1 {
-  font-size: 30px;
+  font-size: var(--t-hero);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -57,7 +57,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin: 16px 0 8px;
   touch-action: pan-y;
@@ -93,7 +93,7 @@
   align-items: center;
   gap: 4px;
   min-height: 44px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--green);
   white-space: nowrap;
 }
@@ -104,7 +104,7 @@
 }
 .shop-about h2 {
   font-family: var(--serif);
-  font-size: 18px;
+  font-size: var(--t-title);
   font-weight: 500;
 }
 .shop-about .shop-introduction {
@@ -114,29 +114,31 @@
 .shop-about .shop-social-note {
   color: var(--ink-2);
   margin: 10px 0 0;
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 @media (max-width: 600px) {
   .shop-journey-nav {
     gap: 6px;
     margin-bottom: 10px;
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .shop-journey-nav :is(a, button) {
     gap: 4px;
   }
   .shop-journey-home small {
-    font-size: 9px;
+    font-size: var(--t-cap);
   }
   .shop-journey .shop-hero {
     padding: 14px 16px;
   }
   .shop-journey .shop-hero h1 {
-    font-size: 26px;
+    font-size: var(--t-big);
   }
   .shop-journey .shop-hero-bottom {
     gap: 8px;
   }
+  /* "店内に入る" and the follow button side by side, even at 320px. */
+
   .shop-journey .owner-profile-link small {
     display: none;
   }
@@ -189,13 +191,13 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   font-family: "Kaisei HarunoUmi", var(--serif);
-  font-size: 14px;
+  font-size: var(--t-meta);
   line-height: 1.75;
 }
 .store-shelf-pops small {
   display: block;
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 @media (min-width: 900px) {

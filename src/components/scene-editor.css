@@ -6,7 +6,7 @@
   width: min(940px, calc(100vw - 32px));
 }
 .scene-editor-intro {
-  font-size: 13px;
+  font-size: var(--t-meta);
   line-height: 1.9;
   margin-bottom: 20px;
   color: var(--muted);
@@ -42,7 +42,7 @@
   animation: none;
 }
 .scene-preview > p {
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.7;
   text-align: center;
   padding: 12px 5px;
@@ -64,7 +64,7 @@
 }
 .scene-section legend {
   font-family: var(--serif);
-  font-size: 16px;
+  font-size: var(--t-page);
   padding-right: 10px;
 }
 .scene-section label {
@@ -72,7 +72,7 @@
   flex-direction: column;
   gap: 6px;
   margin: 12px 0;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--muted);
 }
 .scene-section input:not([type="checkbox"]),
@@ -86,7 +86,7 @@
   background: var(--paper);
   color: var(--ink);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--t-meta);
   padding: 10px;
 }
 .scene-section textarea {
@@ -124,11 +124,11 @@
   box-shadow: 0 0 0 1px var(--green);
 }
 .scene-template-options b {
-  font-size: 11px;
+  font-size: var(--t-cap);
   font-weight: 500;
 }
 .scene-template-options small {
-  font-size: 10px;
+  font-size: var(--t-cap);
   line-height: 1.6;
   color: var(--muted);
 }
@@ -173,7 +173,7 @@
   text-align: left;
   border: 1px solid var(--line);
   border-radius: var(--r-tag);
-  font-size: 12px;
+  font-size: var(--t-cap);
   overflow-wrap: anywhere;
 }
 .scene-placement-list button[aria-pressed="true"] {
@@ -182,7 +182,7 @@
 }
 .scene-placement-list small {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--muted);
 }
 /* A long title wraps; the + beside it keeps its size. */
@@ -199,11 +199,11 @@
 .scene-search-results small {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--t-cap);
   margin-top: 3px;
 }
 .scene-hint {
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--muted);
 }
@@ -217,7 +217,7 @@
   padding: 8px 14px;
   border: 1px solid var(--line);
   border-radius: var(--r-tag);
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .scene-order-buttons button:disabled,
 .scene-take-off:disabled {
@@ -239,7 +239,7 @@
   background: var(--paper);
   padding: 15px 0 8px;
   border-top: 1px solid var(--line);
-  z-index: 12;
+  z-index: var(--layer-sticky);
 }
 .scene-editor-footer > div {
   display: flex;
@@ -247,7 +247,7 @@
   justify-content: flex-end;
 }
 .scene-error {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.7;
   color: var(--alert);
   margin-bottom: 10px;
@@ -269,12 +269,12 @@
 }
 .editor-immersive-entry h2 {
   font-family: var(--serif);
-  font-size: 19px;
+  font-size: var(--t-title);
   margin: 0 0 7px;
 }
 .editor-immersive-entry p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   margin: 0;
 }
@@ -292,12 +292,12 @@
 }
 .editor-messages h2 {
   font-family: var(--serif);
-  font-size: 19px;
+  font-size: var(--t-title);
   margin: 0 0 7px;
 }
 .editor-messages > p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   margin: 0 0 12px;
 }
@@ -324,12 +324,12 @@
 }
 .editor-messages time {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .editor-messages li p {
   grid-column: 1 / -1;
   margin: 0;
-  font-size: 14px;
+  font-size: var(--t-meta);
   line-height: 1.8;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

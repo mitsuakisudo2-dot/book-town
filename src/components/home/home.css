@@ -49,7 +49,7 @@
 .home-tabs {
   position: sticky;
   top: var(--home-bar);
-  z-index: 12;
+  z-index: var(--layer-sticky);
   display: flex;
   margin: -28px calc(-1 * var(--home-gutter)) 0;
   background: color-mix(in srgb, var(--paper) 92%, transparent);
@@ -199,7 +199,7 @@ html[data-home-tab="letters"]
 .home-slide-title {
   margin: 0;
   font-family: var(--serif);
-  font-size: clamp(18px, 5.6vw, var(--t-head));
+  font-size: clamp(var(--t-title), 5.6vw, var(--t-head));
   font-weight: 600;
   line-height: 1.4;
   text-shadow: 0 1px 6px color-mix(in srgb, var(--shade) 60%, transparent);
@@ -984,7 +984,7 @@ html[data-home-tab] {
 .home-new-slot {
   position: sticky;
   top: calc(var(--home-bar) + 45px);
-  z-index: 11;
+  z-index: calc(var(--layer-sticky) - 1);
   display: flex;
   justify-content: center;
   height: 0;

@@ -14,7 +14,7 @@
   margin-bottom: 18px;
 }
 .visitor-page .visitor-page-note {
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 2;
   color: var(--ink-2);
 }

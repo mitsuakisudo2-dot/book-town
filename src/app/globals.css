@@ -7,7 +7,7 @@
   background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 14px;
+  font-size: var(--t-meta);
   font-synthesis: none;
 }
 * {
@@ -104,7 +104,7 @@ input[type="checkbox"] {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  z-index: 20;
+  z-index: var(--layer-sidebar);
 }
 .brand {
   display: flex;
@@ -119,20 +119,20 @@ input[type="checkbox"] {
 }
 .brand > span:last-child {
   font-family: Georgia, serif;
-  font-size: 23px;
+  font-size: var(--t-head);
   letter-spacing: -0.6px;
   line-height: 1.3;
 }
 .brand small {
   display: block;
   font-family: var(--sans);
-  font-size: 8px;
+  font-size: var(--t-cap);
   letter-spacing: 1.2px;
   color: var(--ink-2);
   margin-top: 9px;
 }
 .side-caption {
-  font-size: 9px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   letter-spacing: 0.8px;
   margin: 25px 0 38px 8px;
@@ -147,7 +147,7 @@ input[type="checkbox"] {
   align-items: center;
   border-radius: var(--r-tag);
   padding: 15px 15px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .side-link:hover {
@@ -168,7 +168,7 @@ input[type="checkbox"] {
   background: var(--green);
   color: var(--on-green);
   border-radius: var(--r-tag);
-  font-size: 11px;
+  font-size: var(--t-cap);
   margin-top: 25px;
   box-shadow: var(--lift-2);
 }
@@ -188,12 +188,12 @@ input[type="checkbox"] {
 }
 .side-philosophy p {
   font-family: var(--serif);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 2;
   letter-spacing: 0.5px;
 }
 .side-philosophy small {
-  font-size: 8px;
+  font-size: var(--t-cap);
   display: block;
   margin-top: 17px;
   color: var(--ink-2);
@@ -209,13 +209,13 @@ input[type="checkbox"] {
   flex: 1;
 }
 .side-me b {
-  font-size: 11px;
+  font-size: var(--t-cap);
   font-weight: 500;
   display: block;
 }
 .side-me small {
   display: block;
-  font-size: 8px;
+  font-size: var(--t-cap);
   margin-top: 5px;
   color: var(--ink-2);
 }
@@ -255,7 +255,7 @@ input[type="checkbox"] {
   gap: 20px;
   position: sticky;
   top: 0;
-  z-index: 16;
+  z-index: var(--layer-topbar);
   background: color-mix(in srgb, var(--paper) 95%, transparent);
   backdrop-filter: blur(12px);
 }
@@ -272,7 +272,7 @@ input[type="checkbox"] {
   outline: none;
   width: 100%;
   max-width: 350px;
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 .top-search input::placeholder {
   color: var(--ink-2);
@@ -282,7 +282,7 @@ input[type="checkbox"] {
   padding: 0 5px;
   border-radius: var(--r-tag);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--t-cap);
   opacity: 0.6;
 }
 .top-actions {
@@ -297,7 +297,7 @@ input[type="checkbox"] {
   border: 1px solid var(--line);
   border-radius: var(--r-tag);
   padding: 4px 7px;
-  font-size: 9px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   display: flex;
   gap: 6px;
@@ -336,7 +336,7 @@ input[type="checkbox"] {
 }
 .demo-tag {
   display: inline-flex;
-  font-size: 7px;
+  font-size: var(--t-cap);
   letter-spacing: 0.3px;
   line-height: 1.6;
   color: var(--ink-2);
@@ -373,7 +373,7 @@ input[type="checkbox"] {
   padding: 11px 13px;
   width: 100%;
   background: var(--sheet);
-  font-size: 12px;
+  font-size: var(--t-cap);
   outline-color: var(--green);
 }
 .field::placeholder {
@@ -381,7 +381,7 @@ input[type="checkbox"] {
 }
 .form-label {
   display: block;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-bottom: 18px;
 }
@@ -393,7 +393,7 @@ input[type="checkbox"] {
   color: var(--ink-2);
   border-radius: var(--r-tag);
   padding: 14px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.9;
   margin: 19px 0;
 }
@@ -402,7 +402,7 @@ input[type="checkbox"] {
   inset: 0;
   background: color-mix(in srgb, var(--shade) 33%, transparent);
   backdrop-filter: blur(4px);
-  z-index: 80;
+  z-index: var(--layer-modal);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -506,7 +506,7 @@ input[type="checkbox"] {
     padding-block: 2px;
   }
   .modal.is-writing > .modal-top h2 {
-    font-size: 17px;
+    font-size: var(--t-page);
     line-height: 1.5;
   }
 }
@@ -519,18 +519,18 @@ input[type="checkbox"] {
 }
 .modal-top h2 {
   font-family: var(--serif);
-  font-size: 21px;
+  font-size: var(--t-head);
   font-weight: 500;
   line-height: 1.8;
 }
 .modal-lead {
   font-family: var(--serif);
-  font-size: 16px;
+  font-size: var(--t-page);
   line-height: 1.9;
   margin-bottom: 15px;
 }
 .modal > .muted {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 2;
 }
 .modal > .btn:last-child {
@@ -541,7 +541,7 @@ input[type="checkbox"] {
   bottom: 25px;
   left: calc(50% + 65px);
   transform: translateX(-50%);
-  z-index: 120;
+  z-index: var(--layer-toast);
   background: var(--green);
   color: var(--on-green);
   box-shadow: var(--lift-3);
@@ -550,7 +550,7 @@ input[type="checkbox"] {
   display: flex;
   gap: 9px;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--t-cap);
   max-width: 90vw;
   animation: fade-in 0.18s ease;
 }
@@ -672,7 +672,7 @@ div.book-jacket:hover {
 .cover-credit {
   display: block;
   margin: 6px 0;
-  font-size: 10px;
+  font-size: var(--t-cap);
   line-height: 1.7;
   color: var(--ink-2);
 }
@@ -688,7 +688,7 @@ div.book-jacket:hover {
 }
 .google-covers-credit {
   margin: 18px 43px 0;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   text-align: right;
 }
@@ -787,18 +787,18 @@ div.book-jacket:hover {
 }
 .catalog-book h3 {
   font-family: var(--serif);
-  font-size: 13px;
+  font-size: var(--t-meta);
   font-weight: 500;
   line-height: 1.7;
   margin-top: 14px;
 }
 .catalog-book p {
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-top: 5px;
 }
 .catalog-book > span {
-  font-size: 8px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   display: block;
   margin: 5px 0 12px;
@@ -808,13 +808,13 @@ div.book-jacket:hover {
 }
 .page-title {
   font-family: var(--serif);
-  font-size: 31px;
+  font-size: var(--t-hero);
   font-weight: 500;
   letter-spacing: 1px;
   line-height: 1.7;
 }
 .page-subtitle {
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-top: 10px;
 }
@@ -835,12 +835,12 @@ div.book-jacket:hover {
 .empty-state h3 {
   font-family: var(--serif);
   font-weight: 500;
-  font-size: 21px;
+  font-size: var(--t-head);
   line-height: 1.9;
   margin-bottom: 15px;
 }
 .empty-state p {
-  font-size: 12px;
+  font-size: var(--t-cap);
   margin-bottom: 20px;
 }
 .empty-state-actions {
@@ -855,16 +855,16 @@ div.book-jacket:hover {
 }
 .not-found h1 {
   font-family: var(--serif);
-  font-size: 25px;
+  font-size: var(--t-big);
   font-weight: 500;
 }
 .not-found p {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--t-cap);
   margin: 20px 0 25px;
 }
 .back-link {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   display: inline-flex;
   align-items: center;
@@ -893,20 +893,20 @@ div.book-jacket:hover {
 }
 .shop-hero h1 {
   font-family: var(--serif);
-  font-size: 36px;
+  font-size: var(--t-display);
   line-height: 1.6;
   font-weight: 500;
   color: var(--theme-deep);
   letter-spacing: 2px;
 }
 .shop-tagline {
-  font-size: 12px;
+  font-size: var(--t-cap);
   letter-spacing: 0.7px;
   color: var(--theme-deep);
   margin-top: 8px;
 }
 .shop-introduction {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.9;
   color: var(--ink-2);
   margin-top: 16px;
@@ -924,11 +924,11 @@ div.book-jacket:hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .owner-profile-link b {
-  font-size: 13px;
+  font-size: var(--t-meta);
   font-weight: 500;
   color: var(--green);
 }
@@ -936,16 +936,15 @@ div.book-jacket:hover {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 8px;
+  font-size: var(--t-cap);
   margin-top: 5px;
   color: var(--ink-2);
 }
 .shop-social-note {
-  font-size: 9px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-left: auto;
 }
-
 .shop-shelf-index {
   display: flex;
   gap: 9px;
@@ -960,7 +959,7 @@ div.book-jacket:hover {
   background: var(--sheet);
   border-radius: var(--r-pill);
   padding: 5px 11px;
-  font-size: 9px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .shop-shelf-index a:hover {
@@ -979,19 +978,19 @@ div.book-jacket:hover {
 }
 .store-shelf-label > span {
   font-family: Georgia, serif;
-  font-size: 17px;
+  font-size: var(--t-page);
   color: var(--ink-2);
   font-style: italic;
 }
 .store-shelf-label h3 {
   font-family: var(--serif);
-  font-size: 17px;
+  font-size: var(--t-page);
   font-weight: 500;
   letter-spacing: 0.5px;
 }
 .store-shelf-label small {
   margin-left: auto;
-  font-size: 9px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .shelf-scroll {
@@ -1175,7 +1174,7 @@ div.book-jacket:hover {
   gap: 12px;
   min-width: 0;
   color: #9d8662;
-  font-size: 12px;
+  font-size: var(--t-cap);
   text-align: center;
   overflow-wrap: anywhere;
   word-break: auto-phrase;
@@ -1242,17 +1241,17 @@ div.book-jacket:hover {
 }
 .shop-owner-footer b {
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: var(--t-meta);
   font-weight: 500;
   color: var(--ink-2);
 }
 .shop-owner-footer p {
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-top: 5px;
 }
 .genre-tag {
-  font-size: 9px;
+  font-size: var(--t-cap);
   background: var(--green-soft);
   border-radius: var(--r-pill);
   display: inline-block;
@@ -1260,14 +1259,14 @@ div.book-jacket:hover {
   color: var(--green);
 }
 .jacket-disclaimer {
-  font-size: 8px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   display: block;
   margin-top: 15px;
   line-height: 1.7;
 }
 .book-summary {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 2.05;
   color: var(--ink-2);
   margin: 22px 0;
@@ -1283,12 +1282,12 @@ div.book-jacket:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .owner-pop p {
   font-family: var(--serif);
-  font-size: 16px;
+  font-size: var(--t-page);
   color: var(--ink-2);
   line-height: 2;
   letter-spacing: 0.5px;
@@ -1297,7 +1296,7 @@ div.book-jacket:hover {
   margin: 13px 0;
 }
 .owner-pop small {
-  font-size: 9px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .book-page-hero {
@@ -1318,13 +1317,13 @@ div.book-jacket:hover {
 }
 .book-page-hero h1 {
   font-family: var(--serif);
-  font-size: 35px;
+  font-size: var(--t-display);
   font-weight: 500;
   line-height: 1.8;
   margin: 10px 0 6px;
 }
 .book-page-author {
-  font-size: 13px;
+  font-size: var(--t-meta);
   color: var(--ink-2);
 }
 .book-page-hero .book-summary {
@@ -1335,12 +1334,12 @@ div.book-jacket:hover {
 }
 .book-path-heading h2 {
   font-family: var(--serif);
-  font-size: 25px;
+  font-size: var(--t-big);
   font-weight: 500;
   line-height: 1.8;
 }
 .book-path-heading p {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-top: 8px;
 }
@@ -1371,7 +1370,7 @@ div.book-jacket:hover {
 }
 .stockist-title h3 {
   font-family: var(--serif);
-  font-size: 18px;
+  font-size: var(--t-title);
   font-weight: 500;
   line-height: 1.7;
 }
@@ -1386,14 +1385,14 @@ div.book-jacket:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--theme-deep);
   opacity: 0.8;
   margin: 12px 0 0;
 }
 .stockist blockquote {
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: var(--t-body);
   font-weight: 400;
   line-height: 2;
   letter-spacing: 0.4px;
@@ -1413,7 +1412,7 @@ div.book-jacket:hover {
   gap: 12px;
 }
 .stockist-bottom > span {
-  font-size: 8px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   max-width: 150px;
 }
@@ -1454,7 +1453,7 @@ div.book-jacket:hover {
     padding: 0 32px;
   }
   .brand > span:last-child {
-    font-size: 21px;
+    font-size: var(--t-head);
   }
   .brand-mark > svg {
     width: 27px;
@@ -1478,22 +1477,22 @@ div.book-jacket:hover {
     width: 155px;
   }
   .book-page-hero h1 {
-    font-size: 30px;
+    font-size: var(--t-hero);
   }
   .catalog-grid {
     gap: 28px 20px;
   }
   .shop-hero h1 {
-    font-size: 31px;
+    font-size: var(--t-hero);
   }
   .shop-hero-bottom {
     gap: 13px;
   }
   .shop-social-note {
-    font-size: 8px;
+    font-size: var(--t-cap);
   }
   .side-philosophy p {
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .town-footer {
     display: block;
@@ -1505,7 +1504,7 @@ div.book-jacket:hover {
 }
 @media (max-width: 760px) {
   :root {
-    font-size: 13px;
+    font-size: var(--t-meta);
   }
   .town-sidebar {
     display: none;
@@ -1527,7 +1526,7 @@ div.book-jacket:hover {
   }
   .mobile-brand span {
     font-family: Georgia, serif;
-    font-size: 20px;
+    font-size: var(--t-head);
     letter-spacing: -0.5px;
   }
   .top-search {
@@ -1535,7 +1534,7 @@ div.book-jacket:hover {
     min-width: 0;
   }
   .top-search input {
-    font-size: 10px;
+    font-size: var(--t-cap);
     max-width: 155px;
   }
   .top-search kbd {
@@ -1548,7 +1547,7 @@ div.book-jacket:hover {
     display: none;
   }
   .demo-pill {
-    font-size: 8px;
+    font-size: var(--t-cap);
     padding: 3px 6px;
     white-space: nowrap;
   }
@@ -1574,7 +1573,7 @@ div.book-jacket:hover {
     bottom: 0;
     left: 0;
     right: 0;
-    z-index: 35;
+    z-index: var(--layer-tabbar);
     display: flex;
     justify-content: space-around;
     align-items: center;
@@ -1598,17 +1597,17 @@ div.book-jacket:hover {
     color: var(--green);
   }
   .town-bottom-nav span {
-    font-size: 10px;
+    font-size: var(--t-cap);
   }
   .toast {
     left: 50%;
     bottom: 91px;
-    font-size: 11px;
+    font-size: var(--t-cap);
     padding: 12px 17px;
     max-width: 91vw;
   }
   .field {
-    font-size: 16px;
+    font-size: var(--t-page);
   }
   .modal-backdrop {
     padding: 14px;
@@ -1621,44 +1620,44 @@ div.book-jacket:hover {
     margin-bottom: 19px;
   }
   .modal-top h2 {
-    font-size: 20px;
+    font-size: var(--t-head);
   }
   .modal-lead {
-    font-size: 15px;
+    font-size: var(--t-body);
   }
   .modal > .muted {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
   .catalog-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 25px 18px;
   }
   .catalog-book h3 {
-    font-size: 12px;
+    font-size: var(--t-cap);
     margin-top: 12px;
   }
   .catalog-book p {
-    font-size: 10px;
+    font-size: var(--t-cap);
     line-height: 1.7;
   }
   .catalog-book > span {
-    font-size: 9px;
+    font-size: var(--t-cap);
   }
   .page-title {
-    font-size: 27px;
+    font-size: var(--t-big);
   }
   .page-subtitle {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
   .back-link {
-    font-size: 11px;
+    font-size: var(--t-cap);
     margin-bottom: 21px;
   }
   .shop-hero {
     padding: 26px 22px 23px;
   }
   .shop-hero h1 {
-    font-size: 29px;
+    font-size: var(--t-hero);
     letter-spacing: 1px;
   }
   .shop-hero .eyebrow {
@@ -1666,10 +1665,10 @@ div.book-jacket:hover {
     margin-bottom: 14px;
   }
   .shop-tagline {
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .shop-introduction {
-    font-size: 13px;
+    font-size: var(--t-meta);
     line-height: 1.95;
     margin-top: 13px;
   }
@@ -1680,16 +1679,16 @@ div.book-jacket:hover {
     padding-top: 17px;
   }
   .owner-profile-link {
-    font-size: 10px;
+    font-size: var(--t-cap);
   }
   .owner-profile-link b {
-    font-size: 13px;
+    font-size: var(--t-meta);
   }
   .owner-profile-link small {
-    font-size: 9px;
+    font-size: var(--t-cap);
   }
   .shop-social-note {
-    font-size: 8px;
+    font-size: var(--t-cap);
     margin-left: auto;
   }
   .shop-shelf-index {
@@ -1697,7 +1696,7 @@ div.book-jacket:hover {
     margin-bottom: 21px;
   }
   .shop-shelf-index a {
-    font-size: 10px;
+    font-size: var(--t-cap);
     padding: 6px 11px;
   }
   .store-shelf-section {
@@ -1709,14 +1708,14 @@ div.book-jacket:hover {
     gap: 10px;
   }
   .store-shelf-label h3 {
-    font-size: 17px;
+    font-size: var(--t-page);
     line-height: 1.8;
   }
   .store-shelf-label > span {
-    font-size: 16px;
+    font-size: var(--t-page);
   }
   .store-shelf-label small {
-    font-size: 9px;
+    font-size: var(--t-cap);
     white-space: nowrap;
   }
   .shelf-books-row {
@@ -1730,20 +1729,20 @@ div.book-jacket:hover {
     padding-top: 23px;
   }
   .shop-owner-footer b {
-    font-size: 14px;
+    font-size: var(--t-meta);
   }
   .shop-owner-footer p {
-    font-size: 11px;
+    font-size: var(--t-cap);
     line-height: 1.9;
   }
   .shop-owner-footer .text-btn {
     margin-left: 57px;
   }
   .jacket-disclaimer {
-    font-size: 8px;
+    font-size: var(--t-cap);
   }
   .book-summary {
-    font-size: 13px;
+    font-size: var(--t-meta);
     margin: 21px 0;
     line-height: 2;
   }
@@ -1751,15 +1750,15 @@ div.book-jacket:hover {
     padding: 17px 18px;
   }
   .owner-pop > span {
-    font-size: 10px;
+    font-size: var(--t-cap);
   }
   .owner-pop p {
-    font-size: 15px;
+    font-size: var(--t-body);
     line-height: 2;
     margin: 12px 0;
   }
   .owner-pop small {
-    font-size: 9px;
+    font-size: var(--t-cap);
   }
   .book-page-hero {
     gap: 22px;
@@ -1770,7 +1769,7 @@ div.book-jacket:hover {
     width: 117px;
   }
   .book-page-hero h1 {
-    font-size: 26px;
+    font-size: var(--t-big);
     line-height: 1.7;
     margin: 9px 0 6px;
   }
@@ -1778,32 +1777,32 @@ div.book-jacket:hover {
     letter-spacing: 1.1px;
   }
   .book-page-author {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
   .book-page-hero .genre-tag {
-    font-size: 8px;
+    font-size: var(--t-cap);
     padding: 4px 9px;
   }
   .book-page-hero .book-summary {
-    font-size: 12px;
+    font-size: var(--t-cap);
     margin: 14px 0 18px;
   }
   .book-page-hero .btn {
     gap: 5px;
   }
   .book-page-hero .jacket-disclaimer {
-    font-size: 7px;
+    font-size: var(--t-cap);
     margin-top: 13px;
   }
   .book-path-heading {
     margin: 29px 0 22px;
   }
   .book-path-heading h2 {
-    font-size: 23px;
+    font-size: var(--t-head);
     line-height: 1.8;
   }
   .book-path-heading p {
-    font-size: 12px;
+    font-size: var(--t-cap);
     line-height: 1.9;
     margin-top: 8px;
   }
@@ -1811,10 +1810,10 @@ div.book-jacket:hover {
     padding: 20px 19px;
   }
   .stockist-title h3 {
-    font-size: 18px;
+    font-size: var(--t-title);
   }
   .stockist-title .demo-tag {
-    font-size: 7px;
+    font-size: var(--t-cap);
     white-space: nowrap;
   }
   .stockist-title > a {
@@ -1825,20 +1824,19 @@ div.book-jacket:hover {
     margin-left: 3px;
   }
   .stockist-shelf {
-    font-size: 11px;
+    font-size: var(--t-cap);
     margin-top: 11px;
   }
   .stockist blockquote {
-    font-size: 15px;
+    font-size: var(--t-body);
     line-height: 1.95;
     margin: 18px 0 19px;
     padding-left: 13px;
   }
   .stockist-bottom > span {
-    font-size: 9px;
+    font-size: var(--t-cap);
     max-width: 130px;
   }
-
   .stockist-list {
     gap: 18px;
   }
@@ -1848,10 +1846,10 @@ div.book-jacket:hover {
   .empty-state h1,
   .empty-state h2,
   .empty-state h3 {
-    font-size: 20px;
+    font-size: var(--t-head);
   }
   .empty-state p {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
   .wishlist-grid {
     margin-top: 28px;
@@ -1866,7 +1864,7 @@ div.book-jacket:hover {
     gap: 12px;
   }
   .mobile-brand span {
-    font-size: 19px;
+    font-size: var(--t-title);
   }
   .mobile-brand > svg {
     width: 22px;
@@ -1876,10 +1874,10 @@ div.book-jacket:hover {
   }
   .top-search input {
     max-width: 111px;
-    font-size: 9px;
+    font-size: var(--t-cap);
   }
   .top-actions .demo-pill {
-    font-size: 7px;
+    font-size: var(--t-cap);
     padding: 3px 5px;
   }
   .shop-window {
@@ -1890,28 +1888,28 @@ div.book-jacket:hover {
     padding: 25px 19px 22px;
   }
   .shop-hero h1 {
-    font-size: 27px;
+    font-size: var(--t-big);
   }
   .shop-introduction {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
   .shop-hero-bottom {
     gap: 11px;
   }
   .shop-social-note {
-    font-size: 7px;
+    font-size: var(--t-cap);
   }
   .store-shelf-label h3 {
-    font-size: 15px;
+    font-size: var(--t-body);
   }
   .catalog-grid {
     gap: 23px 14px;
   }
   .catalog-book h3 {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
   .catalog-book p {
-    font-size: 9px;
+    font-size: var(--t-cap);
   }
   .book-page-hero {
     gap: 18px;
@@ -1920,18 +1918,17 @@ div.book-jacket:hover {
     width: 102px;
   }
   .book-page-hero h1 {
-    font-size: 23px;
+    font-size: var(--t-head);
   }
   .book-page-hero .book-summary {
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .stockist-title h3 {
-    font-size: 17px;
+    font-size: var(--t-page);
   }
   .stockist-bottom > span {
-    font-size: 8px;
+    font-size: var(--t-cap);
   }
-
   .town-footer {
     margin-left: 16px;
     margin-right: 16px;
@@ -1953,7 +1950,7 @@ div.book-jacket:hover {
   background: var(--notice);
   border: 1px solid var(--line-2);
   border-radius: var(--r-tag);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink);
 }
@@ -1968,7 +1965,7 @@ div.book-jacket:hover {
 
 /* Keep mobile search readable and easy to touch. */
 .top-search input {
-  font-size: 13px;
+  font-size: var(--t-meta);
 }
 @media (max-width: 760px) {
   .town-topbar {
@@ -1988,7 +1985,7 @@ div.book-jacket:hover {
     grid-row: 1;
   }
   .top-actions .demo-pill {
-    font-size: 10px;
+    font-size: var(--t-cap);
     padding: 4px 7px;
   }
   .top-search {
@@ -2004,13 +2001,13 @@ div.book-jacket:hover {
     justify-content: flex-start;
   }
   .top-search input {
-    font-size: 16px;
+    font-size: var(--t-page);
     max-width: none;
     min-width: 0;
     height: 100%;
   }
   .top-search input::placeholder {
-    font-size: 12px;
+    font-size: var(--t-cap);
     color: var(--ink-2);
   }
   .store-shelf-section {
@@ -2034,7 +2031,7 @@ div.book-jacket:hover {
   border-color: var(--line-2);
   background: var(--sheet);
   color: var(--green);
-  font-size: 11px;
+  font-size: var(--t-cap);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -2050,7 +2047,7 @@ div.book-jacket:hover {
   border-radius: 50%;
   background: var(--green-soft);
   color: var(--green);
-  font-size: 11px;
+  font-size: var(--t-cap);
   font-weight: 700;
 }
 .town-shell .top-actions button.demo-pill:hover {
@@ -2102,7 +2099,7 @@ dialog .toast {
    the search page and every picker that finds books. Quiet in size, but
    readable (4.5:1 or more on the paper and on white). */
 .search-near {
-  font-size: 11px;
+  font-size: var(--t-cap);
   font-weight: 400;
   color: var(--ink-2);
   margin: 18px 0 0;

@@ -1,7 +1,7 @@
 /* Comfortable reading and touch targets; keep decorative book-cover lettering intact. */
 .town-shell .composer-text,
 .town-shell .bh-pop .bh-pop-text {
-  font-size: 16px;
+  font-size: var(--t-page);
   line-height: 1.85;
 }
 .town-shell .page-subtitle,
@@ -10,29 +10,29 @@
 .town-shell .reading-muted,
 .town-shell .social-note,
 .town-shell .empty-state p {
-  font-size: 14px;
+  font-size: var(--t-meta);
   color: var(--ink-2);
 }
 .town-shell .book-page-hero .book-summary,
 .town-shell .book-page-author,
 .town-shell .book-path-heading p {
-  font-size: 14px;
+  font-size: var(--t-meta);
   color: var(--ink-2);
   line-height: 1.85;
 }
 .town-shell .book-page-hero .jacket-disclaimer {
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   line-height: 1.8;
 }
 .town-shell .search-box input {
-  font-size: 16px;
+  font-size: var(--t-page);
 }
 .town-shell .composer-count,
 .town-shell .picker-chosen small,
 .town-shell .demo-tag,
 .town-shell .street-shop-footer {
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .town-shell .composer-book,
@@ -40,19 +40,19 @@
 .town-shell .composer-spoiler,
 .town-shell .street-follow {
   min-height: 44px;
-  font-size: 13px;
+  font-size: var(--t-meta);
   color: var(--green);
 }
 .town-shell .field,
 .town-shell .picker-search input {
-  font-size: 16px;
+  font-size: var(--t-page);
 }
 .town-shell .compose-fab {
   align-content: center;
   gap: 3px;
 }
 .town-shell .compose-fab span {
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1;
 }
 @media (max-width: 760px) {
@@ -63,11 +63,11 @@
     row-gap: 0;
   }
   .town-shell .town-bottom-nav a {
-    font-size: 12px;
+    font-size: var(--t-cap);
     color: var(--ink-2);
   }
   .town-shell .town-bottom-nav span {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
 }
 @media (max-width: 420px) {
@@ -132,14 +132,14 @@
     min-width: 0;
   }
   .town-shell .town-bottom-nav span {
-    font-size: 10.5px;
+    font-size: var(--t-cap);
     letter-spacing: -0.03em;
     white-space: nowrap;
   }
 }
 @media (max-width: 340px) {
   .town-shell .town-bottom-nav span {
-    font-size: 9.5px;
+    font-size: var(--t-cap);
     letter-spacing: -0.05em;
   }
 }
@@ -151,7 +151,7 @@
 }
 .wishlist-invitations h2 {
   font-family: var(--serif);
-  font-size: 17px;
+  font-size: var(--t-page);
   font-weight: 500;
   margin-bottom: 12px;
   color: var(--forest);
@@ -184,12 +184,12 @@
 }
 .wishlist-invitations b {
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: var(--t-body);
   font-weight: 600;
 }
 .wishlist-invitations q {
   font-family: "Kaisei HarunoUmi", var(--serif);
-  font-size: 14px;
+  font-size: var(--t-meta);
   line-height: 1.7;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -203,6 +203,6 @@
   content: "」";
 }
 .wishlist-invitations small {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }

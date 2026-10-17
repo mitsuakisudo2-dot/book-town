@@ -24,7 +24,7 @@
 }
 .poster-editor-elsewhere h2 {
   margin: 0 0 4px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 500;
   color: var(--ink-2);
 }
@@ -39,7 +39,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 7px 0;
-  font-size: 13px;
+  font-size: var(--t-meta);
 }
 .poster-editor-elsewhere li + li {
   border-top: 1px dashed var(--line);
@@ -57,7 +57,7 @@
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--green);
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -74,7 +74,7 @@
 .poster-editor-preview {
   position: sticky;
   top: 79px;
-  z-index: 6;
+  z-index: var(--layer-sticky);
   display: flex;
   align-items: flex-end;
   gap: 14px;
@@ -120,7 +120,7 @@
   border-radius: var(--r-tag);
   background: var(--sheet);
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .poster-page-tabs button[aria-pressed="true"] {
   background: var(--green);
@@ -133,7 +133,7 @@
   gap: 4px;
   border-style: dashed;
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 .poster-page-add:hover,
 .poster-page-tabs button:hover:not([aria-pressed="true"]) {
@@ -173,7 +173,7 @@
   padding: 0;
   margin-bottom: 12px;
   font-family: var(--serif);
-  font-size: 17px;
+  font-size: var(--t-page);
   font-weight: 500;
   color: var(--ink);
 }
@@ -186,17 +186,17 @@
   background: var(--green-soft);
   color: var(--green);
   font-family: var(--sans);
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 .poster-step-note {
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink-2);
   margin: -4px 0 12px;
 }
 .poster-editor-quiet {
   display: block;
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink-2);
   margin: 6px 0;
@@ -250,12 +250,12 @@
 }
 .poster-template b {
   font-family: var(--serif);
-  font-size: 13px;
+  font-size: var(--t-meta);
   font-weight: 500;
   margin-top: 4px;
 }
 .poster-template small {
-  font-size: 10px;
+  font-size: var(--t-cap);
   line-height: 1.6;
   color: var(--ink-2);
 }
@@ -326,7 +326,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .poster-chosen-tools {
@@ -367,11 +367,11 @@
   flex: 1;
   white-space: normal;
   font-family: var(--serif);
-  font-size: 13px;
+  font-size: var(--t-meta);
   color: var(--ink);
 }
 .poster-cover-note {
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   line-height: 1.7;
   margin: 2px 0 10px;
@@ -418,11 +418,11 @@
   white-space: nowrap;
 }
 .poster-book-offer b {
-  font-size: 11px;
+  font-size: var(--t-cap);
   font-weight: 500;
 }
 .poster-book-offer small {
-  font-size: 9px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .poster-offer-on {
@@ -439,7 +439,7 @@
 }
 .poster-field label {
   display: block;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-bottom: 6px;
 }
@@ -450,7 +450,7 @@
 .poster-remaining {
   display: block;
   text-align: right;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-top: 4px;
 }
@@ -470,7 +470,7 @@
   padding: 6px;
   border: 1px solid transparent;
   border-radius: var(--r-box);
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   cursor: pointer;
 }
@@ -488,7 +488,7 @@
   border-radius: var(--r-tag);
   border-bottom: 3px solid;
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: var(--t-body);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--shade) 8%, transparent);
 }
 .poster-swatch i {
@@ -512,12 +512,12 @@
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
   background: var(--sheet);
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   cursor: pointer;
 }
 .poster-font span {
-  font-size: 15px;
+  font-size: var(--t-body);
   color: var(--ink);
 }
 .poster-font.is-mincho span {
@@ -538,7 +538,7 @@
   align-items: flex-start;
   gap: 10px;
   margin-bottom: 12px;
-  font-size: 13px;
+  font-size: var(--t-meta);
   cursor: pointer;
 }
 .poster-option input {
@@ -549,7 +549,7 @@
 }
 .poster-option small {
   display: block;
-  font-size: 10px;
+  font-size: var(--t-cap);
   line-height: 1.7;
   color: var(--ink-2);
   margin-top: 2px;
@@ -572,7 +572,7 @@
   align-items: flex-start;
   gap: 7px;
   margin: 12px 0 4px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink-2);
 }
@@ -596,11 +596,11 @@
   border-radius: var(--r-tag);
   background: var(--green-soft);
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.7;
 }
 .poster-editor-undo button {
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--green);
   text-decoration: underline;
   text-underline-offset: 3px;
