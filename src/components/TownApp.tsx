@@ -1029,10 +1029,9 @@ function BookView({
       <p role="status">本を開いています…</p>
     ) : (
       <div className="empty-state">
-        <h1>この本は見つかりませんでした。</h1>
-        <p>この本のページは、いまは見られません。</p>
-        <Link href="/profiles/me/" className="button secondary">
-          保存した本を見る
+        <h1>この本のページは、いまは見られません。</h1>
+        <Link href="/" className="button secondary">
+          街にもどる
         </Link>
       </div>
     );
