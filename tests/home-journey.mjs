@@ -181,9 +181,19 @@ async function compose(text) {
   await expect(sheet).toHaveCount(0);
 }
 /** Stops the page's clock a moment ahead of where it has got to. */
-async function stopClock() {
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.pauseAt(now + 100);
+async function stopClock(ahead = 100) {
+  // A slow runner can take longer than `ahead` between reading the clock and
+  // stopping it, and the clock will not go back. It stands still by then, so
+  // read again: the second try lands ahead of it.
+  for (let tries = 1; ; tries += 1) {
+    const now = await page.evaluate(() => Date.now());
+    try {
+      return await page.clock.pauseAt(now + ahead);
+    } catch (error) {
+      if (tries > 1 || !String(error).includes("fast-forward to the past"))
+        throw error;
+    }
+  }
 }
 /**
  * A finger dragged across the screen (CDP touch: pointer events), one step
@@ -1275,8 +1285,7 @@ try {
         expect(drawn.length).toBeGreaterThan(0);
         const words = page.locator(".home-pull");
         // The clock stops a little ahead: Home is still settling.
-        const now = await page.evaluate(() => Date.now());
-        await page.clock.pauseAt(now + 2000);
+        await stopClock(2000);
         await pull("start");
         await pull("move", 60);
         await expect(words).toHaveText("引っぱって新しい便りを読む");
@@ -2107,7 +2116,11 @@ try {
             ".home-alley > .street-end",
             `${width}px the alley's end`,
           );
-          // Following nobody, 便りだけ's shops to follow.
+          // Following nobody, 便りだけ's shops to follow. Read down to the
+          // alley's end, the bars have slid away (or are sliding back as the
+          // alley grows); a reader goes back up to the tabs first.
+          await page.evaluate(() => scrollTo(0, 0));
+          await expect(tab("便りだけ")).toBeInViewport({ ratio: 1 });
           await tab("便りだけ").tap();
           await expect(
             pane("letters").locator(".follow-suggestions"),
