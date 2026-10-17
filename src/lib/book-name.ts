@@ -24,7 +24,35 @@ export const quotedTitle = (book: Pick<Book, "title">): string =>
 export const quote = (title: string): string => `『${title}』`;
 
 /** The book's author as a reader sees it. */
-export const bookAuthor = (book: Pick<Book, "author">): string => book.author;
+export const bookAuthor = (book: Pick<Book, "author">): string =>
+  authorWords(book.author);
+
+/** A life's years at the end of a catalogue heading: ",1947-", ",1894-1961". */
+const YEARS = /\s*,?\s*[0-9]{3,4}\??\s*-\s*([0-9]{3,4}\??)?\s*$/;
+/** A catalogue heading: family name, given name, and maybe the years. */
+const HEADING = /^([^,\s]+),([^,\s]+)(,[0-9]{3,4}\??-([0-9]{3,4}\??)?)?$/;
+
+/**
+ * An author written the way a library catalogue heads it ("King,Stephen,1947-
+ * 小尾,芙佐,1932-"), in the shape the bibliographic master names people
+ * (docs/09「著者の形」, private.bib_person): no years, a romaji name given
+ * name first ("Stephen King", "James P. Hogan"), a Japanese one joined ("小尾芙佐"), people
+ * one after another with "、". Anything else is the author as written.
+ */
+export function authorWords(author: string): string {
+  const people = author.trim().split(/\s+/);
+  if (!people.every((person) => HEADING.test(person))) return author;
+  return people
+    .map((person) => {
+      const [family, given] = person.replace(YEARS, "").split(",");
+      // The catalogue runs a given name and its initial together
+      // ("JamesP."); the initial gets its space back.
+      return /[A-Za-z]/.test(family + given)
+        ? `${given.replace(/([a-z])([A-Z]\.?)$/, "$1 $2")} ${family}`
+        : family + given;
+    })
+    .join("、");
+}
 
 /** The book with this ID, if the town has it. */
 export function bookById<T extends Pick<Book, "id">>(
