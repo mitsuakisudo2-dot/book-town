@@ -25,7 +25,7 @@
   min-width: 0;
 }
 .poster-screen-name {
-  font-size: 14px;
+  font-size: var(--t-meta);
   font-weight: 500;
   color: var(--ink);
 }
@@ -33,7 +33,7 @@
   color: var(--green);
 }
 .poster-screen-author small {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .poster-screen-kind {
@@ -42,7 +42,7 @@
   align-items: baseline;
   gap: 4px 10px;
   margin-top: 24px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .poster-screen-kind .poster-tag {
@@ -50,7 +50,7 @@
 }
 .poster-screen-title {
   font-family: var(--serif);
-  font-size: 25px;
+  font-size: var(--t-big);
   font-weight: 500;
   line-height: 1.6;
   letter-spacing: 0.04em;
@@ -65,7 +65,7 @@
   border-radius: 5px;
   background: var(--band);
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.7;
 }
 .poster-screen-review {
@@ -73,7 +73,7 @@
 }
 .poster-screen-fact {
   margin-top: 12px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .poster-screen-actions {
@@ -90,7 +90,7 @@
 }
 .poster-screen-books h2 {
   font-family: var(--serif);
-  font-size: 16px;
+  font-size: var(--t-page);
   font-weight: 500;
   margin-bottom: 12px;
 }
@@ -122,13 +122,13 @@
 }
 .poster-screen-books b {
   font-family: var(--serif);
-  font-size: 13px;
+  font-size: var(--t-meta);
   font-weight: 500;
   line-height: 1.6;
   color: var(--ink);
 }
 .poster-screen-books small {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 @media (max-width: 760px) {
@@ -140,7 +140,7 @@
     position: static;
   }
   .poster-screen-title {
-    font-size: 21px;
+    font-size: var(--t-head);
   }
 }
 
@@ -169,7 +169,7 @@
 /* Said once, without a count: the reader chose not to see these. */
 .book-posters-left-out {
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink-2);
 }
@@ -213,13 +213,13 @@
 }
 .profile-posters-empty p {
   max-width: 30em;
-  font-size: 13px;
+  font-size: var(--t-meta);
   line-height: 1.9;
 }
 @media (max-width: 640px) {
   .profile-posters .profile-section-heading .button {
     padding: 8px 12px;
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .profile-poster-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

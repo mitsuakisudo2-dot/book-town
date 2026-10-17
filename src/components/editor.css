@@ -5,7 +5,7 @@
 .editor-kicker {
   display: block;
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: var(--t-cap);
   font-weight: 700;
   letter-spacing: 0.17em;
   line-height: 1.6;
@@ -19,7 +19,7 @@
 }
 .editor-page-heading h1 {
   font-family: var(--font-serif, "Noto Serif JP"), "Yu Mincho", serif;
-  font-size: clamp(23px, 2.5vw, 31px);
+  font-size: clamp(var(--t-head), 2.5vw, var(--t-hero));
   letter-spacing: 0.015em;
   line-height: 1.55;
   margin: 7px 0 10px;
@@ -28,7 +28,7 @@
 .editor-page-heading p,
 .editor-shelves-heading p {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.9;
   margin: 0;
 }
@@ -42,7 +42,7 @@
   border-radius: 6px;
   border: 1px solid transparent;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 600;
   line-height: 1.4;
   text-decoration: none;
@@ -96,7 +96,7 @@
 .editor-label {
   display: block;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 600;
   line-height: 1.7;
 }
@@ -138,7 +138,7 @@
 .editor-required {
   color: var(--ink-2);
   background: var(--band);
-  font-size: 9px;
+  font-size: var(--t-cap);
   margin-left: 5px;
   padding: 2px 5px;
   border-radius: 2px;
@@ -146,13 +146,13 @@
 }
 .editor-optional {
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: var(--t-cap);
   margin-left: 5px;
   font-weight: 400;
 }
 .editor-field-note {
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: var(--t-cap);
   font-weight: 400;
   line-height: 1.8;
   margin: 10px 0 0;
@@ -171,7 +171,7 @@
   border-radius: 4px;
   background: transparent;
   padding: 5px 7px 5px 4px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   cursor: pointer;
   min-height: 38px;
@@ -203,7 +203,7 @@
   justify-content: space-between;
   padding: 17px 20px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 600;
   color: var(--ink-2);
 }
@@ -239,7 +239,7 @@
 }
 .editor-save-refused {
   flex: 1 1 240px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.7;
   color: var(--alert);
 }
@@ -260,7 +260,7 @@
 }
 .editor-shelves-heading h2 {
   font-family: var(--font-serif, "Noto Serif JP"), "Yu Mincho", serif;
-  font-size: 21px;
+  font-size: var(--t-head);
   font-weight: 600;
   margin: 0 0 7px;
 }
@@ -312,7 +312,7 @@
   border-radius: 4px;
   font-family: var(--font-serif, "Noto Serif JP"), "Yu Mincho", serif;
   color: var(--ink);
-  font-size: 17px;
+  font-size: var(--t-page);
   font-weight: 600;
   line-height: 1.5;
   outline: none;
@@ -339,7 +339,7 @@
   color: var(--ink-2);
   border-radius: 5px;
   font: inherit;
-  font-size: 10px;
+  font-size: var(--t-cap);
   min-height: 34px;
   padding: 7px 8px;
   cursor: pointer;
@@ -374,13 +374,13 @@
   justify-content: space-between;
   gap: 12px;
   margin: 18px 0 8px;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .editor-space-row strong {
   color: var(--forest);
   margin-left: 3px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 600;
 }
 .editor-capacity-total {
@@ -416,13 +416,13 @@
   gap: 5px;
   align-items: center;
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: var(--t-cap);
   line-height: 1.7;
   margin: 0;
 }
 .editor-shelf-below .editor-button {
   min-height: 36px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   padding: 8px 12px;
 }
 .editor-selected-book {
@@ -442,14 +442,14 @@
 .editor-selected-heading h3 {
   color: var(--ink);
   font-family: var(--font-serif, "Noto Serif JP"), "Yu Mincho", serif;
-  font-size: 18px;
+  font-size: var(--t-title);
   font-weight: 600;
   margin: 5px 0 5px;
 }
 .editor-selected-heading p {
   margin: 0;
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 .editor-selected-controls {
   display: flex;
@@ -463,12 +463,12 @@
   gap: 8px;
 }
 .editor-control-label {
-  font-size: 11px;
+  font-size: var(--t-cap);
   font-weight: 600;
   color: var(--ink-2);
 }
 .editor-control-note {
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--lamp);
   line-height: 1.6;
 }
@@ -492,7 +492,7 @@
   color: var(--ink-2);
   border-radius: 4px;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--t-cap);
   cursor: pointer;
   transition:
     color 0.2s,
@@ -504,7 +504,7 @@
   box-shadow: 0 1px 4px color-mix(in srgb, var(--shade) 7%, transparent);
 }
 .editor-segment small {
-  font-size: 9px;
+  font-size: var(--t-cap);
   font-weight: 400;
   opacity: 0.7;
 }
@@ -515,7 +515,7 @@
 .editor-move-buttons .editor-button {
   min-height: 40px;
   padding: 8px 11px;
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 .editor-pop-label textarea {
   background: var(--pop);
@@ -535,7 +535,7 @@
   gap: 6px;
   color: var(--green);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--t-cap);
   border: 0;
   background: transparent;
   text-decoration: none;
@@ -550,7 +550,7 @@
   background: transparent;
   padding: 8px 0;
   font-family: inherit;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   cursor: pointer;
 }
@@ -564,7 +564,7 @@
   color: var(--ink-2);
   margin-top: 25px;
   padding: 0 3px;
-  font-size: 10px;
+  font-size: var(--t-cap);
   flex-wrap: wrap;
 }
 .editor-bottom-note > p {
@@ -599,13 +599,13 @@
 .editor-no-shelves h3 {
   font-family: var(--font-serif, "Noto Serif JP"), "Yu Mincho", serif;
   color: var(--ink);
-  font-size: 18px;
+  font-size: var(--t-title);
   font-weight: 500;
   margin: 16px 0 12px;
 }
 .editor-no-shelves p {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.9;
   margin: 0 0 20px;
 }
@@ -614,7 +614,7 @@
 }
 .editor-picker-context {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   margin: 0 0 17px;
 }
@@ -636,7 +636,7 @@
   border: 0;
   background: transparent;
   box-shadow: none;
-  font-size: 12px;
+  font-size: var(--t-cap);
   padding: 12px 0;
 }
 .editor-picker-display {
@@ -647,7 +647,7 @@
   margin: 17px 0 20px;
 }
 .editor-picker-display > span {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   font-weight: 600;
 }
@@ -656,7 +656,7 @@
   border-radius: 5px;
   background: var(--lamp-soft);
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   margin: -5px 0 16px;
 }
@@ -707,7 +707,7 @@
   padding: 12px 4px;
   background: var(--paper);
   border-top: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .editor-book-choice:disabled {
@@ -722,7 +722,7 @@
 }
 .editor-book-choice-title {
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.6;
   font-weight: 600;
   width: 100%;
@@ -734,7 +734,7 @@
 }
 .editor-book-choice-author {
   color: var(--ink-2);
-  font-size: 9px;
+  font-size: var(--t-cap);
   line-height: 1.6;
   margin-top: 3px;
   width: 100%;
@@ -744,7 +744,7 @@
   gap: 3px;
   align-items: center;
   color: var(--green);
-  font-size: 9px;
+  font-size: var(--t-cap);
   line-height: 1.6;
   margin: 10px 0 0;
 }
@@ -757,17 +757,17 @@
   margin: 0 auto;
 }
 .editor-empty-search p {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.8;
 }
 .editor-add-shelf-form > p {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.9;
   color: var(--ink-2);
   margin: 0 0 18px;
 }
 .editor-add-shelf-form > .editor-field-note {
-  font-size: 10px;
+  font-size: var(--t-cap);
   margin-top: 11px;
 }
 .editor-add-shelf-form > button {
@@ -776,11 +776,11 @@
 }
 .editor-remove-shelf-dialog > p {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.9;
 }
 .editor-remove-shelf-dialog > p.editor-field-note {
-  font-size: 10px;
+  font-size: var(--t-cap);
 }
 .editor-remove-shelf-dialog > div {
   display: flex;
@@ -816,24 +816,24 @@
   .editor-label input,
   .editor-label textarea,
   .editor-search-field input {
-    font-size: 16px;
+    font-size: var(--t-page);
   }
   .editor-page-heading {
     display: block;
     margin-bottom: 21px;
   }
   .editor-page-heading h1 {
-    font-size: 23px;
+    font-size: var(--t-head);
     margin-bottom: 7px;
   }
   .editor-page-heading p {
-    font-size: 11px;
+    font-size: var(--t-cap);
     line-height: 1.9;
   }
   .editor-page-heading > .editor-button {
     margin-top: 16px;
     min-height: 37px;
-    font-size: 11px;
+    font-size: var(--t-cap);
     padding: 8px 12px;
   }
   .editor-settings {
@@ -841,7 +841,7 @@
   }
   .editor-settings summary {
     padding: 15px 16px;
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .editor-settings-fields {
     grid-template-columns: 1fr;
@@ -859,17 +859,17 @@
     gap: 12px;
   }
   .editor-shelves-heading h2 {
-    font-size: 18px;
+    font-size: var(--t-title);
   }
   .editor-shelves-heading p {
-    font-size: 10px;
+    font-size: var(--t-cap);
     max-width: 200px;
     line-height: 1.8;
   }
   .editor-shelves-heading > .editor-button {
     margin-top: 2px;
     min-height: 37px;
-    font-size: 10px;
+    font-size: var(--t-cap);
     padding: 8px 10px;
   }
   .editor-shelves-heading > .editor-button svg {
@@ -890,14 +890,14 @@
     max-width: none;
   }
   .editor-shelf-name-label input {
-    font-size: 16px;
+    font-size: var(--t-page);
   }
   .editor-shelf-heading-actions {
     gap: 0;
   }
   .editor-privacy {
     padding: 6px;
-    font-size: 9px;
+    font-size: var(--t-cap);
     min-height: 33px;
   }
   .editor-privacy svg {
@@ -908,11 +908,11 @@
     height: 34px;
   }
   .editor-space-row {
-    font-size: 9px;
+    font-size: var(--t-cap);
     margin-top: 15px;
   }
   .editor-space-row strong {
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .editor-capacity-track {
     margin-bottom: 16px;
@@ -923,7 +923,7 @@
     margin-top: 12px;
   }
   .editor-shelf-below p {
-    font-size: 9px;
+    font-size: var(--t-cap);
     max-width: 160px;
     align-items: flex-start;
   }
@@ -932,7 +932,7 @@
     margin-top: 2px;
   }
   .editor-shelf-below .editor-button {
-    font-size: 10px;
+    font-size: var(--t-cap);
     min-height: 36px;
     padding: 8px 9px;
   }
@@ -940,7 +940,7 @@
     padding: 16px 13px;
   }
   .editor-selected-heading h3 {
-    font-size: 16px;
+    font-size: var(--t-page);
   }
   .editor-selected-controls {
     gap: 18px;
@@ -948,7 +948,7 @@
   }
   .editor-segment button {
     padding: 7px 9px;
-    font-size: 10px;
+    font-size: var(--t-cap);
     min-height: 36px;
   }
   .editor-move-buttons .editor-button {
@@ -957,13 +957,13 @@
   }
   .editor-selected-footer {
     align-items: flex-start;
-    font-size: 10px;
+    font-size: var(--t-cap);
   }
   .editor-remove-book {
-    font-size: 9px;
+    font-size: var(--t-cap);
   }
   .editor-bottom-note {
-    font-size: 9px;
+    font-size: var(--t-cap);
     align-items: flex-start;
   }
   .editor-bottom-note > svg {
@@ -987,32 +987,32 @@
     margin-bottom: 10px;
   }
   .editor-book-choice-title {
-    font-size: 10px;
+    font-size: var(--t-cap);
     min-height: 32px;
   }
   .editor-book-choice-author {
-    font-size: 8px;
+    font-size: var(--t-cap);
   }
   .editor-book-choice-add {
-    font-size: 8px;
+    font-size: var(--t-cap);
     gap: 1px;
   }
   .editor-book-choice-add svg {
     width: 11px;
   }
   .editor-picker-context {
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .editor-picker-display {
     gap: 7px;
   }
   .editor-picker-display .editor-segment button {
-    font-size: 10px;
+    font-size: var(--t-cap);
     padding: 6px 8px;
     gap: 4px;
   }
   .editor-picker-display .editor-segment small {
-    font-size: 8px;
+    font-size: var(--t-cap);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1044,7 +1044,7 @@
   border-radius: 50%;
   background: var(--green);
   color: var(--on-green);
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 700;
   box-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 20%, transparent);
 }

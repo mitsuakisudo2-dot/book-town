@@ -12,12 +12,12 @@
 .record-book b {
   display: block;
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: var(--t-body);
   font-weight: 500;
   line-height: 1.6;
 }
 .record-book small {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 
@@ -27,7 +27,7 @@
   margin: 0 0 18px;
 }
 .feeling-picker legend {
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-bottom: 10px;
 }
@@ -37,7 +37,7 @@
   gap: 7px;
 }
 .feeling-chip {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.5;
   padding: 7px 12px;
   border-radius: 999px;
@@ -69,7 +69,7 @@
   justify-content: space-between;
   gap: 12px;
   margin: 8px 0 16px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .record-options label {
@@ -80,7 +80,7 @@
 /* Shown only near the limit, so it is read: as the composer's count. */
 .record-count {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .record-visibility {
@@ -92,7 +92,7 @@
   gap: 8px;
 }
 .record-visibility legend {
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-bottom: 8px;
 }
@@ -100,7 +100,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   padding: 8px 13px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -122,11 +122,11 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 8px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .record-going .text-button {
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .record-actions {
   display: flex;
@@ -136,7 +136,7 @@
 }
 .record-delete {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--alert);
 }
 
@@ -158,7 +158,7 @@
 }
 .book-feelings h2 {
   font-family: var(--serif);
-  font-size: 20px;
+  font-size: var(--t-head);
   font-weight: 500;
   margin: 6px 0 16px;
 }
@@ -167,7 +167,7 @@
   flex-wrap: wrap;
   gap: 6px 20px;
   font-family: var(--serif);
-  font-size: 19px;
+  font-size: var(--t-title);
   line-height: 1.7;
   color: var(--green);
   margin-bottom: 18px;
@@ -183,13 +183,13 @@
   vertical-align: middle;
 }
 .book-feelings-empty {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 2;
   color: var(--ink-2);
   margin-bottom: 16px;
 }
 .book-talkers h3 {
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 500;
   color: var(--ink-2);
   margin-bottom: 10px;
@@ -206,7 +206,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink);
 }
 .book-feelings-own {
@@ -214,7 +214,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 4px 14px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .book-feelings-own-actions {
@@ -259,7 +259,7 @@
 .record-card-title {
   display: block;
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: var(--t-meta);
   line-height: 1.6;
   color: var(--ink);
   margin-bottom: 6px;
@@ -271,14 +271,14 @@
   margin-bottom: 6px;
 }
 .record-card-feelings span {
-  font-size: 10px;
+  font-size: var(--t-cap);
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--green-soft);
   color: var(--ink);
 }
 .record-card-note {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.9;
   color: var(--ink);
   overflow-wrap: anywhere;
@@ -289,7 +289,7 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 8px;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .record-card-meta span {
@@ -298,7 +298,7 @@
   gap: 4px;
 }
 .record-card-meta .text-button {
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 
 @media (max-width: 600px) {
@@ -306,7 +306,7 @@
     padding: 22px 18px;
   }
   .book-feelings-words {
-    font-size: 17px;
+    font-size: var(--t-page);
   }
   .record-shelf ul {
     grid-template-columns: 1fr;
@@ -333,7 +333,7 @@
 }
 .spoiler-display-note {
   margin: 2px 0 0;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 /* 設定: the six palettes, each named in words beside its colour, and the

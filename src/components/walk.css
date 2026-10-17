@@ -73,6 +73,15 @@
   background: #1d0c05;
   color: var(--on-dark);
   isolation: isolate;
+  /* The walk's own layers, closed in by the isolation above (the town's
+     are --layer-… in tokens.css): the head over the scene, a focused book
+     over its row, the shelf's board over its books, the first hint over
+     all. */
+  --walk-z-top: 10;
+  --walk-z-focus: 10;
+  --walk-z-shelf-edge: 24;
+  --walk-z-shelf-top: 25;
+  --walk-z-hint: 30;
   --walk-light: #ffd293;
   --walk-brush: "Yohaku Brush", "Kaisei HarunoUmi", var(--serif);
   --walk-pen: "Yohaku Pen", "Kaisei HarunoUmi", var(--serif);
@@ -167,6 +176,12 @@
   container-type: inline-size;
   animation: walk-arrive 0.26s ease-out;
 }
+/* The isolation keeps a Modal opened on the walk inside the walk's layers,
+   under the town's bars. While one is open the walk rises to the Modal's
+   layer, so the Modal is over the bottom bar as on every other screen. */
+.walk-view:has(.modal-backdrop) {
+  z-index: var(--layer-modal);
+}
 .walk-artboard > * {
   --walk-u: 1cqw;
 }
@@ -178,7 +193,7 @@
 /* Header: the owner, their words, and the shop's three circles. */
 .walk-top {
   position: relative;
-  z-index: 10;
+  z-index: var(--walk-z-top);
   flex: none;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -225,14 +240,14 @@
 .walk-owner b {
   font-family: var(--serif);
   font-weight: 500;
-  font-size: clamp(11px, 3.1vw, 13px);
+  font-size: clamp(var(--t-cap), 3.1vw, var(--t-meta));
   line-height: 1.25;
   letter-spacing: 0.04em;
 }
 .walk-owner small {
   margin-top: 2px;
   font-family: var(--serif);
-  font-size: clamp(8px, 2.15vw, 9.5px);
+  font-size: var(--t-cap);
   line-height: 1.3;
   color: color-mix(in srgb, var(--on-dark) 90%, transparent);
 }
@@ -245,7 +260,7 @@
   margin: 0;
   font-family: var(--serif);
   font-weight: 500;
-  font-size: 11px;
+  font-size: var(--t-cap);
   line-height: 1.45;
   letter-spacing: 0.04em;
   color: color-mix(in srgb, var(--on-dark) 92%, transparent);
@@ -292,7 +307,7 @@
 }
 .walk-header-tools button small {
   font-family: var(--sans);
-  font-size: 8.5px;
+  font-size: var(--t-cap);
   line-height: 1.2;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -344,13 +359,13 @@
   min-width: 30px;
   text-align: center;
   font-family: var(--sans);
-  font-size: 9px;
+  font-size: var(--t-cap);
   letter-spacing: 0.1em;
   color: color-mix(in srgb, var(--on-dark) 88%, transparent);
 }
 .walk-journey-hint {
   display: none;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: color-mix(in srgb, var(--on-dark) 80%, transparent);
   letter-spacing: 0.08em;
 }
@@ -358,7 +373,7 @@
 /* Shown once, on the first walk: how to turn to the next shop. */
 .walk-first-hint {
   position: absolute;
-  z-index: 30;
+  z-index: var(--walk-z-hint);
   left: 50%;
   top: 78.5%;
   display: flex;
@@ -367,7 +382,7 @@
   margin: 0;
   padding: 8px 15px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   letter-spacing: 0.06em;
   white-space: nowrap;
   color: var(--on-dark);
@@ -640,7 +655,7 @@
   left: 12.2%;
   right: 8.3%;
   height: 1.69%;
-  z-index: 25;
+  z-index: var(--walk-z-shelf-top);
   background:
     linear-gradient(#c69365 0 12%, #863d15 30%, #5a2509 100%),
     url("/themes/woodshop/wood-v2.webp") center / cover;
@@ -671,7 +686,7 @@
   right: 0;
   bottom: 0;
   height: 1.69%;
-  z-index: 24;
+  z-index: var(--walk-z-shelf-edge);
   background: #2b1204;
   box-shadow: inset 0 1px rgba(255, 190, 120, 0.3);
 }
@@ -1062,7 +1077,7 @@
   z-index: auto;
 }
 .walk-book:has(> .walk-book-target:focus-visible) {
-  z-index: 10 !important;
+  z-index: var(--walk-z-focus) !important;
 }
 .walk-book .book-jacket {
   width: 100%;
@@ -1489,7 +1504,7 @@
   height: 56%;
 }
 .walk-actions :is(button, a) small {
-  font-size: clamp(7px, 2.4cqw, 11px);
+  font-size: var(--t-cap);
   text-shadow: 0 1px 3px var(--shade);
 }
 .walk-actions :is(button, a)[aria-pressed="true"] > span {
@@ -1575,17 +1590,17 @@
   font-family: var(--serif);
 }
 .walk-end h1 {
-  font-size: 24px;
+  font-size: var(--t-big);
   line-height: 1.8;
   color: var(--on-dark);
   word-break: auto-phrase;
   text-wrap: balance;
 }
 .walk-end p {
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .walk-end a {
-  font-size: 13px;
+  font-size: var(--t-meta);
   color: color-mix(in srgb, var(--on-dark) 85%, transparent);
   text-decoration: underline;
 }
@@ -1601,7 +1616,7 @@
   background: var(--notice);
   color: var(--ink);
   padding: 8px;
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 .walk-own-missing {
   position: relative;
@@ -1617,7 +1632,7 @@
   margin: 0 0 6px;
   padding: 10px 36px 10px 12px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.6;
   color: var(--on-dark);
   background: color-mix(in srgb, var(--shade) 72%, transparent);
@@ -1626,7 +1641,7 @@
 .walk-own-missing a {
   padding: 4px 12px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--shade);
   background: var(--on-dark);
 }
@@ -1646,7 +1661,7 @@
 .walk-full-pop {
   white-space: pre-wrap;
   font-family: "Yohaku Hand", var(--serif);
-  font-size: 18px;
+  font-size: var(--t-title);
   line-height: 2.2;
   padding: 20px;
   background: var(--pop);
@@ -1699,7 +1714,7 @@
   margin-top: 20px;
 }
 .walk-zoom-nav span {
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 .walk-zoom-nav button {
   min-height: 44px;
@@ -1729,7 +1744,7 @@
   padding: 6px 11px;
   border: 1px solid var(--line-2);
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.4;
   text-align: left;
   color: var(--ink);
@@ -1737,7 +1752,7 @@
 }
 .walk-message-note {
   margin: 10px 0 0;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 /* A book's POP ends with the book, one tap from taking it in hand. */
@@ -1769,10 +1784,10 @@
 .walk-pop-book b {
   font-family: var(--serif);
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--t-meta);
 }
 .walk-pop-book small {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .walk-pop-book em {
@@ -1781,7 +1796,7 @@
   gap: 4px;
   margin-top: 4px;
   font-style: normal;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--green);
 }
 .walk-history-list {
@@ -1793,10 +1808,10 @@
   justify-content: space-between;
   gap: 12px;
   padding: 8px;
-  font-size: 13px;
+  font-size: var(--t-meta);
 }
 .walk-history-list time {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 /* A real cover is shown whole, as its source serves it: never cropped. */
@@ -1861,7 +1876,7 @@
     gap: 1px;
   }
   .town-bottom-nav span {
-    font-size: 9px;
+    font-size: var(--t-cap);
   }
 }
 /* Wide screens: the owner and the page turner sit beside the store. */
@@ -1893,16 +1908,16 @@
     min-height: 0;
   }
   .walk-owner b {
-    font-size: 18px;
+    font-size: var(--t-title);
   }
   .walk-owner small {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
   .walk-owner-bio {
     position: static;
     width: auto;
     margin-top: 14px;
-    font-size: 13px;
+    font-size: var(--t-meta);
     line-height: 1.9;
     -webkit-line-clamp: 8;
   }
@@ -1915,7 +1930,7 @@
     height: 42px;
   }
   .walk-header-tools button small {
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .walk-first-hint {
     display: none;
@@ -1944,7 +1959,7 @@
   }
   .walk-progress,
   .walk-progress-end {
-    font-size: 13px;
+    font-size: var(--t-meta);
   }
   .walk-journey-hint {
     display: block;

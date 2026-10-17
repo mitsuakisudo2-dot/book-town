@@ -7,7 +7,7 @@
   align-items: center;
   gap: 2px 14px;
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink-2);
 }
@@ -25,7 +25,7 @@
   min-height: 44px;
   margin: -10px 0;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--green);
   text-decoration: underline;
   text-decoration-color: var(--line-2);
@@ -43,7 +43,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 2px 14px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink-2);
 }
