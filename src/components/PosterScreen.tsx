@@ -17,7 +17,8 @@ import {
   reviewNoteOf,
   reviewNoteWords,
 } from "../lib/social";
-import { isDatabaseId, posterNewPath, profilePath } from "../lib/paths";
+import { posterNewPath, profilePath } from "../lib/paths";
+import { isSampleId } from "../lib/record-kind";
 import { usePersistenceStatus } from "../lib/store";
 import { useUrlParam } from "../lib/url-state";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
@@ -134,7 +135,7 @@ export function PosterScreen({
               </Link>
               <small>
                 @{author.handle}
-                {!mine && !isDatabaseId(author.id) && " · 見本"}
+                {isSampleId(author.id) && " · 見本"}
                 {" · "}
                 <time dateTime={poster.createdAt}>
                   {formatPostTime(poster.createdAt)}

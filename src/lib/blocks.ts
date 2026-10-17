@@ -1,4 +1,4 @@
-import { isDatabaseId } from "./paths";
+import { isDatabaseId } from "./record-kind";
 import { ME_ID, type Post, type Reader, type TownState } from "./types";
 
 // A block works both ways (supabase/migrations/20261012000000_initial_schema

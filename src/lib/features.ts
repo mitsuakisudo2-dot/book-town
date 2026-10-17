@@ -11,13 +11,8 @@ import { reviewCoverOf, spoilerViewOf } from "./social";
 import { isPublished, posterSpoilerView, type Poster } from "./posters";
 import { splitHidden } from "./hidden-words";
 import { bookById } from "./book-name";
-import {
-  dayOrder,
-  isOwnShop,
-  isSample,
-  pickOfDay,
-  publicItems,
-} from "./tonight";
+import { isSampleId } from "./record-kind";
+import { dayOrder, isOwnShop, pickOfDay, publicItems } from "./tonight";
 
 // The 特集 bands of the home: each reads only what anyone may see (public
 // shelves, open posters and posts), is drawn only when it has enough to be
@@ -119,13 +114,13 @@ export function shelvesFeature(
   if (open.length < FEATURE_MIN.shelves) return null;
   const order = [
     ...dayOrder(
-      open.filter((shop) => !isSample(shop.id)),
+      open.filter((shop) => !isSampleId(shop.id)),
       (shop) => shop.id,
       now,
       "shelves:",
     ),
     ...dayOrder(
-      open.filter((shop) => isSample(shop.id)),
+      open.filter((shop) => isSampleId(shop.id)),
       (shop) => shop.id,
       now,
       "shelves:",
@@ -262,7 +257,9 @@ export const BOARD_PICKS = 4;
  * of a 見本 shop that is not the reader's own.
  */
 export const isBoardPick = (state: TownState, pick: PopPick): boolean =>
-  isSample(pick.shop.id) && !isOwnShop(state, pick.shop) && pick.shelf.isPublic;
+  isSampleId(pick.shop.id) &&
+  !isOwnShop(state, pick.shop) &&
+  pick.shelf.isPublic;
 
 /**
  * The 見本 掲示板's お題: one book from each 見本 shop's public shelves, the

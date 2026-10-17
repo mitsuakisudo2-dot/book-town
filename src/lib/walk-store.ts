@@ -17,7 +17,7 @@ import {
 import { followAccountWalk } from "./town-session";
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
-import { isDatabaseId } from "./paths";
+import { isSampleId } from "./record-kind";
 import { parseScreenKey } from "./walk-remote";
 import { OWN_SHOP_ID, type PersistenceStatus, type TownState } from "./types";
 
@@ -51,7 +51,7 @@ function reachesSample(before: WalkState, after: WalkState) {
       (key) => parseScreenKey(key)?.[0] ?? OWN_SHOP_ID,
     ),
   ];
-  return shops.some((id) => id !== OWN_SHOP_ID && !isDatabaseId(id));
+  return shops.some(isSampleId);
 }
 
 export function createWalkStore(

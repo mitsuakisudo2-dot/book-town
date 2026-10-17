@@ -7,6 +7,7 @@ import {
   demoShops,
   readingNow as demoReadingNow,
 } from "./data";
+import { isDatabaseId } from "./record-kind";
 import type { TownState } from "./types";
 
 /**
@@ -91,3 +92,14 @@ const sampleBookByRowId = new Map(
 /** The 見本's book a database id stands for, if it is one. */
 export const sampleBookOfRow = (rowId: string): string | undefined =>
   sampleBookByRowId.get(rowId);
+
+/**
+ * Whose a book is, read from its id: the 見本's (by its own id, or by the id
+ * the database keeps it under), one in the database, or one typed in this
+ * browser. Like `recordKind` (src/lib/record-kind.ts) for the rest: a 見本's
+ * book in the database is still the 見本's, never taken for a reader's own.
+ */
+export function bookKind(bookId: string): "sample" | "database" | "local" {
+  if (isSampleBook(bookId) || sampleBookOfRow(bookId)) return "sample";
+  return isDatabaseId(bookId) ? "database" : "local";
+}

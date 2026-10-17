@@ -1,4 +1,4 @@
-import { isDatabaseId } from "./paths";
+import { isSampleId } from "./record-kind";
 import { posterBookIds, type Poster } from "./posters";
 import type { ShopLayout } from "./shop-layout";
 import {
@@ -924,7 +924,7 @@ export function encounterOf(
       input.kind === "love" ||
       post.bookId === null ||
       post.authorId === ME_ID ||
-      (account && !isDatabaseId(post.id))
+      (account && isSampleId(post.id))
     )
       return null;
     return {
@@ -939,7 +939,7 @@ export function encounterOf(
     const length = codePoints(input.placementKey);
     if (
       shop.ownerId === ME_ID ||
-      (account && !isDatabaseId(shop.id)) ||
+      (account && isSampleId(shop.id)) ||
       length < 1 ||
       length > PLACEMENT_KEY_MAX_LENGTH
     )

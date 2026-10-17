@@ -1,7 +1,7 @@
 "use client";
 import { useState, type ReactNode } from "react";
 import { blockedReaders } from "../lib/blocks";
-import { isDatabaseId } from "../lib/paths";
+import { isDatabaseId } from "../lib/record-kind";
 import { useTownBackend } from "../lib/store";
 import type { Notify, Reader, TownActions, TownState } from "../lib/types";
 import { requestAccount } from "../lib/visitor";

@@ -2,6 +2,7 @@
 
 import { NAME_MAX_LENGTH, validEmail } from "./account";
 import { createKeptDraftStore, keptText } from "./kept-draft";
+import { DATABASE_ID } from "./record-kind";
 
 // Signing in sends the reader to their mail app, where the phone may drop
 // this page. The step reached (the address the code went to) and the first
@@ -49,8 +50,6 @@ export const sentCodeStore = createKeptDraftStore<SentCode>(
 export type ProfileWork = { name: string; handle: string };
 /** The ID field takes an @ and an ID of up to 20 characters. */
 export const HANDLE_FIELD_MAX_LENGTH = 21;
-const USER_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The first profile read back, if it fits the form's fields. */
 export function readProfileWork(value: unknown): ProfileWork | null {
@@ -68,7 +67,7 @@ export function readProfileWork(value: unknown): ProfileWork | null {
 export const profileWorkStore = createKeptDraftStore<ProfileWork>(
   {
     storageKey: "book-town-first-profile-v1",
-    keyPattern: USER_ID,
+    keyPattern: DATABASE_ID,
     read: readProfileWork,
     isEmpty: (work) => !work.name.trim() && !work.handle.trim(),
     limit: 3,
