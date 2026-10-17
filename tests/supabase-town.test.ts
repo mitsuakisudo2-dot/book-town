@@ -1506,6 +1506,79 @@ async function main() {
   );
 
   await check(
+    "the reader's own shelves are written as they change, and nobody else reads them",
+    async () => {
+      const mei = await reader("mei");
+      const client = createClient<Database>(API_URL, PUBLISHABLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { headers: { "x-booktown-library": "1" } },
+      });
+      const session = (await mei.client.auth.getSession()).data.session!;
+      assert.ifError(
+        (
+          await client.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          })
+        ).error,
+      );
+      const person = { id: mei.id, client };
+      const store = await townOf(person);
+      const one = store.actions.registerBook(
+        { title: "メイの本", author: "誰か" },
+        "manual",
+      );
+      const two = store.actions.registerBook(
+        { title: "メイのもう一冊", author: "誰か" },
+        "manual",
+      );
+      assert.ok(one && one.result === "added");
+      assert.ok(two && two.result === "added");
+      await settled(store);
+      const sf = store.actions.makeLibraryShelf("SF", "遠い星の話")!;
+      const rain = store.actions.makeLibraryShelf("雨の日", "")!;
+      assert.ok(
+        store.actions.changeLibrary([one.bookId, two.bookId], { addShelf: sf }),
+      );
+      store.actions.changeLibrary([one.bookId], { addShelf: rain });
+      await settled(store);
+      store.actions.editLibraryShelf(sf, { name: "SFと宇宙" });
+      store.actions.changeLibrary([two.bookId], { removeShelf: sf });
+      store.actions.putAwayLibraryShelf(rain, true);
+      await settled(store);
+      const back = (await townOf(person)).getSnapshot();
+      assert.deepEqual(
+        back.libraryShelves
+          .map((shelf) => [shelf.name, shelf.note, shelf.deletedAt === null])
+          .sort(),
+        [
+          ["SFと宇宙", "遠い星の話", true],
+          ["雨の日", "", false],
+        ],
+      );
+      assert.deepEqual(
+        back.libraryShelfBooks
+          .map((book) => [book.shelfId, book.bookId])
+          .sort(),
+        [
+          [rain, one.bookId],
+          [sf, one.bookId],
+        ].sort(),
+      );
+      // Another reader reads none of it.
+      const other = await reader("nao");
+      for (const table of ["library_shelves", "library_shelf_books"] as const) {
+        const seen = await other.client
+          .from(table)
+          .select("user_id")
+          .eq("user_id", mei.id);
+        assert.ifError(seen.error);
+        assert.equal(seen.data.length, 0);
+      }
+    },
+  );
+
+  await check(
     "more than 1000 public records reach every reader and visitor, each one",
     async () => {
       const rin = await reader("rin");
