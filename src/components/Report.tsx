@@ -272,7 +272,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
           </p>
           {phase === "failed" && (
             <p className="profile-link-error" role="alert">
-              {failure({ what: "送れませんでした", next: AGAIN.afterSomeTime })}
+              {failure({ what: "送れませんでした", next: AGAIN.later })}
             </p>
           )}
           {stopping ? (

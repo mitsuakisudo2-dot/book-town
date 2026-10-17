@@ -60,7 +60,7 @@ export function BlockQuestion({
                 failure(
                   {
                     what: "ブロックできませんでした",
-                    next: AGAIN.afterAMoment,
+                    next: AGAIN.later,
                   },
                   "",
                 ),

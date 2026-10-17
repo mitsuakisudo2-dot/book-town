@@ -85,15 +85,15 @@ check("a failure says what happened, what is kept, and what to do", () => {
       kept: KEPT.draft,
       next: AGAIN.later,
     }),
-    "開店できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。",
+    "開店できませんでした。書きかけは残しています。少し時間をおいて、もう一度お試しください。",
   );
   assert.equal(
     failure({ what: "保存できませんでした" }, ""),
     "保存できませんでした",
   );
   assert.equal(
-    failure({ next: AGAIN.afterABitOfTime }),
-    "少し時間をおいてから、もう一度お試しください。",
+    failure({ next: AGAIN.later }),
+    "少し時間をおいて、もう一度お試しください。",
   );
   assert.equal(
     failure(WHILE_OFFLINE),
