@@ -123,3 +123,48 @@ export function bibliographyFrom(row: BibliographyRow): Bibliography | null {
     from: (["ndl", "openbd"] as const).filter((source) => named.has(source)),
   };
 }
+
+/**
+ * A book of the reader's held back (docs/09「食い違いの判定と保留」): what
+ * they typed is clearly another book than the one its ISBN is. Only its
+ * reader is told, and the master is not shown for it until they fix the ISBN
+ * or say it is right (confirm_book_isbn).
+ */
+export interface BookHold {
+  bookId: string;
+  /** When it was held: the notice's time, and its mark of being seen. */
+  heldAt: string;
+  /** The book the ISBN is, as the master names it. */
+  master: Pick<Bibliography, "title" | "creators">;
+}
+
+/** A row of public.book_holds, as the database sends it. */
+export interface BookHoldRow {
+  book_id: string;
+  held_at: string;
+  title: string | null;
+  creators: unknown;
+}
+
+/** A hold from its row; null for one without the master's title. */
+export function holdFrom(row: BookHoldRow): BookHold | null {
+  const master = bibliographyFrom({
+    book_id: row.book_id,
+    title: row.title,
+    subtitle: null,
+    volume: null,
+    edition: null,
+    series: [],
+    creators: row.creators,
+    publisher: null,
+    issued: null,
+    sources: null,
+  });
+  return master && text(row.held_at)
+    ? {
+        bookId: row.book_id,
+        heldAt: row.held_at,
+        master: { title: master.title, creators: master.creators },
+      }
+    : null;
+}

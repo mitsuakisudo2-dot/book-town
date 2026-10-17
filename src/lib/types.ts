@@ -302,6 +302,19 @@ export interface NewBook {
   price?: number;
 }
 
+/**
+ * How a reader's fix of a book they registered went: fixed, nothing to fix,
+ * no title, an ISBN that does not check out, an ISBN another book of their
+ * library has (`already`), or not kept (the town is not in yet).
+ */
+export type BookFixResult =
+  | "fixed"
+  | "unchanged"
+  | "no-title"
+  | "bad-isbn"
+  | "already"
+  | "not-saved";
+
 /** How a book came to be registered: read by the camera, its ISBN typed, or by hand. */
 export type RegisterVia = "scan" | "isbn" | "manual";
 
@@ -494,6 +507,12 @@ export interface TownActions {
   ): Registration | null;
   /** registerBook, answering with the book's id (null when not registered). */
   addBook(book: NewBook): string | null;
+  /**
+   * Fixes the title, author and ISBN of a book the reader registered (one
+   * held back, docs/09「食い違いの判定と保留」). An empty ISBN takes it away.
+   * The database takes it only for a book the reader typed in.
+   */
+  fixBook(bookId: string, fix: Required<Omit<NewBook, "price">>): BookFixResult;
   toggleLibrary(bookId: string): void;
   /**
    * Sorts books in the library: 積読・読書中・読了 (null for 未設定),

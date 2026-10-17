@@ -93,6 +93,32 @@
   }
 }
 
+/* A book of the reader's held back: told on its page, with the two answers. */
+.town-shell .book-held {
+  margin: 18px 0 4px;
+}
+.town-shell .book-held h2 {
+  margin-bottom: 6px;
+  font-family: var(--serif);
+  font-size: var(--t-page);
+  font-weight: 600;
+  color: var(--ink);
+}
+.town-shell .book-held p {
+  margin-bottom: 6px;
+  font-size: var(--t-meta);
+  line-height: 1.8;
+}
+.town-shell .book-held .btns {
+  margin-top: 12px;
+}
+.book-fix-note {
+  margin: 0 0 16px;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 1.7;
+}
+
 /* The book page: a cover of a readable size beside its title; on a phone the
    summary and the buttons take the full width under them. */
 .town-shell .book-page-hero {

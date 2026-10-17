@@ -988,6 +988,12 @@ export type Write =
       kind: "books";
       rows: Omit<TablesInsert<"books">, "work_id" | "edition_id">[];
     }
+  // What a reader fixed of books they typed in. The database moves a book
+  // whose ISBN changed to that ISBN's edition and work.
+  | {
+      kind: "fix-books";
+      rows: { id: string; title: string; author: string; isbn: string | null }[];
+    }
   | {
       kind: "profile";
       patch: Partial<
@@ -1214,6 +1220,28 @@ export function planWrites(
         price: book.price ?? null,
         source: "manual",
         created_by: user,
+      })),
+    });
+  // A book fixed: its title, author or ISBN (a book held back, answered).
+  const booksBefore = new Map(base.books.map((book) => [book.id, book]));
+  const fixed = next.books.filter((book) => {
+    const was = booksBefore.get(book.id);
+    return (
+      was !== undefined &&
+      isDatabaseId(book.id) &&
+      (was.title !== book.title ||
+        was.author !== book.author ||
+        (was.isbn ?? null) !== (book.isbn ?? null))
+    );
+  });
+  if (fixed.length)
+    writes.push({
+      kind: "fix-books",
+      rows: fixed.map((book) => ({
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        isbn: book.isbn ?? null,
       })),
     });
 

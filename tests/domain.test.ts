@@ -7,6 +7,7 @@ import {
   type RepositorySnapshot,
 } from "../src/lib/repository";
 import { createTownStore } from "../src/lib/store";
+import { bookById } from "../src/lib/book-name";
 import {
   counterId,
   unavailableBackend,
@@ -2533,6 +2534,66 @@ check("words are not taken while the town loads or cannot be kept", () => {
   switchTo(unavailableBackend(emptyTown()));
   assert.equal(town.actions.createPost(words), null);
   assert.equal(town.getSnapshot().posts.length, 0);
+});
+
+check("a book the reader registered is fixed: its title, author and ISBN", () => {
+  const town = createTownStore(createMemoryRepository());
+  const id = town.actions.addBook({
+    title: "よるのとしょかん",
+    author: "ドウ",
+    isbn: "9784000000000",
+  });
+  assert.ok(id);
+  const other = town.actions.addBook({ title: "ほかの本", author: "", isbn: "9784000000017" });
+  assert.ok(other);
+  const fix = (title: string, author: string, isbn: string) =>
+    town.actions.fixBook(id, { title, author, isbn });
+  assert.equal(fix("  ", "ドウ", ""), "no-title");
+  assert.equal(fix("夜の図書館", "ドウ", "978-4"), "bad-isbn");
+  assert.equal(fix("よるのとしょかん", "ドウ", "9784000000000"), "unchanged");
+  // Another book of the library has that ISBN: not two of one book.
+  assert.equal(fix("夜の図書館", "ドウ", "978-4-00-000001-7"), "already");
+  assert.equal(fix(" 夜の図書館 ", "ジェーン・ドウ", "978-4-00-000003-1"), "fixed");
+  const fixed = bookById(town.getSnapshot().books, id);
+  assert.equal(fixed?.title, "夜の図書館");
+  assert.equal(fixed?.author, "ジェーン・ドウ");
+  assert.equal(fixed?.isbn, "9784000000031");
+  // An empty ISBN takes it away; the book stays in the library.
+  assert.equal(fix("夜の図書館", "ジェーン・ドウ", ""), "fixed");
+  assert.equal(bookById(town.getSnapshot().books, id)?.isbn, undefined);
+  assert.ok(town.getSnapshot().library.includes(id));
+  assert.equal(town.actions.fixBook("no-such-book", { title: "x", author: "", isbn: "" }), "not-saved");
+});
+
+check("a book held back is told once in お知らせ, leading to its page", () => {
+  const town = createTownStore(createMemoryRepository());
+  const id = town.actions.addBook({ title: "よるのとしょかん", author: "", isbn: "9784000000000" });
+  assert.ok(id);
+  const state = town.getSnapshot();
+  const hold = {
+    bookId: id,
+    heldAt: "2026-10-17T05:00:00.000Z",
+    master: { title: "見本の物語", creators: [{ name: "山田一郎" }] },
+  };
+  const notice = notificationsFor(state, 0, [hold]).find((entry) =>
+    entry.id.startsWith("held:"),
+  );
+  assert.ok(notice);
+  assert.equal(
+    notice.text,
+    "登録した『よるのとしょかん』のISBNは、『見本の物語』の本のようです。本のページで確かめてください",
+  );
+  assert.equal(notice.href, bookPath(id));
+  assert.equal(unreadCount(state, [hold]), unreadCount(state) + 1);
+  town.actions.markNotificationsSeen([notice.id]);
+  assert.equal(unreadCount(town.getSnapshot(), [hold]), unreadCount(state));
+  // A book the town does not have tells nothing.
+  assert.equal(
+    notificationsFor(state, 0, [{ ...hold, bookId: "gone" }]).filter((entry) =>
+      entry.id.startsWith("held:"),
+    ).length,
+    0,
+  );
 });
 
 console.log(`${passed} domain checks passed.`);

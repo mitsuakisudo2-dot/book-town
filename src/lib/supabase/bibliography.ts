@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
-import { bibliographyFrom, type Bibliography } from "../bibliography";
+import {
+  bibliographyFrom,
+  holdFrom,
+  type Bibliography,
+  type BookHold,
+} from "../bibliography";
 
 // The bibliographic master's calls to the database (docs/09「書誌マスタ」).
 // public.book_bibliography answers anyone, visitors too, but only for a book
@@ -30,4 +35,24 @@ export async function askBibliography(
     if (master) masters.set(row.book_id, master);
   }
   return masters;
+}
+
+/** The reader's books held back, oldest first; null when the call failed. */
+export async function askHolds(client: Client): Promise<BookHold[] | null> {
+  const { data, error } = await client.rpc("book_holds");
+  if (error || !data) return null;
+  return data.flatMap((row) => holdFrom(row) ?? []);
+}
+
+/**
+ * The reader says the held book is the ISBN's after all: the master shows
+ * for it from now on. False when it was not taken (not theirs, not held, or
+ * the call failed).
+ */
+export async function confirmIsbn(
+  client: Client,
+  bookId: string,
+): Promise<boolean> {
+  const { error } = await client.rpc("confirm_book_isbn", { book: bookId });
+  return !error;
 }

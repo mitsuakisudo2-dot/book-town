@@ -3,10 +3,14 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { AccountState } from "./account";
 import { useAccountState } from "./account-session";
-import type { Bibliography } from "./bibliography";
+import type { Bibliography, BookHold } from "./bibliography";
 import { bookKind } from "./samples";
 import { getSupabase } from "./supabase/client";
-import { askBibliography, BIBLIOGRAPHY_BATCH } from "./supabase/bibliography";
+import {
+  askBibliography,
+  askHolds,
+  BIBLIOGRAPHY_BATCH,
+} from "./supabase/bibliography";
 
 // The bibliographic master of the books on screen, asked of the database
 // once per account and page load and kept here. A book of the demo, a 見本 or
@@ -96,9 +100,11 @@ function ask(bookId: string, asker: string) {
   queueMicrotask(() => void send());
 }
 
-/** Drops what is known of this book: its reader changed it. */
+/** Asks again for this book's master: its reader changed it, or said it is right. */
 export function forgetBibliography(bookId: string) {
-  if (known.delete(bookId)) tell();
+  known.delete(bookId);
+  tell();
+  if (owner) ask(bookId, owner);
 }
 
 /**
@@ -117,4 +123,52 @@ export function useBibliography(bookId: string): Bibliography | null {
     if (wanted && asker) ask(bookId, asker);
   }, [wanted, asker, bookId]);
   return master;
+}
+
+// The reader's own books held back (「食い違いの判定と保留」), asked once per
+// account and page load. A visitor and the demo have none. A call that fails
+// leaves the list empty until the next page load.
+
+const NO_HOLDS: BookHold[] = [];
+let holds: { reader: string; list: BookHold[] | null } | null = null;
+
+/** The reader's books held back, oldest first. */
+export function useBookHolds(): BookHold[] {
+  const asker = ownerOf(useAccountState());
+  const reader = asker === "visitor" ? null : asker;
+  const list = useSyncExternalStore(
+    subscribe,
+    () =>
+      reader && holds?.reader === reader ? (holds.list ?? NO_HOLDS) : NO_HOLDS,
+    () => NO_HOLDS,
+  );
+  useEffect(() => {
+    if (!reader || holds?.reader === reader) return;
+    const client = getSupabase();
+    if (!client) return;
+    const asking: typeof holds = { reader, list: null };
+    holds = asking;
+    void askHolds(client).then((answer) => {
+      // Someone else signed in meanwhile: their own question is under way.
+      if (holds !== asking) return;
+      holds = { reader, list: answer ?? [] };
+      tell();
+    });
+  }, [reader]);
+  return list;
+}
+
+/** The hold on this book of the reader's, if it is held. */
+export function useBookHold(bookId: string): BookHold | null {
+  return useBookHolds().find((hold) => hold.bookId === bookId) ?? null;
+}
+
+/** Takes the book off the list: its reader answered the hold. */
+export function forgetHold(bookId: string) {
+  if (!holds?.list) return;
+  holds = {
+    reader: holds.reader,
+    list: holds.list.filter((hold) => hold.bookId !== bookId),
+  };
+  tell();
 }

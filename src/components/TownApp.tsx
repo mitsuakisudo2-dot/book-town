@@ -108,7 +108,8 @@ import {
   quotedTitle,
 } from "../lib/book-name";
 import { SOURCE_NAMES, type Bibliography } from "../lib/bibliography";
-import { useBibliography } from "../lib/bibliography-session";
+import { useBibliography, useBookHolds } from "../lib/bibliography-session";
+import { HeldBook } from "./HeldBook";
 import { counted, whenSome } from "../lib/words";
 
 // Every screen but Home comes in its own file, read when it is first shown
@@ -345,7 +346,9 @@ export default function TownApp({
               ? "profile"
               : null;
   const reading = Boolean(activeSession(state));
-  const unread = unreadCount(state);
+  // The reader's books held back are told in お知らせ too.
+  const holds = useBookHolds();
+  const unread = unreadCount(state, holds);
   // ホーム returns to the Home tab shown last (home-tab.ts); on Home itself
   // it takes the tab shown back to its top. A 便り's page at its own address
   // is read as part of Home, but is not one of its tabs.
@@ -1124,6 +1127,7 @@ function BookView({
           <CoverRemovalLink book={named} />
         </div>
         <div className="book-hero-body">
+          <HeldBook book={book} actions={actions} notify={notify} />
           <p className="book-summary">{book.summary}</p>
           <BookActions
             book={book}

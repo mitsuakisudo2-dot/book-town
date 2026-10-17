@@ -33,7 +33,7 @@ import {
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId, isSampleId } from "./record-kind";
-import { bookByIsbn } from "./book-name";
+import { bookById, bookByIsbn } from "./book-name";
 import {
   bookPrice,
   bookText,
@@ -74,6 +74,7 @@ import {
   displayCost,
   normalizeCapacity,
   shelfUsed,
+  type Book,
   type BookDisplay,
   type PersistenceStatus,
   type Post,
@@ -847,6 +848,35 @@ export function createTownStore(
     addBook(input) {
       const done = actions.registerBook(input, input.isbn ? "isbn" : "manual");
       return done && done.result !== "not-saved" ? done.bookId : null;
+    },
+    fixBook(bookId, fix) {
+      initialize();
+      const book = bookById(state.books, bookId);
+      const title = bookText(fix.title);
+      const author = bookText(fix.author);
+      const typed = fix.isbn.trim();
+      const isbn = typed ? normalizeIsbn(typed) : null;
+      if (!title) return "no-title";
+      if (typed && !isbn) return "bad-isbn";
+      if (!book || status === "loading" || backend.kind === "unavailable")
+        return "not-saved";
+      const moved = (isbn ?? undefined) !== book.isbn;
+      if (title === book.title && author === book.author && !moved)
+        return "unchanged";
+      const mine = isbn ? libraryBookByIsbn(state, isbn) : undefined;
+      if (mine && mine.id !== bookId) return "already";
+      // A new ISBN puts the book in that ISBN's work, which the database
+      // decides: until it is read again, the book is its own.
+      const fixed: Book = { ...book, title, author };
+      if (isbn) fixed.isbn = isbn;
+      else delete fixed.isbn;
+      if (moved) delete fixed.workId;
+      return commit({
+        ...state,
+        books: state.books.map((entry) => (entry.id === bookId ? fixed : entry)),
+      })
+        ? "fixed"
+        : "not-saved";
     },
     toggleLibrary(bookId) {
       initialize();

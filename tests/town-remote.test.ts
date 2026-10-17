@@ -18,6 +18,7 @@ import {
   type Write,
 } from "../src/lib/town-remote";
 import { demoBooks, demoPosters, demoPosts, demoShops } from "../src/lib/data";
+import { createRegisteredBook } from "../src/lib/books";
 import type { Poster } from "../src/lib/posters";
 import { isSampleBook, sampleBookRowId, withSamples } from "../src/lib/samples";
 import {
@@ -1404,6 +1405,39 @@ async function main() {
     assert.equal(create.row.is_open, true);
     const shelves = writes[1] as Extract<Write, { kind: "shelves" }>;
     assert.equal(shelves.shelves.length, 2);
+  });
+
+  await check("a book fixed is written as its title, author and ISBN, and only that", () => {
+    const mine = createRegisteredBook("00000000-0000-4000-8000-0000000000b7", {
+      title: "よるのとしょかん",
+      author: "ドウ",
+      isbn: "9784000000000",
+    });
+    const local = createRegisteredBook("my-book-1", { title: "手元の本", author: "" });
+    const before: TownState = { ...base(), books: [...base().books, mine, local] };
+    const next: TownState = {
+      ...before,
+      books: before.books.map((book) =>
+        book.id === mine.id
+          ? { ...book, title: "夜の図書館", author: "ジェーン・ドウ", isbn: undefined }
+          : book.id === local.id
+            ? { ...book, title: "直した手元の本" }
+            : book,
+      ),
+    };
+    const writes = planWrites(before, next, ids);
+    // A book only in this browser has no row to fix.
+    assert.deepEqual(writes, [
+      {
+        kind: "fix-books",
+        rows: [{ id: mine.id, title: "夜の図書館", author: "ジェーン・ドウ", isbn: null }],
+      },
+    ]);
+    // A book's other fields changing on screen write nothing.
+    assert.deepEqual(
+      planWrites(before, { ...before, books: before.books.map((book) => ({ ...book, summary: "x" })) }, ids),
+      [],
+    );
   });
 
   await check("only the person's own posts are written, replies last", () => {
