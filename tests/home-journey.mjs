@@ -66,6 +66,22 @@ async function goHome() {
   await expect(page).toHaveURL(`${baseURL}/`);
   await expect(page.locator(".home-skeletons")).toHaveCount(0);
 }
+/**
+ * Waits for the web fonts to be in: they come after the page has loaded
+ * (SHOW_FONTS in src/app/layout.tsx), and a 便り's lines wrap again when they
+ * do. A check that measures where things sit waits for them first.
+ */
+async function fontsSettled() {
+  await expect(page.locator("#web-fonts")).toHaveAttribute("media", "all", {
+    timeout: 20_000,
+  });
+  await page.evaluate(async () => {
+    await new Promise((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(done)),
+    );
+    await document.fonts.ready;
+  });
+}
 /** Opens a page of its own on the browser for a check, then closes it. */
 async function withPage(options, run) {
   const reader = page;
@@ -1679,6 +1695,7 @@ try {
         await orbit.evaluate((element) =>
           element.scrollIntoView({ block: "center" }),
         );
+        await fontsSettled();
         const tops = () =>
           pane("home").evaluate((element) =>
             [
@@ -2000,6 +2017,7 @@ try {
     () =>
       withPage({}, async () => {
         await goHome();
+        await fontsSettled();
         const shell = page.locator(".town-shell");
         const scrolled = () => page.evaluate(() => Math.round(scrollY));
         // Time for a scroll to be read (the page's own frames).
