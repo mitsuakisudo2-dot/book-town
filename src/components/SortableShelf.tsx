@@ -114,7 +114,7 @@ function SortableBook({
         style: {
           transform: CSS.Transform.toString(transform),
           transition,
-          zIndex: isDragging ? 10 : undefined,
+          zIndex: isDragging ? 9 : undefined,
         },
         dragging: isDragging,
         handle: { ...attributes, ...listeners },
