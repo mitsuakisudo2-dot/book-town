@@ -25,49 +25,89 @@ import {
   type WalkBackend,
 } from "./walk-backend";
 
-interface Backends<B> {
+interface Backend {
+  load(): unknown;
+  close?(): void;
+}
+
+interface Backends<B extends Backend> {
   local(): B;
   unavailable(): B;
   visitor(client: SupabaseClient<Database>): B;
   account(client: SupabaseClient<Database>, userId: string): B;
 }
 
+/** A backend already reading: its first load() is the read under way. */
+function readingAhead<B extends Backend>(backend: B): B {
+  let first: unknown = backend.load();
+  // Not used if the account turns out otherwise: its failure says nothing.
+  if (first instanceof Promise) first.catch(() => {});
+  return {
+    ...backend,
+    load() {
+      const ahead = first;
+      first = undefined;
+      return ahead ?? backend.load();
+    },
+  };
+}
+
 /**
  * Keeps a store on the right backend as the account changes: the signed-in
  * person's data in Supabase, the public town to look at when nobody is signed
  * in, or the demo in this browser when the site has no Supabase. Waits while
- * the account is still being checked, until it knows whose session this is:
- * that person's town starts loading while their profile is read, so the two
- * answers come back together, not one after the other (docs/09 「速さ」). A
- * session without a profile then moves on to the public town.
+ * the account is still being checked. Once it knows whose session this is,
+ * that person's town is read while their profile is, so the two answers come
+ * back together, not one after the other (docs/09 「速さ」); the store still
+ * waits, taking no change, until the profile says the town is theirs. A
+ * session without a profile moves on to the public town instead.
  */
-function followAccountWith<B>(
+function followAccountWith<B extends Backend>(
   switchTo: (backend: B) => void,
   backends: Backends<B>,
 ) {
   let current = "";
+  let ahead: { userId: string; backend: B } | null = null;
   const sync = () => {
     const account = accountStore.getSnapshot();
-    const user =
-      account.status === "signed-in"
-        ? account.user
-        : account.status === "loading"
-          ? account.pending
-          : undefined;
-    if (account.status === "loading" && !user) return;
     const client = getSupabase();
+    if (account.status === "loading") {
+      const pending = account.pending;
+      if (pending && client && ahead?.userId !== pending.id) {
+        ahead?.backend.close?.();
+        ahead = {
+          userId: pending.id,
+          backend: readingAhead(backends.account(client, pending.id)),
+        };
+      }
+      return;
+    }
     const key =
-      user && client
-        ? "account:" + user.id
+      account.status === "signed-in" && client
+        ? "account:" + account.user.id
         : account.status === "unavailable"
           ? "unavailable"
           : client
             ? "visitor"
             : "local";
-    if (key === current) return;
+    const early = ahead;
+    ahead = null;
+    if (key === current) {
+      early?.backend.close?.();
+      return;
+    }
     current = key;
-    if (user && client) switchTo(backends.account(client, user.id));
-    else if (account.status === "unavailable") switchTo(backends.unavailable());
+    if (account.status === "signed-in" && client) {
+      if (early && early.userId !== account.user.id) early.backend.close?.();
+      switchTo(
+        early?.userId === account.user.id
+          ? early.backend
+          : backends.account(client, account.user.id),
+      );
+      return;
+    }
+    early?.backend.close?.();
+    if (account.status === "unavailable") switchTo(backends.unavailable());
     else if (client) switchTo(backends.visitor(client));
     else switchTo(backends.local());
   };
