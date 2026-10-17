@@ -7,6 +7,7 @@ import { tapsOf } from "../../lib/social";
 import type { Notify, TownActions, TownState } from "../../lib/types";
 import { Modal } from "../ui";
 import { LetterIcon } from "./icons";
+import { counted } from "../../lib/words";
 
 /** How long 「n回」 shows above the heart. */
 const PILL_FOR = 1000;
@@ -50,7 +51,7 @@ export function LikeButton({
         if (typeof now !== "number" || now <= taps) return;
         made.current += 1;
         setPill({ key: made.current, taps: now });
-        announce(`いいね ${now}回`);
+        announce(`いいね ${counted(now, "回")}`);
       }}
     >
       <span
@@ -62,7 +63,7 @@ export function LikeButton({
       <span className="sr-only">いいね</span>
       {pill && (
         <span key={pill.key} className="letter-like-pill" aria-hidden="true">
-          {pill.taps}回
+          {counted(pill.taps, "回")}
         </span>
       )}
     </button>

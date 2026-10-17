@@ -55,6 +55,7 @@ import {
   bookTitle,
   quotedTitle,
 } from "../lib/book-name";
+import { counted, nth, failure, AGAIN } from "../lib/words";
 
 type Shared = {
   state: TownState;
@@ -201,8 +202,8 @@ function workElsewhere(
 }
 
 const FAILED = {
-  save: "うまく残せませんでした。少し待って、もう一度お試しください。",
-  delete: "うまく消せませんでした。少し待って、もう一度お試しください。",
+  save: failure({ what: "うまく残せませんでした", next: AGAIN.inAMoment }),
+  delete: failure({ what: "うまく消せませんでした", next: AGAIN.inAMoment }),
 };
 
 /** A step back the reader can take after a change that let something go. */
@@ -345,7 +346,9 @@ function PosterMaker({
     const empty = !page.heading && !page.text && !page.bookIds.length;
     change(
       { ...work, pages: work.pages.filter((_, index) => index !== at) },
-      empty ? null : { work, message: `${at + 1}ページ目を外しました。` },
+      empty
+        ? null
+        : { work, message: `${nth(at + 1, "ページ")}を外しました。` },
     );
     setPageIndex(Math.max(0, at - 1));
     handTo.current = chosenTab;
@@ -477,7 +480,7 @@ function PosterMaker({
                   type="button"
                   key={index}
                   aria-pressed={index === at}
-                  aria-label={`${index + 1}ページ目`}
+                  aria-label={`${nth(index + 1, "ページ")}`}
                   onClick={() => setPageIndex(index)}
                 >
                   {index + 1}
@@ -500,12 +503,12 @@ function PosterMaker({
                 className="text-btn quiet poster-page-remove"
                 onClick={removePage}
               >
-                {at + 1}ページ目を外す
+                {nth(at + 1, "ページ")}を外す
               </button>
             )}
             {work.pages.length >= POSTER_LIMITS.pages && (
               <small className="poster-editor-quiet">
-                ページは{POSTER_LIMITS.pages}枚までです。
+                ページは{counted(POSTER_LIMITS.pages, "枚")}までです。
               </small>
             )}
             <button
@@ -579,14 +582,14 @@ function PosterMaker({
                   .length
               }
               onChange={chooseBooks}
-              where={work.pages.length > 1 ? `${at + 1}ページ目に` : ""}
+              where={work.pages.length > 1 ? `${nth(at + 1, "ページ")}に` : ""}
             />
           )}
 
           <Words
             template={work.template}
             page={page}
-            where={work.pages.length > 1 ? `${at + 1}ページ目の` : ""}
+            where={work.pages.length > 1 ? `${nth(at + 1, "ページ")}の` : ""}
             onChange={changePage}
             step={limit.max > 0 ? 3 : 2}
           />
@@ -944,8 +947,8 @@ function BookChoice({
         {max === 1
           ? `${where}載せる本を1冊。`
           : books.length
-            ? `${where}${books.length}冊を並べています。${max}冊まで並べられます。`
-            : `${where}${min}冊から${max}冊まで、好きな数だけ並べられます。`}
+            ? `${where}${counted(books.length, "冊")}を並べています。${counted(max, "冊")}まで並べられます。`
+            : `${where}${counted(min, "冊")}から${counted(max, "冊")}まで、好きな数だけ並べられます。`}
       </p>
       {books.length > 0 && (
         <ol className={"poster-chosen" + (max === 1 ? " is-one" : "")}>
@@ -988,7 +991,8 @@ function BookChoice({
       )}
       {waiting > 0 && (
         <p className="poster-editor-quiet">
-          ほかに選んでいた{waiting}冊は、「{POSTER_TEMPLATE_WORDS.lineup.name}
+          ほかに選んでいた{counted(waiting, "冊")}は、「
+          {POSTER_TEMPLATE_WORDS.lineup.name}
           」の型にすると、また並びます。
         </p>
       )}
@@ -1038,8 +1042,8 @@ function BookChoice({
       )}
       {full && chosen.length >= max && (
         <p className="poster-editor-quiet" role="status">
-          1ページに並べられるのは{max}
-          冊までです。「ページを足す」で、続きを次のページに並べられます。
+          1ページに並べられるのは{counted(max, "冊")}
+          までです。「ページを足す」で、続きを次のページに並べられます。
         </p>
       )}
       {offered.length > 0 && (
@@ -1078,7 +1082,7 @@ function Remaining({ value, limit }: { value: string; limit: number }) {
   if (left > Math.max(8, Math.round(limit * 0.1))) return null;
   return (
     <small className="poster-remaining" aria-live="polite">
-      {left > 0 ? `あと${left}字` : "ここまでです"}
+      {left > 0 ? `あと${counted(left, "字")}` : "ここまでです"}
     </small>
   );
 }

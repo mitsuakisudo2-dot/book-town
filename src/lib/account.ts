@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { handleProblem, normalizeHandle } from "./handles";
 import type { ProfileInsert, ProfileRow } from "./supabase/database.types";
+import { counted, failure, AGAIN, KEPT, NOT_CONNECTED } from "./words";
 
 /** Sign-in sends a six-digit code by email; the reader types it back in. */
 export const CODE_LENGTH = 6;
@@ -43,24 +44,36 @@ export type AccountFailure =
   | "leave-failed";
 
 export const failureMessages: Record<AccountFailure, string> = {
-  "invalid-email": "メールアドレスの形を確かめてください。",
-  "not-invited":
-    "このメールアドレスは、まだ招待されていません。招待を受けたアドレスで入ってください。",
-  "invalid-code":
-    "コードが違うか、期限が切れています。もう一度コードを送ってください。",
-  "invalid-link":
-    "このログイン用のリンクは、期限が切れているか、すでに使われています。もう一度メールを送ってください。",
-  "rate-limited": "少し時間をおいてから、もう一度お試しください。",
-  "handle-taken": "このIDはほかの読書家が使っています。",
-  "invalid-profile": "入力した内容を確かめてください。",
-  network:
-    "つながりませんでした。通信の状態を確かめて、もう一度お試しください。",
-  misconfigured:
-    "サイトの設定に問題があり、いまはログインできません。運営にお知らせください。",
-  server:
-    "ログインの仕組みが応えませんでした。しばらくしてから、もう一度お試しください。",
-  "leave-failed":
-    "退会できませんでした。何も消えていません。しばらくしてから、もう一度お試しください。",
+  "invalid-email": failure({ next: "メールアドレスの形を確かめてください" }),
+  "not-invited": failure({
+    what: "このメールアドレスは、まだ招待されていません",
+    next: "招待を受けたアドレスで入ってください",
+  }),
+  "invalid-code": failure({
+    what: "コードが違うか、期限が切れています",
+    next: "もう一度コードを送ってください",
+  }),
+  "invalid-link": failure({
+    what: "このログイン用のリンクは、期限が切れているか、すでに使われています",
+    next: "もう一度メールを送ってください",
+  }),
+  "rate-limited": failure({ next: AGAIN.afterABitOfTime }),
+  "handle-taken": failure({ what: "このIDはほかの読書家が使っています" }),
+  "invalid-profile": failure({ next: "入力した内容を確かめてください" }),
+  network: failure({ what: NOT_CONNECTED, next: AGAIN.connection }),
+  misconfigured: failure({
+    what: "サイトの設定に問題があり、いまはログインできません",
+    next: "運営にお知らせください",
+  }),
+  server: failure({
+    what: "ログインの仕組みが応えませんでした",
+    next: AGAIN.afterAWhile,
+  }),
+  "leave-failed": failure({
+    what: "退会できませんでした",
+    kept: KEPT.nothing,
+    next: AGAIN.afterAWhile,
+  }),
 };
 
 /** The ID typed to confirm 退会 is not the reader's. */
@@ -131,7 +144,7 @@ export function profileDraftIssue(
   if (name.length > NAME_MAX_LENGTH)
     return {
       field: "name",
-      message: `ユーザー名は${NAME_MAX_LENGTH}文字までです。`,
+      message: `ユーザー名は${counted(NAME_MAX_LENGTH, "文字")}までです。`,
     };
   if (!draft.ageConfirmed)
     return {

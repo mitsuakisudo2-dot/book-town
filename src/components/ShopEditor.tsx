@@ -56,6 +56,7 @@ import { booksBeforeSearch } from "../lib/book-lists";
 import { focusField } from "../lib/coarse-pointer";
 import "./editor.css";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
+import { counted, whenSome, failure, AGAIN } from "../lib/words";
 
 type ShopEditorProps = {
   state: TownState;
@@ -318,7 +319,12 @@ function AddBookPicker({
       setAddedHere([...addedHere, book.id]);
       notify(`「${bookTitle(book)}」を本棚に並べました。`);
     } else {
-      notify("棚の空きスペースが足りません。並べ方を変えてみてください。");
+      notify(
+        failure({
+          what: "棚の空きスペースが足りません",
+          next: "並べ方を変えてみてください",
+        }),
+      );
     }
   }
 
@@ -429,7 +435,10 @@ function AddBookPicker({
         {/* A full shelf has said so above; this is for the room left. */}
         {remaining > 0 && cost > remaining && (
           <p className="editor-capacity-warning" role="status">
-            空きスペースが足りません。背表紙で並べるか、棚を整理してください。
+            {failure({
+              what: "空きスペースが足りません",
+              next: "背表紙で並べるか、棚を整理してください",
+            })}
           </p>
         )}
         {filtered.length > 0 && (
@@ -477,8 +486,9 @@ function AddBookPicker({
             {addedHere.length || removedCount
               ? "この画面で" +
                 [
-                  addedHere.length ? `${addedHere.length}冊並べました` : "",
-                  removedCount ? `${removedCount}冊外しました` : "",
+                  whenSome(addedHere.length, "冊", (c) => `${c}並べました`) ??
+                    "",
+                  whenSome(removedCount, "冊", (c) => `${c}外しました`) ?? "",
                 ]
                   .filter(Boolean)
                   .join("・")
@@ -956,7 +966,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   function removeShelfAndWork(shelfId: string) {
     if (!townTook(() => actions.removeShelf(shelfId))) {
       notify(
-        "本棚を削除できませんでした。少しおいて、もう一度お試しください。",
+        failure({ what: "本棚を削除できませんでした", next: AGAIN.later }),
       );
       return false;
     }
@@ -992,7 +1002,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     );
     // The shelf it came off is gone, even if a new one has its id.
     if (!now || (removedShelves.current[shelfId] ?? 0) !== removals) {
-      notify("棚がなくなったため、戻せませんでした。");
+      notify(failure({ what: "棚がなくなったため、戻せませんでした" }));
       return false;
     }
     // Already back on the shelf (by the picker, or a second tap).
@@ -1006,7 +1016,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         index: taken.index,
       })
     ) {
-      notify("棚の空きスペースが足りず、戻せませんでした。");
+      notify(failure({ what: "棚の空きスペースが足りず、戻せませんでした" }));
       return false;
     }
     forget(shelfId, bookId);
@@ -1236,8 +1246,9 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         >
           <div className="editor-remove-shelf-dialog">
             <p>
-              「{removeShelf.name}」に並んでいる{removeShelf.items.length}
-              冊と、この棚に書いたPOPが削除されます。
+              「{removeShelf.name}」に並んでいる
+              {counted(removeShelf.items.length, "冊")}
+              と、この棚に書いたPOPが削除されます。
             </p>
             <p className="editor-field-note">
               本の情報や、読みたいリストはそのまま残ります。

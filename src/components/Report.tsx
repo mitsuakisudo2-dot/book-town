@@ -26,6 +26,7 @@ import { Icon, Modal } from "./ui";
 import { KeptDraftNote, StopConfirm, useOpenedWithWork } from "./KeptDraftNote";
 import "./report.css";
 import { quotedTitle } from "../lib/book-name";
+import { failure, AGAIN } from "../lib/words";
 
 // A spoiler is asked about with 「ネタバレでは？」 instead, which folds a post
 // rather than hiding it. Personal information and threats act at once (when
@@ -271,7 +272,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
           </p>
           {phase === "failed" && (
             <p className="profile-link-error" role="alert">
-              送れませんでした。時間をおいて、もう一度お試しください。
+              {failure({ what: "送れませんでした", next: AGAIN.afterSomeTime })}
             </p>
           )}
           {stopping ? (

@@ -99,6 +99,7 @@ import {
 import { useAnnouncement } from "../lib/live-region";
 import { reducedMotion } from "../lib/motion";
 import { bookAuthor, bookById, bookTitle, quotedTitle } from "../lib/book-name";
+import { counted, whenSome } from "../lib/words";
 
 // Every screen but Home comes in its own file, read when it is first shown
 // (and after Home is drawn, below), so a phone opening the town reads and
@@ -834,7 +835,7 @@ function ShopView({
               <h3>{s.name}</h3>
               {/* An empty shelf has no count: the owner gets a way to fill it. */}
               {s.items.length > 0 ? (
-                <small>{s.items.length}冊の選書</small>
+                <small>{counted(s.items.length, "冊")}の選書</small>
               ) : (
                 shop.ownerId === ME_ID && (
                   <Link href="/my-shop/" className="store-shelf-fill">
@@ -898,9 +899,13 @@ function ShopView({
           (shop.followers > 0 || shop.weekVisitors) ? (
           <p className="shop-social-note">
             {[
-              shop.followers > 0 && `${shop.followers}人がフォロー`,
+              whenSome(shop.followers, "人", (c) => `${c}がフォロー`),
               shop.weekVisitors &&
-                `この1週間に${shop.weekVisitors.count}人が立ち寄り`,
+                whenSome(
+                  shop.weekVisitors.count,
+                  "人",
+                  (c) => `この1週間に${c}が立ち寄り`,
+                ),
               "この数はあなたにだけ見えています",
             ]
               .filter(Boolean)

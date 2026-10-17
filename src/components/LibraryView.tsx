@@ -27,6 +27,7 @@ import { replaceAddress, useUrlParam } from "../lib/url-state";
 import { JournalNotes, TitlesToType } from "./LibraryJournalNotes";
 import { ScanSession } from "./ScanSession";
 import { BookJacket, Icon } from "./ui";
+import { counted } from "../lib/words";
 
 // The reader's library (管理表14): every book they have met in the town,
 // sorted onto the default shelves (library.ts DEFAULT_SHELVES) and narrowed
@@ -226,7 +227,9 @@ export function LibraryView({
     const undo = actions.changeLibrary(ids, change.change(lit));
     if (!undo) return;
     const book = ids.length === 1 ? books.get(ids[0]) : undefined;
-    const subject = book ? `${quotedTitle(book)}を` : `${ids.length}冊を`;
+    const subject = book
+      ? `${quotedTitle(book)}を`
+      : `${counted(ids.length, "冊")}を`;
     // A book nothing else keeps leaves the library with 読みたい or ☆: said.
     const left = change === REMOVE ? 0 : leftBy(undo);
     const after =
@@ -234,14 +237,14 @@ export function LibraryView({
         ? ""
         : book
           ? "（ライブラリからも外れました）"
-          : `（${left}冊はライブラリからも外れました）`;
+          : `（${counted(left, "冊")}はライブラリからも外れました）`;
     notify(subject + change.done(lit) + after, {
       label: "元に戻す",
       run: () => {
         const restored = actions.undoLibrary(undo);
         notify(
           restored
-            ? `${restored === 1 && book ? quotedTitle(book) : `${restored}冊`}を元に戻しました`
+            ? `${restored === 1 && book ? quotedTitle(book) : counted(restored, "冊")}を元に戻しました`
             : "そのあと変えた本なので、そのままにしました",
         );
       },
@@ -353,7 +356,7 @@ export function LibraryView({
       <header className="library-head" inert={Boolean(picking)}>
         <div>
           <h1>ライブラリ</h1>
-          {counts.works > 0 && <p>{counts.works}冊</p>}
+          {counts.works > 0 && <p>{counted(counts.works, "冊")}</p>}
         </div>
         <button
           type="button"
@@ -381,7 +384,7 @@ export function LibraryView({
               aria-pressed={pressedShelf === shelf.key}
               aria-label={
                 n
-                  ? `${shelf.label} ${n}冊`
+                  ? `${shelf.label} ${counted(n, "冊")}`
                   : shelf.key === "all"
                     ? ALL_CHIP
                     : shelf.label
@@ -409,7 +412,7 @@ export function LibraryView({
               key={chip.key}
               className="chip"
               aria-pressed={chip.on}
-              aria-label={`${chip.label} ${chip.count}冊`}
+              aria-label={`${chip.label} ${counted(chip.count, "冊")}`}
               onClick={() => setFilter(chip.params)}
             >
               {chip.on && <Icon name="check" size={16} />}
@@ -430,7 +433,9 @@ export function LibraryView({
       {listed.length > 0 && (
         <div className="library-bar" inert={Boolean(picking)}>
           {/* The whole library's number is at the top; a filtered view says its own. */}
-          {filtered && <p aria-live="polite">{worksIn(library, listed)}冊</p>}
+          {filtered && (
+            <p aria-live="polite">{counted(worksIn(library, listed), "冊")}</p>
+          )}
           <button
             type="button"
             className="btn soft"
@@ -639,7 +644,7 @@ function PickBar({
     <section className="library-pick" aria-label="選んだ本を変える" ref={bar}>
       <div className="library-pick-head">
         <p aria-live="polite" tabIndex={-1} ref={heading}>
-          {count ? `${count}冊を選択中` : "本を選んでください"}
+          {count ? `${counted(count, "冊")}を選択中` : "本を選んでください"}
         </p>
         <button type="button" className="text-btn" onClick={onAll}>
           {allPicked ? "すべて解除" : "すべて選ぶ"}

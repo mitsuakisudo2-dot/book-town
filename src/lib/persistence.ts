@@ -1,5 +1,6 @@
 import type { TownBackend } from "./town-backend";
 import type { PersistenceStatus } from "./types";
+import { failure, WHILE_OFFLINE } from "./words";
 
 type Where = TownBackend["kind"];
 
@@ -10,16 +11,17 @@ export function shelfSaveMessage(where: Where, status: PersistenceStatus) {
       saved: "本棚の変更は、このブラウザに保存済みです。",
       saving: "本棚の変更は、このブラウザに保存済みです。",
       loading: "このブラウザの保存データを読み込んでいます。",
-      unavailable:
-        "ブラウザに保存できません。変更はリロードすると失われる場合があります。",
+      unavailable: failure({
+        what: "ブラウザに保存できません",
+        kept: "変更はリロードすると失われる場合があります",
+      }),
       recovered: "保存データを読み込めなかったため、初期状態に戻しました。",
     }[status];
   return {
     saved: "本棚の変更は、あなたのアカウントに保存済みです。",
     saving: "本棚の変更を保存しています…",
     loading: "あなたの本屋を読み込んでいます。",
-    unavailable:
-      "つながらないため、まだ保存できていません。つながりしだい保存します。",
+    unavailable: failure(WHILE_OFFLINE),
     recovered: "保存できない変更があったため、保存されている状態に戻しました。",
   }[status];
 }
@@ -30,15 +32,27 @@ export function saveWarning(
   status: PersistenceStatus,
 ): string | null {
   if (where === "unavailable")
-    return "アカウントを読み込めませんでした。通信の状態を確かめて、ページを読み込み直してください。";
+    return failure({
+      what: "アカウントを読み込めませんでした",
+      next: "通信の状態を確かめて、ページを読み込み直してください",
+    });
   if (where === "visitor")
     return status === "unavailable"
-      ? "本の街の新しい様子を読み込めませんでした。いまは見本の書店だけを表示しています。"
+      ? failure({
+          what: "本の街の新しい様子を読み込めませんでした",
+          kept: "いまは見本の書店だけを表示しています",
+        })
       : null;
   if (status === "unavailable")
     return where === "local"
-      ? "このブラウザに保存できません。ブラウザの保存設定を確認してください。今の操作はページを閉じると失われます。"
-      : "つながらないため、まだ保存できていません。つながりしだい保存します。ページを閉じると、保存前の変更は失われます。";
+      ? failure({
+          what: "このブラウザに保存できません",
+          next: "ブラウザの保存設定を確認してください。今の操作はページを閉じると失われます",
+        })
+      : failure({
+          ...WHILE_OFFLINE,
+          kept: `${WHILE_OFFLINE.kept}。ページを閉じると、保存前の変更は失われます`,
+        });
   if (status === "recovered")
     return where === "local"
       ? "保存データを読み込めなかったため、デモの初期状態に戻しました。"
