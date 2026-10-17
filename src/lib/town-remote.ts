@@ -1293,13 +1293,21 @@ export function planWrites(
     });
   const shelfKey = (book: ShelfBook) =>
     JSON.stringify([book.shelfId, book.bookId]);
-  const baseOn = new Set(base.libraryShelfBooks.map(shelfKey));
-  const nextOn = new Set(next.libraryShelfBooks.map(shelfKey));
+  // A book whose place on a shelf changed (an undo puts back when it was
+  // put on) is taken off and put on again: added_at has no update grant.
+  const samePlace = (a: ShelfBook, b: ShelfBook | undefined) =>
+    b !== undefined && a.addedAt === b.addedAt && a.position === b.position;
+  const baseOn = new Map(
+    base.libraryShelfBooks.map((book) => [shelfKey(book), book]),
+  );
+  const nextOn = new Map(
+    next.libraryShelfBooks.map((book) => [shelfKey(book), book]),
+  );
   const putOn = next.libraryShelfBooks.filter(
-    (book) => !baseOn.has(shelfKey(book)),
+    (book) => !samePlace(book, baseOn.get(shelfKey(book))),
   );
   const takenOff = base.libraryShelfBooks.filter(
-    (book) => !nextOn.has(shelfKey(book)),
+    (book) => !samePlace(book, nextOn.get(shelfKey(book))),
   );
   if (putOn.length || takenOff.length)
     writes.push({

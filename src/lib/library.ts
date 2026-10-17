@@ -1360,9 +1360,9 @@ export interface LibraryCounts {
   /** Works on each default shelf; a shelf with none is left out. */
   shelves: Record<string, number>;
   /**
-   * Works on each theme shelf not put away, and, while its view hides the
-   * books only wanted, how many of them it hides; a shelf or a number that
-   * would be 0 is left out.
+   * Works each theme shelf not put away shows, and, while its view hides
+   * the books only wanted, how many of them it hides; a shelf with no books
+   * at all, or a hidden number that would be 0, is left out.
    */
   themes: Record<string, { works: number; hiddenWanted?: number }>;
 }
@@ -1456,11 +1456,18 @@ export function countsOf(
     const members = shown.filter(({ e }) => on?.has(e.bookId));
     const n = works(members);
     if (n === 0) continue;
-    const hidden = shelf.showWanted
-      ? 0
-      : works(members.filter(({ e }) => wantedOnly(e)));
+    if (shelf.showWanted) {
+      counts.themes[id] = { works: n };
+      continue;
+    }
+    // The number is what the shelf shows; the books only wanted that it
+    // hides are counted apart.
+    const hidden = works(members.filter(({ e }) => wantedOnly(e)));
+    const showing = works(members.filter(({ e }) => !wantedOnly(e)));
     counts.themes[id] =
-      hidden > 0 ? { works: n, hiddenWanted: hidden } : { works: n };
+      hidden > 0
+        ? { works: showing, hiddenWanted: hidden }
+        : { works: showing };
   }
   return counts;
 }

@@ -747,6 +747,24 @@ check("the shelves are read and written as the reader changed them", () => {
     planWrites(store.getSnapshot(), store.getSnapshot(), ids).length,
     0,
   );
+
+  // A book back on a shelf at its old place (an undo) is put on again there.
+  const moved = {
+    ...base,
+    libraryShelfBooks: base.libraryShelfBooks.map((book) => ({
+      ...book,
+      addedAt: "2026-10-20T00:00:00.000Z",
+    })),
+  };
+  const again = planWrites(moved, base, ids).find(
+    (write): write is Extract<Write, { kind: "shelf-books" }> =>
+      write.kind === "shelf-books",
+  )!;
+  assert.deepEqual(again.remove, [{ shelf_id: SHELF, book_id: BOOK }]);
+  assert.deepEqual(
+    again.add.map((row) => [row.shelf_id, row.book_id, row.added_at]),
+    [[SHELF, BOOK, base.libraryShelfBooks[0].addedAt]],
+  );
 });
 
 console.log(`${passed} library town checks passed`);

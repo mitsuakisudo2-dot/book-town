@@ -39,7 +39,7 @@ import { JournalNotes, TitlesToType } from "./LibraryJournalNotes";
 import { LibraryShelfSheet } from "./LibraryShelfSheet";
 import { ScanSession } from "./ScanSession";
 import { BookJacket, Icon } from "./ui";
-import { counted } from "../lib/words";
+import { counted, whenSome } from "../lib/words";
 
 // The reader's library (管理表14): every book they have met in the town,
 // sorted onto the default shelves (library.ts DEFAULT_SHELVES) and the
@@ -159,6 +159,9 @@ const leftBy = (undo: LibraryUndo) =>
       (undo.before[id]?.entry?.removedAt ?? null) === null,
   ).length;
 
+/** What a new shelf is held as until the account has it: "made:" + its id. */
+const MADE = "made:";
+
 export function LibraryView({
   state,
   actions,
@@ -221,7 +224,17 @@ export function LibraryView({
   // The shelf being made (NEW_SHELF_KEY) or changed (its id).
   const [shelfSheet, setShelfSheet] = useState<string | null>(null);
   const owner = useDraftOwner();
-  const saving = useKeptUntilSaved(() => notify(SAVE_REFUSED));
+  const saving = useKeptUntilSaved((what) => {
+    // A new shelf the account did not take: its words go back to the form
+    // for the next 「棚を作る」, where they were before it was made.
+    const made = what.startsWith(MADE) ? what.slice(MADE.length) : null;
+    if (made && owner) {
+      const words = libraryShelfDraftStore.get(`${owner}/${made}`);
+      libraryShelfDraftStore.clear(`${owner}/${made}`);
+      if (words) libraryShelfDraftStore.set(`${owner}/${NEW_SHELF_KEY}`, words);
+    }
+    notify(SAVE_REFUSED);
+  });
   const books = useMemo(
     () => new Map(state.books.map((book) => [book.id, book])),
     [state.books],
@@ -327,7 +340,7 @@ export function LibraryView({
     if (!undo) return;
     const book = ids.length === 1 ? books.get(ids[0]) : undefined;
     notify(
-      `${book ? quotedTitle(book) : `${ids.length}冊`}を「${shelf.name}」に入れました`,
+      `${book ? quotedTitle(book) : counted(ids.length, "冊")}を「${shelf.name}」に入れました`,
       {
         label: "元に戻す",
         run: () => {
@@ -375,8 +388,13 @@ export function LibraryView({
     }
     const id = actions.makeLibraryShelf(work.name, work.note);
     if (!id) return false;
-    if (key)
-      saving.hold("new-shelf", libraryShelfDraftStore, key, {
+    // The form is clear for the next shelf; the words wait under the shelf
+    // made until the account has it (there they change nothing), and come
+    // back to the form if it is refused.
+    if (key) libraryShelfDraftStore.clear(key);
+    const made = shelfDraftKey(id);
+    if (made)
+      saving.hold(MADE + id, libraryShelfDraftStore, made, {
         work,
         base: NEW_SHELF,
       });
@@ -577,7 +595,7 @@ export function LibraryView({
               key={shelf.id}
               className="chip"
               aria-pressed={pressedShelf === shelf.id}
-              aria-label={n ? `${shelf.name} ${n}冊` : shelf.name}
+              aria-label={n ? `${shelf.name} ${counted(n, "冊")}` : shelf.name}
               onClick={() => setFilter({ shelf: shelf.id })}
             >
               {shelf.name}
@@ -599,12 +617,9 @@ export function LibraryView({
           <div>
             <h2>{theme.name}</h2>
             {theme.note && <p>{theme.note}</p>}
-            {counts.themes[theme.id]?.hiddenWanted ? (
-              <p>
-                「読みたい」だけの本
-                {counts.themes[theme.id]?.hiddenWanted}冊は並べていません
-              </p>
-            ) : null}
+            {whenSome(counts.themes[theme.id]?.hiddenWanted ?? 0, "冊", (n) => (
+              <p>「読みたい」だけの本{n}は並べていません</p>
+            ))}
           </div>
           <button
             type="button"
@@ -727,13 +742,13 @@ export function LibraryView({
             );
           })}
         </ul>
-      ) : theme && !filters && !counts.themes[theme.id] ? (
+      ) : theme && !filters && !counts.themes[theme.id]?.works ? (
         <section className="library-start">
           <h2>この棚に、本を入れましょう。</h2>
           <p>ライブラリの本から選んで入れられます。</p>
           <button
             type="button"
-            className="btn fill"
+            className="btn soft"
             onClick={() => {
               // The whole library to pick from, under the shelf's own name.
               setPicking(filterLibrary(library, { showWanted: true }, shop));

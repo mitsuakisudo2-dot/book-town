@@ -234,6 +234,7 @@
   left: 0;
   z-index: calc(var(--layer-tabbar) + 1);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   padding: 12px 16px max(12px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
@@ -262,6 +263,10 @@
 }
 .library-pick-row::-webkit-scrollbar {
   display: none;
+}
+.library-pick > .btn {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .library-pick-row .chip {
   padding: 0 14px;

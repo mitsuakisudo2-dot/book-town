@@ -361,6 +361,12 @@ try {
       await expect(page).toHaveURL(/\/library\/\?shelf=[\w-]+$/);
       const shelf = shelves.getByRole("button", { name: "雨の日に読みたい" });
       await expect(shelf).toHaveAttribute("aria-pressed", "true");
+      // The next shelf starts from a clear form.
+      await shelves.getByRole("button", { name: "棚を作る" }).click();
+      await expect(sheet.getByLabel("棚の名前")).toHaveValue("");
+      await expect(sheet).not.toContainText("書きかけ");
+      await page.goBack();
+      await expect(sheet).toHaveCount(0);
       // An empty shelf shows no number, and asks for its books.
       await expect(page.locator(".library-page")).not.toContainText(
         /(^|\D)0冊/,
