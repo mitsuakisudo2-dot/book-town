@@ -1,7 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { layersSettled, settleBeforeNavigating } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
 import {
   coarse,
@@ -65,6 +65,22 @@ async function goHome() {
     await tab("ホーム").tap();
   await expect(page).toHaveURL(`${baseURL}/`);
   await expect(page.locator(".home-skeletons")).toHaveCount(0);
+}
+/**
+ * Waits for the web fonts to be in: they come after the page has loaded
+ * (SHOW_FONTS in src/app/layout.tsx), and a 便り's lines wrap again when they
+ * do. A check that measures where things sit waits for them first.
+ */
+async function fontsSettled() {
+  await expect(page.locator("#web-fonts")).toHaveAttribute("media", "all", {
+    timeout: 20_000,
+  });
+  await page.evaluate(async () => {
+    await new Promise((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(done)),
+    );
+    await document.fonts.ready;
+  });
 }
 /** Opens a page of its own on the browser for a check, then closes it. */
 async function withPage(options, run) {
@@ -181,9 +197,19 @@ async function compose(text) {
   await expect(sheet).toHaveCount(0);
 }
 /** Stops the page's clock a moment ahead of where it has got to. */
-async function stopClock() {
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.pauseAt(now + 100);
+async function stopClock(ahead = 100) {
+  // A slow runner can take longer than `ahead` between reading the clock and
+  // stopping it, and the clock will not go back. It stands still by then, so
+  // read again: the second try lands ahead of it.
+  for (let tries = 1; ; tries += 1) {
+    const now = await page.evaluate(() => Date.now());
+    try {
+      return await page.clock.pauseAt(now + ahead);
+    } catch (error) {
+      if (tries > 1 || !String(error).includes("fast-forward to the past"))
+        throw error;
+    }
+  }
 }
 /**
  * A finger dragged across the screen (CDP touch: pointer events), one step
@@ -825,7 +851,11 @@ try {
         await page.keyboard.press("Escape");
         await expect(letter).toHaveCount(0);
 
-        // The screen beneath stays where it was.
+        // The screen beneath stays where it was. The closed page's step
+        // comes off the history a moment later, and the browser then puts
+        // the page where it was when the 便り opened; the reader's next
+        // scroll comes after that, and so does this one.
+        await layersSettled(page);
         await page.evaluate(() => scrollTo(0, 700));
         await page.waitForTimeout(100);
         expect(await page.evaluate(() => scrollY)).toBeGreaterThan(600);
@@ -1271,8 +1301,7 @@ try {
         expect(drawn.length).toBeGreaterThan(0);
         const words = page.locator(".home-pull");
         // The clock stops a little ahead: Home is still settling.
-        const now = await page.evaluate(() => Date.now());
-        await page.clock.pauseAt(now + 2000);
+        await stopClock(2000);
         await pull("start");
         await pull("move", 60);
         await expect(words).toHaveText("引っぱって新しい便りを読む");
@@ -1666,6 +1695,7 @@ try {
         await orbit.evaluate((element) =>
           element.scrollIntoView({ block: "center" }),
         );
+        await fontsSettled();
         const tops = () =>
           pane("home").evaluate((element) =>
             [
@@ -1987,6 +2017,7 @@ try {
     () =>
       withPage({}, async () => {
         await goHome();
+        await fontsSettled();
         const shell = page.locator(".town-shell");
         const scrolled = () => page.evaluate(() => Math.round(scrollY));
         // Time for a scroll to be read (the page's own frames).
@@ -2103,7 +2134,11 @@ try {
             ".home-alley > .street-end",
             `${width}px the alley's end`,
           );
-          // Following nobody, 便りだけ's shops to follow.
+          // Following nobody, 便りだけ's shops to follow. Read down to the
+          // alley's end, the bars have slid away (or are sliding back as the
+          // alley grows); a reader goes back up to the tabs first.
+          await page.evaluate(() => scrollTo(0, 0));
+          await expect(tab("便りだけ")).toBeInViewport({ ratio: 1 });
           await tab("便りだけ").tap();
           await expect(
             pane("letters").locator(".follow-suggestions"),
