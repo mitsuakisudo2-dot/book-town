@@ -4,6 +4,7 @@ import type { PopPick } from "../../../lib/features";
 import type { TownState } from "../../../lib/types";
 import { findReader } from "../../../lib/social";
 import { isSample } from "../../../lib/tonight";
+import { bookTitle } from "../../../lib/book-name";
 import { BookJacket } from "../../ui";
 import { SampleTag } from "../FeatureBand";
 import type { Picked } from "../ShopFront";
@@ -36,7 +37,7 @@ export function Pops({
               <BookJacket book={book} sizes="30px" />
             </span>
             <span>
-              <b>{book.title}</b>
+              <b>{bookTitle(book)}</b>
               <small>
                 {shop.name}
                 {owner && `・店主 ${owner.name}`}

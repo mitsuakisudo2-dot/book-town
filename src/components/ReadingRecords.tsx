@@ -39,6 +39,7 @@ import {
 } from "./KeptDraftNote";
 import { LengthNearLimit } from "./Social";
 import { shownToOthers, type Audience } from "../lib/visibility";
+import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import "./records.css";
 
 type Shared = {
@@ -214,8 +215,8 @@ export function RecordSheet({
       <div className="record-book">
         <BookJacket book={book} />
         <div>
-          <b>{book.title}</b>
-          <small>{book.author}</small>
+          <b>{bookTitle(book)}</b>
+          <small>{bookAuthor(book)}</small>
         </div>
       </div>
       <fieldset className="feeling-picker">
@@ -438,8 +439,7 @@ export function RecordShelf({
   const editingRecord =
     editing && records.find((entry) => entry.id === editing.id);
   const editingBook =
-    editingRecord &&
-    state.books.find((book) => book.id === editingRecord.bookId);
+    editingRecord && bookById(state.books, editingRecord.bookId);
   return (
     <section className="record-shelf" aria-labelledby="record-shelf-title">
       <div className="profile-section-heading">
@@ -450,7 +450,7 @@ export function RecordShelf({
       </div>
       <ul>
         {records.map((record) => {
-          const book = state.books.find((entry) => entry.id === record.bookId);
+          const book = bookById(state.books, record.bookId);
           if (!book) return null;
           const noteView = recordNoteView(state, record);
           const hidden = noteView === "folded" && !opened.includes(record.id);
@@ -461,7 +461,7 @@ export function RecordShelf({
               </Link>
               <div>
                 <Link href={bookPath(book.id)} className="record-card-title">
-                  {book.title}
+                  {bookTitle(book)}
                 </Link>
                 {record.feelings.length > 0 && (
                   <p className="record-card-feelings">

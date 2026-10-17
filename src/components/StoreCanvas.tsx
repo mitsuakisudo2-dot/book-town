@@ -13,6 +13,7 @@ import {
 import { popExcerpt, tierCardOwners } from "../lib/store-scene-adapter";
 import { ART_PANELS, artPanel } from "../lib/book-art";
 import type { Book } from "../lib/types";
+import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 
 const THEME = "/themes/woodshop/";
 const pct = (n: number) => n * 100 + "%";
@@ -245,7 +246,7 @@ export function StoreBook({
       <BookJacket
         book={book}
         illustrated
-        author={shortAuthor(book.author)}
+        author={shortAuthor(bookAuthor(book))}
         artIndex={artIndex}
       />
     );
@@ -253,7 +254,7 @@ export function StoreBook({
     [...book.id].reduce((sum, c) => sum + c.charCodeAt(0), 0) %
       SPINE_TONES.length
   ] ?? [book.color, book.ink];
-  const author = shortAuthor(book.author);
+  const author = shortAuthor(bookAuthor(book));
   return (
     <span
       className={"walk-spine is-pattern-" + (Math.abs(book.pattern) % 3)}
@@ -261,13 +262,13 @@ export function StoreBook({
         {
           background: tone[0],
           color: tone[1],
-          "--n": [...book.title].length,
+          "--n": [...bookTitle(book)].length,
           "--m": [...author].length,
           "--accent": book.color,
         } as CSSProperties
       }
     >
-      <span>{book.title}</span>
+      <span>{bookTitle(book)}</span>
       <small>{author}</small>
       <i className="walk-spine-mark" aria-hidden="true" />
     </span>
@@ -351,7 +352,7 @@ export function StoreCanvas({
           )
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
       )) {
-      const book = books.find((b) => b.id === p.bookId);
+      const book = bookById(books, p.bookId);
       if (!book) continue;
       const preferred = artPanel(book);
       let panel = preferred;
@@ -410,7 +411,7 @@ export function StoreCanvas({
     } as CSSProperties;
   }
   function renderBook(o: SceneObject, row: SceneObject, rowIndex: number) {
-    const book = books.find((b) => b.id === o.bookId);
+    const book = bookById(books, o.bookId);
     if (!book) return null;
     const pop = bookPop(scene, o.id);
     const tier = cardOwners.has(o.id);
@@ -427,9 +428,9 @@ export function StoreCanvas({
           className="walk-book-target"
           data-placement={o.id}
           aria-label={
-            book.title +
+            bookTitle(book) +
             "、" +
-            book.author +
+            bookAuthor(book) +
             "。手に取る" +
             (pop?.text && !shown ? "。POPあり" : "")
           }
@@ -465,7 +466,7 @@ export function StoreCanvas({
                   }
             }
             onClick={() => onPop(o)}
-            aria-label={book.title + "のPOP全文を読む"}
+            aria-label={bookTitle(book) + "のPOP全文を読む"}
           >
             <span className="walk-pop-excerpt">
               {tier ? popExcerpt(pop.text ?? "", 28) : pop.text}

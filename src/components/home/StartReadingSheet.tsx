@@ -6,6 +6,12 @@ import { useRouter } from "next/navigation";
 import type { ReadingMode } from "../../lib/types";
 import { currentBookId } from "../../lib/reading";
 import { booksBeforeSearch } from "../../lib/book-lists";
+import {
+  bookAuthor,
+  bookById,
+  booksById,
+  bookTitle,
+} from "../../lib/book-name";
 import { leaveLayers } from "../../lib/back-layer";
 import { BookPicker } from "../BookPicker";
 import { BookJacket, Icon, Modal } from "../ui";
@@ -33,14 +39,10 @@ export function StartReadingSheet({
       (id) => id !== current && !state.finishedBooks.includes(id),
     ),
   ];
-  const offered = ids
-    .flatMap((id) => state.books.filter((book) => book.id === id))
-    .slice(0, 1 + WISHES);
+  const offered = booksById(state.books, ids).slice(0, 1 + WISHES);
   const [chosen, setChosen] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
-  const book = chosen
-    ? state.books.find((entry) => entry.id === chosen)
-    : undefined;
+  const book = bookById(state.books, chosen);
   function start(mode: ReadingMode) {
     // Turned away (a visitor is asked to sign in instead): the sheet goes.
     if (!actions.startReading(chosen, mode)) return onClose();
@@ -60,8 +62,8 @@ export function StartReadingSheet({
               <BookJacket book={book} sizes="44px" />
             </span>
             <span>
-              <b>{book.title}</b>
-              <small>{book.author}</small>
+              <b>{bookTitle(book)}</b>
+              <small>{bookAuthor(book)}</small>
             </span>
           </div>
           <p className="home-sheet-lead">どう読みますか。</p>
@@ -101,7 +103,7 @@ export function StartReadingSheet({
                         <BookJacket book={entry} sizes="36px" />
                       </span>
                       <span>
-                        <b>{entry.title}</b>
+                        <b>{bookTitle(entry)}</b>
                         <small>
                           {entry.id === current ? "読みかけ" : "読みたい本"}
                         </small>

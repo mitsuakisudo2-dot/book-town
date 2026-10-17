@@ -6,6 +6,7 @@ import { formatPrice, REGISTERED_GENRE } from "../lib/books";
 import { bookLookup } from "../lib/book-lookup";
 import { iosSafari } from "../lib/user-agent";
 import { Icon } from "./ui";
+import { bookAuthor, bookTitle } from "../lib/book-name";
 
 const unchanging = () => () => {};
 /** Safari on an iPhone or iPad; false on the server and while hydrating. */
@@ -40,7 +41,7 @@ export function BookPrice({
  * beside them a way to read about it elsewhere first.
  */
 export function BookPurchase({ book }: { book: Book }) {
-  const query = encodeURIComponent(`${book.title} ${book.author}`);
+  const query = encodeURIComponent(`${bookTitle(book)} ${bookAuthor(book)}`);
   const lookup = bookLookup(book, useIosSafari());
   return (
     <div className="book-links">

@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import type { PopPick } from "../../lib/features";
+import { quotedTitle } from "../../lib/book-name";
 import { BOARD_NOTICE, refuseForSample } from "../../lib/sample-notice";
 import { BookJacket, Icon } from "../ui";
 import { SampleTag } from "./FeatureBand";
@@ -45,7 +46,7 @@ export function CorkBoard({
               <li key={shop.id}>
                 <button
                   type="button"
-                  aria-label={`『${book.title}』${shop.name}`}
+                  aria-label={`${quotedTitle(book)}${shop.name}`}
                   onClick={() => onPick({ shop, shelf, item })}
                 >
                   <span className="home-tile-book" aria-hidden="true">

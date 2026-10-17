@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ownersToFollow } from "../../lib/social";
 import { isDatabaseId, profilePath } from "../../lib/paths";
 import { useTownBackend } from "../../lib/store";
+import { quotedTitle } from "../../lib/book-name";
 import { ReaderAvatar } from "../ui";
 import type { Shared } from "./Letters";
 
@@ -32,7 +33,7 @@ export function FollowSuggestions({ state, actions, notify }: Shared) {
               </span>
             </Link>
             <p className="follow-pop">
-              『{book.title}』に添えたPOP：{pop}
+              {quotedTitle(book)}に添えたPOP：{pop}
             </p>
             <button
               type="button"

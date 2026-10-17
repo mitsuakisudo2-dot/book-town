@@ -37,6 +37,7 @@ import "./reading.css";
 import "./records.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { useTownBackend } from "../lib/store";
+import { bookAuthor, bookTitle } from "../lib/book-name";
 
 type Shared = {
   state: TownState;
@@ -177,9 +178,9 @@ export function SearchView({ state, actions, notify }: Shared) {
       <Link href={bookPath(book.id)} className="search-book">
         <BookJacket book={book} className="search-jacket" />
         <span>
-          <b>{book.title}</b>
+          <b>{bookTitle(book)}</b>
           <small>
-            {book.author}・{book.genre}
+            {bookAuthor(book)}・{book.genre}
           </small>
           {meta && <em>{meta}</em>}
         </span>

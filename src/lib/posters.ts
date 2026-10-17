@@ -1,5 +1,6 @@
 import { ME_ID, type Book, type TownState } from "./types";
 import type { ReviewCover, SpoilerView } from "./social";
+import { bookById, quotedTitle } from "./book-name";
 
 // A poster is what a reader makes about books: a few pages, each set by its
 // template (one book told at length, a lineup of covers, or words alone) in a
@@ -257,8 +258,8 @@ export function posterTitle(
   const heading = poster.pages.find((page) => page.heading)?.heading;
   if (heading) return heading;
   const first = posterBookIds(poster)[0];
-  const book = books.find((entry) => entry.id === first);
-  if (book) return `『${book.title}』`;
+  const book = bookById(books, first);
+  if (book) return quotedTitle(book);
   const text = poster.pages.find((page) => page.text)?.text ?? "";
   return text.length > 24 ? text.slice(0, 24) + "…" : text || "ポスター";
 }
@@ -300,8 +301,8 @@ export function posterThumbName(
   if (folded)
     return `ポスター たたんでいます（${FOLDED_POSTER_REASONS[folded]}）`;
   if (!poster.spoiler) return "ポスター " + posterTitle(poster, books);
-  const first = books.find((book) => book.id === posterBookIds(poster)[0]);
-  return "ネタバレを含むポスター" + (first ? `（『${first.title}』）` : "");
+  const first = bookById(books, posterBookIds(poster)[0]);
+  return "ネタバレを含むポスター" + (first ? `（${quotedTitle(first)}）` : "");
 }
 
 const newestFirst = (a: Poster, b: Poster) =>

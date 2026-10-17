@@ -19,6 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { Book, Shelf, ShelfItem } from "../lib/types";
 import { BookJacket, Icon } from "./ui";
+import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 
 type Props = {
   shelf: Shelf;
@@ -55,7 +56,7 @@ export function WoodenShelf({
       <div className="shelf-back">
         <div className="shelf-books-row">
           {shelf.items.map((item) => {
-            const b = books.find((book) => book.id === item.bookId);
+            const b = bookById(books, item.bookId);
             return b ? (
               <ShelfBook
                 key={item.id}
@@ -152,15 +153,15 @@ function ShelfBook({
         {...(editing ? listeners : {})}
         onClick={onSelect}
         className="shelf-book-button"
-        aria-label={`${book.title} · ${item.display === "face" ? "面陳" : "背表紙"}${item.pop ? " · POPあり" : ""}${editing ? " · 編集する" : ""}`}
+        aria-label={`${bookTitle(book)} · ${item.display === "face" ? "面陳" : "背表紙"}${item.pop ? " · POPあり" : ""}${editing ? " · 編集する" : ""}`}
       >
         {item.display === "face" ? (
           <BookJacket book={book} />
         ) : (
           <span className={"book-spine pattern-" + (book.pattern % 3)}>
             <span className="spine-cap" />
-            <span className="spine-title">{book.title}</span>
-            <span className="spine-author">{book.author}</span>
+            <span className="spine-title">{bookTitle(book)}</span>
+            <span className="spine-author">{bookAuthor(book)}</span>
             <span className="spine-mark">本</span>
           </span>
         )}

@@ -51,6 +51,7 @@ import {
 import { notePosted } from "../lib/just-posted";
 import { coverSelection, splitHidden } from "../lib/hidden-words";
 import { focusField } from "../lib/coarse-pointer";
+import { bookTitle } from "../lib/book-name";
 
 type Shared = {
   state: TownState;
@@ -334,7 +335,7 @@ export function PostComposer({
           {isReply
             ? "返信"
             : fixedBook
-              ? fixedBook.title + "の感想"
+              ? bookTitle(fixedBook) + "の感想"
               : "いま、どんな本のことを考えていますか"}
         </label>
         <textarea

@@ -1,10 +1,11 @@
 // この本について調べる (BookPurchase in BookActions.tsx): a web search for the
 // book's title and author, in a new tab.
 
-type Named = { title: string; author: string };
+import { bookAuthor, bookTitle, type Named } from "./book-name";
 
 /** The title and the author, a full-width space between them. */
-export const lookupQuery = (book: Named) => `${book.title}　${book.author}`;
+export const lookupQuery = (book: Named) =>
+  `${bookTitle(book)}　${bookAuthor(book)}`;
 
 /** Google's results, without "www." (see BookPurchase). */
 export const googleLookupUrl = (book: Named) =>

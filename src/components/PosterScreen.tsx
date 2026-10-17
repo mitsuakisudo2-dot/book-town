@@ -25,6 +25,7 @@ import { PosterFoldCover, PosterPages } from "./PosterView";
 import { ReportButton } from "./Report";
 import { BackLink } from "./BackLink";
 import "./poster-screen.css";
+import { bookAuthor, booksById, bookTitle } from "../lib/book-name";
 
 type Shared = {
   state: TownState;
@@ -82,9 +83,7 @@ export function PosterScreen({
     );
   const mine = author.id === ME_ID;
   const draft = poster.status === "draft";
-  const books = posterBookIds(poster)
-    .map((id) => state.books.find((book) => book.id === id))
-    .filter((book) => book !== undefined);
+  const books = booksById(state.books, posterBookIds(poster));
   const cover = reviewCoverOf(state, "poster", poster.id, poster.authorId);
   const note = reviewNoteOf(state, "poster", poster.id, poster.authorId);
   // Opened with 読む, it stays open while the reader is here.
@@ -217,8 +216,8 @@ export function PosterScreen({
                         className="poster-screen-jacket"
                       />
                       <span>
-                        <b>{book.title}</b>
-                        <small>{book.author}</small>
+                        <b>{bookTitle(book)}</b>
+                        <small>{bookAuthor(book)}</small>
                       </span>
                       <Icon name="chevron" size={14} />
                     </Link>

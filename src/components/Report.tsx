@@ -25,6 +25,7 @@ import { requestAccount } from "../lib/visitor";
 import { Icon, Modal } from "./ui";
 import { KeptDraftNote, StopConfirm, useOpenedWithWork } from "./KeptDraftNote";
 import "./report.css";
+import { quotedTitle } from "../lib/book-name";
 
 // A spoiler is asked about with 「ネタバレでは？」 instead, which folds a post
 // rather than hiding it. Personal information and threats act at once (when
@@ -91,7 +92,7 @@ export function CoverRemovalLink({ book }: { book: Book }) {
       target={{
         kind: "book",
         id: book.id,
-        name: `『${book.title}』の表紙`,
+        name: `${quotedTitle(book)}の表紙`,
         extra: `表紙の出どころ: ${cover.source === "google" ? "Google Books" : "openBD"} / ISBN ${book.isbn}`,
       }}
     >
