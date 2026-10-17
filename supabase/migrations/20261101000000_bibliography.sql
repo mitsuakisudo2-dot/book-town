@@ -17,35 +17,38 @@
 -- Editions without an ISBN get nothing from either: nothing public says
 -- what they are, and the only thing to go by would be a reader's own entry.
 --
--- How. pg_cron runs private.bib_tick() every minute: it reads the answers
--- that came back (pg_net), keeps what they say, and asks again for what is
--- due, a little at a time. Nothing leaves through GitHub Actions, whose logs
--- anyone may read: the ISBNs asked about include those of books registered
--- privately. An edition is first asked about when it is made; then again
--- by need (one still in the making within a week, one not found after a
--- day, a week, a month and then every three months, a new or incomplete one
--- each month, openBD's each month so its corrections and deletions reach
--- the master, the library's finished ones twice a year), and at once when
--- the operator asks. One with no book left is not asked about.
+-- How. pg_cron runs private.bib_tick() every twenty seconds: it reads the
+-- answers that came back (pg_net), keeps what they say, and asks again for
+-- what is due, a little at a time. Nothing leaves through GitHub Actions,
+-- whose logs anyone may read: the ISBNs asked about include those of books
+-- registered privately. Both sources are asked about an edition each time a
+-- book is placed in it (registered, or moved there by an edited ISBN), in
+-- the order the books were placed; then again by need (one still in the
+-- making within a week, one not found after a day, a week, a month and then
+-- every three months, a new or incomplete one each month, openBD's each
+-- month so its corrections and deletions reach the master, the library's
+-- finished ones twice a year), and at once when the operator asks. One with
+-- no book left is not asked about.
 --
 -- When an answer changes something. Not found or failed: what was kept stays
 -- (openBD's goes when openBD no longer has the book). Found: the source's
 -- fields become what it says now, so a field it emptied is emptied for that
--- source (the other may still fill it), except a title that would leave the
--- master with none, which stays and is listed for the operator.
+-- source (the other may still fill it). A title that would leave the master
+-- with none stays either way, and is listed for the operator.
 --
 -- Who reads what. Nobody reads the master's tables through the API.
 -- book_bibliography(ids) gives what the master shows for books a reader may
 -- see the bibliography of: books in public places (book_is_listed), the
--- reader's own (book_is_mine, or registered by them). Never for a book
--- placed in its edition less than ten minutes ago, whoever asks, so how soon
--- a reader's new book gets it does not tell whether someone registered that
--- ISBN before (a new edition is fetched within those minutes; an old one has
--- it already). The judging of registrations against the master (the next
--- step) waits the same way, from private.book_checks.
+-- reader's own (book_is_mine, or registered by them). For each book, only
+-- what the sources answered to questions sent after the book was placed in
+-- its edition, and not before ten minutes after it was: an edition someone
+-- registered before and one nobody had go through the same questions in the
+-- same queue, so neither what a book shows nor when tells whether someone
+-- registered that ISBN before. The judging of registrations against the
+-- master (the next step) waits the same way, from private.book_checks.
 --
 -- The copy the edition ids took (20261031000000_edition_ids) is dropped: the
--- move was checked in production.
+-- move was checked in production. Dropped, it is gone for good.
 --
 -- Rollback: a new migration undoes this one with
 --   select cron.unschedule('bibliography');
@@ -57,18 +60,19 @@
 --   drop view private.bibliography_review;
 --   drop table private.edition_fixes, private.edition_sources, private.book_checks;
 --   drop function private.bib_tick(), private.bib_send(), private.bib_receive(),
---     private.bib_take(uuid, text, text, text, text, text, jsonb),
+--     private.bib_take(uuid, text, bigint, text, text, text, text, jsonb),
 --     private.bib_next(text, text, smallint, smallint, text, jsonb),
---     private.edition_bibliography(uuid), private.bib_filled(jsonb),
+--     private.edition_bibliography(uuid, timestamptz), private.bib_filled(jsonb),
 --     private.ndl_answer(text, text), private.openbd_answer(jsonb, text),
---     private.onix_list(jsonb), private.ndl_credit(text),
+--     private.onix_list(jsonb), private.ndl_credit(text), private.bib_person(text, text),
 --     private.bib_title_parts(text), private.bib_issued(text), private.bib_text(text),
 --     private.isbn13(text), private.edition_asked(), private.book_checked(),
+--     private.bib_ask(uuid),
 --     private.bib_edition_of(uuid), private.fix_bibliography(uuid, text, jsonb, text),
 --     private.unfix_bibliography(uuid, text), private.refetch_bibliography(uuid),
 --     private.withdraw_bibliography(uuid, text), private.allow_bibliography(uuid, text);
--- pg_net and pg_cron can stay. Nothing else changes, so nothing comes back
--- from a copy.
+-- pg_net and pg_cron can stay. No book or edition changes, so nothing comes
+-- back from a copy (and the edition ids' copy stays dropped).
 
 -- pg_net asks the sources, pg_cron runs the asking. Supabase has both (pg_net
 -- in its extensions schema, as its dashboard puts it; its own objects are in
@@ -155,9 +159,9 @@ language sql immutable set search_path = '' as $$
 $$;
 revoke all on function private.bib_title_parts(text) from public, anon, authenticated;
 
--- One statement of who made a book, as the library writes it ("レイ・ブラッ
--- ドベリ 著", "高橋美野梨, 中丸禎子, 小澤実 編著", "尾田栄一郎∥著", "村上春樹
--- [著]"): the names, and the role after them when there is one.
+-- One statement of who made a book, as the library writes it ("ジョン・ドウ
+-- 著", "山田一郎, 川村花子, 森三郎 編著", "海野波子∥著", "田中太郎 [著]"):
+-- the names, and the role after them when there is one.
 create function private.ndl_credit(credit text, out names text[], out role text)
 language sql immutable set search_path = '' as $$
   select coalesce(
@@ -170,6 +174,24 @@ language sql immutable set search_path = '' as $$
     '^(.*?\S)\s*(?:∥|\s)\s*(\[[^\]\s]{1,8}\]|[^\s∥\[\]A-Za-z0-9]{1,8})$') as m) p
 $$;
 revoke all on function private.ndl_credit(text) from public, anon, authenticated;
+
+-- A person's name as a name authority writes it ("山田, 一郎, 1950-", "Doe,
+-- John, 1920-2012"), as books print it: without the years, the family name
+-- after the given one in Latin letters ("John Doe"), before it otherwise,
+-- joined by apart ("山田一郎"; "ヤマダ イチロウ" for a reading). Anything else
+-- stays as it is.
+create function private.bib_person(raw text, apart text default '') returns text
+language sql immutable set search_path = '' as $$
+  select case
+    when m is null then n
+    when (m[1] || m[2]) ~ '[A-Za-z]' then btrim(m[2]) || ' ' || btrim(m[1])
+    else btrim(m[1]) || apart || btrim(m[2])
+  end
+  from (select private.bib_text(regexp_replace(raw,
+    '\s*,?\s*[0-9]{3,4}\??\s*-\s*([0-9]{3,4}\??)?\s*$', '')) as n) a
+  cross join lateral (select regexp_match(n, '^([^,]+),([^,]+)$') as m) b
+$$;
+revoke all on function private.bib_person(text, text) from public, anon, authenticated;
 
 -- What one answer of the National Diet Library's SRU (recordSchema=dcndl)
 -- says about one ISBN: found, with the record and its fields; missing; or
@@ -189,6 +211,10 @@ declare
   agents jsonb;
   named jsonb;
 begin
+  if content is null then
+    state := 'failed';
+    return;
+  end if;
   begin
     doc := xmlparse(document content);
   exception when others then
@@ -203,7 +229,7 @@ begin
       from xmltable(
         xmlnamespaces('http://www.loc.gov/zing/srw/' as s, 'http://www.loc.gov/zing/srw/diagnostic/' as d),
         '/s:searchRetrieveResponse/s:diagnostics/d:diagnostic' passing doc
-        columns m text path 'd:message') x
+        columns m text path 'string(d:message)') x
     ) then 'missing' else 'failed' end;
     return;
   end if;
@@ -213,7 +239,7 @@ begin
     return;
   end if;
 
-  select r.main, r.status into main, status
+  select r.main, nullif(r.status, '') into main, status
   from xmltable(
     xmlnamespaces('http://www.loc.gov/zing/srw/' as s,
       'http://www.w3.org/1999/02/22-rdf-syntax-ns#' as rdf,
@@ -221,8 +247,8 @@ begin
     '/s:searchRetrieveResponse/s:records/s:record/s:recordData/rdf:RDF' passing doc
     columns
       main xml path 'dcndl:BibResource[dcterms:title][1]',
-      category text path 'dcndl:BibAdminResource/dcndl:bibRecordCategory',
-      status text path 'dcndl:BibAdminResource/dcndl:catalogingStatus',
+      category text path 'string(dcndl:BibAdminResource/dcndl:bibRecordCategory)',
+      status text path 'string(dcndl:BibAdminResource/dcndl:catalogingStatus)',
       n for ordinality) r
   cross join lateral (
     select coalesce(array_agg(private.isbn13(i.v)), array[]::text[]) as isbns
@@ -263,10 +289,12 @@ begin
   -- The people as the library's name authority has them, in order, and its
   -- statements of who made the book as the book itself puts it. When the
   -- statements name as many people as there are, in the same order, each
-  -- person gets the name and the role the book gives them.
+  -- person gets the name and the role the book gives them; else the name
+  -- comes from the authority's heading (bib_person).
   select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+      'name', private.bib_person(a.name),
       'heading', private.bib_text(a.name),
-      'reading', private.bib_text(a.reading),
+      'reading', private.bib_person(a.reading, ' '),
       'authority', private.bib_text(a.about))) order by a.n), '[]')
   into agents
   from xmltable(
@@ -338,17 +366,22 @@ end;
 $$;
 revoke all on function private.ndl_answer(text, text) from public, anon, authenticated;
 
--- An ONIX element that may come as one object or a list of them, as a list.
+-- An ONIX element that may come as one object or a list of them, as a list
+-- of the objects in it.
 create function private.onix_list(v jsonb) returns setof jsonb
 language sql immutable set search_path = '' as $$
-  select e from jsonb_array_elements(case jsonb_typeof(v) when 'array' then v when 'object' then jsonb_build_array(v) else '[]' end) e
+  select e
+  from jsonb_array_elements(case jsonb_typeof(v)
+    when 'array' then v when 'object' then jsonb_build_array(v) else '[]' end) e
+  where jsonb_typeof(e) = 'object'
 $$;
 revoke all on function private.onix_list(jsonb) from public, anon, authenticated;
 
 -- What openBD says about one ISBN: found, with the parts of its record the
--- master uses and their fields, or missing (its answer for the ISBN is
--- null). Its record also has what the publisher wrote about the book and
--- its authors; the master keeps none of that.
+-- master uses and their fields; missing (its answer for the ISBN is null);
+-- or failed (no answer for it, or one about another book). Its record also
+-- has what the publisher wrote about the book and its authors; the master
+-- keeps none of that.
 create function private.openbd_answer(element jsonb, isbn text,
   out state text, out record text, out fields jsonb)
 language plpgsql immutable set search_path = '' as $$
@@ -356,11 +389,11 @@ declare
   onix jsonb := element -> 'onix';
   title jsonb;
 begin
-  if element is null or jsonb_typeof(element) = 'null' then
+  if jsonb_typeof(element) = 'null' then
     state := 'missing';
     return;
   end if;
-  if jsonb_typeof(element) <> 'object'
+  if jsonb_typeof(element) is distinct from 'object'
       or private.isbn13(element #>> '{summary,isbn}') is distinct from isbn then
     state := 'failed';
     return;
@@ -396,13 +429,16 @@ begin
       where private.bib_text(s #>> '{TitleText,content}') is not null),
     'creators', (
       select nullif(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
-          'name', private.bib_text(c #>> '{PersonName,content}'),
-          'reading', private.bib_text(c #>> '{PersonName,collationkey}'),
+          'name', private.bib_person(c #>> '{PersonName,content}'),
+          'heading', nullif(private.bib_text(c #>> '{PersonName,content}'),
+            private.bib_person(c #>> '{PersonName,content}')),
+          'reading', private.bib_person(c #>> '{PersonName,collationkey}', ' '),
           'role', (
             select private.bib_text(string_agg(r, ','))
             from jsonb_array_elements_text(case jsonb_typeof(c -> 'ContributorRole')
               when 'array' then c -> 'ContributorRole' else '[]' end) r)))
-        order by coalesce(nullif(c ->> 'SequenceNumber', ''), '0')::numeric, n), '[]')
+        order by case when c ->> 'SequenceNumber' ~ '^[0-9]{1,9}$'
+          then (c ->> 'SequenceNumber')::int end nulls last, n), '[]')
       from private.onix_list(onix #> '{DescriptiveDetail,Contributor}') with ordinality u (c, n)
       where private.bib_text(c #>> '{PersonName,content}') is not null),
     'credits', (
@@ -438,10 +474,17 @@ create table private.edition_sources (
   fields jsonb not null default '{}' check (jsonb_typeof(fields) = 'object'),
   answered_at timestamptz,
   found_at timestamptz,
+  -- When the questions were sent whose answers fields hold: the found answer
+  -- they are from, and the one the title is from (an earlier one when the
+  -- title was kept). A book is shown only what was asked after it was placed.
+  found_sent_at timestamptz,
+  title_sent_at timestamptz,
   -- Answers in a row that did not find it, and that failed.
   misses smallint not null default 0,
   failures smallint not null default 0,
-  -- When to ask next (null: not again), and when the operator asked.
+  -- When to ask next (null: not again), and since when a question is owed
+  -- (a book was placed in the edition, or the operator asked): the oldest
+  -- ask that no question sent since has answered.
   next_at timestamptz,
   asked_at timestamptz,
   -- The question out, if one is: pg_net's id for it, when it went, and where
@@ -449,8 +492,8 @@ create table private.edition_sources (
   request_id bigint,
   sent_at timestamptz,
   request_place smallint,
-  -- Set when a found answer had no title and the master would have had none
-  -- (the title it had stays), for the operator to look at.
+  -- Set when an answer had no title and the master would have had none (the
+  -- title it had stays), for the operator to look at.
   title_kept_at timestamptz,
   primary key (edition_id, source),
   check ((request_id is null) = (sent_at is null))
@@ -488,22 +531,17 @@ create table private.book_checks (
 alter table private.book_checks enable row level security;
 revoke all on private.book_checks from public, anon, authenticated;
 
-insert into private.book_checks (book_id, placed_at)
-select b.id, b.created_at from public.books b;
-
-insert into private.edition_sources (edition_id, source, next_at)
-select e.id, s.source, now()
-from public.editions e cross join (values ('ndl'), ('openbd')) s (source)
-where e.isbn is not null;
-
--- A new edition with an ISBN is asked about at the next turn; a book's place
--- is written down when it is registered and when its edition changes.
+-- A new edition with an ISBN gets its two sources. A book's place is written
+-- down when it is registered and when its edition changes, and both sources
+-- of its edition are asked again: a question is owed from then (asked_at),
+-- or from an earlier ask still waiting for its question; one sent before the
+-- book was placed does not answer for it.
 create function private.edition_asked() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   if new.isbn is not null then
-    insert into private.edition_sources (edition_id, source, next_at)
-    values (new.id, 'ndl', now()), (new.id, 'openbd', now())
+    insert into private.edition_sources (edition_id, source, next_at, asked_at)
+    values (new.id, 'ndl', now(), now()), (new.id, 'openbd', now(), now())
     on conflict do nothing;
   end if;
   return null;
@@ -513,11 +551,25 @@ revoke all on function private.edition_asked() from public, anon, authenticated;
 create trigger editions_asked after insert on public.editions
   for each row execute function private.edition_asked();
 
+-- Owes the edition's sources a question (not one withdrawn): from now, unless
+-- an earlier ask is still owed one. A question out, sent before now, does
+-- not answer this ask, so another goes after it.
+create function private.bib_ask(edition uuid) returns void
+language sql security definer set search_path = '' as $$
+  update private.edition_sources s set
+    asked_at = case when s.asked_at is not null and (s.sent_at is null or s.asked_at > s.sent_at)
+      then s.asked_at else now() end,
+    next_at = case when s.request_id is null then now() else s.next_at end
+  where s.edition_id = bib_ask.edition and s.state <> 'withdrawn'
+$$;
+revoke all on function private.bib_ask(uuid) from public, anon, authenticated;
+
 create function private.book_checked() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   insert into private.book_checks (book_id, placed_at) values (new.id, now())
   on conflict (book_id) do update set placed_at = excluded.placed_at;
+  perform private.bib_ask(new.edition_id);
   return null;
 end;
 $$;
@@ -529,6 +581,19 @@ create trigger books_checked after insert on public.books
 create trigger books_placed after update on public.books
   for each row when (old.edition_id is distinct from new.edition_id)
   execute function private.book_checked();
+
+-- What was there before: each book placed when it was made, and every
+-- edition with an ISBN to be asked about (after the triggers, so a book
+-- registered meanwhile is in one or the other).
+insert into private.book_checks (book_id, placed_at)
+select b.id, b.created_at from public.books b
+on conflict do nothing;
+
+insert into private.edition_sources (edition_id, source, next_at)
+select e.id, s.source, now()
+from public.editions e cross join (values ('ndl'), ('openbd')) s (source)
+where e.isbn is not null
+on conflict do nothing;
 
 -- Asking ------------------------------------------------------------------------
 
@@ -546,7 +611,10 @@ language sql stable set search_path = '' as $$
     when 'found' then case
       when source = 'ndl' and status = 'C3' then interval '7 days'
       when source = 'openbd' then interval '30 days'
-      when coalesce(fields ->> 'issued', '') >= to_char(now() - interval '1 year', 'YYYY-MM')
+      -- issued is 2014 or 2014-06: a year alone is new while it is last year's.
+      when coalesce(fields ->> 'issued', '')
+          >= to_char(now() - interval '1 year', case when length(fields ->> 'issued') = 4
+            then 'YYYY' else 'YYYY-MM' end)
         or not (fields ?& array['title', 'creators', 'publisher', 'issued'])
         then interval '30 days'
       else interval '180 days'
@@ -564,42 +632,50 @@ $$;
 revoke all on function private.bib_next(text, text, smallint, smallint, text, jsonb)
   from public, anon, authenticated;
 
--- Keeps what one answer says about one edition. Found: the source's record and
--- fields become what it says now; a title it no longer gives stays when
--- nothing else (the other source, a correction) would give one, and the
--- edition is listed for the operator (bibliography_review). Missing: openBD's
--- data goes (it no longer has the book); the library's stays. Failed: all
--- stays, and the question goes again sooner. An answer that comes back after
--- the operator withdrew the source is not kept.
-create function private.bib_take(edition uuid, source text, state text, record text,
-  record_id text, status text, fields jsonb) returns void
+-- Keeps what one answer says about one edition: the answer to question (null
+-- for none), which must be the question the edition's source has out. Found:
+-- the source's record and fields become what it says now. Missing: openBD's
+-- data goes (it no longer has the book); the library's stays. Either way a
+-- title the master would be left without stays, and the edition is listed
+-- for the operator (bibliography_review). Failed: all stays, and the question
+-- goes again sooner. A found or missing answer settles the asks made before
+-- its question went; one made after gets the next question at once. An
+-- answer that comes back after the operator withdrew the source is not kept.
+create function private.bib_take(edition uuid, source text, question bigint, state text,
+  record text, record_id text, status text, fields jsonb) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
   s private.edition_sources;
+  sent timestamptz;
+  alone boolean;
 begin
   select * into s from private.edition_sources x
   where x.edition_id = bib_take.edition and x.source = bib_take.source
   for update;
-  if not found then
+  if not found or (question is not null and s.request_id is distinct from question) then
     return;
   end if;
+  sent := s.sent_at;
   s.request_id := null;
   s.sent_at := null;
   s.request_place := null;
   if s.state <> 'withdrawn' then
     s.answered_at := now();
+    -- Whether this source's title is the only one the master has.
+    alone := s.fields ? 'title'
+      and not exists (
+        select 1 from private.edition_sources o
+        where o.edition_id = s.edition_id and o.source <> s.source and o.fields ? 'title')
+      and not exists (
+        select 1 from private.edition_fixes f
+        where f.edition_id = s.edition_id and f.field = 'title');
     if bib_take.state = 'found' then
-      if not (bib_take.fields ? 'title') and s.fields ? 'title'
-          and not exists (
-            select 1 from private.edition_sources o
-            where o.edition_id = s.edition_id and o.source <> s.source and o.fields ? 'title')
-          and not exists (
-            select 1 from private.edition_fixes f
-            where f.edition_id = s.edition_id and f.field = 'title') then
+      if not (bib_take.fields ? 'title') and alone then
         bib_take.fields := bib_take.fields || jsonb_build_object('title', s.fields -> 'title');
         s.title_kept_at := coalesce(s.title_kept_at, now());
       else
         s.title_kept_at := null;
+        s.title_sent_at := case when bib_take.fields ? 'title' then sent end;
       end if;
       s.state := 'found';
       s.record := bib_take.record;
@@ -607,43 +683,56 @@ begin
       s.status := bib_take.status;
       s.fields := bib_take.fields;
       s.found_at := now();
+      s.found_sent_at := sent;
       s.misses := 0;
       s.failures := 0;
-      s.asked_at := null;
     elsif bib_take.state = 'missing' then
       s.state := 'missing';
       s.misses := least(s.misses + 1, 1000);
       s.failures := 0;
-      s.asked_at := null;
       if s.source = 'openbd' then
         s.record := null;
         s.record_id := null;
         s.status := null;
-        s.fields := '{}';
-        s.title_kept_at := null;
+        s.found_sent_at := null;
+        if alone then
+          s.fields := jsonb_build_object('title', s.fields -> 'title');
+          s.title_kept_at := coalesce(s.title_kept_at, now());
+        else
+          s.fields := '{}';
+          s.title_kept_at := null;
+          s.title_sent_at := null;
+        end if;
       end if;
     else
       s.state := 'failed';
       s.failures := least(s.failures + 1, 1000);
     end if;
-    s.next_at := private.bib_next(s.source, s.state, s.misses, s.failures, s.status, s.fields);
+    if s.state <> 'failed' and (sent is null or s.asked_at <= sent) then
+      s.asked_at := null;
+    end if;
+    s.next_at := case when s.state <> 'failed' and s.asked_at is not null then now()
+      else private.bib_next(s.source, s.state, s.misses, s.failures, s.status, s.fields) end;
   end if;
   update private.edition_sources x set
     state = s.state, record = s.record, record_id = s.record_id, status = s.status,
     fields = s.fields, answered_at = s.answered_at, found_at = s.found_at,
+    found_sent_at = s.found_sent_at, title_sent_at = s.title_sent_at,
     misses = s.misses, failures = s.failures, next_at = s.next_at, asked_at = s.asked_at,
     request_id = null, sent_at = null, request_place = null, title_kept_at = s.title_kept_at
   where x.edition_id = s.edition_id and x.source = s.source;
 end;
 $$;
-revoke all on function private.bib_take(uuid, text, text, text, text, text, jsonb)
+revoke all on function private.bib_take(uuid, text, bigint, text, text, text, text, jsonb)
   from public, anon, authenticated;
 
 -- Asks what is due, a little each turn: the library about one edition, openBD
--- about up to a hundred in one question. First what the operator asked
--- about, then editions never asked about, then the library's records still in
--- the making, then those not found, then the rest, each by when it fell due.
--- Not about an edition with no book. The library's search takes one ISBN a
+-- about up to a hundred in one question. First what is owed a question (a
+-- book was placed, or the operator asked), oldest ask first, whether the
+-- edition is new or not; then editions never asked about (those there before
+-- this file), then the library's records still in the making, then those not
+-- found, then the rest, each by when it fell due. Not about an edition with
+-- no book. The library's search takes one ISBN a
 -- question (its API spec, 第1.5版 表3-3) and is asked only for its own
 -- records, finished (iss-ndl-opac) or in the making (iss-ndl-opac-inprocess),
 -- without its holdings (onlyBib).
@@ -663,8 +752,8 @@ begin
     where s.source = 'ndl' and s.request_id is null and s.state <> 'withdrawn'
       and s.next_at <= now()
       and exists (select 1 from public.books b where b.edition_id = s.edition_id)
-    order by s.asked_at is null, s.state <> 'waiting', s.status is distinct from 'C3',
-      s.state <> 'missing', s.next_at
+    order by s.asked_at is null, s.asked_at, s.state <> 'waiting',
+      s.status is distinct from 'C3', s.state <> 'missing', s.next_at
     limit 1
     for update of s skip locked
   loop
@@ -687,7 +776,8 @@ begin
     where s.source = 'openbd' and s.request_id is null and s.state <> 'withdrawn'
       and s.next_at <= now()
       and exists (select 1 from public.books b where b.edition_id = s.edition_id)
-    order by s.asked_at is null, s.state <> 'waiting', s.state <> 'missing', s.next_at
+    order by s.asked_at is null, s.asked_at, s.state <> 'waiting', s.state <> 'missing',
+      s.next_at
     limit 100
     for update of s skip locked
   ) d;
@@ -706,7 +796,9 @@ revoke all on function private.bib_send() from public, anon, authenticated;
 
 -- Reads the answers that came back (pg_net keeps them in net._http_response)
 -- and keeps what they say; a question with no answer after fifteen minutes
--- failed. An answer read is deleted from pg_net's table.
+-- failed, and so did an answer that is not one the source gives (openBD's
+-- must be a list as long as the question) or that cannot be read. An answer
+-- read is deleted from pg_net's table.
 create function private.bib_receive() returns void
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -717,16 +809,18 @@ declare
   a record;
 begin
   for out_q in
-    select x.request_id, x.source, min(x.sent_at) as sent_at
+    select x.request_id, x.source, min(x.sent_at) as sent_at, max(x.request_place) as places
     from private.edition_sources x
     where x.request_id is not null
     group by x.request_id, x.source
   loop
     select h.status_code, h.content, h.timed_out, h.error_msg into answer
-    from net._http_response h where h.id = out_q.request_id;
+    from net._http_response h where h.id = out_q.request_id
+    limit 1;
     if not found then
       if out_q.sent_at < now() - interval '15 minutes' then
-        perform private.bib_take(x.edition_id, x.source, 'failed', null, null, null, null)
+        perform private.bib_take(x.edition_id, x.source, out_q.request_id, 'failed',
+          null, null, null, null)
         from private.edition_sources x where x.request_id = out_q.request_id;
       end if;
       continue;
@@ -744,16 +838,27 @@ begin
       from private.edition_sources x join public.editions e on e.id = x.edition_id
       where x.request_id = out_q.request_id
     loop
-      if answer.status_code is distinct from 200 or answer.timed_out or answer.error_msg is not null
-          or (out_q.source = 'openbd' and jsonb_typeof(body) is distinct from 'array') then
-        perform private.bib_take(s.edition_id, out_q.source, 'failed', null, null, null, null);
-      elsif out_q.source = 'ndl' then
-        select * into a from private.ndl_answer(answer.content, s.isbn);
-        perform private.bib_take(s.edition_id, 'ndl', a.state, a.record, a.record_id, a.status, a.fields);
-      else
-        select * into a from private.openbd_answer(body -> (s.request_place - 1), s.isbn);
-        perform private.bib_take(s.edition_id, 'openbd', a.state, a.record, null, null, a.fields);
-      end if;
+      begin
+        if answer.status_code is distinct from 200 or answer.timed_out
+            or answer.error_msg is not null
+            or (out_q.source = 'openbd'
+              and (case when jsonb_typeof(body) = 'array' then jsonb_array_length(body) end)
+                is distinct from out_q.places) then
+          perform private.bib_take(s.edition_id, out_q.source, out_q.request_id, 'failed',
+            null, null, null, null);
+        elsif out_q.source = 'ndl' then
+          select * into a from private.ndl_answer(answer.content, s.isbn);
+          perform private.bib_take(s.edition_id, 'ndl', out_q.request_id, a.state, a.record,
+            a.record_id, a.status, a.fields);
+        else
+          select * into a from private.openbd_answer(body -> (s.request_place - 1), s.isbn);
+          perform private.bib_take(s.edition_id, 'openbd', out_q.request_id, a.state, a.record,
+            null, null, a.fields);
+        end if;
+      exception when others then
+        perform private.bib_take(s.edition_id, out_q.source, out_q.request_id, 'failed',
+          null, null, null, null);
+      end;
     end loop;
     begin
       delete from net._http_response h where h.id = out_q.request_id;
@@ -774,9 +879,9 @@ end;
 $$;
 revoke all on function private.bib_tick() from public, anon, authenticated;
 
--- Every minute. pg_cron keeps a line for each run; lines older than a week go
--- once a day.
-select cron.schedule('bibliography', '* * * * *', 'select private.bib_tick()');
+-- Every twenty seconds (three questions to the library a minute). pg_cron
+-- keeps a line for each run; lines older than a week go once a day.
+select cron.schedule('bibliography', '20 seconds', 'select private.bib_tick()');
 select cron.schedule('cron-history', '17 3 * * *',
   $$delete from cron.job_run_details where end_time < now() - interval '7 days'$$);
 
@@ -791,8 +896,10 @@ revoke all on function private.bib_filled(jsonb) from public, anon, authenticate
 -- An edition's bibliography, field by field: the operator's correction, else
 -- the library's value, else openBD's, the first that is not empty (a
 -- correction to JSON null shows nothing). sources says where each field
--- shown came from: fix, ndl or openbd.
-create function private.edition_bibliography(ed uuid)
+-- shown came from: fix, ndl or openbd. With since, only what the sources
+-- said in answer to questions sent from then on (a book is shown what was
+-- asked after it was placed).
+create function private.edition_bibliography(ed uuid, since timestamptz default '-infinity')
 returns table (title text, title_reading text, subtitle text, volume text, edition text,
   series jsonb, creators jsonb, credits jsonb, publisher text, issued text, ndc text,
   sources jsonb)
@@ -803,6 +910,8 @@ language sql stable set search_path = '' as $$
        where f.edition_id = ed and f.field = k.field),
       (select jsonb_build_array(s.fields -> k.field, s.source) from private.edition_sources s
        where s.edition_id = ed and private.bib_filled(s.fields -> k.field)
+         and coalesce(case when k.field = 'title' then s.title_sent_at else s.found_sent_at end,
+           '-infinity') >= since
        order by s.source = 'ndl' desc
        limit 1)) as pick
     from unnest(array['title', 'title_reading', 'subtitle', 'volume', 'edition', 'series',
@@ -820,12 +929,14 @@ language sql stable set search_path = '' as $$
     v ->> 'issued', v ->> 'ndc', sources
   from shown
 $$;
-revoke all on function private.edition_bibliography(uuid) from public, anon, authenticated;
+revoke all on function private.edition_bibliography(uuid, timestamptz)
+  from public, anon, authenticated;
 
 -- What the master shows for each of the books asked about (up to 200) that the
--- reader may see it for: a book in public places, or the reader's own. Only
--- once the book has been in its edition for ten minutes, and only when the
--- master has something for it. The app shows it where others read about the
+-- reader may see it for: a book in public places, or the reader's own. For
+-- each, what the sources said to questions sent after the book was placed
+-- in its edition (and the operator's corrections), from ten minutes after;
+-- only when that is something. The app shows it where others read about the
 -- book; on the reader's own shelf, what they typed (docs/09「書誌マスタ」).
 create function public.book_bibliography(ids uuid[])
 returns table (book_id uuid, title text, title_reading text, subtitle text, volume text,
@@ -836,7 +947,7 @@ language sql stable security definer set search_path = '' as $$
     d.creators, d.credits, d.publisher, d.issued, d.ndc, d.sources
   from public.books b
   join private.book_checks c on c.book_id = b.id
-  cross join lateral private.edition_bibliography(b.edition_id) d
+  cross join lateral private.edition_bibliography(b.edition_id, c.placed_at) d
   where b.id = any ((book_bibliography.ids)[1:200])
     and c.placed_at <= now() - interval '10 minutes'
     and d.sources <> '{}'
@@ -867,13 +978,22 @@ revoke all on function private.bib_edition_of(uuid) from public, anon, authentic
 
 -- Shows value for field over both sources: text fields take a JSON string,
 -- series and creators a list of objects with a name, credits a list of
--- strings; JSON null shows nothing for the field.
+-- strings; JSON null shows nothing for the field. Only for an edition with a
+-- book in a public place: a correction shows to every later registration of
+-- the ISBN, so on one only registered privately it would tell that someone
+-- had registered it.
 create function private.fix_bibliography(book uuid, field text, value jsonb,
   note text default null) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
   ok boolean;
+  ed uuid := private.bib_edition_of(book);
 begin
+  if not exists (
+      select 1 from public.books b
+      where b.edition_id = ed and private.book_is_listed(b.id)) then
+    raise exception 'none of the edition''s books is in a public place';
+  end if;
   ok := case
     when value = 'null'::jsonb then true
     when field in ('series', 'creators') then jsonb_typeof(value) = 'array'
@@ -892,7 +1012,7 @@ begin
     raise exception 'not a value for %', field;
   end if;
   insert into private.edition_fixes (edition_id, field, value, note)
-  values (private.bib_edition_of(book), field, value, note)
+  values (ed, field, value, note)
   on conflict on constraint edition_fixes_pkey do update
     set value = excluded.value, note = excluded.note, made_at = now();
 end;
@@ -912,14 +1032,17 @@ end;
 $$;
 revoke all on function private.unfix_bibliography(uuid, text) from public, anon, authenticated;
 
--- Asks both sources again at the next turn, before anything else (a
+-- Asks both sources again as soon as what is owed before it has gone (a
 -- correction or a deletion was asked for).
 create function private.refetch_bibliography(book uuid) returns void
 language plpgsql security definer set search_path = '' as $$
+declare
+  ed uuid := private.bib_edition_of(book);
 begin
-  update private.edition_sources s set asked_at = now(), next_at = now()
-  where s.edition_id = private.bib_edition_of(book) and s.state <> 'withdrawn';
-  if not found then
+  perform private.bib_ask(ed);
+  if not exists (
+      select 1 from private.edition_sources s
+      where s.edition_id = ed and s.state <> 'withdrawn') then
     raise exception 'nothing to ask about: the book has no ISBN, or both sources are withdrawn';
   end if;
 end;
@@ -934,7 +1057,7 @@ language plpgsql security definer set search_path = '' as $$
 begin
   update private.edition_sources s set state = 'withdrawn', record = null, record_id = null,
     status = null, fields = '{}', next_at = null, asked_at = null, misses = 0, failures = 0,
-    title_kept_at = null
+    title_kept_at = null, found_sent_at = null, title_sent_at = null
   where s.edition_id = private.bib_edition_of(book) and s.source = withdraw_bibliography.source;
   if not found then
     raise exception 'no % data for the book', source;
@@ -946,7 +1069,7 @@ revoke all on function private.withdraw_bibliography(uuid, text) from public, an
 create function private.allow_bibliography(book uuid, source text) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
-  update private.edition_sources s set state = 'waiting', next_at = now()
+  update private.edition_sources s set state = 'waiting', next_at = now(), asked_at = now()
   where s.edition_id = private.bib_edition_of(book) and s.source = allow_bibliography.source
     and s.state = 'withdrawn';
   if not found then
@@ -956,11 +1079,16 @@ end;
 $$;
 revoke all on function private.allow_bibliography(uuid, text) from public, anon, authenticated;
 
--- For the operator: editions whose found answer had no title (the master kept
--- the one it had), and those whose source failed four times in a row.
+-- For the operator: editions whose source's answer had no title (the master
+-- kept the one it had), and those whose source failed four times in a row;
+-- listed, when one of its books is in a public place (only those can be
+-- corrected). Its rows are ISBNs and books registered privately too: they
+-- go into no pull request, issue or log.
 create view private.bibliography_review as
 select e.isbn, s.source, s.state, s.failures, s.answered_at, s.title_kept_at,
   case when s.title_kept_at is not null then 'title kept' else 'failing' end as why,
+  exists (select 1 from public.books b where b.edition_id = e.id and private.book_is_listed(b.id))
+    as listed,
   (select b.id from public.books b where b.edition_id = e.id order by b.created_at limit 1)
     as a_book
 from private.edition_sources s

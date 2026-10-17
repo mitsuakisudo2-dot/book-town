@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import {
+  MIGRATIONS,
   SUPABASE_STANDIN,
   migrationFiles,
   migrationText,
@@ -99,11 +102,21 @@ function ndlRecord(r: Ndl): string {
         ? ""
         : `<dcndl:transcription>${escape(reading)}</dcndl:transcription>`
     }</rdf:Description></${tag}>`;
-  const holders = Array.from(
-    { length: r.holders ?? 0 },
-    (_, i) =>
-      `<dcndl:Item rdf:about="${about}-${i}#item"><dcndl:holdingAgent><foaf:Agent><foaf:name>図書館${i}</foaf:name></foaf:Agent></dcndl:holdingAgent></dcndl:Item>`,
-  ).join("");
+  // Who holds the book: links to other libraries' records (what an onlyBib
+  // answer still has), and those records themselves (what it leaves out).
+  const held = Array.from({ length: r.holders ?? 0 }, (_, i) => i);
+  const holderLinks = held
+    .map(
+      (i) =>
+        `<dcndl:record rdf:resource="https://ndlsearch.ndl.go.jp/books/R100000001-I9${i}#item"/>`,
+    )
+    .join("");
+  const holders = held
+    .map(
+      (i) =>
+        `<dcndl:Item rdf:about="https://ndlsearch.ndl.go.jp/books/R100000001-I9${i}#item"><dcndl:holdingAgent><foaf:Agent><foaf:name>図書館${i}</foaf:name></foaf:Agent></dcndl:holdingAgent></dcndl:Item>`,
+    )
+    .join("");
   return `<record><recordSchema>info:srw/schema/1/dc-v1.1</recordSchema><recordPacking>xml</recordPacking><recordData>
 <rdf:RDF ${NS}>
   <dcndl:BibAdminResource rdf:about="${about}">
@@ -112,11 +125,15 @@ function ndlRecord(r: Ndl): string {
     <dcndl:record rdf:resource="${about}#material"/>
   </dcndl:BibAdminResource>
   <dcndl:BibResource rdf:about="${about}#material">
+    <dcterms:identifier rdf:datatype="http://ndl.go.jp/dcndl/terms/JPNO">99999999</dcterms:identifier>
     ${r.bibId ? `<dcterms:identifier rdf:datatype="http://ndl.go.jp/dcndl/terms/NDLBibID">${r.bibId}</dcterms:identifier>` : ""}
+    <dcterms:identifier rdf:datatype="http://ndl.go.jp/dcndl/terms/TOHANMARCNO">88888888</dcterms:identifier>
     ${r.isbns.map((i) => `<dcterms:identifier rdf:datatype="http://ndl.go.jp/dcndl/terms/ISBN">${i}</dcterms:identifier>`).join("")}
+    <dcndl:partInformation><rdf:Description><dcterms:title>収めた一編</dcterms:title><dcndl:transcription>オサメタ イッペン</dcndl:transcription></rdf:Description></dcndl:partInformation>
+    ${described("dcndl:alternative", "ANOTHER TITLE")}
     ${text("dcterms:title", r.plainTitle ?? r.title)}
     ${described("dc:title", r.title, r.reading)}
-    ${r.volume ? described("dcndl:volume", r.volume) : ""}
+    ${r.volume ? described("dcndl:volume", r.volume, "カン") : ""}
     ${(r.series ?? []).map((s) => described("dcndl:seriesTitle", s.value, s.reading)).join("")}
     ${text("dcndl:edition", r.edition)}
     ${(r.agents ?? [])
@@ -130,12 +147,13 @@ function ndlRecord(r: Ndl): string {
       )
       .join("")}
     ${(r.credits ?? []).map((c) => text("dc:creator", c)).join("")}
-    ${r.publisher ? `<dcterms:publisher><foaf:Agent><foaf:name>${escape(r.publisher)}</foaf:name></foaf:Agent></dcterms:publisher>` : ""}
+    ${r.publisher ? `<dcterms:publisher><foaf:Agent><foaf:name>${escape(r.publisher)}</foaf:name><dcndl:transcription>カクウ ショボウ</dcndl:transcription><dcndl:location>東京</dcndl:location></foaf:Agent></dcterms:publisher>` : ""}
     ${text("dcterms:date", r.date)}
     ${r.issued ? `<dcterms:issued rdf:datatype="http://purl.org/dc/terms/W3CDTF">${r.issued}</dcterms:issued>` : ""}
+    <dcterms:subject><rdf:Description><rdf:value>架空の主題</rdf:value><dcndl:transcription>カクウ ノ シュダイ</dcndl:transcription></rdf:Description></dcterms:subject>
     ${(r.subjects ?? []).map((s) => `<dcterms:subject rdf:resource="${s}"/>`).join("")}
   </dcndl:BibResource>
-  <dcndl:BibResource rdf:about="${about}#material"><dcndl:record rdf:resource="${about}#item"/></dcndl:BibResource>
+  <dcndl:BibResource rdf:about="${about}#material">${holderLinks}</dcndl:BibResource>
   ${holders}
 </rdf:RDF></recordData><recordPosition>1</recordPosition></record>`;
 }
@@ -357,6 +375,35 @@ function helpers(db: PGlite) {
        where book_id = $1`,
       [book, minutes],
     );
+  /** As if this many minutes had gone by since everything written so far. */
+  const later = (minutes: number) =>
+    rows(
+      `with i as (select make_interval(mins => $1) as i),
+         b as (update private.book_checks set placed_at = placed_at - (select i from i))
+       update private.edition_sources set
+         answered_at = answered_at - (select i from i), found_at = found_at - (select i from i),
+         found_sent_at = found_sent_at - (select i from i),
+         title_sent_at = title_sent_at - (select i from i),
+         title_kept_at = title_kept_at - (select i from i),
+         next_at = next_at - (select i from i), asked_at = asked_at - (select i from i),
+         sent_at = sent_at - (select i from i)`,
+      [minutes],
+    );
+  /** Nothing owed or due: no source is asked anything until a book moves. */
+  const quiet = () =>
+    rows(
+      `update private.edition_sources set asked_at = null, next_at = now() + interval '1 day'
+       where request_id is null`,
+    );
+  /** Every question out goes unanswered past its fifteen minutes; then quiet. */
+  const settle = async () => {
+    await rows(
+      `update private.edition_sources set sent_at = now() - interval '16 minutes'
+       where request_id is not null`,
+    );
+    await rows("select private.bib_receive()");
+    await quiet();
+  };
   const shown = (visitor: Visitor, ids: string[]) =>
     as<Record<string, unknown>>(
       visitor,
@@ -375,6 +422,9 @@ function helpers(db: PGlite) {
     kept,
     due,
     age,
+    later,
+    quiet,
+    settle,
     shown,
   };
 }
@@ -469,6 +519,343 @@ async function publicRows(db: PGlite): Promise<Record<string, string[]>> {
   return all;
 }
 
+type Check = (name: string, run: () => Promise<void>) => Promise<void>;
+
+/**
+ * The order things are asked in, an ask while a question is out, answers
+ * that come back odd or late, the operator's list and when the library is
+ * asked again: on a database of their own.
+ */
+async function edgeChecks(check: Check) {
+  const db = await migrated();
+  const {
+    rows,
+    as,
+    register,
+    tick,
+    questions,
+    answer,
+    kept,
+    due,
+    later,
+    settle,
+    shown,
+  } = helpers(db);
+  await db.exec(`
+    insert into auth.users (id) values ('${AKI}'), ('${BEN}');
+    insert into profiles (id, handle, name) values
+      ('${AKI}', 'aki', 'アキ'), ('${BEN}', 'ben', 'ベン');
+  `);
+  const Y = (n: number) => numbered(100 + n);
+  const editionOf = async (isbnOf: string) =>
+    (
+      await rows<{ id: string }>("select id from editions where isbn = $1", [
+        isbnOf,
+      ])
+    )[0].id;
+  /** The ISBN each question out to the library is about, oldest first. */
+  const libraryAsked = async () =>
+    (await questions())
+      .filter((q) => q.url.startsWith("https://ndlsearch.ndl.go.jp/"))
+      .map((q) => decodeURIComponent(q.url).match(/isbn="(\d{13})"/)?.[1]);
+  /** The ISBNs of each question out to openBD, in the order asked. */
+  const openbdAsked = async () =>
+    (await questions())
+      .filter((q) => q.url.startsWith("https://api.openbd.jp/"))
+      .map((q) => new URL(q.url).searchParams.get("isbn")?.split(","));
+
+  await check(
+    "what is owed a question goes first, oldest ask first, whether its edition is new or old; then editions never asked about, the library's records in the making, those not found, and the rest",
+    async () => {
+      for (const n of [1, 2, 3, 4, 5])
+        await register(AKI, id(3, n), Y(n), `本${n}`);
+      // As if they had been answered before: Y1 and Y5 found, Y2 not found,
+      // Y3 in the making at the library; Y4 there before this file, never
+      // asked about. Each fell due a while ago.
+      await rows(
+        `update private.edition_sources s set asked_at = null, state = v.state,
+           status = case when s.source = 'ndl' then v.status end, next_at = now() - v.ago
+         from editions e, (values ($1, 'found', null, interval '3 days'),
+           ($2, 'missing', null, interval '2 days'), ($3, 'found', 'C3', interval '1 day'),
+           ($4, 'waiting', null, interval '1 hour'), ($5, 'found', null, interval '4 days'))
+           v (isbn, state, status, ago)
+         where e.id = s.edition_id and e.isbn = v.isbn`,
+        [Y(1), Y(2), Y(3), Y(4), Y(5)],
+      );
+      // Then Aki registers Y6, which nobody had; Ben, Y5, which Aki had; and
+      // Aki, Y7.
+      await register(AKI, id(3, 6), Y(6), "本6");
+      await register(BEN, id(3, 15), Y(5), "本5");
+      await register(AKI, id(3, 7), Y(7), "本7");
+      for (let turn = 0; turn < 7; turn++) await tick();
+      assert.deepEqual(await libraryAsked(), [
+        Y(6),
+        Y(5),
+        Y(7),
+        Y(4),
+        Y(3),
+        Y(2),
+        Y(1),
+      ]);
+      assert.deepEqual(await openbdAsked(), [
+        [Y(6), Y(5), Y(7), Y(4), Y(2), Y(1), Y(3)],
+      ]);
+      await settle();
+    },
+  );
+
+  const EIGHT = Y(8);
+  const answerEight = () =>
+    answerAll(
+      db,
+      { [EIGHT]: sru({ isbns: [EIGHT], title: "八冊目" }) },
+      { [EIGHT]: openbd({ isbn: EIGHT, title: "八冊目" }) },
+    );
+
+  await check(
+    "a book placed while a question is out, and the operator asking again then, get another question once it is answered",
+    async () => {
+      await register(AKI, id(3, 8), EIGHT, "本8");
+      await tick();
+      assert.deepEqual(await libraryAsked(), [EIGHT]);
+      await register(BEN, id(3, 18), EIGHT, "本8");
+      assert.equal((await kept(EIGHT, "ndl")).asked, true);
+      await answerEight();
+      await tick();
+      // The answer settles Aki's ask, not Ben's: the next question goes in
+      // the same turn, and only its answer shows on Ben's book.
+      const library = await kept(EIGHT, "ndl");
+      assert.equal(library.state, "found");
+      assert.equal(library.asked, true);
+      assert.deepEqual(await libraryAsked(), [EIGHT]);
+      assert.deepEqual(await openbdAsked(), [[EIGHT]]);
+      await later(11);
+      assert.equal((await shown(AKI, [id(3, 8)])).length, 1);
+      assert.deepEqual(await shown(BEN, [id(3, 18)]), []);
+      await answerEight();
+      await tick();
+      assert.equal((await kept(EIGHT, "ndl")).asked, false);
+      assert.deepEqual(await questions(), []);
+      assert.equal((await shown(BEN, [id(3, 18)])).length, 1);
+      // The operator asks again, and again while that question is out.
+      await rows("select private.refetch_bibliography($1)", [id(3, 8)]);
+      await tick();
+      assert.deepEqual(await libraryAsked(), [EIGHT]);
+      await rows("select private.refetch_bibliography($1)", [id(3, 8)]);
+      await answerEight();
+      await tick();
+      assert.deepEqual(await libraryAsked(), [EIGHT]);
+      await answerEight();
+      await tick();
+      assert.deepEqual(await questions(), []);
+    },
+  );
+
+  await check(
+    "only the answer to the question out is kept, and a question is waited for fifteen minutes",
+    async () => {
+      await due(EIGHT);
+      await tick();
+      const [q] = (await questions()).filter((x) =>
+        x.url.startsWith("https://ndlsearch.ndl.go.jp/"),
+      );
+      await rows(
+        "select private.bib_take($1, 'ndl', $2, 'missing', null, null, null, null)",
+        [await editionOf(EIGHT), q.id + 1000],
+      );
+      let library = await kept(EIGHT, "ndl");
+      assert.equal(library.state, "found");
+      assert.equal(library.out, true);
+      await rows(
+        "update private.edition_sources set sent_at = now() - interval '14 minutes' where request_id is not null",
+      );
+      await rows("select private.bib_receive()");
+      assert.equal((await kept(EIGHT, "ndl")).out, true);
+      await rows(
+        "update private.edition_sources set sent_at = now() - interval '16 minutes' where request_id is not null",
+      );
+      await rows("select private.bib_receive()");
+      library = await kept(EIGHT, "ndl");
+      assert.equal(library.state, "failed");
+      assert.equal(library.out, false);
+      assert.equal(
+        (library.fields as { title: string }).title,
+        "八冊目",
+        "what was found stays",
+      );
+      await settle();
+    },
+  );
+
+  const [NINE, TEN] = [Y(9), Y(10)];
+  /** Asks openBD alone about Y9 and Y10, and answers with what body makes of them. */
+  const openbdRound = async (
+    body: (asked: string[]) => unknown,
+    meanwhile?: () => Promise<unknown>,
+  ) => {
+    await rows(
+      "update private.edition_sources set next_at = now() + interval '1 day' where source = 'ndl' and request_id is null",
+    );
+    for (const i of [NINE, TEN])
+      await rows(
+        `update private.edition_sources s set next_at = now() - interval '1 second'
+         from editions e where e.id = s.edition_id and e.isbn = $1 and s.source = 'openbd'`,
+        [i],
+      );
+    await tick();
+    const q = (await questions()).find((x) =>
+      x.url.startsWith("https://api.openbd.jp/"),
+    );
+    assert.ok(q, "a question to openBD");
+    const asked = new URL(q.url).searchParams.get("isbn")?.split(",") ?? [];
+    assert.deepEqual([...asked].sort(), [NINE, TEN]);
+    await answer(q.id, JSON.stringify(body(asked)));
+    await meanwhile?.();
+    await tick();
+  };
+  const found = (i: string) =>
+    openbd({ isbn: i, title: i === NINE ? "九冊目" : "十冊目" });
+
+  await check(
+    "openBD's answer of the wrong length fails every edition asked in it and keeps what they had; its null for an edition is not found, which keeps a title the master has from openBD alone",
+    async () => {
+      await register(AKI, id(3, 9), NINE, "本9");
+      await register(AKI, id(3, 10), TEN, "本10");
+      await openbdRound((asked) => asked.map(found));
+      assert.equal((await kept(NINE, "openbd")).state, "found");
+      for (const body of [[], (asked: string[]) => [found(asked[0])]]) {
+        await openbdRound(typeof body === "function" ? body : () => body);
+        for (const i of [NINE, TEN]) {
+          const open = await kept(i, "openbd");
+          assert.equal(open.state, "failed");
+          assert.ok((open.fields as { title?: string }).title);
+        }
+      }
+      // The library has a title for Y10 and none for Y9.
+      await rows(
+        "select private.bib_take($1, 'ndl', null, 'found', '<record/>', null, null, $2::jsonb)",
+        [await editionOf(TEN), JSON.stringify({ title: "十冊目（図書館）" })],
+      );
+      await openbdRound((asked) => asked.map(() => null));
+      const nine = await kept(NINE, "openbd");
+      assert.equal(nine.state, "missing");
+      assert.deepEqual(nine.fields, { title: "九冊目" });
+      assert.equal(nine.title_kept, true);
+      assert.equal(nine.record, null);
+      const ten = await kept(TEN, "openbd");
+      assert.equal(ten.state, "missing");
+      assert.deepEqual(ten.fields, {});
+      assert.deepEqual(
+        await rows(
+          "select isbn, source, why from private.bibliography_review where isbn = any ($1::text[])",
+          [[NINE, TEN]],
+        ),
+        [{ isbn: NINE, source: "openbd", why: "title kept" }],
+      );
+    },
+  );
+
+  await check(
+    "an answer that cannot be read fails only its own edition, and the turn goes on",
+    async () => {
+      await db.exec(`
+        alter function private.openbd_answer(jsonb, text) rename to openbd_answer_read;
+        create function private.openbd_answer(element jsonb, isbn text,
+          out state text, out record text, out fields jsonb)
+        language plpgsql set search_path = '' as $$
+        begin
+          if element ? 'unreadable' then
+            raise exception 'an answer that cannot be read';
+          end if;
+          select * into state, record, fields from private.openbd_answer_read(element, isbn);
+        end;
+        $$;
+      `);
+      try {
+        await openbdRound(
+          (asked) =>
+            asked.map((i) => (i === NINE ? { unreadable: true } : found(i))),
+          () =>
+            rows(
+              `update private.edition_sources s set next_at = now() - interval '1 second'
+               from editions e where e.id = s.edition_id and e.isbn = $1 and s.source = 'ndl'`,
+              [EIGHT],
+            ),
+        );
+        const nine = await kept(NINE, "openbd");
+        assert.equal(nine.state, "failed");
+        assert.deepEqual(nine.fields, { title: "九冊目" });
+        assert.equal((await kept(TEN, "openbd")).state, "found");
+        // The turn that read it went on to ask.
+        assert.deepEqual(await libraryAsked(), [EIGHT]);
+      } finally {
+        await db.exec(`
+          drop function private.openbd_answer(jsonb, text);
+          alter function private.openbd_answer_read(jsonb, text) rename to openbd_answer;
+        `);
+      }
+      await settle();
+    },
+  );
+
+  await check(
+    "the operator's list has a source that failed four times in a row, whether one of its books is in a public place and one of them, until it is found",
+    async () => {
+      const edition = await editionOf(TEN);
+      const take = (state: string) =>
+        rows(
+          "select private.bib_take($1, 'ndl', null, $2, '<record/>', null, null, $3::jsonb)",
+          [edition, state, JSON.stringify({ title: "十冊目（図書館）" })],
+        );
+      const listed = () =>
+        rows(
+          "select isbn, why, listed, a_book from private.bibliography_review where isbn = $1 and source = 'ndl'",
+          [TEN],
+        );
+      for (let i = 0; i < 3; i++) await take("failed");
+      assert.deepEqual(await listed(), []);
+      await take("failed");
+      assert.deepEqual(await listed(), [
+        { isbn: TEN, why: "failing", listed: false, a_book: id(3, 10) },
+      ]);
+      const [post] = await as<{ id: string }>(
+        AKI,
+        "insert into posts (author_id, body, book_id) values ($1, '読んだ', $2) returning id",
+        [AKI, id(3, 10)],
+      );
+      assert.equal((await listed())[0]?.listed, true);
+      await take("found");
+      assert.deepEqual(await listed(), []);
+      await as(AKI, "delete from posts where id = $1", [post.id]);
+    },
+  );
+
+  await check(
+    "the library's finished record is asked about each month while the book came out within a year, by its month or its year, and twice a year after",
+    async () => {
+      assert.deepEqual(
+        await rows(
+          `select v.k, (private.bib_next('ndl', 'found', 0::smallint, 0::smallint, 'C7',
+             jsonb_build_object('title', 't', 'creators', '[{"name": "n"}]'::jsonb,
+               'publisher', 'p', 'issued', v.issued)) - now())::text as wait
+           from (values (1, to_char(now() - interval '11 months', 'YYYY-MM')),
+             (2, to_char(now() - interval '13 months', 'YYYY-MM')),
+             (3, to_char(now() - interval '1 year', 'YYYY')),
+             (4, to_char(now() - interval '2 years', 'YYYY'))) v (k, issued)
+           order by v.k`,
+        ),
+        [
+          { k: 1, wait: "30 days" },
+          { k: 2, wait: "180 days" },
+          { k: 3, wait: "30 days" },
+          { k: 4, wait: "180 days" },
+        ],
+      );
+    },
+  );
+  await db.close();
+}
+
 async function main() {
   let passed = 0;
   async function check(name: string, run: () => Promise<void>) {
@@ -537,7 +924,7 @@ async function main() {
         [
           {
             jobname: "bibliography",
-            schedule: "* * * * *",
+            schedule: "20 seconds",
             command: "select private.bib_tick()",
           },
           {
@@ -584,6 +971,8 @@ async function main() {
     kept,
     due,
     age,
+    later,
+    settle,
     shown,
   } = helpers(db);
   await db.exec(`
@@ -776,7 +1165,7 @@ async function main() {
             name: "山田一郎",
             role: "訳",
             heading: "山田, 一郎, 1970-",
-            reading: "ヤマダ, イチロウ, 1970-",
+            reading: "ヤマダ イチロウ",
             authority: "http://id.ndl.go.jp/auth/entity/00000002",
           },
         ],
@@ -788,7 +1177,10 @@ async function main() {
       // The record is kept as it came, but for the libraries that hold it.
       assert.match(answer.record ?? "", /^<dcndl:BibResource /);
       assert.match(answer.record ?? "", /架空書房 &amp; 夜社/);
-      assert.doesNotMatch(answer.record ?? "", /holdingAgent|図書館0/);
+      assert.doesNotMatch(
+        answer.record ?? "",
+        /holdingAgent|図書館0|R100000001/,
+      );
 
       // Several people under one statement, the statement's ways of writing
       // a role, and statements that do not match the people.
@@ -819,10 +1211,11 @@ async function main() {
         { name: "John Smith", heading: "人, 0" },
         { name: "甲", role: "著", heading: "人, 1" },
       ]);
+      // When they do not match, each person's name comes from the heading.
       assert.deepEqual(await named(["甲, 乙 著"], 3), [
-        { heading: "人, 0" },
-        { heading: "人, 1" },
-        { heading: "人, 2" },
+        { name: "人0", heading: "人, 0" },
+        { name: "人1", heading: "人, 1" },
+        { name: "人2", heading: "人, 2" },
       ]);
 
       // A date the library writes as a year only, or in full-width digits;
@@ -973,6 +1366,56 @@ async function main() {
         (await fromOpenbd(openbd({ isbn: X1, title: "別の本" }), X2)).state,
         "failed",
       );
+      // No element at all (an answer shorter than the question) is not
+      // "missing".
+      assert.equal(
+        (
+          await rows<{ state: string }>(
+            "select state from private.openbd_answer(null, $1)",
+            [X2],
+          )
+        )[0].state,
+        "failed",
+      );
+      // People written as a name authority writes them get the name books
+      // print; a person that is not an object, and an order that is not a
+      // number, are let be.
+      const odd = openbd({
+        isbn: X2,
+        title: "題",
+        people: [
+          { name: "Doe, Jane, 1950-" },
+          { name: "山田, 一郎, 1970-", reading: "ヤマダ, イチロウ, 1970-" },
+        ],
+      }) as { onix: { DescriptiveDetail: { Contributor: unknown[] } } };
+      const people = odd.onix.DescriptiveDetail.Contributor as Record<
+        string,
+        unknown
+      >[];
+      people[0].SequenceNumber = "2";
+      people[1].SequenceNumber = "1a";
+      odd.onix.DescriptiveDetail.Contributor.push("著者紹介");
+      assert.deepEqual((await fromOpenbd(odd, X2)).fields?.creators, [
+        { name: "Jane Doe", heading: "Doe, Jane, 1950-" },
+        {
+          name: "山田一郎",
+          heading: "山田, 一郎, 1970-",
+          reading: "ヤマダ イチロウ",
+        },
+      ]);
+      const person = async (raw: string, apart = "") =>
+        (
+          await rows<{ name: string | null }>(
+            "select private.bib_person($1, $2) as name",
+            [raw, apart],
+          )
+        )[0].name;
+      assert.equal(await person("Doe,John,1920-2012"), "John Doe");
+      assert.equal(await person("海野, 波子, 1901-1999"), "海野波子");
+      assert.equal(await person("ウミノ, ナミコ", " "), "ウミノ ナミコ");
+      assert.equal(await person("海野 波子"), "海野 波子");
+      assert.equal(await person("Doe, John, Jr."), "Doe, John, Jr.");
+      assert.equal(await person("架空書房編集部"), "架空書房編集部");
     },
   );
 
@@ -1051,14 +1494,17 @@ async function main() {
         fields: Record<string, unknown> | null = null,
         status: string | null = null,
       ) =>
-        rows("select private.bib_take($1, $2, $3, $4, null, $5, $6::jsonb)", [
-          edition,
-          source,
-          state,
-          fields ? "<record/>" : null,
-          status,
-          fields ? JSON.stringify(fields) : null,
-        ]);
+        rows(
+          "select private.bib_take($1, $2, null, $3, $4, null, $5, $6::jsonb)",
+          [
+            edition,
+            source,
+            state,
+            fields ? "<record/>" : null,
+            status,
+            fields ? JSON.stringify(fields) : null,
+          ],
+        );
       const master = async () =>
         (
           await rows<Record<string, unknown>>(
@@ -1240,9 +1686,25 @@ async function main() {
   // What the master shows, and to whom -----------------------------------------------
 
   await check(
-    "the operator's correction shows over both sources, field by field; JSON null shows nothing; taking it back shows the sources again",
+    "the operator's correction shows over both sources, field by field, only on an edition in a public place; JSON null shows nothing; taking it back shows the sources again",
     async () => {
       const book = id(2, 1);
+      // A post makes Aki's books public for this check (taken down at its end).
+      const shared = async (reader: string, of: string) =>
+        (
+          await as<{ id: string }>(
+            reader,
+            "insert into posts (author_id, body, book_id) values ($1, '読んだ', $2) returning id",
+            [reader, of],
+          )
+        )[0].id;
+      await refused(
+        () =>
+          rows("select private.fix_bibliography($1, 'title', '\"x\"')", [book]),
+        /none of the edition's books is in a public place/,
+        "an edition only registered privately",
+      );
+      const posts = [await shared(AKI, book), await shared(AKI, id(2, 3))];
       const edition = (
         await rows<{ id: string }>(
           "select edition_id as id from books where id = $1",
@@ -1331,22 +1793,42 @@ async function main() {
         "手帖（直した）",
       );
       await rows("select private.unfix_bibliography($1, 'title')", [id(2, 3)]);
+      await as(AKI, "delete from posts where id = any ($1::uuid[])", [posts]);
     },
   );
 
   await check(
-    "a reader reads the master for books in public places and their own, not before a book has been in its edition ten minutes, whether that edition is old or new",
+    "a reader reads the master for books in public places and their own, from what the sources answered after the book was placed and ten minutes on, whether its edition is old or new",
     async () => {
-      // Ben's own copy of X1, registered and placed long ago, on no public page.
+      await settle();
+      // Ben moves his copy to X1, whose edition the sources answered about
+      // before: that was before his book was placed, so it shows him nothing
+      // until a question sent since is answered, and not for ten minutes.
       const bens = id(2, 2);
       await as(BEN, "update books set isbn = $2 where id = $1", [bens, X1]);
-      await age(bens, 60);
-      await age(id(2, 1), 60);
-      // Ben reads it; Aki and visitors do not.
+      await later(60);
+      assert.deepEqual(await shown(BEN, [bens]), []);
+      assert.equal((await kept(X1, "ndl")).asked, true);
+      await tick();
+      await answerAll(db, { [X1]: LIBRARY_X1 }, { [X1]: OPENBD_X1 });
+      await tick();
       assert.equal((await shown(BEN, [bens])).length, 1);
+      // Nor before ten minutes: Ben moves it to X2 and back.
+      await as(BEN, "update books set isbn = $2 where id = $1", [bens, X2]);
+      await as(BEN, "update books set isbn = $2 where id = $1", [bens, X1]);
+      await tick();
+      await answerAll(db, { [X1]: LIBRARY_X1 }, { [X1]: OPENBD_X1 });
+      await tick();
+      assert.deepEqual(await shown(BEN, [bens]), []);
+      await later(9);
+      assert.deepEqual(await shown(BEN, [bens]), []);
+      await later(1);
+      assert.equal((await shown(BEN, [bens])).length, 1);
+      // Aki and visitors do not read it: it is Ben's, on no public page.
       assert.deepEqual(await shown(AKI, [bens]), []);
       assert.deepEqual(await shown(null, [bens]), []);
-      // Aki's copy of X1 is hers, and a post makes it public.
+      // Aki's copy of X1, placed long before, is hers, and a post makes it
+      // public.
       const akis = id(2, 1);
       assert.equal((await shown(AKI, [akis]))[0].title, "架空の図書館");
       assert.deepEqual(await shown(null, [akis]), []);
@@ -1374,10 +1856,13 @@ async function main() {
       ]);
       assert.equal(seen[0].title, "架空の図書館");
       assert.equal(seen[0].publisher, "架空書房");
-      // Chi registers X1, which others had, and X3, which nobody had: for
-      // ten minutes neither shows, whoever asks, and then both do.
+      // Chi registers X1, which others had, and X3, which nobody had. Both
+      // are asked about in the order placed; what the sources said about X1
+      // before does not show for Chi's copy, even ten minutes on: neither
+      // shows, whoever asks, until both are answered, and then both do.
       const old = id(2, 4);
       const fresh = id(2, 5);
+      await settle();
       await register(CHI, old, X1, "かくうのとしょかん");
       await register(CHI, fresh, X3, "まだない本");
       await as(
@@ -1385,39 +1870,43 @@ async function main() {
         "insert into posts (author_id, body, book_id) values ($1, 'これから', $2), ($1, 'これも', $3)",
         [CHI, old, fresh],
       );
-      await rows(
-        "update private.edition_sources set next_at = now() + interval '1 day' where request_id is null",
-      );
-      await rows(
-        "update private.edition_sources s set next_at = now() from editions e where e.id = s.edition_id and e.isbn = $1",
-        [X3],
-      );
-      await tick();
-      await answerAll(
-        db,
-        { [X3]: sru({ isbns: [X3], title: "まだない本の正しい題" }) },
-        {},
-      );
-      await tick();
+      await later(11);
       for (const visitor of [CHI, AKI, null])
         assert.deepEqual(
           await shown(visitor, [old, fresh]),
           [],
           String(visitor),
         );
-      await age(old, 9);
-      await age(fresh, 9);
-      assert.deepEqual(await shown(CHI, [old, fresh]), []);
-      await age(old, 2);
-      await age(fresh, 2);
-      assert.deepEqual(
-        (await shown(CHI, [old, fresh])).map((row) => [row.book_id, row.title]),
-        [
-          [old, "架空の図書館"],
-          [fresh, "まだない本の正しい題"],
-        ],
+      await tick();
+      const asked = await questions();
+      assert.match(asked[0].url, new RegExp(`isbn%3D%22${X1}%22`));
+      assert.equal(
+        new URL(asked[1].url).searchParams.get("isbn"),
+        `${X1},${X3}`,
       );
-      // Moved by an edited ISBN, a book waits its ten minutes again.
+      await tick();
+      await answerAll(
+        db,
+        {
+          [X1]: LIBRARY_X1,
+          [X3]: sru({ isbns: [X3], title: "まだない本の正しい題" }),
+        },
+        { [X1]: OPENBD_X1 },
+      );
+      await tick();
+      for (const visitor of [CHI, AKI, null])
+        assert.deepEqual(
+          (await shown(visitor, [old, fresh])).map((row) => [
+            row.book_id,
+            row.title,
+          ]),
+          [
+            [old, "架空の図書館"],
+            [fresh, "まだない本の正しい題"],
+          ],
+          String(visitor),
+        );
+      // Moved by an edited ISBN, a book waits again.
       await as(CHI, "update books set isbn = $2 where id = $1", [old, X3]);
       assert.deepEqual(await shown(CHI, [old]), []);
       // A book the master has nothing for is not listed; at most 200 are asked.
@@ -1426,11 +1915,12 @@ async function main() {
       const many = Array.from({ length: 199 }, (_, i) => id(8, i));
       assert.equal((await shown(null, [...many, akis])).length, 1);
       assert.equal((await shown(null, [...many, id(8, 999), akis])).length, 0);
+      await settle();
     },
   );
 
   await check(
-    "nobody reaches the master's tables, its asking or the operator's tools through the API",
+    "nobody reaches the master's tables, its asking or the operator's tools through the API, nor pg_net's tables",
     async () => {
       for (const visitor of [null, AKI]) {
         for (const table of [
@@ -1441,7 +1931,7 @@ async function main() {
         ])
           await refused(
             () => as(visitor, `select * from ${table}`),
-            /permission denied/,
+            /permission denied for (table|view)/,
             `${visitor} reads ${table}`,
           );
         for (const call of [
@@ -1456,22 +1946,45 @@ async function main() {
         ])
           await refused(
             () => as(visitor, call),
-            /permission denied/,
+            /permission denied for function/,
             `${visitor}: ${call}`,
           );
       }
-      const granted = await rows<{ role: string; ok: boolean }>(
-        `select r.role, has_function_privilege(r.role, p.oid, 'execute') as ok
-         from (values ('anon'), ('authenticated')) r (role)
-         cross join pg_proc p
-         where p.pronamespace = 'private'::regnamespace
-           and p.proname in ('bib_tick', 'bib_send', 'bib_receive', 'bib_take', 'bib_next',
-             'edition_bibliography', 'ndl_answer', 'openbd_answer', 'isbn13', 'fix_bibliography',
-             'unfix_bibliography', 'refetch_bibliography', 'withdraw_bibliography',
-             'allow_bibliography', 'edition_asked', 'book_checked', 'bib_edition_of')
-           and has_function_privilege(r.role, p.oid, 'execute')`,
+      // Of every function the file makes, the API's roles run only the read.
+      const made = [
+        ...TEXT.matchAll(/^create function (private|public)\.(\w+)\(/gm),
+      ].map((m) => `${m[1]}.${m[2]}`);
+      assert.ok(made.length > 25, "the functions the file makes");
+      assert.equal(
+        await count(
+          `select count(*) from pg_proc p
+           where p.pronamespace::regnamespace::text || '.' || p.proname = any ($1::text[])`,
+          [made],
+        ),
+        made.length,
       );
-      assert.deepEqual(granted, []);
+      assert.deepEqual(
+        await rows(
+          `select r.role, p.proname from (values ('anon'), ('authenticated')) r (role)
+           cross join pg_proc p
+           where p.pronamespace::regnamespace::text || '.' || p.proname = any ($1::text[])
+             and has_function_privilege(r.role, p.oid, 'execute')
+           order by 1, 2`,
+          [made],
+        ),
+        [
+          { role: "anon", proname: "book_bibliography" },
+          { role: "authenticated", proname: "book_bibliography" },
+        ],
+      );
+      // Supabase opens pg_net's tables, which hold the ISBNs asked about, to
+      // every role, and that cannot be taken back; the API serves only public
+      // and graphql_public (here, and so in production), so they stay out of
+      // its reach. Never add net to these.
+      const api = readFileSync(join(MIGRATIONS, "..", "config.toml"), "utf8")
+        .split(/^\[/m)
+        .find((part) => part.startsWith("api]"));
+      assert.match(api ?? "", /^schemas = \["public", "graphql_public"\]$/m);
     },
   );
 
@@ -1543,6 +2056,7 @@ async function main() {
     },
   );
   await db.close();
+  await edgeChecks(check);
   console.log(`${passed} bibliography checks passed`);
 }
 
