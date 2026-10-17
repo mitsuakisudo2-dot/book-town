@@ -147,6 +147,9 @@ function postsAsked(rows, params) {
         (Date.parse(a.created_at) - Date.parse(b.created_at)) *
         (order === "created_at.asc" ? 1 : -1),
     );
+  // Every reply to a 便り, read a page at a time in the order of their ids.
+  else if (order === "id.asc")
+    asked = [...asked].sort((a, b) => a.id.localeCompare(b.id));
   else if (order) throw new Error("not mocked: posts order " + order);
   return asked;
 }
@@ -266,6 +269,25 @@ const standIn = async (route) => {
       body: JSON.stringify(body),
     });
   const body = request.postData() ? JSON.parse(request.postData()) : {};
+  // Like PostgREST, the page asked for (offset, limit) and the total, which
+  // the app reads to know it has every row of a list.
+  const rowsAsked = (rows) => {
+    const from = Number(url.searchParams.get("offset") ?? 0);
+    const page = rows.slice(
+      from,
+      from + Number(url.searchParams.get("limit") ?? rows.length),
+    );
+    const range = page.length ? `${from}-${from + page.length - 1}` : "*";
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: {
+        "content-range": `${range}/${rows.length}`,
+        "access-control-expose-headers": "Content-Range",
+      },
+      body: JSON.stringify(page),
+    });
+  };
   if (url.pathname === "/auth/v1/otp") {
     codeRequests.push(url);
     return body.email === INVITED
@@ -295,12 +317,9 @@ const standIn = async (route) => {
           await new Promise((done) => setTimeout(done, ownProfileDelay));
       }
       const own = profile ? [profile] : [];
-      return json(
-        200,
-        url.searchParams.get("id") === "eq." + user.id
-          ? own
-          : [...own, ...(town?.profiles ?? [])],
-      );
+      return url.searchParams.get("id") === "eq." + user.id
+        ? json(200, own)
+        : rowsAsked([...own, ...(town?.profiles ?? [])]);
     }
     if (request.method() === "POST") {
       inserted.push(body);
@@ -470,9 +489,7 @@ const standIn = async (route) => {
   if (url.pathname === "/rest/v1/rpc/shop_visitors") return json(200, 0);
   if (url.pathname.startsWith("/rest/v1/") && request.method() !== "GET")
     townWrites.push(url.pathname);
-  // The rest of the signed-in town: a new reader has nothing yet. Like
-  // PostgREST, the page asked for (offset, limit) and the total, which the
-  // app reads to know it has every one of the reader's own rows.
+  // The rest of the signed-in town: a new reader has nothing yet.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "GET") {
     townReads.push(url.pathname);
     if (townDelay) await new Promise((done) => setTimeout(done, townDelay));
@@ -488,25 +505,11 @@ const standIn = async (route) => {
         return json(500, { message: "unavailable" });
       }
     }
-    const rows =
+    return rowsAsked(
       table === "posts"
         ? postsAsked(town?.posts ?? [], url.searchParams)
-        : (town?.[table] ?? []);
-    const from = Number(url.searchParams.get("offset") ?? 0);
-    const page = rows.slice(
-      from,
-      from + Number(url.searchParams.get("limit") ?? rows.length),
+        : (town?.[table] ?? []),
     );
-    const range = page.length ? `${from}-${from + page.length - 1}` : "*";
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      headers: {
-        "content-range": `${range}/${rows.length}`,
-        "access-control-expose-headers": "Content-Range",
-      },
-      body: JSON.stringify(page),
-    });
   }
   return json(404, { message: "not mocked: " + url.pathname });
 };

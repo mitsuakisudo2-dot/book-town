@@ -94,10 +94,13 @@ export function sceneFromRow(
   }
 }
 
-/** Builds the walk from the database rows and this device's walk position. */
+/**
+ * Builds the walk from the database rows and this device's walk position.
+ * A visitor's has no shop of their own (shopId null) and only others' scenes.
+ */
 export function walkFromRows(
   rows: WalkRows,
-  ids: WalkIds,
+  ids: Pick<WalkIds, "shopId">,
   position: WalkPosition,
 ): WalkData {
   const alias = (shopId: string) =>
