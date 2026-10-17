@@ -36,7 +36,7 @@ import {
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId, isSampleId } from "./record-kind";
-import { bookByIsbn } from "./book-name";
+import { bookAuthor, bookById, bookByIsbn } from "./book-name";
 import {
   bookPrice,
   bookText,
@@ -77,6 +77,7 @@ import {
   displayCost,
   normalizeCapacity,
   shelfUsed,
+  type Book,
   type BookDisplay,
   type PersistenceStatus,
   type Post,
@@ -861,6 +862,38 @@ export function createTownStore(
       const done = actions.registerBook(input, input.isbn ? "isbn" : "manual");
       return done && done.result !== "not-saved" ? done.bookId : null;
     },
+    fixBook(bookId, fix) {
+      initialize();
+      const book = bookById(state.books, bookId);
+      const title = bookText(fix.title);
+      const typed = fix.isbn.trim();
+      const isbn = typed ? normalizeIsbn(typed) : null;
+      if (!title) return "no-title";
+      if (typed && !isbn) return "bad-isbn";
+      if (!book || status === "loading" || backend.kind === "unavailable")
+        return "not-saved";
+      // The form shows the author as the reader sees it (bookAuthor); left
+      // as shown, the author stays as it was written.
+      const shown = bookText(fix.author);
+      const author = shown === bookAuthor(book) ? book.author : shown;
+      const moved = (isbn ?? undefined) !== book.isbn;
+      if (title === book.title && author === book.author && !moved)
+        return "unchanged";
+      const mine = isbn ? libraryBookByIsbn(state, isbn) : undefined;
+      if (mine && mine.id !== bookId) return "already";
+      // A new ISBN puts the book in that ISBN's work, which the database
+      // decides: until it is read again, the book is its own.
+      const fixed: Book = { ...book, title, author };
+      if (isbn) fixed.isbn = isbn;
+      else delete fixed.isbn;
+      if (moved) delete fixed.workId;
+      return commit({
+        ...state,
+        books: state.books.map((entry) => (entry.id === bookId ? fixed : entry)),
+      })
+        ? "fixed"
+        : "not-saved";
+    },
     toggleLibrary(bookId) {
       initialize();
       if (!state.books.some((book) => book.id === bookId)) return;
@@ -1361,6 +1394,25 @@ export function usePersistenceStatus(): PersistenceStatus {
     townStore.getPersistenceSnapshot,
     townStore.getServerPersistenceSnapshot,
   );
+}
+
+/**
+ * Whether the account takes what the town holds now: true once it is all
+ * saved, false when a change is turned away (the town then goes back to
+ * what is saved) or the account cannot be reached.
+ */
+export function townSettled(store = townStore): Promise<boolean> {
+  return new Promise((resolve) => {
+    let stop: (() => void) | null = null;
+    const look = () => {
+      const status = store.getPersistenceSnapshot();
+      if (status === "loading" || status === "saving") return false;
+      stop?.();
+      resolve(status === "saved");
+      return true;
+    };
+    if (!look()) stop = store.subscribe(look);
+  });
 }
 
 /** Whether the town can read 便り after it was read (not in the demo). */

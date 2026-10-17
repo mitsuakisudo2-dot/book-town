@@ -18,7 +18,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { AccountState } from "./account";
 import { bookPrice, bookText, normalizeIsbn } from "./books";
-import { bookByIsbn } from "./book-name";
+import { authorWords, bookByIsbn } from "./book-name";
 import { lookUpBooks, type OpenBdAnswer } from "./openbd";
 import type { TownBackend } from "./town-backend";
 import type {
@@ -90,6 +90,8 @@ const words = (value: unknown): string =>
 /**
  * What a book's title, author and price come to in the journal: cut as the
  * book keeps them (books.ts), so an item never holds what it could not send.
+ * A catalogue's author ("村上,春樹,1949-") comes in the shape the reader sees
+ * everywhere ("村上春樹"), as the field of a book registered by hand fills.
  */
 export const bookWords = (book: {
   title: string;
@@ -99,7 +101,7 @@ export const bookWords = (book: {
   const price = bookPrice(book.price);
   return {
     title: bookText(book.title),
-    author: bookText(book.author),
+    author: bookText(authorWords(book.author)),
     ...(price ? { price } : {}),
   };
 };

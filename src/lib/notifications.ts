@@ -1,6 +1,13 @@
 import { activeSession, readersNow } from "./reading";
 import { bookPath } from "./books";
-import { quote as quoteTitle, titleById } from "./book-name";
+import {
+  bookById,
+  masterTitle,
+  quote as quoteTitle,
+  quotedTitle,
+  titleById,
+} from "./book-name";
+import type { BookHold } from "./bibliography";
 import { findReader, reviewFoldOf, spoilerViewOf } from "./social";
 import {
   ME_ID,
@@ -85,8 +92,26 @@ const ownPosterWords = (
  * reader's asking (an older page of 便りだけ, one 便り by its id) are old, and
  * make none: only the town's reading and the new 便り taken in do.
  */
-export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
+export function notificationsFor(
+  state: TownState,
+  openedAt = 0,
+  holds: readonly BookHold[] = [],
+): Notice[] {
   const notices: Notice[] = [];
+  // A book of the reader's held back: its ISBN looks like another book's.
+  // Told once (new until seen), for as long as it is held; a book held again
+  // later is a new notice.
+  for (const hold of holds) {
+    const book = bookById(state.books, hold.bookId);
+    if (book)
+      notices.push({
+        id: `held:${hold.bookId}:${hold.heldAt}`,
+        readerId: ME_ID,
+        createdAt: hold.heldAt,
+        text: `登録した${quotedTitle(book)}のISBNは、${quoteTitle(masterTitle(hold.master))}のものです。本のページで確かめてください`,
+        href: bookPath(hold.bookId),
+      });
+  }
   const old = (post: Post) => Boolean(state.readAfter?.[post.id]);
   const name = (id: string) => findReader(state, id)?.name ?? "";
   const title = (id: string | null) => titleById(state.books, id) ?? "";
@@ -333,7 +358,10 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
     .slice(0, 40);
 }
 
-export const unreadCount = (state: TownState): number =>
-  notificationsFor(state).filter(
+export const unreadCount = (
+  state: TownState,
+  holds: readonly BookHold[] = [],
+): number =>
+  notificationsFor(state, 0, holds).filter(
     (notice) => !state.seenNotifications.includes(notice.id),
   ).length;

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Notify, TownActions, TownState } from "../lib/types";
 import { monthDay, notificationsFor } from "../lib/notifications";
+import { useBookHolds } from "../lib/bibliography-session";
 import {
   REPORT_KIND_WORDS,
   REPORT_REASON_WORDS,
@@ -24,7 +25,9 @@ type Shared = {
 export function NotificationsView({ state, actions }: Shared) {
   const clock = useClock(30_000);
   const savedIn = useTownBackend();
-  const notices = notificationsFor(state, clock?.openedAt ?? 0);
+  // Asked again as it opens: a book can be held while the page stays open.
+  const holds = useBookHolds(true);
+  const notices = notificationsFor(state, clock?.openedAt ?? 0, holds);
   // Notices that were unread when this page showed them keep their mark until it closes.
   const [fresh, setFresh] = useState<string[]>([]);
   const unread = notices

@@ -15,6 +15,7 @@
 }
 .town-shell .book-page-hero .book-summary,
 .town-shell .book-page-author,
+.town-shell .book-page-publication,
 .town-shell .book-path-heading p {
   font-size: var(--t-meta);
   color: var(--ink-2);
@@ -69,6 +70,77 @@
   .town-shell .town-bottom-nav span {
     font-size: var(--t-cap);
   }
+}
+
+/* The master's subtitle sits close under the title, in its letters; who
+   published the book and when, under the people. */
+.town-shell .book-page-subtitle {
+  margin: -4px 0 6px;
+  font-family: var(--serif);
+  font-size: var(--t-page);
+  line-height: 1.7;
+}
+.town-shell .book-page-publication {
+  margin-top: 2px;
+}
+/* A title breaks into lines of a like length, so 「上」 or a closing bracket
+   never stands alone on the last. */
+.town-shell .book-page-hero h1 {
+  text-wrap: balance;
+  line-break: strict;
+}
+/* The people, and the publisher, series and date, break between their parts,
+   not in them; the mark between two parts (／, ・) stays at the start of a
+   line's second part, and is cut off where a line starts with it. */
+.town-shell .parts-line {
+  overflow: hidden;
+}
+.town-shell .parts-line > span {
+  display: flex;
+  flex-wrap: wrap;
+  margin-inline-start: -1em;
+}
+.town-shell .parts-line > span > span {
+  position: relative;
+  min-width: 0;
+  padding-inline-start: 1em;
+}
+.town-shell .parts-line .parts-mark {
+  position: absolute;
+  inset-inline-start: 0;
+  width: 1em;
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .town-shell .book-page-subtitle {
+    font-size: var(--t-meta);
+  }
+}
+
+/* A book of the reader's held back: told on its page, with the two answers. */
+.town-shell .book-held {
+  margin: 18px 0 4px;
+}
+.town-shell .book-held h2 {
+  margin-bottom: 6px;
+  font-family: var(--serif);
+  font-size: var(--t-page);
+  font-weight: 600;
+  color: var(--ink);
+}
+.town-shell .book-held p {
+  margin-bottom: 6px;
+  font-size: var(--t-meta);
+  line-height: 1.8;
+}
+.town-shell .book-held .btns {
+  margin-top: 12px;
+}
+.book-fix-note {
+  margin: 0 0 16px;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 1.7;
 }
 
 /* The book page: a cover of a readable size beside its title; on a phone the

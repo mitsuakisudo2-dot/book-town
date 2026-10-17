@@ -98,7 +98,17 @@ import {
 } from "./letter/post-layer";
 import { useAnnouncement } from "../lib/live-region";
 import { reducedMotion } from "../lib/motion";
-import { bookAuthor, bookById, bookTitle, quotedTitle } from "../lib/book-name";
+import {
+  bookAuthor,
+  bookById,
+  bookHeading,
+  bookNamedBy,
+  bookTitle,
+  quotedTitle,
+} from "../lib/book-name";
+import type { Bibliography } from "../lib/bibliography";
+import { useBibliography, useBookHolds } from "../lib/bibliography-session";
+import { HeldBook } from "./HeldBook";
 import { counted, whenSome } from "../lib/words";
 
 // Every screen but Home comes in its own file, read when it is first shown
@@ -116,6 +126,9 @@ const SearchView = dynamic(() =>
 );
 const ReadingView = dynamic(() =>
   import("./ReadingView").then((file) => file.ReadingView),
+);
+const CreditsView = dynamic(() =>
+  import("./CreditsView").then((file) => file.CreditsView),
 );
 const NotificationsView = dynamic(() =>
   import("./NotificationsView").then((file) => file.NotificationsView),
@@ -148,7 +161,8 @@ type View =
   | "library"
   | "poster"
   | "poster-new"
-  | "post";
+  | "post"
+  | "credits";
 type Shared = {
   state: TownState;
   actions: TownActions;
@@ -331,7 +345,9 @@ export default function TownApp({
               ? "profile"
               : null;
   const reading = Boolean(activeSession(state));
-  const unread = unreadCount(state);
+  // The reader's books held back are told in お知らせ too.
+  const holds = useBookHolds();
+  const unread = unreadCount(state, holds);
   // ホーム returns to the Home tab shown last (home-tab.ts); on Home itself
   // it takes the tab shown back to its top. A 便り's page at its own address
   // is read as part of Home, but is not one of its tabs.
@@ -553,6 +569,8 @@ export default function TownApp({
             />
           ) : view === "library" ? (
             <LibraryView {...shared} />
+          ) : view === "credits" ? (
+            <CreditsView />
           ) : (
             <Wishlist {...shared} />
           )}
@@ -1014,6 +1032,70 @@ function shelfPops(shelf: Shelf, books: Book[]) {
     .filter((entry): entry is { item: ShelfItem; book: Book } => !!entry.book)
     .slice(0, 3);
 }
+/**
+ * The title and the people of a book's page, and under them who published
+ * it and when: the master's once there is one (docs/09「書誌マスタ」).
+ */
+function BookHeadingLines({
+  book,
+  master,
+}: {
+  book: Book;
+  master: Bibliography | null;
+}) {
+  const { title, subtitle, author, publication } = bookHeading(book, master);
+  return (
+    <>
+      <h1>{title}</h1>
+      {subtitle && <p className="book-page-subtitle">{subtitle}</p>}
+      {author.length > 0 && (
+        <Parts className="book-page-author" parts={author} mark="／" />
+      )}
+      {publication.length > 0 && (
+        <Parts className="book-page-publication" parts={publication} mark="・" />
+      )}
+    </>
+  );
+}
+
+/**
+ * A line of parts with a mark between them ("見本書房・見本文庫・2003年9月").
+ * It breaks between parts, and a mark that would end or start a line is out
+ * of sight (usability.css), so none is left on its own.
+ */
+function Parts({
+  className,
+  parts,
+  mark,
+}: {
+  className: string;
+  parts: string[];
+  mark: string;
+}) {
+  return (
+    <p className={className + " parts-line"}>
+      <span>
+        {parts.map((part, at) => (
+          <span key={at}>
+            {at > 0 && <span className="parts-mark">{mark}</span>}
+            {part}
+          </span>
+        ))}
+      </span>
+    </p>
+  );
+}
+
+/** Where the heading came from, beside the cover's credit: the credits page. */
+function BibliographyCredit({ master }: { master: Bibliography | null }) {
+  if (!master?.from.length) return null;
+  return (
+    <span className="cover-credit">
+      <Link href="/credits/">書誌の出典</Link>
+    </span>
+  );
+}
+
 function BookView({
   state,
   actions,
@@ -1022,6 +1104,7 @@ function BookView({
 }: Shared & { bookId: string }) {
   const persistence = usePersistenceStatus();
   const book = bookById(state.books, bookId);
+  const master = useBibliography(bookId);
   if (!book)
     return persistence === "loading" ? (
       <p role="status">本を開いています…</p>
@@ -1033,6 +1116,8 @@ function BookView({
         </Link>
       </div>
     );
+  // The cover, its lookup and the shop links go by the heading's name.
+  const named = bookNamedBy(book, master);
   const matches = [
     ...state.shops,
     ...(state.ownShop ? [state.ownShop] : []),
@@ -1049,18 +1134,19 @@ function BookView({
     <>
       <BackLink className="back-link" />
       <section className="book-page-hero">
-        <BookJacket book={book} />
+        <BookJacket book={named} />
         <div className="book-hero-head">
           <span className="eyebrow">ONE BOOK, MANY WORLDS</span>
           <span className="genre-tag">{book.genre}</span>
-          <h1>{bookTitle(book)}</h1>
-          <p className="book-page-author">{bookAuthor(book)}</p>
+          <BookHeadingLines book={book} master={master} />
           <BookPrice book={book} />
-          <BookPurchase book={book} />
-          <CoverCredit book={book} />
-          <CoverRemovalLink book={book} />
+          <BookPurchase book={named} />
+          <CoverCredit book={named} />
+          <BibliographyCredit master={master} />
+          <CoverRemovalLink book={named} />
         </div>
         <div className="book-hero-body">
+          <HeldBook book={book} actions={actions} notify={notify} />
           <p className="book-summary">{book.summary}</p>
           <BookActions
             book={book}

@@ -8,6 +8,7 @@
 // store exists to be told; tests/leave.test.ts checks none is missing.
 import { forgetOwnerEverywhere } from "./kept-draft";
 import "./account-draft";
+import "./book-fix-draft";
 import "./library-shelf-draft";
 import "./open-shop-draft";
 import "./post-draft";

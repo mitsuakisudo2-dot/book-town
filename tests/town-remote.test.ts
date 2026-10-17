@@ -18,6 +18,7 @@ import {
   type Write,
 } from "../src/lib/town-remote";
 import { demoBooks, demoPosters, demoPosts, demoShops } from "../src/lib/data";
+import { createRegisteredBook } from "../src/lib/books";
 import type { Poster } from "../src/lib/posters";
 import { isSampleBook, sampleBookRowId, withSamples } from "../src/lib/samples";
 import {
@@ -38,7 +39,7 @@ import {
 import { loadWalkRows } from "../src/lib/supabase/walk-backend";
 import { emptyArrived, takeIn, type Arrived } from "../src/lib/arrived";
 import { createLetterReads } from "../src/lib/arrivals";
-import { createTownStore } from "../src/lib/store";
+import { createTownStore, townSettled } from "../src/lib/store";
 import { counterId, type TownBackend } from "../src/lib/town-backend";
 import {
   ME_ID,
@@ -1406,6 +1407,39 @@ async function main() {
     assert.equal(shelves.shelves.length, 2);
   });
 
+  await check("a book fixed is written as its title, author and ISBN, and only that", () => {
+    const mine = createRegisteredBook("00000000-0000-4000-8000-0000000000b7", {
+      title: "よるのとしょかん",
+      author: "ドウ",
+      isbn: "9784000000000",
+    });
+    const local = createRegisteredBook("my-book-1", { title: "手元の本", author: "" });
+    const before: TownState = { ...base(), books: [...base().books, mine, local] };
+    const next: TownState = {
+      ...before,
+      books: before.books.map((book) =>
+        book.id === mine.id
+          ? { ...book, title: "夜の図書館", author: "ジェーン・ドウ", isbn: undefined }
+          : book.id === local.id
+            ? { ...book, title: "直した手元の本" }
+            : book,
+      ),
+    };
+    const writes = planWrites(before, next, ids);
+    // A book only in this browser has no row to fix.
+    assert.deepEqual(writes, [
+      {
+        kind: "fix-books",
+        rows: [{ id: mine.id, title: "夜の図書館", author: "ジェーン・ドウ", isbn: null }],
+      },
+    ]);
+    // A book's other fields changing on screen write nothing.
+    assert.deepEqual(
+      planWrites(before, { ...before, books: before.books.map((book) => ({ ...book, summary: "x" })) }, ids),
+      [],
+    );
+  });
+
   await check("only the person's own posts are written, replies last", () => {
     const before = base();
     const parent = {
@@ -2559,6 +2593,42 @@ async function main() {
       assert.ok(
         !store.getSnapshot().posts.some((entry) => entry.id === NEW_POST),
       );
+    },
+  );
+
+  await check(
+    "a change settles once the account has it, and fails when turned away",
+    async () => {
+      const town = loadedTown();
+      let listener: Parameters<NonNullable<TownBackend["watch"]>>[0] | null =
+        null;
+      const backend: TownBackend = {
+        kind: "account",
+        newId: () => crypto.randomUUID(),
+        load: async () => ({ state: town, status: "saved" }),
+        save: () => "saving",
+        watch(next) {
+          listener = next;
+          return () => undefined;
+        },
+      };
+      const store = createTownStore(backend);
+      store.initialize();
+      await settle(() => store.getPersistenceSnapshot() === "saved");
+      // Nothing on its way: settled at once.
+      assert.equal(await townSettled(store), true);
+      listener!.status("saving");
+      let heard: boolean | null = null;
+      const saved = townSettled(store).then((taken) => (heard = taken));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.equal(heard, null);
+      listener!.status("saved");
+      assert.equal(await saved, true);
+      // Turned away: the town goes back to what is saved, and says so.
+      listener!.status("saving");
+      const refused = townSettled(store);
+      listener!.replace(town, "recovered");
+      assert.equal(await refused, false);
     },
   );
 

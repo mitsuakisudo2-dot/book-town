@@ -105,7 +105,11 @@ async function answerOutside(context) {
                       summary: {
                         isbn,
                         title,
-                        author: "試験 花子／著",
+                        // As openBD heads it from the library's catalogue.
+                        author:
+                          isbn === LONG
+                            ? "村上,春樹,1949-／著"
+                            : "試験 花子／著",
                         publisher: "試験書房",
                       },
                     }
@@ -574,7 +578,7 @@ try {
   );
 
   await check(
-    "openBD's answer fills the book in, and a long title ends in …",
+    "openBD's answer fills the book in, its author as the reader sees it, and a long title ends in …",
     async () => {
       await openRegister();
       await dialog().getByLabel("ISBN").fill(LONG);
@@ -582,13 +586,17 @@ try {
       await expect(message()).toHaveText(
         "書籍情報が見つかりました。確認して登録してください。",
       );
-      await expect(dialog().getByLabel("著者")).toHaveValue("試験 花子");
+      // Not the catalogue's "村上,春樹,1949-".
+      await expect(dialog().getByLabel("著者")).toHaveValue("村上春樹");
+      await expect(page.locator(".toast")).toHaveCount(0, { timeout: 10000 });
+      await page.screenshot({ path: path.join(output, "filled-author.png") });
       await registerButton().click();
       // The toast names the book as kept, not as openBD wrote it.
       await registered(`『${LONG_TITLE.slice(0, 199)}…』を登録しました`);
       const book = (await stored()).addedBooks.find(
         (entry) => entry.id === "isbn-" + LONG,
       );
+      expect(book.author).toBe("村上春樹");
       expect(book.title).toHaveLength(200);
       expect(book.title).toBe(LONG_TITLE.slice(0, 199) + "…");
       // Kept through a reload: the saved town never drops it for its length.

@@ -6,7 +6,7 @@ import { lookUpBook } from "../lib/openbd";
 import { libraryBookByIsbn, useTownBackend } from "../lib/store";
 import type { TownActions, TownState } from "../lib/types";
 import { Icon, Modal } from "./ui";
-import { bookByIsbn, quotedTitle } from "../lib/book-name";
+import { bookAuthor, bookByIsbn, quotedTitle } from "../lib/book-name";
 import { failure, AGAIN } from "../lib/words";
 
 type Detector = {
@@ -141,7 +141,9 @@ export function BarcodeRegister({
   function fill(book: { title: string; author: string; price?: number }) {
     const next = {
       title: book.title,
-      author: book.author,
+      // A catalogue's heading ("村上,春樹,1949-") in the shape the reader
+      // sees the author everywhere else ("村上春樹").
+      author: bookAuthor(book),
       price: book.price ? String(book.price) : "",
     };
     filled.current = next;

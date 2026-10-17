@@ -684,6 +684,17 @@ export async function applyWrite(
         }),
       );
       return;
+    case "fix-books":
+      for (const { id, ...fix } of write.rows) {
+        const fixed = await all(
+          client.from("books").update(fix).eq("id", id).select("id"),
+        );
+        // Only a book the reader typed in can be fixed (row level security
+        // leaves any other alone, without an error): not saved, then.
+        if (!fixed.length)
+          throw new TownSyncError("The book could not be fixed", false);
+      }
+      return;
     case "profile":
       await settled(
         client.from("profiles").update(write.patch).eq("id", ids.userId),
