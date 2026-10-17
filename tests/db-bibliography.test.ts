@@ -7,6 +7,7 @@ import {
   SUPABASE_STANDIN,
   migrationFiles,
   migrationText,
+  oneMomentEach,
 } from "./fixtures/pglite-supabase";
 
 // The bibliographic master (item 4 of the 2026-10-16 plan, the owner's review
@@ -251,7 +252,9 @@ function openbd(o: {
 type Visitor = string | null;
 
 async function migrated(upTo?: string): Promise<PGlite> {
-  const db = new PGlite();
+  // What is asked first follows the order the books were placed in, which
+  // the checks below count on.
+  const db = oneMomentEach(new PGlite());
   await db.exec(SUPABASE_STANDIN);
   for (const file of FILES.filter((file) => (upTo ? file < upTo : true)))
     await db.exec(migrationText(file));
