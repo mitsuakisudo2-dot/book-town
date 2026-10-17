@@ -1,0 +1,250 @@
+/* The reader's library (LibraryView): shelves and filters as chips, the books
+   standing on shelf boards, and the bar of changes while picking. */
+
+.library-page {
+  display: grid;
+  gap: 16px;
+  padding-bottom: 24px;
+}
+.library-page.is-picking {
+  /* Room for the bar of changes, over the bottom bar (PickBar measures it). */
+  padding-bottom: calc(var(--library-pick-height, 240px) + 24px);
+}
+
+.library-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.library-head h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: var(--t-head);
+}
+.library-head p {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+}
+
+/* A row of chips that scrolls sideways on a phone, never wrapping under. */
+.library-chips {
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 0 16px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.library-chips::-webkit-scrollbar {
+  display: none;
+}
+.library-count {
+  color: inherit;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.library-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+.library-note {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 1.6;
+}
+.library-bar p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+}
+
+/* The books on shelf boards: no gap between columns, so the boards of one
+   row meet. */
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  row-gap: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.library-grid li {
+  min-width: 0;
+}
+.library-book {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  width: 100%;
+  height: 100%;
+  padding: 0 0 8px;
+  border-radius: var(--r-box);
+  color: var(--ink);
+  text-align: left;
+}
+.library-book .book-jacket {
+  width: calc(100% - 20px);
+  max-width: 128px;
+  margin: 0 auto;
+}
+/* The board the cover stands on. */
+.library-book .book-jacket + strong {
+  border-top: 8px solid var(--cork);
+  margin-top: 0;
+  padding: 10px 12px 0;
+}
+.library-book strong,
+.library-book small {
+  display: block;
+  padding: 0 12px;
+  overflow-wrap: anywhere;
+}
+.library-book strong {
+  font-family: var(--serif);
+  font-size: var(--t-meta);
+  font-weight: 500;
+  line-height: 1.5;
+}
+.library-marks {
+  padding: 0 12px;
+}
+.library-book small {
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+.library-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin-top: 6px;
+  color: var(--green);
+  font-size: var(--t-cap);
+  font-weight: 700;
+}
+/* A mark is never broken in two. */
+.library-marks span {
+  white-space: nowrap;
+}
+/* Taken out of the library while picking: said, and no longer picked. */
+.is-gone .library-marks {
+  color: var(--ink-2);
+}
+.is-gone .book-jacket {
+  opacity: 0.55;
+}
+/* Picked: a ring outside the cover, never over it, and a tick by it. */
+.library-book[aria-pressed="true"] {
+  background: var(--green-soft);
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+}
+.library-tick {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  background: var(--green);
+  color: var(--on-green);
+}
+
+.library-start {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 24px 0;
+  color: var(--ink-2);
+}
+.library-start h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-title);
+}
+.library-start p {
+  margin: 0;
+  font-size: var(--t-body);
+  line-height: 1.7;
+}
+
+/* The bar of changes while picking: over the bottom bar, in reach of the
+   thumb. */
+.library-pick {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: calc(var(--layer-tabbar) + 1);
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--sheet);
+  box-shadow: var(--lift-2);
+}
+.library-pick-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.library-pick-head p {
+  flex: 1;
+  margin: 0;
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+/* One row each, scrolling sideways on a narrow phone, so the bar stays low. */
+.library-pick-row {
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.library-pick-row::-webkit-scrollbar {
+  display: none;
+}
+.library-pick-row .chip {
+  padding: 0 14px;
+}
+.library-pick-row .chip:disabled,
+.library-pick-row .btn:disabled {
+  opacity: 0.45;
+}
+
+@media (min-width: 900px) {
+  .library-pick {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+    width: min(560px, calc(100vw - 48px));
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+  }
+}
+.library-bar .btn {
+  margin-left: auto;
+}
+
+/* While picking, a notice sits just above the bar of changes, in reach of
+   the thumb (PickBar says how tall the bar is). */
+body:has(.library-pick) .toast {
+  top: auto;
+  bottom: calc(var(--library-pick-height, 0px) + 12px);
+  left: 50%;
+}
