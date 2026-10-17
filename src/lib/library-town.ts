@@ -184,9 +184,8 @@ export function libraryStateOf(state: TownState): LibraryState {
     posts: state.posts,
     posters: state.posters,
     libraryEntries: entriesOf(state),
-    // The reader's own shelves come with 管理表 15.
-    libraryShelves: [],
-    libraryShelfBooks: [],
+    libraryShelves: state.libraryShelves,
+    libraryShelfBooks: state.libraryShelfBooks,
     encounters: townEncounters(state),
     settings: LIBRARY_SETTINGS,
   };
@@ -217,11 +216,19 @@ export function withLibraryOp(
       kept[bookId] = row;
       changed.push(bookId);
     }
+  // A book on a shelf is a row of the library in the database too
+  // (library_shelf_books' foreign key): one only worked out is kept.
+  for (const book of next.libraryShelfBooks)
+    if (!kept[book.bookId] && next.libraryEntries[book.bookId]) {
+      if (kept === state.libraryEntries) kept = { ...kept };
+      kept[book.bookId] = next.libraryEntries[book.bookId];
+    }
   return {
     ...state,
     libraryEntries: kept,
     favorites: next.favorites,
     library: next.library,
+    libraryShelfBooks: next.libraryShelfBooks,
     ...relisted(state, [...books, ...changed], next.libraryEntries),
   };
 }
@@ -296,7 +303,13 @@ export function withoutRegistering(
 /** What the reader can change of books from the library's screens. */
 export type LibraryChange = Pick<
   LibrarySet,
-  "status" | "want" | "owned" | "favorite" | "removed"
+  | "status"
+  | "want"
+  | "owned"
+  | "favorite"
+  | "removed"
+  | "addShelf"
+  | "removeShelf"
 >;
 
 /**
@@ -307,6 +320,8 @@ export interface LibraryUndo {
   books: string[];
   before: Record<string, OpBefore>;
   after: Record<string, LibraryEntry | null>;
+  /** The reader's shelves the op put the books on or took them off. */
+  shelves: string[];
 }
 
 /** withLibraryOp, and what undoes it; null when nothing changed. */
@@ -328,6 +343,9 @@ export function libraryChange(
       books: ids,
       before,
       after: Object.fromEntries(ids.map((id) => [id, rows[id] ?? null])),
+      shelves: [set.addShelf, set.removeShelf].filter(
+        (id): id is string => id !== undefined,
+      ),
     },
   };
 }
@@ -348,6 +366,7 @@ export function undoLibraryChange(
   let kept = state.libraryEntries;
   let favorites = state.favorites;
   let library = state.library;
+  let shelfBooks = state.libraryShelfBooks;
   let restored = 0;
   for (const bookId of undo.books) {
     const now = rows[bookId] ?? null;
@@ -380,12 +399,29 @@ export function undoLibraryChange(
       library = [...library, bookId];
     if (!was.registered && library.includes(bookId))
       library = library.filter((id) => id !== bookId);
+    // Its places on the shelves the op changed, as they were, each with
+    // the time and the position it had, so a shelf keeps its order. Its
+    // other shelves stay as they are now.
+    for (const shelfId of undo.shelves) {
+      const now = shelfBooks.find(
+        (book) => book.bookId === bookId && book.shelfId === shelfId,
+      );
+      const then = was.shelves.find((book) => book.shelfId === shelfId);
+      if (now === then) continue;
+      shelfBooks = [
+        ...shelfBooks.filter(
+          (book) => !(book.bookId === bookId && book.shelfId === shelfId),
+        ),
+        ...(then ? [then] : []),
+      ];
+    }
     restored += 1;
   }
   if (
     kept === state.libraryEntries &&
     favorites === state.favorites &&
-    library === state.library
+    library === state.library &&
+    shelfBooks === state.libraryShelfBooks
   )
     return { state, restored };
   return {
@@ -394,6 +430,7 @@ export function undoLibraryChange(
       libraryEntries: kept,
       favorites,
       library,
+      libraryShelfBooks: shelfBooks,
       ...relisted(state, undo.books, { ...rows, ...kept }),
     },
     restored,

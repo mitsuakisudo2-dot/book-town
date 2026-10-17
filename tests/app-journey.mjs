@@ -337,6 +337,107 @@ try {
   );
 
   await check(
+    "a shelf of the reader's own is made, filled from the library, kept, and put away with undo",
+    async () => {
+      await go("/library/");
+      const shelves = page.getByRole("group", { name: "棚" });
+      const toast = page.locator(".toast");
+      const books = page.locator(".library-book");
+      const all = await books.count();
+
+      // Made from the chip row: its words are kept while it is written.
+      await shelves.getByRole("button", { name: "棚を作る" }).click();
+      const sheet = page.getByRole("dialog", { name: "棚を作る" });
+      await sheet.getByLabel("棚の名前").fill("雨の日に読みたい");
+      await page.goBack();
+      await expect(sheet).toHaveCount(0);
+      await shelves.getByRole("button", { name: "棚を作る" }).click();
+      await expect(sheet.getByLabel("棚の名前")).toHaveValue(
+        "雨の日に読みたい",
+      );
+      await expect(sheet).toContainText("書きかけを続けています");
+      await sheet.getByRole("button", { name: "作る", exact: true }).click();
+      await expect(toast).toContainText("「雨の日に読みたい」を作りました");
+      await expect(page).toHaveURL(/\/library\/\?shelf=[\w-]+$/);
+      const shelf = shelves.getByRole("button", { name: "雨の日に読みたい" });
+      await expect(shelf).toHaveAttribute("aria-pressed", "true");
+      // The next shelf starts from a clear form.
+      await shelves.getByRole("button", { name: "棚を作る" }).click();
+      await expect(sheet.getByLabel("棚の名前")).toHaveValue("");
+      await expect(sheet).not.toContainText("書きかけ");
+      await page.goBack();
+      await expect(sheet).toHaveCount(0);
+      // An empty shelf shows no number, and asks for its books.
+      await expect(page.locator(".library-page")).not.toContainText(
+        /(^|\D)0冊/,
+      );
+      await page.getByRole("button", { name: "ライブラリから選ぶ" }).click();
+      const bar = page.getByRole("region", { name: "選んだ本を変える" });
+      await expect(books).toHaveCount(all);
+      const titles = [];
+      for (const i of [0, 1]) {
+        titles.push(
+          (await books.nth(i).locator("strong").textContent()).trim(),
+        );
+        await books.nth(i).click();
+      }
+      await bar
+        .getByRole("button", { name: "「雨の日に読みたい」に入れる" })
+        .click();
+      await expect(toast).toContainText(
+        "2冊を「雨の日に読みたい」に入れました",
+      );
+      await expect(bar).toHaveCount(0);
+      await expect(shelf).toHaveAttribute("aria-pressed", "true");
+      await expect(books).toHaveCount(2);
+      await expect(shelf).toHaveAccessibleName("雨の日に読みたい 2冊");
+
+      // Kept: a reload comes back to the shelf and its books.
+      await page.reload();
+      await expect(books).toHaveCount(2);
+      await expect(books.first()).toContainText(titles[0]);
+
+      // From the whole library, a book picked goes on the shelf, and its
+      // card says which of the reader's shelves it is on.
+      await shelves
+        .getByRole("button", { name: "すべて", exact: true })
+        .click();
+      await page.getByRole("button", { name: "選ぶ", exact: true }).click();
+      const third = books.nth(2);
+      await third.click();
+      const onShelf = bar
+        .getByRole("group", { name: "自分の棚" })
+        .getByRole("button", { name: "雨の日に読みたい" });
+      await expect(onShelf).toHaveAttribute("aria-pressed", "false");
+      await onShelf.click();
+      await expect(onShelf).toHaveAttribute("aria-pressed", "true");
+      await page.goBack();
+      await expect(bar).toHaveCount(0);
+      await expect(third).toContainText("雨の日に読みたい");
+
+      // Changed, then put away: the books stay in the library, and undo
+      // brings the shelf back with them.
+      await shelf.click();
+      await page.getByRole("button", { name: "棚を編集" }).click();
+      const edit = page.getByRole("dialog", { name: "棚を編集" });
+      await edit.getByLabel(/どんな棚か/).fill("しとしと降る日に。");
+      await edit.getByRole("button", { name: "保存する" }).click();
+      await expect(page.locator(".library-shelf-head")).toContainText(
+        "しとしと降る日に。",
+      );
+      await page.getByRole("button", { name: "棚を編集" }).click();
+      await edit.getByRole("button", { name: "この棚を消す" }).click();
+      await expect(toast).toContainText("「雨の日に読みたい」を消しました");
+      await expect(page).toHaveURL(`${baseURL}/library/`);
+      await expect(shelf).toHaveCount(0);
+      await expect(books).toHaveCount(all);
+      await toast.getByRole("button", { name: "元に戻す" }).click();
+      await expect(shelf).toHaveAccessibleName("雨の日に読みたい 3冊");
+      await noOverflow("library shelves");
+    },
+  );
+
+  await check(
     "swipes on a shelf stay on the shelf; other swipes switch the Home tabs",
     async () => {
       await goHome();
@@ -989,8 +1090,7 @@ try {
           .getByRole("link", { name: /^この本についてGoogleで調べる/ }),
       ).toHaveAttribute(
         "href",
-        "https://google.com/search?q=" +
-          encodeURIComponent("ソラリス"),
+        "https://google.com/search?q=" + encodeURIComponent("ソラリス"),
       );
       const reviews = page.locator(
         ".book-reviews > .post-feed > article.post-card",

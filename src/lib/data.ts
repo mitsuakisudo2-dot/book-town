@@ -1519,6 +1519,8 @@ export function createInitialState(): TownState {
     finishedBooks: [],
     library: [],
     libraryEntries: {},
+    libraryShelves: [],
+    libraryShelfBooks: [],
     readingRecords,
     // Records stay the reader's own until they choose to publish them.
     settings: {

@@ -23,7 +23,13 @@ import {
   keepingUses,
   withoutRegistering,
 } from "./library-town";
-import { READING_STATUSES, type ReadingStatus } from "./library";
+import {
+  positionAfter,
+  READING_STATUSES,
+  validateShelf,
+  type LibraryShelf,
+  type ReadingStatus,
+} from "./library";
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId, isSampleId } from "./record-kind";
@@ -156,6 +162,8 @@ const ANSWERING_ACTIONS = new Set<keyof TownActions>([
   "blockReader",
   "changeDisplay",
   "deletePoster",
+  "editLibraryShelf",
+  "putAwayLibraryShelf",
   "updateRecord",
 ]);
 /** What an action turned away answers: false, no books put back, or nothing. */
@@ -869,6 +877,12 @@ export function createTownStore(
         set.owned = change.owned;
       if (typeof change.favorite === "boolean") set.favorite = change.favorite;
       if (typeof change.removed === "boolean") set.removed = change.removed;
+      const live = (id: unknown) =>
+        state.libraryShelves.some(
+          (shelf) => shelf.id === id && shelf.deletedAt === null,
+        );
+      if (live(change.addShelf)) set.addShelf = change.addShelf;
+      if (live(change.removeShelf)) set.removeShelf = change.removeShelf;
       if (!books.length || !Object.keys(set).length) return null;
       // A book sorted before it was in the library was found there, on its
       // page or in a search; "manual" would be a registering, which never
@@ -886,6 +900,71 @@ export function createTownStore(
       initialize();
       const done = undoLibraryChange(state, undo, now().toISOString());
       return commit(done.state) ? done.restored : 0;
+    },
+    makeLibraryShelf(name, note) {
+      initialize();
+      const time = now().toISOString();
+      const shelf: LibraryShelf = {
+        id: crypto.randomUUID(),
+        name: name.trim(),
+        note: note.trim(),
+        position: positionAfter(
+          state.libraryShelves.map((entry) => entry.position),
+          time,
+        ),
+        showWanted: true,
+        createdAt: time,
+        deletedAt: null,
+      };
+      if (validateShelf(shelf) !== null) return null;
+      return commit({
+        ...state,
+        libraryShelves: [...state.libraryShelves, shelf],
+      })
+        ? shelf.id
+        : null;
+    },
+    editLibraryShelf(shelfId, change) {
+      initialize();
+      const shelf = state.libraryShelves.find((entry) => entry.id === shelfId);
+      if (!shelf) return false;
+      const next: LibraryShelf = {
+        ...shelf,
+        ...(typeof change.name === "string"
+          ? { name: change.name.trim() }
+          : {}),
+        ...(typeof change.note === "string"
+          ? { note: change.note.trim() }
+          : {}),
+        ...(typeof change.showWanted === "boolean"
+          ? { showWanted: change.showWanted }
+          : {}),
+      };
+      if (
+        validateShelf(next) !== null ||
+        (next.name === shelf.name &&
+          next.note === shelf.note &&
+          next.showWanted === shelf.showWanted)
+      )
+        return false;
+      return commit({
+        ...state,
+        libraryShelves: state.libraryShelves.map((entry) =>
+          entry.id === shelfId ? next : entry,
+        ),
+      });
+    },
+    putAwayLibraryShelf(shelfId, away) {
+      initialize();
+      const shelf = state.libraryShelves.find((entry) => entry.id === shelfId);
+      if (!shelf || (shelf.deletedAt !== null) === away) return false;
+      const deletedAt = away ? now().toISOString() : null;
+      return commit({
+        ...state,
+        libraryShelves: state.libraryShelves.map((entry) =>
+          entry.id === shelfId ? { ...entry, deletedAt } : entry,
+        ),
+      });
     },
     setComposeIcon(icon) {
       initialize();

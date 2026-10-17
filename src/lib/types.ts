@@ -1,4 +1,4 @@
-import type { LibraryEntry } from "./library";
+import type { LibraryEntry, LibraryShelf, ShelfBook } from "./library";
 import type { LibraryChange, LibraryUndo } from "./library-town";
 import type { Poster, PosterDraft } from "./posters";
 import type { FiledReport } from "./supabase/reports";
@@ -128,6 +128,9 @@ export const ownTagline = (shop: Pick<Shop, "tagline">) =>
 export const SHOP_DESCRIPTION_MAX_LENGTH = 2000;
 export const SHELF_NAME_MAX_LENGTH = 80;
 export const POP_MAX_LENGTH = 1000;
+/** A shelf of the reader's own in the library (library_shelves). */
+export const LIBRARY_SHELF_NAME_MAX_LENGTH = 40;
+export const LIBRARY_SHELF_NOTE_MAX_LENGTH = 500;
 export const READER_NAME_MAX_LENGTH = 80;
 export const BIO_MAX_LENGTH = 2000;
 export const NINE_NOTE_MAX_LENGTH = 500;
@@ -365,6 +368,10 @@ export interface TownState {
    * changes something of it.
    */
   libraryEntries: Record<string, LibraryEntry>;
+  /** The shelves the reader made in the library (library_shelves), put away ones too, in no order. */
+  libraryShelves: LibraryShelf[];
+  /** Which books are on them (library_shelf_books). */
+  libraryShelfBooks: ShelfBook[];
   settings: Settings;
   seenNotifications: string[];
   /** Words other readers left at the viewer's shop. Only an account receives them. */
@@ -497,6 +504,16 @@ export interface TownActions {
   changeLibrary(bookIds: string[], change: LibraryChange): LibraryUndo | null;
   /** Undoes a change but for books changed again since; how many went back. */
   undoLibrary(undo: LibraryUndo): number;
+  /**
+   * Makes a shelf of the reader's own in the library, last among them.
+   * Answers its id, or null when the name is empty or too long (or the town
+   * is still loading, or for a visitor, asked to sign in instead).
+   */
+  makeLibraryShelf(name: string, note: string): string | null;
+  /** Changes a shelf's name, note or whether it shows the books only wanted. False when nothing changed. */
+  editLibraryShelf(shelfId: string, change: LibraryShelfChange): boolean;
+  /** Puts a shelf away (true) or brings it back (false), with its books. */
+  putAwayLibraryShelf(shelfId: string, away: boolean): boolean;
   setComposeIcon(icon: ComposeIcon): void;
   /** Finishing a book, with how it felt. Also marks the book as finished. */
   recordReading(draft: RecordDraft): string | null;
@@ -541,3 +558,8 @@ export const normalizeCapacity = (capacity?: number): number =>
 export type PersistenceStatus =
   /** Changes are on their way to the account. */
   "loading" | "saving" | "saved" | "unavailable" | "recovered";
+
+/** What can be changed of a shelf the reader made. */
+export type LibraryShelfChange = Partial<
+  Pick<LibraryShelf, "name" | "note" | "showWanted">
+>;
