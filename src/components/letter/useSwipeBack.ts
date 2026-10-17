@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type RefObject } from "react";
+import { DUR_MS, EASE, reducedMotion } from "../../lib/motion";
 
 /** The strip at the left edge that belongs to Safari's own back gesture. */
 export const SWIPE_EDGE = 24;
@@ -55,8 +56,7 @@ export function useSwipeBack(
     };
     let drag: Drag | null = null;
     let swallow = false;
-    const reduced = () =>
-      matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = reducedMotion;
     const settle = (to: "back" | "open", from: number) => {
       layer.classList.remove("is-dragging");
       if (to === "open") {
@@ -72,7 +72,7 @@ export function useSwipeBack(
           { transform: `translateX(${from}px)` },
           { transform: "translateX(100%)" },
         ],
-        { duration: 150, easing: "cubic-bezier(.2,0,0,1)", fill: "forwards" },
+        { duration: DUR_MS.press, easing: EASE.standard, fill: "forwards" },
       );
       void slide.finished.then(
         () => backRef.current(),

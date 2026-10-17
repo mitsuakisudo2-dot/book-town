@@ -172,8 +172,8 @@
   color: var(--ink);
   cursor: pointer;
   transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+    transform var(--dur-move),
+    box-shadow var(--dur-move);
 }
 .store-shelf-pops li:nth-child(odd) button {
   transform: rotate(-0.5deg);

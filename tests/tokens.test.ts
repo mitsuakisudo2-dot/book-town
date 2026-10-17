@@ -460,6 +460,54 @@ check(
   },
 );
 
+check("movements take their time and easing from the motion tokens", () => {
+  // Times and curves live in tokens.css (--dur-*, --ease-*) and, for what
+  // CSS can't reach (element.animate), in src/lib/motion.ts.
+  const problems: string[] = [];
+  for (const file of filesIn("src", [".css"])) {
+    if (file === "src/app/tokens.css") continue;
+    const css = read(file).replace(/\/\*[\s\S]*?\*\//g, " ");
+    for (const [decl] of css.matchAll(
+      /(?:transition|animation)(?:-delay|-duration)?\s*:[^;{}]*;/g,
+    ))
+      if (/(?<![\w.-])\d*\.?\d+m?s\b|cubic-bezier/.test(decl))
+        problems.push(`${file}: ${decl.trim()}`);
+  }
+  for (const file of filesIn("src", [".ts", ".tsx"])) {
+    if (file === "src/lib/motion.ts") continue;
+    const code = read(file);
+    if (/\bduration:\s*\d|easing:\s*["'`]cubic-bezier/.test(code))
+      problems.push(
+        `${file}: a duration or easing written out (use src/lib/motion.ts)`,
+      );
+    if (/matchMedia\(["'`]\(prefers-reduced-motion/.test(code))
+      problems.push(
+        `${file}: asks for less motion itself (use reducedMotion())`,
+      );
+  }
+  assert.deepEqual(problems, [], problems.join("\n"));
+  const motion = read("src/lib/motion.ts");
+  const durations = { press: 150, move: 200, tab: 280, settle: 450, lamp: 800 };
+  for (const [name, ms] of Object.entries(durations)) {
+    assert.ok(
+      new RegExp(`${name}:\\s*${ms}\\b`).test(motion),
+      `motion.ts ${name} is ${ms}ms`,
+    );
+    const token = name;
+    assert.ok(
+      tokens.includes(`--dur-${token}: ${ms / 1000}s;`),
+      `--dur-${token} is ${ms / 1000}s, as in motion.ts`,
+    );
+  }
+  for (const [name, curve] of [
+    ["standard", "cubic-bezier(0.2, 0, 0, 1)"],
+    ["tab", "cubic-bezier(0.3, 0, 0, 1)"],
+  ]) {
+    assert.ok(motion.includes(`${name}: "${curve}"`), `motion.ts ease ${name}`);
+    assert.ok(tokens.includes(`--ease-${name}: ${curve};`), `--ease-${name}`);
+  }
+});
+
 check("the old buttons stay gone: every button is a part", () => {
   // .button, .text-button, .icon-button and the editor's own buttons were
   // folded into parts.css (.btn, .text-btn, .icon-btn, .chip) on 2026-10-17.

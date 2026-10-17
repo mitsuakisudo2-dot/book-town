@@ -174,7 +174,7 @@
   width: min(100cqw, 100cqh * 9 / 16);
   aspect-ratio: 9/16;
   container-type: inline-size;
-  animation: walk-arrive 0.26s ease-out;
+  animation: walk-arrive var(--dur-arrive-s) ease-out;
 }
 /* The isolation keeps a Modal opened on the walk inside the walk's layers,
    under the town's bars. While one is open the walk rises to the Modal's
@@ -214,7 +214,7 @@
   position: relative;
   min-width: 0;
   min-height: var(--walk-avatar);
-  animation: walk-fade 0.26s ease-out;
+  animation: walk-fade var(--dur-arrive-s) ease-out;
 }
 .walk-owner a {
   display: flex;
@@ -293,7 +293,7 @@
   justify-self: end;
   display: flex;
   gap: 8px;
-  animation: walk-fade 0.26s ease-out;
+  animation: walk-fade var(--dur-arrive-s) ease-out;
 }
 .walk-header-tools button i,
 .walk-journey-controls button {
@@ -407,11 +407,11 @@
   backdrop-filter: blur(6px);
   pointer-events: none;
   transform: translateX(-50%);
-  animation: walk-first-hint 3.6s ease both;
+  animation: walk-first-hint var(--dur-hint) ease both;
 }
 .walk-first-hint i {
   font-style: normal;
-  animation: walk-first-hint-arrow 0.9s ease-in-out 3;
+  animation: walk-first-hint-arrow var(--dur-glow) ease-in-out 3;
 }
 @keyframes walk-first-hint {
   0% {
@@ -717,7 +717,7 @@
     rgba(255, 170, 90, 0.13),
     transparent 70%
   );
-  transition: filter 0.25s ease;
+  transition: filter var(--dur-slide) ease;
 }
 .walk-row.is-dimmed {
   filter: brightness(0.42) saturate(0.7);

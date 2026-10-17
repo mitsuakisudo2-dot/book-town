@@ -213,7 +213,7 @@
   border-left-color: var(--lamp-glow);
 }
 .scan-card.is-flash {
-  animation: scan-flash 600ms ease;
+  animation: scan-flash var(--dur-flash) ease;
 }
 @keyframes scan-flash {
   0% {
@@ -298,7 +298,7 @@
   height: 42px;
   border-radius: 1px 1px 0 0;
   box-shadow: inset -1px 0 0 #0000002e;
-  animation: scan-spine-in 240ms ease-out;
+  animation: scan-spine-in var(--dur-enter) ease-out;
 }
 .scan-spine.is-added {
   background: #768281;

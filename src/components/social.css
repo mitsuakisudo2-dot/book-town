@@ -315,9 +315,9 @@ mark.hidden-words.is-open {
     0 6px 18px color-mix(in srgb, var(--shade) 21%, transparent),
     inset 0 0 0 3px color-mix(in srgb, var(--on-dark) 11%, transparent);
   transition:
-    transform 0.15s,
-    opacity 0.2s,
-    visibility 0.2s;
+    transform var(--dur-press),
+    opacity var(--dur-move),
+    visibility var(--dur-move);
 }
 .compose-fab:hover {
   transform: translateY(-2px) rotate(-6deg);
@@ -353,7 +353,7 @@ mark.hidden-words.is-open {
   border-radius: 50%;
   background: var(--alert);
   margin-left: auto;
-  animation: live-pulse 1.6s ease-in-out infinite;
+  animation: live-pulse var(--dur-pulse) ease-in-out infinite;
 }
 .town-bottom-nav a.nav-reading.is-live svg {
   color: var(--alert);
