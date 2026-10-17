@@ -60,8 +60,8 @@ export const all = async <T>(
   request: PromiseLike<Outcome<T[]>>,
 ): Promise<T[]> => (await settled(request)).data ?? [];
 
-/** How many rows `allRows` asks for at a time; Supabase's own limit. */
-const PAGE = 1000;
+/** How many rows a request brings at most: Supabase's own limit (max_rows). */
+export const PAGE = 1000;
 
 /** A select that can be put in order and read a stretch at a time. */
 export interface Pageable<T> {
@@ -71,15 +71,17 @@ export interface Pageable<T> {
 
 /**
  * Reads every row a select matches, a page at a time, until the rows the
- * first page counted are all in (or a page brings nothing new), so it works
- * whatever the server's own limit is. The rows go in
- * the order of their key (the primary key, without the columns the select
- * fixes). Each page after the first starts again at the last row already read:
- * if another row stands there, rows were added or removed ahead of it
- * meanwhile, so the pages no longer meet and one could slip between them. That,
- * a row met twice, or a total other than the first page's count fails as worth
- * retrying, so the whole town is read again rather than written from a short
- * list.
+ * first page counted are all in, so it works whatever the server's own limit
+ * is. The rows go in the order of their key (the primary key, without the
+ * columns the select fixes, or a column to sort by before it). The first page
+ * tells how many there are and how many one answer holds; the pages after it
+ * are asked for together, so a list past the limit waits for one more answer,
+ * not one a page. Each page after the first starts again at the last row of
+ * the one before: if another row stands there, rows were added or removed
+ * ahead of it meanwhile, so the pages no longer meet and one could slip
+ * between them. That, a row met twice, or a total other than the first page's
+ * count fails as worth retrying, so the whole town is read again rather than
+ * written from, or shown with, a short list.
  */
 export async function allRows<T extends Record<string, unknown>>(
   select: (count?: "exact") => Pageable<T>,
@@ -87,19 +89,21 @@ export async function allRows<T extends Record<string, unknown>>(
   size = PAGE,
 ): Promise<T[]> {
   const keyOf = (row: T) => JSON.stringify(keys.map((column) => row[column]));
+  const ask = async (from: number, to: number, count?: "exact") => {
+    let query = select(count);
+    for (const key of keys) query = query.order(key);
+    return settled(query.range(from, to));
+  };
   const rows: T[] = [];
   const seen = new Set<string>();
-  let total: number | null = null;
-  for (let first = true; ; first = false) {
-    let query = select(first ? "exact" : undefined);
-    for (const key of keys) query = query.order(key);
-    const from = first ? 0 : rows.length - 1;
-    const outcome = await settled(query.range(from, from + size - 1));
-    if (first) total = outcome.count ?? null;
-    const page = outcome.data ?? [];
-    if (!first && (!page.length || keyOf(page[0]) !== keyOf(rows[from])))
+  /** Joins on a page that starts at the last row read; how many were new. */
+  const join = (found: T[]) => {
+    const last = rows[rows.length - 1];
+    if (!found.length || keyOf(found[0]) !== keyOf(last))
       throw new RowsChangedError("Rows moved between two pages; reading again");
-    const fresh = first ? page : page.slice(1);
+    return take(found.slice(1));
+  };
+  const take = (fresh: T[]) => {
     for (const row of fresh) {
       const key = keyOf(row);
       if (seen.has(key))
@@ -107,15 +111,51 @@ export async function allRows<T extends Record<string, unknown>>(
       seen.add(key);
       rows.push(row);
     }
-    if (!fresh.length || total === null || rows.length >= total) break;
-  }
+    return fresh.length;
+  };
+  const first = await ask(0, size - 1, "exact");
+  const total = first.count ?? null;
   if (total === null)
     throw new TownSyncError("The rows were not counted; reading again", true);
+  take(first.data ?? []);
+  // One answer's rows, less the one each page shares with the page before.
+  const step = rows.length - 1;
+  if (step > 0 && rows.length < total) {
+    const starts: number[] = [];
+    // Up to a page that starts at or after the last row counted: a full
+    // page ending just on it would not tell a row pushed past it.
+    for (let from = step; from < total; from += step) starts.push(from);
+    const pages = await Promise.all(
+      starts.map((from) => ask(from, from + step)),
+    );
+    pages.forEach((outcome, n) => {
+      // A page short of the others leaves a gap before the next one.
+      if (rows.length - 1 !== starts[n])
+        throw new RowsChangedError("A page came short; reading again");
+      join(outcome.data ?? []);
+    });
+  }
+  // Rows added since they were counted.
+  while (rows.length && rows.length < total) {
+    const from = rows.length - 1;
+    if (!join((await ask(from, from + size - 1)).data ?? [])) break;
+  }
   if (rows.length !== total)
     throw new RowsChangedError(
       `Read ${rows.length} rows of ${total}; reading again`,
     );
   return rows;
+}
+
+/** Reads again at once while rows move under the read, a few times. */
+export async function steadily<T>(read: () => Promise<T>, times = 3) {
+  for (let tried = 0; ; tried += 1) {
+    try {
+      return await read();
+    } catch (error) {
+      if (!(error instanceof RowsChangedError) || tried >= times) throw error;
+    }
+  }
 }
 
 export const chunks = <T>(list: T[], size: number): T[][] =>

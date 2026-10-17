@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountStore } from "./account-session";
 import { localTownRepository } from "./repository";
 import { getSupabase } from "./supabase/client";
+import { allRows } from "./supabase/sync";
 import { supabaseConfigured } from "./supabase/config";
 import { setCoverRefusalLoader } from "./covers";
 import type { Database } from "./supabase/database.generated";
@@ -121,12 +122,12 @@ if (supabaseConfigured)
   setCoverRefusalLoader(async () => {
     const client = getSupabase();
     if (!client) throw new Error("No database on this page");
-    const { data, error } = await client
-      .from("cover_refusals")
-      .select("isbn, source")
-      .limit(1000);
-    if (error) throw error;
-    return data ?? [];
+    // Every one: a refusal left out would show that cover again.
+    return allRows(
+      (count) =>
+        client.from("cover_refusals").select("isbn, source", { count }),
+      ["isbn", "source"],
+    );
   });
 
 /** The town: the person's town in Supabase, or the demo in this browser. */
