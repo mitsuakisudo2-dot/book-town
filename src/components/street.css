@@ -30,7 +30,7 @@
 .street-shop-title > a > svg {
   color: var(--theme);
   opacity: 0.6;
-  transition: transform 0.2s;
+  transition: transform var(--dur-move);
 }
 .street-shop-title > a:hover > svg {
   transform: translateX(5px);
@@ -657,13 +657,13 @@
 
 /* Each shop shows its face on the street: the owner's words come first. */
 .street-shop.is-arriving {
-  animation: street-arrive 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: street-arrive var(--dur-settle) var(--ease-arrive) both;
 }
 .street-shop.is-arriving:nth-of-type(2) {
-  animation-delay: 0.06s;
+  animation-delay: var(--dur-stagger-1);
 }
 .street-shop.is-arriving:nth-of-type(3) {
-  animation-delay: 0.12s;
+  animation-delay: var(--dur-stagger-2);
 }
 @keyframes street-arrive {
   from {
@@ -699,8 +699,8 @@
   transform: rotate(-0.6deg);
   color: var(--ink);
   transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+    transform var(--dur-move),
+    box-shadow var(--dur-move);
 }
 .street-shop-voice:hover {
   transform: rotate(0deg) translateY(-1px);

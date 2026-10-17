@@ -37,6 +37,7 @@ import { isSampleId } from "../lib/record-kind";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./social.css";
 import "./poster.css";
+import { reducedMotion } from "../lib/motion";
 import {
   bookAuthor,
   bookById,
@@ -289,8 +290,7 @@ export function PosterSheet(props: {
   return <Sheet {...props} />;
 }
 
-const quietScroll = () =>
-  matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+const quietScroll = () => (reducedMotion() ? "auto" : "smooth");
 
 /**
  * A whole poster: its pages side by side, turned by a swipe, the arrows or

@@ -111,7 +111,7 @@ html[data-home-tab="letters"]
 @media (max-width: 760px) {
   .town-shell.is-home .town-topbar,
   .home-tabs {
-    transition: transform 0.24s cubic-bezier(0.2, 0, 0, 1);
+    transition: transform var(--dur-enter) var(--ease-standard);
   }
   .town-shell.is-home .town-topbar {
     -webkit-backdrop-filter: blur(14px);
@@ -284,8 +284,8 @@ html[data-home-tab="letters"]
   border-radius: var(--r-edge);
   background: var(--line-2);
   transition:
-    width 0.2s cubic-bezier(0.2, 0, 0, 1),
-    background 0.2s;
+    width var(--dur-move) var(--ease-standard),
+    background var(--dur-move);
 }
 .home-carousel-dots > span.is-on {
   width: 18px;
@@ -468,7 +468,7 @@ html[data-home-tab="letters"]
   );
   background-size: 300% 100%;
   opacity: 0.6;
-  animation: home-skel 1.2s linear infinite;
+  animation: home-skel var(--dur-skeleton) linear infinite;
 }
 @keyframes home-skel {
   from {
@@ -1176,7 +1176,7 @@ html[data-home-tab] {
 /* Clipped, not hidden: nothing can scroll it, not even a script. */
 .home-live-box {
   overflow: clip;
-  transition: height 0.3s cubic-bezier(0.2, 0, 0, 1);
+  transition: height var(--dur-grow) var(--ease-standard);
 }
 .home-live-line {
   display: grid;
@@ -1352,7 +1352,7 @@ html[data-home-tab] {
 }
 .home-live-more svg {
   transform: rotate(90deg);
-  transition: transform 0.2s;
+  transition: transform var(--dur-move);
 }
 .home-live-more[aria-expanded="true"] svg {
   transform: rotate(-90deg);

@@ -168,7 +168,7 @@
   gap: 9px;
 }
 .editor-settings summary > svg {
-  transition: transform 0.2s;
+  transition: transform var(--dur-move);
 }
 .editor-settings[open] summary > svg {
   transform: rotate(90deg);
@@ -334,7 +334,7 @@
   height: 100%;
   display: block;
   background: var(--green);
-  transition: width 0.35s;
+  transition: width var(--dur-enter-l);
   border-radius: var(--r-box);
 }
 .editor-shelf-below {
@@ -359,7 +359,7 @@
   border: 1px solid var(--line);
   padding: 22px;
   border-radius: var(--r-tag);
-  animation: editor-fade-in 0.22s ease-out;
+  animation: editor-fade-in var(--dur-enter-s) ease-out;
 }
 .editor-selected-heading {
   display: flex;
@@ -423,8 +423,8 @@
   font-size: var(--t-cap);
   cursor: pointer;
   transition:
-    color 0.2s,
-    background 0.2s;
+    color var(--dur-move),
+    background var(--dur-move);
 }
 .editor-segment button.is-active {
   background: var(--sheet);
@@ -576,8 +576,8 @@
   padding: 15px 10px 11px;
   cursor: pointer;
   transition:
-    border-color 0.2s,
-    background 0.2s;
+    border-color var(--dur-move),
+    background var(--dur-move);
 }
 .editor-book-choice:hover:not(:disabled) {
   border-color: var(--green);

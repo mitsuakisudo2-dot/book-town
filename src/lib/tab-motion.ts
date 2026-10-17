@@ -4,12 +4,14 @@
 // Each tab's page mounts its own TownApp, so the tab shown last is kept here,
 // outside React, for as long as the page is open.
 
+import { DUR_MS, EASE, reducedMotion } from "./motion";
+
 let shownLast: number | null = null;
 // A tab's page can name its tab a moment late: 本棚 reads `?books=` from the
 // address, which changes just after the page is drawn, so it is わたし for a
 // frame first. A move straight after another is the same move, counted from
 // where the first one started.
-const SAME_MOVE_MS = 200;
+const SAME_MOVE_MS = DUR_MS.move;
 let cameFrom: number | null = null;
 let movedAt = -Infinity;
 let playing: { animation: Animation; mark: Element } | null = null;
@@ -48,7 +50,7 @@ function stopPlaying() {
 }
 
 /** How long, in ms, the mark takes to reach the tab tapped. */
-export const TAB_MARK_MS = 280;
+export const TAB_MARK_MS = DUR_MS.tab;
 /** The most, in ms, the mark moves on between two frames. */
 const MAX_FRAME_MS = 34;
 
@@ -61,7 +63,7 @@ export function playTabMove(move: TabMove | null, bar: HTMLElement | null) {
   if (!move || !bar || typeof window === "undefined") return;
   stopPlaying();
   bar.classList.remove("is-moving");
-  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  if (typeof window.matchMedia === "function" && reducedMotion()) return;
   const tabs = bar.querySelectorAll(":scope > a");
   const from = tabs[move.from]?.querySelector("svg");
   const to = tabs[move.to]?.querySelector("svg");
@@ -90,7 +92,7 @@ export function playTabMove(move: TabMove | null, bar: HTMLElement | null) {
       },
       { transform: "translate(-50%, -50%)" },
     ],
-    { duration: TAB_MARK_MS, easing: "cubic-bezier(0.3, 0, 0, 1)" },
+    { duration: TAB_MARK_MS, easing: EASE.tab },
   );
   // The page tapped can hold the screen still while it is drawn (書店めぐり
   // for about half a second): driven by the clock, the mark would spend its

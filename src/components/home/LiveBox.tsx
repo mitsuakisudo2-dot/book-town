@@ -36,6 +36,7 @@ import { useTownReads } from "../../lib/store";
 import { bookById, bookTitle, quotedTitle } from "../../lib/book-name";
 import { isSampleId } from "../../lib/record-kind";
 import type { Post, TownState } from "../../lib/types";
+import { DUR_MS, EASE, reducedMotion } from "../../lib/motion";
 import { BookJacket, Icon } from "../ui";
 import { spoilerWords } from "../letter/LetterCard";
 import { forgetOpened, noteOpened, openPost } from "../letter/post-layer";
@@ -101,7 +102,7 @@ function usePageShown(): boolean {
   );
 }
 
-const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const still = reducedMotion;
 
 // A tap on these does their own thing, never the line's.
 const OWN_TAPS = "a,button,[role=dialog],.modal-backdrop";
@@ -214,7 +215,7 @@ export function LiveBox({
         { transform: `translateY(${-count * LIVE_ROW}px)` },
         { transform: "none" },
       ],
-      { duration: 450, easing: "cubic-bezier(.2,0,0,1)" },
+      { duration: DUR_MS.settle, easing: EASE.standard },
     );
     const glow = getComputedStyle(element)
       .getPropertyValue("--lamp-soft")
@@ -225,7 +226,7 @@ export function LiveBox({
         ?.animate(
           [{ backgroundColor: glow }, { backgroundColor: "transparent" }],
           {
-            duration: 800,
+            duration: DUR_MS.lamp,
             easing: "ease-out",
           },
         );
