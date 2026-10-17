@@ -1666,6 +1666,9 @@ try {
         await orbit.evaluate((element) =>
           element.scrollIntoView({ block: "center" }),
         );
+        // The web fonts still coming would re-wrap a card's words: measure
+        // after they are in, so only the follow could move anything.
+        await page.evaluate(() => document.fonts.ready);
         const tops = () =>
           pane("home").evaluate((element) =>
             [
