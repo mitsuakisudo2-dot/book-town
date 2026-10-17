@@ -9,6 +9,7 @@ import {
 } from "./types";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
 import { hasFinished } from "./reading";
+import { bookById } from "./book-name";
 
 const time = (post: Post) => Date.parse(post.createdAt) || 0;
 const newestFirst = (a: Post, b: Post) => time(b) - time(a);
@@ -180,7 +181,7 @@ export function ownersToFollow(state: TownState, limit = 3) {
         .filter((shelf) => shelf.isPublic)
         .flatMap((shelf) => shelf.items)
         .find((entry) => entry.pop.trim());
-      const book = state.books.find((entry) => entry.id === item?.bookId);
+      const book = bookById(state.books, item?.bookId);
       return owner && item && book && owner.id !== ME_ID
         ? [{ shop, owner, pop: item.pop.trim(), book }]
         : [];

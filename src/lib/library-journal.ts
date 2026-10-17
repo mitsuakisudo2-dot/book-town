@@ -18,6 +18,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { AccountState } from "./account";
 import { bookPrice, bookText, normalizeIsbn } from "./books";
+import { bookByIsbn } from "./book-name";
 import { lookUpBooks, type OpenBdAnswer } from "./openbd";
 import type { TownBackend } from "./town-backend";
 import type {
@@ -593,7 +594,7 @@ export async function sendJournal(
       // A title the town knows needs no question.
       const known = item.title
         ? undefined
-        : town.state().books.find((book) => book.isbn === item.isbn);
+        : bookByIsbn(town.state().books, item.isbn);
       if (known)
         journal.update(owner, id, { ...bookWords(known), state: "ready" });
       left.push(item);

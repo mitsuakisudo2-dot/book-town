@@ -14,6 +14,7 @@ import { Icon, ReaderAvatar } from "../ui";
 import { WoodenShelf } from "../WoodenShelf";
 import { profilePath, shopPath, walkPath } from "../../lib/paths";
 import { useTownBackend } from "../../lib/store";
+import { bookById, quotedTitle } from "../../lib/book-name";
 import type { Shared } from "./Letters";
 import "../street.css";
 
@@ -31,7 +32,7 @@ function voiceOf(state: Shared["state"], shop: Shop) {
         .map((item) => ({
           shelf,
           item,
-          book: state.books.find((book) => book.id === item.bookId),
+          book: bookById(state.books, item.bookId),
         })),
     )
     .find((entry) => entry.book);
@@ -159,8 +160,8 @@ export function ShopFront({
             「{voice.item.pop!.trim()}」
           </span>
           <small>
-            {owner ? `店主 ${owner.name}` : "店主"}のPOP ·『{voice.book!.title}
-            』
+            {owner ? `店主 ${owner.name}` : "店主"}のPOP ·
+            {quotedTitle(voice.book!)}
           </small>
         </button>
       )}

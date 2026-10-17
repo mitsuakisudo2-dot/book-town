@@ -1,5 +1,6 @@
 import { activeSession, readersNow } from "./reading";
 import { bookPath } from "./books";
+import { quote as quoteTitle, titleById } from "./book-name";
 import { findReader, reviewFoldOf, spoilerViewOf } from "./social";
 import {
   ME_ID,
@@ -87,8 +88,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
   const notices: Notice[] = [];
   const old = (post: Post) => Boolean(state.readAfter?.[post.id]);
   const name = (id: string) => findReader(state, id)?.name ?? "";
-  const title = (id: string | null) =>
-    state.books.find((book) => book.id === id)?.title ?? "";
+  const title = (id: string | null) => titleById(state.books, id) ?? "";
   const mine = new Map(
     state.posts
       .filter((post) => post.authorId === ME_ID && post.parentId === null)
@@ -142,7 +142,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         id: `wants:${post.id}:${post.wants}`,
         readerId: ME_ID,
         createdAt: post.createdAt,
-        text: `あなたの感想で、${post.wants}人が『${title(post.bookId)}』を読みたくなりました`,
+        text: `あなたの感想で、${post.wants}人が${quoteTitle(title(post.bookId))}を読みたくなりました`,
         href: post.bookId ? bookPath(post.bookId) : "/profiles/me/",
       });
   // いいね: one notice per reader and post, with how many times they pressed.
@@ -191,7 +191,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         id: "wish:" + post.id,
         readerId: post.authorId,
         createdAt: post.createdAt,
-        text: `読みたい本『${title(post.bookId)}』に、${name(post.authorId)}さんの感想が届いています`,
+        text: `読みたい本${quoteTitle(title(post.bookId))}に、${name(post.authorId)}さんの感想が届いています`,
         href: bookPath(post.bookId),
       });
   }
@@ -299,8 +299,8 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         readerId: record.readerId,
         createdAt: record.createdAt,
         text: record.feelings.includes("talk")
-          ? `${name(record.readerId)}さんも『${title(record.bookId)}』を読み終えて、誰かと話したいそうです`
-          : `${name(record.readerId)}さんも『${title(record.bookId)}』を読み終えました`,
+          ? `${name(record.readerId)}さんも${quoteTitle(title(record.bookId))}を読み終えて、誰かと話したいそうです`
+          : `${name(record.readerId)}さんも${quoteTitle(title(record.bookId))}を読み終えました`,
         href: bookPath(record.bookId),
       });
   // 立ち寄り便り: one notice a week, only when someone came, never who.
@@ -321,7 +321,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
           id: `reading:${active.id}:${entry.readerId}`,
           readerId: entry.readerId,
           createdAt: active.startedAt,
-          text: `${name(entry.readerId)}さんも今『${title(entry.bookId)}』を読んでいます`,
+          text: `${name(entry.readerId)}さんも今${quoteTitle(title(entry.bookId))}を読んでいます`,
           href: "/reading/",
         });
   return notices

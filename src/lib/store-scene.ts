@@ -1,4 +1,5 @@
 import type { Book, BookDisplay, Shop } from "./types";
+import { bookById } from "./book-name";
 
 export type Rect = {
   x: number;
@@ -637,7 +638,7 @@ export function setRowStyle(
   for (const p of next.objects.filter(
     (o) => o.kind === "book" && o.parentId === rowId,
   )) {
-    const book = books.find((b) => b.id === p.bookId);
+    const book = bookById(books, p.bookId);
     if (!book) throw new Error("Unknown Book");
     if (row.mode && row.mode !== "mixed") p.display = row.mode;
     p.preferredSize = placementSize(book, p.display!, row.bookHeight);
