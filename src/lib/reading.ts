@@ -1,6 +1,7 @@
 import { ME_ID, type Post, type ReadingSession, type TownState } from "./types";
 import { uncoverHidden } from "./hidden-words";
 import { notLeftOut } from "./social";
+import { counted } from "./words";
 
 export const activeSession = (state: TownState): ReadingSession | undefined =>
   state.readingSessions.find((session) => session.endedAt === null);
@@ -100,8 +101,11 @@ export const readingFeed = (state: TownState): Post[] =>
 export function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours) return minutes ? `${hours}時間${minutes}分` : `${hours}時間`;
-  if (minutes) return `${minutes}分`;
+  if (hours)
+    return minutes
+      ? `${counted(hours, "時間")}${counted(minutes, "分")}`
+      : `${counted(hours, "時間")}`;
+  if (minutes) return `${counted(minutes, "分")}`;
   return "1分未満";
 }
 

@@ -10,7 +10,7 @@ import {
   type RefObject,
 } from "react";
 import Link from "next/link";
-import { ME_ID, type Book, type Reader, type TownState } from "../lib/types";
+import { type Book, type Reader, type TownState } from "../lib/types";
 import {
   FOLDED_POSTER_REASONS,
   OWN_POSTER_REVIEW_WORDS,
@@ -32,7 +32,8 @@ import {
   reviewNoteWords,
   type ReviewCover,
 } from "../lib/social";
-import { isDatabaseId, posterPath, profilePath } from "../lib/paths";
+import { posterPath, profilePath } from "../lib/paths";
+import { isSampleId } from "../lib/record-kind";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./social.css";
 import "./poster.css";
@@ -44,6 +45,7 @@ import {
   bookTitle,
   quotedTitle,
 } from "../lib/book-name";
+import { counted, nth } from "../lib/words";
 
 type Look = Pick<Poster, "template" | "theme" | "font" | "pages">;
 
@@ -449,7 +451,9 @@ export function PosterPages({
               className="poster-slide"
               role={many ? "group" : undefined}
               aria-label={
-                many ? `${at + 1}ページ目（全${count}ページ）` : undefined
+                many
+                  ? `${nth(at + 1, "ページ")}（全${counted(count, "ページ")}）`
+                  : undefined
               }
             >
               <Sheet
@@ -477,7 +481,7 @@ export function PosterPages({
       {/* Said aloud when a page turns; the counter above is only seen. */}
       {many && (
         <span className="poster-said" aria-live="polite">
-          {`${index + 1}ページ目（全${count}ページ）`}
+          {`${nth(index + 1, "ページ")}（全${counted(count, "ページ")}）`}
         </span>
       )}
       {(many || poster.spoiler) && (
@@ -504,7 +508,7 @@ export function PosterPages({
                     type="button"
                     className={at === index ? "is-current" : ""}
                     aria-current={at === index ? "true" : undefined}
-                    aria-label={`${at + 1}ページ目`}
+                    aria-label={`${nth(at + 1, "ページ")}`}
                     onClick={() => go(at)}
                   />
                 ))}
@@ -666,7 +670,8 @@ export function PosterThumb({
       {(badge || poster.pages.length > 1) && (
         <span className="poster-thumb-note" aria-hidden="true">
           {badge && <span className="poster-thumb-badge">{badge}</span>}
-          {poster.pages.length > 1 && `${poster.pages.length}ページ`}
+          {poster.pages.length > 1 &&
+            `${counted(poster.pages.length, "ページ")}`}
         </span>
       )}
       {review && (
@@ -695,7 +700,6 @@ export function PosterCard({
   const note = reviewNoteOf(state, "poster", poster.id, poster.authorId);
   // A reader who chose not to see spoilers is not shown this one at all.
   if (!author || posterSpoilerView(state, poster) === "left_out") return null;
-  const mine = author.id === ME_ID;
   const profile = profilePath(author.id);
   return (
     <article
@@ -717,7 +721,7 @@ export function PosterCard({
           </Link>
           <span className="post-handle">
             @{author.handle}
-            {!mine && !isDatabaseId(author.id) && " · 見本"}
+            {isSampleId(author.id) && " · 見本"}
           </span>
           <time dateTime={poster.createdAt}>
             {formatPostTime(poster.createdAt)}

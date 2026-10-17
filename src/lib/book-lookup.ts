@@ -1,15 +1,15 @@
-// この本について調べる (BookPurchase in BookActions.tsx): a Google search for
-// the book's title and author, in a new tab.
+// この本について調べる and the shop links (BookPurchase in BookActions.tsx):
+// a search for the book's title, in a new tab. The author is left out
+// (2026-10-17).
 //
 // Every device and browser gets Google. Safari's own search on the iPhone
 // (x-web-search://, #70) was tried on the iPhone and put back to Google
 // (2026-10-17).
 
-import { bookAuthor, bookTitle, type Named } from "./book-name";
+import { bookTitle, type Named } from "./book-name";
 
-/** The title and the author, a full-width space between them. */
-export const lookupQuery = (book: Named) =>
-  `${bookTitle(book)}　${bookAuthor(book)}`;
+/** The words searched for: the title alone. */
+export const lookupQuery = (book: Named) => bookTitle(book);
 
 /** Google's results, without "www." (see BookPurchase). */
 export const googleLookupUrl = (book: Named) =>

@@ -81,13 +81,8 @@ const SPOILER_CHOICES: {
 ];
 import "./profile.css";
 import "./reading.css";
-import {
-  isDatabaseId,
-  posterNewPath,
-  posterPath,
-  profilePath,
-  shopPath,
-} from "../lib/paths";
+import { posterNewPath, posterPath, profilePath, shopPath } from "../lib/paths";
+import { isSampleId } from "../lib/record-kind";
 import { postersOf } from "../lib/posters";
 import { PosterThumb } from "./PosterView";
 import "./poster-screen.css";
@@ -106,12 +101,12 @@ import {
   usePalette,
 } from "../lib/appearance-store";
 import { useUrlParam } from "../lib/url-state";
-import { onShelfRequest, takeShelfRequest } from "../lib/shelf-tab";
 import { afterLayerCloses, leaveLayers } from "../lib/back-layer";
 import { focusField } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { VisibilitySettings } from "./VisibilitySettings";
 import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
+import { counted, nth, outOf, whenSome, failure, KEPT } from "../lib/words";
 
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
 type Collection = (typeof COLLECTIONS)[number];
@@ -169,21 +164,6 @@ export function ProfileView({
       });
     });
   }, [landing, setBooks]);
-  // 本棚 in the main navigation opens this list (shelf-tab.ts): it comes
-  // into view, under the bar at the top.
-  useEffect(() => {
-    if (!isSelf) return;
-    const show = () => {
-      if (!takeShelfRequest()) return;
-      requestAnimationFrame(() =>
-        document
-          .getElementById("profile-collections")
-          ?.scrollIntoView({ block: "start" }),
-      );
-    };
-    show();
-    return onShelfRequest(show);
-  }, [isSelf]);
   const clock = useClock(60_000);
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingNine, setEditingNine] = useState(false);
@@ -229,8 +209,11 @@ export function ProfileView({
     setRefused(what === "nine" ? "nine" : "profile");
     notify(
       what === "nine"
-        ? "人生の9冊を保存できませんでした。書きかけは残しています。"
-        : "プロフィールを保存できませんでした。書きかけは残しています。",
+        ? failure({ what: "人生の9冊を保存できませんでした", kept: KEPT.draft })
+        : failure({
+            what: "プロフィールを保存できませんでした",
+            kept: KEPT.draft,
+          }),
     );
   });
   // Saved since (here or on another device), it is let go.
@@ -480,7 +463,7 @@ export function ProfileView({
         <div className="profile-reader-text">
           <p className="profile-eyebrow">
             READER IN BOOK TOWN{" "}
-            {!isSelf && !isDatabaseId(reader.id) && (
+            {!isSelf && isSampleId(reader.id) && (
               <span className="profile-demo">見本の読書家</span>
             )}
           </p>
@@ -511,7 +494,7 @@ export function ProfileView({
           {/* Only what has happened is counted: an empty count is left out. */}
           {(postCount > 0 ||
             (isSelf && state.following.length > 0) ||
-            (followerCount > 0 && (isSelf || !isDatabaseId(reader.id))) ||
+            (followerCount > 0 && (isSelf || isSampleId(reader.id))) ||
             (isSelf && Boolean(readingTime))) && (
             <div className="profile-stats">
               {postCount > 0 && (
@@ -667,7 +650,7 @@ export function ProfileView({
                 {isSelf ? (
                   <button
                     onClick={beginNineEdit}
-                    aria-label={`${index + 1}冊目を選ぶ`}
+                    aria-label={`${nth(index + 1, "冊")}を選ぶ`}
                   >
                     <span>0{index + 1}</span>
                     <Icon name="plus" />
@@ -972,7 +955,12 @@ export function ProfileView({
             {savedIn === "local"
               ? "まだフォロワーはいません。この試作は、あなたのブラウザの中だけで動いているため、他の人からのフォローは届きません。"
               : shop
-                ? `あなたの書店を${followerCount}人がフォローしています。この数は、あなたにだけ見えています。`
+                ? whenSome(
+                    followerCount,
+                    "人",
+                    (c) =>
+                      `あなたの書店を${c}がフォローしています。この数は、あなたにだけ見えています。`,
+                  )
                 : "書店を開くと、ほかの読書家にフォローしてもらえるようになります。"}
           </p>
         </Modal>
@@ -1370,8 +1358,8 @@ export function ProfileView({
               <h3>一冊を加える</h3>
               <span>
                 {draftNine.length
-                  ? `${draftNine.length} / ${NINE_MAX} 冊`
-                  : `${NINE_MAX}冊まで`}
+                  ? outOf(draftNine.length, NINE_MAX, "冊")
+                  : `${counted(NINE_MAX, "冊")}まで`}
               </span>
             </div>
             <input

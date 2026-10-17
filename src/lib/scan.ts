@@ -7,6 +7,7 @@
 import { normalizeIsbn } from "./books";
 import type { ScanItem } from "./library-journal";
 import type { Book } from "./types";
+import { counted, failure, AGAIN } from "./words";
 
 /** The same book read again within this long of last being in view is one read. */
 export const SAME_BOOK_MS = 3000;
@@ -222,14 +223,15 @@ export function closingNotice(counts: {
   const { added, waiting, later } = counts;
   if (added > 0)
     return (
-      `${added}冊を登録しました` +
-      (waiting > 0 ? `・書名待ち ${waiting}冊` : "") +
-      (later > 0 ? `・${later}冊は控えに置きました` : "")
+      `${counted(added, "冊")}を登録しました` +
+      (waiting > 0 ? `・書名待ち ${counted(waiting, "冊")}` : "") +
+      (later > 0 ? `・${counted(later, "冊")}は控えに置きました` : "")
     );
   const kept = waiting + later;
   if (kept > 0)
     return (
-      `${kept}冊を控えました` + (waiting > 0 ? `（書名待ち ${waiting}冊）` : "")
+      `${counted(kept, "冊")}を控えました` +
+      (waiting > 0 ? `（書名待ち ${counted(waiting, "冊")}）` : "")
     );
   return null;
 }
@@ -247,23 +249,44 @@ export const SCAN_COPY = {
       "オフラインです。読んだ本は端末に控えています。つながったら登録します",
     loading:
       "読み込んでいます。読んだ本は端末に控えて、読み込みが終わったら登録します",
-    unavailable:
-      "アカウントを読み込めませんでした。読んだ本は端末に控えています。ページを読み込み直すと登録します",
-    notKept:
-      "この端末に控えを置けません。ページを閉じると、まだ登録していない本は失われます",
+    unavailable: failure(
+      {
+        what: "アカウントを読み込めませんでした",
+        kept: "読んだ本は端末に控えています",
+        next: "ページを読み込み直すと登録します",
+      },
+      "",
+    ),
+    notKept: failure(
+      {
+        what: "この端末に控えを置けません",
+        kept: "ページを閉じると、まだ登録していない本は失われます",
+      },
+      "",
+    ),
   },
   typing: {
     help: "13桁そろうと登録します",
-    badIsbn:
-      "ISBNとして読めませんでした。978か979で始まる13桁を確かめてください",
+    badIsbn: failure(
+      {
+        what: "ISBNとして読めませんでした",
+        next: "978か979で始まる13桁を確かめてください",
+      },
+      "",
+    ),
     price: "上の段のバーコード（978…）の数字を打ってください",
     magazine: "雑誌は［手で入力］から書名で登録できます",
   },
   /** Why ISBNs are typed, under 13桁そろうと登録します: the cause only. */
   note: {
     "no-reader": "このブラウザはバーコードを読み取れません",
-    "reader-failed":
-      "読み取りの準備ができませんでした。電波のよい所で［カメラで読む］をもう一度",
+    "reader-failed": failure(
+      {
+        what: "読み取りの準備ができませんでした",
+        next: "電波のよい所で［カメラで読む］をもう一度",
+      },
+      "",
+    ),
     denied: "カメラが使えません",
     "no-camera": "カメラが見つかりません",
     busy: "カメラをほかのアプリが使っているようです",
@@ -282,12 +305,15 @@ export const SCAN_COPY = {
     offline: "つながったら書名を調べます",
     waiting: "読み込みが終わったら登録します",
     unavailable: "端末に控えました。ページを読み込み直すと登録します",
-    refused: "保存できませんでした",
+    refused: failure({ what: "保存できませんでした" }, ""),
     same: "同じ本です",
     againIn: "この回でもう入れました",
     already: "もうライブラリにあります",
     held: "もう控えにあります",
     undone: "取り消しました",
-    notYet: "まだ取り消せません。少し待ってから、もう一度押してください",
+    notYet: failure(
+      { what: "まだ取り消せません", next: AGAIN.pressAfterAMoment },
+      "",
+    ),
   },
 } as const;

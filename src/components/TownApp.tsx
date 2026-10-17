@@ -56,7 +56,6 @@ import "./usability.css";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
 import {
-  isDatabaseId,
   posterNewPath,
   posterPath,
   profilePath,
@@ -64,6 +63,7 @@ import {
   shopPath,
   walkPath,
 } from "../lib/paths";
+import { isSampleId } from "../lib/record-kind";
 import { requestSearch } from "../lib/tags";
 import { enterPressed } from "../lib/search/use-book-search";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
@@ -81,8 +81,7 @@ import {
 } from "../lib/sample-notice";
 import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
-import { replaceAddress, useUrlParam } from "../lib/url-state";
-import { requestShelf, takeShelfRequest } from "../lib/shelf-tab";
+import { replaceAddress } from "../lib/url-state";
 import { useLastHomeAddress } from "../lib/last-address";
 import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
 import { findReader, reviewCoverOf, reviewNoteOf } from "../lib/social";
@@ -100,6 +99,7 @@ import {
 import { useAnnouncement } from "../lib/live-region";
 import { reducedMotion } from "../lib/motion";
 import { bookAuthor, bookById, bookTitle, quotedTitle } from "../lib/book-name";
+import { counted, whenSome } from "../lib/words";
 
 // Every screen but Home comes in its own file, read when it is first shown
 // (and after Home is drawn, below), so a phone opening the town reads and
@@ -123,6 +123,9 @@ const NotificationsView = dynamic(() =>
 const WalkView = dynamic(() =>
   import("./WalkView").then((file) => file.WalkView),
 );
+const LibraryView = dynamic(() =>
+  import("./LibraryView").then((file) => file.LibraryView),
+);
 const PosterEditor = dynamic(() =>
   import("./PosterEditor").then((file) => file.PosterEditor),
 );
@@ -142,6 +145,7 @@ type View =
   | "book"
   | "profile"
   | "wishlist"
+  | "library"
   | "poster"
   | "poster-new"
   | "post";
@@ -152,15 +156,14 @@ type Shared = {
 };
 type Section = "home" | "search" | "walk" | "shelf" | "reading" | "profile";
 // Six for now, while けにー alone uses the town and the final row is decided
-// (10-16). 本棚 opens the 登録 list on the reader's own profile until the
-// library has a page of its own; 記録 opens 読書を開始 as it is.
+// (10-16). 本棚 opens the library; 記録 opens 読書を開始 as it is.
 const links: { href: string; icon: string; label: string; section: Section }[] =
   [
     { href: "/", icon: "home", label: "ホーム", section: "home" },
     { href: "/search/", icon: "search", label: "検索", section: "search" },
     { href: "/walk/", icon: "store", label: "書店めぐり", section: "walk" },
     {
-      href: "/profiles/me/?books=library",
+      href: "/library/",
       icon: "shelf",
       label: "本棚",
       section: "shelf",
@@ -185,8 +188,6 @@ function sectionOf(
   view: View,
   selectedId?: string,
   ownPoster = false,
-  /** The own profile shows its 登録 list (`?books=library`): 本棚. */
-  shelf = false,
 ): Section | null {
   if (view === "walk") return "walk";
   // A shop's page is part of walking the shops, wherever it was opened from.
@@ -195,12 +196,12 @@ function sectionOf(
   if (view === "town" || view === "timeline" || view === "post") return "home";
   if (view === "search") return "search";
   if (view === "reading") return "reading";
+  if (view === "library") return "shelf";
   if (view === "editor" || view === "wishlist") return "profile";
   // What the viewer makes lives on their profile, as their posters do.
   if (view === "poster-new" || (view === "poster" && ownPoster))
     return "profile";
-  if (view === "profile" && (selectedId ?? "me") === "me")
-    return shelf ? "shelf" : "profile";
+  if (view === "profile" && (selectedId ?? "me") === "me") return "profile";
   return null;
 }
 export default function TownApp({
@@ -226,9 +227,6 @@ export default function TownApp({
   const [search, setSearch] = useState("");
   const [about, setAbout] = useState(false);
   useEffect(() => notePageShown(), [view, selectedId]);
-  // A tap on 本棚 is for the page it opened; the profile has taken it by now
-  // (its effects run first), and no other page keeps it.
-  useEffect(() => void takeShelfRequest(), [view, selectedId]);
   // A message about what was just done does not follow the reader to the next
   // page, where it would sit over that page's buttons. One that moved there
   // with the reader (said as the page changed) stays, as does one that
@@ -311,14 +309,12 @@ export default function TownApp({
     router.push(searchPath(query));
     setSearch("");
   };
-  const [books] = useUrlParam("books");
   const section = sectionOf(
     view,
     selectedId,
     state.posters.some(
       (poster) => poster.id === selectedId && poster.authorId === ME_ID,
     ),
-    books === "library",
   );
   // A visitor who is not signed in has no pages of their own yet.
   const visitor = savedIn === "visitor";
@@ -327,11 +323,13 @@ export default function TownApp({
       ? "shop"
       : view === "wishlist"
         ? "wishlist"
-        : view === "notifications"
-          ? "notifications"
-          : view === "profile" && (selectedId || "me") === "me"
-            ? "profile"
-            : null;
+        : view === "library"
+          ? "library"
+          : view === "notifications"
+            ? "notifications"
+            : view === "profile" && (selectedId || "me") === "me"
+              ? "profile"
+              : null;
   const reading = Boolean(activeSession(state));
   const unread = unreadCount(state);
   // ホーム returns to the Home tab shown last (home-tab.ts); on Home itself
@@ -347,24 +345,16 @@ export default function TownApp({
     event.preventDefault();
     requestHomeTop();
   };
-  // 本棚 and わたし are the same page for now. On it, each switches the
-  // list in place (as its own buttons do), and 本棚 brings the list into view,
-  // here or once the profile opens (shelf-tab.ts).
-  const onOwnProfile = view === "profile" && (selectedId || "me") === "me";
-  const shelfClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!plainClick(event)) return;
-    if (onOwnProfile) {
+  // On its own page, 本棚 or わたし takes the page back to its top, in place,
+  // keeping what it shows.
+  const topClick =
+    (here: boolean) => (event: MouseEvent<HTMLAnchorElement>) => {
+      if (!here || !plainClick(event)) return;
       event.preventDefault();
-      replaceAddress({ params: { books: "library" } });
-    }
-    requestShelf();
-  };
-  const meClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!onOwnProfile || !plainClick(event)) return;
-    event.preventDefault();
-    if (books === "library") replaceAddress({ params: { books: null } });
-    window.scrollTo({ top: 0 });
-  };
+      window.scrollTo({ top: 0 });
+    };
+  const shelfClick = topClick(view === "library");
+  const meClick = topClick(view === "profile" && (selectedId || "me") === "me");
   // Moving to another tab of the bottom bar slides the round mark behind
   // the chosen tab along the bar to it (tab-motion.ts). Only where it shows.
   const navRef = useRef<HTMLElement>(null);
@@ -561,6 +551,8 @@ export default function TownApp({
               posterId={selectedId || undefined}
               bookId={bookId || undefined}
             />
+          ) : view === "library" ? (
+            <LibraryView {...shared} />
           ) : (
             <Wishlist {...shared} />
           )}
@@ -843,7 +835,7 @@ function ShopView({
               <h3>{s.name}</h3>
               {/* An empty shelf has no count: the owner gets a way to fill it. */}
               {s.items.length > 0 ? (
-                <small>{s.items.length}冊の選書</small>
+                <small>{counted(s.items.length, "冊")}の選書</small>
               ) : (
                 shop.ownerId === ME_ID && (
                   <Link href="/my-shop/" className="store-shelf-fill">
@@ -907,9 +899,13 @@ function ShopView({
           (shop.followers > 0 || shop.weekVisitors) ? (
           <p className="shop-social-note">
             {[
-              shop.followers > 0 && `${shop.followers}人がフォロー`,
+              whenSome(shop.followers, "人", (c) => `${c}がフォロー`),
               shop.weekVisitors &&
-                `この1週間に${shop.weekVisitors.count}人が立ち寄り`,
+                whenSome(
+                  shop.weekVisitors.count,
+                  "人",
+                  (c) => `この1週間に${c}が立ち寄り`,
+                ),
               "この数はあなたにだけ見えています",
             ]
               .filter(Boolean)
@@ -1175,8 +1171,7 @@ function BookPosters({ state, book }: { state: TownState; book: Book }) {
         {posters.map((poster) => {
           // Who made it, and a 見本 says it is one, as on the timeline.
           const maker = findReader(state, poster.authorId);
-          const sample =
-            poster.authorId !== ME_ID && !isDatabaseId(poster.authorId);
+          const sample = isSampleId(poster.authorId);
           return (
             <li key={poster.id}>
               <PosterThumb

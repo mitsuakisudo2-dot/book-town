@@ -15,6 +15,7 @@ import { letterPageOf, postPageOf } from "./letter";
 import { posterTitle, type Poster } from "./posters";
 import { coverHidden } from "./hidden-words";
 import { shownToOthers } from "./visibility";
+import { counted, someCount } from "./words";
 
 export interface Notice {
   id: string;
@@ -136,15 +137,17 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
       ),
     });
   }
-  for (const post of mine.values())
-    if (post.wants > 0 && !old(post))
+  for (const post of mine.values()) {
+    const wanted = someCount(post.wants, "人");
+    if (wanted && !old(post))
       notices.push({
         id: `wants:${post.id}:${post.wants}`,
         readerId: ME_ID,
         createdAt: post.createdAt,
-        text: `あなたの感想で、${post.wants}人が${quoteTitle(title(post.bookId))}を読みたくなりました`,
+        text: `あなたの感想で、${wanted}が${quoteTitle(title(post.bookId))}を読みたくなりました`,
         href: post.bookId ? bookPath(post.bookId) : "/profiles/me/",
       });
+  }
   // いいね: one notice per reader and post, with how many times they pressed.
   for (const post of state.posts) {
     if (post.authorId !== ME_ID || old(post)) continue;
@@ -155,7 +158,7 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
         id: `like:${post.id}:${liker.readerId}`,
         readerId: liker.readerId,
         createdAt: liker.at,
-        text: `${who}さんが、あなたの投稿に${liker.taps > 1 ? liker.taps + "回" : ""}いいねしました ${quote(post.body)}`,
+        text: `${who}さんが、あなたの投稿に${liker.taps > 1 ? counted(liker.taps, "回") : ""}いいねしました ${quote(post.body)}`,
         href: pageOr(
           state,
           post,
@@ -305,12 +308,13 @@ export function notificationsFor(state: TownState, openedAt = 0): Notice[] {
       });
   // 立ち寄り便り: one notice a week, only when someone came, never who.
   const visitors = state.ownShop?.weekVisitors;
-  if (visitors && visitors.count > 0)
+  const came = visitors && someCount(visitors.count, "人");
+  if (visitors && came)
     notices.push({
       id: "visitors:" + weekOf(visitors.at),
       readerId: ME_ID,
       createdAt: visitors.at,
-      text: `この1週間で、${visitors.count}人があなたの本屋に立ち寄りました`,
+      text: `この1週間で、${came}があなたの本屋に立ち寄りました`,
       href: shopPath(OWN_SHOP_ID),
     });
   const active = activeSession(state);

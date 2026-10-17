@@ -69,6 +69,7 @@ import { BarcodeRegister } from "./BarcodeRegister";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
 import { bookAuthor, bookById, bookByIsbn, bookTitle } from "../lib/book-name";
+import { counted } from "../lib/words";
 
 // The continuous scanner (plan 7-1, flow A): the camera stays open and every
 // book read is registered at once, with no question about reading status,
@@ -1067,9 +1068,10 @@ export function ScanSession({
 
   const countText =
     added > 0
-      ? `この回 ${added}冊` + (waiting > 0 ? `・書名待ち ${waiting}冊` : "")
+      ? `この回 ${counted(added, "冊")}` +
+        (waiting > 0 ? `・書名待ち ${counted(waiting, "冊")}` : "")
       : waiting > 0
-        ? `書名待ち ${waiting}冊`
+        ? `書名待ち ${counted(waiting, "冊")}`
         : "";
 
   // The card: what the last read came to.
@@ -1299,7 +1301,9 @@ export function ScanSession({
         <div
           className="scan-shelf"
           role="img"
-          aria-label={"この回に入れた本" + (added > 0 ? ` ${added}冊` : "")}
+          aria-label={
+            "この回に入れた本" + (added > 0 ? ` ${counted(added, "冊")}` : "")
+          }
         >
           <ol ref={shelf}>
             {cards.map((entry) => {

@@ -14,6 +14,7 @@ import { WoodenShelf } from "./WoodenShelf";
 import { BookPrice } from "./BookActions";
 import { shopPath } from "../lib/paths";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
+import { counted } from "../lib/words";
 
 function BookRail({
   title,
@@ -222,7 +223,7 @@ export function BookDiscovery({
           >
             {expandedBookId === bookId
               ? "3件に戻す"
-              : `ほかの書店も見る（残り${otherShelves.length - 3}件）`}
+              : `ほかの書店も見る（残り${counted(otherShelves.length - 3, "件")}）`}
           </button>
         )}
       </section>

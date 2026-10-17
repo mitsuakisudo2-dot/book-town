@@ -30,8 +30,11 @@ import { findReader } from "../lib/social";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { SortableShelf } from "./SortableShelf";
 import { StoreSceneEditor } from "./StoreSceneEditor";
-import { useWalkStore } from "../lib/walk-store";
-import { hasPublicSceneBooks } from "../lib/store-customization";
+import { saveOwnedScene, useWalkStore } from "../lib/walk-store";
+import {
+  hasPublicSceneBooks,
+  sceneForShelves,
+} from "../lib/store-customization";
 import { publicWalkShops } from "../lib/store-scene-adapter";
 import { OpenShop, ThemePicker } from "./OpenShop";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
@@ -53,6 +56,7 @@ import { booksBeforeSearch } from "../lib/book-lists";
 import { focusField } from "../lib/coarse-pointer";
 import "./editor.css";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
+import { counted, whenSome, failure, AGAIN } from "../lib/words";
 
 type ShopEditorProps = {
   state: TownState;
@@ -315,7 +319,12 @@ function AddBookPicker({
       setAddedHere([...addedHere, book.id]);
       notify(`「${bookTitle(book)}」を本棚に並べました。`);
     } else {
-      notify("棚の空きスペースが足りません。並べ方を変えてみてください。");
+      notify(
+        failure({
+          what: "棚の空きスペースが足りません",
+          next: "並べ方を変えてみてください",
+        }),
+      );
     }
   }
 
@@ -426,7 +435,10 @@ function AddBookPicker({
         {/* A full shelf has said so above; this is for the room left. */}
         {remaining > 0 && cost > remaining && (
           <p className="editor-capacity-warning" role="status">
-            空きスペースが足りません。背表紙で並べるか、棚を整理してください。
+            {failure({
+              what: "空きスペースが足りません",
+              next: "背表紙で並べるか、棚を整理してください",
+            })}
           </p>
         )}
         {filtered.length > 0 && (
@@ -474,8 +486,9 @@ function AddBookPicker({
             {addedHere.length || removedCount
               ? "この画面で" +
                 [
-                  addedHere.length ? `${addedHere.length}冊並べました` : "",
-                  removedCount ? `${removedCount}冊外しました` : "",
+                  whenSome(addedHere.length, "冊", (c) => `${c}並べました`) ??
+                    "",
+                  whenSome(removedCount, "冊", (c) => `${c}外しました`) ?? "",
                 ]
                   .filter(Boolean)
                   .join("・")
@@ -912,6 +925,40 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       )
         shelfNameDraftStore.clear(key);
   }, [shop, owner, settled]);
+  // A decorated shop follows its shelves: books put on a shelf go into the
+  // shop's rows and books taken off leave them. Saved only once the town and
+  // the walk are both read from the same place, so a shelf not read yet
+  // never empties the shop.
+  const followed = useRef("");
+  const walkKnown =
+    walk.ready &&
+    walk.kind === savedIn &&
+    (walk.kind === "local" || walk.kind === "account") &&
+    walk.status !== "unavailable" &&
+    walk.status !== "recovered";
+  const townKnown =
+    persistenceStatus !== "loading" &&
+    persistenceStatus !== "unavailable" &&
+    persistenceStatus !== "recovered";
+  useEffect(() => {
+    if (!shop || shop.demo || !ownScene || !walkKnown || !townKnown) return;
+    const next = sceneForShelves(ownScene, shop, state.books);
+    if (!next) return;
+    // Tried once for each pair of shelves and scene, saved or not.
+    const pair = JSON.stringify([shop.shelves, next.scene]);
+    if (followed.current === pair) return;
+    followed.current = pair;
+    if (!saveOwnedScene(next.scene, state).ok) return;
+    const titles = next.waiting.map((id) => {
+      const book = bookById(state.books, id);
+      return book ? bookTitle(book) : "";
+    });
+    if (titles.length)
+      notify(
+        (titles.length === 1 ? `「${titles[0]}」は` : "棚に並べた本の一部は") +
+          "店内の棚に入りきらないため、飾りつけの「まだ並べていない本」に置きました。",
+      );
+  }, [shop, ownScene, walkKnown, townKnown, state, notify]);
   // Shelves removed here, counted by id: a new shelf can be given the id of
   // one removed, and must not get its books from an old 元に戻す.
   const removedShelves = useRef<Record<string, number>>({});
@@ -919,7 +966,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   function removeShelfAndWork(shelfId: string) {
     if (!townTook(() => actions.removeShelf(shelfId))) {
       notify(
-        "本棚を削除できませんでした。少しおいて、もう一度お試しください。",
+        failure({ what: "本棚を削除できませんでした", next: AGAIN.later }),
       );
       return false;
     }
@@ -955,7 +1002,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     );
     // The shelf it came off is gone, even if a new one has its id.
     if (!now || (removedShelves.current[shelfId] ?? 0) !== removals) {
-      notify("棚がなくなったため、戻せませんでした。");
+      notify(failure({ what: "棚がなくなったため、戻せませんでした" }));
       return false;
     }
     // Already back on the shelf (by the picker, or a second tap).
@@ -969,7 +1016,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         index: taken.index,
       })
     ) {
-      notify("棚の空きスペースが足りず、戻せませんでした。");
+      notify(failure({ what: "棚の空きスペースが足りず、戻せませんでした" }));
       return false;
     }
     forget(shelfId, bookId);
@@ -1033,7 +1080,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           {/* Two places to arrange books; say in one line where each one shows. */}
           <p>
             {ownScene
-              ? "店内は、飾りつけた形で書店めぐりに出ています。下の本棚に新しく並べた本は、飾りつけの「まだ並べていない本」から店内に置けます。"
+              ? "店内は、飾りつけた形で書店めぐりに出ています。下の本棚に並べた本は店内にも並び、棚から外した本は店内からも下がります。"
               : "下の本棚に並べた本が、そのまま書店めぐりの店内に並びます。飾りつけると、棚の形や看板、本の置き場所を自由に変えられます。"}
           </p>
           {!inWalk && (
@@ -1199,8 +1246,9 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         >
           <div className="editor-remove-shelf-dialog">
             <p>
-              「{removeShelf.name}」に並んでいる{removeShelf.items.length}
-              冊と、この棚に書いたPOPが削除されます。
+              「{removeShelf.name}」に並んでいる
+              {counted(removeShelf.items.length, "冊")}
+              と、この棚に書いたPOPが削除されます。
             </p>
             <p className="editor-field-note">
               本の情報や、読みたいリストはそのまま残ります。

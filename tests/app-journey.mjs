@@ -211,32 +211,13 @@ try {
   );
 
   await check(
-    "本棚 opens the 登録 list and わたし the profile, each lit on its own",
+    "本棚 opens the library, its shelves stay in the address, and books change together",
     async () => {
       const nav = page.getByRole("navigation", {
         name: "スマートフォンナビゲーション",
       });
       const shelfTab = nav.getByRole("link", { name: "本棚" });
       const meTab = nav.getByRole("link", { name: "わたし" });
-      const collection = (name) =>
-        page
-          .locator(".profile-collection-tabs")
-          .getByRole("button", { name: new RegExp("^" + name) });
-      // The list's heading is in view, clear of the bar at the top.
-      const listInView = () =>
-        expect
-          .poll(() =>
-            page.evaluate(() => {
-              const bar = document
-                .querySelector(".town-topbar")
-                .getBoundingClientRect();
-              const title = document
-                .getElementById("profile-collection-title")
-                .getBoundingClientRect();
-              return title.top >= bar.bottom - 1 && title.bottom <= innerHeight;
-            }),
-          )
-          .toBe(true);
       const lit = async (on, off) => {
         await expect(on).toHaveAttribute("aria-current", "page");
         await expect(on).toHaveClass(/active/);
@@ -244,46 +225,75 @@ try {
         await expect(off).not.toHaveClass(/active/);
       };
 
-      // From another page, 本棚 opens the profile on the 登録 list.
+      // From another page, 本棚 opens the library.
       await go("/reading/");
       await lit(nav.getByRole("link", { name: "記録" }), shelfTab);
+      await shelfTab.click();
+      await expect(page).toHaveURL(`${baseURL}/library/`);
+      await lit(shelfTab, meTab);
       await expect(
-        page.getByRole("heading", { name: "読書を開始" }),
+        page.getByRole("heading", { name: "ライブラリ", level: 1 }),
       ).toBeVisible();
-      await shelfTab.click();
-      await expect(page).toHaveURL(`${baseURL}/profiles/me/?books=library`);
-      await lit(shelfTab, meTab);
-      await expect(collection("登録")).toHaveAttribute("aria-pressed", "true");
-      await listInView();
-
-      // On the profile, わたし and 本棚 switch in place: no step of 戻る.
-      const steps = await page.evaluate(() => history.length);
-      await meTab.click();
-      await expect(page).toHaveURL(`${baseURL}/profiles/me/`);
-      await lit(meTab, shelfTab);
-      await expect(collection("読みたい")).toHaveAttribute(
-        "aria-pressed",
-        "true",
+      const shelves = page.getByRole("group", { name: "棚" });
+      await expect(
+        shelves.getByRole("button", { name: "すべて", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      // No shelf, filter or number says 0.
+      await expect(page.locator(".library-page")).not.toContainText(
+        /(^|\D)0冊/,
       );
-      await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
-      await shelfTab.click();
-      await expect(page).toHaveURL(`${baseURL}/profiles/me/?books=library`);
-      await lit(shelfTab, meTab);
-      await listInView();
+      for (const chip of await page.locator(".library-count").allTextContents())
+        expect(chip).not.toBe("0");
+
+      // Picking books is one step of 戻る; a change is undone from its notice.
+      await page.getByRole("button", { name: "選ぶ", exact: true }).click();
+      const bar = page.getByRole("region", { name: "選んだ本を変える" });
+      await expect(bar).toContainText("本を選んでください");
+      const first = page.locator(".library-book").first();
+      const title = (await first.locator("strong").textContent()).trim();
+      await first.click();
+      await expect(bar).toContainText("1冊を選択中");
+      const tsundoku = bar.getByRole("button", { name: "積読" });
+      await tsundoku.click();
+      const toast = page.locator(".toast");
+      await expect(toast).toContainText(`『${title}』を積読にしました`);
+      await expect(tsundoku).toHaveAttribute("aria-pressed", "true");
+      await expect(first).toContainText("積読");
+      await toast.getByRole("button", { name: "元に戻す" }).click();
+      await expect(toast).toContainText(`『${title}』を元に戻しました`);
+      await expect(tsundoku).toHaveAttribute("aria-pressed", "false");
+      await tsundoku.click();
+      await expect(tsundoku).toHaveAttribute("aria-pressed", "true");
+      await page.goBack();
+      await expect(bar).toHaveCount(0);
+      await expect(page).toHaveURL(`${baseURL}/library/`);
+      await expect(
+        page.getByRole("button", { name: "選ぶ", exact: true }),
+      ).toBeFocused();
+
+      // A filter is chosen in place: the address says it, with no step of 戻る.
+      const steps = await page.evaluate(() => history.length);
+      const unsorted = page
+        .getByRole("group", { name: "絞り込み" })
+        .getByRole("button", { name: /^未整理/ });
+      await unsorted.click();
+      await expect(page).toHaveURL(`${baseURL}/library/?unsorted=1`);
+      await expect(unsorted).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        page.locator(".library-book", { hasText: title }),
+      ).toHaveCount(0);
       expect(await page.evaluate(() => history.length)).toBe(steps);
-      // The list's own buttons move the light with the address.
-      await collection("お気に入り").click();
-      await expect(page).toHaveURL(`${baseURL}/profiles/me/?books=favorites`);
-      await lit(meTab, shelfTab);
-      await collection("登録").click();
+      await page.reload();
+      await expect(unsorted).toHaveAttribute("aria-pressed", "true");
       await lit(shelfTab, meTab);
 
-      // A reload keeps 本棚 lit, and 戻る returns to 記録.
-      await page.reload();
-      await lit(shelfTab, meTab);
+      // 戻る returns to 記録; わたし opens the profile.
       await page.goBack();
       await expect(page).toHaveURL(`${baseURL}/reading/`);
       await lit(nav.getByRole("link", { name: "記録" }), shelfTab);
+      await meTab.click();
+      await expect(page).toHaveURL(`${baseURL}/profiles/me/`);
+      await lit(meTab, shelfTab);
 
       // The six labels keep to one line, inside their own tab and the screen.
       await go("/profiles/me/");
@@ -980,7 +990,7 @@ try {
       ).toHaveAttribute(
         "href",
         "https://google.com/search?q=" +
-          encodeURIComponent("ソラリス　スタニスワフ・レム"),
+          encodeURIComponent("ソラリス"),
       );
       const reviews = page.locator(
         ".book-reviews > .post-feed > article.post-card",
@@ -1505,7 +1515,7 @@ try {
   await check(
     "the lookup is Google's on every device, Safari on an iPhone or iPad too",
     async () => {
-      const words = encodeURIComponent("ソラリス　スタニスワフ・レム");
+      const words = encodeURIComponent("ソラリス");
       const google = `https://google.com/search?q=${words}`;
       const served = await (
         await page.request.get(`${baseURL}/books/solaris/`)

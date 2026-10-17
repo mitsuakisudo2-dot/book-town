@@ -43,6 +43,7 @@ import { KeptDraftNote, StopConfirm, useDraftOwner } from "./KeptDraftNote";
 import "./walk.css";
 import "./scene-editor.css";
 import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
+import { counted, nth, failure } from "../lib/words";
 
 /**
  * A small owner-only form editor. Scene geometry stays with the template.
@@ -360,7 +361,7 @@ export function StoreSceneEditor({
                 >
                   {rows.map((r, i) => (
                     <option value={r.id} key={r.id}>
-                      {i + 1}段目 · {r.text || "名前のない棚"}
+                      {nth(i + 1, "段")} · {r.text || "名前のない棚"}
                     </option>
                   ))}
                 </select>
@@ -535,7 +536,7 @@ export function StoreSceneEditor({
                     <option value="">まだ並べない</option>
                     {rows.map((r, i) => (
                       <option key={r.id} value={r.id}>
-                        {i + 1}段目 · {r.text || "名前のない棚"}
+                        {nth(i + 1, "段")} · {r.text || "名前のない棚"}
                       </option>
                     ))}
                   </select>
@@ -669,7 +670,9 @@ export function StoreSceneEditor({
             )}
             {unplaced.length > 0 && (
               <fieldset className="scene-section" disabled={waiting}>
-                <legend>まだ並べていない本 · {unplaced.length}冊</legend>
+                <legend>
+                  まだ並べていない本 · {counted(unplaced.length, "冊")}
+                </legend>
                 <p className="scene-hint">
                   棚に入りきらない本、下ろした本、本棚に新しく並べた本です。POPも残っています。本を選び、置く棚を指定してください。
                 </p>
@@ -714,7 +717,10 @@ export function StoreSceneEditor({
           )}
           {saved.kind === "local" && saved.status === "recovered" && (
             <p className="scene-error" role="alert">
-              保存データを読み込めないため上書きできません。元のデータは保持しています。
+              {failure({
+                what: "保存データを読み込めないため上書きできません",
+                kept: "元のデータは保持しています",
+              })}
             </p>
           )}
           {stopping ? (

@@ -31,22 +31,21 @@ const UA = {
 const solaris = { title: "ソラリス", author: "スタニスワフ・レム" };
 
 {
-  // The title and the author, a full-width space between them.
-  assert.equal(lookupQuery(solaris), "ソラリス　スタニスワフ・レム");
-  // Google's address is the one the link always had.
+  // The title alone, without the author.
+  assert.equal(lookupQuery(solaris), "ソラリス");
   assert.equal(
     googleLookupUrl(solaris),
-    "https://google.com/search?q=%E3%82%BD%E3%83%A9%E3%83%AA%E3%82%B9%E3%80%80%E3%82%B9%E3%82%BF%E3%83%8B%E3%82%B9%E3%83%AF%E3%83%95%E3%83%BB%E3%83%AC%E3%83%A0",
+    "https://google.com/search?q=%E3%82%BD%E3%83%A9%E3%83%AA%E3%82%B9",
   );
   assert.equal(
     new URL(googleLookupUrl(solaris)).searchParams.get("q"),
-    "ソラリス　スタニスワフ・レム",
+    "ソラリス",
   );
 }
 
 {
   // Characters that mean something in an address stay part of the words.
-  const odd = { title: "A & B? #1 は 50%", author: "C+D / E=F" };
+  const odd = { title: "A & B? #1 は 50%　C+D / E=F", author: "" };
   const words = "A & B? #1 は 50%　C+D / E=F";
   assert.equal(lookupQuery(odd), words);
   assert.equal(

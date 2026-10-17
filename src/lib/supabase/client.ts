@@ -19,6 +19,10 @@ export function getSupabase(): SupabaseClient<Database> | null {
       // link's session arrives after the # in the address and is read here.
       detectSessionInUrl: true,
     },
+    // This app writes the reader's library rows itself, so the database
+    // leaves them alone when its marks change (book_marks_follow, which
+    // copies the marks of an app from before the library).
+    global: { headers: { "x-booktown-library": "1" } },
   });
   return client;
 }

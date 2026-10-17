@@ -1,5 +1,5 @@
 import { ME_ID, type Shop, type ShelfItem, type TownState } from "./types";
-import { isDatabaseId } from "./paths";
+import { isSampleId } from "./record-kind";
 
 // What the home shows "today": one shop a night, the day's POPs. Chosen by
 // the day in Japan over the shops' ids, so it holds all day for everyone and
@@ -62,15 +62,12 @@ export const isOwnShop = (
   shop: Shop,
 ): boolean => shop.ownerId === ME_ID || shop.id === state.ownShop?.id;
 
-/** A 見本 (sample) record: one that is not in the database. */
-export const isSample = (id: string): boolean => !isDatabaseId(id);
-
 /**
  * Real shops first, 見本 after: a town with real shops recommends them, and
  * falls back to the samples only when it has none.
  */
 export function realFirst<T>(items: T[], idOf: (item: T) => string): T[] {
-  const real = items.filter((item) => !isSample(idOf(item)));
+  const real = items.filter((item) => !isSampleId(idOf(item)));
   return real.length ? real : items;
 }
 

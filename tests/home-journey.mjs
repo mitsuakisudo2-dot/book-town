@@ -850,6 +850,33 @@ try {
         await expect(letter).toBeVisible();
         await page.keyboard.press("Escape");
         await expect(letter).toHaveCount(0);
+        // Closing the page while the sheet's step is still coming off the
+        // history: the page stays closed, its step off too.
+        await layersSettled(page);
+        await post.locator(".letter-text").tap();
+        await expect(letter).toBeVisible();
+        await letter.getByRole("button", { name: "凪さんに返信" }).tap();
+        await expect(sheet).toBeVisible();
+        await page.evaluate(async () => {
+          const escape = () =>
+            document.activeElement.dispatchEvent(
+              new KeyboardEvent("keydown", {
+                key: "Escape",
+                bubbles: true,
+                cancelable: true,
+              }),
+            );
+          escape();
+          await new Promise((done) => setTimeout(done, 5));
+          escape();
+        });
+        await expect(sheet).toHaveCount(0);
+        await expect(letter).toHaveCount(0);
+        await layersSettled(page);
+        await expect(letter).toHaveCount(0);
+        expect(
+          await page.evaluate(() => history.state?.booktownLayers ?? null),
+        ).toBeNull();
 
         // The screen beneath stays where it was. The closed page's step
         // comes off the history a moment later, and the browser then puts
@@ -2342,11 +2369,11 @@ try {
         // It arrives and the moving mark goes.
         await expect(page.locator(".nav-mark")).toHaveCount(0);
         await expect(bar).not.toHaveClass(/is-moving/);
-        // ホーム to 本棚: one slide, though the page names 本棚 a moment late.
+        // ホーム to 本棚: one slide.
         await bar.getByRole("link", { name: "ホーム" }).tap();
         await expect(page.locator(".nav-mark")).toHaveCount(0);
         await bar.getByRole("link", { name: "本棚" }).tap();
-        await expect(page).toHaveURL(/books=library/);
+        await expect(page).toHaveURL(/\/library\//);
         const shelf = await marks();
         expect(shelf).toMatchObject({
           from: shelf.icons[0],

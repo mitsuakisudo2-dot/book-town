@@ -17,7 +17,8 @@ import {
   reviewNoteOf,
   reviewNoteWords,
 } from "../lib/social";
-import { isDatabaseId, posterNewPath, profilePath } from "../lib/paths";
+import { posterNewPath, profilePath } from "../lib/paths";
+import { isSampleId } from "../lib/record-kind";
 import { usePersistenceStatus } from "../lib/store";
 import { useUrlParam } from "../lib/url-state";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
@@ -26,6 +27,7 @@ import { ReportButton } from "./Report";
 import { BackLink } from "./BackLink";
 import "./poster-screen.css";
 import { bookAuthor, booksById, bookTitle } from "../lib/book-name";
+import { counted } from "../lib/words";
 
 type Shared = {
   state: TownState;
@@ -134,7 +136,7 @@ export function PosterScreen({
               </Link>
               <small>
                 @{author.handle}
-                {!mine && !isDatabaseId(author.id) && " · 見本"}
+                {isSampleId(author.id) && " · 見本"}
                 {" · "}
                 <time dateTime={poster.createdAt}>
                   {formatPostTime(poster.createdAt)}
@@ -145,7 +147,8 @@ export function PosterScreen({
           <p className="poster-screen-kind">
             <span className="poster-tag">ポスター</span>
             {POSTER_TEMPLATE_WORDS[poster.template].name}
-            {poster.pages.length > 1 && ` · ${poster.pages.length}ページ`}
+            {poster.pages.length > 1 &&
+              ` · ${counted(poster.pages.length, "ページ")}`}
           </p>
           <h1 id="poster-title" className="poster-screen-title">
             {title}

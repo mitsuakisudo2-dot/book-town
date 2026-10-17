@@ -17,6 +17,7 @@ import { journalTown, useTownBackend } from "../lib/store";
 import type { Notify } from "../lib/types";
 import { Modal } from "./ui";
 import { quote } from "../lib/book-name";
+import { counted, failure, AGAIN } from "../lib/words";
 
 // The 登録 tab's lines about books kept on this device by the scanner:
 // titles still to be typed (書名待ち), and books the database refused. Each
@@ -56,10 +57,13 @@ export function JournalNotes({
     if (!owner) return;
     const sent = await retryRefused(libraryJournal, owner, journalTown);
     const added = sent.filter((entry) => entry.result === "added").length;
-    if (added) notify(`${added}冊を登録しました`);
+    if (added) notify(`${counted(added, "冊")}を登録しました`);
     else if (sent.some((entry) => entry.result === "waiting"))
       notify(
-        "まだ保存できません。読み込みが終わってから、もう一度押してください",
+        failure(
+          { what: "まだ保存できません", next: AGAIN.pressWhenLoaded },
+          "",
+        ),
       );
   }
   function discard() {
@@ -69,7 +73,7 @@ export function JournalNotes({
       refused.map((item) => item.id),
     );
     notify(
-      `${refused.length}冊を控えから外しました`,
+      `${counted(refused.length, "冊")}を控えから外しました`,
       undoRemove(owner, refused, notify),
     );
   }
@@ -79,7 +83,7 @@ export function JournalNotes({
       {waiting.length > 0 && (
         <div className="journal-note">
           <p>
-            <b>書名待ち {waiting.length}冊</b>
+            <b>書名待ち {counted(waiting.length, "冊")}</b>
             <small>書名がわからなかった本です。書名を入れると登録します</small>
           </p>
           <div className="journal-note-actions">
@@ -92,7 +96,7 @@ export function JournalNotes({
       {refused.length > 0 && (
         <div className="journal-note">
           <p>
-            <b>送れなかった本 {refused.length}冊</b>
+            <b>送れなかった本 {counted(refused.length, "冊")}</b>
             <small>保存できなかった本です</small>
           </p>
           <div className="journal-note-actions">

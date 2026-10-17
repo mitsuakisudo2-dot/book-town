@@ -17,9 +17,10 @@ import {
 import { followAccountWalk } from "./town-session";
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
-import { isDatabaseId } from "./paths";
+import { isSampleId } from "./record-kind";
 import { parseScreenKey } from "./walk-remote";
 import { OWN_SHOP_ID, type PersistenceStatus, type TownState } from "./types";
+import { failure } from "./words";
 
 export interface WalkSnapshot extends WalkData {
   ready: boolean;
@@ -51,7 +52,7 @@ function reachesSample(before: WalkState, after: WalkState) {
       (key) => parseScreenKey(key)?.[0] ?? OWN_SHOP_ID,
     ),
   ];
-  return shops.some((id) => id !== OWN_SHOP_ID && !isDatabaseId(id));
+  return shops.some(isSampleId);
 }
 
 export function createWalkStore(
@@ -177,8 +178,13 @@ export function createWalkStore(
         ok: false,
         error:
           backend.kind === "local"
-            ? "保存データを読み込めないため、上書きできません。元のデータは保持しています。"
-            : "保存先を読み込めていないため、まだ保存できません。",
+            ? failure({
+                what: "保存データを読み込めないため、上書きできません",
+                kept: "元のデータは保持しています",
+              })
+            : failure({
+                what: "保存先を読み込めていないため、まだ保存できません",
+              }),
       };
     const shop = town.ownShop;
     if (!shop || shop.ownerId !== town.me.id || shop.demo)
@@ -212,7 +218,10 @@ export function createWalkStore(
     if (backend.kind === "local" && status !== "saved")
       return {
         ok: false,
-        error: "ブラウザに保存できません。編集内容はこの画面に残っています。",
+        error: failure({
+          what: "ブラウザに保存できません",
+          kept: "編集内容はこの画面に残っています",
+        }),
       };
     set({ state, scenes, backups, status });
     return { ok: true };

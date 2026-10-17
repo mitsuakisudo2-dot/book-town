@@ -37,6 +37,7 @@ import "./profile.css";
 import "./reading.css";
 import "./account.css";
 import "./leave.css";
+import { counted, failure, AGAIN, NOT_CONNECTED } from "../lib/words";
 
 /** Sign-in with a code from email, then the first profile. One page for both. */
 export default function AccountView() {
@@ -394,9 +395,12 @@ function FirstProfile({ userId }: { userId: string }) {
 function Unavailable() {
   return (
     <>
-      <h1>つながりませんでした</h1>
+      <h1>{NOT_CONNECTED}</h1>
       <p className="account-lead">
-        ログインはできていますが、プロフィールを読み込めませんでした。通信の状態を確かめて、もう一度お試しください。
+        {failure({
+          what: "ログインはできていますが、プロフィールを読み込めませんでした",
+          next: AGAIN.connection,
+        })}
       </p>
       <button className="btn fill" onClick={() => void accountActions.retry()}>
         もう一度読み込む
@@ -434,8 +438,8 @@ function SignOut({ leave = false }: { leave?: boolean }) {
     <div className="account-links">
       {waiting > 0 && (
         <p className="account-journal-warning">
-          まだ登録できていない本が{waiting}
-          冊あります。ログアウトすると、この端末の控えから消えます
+          まだ登録できていない本が{counted(waiting, "冊")}
+          あります。ログアウトすると、この端末の控えから消えます
         </p>
       )}
       <button

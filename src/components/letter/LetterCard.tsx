@@ -16,7 +16,8 @@ import {
   spoilerBars,
 } from "../../lib/letter";
 import { postedJustNow } from "../../lib/just-posted";
-import { isDatabaseId, postPath, profilePath } from "../../lib/paths";
+import { postPath, profilePath } from "../../lib/paths";
+import { isDatabaseId, isSampleId } from "../../lib/record-kind";
 import {
   findReader,
   formatPostTime,
@@ -147,7 +148,7 @@ export function LetterCard({
     post.authorId === ME_ID
       ? state.ownShop
       : state.shops.find((entry) => entry.ownerId === post.authorId);
-  const sample = !mine && !isDatabaseId(author.id);
+  const sample = isSampleId(author.id);
   const profile = profilePath(author.id);
   const pageId = postPageOf(post);
   const pagePath = postPath(pageId);

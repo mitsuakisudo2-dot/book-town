@@ -52,6 +52,7 @@ import { notePosted } from "../lib/just-posted";
 import { coverSelection, splitHidden } from "../lib/hidden-words";
 import { focusField } from "../lib/coarse-pointer";
 import { bookTitle } from "../lib/book-name";
+import { counted, failure } from "../lib/words";
 
 type Shared = {
   state: TownState;
@@ -96,7 +97,8 @@ export function BookReviews({ book, ...props }: Shared & { book: Book }) {
             className="btn reviews-more"
             onClick={() => setShowAll(true)}
           >
-            残りのレビューをすべて表示（{open.length - shown.length}件）
+            残りのレビューをすべて表示（
+            {counted(open.length - shown.length, "件")}）
           </button>
         )}
         {!open.length && !leftOut && (
@@ -115,7 +117,7 @@ export function BookReviews({ book, ...props }: Shared & { book: Book }) {
             onClick={() => setDoorOpen(!doorOpen)}
           >
             <Icon name={doorOpen ? "eye" : "lock"} size={17} />
-            ネタバレありのレビュー（{spoilers.length}件）
+            ネタバレありのレビュー（{counted(spoilers.length, "件")}）
             <span>
               {doorOpen ? "扉を閉じる" : "読み終えた人は、扉を開ける"}
             </span>
@@ -482,7 +484,12 @@ export function HideWordsButton({
           POST_MAX_LENGTH,
         );
         if (!covered) {
-          notify("文字数の上限に近いため、隠す印を付けられませんでした");
+          notify(
+            failure(
+              { what: "文字数の上限に近いため、隠す印を付けられませんでした" },
+              "",
+            ),
+          );
           return;
         }
         // The covered words are chosen in the text box (or, `chosen`, the

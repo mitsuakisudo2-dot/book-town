@@ -35,7 +35,8 @@ import { RecordSheet } from "./ReadingRecords";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { useClock } from "./useClock";
 import "./reading.css";
-import { isDatabaseId, profilePath } from "../lib/paths";
+import { profilePath } from "../lib/paths";
+import { isSampleId } from "../lib/record-kind";
 import { bookPath } from "../lib/books";
 import { recentlyFinished } from "../lib/records";
 import { uncoverHidden } from "../lib/hidden-words";
@@ -64,6 +65,7 @@ import {
   bookTitle,
   quotedTitle,
 } from "../lib/book-name";
+import { counted, whenSome, failure } from "../lib/words";
 
 type Shared = {
   state: TownState;
@@ -239,7 +241,7 @@ function ReadingFeed({
 function minutesSince(startedAt: number, now: number | undefined) {
   return now === undefined
     ? ""
-    : `読み始めて${Math.max(1, Math.round((now - startedAt) / 60000))}分`;
+    : `読み始めて${counted(Math.max(1, Math.round((now - startedAt) / 60000)), "分")}`;
 }
 
 function ReadersNow({
@@ -290,8 +292,16 @@ function ReadersNow({
       <h2 id={"readers-now-" + (bookId ?? "all")}>
         <span className="live-dot" aria-hidden="true" />
         {bookId
-          ? `同じ本を、いま${readers.length}人が読んでいます`
-          : `いま${readers.length}人が、みんなで読んでいます`}
+          ? whenSome(
+              readers.length,
+              "人",
+              (c) => `同じ本を、いま${c}が読んでいます`,
+            )
+          : whenSome(
+              readers.length,
+              "人",
+              (c) => `いま${c}が、みんなで読んでいます`,
+            )}
       </h2>
       <ul>
         {readers.map((entry) => {
@@ -305,7 +315,7 @@ function ReadersNow({
                 <span>
                   <b>
                     {reader.id === ME_ID ? "あなた" : reader.name}
-                    {reader.id !== ME_ID && !isDatabaseId(reader.id) && (
+                    {isSampleId(reader.id) && (
                       <small className="demo-tag">見本の読書家</small>
                     )}
                   </b>
@@ -410,7 +420,13 @@ function LineToAdd({
             focusField(review);
           else
             notify(
-              "長くなりすぎるため、書き足せませんでした。言葉は読書のページに残しています",
+              failure(
+                {
+                  what: "長くなりすぎるため、書き足せませんでした",
+                  kept: "言葉は読書のページに残しています",
+                },
+                "",
+              ),
             );
         }}
       >
@@ -584,7 +600,7 @@ function StartReading({
           <p className="reading-total">
             <Icon name="clock" size={17} />
             これまでの読書時間 <b>{formatDuration(totals.total)}</b>
-            <small>・{state.readingSessions.length}回</small>
+            <small>・{counted(state.readingSessions.length, "回")}</small>
           </p>
         )}
         {sessions.length ? (

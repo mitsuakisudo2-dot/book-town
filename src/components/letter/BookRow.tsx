@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { bookPath } from "../../lib/books";
 import { bookAuthor, bookTitle, quotedTitle } from "../../lib/book-name";
-import { isDatabaseId } from "../../lib/paths";
+import { isDatabaseId } from "../../lib/record-kind";
 import { useTownBackend } from "../../lib/store";
 import type {
   Book,

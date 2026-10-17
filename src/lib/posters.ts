@@ -1,6 +1,7 @@
 import { ME_ID, type Book, type TownState } from "./types";
 import type { ReviewCover, SpoilerView } from "./social";
 import { bookById, quotedTitle } from "./book-name";
+import { counted, nth } from "./words";
 
 // A poster is what a reader makes about books: a few pages, each set by its
 // template (one book told at length, a lineup of covers, or words alone) in a
@@ -230,11 +231,12 @@ export function restorePoster(
 export function posterProblem(draft: PosterDraft): string | null {
   const need = pageBooks[draft.template];
   for (const [index, page] of draft.pages.entries()) {
-    const where = draft.pages.length > 1 ? `${index + 1}ページ目に、` : "";
+    const where =
+      draft.pages.length > 1 ? `${nth(index + 1, "ページ")}に、` : "";
     if (page.bookIds.length < need.min)
       return need.min === 1
         ? `${where}本を1冊選んでください。`
-        : `${where}本を${need.min}冊以上選んでください。`;
+        : `${where}本を${counted(need.min, "冊")}以上選んでください。`;
     if (draft.template === "lineup" && index === 0 && !page.heading)
       return "見出しを書いてください。";
     if (draft.template !== "lineup" && !page.heading && !page.text)

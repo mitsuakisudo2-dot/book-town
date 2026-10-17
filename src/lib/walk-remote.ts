@@ -1,4 +1,4 @@
-import { isDatabaseId } from "./paths";
+import { isDatabaseId } from "./record-kind";
 import { validateScene, type StoreScene } from "./store-scene";
 import {
   OWN_SHOP_ID,

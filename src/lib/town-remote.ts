@@ -11,6 +11,8 @@ import {
   type PosterPageRow,
 } from "./posters";
 import { tapsOf } from "./social";
+import { blankEntry, validateEntry, type LibraryEntry } from "./library";
+import { entriesOf } from "./library-town";
 import {
   COMPOSE_ICONS,
   SPOILER_DISPLAYS,
@@ -43,7 +45,7 @@ import {
 } from "./types";
 import type { Tables, TablesInsert } from "./supabase/database.types";
 import { demoBooks } from "./data";
-import { isDatabaseId } from "./paths";
+import { isDatabaseId } from "./record-kind";
 import { withoutReaders } from "./blocks";
 import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
 import { filedReportFrom } from "./supabase/reports";
@@ -167,6 +169,8 @@ export interface RemoteRows {
   /** Whom the person blocked (only the blocker reads their blocks). */
   blocks: Pick<Tables<"blocks">, "blocked_id">[];
   marks: Tables<"book_marks">[];
+  /** The person's own library rows; none in a visitor's town. */
+  libraryEntries?: Tables<"library_entries">[];
   posts: Tables<"posts">[];
   /** The person's own reactions, and other people's reactions to their posts. */
   postReactions: Tables<"post_reactions">[];
@@ -361,10 +365,40 @@ function withSampleBookIds(rows: RemoteRows): RemoteRows {
     books: rows.books.filter((row) => !sampleBookOfRow(row.id)),
     nine: rows.nine.map(named),
     marks: rows.marks.map(named),
+    libraryEntries: rows.libraryEntries?.map(named),
     posts: rows.posts.map(named),
     sessions: rows.sessions.map(named),
     records: rows.records.map(named),
   };
+}
+
+/** The person's own library rows, of books the town knows, as the rules keep them. */
+function entriesFromRows(
+  rows: Tables<"library_entries">[],
+  userId: string | null,
+  bookIds: Set<string>,
+): Record<string, LibraryEntry> {
+  const entries: Record<string, LibraryEntry> = {};
+  for (const row of rows) {
+    if (row.user_id !== userId || !bookIds.has(row.book_id)) continue;
+    const entry: LibraryEntry = {
+      bookId: row.book_id,
+      status: row.status as LibraryEntry["status"],
+      statusAt: row.status_at,
+      wantedAt: row.wanted_at,
+      likedAt: row.liked_at,
+      owned: row.owned as LibraryEntry["owned"],
+      source: row.source as LibraryEntry["source"],
+      batchId: row.batch_id,
+      addedAt: row.added_at,
+      removedAt: row.removed_at,
+      likeRestored: row.like_restored,
+      everUsed: row.ever_used,
+    };
+    // A value this app does not know (one from a later app) is left to it.
+    if (validateEntry(entry) === null) entries[row.book_id] = entry;
+  }
+  return entries;
 }
 
 /**
@@ -627,6 +661,7 @@ export function townFromRows(
       ),
     ],
     ...lists,
+    libraryEntries: entriesFromRows(rows.libraryEntries ?? [], userId, bookIds),
     popReactions,
     posts,
     likedPosts: reacted("like"),
@@ -865,6 +900,7 @@ export function referencedBookIds(rows: Omit<RemoteRows, "books">): string[] {
   });
   rows.nine.forEach((row) => ids.add(row.book_id));
   rows.marks.forEach((row) => ids.add(row.book_id));
+  rows.libraryEntries?.forEach((row) => ids.add(row.book_id));
   rows.posts.forEach((row) => row.book_id && ids.add(row.book_id));
   rows.sessions.forEach((row) => row.book_id && ids.add(row.book_id));
   rows.records.forEach((row) => ids.add(row.book_id));
@@ -936,7 +972,55 @@ export type Write =
   | { kind: "posters"; rows: TablesInsert<"posters">[] }
   | { kind: "update-poster"; id: string; patch: PosterFields }
   | { kind: "remove"; table: RelationTable; rows: Pair[] }
-  | { kind: "add"; table: RelationTable; rows: Pair[] };
+  | { kind: "add"; table: RelationTable; rows: Pair[] }
+  | {
+      kind: "library-entries";
+      /** Rows new to the database: inserted, a row already there kept as it is. */
+      rows: TablesInsert<"library_entries">[];
+      /**
+       * What the reader changed of each book's row, and only that, so a
+       * device a change behind never puts back what another changed. One of
+       * a new row (`made`) is applied only when the row was there already.
+       */
+      patches: { book_id: string; made: boolean; patch: LibraryPatch }[];
+    };
+
+/** The columns of a library row the reader changes. */
+export type LibraryPatch = Partial<
+  Pick<
+    Tables<"library_entries">,
+    | "status"
+    | "status_at"
+    | "wanted_at"
+    | "liked_at"
+    | "owned"
+    | "removed_at"
+    | "like_restored"
+    | "ever_used"
+  >
+>;
+
+const libraryColumns = (e: LibraryEntry): Required<LibraryPatch> => ({
+  status: e.status,
+  status_at: e.statusAt,
+  wanted_at: e.wantedAt,
+  liked_at: e.likedAt,
+  owned: e.owned,
+  removed_at: e.removedAt,
+  like_restored: e.likeRestored,
+  ever_used: e.everUsed,
+});
+
+/** The columns that differ between what a row was and what it is. */
+function libraryPatch(from: LibraryEntry, to: LibraryEntry): LibraryPatch {
+  const was = libraryColumns(from);
+  const now = libraryColumns(to);
+  return Object.fromEntries(
+    (Object.keys(now) as (keyof LibraryPatch)[])
+      .filter((key) => was[key] !== now[key])
+      .map((key) => [key, now[key]]),
+  );
+}
 
 type PosterFields = Pick<
   Tables<"posters">,
@@ -1044,6 +1128,39 @@ export function planWrites(
         created_by: user,
       })),
     });
+
+  // The library's rows the reader changed. A row new here may be one the
+  // database has (another device made it), so what changed is sent as well,
+  // against the row this device worked it out from. Written before the marks:
+  // a save cut short leaves the rows ahead of the marks, never behind them.
+  const rows: TablesInsert<"library_entries">[] = [];
+  const patches: Extract<Write, { kind: "library-entries" }>["patches"] = [];
+  let worked: Record<string, LibraryEntry> | null = null;
+  for (const [book_id, entry] of Object.entries(next.libraryEntries)) {
+    const kept = base.libraryEntries[book_id];
+    if (kept === entry) continue;
+    if (kept) {
+      const patch = libraryPatch(kept, entry);
+      if (Object.keys(patch).length)
+        patches.push({ book_id, made: false, patch });
+      continue;
+    }
+    worked ??= entriesOf(base);
+    const from =
+      worked[book_id] ?? blankEntry(book_id, entry.source, entry.addedAt);
+    rows.push({
+      user_id: user,
+      book_id,
+      source: entry.source,
+      batch_id: entry.batchId,
+      added_at: entry.addedAt,
+      ...libraryColumns(entry),
+    });
+    const patch = libraryPatch(from, entry);
+    if (Object.keys(patch).length) patches.push({ book_id, made: true, patch });
+  }
+  if (rows.length || patches.length)
+    writes.push({ kind: "library-entries", rows, patches });
 
   const profile: Extract<Write, { kind: "profile" }>["patch"] = {};
   if (next.me.handle !== base.me.handle) profile.handle = next.me.handle;
@@ -1281,6 +1398,7 @@ export function planWrites(
       return row.taps !== was && !(was === 0 && row.taps === 1);
     });
   if (pressed.length) writes.push({ kind: "like-taps", rows: pressed });
+
   return withSampleRows(writes, user);
 }
 /**
@@ -1333,6 +1451,20 @@ function withSampleRows(writes: Write[], user: string): Write[] {
               ...write.patch,
               pages: withPageRowBooks(write.patch.pages, keep),
             },
+          },
+        ];
+      case "library-entries":
+        return [
+          {
+            ...write,
+            rows: write.rows.map((row) => ({
+              ...row,
+              book_id: keep(row.book_id),
+            })),
+            patches: write.patches.map((row) => ({
+              ...row,
+              book_id: keep(row.book_id),
+            })),
           },
         ];
       case "add":
@@ -1407,6 +1539,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     readingSessions: [],
     finishedBooks: [],
     library: [],
+    libraryEntries: {},
     readingRecords: [],
     settings: {
       composeIcon: "pen",
