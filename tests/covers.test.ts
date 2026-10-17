@@ -3,6 +3,7 @@ import {
   COVER_SOURCES,
   coverRefusalsFrom,
   googleCover,
+  googleQuestions,
   lookCovers,
   openBdCovers,
   shownCover,
@@ -173,6 +174,80 @@ async function main() {
       const google = asked.filter((u) => u.startsWith("www.googleapis.com"));
       assert.equal(google.length, 2);
       assert.ok(google.every((u) => !u.includes(KOKORO)));
+    },
+  );
+
+  await check(
+    "Google is asked the title and author first, then the ISBN",
+    () => {
+      const [words, isbn] = googleQuestions(MOMO, {
+        title: 'Re:ゼロ "モモ"',
+        author: "-ミヒャエル・エンデ",
+      }).map((question) => new URL(question).searchParams);
+      // Quotes, colons and a leading minus are not read as Google's syntax.
+      assert.equal(words.get("q"), "Re ゼロ モモ ミヒャエル・エンデ");
+      assert.equal(words.get("maxResults"), "10");
+      assert.equal(isbn.get("q"), "isbn:" + MOMO);
+      assert.equal(isbn.get("maxResults"), "3");
+      // A book without a title is asked by its ISBN only.
+      assert.deepEqual(
+        googleQuestions(MOMO).map((q) => new URL(q).searchParams.get("q")),
+        ["isbn:" + MOMO],
+      );
+      assert.equal(googleQuestions(MOMO, { title: " " }).length, 1);
+    },
+  );
+
+  await check(
+    "Google's search by words finds the cover of that very ISBN only",
+    async () => {
+      // As Google answers since October 2026: nothing for isbn:, the book
+      // among others for its title.
+      const { asked, fetcher } = stand((url) => {
+        if (url.host === "api.openbd.jp")
+          return { body: [openBdRecord(MOMO), null] };
+        const q = url.searchParams.get("q") ?? "";
+        if (q.startsWith("isbn:")) return { body: {} };
+        if (q.startsWith("モモ"))
+          return {
+            body: {
+              items: [
+                googleVolume("9784000000019", "https://books.google.com/o"),
+                googleVolume(MOMO, "https://books.google.com/m"),
+              ],
+            },
+          };
+        // Another book's title brings only other editions.
+        return {
+          body: {
+            items: [
+              googleVolume("9784000000019", "https://books.google.com/o"),
+            ],
+          },
+        };
+      });
+      const answers = await lookCovers(
+        [MOMO, NONE],
+        COVER_SOURCES,
+        fetcher,
+        new Set(),
+        new Map(),
+        new Map([
+          [MOMO, { title: "モモ", author: "ミヒャエル・エンデ" }],
+          [NONE, { title: "ない本" }],
+        ]),
+      );
+      assert.equal(answers.get(MOMO)?.url, "https://books.google.com/m");
+      assert.equal(answers.get(NONE), null);
+      const google = asked
+        .filter((u) => u.startsWith("www.googleapis.com"))
+        .map((u) => new URL("https://" + u).searchParams.get("q"));
+      // MOMO is found by its words and its ISBN is not asked; NONE is asked
+      // both ways.
+      assert.deepEqual(
+        google.sort(),
+        ["isbn:" + NONE, "モモ ミヒャエル・エンデ", "ない本"].sort(),
+      );
     },
   );
 

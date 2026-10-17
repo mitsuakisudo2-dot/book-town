@@ -16,7 +16,12 @@ export interface AccountUser {
 export type AccountState =
   /** This build has no Supabase project: the local demo, saved in this browser. */
   | { status: "demo" }
-  | { status: "loading" }
+  /**
+   * Being checked. `pending` is the person whose session this browser has,
+   * while their profile is still being read: the town can start loading with
+   * it (town-session.ts).
+   */
+  | { status: "loading"; pending?: AccountUser }
   | { status: "signed-out" }
   /** Signed in, but the profile could not be read; retry() tries again. */
   | { status: "unavailable"; user: AccountUser }
@@ -179,6 +184,9 @@ export function createAccountStore(
   let started = false;
   // A newer sign-in or sign-out wins over a profile read that is still running.
   let generation = 0;
+  // Whose profile is being read, in which generation: the same person told
+  // again (Supabase tells the session restored twice) waits for that read.
+  let reading: { userId: string; generation: number } | null = null;
   // While a deletion is asked, a sign-out it brings waits for its answer, so
   // the page goes from 退会する to 退会しました with nothing between.
   let deleting = false;
@@ -208,6 +216,13 @@ export function createAccountStore(
       outWhileDeleting = true;
       return;
     }
+    if (
+      !force &&
+      user &&
+      reading?.userId === user.id &&
+      reading.generation === generation
+    )
+      return;
     const mine = ++generation;
     if (!user) {
       // Signed out after a deletion whose answer was lost: it went through
@@ -220,6 +235,10 @@ export function createAccountStore(
       if (mine === generation) set({ status: "signed-out" });
       return;
     }
+    reading = { userId: user.id, generation: mine };
+    // A deletion whose answer was lost may have gone: nothing loads for it.
+    if (state.status === "loading" && leaving.pending() !== user.id)
+      set({ status: "loading", pending: user });
     try {
       const profile = await backend.loadProfile(user.id);
       if (mine !== generation) return;
@@ -241,6 +260,8 @@ export function createAccountStore(
     } catch {
       if (mine !== generation) return;
       set({ status: "unavailable", user });
+    } finally {
+      if (reading?.generation === mine) reading = null;
     }
   }
 
