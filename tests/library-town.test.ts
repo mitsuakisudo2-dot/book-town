@@ -280,10 +280,12 @@ check("a book once used stays in the library when the use goes", () => {
     .find((id) => !(id in entriesOf(store.getSnapshot())));
   assert.ok(book);
   store.actions.updateNine([book], {});
-  let state = store.getSnapshot();
-  assert.equal(state.libraryEntries[book]?.everUsed, true);
+  // While it is used, the row worked out says so, and nothing is kept.
+  assert.ok(!(book in store.getSnapshot().libraryEntries));
+  assert.equal(entriesOf(store.getSnapshot())[book]?.everUsed, true);
   store.actions.updateNine([], {});
-  state = store.getSnapshot();
+  const state = store.getSnapshot();
+  assert.equal(state.libraryEntries[book]?.everUsed, true);
   assert.ok(shown(state, book));
 });
 

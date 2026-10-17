@@ -25,8 +25,8 @@ import { ME_ID, type TownState } from "./types";
 // ☆・読了), their own records, readings, posts, posters, 人生の9冊 and shop.
 // So a book used since the backfill ran, or a demo saved before the library,
 // is in the library without a row being written for it, and gets one the
-// first time the reader sorts it, or changes anything at all while it is used
-// (keepingUses), so it stays when the use goes.
+// first time the reader sorts it, or when a use of it goes (keepingUses), so
+// it stays in the library.
 //
 // Likes and 読みたくなった are not kept as encounters yet (管理表 9 and 10):
 // until they are, the town's own reactions stand in for them, so いいねした本
@@ -418,16 +418,19 @@ function usedBooks(state: TownState): string[] {
 /**
  * A book once used stays in the library when the use goes (ever_used, N19).
  * The row worked out for a used book says so only while the use is there, so
- * a change keeps the row of every book used before or after it, marked used,
- * the first time it sees one. Answers `next` itself when nothing is to keep.
+ * a change that takes a use away keeps the book's row, marked used, unless a
+ * row kept already says so. Nothing else is written for it: a follow or a
+ * like never waits on the library. Answers `next` itself when nothing is to
+ * keep.
  */
 export function keepingUses(prev: TownState, next: TownState): TownState {
+  const still = new Set(usedBooks(next));
   const known = new Set(next.books.map((book) => book.id));
   let kept = next.libraryEntries;
-  for (const bookId of new Set([...usedBooks(prev), ...usedBooks(next)])) {
-    if (!known.has(bookId) || kept[bookId]?.everUsed) continue;
-    const row =
-      kept[bookId] ?? entriesOf(next)[bookId] ?? entriesOf(prev)[bookId];
+  for (const bookId of new Set(usedBooks(prev))) {
+    if (still.has(bookId) || !known.has(bookId) || kept[bookId]?.everUsed)
+      continue;
+    const row = kept[bookId] ?? entriesOf(prev)[bookId];
     if (!row) continue;
     if (kept === next.libraryEntries) kept = { ...kept };
     kept[bookId] = { ...row, everUsed: true };
