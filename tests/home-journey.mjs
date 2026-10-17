@@ -1,7 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { settleBeforeNavigating } from "./journey-layers.mjs";
+import { layersSettled, settleBeforeNavigating } from "./journey-layers.mjs";
 import { expectReadable } from "./journey-contrast.mjs";
 import {
   coarse,
@@ -825,7 +825,11 @@ try {
         await page.keyboard.press("Escape");
         await expect(letter).toHaveCount(0);
 
-        // The screen beneath stays where it was.
+        // The screen beneath stays where it was. The closed page's step
+        // comes off the history a moment later, and the browser then puts
+        // the page where it was when the 便り opened; the reader's next
+        // scroll comes after that, and so does this one.
+        await layersSettled(page);
         await page.evaluate(() => scrollTo(0, 700));
         await page.waitForTimeout(100);
         expect(await page.evaluate(() => scrollY)).toBeGreaterThan(600);
