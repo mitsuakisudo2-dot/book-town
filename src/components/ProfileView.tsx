@@ -269,7 +269,7 @@ export function ProfileView({
       <div className="profile-view profile-not-found">
         <Icon name="user" />
         <h1>読書家が見つかりませんでした</h1>
-        <Link className="button primary" href="/">
+        <Link className="btn fill" href="/">
           本の街に戻る
         </Link>
       </div>
@@ -540,11 +540,11 @@ export function ProfileView({
             {isSelf ? (
               <>
                 {/* One main step (the shop); the rest stay small beside it. */}
-                <Link className="button primary" href="/my-shop/">
+                <Link className="btn fill" href="/my-shop/">
                   <Icon name="store" /> {shop ? "書店を整える" : "書店をひらく"}
                 </Link>
                 <button
-                  className="button secondary"
+                  className="btn"
                   disabled={!owner}
                   onClick={beginProfileEdit}
                 >
@@ -553,14 +553,14 @@ export function ProfileView({
                 <span className="profile-minor-actions">
                   <button
                     type="button"
-                    className="text-button"
+                    className="text-btn quiet"
                     onClick={() => setSheet("scan")}
                   >
                     <Icon name="barcode" size={15} /> 本を登録
                   </button>
                   <button
                     type="button"
-                    className="text-button"
+                    className="text-btn quiet"
                     onClick={() => setSheet("settings")}
                   >
                     <Icon name="settings" size={15} /> 設定
@@ -570,7 +570,7 @@ export function ProfileView({
             ) : (
               shop && (
                 <button
-                  className={`button ${following ? "secondary" : "primary"}`}
+                  className={following ? "btn" : "btn fill"}
                   aria-pressed={following}
                   onClick={() => {
                     actions.toggleFollow(shop.id);
@@ -621,7 +621,7 @@ export function ProfileView({
           </div>
           {isSelf && (
             <button
-              className="button secondary profile-edit-nine"
+              className="btn profile-edit-nine"
               disabled={!owner}
               onClick={beginNineEdit}
             >
@@ -745,7 +745,7 @@ export function ProfileView({
                 </p>
                 <button
                   type="button"
-                  className="button primary"
+                  className="btn fill"
                   onClick={() => setSheet("scan")}
                 >
                   <Icon name="plus" size={16} /> 本を登録
@@ -897,7 +897,7 @@ export function ProfileView({
               </div>
             )}
             {isSelf && (
-              <Link className="button secondary" href="/my-shop">
+              <Link className="btn" href="/my-shop">
                 <Icon name="edit" /> 書店と本棚を編集する
               </Link>
             )}
@@ -911,7 +911,7 @@ export function ProfileView({
                 : "この読書家の書店は、準備中です。"}
             </p>
             {isSelf && (
-              <Link className="button primary" href="/my-shop">
+              <Link className="btn fill" href="/my-shop">
                 3分で本屋を開く <Icon name="arrow" />
               </Link>
             )}
@@ -949,7 +949,7 @@ export function ProfileView({
                       </span>
                     </Link>
                     <button
-                      className="button secondary"
+                      className="btn"
                       onClick={() => {
                         actions.toggleFollow(place.id);
                         notify("フォローを解除しました");
@@ -1217,7 +1217,7 @@ export function ProfileView({
                   />
                   <button
                     type="button"
-                    className="profile-link-remove"
+                    className="icon-btn profile-link-remove"
                     aria-label={`リンク${index + 1}を削除`}
                     onClick={() =>
                       changeProfile({
@@ -1237,7 +1237,7 @@ export function ProfileView({
               {draftLinks.length < PROFILE_LINK_LIMIT && (
                 <button
                   type="button"
-                  className="profile-link-add"
+                  className="text-btn profile-link-add"
                   onClick={() => changeProfile({ links: [...draftLinks, ""] })}
                 >
                   <Icon name="plus" size={14} /> リンクを追加
@@ -1267,15 +1267,11 @@ export function ProfileView({
               />
             ) : (
               <div className="profile-form-actions">
-                <button
-                  className="button secondary"
-                  type="button"
-                  onClick={cancelProfile}
-                >
+                <button className="btn" type="button" onClick={cancelProfile}>
                   キャンセル
                 </button>
                 <button
-                  className="button primary"
+                  className="btn fill"
                   type="submit"
                   disabled={!draftName.trim()}
                 >
@@ -1453,10 +1449,10 @@ export function ProfileView({
               />
             ) : (
               <div className="profile-form-actions profile-nine-save">
-                <button className="button secondary" onClick={cancelNine}>
+                <button className="btn" onClick={cancelNine}>
                   キャンセル
                 </button>
-                <button className="button primary" onClick={saveNine}>
+                <button className="btn fill" onClick={saveNine}>
                   この並びを保存
                 </button>
               </div>
@@ -1478,7 +1474,7 @@ export function ProfileView({
             <blockquote>{reader.nineNotes[selectedNote]}</blockquote>
             <p>— {reader.name}</p>
             <Link
-              className="button secondary"
+              className="btn"
               href={bookPath(selectedNote)}
               onClick={() => setSelectedNote(null)}
             >
@@ -1517,7 +1513,7 @@ function ProfilePosters({
           <h2 id="profile-posters-title">ポスター</h2>
         </div>
         {isSelf && posters.length > 0 && (
-          <Link className="button secondary" href={posterNewPath()}>
+          <Link className="btn" href={posterNewPath()}>
             <Icon name="plus" /> ポスターを作る
           </Link>
         )}
@@ -1547,7 +1543,7 @@ function ProfilePosters({
           <p>
             本を選んで、ひとこと添えるだけ。その時の気持ちを、1枚の小さな企画展に。
           </p>
-          <Link className="button primary" href={posterNewPath()}>
+          <Link className="btn fill" href={posterNewPath()}>
             <Icon name="plus" /> ポスターを作る
           </Link>
         </div>

@@ -50,9 +50,7 @@
   flex-wrap: wrap;
   gap: 8px 16px;
 }
-.shop-journey .shop-hero-bottom .button {
-  width: auto;
-  min-height: 44px;
+.shop-journey .shop-hero-bottom .btn {
   margin-left: auto;
 }
 .shop-shelf-hint {
@@ -140,15 +138,13 @@
     gap: 8px;
   }
   /* "店内に入る" and the follow button side by side, even at 320px. */
-  .shop-journey .shop-hero-bottom .button {
-    padding-inline: 10px;
-  }
+
   .shop-journey .owner-profile-link small {
     display: none;
   }
 }
 /* With "店内に入る" beside the follow button, only the first button pushes right. */
-.shop-journey .shop-hero-bottom .button + .button {
+.shop-journey .shop-hero-bottom .btn + .btn {
   margin-left: 0;
 }
 /* A shelf beside its owner's POPs: the shelf is only as wide as its books. */
@@ -171,7 +167,7 @@
   text-align: left;
   background: var(--pop);
   border: 1px solid var(--pop-line);
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   box-shadow: 2px 3px 0 color-mix(in srgb, var(--pop-line) 50%, transparent);
   color: var(--ink);
   cursor: pointer;
@@ -233,9 +229,17 @@
   .shop-journey .shop-hero-bottom .owner-profile-link {
     flex-basis: 100%;
   }
-  .shop-journey .shop-hero-bottom .button {
+  .shop-journey .shop-hero-bottom .btn {
     flex: 1 1 0;
+    min-width: 0;
     margin-left: 0;
+    padding-inline: 10px;
     justify-content: center;
+  }
+}
+/* On the narrowest phones the two still share a row: the words, not the icons. */
+@media (max-width: 360px) {
+  .shop-journey .shop-hero-bottom .btn svg {
+    display: none;
   }
 }

@@ -62,7 +62,7 @@
   gap: 7px;
   margin-top: 16px;
   padding: 9px 13px;
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   background: var(--band);
   color: var(--ink-2);
   font-size: var(--t-cap);
@@ -107,7 +107,7 @@
   align-items: center;
   gap: 14px;
   padding: 8px 6px;
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   color: var(--ink-2);
 }
 .poster-screen-books a:hover {
@@ -217,10 +217,6 @@
   line-height: 1.9;
 }
 @media (max-width: 640px) {
-  .profile-posters .profile-section-heading .button {
-    padding: 8px 12px;
-    font-size: var(--t-cap);
-  }
   .profile-poster-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px 8px;

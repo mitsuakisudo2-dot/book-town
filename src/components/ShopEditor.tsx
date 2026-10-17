@@ -224,7 +224,7 @@ function ShopSettings({
               </p>
             )}
             <button
-              className="editor-button primary"
+              className="btn fill"
               disabled={!name.trim() || !work}
               type="submit"
             >
@@ -447,7 +447,7 @@ function AddBookPicker({
             </p>
             <button
               type="button"
-              className="editor-text-button"
+              className="text-btn"
               onClick={() => setSearch("")}
             >
               検索をやめる
@@ -480,7 +480,7 @@ function AddBookPicker({
                   .join("・")
               : "押すたびに、並べる・外すを切り替えられます"}
           </span>
-          <button type="button" className="button" onClick={onClose}>
+          <button type="button" className="btn fill" onClick={onClose}>
             完了
           </button>
         </div>
@@ -619,7 +619,7 @@ function ShelfEditingPanel({
           </button>
           <button
             type="button"
-            className="editor-icon-button subtle"
+            className="icon-btn subtle"
             aria-label={`「${shelf.name}」を削除`}
             onClick={onRemove}
           >
@@ -695,11 +695,7 @@ function ShelfEditingPanel({
           <Icon name="grip" size={14} />
           本を選んで編集。ドラッグでも並び替えられます。
         </p>
-        <button
-          type="button"
-          className="editor-button secondary"
-          onClick={onAdd}
-        >
+        <button type="button" className="btn" onClick={onAdd}>
           <Icon name="edit" size={17} />
           本棚を編集
         </button>
@@ -713,7 +709,7 @@ function ShelfEditingPanel({
               <p>{selectedBook.author}</p>
             </div>
             <button
-              className="editor-icon-button"
+              className="icon-btn"
               type="button"
               aria-label="本の編集を閉じる"
               onClick={() => setSelectedId(null)}
@@ -770,7 +766,7 @@ function ShelfEditingPanel({
               <div className="editor-move-buttons">
                 <button
                   type="button"
-                  className="editor-button secondary"
+                  className="btn"
                   aria-label={`${selectedBook.title}を一つ左へ移動`}
                   disabled={selectedIndex <= 0}
                   onClick={() =>
@@ -786,7 +782,7 @@ function ShelfEditingPanel({
                 </button>
                 <button
                   type="button"
-                  className="editor-button secondary"
+                  className="btn"
                   aria-label={`${selectedBook.title}を一つ右へ移動`}
                   disabled={selectedIndex >= shelf.items.length - 1}
                   onClick={() =>
@@ -819,16 +815,13 @@ function ShelfEditingPanel({
             </span>
           </label>
           <div className="editor-selected-footer">
-            <Link
-              href={bookPath(selectedBook.id)}
-              className="editor-text-button"
-            >
+            <Link href={bookPath(selectedBook.id)} className="text-btn">
               本の詳細を見る
               <Icon name="arrow" size={15} />
             </Link>
             <button
               type="button"
-              className="editor-remove-book"
+              className="text-btn quiet editor-remove-book"
               onClick={() => {
                 takeOff(selected, selectedBook.title);
                 setSelectedId(null);
@@ -1028,7 +1021,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             本を並べて、言葉を添えて。あなたの感性が、この街の景色になります。
           </p>
         </div>
-        <Link className="editor-button secondary" href="/shops/mine">
+        <Link className="btn" href="/shops/mine">
           <Icon name="eye" size={17} />
           お店を眺める
         </Link>
@@ -1049,7 +1042,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         <div>
           <button
             type="button"
-            className="editor-button primary"
+            className="btn fill"
             disabled={!walk.ready}
             onClick={() => setSceneEditorOpen(true)}
           >
@@ -1057,7 +1050,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             店内を飾りつける
           </button>
           {inWalk && (
-            <Link className="editor-button secondary" href="/walk/#mine">
+            <Link className="btn" href="/walk/#mine">
               店内を眺める
             </Link>
           )}
@@ -1085,7 +1078,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         </div>
         <button
           type="button"
-          className="editor-button primary"
+          className="btn fill"
           onClick={() => setAddShelfOpen(true)}
         >
           <Icon name="plus" size={18} />
@@ -1122,7 +1115,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           </p>
           <button
             type="button"
-            className="editor-button primary"
+            className="btn fill"
             onClick={() => setAddShelfOpen(true)}
           >
             <Icon name="plus" size={18} />
@@ -1174,7 +1167,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
               20スペースの棚を作ります。公開・非公開は、あとから変更できます。
             </p>
             <button
-              className="editor-button primary"
+              className="btn fill"
               type="submit"
               disabled={!newShelfName.trim()}
             >
@@ -1214,14 +1207,14 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             <div>
               <button
                 type="button"
-                className="editor-button secondary"
+                className="btn"
                 onClick={() => setRemoveShelfId(null)}
               >
                 キャンセル
               </button>
               <button
                 type="button"
-                className="editor-button danger"
+                className="btn danger fill"
                 onClick={() => {
                   if (!removeShelfAndWork(removeShelf.id)) return;
                   setRemoveShelfId(null);

@@ -866,7 +866,7 @@ export function WalkView({
                 <>
                   <h1>まだ、灯りのついた書店がありません</h1>
                   <p>最初の一軒を開くと、ここから街の人が訪ねてこられます。</p>
-                  <Link className="button" href="/my-shop/">
+                  <Link className="btn fill" href="/my-shop/">
                     {state.ownShop ? "自分の書店を整える" : "本屋を開く"}
                     <Icon name="arrow" />
                   </Link>
@@ -975,7 +975,7 @@ export function WalkView({
           />
           <MessageSend>
             <button
-              className="button"
+              className="btn fill"
               onClick={() => {
                 const text = message.trim() ? message : "";
                 const persisted = editReaction({ message: text });
@@ -1015,7 +1015,7 @@ export function WalkView({
             }
           >
             <button
-              className="button"
+              className="btn fill"
               onClick={() => {
                 const persisted = editReaction({ message });
                 notify(
@@ -1035,14 +1035,14 @@ export function WalkView({
         <Modal title={shop.name} onClose={close}>
           <div className="walk-menu">
             <Link
-              className="button secondary"
+              className="btn"
               href={ownShop ? "/my-shop/" : shopPath(shop.id)}
             >
               <Icon name="store" />
               書店のページを見る
             </Link>
             <button
-              className="button secondary"
+              className="btn"
               onClick={() => setOverlay({ kind: "history" })}
             >
               <Icon name="clock" />
@@ -1050,7 +1050,7 @@ export function WalkView({
             </button>
             {!ownShop && (
               <ReportButton
-                className="button secondary"
+                className="btn"
                 target={{ kind: "shop", id: shop.id, name: shop.name }}
                 onOpen={close}
               >
@@ -1075,7 +1075,7 @@ export function WalkView({
             ))}
           </ul>
           <button
-            className="button secondary"
+            className="btn"
             onClick={() => {
               update((previous) =>
                 startWalk(
