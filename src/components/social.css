@@ -89,6 +89,11 @@
 .composer-tools .btn:disabled {
   opacity: 0.45;
 }
+/* The tools share one row with the keyboard up: 投稿する keeps a little less
+   room at its sides so ［隠す］ fits beside it. */
+.composer-tools .btn {
+  padding-inline: 14px;
+}
 .composer-hint {
   font-size: var(--t-cap);
   color: var(--ink-2);
