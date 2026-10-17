@@ -4,7 +4,7 @@
 // Each tab's page mounts its own TownApp, so the tab shown last is kept here,
 // outside React, for as long as the page is open.
 
-import { DUR_MS, EASE, reducedMotion } from "./motion";
+import { DUR_MS, EASE, playByFrames, reducedMotion } from "./motion";
 
 let shownLast: number | null = null;
 // A tab's page can name its tab a moment late: 本棚 reads `?books=` from the
@@ -51,8 +51,6 @@ function stopPlaying() {
 
 /** How long, in ms, the mark takes to reach the tab tapped. */
 export const TAB_MARK_MS = DUR_MS.tab;
-/** The most, in ms, the mark moves on between two frames. */
-const MAX_FRAME_MS = 34;
 
 /**
  * Slides a round mark (`.nav-mark`) along `bar` from the icon of the tab
@@ -95,26 +93,12 @@ export function playTabMove(move: TabMove | null, bar: HTMLElement | null) {
     { duration: TAB_MARK_MS, easing: EASE.tab },
   );
   // The page tapped can hold the screen still while it is drawn (書店めぐり
-  // for about half a second): driven by the clock, the mark would spend its
-  // time then and jump. It moves frame by frame instead, a frame at most
-  // MAX_FRAME_MS on, so it slides once the screen moves again.
-  animation.pause();
+  // for about half a second): the mark moves frame by frame, so it slides
+  // once the screen moves again.
   playing = { animation, mark };
-  let shown = 0;
-  let last: number | null = null;
-  const frame = (time: number) => {
-    if (playing?.animation !== animation) return;
-    shown += last === null ? 0 : Math.min(time - last, MAX_FRAME_MS);
-    last = time;
-    if (shown < TAB_MARK_MS) {
-      animation.currentTime = shown;
-      requestAnimationFrame(frame);
-      return;
-    }
-    animation.cancel();
+  playByFrames(animation, TAB_MARK_MS, () => {
     bar.classList.remove("is-moving");
     mark.remove();
     playing = null;
-  };
-  requestAnimationFrame(frame);
+  });
 }
