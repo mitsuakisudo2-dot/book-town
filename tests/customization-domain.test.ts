@@ -329,7 +329,7 @@ check(
   },
 );
 check(
-  "books shelved after the scene was first saved join it unplaced, with their POPs",
+  "books shelved after the scene was first saved join its rows, with their POPs",
   () => {
     const managed = changePlacement(
       applyStoreTemplate(scene, "study", books),
@@ -358,7 +358,7 @@ check(
     );
     assert.equal(reopened.templateId, "study");
     const c = objectById(reopened, "placement:mine:c")!;
-    assert.equal(c.parentId, null);
+    assert.notEqual(c.parentId, null);
     assert.equal(c.isPublic, true);
     assert.equal(c.display, "face");
     assert.deepEqual(c.source, {
@@ -386,11 +386,15 @@ check("a shelf item id given to another book gets its own placement", () => {
     pop: "同じ番号の別の本",
   };
   const reopened = migrateShopScene(reused, books, scene);
-  assert.equal(objectById(reopened, "placement:mine:a")!.bookId, books[0].id);
+  // The book that left waits unplaced with its POP, no longer the shelf's.
+  const left = objectById(reopened, "placement:mine:a")!;
+  assert.equal(left.bookId, books[0].id);
+  assert.equal(left.parentId, null);
+  assert.equal(left.source, undefined);
   assert.equal(bookPop(reopened, "placement:mine:a")?.text, "公の言葉");
   const momo = objectById(reopened, "placement:mine:a:momo")!;
   assert.equal(momo.bookId, "momo");
-  assert.equal(momo.parentId, null);
+  assert.notEqual(momo.parentId, null);
   assert.equal(bookPop(reopened, momo.id)?.text, "同じ番号の別の本");
   assert.deepEqual(validateScene(reopened), []);
   assert.deepEqual(migrateShopScene(reused, books, reopened), reopened);
@@ -529,4 +533,122 @@ check(
     assert.equal(raw, original);
   },
 );
+/** A shop of one public shelf holding these books, all face out. */
+const shelfShop = (items: [string, string][]): Shop => ({
+  ...shop,
+  shelves: [
+    {
+      id: "public",
+      name: "旅の入口",
+      capacity: 20,
+      isPublic: true,
+      items: items.map(([id, bookId]) => ({
+        id,
+        bookId,
+        display: "face" as const,
+        pop: "",
+      })),
+    },
+  ],
+});
+const placed = (s: StoreScene) =>
+  s.objects
+    .filter((o) => o.kind === "book" && o.parentId)
+    .map((o) => o.bookId)
+    .sort();
+check(
+  "a decorated shop follows the books put on and taken off its shelf",
+  () => {
+    const first = shelfShop([
+      ["a", books[0].id],
+      ["b", books[1].id],
+      ["c", books[2].id],
+    ]);
+    const decorated = migrateShopScene(first, books);
+    assert.deepEqual(
+      placed(decorated),
+      [books[0].id, books[1].id, books[2].id].sort(),
+    );
+    // The owner swaps two books (the shelf gives "b" to the next book) and
+    // adds one more.
+    const swapped = shelfShop([
+      ["a", books[0].id],
+      ["b", books[3].id],
+      ["d", books[4].id],
+      ["e", books[5].id],
+    ]);
+    const followed = migrateShopScene(swapped, books, decorated);
+    assert.deepEqual(validateOwnedScene(followed, swapped, books), []);
+    assert.deepEqual(
+      placed(followed),
+      [books[0].id, books[3].id, books[4].id, books[5].id].sort(),
+    );
+    // What left the shelf waits unplaced, not tied to it any more.
+    const left = objectById(followed, "placement:mine:c")!;
+    assert.equal(left.parentId, null);
+    assert.equal(left.source, undefined);
+    assert.ok(unplacedBooks(followed).some((o) => o.id === left.id));
+    assert.deepEqual(migrateShopScene(swapped, books, followed), followed);
+    // Put back on the shelf, the same placement comes back with its POP.
+    const withPop = setBookPop(followed, left.id, "また並べる");
+    const back = shelfShop([
+      ...swapped.shelves[0].items.map(
+        (i) => [i.id, i.bookId] as [string, string],
+      ),
+      ["f", books[2].id],
+    ]);
+    const returned = migrateShopScene(back, books, withPop);
+    assert.equal(objectById(returned, left.id)!.parentId !== null, true);
+    assert.equal(objectById(returned, left.id)!.source?.itemId, "f");
+    assert.equal(bookPop(returned, left.id)!.text, "また並べる");
+    assert.equal(
+      returned.objects.filter(
+        (o) => o.kind === "book" && o.bookId === books[2].id,
+      ).length,
+      1,
+    );
+  },
+);
+check(
+  "books the owner set out by hand, or took off, stay where they are",
+  () => {
+    const one = shelfShop([["a", books[0].id]]);
+    let s = migrateShopScene(one, books);
+    s = addBookPlacement(s, books[6], "row-2", "by-hand", "spine", 0);
+    s = takePlacementOff(s, "placement:mine:a");
+    const again = migrateShopScene(one, books, s);
+    assert.deepEqual(again, s);
+  },
+);
+check("a private shelf's new book, or one with no room, waits unplaced", () => {
+  const first = shelfShop([["a", books[0].id]]);
+  const decorated = migrateShopScene(first, books);
+  const secret = {
+    ...first,
+    shelves: [
+      ...first.shelves,
+      {
+        id: "private",
+        name: "秘密の棚",
+        capacity: 20,
+        isPublic: false,
+        items: [
+          { id: "s", bookId: books[1].id, display: "face" as const, pop: "" },
+        ],
+      },
+    ],
+  };
+  const followed = migrateShopScene(secret, books, decorated);
+  const p = objectById(followed, "placement:mine:s")!;
+  assert.equal(p.parentId, null);
+  assert.equal(p.isPublic, false);
+  // Many face-outs: what the rows cannot hold waits, and the rest is valid.
+  const many = shelfShop(
+    books.slice(0, 20).map((b, i) => ["m" + i, b.id] as [string, string]),
+  );
+  const full = migrateShopScene(many, books, decorated);
+  assert.deepEqual(validateOwnedScene(full, many, books), []);
+  assert.ok(unplacedBooks(full).length > 0);
+  assert.ok(placed(full).length > 3);
+});
 console.log(passed + " customization domain checks passed");
