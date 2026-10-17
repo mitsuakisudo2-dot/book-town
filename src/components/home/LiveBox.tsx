@@ -34,7 +34,7 @@ import {
 } from "../../lib/social";
 import { useTownReads } from "../../lib/store";
 import { bookById, bookTitle, quotedTitle } from "../../lib/book-name";
-import { isSample } from "../../lib/tonight";
+import { isSampleId } from "../../lib/record-kind";
 import type { Post, TownState } from "../../lib/types";
 import { BookJacket, Icon } from "../ui";
 import { spoilerWords } from "../letter/LetterCard";
@@ -401,7 +401,7 @@ function LiveLine({
             {author.name.slice(0, 1)}
           </span>
           <b className="home-live-name">{author.name}</b>
-          {isSample(author.id) && <span className="home-tag">見本</span>}
+          {isSampleId(author.id) && <span className="home-tag">見本</span>}
           <span className="home-live-book">{quotedTitle(book)}</span>
           <a
             ref={timeLink}

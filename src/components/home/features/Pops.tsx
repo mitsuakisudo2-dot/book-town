@@ -3,7 +3,7 @@
 import type { PopPick } from "../../../lib/features";
 import type { TownState } from "../../../lib/types";
 import { findReader } from "../../../lib/social";
-import { isSample } from "../../../lib/tonight";
+import { isSampleId } from "../../../lib/record-kind";
 import { bookTitle } from "../../../lib/book-name";
 import { BookJacket } from "../../ui";
 import { SampleTag } from "../FeatureBand";
@@ -41,7 +41,7 @@ export function Pops({
               <small>
                 {shop.name}
                 {owner && `・店主 ${owner.name}`}
-                {isSample(shop.id) && <SampleTag />}
+                {isSampleId(shop.id) && <SampleTag />}
               </small>
             </span>
           </span>

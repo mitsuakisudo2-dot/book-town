@@ -28,7 +28,7 @@ import {
   type TownState,
 } from "../src/lib/types";
 import { demoBooks, demoPosts } from "../src/lib/data";
-import { isDatabaseId } from "../src/lib/paths";
+import { isDatabaseId } from "../src/lib/record-kind";
 import { sampleBookRowId } from "../src/lib/samples";
 
 // Two readers use the town against a real local Supabase (`supabase start`):

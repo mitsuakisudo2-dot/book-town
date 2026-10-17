@@ -1,4 +1,4 @@
-import { isDatabaseId } from "./paths";
+import { bookKind } from "./samples";
 import { isPublished, posterBookIds } from "./posters";
 import { ME_ID, type Book, type TownState } from "./types";
 import { shownToOthers } from "./visibility";
@@ -70,6 +70,6 @@ function publicBookIds(state: TownState): (string | null)[] {
 export function booksBeforeSearch(state: TownState): Book[] {
   const used = new Set([...ownBookIds(state), ...publicBookIds(state)]);
   return state.books.filter(
-    (book) => !isDatabaseId(book.id) || used.has(book.id),
+    (book) => bookKind(book.id) !== "database" || used.has(book.id),
   );
 }

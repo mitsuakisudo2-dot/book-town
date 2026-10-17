@@ -10,7 +10,7 @@ import {
   type RefObject,
 } from "react";
 import Link from "next/link";
-import { ME_ID, type Book, type Reader, type TownState } from "../lib/types";
+import { type Book, type Reader, type TownState } from "../lib/types";
 import {
   FOLDED_POSTER_REASONS,
   OWN_POSTER_REVIEW_WORDS,
@@ -32,7 +32,8 @@ import {
   reviewNoteWords,
   type ReviewCover,
 } from "../lib/social";
-import { isDatabaseId, posterPath, profilePath } from "../lib/paths";
+import { posterPath, profilePath } from "../lib/paths";
+import { isSampleId } from "../lib/record-kind";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./social.css";
 import "./poster.css";
@@ -695,7 +696,6 @@ export function PosterCard({
   const note = reviewNoteOf(state, "poster", poster.id, poster.authorId);
   // A reader who chose not to see spoilers is not shown this one at all.
   if (!author || posterSpoilerView(state, poster) === "left_out") return null;
-  const mine = author.id === ME_ID;
   const profile = profilePath(author.id);
   return (
     <article
@@ -717,7 +717,7 @@ export function PosterCard({
           </Link>
           <span className="post-handle">
             @{author.handle}
-            {!mine && !isDatabaseId(author.id) && " · 見本"}
+            {isSampleId(author.id) && " · 見本"}
           </span>
           <time dateTime={poster.createdAt}>
             {formatPostTime(poster.createdAt)}

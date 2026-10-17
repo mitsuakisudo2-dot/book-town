@@ -1,6 +1,4 @@
-/** Records from the database carry UUIDs; the demo's have readable ids. */
-export const isDatabaseId = (id: string): boolean =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+import { isDatabaseId } from "./record-kind";
 
 /**
  * The site is exported as static pages, so only the demo shops (and "mine")
