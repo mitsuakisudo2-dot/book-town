@@ -4,7 +4,6 @@ import {
   contextsOf,
   keptByNothing,
   LIBRARY_SETTINGS,
-  legacyLists,
   legacyToLibrary,
   opBefore,
   sameEntry,
@@ -26,7 +25,8 @@ import { ME_ID, type TownState } from "./types";
 // ☆・読了), their own records, readings, posts, posters, 人生の9冊 and shop.
 // So a book used since the backfill ran, or a demo saved before the library,
 // is in the library without a row being written for it, and gets one the
-// first time the reader sorts it.
+// first time the reader sorts it, or changes anything at all while it is used
+// (keepingUses), so it stays when the use goes.
 //
 // Likes and 読みたくなった are not kept as encounters yet (管理表 9 and 10):
 // until they are, the town's own reactions stand in for them, so いいねした本
@@ -194,9 +194,9 @@ export function libraryStateOf(state: TownState): LibraryState {
 
 /**
  * One op on some books (applyOp), in the town: the rows it changed are kept,
- * ☆ and the books registered on purpose are the op's own, and 読みたい and
- * 読了 are read back from the rows, as the old screens and book_marks keep
- * them. The state itself comes back when nothing changes.
+ * ☆ and the books registered on purpose are the op's own, and the op's books
+ * go into or out of 読みたい and 読了 as their rows now say (relisted). The
+ * state itself comes back when nothing changes.
  */
 export function withLibraryOp(
   state: TownState,
@@ -210,20 +210,57 @@ export function withLibraryOp(
   const next = applyOp(library, books, set, time, via, townShopBooks(state));
   if (next === library) return state;
   let kept = state.libraryEntries;
+  const changed: string[] = [];
   for (const [bookId, row] of Object.entries(next.libraryEntries))
     if (row !== before[bookId]) {
       if (kept === state.libraryEntries) kept = { ...kept };
       kept[bookId] = row;
+      changed.push(bookId);
     }
-  const known = new Set(state.books.map((book) => book.id));
-  const lists = legacyLists(next.libraryEntries);
   return {
     ...state,
     libraryEntries: kept,
     favorites: next.favorites,
     library: next.library,
-    wishlist: lists.wishlist.filter((id) => known.has(id)),
-    finishedBooks: lists.finishedBooks.filter((id) => known.has(id)),
+    ...relisted(state, [...books, ...changed], next.libraryEntries),
+  };
+}
+
+/**
+ * 読みたい and 読了 as the old screens and book_marks keep them, for the
+ * books of an op: each is added at the end of its list or taken out, as its
+ * row now says. The other books stay as they are, in their order, whatever
+ * their rows say: a list follows only what the reader did.
+ */
+function relisted(
+  state: TownState,
+  books: string[],
+  rows: Record<string, LibraryEntry>,
+): Pick<TownState, "wishlist" | "finishedBooks"> {
+  const known = new Set(state.books.map((book) => book.id));
+  const ids = [...new Set(books)].filter((id) => known.has(id));
+  const relist = (list: string[], has: (row: LibraryEntry) => boolean) => {
+    const keep = (id: string) => {
+      const row = rows[id];
+      return row !== undefined && has(row);
+    };
+    const touched = new Set(ids);
+    const stays = list.filter((id) => !touched.has(id) || keep(id));
+    const there = new Set(stays);
+    const next = [...stays, ...ids.filter((id) => keep(id) && !there.has(id))];
+    return next.length === list.length && next.every((id, i) => id === list[i])
+      ? list
+      : next;
+  };
+  return {
+    wishlist: relist(
+      state.wishlist,
+      (row) => row.removedAt === null && row.wantedAt !== null,
+    ),
+    finishedBooks: relist(
+      state.finishedBooks,
+      (row) => row.status === "finished",
+    ),
   };
 }
 
@@ -351,17 +388,51 @@ export function undoLibraryChange(
     library === state.library
   )
     return { state, restored };
-  const known = new Set(state.books.map((book) => book.id));
-  const lists = legacyLists({ ...rows, ...kept });
   return {
     state: {
       ...state,
       libraryEntries: kept,
       favorites,
       library,
-      wishlist: lists.wishlist.filter((id) => known.has(id)),
-      finishedBooks: lists.finishedBooks.filter((id) => known.has(id)),
+      ...relisted(state, undo.books, { ...rows, ...kept }),
     },
     restored,
   };
+}
+
+/** The books the reader uses: their own posts, posters (drafts too), 人生の9冊 and shop. */
+function usedBooks(state: TownState): string[] {
+  const own = (authorId: string) => authorId === ME_ID;
+  return [
+    ...state.posts.flatMap((post) =>
+      own(post.authorId) && post.bookId !== null ? [post.bookId] : [],
+    ),
+    ...state.posters
+      .filter((poster) => own(poster.authorId))
+      .flatMap((poster) => posterBookIds(poster)),
+    ...state.me.lifeNine,
+    ...shopBookIds(state.ownShop),
+  ];
+}
+
+/**
+ * A book once used stays in the library when the use goes (ever_used, N19).
+ * The row worked out for a used book says so only while the use is there, so
+ * a change keeps the row of every book used before or after it, marked used,
+ * the first time it sees one. Answers `next` itself when nothing is to keep.
+ */
+export function keepingUses(prev: TownState, next: TownState): TownState {
+  const known = new Set(next.books.map((book) => book.id));
+  let kept = next.libraryEntries;
+  for (const bookId of new Set([...usedBooks(prev), ...usedBooks(next)])) {
+    if (!known.has(bookId) || kept[bookId]?.everUsed) continue;
+    const row =
+      kept[bookId] ?? entriesOf(next)[bookId] ?? entriesOf(prev)[bookId];
+    if (!row) continue;
+    if (kept === next.libraryEntries) kept = { ...kept };
+    kept[bookId] = { ...row, everUsed: true };
+  }
+  return kept === next.libraryEntries
+    ? next
+    : { ...next, libraryEntries: kept };
 }

@@ -20,6 +20,7 @@ import {
   libraryChange,
   undoLibraryChange,
   withLibraryOp,
+  keepingUses,
   withoutRegistering,
 } from "./library-town";
 import { READING_STATUSES, type ReadingStatus } from "./library";
@@ -156,6 +157,9 @@ const ANSWERING_ACTIONS = new Set<keyof TownActions>([
   "deletePoster",
   "updateRecord",
 ]);
+/** What an action turned away answers: false, no books put back, or nothing. */
+const refused = (name: keyof TownActions) =>
+  ANSWERING_ACTIONS.has(name) ? false : name === "undoLibrary" ? 0 : null;
 
 export function createTownStore(
   source: TownRepository | TownBackend = localTownRepository,
@@ -243,7 +247,7 @@ export function createTownStore(
   /** Whether the change was taken: nothing is changed while the town loads. */
   function commit(next: TownState): boolean {
     if (next === state || loading) return false;
-    state = next;
+    state = keepingUses(state, next);
     status = backend.save(state);
     notify();
     return true;
@@ -721,28 +725,29 @@ export function createTownStore(
         startedAt: time,
         endedAt: null,
       };
-      const reading: TownState = {
-        ...state,
-        readingSessions: [
-          // Starting a new book closes whatever was running.
-          ...state.readingSessions.map((entry) =>
-            entry.endedAt === null ? { ...entry, endedAt: time } : entry,
-          ),
-          session,
-        ],
-      };
       // The book is 読書中; a finished one opened again is a reread (問い7).
-      commit(
+      // Before the session is added: a running session would already make
+      // the row worked out for it 読書中, and nothing would be kept.
+      const marked =
         bookId === null
-          ? reading
+          ? state
           : withLibraryOp(
-              reading,
+              state,
               [bookId],
               { status: "reading" },
               time,
               "reading",
-            ),
-      );
+            );
+      commit({
+        ...marked,
+        readingSessions: [
+          // Starting a new book closes whatever was running.
+          ...marked.readingSessions.map((entry) =>
+            entry.endedAt === null ? { ...entry, endedAt: time } : entry,
+          ),
+          session,
+        ],
+      });
       return session.id;
     },
     endReading(finished) {
@@ -1102,12 +1107,12 @@ export function createTownStore(
         initialize();
         if (backend.kind === "account" && reachesSample(name, args)) {
           options.onSample?.();
-          return ANSWERING_ACTIONS.has(name) ? false : null;
+          return refused(name);
         }
         if (backend.kind !== "visitor")
           return (actions[name] as (...a: unknown[]) => unknown)(...args);
         if (!QUIET_ACTIONS.has(name)) options.onVisitor?.();
-        return ANSWERING_ACTIONS.has(name) ? false : null;
+        return refused(name);
       },
     ]),
   ) as unknown as TownActions;

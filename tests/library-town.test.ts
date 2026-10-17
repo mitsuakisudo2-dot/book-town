@@ -243,6 +243,50 @@ check(
   },
 );
 
+check("a book started from nothing is kept as 読書中, and stays so", () => {
+  const store = fresh();
+  const book = store.getSnapshot().books[3].id;
+  assert.ok(!(book in store.getSnapshot().libraryEntries));
+  store.actions.startReading(book, "solo");
+  assert.equal(store.getSnapshot().libraryEntries[book]?.status, "reading");
+  store.actions.endReading(false);
+  assert.equal(entriesOf(store.getSnapshot())[book]?.status, "reading");
+});
+
+check("the old lists keep their order as rows are kept around them", () => {
+  const initial = createInitialState();
+  const [b, a, c, d, x, y] = initial.books.map((book) => book.id).sort();
+  const store = fresh({ ...initial, wishlist: [a, b], finishedBooks: [x, y] });
+  const { actions } = store;
+  actions.startReading(a, "solo");
+  actions.endReading(true);
+  actions.toggleWish(x);
+  actions.toggleWish(c);
+  actions.toggleWish(d);
+  actions.startReading(c, "solo");
+  actions.endReading(true);
+  actions.toggleFavorite(d);
+  actions.toggleFavorite(d);
+  const state = store.getSnapshot();
+  assert.deepEqual(state.wishlist, [a, b, x, c, d]);
+  assert.deepEqual(state.finishedBooks, [x, y, a, c]);
+});
+
+check("a book once used stays in the library when the use goes", () => {
+  const store = fresh();
+  const book = store
+    .getSnapshot()
+    .books.map((entry) => entry.id)
+    .find((id) => !(id in entriesOf(store.getSnapshot())));
+  assert.ok(book);
+  store.actions.updateNine([book], {});
+  let state = store.getSnapshot();
+  assert.equal(state.libraryEntries[book]?.everUsed, true);
+  store.actions.updateNine([], {});
+  state = store.getSnapshot();
+  assert.ok(shown(state, book));
+});
+
 check("undo puts the books back, but not one changed again since", () => {
   const store = fresh();
   const { actions } = store;
@@ -295,7 +339,8 @@ check("the demo keeps the rows, and leaves out any it would not take", () => {
     bookId: "ghost",
   };
   const broken = deserializeTown(JSON.stringify(envelope)).state;
-  assert.deepEqual(broken.libraryEntries, {});
+  assert.ok(!("momo" in broken.libraryEntries));
+  assert.ok(!("ghost" in broken.libraryEntries));
   // A save from before the library still has its books.
   delete envelope.data.libraryEntries;
   envelope.data.finishedBooks = ["momo"];

@@ -1127,6 +1127,39 @@ export function planWrites(
       })),
     });
 
+  // The library's rows the reader changed. A row new here may be one the
+  // database has (another device made it), so what changed is sent as well,
+  // against the row this device worked it out from. Written before the marks:
+  // a save cut short leaves the rows ahead of the marks, never behind them.
+  const rows: TablesInsert<"library_entries">[] = [];
+  const patches: Extract<Write, { kind: "library-entries" }>["patches"] = [];
+  let worked: Record<string, LibraryEntry> | null = null;
+  for (const [book_id, entry] of Object.entries(next.libraryEntries)) {
+    const kept = base.libraryEntries[book_id];
+    if (kept === entry) continue;
+    if (kept) {
+      const patch = libraryPatch(kept, entry);
+      if (Object.keys(patch).length)
+        patches.push({ book_id, made: false, patch });
+      continue;
+    }
+    worked ??= entriesOf(base);
+    const from =
+      worked[book_id] ?? blankEntry(book_id, entry.source, entry.addedAt);
+    rows.push({
+      user_id: user,
+      book_id,
+      source: entry.source,
+      batch_id: entry.batchId,
+      added_at: entry.addedAt,
+      ...libraryColumns(entry),
+    });
+    const patch = libraryPatch(from, entry);
+    if (Object.keys(patch).length) patches.push({ book_id, made: true, patch });
+  }
+  if (rows.length || patches.length)
+    writes.push({ kind: "library-entries", rows, patches });
+
   const profile: Extract<Write, { kind: "profile" }>["patch"] = {};
   if (next.me.handle !== base.me.handle) profile.handle = next.me.handle;
   if (next.me.name !== base.me.name) profile.name = next.me.name;
@@ -1364,37 +1397,6 @@ export function planWrites(
     });
   if (pressed.length) writes.push({ kind: "like-taps", rows: pressed });
 
-  // The library's rows the reader changed. A row new here may be one the
-  // database has (another device made it), so what changed is sent as well,
-  // against the row this device worked it out from.
-  const rows: TablesInsert<"library_entries">[] = [];
-  const patches: Extract<Write, { kind: "library-entries" }>["patches"] = [];
-  let worked: Record<string, LibraryEntry> | null = null;
-  for (const [book_id, entry] of Object.entries(next.libraryEntries)) {
-    const kept = base.libraryEntries[book_id];
-    if (kept === entry) continue;
-    if (kept) {
-      const patch = libraryPatch(kept, entry);
-      if (Object.keys(patch).length)
-        patches.push({ book_id, made: false, patch });
-      continue;
-    }
-    worked ??= entriesOf(base);
-    const from =
-      worked[book_id] ?? blankEntry(book_id, entry.source, entry.addedAt);
-    rows.push({
-      user_id: user,
-      book_id,
-      source: entry.source,
-      batch_id: entry.batchId,
-      added_at: entry.addedAt,
-      ...libraryColumns(entry),
-    });
-    const patch = libraryPatch(from, entry);
-    if (Object.keys(patch).length) patches.push({ book_id, made: true, patch });
-  }
-  if (rows.length || patches.length)
-    writes.push({ kind: "library-entries", rows, patches });
   return withSampleRows(writes, user);
 }
 /**
