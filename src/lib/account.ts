@@ -57,7 +57,7 @@ export const failureMessages: Record<AccountFailure, string> = {
     what: "このログイン用のリンクは、期限が切れているか、すでに使われています",
     next: "もう一度メールを送ってください",
   }),
-  "rate-limited": failure({ next: AGAIN.afterABitOfTime }),
+  "rate-limited": failure({ next: AGAIN.later }),
   "handle-taken": failure({ what: "このIDはほかの読書家が使っています" }),
   "invalid-profile": failure({ next: "入力した内容を確かめてください" }),
   network: failure({ what: NOT_CONNECTED, next: AGAIN.connection }),
@@ -67,12 +67,12 @@ export const failureMessages: Record<AccountFailure, string> = {
   }),
   server: failure({
     what: "ログインの仕組みが応えませんでした",
-    next: AGAIN.afterAWhile,
+    next: AGAIN.later,
   }),
   "leave-failed": failure({
     what: "退会できませんでした",
     kept: KEPT.nothing,
-    next: AGAIN.afterAWhile,
+    next: AGAIN.later,
   }),
 };
 

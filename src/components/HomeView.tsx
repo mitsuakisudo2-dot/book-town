@@ -43,7 +43,7 @@ import { lastOpen } from "../lib/last-open";
 import { announce } from "../lib/live-region";
 import { findReader } from "../lib/social";
 import { getTownSnapshot, townStore } from "../lib/store";
-import { DUR_MS, EASE, reducedMotion } from "../lib/motion";
+import { DUR_MS, EASE, playByFrames, reducedMotion } from "../lib/motion";
 import "./home/home.css";
 
 type Shared = {
@@ -179,16 +179,22 @@ export function HomeView({
     window.scrollTo({ top: change.top, behavior: "instant" });
     bar.current?.reset();
     // The pane comes in from the side it was swiped from (v37: 40px, .28s).
-    if (!reducedMotion())
-      panes.current[tab]?.animate(
-        [
-          {
-            transform: `translateX(${tab === "letters" ? 40 : -40}px)`,
-            opacity: 0.3,
-          },
-          { transform: "none", opacity: 1 },
-        ],
-        { duration: DUR_MS.tab, easing: EASE.standard },
+    // ホーム holds the screen still for a moment while it is drawn again, so
+    // the pane moves frame by frame: it slides in both ways.
+    const coming = panes.current[tab];
+    if (coming && !reducedMotion())
+      playByFrames(
+        coming.animate(
+          [
+            {
+              transform: `translateX(${tab === "letters" ? 40 : -40}px)`,
+              opacity: 0.3,
+            },
+            { transform: "none", opacity: 1 },
+          ],
+          { duration: DUR_MS.tab, easing: EASE.standard },
+        ),
+        DUR_MS.tab,
       );
   }, [tab]);
   // Panes made before new 便り were taken in at another, which still draw

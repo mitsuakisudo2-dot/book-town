@@ -312,7 +312,7 @@ export const SCAN_COPY = {
     held: "もう控えにあります",
     undone: "取り消しました",
     notYet: failure(
-      { what: "まだ取り消せません", next: AGAIN.pressAfterAMoment },
+      { what: "まだ取り消せません", next: AGAIN.pressLater },
       "",
     ),
   },

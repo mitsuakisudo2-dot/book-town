@@ -101,27 +101,21 @@ export const KEPT = {
 } as const;
 
 /**
- * How a notice asks to try again. These are the ways the screens say it
- * today, word for word; they are to come down to fewer.
+ * How a notice asks to try again. A wait is always said one way, 少し時間を
+ * おいて (けにーさん 2026-10-17); how is said only when it differs.
  */
 export const AGAIN = {
   now: "もう一度お試しください",
-  later: "少しおいて、もう一度お試しください",
-  inAMoment: "少し待って、もう一度お試しください",
-  afterAMoment: "少し待ってから、もう一度お試しください",
-  afterAWhile: "しばらくしてから、もう一度お試しください",
-  afterSomeTime: "時間をおいて、もう一度お試しください",
-  afterABitOfTime: "少し時間をおいてから、もう一度お試しください",
+  later: "少し時間をおいて、もう一度お試しください",
   connection: "通信の状態を確かめて、もう一度お試しください",
   /** For a button: pressed again once the town is in. */
   pressWhenLoaded: "読み込みが終わってから、もう一度押してください",
-  pressLater: "少しおいて、もう一度押してください",
-  pressAfterAMoment: "少し待ってから、もう一度押してください",
+  pressLater: "少し時間をおいて、もう一度押してください",
 } as const;
 
 /**
  * The notice, its sentences in order: "保存できませんでした。書きかけは残して
- * います。少しおいて、もう一度お試しください。" `end` is what closes it:
+ * います。少し時間をおいて、もう一度お試しください。" `end` is what closes it:
  * 「。」, or nothing for the notices that are written without it today.
  */
 export function failure(

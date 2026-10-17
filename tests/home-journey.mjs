@@ -1316,6 +1316,59 @@ try {
       }),
   );
   await check(
+    "390px swiping either way, the pane coming in slides from its side, even when the screen is held still a moment after the swipe",
+    () =>
+      withPage({}, async () => {
+        await goHome();
+        const doors = page.getByRole("navigation", { name: "できること" });
+        /** Notes, frame by frame, where the pane `which` is across. */
+        const note = (which) =>
+          page.evaluate((which) => {
+            window.__paneAt = [];
+            const start = performance.now();
+            const frame = () => {
+              const pane = document.querySelector(
+                `.home-pane[data-pane="${which}"]`,
+              );
+              const moved = pane && getComputedStyle(pane).transform;
+              if (moved)
+                window.__paneAt.push(
+                  moved === "none" ? 0 : Math.round(new DOMMatrix(moved).m41),
+                );
+              if (performance.now() - start < 1500)
+                requestAnimationFrame(frame);
+            };
+            requestAnimationFrame(frame);
+            // The next task holds the screen still for 400ms, as drawing
+            // ホーム again can on a phone.
+            addEventListener(
+              "touchend",
+              () =>
+                setTimeout(() => {
+                  const until = performance.now() + 400;
+                  while (performance.now() < until);
+                }),
+              { once: true, capture: true },
+            );
+          }, which);
+        const places = () => page.evaluate(() => window.__paneAt);
+        for (const [which, from, dx, side] of [
+          ["letters", doors, -160, 1],
+          ["home", pane("letters"), 160, -1],
+        ]) {
+          await note(which);
+          await swipe(from, dx);
+          await expect(pane(which)).toBeVisible();
+          await page.waitForTimeout(1600);
+          const seen = await places();
+          // From 40px on its side, through the way, to its place: it slid.
+          expect(new Set(seen).size, which).toBeGreaterThanOrEqual(3);
+          expect(Math.max(...seen.map((x) => x * side)), which).toBe(40);
+          expect(seen.at(-1), which).toBe(0);
+        }
+      }),
+  );
+  await check(
     "390px in the demo a pull at the top says nothing new came, nothing waits a minute later, and only a pull from the top reads",
     () =>
       withPage({}, async () => {
