@@ -198,6 +198,7 @@ export type Database = {
           author: string;
           created_at: string;
           created_by: string | null;
+          edition_id: string;
           id: string;
           isbn: string | null;
           price: number | null;
@@ -212,6 +213,7 @@ export type Database = {
           author?: string;
           created_at?: string;
           created_by?: string | null;
+          edition_id: string;
           id?: string;
           isbn?: string | null;
           price?: number | null;
@@ -225,6 +227,7 @@ export type Database = {
           author?: string;
           created_at?: string;
           created_by?: string | null;
+          edition_id?: string;
           id?: string;
           isbn?: string | null;
           price?: number | null;
@@ -243,11 +246,11 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "books_isbn_fkey";
-            columns: ["isbn"];
+            foreignKeyName: "books_edition_id_fkey";
+            columns: ["edition_id"];
             isOneToOne: false;
             referencedRelation: "editions";
-            referencedColumns: ["isbn"];
+            referencedColumns: ["id"];
           },
           {
             foreignKeyName: "books_work_id_fkey";
@@ -283,18 +286,21 @@ export type Database = {
       editions: {
         Row: {
           created_at: string;
-          isbn: string;
+          id: string;
+          isbn: string | null;
           work_id: string;
         };
         ComputedFields: never;
         Insert: {
           created_at?: string;
-          isbn: string;
+          id?: string;
+          isbn?: string | null;
           work_id: string;
         };
         Update: {
           created_at?: string;
-          isbn?: string;
+          id?: string;
+          isbn?: string | null;
           work_id?: string;
         };
         Relationships: [

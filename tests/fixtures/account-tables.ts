@@ -159,7 +159,8 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     people: { reporter_id: "delete" },
     readers: "own",
   },
-  // Works and the edition of each ISBN (works); they name no one.
+  // Works and their editions, one an ISBN or a book without one (works,
+  // edition_ids); they name no one.
   "public.editions": { people: {}, readers: "nobody" },
   "public.works": { people: {}, readers: "nobody" },
   "private.staff": { people: { user_id: "delete" }, readers: "nobody" },
@@ -168,8 +169,8 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   "private.work_changes": { people: {}, readers: "nobody" },
   "private.work_joins": {
     people: {},
-    // Works' ids, kept so a join can be undone exactly.
-    notPeople: ["led_here"],
+    // Works' and editions' ids, kept so a join can be undone exactly.
+    notPeople: ["led_here", "editions"],
     readers: "nobody",
   },
   "private.works_apart": { people: {}, readers: "nobody" },

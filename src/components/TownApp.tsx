@@ -43,7 +43,8 @@ import {
   ReaderAvatar,
 } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
-import { BookInHand, heldBookOf } from "./BookInHand";
+import { BookInHand, readBookInHandAhead } from "./book-in-hand-later";
+import { heldBookOf } from "../lib/held-book";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookReviews, FoldedWords } from "./Social";
 import { HomeView } from "./HomeView";
@@ -672,6 +673,7 @@ function ShopView({
     setSelected({ item, shelf });
     return true;
   }, Boolean(shop));
+  useEffect(() => readBookInHandAhead(), []);
   const publicShops = [
     ...state.shops,
     ...(state.ownShop ? [state.ownShop] : []),
@@ -1030,10 +1032,9 @@ function BookView({
       <p role="status">本を開いています…</p>
     ) : (
       <div className="empty-state">
-        <h1>この本は見つかりませんでした。</h1>
-        <p>登録した本は、登録したときと同じブラウザで開いてください。</p>
-        <Link href="/profiles/me/" className="button secondary">
-          保存した本を見る
+        <h1>この本のページは、いまは見られません。</h1>
+        <Link href="/" className="button secondary">
+          街にもどる
         </Link>
       </div>
     );

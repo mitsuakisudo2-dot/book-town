@@ -28,7 +28,7 @@ import { bookPath } from "../lib/books";
 import { profilePath } from "../lib/paths";
 import { findReader } from "../lib/social";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
-import { WoodenShelf } from "./WoodenShelf";
+import { SortableShelf } from "./SortableShelf";
 import { StoreSceneEditor } from "./StoreSceneEditor";
 import { useWalkStore } from "../lib/walk-store";
 import { hasPublicSceneBooks } from "../lib/store-customization";
@@ -676,10 +676,9 @@ function ShelfEditingPanel({
           style={{ width: `${Math.min(100, (used / shelf.capacity) * 100)}%` }}
         />
       </div>
-      <WoodenShelf
+      <SortableShelf
         shelf={shelf}
         books={books}
-        editing
         selectedId={selected?.id}
         onSelect={(item) => setSelectedId(item.id)}
         onReorder={(activeId, overId) => {

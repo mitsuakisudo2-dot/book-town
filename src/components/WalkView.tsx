@@ -12,7 +12,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { flushSync, preload } from "react-dom";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
-import { BookInHand, heldBookOf } from "./BookInHand";
+import { BookInHand } from "./BookInHand";
+import { heldBookOf } from "../lib/held-book";
 import { DoodleIcon, StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { ShelfZoom } from "./ShelfZoom";
 import {

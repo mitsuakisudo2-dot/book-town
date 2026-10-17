@@ -608,7 +608,7 @@
 .post-page.is-layer {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--layer-page);
   height: 100dvh;
   box-shadow: -8px 0 24px color-mix(in srgb, var(--shade) 12%, transparent);
   touch-action: pan-y pinch-zoom;

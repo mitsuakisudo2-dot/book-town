@@ -5929,11 +5929,12 @@ async function main() {
         (await read(null, "select id from shops")).length,
         (await read(null, "select profile_id as id from profile_nine")).length,
       ];
-      // Every column but the work, which a later migration adds to each book.
+      // Every column but the edition and the work, which later migrations
+      // add to each book.
       const catalog = () =>
         earlier
           .query(
-            "select to_jsonb(b) - 'work_id' as row from books b order by id",
+            "select to_jsonb(b) - 'work_id' - 'edition_id' as row from books b order by id",
           )
           .then((r) => r.rows);
       const before = {
@@ -6102,11 +6103,12 @@ async function main() {
           "books",
           "book_marks",
         ])
-          // Every column but a book's work, which a later migration adds.
+          // Every column but a book's edition and work, which later
+          // migrations add.
           out[table] = (
             await earlier.query(
-              `select to_jsonb(t) - 'work_id' as row from ${table} t
-               order by (to_jsonb(t) - 'work_id')::text`,
+              `select to_jsonb(t) - 'work_id' - 'edition_id' as row from ${table} t
+               order by (to_jsonb(t) - 'work_id' - 'edition_id')::text`,
             )
           ).rows;
         return out;

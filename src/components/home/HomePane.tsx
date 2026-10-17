@@ -43,7 +43,8 @@ import type { Poster } from "../../lib/posters";
 import type { Post, Shop, TownState } from "../../lib/types";
 import { findReader } from "../../lib/social";
 import { useLayerReturn } from "../../lib/back-layer";
-import { BookInHand, heldBookOf } from "../BookInHand";
+import { BookInHand, readBookInHandAhead } from "../book-in-hand-later";
+import { heldBookOf } from "../../lib/held-book";
 import { Alley } from "./Alley";
 import { CorkBoard } from "./CorkBoard";
 import { Entrances } from "./Entrances";
@@ -269,6 +270,9 @@ export function HomePane({
   // again as everything before (docs/09 「速さ」). Back on Home later, it is
   // all there at once, where the reader left it.
   const [stage, setStage] = useState(homeDrawn);
+  useEffect(() => {
+    if (drawn && stage >= 2) readBookInHandAhead();
+  }, [drawn, stage]);
   useEffect(() => {
     if (!drawn || stage >= 2) return;
     let timer = 0;
