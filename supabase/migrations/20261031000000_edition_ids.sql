@@ -29,6 +29,13 @@
 --
 -- Rollback: until the app reads edition_id (it does not yet), a new
 -- migration undoes this one with
+--   select set_config('lock_timeout', '10s', true);
+--   do $$
+--   begin
+--     lock table public.books in access exclusive mode;
+--     lock table public.editions in access exclusive mode;
+--   end;
+--   $$;
 --   drop trigger books_touch on public.books;
 --   create trigger books_touch before update on public.books
 --     for each row when (old.work_id is not distinct from new.work_id)
@@ -351,8 +358,9 @@ $$;
 -- every edition its ISBN, work and age, and no edition with an ISBN came
 -- from nowhere; each book with an ISBN is in that ISBN's edition, and each
 -- without alone in an edition without one, as old as the book; every book
--- is in its edition's work; and each join knows an edition for every ISBN
--- it moved. Counts only in the messages: they land in public Actions logs.
+-- is in its edition's work; and each join knows the edition of every ISBN
+-- and of every book without one it moved. Counts only in the messages: they
+-- land in public Actions logs.
 do $$
 declare
   copy_table text;
@@ -412,6 +420,14 @@ begin
       select 1 from public.editions e where e.isbn = i.isbn and e.id = any (j.editions)));
   if changed > 0 then
     raise exception '% joins lack the edition of an ISBN they moved', changed;
+  end if;
+  select count(*) into changed from private.work_joins j
+  where exists (
+    select 1 from private.work_changes c join public.books b on b.id = c.book_id
+    where c.join_id = j.id and c.kind = 'join' and b.isbn is null
+      and not b.edition_id = any (j.editions));
+  if changed > 0 then
+    raise exception '% joins lack the edition of a book without an ISBN they moved', changed;
   end if;
 end;
 $$;

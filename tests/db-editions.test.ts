@@ -968,6 +968,12 @@ async function main() {
           to: "update public.books b set edition_id = gen_random_uuid(), title = b.title || '！' where b.isbn is null;\n",
           reason: /the move changed 3 books/,
         },
+        {
+          from: "  where c.join_id = j.id and c.kind = 'join' and b.isbn is null\n  order by 1);",
+          to: "  where false\n  order by 1);",
+          reason:
+            /1 joins lack the edition of a book without an ISBN they moved/,
+        },
       ];
       for (const { from, to, reason } of spoils) {
         const spoil = TEXT.replace(from, to);
