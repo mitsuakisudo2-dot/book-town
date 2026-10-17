@@ -303,9 +303,8 @@ update private.book_checks c set checked_at = now(), verdict = 'none', judged_at
 from public.books b
 where b.id = c.book_id and b.isbn is null;
 
--- Books a source's answer could not mark to compare again, their checks
--- being written to just then (bib_recheck): the next tick compares them.
--- The tick alone writes here, so nothing is lost between its turns. Not a
+-- Books to compare again that could not be marked, their checks being
+-- written to just then (bib_recheck): the next tick compares them. Not a
 -- reference to the book: making one would wait on the book's row.
 create table private.book_rechecks (
   book_id uuid primary key
@@ -634,13 +633,17 @@ revoke all on function private.edition_bibliography(uuid, timestamptz)
 
 -- The edition's books placed after one time and by another (all of them, by
 -- default) are compared again on the next tick: what they see of the master
--- may have changed. Not a book its reader said is the ISBN's, nor one not
--- compared yet. In the tick (a source's answer), a book whose checks are
--- being written (placed again, its title edited, its reader answering) is
--- not waited on, as waiting on a reader who waits on the edition's sources
--- would never end; it is written down in book_rechecks, and the next tick
--- compares it. The operator's tools wait (with wait), so a book the tick is
--- judging from what was there before is marked once the tick is done.
+-- may have changed. Not a book its reader said is the ISBN's. A book due to
+-- be compared anyway is taken too: the tick may be comparing it right now
+-- from what was there before. The operator's tools wait (with wait) for the
+-- books the tick is comparing, and mark them once it is done. Anything else
+-- does not wait (a source's answer in the tick, the cache answering a new
+-- book), as waiting on a reader who waits on the edition's sources would
+-- never end: a book whose checks are being written just then (being
+-- compared, placed again, its title edited, its reader answering) is written
+-- down in book_rechecks instead, and the next tick compares it. The tick
+-- takes a book off that list before it reads the master for it, so a mark
+-- made meanwhile stays for the turn after.
 create function private.bib_recheck(edition uuid, wait boolean default false,
   after timestamptz default '-infinity', upto timestamptz default 'infinity') returns void
 language plpgsql security definer set search_path = '' as $$
@@ -653,7 +656,7 @@ begin
     from public.books b
     where b.id = c.book_id and b.edition_id = bib_recheck.edition
       and c.placed_at > after and c.placed_at <= upto
-      and c.checked_at is not null and c.confirmed_at is null;
+      and c.confirmed_at is null;
     return;
   end if;
   with due as (
@@ -661,18 +664,20 @@ begin
     join public.books b on b.id = x.book_id
     where b.edition_id = bib_recheck.edition
       and x.placed_at > after and x.placed_at <= upto
-      and x.checked_at is not null and x.confirmed_at is null
+      and x.confirmed_at is null
+  ), free as (
+    select x.book_id, x.checked_at from private.book_checks x
+    where x.book_id in (select d.book_id from due d)
+    for update of x skip locked
   ), marked as (
     update private.book_checks c set checked_at = null
-    where c.book_id in (
-      select x.book_id from private.book_checks x
-      where x.book_id in (select d.book_id from due d)
-      for update of x skip locked)
+    from free f
+    where c.book_id = f.book_id and f.checked_at is not null
     returning c.book_id
   )
   insert into private.book_rechecks (book_id)
   select d.book_id from due d
-  where d.book_id not in (select m.book_id from marked m)
+  where d.book_id not in (select f.book_id from free f)
   on conflict do nothing;
 end;
 $$;
@@ -901,10 +906,10 @@ begin
       select 1 from public.books o
       where o.edition_id = new.edition_id and o.id <> new.id
         and (o.source <> 'manual' or private.book_is_listed(o.id))) then
-    update private.edition_sources s set settled_for = now(),
+    update private.edition_sources s set settled_for = greatest(s.settled_for, now()),
       tried_for = greatest(s.tried_for, now()),
-      found_for = case when s.found_for is not null then now() end,
-      title_for = case when s.title_for is not null then now() end
+      found_for = greatest(s.found_for, case when s.found_for is not null then now() end),
+      title_for = greatest(s.title_for, case when s.title_for is not null then now() end)
     where s.edition_id = new.edition_id and s.state <> 'withdrawn'
       and s.settled_for is not null;
     update private.edition_sources s set misses = 0, failures = 0,
