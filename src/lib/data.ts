@@ -1526,6 +1526,7 @@ export function createInitialState(): TownState {
     settings: {
       composeIcon: "pen",
       visibility: cleanVisibilities(null),
+      shelfAudiences: {},
       spoilerDisplay: "fold_possible",
     },
     seenNotifications: [],

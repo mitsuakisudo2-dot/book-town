@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createInitialState } from "../src/lib/data";
-import { inLibrary } from "../src/lib/library";
+import { countsOf, filterLibrary, inLibrary } from "../src/lib/library";
 import {
   entriesOf,
   LEGACY_AT,
@@ -660,6 +660,8 @@ check("the shelves are read and written as the reader changed them", () => {
     note: "",
     position: "a",
     show_wanted: true,
+    audience: "private",
+    rule: null,
     created_at: at,
     updated_at: at,
     deleted_at: null,
@@ -735,6 +737,9 @@ check("the shelves are read and written as the reader changed them", () => {
   assert.equal(shelves.rows.length, 1);
   assert.equal(shelves.rows[0].id, made);
   assert.equal(shelves.rows[0].user_id, AKI);
+  // Private and filled by hand: the database's own default, not sent, so a
+  // database a migration behind takes it too.
+  assert.ok(!("audience" in shelves.rows[0]) && !("rule" in shelves.rows[0]));
   const books = writes.find(
     (write): write is Extract<Write, { kind: "shelf-books" }> =>
       write.kind === "shelf-books",
@@ -765,6 +770,214 @@ check("the shelves are read and written as the reader changed them", () => {
     again.add.map((row) => [row.shelf_id, row.book_id, row.added_at]),
     [[SHELF, BOOK, base.libraryShelfBooks[0].addedAt]],
   );
+});
+
+// ---------------------------------------------------------------- who may see a shelf, and smart shelves
+
+check(
+  "a smart shelf gathers the books that meet its rule, and takes none by hand",
+  () => {
+    const store = fresh();
+    const { actions } = store;
+    actions.changeLibrary(["momo", "solaris"], { status: "finished" });
+    actions.changeLibrary(["fictions"], { status: "reading" });
+    // No condition, a rule that cannot be read, or a shelf made smart: refused.
+    assert.equal(actions.makeLibraryShelf("空", "", { rule: {} }), null);
+    assert.equal(
+      actions.makeLibraryShelf("変", "", { rule: { status: [] } }),
+      null,
+    );
+    const sf = actions.makeLibraryShelf("SF", "")!;
+    actions.changeLibrary(["solaris"], { addShelf: sf });
+    const done = actions.makeLibraryShelf("読み終えた", "", {
+      rule: { status: ["finished"] },
+    })!;
+    assert.equal(
+      actions.makeLibraryShelf("入れ子", "", { rule: { with: [done] } }),
+      null,
+    );
+    const lem = actions.makeLibraryShelf("レム", "", {
+      rule: { author: "れむ", with: [sf] },
+    })!;
+    let library = libraryStateOf(store.getSnapshot());
+    const shop = townShopBooks(store.getSnapshot());
+    const on = (shelf: string) =>
+      filterLibrary(library, { shelf, showWanted: true }, shop).sort();
+    assert.deepEqual(on(done), ["momo", "solaris"]);
+    // The author is found as a search finds it: かな and カタカナ alike.
+    assert.deepEqual(on(lem), ["solaris"]);
+    assert.equal(countsOf(library, shop).themes[done].works, 2);
+    // A smart shelf takes no book by hand, and holds no shelf rows.
+    assert.equal(actions.changeLibrary(["fictions"], { addShelf: done }), null);
+    assert.ok(
+      store
+        .getSnapshot()
+        .libraryShelfBooks.every((book) => book.shelfId === sf),
+    );
+    // Its rule changes; a shelf stays the kind it was made.
+    assert.equal(
+      actions.editLibraryShelf(done, { rule: { status: ["reading"] } }),
+      true,
+    );
+    assert.equal(
+      actions.editLibraryShelf(sf, { rule: { owned: "yes" } }),
+      false,
+    );
+    assert.equal(actions.editLibraryShelf(done, { rule: {} }), false);
+    library = libraryStateOf(store.getSnapshot());
+    assert.deepEqual(on(done), ["fictions"]);
+    // The demo keeps the rule.
+    const back = deserializeTown(serializeTown(store.getSnapshot())).state;
+    assert.deepEqual(back.libraryShelves, store.getSnapshot().libraryShelves);
+  },
+);
+
+check(
+  "each shelf has who may see it, and a narrower starting choice narrows them all",
+  () => {
+    const store = fresh();
+    const { actions } = store;
+    const sf = actions.makeLibraryShelf("SF", "")!;
+    const shelfOf = () =>
+      store.getSnapshot().libraryShelves.find((shelf) => shelf.id === sf)!;
+    // A new shelf starts at the starting choice: 自分だけ.
+    assert.equal(shelfOf().audience, "private");
+    assert.equal(actions.editLibraryShelf(sf, { audience: "everyone" }), true);
+    // フォロワー限定 is not offered yet.
+    assert.equal(
+      actions.editLibraryShelf(sf, { audience: "followers" }),
+      false,
+    );
+    assert.equal(actions.setDefaultShelfAudience("finished", "everyone"), true);
+    assert.equal(
+      actions.setDefaultShelfAudience("finished", "everyone"),
+      false,
+    );
+    assert.equal(actions.setDefaultShelfAudience("nope", "everyone"), false);
+    assert.deepEqual(store.getSnapshot().settings.shelfAudiences, {
+      finished: "everyone",
+    });
+    const back = deserializeTown(serializeTown(store.getSnapshot())).state;
+    assert.deepEqual(back.settings.shelfAudiences, { finished: "everyone" });
+    // Wider, then narrower again: what was wider narrows with it.
+    actions.setVisibility("shelves", "everyone");
+    const made = actions.makeLibraryShelf("公開から", "")!;
+    assert.equal(
+      store.getSnapshot().libraryShelves.find((shelf) => shelf.id === made)!
+        .audience,
+      "everyone",
+    );
+    actions.setVisibility("shelves", "private");
+    assert.ok(
+      store
+        .getSnapshot()
+        .libraryShelves.every((shelf) => shelf.audience === "private"),
+    );
+    assert.deepEqual(store.getSnapshot().settings.shelfAudiences, {
+      finished: "private",
+    });
+  },
+);
+
+check("who may see a shelf and its rule are read and written", () => {
+  const SHELF = "00000000-0000-4000-8000-0000000005f1";
+  const shelfRow = {
+    id: SHELF,
+    user_id: AKI,
+    name: "今年の読了",
+    note: "",
+    position: "a",
+    show_wanted: true,
+    audience: "everyone",
+    rule: { status: ["finished"], since: "2026-01" },
+    created_at: at,
+    updated_at: at,
+    deleted_at: null,
+  };
+  const base = townFromRows(
+    rows({
+      libraryEntries: [entryRow(BOOK)],
+      libraryShelves: [
+        shelfRow,
+        // A rule from a later app, or none at all from an earlier database.
+        {
+          ...shelfRow,
+          id: "00000000-0000-4000-8000-0000000005f2",
+          rule: { someday: true },
+        },
+        {
+          ...shelfRow,
+          id: "00000000-0000-4000-8000-0000000005f3",
+          audience: undefined as unknown as string,
+          rule: undefined as unknown as null,
+        },
+      ],
+      readerSettings: {
+        user_id: AKI,
+        shelf_audiences: { finished: "everyone", secret: "everyone" },
+      } as unknown as RemoteRows["readerSettings"],
+    }),
+    ids,
+  );
+  assert.deepEqual(
+    base.libraryShelves.map((shelf) => [shelf.id, shelf.audience, shelf.rule]),
+    [
+      [SHELF, "everyone", { status: ["finished"], since: "2026-01" }],
+      ["00000000-0000-4000-8000-0000000005f3", "private", null],
+    ],
+  );
+  assert.deepEqual(base.settings.shelfAudiences, { finished: "everyone" });
+  const store = createTownStore(
+    {
+      kind: "local",
+      newId: () => crypto.randomUUID(),
+      load: () => ({ state: base, status: "saved" }),
+      save: () => "saved",
+    },
+    tick,
+  );
+  store.initialize();
+  const { actions } = store;
+  actions.editLibraryShelf(SHELF, {
+    audience: "private",
+    rule: { status: ["finished"], since: "2026-01", until: "2026-12" },
+  });
+  const smart = actions.makeLibraryShelf("積読", "", {
+    rule: { status: ["tsundoku"] },
+  })!;
+  actions.makeLibraryShelf("手で", "");
+  actions.setDefaultShelfAudience("want", "everyone");
+  const writes = planWrites(base, store.getSnapshot(), ids);
+  const shelves = writes.find(
+    (write): write is Extract<Write, { kind: "library-shelves" }> =>
+      write.kind === "library-shelves",
+  )!;
+  assert.deepEqual(shelves.patches, [
+    {
+      id: SHELF,
+      patch: {
+        audience: "private",
+        rule: { status: ["finished"], since: "2026-01", until: "2026-12" },
+      },
+    },
+  ]);
+  // A smart shelf among them: every new row says who may see it and its rule.
+  assert.deepEqual(
+    shelves.rows.map((row) => [row.audience, row.rule]),
+    [
+      ["private", { status: ["tsundoku"] }],
+      ["private", null],
+    ],
+  );
+  assert.equal(shelves.rows[0].id, smart);
+  const settings = writes.find(
+    (write): write is Extract<Write, { kind: "reader-settings" }> =>
+      write.kind === "reader-settings",
+  )!;
+  assert.deepEqual(settings.row, {
+    user_id: AKI,
+    shelf_audiences: { finished: "everyone", want: "everyone" },
+  });
 });
 
 console.log(`${passed} library town checks passed`);

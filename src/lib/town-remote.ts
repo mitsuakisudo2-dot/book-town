@@ -13,6 +13,8 @@ import {
 import { tapsOf } from "./social";
 import {
   blankEntry,
+  cleanShelfAudiences,
+  readRule,
   validateEntry,
   validateShelf,
   type LibraryEntry,
@@ -425,9 +427,14 @@ function shelvesFromRows(
       note: row.note,
       position: row.position,
       showWanted: row.show_wanted,
+      // A database a migration behind has neither: private, filled by hand.
+      audience: isAudience(row.audience) ? row.audience : "private",
+      rule: row.rule == null ? null : readRule(row.rule),
       createdAt: row.created_at,
       deletedAt: row.deleted_at,
     };
+    // A rule this app cannot read (one from a later app) is left to it.
+    if (row.rule != null && shelf.rule === null) return [];
     return validateShelf(shelf) === null ? [shelf] : [];
   });
 }
@@ -784,6 +791,8 @@ export function townFromRows(
         ? (ownProfile?.compose_icon as ComposeIcon)
         : "pen",
       visibility: visibilitiesFromRow(rows.readerSettings),
+      // A database a migration behind has none: each follows the starting choice.
+      shelfAudiences: cleanShelfAudiences(rows.readerSettings?.shelf_audiences),
       spoilerDisplay: SPOILER_DISPLAYS.includes(
         rows.readerSettings?.spoiler_display as SpoilerDisplay,
       )
@@ -1030,7 +1039,7 @@ export type Write =
         Partial<
           Pick<
             TablesInsert<"reader_settings">,
-            "spoiler_display" | SettingsVisibilityColumn
+            "spoiler_display" | "shelf_audiences" | SettingsVisibilityColumn
           >
         >;
     }
@@ -1069,7 +1078,13 @@ export type Write =
 export type LibraryShelfPatch = Partial<
   Pick<
     Tables<"library_shelves">,
-    "name" | "note" | "position" | "show_wanted" | "deleted_at"
+    | "name"
+    | "note"
+    | "position"
+    | "show_wanted"
+    | "deleted_at"
+    | "audience"
+    | "rule"
   >
 >;
 
@@ -1258,6 +1273,8 @@ export function planWrites(
     position: shelf.position,
     show_wanted: shelf.showWanted,
     deleted_at: shelf.deletedAt,
+    audience: shelf.audience,
+    rule: shelf.rule as TablesInsert<"library_shelves">["rule"],
   });
   const baseShelves = new Map(
     base.libraryShelves.map((shelf) => [shelf.id, shelf]),
@@ -1280,11 +1297,21 @@ export function planWrites(
     const to = shelfColumns(shelf);
     const patch = Object.fromEntries(
       (Object.keys(to) as (keyof typeof to)[])
-        .filter((key) => from[key] !== to[key])
+        .filter((key) => !sameJson(from[key], to[key]))
         .map((key) => [key, to[key]]),
     ) as LibraryShelfPatch;
     if (Object.keys(patch).length) shelfPatches.push({ id: shelf.id, patch });
   }
+  // New shelves private and filled by hand leave out who may see them and
+  // the rule, both the database's own default, so they are written whether
+  // or not the database has those columns yet (the app and the migration
+  // reach production apart). One row sending them sends them for all: rows
+  // sent together have the same columns.
+  if (shelfRows.every((row) => row.audience === "private" && row.rule === null))
+    for (const row of shelfRows) {
+      delete row.audience;
+      delete row.rule;
+    }
   if (shelfRows.length || shelfPatches.length)
     writes.push({
       kind: "library-shelves",
@@ -1350,6 +1377,9 @@ export function planWrites(
     settingsRow,
     visibilityChanges(base.settings.visibility, next.settings.visibility),
   );
+  if (!sameJson(next.settings.shelfAudiences, base.settings.shelfAudiences))
+    settingsRow.shelf_audiences = next.settings
+      .shelfAudiences as TablesInsert<"reader_settings">["shelf_audiences"];
   if (Object.keys(settingsRow).length > 1)
     writes.push({ kind: "reader-settings", row: settingsRow });
 
@@ -1725,6 +1755,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     settings: {
       composeIcon: "pen",
       visibility: cleanVisibilities(null),
+      shelfAudiences: {},
       spoilerDisplay: "fold_possible",
     },
     seenNotifications: [],
