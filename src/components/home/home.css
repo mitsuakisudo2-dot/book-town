@@ -49,7 +49,7 @@
 .home-tabs {
   position: sticky;
   top: var(--home-bar);
-  z-index: 12;
+  z-index: var(--layer-sticky);
   display: flex;
   margin: -28px calc(-1 * var(--home-gutter)) 0;
   background: color-mix(in srgb, var(--paper) 92%, transparent);
@@ -1017,7 +1017,7 @@ html[data-home-tab] {
 .home-new-slot {
   position: sticky;
   top: calc(var(--home-bar) + 45px);
-  z-index: 11;
+  z-index: calc(var(--layer-sticky) - 1);
   display: flex;
   justify-content: center;
   height: 0;

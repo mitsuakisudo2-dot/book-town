@@ -133,7 +133,7 @@ function ShelfBook({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition: transition,
-    zIndex: isDragging ? 10 : undefined,
+    zIndex: isDragging ? 9 : undefined,
     "--book-height": h + "px",
     "--book-thickness": Math.max(20, Math.min(thickness, 38)) + "px",
     "--book-color": book.color,

@@ -4,7 +4,7 @@
 
 .site-notes-button {
   position: fixed;
-  z-index: 90;
+  z-index: var(--layer-notes-button);
   right: max(36px, env(safe-area-inset-right, 0px));
   bottom: 100px;
   display: grid;
@@ -73,7 +73,7 @@ body:has(.modal-backdrop) .site-notes-button {
 .site-notes-tint {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: var(--layer-notes);
   background: color-mix(in srgb, var(--lamp-glow) 10%, transparent);
   box-shadow: inset 0 0 0 3px var(--lamp-glow);
   touch-action: manipulation;
@@ -100,11 +100,11 @@ body:has(.modal-backdrop) .site-notes-button {
   height: 0;
   overflow: clip;
   pointer-events: none;
-  z-index: 101;
+  z-index: calc(var(--layer-notes) + 1);
 }
 .site-notes-pin {
   position: absolute;
-  z-index: 101;
+  z-index: calc(var(--layer-notes) + 1);
   display: grid;
   place-items: center;
   width: 28px;
@@ -167,7 +167,7 @@ body:has(.modal-backdrop) .site-notes-button {
    fixed things beneath (a book's reaction row cannot be scrolled away). */
 .site-notes-banner {
   position: fixed;
-  z-index: 102;
+  z-index: calc(var(--layer-notes) + 2);
   right: max(36px, env(safe-area-inset-right, 0px));
   bottom: 100px;
   display: flex;
@@ -238,7 +238,7 @@ body:has(.modal-backdrop) .site-notes-button {
 .site-notes-sheet,
 .site-notes-card {
   position: fixed;
-  z-index: 103;
+  z-index: calc(var(--layer-notes) + 3);
   display: flex;
   flex-direction: column;
   gap: 6px;

@@ -113,6 +113,22 @@
   --r-card: 16px;
   --r-pill: 999px;
 
+  /* Layers: what lies over what, lowest first. A screen's z-index is one of
+     these, never a number of its own (tests/layers.test.ts). Numbers from -2
+     to 9 are only for the order of parts inside one part (a jacket's edge,
+     a shelf's board), and the walk keeps its own in walk.css (--walk-z-…),
+     since .walk-view closes its layers with isolation. */
+  --layer-sticky: 12; /* a band held in the page: Home's tabs, an editor's foot */
+  --layer-topbar: 16; /* the town's bar at the top */
+  --layer-sidebar: 20; /* the town's side on a wide screen */
+  --layer-float: 34; /* a button floating over the page (書く) */
+  --layer-tabbar: 35; /* the bottom bar on a phone */
+  --layer-page: 60; /* a page laid over the screen (a 便り) */
+  --layer-modal: 80; /* a Modal, the scanner */
+  --layer-notes-button: 90; /* 注釈 button */
+  --layer-notes: 100; /* 注釈 mode: tint, pins (+1), banner (+2), card (+3) */
+  --layer-toast: 120; /* a notice, over everything */
+
   /* The device's own letters first (仮); Noto when it has none. Mincho only
      for titles, shop names, headings, quotes and POPs. */
   --sans:
