@@ -23,7 +23,8 @@
 -- whose logs anyone may read: the ISBNs asked about include those of books
 -- registered privately. Both sources are asked about an edition each time a
 -- book is placed in it (registered, or moved there by an edited ISBN), in
--- the order the books were placed; then again by need (one still in the
+-- the order the books were placed, an edition registered before and one
+-- nobody had alike; then again by need (one still in the
 -- making within a week, one not found after a day, a week, a month and then
 -- every three months, a new or incomplete one each month, openBD's each
 -- month so its corrections and deletions reach the master, the library's
@@ -43,8 +44,10 @@
 -- what the sources answered to questions sent after the book was placed in
 -- its edition, and not before ten minutes after it was: an edition someone
 -- registered before and one nobody had go through the same questions in the
--- same queue, so neither what a book shows nor when tells whether someone
--- registered that ISBN before. The judging of registrations against the
+-- same queue, from the same start (what a book's placement asks for is owed
+-- only while the book is there, and how long to wait after an answer counts
+-- from the placement), so neither what a book shows nor when tells whether
+-- someone registered that ISBN before. What is left is in docs/09. The judging of registrations against the
 -- master (the next step) waits the same way, from private.book_checks.
 --
 -- The copy the edition ids took (20261031000000_edition_ids) is dropped: the
@@ -67,7 +70,7 @@
 --     private.onix_list(jsonb), private.ndl_credit(text), private.bib_person(text, text),
 --     private.bib_title_parts(text), private.bib_issued(text), private.bib_text(text),
 --     private.isbn13(text), private.edition_asked(), private.book_checked(),
---     private.bib_ask(uuid),
+--     private.bib_ask(uuid, boolean), private.bib_owed(uuid, timestamptz, timestamptz),
 --     private.bib_edition_of(uuid), private.fix_bibliography(uuid, text, jsonb, text),
 --     private.unfix_bibliography(uuid, text), private.refetch_bibliography(uuid),
 --     private.withdraw_bibliography(uuid, text), private.allow_bibliography(uuid, text);
@@ -482,11 +485,12 @@ create table private.edition_sources (
   -- Answers in a row that did not find it, and that failed.
   misses smallint not null default 0,
   failures smallint not null default 0,
-  -- When to ask next (null: not again), and since when a question is owed
-  -- (a book was placed in the edition, or the operator asked): the oldest
-  -- ask that no question sent since has answered.
+  -- When to ask next (null: not again). When the question was sent whose
+  -- answer (found or not) is the last kept: a book placed after it is owed a
+  -- question (bib_owed), and so is the operator's ask (refetch_at) after it.
   next_at timestamptz,
-  asked_at timestamptz,
+  settled_at timestamptz,
+  refetch_at timestamptz,
   -- The question out, if one is: pg_net's id for it, when it went, and where
   -- this edition's ISBN is in it (openBD answers in the order asked).
   request_id bigint,
@@ -533,15 +537,14 @@ revoke all on private.book_checks from public, anon, authenticated;
 
 -- A new edition with an ISBN gets its two sources. A book's place is written
 -- down when it is registered and when its edition changes, and both sources
--- of its edition are asked again: a question is owed from then (asked_at),
--- or from an earlier ask still waiting for its question; one sent before the
--- book was placed does not answer for it.
+-- of its edition are asked again (bib_ask): the book is owed a question sent
+-- after it was placed, for as long as it is there (bib_owed).
 create function private.edition_asked() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   if new.isbn is not null then
-    insert into private.edition_sources (edition_id, source, next_at, asked_at)
-    values (new.id, 'ndl', now(), now()), (new.id, 'openbd', now(), now())
+    insert into private.edition_sources (edition_id, source, next_at)
+    values (new.id, 'ndl', now()), (new.id, 'openbd', now())
     on conflict do nothing;
   end if;
   return null;
@@ -551,18 +554,36 @@ revoke all on function private.edition_asked() from public, anon, authenticated;
 create trigger editions_asked after insert on public.editions
   for each row execute function private.edition_asked();
 
--- Owes the edition's sources a question (not one withdrawn): from now, unless
--- an earlier ask is still owed one. A question out, sent before now, does
--- not answer this ask, so another goes after it.
-create function private.bib_ask(edition uuid) returns void
+-- When the edition's oldest question owed is from: the first book placed in
+-- it, of those there now, after the question settled was sent; or the
+-- operator's ask after it. Null when none is owed. A book that left takes its
+-- ask with it.
+create function private.bib_owed(edition uuid, settled timestamptz, refetch timestamptz)
+returns timestamptz
+language sql stable set search_path = '' as $$
+  select least(
+    (select min(c.placed_at)
+     from public.books b join private.book_checks c on c.book_id = b.id
+     where b.edition_id = bib_owed.edition and c.placed_at > coalesce(settled, '-infinity')),
+    case when refetch > coalesce(settled, '-infinity') then refetch end)
+$$;
+revoke all on function private.bib_owed(uuid, timestamptz, timestamptz)
+  from public, anon, authenticated;
+
+-- Asks the edition's sources (not one withdrawn) again now, or as soon as the
+-- question out is answered (it was sent before, so it does not answer this
+-- ask): a book was placed in it, or the operator asked (refetch). How long to
+-- wait after an answer that did not find it, or failed, counts from here: the
+-- edition's answers before do not make its new book wait longer.
+create function private.bib_ask(edition uuid, refetch boolean default false) returns void
 language sql security definer set search_path = '' as $$
   update private.edition_sources s set
-    asked_at = case when s.asked_at is not null and (s.sent_at is null or s.asked_at > s.sent_at)
-      then s.asked_at else now() end,
+    misses = 0, failures = 0,
+    refetch_at = case when bib_ask.refetch then now() else s.refetch_at end,
     next_at = case when s.request_id is null then now() else s.next_at end
   where s.edition_id = bib_ask.edition and s.state <> 'withdrawn'
 $$;
-revoke all on function private.bib_ask(uuid) from public, anon, authenticated;
+revoke all on function private.bib_ask(uuid, boolean) from public, anon, authenticated;
 
 create function private.book_checked() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -638,9 +659,11 @@ revoke all on function private.bib_next(text, text, smallint, smallint, text, js
 -- data goes (it no longer has the book); the library's stays. Either way a
 -- title the master would be left without stays, and the edition is listed
 -- for the operator (bibliography_review). Failed: all stays, and the question
--- goes again sooner. A found or missing answer settles the asks made before
--- its question went; one made after gets the next question at once. An
--- answer that comes back after the operator withdrew the source is not kept.
+-- goes again sooner. A found or missing answer settles what was owed before
+-- its question went. When a book was placed (or the operator asked) after it
+-- went, the next question goes at once, and the answer does not count toward
+-- how long to wait (that counts from the placement). An answer that comes
+-- back after the operator withdrew the source is not kept.
 create function private.bib_take(edition uuid, source text, question bigint, state text,
   record text, record_id text, status text, fields jsonb) returns void
 language plpgsql security definer set search_path = '' as $$
@@ -648,6 +671,7 @@ declare
   s private.edition_sources;
   sent timestamptz;
   alone boolean;
+  later boolean;
 begin
   select * into s from private.edition_sources x
   where x.edition_id = bib_take.edition and x.source = bib_take.source
@@ -656,6 +680,7 @@ begin
     return;
   end if;
   sent := s.sent_at;
+  later := sent is not null and private.bib_owed(s.edition_id, sent, s.refetch_at) is not null;
   s.request_id := null;
   s.sent_at := null;
   s.request_place := null;
@@ -688,7 +713,7 @@ begin
       s.failures := 0;
     elsif bib_take.state = 'missing' then
       s.state := 'missing';
-      s.misses := least(s.misses + 1, 1000);
+      s.misses := case when later then s.misses else least(s.misses + 1, 1000) end;
       s.failures := 0;
       if s.source = 'openbd' then
         s.record := null;
@@ -706,19 +731,19 @@ begin
       end if;
     else
       s.state := 'failed';
-      s.failures := least(s.failures + 1, 1000);
+      s.failures := case when later then s.failures else least(s.failures + 1, 1000) end;
     end if;
-    if s.state <> 'failed' and (sent is null or s.asked_at <= sent) then
-      s.asked_at := null;
+    if s.state <> 'failed' and sent is not null then
+      s.settled_at := greatest(s.settled_at, sent);
     end if;
-    s.next_at := case when s.state <> 'failed' and s.asked_at is not null then now()
+    s.next_at := case when later then now()
       else private.bib_next(s.source, s.state, s.misses, s.failures, s.status, s.fields) end;
   end if;
   update private.edition_sources x set
     state = s.state, record = s.record, record_id = s.record_id, status = s.status,
     fields = s.fields, answered_at = s.answered_at, found_at = s.found_at,
     found_sent_at = s.found_sent_at, title_sent_at = s.title_sent_at,
-    misses = s.misses, failures = s.failures, next_at = s.next_at, asked_at = s.asked_at,
+    misses = s.misses, failures = s.failures, next_at = s.next_at, settled_at = s.settled_at,
     request_id = null, sent_at = null, request_place = null, title_kept_at = s.title_kept_at
   where x.edition_id = s.edition_id and x.source = s.source;
 end;
@@ -728,11 +753,11 @@ revoke all on function private.bib_take(uuid, text, bigint, text, text, text, te
 
 -- Asks what is due, a little each turn: the library about one edition, openBD
 -- about up to a hundred in one question. First what is owed a question (a
--- book was placed, or the operator asked), oldest ask first, whether the
--- edition is new or not; then editions never asked about (those there before
--- this file), then the library's records still in the making, then those not
--- found, then the rest, each by when it fell due. Not about an edition with
--- no book. The library's search takes one ISBN a
+-- book was placed, or the operator asked), oldest first, whether the edition
+-- is new or not (ties, as of books registered together, by the edition's
+-- random id, nothing it has been through); then the library's records still
+-- in the making, then those not found, then the rest, each by when it fell
+-- due. Not about an edition with no book. The library's search takes one ISBN a
 -- question (its API spec, 第1.5版 表3-3) and is asked only for its own
 -- records, finished (iss-ndl-opac) or in the making (iss-ndl-opac-inprocess),
 -- without its holdings (onlyBib).
@@ -749,10 +774,12 @@ begin
     select s.edition_id, e.isbn
     from private.edition_sources s
     join public.editions e on e.id = s.edition_id
+    cross join lateral (
+      select private.bib_owed(s.edition_id, s.settled_at, s.refetch_at) as at) owed
     where s.source = 'ndl' and s.request_id is null and s.state <> 'withdrawn'
       and s.next_at <= now()
       and exists (select 1 from public.books b where b.edition_id = s.edition_id)
-    order by s.asked_at is null, s.asked_at, s.state <> 'waiting',
+    order by owed.at is null, owed.at, case when owed.at is not null then s.edition_id end,
       s.status is distinct from 'C3', s.state <> 'missing', s.next_at
     limit 1
     for update of s skip locked
@@ -773,11 +800,13 @@ begin
     select s.edition_id, e.isbn
     from private.edition_sources s
     join public.editions e on e.id = s.edition_id
+    cross join lateral (
+      select private.bib_owed(s.edition_id, s.settled_at, s.refetch_at) as at) owed
     where s.source = 'openbd' and s.request_id is null and s.state <> 'withdrawn'
       and s.next_at <= now()
       and exists (select 1 from public.books b where b.edition_id = s.edition_id)
-    order by s.asked_at is null, s.asked_at, s.state <> 'waiting', s.state <> 'missing',
-      s.next_at
+    order by owed.at is null, owed.at, case when owed.at is not null then s.edition_id end,
+      s.state <> 'missing', s.next_at
     limit 100
     for update of s skip locked
   ) d;
@@ -798,7 +827,9 @@ revoke all on function private.bib_send() from public, anon, authenticated;
 -- and keeps what they say; a question with no answer after fifteen minutes
 -- failed, and so did an answer that is not one the source gives (openBD's
 -- must be a list as long as the question) or that cannot be read. An answer
--- read is deleted from pg_net's table.
+-- read is deleted from pg_net's table. It never waits for a reader: a
+-- question whose editions a registration is writing to is left for the next
+-- turn, answer and all.
 create function private.bib_receive() returns void
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -809,11 +840,17 @@ declare
   a record;
 begin
   for out_q in
-    select x.request_id, x.source, min(x.sent_at) as sent_at, max(x.request_place) as places
+    select x.request_id, x.source, min(x.sent_at) as sent_at, max(x.request_place) as places,
+      count(*) as editions
     from private.edition_sources x
     where x.request_id is not null
     group by x.request_id, x.source
   loop
+    if (select count(*) from (
+          select 1 from private.edition_sources x where x.request_id = out_q.request_id
+          for update skip locked) l) < out_q.editions then
+      continue;
+    end if;
     select h.status_code, h.content, h.timed_out, h.error_msg into answer
     from net._http_response h where h.id = out_q.request_id
     limit 1;
@@ -1039,7 +1076,7 @@ language plpgsql security definer set search_path = '' as $$
 declare
   ed uuid := private.bib_edition_of(book);
 begin
-  perform private.bib_ask(ed);
+  perform private.bib_ask(ed, true);
   if not exists (
       select 1 from private.edition_sources s
       where s.edition_id = ed and s.state <> 'withdrawn') then
@@ -1051,14 +1088,23 @@ revoke all on function private.refetch_bibliography(uuid) from public, anon, aut
 
 -- Takes a source's data off an edition and stops asking it (the source, or
 -- whoever the book is about, asked for it to go), and puts it back to be
--- asked again.
+-- asked again. Only for an edition with a book in a public place, as with
+-- corrections: every later registration of the ISBN goes without it. (One
+-- only registered privately is shown on no page others read.)
 create function private.withdraw_bibliography(book uuid, source text) returns void
 language plpgsql security definer set search_path = '' as $$
+declare
+  ed uuid := private.bib_edition_of(book);
 begin
+  if not exists (
+      select 1 from public.books b
+      where b.edition_id = ed and private.book_is_listed(b.id)) then
+    raise exception 'none of the edition''s books is in a public place';
+  end if;
   update private.edition_sources s set state = 'withdrawn', record = null, record_id = null,
-    status = null, fields = '{}', next_at = null, asked_at = null, misses = 0, failures = 0,
+    status = null, fields = '{}', next_at = null, refetch_at = null, misses = 0, failures = 0,
     title_kept_at = null, found_sent_at = null, title_sent_at = null
-  where s.edition_id = private.bib_edition_of(book) and s.source = withdraw_bibliography.source;
+  where s.edition_id = ed and s.source = withdraw_bibliography.source;
   if not found then
     raise exception 'no % data for the book', source;
   end if;
@@ -1069,7 +1115,7 @@ revoke all on function private.withdraw_bibliography(uuid, text) from public, an
 create function private.allow_bibliography(book uuid, source text) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
-  update private.edition_sources s set state = 'waiting', next_at = now(), asked_at = now()
+  update private.edition_sources s set state = 'waiting', next_at = now(), refetch_at = now()
   where s.edition_id = private.bib_edition_of(book) and s.source = allow_bibliography.source
     and s.state = 'withdrawn';
   if not found then

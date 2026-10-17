@@ -354,7 +354,7 @@ function helpers(db: PGlite) {
         title_kept: boolean;
       }>(
         `select s.state, s.record, s.record_id, s.status, s.fields, s.misses, s.failures,
-           (s.next_at - s.answered_at)::text as wait, s.asked_at is not null as asked,
+           (s.next_at - s.answered_at)::text as wait, private.bib_owed(s.edition_id, s.settled_at, s.refetch_at) is not null as asked,
            s.request_id is not null as out, s.title_kept_at is not null as title_kept
          from private.edition_sources s join editions e on e.id = s.edition_id
          where e.isbn = $1 and s.source = $2`,
@@ -385,14 +385,16 @@ function helpers(db: PGlite) {
          found_sent_at = found_sent_at - (select i from i),
          title_sent_at = title_sent_at - (select i from i),
          title_kept_at = title_kept_at - (select i from i),
-         next_at = next_at - (select i from i), asked_at = asked_at - (select i from i),
+         next_at = next_at - (select i from i), settled_at = settled_at - (select i from i),
+         refetch_at = refetch_at - (select i from i),
          sent_at = sent_at - (select i from i)`,
       [minutes],
     );
   /** Nothing owed or due: no source is asked anything until a book moves. */
   const quiet = () =>
     rows(
-      `update private.edition_sources set asked_at = null, next_at = now() + interval '1 day'
+      `update private.edition_sources set settled_at = now(), refetch_at = null,
+         next_at = now() + interval '1 day'
        where request_id is null`,
     );
   /** Every question out goes unanswered past its fifteen minutes; then quiet. */
@@ -531,6 +533,7 @@ async function edgeChecks(check: Check) {
   const {
     rows,
     as,
+    refused,
     register,
     tick,
     questions,
@@ -565,15 +568,17 @@ async function edgeChecks(check: Check) {
       .map((q) => new URL(q.url).searchParams.get("isbn")?.split(","));
 
   await check(
-    "what is owed a question goes first, oldest ask first, whether its edition is new or old; then editions never asked about, the library's records in the making, those not found, and the rest",
+    "what is owed a question goes first, oldest first, whether its edition is new, old or there before this file; then the library's records in the making, those not found, and the rest",
     async () => {
       for (const n of [1, 2, 3, 4, 5])
         await register(AKI, id(3, n), Y(n), `本${n}`);
       // As if they had been answered before: Y1 and Y5 found, Y2 not found,
-      // Y3 in the making at the library; Y4 there before this file, never
-      // asked about. Each fell due a while ago.
+      // Y3 in the making at the library. Y4 was there before this file, never
+      // asked about: its book is owed a question from when it was registered.
+      // Each fell due a while ago.
       await rows(
-        `update private.edition_sources s set asked_at = null, state = v.state,
+        `update private.edition_sources s set state = v.state,
+           settled_at = case when v.state <> 'waiting' then now() end,
            status = case when s.source = 'ndl' then v.status end, next_at = now() - v.ago
          from editions e, (values ($1, 'found', null, interval '3 days'),
            ($2, 'missing', null, interval '2 days'), ($3, 'found', 'C3', interval '1 day'),
@@ -589,17 +594,130 @@ async function edgeChecks(check: Check) {
       await register(AKI, id(3, 7), Y(7), "本7");
       for (let turn = 0; turn < 7; turn++) await tick();
       assert.deepEqual(await libraryAsked(), [
+        Y(4),
         Y(6),
         Y(5),
         Y(7),
-        Y(4),
         Y(3),
         Y(2),
         Y(1),
       ]);
       assert.deepEqual(await openbdAsked(), [
-        [Y(6), Y(5), Y(7), Y(4), Y(2), Y(1), Y(3)],
+        [Y(4), Y(6), Y(5), Y(7), Y(2), Y(1), Y(3)],
       ]);
+      await settle();
+    },
+  );
+
+  /** Every question out answered: the library and openBD found what they were asked. */
+  const answerFound = async () => {
+    const asked = [
+      ...((await libraryAsked()) as string[]),
+      ...((await openbdAsked()).flat() as string[]),
+    ];
+    await answerAll(
+      db,
+      Object.fromEntries(asked.map((i) => [i, sru({ isbns: [i], title: i })])),
+      Object.fromEntries(asked.map((i) => [i, openbd({ isbn: i, title: i })])),
+    );
+  };
+
+  await check(
+    "a book that leaves its edition takes what it was owed with it: back again, it waits its turn as in an edition nobody had",
+    async () => {
+      // Aki has Y12, answered; nobody has Y11.
+      await register(AKI, id(3, 12), Y(12), "本12");
+      await tick();
+      await answerFound();
+      await tick();
+      await settle();
+      for (const [bens, there, away, others] of [
+        [id(3, 21), Y(11), Y(13), [Y(14), Y(15)]],
+        [id(3, 22), Y(12), Y(16), [Y(17), Y(18)]],
+      ] as const) {
+        // Ben registers it and moves it away before anything is asked, then
+        // registers two more, then moves it back (the edition he moved it to
+        // is left with no book, and is not asked about).
+        await register(BEN, bens, there, "行き来する本");
+        await as(BEN, "update books set isbn = $2 where id = $1", [bens, away]);
+        for (const i of others)
+          await register(BEN, id(4, Number(i.slice(8, 12))), i, "ほかの本");
+        await as(BEN, "update books set isbn = $2 where id = $1", [
+          bens,
+          there,
+        ]);
+        for (let turn = 0; turn < 3; turn++) await tick();
+        assert.deepEqual(await libraryAsked(), [...others, there], there);
+        await settle();
+      }
+    },
+  );
+
+  await check(
+    "books registered together are asked about in an order nothing in their editions' past decides",
+    async () => {
+      const together = [Y(1), Y(19), Y(20), Y(21)];
+      await as(
+        BEN,
+        `insert into books (id, isbn, title, created_by)
+         select gen_random_uuid(), i, '一緒の本', $2 from unnest($1::text[]) i`,
+        [together, BEN],
+      );
+      for (let turn = 0; turn < 4; turn++) await tick();
+      assert.deepEqual(
+        await libraryAsked(),
+        (
+          await rows<{ isbn: string }>(
+            "select isbn from editions where isbn = any ($1::text[]) order by id",
+            [together],
+          )
+        ).map((e) => e.isbn),
+      );
+      await settle();
+    },
+  );
+
+  await check(
+    "how long to wait after an answer counts from the book's placement, and a question sent before it does not count",
+    async () => {
+      // Y2 was not found three times, Y3 failed three times.
+      await rows(
+        `update private.edition_sources s set misses = 3, failures = 3
+         from editions e where e.id = s.edition_id and e.isbn = any ($1::text[])`,
+        [[Y(2), Y(3)]],
+      );
+      await register(BEN, id(3, 32), Y(2), "本2");
+      await register(BEN, id(3, 33), Y(3), "本3");
+      await tick();
+      await tick();
+      for (const q of await questions())
+        await answer(
+          q.id,
+          q.url.includes(Y(3))
+            ? "<html>busy</html>"
+            : diagnostic("Record does not exist"),
+          q.url.includes(Y(3)) ? 503 : 200,
+        );
+      await tick();
+      const two = await kept(Y(2), "ndl");
+      assert.equal(two.misses, 1);
+      assert.equal(two.wait, "1 day");
+      const three = await kept(Y(3), "ndl");
+      assert.equal(three.failures, 1);
+      assert.equal(three.wait, "00:10:00");
+      await settle();
+      // Aki's question about Y22 is out when Ben registers it; it fails, and
+      // Ben's goes at once, counting from nothing.
+      await register(AKI, id(3, 40), Y(22), "本22");
+      await tick();
+      await register(BEN, id(3, 41), Y(22), "本22");
+      const [q] = (await questions()).filter((x) =>
+        x.url.startsWith("https://ndlsearch.ndl.go.jp/"),
+      );
+      await answer(q.id, "<html>busy</html>", 503);
+      await tick();
+      assert.equal((await kept(Y(22), "ndl")).failures, 0);
+      assert.deepEqual(await libraryAsked(), [Y(22)]);
       await settle();
     },
   );
@@ -818,6 +936,13 @@ async function edgeChecks(check: Check) {
       assert.deepEqual(await listed(), [
         { isbn: TEN, why: "failing", listed: false, a_book: id(3, 10) },
       ]);
+      // Not in a public place: not corrected, nor withdrawn.
+      await refused(
+        () =>
+          rows("select private.withdraw_bibliography($1, 'ndl')", [id(3, 10)]),
+        /none of the edition's books is in a public place/,
+        "withdrawing on an edition only registered privately",
+      );
       const [post] = await as<{ id: string }>(
         AKI,
         "insert into posts (author_id, body, book_id) values ($1, '読んだ', $2) returning id",
@@ -1469,9 +1594,7 @@ async function main() {
       // pg_net's copies of the answers read are gone.
       assert.equal(await count("select count(*) from net._http_response"), 0);
       // The library's question about X2 never came back.
-      await rows(
-        "update private.edition_sources set sent_at = now() - interval '16 minutes' where request_id is not null",
-      );
+      await later(16);
       await tick();
       const lost = await kept(X2, "ndl");
       assert.equal(lost.state, "failed");
