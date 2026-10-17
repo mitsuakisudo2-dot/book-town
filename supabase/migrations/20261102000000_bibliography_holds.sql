@@ -9,9 +9,11 @@
 -- placed, and the operator's corrections), folded as the search folds them
 -- (private.fold_book_text). The same: the title, or the title with its
 -- subtitle or its volume, or the title and the same volume written another
--- way (第1巻, 上 for 1). Apart: the title and another volume, where the
--- master tells its volume, whatever else agrees (one work is one volume; the
--- owner, 2026-10-17 04:15Z); no volume typed is not another. Close: one inside the other, the title's reading too (a subtitle, 新訳版, a
+-- way (第1巻, 上 for 1). Apart: the title and a clearly other volume (its
+-- number differs from every volume the master tells), whatever else agrees
+-- (one work is one volume; the owner, 2026-10-17 04:15Z: only a clear
+-- mismatch, not a volume written another way, nor no volume typed). Close:
+-- one inside the other, the title's reading too (a subtitle, 新訳版, a
 -- title typed in kana), or an author of the master's in the reader's author
 -- line, by name, reading or authority form. Apart: neither (with no author
 -- typed, the title alone decides). None: no title in the master (once both
@@ -1260,8 +1262,8 @@ revoke all on function private.keep_apart(uuid, uuid) from public, anon, authent
 -- The operator's list ---------------------------------------------------------------
 
 -- As before (bibliography), and every book held: when it was held, what its
--- reader typed (title, author) and the master's title and creators. Its rows go into no pull request,
--- issue or log, as before.
+-- reader typed (title, author) and the master's title and creators. Its
+-- rows go into no pull request, issue or log, as before.
 create or replace view private.bibliography_review as
 select e.isbn, s.source, s.state, s.failures, s.answered_at, s.title_kept_at,
   case when s.title_kept_at is not null then 'title kept' else 'failing' end as why,
