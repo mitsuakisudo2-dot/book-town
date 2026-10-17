@@ -939,9 +939,10 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     if (followed.current === pair) return;
     followed.current = pair;
     if (!saveOwnedScene(next.scene, state).ok) return;
-    const titles = next.waiting.map(
-      (id) => state.books.find((b) => b.id === id)?.title ?? "",
-    );
+    const titles = next.waiting.map((id) => {
+      const book = bookById(state.books, id);
+      return book ? bookTitle(book) : "";
+    });
     if (titles.length)
       notify(
         (titles.length === 1 ? `「${titles[0]}」は` : "棚に並べた本の一部は") +
