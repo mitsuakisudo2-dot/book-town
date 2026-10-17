@@ -71,6 +71,9 @@
 .library-shelf-head .text-btn {
   flex: 0 0 auto;
 }
+.library-shelf-form > .library-note {
+  margin-bottom: 16px;
+}
 .library-shelf-form textarea.field {
   resize: vertical;
 }
