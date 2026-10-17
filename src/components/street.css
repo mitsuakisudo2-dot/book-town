@@ -22,7 +22,7 @@
 }
 .street-shop-title h2 {
   font-family: var(--serif);
-  font-size: 29px;
+  font-size: var(--t-hero);
   line-height: 1.5;
   letter-spacing: 2px;
   font-weight: 500;
@@ -37,7 +37,7 @@
   opacity: 1;
 }
 .street-shop-title > p {
-  font-size: 12px;
+  font-size: var(--t-cap);
   letter-spacing: 0.7px;
   margin-top: 6px;
   color: var(--theme-deep);
@@ -53,10 +53,10 @@
   align-items: center;
   gap: 8px;
   min-height: 40px;
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .street-shop-owner small {
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-right: 3px;
 }
@@ -68,7 +68,7 @@
   min-height: 38px;
   border: 1px solid var(--line-2);
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   border-radius: 3px;
   background: color-mix(in srgb, var(--sheet) 62%, transparent);
   white-space: nowrap;
@@ -99,7 +99,7 @@
   gap: 8px;
   min-width: 0;
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: var(--t-meta);
   font-weight: 500;
   line-height: 1.7;
   color: var(--ink-2);
@@ -176,7 +176,7 @@
   top: 7px;
 }
 .street-shelf .jacket-title {
-  font-size: 17px;
+  font-size: var(--t-page);
 }
 .street-shelf .shelf-plank {
   height: 16px;
@@ -212,7 +212,7 @@
   padding: 13px 25px;
   background: var(--sheet);
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: var(--t-cap);
 }
 .street-shop-footer > a {
   display: flex;
@@ -230,7 +230,7 @@
   gap: 10px;
   margin: 8px 0 26px;
   font-family: var(--serif);
-  font-size: 13px;
+  font-size: var(--t-meta);
   color: var(--ink-2);
 }
 .street-round::before,
@@ -259,11 +259,11 @@
 .street-end h2 {
   font-family: var(--serif);
   font-weight: 500;
-  font-size: 22px;
+  font-size: var(--t-head);
   line-height: 1.8;
 }
 .street-end p {
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 2;
   margin-top: 13px;
   color: var(--ink-2);
@@ -282,7 +282,7 @@
   align-items: center;
   padding: 10px 13px;
   min-height: 44px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   border: 1px solid var(--line-2);
   border-radius: 3px;
 }
@@ -290,7 +290,7 @@
   background: var(--green-soft);
 }
 .street-end > small {
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .street-empty,
@@ -305,12 +305,12 @@
 }
 .street-empty h2 {
   font-family: var(--serif);
-  font-size: 20px;
+  font-size: var(--t-head);
   font-weight: 500;
   line-height: 1.9;
 }
 .street-empty p {
-  font-size: 13px;
+  font-size: var(--t-meta);
   margin: 13px 0 22px;
 }
 
@@ -327,7 +327,7 @@
   margin: 0 auto;
 }
 .top-search input {
-  font-size: 14px;
+  font-size: var(--t-meta);
 }
 .shelf-book-button {
   touch-action: pan-x pan-y pinch-zoom;
@@ -383,7 +383,7 @@
     padding-top: 31px;
   }
   .brand > span:last-child {
-    font-size: 26px;
+    font-size: var(--t-big);
   }
   .side-link {
     min-height: 49px;
@@ -404,7 +404,7 @@
     padding-right: 15px;
   }
   .street-shop-title h2 {
-    font-size: 26px;
+    font-size: var(--t-big);
   }
   .street-shop-footer {
     padding: 11px 18px;
@@ -425,7 +425,7 @@
     min-width: 560px;
   }
   .street-shop-title h2 {
-    font-size: 29px;
+    font-size: var(--t-hero);
   }
 }
 @media (max-width: 760px) {
@@ -439,19 +439,19 @@
     border-top-width: 4px;
   }
   .street-shop-title h2 {
-    font-size: 27px;
+    font-size: var(--t-big);
     letter-spacing: 1.6px;
   }
   .street-shop-title > p {
-    font-size: 11px;
+    font-size: var(--t-cap);
     margin-top: 5px;
   }
   .street-shop-owner > a:first-child {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
   .street-follow {
     min-height: 40px;
-    font-size: 11px;
+    font-size: var(--t-cap);
     padding: 6px 10px;
   }
   .street-shop-shelves {
@@ -461,11 +461,11 @@
     margin-bottom: 13px;
   }
   .street-shelf h3 {
-    font-size: 13px;
+    font-size: var(--t-meta);
     gap: 7px;
   }
   .street-shelf h3 > span {
-    font-size: 13px;
+    font-size: var(--t-meta);
   }
   .street-shelf > header {
     gap: 7px;
@@ -499,42 +499,42 @@
     font-size: 11px;
   }
   .street-shelf .jacket-title {
-    font-size: 15px;
+    font-size: var(--t-body);
   }
   .street-shelf .shelf-plank {
     height: 15px;
   }
   .street-shop-footer {
     padding: 9px 12px;
-    font-size: 9px;
+    font-size: var(--t-cap);
     flex-wrap: wrap;
     gap: 0 9px;
   }
   .street-shop-footer > a {
     min-height: 36px;
-    font-size: 10px;
+    font-size: var(--t-cap);
     margin-left: auto;
   }
   .street-end {
     padding: 5px 0 10px;
   }
   .street-end h2 {
-    font-size: 21px;
+    font-size: var(--t-head);
   }
   .street-end p {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
 }
 @media (max-width: 360px) {
   .street-shop-title h2 {
-    font-size: 24px;
+    font-size: var(--t-big);
   }
   .street-shop-header {
     padding-left: 14px;
     padding-right: 14px;
   }
   .street-shelf h3 {
-    font-size: 12px;
+    font-size: var(--t-cap);
   }
   .street-shelf-controls button {
     width: 32px;
@@ -555,7 +555,7 @@
     padding-top: 14px;
   }
   .street-shop-title h2 {
-    font-size: 25px;
+    font-size: var(--t-big);
   }
 }
 
@@ -582,12 +582,12 @@
   gap: 8px;
 }
 .street-shop.is-compact .street-shop-title h2 {
-  font-size: 19px;
+  font-size: var(--t-title);
   letter-spacing: 1px;
   line-height: 1.5;
 }
 .street-own-tag {
-  font-size: 10px;
+  font-size: var(--t-cap);
   border: 1px solid var(--theme-light);
   padding: 1px 7px;
   border-radius: 2px;
@@ -600,7 +600,7 @@
 }
 .street-shop.is-compact .street-shop-owner > a:first-child {
   min-height: 32px;
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 .street-shop.is-compact .street-follow {
   min-height: 30px;
@@ -617,7 +617,7 @@
   margin-bottom: 3px;
 }
 .street-shop.is-compact .street-shelf h3 {
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .street-shop.is-compact .street-shelf-controls button {
   width: 28px;
@@ -646,7 +646,7 @@
   max-height: calc(100% - 34px);
 }
 .street-shop.is-compact .street-shelf .jacket-title {
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .street-shop.is-compact .street-shelf .shelf-plank {
   height: 12px;
@@ -678,7 +678,7 @@
 .street-shop.is-compact .street-shop-tagline {
   flex-basis: 100%;
   font-family: var(--serif);
-  font-size: 13px;
+  font-size: var(--t-meta);
   line-height: 1.7;
   color: var(--theme-deep);
   margin-top: -2px;
@@ -712,13 +712,13 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: var(--t-body);
   line-height: 1.75;
 }
 .street-shop-voice small {
   display: block;
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .street-new-own {
@@ -728,14 +728,14 @@
   padding: 9px 18px;
   background: var(--lamp-soft);
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--t-meta);
   font-weight: 600;
 }
 .street-shop.is-compact .street-shop-footer {
   gap: 4px 12px;
 }
 .street-shop.is-compact .street-shop-footer > a {
-  font-size: 12px;
+  font-size: var(--t-cap);
   min-height: 40px;
 }
 .street-shop.is-compact .street-shop-footer > a:first-child {
@@ -762,7 +762,7 @@
     padding: 9px 13px 8px;
   }
   .street-shop-voice-words {
-    font-size: 14px;
+    font-size: var(--t-meta);
   }
 }
 @media (prefers-reduced-motion: reduce) {
