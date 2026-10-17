@@ -6,6 +6,7 @@ import type { Post, TownState } from "../../../lib/types";
 import { findReader } from "../../../lib/social";
 import { postPath } from "../../../lib/paths";
 import { isSample } from "../../../lib/tonight";
+import { bookById, bookTitle } from "../../../lib/book-name";
 import { BookJacket, ReaderAvatar } from "../../ui";
 import { openPost } from "../../letter/post-layer";
 import { SampleTag } from "../FeatureBand";
@@ -24,7 +25,7 @@ const plainClick = (event: MouseEvent) =>
  */
 export function Reviews({ posts, state }: { posts: Post[]; state: TownState }) {
   return posts.map((post) => {
-    const book = state.books.find((entry) => entry.id === post.bookId);
+    const book = bookById(state.books, post.bookId);
     const writer = findReader(state, post.authorId);
     if (!book) return null;
     return (
@@ -41,7 +42,7 @@ export function Reviews({ posts, state }: { posts: Post[]; state: TownState }) {
           <span className="home-tile-book" aria-hidden="true">
             <BookJacket book={book} sizes="116px" />
           </span>
-          <b className="home-review-title">{book.title}</b>
+          <b className="home-review-title">{bookTitle(book)}</b>
           <span className="home-review-words">「{post.body}」</span>
           <span className="home-review-by">
             {writer && <ReaderAvatar reader={writer} size={20} />}

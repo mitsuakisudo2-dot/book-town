@@ -781,7 +781,9 @@ export function townFromRows(
           (poster.status === "published" || row.author_id === userId)
           ? [poster]
           : [];
-      }),
+      })
+      // Newest first, whatever order the rows came in.
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
   };
   // The database keeps the blocked away already; the town does not count on
   // it.

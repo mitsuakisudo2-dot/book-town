@@ -57,6 +57,13 @@ import {
   useNotTakenWords,
   useOpenedWithWork,
 } from "./KeptDraftNote";
+import {
+  bookAuthor,
+  bookById,
+  booksById,
+  bookTitle,
+  quotedTitle,
+} from "../lib/book-name";
 
 type Shared = {
   state: TownState;
@@ -114,7 +121,7 @@ export function ReadingView(props: Shared) {
   const clock = useClock();
   const active = activeSession(props.state);
   const book = active?.bookId
-    ? props.state.books.find((entry) => entry.id === active.bookId)
+    ? bookById(props.state.books, active.bookId)
     : undefined;
   // After closing the book, "感想を書く" opens a composer for the book just
   // read, with the sitting whose line was meant for it.
@@ -170,7 +177,9 @@ export function ReadingView(props: Shared) {
       )}
       {review && (
         <Modal
-          title={review.book ? `『${review.book.title}』の感想` : "感想を書く"}
+          title={
+            review.book ? `${quotedTitle(review.book)}の感想` : "感想を書く"
+          }
           onClose={() => setReview(null)}
           writing
         >
@@ -248,9 +257,7 @@ function ReadersNow({
   // shows what was read lately instead of a zero.
   if (!readers.length && bookId) return null;
   if (!readers.length) {
-    const finished = recentlyFinished(state)
-      .map((id) => state.books.find((book) => book.id === id))
-      .filter((book): book is Book => Boolean(book));
+    const finished = booksById(state.books, recentlyFinished(state));
     return (
       <section
         className="readers-now is-quiet"
@@ -264,7 +271,7 @@ function ReadersNow({
             <ul>
               {finished.map((book) => (
                 <li key={book.id}>
-                  <Link href={bookPath(book.id)} title={book.title}>
+                  <Link href={bookPath(book.id)} title={bookTitle(book)}>
                     <BookJacket book={book} />
                   </Link>
                 </li>
@@ -289,7 +296,7 @@ function ReadersNow({
       <ul>
         {readers.map((entry) => {
           const reader = findReader(state, entry.readerId);
-          const book = state.books.find((item) => item.id === entry.bookId);
+          const book = bookById(state.books, entry.bookId);
           if (!reader) return null;
           return (
             <li key={entry.readerId}>
@@ -304,7 +311,7 @@ function ReadersNow({
                   </b>
                   <small>
                     {!bookId &&
-                      (book ? <>『{book.title}』・</> : <>本を選ばずに・</>)}
+                      (book ? <>{quotedTitle(book)}・</> : <>本を選ばずに・</>)}
                     {minutesSince(entry.startedAt, clock?.now)}
                   </small>
                 </span>
@@ -335,7 +342,7 @@ function ClosedCard({
         <Link
           href={bookPath(closed.book.id)}
           className="reading-jacket-link"
-          aria-label={`『${closed.book.title}』の作品ページへ`}
+          aria-label={`${quotedTitle(closed.book)}の作品ページへ`}
         >
           <BookJacket book={closed.book} className="reading-closed-jacket" />
         </Link>
@@ -345,17 +352,17 @@ function ClosedCard({
           今日の読書 <b>{formatDuration(closed.seconds)}</b>
         </p>
         {closed.book && (
-          <p className="reading-closed-title">『{closed.book.title}』</p>
+          <p className="reading-closed-title">{quotedTitle(closed.book)}</p>
         )}
         {closed.memo && (
           <blockquote className="reading-closed-memo">{closed.memo}</blockquote>
         )}
         <div className="reading-closed-actions">
-          <button type="button" className="button secondary" onClick={onReview}>
+          <button type="button" className="btn" onClick={onReview}>
             <Icon name="pen" size={15} />
             感想を書く
           </button>
-          <button type="button" className="text-button" onClick={onDismiss}>
+          <button type="button" className="text-btn" onClick={onDismiss}>
             閉じる
           </button>
         </div>
@@ -389,7 +396,7 @@ function LineToAdd({
       <blockquote>{uncoverHidden(draft.body)}</blockquote>
       <button
         type="button"
-        className="button secondary"
+        className="btn"
         onClick={(event) => {
           const review = event.currentTarget
             .closest(".modal")
@@ -433,7 +440,7 @@ function UnsentLines({
     // town is not shown here.
     if (!session || session.endedAt === null || !draft.body.trim()) return [];
     const book = session.bookId
-      ? state.books.find((entry) => entry.id === session.bookId)
+      ? bookById(state.books, session.bookId)
       : undefined;
     return [{ sessionId, body: draft.body, book }];
   });
@@ -447,13 +454,13 @@ function UnsentLines({
             <blockquote>{uncoverHidden(body)}</blockquote>
             <small>
               {book
-                ? `『${book.title}』を読みながら`
+                ? `${quotedTitle(book)}を読みながら`
                 : "本を選ばずに読みながら"}
             </small>
             <div className="reading-unsent-actions">
               <button
                 type="button"
-                className="button secondary"
+                className="btn"
                 onClick={() => {
                   // It starts the review, unless one is already being written.
                   carryLine(owner, sessionId, book);
@@ -505,9 +512,7 @@ function StartReading({
     mode: ReadingMode;
     phrase: string;
   } | null>(null);
-  const chosen = bookId
-    ? state.books.find((entry) => entry.id === bookId)
-    : undefined;
+  const chosen = bookId ? bookById(state.books, bookId) : undefined;
   function start(mode: ReadingMode) {
     setConfirm(null);
     if (!actions.startReading(bookId, mode)) return;
@@ -585,13 +590,11 @@ function StartReading({
         {sessions.length ? (
           <ul>
             {sessions.map((session) => {
-              const book = state.books.find(
-                (entry) => entry.id === session.bookId,
-              );
+              const book = bookById(state.books, session.bookId);
               return (
                 <li key={session.id}>
                   <span>
-                    <b>{book?.title ?? "本を選ばずに"}</b>
+                    <b>{book ? bookTitle(book) : "本を選ばずに"}</b>
                     <small>
                       {formatPostTime(session.startedAt)}・
                       {modeLabel[session.mode]}
@@ -623,19 +626,19 @@ function StartReading({
                 size={14}
               />
               {modeLabel[confirm.mode]}・
-              {chosen ? `『${chosen.title}』` : "本を選ばずに"}
+              {chosen ? quotedTitle(chosen) : "本を選ばずに"}
             </p>
             <div className="reading-confirm-actions">
               <button
                 type="button"
-                className="button secondary"
+                className="btn"
                 onClick={() => setConfirm(null)}
               >
                 もう少し準備する
               </button>
               <button
                 type="button"
-                className="button"
+                className="btn fill"
                 onClick={() => start(confirm.mode)}
               >
                 {chosen ? "本を開く" : "はじめる"}
@@ -751,7 +754,7 @@ function ReadingRoom({
           <Link
             href={bookPath(book.id)}
             className="reading-jacket-link"
-            aria-label={`『${book.title}』の作品ページへ`}
+            aria-label={`${quotedTitle(book)}の作品ページへ`}
           >
             <BookJacket book={book} className="reading-jacket" />
           </Link>
@@ -767,8 +770,8 @@ function ReadingRoom({
             <Icon name={together ? "users" : "lock"} size={13} />
             {modeLabel[session.mode]}
           </span>
-          <h1>{book ? book.title : "読書中"}</h1>
-          <p>{book ? book.author : "本を選ばずに読んでいます"}</p>
+          <h1>{book ? bookTitle(book) : "読書中"}</h1>
+          <p>{book ? bookAuthor(book) : "本を選ばずに読んでいます"}</p>
           <p className="reading-timer" role="timer" aria-label="読書時間">
             {seconds === null ? "--:--" : formatTimer(seconds)}
           </p>
@@ -781,7 +784,7 @@ function ReadingRoom({
           <div className="reading-end">
             <button
               type="button"
-              className="button secondary"
+              className="btn"
               onClick={() =>
                 setEnding({ finished: false, phrase: pick(END_PHRASES) })
               }
@@ -791,7 +794,7 @@ function ReadingRoom({
             {book && (
               <button
                 type="button"
-                className="button"
+                className="btn fill"
                 onClick={() =>
                   setEnding({ finished: true, phrase: pick(FINISH_PHRASES) })
                 }
@@ -844,7 +847,7 @@ function ReadingRoom({
           )}
           <span className="composer-send">
             <LengthNearLimit length={memo.length} max={POST_MAX_LENGTH} />
-            <button className="button" type="submit" disabled={!memo.trim()}>
+            <button className="btn fill" type="submit" disabled={!memo.trim()}>
               {together ? "つぶやく" : "メモする"}
             </button>
           </span>
@@ -919,7 +922,7 @@ function ReadingRoom({
             <p className="reading-confirm-detail">
               <Icon name="clock" size={14} />
               今回の読書 {seconds === null ? "—" : formatDuration(seconds)}
-              {book && `・『${book.title}』`}
+              {book && `・${quotedTitle(book)}`}
             </p>
             {/* A line not sent yet is offered, never dropped with the book. */}
             {memo.trim() && (
@@ -932,7 +935,7 @@ function ReadingRoom({
                 <blockquote>{uncoverHidden(memo)}</blockquote>
                 <button
                   type="button"
-                  className="button secondary"
+                  className="btn"
                   onClick={() => {
                     const line = uncoverHidden(memo).trim();
                     if (send()) close(ending.finished, line);
@@ -946,14 +949,14 @@ function ReadingRoom({
             <div className="reading-confirm-actions">
               <button
                 type="button"
-                className="button secondary"
+                className="btn"
                 onClick={() => setEnding(null)}
               >
                 もう少し読む
               </button>
               <button
                 type="button"
-                className="button secondary"
+                className="btn"
                 onClick={() => {
                   actions.endReading(ending.finished);
                   // The line not sent starts the review, when that is empty.
@@ -966,7 +969,7 @@ function ReadingRoom({
               </button>
               <button
                 type="button"
-                className="button"
+                className="btn fill"
                 onClick={() => close(ending.finished)}
               >
                 {ending.finished ? "読み終えた" : "本を閉じる"}

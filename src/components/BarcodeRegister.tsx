@@ -6,6 +6,7 @@ import { lookUpBook } from "../lib/openbd";
 import { libraryBookByIsbn, useTownBackend } from "../lib/store";
 import type { TownActions, TownState } from "../lib/types";
 import { Icon, Modal } from "./ui";
+import { bookByIsbn, quotedTitle } from "../lib/book-name";
 
 type Detector = {
   detect(source: CanvasImageSource): Promise<Array<{ rawValue: string }>>;
@@ -148,7 +149,7 @@ export function BarcodeRegister({
     // Whether it is already registered is about the reader's own library;
     // a book the town knows only fills in its title.
     const mine = libraryBookByIsbn(state, found);
-    const known = mine ?? state.books.find((book) => book.isbn === found);
+    const known = mine ?? bookByIsbn(state.books, found);
     if (known) {
       asking.current = null;
       setLooking(false);
@@ -222,8 +223,8 @@ export function BarcodeRegister({
     // Named as kept: a book the town knew by its own title, a long one cut.
     notify(
       done.result === "already"
-        ? `『${done.title}』はもうライブラリにあります`
-        : `『${done.title}』を登録しました`,
+        ? `${quotedTitle(done)}はもうライブラリにあります`
+        : `${quotedTitle(done)}を登録しました`,
     );
     onClose();
   }
@@ -241,7 +242,7 @@ export function BarcodeRegister({
           <video ref={video} muted playsInline aria-label="カメラの映像" />
           <button
             type="button"
-            className="button secondary"
+            className="btn"
             onClick={() => setScanning(false)}
           >
             読み取りをやめる
@@ -251,7 +252,7 @@ export function BarcodeRegister({
         canScan && (
           <button
             type="button"
-            className="button register-camera"
+            className="btn fill register-camera"
             onClick={() => {
               setMessage("");
               setScanning(true);
@@ -284,7 +285,7 @@ export function BarcodeRegister({
             }}
           />
         </label>
-        <button type="submit" className="button secondary" disabled={looking}>
+        <button type="submit" className="btn" disabled={looking}>
           <Icon name="barcode" size={16} />
           ISBNで探す
         </button>
@@ -329,7 +330,7 @@ export function BarcodeRegister({
         </label>
         <button
           type="submit"
-          className="button"
+          className="btn fill"
           disabled={!title.trim() || looking}
         >
           登録する

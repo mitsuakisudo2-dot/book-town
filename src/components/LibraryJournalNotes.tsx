@@ -16,6 +16,7 @@ import {
 import { journalTown, useTownBackend } from "../lib/store";
 import type { Notify } from "../lib/types";
 import { Modal } from "./ui";
+import { quote } from "../lib/book-name";
 
 // The 登録 tab's lines about books kept on this device by the scanner:
 // titles still to be typed (書名待ち), and books the database refused. Each
@@ -82,11 +83,7 @@ export function JournalNotes({
             <small>書名がわからなかった本です。書名を入れると登録します</small>
           </p>
           <div className="journal-note-actions">
-            <button
-              type="button"
-              className="button secondary"
-              onClick={onTypeTitles}
-            >
+            <button type="button" className="btn" onClick={onTypeTitles}>
               書名を入れる
             </button>
           </div>
@@ -99,18 +96,10 @@ export function JournalNotes({
             <small>保存できなかった本です</small>
           </p>
           <div className="journal-note-actions">
-            <button
-              type="button"
-              className="button secondary"
-              onClick={() => void retry()}
-            >
+            <button type="button" className="btn" onClick={() => void retry()}>
               もう一度送る
             </button>
-            <button
-              type="button"
-              className="button secondary"
-              onClick={discard}
-            >
+            <button type="button" className="btn" onClick={discard}>
               捨てる
             </button>
           </div>
@@ -176,12 +165,12 @@ function TitleForm({
     const name = done?.item.title ?? typed;
     notify(
       done?.result === "added"
-        ? `『${name}』を登録しました`
+        ? `${quote(name)}を登録しました`
         : done?.result === "already"
-          ? `『${name}』はもうライブラリにあります`
+          ? `${quote(name)}はもうライブラリにあります`
           : done?.result === "unavailable"
-            ? `『${name}』は端末に控えました。ページを読み込み直すと登録します`
-            : `『${name}』は、読み込みが終わったら登録します`,
+            ? `${quote(name)}は端末に控えました。ページを読み込み直すと登録します`
+            : `${quote(name)}は、読み込みが終わったら登録します`,
     );
   }
   function leave() {
@@ -219,10 +208,10 @@ function TitleForm({
         />
       </label>
       <div className="journal-note-actions">
-        <button type="submit" className="button" disabled={!title.trim()}>
+        <button type="submit" className="btn fill" disabled={!title.trim()}>
           登録する
         </button>
-        <button type="button" className="button secondary" onClick={leave}>
+        <button type="button" className="btn" onClick={leave}>
           控えから外す
         </button>
       </div>

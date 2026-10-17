@@ -6,7 +6,6 @@ import {
 } from "../walk-backend";
 import {
   planWalkWrites,
-  sceneFromRow,
   walkFromRows,
   type WalkIds,
   type WalkRows,
@@ -16,16 +15,15 @@ import { loadPosition, noPosition, savePosition } from "../walk-repository";
 import type { Database, Json } from "./database.generated";
 import {
   all,
+  allRows,
   backgroundSync,
   settled,
+  steadily,
   TownSyncError,
   type SyncOptions,
 } from "./sync";
 
 type Client = SupabaseClient<Database>;
-
-// The same row limit as the town; paging comes with more readers.
-const LIMIT = 1000;
 
 async function ownShopId(client: Client, userId: string) {
   const rows = await all(
@@ -34,57 +32,89 @@ async function ownShopId(client: Client, userId: string) {
   return rows[0]?.id ?? null;
 }
 
-/** Reads the person's walk and the scenes of every shop they can see. */
+/**
+ * Reads the walk `userId` sees, or a visitor (null) sees: the public scene of
+ * every shop the database lets them see, each list whole, a page at a time
+ * (allRows, as the town). Signed in, also their own scene and what they did
+ * on their walks, and their own shop's id.
+ */
 export async function loadWalkRows(
   client: Client,
-  userId: string,
-): Promise<{ rows: WalkRows; ids: WalkIds }> {
+  userId: string | null,
+): Promise<{ rows: WalkRows; shopId: string | null }> {
+  /** What only the signed-in person reads: nothing for a visitor. */
+  const own = async <T>(read: (id: string) => Promise<T[]>): Promise<T[]> =>
+    userId === null ? [] : read(userId);
   const [shopId, scenes, reactions, saved, popReactions, visits] =
     await Promise.all([
-      ownShopId(client, userId),
-      all(
-        client
-          .from("shops")
-          .select("id, public_scene")
-          .not("public_scene", "is", null)
-          .neq("owner_id", userId)
-          .limit(LIMIT),
+      userId === null ? null : ownShopId(client, userId),
+      // Others' shops: the person's own scene is read whole below.
+      allRows(
+        (count) => {
+          const shown = client
+            .from("shops")
+            .select("id, public_scene", { count })
+            .not("public_scene", "is", null);
+          return userId === null ? shown : shown.neq("owner_id", userId);
+        },
+        ["id"],
       ),
-      all(
-        client
-          .from("shop_reactions")
-          .select("shop_id, liked, message")
-          .eq("user_id", userId),
+      own((id) =>
+        allRows(
+          (count) =>
+            client
+              .from("shop_reactions")
+              .select("shop_id, liked, message", { count })
+              .eq("user_id", id),
+          ["shop_id"],
+        ),
       ),
-      all(client.from("saved_shops").select("shop_id").eq("user_id", userId)),
-      all(
-        client
-          .from("pop_reactions")
-          .select("shop_id, placement_key, reaction")
-          .eq("user_id", userId),
+      own((id) =>
+        allRows(
+          (count) =>
+            client
+              .from("saved_shops")
+              .select("shop_id", { count })
+              .eq("user_id", id),
+          ["shop_id"],
+        ),
       ),
-      all(
-        client
-          .from("shop_visits")
-          .select("shop_id, visited_at")
-          .eq("user_id", userId),
+      own((id) =>
+        allRows(
+          (count) =>
+            client
+              .from("pop_reactions")
+              .select("shop_id, placement_key, reaction", { count })
+              .eq("user_id", id),
+          ["shop_id", "placement_key", "reaction"],
+        ),
+      ),
+      own((id) =>
+        allRows(
+          (count) =>
+            client
+              .from("shop_visits")
+              .select("shop_id, visited_at", { count })
+              .eq("user_id", id),
+          ["shop_id"],
+        ),
       ),
     ]);
-  const own = shopId
+  const ownScene = shopId
     ? await all(
         client.from("shop_private").select("scene").eq("shop_id", shopId),
       )
     : [];
   return {
     rows: {
-      ownScene: own[0]?.scene ?? null,
+      ownScene: ownScene[0]?.scene ?? null,
       scenes,
       reactions,
       saved,
       popReactions,
       visits,
     },
-    ids: { userId, shopId },
+    shopId,
   };
 }
 
@@ -174,10 +204,10 @@ export function accountWalkBackend(
     {
       async read() {
         const loaded = await loadWalkRows(client, userId);
-        ids = loaded.ids;
+        ids = { userId, shopId: loaded.shopId };
         return walkFromRows(
           loaded.rows,
-          loaded.ids,
+          ids,
           storage ? loadPosition(userId) : noPosition(),
         );
       },
@@ -214,20 +244,10 @@ export function visitorWalkBackend(client: Client): WalkBackend {
     kind: "visitor",
     async load() {
       try {
-        const rows = await all(
-          client
-            .from("shops")
-            .select("id, public_scene")
-            .eq("is_open", true)
-            .not("public_scene", "is", null)
-            .limit(LIMIT),
-        );
-        const scenes = rows.flatMap((row) => {
-          const scene = sceneFromRow(row.public_scene, row.id);
-          return scene ? [scene] : [];
-        });
+        // Rows that move while being read are read again at once.
+        const loaded = await steadily(() => loadWalkRows(client, null));
         return {
-          data: { ...emptyWalkData(), scenes },
+          data: walkFromRows(loaded.rows, { shopId: null }, noPosition()),
           status: "saved" as const,
         };
       } catch {

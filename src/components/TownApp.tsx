@@ -98,6 +98,7 @@ import {
   usePostLayer,
 } from "./letter/post-layer";
 import { useAnnouncement } from "../lib/live-region";
+import { bookAuthor, bookById, bookTitle, quotedTitle } from "../lib/book-name";
 
 // Every screen but Home comes in its own file, read when it is first shown
 // (and after Home is drawn, below), so a phone opening the town reads and
@@ -630,7 +631,7 @@ export default function TownApp({
           <p className="muted">
             決まった巡り方はありません。棚を眺めたり、同じ本をたどったり、あなたのペースでどうぞ。
           </p>
-          <button className="button" onClick={() => setAbout(false)}>
+          <button className="btn fill" onClick={() => setAbout(false)}>
             街を歩いてみる
             <Icon name="arrow" size={16} />
           </button>
@@ -703,7 +704,7 @@ function ShopView({
         <Icon name="store" size={34} />
         <h1>あなたの小さな書店を、ここに。</h1>
         <p>店名と紹介を書いて、好きな本を並べてみましょう。</p>
-        <Link href="/my-shop/" className="button">
+        <Link href="/my-shop/" className="btn fill">
           書店をひらく
           <Icon name="plus" size={17} />
         </Link>
@@ -714,7 +715,7 @@ function ShopView({
         <Icon name="store" size={34} />
         <h1>この書店は、いまは閉まっています。</h1>
         <p>ほかの書店の灯りは、今日もついています。</p>
-        <Link href="/walk/" className="button">
+        <Link href="/walk/" className="btn fill">
           ほかの書店をめぐる
           <Icon name="arrow" size={17} />
         </Link>
@@ -774,19 +775,19 @@ function ShopView({
             </Link>
           )}
           {hasBooks && (
-            <Link href={walkPath(shop.id)} className="button secondary">
+            <Link href={walkPath(shop.id)} className="btn">
               <Icon name="store" size={16} />
               店内に入る
             </Link>
           )}
           {shop.ownerId === "me" ? (
-            <Link href="/my-shop/" className="button secondary">
+            <Link href="/my-shop/" className="btn">
               <Icon name="edit" size={15} />
               書店を整える
             </Link>
           ) : (
             <button
-              className={"button " + (followed ? "secondary" : "")}
+              className={"btn" + (followed ? "" : " fill")}
               aria-pressed={followed}
               onClick={() => {
                 actions.toggleFollow(shop.id);
@@ -874,7 +875,7 @@ function ShopView({
                         <span className="store-shelf-pop-words">
                           {item.pop}
                         </span>
-                        <small>『{book.title}』</small>
+                        <small>{quotedTitle(book)}</small>
                       </button>
                     </li>
                   ))}
@@ -889,7 +890,7 @@ function ShopView({
           <Icon name="book" size={30} />
           <h3>この店の棚は、これから育ちます。</h3>
           {shop.ownerId === "me" && (
-            <Link href="/my-shop/" className="button secondary">
+            <Link href="/my-shop/" className="btn">
               最初の棚をつくる
             </Link>
           )}
@@ -933,7 +934,7 @@ function ShopView({
             <b>{owner.name}の、好きの輪郭。</b>
             <p>人生の9冊から、店主をもう少し知ってみる。</p>
           </div>
-          <Link href={profilePath(owner.id)} className="text-button">
+          <Link href={profilePath(owner.id)} className="text-btn">
             プロフィールへ
             <Icon name="arrow" size={16} />
           </Link>
@@ -1013,7 +1014,7 @@ function shelfPops(shelf: Shelf, books: Book[]) {
     .filter((item) => item.pop.trim())
     .map((item) => ({
       item,
-      book: books.find((book) => book.id === item.bookId),
+      book: bookById(books, item.bookId),
     }))
     .filter((entry): entry is { item: ShelfItem; book: Book } => !!entry.book)
     .slice(0, 3);
@@ -1025,14 +1026,14 @@ function BookView({
   bookId,
 }: Shared & { bookId: string }) {
   const persistence = usePersistenceStatus();
-  const book = state.books.find((b) => b.id === bookId);
+  const book = bookById(state.books, bookId);
   if (!book)
     return persistence === "loading" ? (
       <p role="status">本を開いています…</p>
     ) : (
       <div className="empty-state">
         <h1>この本のページは、いまは見られません。</h1>
-        <Link href="/" className="button secondary">
+        <Link href="/" className="btn">
           街にもどる
         </Link>
       </div>
@@ -1057,8 +1058,8 @@ function BookView({
         <div className="book-hero-head">
           <span className="eyebrow">ONE BOOK, MANY WORLDS</span>
           <span className="genre-tag">{book.genre}</span>
-          <h1>{book.title}</h1>
-          <p className="book-page-author">{book.author}</p>
+          <h1>{bookTitle(book)}</h1>
+          <p className="book-page-author">{bookAuthor(book)}</p>
           <BookPrice book={book} />
           <BookPurchase book={book} />
           <CoverCredit book={book} />
@@ -1115,11 +1116,11 @@ function BookView({
               {item.pop || "この棚では、本そのものが語りかけます。"}
             </blockquote>
             <div className="stockist-bottom">
-              <Link href={walkPath(shop.id)} className="text-button">
+              <Link href={walkPath(shop.id)} className="text-btn">
                 <Icon name="store" size={15} />
                 店内に入る
               </Link>
-              <Link href={shopPath(shop.id, shelf.id)} className="text-button">
+              <Link href={shopPath(shop.id, shelf.id)} className="text-btn">
                 この棚を見に行く
                 <Icon name="arrow" size={16} />
               </Link>
@@ -1130,7 +1131,7 @@ function BookView({
           <div className="empty-state">
             <h3>この本の、最初の居場所を。</h3>
             <p>あなたの書店に並べて、POPを書いてみませんか。</p>
-            <Link href="/my-shop/" className="button secondary">
+            <Link href="/my-shop/" className="btn">
               自分の書店へ
             </Link>
           </div>
@@ -1152,7 +1153,7 @@ function BookPosters({ state, book }: { state: TownState; book: Book }) {
     </p>
   );
   const make = (
-    <Link href={posterNewPath({ bookId: book.id })} className="text-button">
+    <Link href={posterNewPath({ bookId: book.id })} className="text-btn">
       <Icon name="plus" size={14} />
       この本でポスターを作る
     </Link>
@@ -1218,7 +1219,7 @@ function Wishlist({ state, actions, notify }: Shared) {
             entry.pop.trim() &&
             state.books.some((book) => book.id === entry.bookId),
         );
-      const book = item && state.books.find((b) => b.id === item.bookId);
+      const book = item && bookById(state.books, item.bookId);
       return owner && item && book ? [{ shop, owner, item, book }] : [];
     })
     .slice(0, 3);
@@ -1233,12 +1234,12 @@ function Wishlist({ state, actions, notify }: Shared) {
             <article className="catalog-book" key={b.id}>
               <Link href={bookPath(b.id)}>
                 <BookJacket book={b} />
-                <h3>{b.title}</h3>
-                <p>{b.author}</p>
+                <h3>{bookTitle(b)}</h3>
+                <p>{bookAuthor(b)}</p>
               </Link>
               <span>{b.genre}</span>
               <button
-                className="text-button"
+                className="text-btn"
                 onClick={() => {
                   actions.toggleWish(b.id);
                   notify("読みたいリストから外しました");
@@ -1255,7 +1256,7 @@ function Wishlist({ state, actions, notify }: Shared) {
           <Icon name="bookmark" size={34} />
           <h2>次の一冊は、どの棚にいるでしょう。</h2>
           <p>気になる本を「読みたい」に加えると、ここに並びます。</p>
-          <Link href="/" className="button secondary">
+          <Link href="/" className="btn">
             街を歩いてみる
             <Icon name="arrow" size={16} />
           </Link>
@@ -1273,7 +1274,7 @@ function Wishlist({ state, actions, notify }: Shared) {
                 <Link href={bookPath(book.id)}>
                   <BookJacket book={book} />
                   <span>
-                    <b>{book.title}</b>
+                    <b>{bookTitle(book)}</b>
                     <q>{item.pop.trim()}</q>
                     <small>
                       {shop.name}・店主 {owner.name}のPOP

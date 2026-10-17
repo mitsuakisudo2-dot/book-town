@@ -52,6 +52,7 @@ import {
 import { booksBeforeSearch } from "../lib/book-lists";
 import { focusField } from "../lib/coarse-pointer";
 import "./editor.css";
+import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 
 type ShopEditorProps = {
   state: TownState;
@@ -224,7 +225,7 @@ function ShopSettings({
               </p>
             )}
             <button
-              className="editor-button primary"
+              className="btn fill"
               disabled={!name.trim() || !work}
               type="submit"
             >
@@ -302,17 +303,17 @@ function AddBookPicker({
       // Placed in this visit: a second tap only takes the placing back.
       actions.removeShelfBook(shelf.id, placed.id);
       setAddedHere(addedHere.filter((id) => id !== book.id));
-      notify(`「${book.title}」を棚から外しました。`);
+      notify(`「${bookTitle(book)}」を棚から外しました。`);
     } else if (placed) {
-      takeOff(placed, book.title);
+      takeOff(placed, bookTitle(book));
       setRemovedNow([...removedNow.filter((id) => id !== book.id), book.id]);
     } else if (taken) {
-      if (putBack(book.id, book.title))
+      if (putBack(book.id, bookTitle(book)))
         setRemovedNow(removedNow.filter((id) => id !== book.id));
     } else if (actions.addShelfBook(shelf.id, book.id, display)) {
       // The editor stays open so several books can be placed in a row.
       setAddedHere([...addedHere, book.id]);
-      notify(`「${book.title}」を本棚に並べました。`);
+      notify(`「${bookTitle(book)}」を本棚に並べました。`);
     } else {
       notify("棚の空きスペースが足りません。並べ方を変えてみてください。");
     }
@@ -333,8 +334,8 @@ function AddBookPicker({
         onClick={() => choose(book)}
       >
         <BookJacket book={book} className="editor-picker-jacket" />
-        <span className="editor-book-choice-title">{book.title}</span>
-        <span className="editor-book-choice-author">{book.author}</span>
+        <span className="editor-book-choice-title">{bookTitle(book)}</span>
+        <span className="editor-book-choice-author">{bookAuthor(book)}</span>
         <span className="editor-book-choice-add">
           {placed ? (
             <>
@@ -447,7 +448,7 @@ function AddBookPicker({
             </p>
             <button
               type="button"
-              className="editor-text-button"
+              className="text-btn"
               onClick={() => setSearch("")}
             >
               検索をやめる
@@ -480,7 +481,7 @@ function AddBookPicker({
                   .join("・")
               : "押すたびに、並べる・外すを切り替えられます"}
           </span>
-          <button type="button" className="button" onClick={onClose}>
+          <button type="button" className="btn fill" onClick={onClose}>
             完了
           </button>
         </div>
@@ -566,7 +567,7 @@ function ShelfEditingPanel({
     return () => removeEventListener("pagehide", leave);
   }, []);
   const selected = shelf.items.find((item) => item.id === selectedId) ?? null;
-  const selectedBook = books.find((book) => book.id === selected?.bookId);
+  const selectedBook = bookById(books, selected?.bookId);
   const used = shelfUsed(shelf);
   const remaining = shelf.capacity - used;
   const selectedIndex = selected
@@ -619,7 +620,7 @@ function ShelfEditingPanel({
           </button>
           <button
             type="button"
-            className="editor-icon-button subtle"
+            className="icon-btn subtle"
             aria-label={`「${shelf.name}」を削除`}
             onClick={onRemove}
           >
@@ -695,11 +696,7 @@ function ShelfEditingPanel({
           <Icon name="grip" size={14} />
           本を選んで編集。ドラッグでも並び替えられます。
         </p>
-        <button
-          type="button"
-          className="editor-button secondary"
-          onClick={onAdd}
-        >
+        <button type="button" className="btn" onClick={onAdd}>
           <Icon name="edit" size={17} />
           本棚を編集
         </button>
@@ -709,11 +706,11 @@ function ShelfEditingPanel({
           <div className="editor-selected-heading">
             <div>
               <span className="editor-kicker">いま編集している本</span>
-              <h3>{selectedBook.title}</h3>
-              <p>{selectedBook.author}</p>
+              <h3>{bookTitle(selectedBook)}</h3>
+              <p>{bookAuthor(selectedBook)}</p>
             </div>
             <button
-              className="editor-icon-button"
+              className="icon-btn"
               type="button"
               aria-label="本の編集を閉じる"
               onClick={() => setSelectedId(null)}
@@ -727,7 +724,7 @@ function ShelfEditingPanel({
               <div
                 className="editor-segment"
                 role="group"
-                aria-label={`${selectedBook.title}の並べ方`}
+                aria-label={`${bookTitle(selectedBook)}の並べ方`}
               >
                 <button
                   type="button"
@@ -770,8 +767,8 @@ function ShelfEditingPanel({
               <div className="editor-move-buttons">
                 <button
                   type="button"
-                  className="editor-button secondary"
-                  aria-label={`${selectedBook.title}を一つ左へ移動`}
+                  className="btn"
+                  aria-label={`${bookTitle(selectedBook)}を一つ左へ移動`}
                   disabled={selectedIndex <= 0}
                   onClick={() =>
                     actions.moveShelfBook(
@@ -786,8 +783,8 @@ function ShelfEditingPanel({
                 </button>
                 <button
                   type="button"
-                  className="editor-button secondary"
-                  aria-label={`${selectedBook.title}を一つ右へ移動`}
+                  className="btn"
+                  aria-label={`${bookTitle(selectedBook)}を一つ右へ移動`}
                   disabled={selectedIndex >= shelf.items.length - 1}
                   onClick={() =>
                     actions.moveShelfBook(
@@ -819,18 +816,15 @@ function ShelfEditingPanel({
             </span>
           </label>
           <div className="editor-selected-footer">
-            <Link
-              href={bookPath(selectedBook.id)}
-              className="editor-text-button"
-            >
+            <Link href={bookPath(selectedBook.id)} className="text-btn">
               本の詳細を見る
               <Icon name="arrow" size={15} />
             </Link>
             <button
               type="button"
-              className="editor-remove-book"
+              className="text-btn quiet editor-remove-book"
               onClick={() => {
-                takeOff(selected, selectedBook.title);
+                takeOff(selected, bookTitle(selectedBook));
                 setSelectedId(null);
               }}
             >
@@ -1028,7 +1022,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             本を並べて、言葉を添えて。あなたの感性が、この街の景色になります。
           </p>
         </div>
-        <Link className="editor-button secondary" href="/shops/mine">
+        <Link className="btn" href="/shops/mine">
           <Icon name="eye" size={17} />
           お店を眺める
         </Link>
@@ -1049,7 +1043,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         <div>
           <button
             type="button"
-            className="editor-button primary"
+            className="btn fill"
             disabled={!walk.ready}
             onClick={() => setSceneEditorOpen(true)}
           >
@@ -1057,7 +1051,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             店内を飾りつける
           </button>
           {inWalk && (
-            <Link className="editor-button secondary" href="/walk/#mine">
+            <Link className="btn" href="/walk/#mine">
               店内を眺める
             </Link>
           )}
@@ -1085,7 +1079,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         </div>
         <button
           type="button"
-          className="editor-button primary"
+          className="btn fill"
           onClick={() => setAddShelfOpen(true)}
         >
           <Icon name="plus" size={18} />
@@ -1122,7 +1116,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           </p>
           <button
             type="button"
-            className="editor-button primary"
+            className="btn fill"
             onClick={() => setAddShelfOpen(true)}
           >
             <Icon name="plus" size={18} />
@@ -1174,7 +1168,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
               20スペースの棚を作ります。公開・非公開は、あとから変更できます。
             </p>
             <button
-              className="editor-button primary"
+              className="btn fill"
               type="submit"
               disabled={!newShelfName.trim()}
             >
@@ -1214,14 +1208,14 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             <div>
               <button
                 type="button"
-                className="editor-button secondary"
+                className="btn"
                 onClick={() => setRemoveShelfId(null)}
               >
                 キャンセル
               </button>
               <button
                 type="button"
-                className="editor-button danger"
+                className="btn danger fill"
                 onClick={() => {
                   if (!removeShelfAndWork(removeShelf.id)) return;
                   setRemoveShelfId(null);

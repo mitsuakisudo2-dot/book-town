@@ -42,6 +42,7 @@ import { Icon, Modal } from "./ui";
 import { KeptDraftNote, StopConfirm, useDraftOwner } from "./KeptDraftNote";
 import "./walk.css";
 import "./scene-editor.css";
+import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
 
 /**
  * A small owner-only form editor. Scene geometry stays with the template.
@@ -129,7 +130,7 @@ export function StoreSceneEditor({
     .filter((o) => o.kind === "book" && o.parentId === row.id)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const placement = placementId ? objectById(draft, placementId) : undefined;
-  const book = state.books.find((b) => b.id === placement?.bookId);
+  const book = bookById(state.books, placement?.bookId);
   const pop = placement ? bookPop(draft, placement.id) : undefined;
   const unplaced = unplacedBooks(draft);
   // Books are found the way every search finds them; the reader's own come
@@ -169,8 +170,8 @@ export function StoreSceneEditor({
   const choiceButton = (b: Book) => (
     <button key={b.id} type="button" onClick={() => placeBook(b)}>
       <span>
-        {b.title}
-        <small>{b.author}</small>
+        {bookTitle(b)}
+        <small>{bookAuthor(b)}</small>
       </span>
       <Icon name="plus" size={16} />
     </button>
@@ -429,7 +430,7 @@ export function StoreSceneEditor({
                     aria-pressed={p.id === placementId}
                     onClick={() => selectBook(p.id)}
                   >
-                    {state.books.find((b) => b.id === p.bookId)?.title}
+                    {titleById(state.books, p.bookId)}
                     <small>
                       {p.display === "face" ? "表紙" : "背表紙"}
                       {p.isPublic === false ? " · 非公開" : ""}
@@ -490,7 +491,7 @@ export function StoreSceneEditor({
                 id="scene-book-form"
                 disabled={waiting}
               >
-                <legend>{book.title}</legend>
+                <legend>{bookTitle(book)}</legend>
                 <label>
                   見せ方
                   <select
@@ -680,7 +681,7 @@ export function StoreSceneEditor({
                       aria-pressed={p.id === placementId}
                       onClick={() => selectBook(p.id)}
                     >
-                      {state.books.find((b) => b.id === p.bookId)?.title}
+                      {titleById(state.books, p.bookId)}
                       <small>
                         {p.isPublic === false ? "非公開" : "未配置"}
                       </small>
@@ -726,16 +727,12 @@ export function StoreSceneEditor({
             />
           ) : (
             <div>
-              <button
-                type="button"
-                className="editor-button secondary"
-                onClick={cancel}
-              >
+              <button type="button" className="btn" onClick={cancel}>
                 キャンセル
               </button>
               <button
                 type="button"
-                className="editor-button primary"
+                className="btn fill"
                 disabled={
                   !saved.ready ||
                   waiting ||

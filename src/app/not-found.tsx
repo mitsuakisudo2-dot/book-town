@@ -5,7 +5,7 @@ export default function NotFound() {
       <span className="eyebrow">ANOTHER STREET</span>
       <h1>この道の先には、まだ書店がありません。</h1>
       <p>街の広場から、もう一度歩いてみましょう。</p>
-      <Link className="button" href="/">
+      <Link className="btn fill" href="/">
         本の街へ
       </Link>
     </main>

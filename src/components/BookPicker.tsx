@@ -5,6 +5,7 @@ import type { Book } from "../lib/types";
 import { useCoarsePointer, useFocusFieldOnShow } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { BookJacket, Icon, useInWritingSheet } from "./ui";
+import { bookAuthor, bookById, booksById, bookTitle } from "../lib/book-name";
 
 /** Search the catalog by title, author, genre or ISBN, and pick one book. */
 export function BookPicker({
@@ -53,29 +54,26 @@ export function BookPicker({
     limit: 6,
     genreFinds,
   });
-  const selected = value ? books.find((book) => book.id === value) : undefined;
+  const selected = value ? bookById(books, value) : undefined;
   if (selected)
     return (
       <div className="picker-chosen">
         <BookJacket book={selected} className="picker-jacket" />
         <span>
-          <b>{selected.title}</b>
-          <small>{selected.author}</small>
+          <b>{bookTitle(selected)}</b>
+          <small>{bookAuthor(selected)}</small>
         </span>
         <button
           type="button"
-          className="picker-clear"
+          className="icon-btn picker-clear"
           onClick={() => onChange(null)}
-          aria-label={selected.title + "を外す"}
+          aria-label={bookTitle(selected) + "を外す"}
         >
           <Icon name="close" size={15} />
         </button>
       </div>
     );
-  const suggested = suggestions
-    .map((bookId) => books.find((book) => book.id === bookId))
-    .filter((book): book is Book => Boolean(book))
-    .slice(0, 6);
+  const suggested = booksById(books, suggestions).slice(0, 6);
   const searching = query.trim() !== "";
   const shown = searching
     ? results.found.map((match) => match.book)
@@ -91,9 +89,9 @@ export function BookPicker({
       >
         <BookJacket book={book} className="picker-jacket" />
         <span>
-          <b>{book.title}</b>
+          <b>{bookTitle(book)}</b>
           <small>
-            {book.author}・{book.genre}
+            {bookAuthor(book)}・{book.genre}
           </small>
         </span>
       </button>

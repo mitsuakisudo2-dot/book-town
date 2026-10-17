@@ -34,6 +34,7 @@ import {
   writingField,
 } from "./useWritingSheet";
 import "./illustrated-jackets.css";
+import { bookAuthor, bookTitle } from "../lib/book-name";
 const shapes: Record<string, ReactNode> = {
   book: (
     <>
@@ -281,7 +282,7 @@ export function BookJacket({
   className = "",
   onClick,
   illustrated = false,
-  author = book.author,
+  author = bookAuthor(book),
   artIndex,
   sizes = "160px",
 }: {
@@ -306,7 +307,9 @@ export function BookJacket({
   const art = illustrated ? bookArt(book, artIndex) : null;
   className += illustrated ? " is-illustrated" : "";
   const tate =
-    !illustrated && book.genre === REGISTERED_GENRE && tateTitle(book.title);
+    !illustrated &&
+    book.genre === REGISTERED_GENRE &&
+    tateTitle(bookTitle(book));
   className += tate ? " is-tate" : "";
   className += covered ? " has-cover" : "";
   const style = {
@@ -317,7 +320,7 @@ export function BookJacket({
     "--art-y": art?.y,
     "--art-shade": art?.light ? "#f6f0dc50" : "#101e3580",
     "--art-shadow": art?.light ? "#f5ecce" : "#10252d",
-    "--tate-size": tate ? tateSize([...book.title].length) : undefined,
+    "--tate-size": tate ? tateSize([...bookTitle(book)].length) : undefined,
   } as CSSProperties;
   const content = (
     <>
@@ -348,7 +351,7 @@ export function BookJacket({
         </span>
       )}
       <span className="jacket-series">BOOK TOWN EDITIONS</span>
-      <span className="jacket-title">{book.title}</span>
+      <span className="jacket-title">{bookTitle(book)}</span>
       <span className="jacket-author">{author}</span>
       <span className="jacket-imprint">本の街 文庫</span>
     </>
@@ -358,7 +361,7 @@ export function BookJacket({
       className={"book-jacket " + className}
       style={style}
       onClick={onClick}
-      aria-label={book.title + "の詳細"}
+      aria-label={bookTitle(book) + "の詳細"}
     >
       {content}
     </button>
@@ -368,7 +371,8 @@ export function BookJacket({
       style={style}
       role="img"
       aria-label={
-        book.title + (covered ? "の表紙" : "の表紙（BookTownの装丁カード）")
+        bookTitle(book) +
+        (covered ? "の表紙" : "の表紙（BookTownの装丁カード）")
       }
     >
       {content}
@@ -588,7 +592,7 @@ export function Modal({
       >
         <div className="modal-top">
           <h2>{title}</h2>
-          <button className="icon-button" onClick={onClose} aria-label="閉じる">
+          <button className="icon-btn" onClick={onClose} aria-label="閉じる">
             <Icon name="close" />
           </button>
         </div>

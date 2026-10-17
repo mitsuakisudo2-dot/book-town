@@ -10,6 +10,7 @@ import {
 import { reviewCoverOf, spoilerViewOf } from "./social";
 import { isPublished, posterSpoilerView, type Poster } from "./posters";
 import { splitHidden } from "./hidden-words";
+import { bookById } from "./book-name";
 import {
   dayOrder,
   isOwnShop,
@@ -138,7 +139,7 @@ export function shelvesFeature(
 /** Up to `count` covers of a shop's public shelves, for its card. */
 export const shopCovers = (state: TownState, shop: Shop, count = 4): Book[] =>
   shownBooks(state, shop)
-    .map((item) => state.books.find((book) => book.id === item.bookId)!)
+    .map((item) => bookById(state.books, item.bookId)!)
     .filter(
       (book, index, all) =>
         all.findIndex((other) => other.id === book.id) === index,
@@ -205,7 +206,7 @@ export const placeOf = ({ shop, shelf, item }: PopPick): PlaceRef => ({
 const placed = (state: TownState, shop: Shop): PopPick[] =>
   shop.shelves.flatMap((shelf) =>
     shelf.items.flatMap((item) => {
-      const book = state.books.find((entry) => entry.id === item.bookId);
+      const book = bookById(state.books, item.bookId);
       return book ? [{ shop, shelf, item, book }] : [];
     }),
   );
@@ -218,7 +219,7 @@ export function pickAt(state: TownState, place: PlaceRef): PopPick | null {
   const shop = state.shops.find((entry) => entry.id === place.shopId);
   const shelf = shop?.shelves.find((entry) => entry.id === place.shelfId);
   const item = shelf?.items.find((entry) => entry.id === place.itemId);
-  const book = item && state.books.find((entry) => entry.id === item.bookId);
+  const book = item && bookById(state.books, item.bookId);
   return shop && shelf && item && book ? { shop, shelf, item, book } : null;
 }
 

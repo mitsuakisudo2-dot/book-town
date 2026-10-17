@@ -29,6 +29,7 @@ import {
   tapsOf,
 } from "../../lib/social";
 import { useTownBackend } from "../../lib/store";
+import { bookById, bookTitle } from "../../lib/book-name";
 import {
   ME_ID,
   type Notify,
@@ -101,9 +102,7 @@ export function LetterCard({
   opAuthorId?: string;
 }) {
   const author = findReader(state, post.authorId);
-  const book = post.bookId
-    ? state.books.find((entry) => entry.id === post.bookId)
-    : undefined;
+  const book = bookById(state.books, post.bookId);
   const onPage = place === "page";
   const [shown, setShown] = useState(
     () => onPage && wasOpened("spoiler:" + post.id),
@@ -143,9 +142,7 @@ export function LetterCard({
 
   const reply = post.parentId !== null;
   const solo = post.readingMode === "solo";
-  const spoilerBook = state.books.find(
-    (entry) => entry.id === spoilerBookOf(state, post),
-  );
+  const spoilerBook = bookById(state.books, spoilerBookOf(state, post));
   const shop =
     post.authorId === ME_ID
       ? state.ownShop
@@ -327,7 +324,7 @@ export function LetterCard({
           ) : hidden ? (
             <SpoilerCover
               words={spoilerWords(post, askedByMe)}
-              title={spoilerBook?.title}
+              title={spoilerBook && bookTitle(spoilerBook)}
               bars={spoilerBars(post.body)}
               onOpen={() => {
                 setShown(true);
@@ -359,7 +356,7 @@ export function LetterCard({
               {(book || post.parentId) && (
                 <button
                   type="button"
-                  className="letter-text-button"
+                  className="text-btn"
                   onClick={() => {
                     actions.markSpoiler(post.id);
                     notify("ネタバレの印を付けました");

@@ -145,7 +145,7 @@ input[type="checkbox"] {
   display: flex;
   gap: 13px;
   align-items: center;
-  border-radius: 7px;
+  border-radius: var(--r-tag);
   padding: 15px 15px;
   font-size: var(--t-cap);
   color: var(--ink-2);
@@ -167,10 +167,10 @@ input[type="checkbox"] {
   padding: 12px 13px;
   background: var(--green);
   color: var(--on-green);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   font-size: var(--t-cap);
   margin-top: 25px;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--shade) 4%, transparent);
+  box-shadow: var(--lift-2);
 }
 .open-shop-link > svg:last-child {
   margin-left: auto;
@@ -280,7 +280,7 @@ input[type="checkbox"] {
 .top-search kbd {
   border: 1px solid var(--line);
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   font-family: inherit;
   font-size: var(--t-cap);
   opacity: 0.6;
@@ -295,7 +295,7 @@ input[type="checkbox"] {
 }
 .demo-pill {
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   padding: 4px 7px;
   font-size: var(--t-cap);
   color: var(--ink-2);
@@ -324,18 +324,6 @@ input[type="checkbox"] {
   font-weight: 500;
   margin-bottom: 9px;
 }
-.text-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--green);
-  font-size: var(--t-cap);
-  line-height: 1.7;
-  padding: 0;
-}
-.text-button:hover {
-  color: var(--green);
-}
 .shop-window {
   margin: 17px auto 0;
   width: 85%;
@@ -343,7 +331,7 @@ input[type="checkbox"] {
   background: #f9f5e653;
   padding: 8px 9px 0;
   box-shadow: inset 0 0 0 1px #ffffff25;
-  border-radius: 2px;
+  border-radius: var(--r-edge);
   position: relative;
 }
 .demo-tag {
@@ -354,7 +342,7 @@ input[type="checkbox"] {
   color: var(--ink-2);
   border: 1px solid var(--line);
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   white-space: nowrap;
 }
 .town-footer {
@@ -375,54 +363,13 @@ input[type="checkbox"] {
   font-size: var(--t-cap);
   letter-spacing: 0.7px;
 }
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: var(--green);
-  color: var(--on-green);
-  border: 1px solid var(--green);
-  padding: 11px 18px;
-  border-radius: 5px;
-  font-size: var(--t-cap);
-  line-height: 1.6;
-  white-space: nowrap;
-}
-.button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--green) 88%, var(--ink));
-}
-.button.secondary {
-  background: transparent;
-  color: var(--green);
-  border-color: var(--line-2);
-}
-.button.secondary:hover:not(:disabled) {
-  background: var(--green-soft);
-}
-.button.primary {
-  background: var(--green);
-  color: var(--on-green);
-}
-.icon-button {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  color: var(--ink-2);
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.icon-button:hover {
-  background: var(--green-soft);
-}
 /* Quiet, but readable on the paper (AA, 4.5:1 and more). */
 .muted {
   color: var(--ink-2);
 }
 .field {
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   padding: 11px 13px;
   width: 100%;
   background: var(--sheet);
@@ -444,7 +391,7 @@ input[type="checkbox"] {
 .note-box {
   background: var(--green-soft);
   color: var(--ink-2);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   padding: 14px;
   font-size: var(--t-cap);
   line-height: 1.9;
@@ -469,9 +416,9 @@ input[type="checkbox"] {
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--paper);
-  border-radius: 11px;
+  border-radius: var(--r-box);
   padding: 26px;
-  box-shadow: 0 20px 80px color-mix(in srgb, var(--shade) 18%, transparent);
+  box-shadow: var(--lift-3);
 }
 .modal.wide {
   max-width: 650px;
@@ -586,7 +533,7 @@ input[type="checkbox"] {
   font-size: var(--t-cap);
   line-height: 2;
 }
-.modal > .button:last-child {
+.modal > .btn:last-child {
   margin-top: 20px;
 }
 .toast {
@@ -597,9 +544,9 @@ input[type="checkbox"] {
   z-index: var(--layer-toast);
   background: var(--green);
   color: var(--on-green);
-  box-shadow: 0 8px 30px color-mix(in srgb, var(--shade) 15%, transparent);
+  box-shadow: var(--lift-3);
   padding: 13px 20px;
-  border-radius: 7px;
+  border-radius: var(--r-tag);
   display: flex;
   gap: 9px;
   align-items: center;
@@ -856,9 +803,6 @@ div.book-jacket:hover {
   display: block;
   margin: 5px 0 12px;
 }
-.catalog-book .text-button {
-  font-size: var(--t-cap);
-}
 .catalog-book .saved {
   color: var(--green);
 }
@@ -931,7 +875,7 @@ div.book-jacket:hover {
   position: relative;
   padding: 29px 34px 28px;
   border: 1px solid var(--theme-light);
-  border-radius: 8px;
+  border-radius: var(--r-box);
   background: var(--theme-pale);
   overflow: hidden;
 }
@@ -1001,10 +945,6 @@ div.book-jacket:hover {
   color: var(--ink-2);
   margin-left: auto;
 }
-.shop-hero-bottom .button {
-  font-size: var(--t-cap);
-  padding: 8px 13px;
-}
 .shop-shelf-index {
   display: flex;
   gap: 9px;
@@ -1017,7 +957,7 @@ div.book-jacket:hover {
   gap: 7px;
   border: 1px solid var(--line);
   background: var(--sheet);
-  border-radius: 20px;
+  border-radius: var(--r-pill);
   padding: 5px 11px;
   font-size: var(--t-cap);
   color: var(--ink-2);
@@ -1059,7 +999,7 @@ div.book-jacket:hover {
   scrollbar-width: thin;
   scrollbar-color: #bca984 #e9dcc6;
   border: 1px solid #c7ac86;
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   background: #dec9a8;
   box-shadow: 0 5px 10px #7b604a12;
 }
@@ -1265,7 +1205,7 @@ div.book-jacket:hover {
   color: #6e5a3a;
   box-shadow: 0 1px 2px #58442826;
   z-index: 4;
-  border-radius: 1px;
+  border-radius: var(--r-edge);
   line-height: 1.5;
   pointer-events: none;
 }
@@ -1280,7 +1220,7 @@ div.book-jacket:hover {
   top: 3px;
   color: var(--book-ink);
   background: #f6f1db99;
-  border-radius: 2px;
+  border-radius: var(--r-edge);
   opacity: 0;
   line-height: 1;
   pointer-events: none;
@@ -1310,13 +1250,10 @@ div.book-jacket:hover {
   color: var(--ink-2);
   margin-top: 5px;
 }
-.shop-owner-footer .text-button {
-  font-size: var(--t-cap);
-}
 .genre-tag {
   font-size: var(--t-cap);
   background: var(--green-soft);
-  border-radius: 20px;
+  border-radius: var(--r-pill);
   display: inline-block;
   padding: 5px 11px;
   color: var(--green);
@@ -1337,7 +1274,7 @@ div.book-jacket:hover {
 .owner-pop {
   border: 1px solid var(--pop-line);
   background: var(--pop);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   padding: 19px 21px;
   position: relative;
 }
@@ -1392,9 +1329,6 @@ div.book-jacket:hover {
 .book-page-hero .book-summary {
   margin-top: 17px;
 }
-.book-page-hero .button {
-  font-size: var(--t-cap);
-}
 .book-path-heading {
   margin: 35px 0 24px;
 }
@@ -1416,7 +1350,7 @@ div.book-jacket:hover {
 }
 .stockist {
   border: 1px solid var(--theme-light);
-  border-radius: 7px;
+  border-radius: var(--r-tag);
   background: var(--theme-pale);
   padding: 23px 24px;
   min-width: 0;
@@ -1482,8 +1416,7 @@ div.book-jacket:hover {
   color: var(--ink-2);
   max-width: 150px;
 }
-.stockist-bottom .text-button {
-  font-size: var(--t-cap);
+.stockist-bottom .text-btn {
   color: var(--theme-deep);
   white-space: nowrap;
 }
@@ -1673,10 +1606,6 @@ div.book-jacket:hover {
     padding: 12px 17px;
     max-width: 91vw;
   }
-  .button {
-    padding: 10px 15px;
-    font-size: var(--t-cap);
-  }
   .field {
     font-size: var(--t-page);
   }
@@ -1712,9 +1641,6 @@ div.book-jacket:hover {
     line-height: 1.7;
   }
   .catalog-book > span {
-    font-size: var(--t-cap);
-  }
-  .catalog-book .text-button {
     font-size: var(--t-cap);
   }
   .page-title {
@@ -1765,11 +1691,6 @@ div.book-jacket:hover {
     font-size: var(--t-cap);
     margin-left: auto;
   }
-  .shop-hero-bottom .button {
-    width: 100%;
-    font-size: var(--t-cap);
-    padding: 9px 14px;
-  }
   .shop-shelf-index {
     gap: 7px;
     margin-bottom: 21px;
@@ -1814,9 +1735,8 @@ div.book-jacket:hover {
     font-size: var(--t-cap);
     line-height: 1.9;
   }
-  .shop-owner-footer .text-button {
+  .shop-owner-footer .text-btn {
     margin-left: 57px;
-    font-size: var(--t-cap);
   }
   .jacket-disclaimer {
     font-size: var(--t-cap);
@@ -1867,9 +1787,7 @@ div.book-jacket:hover {
     font-size: var(--t-cap);
     margin: 14px 0 18px;
   }
-  .book-page-hero .button {
-    font-size: var(--t-cap);
-    padding: 8px 11px;
+  .book-page-hero .btn {
     gap: 5px;
   }
   .book-page-hero .jacket-disclaimer {
@@ -1918,9 +1836,6 @@ div.book-jacket:hover {
   .stockist-bottom > span {
     font-size: var(--t-cap);
     max-width: 130px;
-  }
-  .stockist-bottom .text-button {
-    font-size: var(--t-cap);
   }
   .stockist-list {
     gap: 18px;
@@ -1996,9 +1911,6 @@ div.book-jacket:hover {
   .catalog-book p {
     font-size: var(--t-cap);
   }
-  .catalog-book .text-button {
-    font-size: var(--t-cap);
-  }
   .book-page-hero {
     gap: 18px;
   }
@@ -2015,9 +1927,6 @@ div.book-jacket:hover {
     font-size: var(--t-page);
   }
   .stockist-bottom > span {
-    font-size: var(--t-cap);
-  }
-  .stockist-bottom .text-button {
     font-size: var(--t-cap);
   }
   .town-footer {
@@ -2040,7 +1949,7 @@ div.book-jacket:hover {
   padding: 12px 16px;
   background: var(--notice);
   border: 1px solid var(--line-2);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   font-size: var(--t-cap);
   line-height: 1.8;
   color: var(--ink);
@@ -2088,7 +1997,7 @@ div.book-jacket:hover {
     padding: 0 11px;
     background: var(--band);
     border: 1px solid var(--line);
-    border-radius: 5px;
+    border-radius: var(--r-tag);
     justify-content: flex-start;
   }
   .top-search input {
@@ -2118,7 +2027,7 @@ div.book-jacket:hover {
 .town-shell .top-actions button.demo-pill {
   min-height: 30px;
   padding: 3px 5px 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border-color: var(--line-2);
   background: var(--sheet);
   color: var(--green);

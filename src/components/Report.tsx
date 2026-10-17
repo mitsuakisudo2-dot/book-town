@@ -25,6 +25,7 @@ import { requestAccount } from "../lib/visitor";
 import { Icon, Modal } from "./ui";
 import { KeptDraftNote, StopConfirm, useOpenedWithWork } from "./KeptDraftNote";
 import "./report.css";
+import { quotedTitle } from "../lib/book-name";
 
 // A spoiler is asked about with 「ネタバレでは？」 instead, which folds a post
 // rather than hiding it. Personal information and threats act at once (when
@@ -91,7 +92,7 @@ export function CoverRemovalLink({ book }: { book: Book }) {
       target={{
         kind: "book",
         id: book.id,
-        name: `『${book.title}』の表紙`,
+        name: `${quotedTitle(book)}の表紙`,
         extra: `表紙の出どころ: ${cover.source === "google" ? "Google Books" : "openBD"} / ISBN ${book.isbn}`,
       }}
     >
@@ -211,7 +212,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
               これについては、すでに通報を受け付けています。
             </p>
           )}
-          <button className="button secondary" onClick={closeReport}>
+          <button className="btn" onClick={closeReport}>
             閉じる
           </button>
         </>
@@ -278,7 +279,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
           ) : (
             <div className="report-actions">
               <button
-                className="button primary"
+                className="btn fill"
                 type="submit"
                 disabled={!ready || phase === "sending"}
               >
@@ -290,7 +291,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
                     : "通報する"}
               </button>
               <button
-                className="button secondary"
+                className="btn"
                 type="button"
                 onClick={() => (detail.trim() ? setStopping(true) : stop())}
               >

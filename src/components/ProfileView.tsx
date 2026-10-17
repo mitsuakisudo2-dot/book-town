@@ -111,6 +111,7 @@ import { afterLayerCloses, leaveLayers } from "../lib/back-layer";
 import { focusField } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { VisibilitySettings } from "./VisibilitySettings";
+import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
 
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
 type Collection = (typeof COLLECTIONS)[number];
@@ -269,7 +270,7 @@ export function ProfileView({
       <div className="profile-view profile-not-found">
         <Icon name="user" />
         <h1>読書家が見つかりませんでした</h1>
-        <Link className="button primary" href="/">
+        <Link className="btn fill" href="/">
           本の街に戻る
         </Link>
       </div>
@@ -279,7 +280,7 @@ export function ProfileView({
   const publicShelves = shop?.shelves.filter((shelf) => shelf.isPublic) ?? [];
   const lifeNine = Array.from({ length: 9 }, (_, index) => {
     const id = reader.lifeNine[index];
-    return id ? state.books.find((book) => book.id === id) : undefined;
+    return id ? bookById(state.books, id) : undefined;
   });
   const following = Boolean(shop && state.following.includes(shop.id));
   const followedShops = state.shops.filter((place) =>
@@ -365,13 +366,13 @@ export function ProfileView({
     <button
       className="profile-picker-book"
       key={book.id}
-      aria-label={`${book.title}を人生の9冊に加える`}
+      aria-label={`${bookTitle(book)}を人生の9冊に加える`}
       disabled={draftNine.length >= NINE_MAX}
       onClick={() => addNine(book.id)}
     >
       <BookJacket book={book} />
-      <strong>{book.title}</strong>
-      <span>{book.author}</span>
+      <strong>{bookTitle(book)}</strong>
+      <span>{bookAuthor(book)}</span>
       <small>
         <Icon name="plus" /> 加える
       </small>
@@ -540,11 +541,11 @@ export function ProfileView({
             {isSelf ? (
               <>
                 {/* One main step (the shop); the rest stay small beside it. */}
-                <Link className="button primary" href="/my-shop/">
+                <Link className="btn fill" href="/my-shop/">
                   <Icon name="store" /> {shop ? "書店を整える" : "書店をひらく"}
                 </Link>
                 <button
-                  className="button secondary"
+                  className="btn"
                   disabled={!owner}
                   onClick={beginProfileEdit}
                 >
@@ -553,14 +554,14 @@ export function ProfileView({
                 <span className="profile-minor-actions">
                   <button
                     type="button"
-                    className="text-button"
+                    className="text-btn quiet"
                     onClick={() => setSheet("scan")}
                   >
                     <Icon name="barcode" size={15} /> 本を登録
                   </button>
                   <button
                     type="button"
-                    className="text-button"
+                    className="text-btn quiet"
                     onClick={() => setSheet("settings")}
                   >
                     <Icon name="settings" size={15} /> 設定
@@ -570,7 +571,7 @@ export function ProfileView({
             ) : (
               shop && (
                 <button
-                  className={`button ${following ? "secondary" : "primary"}`}
+                  className={following ? "btn" : "btn fill"}
                   aria-pressed={following}
                   onClick={() => {
                     actions.toggleFollow(shop.id);
@@ -621,7 +622,7 @@ export function ProfileView({
           </div>
           {isSelf && (
             <button
-              className="button secondary profile-edit-nine"
+              className="btn profile-edit-nine"
               disabled={!owner}
               onClick={beginNineEdit}
             >
@@ -641,20 +642,20 @@ export function ProfileView({
                 <Link
                   href={bookPath(book.id)}
                   className="profile-nine-book"
-                  aria-label={`${book.title}の詳細を見る`}
+                  aria-label={`${bookTitle(book)}の詳細を見る`}
                 >
                   <span className="profile-nine-number">0{index + 1}</span>
                   <BookJacket book={book} />
                 </Link>
                 <Link className="profile-nine-title" href={bookPath(book.id)}>
-                  {book.title}
+                  {bookTitle(book)}
                 </Link>
-                <p className="profile-nine-author">{book.author}</p>
+                <p className="profile-nine-author">{bookAuthor(book)}</p>
                 {reader.nineNotes[book.id] && (
                   <button
                     className="profile-nine-note"
                     onClick={() => setSelectedNote(book.id)}
-                    aria-label={`${book.title}についてのひとことを読む`}
+                    aria-label={`${bookTitle(book)}についてのひとことを読む`}
                   >
                     <Icon name="leaf" />
                     ひとことを読む
@@ -745,7 +746,7 @@ export function ProfileView({
                 </p>
                 <button
                   type="button"
-                  className="button primary"
+                  className="btn fill"
                   onClick={() => setSheet("scan")}
                 >
                   <Icon name="plus" size={16} /> 本を登録
@@ -771,16 +772,16 @@ export function ProfileView({
                 ? [...state.library].reverse()
                 : state[collection]
               ).map((id) => {
-                const book = state.books.find((entry) => entry.id === id);
+                const book = bookById(state.books, id);
                 return book ? (
                   <article className="profile-saved-book" key={id}>
                     <Link
                       href={bookPath(id)}
-                      aria-label={`${book.title}の詳細を見る`}
+                      aria-label={`${bookTitle(book)}の詳細を見る`}
                     >
                       <BookJacket book={book} />
-                      <strong>{book.title}</strong>
-                      <small>{book.author}</small>
+                      <strong>{bookTitle(book)}</strong>
+                      <small>{bookAuthor(book)}</small>
                     </Link>
                     <button
                       onClick={() =>
@@ -790,7 +791,7 @@ export function ProfileView({
                             ? actions.toggleFavorite(id)
                             : actions.toggleLibrary(id)
                       }
-                      aria-label={`${book.title}を${collection === "wishlist" ? "読みたい" : collection === "favorites" ? "お気に入り" : "登録した本"}から外す`}
+                      aria-label={`${bookTitle(book)}を${collection === "wishlist" ? "読みたい" : collection === "favorites" ? "お気に入り" : "登録した本"}から外す`}
                     >
                       <Icon name="close" size={14} /> 外す
                     </button>
@@ -874,11 +875,8 @@ export function ProfileView({
                           <span className="profile-shelf-preview">
                             {shelf.items
                               .slice(0, 3)
-                              .map(
-                                (item) =>
-                                  state.books.find(
-                                    (book) => book.id === item.bookId,
-                                  )?.title,
+                              .map((item) =>
+                                titleById(state.books, item.bookId),
                               )
                               .filter(Boolean)
                               .join(" · ") ||
@@ -897,7 +895,7 @@ export function ProfileView({
               </div>
             )}
             {isSelf && (
-              <Link className="button secondary" href="/my-shop">
+              <Link className="btn" href="/my-shop">
                 <Icon name="edit" /> 書店と本棚を編集する
               </Link>
             )}
@@ -911,7 +909,7 @@ export function ProfileView({
                 : "この読書家の書店は、準備中です。"}
             </p>
             {isSelf && (
-              <Link className="button primary" href="/my-shop">
+              <Link className="btn fill" href="/my-shop">
                 3分で本屋を開く <Icon name="arrow" />
               </Link>
             )}
@@ -949,7 +947,7 @@ export function ProfileView({
                       </span>
                     </Link>
                     <button
-                      className="button secondary"
+                      className="btn"
                       onClick={() => {
                         actions.toggleFollow(place.id);
                         notify("フォローを解除しました");
@@ -1217,7 +1215,7 @@ export function ProfileView({
                   />
                   <button
                     type="button"
-                    className="profile-link-remove"
+                    className="icon-btn profile-link-remove"
                     aria-label={`リンク${index + 1}を削除`}
                     onClick={() =>
                       changeProfile({
@@ -1237,7 +1235,7 @@ export function ProfileView({
               {draftLinks.length < PROFILE_LINK_LIMIT && (
                 <button
                   type="button"
-                  className="profile-link-add"
+                  className="text-btn profile-link-add"
                   onClick={() => changeProfile({ links: [...draftLinks, ""] })}
                 >
                   <Icon name="plus" size={14} /> リンクを追加
@@ -1267,15 +1265,11 @@ export function ProfileView({
               />
             ) : (
               <div className="profile-form-actions">
-                <button
-                  className="button secondary"
-                  type="button"
-                  onClick={cancelProfile}
-                >
+                <button className="btn" type="button" onClick={cancelProfile}>
                   キャンセル
                 </button>
                 <button
-                  className="button primary"
+                  className="btn fill"
                   type="submit"
                   disabled={!draftName.trim()}
                 >
@@ -1314,7 +1308,7 @@ export function ProfileView({
             </p>
             <div className="profile-nine-editor-list">
               {draftNine.map((id, index) => {
-                const book = state.books.find((entry) => entry.id === id);
+                const book = bookById(state.books, id);
                 if (!book) return null;
                 return (
                   <div className="profile-nine-editor-item" key={id}>
@@ -1323,10 +1317,10 @@ export function ProfileView({
                       <BookJacket book={book} />
                     </div>
                     <div className="profile-editor-book-info">
-                      <strong>{book.title}</strong>
-                      <span>{book.author}</span>
+                      <strong>{bookTitle(book)}</strong>
+                      <span>{bookAuthor(book)}</span>
                       <input
-                        aria-label={`${book.title}へのひとこと`}
+                        aria-label={`${bookTitle(book)}へのひとこと`}
                         placeholder="この本へのひとこと（任意）"
                         maxLength={PROFILE_FIELDS.note}
                         value={draftNotes[id] ?? ""}
@@ -1339,21 +1333,21 @@ export function ProfileView({
                     </div>
                     <div className="profile-order-controls">
                       <button
-                        aria-label={`${book.title}を前へ移動`}
+                        aria-label={`${bookTitle(book)}を前へ移動`}
                         disabled={index === 0}
                         onClick={() => moveNine(index, -1)}
                       >
                         ↑
                       </button>
                       <button
-                        aria-label={`${book.title}を後ろへ移動`}
+                        aria-label={`${bookTitle(book)}を後ろへ移動`}
                         disabled={index === draftNine.length - 1}
                         onClick={() => moveNine(index, 1)}
                       >
                         ↓
                       </button>
                       <button
-                        aria-label={`${book.title}を人生の9冊から外す`}
+                        aria-label={`${bookTitle(book)}を人生の9冊から外す`}
                         onClick={() =>
                           changeNine({
                             ids: draftNine.filter((entry) => entry !== id),
@@ -1453,10 +1447,10 @@ export function ProfileView({
               />
             ) : (
               <div className="profile-form-actions profile-nine-save">
-                <button className="button secondary" onClick={cancelNine}>
+                <button className="btn" onClick={cancelNine}>
                   キャンセル
                 </button>
-                <button className="button primary" onClick={saveNine}>
+                <button className="btn fill" onClick={saveNine}>
                   この並びを保存
                 </button>
               </div>
@@ -1467,10 +1461,7 @@ export function ProfileView({
 
       {selectedNote && (
         <Modal
-          title={
-            state.books.find((book) => book.id === selectedNote)?.title ??
-            "本へのひとこと"
-          }
+          title={titleById(state.books, selectedNote) ?? "本へのひとこと"}
           onClose={() => setSelectedNote(null)}
         >
           <div className="profile-note-detail">
@@ -1478,7 +1469,7 @@ export function ProfileView({
             <blockquote>{reader.nineNotes[selectedNote]}</blockquote>
             <p>— {reader.name}</p>
             <Link
-              className="button secondary"
+              className="btn"
               href={bookPath(selectedNote)}
               onClick={() => setSelectedNote(null)}
             >
@@ -1517,7 +1508,7 @@ function ProfilePosters({
           <h2 id="profile-posters-title">ポスター</h2>
         </div>
         {isSelf && posters.length > 0 && (
-          <Link className="button secondary" href={posterNewPath()}>
+          <Link className="btn" href={posterNewPath()}>
             <Icon name="plus" /> ポスターを作る
           </Link>
         )}
@@ -1547,7 +1538,7 @@ function ProfilePosters({
           <p>
             本を選んで、ひとこと添えるだけ。その時の気持ちを、1枚の小さな企画展に。
           </p>
-          <Link className="button primary" href={posterNewPath()}>
+          <Link className="btn fill" href={posterNewPath()}>
             <Icon name="plus" /> ポスターを作る
           </Link>
         </div>

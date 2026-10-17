@@ -27,6 +27,7 @@ import { READING_STATUSES, type ReadingStatus } from "./library";
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId } from "./paths";
+import { bookByIsbn } from "./book-name";
 import {
   bookPrice,
   bookText,
@@ -801,9 +802,7 @@ export function createTownStore(
         bookId && isbn
           ? state.books.find((book) => book.id === bookId && book.isbn === isbn)
           : undefined;
-      const existing =
-        decided ??
-        (isbn ? state.books.find((book) => book.isbn === isbn) : undefined);
+      const existing = decided ?? bookByIsbn(state.books, isbn);
       // The library remembers how a book first came in.
       const register = (town: TownState, id: string) =>
         withLibraryOp(

@@ -2,6 +2,55 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 
+// pg_net and pg_cron, as far as the bibliographic master uses them. A
+// question is written down in net.http_request_queue, and a test puts its
+// answer in net._http_response as pg_net would; a schedule is a row.
+export const EXTENSIONS_STANDIN = `
+  create schema net;
+  create table net.http_request_queue (
+    id bigserial primary key,
+    method text not null,
+    url text not null,
+    headers jsonb,
+    timeout_milliseconds integer
+  );
+  create table net._http_response (
+    id bigint primary key,
+    status_code integer,
+    content_type text,
+    headers jsonb,
+    content text,
+    timed_out boolean,
+    error_msg text,
+    created timestamptz not null default now()
+  );
+  create function net.http_get(url text, params jsonb default '{}',
+      headers jsonb default '{}', timeout_milliseconds integer default 5000)
+  returns bigint language sql as $$
+    insert into net.http_request_queue (method, url, headers, timeout_milliseconds)
+    values ('GET', url, headers, timeout_milliseconds)
+    returning id
+  $$;
+  create schema cron;
+  create table cron.job (
+    jobid bigserial primary key,
+    jobname text unique,
+    schedule text not null,
+    command text not null
+  );
+  create table cron.job_run_details (runid bigserial primary key, end_time timestamptz);
+  create function cron.schedule(job_name text, schedule text, command text)
+  returns bigint language sql as $$
+    insert into cron.job (jobname, schedule, command) values (job_name, schedule, command)
+    on conflict (jobname) do update set schedule = excluded.schedule, command = excluded.command
+    returning jobid
+  $$;
+  create function cron.unschedule(job_name text) returns boolean language sql as $$
+    with gone as (delete from cron.job where jobname = job_name returning 1)
+    select exists (select 1 from gone)
+  $$;
+`;
+
 // The parts of Supabase the migrations rely on: its roles, auth.users and
 // auth.uid(), as tests/database-policies.test.ts sets them up.
 export const SUPABASE_STANDIN = `
@@ -21,7 +70,8 @@ export const SUPABASE_STANDIN = `
   alter default privileges in schema public grant all on tables to anon, authenticated;
   alter default privileges in schema public grant all on sequences to anon, authenticated;
   alter default privileges in schema public grant execute on functions to anon, authenticated;
-`;
+
+${EXTENSIONS_STANDIN}`;
 
 export const MIGRATIONS = join(__dirname, "..", "..", "supabase", "migrations");
 

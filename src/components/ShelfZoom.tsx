@@ -8,6 +8,7 @@ import {
   type StoreScene,
 } from "../lib/store-scene";
 import type { Book } from "../lib/types";
+import { bookById, bookTitle } from "../lib/book-name";
 export function ShelfZoom({
   scene,
   rowId,
@@ -38,11 +39,11 @@ export function ShelfZoom({
       </p>
       <div className="walk-close-shelf">
         {shown.map((p) => {
-          const book = books.find((b) => b.id === p.bookId);
+          const book = bookById(books, p.bookId);
           return book ? (
             <button
               key={p.id}
-              aria-label={book.title + "を手に取る"}
+              aria-label={bookTitle(book) + "を手に取る"}
               onClick={() => onBook(p)}
               className={"walk-close-book is-" + p.display}
             >
@@ -53,7 +54,7 @@ export function ShelfZoom({
       </div>
       <div className="walk-zoom-nav">
         <button
-          className="button secondary"
+          className="btn"
           disabled={page === 0}
           onClick={() => setPage(page - 1)}
           aria-label="段の左側を見る"
@@ -63,7 +64,7 @@ export function ShelfZoom({
         </button>
         <span>同じ段を眺めています</span>
         <button
-          className="button secondary"
+          className="btn"
           disabled={(page + 1) * 5 >= items.length}
           onClick={() => setPage(page + 1)}
           aria-label="段の右側を見る"

@@ -25,6 +25,7 @@ import {
   OWN_SHOP_ID,
   reviewKey,
   type PersistenceStatus,
+  type TownState,
 } from "../src/lib/types";
 import { demoBooks, demoPosts } from "../src/lib/data";
 import { isDatabaseId } from "../src/lib/paths";
@@ -1501,6 +1502,46 @@ async function main() {
       assert.ok(back.libraryEntries[other.bookId].removedAt);
       assert.ok(!back.wishlist.includes(other.bookId));
       assert.ok(!back.library.includes(other.bookId));
+    },
+  );
+
+  await check(
+    "more than 1000 public records reach every reader and visitor, each one",
+    async () => {
+      const rin = await reader("rin");
+      // Rin's records of a book from the catalog, which anyone may read, put
+      // in as the operator so no insert answers with more rows than one
+      // request holds.
+      const book = crypto.randomUUID();
+      const catalog = await admin
+        .from("books")
+        .insert({ id: book, title: "夜の図書館", source: "ndl" });
+      assert.ifError(catalog.error);
+      const ids = Array.from({ length: 1001 }, () => crypto.randomUUID());
+      const records = await admin.from("reading_entries").insert(
+        ids.map((id) => ({
+          id,
+          user_id: rin.id,
+          book_id: book,
+          feelings: ["quiet"],
+          is_public: true,
+          audience: "everyone",
+        })),
+      );
+      assert.ifError(records.error);
+      const rinsIn = (town: TownState) =>
+        town.readingRecords
+          .filter((record) => record.readerId === rin.id)
+          .map((record) => record.id)
+          .sort();
+      assert.deepEqual(
+        rinsIn((await townOf(ben)).getSnapshot()),
+        [...ids].sort(),
+      );
+      const visitor = createTownStore(visitorTownBackend(newClient()));
+      visitor.initialize();
+      await settled(visitor);
+      assert.deepEqual(rinsIn(visitor.getSnapshot()), [...ids].sort());
     },
   );
 

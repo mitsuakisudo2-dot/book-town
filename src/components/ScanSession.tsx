@@ -68,6 +68,7 @@ import type { Book, Notify, TownActions, TownState } from "../lib/types";
 import { BarcodeRegister } from "./BarcodeRegister";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
+import { bookAuthor, bookById, bookByIsbn, bookTitle } from "../lib/book-name";
 
 // The continuous scanner (plan 7-1, flow A): the camera stays open and every
 // book read is registered at once, with no question about reading status,
@@ -463,7 +464,7 @@ export function ScanSession({
       townReady
         ? {
             inLibrary: (code) => libraryBookByIsbn(town, code),
-            known: (code) => town.books.find((book) => book.isbn === code),
+            known: (code) => bookByIsbn(town.books, code),
           }
         : null,
       (code) => heldItem(libraryJournal, reader, generation, code),
@@ -1049,8 +1050,7 @@ export function ScanSession({
     if (row) row.scrollLeft = row.scrollWidth;
   }, [cards.length]);
 
-  const bookOf = (bookId?: string) =>
-    bookId ? state.books.find((book) => book.id === bookId) : undefined;
+  const bookOf = (bookId?: string) => bookById(state.books, bookId);
 
   // The banner: one line, the most pressing first.
   const banner = !owner
@@ -1086,13 +1086,13 @@ export function ScanSession({
   const untitled = cardShows === "untitled" || cardShows === "offline";
   const line1 = !current
     ? null
-    : (cardBook?.title ??
+    : ((cardBook && bookTitle(cardBook)) ??
       card?.title ??
       current.title ??
       (untitled || current.say === "held"
         ? SCAN_COPY.card.untitledTitle
         : (cardIsbn ?? "")));
-  const author = cardBook?.author ?? card?.author;
+  const author = (cardBook && bookAuthor(cardBook)) ?? card?.author;
   // Typing, the field's own line says it: the card waits empty.
   const line2 = !current
     ? !owner
@@ -1143,7 +1143,7 @@ export function ScanSession({
         <div className="scan-top">
           <button
             type="button"
-            className="scan-icon-button"
+            className="icon-btn"
             aria-label="閉じる"
             onClick={finish}
           >
@@ -1154,9 +1154,7 @@ export function ScanSession({
           </p>
           <button
             type="button"
-            className={
-              "scan-icon-button scan-sound" + (sound.on ? "" : " is-off")
-            }
+            className={"icon-btn scan-sound" + (sound.on ? "" : " is-off")}
             aria-label="音"
             aria-pressed={sound.on}
             onPointerDown={typing ? keepFocus : undefined}
@@ -1194,7 +1192,7 @@ export function ScanSession({
               />
               <button
                 type="submit"
-                className="button secondary"
+                className="btn"
                 disabled={!owner}
                 onPointerDown={keepFocus}
                 onClick={refocus}
@@ -1247,7 +1245,7 @@ export function ScanSession({
                 {input.phase === "hidden" && (
                   <button
                     type="button"
-                    className="button"
+                    className="btn fill"
                     onClick={() =>
                       setInput({ kind: "camera", phase: "starting" })
                     }
@@ -1289,7 +1287,7 @@ export function ScanSession({
           {canUndo && (
             <button
               type="button"
-              className="button secondary scan-undo"
+              className="btn scan-undo"
               aria-label={`${undoName}の登録を取り消す`}
               onPointerDown={typing ? keepFocus : undefined}
               onClick={undo}
@@ -1336,11 +1334,7 @@ export function ScanSession({
         </div>
         <div className="scan-bottom">
           {input.kind === "camera" ? (
-            <button
-              type="button"
-              className="button secondary"
-              onClick={typeIsbn}
-            >
+            <button type="button" className="btn" onClick={typeIsbn}>
               ISBNを打つ
             </button>
           ) : (
@@ -1351,21 +1345,17 @@ export function ScanSession({
             input.why !== "no-camera" && (
               <button
                 type="button"
-                className="button secondary"
+                className="btn"
                 onClick={() => setInput({ kind: "camera", phase: "starting" })}
               >
                 カメラで読む
               </button>
             )
           )}
-          <button
-            type="button"
-            className="button secondary"
-            onClick={openManual}
-          >
+          <button type="button" className="btn" onClick={openManual}>
             手で入力
           </button>
-          <button type="button" className="button primary" onClick={finish}>
+          <button type="button" className="btn fill" onClick={finish}>
             終わる
           </button>
         </div>
