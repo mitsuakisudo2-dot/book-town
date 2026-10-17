@@ -2342,11 +2342,11 @@ try {
         // It arrives and the moving mark goes.
         await expect(page.locator(".nav-mark")).toHaveCount(0);
         await expect(bar).not.toHaveClass(/is-moving/);
-        // ホーム to 本棚: one slide, though the page names 本棚 a moment late.
+        // ホーム to 本棚: one slide.
         await bar.getByRole("link", { name: "ホーム" }).tap();
         await expect(page.locator(".nav-mark")).toHaveCount(0);
         await bar.getByRole("link", { name: "本棚" }).tap();
-        await expect(page).toHaveURL(/books=library/);
+        await expect(page).toHaveURL(/\/library\//);
         const shelf = await marks();
         expect(shelf).toMatchObject({
           from: shelf.icons[0],

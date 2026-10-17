@@ -1396,6 +1396,21 @@ const editionCount = (rows: LibraryEntry[], books: Map<string, Book>) =>
     }),
   ).size;
 
+/** How many works these books of the library are (4-7): editions of one work count once. */
+export function worksIn(
+  state: LibraryState,
+  bookIds: readonly string[],
+): number {
+  const books = new Map(state.books.map((book) => [book.id, book]));
+  return workCount(
+    bookIds.flatMap((id) => {
+      const e = state.libraryEntries[id];
+      return e ? [e] : [];
+    }),
+    books,
+  );
+}
+
 /**
  * The library's numbers (4-7), in works so versions never swell them. A
  * book only liked is left out of the total and 「まだ振り分けていない」
