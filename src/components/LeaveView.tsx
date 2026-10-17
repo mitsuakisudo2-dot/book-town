@@ -16,6 +16,7 @@ import "./profile.css";
 import "./reading.css";
 import "./account.css";
 import "./leave.css";
+import { failure, AGAIN, NOT_CONNECTED } from "../lib/words";
 
 /**
  * 退会: the reader deletes their account here, from the web. Everything
@@ -59,9 +60,12 @@ export default function LeaveView() {
           </>
         ) : account.status === "unavailable" ? (
           <>
-            <h1>つながりませんでした</h1>
+            <h1>{NOT_CONNECTED}</h1>
             <p className="account-lead">
-              アカウントを読み込めませんでした。通信の状態を確かめて、もう一度お試しください。
+              {failure({
+                what: "アカウントを読み込めませんでした",
+                next: AGAIN.connection,
+              })}
             </p>
             <button
               type="button"

@@ -38,6 +38,7 @@ import "./records.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { useTownBackend } from "../lib/store";
 import { bookAuthor, bookTitle } from "../lib/book-name";
+import { counted, whenSome } from "../lib/words";
 
 type Shared = {
   state: TownState;
@@ -125,12 +126,12 @@ export function SearchView({ state, actions, notify }: Shared) {
     if (!at.length) return "";
     return at.length === 1
       ? `「${at[0].name}」の棚に`
-      : `「${at[0].name}」ほか${at.length - 1}軒の棚に`;
+      : `「${at[0].name}」ほか${counted(at.length - 1, "軒")}の棚に`;
   };
   const presenceWords = (bookId: string) =>
     [
-      signal(bookId).shelves > 0 && `${signal(bookId).shelves}軒の棚に`,
-      signal(bookId).wants > 0 && `読みたくなった ${signal(bookId).wants}人`,
+      whenSome(signal(bookId).shelves, "軒", (c) => `${c}の棚に`),
+      whenSome(signal(bookId).wants, "人", (c) => `読みたくなった ${c}`),
     ]
       .filter(Boolean)
       .join("・");
@@ -392,7 +393,7 @@ export function SearchView({ state, actions, notify }: Shared) {
               <p>いま投稿やレビューで語られている本。</p>
               <ul className="search-list">
                 {talked.map((book) =>
-                  bookRow(book, `投稿 ${signal(book.id).talk}件`),
+                  bookRow(book, `投稿 ${counted(signal(book.id).talk, "件")}`),
                 )}
               </ul>
             </section>

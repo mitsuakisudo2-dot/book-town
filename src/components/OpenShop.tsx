@@ -36,6 +36,7 @@ import {
 import { townTook, useKeptUntilSaved } from "../lib/shop-draft";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import { bookById, bookTitle } from "../lib/book-name";
+import { counted, nth, failure, AGAIN, KEPT } from "../lib/words";
 
 type Shared = {
   state: TownState;
@@ -291,7 +292,11 @@ export function OpenShop({
     setResumed(true);
     setStep("sign");
     notify(
-      "開店できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。",
+      failure({
+        what: "開店できませんでした",
+        kept: KEPT.draft,
+        next: AGAIN.later,
+      }),
     );
   });
   // Back or forward to a step of this flow shows that step again, with the
@@ -329,7 +334,9 @@ export function OpenShop({
       // Turned away (the town was still on its way): nothing opened, and
       // the work stays as it is.
       onDone();
-      notify("まだ開店できませんでした。少しおいて、もう一度押してください。");
+      notify(
+        failure({ what: "まだ開店できませんでした", next: AGAIN.pressLater }),
+      );
       return;
     }
     if (tagline.trim())
@@ -421,8 +428,9 @@ export function OpenShop({
         <span className="editor-kicker">OPEN</span>
         <h1>{opened.words}</h1>
         <p role="status">
-          「{opened.name}」が開店しました。本の街の{state.shops.length + 1}
-          軒目の本屋です。
+          「{opened.name}」が開店しました。本の街の
+          {nth(state.shops.length + 1, "軒")}
+          の本屋です。
         </p>
         <div className="open-next">
           <Link className="btn fill" href="/walk/#mine">
@@ -514,15 +522,15 @@ export function OpenShop({
         </button>
         <span className="editor-kicker">{chosen?.title}</span>
         <h1 id="open-books-title">
-          {max === 1 ? "渡したい1冊を選ぶ" : `${max}冊を選ぶ`}
+          {max === 1 ? "渡したい1冊を選ぶ" : `${counted(max, "冊")}を選ぶ`}
         </h1>
         {keptNote}
         <p className="open-lead" aria-live="polite">
           {picked.length === max
             ? "棚がいっぱいになりました。"
             : picked.length
-              ? `あと${max - picked.length}冊まで並べられます。`
-              : `${max}冊まで並べられます。1冊からでも開けます。`}
+              ? `あと${counted(max - picked.length, "冊")}まで並べられます。`
+              : `${counted(max, "冊")}まで並べられます。1冊からでも開けます。`}
         </p>
         <div
           className={"open-shelf theme-" + theme}
@@ -700,7 +708,7 @@ export function OpenShop({
         </button>
         <p className="editor-field-note">
           {picked.length
-            ? `「${shelfName(kind)}」の棚に${picked.length}冊を並べて開店します。`
+            ? `「${shelfName(kind)}」の棚に${counted(picked.length, "冊")}を並べて開店します。`
             : "空の棚で開店します。本はあとから並べられます。"}
         </p>
       </form>

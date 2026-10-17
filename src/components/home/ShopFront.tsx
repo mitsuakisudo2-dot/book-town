@@ -18,6 +18,7 @@ import { bookById, quotedTitle } from "../../lib/book-name";
 import type { Shared } from "./Letters";
 import "../street.css";
 import { reducedMotion } from "../../lib/motion";
+import { counted } from "../../lib/words";
 
 /** A book picked off a shelf, to be held in the hand (BookInHand). */
 export type Picked = { shop: Shop; shelf: Shelf; item: ShelfItem };
@@ -185,7 +186,9 @@ export function ShopFront({
       </div>
       <footer className="street-shop-footer">
         <Link href={shopPath(shop.id)}>
-          {more > 0 ? `紹介と、ほかの${more}段の棚` : "店の紹介と棚の一覧"}
+          {more > 0
+            ? `紹介と、ほかの${counted(more, "段")}の棚`
+            : "店の紹介と棚の一覧"}
         </Link>
         {enter !== shopPath(shop.id) && (
           <Link href={enter} className="street-enter">

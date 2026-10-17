@@ -1,4 +1,5 @@
 import type { Reader } from "./types";
+import { failure } from "./words";
 
 export const DEFAULT_HANDLE = "reader";
 
@@ -32,7 +33,10 @@ export function handleProblem(
   if (!HANDLE_PATTERN.test(handle))
     return "IDは3〜20文字の半角英小文字・数字・_（アンダーバー）で入力してください。";
   if (RESERVED_HANDLES.includes(handle))
-    return "このIDは使えません。別のIDにしてください。";
+    return failure({
+      what: "このIDは使えません",
+      next: "別のIDにしてください",
+    });
   if (others.some((reader) => reader.handle === handle))
     return "このIDはほかの読書家が使っています。";
   return null;

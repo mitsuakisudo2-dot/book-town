@@ -70,6 +70,7 @@ import {
   quotedTitle,
   titleById,
 } from "../lib/book-name";
+import { failure, WHILE_OFFLINE } from "../lib/words";
 
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
@@ -666,10 +667,16 @@ export function WalkView({
           {delivers
             ? saved.status === "recovered"
               ? "保存できない変更があったため、保存されている状態に戻しました。"
-              : "つながらないため、まだ保存できていません。つながりしだい保存します。"
+              : failure(WHILE_OFFLINE)
             : saved.status === "recovered"
-              ? "書店めぐりの保存を読み込めませんでした。元のデータは保持しています。"
-              : "書店めぐりを保存できません。この操作は再読み込みすると失われます。"}
+              ? failure({
+                  what: "書店めぐりの保存を読み込めませんでした",
+                  kept: "元のデータは保持しています",
+                })
+              : failure({
+                  what: "書店めぐりを保存できません",
+                  kept: "この操作は再読み込みすると失われます",
+                })}
         </p>
       ) : null}
       <div
@@ -985,7 +992,10 @@ export function WalkView({
                 const persisted = editReaction({ message: text });
                 notify(
                   !persisted
-                    ? "届けられませんでした。言葉は再読み込みまで手元に残ります。"
+                    ? failure({
+                        what: "届けられませんでした",
+                        kept: "言葉は再読み込みまで手元に残ります",
+                      })
                     : text
                       ? "ひとことを届けました。"
                       : "ひとことを取り消しました。",
@@ -1025,7 +1035,10 @@ export function WalkView({
                 notify(
                   persisted
                     ? "言葉を手元に保存しました。店主には送信されません。"
-                    : "保存できませんでした。言葉は再読み込みまで手元に残ります。",
+                    : failure({
+                        what: "保存できませんでした",
+                        kept: "言葉は再読み込みまで手元に残ります",
+                      }),
                 );
                 close();
               }}

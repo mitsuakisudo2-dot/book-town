@@ -17,6 +17,7 @@ import {
   type Shop,
   type ShopTheme,
 } from "./types";
+import { failure, AGAIN, KEPT } from "./words";
 
 // The shop's sign and words (書店の看板と紹介) and a shelf's new name are kept
 // in this browser while they are written, so leaving the page, 戻る or a
@@ -34,8 +35,11 @@ export const ownerKeyPattern = (parts = 0) =>
   new RegExp("^" + DRAFT_OWNER + String.raw`(/[^/]+)`.repeat(parts) + "$");
 
 /** Said when a save is turned away: the work stays in hand, kept. */
-export const SAVE_REFUSED =
-  "うまく保存できませんでした。書きかけは残しています。少しおいて、もう一度お試しください。";
+export const SAVE_REFUSED = failure({
+  what: "うまく保存できませんでした",
+  kept: KEPT.draft,
+  next: AGAIN.later,
+});
 
 /** Whether the town took a change: one refused leaves the town as it was. */
 export function townTook(change: () => unknown): boolean {

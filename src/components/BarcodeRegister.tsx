@@ -7,6 +7,7 @@ import { libraryBookByIsbn, useTownBackend } from "../lib/store";
 import type { TownActions, TownState } from "../lib/types";
 import { Icon, Modal } from "./ui";
 import { bookByIsbn, quotedTitle } from "../lib/book-name";
+import { failure, AGAIN } from "../lib/words";
 
 type Detector = {
   detect(source: CanvasImageSource): Promise<Array<{ rawValue: string }>>;
@@ -19,8 +20,10 @@ const detectorClass = (): DetectorClass | undefined =>
     : (window as unknown as { BarcodeDetector?: DetectorClass })
         .BarcodeDetector;
 
-const NOT_AN_ISBN =
-  "ISBNとして読めませんでした。本の裏表紙にある978か979で始まる13桁の数字を入力してください。";
+const NOT_AN_ISBN = failure({
+  what: "ISBNとして読めませんでした",
+  next: "本の裏表紙にある978か979で始まる13桁の数字を入力してください",
+});
 
 /**
  * Register a book by scanning its ISBN barcode with the camera (where the browser can
@@ -103,7 +106,12 @@ export function BarcodeRegister({
       })
       .catch(() => {
         setScanning(false);
-        setMessage("カメラを使えませんでした。ISBNを入力してください。");
+        setMessage(
+          failure({
+            what: "カメラを使えませんでした",
+            next: "ISBNを入力してください",
+          }),
+        );
       });
     return () => {
       stopped = true;
@@ -174,7 +182,10 @@ export function BarcodeRegister({
       setMessage("書籍情報が見つかりました。確認して登録してください。");
     } else {
       setMessage(
-        "書籍情報を取得できませんでした。タイトルと著者を入力して登録できます。",
+        failure({
+          what: "書籍情報を取得できませんでした",
+          next: "タイトルと著者を入力して登録できます",
+        }),
       );
     }
   }
@@ -215,8 +226,14 @@ export function BarcodeRegister({
     if (done.result === "not-saved") {
       setMessage(
         savedIn === "unavailable"
-          ? "保存できません。ページを読み込み直してから、もう一度登録してください。"
-          : "まだ保存できません。読み込みが終わってから、もう一度押してください。",
+          ? failure({
+              what: "保存できません",
+              next: "ページを読み込み直してから、もう一度登録してください",
+            })
+          : failure({
+              what: "まだ保存できません",
+              next: AGAIN.pressWhenLoaded,
+            }),
       );
       return;
     }
@@ -265,7 +282,10 @@ export function BarcodeRegister({
       )}
       {camera && !canScan && (
         <p className="note-box">
-          このブラウザはバーコードの読み取りに対応していません。ISBNを入力してください。
+          {failure({
+            what: "このブラウザはバーコードの読み取りに対応していません",
+            next: "ISBNを入力してください",
+          })}
         </p>
       )}
       <form className="register-form" onSubmit={checkIsbn}>

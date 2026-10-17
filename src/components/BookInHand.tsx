@@ -26,6 +26,7 @@ import { lockPageScroll } from "../lib/scroll-lock";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import { heldBookName } from "../lib/held-book";
 import { reducedMotion } from "../lib/motion";
+import { counted, nth } from "../lib/words";
 
 export interface SceneReading {
   entries: ReadEntry[];
@@ -758,7 +759,8 @@ export function BookInHand({
               <small> · 左右にスワイプ</small>
             </span>
             <span className="bh-sr-only">
-              {availableItems.length}冊中{index + 1}冊目、{bookTitle(book)}
+              {counted(availableItems.length, "冊")}中{nth(index + 1, "冊")}、
+              {bookTitle(book)}
             </span>
           </span>
         </span>

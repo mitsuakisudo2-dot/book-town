@@ -29,6 +29,7 @@ import type {
   RegisterVia,
   TownState,
 } from "./types";
+import { counted } from "./words";
 
 export const JOURNAL_KEY = "book-town-library-journal:";
 /** Items older than this are let go (plan 5-6). */
@@ -760,10 +761,10 @@ export function sentNotice(journal: LibraryJournal, sent: Sent[]) {
   const later = added.length - earlier.length;
   if (earlier.length)
     return (
-      `前回のスキャンの続き ${earlier.length}冊を登録しました` +
-      (later ? `・控えていた${later}冊も登録しました` : "")
+      `前回のスキャンの続き ${counted(earlier.length, "冊")}を登録しました` +
+      (later ? `・控えていた${counted(later, "冊")}も登録しました` : "")
     );
-  return later ? `控えていた${later}冊を登録しました` : null;
+  return later ? `控えていた${counted(later, "冊")}を登録しました` : null;
 }
 
 /**

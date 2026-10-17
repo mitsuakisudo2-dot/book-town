@@ -107,6 +107,7 @@ import { focusField } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { VisibilitySettings } from "./VisibilitySettings";
 import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
+import { counted, nth, outOf, whenSome, failure, KEPT } from "../lib/words";
 
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
 type Collection = (typeof COLLECTIONS)[number];
@@ -224,8 +225,11 @@ export function ProfileView({
     setRefused(what === "nine" ? "nine" : "profile");
     notify(
       what === "nine"
-        ? "人生の9冊を保存できませんでした。書きかけは残しています。"
-        : "プロフィールを保存できませんでした。書きかけは残しています。",
+        ? failure({ what: "人生の9冊を保存できませんでした", kept: KEPT.draft })
+        : failure({
+            what: "プロフィールを保存できませんでした",
+            kept: KEPT.draft,
+          }),
     );
   });
   // Saved since (here or on another device), it is let go.
@@ -662,7 +666,7 @@ export function ProfileView({
                 {isSelf ? (
                   <button
                     onClick={beginNineEdit}
-                    aria-label={`${index + 1}冊目を選ぶ`}
+                    aria-label={`${nth(index + 1, "冊")}を選ぶ`}
                   >
                     <span>0{index + 1}</span>
                     <Icon name="plus" />
@@ -967,7 +971,12 @@ export function ProfileView({
             {savedIn === "local"
               ? "まだフォロワーはいません。この試作は、あなたのブラウザの中だけで動いているため、他の人からのフォローは届きません。"
               : shop
-                ? `あなたの書店を${followerCount}人がフォローしています。この数は、あなたにだけ見えています。`
+                ? whenSome(
+                    followerCount,
+                    "人",
+                    (c) =>
+                      `あなたの書店を${c}がフォローしています。この数は、あなたにだけ見えています。`,
+                  )
                 : "書店を開くと、ほかの読書家にフォローしてもらえるようになります。"}
           </p>
         </Modal>
@@ -1365,8 +1374,8 @@ export function ProfileView({
               <h3>一冊を加える</h3>
               <span>
                 {draftNine.length
-                  ? `${draftNine.length} / ${NINE_MAX} 冊`
-                  : `${NINE_MAX}冊まで`}
+                  ? outOf(draftNine.length, NINE_MAX, "冊")
+                  : `${counted(NINE_MAX, "冊")}まで`}
               </span>
             </div>
             <input

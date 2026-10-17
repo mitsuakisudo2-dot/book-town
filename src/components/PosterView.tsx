@@ -45,6 +45,7 @@ import {
   bookTitle,
   quotedTitle,
 } from "../lib/book-name";
+import { counted, nth } from "../lib/words";
 
 type Look = Pick<Poster, "template" | "theme" | "font" | "pages">;
 
@@ -450,7 +451,9 @@ export function PosterPages({
               className="poster-slide"
               role={many ? "group" : undefined}
               aria-label={
-                many ? `${at + 1}ページ目（全${count}ページ）` : undefined
+                many
+                  ? `${nth(at + 1, "ページ")}（全${counted(count, "ページ")}）`
+                  : undefined
               }
             >
               <Sheet
@@ -478,7 +481,7 @@ export function PosterPages({
       {/* Said aloud when a page turns; the counter above is only seen. */}
       {many && (
         <span className="poster-said" aria-live="polite">
-          {`${index + 1}ページ目（全${count}ページ）`}
+          {`${nth(index + 1, "ページ")}（全${counted(count, "ページ")}）`}
         </span>
       )}
       {(many || poster.spoiler) && (
@@ -505,7 +508,7 @@ export function PosterPages({
                     type="button"
                     className={at === index ? "is-current" : ""}
                     aria-current={at === index ? "true" : undefined}
-                    aria-label={`${at + 1}ページ目`}
+                    aria-label={`${nth(at + 1, "ページ")}`}
                     onClick={() => go(at)}
                   />
                 ))}
@@ -667,7 +670,8 @@ export function PosterThumb({
       {(badge || poster.pages.length > 1) && (
         <span className="poster-thumb-note" aria-hidden="true">
           {badge && <span className="poster-thumb-badge">{badge}</span>}
-          {poster.pages.length > 1 && `${poster.pages.length}ページ`}
+          {poster.pages.length > 1 &&
+            `${counted(poster.pages.length, "ページ")}`}
         </span>
       )}
       {review && (
