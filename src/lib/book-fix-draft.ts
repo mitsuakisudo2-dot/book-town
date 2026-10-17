@@ -1,6 +1,7 @@
 "use client";
 
 import { BOOK_TEXT_MAX } from "./books";
+import { bookAuthor } from "./book-name";
 import type { Book } from "./types";
 import {
   createKeptDraftStore,
@@ -26,12 +27,16 @@ export const ISBN_FIELD_MAX_LENGTH = 20;
 
 export type BookFixWork = { title: string; author: string; isbn: string };
 
-/** The book's own fields as the form starts from them (what its reader typed). */
+/**
+ * The book's own fields as the form starts from them: what its reader typed,
+ * the author as they see it everywhere (a catalogue's "村上,春樹,1949-" as
+ * "村上春樹").
+ */
 export const bookFixOf = (
   book: Pick<Book, "title" | "author" | "isbn">,
 ): BookFixWork => ({
   title: book.title,
-  author: book.author,
+  author: bookAuthor(book),
   isbn: book.isbn ?? "",
 });
 

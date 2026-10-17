@@ -8,6 +8,8 @@ import {
 } from "../src/lib/repository";
 import { createTownStore } from "../src/lib/store";
 import { bookById } from "../src/lib/book-name";
+import { bookFixOf } from "../src/lib/book-fix-draft";
+import { bookWords } from "../src/lib/library-journal";
 import {
   counterId,
   unavailableBackend,
@@ -2563,6 +2565,32 @@ check("a book the reader registered is fixed: its title, author and ISBN", () =>
   assert.equal(bookById(town.getSnapshot().books, id)?.isbn, undefined);
   assert.ok(town.getSnapshot().library.includes(id));
   assert.equal(town.actions.fixBook("no-such-book", { title: "x", author: "", isbn: "" }), "not-saved");
+});
+
+check("a catalogue's author comes as the reader sees it, and stays as written when left so", () => {
+  // A scan's item and the field filled from openBD take the reader's shape.
+  assert.equal(
+    bookWords({ title: "ノルウェイの森", author: "村上,春樹,1949-" }).author,
+    "村上春樹",
+  );
+  const town = createTownStore(createMemoryRepository());
+  const id = town.actions.addBook({
+    title: "ノルウェイの森",
+    author: "村上,春樹,1949-",
+    isbn: "9784000000055",
+  });
+  assert.ok(id);
+  const book = () => bookById(town.getSnapshot().books, id)!;
+  // The form to fix it starts from the author as shown.
+  assert.equal(bookFixOf(book()).author, "村上春樹");
+  const fix = (author: string, isbn: string) =>
+    town.actions.fixBook(id, { title: "ノルウェイの森", author, isbn });
+  assert.equal(fix("村上春樹", "9784000000055"), "unchanged");
+  // Only the ISBN fixed: the author is left as it was written.
+  assert.equal(fix("村上春樹", "9784000000062"), "fixed");
+  assert.equal(book().author, "村上,春樹,1949-");
+  assert.equal(fix("村上 春樹", "9784000000062"), "fixed");
+  assert.equal(book().author, "村上 春樹");
 });
 
 check("a book held back is told once in お知らせ, leading to its page", () => {

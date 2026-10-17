@@ -33,7 +33,7 @@ import {
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId, isSampleId } from "./record-kind";
-import { bookById, bookByIsbn } from "./book-name";
+import { bookAuthor, bookById, bookByIsbn } from "./book-name";
 import {
   bookPrice,
   bookText,
@@ -853,13 +853,16 @@ export function createTownStore(
       initialize();
       const book = bookById(state.books, bookId);
       const title = bookText(fix.title);
-      const author = bookText(fix.author);
       const typed = fix.isbn.trim();
       const isbn = typed ? normalizeIsbn(typed) : null;
       if (!title) return "no-title";
       if (typed && !isbn) return "bad-isbn";
       if (!book || status === "loading" || backend.kind === "unavailable")
         return "not-saved";
+      // The form shows the author as the reader sees it (bookAuthor); left
+      // as shown, the author stays as it was written.
+      const shown = bookText(fix.author);
+      const author = shown === bookAuthor(book) ? book.author : shown;
       const moved = (isbn ?? undefined) !== book.isbn;
       if (title === book.title && author === book.author && !moved)
         return "unchanged";
