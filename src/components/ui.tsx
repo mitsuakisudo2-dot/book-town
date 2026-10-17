@@ -273,6 +273,57 @@ function tateSize(characters: number): string {
   return Math.min(13, 96 / (column * 1.14)).toFixed(2) + "cqw";
 }
 
+/** The widest a title is set across a 装丁カード, and its smallest size. */
+const FLAT_SIZE = 16;
+const FLAT_MIN = 7;
+
+/**
+ * How many lines a title takes across a 装丁カード at `size` (cqw): set like
+ * the browser does, a Japanese letter at a time and a Latin word at a time,
+ * in the 81% of the card between its margins.
+ */
+function flatLines(title: string, size: number): number {
+  const room = 81 * 0.95;
+  const wide = /[\u2014\u2015\u2e80-\uffef]/;
+  let lines = 1;
+  let used = 0;
+  for (const word of title.match(/\s+|[^\s\u2014\u2015\u2e80-\uffef]+|./gu) ??
+    []) {
+    const width = [...word].reduce(
+      (sum, letter) =>
+        sum +
+        size * (/\s/.test(letter) ? 0.3 : wide.test(letter) ? 1.05 : 0.62),
+      0,
+    );
+    if (/^\s+$/.test(word)) used += width;
+    else if (used + width <= room) used += width;
+    else if (width <= room) [lines, used] = [lines + 1, width];
+    else {
+      // A word wider than the card starts its own line and breaks anywhere.
+      const across = Math.ceil(width / room);
+      [lines, used] = [
+        lines + (used > 0 ? 1 : 0) + across - 1,
+        width - (across - 1) * room,
+      ];
+    }
+  }
+  return lines;
+}
+
+/**
+ * The size a long title is set across a 装丁カード so it stays above the
+ * author's name, or none while the full size fits; past the smallest size
+ * it is cut after the lines that fit.
+ */
+function flatSize(title: string): { size: string; lines?: number } | null {
+  const room = 62;
+  const fits = (size: number) => flatLines(title, size) * size * 1.7 <= room;
+  if (fits(FLAT_SIZE)) return null;
+  for (let size = FLAT_SIZE - 0.5; size >= FLAT_MIN; size -= 0.5)
+    if (fits(size)) return { size: size + "cqw" };
+  return { size: FLAT_MIN + "cqw", lines: Math.floor(room / (FLAT_MIN * 1.7)) };
+}
+
 /**
  * A book's face: its real cover when a source has one (see covers.ts), shown
  * as served, or else its BookTown 装丁カード, drawn from its title and author.
@@ -311,6 +362,8 @@ export function BookJacket({
     book.genre === REGISTERED_GENRE &&
     tateTitle(bookTitle(book));
   className += tate ? " is-tate" : "";
+  const flat = illustrated || tate ? null : flatSize(bookTitle(book));
+  className += flat?.lines ? " is-long" : "";
   className += covered ? " has-cover" : "";
   const style = {
     background: book.color,
@@ -321,6 +374,8 @@ export function BookJacket({
     "--art-shade": art?.light ? "#f6f0dc50" : "#101e3580",
     "--art-shadow": art?.light ? "#f5ecce" : "#10252d",
     "--tate-size": tate ? tateSize([...bookTitle(book)].length) : undefined,
+    "--title-size": flat?.size,
+    "--title-lines": flat?.lines,
   } as CSSProperties;
   const content = (
     <>

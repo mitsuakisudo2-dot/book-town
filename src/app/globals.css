@@ -608,11 +608,18 @@ div.book-jacket:hover {
   left: 11%;
   right: 8%;
   font-family: var(--serif);
-  font-size: 16cqw;
+  font-size: var(--title-size, 16cqw);
   font-weight: 600;
   line-height: 1.7;
   letter-spacing: 0.05em;
   overflow-wrap: anywhere;
+}
+/* A title too long even at its smallest stops before the author's name. */
+.book-jacket.is-long .jacket-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--title-lines);
+  overflow: hidden;
 }
 .jacket-author {
   position: absolute;

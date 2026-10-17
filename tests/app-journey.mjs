@@ -1028,6 +1028,65 @@ try {
     },
   );
 
+  await check(
+    "on a narrow phone, a long title on a 装丁カード stays above its author",
+    async () => {
+      const town = JSON.parse(
+        await page.evaluate(() => localStorage.getItem("book-town-v1")),
+      );
+      const long = [
+        ["まよなかの町のちいさな図書館 上 ある町の話 新訳版", "山田一郎"],
+        [
+          "銀河の夜をわたるための覚え書き――ある鉄道員と星をめぐる三十七の短い物語",
+          "試験 太郎",
+        ],
+        ["The Remains of the Day and Other Stories", "Kazuo Ishiguro"],
+        ["あ".repeat(120), "試験 花子"],
+      ];
+      town.data.addedBooks = [
+        ...(town.data.addedBooks ?? []),
+        ...long.map(([title, author], at) => ({
+          id: `my-book-${950 + at}`,
+          title,
+          author,
+        })),
+      ];
+      for (const width of [390, 320]) {
+        const narrow = await browser.newContext({
+          viewport: { width, height: 700 },
+          storageState: {
+            cookies: [],
+            origins: [
+              {
+                origin: new URL(baseURL).origin,
+                localStorage: [
+                  { name: "book-town-v1", value: JSON.stringify(town) },
+                ],
+              },
+            ],
+          },
+        });
+        const tab = settleBeforeNavigating(await narrow.newPage());
+        tab.on("pageerror", (error) => errors.push(error.message));
+        for (const at of long.keys()) {
+          await tab.goto(`${baseURL}/books/registered/?id=my-book-${950 + at}`);
+          const jacket = tab.locator(".book-page-hero > .book-jacket");
+          await expect(jacket).not.toHaveClass(/is-tate/);
+          const [title, author] = await Promise.all(
+            [".jacket-title", ".jacket-author"].map((part) =>
+              jacket.locator(part).boundingBox(),
+            ),
+          );
+          expect(
+            title.y + title.height,
+            `${width}px, ${long[at][0]}: title ends at ${title.y + title.height}, author starts at ${author.y}`,
+          ).toBeLessThanOrEqual(author.y);
+        }
+        await narrow.close();
+      }
+    },
+  );
+
   await check("following list opens from the profile", async () => {
     await go("/profiles/r-nagi/");
     await page.getByRole("button", { name: "書店をフォロー" }).click();
