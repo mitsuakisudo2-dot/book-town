@@ -114,10 +114,25 @@
     align-self: center;
   }
 }
+/* The two text buttons keep their own 12px either side, which reaches into
+   the card's padding: their words line up with the shop's name above. On a
+   narrow phone the second goes under the first, at the right, rather than
+   out of the card. */
+.town-shell .stockist-bottom {
+  flex-wrap: wrap;
+  column-gap: 0;
+}
 .town-shell .stockist-bottom .text-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+.town-shell .stockist-bottom .text-btn:first-child {
+  margin-left: -12px;
+}
+.town-shell .stockist-bottom .text-btn:last-child {
+  margin-left: auto;
+  margin-right: -12px;
 }
 
 /* Narrow phones: the six labels keep to one line and inside the screen. */

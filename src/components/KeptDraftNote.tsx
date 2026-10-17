@@ -7,6 +7,7 @@ import { draftOwner } from "../lib/draft-owner";
 import { usePersistenceStatus, useTownBackend } from "../lib/store";
 import { writingField } from "./useWritingSheet";
 import "./kept-draft.css";
+import { failure } from "../lib/words";
 
 // What a reader writes or arranges is kept in this browser (src/lib/
 // kept-draft.ts) until the save is confirmed or the reader throws it away.
@@ -42,8 +43,14 @@ export function useNotTakenWords(noun: "下書き" | "書きかけ" = "書きか
   if (persistence === "loading")
     return `街を読み込んでいます。${noun}はそのまま残しています`;
   if (savedIn === "unavailable")
-    return `いまは保存できません。${noun}はそのまま残しています`;
-  return `保存できませんでした。${noun}はそのまま残しています`;
+    return failure(
+      { what: "いまは保存できません", kept: `${noun}はそのまま残しています` },
+      "",
+    );
+  return failure(
+    { what: "保存できませんでした", kept: `${noun}はそのまま残しています` },
+    "",
+  );
 }
 
 /**
@@ -139,7 +146,9 @@ export function KeptDraftNote({
     <p className={className ? "kept-note " + className : "kept-note"}>
       {continuing && <span>{lead}</span>}
       {!saved && (
-        <span role="status">このブラウザに書きかけを残せませんでした</span>
+        <span role="status">
+          {failure({ what: "このブラウザに書きかけを残せませんでした" }, "")}
+        </span>
       )}
       {continuing && action}
       {continuing && (

@@ -7,6 +7,7 @@ import type { Notify, Reader, TownActions, TownState } from "../lib/types";
 import { requestAccount } from "../lib/visitor";
 import { Modal, ReaderAvatar } from "./ui";
 import "./block.css";
+import { failure, AGAIN } from "../lib/words";
 
 // Blocking a reader (管理表43): asked once, then done at once. The database
 // keeps the two apart both ways (docs/09「ブロックは双方向に効く」); the
@@ -56,7 +57,13 @@ export function BlockQuestion({
               notify(`${reader.name}さんをブロックしました`);
             else
               notify(
-                "ブロックできませんでした。少し待ってから、もう一度お試しください",
+                failure(
+                  {
+                    what: "ブロックできませんでした",
+                    next: AGAIN.afterAMoment,
+                  },
+                  "",
+                ),
               );
           }}
         >

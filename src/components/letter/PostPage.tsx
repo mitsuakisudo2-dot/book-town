@@ -44,6 +44,7 @@ import {
 } from "./post-layer";
 import { useSwipeBack } from "./useSwipeBack";
 import "./letter.css";
+import { failure } from "../../lib/words";
 
 type Shared = {
   state: TownState;
@@ -269,7 +270,9 @@ export function PostPageView({
           </p>
         ) : failed ? (
           <div className="post-page-missing">
-            <p role="status">つながらないため、開けませんでした</p>
+            <p role="status">
+              {failure({ what: "つながらないため、開けませんでした" }, "")}
+            </p>
             <button type="button" className="btn" onClick={askAgain}>
               もう一度読む
             </button>

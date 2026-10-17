@@ -45,6 +45,7 @@ import { formatPostTime } from "../lib/social";
 import { focusField } from "../lib/coarse-pointer";
 import type { Notify } from "../lib/types";
 import "./site-notes.css";
+import { counted, failure, AGAIN } from "../lib/words";
 
 // 注釈モード, for staff only (SiteNotesGate decides): a round 注釈 button in a
 // corner; tapping it tints the page, and the next tap drops a pin there and
@@ -376,9 +377,14 @@ const WHY: Record<NonNullable<PinPlace["why"]>, string> = {
   "other-size": "位置はおおよそです（別の大きさの画面で残した注釈です）",
   changed: "位置はおおよそです（残したあとで画面が変わりました）",
 };
-const SAVE_FAILED =
-  "保存できませんでした。通信の状態を確かめて、もう一度お試しください。";
-const HOURLY_LIMIT = `1時間に残せる注釈は${SITE_NOTE_LIMITS.perHour}件までです。少し時間をおいてから残してください。`;
+const SAVE_FAILED = failure({
+  what: "保存できませんでした",
+  next: AGAIN.connection,
+});
+const HOURLY_LIMIT = failure({
+  what: `1時間に残せる注釈は${counted(SITE_NOTE_LIMITS.perHour, "件")}までです`,
+  next: "少し時間をおいてから残してください",
+});
 const first = (text: string, count: number) =>
   Array.from(text).slice(0, count).join("");
 
@@ -811,7 +817,9 @@ function NotesMode({
     if (alive.current) setBusy(false);
     if (!done) {
       if (alive.current)
-        setProblem("取り下げられませんでした。もう一度お試しください。");
+        setProblem(
+          failure({ what: "取り下げられませんでした", next: AGAIN.now }),
+        );
       return;
     }
     if (alive.current) {
@@ -823,7 +831,7 @@ function NotesMode({
       label: "元に戻す",
       run: async () => {
         if (!(await setSiteNoteRemoved(client, note.id, false))) {
-          notify("戻せませんでした。もう一度お試しください。");
+          notify(failure({ what: "戻せませんでした", next: AGAIN.now }));
           return;
         }
         returnedNotes.forEach((back) => back(note));
@@ -925,7 +933,7 @@ function NotesMode({
             <span>タップしてください</span>
             {loadFailed && (
               <span className="site-notes-banner-note">
-                これまでの注釈を読み込めませんでした
+                {failure({ what: "これまでの注釈を読み込めませんでした" }, "")}
               </span>
             )}
           </p>
@@ -1015,7 +1023,7 @@ function NotesMode({
           />
           {text.length >= SITE_NOTE_LIMITS.body && (
             <p className="site-notes-limit">
-              {SITE_NOTE_LIMITS.body}文字までです
+              {counted(SITE_NOTE_LIMITS.body, "文字")}までです
             </p>
           )}
           {problem && (

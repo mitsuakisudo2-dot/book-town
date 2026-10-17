@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type TouchEvent } from "react";
 import { announce } from "../../lib/live-region";
+import { failure } from "../../lib/words";
 
 // Pull to refresh (決定 H:123): at the very top of Home, a finger drawn down
 // reads what is new and takes it in at once. The page itself does not move
@@ -28,7 +29,7 @@ export const PULL_WORDS: Record<PullPhase, string> = {
   loading: "読み込んでいます",
   arrived: "新しい便りが届きました",
   none: "新しい便りはまだありません",
-  failed: "つながらないため、読み込めませんでした",
+  failed: failure({ what: "つながらないため、読み込めませんでした" }, ""),
 };
 
 /**
