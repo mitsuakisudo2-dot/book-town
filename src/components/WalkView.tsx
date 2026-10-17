@@ -63,6 +63,13 @@ import {
   takesText,
   useCoarsePointer,
 } from "../lib/coarse-pointer";
+import {
+  bookAuthor,
+  bookById,
+  bookTitle,
+  quotedTitle,
+  titleById,
+} from "../lib/book-name";
 
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
@@ -219,20 +226,19 @@ export function WalkView({
     overlay?.kind === "pop" && overlay.placementId && scene
       ? objectById(scene, overlay.placementId)
       : undefined;
-  const popBook = state.books.find((b) => b.id === popPlacement?.bookId);
+  const popBook = bookById(state.books, popPlacement?.bookId);
   // Ways to begin a word to the owner, drawn from this shop's own shelf.
   const leadBook = scene
-    ? state.books.find(
-        (b) =>
-          b.id ===
-          (scene.objects.find((o) => o.kind === "book" && o.display === "face")
-            ?.bookId ?? scene.objects.find((o) => o.kind === "book")?.bookId),
+    ? bookById(
+        state.books,
+        scene.objects.find((o) => o.kind === "book" && o.display === "face")
+          ?.bookId ?? scene.objects.find((o) => o.kind === "book")?.bookId,
       )
     : undefined;
   const starters = [
     "POPを読んで、読みたくなりました。",
     ...(leadBook
-      ? [`『${leadBook.title}』が並んでいて、うれしくなりました。`]
+      ? [`${quotedTitle(leadBook)}が並んでいて、うれしくなりました。`]
       : []),
     "また来ます。",
   ];
@@ -752,9 +758,7 @@ export function WalkView({
                 onPop={(p) =>
                   open({
                     kind: "pop",
-                    title:
-                      (state.books.find((b) => b.id === p.bookId)?.title ??
-                        "本") + "のPOP",
+                    title: (titleById(state.books, p.bookId) ?? "本") + "のPOP",
                     text: bookPop(scene, p.id)?.text ?? "",
                     stamp: bookPop(scene, p.id)?.stamp,
                     placementId: p.id,
@@ -947,8 +951,8 @@ export function WalkView({
             >
               <BookJacket book={popBook} />
               <span>
-                <b>{popBook.title}</b>
-                <small>{popBook.author}</small>
+                <b>{bookTitle(popBook)}</b>
+                <small>{bookAuthor(popBook)}</small>
                 <em>
                   この本を手に取る <Icon name="arrow" size={14} />
                 </em>

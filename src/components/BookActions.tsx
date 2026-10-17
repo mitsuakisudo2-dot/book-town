@@ -4,6 +4,7 @@ import type { Book, TownActions, TownState } from "../lib/types";
 import { formatPrice, REGISTERED_GENRE } from "../lib/books";
 import { bookLookup } from "../lib/book-lookup";
 import { Icon } from "./ui";
+import { bookAuthor, bookTitle } from "../lib/book-name";
 
 /** 定価, tax included. Books without a known price show nothing. */
 export function BookPrice({
@@ -29,7 +30,7 @@ export function BookPrice({
  * beside them a way to read about it elsewhere first.
  */
 export function BookPurchase({ book }: { book: Book }) {
-  const query = encodeURIComponent(`${book.title} ${book.author}`);
+  const query = encodeURIComponent(`${bookTitle(book)} ${bookAuthor(book)}`);
   const lookup = bookLookup(book);
   return (
     <div className="book-links">

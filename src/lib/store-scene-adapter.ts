@@ -19,6 +19,7 @@ import {
   type SceneObject,
   type StoreScene,
 } from "./store-scene";
+import { bookById } from "./book-name";
 
 export interface ReadEntry {
   id: string;
@@ -229,7 +230,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
     return objectById(scene, id)!.parentId !== null;
   };
   type Entry = { item: ShelfItem; shelf: Shelf };
-  const bookOf = (e: Entry) => books.find((b) => b.id === e.item.bookId);
+  const bookOf = (e: Entry) => bookById(books, e.item.bookId);
   const shelfEntries = shelves.flatMap((shelf) =>
     shelf.items.map((item) => ({ item, shelf })),
   );
@@ -361,9 +362,7 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
   // Each title appears once per store; nothing about readers or popularity is generated.
   if (shop.demo && variant !== 2) {
     const genres = new Set(
-      tierItems
-        .flat()
-        .map((e) => books.find((b) => b.id === e.item.bookId)?.genre),
+      tierItems.flat().map((e) => bookById(books, e.item.bookId)?.genre),
     );
     const pool = books.filter((b) => !used.has(b.id));
     pool.sort(

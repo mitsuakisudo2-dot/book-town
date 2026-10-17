@@ -1,4 +1,5 @@
 import type { Book } from "./types";
+import { bookById } from "./book-name";
 import {
   objectById,
   placementSize,
@@ -114,7 +115,7 @@ export function applyShelfPreset(
       continue;
     }
     const row = objectById(scene, p.parentId)!,
-      book = books.find((b) => b.id === p.bookId);
+      book = bookById(books, p.bookId);
     if (book) p.preferredSize = placementSize(book, p.display!, row.bookHeight);
     // A row brought back from storage shows again; what it hid stays hidden.
     if (
@@ -295,7 +296,7 @@ export function moveToShelf(
         .map((o) => o.order ?? 0),
     ) + 1;
   p.parentId = row.id;
-  const book = books.find((b) => b.id === p.bookId);
+  const book = bookById(books, p.bookId);
   if (book) p.preferredSize = placementSize(book, p.display!, row.bookHeight);
   const placed = relayoutRow(scene, row.id);
   return {

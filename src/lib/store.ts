@@ -19,6 +19,7 @@ import { journalOwner, type JournalTown } from "./library-journal";
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId } from "./paths";
+import { bookByIsbn } from "./book-name";
 import {
   bookPrice,
   bookText,
@@ -760,9 +761,7 @@ export function createTownStore(
         bookId && isbn
           ? state.books.find((book) => book.id === bookId && book.isbn === isbn)
           : undefined;
-      const existing =
-        decided ??
-        (isbn ? state.books.find((book) => book.isbn === isbn) : undefined);
+      const existing = decided ?? bookByIsbn(state.books, isbn);
       if (existing)
         return commit({ ...state, library: [...state.library, existing.id] })
           ? { result: "added", bookId: existing.id, title: existing.title }

@@ -21,6 +21,7 @@ import {
   type SceneObject,
 } from "./store-scene";
 import { woodScene } from "./store-scene-adapter";
+import { bookById } from "./book-name";
 
 export const STORE_TEMPLATES = [
   {
@@ -82,7 +83,7 @@ export function migrateShopScene(
     for (const item of shelf.items) {
       const id = "placement:" + shop.id + ":" + item.id;
       let p = objectById(scene, id);
-      const book = books.find((b) => b.id === item.bookId);
+      const book = bookById(books, item.bookId);
       if (!book) continue;
       if (!p) {
         scene = addBookPlacement(scene, book, null, id, item.display);
@@ -103,7 +104,7 @@ function withShelfBooks(
   let scene = structuredClone(existing);
   for (const shelf of shop.shelves)
     for (const item of shelf.items) {
-      const book = books.find((b) => b.id === item.bookId);
+      const book = bookById(books, item.bookId);
       // Already in the scene, wherever the owner put it.
       if (
         !book ||
@@ -236,7 +237,7 @@ export function applyStoreTemplate(
   // Books keep the size rule of the furniture they move onto, so a scene
   // saved before a size change still fits its new rows.
   const fit = (p: SceneObject, row: SceneObject) => {
-    const book = books.find((b) => b.id === p.bookId);
+    const book = bookById(books, p.bookId);
     if (book) p.preferredSize = placementSize(book, p.display!, row.bookHeight);
   };
   const last = (rowId: string, objects: SceneObject[]) =>
@@ -343,7 +344,7 @@ export function changePlacement(
   if (p?.kind !== "book") throw new Error("Unknown placement");
   if (patch.isPublic !== undefined) p.isPublic = patch.isPublic;
   if (patch.display) {
-    const book = books.find((b) => b.id === p.bookId);
+    const book = bookById(books, p.bookId);
     if (!book) throw new Error("Unknown book");
     p.display = patch.display;
     p.preferredSize = {
