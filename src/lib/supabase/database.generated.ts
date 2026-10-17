@@ -1450,7 +1450,17 @@ export type Database = {
           volume: string;
         }[];
       };
+      book_holds: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          book_id: string;
+          creators: Json;
+          held_at: string;
+          title: string;
+        }[];
+      };
       can_annotate: { Args: Record<PropertyKey, never>; Returns: boolean };
+      confirm_book_isbn: { Args: { book: string }; Returns: undefined };
       delete_my_account: {
         Args: Record<PropertyKey, never>;
         Returns: undefined;
