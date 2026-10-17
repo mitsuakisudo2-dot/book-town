@@ -2859,6 +2859,14 @@ try {
   await check(
     "ひとこと: memos read together come in at Live's top while it is seen, never as new 便り; 止める (kept through a redraw and Home left, and 動かす by the keyboard too), a 便り's page over it, the keyboard's focus on a line and the box off the screen hold them; a memo waiting for the box is no new 便り when Home is come back to; a line just come opens its 便り and 便りだけ gets a dot for it; each memo shows once; with less motion nothing moves",
     async () => {
+      // The page's clock starts on a night the 見本 town's memos are within
+      // Live's seven days of, so they stay below サク's whatever day it runs.
+      const LIVE_NOW = Date.parse("2026-10-11T06:00:00+09:00");
+      const startedAt = Date.now();
+      const agoLive = (hours) =>
+        new Date(LIVE_NOW - hours * 3600_000).toISOString();
+      const nowLive = () =>
+        new Date(LIVE_NOW + (Date.now() - startedAt)).toISOString();
       // サク, followed: two 便り and three memos read together of late.
       const SAKU = homeId(300);
       const SAKU_SHOP = homeId(301);
@@ -2872,7 +2880,7 @@ try {
         memoRow(
           homeId(310 + hours),
           `いっしょに読んでいる、${hours}時間前のひとこと。`,
-          ago(hours),
+          agoLive(hours),
         ),
       );
       const letters = [4, 5].map((hours) =>
@@ -2880,7 +2888,7 @@ try {
           homeId(320 + hours),
           SAKU,
           `サクの便り、${hours}時間前。`,
-          ago(hours),
+          agoLive(hours),
         ),
       );
       town = {
@@ -2903,7 +2911,7 @@ try {
         posts: [...memos, ...letters],
       };
       const arrive = (n, words) => {
-        const row = memoRow(homeId(340 + n), words, new Date().toISOString());
+        const row = memoRow(homeId(340 + n), words, nowLive());
         town.posts.push(row);
         return row;
       };
@@ -2935,7 +2943,7 @@ try {
             return animate.apply(this, args);
           };
         });
-        await phone.clock.install();
+        await phone.clock.install({ time: LIVE_NOW });
         const at = settleBeforeNavigating(await phone.newPage());
         at.on("pageerror", (e) => errors.push(e.message));
         await at.goto(base + "/");
