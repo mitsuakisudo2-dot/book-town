@@ -64,6 +64,36 @@ check("the name of a book, in and out of 『』", () => {
   assert.equal(bookAuthor(book), "宮沢賢治");
 });
 
+check("an author headed the catalogue's way reads as on the book", () => {
+  const author = (written: string) => bookAuthor({ author: written });
+  assert.equal(
+    author("King,Stephen,1947- 小尾,芙佐,1932-"),
+    "Stephen King、小尾芙佐",
+  );
+  assert.equal(
+    author("Thurber,James,1894-1961 鳴海,四郎,1917-2004"),
+    "James Thurber、鳴海四郎",
+  );
+  assert.equal(author("富樫,義博,1966-"), "富樫義博");
+  assert.equal(
+    author("Hogan,JamesP.,1941-2010 池,央耿,1940-"),
+    "James P. Hogan、池央耿",
+  );
+  assert.equal(
+    author("Clarke,ArthurCharles 福島,正実"),
+    "ArthurCharles Clarke、福島正実",
+  );
+  // Written any other way, the author is left as written.
+  for (const written of [
+    "宮沢賢治",
+    "テッド・チャン",
+    "John Doe",
+    "山田一郎 編",
+    "",
+  ])
+    assert.equal(author(written), written);
+});
+
 check("a book by its ID or ISBN, and none for none", () => {
   const books = [book, { ...book, id: "b2", isbn: undefined }];
   assert.equal(bookById(books, "b2"), books[1]);

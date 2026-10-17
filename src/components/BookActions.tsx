@@ -2,9 +2,8 @@
 
 import type { Book, TownActions, TownState } from "../lib/types";
 import { formatPrice, REGISTERED_GENRE } from "../lib/books";
-import { bookLookup } from "../lib/book-lookup";
+import { bookLookup, lookupQuery } from "../lib/book-lookup";
 import { Icon } from "./ui";
-import { bookAuthor, bookTitle } from "../lib/book-name";
 
 /** 定価, tax included. Books without a known price show nothing. */
 export function BookPrice({
@@ -30,7 +29,7 @@ export function BookPrice({
  * beside them a way to read about it elsewhere first.
  */
 export function BookPurchase({ book }: { book: Book }) {
-  const query = encodeURIComponent(`${bookTitle(book)} ${bookAuthor(book)}`);
+  const query = encodeURIComponent(lookupQuery(book));
   const lookup = bookLookup(book);
   return (
     <div className="book-links">
@@ -79,7 +78,7 @@ export function bookNote(book: Book): string {
     book.price && book.genre !== REGISTERED_GENRE
       ? "定価はデモ用の仮の値です。"
       : "",
-    "購入ボタンはタイトル・著者で外部書店を検索します。版や在庫は購入先でご確認ください。",
+    "購入ボタンはタイトルで外部書店を検索します。版や在庫は購入先でご確認ください。",
   ].join("");
 }
 

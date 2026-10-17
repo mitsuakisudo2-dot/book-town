@@ -116,10 +116,9 @@ try {
           );
           expect(
             url.searchParams.get("k") ?? url.searchParams.get("sitem"),
-          ).toContain("ソラリス スタニスワフ・レム");
+          ).toBe("ソラリス");
         }
-        // Beside them, a way to read about the book first. This browser is
-        // no Safari on an iPhone or iPad, so the search is Google's.
+        // Beside them, a way to read about the book first, on Google.
         const lookup = dialog()
           .locator(".bh-book-intro")
           .getByRole("link", { name: /^この本についてGoogleで調べる/ });
@@ -130,9 +129,7 @@ try {
         const search = new URL(await lookup.getAttribute("href"));
         expect(search.hostname).toBe("google.com");
         expect(search.pathname).toBe("/search");
-        expect(search.searchParams.get("q")).toBe(
-          "ソラリス　スタニスワフ・レム",
-        );
+        expect(search.searchParams.get("q")).toBe("ソラリス");
         await page.keyboard.press("Escape");
       },
     );
@@ -417,7 +414,7 @@ try {
         await expect(lookup).toHaveAttribute(
           "href",
           "https://google.com/search?q=" +
-            encodeURIComponent("ソラリス　スタニスワフ・レム"),
+            encodeURIComponent("ソラリス"),
         );
         await expect(lookup).toHaveAccessibleName(
           "この本についてGoogleで調べる（新しいタブで開きます）",
