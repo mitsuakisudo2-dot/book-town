@@ -352,7 +352,16 @@ export function BookJacket({
       )}
       <span className="jacket-series">BOOK TOWN EDITIONS</span>
       <span className="jacket-title">{bookTitle(book)}</span>
-      <span className="jacket-author">{author}</span>
+      <span className="jacket-author">
+        {/* Each name kept whole on its line: a second author starts a new
+            line rather than leaving its last letter alone on one. */}
+        {author.split("、").map((name, at, names) => (
+          <span key={at} className="jacket-name">
+            {name}
+            {at < names.length - 1 && "、"}
+          </span>
+        ))}
+      </span>
       <span className="jacket-imprint">本の街 文庫</span>
     </>
   );

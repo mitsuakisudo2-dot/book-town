@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { afterLayerCloses, useBackLayer } from "../lib/back-layer";
+import { afterLayerCloses, leaveLayers, useBackLayer } from "../lib/back-layer";
 import { bookAuthor, bookTitle, quotedTitle } from "../lib/book-name";
 import { bookPath } from "../lib/books";
 import {
@@ -368,6 +368,14 @@ export function LibraryView({
     );
   };
 
+  /**
+   * Closes the shelf's sheet onto another view of the library: the sheet's
+   * step comes off first, so 戻る from there returns to the page before.
+   */
+  const leaveShelfSheet = (params: Record<string, string | null>) => {
+    leaveLayers(() => setFilter(params));
+    setShelfSheet(null);
+  };
   /** Where the words of the shelf being made or changed are kept. */
   const shelfDraftKey = (key: string) => (owner ? `${owner}/${key}` : null);
   const editing =
@@ -419,15 +427,13 @@ export function LibraryView({
         work,
         base: NEW_SHELF,
       });
-    setShelfSheet(null);
-    setFilter({ shelf: id, unsorted: null, owned: null });
+    leaveShelfSheet({ shelf: id, unsorted: null, owned: null });
     notify(`「${work.name}」を作りました`);
     return true;
   };
   const putAway = (shelf: LibraryShelf) => {
     if (!actions.putAwayLibraryShelf(shelf.id, true)) return;
-    setShelfSheet(null);
-    setFilter({ shelf: null });
+    leaveShelfSheet({ shelf: null });
     notify(`「${shelf.name}」を消しました。本はライブラリに残っています`, {
       label: "元に戻す",
       run: () => {

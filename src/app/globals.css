@@ -624,6 +624,11 @@ div.book-jacket:hover {
   line-height: 1.6;
   letter-spacing: 0.1em;
 }
+.jacket-name {
+  display: inline-block;
+  vertical-align: top;
+  text-wrap: balance;
+}
 .jacket-imprint {
   position: absolute;
   bottom: 7%;
