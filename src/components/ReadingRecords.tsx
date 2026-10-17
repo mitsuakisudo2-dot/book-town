@@ -93,7 +93,7 @@ function PublishButton({
   return (
     <button
       type="button"
-      className="text-button record-publish"
+      className="text-btn record-publish"
       onClick={() => {
         const audience = flipped(record.audience);
         actions.updateRecord(record.id, { audience });
@@ -226,7 +226,7 @@ export function RecordSheet({
             <button
               type="button"
               key={feeling}
-              className="feeling-chip"
+              className="chip"
               aria-pressed={feelings.includes(feeling)}
               onClick={() => toggle(feeling)}
             >
@@ -273,7 +273,7 @@ export function RecordSheet({
         </span>
         <button
           type="button"
-          className="text-button"
+          className="text-btn"
           onClick={() => change({ audience: flipped(audience) })}
         >
           {isPublic ? "自分だけにする" : "公開にする"}
@@ -289,12 +289,12 @@ export function RecordSheet({
         <StopConfirm onDiscard={stop} onKeep={onClose} />
       ) : (
         <div className="record-actions">
-          <button className="button primary" type="button" onClick={save}>
+          <button className="btn fill" type="button" onClick={save}>
             {record ? "書き直す" : "記録する"}
           </button>
           {/* あとで keeps what is chosen for the next time; やめる does not. */}
           <button
-            className="button secondary"
+            className="btn"
             type="button"
             onClick={() =>
               !record ? onClose() : wordsLost ? setStopping(true) : stop()
@@ -306,7 +306,7 @@ export function RecordSheet({
             (confirmingDelete ? (
               <button
                 type="button"
-                className="text-button record-delete"
+                className="text-btn record-delete"
                 onClick={() => {
                   actions.deleteRecord(record.id);
                   clear();
@@ -319,7 +319,7 @@ export function RecordSheet({
             ) : (
               <button
                 type="button"
-                className="text-button record-delete"
+                className="text-btn record-delete"
                 onClick={() => setConfirmingDelete(true)}
               >
                 記録を消す
@@ -391,7 +391,7 @@ export function BookFeelings({
           <span className="book-feelings-own-actions">
             <button
               type="button"
-              className="text-button"
+              className="text-btn"
               onClick={() => setOpen(true)}
             >
               見直す
@@ -400,11 +400,7 @@ export function BookFeelings({
           </span>
         </div>
       ) : (
-        <button
-          type="button"
-          className="button secondary"
-          onClick={() => setOpen(true)}
-        >
+        <button type="button" className="btn" onClick={() => setOpen(true)}>
           <Icon name="leaf" size={15} />
           {keptNew ? "書きかけの気持ちを続ける" : "読み終えた気持ちを残す"}
         </button>
@@ -475,7 +471,7 @@ export function RecordShelf({
                   (hidden ? (
                     <button
                       type="button"
-                      className="text-button"
+                      className="text-btn"
                       onClick={() => setOpened([...opened, record.id])}
                     >
                       ネタバレを含むひとことを読む
@@ -496,7 +492,7 @@ export function RecordShelf({
                   {mine && (
                     <button
                       type="button"
-                      className="text-button"
+                      className="text-btn"
                       onClick={() => setEditing(record)}
                     >
                       見直す

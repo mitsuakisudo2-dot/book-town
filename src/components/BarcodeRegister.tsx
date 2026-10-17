@@ -242,7 +242,7 @@ export function BarcodeRegister({
           <video ref={video} muted playsInline aria-label="カメラの映像" />
           <button
             type="button"
-            className="button secondary"
+            className="btn"
             onClick={() => setScanning(false)}
           >
             読み取りをやめる
@@ -252,7 +252,7 @@ export function BarcodeRegister({
         canScan && (
           <button
             type="button"
-            className="button register-camera"
+            className="btn fill register-camera"
             onClick={() => {
               setMessage("");
               setScanning(true);
@@ -285,7 +285,7 @@ export function BarcodeRegister({
             }}
           />
         </label>
-        <button type="submit" className="button secondary" disabled={looking}>
+        <button type="submit" className="btn" disabled={looking}>
           <Icon name="barcode" size={16} />
           ISBNで探す
         </button>
@@ -330,7 +330,7 @@ export function BarcodeRegister({
         </label>
         <button
           type="submit"
-          className="button"
+          className="btn fill"
           disabled={!title.trim() || looking}
         >
           登録する

@@ -425,15 +425,11 @@ export function OpenShop({
           軒目の本屋です。
         </p>
         <div className="open-next">
-          <Link className="editor-button primary" href="/walk/#mine">
+          <Link className="btn fill" href="/walk/#mine">
             <Icon name="store" size={17} />
             街を歩いてみる
           </Link>
-          <button
-            type="button"
-            className="editor-button secondary"
-            onClick={onDone}
-          >
+          <button type="button" className="btn" onClick={onDone}>
             <Icon name="shelf" size={17} />
             棚を整える
           </button>
@@ -496,7 +492,7 @@ export function OpenShop({
         </div>
         <button
           type="button"
-          className="text-button open-free"
+          className="text-btn open-free"
           disabled={!ready}
           onClick={() => choose("free")}
         >
@@ -511,7 +507,7 @@ export function OpenShop({
         {steps}
         <button
           type="button"
-          className="text-button open-back"
+          className="text-btn open-back"
           onClick={() => go("kind")}
         >
           <Icon name="back" size={14} /> 本屋の形を選び直す
@@ -611,7 +607,7 @@ export function OpenShop({
         <div className="open-actions">
           <button
             type="button"
-            className="editor-button primary"
+            className="btn fill"
             disabled={!picked.length}
             onClick={() => go("sign")}
           >
@@ -627,7 +623,7 @@ export function OpenShop({
       {steps}
       <button
         type="button"
-        className="text-button open-back"
+        className="text-btn open-back"
         onClick={() => go(kind === "free" ? "kind" : "books")}
       >
         <Icon name="back" size={14} />
@@ -666,7 +662,7 @@ export function OpenShop({
           />
           <button
             type="button"
-            className="editor-button secondary"
+            className="btn"
             onClick={() => {
               change({ name: NAME_EXAMPLES[example] });
               setExample((example + 1) % NAME_EXAMPLES.length);
@@ -695,7 +691,7 @@ export function OpenShop({
           />
         </div>
         <button
-          className="editor-button primary open-submit"
+          className="btn fill open-submit"
           type="submit"
           disabled={!name.trim() || !ready}
         >

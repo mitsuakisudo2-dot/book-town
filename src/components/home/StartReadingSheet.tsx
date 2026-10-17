@@ -69,21 +69,21 @@ export function StartReadingSheet({
           <p className="home-sheet-lead">どう読みますか。</p>
           <button
             type="button"
-            className="button home-sheet-mode"
+            className="btn fill home-sheet-mode"
             onClick={() => start("solo")}
           >
             ひとりで読む（記録は自分だけ）
           </button>
           <button
             type="button"
-            className="button secondary home-sheet-mode"
+            className="btn home-sheet-mode"
             onClick={() => start("together")}
           >
             みんなで読む
           </button>
           <button
             type="button"
-            className="home-sheet-quiet"
+            className="text-btn home-sheet-quiet"
             onClick={() => setChosen(null)}
           >
             <Icon name="back" size={16} />
@@ -127,7 +127,7 @@ export function StartReadingSheet({
           ) : (
             <button
               type="button"
-              className="button secondary home-sheet-search"
+              className="btn home-sheet-search"
               onClick={() => setSearching(true)}
             >
               <Icon name="search" size={16} />
@@ -135,7 +135,7 @@ export function StartReadingSheet({
             </button>
           )}
           {state.wishlist.length > 0 && (
-            <Link href="/reading-list/" className="home-sheet-all">
+            <Link href="/reading-list/" className="text-btn home-sheet-all">
               読みたい本をぜんぶ見る
               <Icon name="chevron" size={16} />
             </Link>

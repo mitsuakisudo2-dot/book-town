@@ -149,11 +149,11 @@ function EditorRefusal({
         <p>{children}</p>
         <div className="empty-state-actions">
           {poster && (
-            <Link href={posterPath(poster.id)} className="button secondary">
+            <Link href={posterPath(poster.id)} className="btn">
               ポスターを見る
             </Link>
           )}
-          <Link href={posterNewPath({ bookId })} className="button">
+          <Link href={posterNewPath({ bookId })} className="btn fill">
             ポスターを作る
             <Icon name="arrow" size={16} />
           </Link>
@@ -497,7 +497,7 @@ function PosterMaker({
             {work.pages.length > 1 && (
               <button
                 type="button"
-                className="poster-page-remove"
+                className="text-btn quiet poster-page-remove"
                 onClick={removePage}
               >
                 {at + 1}ページ目を外す
@@ -510,7 +510,7 @@ function PosterMaker({
             )}
             <button
               type="button"
-              className="poster-preview-size"
+              className="text-btn quiet poster-preview-size"
               aria-pressed={enlarged}
               onClick={() => setEnlarged(!enlarged)}
             >
@@ -692,7 +692,7 @@ function PosterMaker({
             <div className="poster-editor-buttons">
               <button
                 type="button"
-                className="button"
+                className="btn fill"
                 onClick={() => save("published")}
               >
                 {published ? "直して貼り出す" : "貼り出す"}
@@ -700,7 +700,7 @@ function PosterMaker({
               {!published && (
                 <button
                   type="button"
-                  className="button secondary"
+                  className="btn"
                   onClick={() => save("draft")}
                 >
                   下書きに残す
@@ -755,12 +755,12 @@ function PosterMaker({
                   aria-label="ポスターを消す"
                 >
                   <span>このポスターを消しますか？ 元には戻せません。</span>
-                  <button type="button" className="button" onClick={remove}>
+                  <button type="button" className="btn fill" onClick={remove}>
                     消す
                   </button>
                   <button
                     type="button"
-                    className="button secondary"
+                    className="btn"
                     ref={cancelButton}
                     onClick={cancel}
                   >
@@ -770,7 +770,7 @@ function PosterMaker({
               ) : (
                 <button
                   type="button"
-                  className="poster-editor-text-button"
+                  className="text-btn quiet"
                   ref={deleteButton}
                   onClick={confirm}
                 >
@@ -1058,7 +1058,7 @@ function BookChoice({
       {!searching && own.length > OWN_SHOWN && (
         <button
           type="button"
-          className="poster-editor-text-button"
+          className="text-btn quiet"
           onClick={() => setAll(!all)}
         >
           {all ? "少なく見る" : "あなたの本を、もっと見る"}

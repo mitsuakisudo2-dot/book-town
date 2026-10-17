@@ -70,10 +70,10 @@ export function PosterScreen({
             作った人が外したのかもしれません。ほかのポスターは、タイムラインで見られます。
           </p>
           <div className="empty-state-actions">
-            <Link href="/timeline/" className="button secondary">
+            <Link href="/timeline/" className="btn">
               タイムラインへ
             </Link>
-            <Link href={posterNewPath()} className="button">
+            <Link href={posterNewPath()} className="btn fill">
               ポスターを作る
               <Icon name="arrow" size={16} />
             </Link>
@@ -176,7 +176,7 @@ export function PosterScreen({
             <div className="poster-screen-actions">
               <Link
                 href={posterNewPath({ posterId: poster.id })}
-                className={"button" + (draft ? "" : " secondary")}
+                className={"btn" + (draft ? " fill" : "")}
               >
                 <Icon name="edit" size={15} />
                 {draft ? "仕上げて貼り出す" : "直す"}
@@ -184,7 +184,7 @@ export function PosterScreen({
             </div>
           ) : (
             <div className="poster-screen-actions">
-              <Link href={posterNewPath()} className="text-button">
+              <Link href={posterNewPath()} className="text-btn">
                 <Icon name="plus" size={14} />
                 わたしもポスターを作る
               </Link>

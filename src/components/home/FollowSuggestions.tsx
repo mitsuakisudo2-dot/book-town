@@ -37,7 +37,7 @@ export function FollowSuggestions({ state, actions, notify }: Shared) {
             </p>
             <button
               type="button"
-              className="button secondary"
+              className="btn"
               onClick={() => {
                 actions.toggleFollow(shop.id);
                 notify(shop.name + "をフォローしました");

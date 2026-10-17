@@ -94,7 +94,7 @@ function DemoNotice() {
       <p className="account-lead">
         いまは、このブラウザだけに保存されるデモの街です。最初の店主のみなさんを招待する準備ができたら、ここからログインできるようになります。
       </p>
-      <Link className="button primary" href="/">
+      <Link className="btn fill" href="/">
         本の街へ
       </Link>
     </>
@@ -187,7 +187,7 @@ function SignIn() {
             aria-describedby={error ? "account-error" : undefined}
           />
           <ErrorLine message={error} />
-          <button className="button primary" disabled={busy || !email.trim()}>
+          <button className="btn fill" disabled={busy || !email.trim()}>
             {busy ? "送っています…" : "コードを送る"}
           </button>
         </form>
@@ -221,7 +221,7 @@ function SignIn() {
         />
         <ErrorLine message={error} />
         <button
-          className="button primary"
+          className="btn fill"
           disabled={busy || code.length !== CODE_LENGTH}
         >
           {busy ? "確かめています…" : "ログインする"}
@@ -383,7 +383,7 @@ function FirstProfile({ userId }: { userId: string }) {
           </label>
         </fieldset>
         <ErrorLine message={error} />
-        <button className="button primary" disabled={busy}>
+        <button className="btn fill" disabled={busy}>
           {busy ? "準備しています…" : "はじめる"}
         </button>
       </form>
@@ -398,10 +398,7 @@ function Unavailable() {
       <p className="account-lead">
         ログインはできていますが、プロフィールを読み込めませんでした。通信の状態を確かめて、もう一度お試しください。
       </p>
-      <button
-        className="button primary"
-        onClick={() => void accountActions.retry()}
-      >
+      <button className="btn fill" onClick={() => void accountActions.retry()}>
         もう一度読み込む
       </button>
       <SignOut />
@@ -416,7 +413,7 @@ function SignedIn({ handle, name }: { handle: string; name: string }) {
       <p className="account-lead">
         {name}（@{handle}）さんとして、本の街にいます。
       </p>
-      <Link className="button primary" href="/">
+      <Link className="btn fill" href="/">
         本の街へ
       </Link>
       <SignOut leave />

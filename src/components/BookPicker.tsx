@@ -65,7 +65,7 @@ export function BookPicker({
         </span>
         <button
           type="button"
-          className="picker-clear"
+          className="icon-btn picker-clear"
           onClick={() => onChange(null)}
           aria-label={bookTitle(selected) + "を外す"}
         >

@@ -727,16 +727,12 @@ export function StoreSceneEditor({
             />
           ) : (
             <div>
-              <button
-                type="button"
-                className="editor-button secondary"
-                onClick={cancel}
-              >
+              <button type="button" className="btn" onClick={cancel}>
                 キャンセル
               </button>
               <button
                 type="button"
-                className="editor-button primary"
+                className="btn fill"
                 disabled={
                   !saved.ready ||
                   waiting ||

@@ -86,7 +86,7 @@ export function LikeUndo({
       <div className="letter-confirm">
         <button
           type="button"
-          className="button"
+          className="btn fill"
           onClick={() => {
             actions.toggleLike(postId);
             notify("いいねを取り消しました");
@@ -95,7 +95,7 @@ export function LikeUndo({
         >
           取り消す
         </button>
-        <button type="button" className="button secondary" onClick={onClose}>
+        <button type="button" className="btn" onClick={onClose}>
           そのまま
         </button>
       </div>

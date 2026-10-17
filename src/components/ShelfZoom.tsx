@@ -54,7 +54,7 @@ export function ShelfZoom({
       </div>
       <div className="walk-zoom-nav">
         <button
-          className="button secondary"
+          className="btn"
           disabled={page === 0}
           onClick={() => setPage(page - 1)}
           aria-label="段の左側を見る"
@@ -64,7 +64,7 @@ export function ShelfZoom({
         </button>
         <span>同じ段を眺めています</span>
         <button
-          className="button secondary"
+          className="btn"
           disabled={(page + 1) * 5 >= items.length}
           onClick={() => setPage(page + 1)}
           aria-label="段の右側を見る"

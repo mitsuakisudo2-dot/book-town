@@ -142,7 +142,7 @@ export function LettersOnly({
         <div className="home-placeholder">
           <b>まだ便りがありません</b>
           <p>フォローした人と本屋の便りだけが、新しい順に並ぶ場所です。</p>
-          <button type="button" className="button" onClick={onHome}>
+          <button type="button" className="btn fill" onClick={onHome}>
             ホームに戻る
           </button>
         </div>
@@ -168,7 +168,7 @@ export function LettersOnly({
           <div className="home-letters-more">
             <button
               type="button"
-              className="button secondary"
+              className="btn"
               onClick={() => {
                 further.current?.focus({ preventScroll: true });
                 readOlderPage();
@@ -183,7 +183,11 @@ export function LettersOnly({
         <div className="home-letters-end">
           <Icon name="leaf" size={22} />
           <b>便りは、ここまでです</b>
-          <button type="button" className="home-letters-home" onClick={onHome}>
+          <button
+            type="button"
+            className="text-btn home-letters-home"
+            onClick={onHome}
+          >
             ホームで本屋の特集を見る
             <Icon name="chevron" size={16} />
           </button>

@@ -97,7 +97,7 @@ export function LetterText({
       {long && (
         <button
           type="button"
-          className="letter-more"
+          className="text-btn letter-more"
           aria-expanded={open}
           aria-controls={id}
           onClick={onToggle}
