@@ -3,6 +3,7 @@ import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
 import { cleanVisibilities } from "./visibility";
 import { restorePoster, type Poster } from "./posters";
+import { validateEntry, type LibraryEntry } from "./library";
 import { DEFAULT_HANDLE, handleProblem } from "./handles";
 import { createRegisteredBook, normalizeIsbn, REGISTERED_GENRE } from "./books";
 import {
@@ -67,6 +68,8 @@ type PersonalData = Pick<
   posts: Post[];
   /** Only the viewer's own posters; the demo's come from the current catalog. */
   posters?: Poster[];
+  /** The library's rows; none in a save from before the library. */
+  libraryEntries?: TownState["libraryEntries"];
   /** Only books the viewer registered; their jackets are redrawn on load. */
   addedBooks: Pick<Book, "id" | "title" | "author" | "isbn" | "price">[];
 };
@@ -248,6 +251,39 @@ function restoreSessions(
 }
 
 /** Keeps each valid record of the viewer's own, about a book this town knows. */
+/**
+ * The library's rows kept in this browser, those the database would take
+ * (validateEntry), of books the town knows. A save from before the library
+ * has none, and every book is worked out from the rest (library-town.ts).
+ */
+function restoreEntries(
+  value: unknown,
+  bookIds: Set<string>,
+): Record<string, LibraryEntry> {
+  if (!object(value)) return {};
+  const entries: Record<string, LibraryEntry> = {};
+  for (const [bookId, entry] of Object.entries(value)) {
+    if (!bookIds.has(bookId) || !object(entry)) continue;
+    const row = {
+      bookId,
+      status: entry.status,
+      statusAt: entry.statusAt,
+      wantedAt: entry.wantedAt,
+      likedAt: entry.likedAt,
+      owned: entry.owned,
+      source: entry.source,
+      batchId: entry.batchId,
+      addedAt: entry.addedAt,
+      removedAt: entry.removedAt,
+      likeRestored: entry.likeRestored,
+      everUsed: entry.everUsed,
+    } as LibraryEntry;
+    if (entry.bookId === bookId && validateEntry(row) === null)
+      entries[bookId] = row;
+  }
+  return entries;
+}
+
 function restoreRecords(value: unknown, bookIds: Set<string>): ReadingRecord[] {
   if (!Array.isArray(value)) return [];
   const ids = new Set<string>();
@@ -467,6 +503,7 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
         readingSessions: restoreSessions(data.readingSessions, bookIds),
         finishedBooks: knownBooks(data.finishedBooks),
         library: knownBooks(data.library),
+        libraryEntries: restoreEntries(data.libraryEntries, bookIds),
         readingRecords: [
           ...initial.readingRecords,
           ...restoreRecords(data.readingRecords, bookIds),
@@ -526,6 +563,7 @@ export function serializeTown(state: TownState): string {
       readingSessions: state.readingSessions,
       finishedBooks: state.finishedBooks,
       library: state.library,
+      libraryEntries: state.libraryEntries,
       readingRecords: state.readingRecords.filter(
         (record) => record.readerId === ME_ID,
       ),

@@ -634,32 +634,51 @@ try {
     },
   );
   await check(
-    "a book shelved after the scene was saved waits among the unplaced books",
+    "a book shelved after the scene was saved joins the shop, and leaves with the shelf",
     async () => {
-      await page.evaluate(() => {
-        const envelope = JSON.parse(localStorage.getItem("book-town-v1"));
-        envelope.data.ownShop.shelves[0].items.push({
-          id: "later",
-          bookId: "dispossessed",
-          display: "spine",
-          pop: "あとから棚に来た本",
-        });
-        localStorage.setItem("book-town-v1", JSON.stringify(envelope));
+      const shelve = (push) =>
+        page.evaluate((push) => {
+          const envelope = JSON.parse(localStorage.getItem("book-town-v1"));
+          const items = envelope.data.ownShop.shelves[0].items;
+          if (push) items.push(push);
+          else
+            items.splice(
+              items.findIndex((i) => i.id === "later"),
+              1,
+            );
+          localStorage.setItem("book-town-v1", JSON.stringify(envelope));
+        }, push);
+      const later = async () =>
+        (await walkData()).sceneOverrides[0].objects.find(
+          (o) => o.kind === "book" && o.bookId === "dispossessed",
+        );
+      await shelve({
+        id: "later",
+        bookId: "dispossessed",
+        display: "spine",
+        pop: "あとから棚に来た本",
       });
-      const before = (await walkData()).sceneOverrides[0];
-      await open();
-      const waiting = dialog().getByRole("group", {
-        name: /^まだ並べていない本/,
-      });
-      await waiting.getByRole("button", { name: /所有せざる人々/ }).click();
-      await expect(dialog().getByLabel("この本のPOP")).toHaveValue(
+      await page.goto(base + "/my-shop/");
+      await expect
+        .poll(async () => (await later())?.parentId ?? null)
+        .not.toBeNull();
+      const placed = await later();
+      expect(placed.source.itemId).toBe("later");
+      await page.goto(base + "/walk/#mine");
+      await expect(page.locator(`[data-placement="${placed.id}"]`)).toHaveCount(
+        1,
+      );
+      // Taken off the shelf, it leaves the shop's rows and waits with its POP.
+      await page.goto(base + "/my-shop/");
+      await shelve(null);
+      await page.goto(base + "/my-shop/");
+      await expect.poll(async () => (await later())?.parentId).toBeNull();
+      const left = await later();
+      expect(left.source).toBeUndefined();
+      const scene = (await walkData()).sceneOverrides[0];
+      expect(scene.objects.find((o) => o.id === "pop:" + left.id).text).toBe(
         "あとから棚に来た本",
       );
-      await expect(dialog().getByLabel("この本を置く棚")).toHaveValue("");
-      // Opening it changes nothing that was saved.
-      await expect(keptLine()).toHaveCount(0);
-      await page.keyboard.press("Escape");
-      expect((await walkData()).sceneOverrides[0]).toEqual(before);
     },
   );
   await check(
