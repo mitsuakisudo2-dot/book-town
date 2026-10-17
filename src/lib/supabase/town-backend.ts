@@ -121,6 +121,7 @@ export async function loadTown(
     myReports,
     readerSettings,
     posters,
+    libraryEntries,
   ] = await Promise.all([
     all(client.from("profiles").select("*").limit(LIMIT)),
     // The person's own nine, whole, as changing it rewrites the list; and
@@ -213,6 +214,15 @@ export async function loadTown(
         .order("created_at", { ascending: false })
         .limit(LIMIT),
     ),
+    // The person's own library, every row.
+    allRows(
+      (count) =>
+        client
+          .from("library_entries")
+          .select("*", { count })
+          .eq("user_id", userId),
+      ["book_id"],
+    ),
   ]);
 
   // Whoever the person blocked is named in their list, even past the
@@ -288,6 +298,7 @@ export async function loadTown(
     follows,
     blocks,
     marks,
+    libraryEntries,
     posts,
     postReactions,
     spoilerReports,
@@ -796,6 +807,37 @@ export async function applyWrite(
           .eq("author_id", ids.userId),
       );
       return;
+    case "library-entries": {
+      // New rows in, ignoring one already there; then what the reader
+      // changed, of the rows already there. Never a partial upsert, which
+      // would write every column it sends.
+      const made = new Set<string>();
+      for (const some of chunks(write.rows, 500))
+        for (const row of await all(
+          client
+            .from("library_entries")
+            .upsert(some, { onConflict: "user_id,book_id", ...ignore })
+            .select("book_id"),
+        ))
+          made.add(row.book_id);
+      const patches = write.patches.filter(
+        (row) => !(row.made && made.has(row.book_id)),
+      );
+      // A few at a time: changing fifty books at once is fifty rows.
+      for (const some of chunks(patches, 8))
+        await Promise.all(
+          some.map((row) =>
+            settled(
+              client
+                .from("library_entries")
+                .update(row.patch)
+                .eq("user_id", ids.userId)
+                .eq("book_id", row.book_id),
+            ),
+          ),
+        );
+      return;
+    }
     case "remove":
       for (const row of write.rows)
         await settled(client.from(write.table).delete().match(row));

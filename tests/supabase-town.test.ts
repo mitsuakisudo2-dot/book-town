@@ -1434,6 +1434,76 @@ async function main() {
     },
   );
 
+  await check(
+    "the app's library is written by the app, and comes back as the reader left it",
+    async () => {
+      const ren = await reader("ren");
+      // The app's own client sends this header (src/lib/supabase/client.ts).
+      const client = createClient<Database>(API_URL, PUBLISHABLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { headers: { "x-booktown-library": "1" } },
+      });
+      const session = (await ren.client.auth.getSession()).data.session!;
+      assert.ifError(
+        (
+          await client.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          })
+        ).error,
+      );
+      const person = { id: ren.id, client };
+      const store = await townOf(person);
+      const done = store.actions.registerBook(
+        { title: "レンの本", author: "誰か" },
+        "manual",
+      );
+      assert.ok(done && done.result === "added");
+      const other = store.actions.registerBook(
+        { title: "レンのもう一冊", author: "誰か" },
+        "manual",
+      );
+      assert.ok(other && other.result === "added");
+      await settled(store);
+      assert.ok(
+        store.actions.changeLibrary([done.bookId], {
+          status: "tsundoku",
+          owned: "yes",
+        }),
+      );
+      store.actions.toggleWish(other.bookId);
+      await settled(store);
+      store.actions.toggleWish(other.bookId);
+      store.actions.toggleLibrary(other.bookId);
+      await settled(store);
+      const rows = await client
+        .from("library_entries")
+        .select("book_id, status, owned, source, wanted_at, removed_at")
+        .eq("user_id", ren.id);
+      assert.ifError(rows.error);
+      const row = (id: string) =>
+        rows.data.find((entry) => entry.book_id === id);
+      // Written by the app, with how the book came in: the database's copy of
+      // marks would have said legacy.
+      assert.deepEqual(row(done.bookId), {
+        book_id: done.bookId,
+        status: "tsundoku",
+        owned: "yes",
+        source: "manual",
+        wanted_at: null,
+        removed_at: null,
+      });
+      assert.equal(row(other.bookId)?.wanted_at, null);
+      assert.ok(row(other.bookId)?.removed_at);
+      const back = (await townOf(person)).getSnapshot();
+      assert.equal(back.libraryEntries[done.bookId].status, "tsundoku");
+      assert.equal(back.libraryEntries[done.bookId].owned, "yes");
+      assert.ok(back.libraryEntries[other.bookId].removedAt);
+      assert.ok(!back.wishlist.includes(other.bookId));
+      assert.ok(!back.library.includes(other.bookId));
+    },
+  );
+
   console.log(passed + " Supabase town checks passed");
 }
 

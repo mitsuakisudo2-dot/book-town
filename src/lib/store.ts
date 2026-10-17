@@ -16,6 +16,13 @@ import { supabaseConfigured } from "./supabase/config";
 import { followAccount } from "./town-session";
 import { accountStore } from "./account-session";
 import { journalOwner, type JournalTown } from "./library-journal";
+import {
+  libraryChange,
+  undoLibraryChange,
+  withLibraryOp,
+  withoutRegistering,
+} from "./library-town";
+import { READING_STATUSES, type ReadingStatus } from "./library";
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId } from "./paths";
@@ -500,22 +507,28 @@ export function createTownStore(
     toggleWish(bookId) {
       initialize();
       if (!state.books.some((book) => book.id === bookId)) return;
-      commit({
-        ...state,
-        wishlist: state.wishlist.includes(bookId)
-          ? state.wishlist.filter((id) => id !== bookId)
-          : [...state.wishlist, bookId],
-      });
+      commit(
+        withLibraryOp(
+          state,
+          [bookId],
+          { want: !state.wishlist.includes(bookId) },
+          now().toISOString(),
+          "want",
+        ),
+      );
     },
     toggleFavorite(bookId) {
       initialize();
       if (!state.books.some((book) => book.id === bookId)) return;
-      commit({
-        ...state,
-        favorites: state.favorites.includes(bookId)
-          ? state.favorites.filter((id) => id !== bookId)
-          : [...state.favorites, bookId],
-      });
+      commit(
+        withLibraryOp(
+          state,
+          [bookId],
+          { favorite: !state.favorites.includes(bookId) },
+          now().toISOString(),
+          "favorite",
+        ),
+      );
     },
     togglePopReaction(shopId, shelfId, itemId, reaction) {
       initialize();
@@ -672,15 +685,23 @@ export function createTownStore(
       const post = state.posts.find((entry) => entry.id === postId);
       if (!post?.bookId || post.authorId === ME_ID) return;
       const adding = !state.wantedPosts.includes(postId);
-      commit({
+      const wanted = {
         ...state,
         wantedPosts: toggled(state.wantedPosts, postId),
-        // Wanting a book saves it; taking the reaction back keeps the list as the reader left it.
-        wishlist:
-          adding && !state.wishlist.includes(post.bookId)
-            ? [...state.wishlist, post.bookId]
-            : state.wishlist,
-      });
+      };
+      // Wanting a book saves it; taking the reaction back keeps the list as
+      // the reader left it.
+      commit(
+        adding
+          ? withLibraryOp(
+              wanted,
+              [post.bookId],
+              { want: true },
+              now().toISOString(),
+              "want",
+            )
+          : wanted,
+      );
     },
     startReading(bookId, mode) {
       initialize();
@@ -700,7 +721,7 @@ export function createTownStore(
         startedAt: time,
         endedAt: null,
       };
-      commit({
+      const reading: TownState = {
         ...state,
         readingSessions: [
           // Starting a new book closes whatever was running.
@@ -709,9 +730,19 @@ export function createTownStore(
           ),
           session,
         ],
-        // Opening a finished book again is a reread.
-        finishedBooks: state.finishedBooks.filter((id) => id !== bookId),
-      });
+      };
+      // The book is 読書中; a finished one opened again is a reread (問い7).
+      commit(
+        bookId === null
+          ? reading
+          : withLibraryOp(
+              reading,
+              [bookId],
+              { status: "reading" },
+              time,
+              "reading",
+            ),
+      );
       return session.id;
     },
     endReading(finished) {
@@ -721,22 +752,27 @@ export function createTownStore(
       );
       if (!active) return;
       const time = now().toISOString();
-      commit({
+      const ended: TownState = {
         ...state,
         readingSessions: state.readingSessions.map((entry) =>
           entry.id === active.id ? { ...entry, endedAt: time } : entry,
         ),
-        finishedBooks:
-          finished &&
+      };
+      commit(
+        finished &&
           active.bookId !== null &&
           !state.finishedBooks.includes(active.bookId)
-            ? [...state.finishedBooks, active.bookId]
-            : state.finishedBooks,
-      });
+          ? withLibraryOp(
+              ended,
+              [active.bookId],
+              { status: "finished" },
+              time,
+              "reading",
+            )
+          : ended,
+      );
     },
-    // `via` is not kept yet: the library will remember it as where a book
-    // came from (plan L1).
-    registerBook(input, _via, bookId) {
+    registerBook(input, via, bookId) {
       initialize();
       const title = bookText(input.title);
       const author = bookText(input.author);
@@ -763,8 +799,17 @@ export function createTownStore(
       const existing =
         decided ??
         (isbn ? state.books.find((book) => book.isbn === isbn) : undefined);
+      // The library remembers how a book first came in.
+      const register = (town: TownState, id: string) =>
+        withLibraryOp(
+          town,
+          [id],
+          { removed: false },
+          now().toISOString(),
+          via === "scan" || via === "isbn" ? via : "manual",
+        );
       if (existing)
-        return commit({ ...state, library: [...state.library, existing.id] })
+        return commit(register(state, existing.id))
           ? { result: "added", bookId: existing.id, title: existing.title }
           : { result: "not-saved" };
       const ids = state.books.map((book) => book.id);
@@ -783,11 +828,7 @@ export function createTownStore(
         ...(isbn ? { isbn } : {}),
         ...(price ? { price } : {}),
       });
-      return commit({
-        ...state,
-        books: [...state.books, book],
-        library: [...state.library, id],
-      })
+      return commit(register({ ...state, books: [...state.books, book] }, id))
         ? { result: "added", bookId: id, title }
         : { result: "not-saved" };
     },
@@ -798,7 +839,49 @@ export function createTownStore(
     toggleLibrary(bookId) {
       initialize();
       if (!state.books.some((book) => book.id === bookId)) return;
-      commit({ ...state, library: toggled(state.library, bookId) });
+      const time = now().toISOString();
+      commit(
+        state.library.includes(bookId)
+          ? withoutRegistering(state, bookId, time)
+          : withLibraryOp(state, [bookId], { removed: false }, time, "manual"),
+      );
+    },
+    changeLibrary(bookIds, change) {
+      initialize();
+      const known = new Set(state.books.map((book) => book.id));
+      const books = bookIds.filter((id) => known.has(id));
+      const set: Parameters<typeof withLibraryOp>[2] = {};
+      if (
+        change.status === null ||
+        READING_STATUSES.includes(change.status as ReadingStatus)
+      )
+        set.status = change.status;
+      if (typeof change.want === "boolean") set.want = change.want;
+      if (
+        change.owned === null ||
+        change.owned === "yes" ||
+        change.owned === "no"
+      )
+        set.owned = change.owned;
+      if (typeof change.favorite === "boolean") set.favorite = change.favorite;
+      if (typeof change.removed === "boolean") set.removed = change.removed;
+      if (!books.length || !Object.keys(set).length) return null;
+      // A book sorted before it was in the library was found there, on its
+      // page or in a search; "manual" would be a registering, which never
+      // sets 所有 on a book already in.
+      const done = libraryChange(
+        state,
+        books,
+        set,
+        now().toISOString(),
+        "search",
+      );
+      return done && commit(done.state) ? done.undo : null;
+    },
+    undoLibrary(undo) {
+      initialize();
+      const done = undoLibraryChange(state, undo, now().toISOString());
+      return commit(done.state) ? done.restored : 0;
     },
     setComposeIcon(icon) {
       initialize();
@@ -825,13 +908,21 @@ export function createTownStore(
         ...record,
         createdAt: now().toISOString(),
       };
-      const taken = commit({
+      const recorded = {
         ...state,
         readingRecords: [...state.readingRecords, entry],
-        finishedBooks: state.finishedBooks.includes(draft.bookId)
-          ? state.finishedBooks
-          : [...state.finishedBooks, draft.bookId],
-      });
+      };
+      const taken = commit(
+        state.finishedBooks.includes(draft.bookId)
+          ? recorded
+          : withLibraryOp(
+              recorded,
+              [draft.bookId],
+              { status: "finished" },
+              entry.createdAt,
+              "record",
+            ),
+      );
       return taken ? entry.id : null;
     },
     updateRecord(recordId, patch) {
