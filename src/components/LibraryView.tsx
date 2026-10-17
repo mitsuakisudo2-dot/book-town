@@ -10,12 +10,22 @@ import {
   DEFAULT_SHELVES,
   filterFromParams,
   filterLibrary,
+  liveShelves,
   READING_STATUSES,
   worksIn,
   type LibraryEntry,
   type LibraryFilter,
+  type LibraryShelf,
   type ReadingStatus,
 } from "../lib/library";
+import {
+  libraryShelfDraftStore,
+  NEW_SHELF,
+  NEW_SHELF_KEY,
+  type LibraryShelfWork,
+} from "../lib/library-shelf-draft";
+import { SAVE_REFUSED, useKeptUntilSaved } from "../lib/shop-draft";
+import { getTownSnapshot } from "../lib/store";
 import {
   libraryStateOf,
   townShopBooks,
@@ -24,17 +34,22 @@ import {
 } from "../lib/library-town";
 import type { Notify, TownActions, TownState } from "../lib/types";
 import { replaceAddress, useUrlParam } from "../lib/url-state";
+import { useDraftOwner } from "./KeptDraftNote";
 import { JournalNotes, TitlesToType } from "./LibraryJournalNotes";
+import { LibraryShelfSheet } from "./LibraryShelfSheet";
 import { ScanSession } from "./ScanSession";
 import { BookJacket, Icon } from "./ui";
 
 // The reader's library (管理表14): every book they have met in the town,
-// sorted onto the default shelves (library.ts DEFAULT_SHELVES) and narrowed
-// with filters that stack, all kept in the address (url-state.ts) so 戻る
-// and a reload come back to the same view. ［選ぶ］ picks books and changes
-// them together (status, 読みたい, 所有, ☆, 外す), each change undone from
-// its notice. While picking, the books shown stay as they were when picking
-// began, so a book changed out of the filter is still there to change again.
+// sorted onto the default shelves (library.ts DEFAULT_SHELVES) and the
+// shelves they make themselves (管理表15), and narrowed with filters that
+// stack, all kept in the address (url-state.ts) so 戻る and a reload come
+// back to the same view. ［選ぶ］ picks books and changes them together
+// (status, 読みたい, 所有, ☆, a shelf of their own, 外す), each change undone
+// from its notice. While picking, the books shown stay as they were when
+// picking began, so a book changed out of the filter is still there to
+// change again. A book is on as many of the reader's shelves as they like,
+// and stays on them whatever its status.
 
 const label = (key: string) =>
   DEFAULT_SHELVES.find((shelf) => shelf.key === key)?.label ?? key;
@@ -49,8 +64,12 @@ const ALL_CHIP = "すべて";
 interface Change {
   key: string;
   label: string;
-  /** Lit: every book picked already has it. */
-  lit: (e: LibraryEntry | undefined, favorite: boolean) => boolean;
+  /** Lit: every book picked already has it (`on`: the reader's shelves the book is on). */
+  lit: (
+    e: LibraryEntry | undefined,
+    favorite: boolean,
+    on: ReadonlySet<string>,
+  ) => boolean;
   /** The change, as it is lit or not. */
   change: (lit: boolean) => LibraryChange;
   /** What was done, after 「n冊を」. */
@@ -106,6 +125,16 @@ const OTHER_CHANGES: Change[] = [
   },
 ];
 
+/** Putting the books picked on a shelf of the reader's own, or taking them off. */
+const shelfChange = (shelf: LibraryShelf): Change => ({
+  key: "shelf:" + shelf.id,
+  label: shelf.name,
+  lit: (_, __, on) => on.has(shelf.id),
+  change: (lit) => (lit ? { removeShelf: shelf.id } : { addShelf: shelf.id }),
+  done: (lit) =>
+    lit ? `「${shelf.name}」から外しました` : `「${shelf.name}」に入れました`,
+});
+
 const REMOVE: Change = {
   key: "remove",
   label: "ライブラリから外す",
@@ -144,18 +173,31 @@ export function LibraryView({
   const library = useMemo(() => libraryStateOf(state), [state]);
   const shop = useMemo(() => townShopBooks(state), [state]);
   const counts = useMemo(() => countsOf(library, shop), [library, shop]);
+  const themes = useMemo(
+    () => liveShelves(state.libraryShelves),
+    [state.libraryShelves],
+  );
+  const theme = themes.find((shelf) => shelf.id === shelfParam);
   const filter = useMemo(() => {
     const params = new Map<string, string>();
     if (shelfParam) params.set("shelf", shelfParam);
     if (unsortedParam) params.set("unsorted", unsortedParam);
     if (ownedParam) params.set("owned", ownedParam);
-    const f = filterFromParams((key) => params.get(key) ?? null, true);
-    // Only the default shelves have a page here; theme shelves come with 15.
-    if (f.shelf && !DEFAULT_SHELVES.some((shelf) => shelf.key === f.shelf))
+    // A shelf of the reader's own shows the books only wanted as they chose.
+    const f = filterFromParams(
+      (key) => params.get(key) ?? null,
+      theme?.showWanted ?? true,
+    );
+    // A shelf put away, or one from another account's link, shows the whole library.
+    if (
+      f.shelf &&
+      !theme &&
+      !DEFAULT_SHELVES.some((shelf) => shelf.key === f.shelf)
+    )
       delete f.shelf;
     if (f.shelf === "all") delete f.shelf;
     return f;
-  }, [shelfParam, unsortedParam, ownedParam]);
+  }, [shelfParam, unsortedParam, ownedParam, theme]);
   const shown = useMemo(
     () => filterLibrary(library, filter, shop),
     [library, filter, shop],
@@ -172,7 +214,13 @@ export function LibraryView({
   );
   const [picking, setPicking] = useState<string[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // Picking books to put on this shelf of the reader's own.
+  const [pickInto, setPickInto] = useState<string | null>(null);
   const [sheet, setSheet] = useState<"scan" | "titles" | null>(null);
+  // The shelf being made (NEW_SHELF_KEY) or changed (its id).
+  const [shelfSheet, setShelfSheet] = useState<string | null>(null);
+  const owner = useDraftOwner();
+  const saving = useKeptUntilSaved(() => notify(SAVE_REFUSED));
   const books = useMemo(
     () => new Map(state.books.map((book) => [book.id, book])),
     [state.books],
@@ -193,6 +241,7 @@ export function LibraryView({
   const stopPicking = () => {
     setPicking(null);
     setPicked(new Set());
+    setPickInto(null);
   };
   // After a layer closing now (picking, the scanner) has taken its step of
   // 戻る back off, so the change is made on the page's own step.
@@ -209,6 +258,20 @@ export function LibraryView({
     });
 
   const favorites = useMemo(() => new Set(state.favorites), [state.favorites]);
+  // The reader's shelves each book is on.
+  const onShelves = useMemo(() => {
+    const live = new Set(themes.map((shelf) => shelf.id));
+    const on = new Map<string, Set<string>>();
+    for (const book of state.libraryShelfBooks)
+      if (live.has(book.shelfId)) {
+        const shelves = on.get(book.bookId) ?? new Set<string>();
+        shelves.add(book.shelfId);
+        on.set(book.bookId, shelves);
+      }
+    return on;
+  }, [themes, state.libraryShelfBooks]);
+  const none: ReadonlySet<string> = new Set();
+  const shelvesOfBook = (id: string) => onShelves.get(id) ?? none;
   const pickable = listed.filter((id) => kept.has(id));
   const pickedIds = pickable.filter((id) => picked.has(id));
   const allPicked =
@@ -216,7 +279,11 @@ export function LibraryView({
   const litOf = (change: Change) =>
     pickedIds.length > 0 &&
     pickedIds.every((id) =>
-      change.lit(library.libraryEntries[id], favorites.has(id)),
+      change.lit(
+        library.libraryEntries[id],
+        favorites.has(id),
+        shelvesOfBook(id),
+      ),
     );
 
   const run = (change: Change) => {
@@ -248,6 +315,99 @@ export function LibraryView({
     });
   };
 
+  /** The books picked go on the shelf open, and picking ends on it. */
+  const putInto = (shelf: LibraryShelf) => {
+    const ids = pickedIds;
+    if (!ids.length) return;
+    const undo = actions.changeLibrary(ids, { addShelf: shelf.id });
+    stopPicking();
+    if (!undo) return;
+    const book = ids.length === 1 ? books.get(ids[0]) : undefined;
+    notify(
+      `${book ? quotedTitle(book) : `${ids.length}冊`}を「${shelf.name}」に入れました`,
+      {
+        label: "元に戻す",
+        run: () => {
+          const restored = actions.undoLibrary(undo);
+          notify(
+            restored
+              ? `「${shelf.name}」から外しました`
+              : "そのあと変えた本なので、そのままにしました",
+          );
+        },
+      },
+    );
+  };
+
+  /** Where the words of the shelf being made or changed are kept. */
+  const shelfDraftKey = (key: string) => (owner ? `${owner}/${key}` : null);
+  const editing =
+    shelfSheet === null || shelfSheet === NEW_SHELF_KEY
+      ? null
+      : (themes.find((shelf) => shelf.id === shelfSheet) ?? null);
+  /** Makes or changes the shelf; false when the town did not take it. */
+  const saveShelf = (work: LibraryShelfWork, showWanted: boolean) => {
+    const key = shelfDraftKey(editing ? editing.id : NEW_SHELF_KEY);
+    if (editing) {
+      if (
+        !actions.editLibraryShelf(editing.id, {
+          name: work.name,
+          note: work.note,
+          showWanted,
+        })
+      )
+        return false;
+      // Kept until the account has it too, as the town now holds it.
+      const now = getTownSnapshot().libraryShelves.find(
+        (shelf) => shelf.id === editing.id,
+      );
+      if (key && now)
+        saving.hold("shelf:" + editing.id, libraryShelfDraftStore, key, {
+          work: { name: now.name, note: now.note },
+          base: { name: editing.name, note: editing.note },
+        });
+      setShelfSheet(null);
+      notify(`「${work.name}」を保存しました`);
+      return true;
+    }
+    const id = actions.makeLibraryShelf(work.name, work.note);
+    if (!id) return false;
+    if (key)
+      saving.hold("new-shelf", libraryShelfDraftStore, key, {
+        work,
+        base: NEW_SHELF,
+      });
+    setShelfSheet(null);
+    setFilter({ shelf: id, unsorted: null, owned: null });
+    notify(`「${work.name}」を作りました`);
+    return true;
+  };
+  const putAway = (shelf: LibraryShelf) => {
+    if (!actions.putAwayLibraryShelf(shelf.id, true)) return;
+    setShelfSheet(null);
+    setFilter({ shelf: null });
+    notify(`「${shelf.name}」を消しました。本はライブラリに残っています`, {
+      label: "元に戻す",
+      run: () => {
+        if (actions.putAwayLibraryShelf(shelf.id, false))
+          notify(`「${shelf.name}」を戻しました`);
+      },
+    });
+  };
+
+  /** The reader's shelves a book is on, but the one open: 「SF・文学 ほか1」. */
+  const shelfMark = (id: string) => {
+    const names = themes
+      .filter(
+        (shelf) => shelf.id !== theme?.id && shelvesOfBook(id).has(shelf.id),
+      )
+      .map((shelf) => shelf.name);
+    if (!names.length) return null;
+    const shown = names.slice(0, 2).join("・");
+    return names.length > 2 ? `${shown} ほか${names.length - 2}` : shown;
+  };
+
+  const into = themes.find((shelf) => shelf.id === pickInto) ?? null;
   const pressedShelf = filter.shelf ?? "all";
   const shelfChips = DEFAULT_SHELVES.filter(
     (shelf) =>
@@ -314,6 +474,16 @@ export function LibraryView({
       )}
       {sheet === "titles" && (
         <TitlesToType notify={notify} onClose={() => setSheet(null)} />
+      )}
+      {shelfSheet !== null && (
+        <LibraryShelfSheet
+          key={shelfSheet}
+          shelf={editing}
+          draftKey={shelfDraftKey(editing ? editing.id : NEW_SHELF_KEY)}
+          onClose={() => setShelfSheet(null)}
+          onSave={saveShelf}
+          onPutAway={editing ? () => putAway(editing) : undefined}
+        />
       )}
     </>
   );
@@ -395,7 +565,53 @@ export function LibraryView({
             </button>
           );
         })}
+        {themes.map((shelf) => {
+          // An empty shelf shows no number: it waits for its books.
+          const n = counts.themes[shelf.id]?.works ?? 0;
+          return (
+            <button
+              type="button"
+              key={shelf.id}
+              className="chip"
+              aria-pressed={pressedShelf === shelf.id}
+              aria-label={n ? `${shelf.name} ${n}冊` : shelf.name}
+              onClick={() => setFilter({ shelf: shelf.id })}
+            >
+              {shelf.name}
+              {n ? <span className="library-count">{n}</span> : null}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className="chip"
+          onClick={() => setShelfSheet(NEW_SHELF_KEY)}
+        >
+          <Icon name="plus" size={16} />
+          棚を作る
+        </button>
       </div>
+      {theme && (
+        <section className="library-shelf-head" inert={Boolean(picking)}>
+          <div>
+            <h2>{theme.name}</h2>
+            {theme.note && <p>{theme.note}</p>}
+            {counts.themes[theme.id]?.hiddenWanted ? (
+              <p>
+                「読みたい」だけの本
+                {counts.themes[theme.id]?.hiddenWanted}冊は並べていません
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="text-btn"
+            onClick={() => setShelfSheet(theme.id)}
+          >
+            棚を編集
+          </button>
+        </section>
+      )}
       {filterChips.length > 0 && (
         <div
           className="library-chips"
@@ -463,6 +679,7 @@ export function LibraryView({
                   favorites.has(id) &&
                     filter.shelf !== "favorite" &&
                     label("favorite"),
+                  shelfMark(id),
                 ].filter((mark): mark is string => Boolean(mark));
             const face = (
               <>
@@ -505,6 +722,23 @@ export function LibraryView({
             );
           })}
         </ul>
+      ) : theme && !filters && !counts.themes[theme.id] ? (
+        <section className="library-start">
+          <h2>この棚に、本を入れましょう。</h2>
+          <p>ライブラリの本から選んで入れられます。</p>
+          <button
+            type="button"
+            className="btn fill"
+            onClick={() => {
+              // The whole library to pick from, under the shelf's own name.
+              setPicking(filterLibrary(library, { showWanted: true }, shop));
+              setPicked(new Set());
+              setPickInto(theme.id);
+            }}
+          >
+            ライブラリから選ぶ
+          </button>
+        </section>
       ) : (
         <section className="library-start">
           <h2>この組み合わせの本は、ありません。</h2>
@@ -535,36 +769,73 @@ export function LibraryView({
           onAll={() => setPicked(allPicked ? new Set() : new Set(pickable))}
           onDone={stopPicking}
         >
-          <div className="library-pick-row" role="group" aria-label="状態">
-            {[...STATUS_CHANGES, WANT].map((change) => (
-              <ChangeButton
-                key={change.key}
-                change={change}
-                lit={litOf(change)}
-                disabled={!pickedIds.length}
-                onPress={() => run(change)}
-              />
-            ))}
-          </div>
-          <div className="library-pick-row" role="group" aria-label="そのほか">
-            {OTHER_CHANGES.map((change) => (
-              <ChangeButton
-                key={change.key}
-                change={change}
-                lit={litOf(change)}
-                disabled={!pickedIds.length}
-                onPress={() => run(change)}
-              />
-            ))}
+          {into ? (
             <button
               type="button"
-              className="btn quiet"
+              className="btn fill"
               disabled={!pickedIds.length}
-              onClick={() => run(REMOVE)}
+              onClick={() => putInto(into)}
             >
-              {REMOVE.label}
+              「{into.name}」に入れる
             </button>
-          </div>
+          ) : (
+            <>
+              <div className="library-pick-row" role="group" aria-label="状態">
+                {[...STATUS_CHANGES, WANT].map((change) => (
+                  <ChangeButton
+                    key={change.key}
+                    change={change}
+                    lit={litOf(change)}
+                    disabled={!pickedIds.length}
+                    onPress={() => run(change)}
+                  />
+                ))}
+              </div>
+              <div
+                className="library-pick-row"
+                role="group"
+                aria-label="そのほか"
+              >
+                {OTHER_CHANGES.map((change) => (
+                  <ChangeButton
+                    key={change.key}
+                    change={change}
+                    lit={litOf(change)}
+                    disabled={!pickedIds.length}
+                    onPress={() => run(change)}
+                  />
+                ))}
+                <button
+                  type="button"
+                  className="btn quiet"
+                  disabled={!pickedIds.length}
+                  onClick={() => run(REMOVE)}
+                >
+                  {REMOVE.label}
+                </button>
+              </div>
+              {themes.length > 0 && (
+                <div
+                  className="library-pick-row"
+                  role="group"
+                  aria-label="自分の棚"
+                >
+                  {themes.map((shelf) => {
+                    const change = shelfChange(shelf);
+                    return (
+                      <ChangeButton
+                        key={change.key}
+                        change={change}
+                        lit={litOf(change)}
+                        disabled={!pickedIds.length}
+                        onPress={() => run(change)}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
         </PickBar>
       )}
       {sheets}

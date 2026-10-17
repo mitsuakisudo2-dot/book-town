@@ -539,4 +539,214 @@ check(
   },
 );
 
+// ---------------------------------------------------------------- the reader's shelves (管理表15)
+
+check("a shelf is made last, renamed, put away and brought back", () => {
+  const store = fresh();
+  const { actions } = store;
+  assert.equal(actions.makeLibraryShelf("   ", ""), null);
+  assert.equal(actions.makeLibraryShelf("あ".repeat(41), ""), null);
+  const sf = actions.makeLibraryShelf(" SF ", " 遠い星の話 ")!;
+  const rain = actions.makeLibraryShelf("雨の日", "")!;
+  const shelves = store.getSnapshot().libraryShelves;
+  assert.deepEqual(
+    shelves.map((shelf) => [shelf.name, shelf.note]),
+    [
+      ["SF", "遠い星の話"],
+      ["雨の日", ""],
+    ],
+  );
+  assert.ok(shelves[0].position < shelves[1].position);
+  assert.equal(actions.editLibraryShelf(sf, { name: "SF" }), false);
+  assert.equal(actions.editLibraryShelf(sf, { name: "" }), false);
+  assert.equal(actions.editLibraryShelf(sf, { showWanted: false }), true);
+  assert.equal(actions.putAwayLibraryShelf(rain, true), true);
+  assert.equal(actions.putAwayLibraryShelf(rain, true), false);
+  assert.ok(store.getSnapshot().libraryShelves[1].deletedAt);
+  assert.equal(actions.putAwayLibraryShelf(rain, false), true);
+  assert.equal(store.getSnapshot().libraryShelves[1].deletedAt, null);
+  assert.equal(store.getSnapshot().libraryShelves[0].showWanted, false);
+});
+
+check(
+  "a book goes on many shelves, keeps its status, and comes off with undo",
+  () => {
+    const store = fresh();
+    const { actions } = store;
+    actions.changeLibrary(["momo"], { status: "finished" });
+    const sf = actions.makeLibraryShelf("SF", "")!;
+    const best = actions.makeLibraryShelf("人生のベスト", "")!;
+    // A book only worked out from the town gets its row kept, as the
+    // database's shelf books need one.
+    assert.equal(store.getSnapshot().libraryEntries.solaris, undefined);
+    const undo = actions.changeLibrary(["momo", "solaris"], { addShelf: sf })!;
+    actions.changeLibrary(["momo"], { addShelf: best });
+    let state = store.getSnapshot();
+    assert.ok(state.libraryEntries.solaris);
+    assert.equal(state.libraryEntries.momo.status, "finished");
+    assert.deepEqual(
+      state.libraryShelfBooks
+        .filter((book) => book.bookId === "momo")
+        .map((book) => book.shelfId)
+        .sort(),
+      [sf, best].sort(),
+    );
+    // A shelf put away, or unknown, takes no books.
+    actions.putAwayLibraryShelf(best, true);
+    assert.equal(actions.changeLibrary(["fictions"], { addShelf: best }), null);
+    assert.equal(
+      actions.changeLibrary(["fictions"], { addShelf: "nope" }),
+      null,
+    );
+    actions.putAwayLibraryShelf(best, false);
+    // Undone: off SF, still on 人生のベスト, still 読了.
+    assert.equal(actions.undoLibrary(undo), 2);
+    state = store.getSnapshot();
+    assert.deepEqual(
+      state.libraryShelfBooks.map((book) => [book.shelfId, book.bookId]),
+      [[best, "momo"]],
+    );
+    assert.equal(state.libraryEntries.momo.status, "finished");
+    // Taken off and undone, a book goes back with the time it was put on.
+    const putOn = state.libraryShelfBooks[0].addedAt;
+    const off = actions.changeLibrary(["momo"], { removeShelf: best })!;
+    assert.equal(store.getSnapshot().libraryShelfBooks.length, 0);
+    actions.undoLibrary(off);
+    assert.equal(store.getSnapshot().libraryShelfBooks[0].addedAt, putOn);
+  },
+);
+
+check("the demo keeps the shelves and their books", () => {
+  const store = fresh();
+  const sf = store.actions.makeLibraryShelf("SF", "遠い星")!;
+  store.actions.changeLibrary(["momo"], { addShelf: sf });
+  const saved = serializeTown(store.getSnapshot());
+  const back = deserializeTown(saved).state;
+  assert.deepEqual(back.libraryShelves, store.getSnapshot().libraryShelves);
+  assert.deepEqual(
+    back.libraryShelfBooks,
+    store.getSnapshot().libraryShelfBooks,
+  );
+  const envelope = JSON.parse(saved);
+  envelope.data.libraryShelves.push({
+    ...envelope.data.libraryShelves[0],
+    id: "x",
+    name: "",
+  });
+  envelope.data.libraryShelfBooks.push(
+    { ...envelope.data.libraryShelfBooks[0] },
+    { ...envelope.data.libraryShelfBooks[0], shelfId: "x" },
+    { ...envelope.data.libraryShelfBooks[0], bookId: "ghost" },
+  );
+  const broken = deserializeTown(JSON.stringify(envelope)).state;
+  assert.equal(broken.libraryShelves.length, 1);
+  assert.equal(broken.libraryShelfBooks.length, 1);
+  delete envelope.data.libraryShelves;
+  assert.deepEqual(
+    deserializeTown(JSON.stringify(envelope)).state.libraryShelfBooks,
+    [],
+  );
+});
+
+check("the shelves are read and written as the reader changed them", () => {
+  const SHELF = "00000000-0000-4000-8000-0000000005f1";
+  const sample = createInitialState().books.find((book) =>
+    isSampleBook(book.id),
+  )!;
+  const shelfRow = {
+    id: SHELF,
+    user_id: AKI,
+    name: "SF",
+    note: "",
+    position: "a",
+    show_wanted: true,
+    created_at: at,
+    updated_at: at,
+    deleted_at: null,
+  };
+  const base = townFromRows(
+    rows({
+      libraryEntries: [entryRow(BOOK), entryRow(sampleBookRowId(sample.id))],
+      libraryShelves: [
+        shelfRow,
+        {
+          ...shelfRow,
+          id: "00000000-0000-4000-8000-0000000005f2",
+          user_id: BOOK,
+        },
+        { ...shelfRow, id: "00000000-0000-4000-8000-0000000005f3", name: "" },
+      ],
+      libraryShelfBooks: [
+        {
+          shelf_id: SHELF,
+          user_id: AKI,
+          book_id: BOOK,
+          added_at: at,
+          position: null,
+        },
+        // Not a row of the library: left out.
+        {
+          shelf_id: SHELF,
+          user_id: AKI,
+          book_id: OTHER,
+          added_at: at,
+          position: null,
+        },
+      ],
+    }),
+    ids,
+  );
+  assert.deepEqual(
+    base.libraryShelves.map((shelf) => shelf.id),
+    [SHELF],
+  );
+  assert.deepEqual(
+    base.libraryShelfBooks.map((book) => book.bookId),
+    [BOOK],
+  );
+  const store = createTownStore(
+    {
+      kind: "local",
+      newId: () => crypto.randomUUID(),
+      load: () => ({ state: base, status: "saved" }),
+      save: () => "saved",
+    },
+    tick,
+  );
+  store.initialize();
+  const { actions } = store;
+  actions.editLibraryShelf(SHELF, { name: "SFと宇宙" });
+  const made = actions.makeLibraryShelf("見本も", "")!;
+  actions.changeLibrary([BOOK], { removeShelf: SHELF });
+  actions.changeLibrary([sample.id], { addShelf: made });
+  const writes = planWrites(base, store.getSnapshot(), ids);
+  const kinds = writes.map((write) => write.kind);
+  assert.ok(
+    kinds.indexOf("library-entries") < kinds.indexOf("library-shelves"),
+  );
+  assert.ok(kinds.indexOf("library-shelves") < kinds.indexOf("shelf-books"));
+  const shelves = writes.find(
+    (write): write is Extract<Write, { kind: "library-shelves" }> =>
+      write.kind === "library-shelves",
+  )!;
+  assert.deepEqual(shelves.patches, [
+    { id: SHELF, patch: { name: "SFと宇宙" } },
+  ]);
+  assert.equal(shelves.rows.length, 1);
+  assert.equal(shelves.rows[0].id, made);
+  assert.equal(shelves.rows[0].user_id, AKI);
+  const books = writes.find(
+    (write): write is Extract<Write, { kind: "shelf-books" }> =>
+      write.kind === "shelf-books",
+  )!;
+  assert.deepEqual(books.remove, [{ shelf_id: SHELF, book_id: BOOK }]);
+  assert.equal(books.add.length, 1);
+  assert.equal(books.add[0].book_id, sampleBookRowId(sample.id));
+  assert.equal(books.add[0].shelf_id, made);
+  assert.equal(
+    planWrites(store.getSnapshot(), store.getSnapshot(), ids).length,
+    0,
+  );
+});
+
 console.log(`${passed} library town checks passed`);
