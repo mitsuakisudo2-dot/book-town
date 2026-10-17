@@ -30,8 +30,11 @@ import { findReader } from "../lib/social";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { SortableShelf } from "./SortableShelf";
 import { StoreSceneEditor } from "./StoreSceneEditor";
-import { useWalkStore } from "../lib/walk-store";
-import { hasPublicSceneBooks } from "../lib/store-customization";
+import { saveOwnedScene, useWalkStore } from "../lib/walk-store";
+import {
+  hasPublicSceneBooks,
+  sceneForShelves,
+} from "../lib/store-customization";
 import { publicWalkShops } from "../lib/store-scene-adapter";
 import { OpenShop, ThemePicker } from "./OpenShop";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
@@ -912,6 +915,40 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       )
         shelfNameDraftStore.clear(key);
   }, [shop, owner, settled]);
+  // A decorated shop follows its shelves: books put on a shelf go into the
+  // shop's rows and books taken off leave them. Saved only once the town and
+  // the walk are both read from the same place, so a shelf not read yet
+  // never empties the shop.
+  const followed = useRef("");
+  const walkKnown =
+    walk.ready &&
+    walk.kind === savedIn &&
+    (walk.kind === "local" || walk.kind === "account") &&
+    walk.status !== "unavailable" &&
+    walk.status !== "recovered";
+  const townKnown =
+    persistenceStatus !== "loading" &&
+    persistenceStatus !== "unavailable" &&
+    persistenceStatus !== "recovered";
+  useEffect(() => {
+    if (!shop || shop.demo || !ownScene || !walkKnown || !townKnown) return;
+    const next = sceneForShelves(ownScene, shop, state.books);
+    if (!next) return;
+    // Tried once for each pair of shelves and scene, saved or not.
+    const pair = JSON.stringify([shop.shelves, next.scene]);
+    if (followed.current === pair) return;
+    followed.current = pair;
+    if (!saveOwnedScene(next.scene, state).ok) return;
+    const titles = next.waiting.map((id) => {
+      const book = bookById(state.books, id);
+      return book ? bookTitle(book) : "";
+    });
+    if (titles.length)
+      notify(
+        (titles.length === 1 ? `「${titles[0]}」は` : "棚に並べた本の一部は") +
+          "店内の棚に入りきらないため、飾りつけの「まだ並べていない本」に置きました。",
+      );
+  }, [shop, ownScene, walkKnown, townKnown, state, notify]);
   // Shelves removed here, counted by id: a new shelf can be given the id of
   // one removed, and must not get its books from an old 元に戻す.
   const removedShelves = useRef<Record<string, number>>({});
@@ -1033,7 +1070,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           {/* Two places to arrange books; say in one line where each one shows. */}
           <p>
             {ownScene
-              ? "店内は、飾りつけた形で書店めぐりに出ています。下の本棚に新しく並べた本は、飾りつけの「まだ並べていない本」から店内に置けます。"
+              ? "店内は、飾りつけた形で書店めぐりに出ています。下の本棚に並べた本は店内にも並び、棚から外した本は店内からも下がります。"
               : "下の本棚に並べた本が、そのまま書店めぐりの店内に並びます。飾りつけると、棚の形や看板、本の置き場所を自由に変えられます。"}
           </p>
           {!inWalk && (
