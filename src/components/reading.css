@@ -12,7 +12,7 @@
   margin-top: 18px;
   padding: 13px 16px;
   border: 1px solid var(--line-2);
-  border-radius: 10px;
+  border-radius: var(--r-box);
   background: var(--sheet);
   color: var(--ink-2);
 }
@@ -39,7 +39,7 @@
   font-size: var(--t-cap);
   padding: 5px 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: var(--ink-2);
   background: var(--sheet);
 }
@@ -82,7 +82,7 @@
   align-items: center;
   gap: 13px;
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-box);
   background: var(--sheet);
   border: 1px solid var(--line);
   color: var(--ink);
@@ -154,7 +154,7 @@
 .reading-start {
   background: var(--sheet);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-box);
   padding: 18px;
 }
 .reading-modes {
@@ -169,7 +169,7 @@
   gap: 6px;
   text-align: left;
   padding: 15px;
-  border-radius: 9px;
+  border-radius: var(--r-box);
   border: 1px solid var(--line-2);
   background: var(--green-soft);
   color: var(--ink);
@@ -217,7 +217,7 @@
 }
 .readers-now li {
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--r-box);
   background: var(--sheet);
 }
 .readers-now a > span,
@@ -334,7 +334,7 @@
   gap: 24px;
   align-items: center;
   padding: 22px;
-  border-radius: 12px;
+  border-radius: var(--r-box);
   background: var(--sheet);
   border: 1px solid var(--line);
 }
@@ -362,7 +362,7 @@
   gap: 5px;
   font-size: var(--t-cap);
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--band);
   color: var(--ink-2);
 }
@@ -415,7 +415,7 @@
   gap: 12px;
   align-items: flex-start;
   padding: 12px 14px;
-  border-radius: 9px;
+  border-radius: var(--r-box);
   background: var(--sheet);
   border: 1px solid var(--line);
   color: var(--ink);
@@ -489,7 +489,7 @@
   font-size: var(--t-cap);
   color: var(--ink-2);
   padding: 12px 6px;
-  border-radius: 10px;
+  border-radius: var(--r-box);
   border: 1px solid var(--line);
   cursor: pointer;
 }
@@ -523,11 +523,10 @@
 .register-form .form-label {
   margin-bottom: 6px;
 }
-.register-form .button,
-.register-camera,
-.scan-frame .button {
+.register-camera {
   min-height: 44px;
 }
+
 .register-message {
   font-size: var(--t-cap);
   color: var(--ink-2);
@@ -543,7 +542,7 @@
   max-width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
-  border-radius: 10px;
+  border-radius: var(--r-box);
   background: var(--shade);
 }
 
@@ -579,7 +578,7 @@
   max-width: 100%;
   padding: 4px 11px;
   border: 1px solid var(--line-2);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--sheet);
   color: var(--green);
   font-size: var(--t-cap);
@@ -610,24 +609,11 @@
   flex: 1;
 }
 .profile-link-remove {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  color: var(--ink-2);
   flex-shrink: 0;
-}
-.profile-link-remove:hover {
-  background: var(--green-soft);
 }
 .profile-link-add {
   justify-self: start;
-  display: inline-flex;
-  align-items: center;
   gap: 5px;
-  font-size: var(--t-cap);
-  color: var(--green);
 }
 .profile-link-error {
   font-size: var(--t-cap);
@@ -640,7 +626,7 @@
   font-weight: 400;
   color: var(--ink-2);
   background: var(--green-soft);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 2px 9px;
 }
 .reading-no-book {
@@ -648,7 +634,7 @@
   place-items: center;
   aspect-ratio: 0.675;
   max-width: 100%;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   border: 1px dashed var(--line-2);
   background: var(--green-soft);
   color: var(--ink-2);
@@ -762,7 +748,7 @@
   margin: 0 auto 8px;
   padding: 18px 20px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-box);
   background: var(--sheet);
   animation: reading-closed-in 0.35s ease-out;
 }
@@ -817,7 +803,7 @@
   gap: 8px;
   padding: 12px 14px;
   border: 1px dashed var(--line-2);
-  border-radius: 8px;
+  border-radius: var(--r-box);
   background: var(--sheet);
 }
 .reading-unsent-line p {
@@ -850,7 +836,7 @@
   margin: 0 auto 8px;
   padding: 16px 20px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-box);
   background: var(--sheet);
 }
 .reading-unsent h2 {
@@ -914,12 +900,12 @@
   line-height: 1.8;
   color: var(--ink-2);
   padding: 7px 12px;
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   background: var(--paper);
 }
 /* A jacket that can show an outside cover leads to the book's own page. */
 .reading-jacket-link {
   flex: none;
   display: block;
-  border-radius: 4px;
+  border-radius: var(--r-tag);
 }

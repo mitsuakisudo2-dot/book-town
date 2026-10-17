@@ -211,7 +211,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
               これについては、すでに通報を受け付けています。
             </p>
           )}
-          <button className="button secondary" onClick={closeReport}>
+          <button className="btn" onClick={closeReport}>
             閉じる
           </button>
         </>
@@ -278,7 +278,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
           ) : (
             <div className="report-actions">
               <button
-                className="button primary"
+                className="btn fill"
                 type="submit"
                 disabled={!ready || phase === "sending"}
               >
@@ -290,7 +290,7 @@ function ReportForm({ target }: { target: ReportTarget }) {
                     : "通報する"}
               </button>
               <button
-                className="button secondary"
+                className="btn"
                 type="button"
                 onClick={() => (detail.trim() ? setStopping(true) : stop())}
               >

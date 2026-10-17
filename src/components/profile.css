@@ -46,7 +46,7 @@
   background: var(--band);
   padding: 2px 7px;
   margin-left: 8px;
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   color: var(--ink-2);
 }
 .profile-reader h1 {
@@ -117,7 +117,7 @@
   padding: 30px 38px 28px;
   background: var(--band);
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   box-shadow: inset 0 1px 1px
     color-mix(in srgb, var(--on-dark) 60%, transparent);
 }
@@ -150,7 +150,7 @@
   right: 0;
   height: 4px;
   background: #b99a74;
-  box-shadow: 0 5px 8px color-mix(in srgb, var(--shade) 11%, transparent);
+  box-shadow: var(--lift-2);
 }
 .profile-nine-book > .book-jacket {
   width: 120px;
@@ -221,7 +221,7 @@
   aspect-ratio: 2/3;
   background: color-mix(in srgb, var(--paper) 60%, transparent);
   border: 1px dashed var(--line-2);
-  border-radius: 2px;
+  border-radius: var(--r-edge);
   position: relative;
   color: var(--ink-2);
 }
@@ -260,7 +260,7 @@
   gap: 23px;
   align-items: center;
   border: 1px solid color-mix(in srgb, var(--theme) 35%, var(--theme-light));
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   margin: 23px 0 27px;
   padding: 32px;
   /* The shop's own colour, from deeper to pale: its words are checked on
@@ -411,7 +411,7 @@
 .profile-book-search {
   border: 1px solid var(--field);
   background: var(--sheet);
-  border-radius: 4px;
+  border-radius: var(--r-tag);
   padding: 11px 13px;
   color: var(--ink);
   font: inherit;
@@ -457,7 +457,7 @@
   padding: 12px;
   border: 1px solid var(--line);
   background: var(--paper);
-  border-radius: 3px;
+  border-radius: var(--r-edge);
 }
 .profile-editor-order {
   font-size: var(--t-cap);
@@ -506,7 +506,7 @@
   border: 1px solid var(--line-2);
   color: var(--green);
   background: var(--sheet);
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   cursor: pointer;
 }
 .profile-order-controls button:hover {
@@ -558,7 +558,7 @@
   align-items: center;
   background: none;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: var(--r-edge);
   padding: 9px 6px 7px;
   min-width: 0;
   cursor: pointer;
@@ -708,10 +708,6 @@
     gap: 13px;
     margin-top: 18px;
   }
-  .profile-reader-actions .button {
-    font-size: var(--t-cap);
-    padding: 9px 11px;
-  }
   .profile-text-link {
     font-size: var(--t-cap);
     gap: 5px;
@@ -841,10 +837,6 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px 6px;
   }
-  .profile-form-actions .button {
-    font-size: var(--t-cap);
-    padding: 11px 13px;
-  }
   .profile-nine-save {
     bottom: -20px;
   }
@@ -938,7 +930,7 @@
 .profile-collection-tabs span {
   font-size: var(--t-cap);
   background: var(--band);
-  border-radius: 12px;
+  border-radius: var(--r-box);
   padding: 2px 7px;
 }
 .profile-collection-tabs span:empty {
@@ -1029,7 +1021,7 @@
   padding: 10px 14px;
   border: 1px solid var(--theme-light);
   border-top: 3px solid var(--theme);
-  border-radius: 5px;
+  border-radius: var(--r-tag);
   background: linear-gradient(135deg, var(--theme-pale), var(--sheet));
   color: var(--theme-deep);
 }
@@ -1069,22 +1061,17 @@
   align-items: center;
   gap: 2px;
 }
-.profile-minor-actions .text-button {
+.profile-minor-actions .text-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: var(--t-cap);
-  color: var(--ink-2);
 }
-.profile-minor-actions .text-button:hover {
+.profile-minor-actions .text-btn:hover {
   background: var(--green-soft);
 }
 @media (max-width: 600px) {
   /* Buttons that wrap fill their row, so a stacked pair lines up. */
-  .profile-reader-actions .button {
+  .profile-reader-actions .btn {
     flex: 1 1 auto;
     justify-content: center;
   }
@@ -1101,9 +1088,8 @@
 .profile-library-head .profile-section-description {
   margin: 0;
 }
-.profile-library-head .button {
+.profile-library-head .btn {
   flex: none;
-  min-height: 44px;
 }
 /* Books the scanner kept on this device: 書名待ち, 送れなかった本. */
 .journal-notes {
@@ -1119,7 +1105,7 @@
   gap: 8px 12px;
   padding: 10px 12px;
   border-left: 3px solid var(--lamp-glow);
-  border-radius: 6px;
+  border-radius: var(--r-tag);
   background: var(--notice);
 }
 .journal-note p,
@@ -1138,9 +1124,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-.journal-note-actions .button {
-  min-height: 44px;
 }
 .journal-title-form {
   display: grid;

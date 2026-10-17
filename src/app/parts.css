@@ -5,8 +5,9 @@
  * comes. Every part is at least 44px to the finger. docs/色と部品の決まり.md
  * says which to use where.
  *
- * Older screens still use .button, .ghost and .icon-button in globals.css;
- * they move to these parts when that screen is worked on.
+ * Every screen's buttons are these parts (the older screens' own buttons
+ * were folded in on 2026-10-17); tests/tokens.test.ts keeps the old names
+ * from coming back.
  */
 
 /* A button: an outline in the palette colour, words at --t-ui. */
@@ -118,4 +119,33 @@
 /* Pressed: the part fades a little under the finger, as in v37. */
 :is(.btn, .chip, .icon-btn, .text-btn):active:not(:disabled) {
   opacity: 0.6;
+}
+
+/* Words that step aside (外す, 大きさを変える): the ink's quieter colour. */
+.text-btn.quiet {
+  color: var(--ink-2);
+  font-weight: 400;
+}
+
+/* Not yet possible (nothing written, a step still to come). */
+:is(.btn, .chip, .icon-btn, .text-btn):disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Under a mouse, the part shows it can be pressed. */
+@media (hover: hover) {
+  .btn:hover:not(:disabled, .fill, .danger) {
+    background: var(--green-soft);
+  }
+  .btn.fill:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--green) 88%, var(--shade));
+  }
+  :is(
+      .icon-btn,
+      .text-btn,
+      .chip:not([aria-pressed="true"], [aria-checked="true"])
+    ):hover:not(:disabled) {
+    background: var(--green-soft);
+  }
 }
