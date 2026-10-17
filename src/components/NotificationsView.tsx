@@ -75,11 +75,11 @@ export function NotificationsView({ state, actions }: Shared) {
           </p>
           <div className="empty-state-actions">
             {!state.ownShop && (
-              <Link className="button primary" href="/my-shop/">
+              <Link className="btn fill" href="/my-shop/">
                 本屋を開く
               </Link>
             )}
-            <Link className="button secondary" href="/walk/">
+            <Link className="btn" href="/walk/">
               書店めぐりに出かける
             </Link>
           </div>

@@ -44,13 +44,3 @@ export function browserName(userAgent: string, ios: boolean): string {
                         : "";
 }
 
-/**
- * Safari itself on an iPhone or iPad, not another browser or an app's view.
- * Safari's view inside an app, and a browser that copies Safari's user agent
- * (as Chrome and Firefox do on an iPad asking for the computer's page),
- * cannot be told from it.
- */
-export function iosSafari(userAgent: string, touchPoints: number): boolean {
-  const ios = iosDevice(userAgent, touchPoints);
-  return ios && browserName(userAgent, ios) === "Safari";
-}

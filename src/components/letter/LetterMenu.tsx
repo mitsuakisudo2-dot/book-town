@@ -75,7 +75,7 @@ export function LetterMenu({
           <div className="letter-confirm">
             <button
               type="button"
-              className="button"
+              className="btn fill"
               onClick={() => {
                 onClose();
                 actions.deletePost(post.id);
@@ -87,7 +87,7 @@ export function LetterMenu({
             {/* The row pressed is gone: the focus waits on the safe answer. */}
             <button
               type="button"
-              className="button secondary"
+              className="btn"
               autoFocus
               onClick={() => setDeleting(false)}
             >

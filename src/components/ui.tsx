@@ -588,7 +588,7 @@ export function Modal({
       >
         <div className="modal-top">
           <h2>{title}</h2>
-          <button className="icon-button" onClick={onClose} aria-label="閉じる">
+          <button className="icon-btn" onClick={onClose} aria-label="閉じる">
             <Icon name="close" />
           </button>
         </div>

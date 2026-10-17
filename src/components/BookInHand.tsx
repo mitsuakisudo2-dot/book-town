@@ -460,7 +460,7 @@ export function BookInHand({
         <button
           type="button"
           ref={closeButtonRef}
-          className="bh-close"
+          className="icon-btn bh-close"
           onClick={onClose}
           aria-label="本を閉じて棚に戻る"
         >

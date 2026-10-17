@@ -82,11 +82,7 @@ export function JournalNotes({
             <small>書名がわからなかった本です。書名を入れると登録します</small>
           </p>
           <div className="journal-note-actions">
-            <button
-              type="button"
-              className="button secondary"
-              onClick={onTypeTitles}
-            >
+            <button type="button" className="btn" onClick={onTypeTitles}>
               書名を入れる
             </button>
           </div>
@@ -99,18 +95,10 @@ export function JournalNotes({
             <small>保存できなかった本です</small>
           </p>
           <div className="journal-note-actions">
-            <button
-              type="button"
-              className="button secondary"
-              onClick={() => void retry()}
-            >
+            <button type="button" className="btn" onClick={() => void retry()}>
               もう一度送る
             </button>
-            <button
-              type="button"
-              className="button secondary"
-              onClick={discard}
-            >
+            <button type="button" className="btn" onClick={discard}>
               捨てる
             </button>
           </div>
@@ -219,10 +207,10 @@ function TitleForm({
         />
       </label>
       <div className="journal-note-actions">
-        <button type="submit" className="button" disabled={!title.trim()}>
+        <button type="submit" className="btn fill" disabled={!title.trim()}>
           登録する
         </button>
-        <button type="button" className="button secondary" onClick={leave}>
+        <button type="button" className="btn" onClick={leave}>
           控えから外す
         </button>
       </div>

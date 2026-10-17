@@ -108,10 +108,16 @@
   --t-clock: calc(44px * var(--t-scale));
 
   /* Corners */
+  --r-edge: 2px;
   --r-tag: 4px;
   --r-box: 12px;
   --r-card: 16px;
   --r-pill: 999px;
+
+  /* Lifts: how far a thing stands off the paper. --shade stays dark at night. */
+  --lift-1: 0 1px 4px color-mix(in srgb, var(--shade) 10%, transparent);
+  --lift-2: 0 4px 14px color-mix(in srgb, var(--shade) 10%, transparent);
+  --lift-3: 0 16px 48px color-mix(in srgb, var(--shade) 18%, transparent);
 
   /* Layers: what lies over what, lowest first. A screen's z-index is one of
      these, never a number of its own (tests/layers.test.ts). Numbers from -2

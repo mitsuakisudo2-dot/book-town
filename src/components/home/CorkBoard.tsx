@@ -58,11 +58,19 @@ export function CorkBoard({
           </ul>
         )}
         <div className="home-notice-buttons">
-          <button type="button" className="home-notice-quiet" onClick={sample}>
+          <button
+            type="button"
+            className="btn quiet home-notice-quiet"
+            onClick={sample}
+          >
             ぜんぶ見る
             <Icon name="chevron" size={16} />
           </button>
-          <button type="button" className="home-notice-add" onClick={sample}>
+          <button
+            type="button"
+            className="btn home-notice-add"
+            onClick={sample}
+          >
             <Icon name="plus" size={16} />
             1冊置く
           </button>
