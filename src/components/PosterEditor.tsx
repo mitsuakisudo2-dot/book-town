@@ -202,8 +202,8 @@ function workElsewhere(
 }
 
 const FAILED = {
-  save: failure({ what: "うまく残せませんでした", next: AGAIN.inAMoment }),
-  delete: failure({ what: "うまく消せませんでした", next: AGAIN.inAMoment }),
+  save: failure({ what: "うまく残せませんでした", next: AGAIN.later }),
+  delete: failure({ what: "うまく消せませんでした", next: AGAIN.later }),
 };
 
 /** A step back the reader can take after a change that let something go. */
