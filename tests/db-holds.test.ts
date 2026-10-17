@@ -54,12 +54,13 @@ function rollbackSql(): string {
     return text.slice(start, text.indexOf("\n", stop) + 1);
   };
   const remade = [
-    ...["bib_send", "bib_tick", "book_checked"].map((name) =>
-      from(
-        "_bibliography.sql",
-        `create function private.${name}(`,
-        `revoke all on function private.${name}(`,
-      ),
+    ...["bib_send", "bib_tick", "book_checked", "withdraw_bibliography"].map(
+      (name) =>
+        from(
+          "_bibliography.sql",
+          `create function private.${name}(`,
+          `revoke all on function private.${name}(`,
+        ),
     ),
     from(
       "_bibliography.sql",
@@ -193,6 +194,26 @@ async function main() {
           "close",
         );
         assert.equal(await verdict("かくうのとしょかん", "", LIBRARY), "close");
+        // A volume not typed is the title; one the master does not tell, close.
+        assert.equal(
+          await verdict("進撃の巨人", "", { title: "進撃の巨人", volume: "1" }),
+          "same",
+        );
+        assert.equal(
+          await verdict("架空の図書館 2026年版", "", LIBRARY),
+          "close",
+        );
+        assert.equal(
+          await verdict("ノルウェイの森 上", "", {
+            title: "ノルウェイの森",
+            volume: "上",
+          }),
+          "same",
+        );
+        assert.equal(
+          await verdict("1Q84 BOOK1", "", { title: "1Q84", volume: "BOOK1" }),
+          "same",
+        );
         // Titles apart, an author agreeing: by name, by reading, by the
         // authority's form without its years.
         assert.equal(
@@ -239,7 +260,7 @@ async function main() {
     );
 
     await check(
-      "apart: no title inside the other and no author agreeing; with no author typed, the title alone decides",
+      "apart: no title inside the other and no author agreeing (with no author typed, the title alone decides), or another volume whatever agrees; none with no letter in the title",
       async () => {
         assert.equal(
           await verdict("ハリポタ1", "", {
@@ -254,7 +275,37 @@ async function main() {
         );
         // One letter is too little to be inside anything.
         assert.equal(await verdict("本", "", { title: "本の雑誌" }), "apart");
-        assert.equal(await verdict("！？", "", { title: "本の雑誌" }), "apart");
+        // No letter in the title: nothing to compare, unless an author agrees.
+        assert.equal(await verdict("！？", "", { title: "本の雑誌" }), "none");
+        assert.equal(await verdict("！？", "山田一郎", LIBRARY), "close");
+        // Another volume of the work: one work is one volume, so its number
+        // (or 上・中・下) decides where the master tells its volume.
+        const shingeki = {
+          title: "進撃の巨人",
+          volume: "1",
+          creators: [{ name: "諫山創" }],
+        };
+        assert.equal(await verdict("進撃の巨人 2", "", shingeki), "apart");
+        assert.equal(
+          await verdict("進撃の巨人（２）", "諫山創", shingeki),
+          "apart",
+        );
+        assert.equal(
+          await verdict("ノルウェイの森 下", "村上春樹", {
+            title: "ノルウェイの森",
+            volume: "上",
+            creators: [{ name: "村上春樹" }],
+          }),
+          "apart",
+        );
+        assert.equal(
+          await verdict("ONE PIECE 12", "", { title: "ONE PIECE 1" }),
+          "apart",
+        );
+        assert.equal(
+          await verdict("1Q84 BOOK2", "", { title: "1Q84", volume: "BOOK1" }),
+          "apart",
+        );
         assert.equal(
           await verdict("菜食主義者", "", { title: "채식주의자" }),
           "apart",
@@ -491,13 +542,27 @@ async function main() {
         /no book of yours is held with that id/,
         "saying it twice",
       );
-      // Her edits, and the sources' answers, judge it no more.
-      await as(CHI, "update books set title = 'もっと別の本' where id = $1", [
-        chis,
-      ]);
+      // The sources' answers judge it no more.
       await rows("select private.refetch_bibliography($1)", [chis]);
       await round();
       assert.deepEqual(await check_(chis), back);
+      // Her edits do (the owner, 2026-10-17 03:22Z: 確かめ直す): what she
+      // said was about what the book said then. Held again, she is told
+      // again, and says it again.
+      await as(CHI, "update books set title = 'もっと別の本' where id = $1", [
+        chis,
+      ]);
+      assert.equal((await check_(chis)).confirmed, false);
+      await tick();
+      const again = await check_(chis);
+      assert.equal(again.held, true);
+      assert.deepEqual(
+        (await holds(CHI)).map((h) => h.book_id),
+        [chis],
+      );
+      await as(CHI, "select confirm_book_isbn($1)", [chis]);
+      assert.equal((await check_(chis)).confirmed, true);
+      assert.equal((await check_(chis)).in_edition_work, true);
       // Placed again, it starts over.
       await as(CHI, "update books set isbn = $2 where id = $1", [chis, X(3)]);
       const moved = await check_(chis);
@@ -649,6 +714,16 @@ async function main() {
         (await moves(akis)).map((m) => m.kind),
         ["hold", "unhold"],
       );
+      // A source withdrawn marks the edition's books to be judged again from
+      // what is left (openBD's title), and allowed back, again.
+      await rows("select private.withdraw_bibliography($1, 'ndl')", [akis]);
+      assert.equal((await check_(akis)).checked, false);
+      await tick();
+      assert.equal((await check_(akis)).verdict, "same");
+      await rows("select private.allow_bibliography($1, 'ndl')", [akis]);
+      assert.equal((await check_(akis)).checked, false);
+      await round();
+      assert.equal((await check_(akis)).verdict, "same");
       await settle();
     },
   );
@@ -687,7 +762,8 @@ async function main() {
       );
       assert.deepEqual(
         await rows(
-          `select why, listed, a_book, title, master_title, held_at is not null as held
+          `select why, listed, a_book, title, author, master_title,
+             master_creators -> 0 ->> 'name' as master_author, held_at is not null as held
            from private.bibliography_review where why = 'held' and a_book = $1`,
           [bensHeld],
         ),
@@ -697,7 +773,9 @@ async function main() {
             listed: true,
             a_book: bensHeld,
             title: "夜の本",
+            author: "海野波子",
             master_title: "架空の図書館",
+            master_author: "山田一郎",
             held: true,
           },
         ],
@@ -735,6 +813,35 @@ async function main() {
           )
         ).some((c) => [c.book_a, c.book_b].includes(bensHeld)),
       );
+      await settle();
+    },
+  );
+
+  await check(
+    "the operator puts a held book back when its reader cannot answer, as the reader's answer would",
+    async () => {
+      const gone = id(1, 12);
+      await register(AKI, gone, X(1), "まるで違う題");
+      await round();
+      await later(11);
+      await tick();
+      assert.equal((await check_(gone)).held, true);
+      await rows("select private.release_hold($1)", [gone]);
+      const back = await check_(gone);
+      assert.equal(back.held, false);
+      assert.equal(back.confirmed, true);
+      assert.equal(back.in_edition_work, true);
+      assert.equal(back.counts, true);
+      assert.deepEqual(
+        (await moves(gone)).map((m) => m.kind),
+        ["hold", "unhold"],
+      );
+      for (const book of [gone, akis, id(9, 9)])
+        await refused(
+          () => rows("select private.release_hold($1)", [book]),
+          /no book is held with that id/,
+          book,
+        );
       await settle();
     },
   );
