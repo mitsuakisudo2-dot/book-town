@@ -70,14 +70,6 @@
     font-size: var(--t-cap);
   }
 }
-@media (max-width: 420px) {
-  .town-shell .book-page-hero > .book-jacket {
-    width: 92px;
-  }
-  .town-shell .book-page-hero {
-    gap: 18px;
-  }
-}
 
 /* The book page: a cover of a readable size beside its title; on a phone the
    summary and the buttons take the full width under them. */
@@ -105,15 +97,17 @@
 }
 @media (max-width: 640px) {
   .town-shell .book-page-hero {
-    grid-template-columns: 104px minmax(0, 1fr);
+    grid-template-columns: clamp(104px, 36vw, 150px) minmax(0, 1fr);
     grid-template-areas:
       "jacket head"
       "body body";
     column-gap: 18px;
     row-gap: 2px;
   }
+  /* The cover takes about a third of the screen: the title, the author
+     and the shop links fill what is left beside it. */
   .town-shell .book-page-hero > .book-jacket {
-    width: 104px;
+    width: 100%;
     align-self: start;
   }
   .town-shell .book-page-hero > .book-hero-head {

@@ -973,7 +973,6 @@ try {
           .locator(".book-page-hero")
           .getByRole("link", { name: /^Amazonで探す/ }),
       ).toBeVisible();
-      // Not Safari on an iPhone or iPad: the lookup is Google's.
       await expect(
         page
           .locator(".book-page-hero")
@@ -1504,12 +1503,10 @@ try {
   );
 
   await check(
-    "in Safari on an iPhone or iPad the lookup is Safari's own search, elsewhere Google",
+    "the lookup is Google's on every device, Safari on an iPhone or iPad too",
     async () => {
       const words = encodeURIComponent("ソラリス　スタニスワフ・レム");
       const google = `https://google.com/search?q=${words}`;
-      const safari = `x-web-search://?${words}`;
-      // The page as served cannot know the device: Google's address.
       const served = await (
         await page.request.get(`${baseURL}/books/solaris/`)
       ).text();
@@ -1524,7 +1521,6 @@ try {
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1",
           viewport: { width: 390, height: 844 },
           touchPoints: 5,
-          safari: true,
         },
         // iPadOS asks for the computer's page, as a Mac with a touch screen.
         {
@@ -1532,24 +1528,19 @@ try {
           userAgent: MAC_SAFARI,
           viewport: { width: 820, height: 1180 },
           touchPoints: 5,
-          safari: true,
         },
         {
           name: "Mac Safari",
           userAgent: MAC_SAFARI,
           viewport: { width: 1280, height: 900 },
           touchPoints: 0,
-          safari: false,
         },
-        // Only Safari answers x-web-search://: another browser on an iPhone
-        // and an app's own view keep Google.
         {
           name: "iPhone Chrome",
           userAgent:
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/140.0.0.0 Mobile/15E148 Safari/604.1",
           viewport: { width: 390, height: 844 },
           touchPoints: 5,
-          safari: false,
         },
         {
           name: "iPhone LINE",
@@ -1557,7 +1548,6 @@ try {
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari Line/15.12.0",
           viewport: { width: 390, height: 844 },
           touchPoints: 5,
-          safari: false,
         },
       ];
       for (const device of devices) {
@@ -1586,8 +1576,8 @@ try {
             key.startsWith("__reactFiber"),
           ),
         );
-        // A frame and a task more, so a wrong Safari address would be in by
-        // the time Google's is checked.
+        // A frame and a task more, so an address put in once the page has
+        // started would be in by the time Google's is checked.
         await tab.evaluate(
           () =>
             new Promise((done) =>
@@ -1595,14 +1585,9 @@ try {
             ),
         );
         const lookup = tab.locator(".book-page-hero .book-lookup");
-        await expect(lookup, device.name).toHaveAttribute(
-          "href",
-          device.safari ? safari : google,
-        );
+        await expect(lookup, device.name).toHaveAttribute("href", google);
         await expect(lookup, device.name).toHaveAccessibleName(
-          device.safari
-            ? "この本について調べる（いつもの検索で、新しいタブで開きます）"
-            : "この本についてGoogleで調べる（新しいタブで開きます）",
+          "この本についてGoogleで調べる（新しいタブで開きます）",
         );
         // Still a plain link to a new tab, with the same words and icon.
         await expect(lookup).toHaveAttribute("target", "_blank");
