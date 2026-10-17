@@ -1,6 +1,6 @@
 .bh-dialog.is-store-scene .bh-pop-text {
   font-family: "Yohaku Hand", var(--serif);
-  font-size: 17px;
+  font-size: var(--t-page);
   line-height: 1.9;
 }
 .bh-pop-stamp {
@@ -54,7 +54,7 @@
   gap: 9px;
   min-width: 0;
   color: var(--bh-subtle);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.7;
 }
 .bh-shelf-caption svg {
@@ -119,14 +119,14 @@
   min-width: 0;
 }
 .bh-genre {
-  font-size: 11px;
+  font-size: var(--t-cap);
   letter-spacing: 0.06em;
   color: var(--ink-2);
 }
 .bh-book-heading h2 {
   margin: 12px 0 13px;
   font-family: var(--serif);
-  font-size: 27px;
+  font-size: var(--t-big);
   line-height: 1.6;
   font-weight: 500;
   overflow-wrap: anywhere;
@@ -138,7 +138,7 @@
 }
 .bh-author {
   color: var(--bh-subtle);
-  font-size: 13px;
+  font-size: var(--t-meta);
 }
 .bh-pop.owner-pop {
   --bh-pop-pad: 25px;
@@ -163,11 +163,11 @@
   align-items: center;
   gap: 10px;
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: var(--t-cap);
   letter-spacing: 0.06em;
 }
 .bh-pop-label small {
-  font-size: 9px;
+  font-size: var(--t-cap);
   border: 1px solid var(--line-2);
   border-radius: 3px;
   padding: 1px 4px;
@@ -175,7 +175,7 @@
 .bh-pop .bh-pop-text {
   margin: 16px 0 19px;
   font-family: var(--serif);
-  font-size: 18px;
+  font-size: var(--t-title);
   line-height: 2;
   color: var(--bh-text);
   letter-spacing: normal;
@@ -184,7 +184,7 @@
 }
 .bh-pop .bh-pop-empty {
   margin: 18px 0;
-  font-size: 13px;
+  font-size: var(--t-meta);
   color: var(--bh-subtle);
   letter-spacing: normal;
 }
@@ -272,7 +272,7 @@
   margin-top: 10px;
   min-width: 46px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
@@ -287,7 +287,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   min-height: 44px;
 }
 .bh-owner-link > span:not(.reader-avatar) {
@@ -295,7 +295,7 @@
 }
 .bh-owner-link small {
   display: block;
-  font-size: 9px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   margin-top: 3px;
 }
@@ -307,7 +307,7 @@
 }
 .bh-shop-link {
   padding-block: 10px;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   line-height: 1.7;
   overflow-wrap: anywhere;
@@ -328,7 +328,7 @@
   border-radius: 5px;
   background: var(--green);
   color: var(--on-green);
-  font-size: 13px;
+  font-size: var(--t-meta);
 }
 .bh-save:hover {
   background: color-mix(in srgb, var(--green) 85%, var(--shade));
@@ -344,7 +344,7 @@
 .bh-cover-note {
   display: block;
   margin-top: 15px;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--bh-subtle);
   line-height: 1.8;
 }
@@ -366,7 +366,7 @@
   min-height: 46px;
   padding: 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .bh-adjacent:hover:not(:disabled) {
   background: var(--green-soft);
@@ -376,7 +376,7 @@
 }
 .bh-position {
   text-align: center;
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-variant-numeric: tabular-nums;
 }
 .bh-position i {
@@ -387,7 +387,7 @@
 .bh-position small {
   display: block;
   margin-top: 4px;
-  font-size: 9px;
+  font-size: var(--t-cap);
   color: var(--bh-subtle);
 }
 .bh-sr-only {
@@ -421,7 +421,7 @@
     padding: 6px 8px 6px 17px;
   }
   .bh-shelf-caption {
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .bh-book-body {
     padding: 24px 20px 17px;
@@ -434,15 +434,15 @@
     width: 108px;
   }
   .bh-book-heading h2 {
-    font-size: 22px;
+    font-size: var(--t-head);
     margin-block: 9px;
   }
   .bh-author {
-    font-size: 11px;
+    font-size: var(--t-cap);
     line-height: 1.8;
   }
   .bh-genre {
-    font-size: 10px;
+    font-size: var(--t-cap);
   }
   .bh-pop.owner-pop {
     --bh-pop-pad: 18px;
@@ -453,7 +453,7 @@
     margin-inline: 4px;
   }
   .bh-pop .bh-pop-text {
-    font-size: 17px;
+    font-size: var(--t-page);
     margin-block: 14px;
   }
   .bh-pop-signature {
@@ -464,7 +464,7 @@
     gap: 7px;
   }
   .bh-adjacent {
-    font-size: 11px;
+    font-size: var(--t-cap);
     gap: 7px;
   }
 }
@@ -479,7 +479,7 @@
     width: 88px;
   }
   .bh-book-heading h2 {
-    font-size: 19px;
+    font-size: var(--t-title);
   }
   .bh-pop.owner-pop {
     --bh-pop-pad: 14px;
@@ -489,7 +489,7 @@
     margin-inline: 9px;
   }
   .bh-pop .bh-pop-text {
-    font-size: 16px;
+    font-size: var(--t-page);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -507,12 +507,12 @@
 }
 .bh-summary h3 {
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: var(--t-cap);
   font-weight: 400;
   margin-bottom: 9px;
 }
 .bh-summary p {
-  font-size: 13px;
+  font-size: var(--t-meta);
   line-height: 2;
   color: var(--ink);
   white-space: pre-wrap;
@@ -538,7 +538,7 @@
   border: 1px solid var(--line-2);
   border-radius: 24px;
   background: var(--sheet);
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   transition:
     background 0.16s,
@@ -595,7 +595,7 @@
   border: 1px solid var(--line-2);
   border-radius: 5px;
   color: var(--green);
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .bh-favorite.is-active {
   background: var(--lamp-soft);
@@ -628,7 +628,7 @@
   border-radius: 999px;
   background: var(--sheet);
   color: var(--green);
-  font-size: 12px;
+  font-size: var(--t-cap);
   white-space: nowrap;
 }
 .book-purchase a:hover,
@@ -643,7 +643,7 @@
 }
 .book-purchase a > span,
 .book-lookup > span {
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 /* Not a shop: a quieter pill, set a little apart from the two that are. */
@@ -661,21 +661,21 @@
   align-items: baseline;
   gap: 4px;
   margin-top: 6px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .book-price b {
-  font-size: 16px;
+  font-size: var(--t-page);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 .book-price small {
-  font-size: 10px;
+  font-size: var(--t-cap);
 }
 .book-price.is-compact {
   display: block;
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
@@ -692,7 +692,7 @@
 }
 .bh-section-heading h3 {
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: var(--t-body);
   font-weight: 500;
   line-height: 1.8;
 }
@@ -739,17 +739,17 @@
 .bh-choice-book strong {
   font-family: var(--serif);
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--t-meta);
 }
 .bh-choice-book small {
   margin-top: 5px;
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
 }
 .bh-choice-book > span {
   margin-top: 10px;
   color: var(--ink-2);
-  font-size: 9px;
+  font-size: var(--t-cap);
 }
 .bh-shop-list {
   display: flex;
@@ -782,25 +782,25 @@
 }
 .bh-shop-card-heading small {
   color: var(--ink-2);
-  font-size: 9px;
+  font-size: var(--t-cap);
 }
 .bh-shop-card-heading h4 {
   font-family: var(--serif);
   color: var(--green);
-  font-size: 20px;
+  font-size: var(--t-head);
   margin: 4px 0;
   font-weight: 500;
 }
 .bh-shop-card-heading p {
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: var(--t-cap);
 }
 .bh-shop-pop-button {
   display: flex;
   align-items: center;
   gap: 7px;
   min-height: 44px;
-  font-size: 12px;
+  font-size: var(--t-cap);
   color: var(--green);
   padding: 10px;
   border: 1px solid var(--line-2);
@@ -822,7 +822,7 @@
 .bh-shop-card blockquote {
   margin: 17px 2px 0;
   font-family: var(--serif);
-  font-size: 13px;
+  font-size: var(--t-meta);
   line-height: 2;
   color: var(--ink);
   overflow-wrap: anywhere;
@@ -836,11 +836,11 @@
   border: 1px solid var(--line-2);
   border-radius: 5px;
   color: var(--green);
-  font-size: 12px;
+  font-size: var(--t-cap);
 }
 .bh-discovery-empty {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--t-cap);
   line-height: 1.9;
   padding: 15px 0;
 }
@@ -848,7 +848,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 11px;
+  font-size: var(--t-cap);
   color: var(--ink-2);
   min-height: 44px;
   margin-top: 20px;
@@ -859,7 +859,7 @@
     gap: 8px;
   }
   .bh-section-heading h3 {
-    font-size: 13px;
+    font-size: var(--t-meta);
   }
   .bh-rail-controls button {
     min-width: 36px;
@@ -869,7 +869,7 @@
     gap: 6px;
   }
   .bh-pop-reactions button {
-    font-size: 11px;
+    font-size: var(--t-cap);
   }
   .bh-choice-book {
     flex-basis: 100px;
@@ -892,7 +892,7 @@
   border-radius: 999px;
   background: var(--sheet);
   color: var(--green);
-  font-size: 12px;
+  font-size: var(--t-cap);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -908,7 +908,7 @@
   background: color-mix(in srgb, var(--green) 10%, var(--green-soft));
 }
 .bh-nav-center .bh-position {
-  font-size: 10px;
+  font-size: var(--t-cap);
   color: var(--bh-subtle);
   white-space: nowrap;
 }
