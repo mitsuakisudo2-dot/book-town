@@ -588,6 +588,7 @@ try {
       );
       // Not the catalogue's "村上,春樹,1949-".
       await expect(dialog().getByLabel("著者")).toHaveValue("村上春樹");
+      await expect(page.locator(".toast")).toHaveCount(0, { timeout: 10000 });
       await page.screenshot({ path: path.join(output, "filled-author.png") });
       await registerButton().click();
       // The toast names the book as kept, not as openBD wrote it.
