@@ -41,9 +41,9 @@ button {
   border: 0;
   background: none;
   transition:
-    background 0.18s,
-    color 0.18s,
-    transform 0.18s;
+    background var(--dur-appear),
+    color var(--dur-appear),
+    transform var(--dur-appear);
 }
 button:disabled {
   opacity: 0.45;
@@ -53,8 +53,8 @@ a {
   color: inherit;
   text-decoration: none;
   transition:
-    color 0.18s,
-    background 0.18s;
+    color var(--dur-appear),
+    background var(--dur-appear);
 }
 button:focus-visible,
 a:focus-visible,
@@ -407,7 +407,7 @@ input[type="checkbox"] {
   justify-content: center;
   align-items: center;
   padding: 22px;
-  animation: fade-in 0.16s ease;
+  animation: fade-in var(--dur-fade-in) ease;
 }
 .modal {
   max-width: 480px;
@@ -552,7 +552,7 @@ input[type="checkbox"] {
   align-items: center;
   font-size: var(--t-cap);
   max-width: 90vw;
-  animation: fade-in 0.18s ease;
+  animation: fade-in var(--dur-appear) ease;
 }
 .book-jacket {
   position: relative;
@@ -568,7 +568,7 @@ input[type="checkbox"] {
     inset 0 0 0 1px #ffffff24;
   text-align: center;
   padding: 0;
-  transition: transform 0.2s;
+  transition: transform var(--dur-move);
 }
 .book-jacket:hover {
   transform: translateY(-3px);
@@ -1042,7 +1042,7 @@ div.book-jacket:hover {
   text-align: center;
   touch-action: pan-x;
   outline-offset: 5px;
-  transition: transform 0.15s;
+  transition: transform var(--dur-press);
 }
 .shelf-book-button:hover {
   transform: translateY(-6px);
