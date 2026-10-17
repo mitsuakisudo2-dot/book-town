@@ -52,6 +52,7 @@ import {
 import { booksBeforeSearch } from "../lib/book-lists";
 import { focusField } from "../lib/coarse-pointer";
 import "./editor.css";
+import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 
 type ShopEditorProps = {
   state: TownState;
@@ -302,17 +303,17 @@ function AddBookPicker({
       // Placed in this visit: a second tap only takes the placing back.
       actions.removeShelfBook(shelf.id, placed.id);
       setAddedHere(addedHere.filter((id) => id !== book.id));
-      notify(`「${book.title}」を棚から外しました。`);
+      notify(`「${bookTitle(book)}」を棚から外しました。`);
     } else if (placed) {
-      takeOff(placed, book.title);
+      takeOff(placed, bookTitle(book));
       setRemovedNow([...removedNow.filter((id) => id !== book.id), book.id]);
     } else if (taken) {
-      if (putBack(book.id, book.title))
+      if (putBack(book.id, bookTitle(book)))
         setRemovedNow(removedNow.filter((id) => id !== book.id));
     } else if (actions.addShelfBook(shelf.id, book.id, display)) {
       // The editor stays open so several books can be placed in a row.
       setAddedHere([...addedHere, book.id]);
-      notify(`「${book.title}」を本棚に並べました。`);
+      notify(`「${bookTitle(book)}」を本棚に並べました。`);
     } else {
       notify("棚の空きスペースが足りません。並べ方を変えてみてください。");
     }
@@ -333,8 +334,8 @@ function AddBookPicker({
         onClick={() => choose(book)}
       >
         <BookJacket book={book} className="editor-picker-jacket" />
-        <span className="editor-book-choice-title">{book.title}</span>
-        <span className="editor-book-choice-author">{book.author}</span>
+        <span className="editor-book-choice-title">{bookTitle(book)}</span>
+        <span className="editor-book-choice-author">{bookAuthor(book)}</span>
         <span className="editor-book-choice-add">
           {placed ? (
             <>
@@ -566,7 +567,7 @@ function ShelfEditingPanel({
     return () => removeEventListener("pagehide", leave);
   }, []);
   const selected = shelf.items.find((item) => item.id === selectedId) ?? null;
-  const selectedBook = books.find((book) => book.id === selected?.bookId);
+  const selectedBook = bookById(books, selected?.bookId);
   const used = shelfUsed(shelf);
   const remaining = shelf.capacity - used;
   const selectedIndex = selected
@@ -705,8 +706,8 @@ function ShelfEditingPanel({
           <div className="editor-selected-heading">
             <div>
               <span className="editor-kicker">いま編集している本</span>
-              <h3>{selectedBook.title}</h3>
-              <p>{selectedBook.author}</p>
+              <h3>{bookTitle(selectedBook)}</h3>
+              <p>{bookAuthor(selectedBook)}</p>
             </div>
             <button
               className="icon-btn"
@@ -723,7 +724,7 @@ function ShelfEditingPanel({
               <div
                 className="editor-segment"
                 role="group"
-                aria-label={`${selectedBook.title}の並べ方`}
+                aria-label={`${bookTitle(selectedBook)}の並べ方`}
               >
                 <button
                   type="button"
@@ -767,7 +768,7 @@ function ShelfEditingPanel({
                 <button
                   type="button"
                   className="btn"
-                  aria-label={`${selectedBook.title}を一つ左へ移動`}
+                  aria-label={`${bookTitle(selectedBook)}を一つ左へ移動`}
                   disabled={selectedIndex <= 0}
                   onClick={() =>
                     actions.moveShelfBook(
@@ -783,7 +784,7 @@ function ShelfEditingPanel({
                 <button
                   type="button"
                   className="btn"
-                  aria-label={`${selectedBook.title}を一つ右へ移動`}
+                  aria-label={`${bookTitle(selectedBook)}を一つ右へ移動`}
                   disabled={selectedIndex >= shelf.items.length - 1}
                   onClick={() =>
                     actions.moveShelfBook(
@@ -823,7 +824,7 @@ function ShelfEditingPanel({
               type="button"
               className="text-btn quiet editor-remove-book"
               onClick={() => {
-                takeOff(selected, selectedBook.title);
+                takeOff(selected, bookTitle(selectedBook));
                 setSelectedId(null);
               }}
             >

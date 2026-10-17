@@ -1,4 +1,5 @@
 import { LetterIcon } from "./icons";
+import { quote } from "../../lib/book-name";
 
 /**
  * A spoiler, covered: the whole box is one button, and a tap anywhere opens
@@ -35,7 +36,7 @@ export function SpoilerCover({
         <LetterIcon name="lock" size={18} />
         <span>
           {words}
-          {title && <span className="sr-only">（『{title}』）</span>}
+          {title && <span className="sr-only">（{quote(title)}）</span>}
         </span>
       </span>
     </button>

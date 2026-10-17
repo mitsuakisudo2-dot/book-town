@@ -48,6 +48,13 @@ import { PosterSheet } from "./PosterView";
 import { BookJacket, Icon } from "./ui";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import "./poster-editor.css";
+import {
+  bookAuthor,
+  bookById,
+  booksById,
+  bookTitle,
+  quotedTitle,
+} from "../lib/book-name";
 
 type Shared = {
   state: TownState;
@@ -165,7 +172,7 @@ function workElsewhere(
   all: Record<string, KeptPosterWork>,
   state: TownState,
 ): { key: string; name: string; href: string }[] {
-  const book = (id?: string) => state.books.find((entry) => entry.id === id);
+  const book = (id?: string) => bookById(state.books, id);
   return Object.entries(all)
     .sort(([, a], [, b]) => Date.parse(b.at) - Date.parse(a.at))
     .flatMap(([key, work]) => {
@@ -186,7 +193,7 @@ function workElsewhere(
       return [
         {
           key,
-          name: heading ?? (first ? `『${first.title}』` : "題のないポスター"),
+          name: heading ?? (first ? quotedTitle(first) : "題のないポスター"),
           href: posterNewPath({ posterId, bookId }),
         },
       ];
@@ -829,7 +836,7 @@ function ownBooks(state: TownState): { book: Book; from: string }[] {
   for (const [ids, from] of sources)
     for (const id of [...ids].reverse()) {
       if (seen.has(id)) continue;
-      const book = state.books.find((entry) => entry.id === id);
+      const book = bookById(state.books, id);
       if (!book) continue;
       seen.add(id);
       found.push({ book, from });
@@ -861,9 +868,7 @@ function BookChoice({
   const [all, setAll] = useState(false);
   const [full, setFull] = useState(false);
   const { min, max } = pageBooks[template];
-  const books = chosen
-    .map((bookId) => state.books.find((book) => book.id === bookId))
-    .filter((book): book is Book => Boolean(book));
+  const books = booksById(state.books, chosen);
   const own = ownBooks(state);
   // Before anything is typed, or by a genre, never a book another reader only
   // typed in.
@@ -914,7 +919,7 @@ function BookChoice({
           onClick={() => toggle(book.id)}
         >
           <BookJacket book={book} className="poster-offer-jacket" />
-          <b>{book.title}</b>
+          <b>{bookTitle(book)}</b>
           <small>
             {place >= 0 ? (
               <span className="poster-offer-on">
@@ -922,7 +927,7 @@ function BookChoice({
                 {max > 1 ? `${place + 1}番目に載せています` : "載せています"}
               </span>
             ) : (
-              (from ?? book.author)
+              (from ?? bookAuthor(book))
             )}
           </small>
         </button>
@@ -947,7 +952,7 @@ function BookChoice({
           {books.map((book, index) => (
             <li key={book.id}>
               <BookJacket book={book} className="poster-chosen-jacket" />
-              <span className="poster-chosen-title">{book.title}</span>
+              <span className="poster-chosen-title">{bookTitle(book)}</span>
               <span className="poster-chosen-tools">
                 {max > 1 && (
                   <>
@@ -955,7 +960,7 @@ function BookChoice({
                       type="button"
                       disabled={index === 0}
                       onClick={() => move(index, -1)}
-                      aria-label={`${book.title}を前へ`}
+                      aria-label={`${bookTitle(book)}を前へ`}
                     >
                       <Icon name="back" size={14} />
                     </button>
@@ -963,7 +968,7 @@ function BookChoice({
                       type="button"
                       disabled={index === books.length - 1}
                       onClick={() => move(index, 1)}
-                      aria-label={`${book.title}を後ろへ`}
+                      aria-label={`${bookTitle(book)}を後ろへ`}
                     >
                       <Icon name="arrow" size={14} />
                     </button>
@@ -972,7 +977,7 @@ function BookChoice({
                 <button
                   type="button"
                   onClick={() => toggle(book.id)}
-                  aria-label={`${book.title}を外す`}
+                  aria-label={`${bookTitle(book)}を外す`}
                 >
                   <Icon name="close" size={14} />
                 </button>
