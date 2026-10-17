@@ -26,7 +26,7 @@ import {
 import { READING_STATUSES, type ReadingStatus } from "./library";
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
-import { isDatabaseId } from "./paths";
+import { isDatabaseId, isSampleId } from "./record-kind";
 import { bookByIsbn } from "./book-name";
 import {
   bookPrice,
@@ -147,7 +147,7 @@ const REACHING: Partial<Record<string, (args: unknown[]) => unknown>> = {
 };
 const reachesSample = (name: string, args: unknown[]) => {
   const target = REACHING[name]?.(args);
-  return typeof target === "string" && !isDatabaseId(target);
+  return typeof target === "string" && isSampleId(target);
 };
 
 /** Actions that answer whether they did anything. */

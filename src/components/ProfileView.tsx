@@ -81,13 +81,8 @@ const SPOILER_CHOICES: {
 ];
 import "./profile.css";
 import "./reading.css";
-import {
-  isDatabaseId,
-  posterNewPath,
-  posterPath,
-  profilePath,
-  shopPath,
-} from "../lib/paths";
+import { posterNewPath, posterPath, profilePath, shopPath } from "../lib/paths";
+import { isSampleId } from "../lib/record-kind";
 import { postersOf } from "../lib/posters";
 import { PosterThumb } from "./PosterView";
 import "./poster-screen.css";
@@ -480,7 +475,7 @@ export function ProfileView({
         <div className="profile-reader-text">
           <p className="profile-eyebrow">
             READER IN BOOK TOWN{" "}
-            {!isSelf && !isDatabaseId(reader.id) && (
+            {!isSelf && isSampleId(reader.id) && (
               <span className="profile-demo">見本の読書家</span>
             )}
           </p>
@@ -511,7 +506,7 @@ export function ProfileView({
           {/* Only what has happened is counted: an empty count is left out. */}
           {(postCount > 0 ||
             (isSelf && state.following.length > 0) ||
-            (followerCount > 0 && (isSelf || !isDatabaseId(reader.id))) ||
+            (followerCount > 0 && (isSelf || isSampleId(reader.id))) ||
             (isSelf && Boolean(readingTime))) && (
             <div className="profile-stats">
               {postCount > 0 && (

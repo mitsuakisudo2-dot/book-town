@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { Post, TownState } from "../../../lib/types";
 import { findReader } from "../../../lib/social";
 import { postPath } from "../../../lib/paths";
-import { isSample } from "../../../lib/tonight";
+import { isSampleId } from "../../../lib/record-kind";
 import { bookById, bookTitle } from "../../../lib/book-name";
 import { BookJacket, ReaderAvatar } from "../../ui";
 import { openPost } from "../../letter/post-layer";
@@ -47,7 +47,7 @@ export function Reviews({ posts, state }: { posts: Post[]; state: TownState }) {
           <span className="home-review-by">
             {writer && <ReaderAvatar reader={writer} size={20} />}
             {writer?.name}
-            {isSample(post.authorId) && <SampleTag />}
+            {isSampleId(post.authorId) && <SampleTag />}
           </span>
         </Link>
       </li>

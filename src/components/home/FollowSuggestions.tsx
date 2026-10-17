@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { ownersToFollow } from "../../lib/social";
-import { isDatabaseId, profilePath } from "../../lib/paths";
+import { profilePath } from "../../lib/paths";
+import { isDatabaseId, isSampleId } from "../../lib/record-kind";
 import { useTownBackend } from "../../lib/store";
 import { quotedTitle } from "../../lib/book-name";
 import { ReaderAvatar } from "../ui";
@@ -28,7 +29,7 @@ export function FollowSuggestions({ state, actions, notify }: Shared) {
                 <b>{shop.name}</b>
                 <small>
                   {owner.name}
-                  {!isDatabaseId(owner.id) && " · 見本"}
+                  {isSampleId(owner.id) && " · 見本"}
                 </small>
               </span>
             </Link>

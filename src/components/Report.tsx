@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useAccountState } from "../lib/account-session";
 import { useCover } from "../lib/covers";
-import { isDatabaseId } from "../lib/paths";
+import { isDatabaseId } from "../lib/record-kind";
 import type { Book } from "../lib/types";
 import { closeReport, openReport, useReportTarget } from "../lib/report";
 import type { ReportTarget } from "../lib/report";

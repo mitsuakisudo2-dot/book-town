@@ -56,7 +56,6 @@ import "./usability.css";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
 import {
-  isDatabaseId,
   posterNewPath,
   posterPath,
   profilePath,
@@ -64,6 +63,7 @@ import {
   shopPath,
   walkPath,
 } from "../lib/paths";
+import { isSampleId } from "../lib/record-kind";
 import { requestSearch } from "../lib/tags";
 import { enterPressed } from "../lib/search/use-book-search";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
@@ -1175,8 +1175,7 @@ function BookPosters({ state, book }: { state: TownState; book: Book }) {
         {posters.map((poster) => {
           // Who made it, and a 見本 says it is one, as on the timeline.
           const maker = findReader(state, poster.authorId);
-          const sample =
-            poster.authorId !== ME_ID && !isDatabaseId(poster.authorId);
+          const sample = isSampleId(poster.authorId);
           return (
             <li key={poster.id}>
               <PosterThumb

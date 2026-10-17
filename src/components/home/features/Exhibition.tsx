@@ -2,10 +2,9 @@
 
 import type { Poster } from "../../../lib/posters";
 import type { TownState } from "../../../lib/types";
-import { ME_ID } from "../../../lib/types";
 import { findReader } from "../../../lib/social";
 import { posterPath } from "../../../lib/paths";
-import { isSample } from "../../../lib/tonight";
+import { isSampleId } from "../../../lib/record-kind";
 import { PosterThumb } from "../../PosterView";
 
 /** 企画展: the posters, each a link to its page; a 見本 says it is one. */
@@ -18,7 +17,7 @@ export function Exhibition({
 }) {
   return posters.map((poster) => {
     const maker = findReader(state, poster.authorId);
-    const sample = poster.authorId !== ME_ID && isSample(poster.authorId);
+    const sample = isSampleId(poster.authorId);
     return (
       <li key={poster.id} className="home-poster-tile">
         <PosterThumb

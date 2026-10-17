@@ -1,4 +1,4 @@
-import { isDatabaseId } from "./paths";
+import { isDatabaseId } from "./record-kind";
 import type { Book, NewBook } from "./types";
 
 const isbn13Valid = (digits: string) =>

@@ -7,7 +7,7 @@ import {
 } from "./home-feed";
 import type { HomeTab } from "./home-tab";
 import { isLiveLine } from "./live";
-import { isDatabaseId } from "./paths";
+import { isDatabaseId } from "./record-kind";
 import { OLDER_PAGE, type TownReads } from "./town-backend";
 import { ME_ID, type OlderRead, type TownState } from "./types";
 
