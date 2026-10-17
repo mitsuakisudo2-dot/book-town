@@ -83,7 +83,7 @@ export function ReportButton({
  */
 export function CoverRemovalLink({ book }: { book: Book }) {
   const savedIn = useTownBackend();
-  const cover = useCover(book.coverUrl ? undefined : book.isbn);
+  const cover = useCover(book.coverUrl ? undefined : book.isbn, book);
   if (!cover || !book.isbn || savedIn !== "account") return null;
   return (
     <ReportButton

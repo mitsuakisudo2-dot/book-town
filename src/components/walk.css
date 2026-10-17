@@ -237,24 +237,41 @@
   min-width: 0;
   padding-top: 5px;
 }
+.walk-owner {
+  /* The name and the @name each keep to one line, so the bio below them
+     sits at their height (--walk-owner-name, --walk-owner-handle). */
+  --walk-owner-name: clamp(var(--t-cap), 3.1vw, var(--t-meta));
+  --walk-owner-handle: var(--t-cap);
+}
+.walk-owner b,
+.walk-owner small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .walk-owner b {
   font-family: var(--serif);
   font-weight: 500;
-  font-size: clamp(var(--t-cap), 3.1vw, var(--t-meta));
+  font-size: var(--walk-owner-name);
   line-height: 1.25;
   letter-spacing: 0.04em;
 }
 .walk-owner small {
   margin-top: 2px;
   font-family: var(--serif);
-  font-size: var(--t-cap);
+  font-size: var(--walk-owner-handle);
   line-height: 1.3;
   color: color-mix(in srgb, var(--on-dark) 90%, transparent);
 }
 .walk-owner-bio {
   position: absolute;
   left: calc(var(--walk-avatar) + 10px);
-  top: 34px;
+  /* Below the name's two lines: the span's 5px, the name, 2px, the
+     @name, and 3px of air. */
+  top: calc(
+    5px + var(--walk-owner-name) * 1.25 + 2px + var(--walk-owner-handle) * 1.3 +
+      3px
+  );
   /* Ends before the pendant lamp, which hangs from 44% of the store. */
   width: calc(44vw - var(--walk-avatar) - 28px);
   margin: 0;

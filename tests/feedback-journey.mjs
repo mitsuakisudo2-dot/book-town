@@ -393,7 +393,7 @@ try {
     await context.close();
   }
   {
-    // On an iPhone the same link asks Safari's own search.
+    // On an iPhone in Safari the link is Google's too.
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 },
       isMobile: true,
@@ -409,18 +409,18 @@ try {
     });
     await go();
     await check(
-      "iPhone: この本について調べる uses Safari's own search",
+      "iPhone: この本について調べる uses Google",
       async () => {
         await solarisTrigger().click();
         await expectTitle("ソラリス");
         const lookup = dialog().locator(".bh-book-intro .book-lookup");
         await expect(lookup).toHaveAttribute(
           "href",
-          "x-web-search://?" +
+          "https://google.com/search?q=" +
             encodeURIComponent("ソラリス　スタニスワフ・レム"),
         );
         await expect(lookup).toHaveAccessibleName(
-          "この本について調べる（いつもの検索で、新しいタブで開きます）",
+          "この本についてGoogleで調べる（新しいタブで開きます）",
         );
         await expect(lookup).toHaveAttribute("target", "_blank");
         await expect(lookup).toHaveAttribute("rel", "noopener noreferrer");

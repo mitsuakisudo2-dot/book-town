@@ -296,7 +296,7 @@ export function BookJacket({
   /** How wide the cover is drawn, for the image's `sizes`. */
   sizes?: string;
 }) {
-  const found = useCover(book.coverUrl ? undefined : book.isbn);
+  const found = useCover(book.coverUrl ? undefined : book.isbn, book);
   const coverUrl = book.coverUrl ?? found?.url;
   const [loaded, setLoaded] = useState<string | null>(null);
   const covered = Boolean(coverUrl) && loaded === coverUrl;
@@ -381,7 +381,7 @@ export function BookJacket({
  * the book on Google Books, or openBD's name. Nothing for a 装丁カード.
  */
 export function CoverCredit({ book }: { book: Book }) {
-  const cover = useCover(book.coverUrl ? undefined : book.isbn);
+  const cover = useCover(book.coverUrl ? undefined : book.isbn, book);
   const google = cover?.source === "google";
   useEffect(() => (google ? countGoogleMark() : undefined), [google]);
   if (!cover) return null;
