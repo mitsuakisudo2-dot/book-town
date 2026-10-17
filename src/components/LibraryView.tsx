@@ -7,11 +7,13 @@ import { bookAuthor, bookTitle, quotedTitle } from "../lib/book-name";
 import { bookPath } from "../lib/books";
 import {
   countsOf,
+  defaultShelfAudience,
   DEFAULT_SHELVES,
   filterFromParams,
   filterLibrary,
   liveShelves,
   READING_STATUSES,
+  ruleWords,
   worksIn,
   type LibraryEntry,
   type LibraryFilter,
@@ -36,10 +38,14 @@ import type { Notify, TownActions, TownState } from "../lib/types";
 import { replaceAddress, useUrlParam } from "../lib/url-state";
 import { useDraftOwner } from "./KeptDraftNote";
 import { JournalNotes, TitlesToType } from "./LibraryJournalNotes";
-import { LibraryShelfSheet } from "./LibraryShelfSheet";
+import {
+  DefaultShelfAudienceSheet,
+  LibraryShelfSheet,
+} from "./LibraryShelfSheet";
 import { ScanSession } from "./ScanSession";
 import { BookJacket, Icon } from "./ui";
 import { counted, whenSome } from "../lib/words";
+import { CHOICE_NAMES, type Audience } from "../lib/visibility";
 
 // The reader's library (管理表14): every book they have met in the town,
 // sorted onto the default shelves (library.ts DEFAULT_SHELVES) and the
@@ -182,6 +188,11 @@ export function LibraryView({
     [state.libraryShelves],
   );
   const theme = themes.find((shelf) => shelf.id === shelfParam);
+  // The shelves filled by hand: a smart shelf gathers its own books.
+  const handShelves = useMemo(
+    () => themes.filter((shelf) => shelf.rule === null),
+    [themes],
+  );
   const filter = useMemo(() => {
     const params = new Map<string, string>();
     if (shelfParam) params.set("shelf", shelfParam);
@@ -223,6 +234,8 @@ export function LibraryView({
   const [sheet, setSheet] = useState<"scan" | "titles" | null>(null);
   // The shelf being made (NEW_SHELF_KEY) or changed (its id).
   const [shelfSheet, setShelfSheet] = useState<string | null>(null);
+  // One of the shelves every library has, its 見せる範囲 being chosen.
+  const [audienceSheet, setAudienceSheet] = useState<string | null>(null);
   const owner = useDraftOwner();
   const saving = useKeptUntilSaved((what) => {
     // A new shelf the account did not take: its words go back to the form
@@ -362,7 +375,10 @@ export function LibraryView({
       ? null
       : (themes.find((shelf) => shelf.id === shelfSheet) ?? null);
   /** Makes or changes the shelf; false when the town did not take it. */
-  const saveShelf = (work: LibraryShelfWork, showWanted: boolean) => {
+  const saveShelf = (
+    work: LibraryShelfWork,
+    { showWanted, audience }: { showWanted: boolean; audience: Audience },
+  ) => {
     const key = shelfDraftKey(editing ? editing.id : NEW_SHELF_KEY);
     if (editing) {
       if (
@@ -370,6 +386,8 @@ export function LibraryView({
           name: work.name,
           note: work.note,
           showWanted,
+          audience,
+          ...(work.rule ? { rule: work.rule } : {}),
         })
       )
         return false;
@@ -379,14 +397,17 @@ export function LibraryView({
       );
       if (key && now)
         saving.hold("shelf:" + editing.id, libraryShelfDraftStore, key, {
-          work: { name: now.name, note: now.note },
-          base: { name: editing.name, note: editing.note },
+          work: { name: now.name, note: now.note, rule: now.rule },
+          base: { name: editing.name, note: editing.note, rule: editing.rule },
         });
       setShelfSheet(null);
       notify(`「${work.name}」を保存しました`);
       return true;
     }
-    const id = actions.makeLibraryShelf(work.name, work.note);
+    const id = actions.makeLibraryShelf(work.name, work.note, {
+      audience,
+      rule: work.rule,
+    });
     if (!id) return false;
     // The form is clear for the next shelf; the words wait under the shelf
     // made until the account has it (there they change nothing), and come
@@ -428,7 +449,9 @@ export function LibraryView({
     return names.length > 2 ? `${shown} ほか${names.length - 2}` : shown;
   };
 
-  const into = themes.find((shelf) => shelf.id === pickInto) ?? null;
+  const into = handShelves.find((shelf) => shelf.id === pickInto) ?? null;
+  // One of the shelves every library has, open but for the whole library.
+  const preset = DEFAULT_SHELVES.find((shelf) => shelf.key === filter.shelf);
   const pressedShelf = filter.shelf ?? "all";
   const shelfChips = DEFAULT_SHELVES.filter(
     (shelf) =>
@@ -500,10 +523,27 @@ export function LibraryView({
         <LibraryShelfSheet
           key={shelfSheet}
           shelf={editing}
+          handShelves={handShelves.filter((shelf) => shelf.id !== editing?.id)}
+          startAudience={state.settings.visibility.shelves.audience}
           draftKey={shelfDraftKey(editing ? editing.id : NEW_SHELF_KEY)}
           onClose={() => setShelfSheet(null)}
           onSave={saveShelf}
           onPutAway={editing ? () => putAway(editing) : undefined}
+        />
+      )}
+      {audienceSheet !== null && (
+        <DefaultShelfAudienceSheet
+          label={label(audienceSheet)}
+          audience={defaultShelfAudience(state.settings, audienceSheet)}
+          onClose={() => setAudienceSheet(null)}
+          onChoose={(audience) => {
+            if (!actions.setDefaultShelfAudience(audienceSheet, audience))
+              return;
+            setAudienceSheet(null);
+            notify(
+              `「${label(audienceSheet)}」を${CHOICE_NAMES[audience]}にしました`,
+            );
+          }}
         />
       )}
     </>
@@ -617,6 +657,12 @@ export function LibraryView({
           <div>
             <h2>{theme.name}</h2>
             {theme.note && <p>{theme.note}</p>}
+            {theme.rule && (
+              <p className="library-rule-words">
+                集める条件：{ruleWords(theme.rule, themes).join("、")}
+              </p>
+            )}
+            <p>見せる範囲：{CHOICE_NAMES[theme.audience]}</p>
             {whenSome(counts.themes[theme.id]?.hiddenWanted ?? 0, "冊", (n) => (
               <p>「読みたい」だけの本{n}は並べていません</p>
             ))}
@@ -629,6 +675,20 @@ export function LibraryView({
             棚を編集
           </button>
         </section>
+      )}
+      {preset && (
+        <p className="library-audience" inert={Boolean(picking)}>
+          見せる範囲：
+          {CHOICE_NAMES[defaultShelfAudience(state.settings, preset.key)]}
+          <button
+            type="button"
+            className="text-btn"
+            aria-label={`「${preset.label}」の見せる範囲を変える`}
+            onClick={() => setAudienceSheet(preset.key)}
+          >
+            変える
+          </button>
+        </p>
       )}
       {filterChips.length > 0 && (
         <div
@@ -742,6 +802,18 @@ export function LibraryView({
             );
           })}
         </ul>
+      ) : theme?.rule && !filters ? (
+        <section className="library-start">
+          <h2>条件に合う本は、まだありません。</h2>
+          <p>条件に合う本がライブラリに入ると、ここに並びます。</p>
+          <button
+            type="button"
+            className="btn soft"
+            onClick={() => setShelfSheet(theme.id)}
+          >
+            条件を変える
+          </button>
+        </section>
       ) : theme && !filters && !counts.themes[theme.id]?.works ? (
         <section className="library-start">
           <h2>この棚に、本を入れましょう。</h2>
@@ -834,13 +906,13 @@ export function LibraryView({
                   {REMOVE.label}
                 </button>
               </div>
-              {themes.length > 0 && (
+              {handShelves.length > 0 && (
                 <div
                   className="library-pick-row"
                   role="group"
                   aria-label="自分の棚"
                 >
-                  {themes.map((shelf) => {
+                  {handShelves.map((shelf) => {
                     const change = shelfChange(shelf);
                     return (
                       <ChangeButton

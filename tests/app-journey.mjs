@@ -438,6 +438,121 @@ try {
   );
 
   await check(
+    "a smart shelf gathers by its conditions, and each shelf says who may see it",
+    async () => {
+      await go("/library/");
+      const shelves = page.getByRole("group", { name: "棚" });
+      const toast = page.locator(".toast");
+      const books = page.locator(".library-book");
+      // The town as it was, put back at the end: the checks after count
+      // on the books it has finished.
+      const town = await page.evaluate(() =>
+        localStorage.getItem("book-town-v1"),
+      );
+      // Two books finished, to be the books the smart shelf gathers.
+      await page.getByRole("button", { name: "選ぶ", exact: true }).click();
+      const picking = page.getByRole("region", { name: "選んだ本を変える" });
+      await books.nth(0).click();
+      await books.nth(1).click();
+      const done = picking
+        .getByRole("group", { name: "状態" })
+        .getByRole("button", { name: "読了" });
+      if ((await done.getAttribute("aria-pressed")) !== "true")
+        await done.click();
+      await page.goBack();
+      await expect(picking).toHaveCount(0);
+      const finishedChip = shelves.getByRole("button", { name: /^読了/ });
+      await finishedChip.click();
+      await expect(finishedChip).toHaveAttribute("aria-pressed", "true");
+      const finished = await books.count();
+      expect(finished).toBeGreaterThan(0);
+
+      // Who may see 読了: 自分だけ, changed to 公開 and kept.
+      const audience = page.locator(".library-audience");
+      await expect(audience).toContainText("見せる範囲：自分だけ");
+      await audience
+        .getByRole("button", { name: /見せる範囲を変える/ })
+        .click();
+      const choose = page.getByRole("dialog", { name: "「読了」の見せる範囲" });
+      await expect(choose).toContainText(
+        "ほかの読書家に本棚を見せる場所はありません",
+      );
+      // Chosen, the sheet closes at once.
+      await choose.getByRole("radio", { name: /公開/ }).click();
+      await expect(toast).toContainText("「読了」を公開にしました");
+      await expect(choose).toHaveCount(0);
+      await page.reload();
+      await expect(audience).toContainText("見せる範囲：公開");
+
+      // Made in 棚を作る with 条件で集める: no condition, no shelf.
+      await shelves.getByRole("button", { name: "棚を作る" }).click();
+      const sheet = page.getByRole("dialog", { name: "棚を作る" });
+      await sheet.getByRole("radio", { name: /条件で集める/ }).check();
+      await sheet.getByLabel("棚の名前").fill("読み終えた本");
+      const make = sheet.getByRole("button", { name: "作る", exact: true });
+      await expect(make).toBeDisabled();
+      await expect(sheet).toContainText("条件を1つ以上選んでください");
+      await sheet
+        .getByRole("group", { name: "読書の状態" })
+        .getByRole("button", { name: "読了" })
+        .click();
+      await noOverflow("smart shelf sheet");
+      await page.screenshot({
+        path: path.join(output, "smart-shelf-sheet.png"),
+      });
+      await make.click();
+      await expect(toast).toContainText("「読み終えた本」を作りました");
+      const smart = shelves.getByRole("button", { name: /^読み終えた本/ });
+      await expect(smart).toHaveAttribute("aria-pressed", "true");
+      await expect(books).toHaveCount(finished);
+      const head = page.locator(".library-shelf-head");
+      await expect(head).toContainText("集める条件：読了");
+      await expect(head).toContainText("見せる範囲：自分だけ");
+      await page.screenshot({ path: path.join(output, "smart-shelf.png") });
+
+      // A smart shelf takes no book by hand: it is not among 自分の棚.
+      await shelves
+        .getByRole("button", { name: "すべて", exact: true })
+        .click();
+      await page.getByRole("button", { name: "選ぶ", exact: true }).click();
+      await books.first().click();
+      const bar = page.getByRole("region", { name: "選んだ本を変える" });
+      await expect(
+        bar.getByRole("button", { name: "読み終えた本" }),
+      ).toHaveCount(0);
+      await page.goBack();
+      await expect(bar).toHaveCount(0);
+
+      // Its conditions change in 棚を編集, and it is made public there.
+      await smart.click();
+      await page.getByRole("button", { name: "棚を編集" }).click();
+      const edit = page.getByRole("dialog", { name: "棚を編集" });
+      await expect(
+        edit.getByRole("radio", { name: /条件で集める/ }),
+      ).toHaveCount(0);
+      await edit
+        .getByRole("group", { name: "読書の状態" })
+        .getByRole("button", { name: "読書中" })
+        .click();
+      await edit.getByRole("radio", { name: /公開/ }).check();
+      await edit.getByRole("button", { name: "保存する" }).click();
+      await expect(head).toContainText("集める条件：読書中・読了");
+      await expect(head).toContainText("見せる範囲：公開");
+      await page.reload();
+      await expect(head).toContainText("集める条件：読書中・読了");
+      await expect(page.locator(".library-page")).not.toContainText(
+        /(^|\D)0冊/,
+      );
+      await noOverflow("smart shelf");
+      await page.evaluate(
+        (kept) => localStorage.setItem("book-town-v1", kept),
+        town,
+      );
+      await page.reload();
+    },
+  );
+
+  await check(
     "swipes on a shelf stay on the shelf; other swipes switch the Home tabs",
     async () => {
       await goHome();

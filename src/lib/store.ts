@@ -24,8 +24,11 @@ import {
   withoutRegistering,
 } from "./library-town";
 import {
+  defaultShelfAudience,
+  DEFAULT_SHELVES,
   positionAfter,
   READING_STATUSES,
+  readRule,
   validateShelf,
   type LibraryShelf,
   type ReadingStatus,
@@ -165,6 +168,7 @@ const ANSWERING_ACTIONS = new Set<keyof TownActions>([
   "deletePoster",
   "editLibraryShelf",
   "putAwayLibraryShelf",
+  "setDefaultShelfAudience",
   "updateRecord",
 ]);
 /** What an action turned away answers: false, no books put back, or nothing. */
@@ -285,6 +289,15 @@ export function createTownStore(
       ),
     });
   }
+  /** Whether a smart shelf's 「ほかの棚」 names only shelves filled by hand. */
+  const handShelves = (ids: string[] | undefined) =>
+    !ids ||
+    ids.every((id) =>
+      state.libraryShelves.some(
+        (shelf) => shelf.id === id && shelf.rule === null,
+      ),
+    );
+
   function editShelf(shelfId: string, edit: (shelf: Shelf) => Shelf) {
     const shop = state.ownShop;
     if (!shop) return;
@@ -910,9 +923,11 @@ export function createTownStore(
         set.owned = change.owned;
       if (typeof change.favorite === "boolean") set.favorite = change.favorite;
       if (typeof change.removed === "boolean") set.removed = change.removed;
+      // A smart shelf gathers its books itself: none is put on by hand.
       const live = (id: unknown) =>
         state.libraryShelves.some(
-          (shelf) => shelf.id === id && shelf.deletedAt === null,
+          (shelf) =>
+            shelf.id === id && shelf.deletedAt === null && shelf.rule === null,
         );
       if (live(change.addShelf)) set.addShelf = change.addShelf;
       if (live(change.removeShelf)) set.removeShelf = change.removeShelf;
@@ -934,9 +949,12 @@ export function createTownStore(
       const done = undoLibraryChange(state, undo, now().toISOString());
       return commit(done.state) ? done.restored : 0;
     },
-    makeLibraryShelf(name, note) {
+    makeLibraryShelf(name, note, more = {}) {
       initialize();
       const time = now().toISOString();
+      const rule = more.rule == null ? null : readRule(more.rule);
+      if (more.rule != null && (rule === null || !handShelves(rule.with)))
+        return null;
       const shelf: LibraryShelf = {
         id: crypto.randomUUID(),
         name: name.trim(),
@@ -946,10 +964,17 @@ export function createTownStore(
           time,
         ),
         showWanted: true,
+        // Who may see it starts at the starting choice, as a record does.
+        audience: more.audience ?? state.settings.visibility.shelves.audience,
+        rule,
         createdAt: time,
         deletedAt: null,
       };
-      if (validateShelf(shelf) !== null) return null;
+      if (
+        validateShelf(shelf) !== null ||
+        !choicesFor("shelves").includes(shelf.audience)
+      )
+        return null;
       return commit({
         ...state,
         libraryShelves: [...state.libraryShelves, shelf],
@@ -972,12 +997,23 @@ export function createTownStore(
         ...(typeof change.showWanted === "boolean"
           ? { showWanted: change.showWanted }
           : {}),
+        ...(change.audience !== undefined ? { audience: change.audience } : {}),
+        // A smart shelf's rule, never taken away or given to one filled by hand.
+        ...(change.rule != null && shelf.rule !== null
+          ? { rule: readRule(change.rule) }
+          : {}),
       };
       if (
         validateShelf(next) !== null ||
+        (next.rule === null) !== (shelf.rule === null) ||
+        !handShelves(next.rule?.with) ||
+        (next.audience !== shelf.audience &&
+          !choicesFor("shelves").includes(next.audience)) ||
         (next.name === shelf.name &&
           next.note === shelf.note &&
-          next.showWanted === shelf.showWanted)
+          next.showWanted === shelf.showWanted &&
+          next.audience === shelf.audience &&
+          JSON.stringify(next.rule) === JSON.stringify(shelf.rule))
       )
         return false;
       return commit({
@@ -985,6 +1021,22 @@ export function createTownStore(
         libraryShelves: state.libraryShelves.map((entry) =>
           entry.id === shelfId ? next : entry,
         ),
+      });
+    },
+    setDefaultShelfAudience(key, audience) {
+      initialize();
+      if (
+        !DEFAULT_SHELVES.some((shelf) => shelf.key === key) ||
+        !choicesFor("shelves").includes(audience) ||
+        defaultShelfAudience(state.settings, key) === audience
+      )
+        return false;
+      return commit({
+        ...state,
+        settings: {
+          ...state.settings,
+          shelfAudiences: { ...state.settings.shelfAudiences, [key]: audience },
+        },
       });
     },
     putAwayLibraryShelf(shelfId, away) {

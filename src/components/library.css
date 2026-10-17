@@ -77,6 +77,87 @@
 .library-shelf-form textarea.field {
   resize: vertical;
 }
+/* Making a shelf: filled by hand or gathered by conditions, one row each. */
+.library-shelf-kind {
+  flex-direction: column;
+  align-items: stretch;
+}
+.library-shelf-kind label {
+  min-height: 44px;
+  border-radius: var(--r-box);
+  align-items: flex-start;
+  line-height: 1.6;
+}
+.library-shelf-kind input {
+  margin-top: 4px;
+  flex: none;
+}
+.library-shelf-kind small {
+  display: block;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+
+/* A smart shelf's conditions: each a few chips that wrap, in the sheet. */
+.library-rule {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+}
+.library-rule h3 {
+  margin: 0;
+  font-size: var(--t-body);
+}
+.library-rule .form-label {
+  margin: 0;
+}
+.library-rule-note {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  line-height: 1.6;
+}
+.library-rule-group {
+  display: grid;
+  gap: 8px;
+}
+.library-rule-group > span {
+  font-size: var(--t-meta);
+}
+.library-rule-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.library-rule-months {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.library-rule-months label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-meta);
+}
+.library-rule-months .field {
+  width: auto;
+  min-width: 0;
+}
+
+/* Who may see one of the shelves every library has, and its change. */
+.library-audience {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+}
+
 .library-shelf-check {
   display: flex;
   align-items: center;

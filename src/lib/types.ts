@@ -5,6 +5,7 @@ import type { FiledReport } from "./supabase/reports";
 import type {
   Audience,
   Choice,
+  ShelfAudiences,
   Visibilities,
   VisibilityKind,
 } from "./visibility";
@@ -226,6 +227,11 @@ export interface Settings {
    * start 自分だけ, chosen again when signing up.
    */
   visibility: Visibilities;
+  /**
+   * Who may see each of the shelves every library has, by its key
+   * (DEFAULT_SHELVES); one not named follows visibility.shelves.
+   */
+  shelfAudiences: ShelfAudiences;
   /** 「ネタバレの表示」: the reader's own. */
   spoilerDisplay: SpoilerDisplay;
 }
@@ -528,9 +534,19 @@ export interface TownActions {
    * Answers its id, or null when the name is empty or too long (or the town
    * is still loading, or for a visitor, asked to sign in instead).
    */
-  makeLibraryShelf(name: string, note: string): string | null;
-  /** Changes a shelf's name, note or whether it shows the books only wanted. False when nothing changed. */
+  makeLibraryShelf(
+    name: string,
+    note: string,
+    more?: Pick<LibraryShelfChange, "audience" | "rule">,
+  ): string | null;
+  /**
+   * Changes a shelf's name, note, whether it shows the books only wanted,
+   * who may see it or a smart shelf's rule (a shelf filled by hand stays
+   * one, and a smart shelf smart). False when nothing changed.
+   */
   editLibraryShelf(shelfId: string, change: LibraryShelfChange): boolean;
+  /** Who may see one of the shelves every library has (読了, 積読, …), by its key. False when nothing changed. */
+  setDefaultShelfAudience(key: string, audience: Audience): boolean;
   /** Puts a shelf away (true) or brings it back (false), with its books. */
   putAwayLibraryShelf(shelfId: string, away: boolean): boolean;
   setComposeIcon(icon: ComposeIcon): void;
@@ -580,5 +596,5 @@ export type PersistenceStatus =
 
 /** What can be changed of a shelf the reader made. */
 export type LibraryShelfChange = Partial<
-  Pick<LibraryShelf, "name" | "note" | "showWanted">
+  Pick<LibraryShelf, "name" | "note" | "showWanted" | "audience" | "rule">
 >;
