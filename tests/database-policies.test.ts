@@ -4180,11 +4180,12 @@ async function main() {
         "UPDATE",
         "status, status_at, wanted_at, liked_at, owned, removed_at, like_restored, ever_used",
       ],
-      ["library_shelves", "INSERT", SHELF_COLUMNS],
+      // Who may see a shelf and a smart shelf's rule: shelf_audience.
+      ["library_shelves", "INSERT", SHELF_COLUMNS + ", audience, rule"],
       [
         "library_shelves",
         "UPDATE",
-        "name, note, position, show_wanted, deleted_at",
+        "name, note, position, show_wanted, deleted_at, audience, rule",
       ],
       ["library_shelf_books", "INSERT", SHELF_BOOK_COLUMNS],
       ["library_shelf_books", "UPDATE", "position"],

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import {
+  cleanShelfAudiences,
+  MET_PLACES,
+  readRule,
+  ruleWords,
   applyOp,
   applyReaction,
   applySet,
@@ -150,6 +154,8 @@ const shelf = (id: string, more: Partial<LibraryShelf> = {}): LibraryShelf => ({
   note: "",
   position: "a0",
   showWanted: true,
+  audience: "private",
+  rule: null,
   createdAt: BEFORE,
   deletedAt: null,
   ...more,
@@ -3171,6 +3177,118 @@ check(
     );
     assert.deepEqual(unstarred.favorites, ["y"]);
     assert.deepEqual(undoFrom(unstarred, was).favorites, ["y", "x"]);
+  },
+);
+
+// ---------------------------------------------------------------- smart shelves and who may see a shelf
+
+check("a smart shelf's rule is read only as far as it is right", () => {
+  assert.deepEqual(
+    readRule({
+      status: ["finished", "finished", "none"],
+      met: ["pop"],
+      since: "2026-01",
+      until: "2026-03",
+      owned: "yes",
+      author: " れむ ",
+    }),
+    {
+      status: ["finished", "none"],
+      met: ["pop"],
+      since: "2026-01",
+      until: "2026-03",
+      owned: "yes",
+      author: "れむ",
+    },
+  );
+  for (const wrong of [
+    null,
+    [],
+    {},
+    { status: [] },
+    { status: ["lost"] },
+    { met: ["mail"] },
+    { since: "2026-13" },
+    { since: "2026-04", until: "2026-03" },
+    { owned: "maybe" },
+    { author: "  " },
+    { author: "あ".repeat(201) },
+    { with: ["not an id"] },
+    { status: ["finished"], later: true },
+  ])
+    assert.equal(readRule(wrong), null, JSON.stringify(wrong));
+});
+
+check("出会った場所 has every way in, once", () => {
+  const sources = MET_PLACES.flatMap((place) => place.sources);
+  assert.deepEqual([...sources].sort(), [...ENTRY_SOURCES].sort());
+});
+
+check("a smart shelf's rule is said in words", () => {
+  const sf = shelf("00000000-0000-4000-8000-0000000005f1");
+  assert.deepEqual(
+    ruleWords(
+      {
+        status: ["finished", "none"],
+        owned: "no",
+        met: ["scan", "pop"],
+        since: "2026-01",
+        until: "2026-03",
+        author: "れむ",
+        with: [sf.id, "00000000-0000-4000-8000-0000000005f9"],
+      },
+      [sf],
+    ),
+    [
+      "読了・状態は未設定",
+      "持ってない",
+      "自分で登録・書店めぐりで出会った",
+      "2026年1月から2026年3月までに加えた",
+      "著者に「れむ」",
+      "「SF」にも入っている",
+    ],
+  );
+  assert.deepEqual(ruleWords({ until: "2026-10" }, []), [
+    "2026年10月までに加えた",
+  ]);
+});
+
+check(
+  "who may see the shelves every library has keeps known shelves only",
+  () => {
+    assert.deepEqual(
+      cleanShelfAudiences({
+        finished: "everyone",
+        want: "private",
+        secret: "everyone",
+        liked: "friends",
+      }),
+      { finished: "everyone", want: "private" },
+    );
+    assert.deepEqual(cleanShelfAudiences(["finished"]), {});
+    assert.deepEqual(cleanShelfAudiences(null), {});
+  },
+);
+
+check(
+  "a shelf with an audience not offered, or a rule not right, is refused",
+  () => {
+    assert.equal(
+      validateShelf(
+        shelf("00000000-0000-4000-8000-0000000005f1", {
+          audience: "friends" as LibraryShelf["audience"],
+        }),
+      ),
+      "audience",
+    );
+    assert.equal(
+      validateShelf(
+        shelf("00000000-0000-4000-8000-0000000005f1", {
+          rule: { status: [] },
+        }),
+      ),
+      "rule",
+    );
   },
 );
 

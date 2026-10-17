@@ -104,10 +104,31 @@ export function useKeptUntilSaved(onRefused: (what: string) => void) {
  */
 export type OverSaved<T> = { work: T; base: T };
 
-const sameField = (a: unknown, b: unknown) =>
-  Array.isArray(a) && Array.isArray(b)
-    ? a.length === b.length && a.every((entry, index) => entry === b[index])
-    : a === b;
+/** The same value: lists entry by entry, objects field by field in any order. */
+export const sameField = (a: unknown, b: unknown): boolean => {
+  if (Array.isArray(a) && Array.isArray(b))
+    return (
+      a.length === b.length &&
+      a.every((entry, index) => sameField(entry, b[index]))
+    );
+  if (
+    !a ||
+    !b ||
+    typeof a !== "object" ||
+    typeof b !== "object" ||
+    Array.isArray(a) ||
+    Array.isArray(b)
+  )
+    return a === b;
+  const x = a as Record<string, unknown>;
+  const y = b as Record<string, unknown>;
+  const keys = (o: Record<string, unknown>) =>
+    Object.keys(o).filter((key) => o[key] !== undefined);
+  return (
+    keys(x).length === keys(y).length &&
+    keys(x).every((key) => sameField(x[key], y[key]))
+  );
+};
 
 /** The work over what is saved now; null when that leaves nothing changed. */
 export function overSaved<T extends object>(

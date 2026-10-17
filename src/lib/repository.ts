@@ -5,6 +5,8 @@ import { cleanVisibilities } from "./visibility";
 import { restorePoster, type Poster } from "./posters";
 import {
   validateEntry,
+  cleanShelfAudiences,
+  readRule,
   validateShelf,
   type LibraryEntry,
   type LibraryShelf,
@@ -305,9 +307,13 @@ function restoreShelves(value: unknown): LibraryShelf[] {
       note: shelf.note,
       position: shelf.position,
       showWanted: shelf.showWanted,
+      // Kept before 2026-10-17: private, filled by hand.
+      audience: shelf.audience ?? "private",
+      rule: shelf.rule == null ? null : readRule(shelf.rule),
       createdAt: shelf.createdAt,
       deletedAt: shelf.deletedAt,
     } as LibraryShelf;
+    if (shelf.rule != null && row.rule === null) return [];
     if (validateShelf(row) !== null || ids.has(row.id)) return [];
     ids.add(row.id);
     return [row];
@@ -589,6 +595,7 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
                 ? { records: { audience: "everyone" } }
                 : initial.settings.visibility),
           ),
+          shelfAudiences: cleanShelfAudiences(settings.shelfAudiences),
           spoilerDisplay: SPOILER_DISPLAYS.includes(
             settings.spoilerDisplay as SpoilerDisplay,
           )

@@ -422,35 +422,41 @@ export type Database = {
       };
       library_shelves: {
         Row: {
+          audience: string;
           created_at: string;
           deleted_at: string | null;
           id: string;
           name: string;
           note: string;
           position: string;
+          rule: Json | null;
           show_wanted: boolean;
           updated_at: string;
           user_id: string;
         };
         ComputedFields: never;
         Insert: {
+          audience?: string;
           created_at?: string;
           deleted_at?: string | null;
           id: string;
           name: string;
           note?: string;
           position: string;
+          rule?: Json | null;
           show_wanted?: boolean;
           updated_at?: string;
           user_id: string;
         };
         Update: {
+          audience?: string;
           created_at?: string;
           deleted_at?: string | null;
           id?: string;
           name?: string;
           note?: string;
           position?: string;
+          rule?: Json | null;
           show_wanted?: boolean;
           updated_at?: string;
           user_id?: string;
@@ -867,6 +873,7 @@ export type Database = {
           memo_hint: boolean;
           records_audience: string;
           saves_audience: string;
+          shelf_audiences: Json;
           shelves_audience: string;
           spoiler_display: string;
           stats_audience: string;
@@ -885,6 +892,7 @@ export type Database = {
           memo_hint?: boolean;
           records_audience?: string;
           saves_audience?: string;
+          shelf_audiences?: Json;
           shelves_audience?: string;
           spoiler_display?: string;
           stats_audience?: string;
@@ -902,6 +910,7 @@ export type Database = {
           memo_hint?: boolean;
           records_audience?: string;
           saves_audience?: string;
+          shelf_audiences?: Json;
           shelves_audience?: string;
           spoiler_display?: string;
           stats_audience?: string;

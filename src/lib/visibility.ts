@@ -61,6 +61,13 @@ export type VisibilityKind = (typeof VISIBILITY_KINDS)[number];
 
 export type Visibilities = Record<VisibilityKind, Visibility>;
 
+/**
+ * Who may see each of the shelves every library has, by its key
+ * (src/lib/library.ts DEFAULT_SHELVES); one not named follows the starting
+ * choice of shelves.
+ */
+export type ShelfAudiences = Partial<Record<string, Audience>>;
+
 const content = (audience: Audience): Visibility => ({
   audience,
   detail: "content",
@@ -170,10 +177,11 @@ export const shownToOthers = (audience: Audience) => audience !== "private";
 
 /**
  * The town with a kind's starting choice changed. A narrower one narrows
- * what the reader kept before at once, records set one by one too (the
- * database does the same, private.narrow_past). A wider one widens only the
- * records that were at the old starting choice, and only when the reader
- * said so (past); the others keep their own choice.
+ * what the reader kept before at once, records and shelves set one by one
+ * too (the database does the same, private.narrow_past and
+ * private.narrow_shelves). A wider one widens only the records and shelves
+ * that were at the old starting choice, and only when the reader said so
+ * (past); the others keep their own choice.
  */
 export function withVisibility(
   state: TownState,
@@ -188,19 +196,38 @@ export function withVisibility(
     ...state.settings,
     visibility: { ...state.settings.visibility, [kind]: next },
   };
-  if (kind !== "records") return { ...state, settings };
+  if (kind !== "records" && kind !== "shelves") return { ...state, settings };
   const narrowing = isNarrowing(before, next);
   if (!narrowing && !past) return { ...state, settings };
+  const moved = (audience: Audience) =>
+    narrowing
+      ? narrowAudience(audience, next.audience)
+      : audience === before.audience
+        ? next.audience
+        : audience;
+  if (kind === "shelves")
+    return {
+      ...state,
+      settings: {
+        ...settings,
+        shelfAudiences: Object.fromEntries(
+          Object.entries(settings.shelfAudiences).map(([key, audience]) => [
+            key,
+            audience && moved(audience),
+          ]),
+        ),
+      },
+      libraryShelves: state.libraryShelves.map((shelf) => {
+        const audience = moved(shelf.audience);
+        return audience === shelf.audience ? shelf : { ...shelf, audience };
+      }),
+    };
   return {
     ...state,
     settings,
     readingRecords: state.readingRecords.map((record) => {
       if (record.readerId !== ME_ID) return record;
-      const audience = narrowing
-        ? narrowAudience(record.audience, next.audience)
-        : record.audience === before.audience
-          ? next.audience
-          : record.audience;
+      const audience = moved(record.audience);
       return audience === record.audience ? record : { ...record, audience };
     }),
   };

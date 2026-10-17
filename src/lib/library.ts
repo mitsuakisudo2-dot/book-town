@@ -10,9 +10,13 @@ import {
   type Post,
   type Reader,
   type ReadingRecord,
+  type Settings,
   type ReadingSession,
   type Shop,
 } from "./types";
+import { isAudience, type Audience, type ShelfAudiences } from "./visibility";
+import { bookAuthor } from "./book-name";
+import { searchFold } from "./search/fold";
 import { workOf } from "./works";
 
 // The reader's library (ライブラリ): every edition they have met in the town,
@@ -126,10 +130,27 @@ export interface LibraryShelf {
   position: string;
   /** Whether the reader's own view of it shows the books only wanted. */
   showWanted: boolean;
+  /** Who may see it (見せる範囲). Nothing shows a shelf to others yet. */
+  audience: Audience;
+  /** A smart shelf's conditions: its books are those of the library that meet them. Null for one filled by hand. */
+  rule: SmartRule | null;
   createdAt: string;
   /** Put away: kept, with its books, so it can come back. */
   deletedAt: string | null;
 }
+
+/**
+ * What a smart shelf (スマート本棚) gathers: the books of the library that
+ * meet every condition it has, read as the library's own filter reads them
+ * (LibraryFilter). At least one condition; `with` names shelves filled by
+ * hand only, so no smart shelf is made of another.
+ */
+export type SmartRule = Partial<
+  Pick<
+    LibraryFilter,
+    "status" | "owned" | "met" | "since" | "until" | "author" | "with"
+  >
+>;
 
 /** A book on a theme shelf (library_shelf_books). */
 export interface ShelfBook {
@@ -278,6 +299,25 @@ export const DEFAULT_SHELVES: readonly DefaultShelf[] = [
     order: "favorite",
   },
 ];
+
+/** Who may see one of the shelves every library has: its own choice, or the starting one. */
+export const defaultShelfAudience = (
+  settings: Pick<Settings, "shelfAudiences" | "visibility">,
+  key: string,
+): Audience =>
+  settings.shelfAudiences[key] ?? settings.visibility.shelves.audience;
+
+/** Who may see the shelves every library has, as far as it was kept right: known keys and audiences only. */
+export function cleanShelfAudiences(saved: unknown): ShelfAudiences {
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
+  return Object.fromEntries(
+    Object.entries(saved).filter(
+      ([key, audience]) =>
+        DEFAULT_SHELVES.some((shelf) => shelf.key === key) &&
+        isAudience(audience),
+    ),
+  );
+}
 
 // ---------------------------------------------------------------- ops
 
@@ -1158,6 +1198,60 @@ function themeShelves(state: LibraryState) {
 }
 
 /**
+ * The books a smart shelf gathers, or undefined for a shelf filled by hand.
+ * Its author is typed, so it is found as a search finds it: within the
+ * author's name as shown or as kept, the two folded alike (searchFold).
+ */
+function smartBooks(
+  state: LibraryState,
+  shelf: LibraryShelf | undefined,
+  shopBooks: ReadonlySet<string>,
+): Set<string> | undefined {
+  if (!shelf?.rule) return undefined;
+  const { author, ...rule } = shelf.rule;
+  const ids = filterLibrary(state, { ...rule, showWanted: true }, shopBooks);
+  if (author === undefined) return new Set(ids);
+  const wanted = searchFold(author);
+  const books = new Map(state.books.map((book) => [book.id, book]));
+  return new Set(
+    ids.filter((id) => {
+      const book = books.get(id);
+      return (
+        !!book &&
+        (searchFold(bookAuthor(book)).includes(wanted) ||
+          searchFold(book.author).includes(wanted))
+      );
+    }),
+  );
+}
+
+/**
+ * 出会った場所 as a smart shelf offers it: the ways a book comes in
+ * (ENTRY_SOURCES), gathered as the reader knows them. Every way is in one.
+ */
+export const MET_PLACES: readonly {
+  key: string;
+  label: string;
+  sources: readonly EntrySource[];
+}[] = [
+  {
+    key: "registered",
+    label: "自分で登録",
+    sources: ["scan", "isbn", "manual"],
+  },
+  { key: "search", label: "検索", sources: ["search"] },
+  { key: "walk", label: "書店めぐり", sources: ["pop"] },
+  { key: "letters", label: "便り", sources: ["like", "post"] },
+  { key: "want", label: "読みたい", sources: ["want"] },
+  { key: "shop", label: "自分の書店", sources: ["shop"] },
+  {
+    key: "other",
+    label: "そのほか",
+    sources: ["reading", "record", "favorite", "poster", "nine", "legacy"],
+  },
+];
+
+/**
  * The books a filter shows, in the order of its shelf: ライブラリ by when
  * they came in, newest first; status, 読みたい and いいね by those times,
  * newest first; ☆ in the order kept; a theme shelf by its keys, then the
@@ -1180,10 +1274,17 @@ export function filterLibrary(
   const theme =
     f.shelf === undefined || preset ? undefined : themes.books.get(f.shelf);
   if (f.shelf !== undefined && !preset && !themes.live.has(f.shelf)) return [];
+  const smart = smartBooks(
+    state,
+    f.shelf === undefined || preset ? undefined : themes.live.get(f.shelf),
+    shopBooks,
+  );
   const has =
     preset?.has ??
     ((e: LibraryEntry, x: EntryContext) =>
-      inLibrary(e, x) && (f.shelf === undefined || !!theme?.has(e.bookId)));
+      inLibrary(e, x) &&
+      (f.shelf === undefined ||
+        (smart ? smart.has(e.bookId) : !!theme?.has(e.bookId))));
   const read = new Set(
     state.readingRecords
       .filter((record) => record.readerId === ME_ID)
@@ -1231,7 +1332,7 @@ export function filterLibrary(
   const favorites = new Map(state.favorites.map((id, i) => [id, i]));
   const order = preset
     ? preset.order
-    : f.shelf === undefined
+    : f.shelf === undefined || smart
       ? "added"
       : "position";
   const compare = (a: LibraryEntry, b: LibraryEntry): number => {
@@ -1266,7 +1367,7 @@ export function filterLibrary(
 
 const ADDRESS_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
-const AUTHOR_MAX_LENGTH = 200;
+export const AUTHOR_MAX_LENGTH = 200;
 
 /** A filter for the address (replaceAddress in url-state.ts): every key, null when not set. */
 export function filterParams(f: LibraryFilter): Record<string, string | null> {
@@ -1343,6 +1444,126 @@ export function filterFromParams(
   const batch = read("batch");
   if (batch && ADDRESS_ID.test(batch)) f.batchId = batch;
   return f;
+}
+
+/**
+ * A smart shelf's rule as it was kept (the database, this browser), with only
+ * what a rule may hold; null when it holds none of it, or anything else.
+ */
+export function readRule(value: unknown): SmartRule | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const kept = value as Record<string, unknown>;
+  const known = ["status", "owned", "met", "since", "until", "author", "with"];
+  if (Object.keys(kept).some((key) => !known.includes(key))) return null;
+  const rule: SmartRule = {};
+  const list = <T extends string>(
+    key: string,
+    ok: (value: string) => boolean,
+  ): T[] | null | undefined => {
+    const values = kept[key];
+    if (values === undefined) return undefined;
+    if (
+      !Array.isArray(values) ||
+      !values.length ||
+      values.length > 32 ||
+      !values.every((one) => typeof one === "string" && ok(one))
+    )
+      return null;
+    return [...new Set(values as T[])];
+  };
+  const status = list<ReadingStatus | "none">(
+    "status",
+    (one) => one === "none" || READING_STATUSES.includes(one as ReadingStatus),
+  );
+  const met = list<EntrySource>("met", (one) =>
+    ENTRY_SOURCES.includes(one as EntrySource),
+  );
+  const withShelves = list<string>("with", (one) => ADDRESS_ID.test(one));
+  if (status === null || met === null || withShelves === null) return null;
+  // In the lists' own order, so the same conditions are kept and said alike.
+  const order =
+    <T>(list: readonly T[]) =>
+    (a: T, b: T) =>
+      list.indexOf(a) - list.indexOf(b);
+  if (status) rule.status = status.sort(order([...READING_STATUSES, "none"]));
+  if (met) rule.met = met.sort(order(ENTRY_SOURCES));
+  if (withShelves) rule.with = withShelves;
+  for (const key of ["since", "until"] as const) {
+    const month = kept[key];
+    if (month === undefined) continue;
+    if (typeof month !== "string" || !MONTH.test(month)) return null;
+    rule[key] = month;
+  }
+  if (rule.since && rule.until && rule.since > rule.until) return null;
+  if (kept.owned !== undefined) {
+    if (kept.owned !== "yes" && kept.owned !== "no" && kept.owned !== "unset")
+      return null;
+    rule.owned = kept.owned;
+  }
+  if (kept.author !== undefined) {
+    const author = typeof kept.author === "string" ? kept.author.trim() : "";
+    if (!author || codePoints(author) > AUTHOR_MAX_LENGTH) return null;
+    rule.author = author;
+  }
+  return Object.keys(rule).length ? rule : null;
+}
+
+/** "2026年1月", of a YYYY-MM month. */
+const monthWords = (month: string) =>
+  `${month.slice(0, 4)}年${Number(month.slice(5, 7))}月`;
+
+/**
+ * A smart shelf's conditions in words, one each, as its head says them
+ * (「読了」「書店めぐりで出会った」「2026年1月から加えた」…). `shelves` names
+ * the shelves of 「ほかの棚」; one put away or gone is left out.
+ */
+export function ruleWords(
+  rule: SmartRule,
+  shelves: readonly LibraryShelf[],
+): string[] {
+  const words: string[] = [];
+  const shelfLabel = (key: string) =>
+    DEFAULT_SHELVES.find((shelf) => shelf.key === key)?.label ?? key;
+  if (rule.status)
+    words.push(
+      rule.status
+        .map((status) =>
+          status === "none" ? "状態は未設定" : shelfLabel(status),
+        )
+        .join("・"),
+    );
+  if (rule.owned)
+    words.push(
+      rule.owned === "yes"
+        ? "持っている"
+        : rule.owned === "no"
+          ? "持ってない"
+          : "持っているかは未設定",
+    );
+  const met = rule.met;
+  if (met)
+    words.push(
+      MET_PLACES.filter((place) =>
+        place.sources.some((source) => met.includes(source)),
+      )
+        .map((place) => place.label)
+        .join("・") + "で出会った",
+    );
+  if (rule.since && rule.until)
+    words.push(
+      `${monthWords(rule.since)}から${monthWords(rule.until)}までに加えた`,
+    );
+  else if (rule.since) words.push(`${monthWords(rule.since)}から加えた`);
+  else if (rule.until) words.push(`${monthWords(rule.until)}までに加えた`);
+  if (rule.author) words.push(`著者に「${rule.author}」`);
+  const names = (rule.with ?? []).flatMap((id) => {
+    const shelf = shelves.find(
+      (one) => one.id === id && one.deletedAt === null,
+    );
+    return shelf ? [`「${shelf.name}」`] : [];
+  });
+  if (names.length) words.push(names.join("・") + "にも入っている");
+  return words;
 }
 
 // ---------------------------------------------------------------- counts
@@ -1452,7 +1673,7 @@ export function countsOf(
   }
   const themes = themeShelves(state);
   for (const [id, shelf] of themes.live) {
-    const on = themes.books.get(id);
+    const on = smartBooks(state, shelf, shopBooks) ?? themes.books.get(id);
     const members = shown.filter(({ e }) => on?.has(e.bookId));
     const n = works(members);
     if (n === 0) continue;
@@ -1856,6 +2077,8 @@ export function validateShelf(shelf: LibraryShelf): string | null {
   )
     return "position";
   if (typeof shelf.showWanted !== "boolean") return "showWanted";
+  if (!isAudience(shelf.audience)) return "audience";
+  if (shelf.rule !== null && readRule(shelf.rule) === null) return "rule";
   if (!isTime(shelf.createdAt)) return "createdAt";
   if (!isTimeOrNull(shelf.deletedAt)) return "deletedAt";
   return null;
