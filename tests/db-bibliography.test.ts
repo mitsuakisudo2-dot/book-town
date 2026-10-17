@@ -133,6 +133,8 @@ async function edgeChecks(check: Check) {
       await rows(
         `update private.edition_sources s set state = v.state,
            settled_at = case when v.state <> 'waiting' then now() end,
+           settled_for = case when v.state <> 'waiting' then now() end,
+           tried_for = case when v.state <> 'waiting' then now() end,
            status = case when s.source = 'ndl' then v.status end, next_at = now() - v.ago
          from editions e, (values ($1, 'found', null, interval '3 days'),
            ($2, 'missing', null, interval '2 days'), ($3, 'found', 'C3', interval '1 day'),
@@ -1508,39 +1510,10 @@ async function main() {
       // Aki and visitors do not read it: it is Ben's, on no public page.
       assert.deepEqual(await shown(AKI, [bens]), []);
       assert.deepEqual(await shown(null, [bens]), []);
-      // Aki's copy of X1, placed long before, is hers, and a post makes it
-      // public.
-      const akis = id(2, 1);
-      assert.equal((await shown(AKI, [akis]))[0].title, "架空の図書館");
-      assert.deepEqual(await shown(null, [akis]), []);
-      await as(
-        AKI,
-        "insert into posts (author_id, body, book_id) values ($1, '面白かった', $2)",
-        [AKI, akis],
-      );
-      const seen = await shown(null, [akis]);
-      assert.equal(seen.length, 1);
-      assert.deepEqual(Object.keys(seen[0]).sort(), [
-        "book_id",
-        "creators",
-        "credits",
-        "edition",
-        "issued",
-        "ndc",
-        "publisher",
-        "series",
-        "sources",
-        "subtitle",
-        "title",
-        "title_reading",
-        "volume",
-      ]);
-      assert.equal(seen[0].title, "架空の図書館");
-      assert.equal(seen[0].publisher, "架空書房");
-      // Chi registers X1, which others had, and X3, which nobody had. Both
-      // are asked about in the order placed; what the sources said about X1
-      // before does not show for Chi's copy, even ten minutes on: neither
-      // shows, whoever asks, until both are answered, and then both do.
+      // Chi registers X1, which others had in private, and X3, which nobody
+      // had. Both are asked about in the order placed; what the sources said
+      // about X1 before does not show for Chi's copy, even ten minutes on:
+      // neither shows, whoever asks, until both are answered, and then both do.
       const old = id(2, 4);
       const fresh = id(2, 5);
       await settle();
@@ -1590,6 +1563,49 @@ async function main() {
       // Moved by an edited ISBN, a book waits again.
       await as(CHI, "update books set isbn = $2 where id = $1", [old, X3]);
       assert.deepEqual(await shown(CHI, [old]), []);
+      // Aki's copy of X1, placed long before, is hers, and a post makes it
+      // public.
+      const akis = id(2, 1);
+      assert.equal((await shown(AKI, [akis]))[0].title, "架空の図書館");
+      assert.deepEqual(await shown(null, [akis]), []);
+      await as(
+        AKI,
+        "insert into posts (author_id, body, book_id) values ($1, '面白かった', $2)",
+        [AKI, akis],
+      );
+      const seen = await shown(null, [akis]);
+      assert.equal(seen.length, 1);
+      assert.deepEqual(Object.keys(seen[0]).sort(), [
+        "book_id",
+        "creators",
+        "credits",
+        "edition",
+        "issued",
+        "ndc",
+        "publisher",
+        "series",
+        "sources",
+        "subtitle",
+        "title",
+        "title_reading",
+        "volume",
+      ]);
+      assert.equal(seen[0].title, "架空の図書館");
+      assert.equal(seen[0].publisher, "架空書房");
+      // Once anyone may see that X1 is someone's, what the sources said
+      // answers a copy placed after, as the cache: Ben's new copy is asked
+      // nothing, and shows the master ten minutes on.
+      await settle();
+      const cached = id(2, 7);
+      await register(BEN, cached, X1, "架空の図書館");
+      await tick();
+      assert.deepEqual(
+        (await questions()).filter((q) => q.url.includes(X1)),
+        [],
+      );
+      await later(11);
+      await judge();
+      assert.equal((await shown(BEN, [cached]))[0].title, "架空の図書館");
       // A book the master has nothing for is not listed; at most 200 are asked.
       await age(id(2, 3), 60);
       assert.deepEqual(await shown(AKI, [id(2, 3)]), []);

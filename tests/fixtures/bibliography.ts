@@ -337,7 +337,7 @@ export function helpers(db: PGlite) {
         title_kept: boolean;
       }>(
         `select s.state, s.record, s.record_id, s.status, s.fields, s.misses, s.failures,
-           (s.next_at - s.answered_at)::text as wait, private.bib_owed(s.edition_id, s.settled_at, s.refetch_at) is not null as asked,
+           (s.next_at - s.answered_at)::text as wait, private.bib_owed(s.edition_id, s.settled_for, s.refetch_at) is not null as asked,
            s.request_id is not null as out, s.title_kept_at is not null as title_kept
          from private.edition_sources s join editions e on e.id = s.edition_id
          where e.isbn = $1 and s.source = $2`,
@@ -370,14 +370,17 @@ export function helpers(db: PGlite) {
          title_kept_at = title_kept_at - (select i from i),
          next_at = next_at - (select i from i), settled_at = settled_at - (select i from i),
          refetch_at = refetch_at - (select i from i),
-         sent_at = sent_at - (select i from i)`,
+         sent_at = sent_at - (select i from i),
+         sent_for = sent_for - (select i from i), tried_for = tried_for - (select i from i),
+         settled_for = settled_for - (select i from i),
+         found_for = found_for - (select i from i), title_for = title_for - (select i from i)`,
       [minutes],
     );
   /** Nothing owed or due: no source is asked anything until a book moves. */
   const quiet = () =>
     rows(
       `update private.edition_sources set settled_at = now(), refetch_at = null,
-         next_at = now() + interval '1 day'
+         settled_for = now(), tried_for = now(), next_at = now() + interval '1 day'
        where request_id is null`,
     );
   /** Every question out goes unanswered past its fifteen minutes; then quiet. */

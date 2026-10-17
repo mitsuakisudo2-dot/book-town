@@ -51,16 +51,22 @@ function rollbackSql(): string {
     const start = text.indexOf(head);
     const stop = text.indexOf(end, start);
     assert.ok(start >= 0 && stop > start, head);
-    return text.slice(start, text.indexOf("\n", stop) + 1);
+    return text.slice(start, text.indexOf(";\n", stop) + 2);
   };
   const remade = [
-    ...["bib_send", "bib_tick", "book_checked", "withdraw_bibliography"].map(
-      (name) =>
-        from(
-          "_bibliography.sql",
-          `create function private.${name}(`,
-          `revoke all on function private.${name}(`,
-        ),
+    ...[
+      "bib_send",
+      "bib_tick",
+      "book_checked",
+      "withdraw_bibliography",
+      "bib_take",
+      "edition_bibliography",
+    ].map((name) =>
+      from(
+        "_bibliography.sql",
+        `create function private.${name}(`,
+        `revoke all on function private.${name}(`,
+      ),
     ),
     from(
       "_bibliography.sql",
@@ -71,6 +77,11 @@ function rollbackSql(): string {
       "_works.sql",
       "create function private.work_candidates(",
       "revoke all on function private.work_candidates(",
+    ),
+    from(
+      "_works.sql",
+      "create function private.keep_apart(",
+      "revoke all on function private.keep_apart(",
     ),
   ].map((text) =>
     text.replace("create function", "create or replace function"),
@@ -151,9 +162,12 @@ async function main() {
           "架空の図書館",
           "架空の図書館 夜の章",
           "架空の図書館：夜の章",
-          "ｶｸｳの図書館".replace("ｶｸｳ", "架空"),
         ])
           assert.equal(await verdict(typed, "", LIBRARY), "same", typed);
+        assert.equal(
+          await verdict("ｶﾌｶの城", "", { title: "カフカの城" }),
+          "same",
+        );
         assert.equal(
           await verdict("進撃の巨人（1）", "", {
             title: "進撃の巨人",
@@ -171,6 +185,22 @@ async function main() {
           await verdict("채식주의자", "", { title: "채식주의자" }),
           "same",
         );
+        // The same volume written another way (the owner, 2026-10-17 04:15Z:
+        // a way of writing is not another volume).
+        const shingeki = { title: "進撃の巨人", volume: "1" };
+        for (const [typed, master] of [
+          ["進撃の巨人 第1巻", shingeki],
+          ["進撃の巨人（１）", { title: "進撃の巨人", volume: "第1巻" }],
+          ["進撃の巨人 01", shingeki],
+          ["ノルウェイの森 1", { title: "ノルウェイの森", volume: "上" }],
+          ["ノルウェイの森（下）", { title: "ノルウェイの森", volume: "2" }],
+          ["銀河英雄伝説 二", { title: "銀河英雄伝説", volume: "2" }],
+          ["銀河英雄伝説 第十二巻", { title: "銀河英雄伝説", volume: "12" }],
+          ["架空の物語 Vol.3", { title: "架空の物語", volume: "3" }],
+          ["しんげきのきょじん 1", { ...shingeki, reading: "シンゲキ ノ キョジン" }],
+          ["ゴルゴ13", { title: "ゴルゴ13", volume: "2" }],
+        ] as const)
+          assert.equal(await verdict(typed, "", master), "same", typed);
       },
     );
 
@@ -213,6 +243,31 @@ async function main() {
         assert.equal(
           await verdict("1Q84 BOOK1", "", { title: "1Q84", volume: "BOOK1" }),
           "same",
+        );
+        // Numbers that are not clearly a volume, or a master that tells
+        // none: the rest decides.
+        assert.equal(
+          await verdict("進撃の巨人 2", "", { title: "進撃の巨人" }),
+          "close",
+        );
+        assert.equal(
+          await verdict("架空の図書館 2026", "", {
+            title: "架空の図書館",
+            volume: "上",
+          }),
+          "close",
+        );
+        assert.equal(
+          await verdict("進撃の巨人 2 (講談社コミックス)", "", {
+            title: "進撃の巨人",
+            volume: "1",
+          }),
+          "close",
+        );
+        // A script the folding drops, with a number: the whole of it.
+        assert.equal(
+          await verdict("Война и мир 1", "", { title: "Война и мир" }),
+          "close",
         );
         // Titles apart, an author agreeing: by name, by reading, by the
         // authority's form without its years.
@@ -286,6 +341,18 @@ async function main() {
           creators: [{ name: "諫山創" }],
         };
         assert.equal(await verdict("進撃の巨人 2", "", shingeki), "apart");
+        for (const [typed, master] of [
+          ["ノルウェイの森 2", { title: "ノルウェイの森", volume: "上" }],
+          ["ノルウェイの森 下", { title: "ノルウェイの森", volume: "1" }],
+          ["銀河英雄伝説 二", { title: "銀河英雄伝説", volume: "1" }],
+          ["ゴルゴ13 2", { title: "ゴルゴ13", volume: "1" }],
+          ["しんげきのきょじん 2", { ...shingeki, reading: "シンゲキ ノ キョジン" }],
+        ] as const)
+          assert.equal(await verdict(typed, "", master), "apart", typed);
+        assert.equal(
+          await verdict("Анна Каренина 1", "", { title: "Война и мир 1" }),
+          "apart",
+        );
         assert.equal(
           await verdict("進撃の巨人（２）", "諫山創", shingeki),
           "apart",
@@ -606,6 +673,14 @@ async function main() {
         (await moves(book)).map((m) => m.kind),
         ["hold", "unhold", "hold"],
       );
+      // Held again, in the work it was held in before, empty since.
+      assert.equal(
+        await count(
+          "select count(distinct to_work) from private.work_changes where book_id = $1 and kind = 'hold'",
+          [book],
+        ),
+        1,
+      );
       assert.deepEqual(
         (await holds(CHI)).map((h) => h.book_id),
         [book],
@@ -888,16 +963,229 @@ async function main() {
     },
   );
 
+  const sees = async (book: string) =>
+    (
+      await rows<{ title: string | null }>(
+        `select (private.edition_bibliography(b.edition_id, c.placed_at)).title
+         from books b join private.book_checks c on c.book_id = b.id where b.id = $1`,
+        [book],
+      )
+    )[0].title;
+  const asking = async (source: "ndl" | "openbd") =>
+    (await questions())
+      .filter((q) =>
+        q.url.startsWith(
+          source === "ndl" ? "https://ndlsearch" : "https://api.openbd.jp/",
+        ),
+      )
+      .map((q) =>
+        source === "ndl"
+          ? decodeURIComponent(q.url).match(/isbn="(\d{13})"/)?.[1]
+          : new URL(q.url).searchParams.get("isbn"),
+      );
+
+  await check(
+    "a book placed while an earlier book of its ISBN waits, in private, is asked about at its own turn, after the books placed before it; the earlier question does not answer it",
+    async () => {
+      await settle();
+      const bens40 = id(4, 1);
+      const akis41 = id(4, 2);
+      const chis40 = id(4, 3);
+      const forty = {
+        [X(40)]: sru({ isbns: [X(40)], title: "四十の本" }),
+        [X(41)]: sru({ isbns: [X(41)], title: "四十一の本" }),
+      };
+      const fortyOpen = {
+        [X(40)]: openbd({ isbn: X(40), title: "四十の本" }),
+        [X(41)]: openbd({ isbn: X(41), title: "四十一の本" }),
+      };
+      await register(BEN, bens40, X(40), "四十の本");
+      await tick();
+      assert.deepEqual(await asking("ndl"), [X(40)]);
+      // While Ben's questions are out, Aki registers X41, which nobody had,
+      // and then Chi X40.
+      await register(AKI, akis41, X(41), "四十一の本");
+      await register(CHI, chis40, X(40), "四十の本");
+      await answerAll(db, forty, fortyOpen);
+      await tick();
+      // Ben's answers are his: Chi's copy sees nothing of them, and the
+      // library is asked about Aki's X41 before Chi's X40, as if nobody had
+      // X40.
+      assert.equal(await sees(bens40), "四十の本");
+      assert.equal(await sees(chis40), null);
+      assert.deepEqual(await asking("ndl"), [X(41)]);
+      assert.deepEqual(await asking("openbd"), [`${X(41)},${X(40)}`]);
+      await answerAll(db, forty, fortyOpen);
+      await tick();
+      assert.deepEqual(await asking("ndl"), [X(40)]);
+      await answerAll(db, forty, fortyOpen);
+      await tick();
+      assert.equal(await sees(chis40), "四十の本");
+      await later(11);
+      await tick();
+      for (const book of [bens40, akis41, chis40])
+        assert.equal((await check_(book)).verdict, "same", book);
+      await settle();
+    },
+  );
+
+  await check(
+    "a book on an ISBN answered before, in private, waits for its own answers: no verdict ten minutes on until they come; a source answering that it has nothing ends the wait",
+    async () => {
+      const bens42 = id(4, 4);
+      const akis42 = id(4, 5);
+      const akis43 = id(4, 6);
+      await register(BEN, bens42, X(42), "四十二の本");
+      await round(
+        { [X(42)]: sru({ isbns: [X(42)], title: "四十二の本" }) },
+        { [X(42)]: openbd({ isbn: X(42), title: "四十二の本" }) },
+      );
+      await settle();
+      await register(AKI, akis42, X(42), "四十二の本");
+      await register(AKI, akis43, X(43), "どこにもない本");
+      await tick();
+      await later(11);
+      await tick();
+      for (const book of [akis42, akis43]) {
+        const waiting = await check_(book);
+        assert.equal(waiting.verdict, null, book);
+        assert.equal(waiting.checked, true, book);
+        assert.equal(waiting.counts, false, book);
+      }
+      // The answers come after the ten minutes: X42 found, X43 nowhere.
+      const nowhere = async () => {
+        for (const q of await questions())
+          await answer(
+            q.id,
+            q.url.startsWith("https://ndlsearch")
+              ? q.url.includes(X(42))
+                ? sru({ isbns: [X(42)], title: "四十二の本" })
+                : diagnostic("Record does not exist")
+              : JSON.stringify(
+                  (new URL(q.url).searchParams.get("isbn") ?? "")
+                    .split(",")
+                    .map((isbn) =>
+                      isbn === X(42)
+                        ? openbd({ isbn: X(42), title: "四十二の本" })
+                        : null,
+                    ),
+                ),
+          );
+      };
+      for (let turn = 0; turn < 3; turn++) {
+        await nowhere();
+        await tick();
+      }
+      assert.equal((await check_(akis42)).verdict, "same");
+      assert.equal((await check_(akis43)).verdict, "none");
+      assert.equal((await check_(akis43)).counts, true);
+      await settle();
+    },
+  );
+
+  await check(
+    "a held book: held_at is when it was held, the operator does not keep its work apart, a held work needs a verdict apart, and an edited ISBN takes it to its new edition's work",
+    async () => {
+      const book = id(4, 7);
+      await register(CHI, book, X(44), "まったく別の本");
+      await round(
+        { [X(44)]: sru({ isbns: [X(44)], title: "四十四の本" }) },
+        { [X(44)]: openbd({ isbn: X(44), title: "四十四の本" }) },
+      );
+      await later(11);
+      await tick();
+      assert.equal((await check_(book)).held, true);
+      // Compared again later, still apart: told when it was held.
+      await rows(
+        `update private.book_checks set checked_at = null,
+           judged_at = judged_at - interval '1 hour' where book_id = $1`,
+        [book],
+      );
+      await judge();
+      const [told] = await holds(CHI);
+      const [when] = await rows<{ judged_at: string; checked_at: string }>(
+        "select judged_at::text, checked_at::text from private.book_checks where book_id = $1",
+        [book],
+      );
+      assert.equal(told.held_at, when.judged_at);
+      assert.notEqual(told.held_at, when.checked_at);
+      await refused(
+        () => rows("select private.keep_apart($1, $2)", [book, akis]),
+        /a held book/,
+        "keeping a held book's work apart",
+      );
+      await refused(
+        () =>
+          rows(
+            "update private.book_checks set verdict = null where book_id = $1",
+            [book],
+          ),
+        /check constraint/,
+        "a held work with no verdict",
+      );
+      await as(CHI, "update books set isbn = $2 where id = $1", [book, X(45)]);
+      const moved = await check_(book);
+      assert.equal(moved.held, false);
+      assert.equal(moved.in_edition_work, true);
+      assert.equal(moved.verdict, null);
+      assert.deepEqual(await holds(CHI), []);
+      await settle();
+    },
+  );
+
+  await check(
+    "an answer the same as before compares again only the books it shows something new; a book the tick could not mark is compared on the next",
+    async () => {
+      const stamp = async (book: string) =>
+        (
+          await rows<{ at: string }>(
+            "select checked_at::text as at from private.book_checks where book_id = $1",
+            [book],
+          )
+        )[0].at;
+      await tick();
+      const was = await stamp(akis);
+      await rows("select private.refetch_bibliography($1)", [akis]);
+      await round();
+      assert.equal(await stamp(akis), was);
+      await rows("insert into private.book_rechecks (book_id) values ($1)", [
+        akis,
+      ]);
+      await tick();
+      assert.notEqual(await stamp(akis), was);
+      assert.equal(await count("select count(*) from private.book_rechecks"), 0);
+      await settle();
+    },
+  );
+
+  await check(
+    "a book without an ISBN left with no verdict (registered while the file was applied) is none on the next tick",
+    async () => {
+      const plain = id(4, 8);
+      await register(AKI, plain, null, "手帖");
+      await rows(
+        `update private.book_checks set checked_at = null, verdict = null, judged_at = null
+         where book_id = $1`,
+        [plain],
+      );
+      await later(11);
+      await tick();
+      assert.equal((await check_(plain)).verdict, "none");
+      assert.equal((await check_(plain)).counts, true);
+    },
+  );
+
   await check(
     "editions due at the same time with nothing owed are asked about in the order of their ids",
     async () => {
       const together = [X(9), X(10), X(11)];
       await register(AKI, id(1, 11), X(11), "十一の本");
       await settle();
-      // As if their answers had been read together: due again at one time.
+      // As if their answers had been read together, alike: due again at one time.
       await rows(
         `update private.edition_sources s set settled_at = now(), refetch_at = null,
-           next_at = now() - interval '1 minute'
+           settled_for = now(), tried_for = now(), next_at = now() - interval '1 minute',
+           state = 'found', status = null
          from editions e where e.id = s.edition_id and e.isbn = any ($1::text[])`,
         [together],
       );
@@ -1010,17 +1298,56 @@ async function main() {
   );
 
   await check(
-    "the rollback in the header leaves the database as it was before",
+    "the rollback in the header leaves the database as it was before, a held book back in its edition's work",
     async () => {
       const earlier = await migrated(HOLDS);
       const was = await catalog(earlier);
       await earlier.exec(TEXT);
       assert.notDeepEqual(await catalog(earlier), was);
+      const before = helpers(earlier);
+      await earlier.exec(`
+        insert into auth.users (id) values ('${AKI}');
+        insert into profiles (id, handle, name) values ('${AKI}', 'aki', 'アキ');
+      `);
+      const held = id(6, 1);
+      await before.register(AKI, held, X(30), "まったく別の本");
+      await before.tick();
+      await answerAll(
+        earlier,
+        { [X(30)]: sru({ isbns: [X(30)], title: "架空の図書館" }) },
+        { [X(30)]: openbd({ isbn: X(30), title: "架空の図書館" }) },
+      );
+      await before.tick();
+      await before.later(11);
+      await before.tick();
+      const where = () =>
+        before.rows<{ home: boolean }>(
+          `select b.work_id = e.work_id as home from books b
+           join editions e on e.id = b.edition_id where b.id = $1`,
+          [held],
+        );
+      assert.deepEqual(await where(), [{ home: false }]);
       const rollback = rollbackSql();
       assert.match(rollback, /drop function public\.book_holds\(\)/);
       await earlier.exec(rollback);
-      assert.deepEqual(await catalog(earlier), was);
-      // And the file runs again.
+      // The moves written down stay, holds among them, so their kinds stay
+      // allowed: the one difference.
+      const kinds = "private.work_changes.work_changes_kind_check";
+      const without = (all: Awaited<ReturnType<typeof catalog>>) =>
+        all.filter((row) => row.name !== kinds);
+      assert.deepEqual(without(await catalog(earlier)), without(was));
+      assert.deepEqual(await where(), [{ home: true }]);
+      assert.deepEqual(
+        (
+          await before.rows<{ kind: string }>(
+            "select kind from private.work_changes where book_id = $1 order by changed_at, id",
+            [held],
+          )
+        ).map((row) => row.kind),
+        ["hold", "unhold"],
+      );
+      // The tick as it was runs, and the file runs again.
+      await before.tick();
       await earlier.exec(TEXT);
       await earlier.close();
     },
