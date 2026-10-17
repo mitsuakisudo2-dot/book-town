@@ -137,11 +137,12 @@ export type ShopRow = Pick<
 >;
 
 /**
- * Who typed a book in is not readable, so a book row comes without it. Its
- * work (work_id) comes with it: the database places every book in the work of
- * its edition (plan item 4), and the app never writes it.
+ * Who typed a book in is not readable, so a book row comes without it, and
+ * so is its edition (edition_id), which the app does not need. Its work
+ * (work_id) comes with it: the database places every book in the work of its
+ * edition (plan item 4), and the app never writes either.
  */
-export type BookRow = Omit<Tables<"books">, "created_by">;
+export type BookRow = Omit<Tables<"books">, "created_by" | "edition_id">;
 
 export interface RemoteRows {
   profiles: Tables<"profiles">[];
@@ -878,8 +879,11 @@ type Pair = Record<string, string>;
 
 /** One step of saving. Each one can be run again safely after a failure. */
 export type Write =
-  // The database gives a book its work; a reader may not name one.
-  | { kind: "books"; rows: Omit<TablesInsert<"books">, "work_id">[] }
+  // The database gives a book its edition and work; a reader may name neither.
+  | {
+      kind: "books";
+      rows: Omit<TablesInsert<"books">, "work_id" | "edition_id">[];
+    }
   | {
       kind: "profile";
       patch: Partial<
