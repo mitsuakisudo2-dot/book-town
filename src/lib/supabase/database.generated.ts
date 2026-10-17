@@ -873,7 +873,7 @@ export type Database = {
           memo_hint: boolean;
           records_audience: string;
           saves_audience: string;
-          shelf_audiences: Json;
+          shelf_audiences: NonNullable<Json>;
           shelves_audience: string;
           spoiler_display: string;
           stats_audience: string;
@@ -892,7 +892,7 @@ export type Database = {
           memo_hint?: boolean;
           records_audience?: string;
           saves_audience?: string;
-          shelf_audiences?: Json;
+          shelf_audiences?: NonNullable<Json>;
           shelves_audience?: string;
           spoiler_display?: string;
           stats_audience?: string;
@@ -910,7 +910,7 @@ export type Database = {
           memo_hint?: boolean;
           records_audience?: string;
           saves_audience?: string;
-          shelf_audiences?: Json;
+          shelf_audiences?: NonNullable<Json>;
           shelves_audience?: string;
           spoiler_display?: string;
           stats_audience?: string;
