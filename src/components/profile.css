@@ -157,7 +157,7 @@
   max-width: 100%;
   aspect-ratio: 2/3;
   box-shadow: 5px 5px 11px color-mix(in srgb, var(--shade) 15%, transparent);
-  transition: transform 0.25s ease;
+  transition: transform var(--dur-slide) ease;
 }
 .profile-nine-book:hover > .book-jacket {
   transform: translateY(-5px) rotate(-1deg);
@@ -228,8 +228,8 @@
 .profile-nine-empty > button {
   cursor: pointer;
   transition:
-    background 0.2s,
-    border-color 0.2s;
+    background var(--dur-move),
+    border-color var(--dur-move);
 }
 .profile-nine-empty > button:hover {
   background: var(--sheet);
@@ -269,8 +269,8 @@
   text-decoration: none;
   color: inherit;
   transition:
-    border-color 0.2s,
-    transform 0.2s;
+    border-color var(--dur-move),
+    transform var(--dur-move);
 }
 .profile-shop-sign:hover {
   border-color: var(--theme);
@@ -339,7 +339,7 @@
   color: var(--ink);
   padding: 19px 0;
   border-bottom: 1px solid var(--line);
-  transition: padding 0.2s;
+  transition: padding var(--dur-move);
 }
 .profile-shelf-link:hover {
   padding-left: 5px;
@@ -563,8 +563,8 @@
   min-width: 0;
   cursor: pointer;
   transition:
-    background 0.2s,
-    border-color 0.2s;
+    background var(--dur-move),
+    border-color var(--dur-move);
   color: var(--ink);
 }
 .profile-picker-book:hover {

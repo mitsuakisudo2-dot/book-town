@@ -85,7 +85,7 @@
 .poster-editor-sheet {
   flex-shrink: 0;
   width: min(46%, 27svh * 0.8, 230px);
-  transition: width 0.2s;
+  transition: width var(--dur-move);
 }
 .poster-editor-preview.is-large {
   flex-wrap: wrap;
@@ -238,8 +238,8 @@
   text-align: center;
   cursor: pointer;
   transition:
-    border-color 0.15s,
-    background 0.15s;
+    border-color var(--dur-press),
+    background var(--dur-press);
 }
 .poster-template:hover {
   border-color: var(--line-2);

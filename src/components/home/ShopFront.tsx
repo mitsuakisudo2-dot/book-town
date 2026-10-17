@@ -17,6 +17,7 @@ import { useTownBackend } from "../../lib/store";
 import { bookById, quotedTitle } from "../../lib/book-name";
 import type { Shared } from "./Letters";
 import "../street.css";
+import { reducedMotion } from "../../lib/motion";
 
 /** A book picked off a shelf, to be held in the hand (BookInHand). */
 export type Picked = { shop: Shop; shelf: Shelf; item: ShelfItem };
@@ -233,9 +234,7 @@ function StreetShelf({
     const scroll = ref.current?.querySelector<HTMLElement>(".shelf-scroll");
     scroll?.scrollBy({
       left: direction * scroll.clientWidth * 0.7,
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "instant"
-        : "smooth",
+      behavior: reducedMotion() ? "instant" : "smooth",
     });
   };
   return (
