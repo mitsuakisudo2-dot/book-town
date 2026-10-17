@@ -22,8 +22,8 @@ import {
   type TownBackend,
 } from "../town-backend";
 import { emptyArrived, type Arrived } from "../arrived";
-import { isDatabaseId } from "../paths";
-import { sampleBookOfRow, withSamples } from "../samples";
+import { isDatabaseId } from "../record-kind";
+import { bookKind, withSamples } from "../samples";
 import { ME_ID, type TownState } from "../types";
 import type {
   Database,
@@ -410,7 +410,7 @@ async function arrivedFor(
   );
   const books = new Set(town?.books.map((book) => book.id));
   const missing = [...new Set(rows.flatMap((row) => row.book_id ?? []))].filter(
-    (id) => isDatabaseId(id) && !sampleBookOfRow(id) && !books.has(id),
+    (id) => bookKind(id) === "database" && !books.has(id),
   );
   const [profiles, bookRows, postReactions, spoilerReports, folds] =
     await Promise.all([

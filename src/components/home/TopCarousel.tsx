@@ -9,7 +9,6 @@ import {
 } from "react";
 import Link from "next/link";
 import {
-  ME_ID,
   type Book,
   type Reader,
   type Shop,
@@ -17,7 +16,7 @@ import {
 } from "../../lib/types";
 import { posterTitle, type Poster } from "../../lib/posters";
 import { posterPath, walkPath } from "../../lib/paths";
-import { isSample } from "../../lib/tonight";
+import { isSampleId } from "../../lib/record-kind";
 import { BookJacket, Icon } from "../ui";
 import { PosterThumb } from "../PosterView";
 import { SampleTag } from "./FeatureBand";
@@ -263,7 +262,7 @@ function SlideBody({ slide, state }: { slide: Slide; state: TownState }) {
             <p className="home-slide-title">{slide.shop.name}</p>
             <p className="home-slide-meta">
               {slide.owner && `店主 ${slide.owner.name}`}
-              {isSample(slide.shop.id) && <SampleTag />}
+              {isSampleId(slide.shop.id) && <SampleTag />}
             </p>
           </div>
           <Link
@@ -294,8 +293,7 @@ function SlideBody({ slide, state }: { slide: Slide; state: TownState }) {
             </p>
             <p className="home-slide-meta">
               {slide.maker && `${slide.maker.name}さんのポスター`}
-              {slide.poster.authorId !== ME_ID &&
-                isSample(slide.poster.authorId) && <SampleTag />}
+              {isSampleId(slide.poster.authorId) && <SampleTag />}
             </p>
           </div>
           <Link

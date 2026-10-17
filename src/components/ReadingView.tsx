@@ -35,7 +35,8 @@ import { RecordSheet } from "./ReadingRecords";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { useClock } from "./useClock";
 import "./reading.css";
-import { isDatabaseId, profilePath } from "../lib/paths";
+import { profilePath } from "../lib/paths";
+import { isSampleId } from "../lib/record-kind";
 import { bookPath } from "../lib/books";
 import { recentlyFinished } from "../lib/records";
 import { uncoverHidden } from "../lib/hidden-words";
@@ -305,7 +306,7 @@ function ReadersNow({
                 <span>
                   <b>
                     {reader.id === ME_ID ? "あなた" : reader.name}
-                    {reader.id !== ME_ID && !isDatabaseId(reader.id) && (
+                    {isSampleId(reader.id) && (
                       <small className="demo-tag">見本の読書家</small>
                     )}
                   </b>

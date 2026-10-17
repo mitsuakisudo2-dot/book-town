@@ -86,11 +86,14 @@ type Layer = {
 // seconds: long enough for the reader to have gone on to another page and
 // come back with 戻る to the very step the layer was on. The page coming back
 // opens the layer there again, so a layer set aside before a move leaves the
-// history as it is, and hands nothing over.
+// history as it is, and hands nothing over. The page's own step back (a
+// sheet closed, its step coming off) is no move: a layer set aside while it
+// comes (the 便り the sheet was over, closed at once) still takes its step
+// off, and does not open again on the step arrived at.
 let moves = 0;
 if (typeof window !== "undefined")
   addEventListener("popstate", () => {
-    moves += 1;
+    if (!backing) moves += 1;
   });
 /** Set aside since the browser last moved: its step is still to come off. */
 const goingNow = (layer: Layer) => layer.asideAt === moves;

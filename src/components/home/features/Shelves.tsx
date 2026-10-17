@@ -10,7 +10,7 @@ import {
 import { shopCovers } from "../../../lib/features";
 import { findReader } from "../../../lib/social";
 import { walkPath } from "../../../lib/paths";
-import { isSample } from "../../../lib/tonight";
+import { isSampleId } from "../../../lib/record-kind";
 import { BookJacket } from "../../ui";
 import { SampleTag } from "../FeatureBand";
 
@@ -47,7 +47,7 @@ export function ShelvesRail({
             {tagline && <span>{tagline}</span>}
             <small>
               {owner && shop.ownerId !== ME_ID && `店主 ${owner.name}`}
-              {isSample(shop.id) && <SampleTag />}
+              {isSampleId(shop.id) && <SampleTag />}
             </small>
           </span>
         </Link>
