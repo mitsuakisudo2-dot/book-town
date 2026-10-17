@@ -1,3 +1,5 @@
+import type { LibraryEntry } from "./library";
+import type { LibraryChange, LibraryUndo } from "./library-town";
 import type { Poster, PosterDraft } from "./posters";
 import type { FiledReport } from "./supabase/reports";
 import type {
@@ -356,6 +358,13 @@ export interface TownState {
   library: string[];
   /** The viewer's own reading records, and others' public ones, oldest first. */
   readingRecords: ReadingRecord[];
+  /**
+   * The rows of the viewer's library (library_entries) as they are kept, by
+   * book. A book with none yet is worked out from the rest of the town each
+   * time (entriesOf in library-town.ts); a row is kept once the reader
+   * changes something of it.
+   */
+  libraryEntries: Record<string, LibraryEntry>;
   settings: Settings;
   seenNotifications: string[];
   /** Words other readers left at the viewer's shop. Only an account receives them. */
@@ -479,6 +488,15 @@ export interface TownActions {
   /** registerBook, answering with the book's id (null when not registered). */
   addBook(book: NewBook): string | null;
   toggleLibrary(bookId: string): void;
+  /**
+   * Sorts books in the library: 積読・読書中・読了 (null for 未設定),
+   * 読みたい, 所有 (null for 未設定), ☆, or taking them out (removed) and
+   * back. Nothing is posted or shown to anyone. Answers what undoes it, or
+   * null when nothing changed (or the town is still loading).
+   */
+  changeLibrary(bookIds: string[], change: LibraryChange): LibraryUndo | null;
+  /** Undoes a change but for books changed again since; how many went back. */
+  undoLibrary(undo: LibraryUndo): number;
   setComposeIcon(icon: ComposeIcon): void;
   /** Finishing a book, with how it felt. Also marks the book as finished. */
   recordReading(draft: RecordDraft): string | null;

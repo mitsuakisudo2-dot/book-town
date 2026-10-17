@@ -30,7 +30,7 @@ import { workOf } from "./works";
 // These are the rules as pure functions over plain data (review doc 5-2), so
 // the store, the demo's storage and the database's trigger (followMarks is
 // its twin) are checked against the same cases, tests/fixtures/
-// library-cases.json. Nothing in the app calls them yet.
+// library-cases.json. The town reaches them through library-town.ts.
 
 // ---------------------------------------------------------------- rows
 
@@ -409,7 +409,8 @@ export interface LibraryState {
 /** Registering reads a book; it never says the reader owns it (問い2). */
 const READ_VIAS: readonly EntrySource[] = ["scan", "isbn", "manual"];
 
-const blankEntry = (
+/** A row as a book first comes in: nothing set yet. */
+export const blankEntry = (
   bookId: string,
   source: EntrySource,
   addedAt: string,
@@ -442,7 +443,8 @@ const ENTRY_FIELDS = [
   "likeRestored",
   "everUsed",
 ] as const;
-const sameEntry = (a: LibraryEntry, b: LibraryEntry) =>
+/** Whether two rows hold the same. */
+export const sameEntry = (a: LibraryEntry, b: LibraryEntry) =>
   ENTRY_FIELDS.every((field) => a[field] === b[field]);
 
 /**
@@ -514,6 +516,13 @@ const keptBy = (x: EntryContext) =>
 function heldByLikeAlone(e: LibraryEntry, x: EntryContext): boolean {
   return (e.likeRestored || !given(e, x)) && !keptBy(x);
 }
+
+/**
+ * Nothing at all keeps the row: no like, nothing the reader gave it, and
+ * nothing that holds it (what taking back a 読みたい or a ☆ looks at).
+ */
+export const keptByNothing = (e: LibraryEntry, x: EntryContext): boolean =>
+  e.likedAt === null && !x.liked && !given(e, x) && !keptBy(x);
 
 /** In the library only by a like that stands: hidden while likes_in_library is off (4-10). */
 export const likeOnly = (e: LibraryEntry, x: EntryContext): boolean =>
