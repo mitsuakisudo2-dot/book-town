@@ -980,7 +980,7 @@ try {
       ).toHaveAttribute(
         "href",
         "https://google.com/search?q=" +
-          encodeURIComponent("ソラリス　スタニスワフ・レム"),
+          encodeURIComponent("ソラリス"),
       );
       const reviews = page.locator(
         ".book-reviews > .post-feed > article.post-card",
@@ -1505,7 +1505,7 @@ try {
   await check(
     "the lookup is Google's on every device, Safari on an iPhone or iPad too",
     async () => {
-      const words = encodeURIComponent("ソラリス　スタニスワフ・レム");
+      const words = encodeURIComponent("ソラリス");
       const google = `https://google.com/search?q=${words}`;
       const served = await (
         await page.request.get(`${baseURL}/books/solaris/`)
