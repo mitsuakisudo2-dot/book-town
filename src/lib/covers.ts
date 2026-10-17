@@ -27,8 +27,8 @@ export interface Cover {
   link?: string;
 }
 
-/** A book's title and author, by ISBN, for sources that search by words. */
-export type CoverNames = Map<string, { title: string; author?: string }>;
+/** A book's title, by ISBN, for sources that search by words. */
+export type CoverNames = Map<string, string>;
 
 export interface CoverSource {
   name: CoverSourceName;
@@ -121,18 +121,16 @@ const googleKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY;
 /**
  * The questions Google is asked for one book, first to last. Since early
  * October 2026 Google's field searches (isbn:, intitle:) come back empty, even
- * for volumes it serves, while plain words still find them; so
- * the book's title and author are asked first, then its ISBN, in case the
- * field search comes back. Either way only a volume carrying that very ISBN
- * is used (googleCover).
+ * for volumes it serves, while plain words still find them; so the book's
+ * title is asked first, then its ISBN, in case the field search comes back.
+ * Only the title: the author as the book was registered ("Chiang,Ted,1967-
+ * 公手,成幸,1949-") rarely matches how Google writes it ("テッド・チャン"), and
+ * words Google cannot match lose the book. Whichever answers, only a volume
+ * carrying that very ISBN is used (googleCover).
  */
-export function googleQuestions(
-  isbn: string,
-  name?: { title: string; author?: string },
-): string[] {
+export function googleQuestions(isbn: string, title?: string): string[] {
   // Quotes, colons and a leading minus would read as Google's own syntax.
-  const words = [name?.title, name?.author]
-    .join(" ")
+  const words = (title ?? "")
     .replace(/[":]/g, " ")
     .replace(/(^|\s)-+/g, "$1")
     .replace(/\s+/g, " ")
@@ -146,10 +144,7 @@ export function googleQuestions(
     "&maxResults=" +
     most +
     fields;
-  return [
-    ...(name?.title.trim() ? [ask(words, 10)] : []),
-    ask("isbn:" + isbn, 3),
-  ];
+  return [...(words ? [ask(words, 40)] : []), ask("isbn:" + isbn, 3)];
 }
 
 const googleBooks: CoverSource = {
@@ -221,10 +216,10 @@ const names: CoverNames = new Map();
 const resting = new Set<CoverSourceName>();
 const listeners = new Set<() => void>();
 
-// v1 was written while Google answered no ISBN (see googleQuestions), so its
-// "no cover" answers are not trusted; it is dropped.
-const STORAGE_KEY = "book-town-covers-v2";
-const OLD_STORAGE_KEY = "book-town-covers-v1";
+// v1 and v2 were written while Google was asked in ways it answered nothing
+// to (see googleQuestions), so their "no cover" answers are not trusted.
+const STORAGE_KEY = "book-town-covers-v3";
+const OLD_STORAGE_KEYS = ["book-town-covers-v1", "book-town-covers-v2"];
 const DAY = 24 * 60 * 60 * 1000;
 /** A found cover is trusted for a month, an absent one checked again in days. */
 const KEEP_FOUND = 30 * DAY;
@@ -247,7 +242,7 @@ function restore() {
   if (restored || typeof window === "undefined") return;
   restored = true;
   try {
-    localStorage.removeItem(OLD_STORAGE_KEY);
+    for (const key of OLD_STORAGE_KEYS) localStorage.removeItem(key);
   } catch {
     // Nothing to drop.
   }
@@ -391,9 +386,8 @@ function flush() {
   });
 }
 
-function request(isbn: string, name?: { title: string; author?: string }) {
-  if (name?.title && !names.has(isbn))
-    names.set(isbn, { title: name.title, author: name.author });
+function request(isbn: string, title?: string) {
+  if (title && !names.has(isbn)) names.set(isbn, title);
   restore();
   if (known.has(isbn) || asked.has(isbn)) return;
   asked.add(isbn);
@@ -411,20 +405,19 @@ function subscribe(listener: () => void) {
 
 /**
  * The real cover of the book with this ISBN, once found; null otherwise. Its
- * title and author let Google find it (see googleQuestions).
+ * title lets Google find it (see googleQuestions).
  */
 export function useCover(
   isbn: string | undefined,
-  name?: { title: string; author?: string },
+  name?: { title: string },
 ): Cover | null {
   const title = name?.title;
-  const author = name?.author;
   useEffect(() => {
     if (!isbn) return;
-    request(isbn, title ? { title, author } : undefined);
+    request(isbn, title);
     // Remembered covers wait for the refusals too, even when nothing is asked.
     void readRefusals();
-  }, [isbn, title, author]);
+  }, [isbn, title]);
   return useSyncExternalStore(
     subscribe,
     () => {

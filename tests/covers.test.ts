@@ -177,29 +177,25 @@ async function main() {
     },
   );
 
-  await check(
-    "Google is asked the title and author first, then the ISBN",
-    () => {
-      const [words, isbn] = googleQuestions(MOMO, {
-        title: 'Re:ゼロ "モモ"',
-        author: "-ミヒャエル・エンデ",
-      }).map((question) => new URL(question).searchParams);
-      // Quotes, colons and a leading minus are not read as Google's syntax.
-      assert.equal(words.get("q"), "Re ゼロ モモ ミヒャエル・エンデ");
-      assert.equal(words.get("maxResults"), "10");
-      assert.equal(isbn.get("q"), "isbn:" + MOMO);
-      assert.equal(isbn.get("maxResults"), "3");
-      // A book without a title is asked by its ISBN only.
-      assert.deepEqual(
-        googleQuestions(MOMO).map((q) => new URL(q).searchParams.get("q")),
-        ["isbn:" + MOMO],
-      );
-      assert.equal(googleQuestions(MOMO, { title: " " }).length, 1);
-    },
-  );
+  await check("Google is asked the title first, then the ISBN", () => {
+    const [words, isbn] = googleQuestions(MOMO, 'Re:ゼロ "モモ" -上').map(
+      (question) => new URL(question).searchParams,
+    );
+    // Quotes, colons and a leading minus are not read as Google's syntax.
+    assert.equal(words.get("q"), "Re ゼロ モモ 上");
+    assert.equal(words.get("maxResults"), "40");
+    assert.equal(isbn.get("q"), "isbn:" + MOMO);
+    assert.equal(isbn.get("maxResults"), "3");
+    // A book without a title is asked by its ISBN only.
+    assert.deepEqual(
+      googleQuestions(MOMO).map((q) => new URL(q).searchParams.get("q")),
+      ["isbn:" + MOMO],
+    );
+    assert.equal(googleQuestions(MOMO, " ").length, 1);
+  });
 
   await check(
-    "Google's search by words finds the cover of that very ISBN only",
+    "Google's search by title finds the cover of that very ISBN only",
     async () => {
       // As Google answers since October 2026: nothing for isbn:, the book
       // among others for its title.
@@ -208,7 +204,7 @@ async function main() {
           return { body: [openBdRecord(MOMO), null] };
         const q = url.searchParams.get("q") ?? "";
         if (q.startsWith("isbn:")) return { body: {} };
-        if (q.startsWith("モモ"))
+        if (q === "モモ")
           return {
             body: {
               items: [
@@ -233,8 +229,8 @@ async function main() {
         new Set(),
         new Map(),
         new Map([
-          [MOMO, { title: "モモ", author: "ミヒャエル・エンデ" }],
-          [NONE, { title: "ない本" }],
+          [MOMO, "モモ"],
+          [NONE, "ない本"],
         ]),
       );
       assert.equal(answers.get(MOMO)?.url, "https://books.google.com/m");
@@ -242,11 +238,11 @@ async function main() {
       const google = asked
         .filter((u) => u.startsWith("www.googleapis.com"))
         .map((u) => new URL("https://" + u).searchParams.get("q"));
-      // MOMO is found by its words and its ISBN is not asked; NONE is asked
+      // MOMO is found by its title and its ISBN is not asked; NONE is asked
       // both ways.
       assert.deepEqual(
         google.sort(),
-        ["isbn:" + NONE, "モモ ミヒャエル・エンデ", "ない本"].sort(),
+        ["isbn:" + NONE, "モモ", "ない本"].sort(),
       );
     },
   );
