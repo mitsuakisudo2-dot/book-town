@@ -5,10 +5,11 @@
 // (x-web-search://, #70) was tried on the iPhone and put back to Google
 // (2026-10-17).
 
-type Named = { title: string; author: string };
+import { bookAuthor, bookTitle, type Named } from "./book-name";
 
 /** The title and the author, a full-width space between them. */
-export const lookupQuery = (book: Named) => `${book.title}　${book.author}`;
+export const lookupQuery = (book: Named) =>
+  `${bookTitle(book)}　${bookAuthor(book)}`;
 
 /** Google's results, without "www." (see BookPurchase). */
 export const googleLookupUrl = (book: Named) =>

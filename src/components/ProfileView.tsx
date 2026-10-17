@@ -111,6 +111,7 @@ import { afterLayerCloses, leaveLayers } from "../lib/back-layer";
 import { focusField } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { VisibilitySettings } from "./VisibilitySettings";
+import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
 
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
 type Collection = (typeof COLLECTIONS)[number];
@@ -279,7 +280,7 @@ export function ProfileView({
   const publicShelves = shop?.shelves.filter((shelf) => shelf.isPublic) ?? [];
   const lifeNine = Array.from({ length: 9 }, (_, index) => {
     const id = reader.lifeNine[index];
-    return id ? state.books.find((book) => book.id === id) : undefined;
+    return id ? bookById(state.books, id) : undefined;
   });
   const following = Boolean(shop && state.following.includes(shop.id));
   const followedShops = state.shops.filter((place) =>
@@ -365,13 +366,13 @@ export function ProfileView({
     <button
       className="profile-picker-book"
       key={book.id}
-      aria-label={`${book.title}を人生の9冊に加える`}
+      aria-label={`${bookTitle(book)}を人生の9冊に加える`}
       disabled={draftNine.length >= NINE_MAX}
       onClick={() => addNine(book.id)}
     >
       <BookJacket book={book} />
-      <strong>{book.title}</strong>
-      <span>{book.author}</span>
+      <strong>{bookTitle(book)}</strong>
+      <span>{bookAuthor(book)}</span>
       <small>
         <Icon name="plus" /> 加える
       </small>
@@ -641,20 +642,20 @@ export function ProfileView({
                 <Link
                   href={bookPath(book.id)}
                   className="profile-nine-book"
-                  aria-label={`${book.title}の詳細を見る`}
+                  aria-label={`${bookTitle(book)}の詳細を見る`}
                 >
                   <span className="profile-nine-number">0{index + 1}</span>
                   <BookJacket book={book} />
                 </Link>
                 <Link className="profile-nine-title" href={bookPath(book.id)}>
-                  {book.title}
+                  {bookTitle(book)}
                 </Link>
-                <p className="profile-nine-author">{book.author}</p>
+                <p className="profile-nine-author">{bookAuthor(book)}</p>
                 {reader.nineNotes[book.id] && (
                   <button
                     className="profile-nine-note"
                     onClick={() => setSelectedNote(book.id)}
-                    aria-label={`${book.title}についてのひとことを読む`}
+                    aria-label={`${bookTitle(book)}についてのひとことを読む`}
                   >
                     <Icon name="leaf" />
                     ひとことを読む
@@ -771,16 +772,16 @@ export function ProfileView({
                 ? [...state.library].reverse()
                 : state[collection]
               ).map((id) => {
-                const book = state.books.find((entry) => entry.id === id);
+                const book = bookById(state.books, id);
                 return book ? (
                   <article className="profile-saved-book" key={id}>
                     <Link
                       href={bookPath(id)}
-                      aria-label={`${book.title}の詳細を見る`}
+                      aria-label={`${bookTitle(book)}の詳細を見る`}
                     >
                       <BookJacket book={book} />
-                      <strong>{book.title}</strong>
-                      <small>{book.author}</small>
+                      <strong>{bookTitle(book)}</strong>
+                      <small>{bookAuthor(book)}</small>
                     </Link>
                     <button
                       onClick={() =>
@@ -790,7 +791,7 @@ export function ProfileView({
                             ? actions.toggleFavorite(id)
                             : actions.toggleLibrary(id)
                       }
-                      aria-label={`${book.title}を${collection === "wishlist" ? "読みたい" : collection === "favorites" ? "お気に入り" : "登録した本"}から外す`}
+                      aria-label={`${bookTitle(book)}を${collection === "wishlist" ? "読みたい" : collection === "favorites" ? "お気に入り" : "登録した本"}から外す`}
                     >
                       <Icon name="close" size={14} /> 外す
                     </button>
@@ -874,11 +875,8 @@ export function ProfileView({
                           <span className="profile-shelf-preview">
                             {shelf.items
                               .slice(0, 3)
-                              .map(
-                                (item) =>
-                                  state.books.find(
-                                    (book) => book.id === item.bookId,
-                                  )?.title,
+                              .map((item) =>
+                                titleById(state.books, item.bookId),
                               )
                               .filter(Boolean)
                               .join(" · ") ||
@@ -1310,7 +1308,7 @@ export function ProfileView({
             </p>
             <div className="profile-nine-editor-list">
               {draftNine.map((id, index) => {
-                const book = state.books.find((entry) => entry.id === id);
+                const book = bookById(state.books, id);
                 if (!book) return null;
                 return (
                   <div className="profile-nine-editor-item" key={id}>
@@ -1319,10 +1317,10 @@ export function ProfileView({
                       <BookJacket book={book} />
                     </div>
                     <div className="profile-editor-book-info">
-                      <strong>{book.title}</strong>
-                      <span>{book.author}</span>
+                      <strong>{bookTitle(book)}</strong>
+                      <span>{bookAuthor(book)}</span>
                       <input
-                        aria-label={`${book.title}へのひとこと`}
+                        aria-label={`${bookTitle(book)}へのひとこと`}
                         placeholder="この本へのひとこと（任意）"
                         maxLength={PROFILE_FIELDS.note}
                         value={draftNotes[id] ?? ""}
@@ -1335,21 +1333,21 @@ export function ProfileView({
                     </div>
                     <div className="profile-order-controls">
                       <button
-                        aria-label={`${book.title}を前へ移動`}
+                        aria-label={`${bookTitle(book)}を前へ移動`}
                         disabled={index === 0}
                         onClick={() => moveNine(index, -1)}
                       >
                         ↑
                       </button>
                       <button
-                        aria-label={`${book.title}を後ろへ移動`}
+                        aria-label={`${bookTitle(book)}を後ろへ移動`}
                         disabled={index === draftNine.length - 1}
                         onClick={() => moveNine(index, 1)}
                       >
                         ↓
                       </button>
                       <button
-                        aria-label={`${book.title}を人生の9冊から外す`}
+                        aria-label={`${bookTitle(book)}を人生の9冊から外す`}
                         onClick={() =>
                           changeNine({
                             ids: draftNine.filter((entry) => entry !== id),
@@ -1463,10 +1461,7 @@ export function ProfileView({
 
       {selectedNote && (
         <Modal
-          title={
-            state.books.find((book) => book.id === selectedNote)?.title ??
-            "本へのひとこと"
-          }
+          title={titleById(state.books, selectedNote) ?? "本へのひとこと"}
           onClose={() => setSelectedNote(null)}
         >
           <div className="profile-note-detail">

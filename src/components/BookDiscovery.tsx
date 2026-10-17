@@ -13,6 +13,7 @@ import { BookJacket, Icon } from "./ui";
 import { WoodenShelf } from "./WoodenShelf";
 import { BookPrice } from "./BookActions";
 import { shopPath } from "../lib/paths";
+import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 
 function BookRail({
   title,
@@ -112,7 +113,7 @@ export function BookDiscovery({
     .flatMap((shelf) =>
       shelf.items.flatMap((item) => {
         if (seen.has(item.bookId)) return [];
-        const book = state.books.find((entry) => entry.id === item.bookId);
+        const book = bookById(state.books, item.bookId);
         if (!book) return [];
         seen.add(book.id);
         return [{ book, shelf, item }];
@@ -140,11 +141,11 @@ export function BookDiscovery({
               className="bh-choice-book"
               key={book.id}
               onClick={() => onSelect(shop, shelf, item)}
-              aria-label={`${book.title}をこの場で手に取る`}
+              aria-label={`${bookTitle(book)}をこの場で手に取る`}
             >
               <BookJacket book={book} />
-              <strong>{book.title}</strong>
-              <small>{book.author}</small>
+              <strong>{bookTitle(book)}</strong>
+              <small>{bookAuthor(book)}</small>
               <BookPrice book={book} compact />
               <span>{shelf.name}</span>
             </button>

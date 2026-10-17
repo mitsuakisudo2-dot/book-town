@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { TownState } from "../../lib/types";
 import { activeSession, currentBookId } from "../../lib/reading";
 import { bookPath } from "../../lib/books";
+import { bookById, bookTitle, quotedTitle } from "../../lib/book-name";
 import { BookJacket } from "../ui";
 
 /**
@@ -14,9 +15,7 @@ import { BookJacket } from "../ui";
 export function ReadingLine({ state }: { state: TownState }) {
   const running = activeSession(state);
   const bookId = running?.bookId ?? currentBookId(state);
-  const book = bookId
-    ? state.books.find((entry) => entry.id === bookId)
-    : undefined;
+  const book = bookById(state.books, bookId);
   if (!book) return null;
   // Two links side by side, never one inside the other.
   return (
@@ -24,18 +23,18 @@ export function ReadingLine({ state }: { state: TownState }) {
       <Link
         href={bookPath(book.id)}
         className="home-reading-book"
-        aria-label={`『${book.title}』の作品ページへ`}
+        aria-label={`${quotedTitle(book)}の作品ページへ`}
       >
         <BookJacket book={book} sizes="34px" />
       </Link>
       <p className="home-reading-text">
         <small>{running ? "読書中" : "読みかけ"}</small>
-        <b>{book.title}</b>
+        <b>{bookTitle(book)}</b>
       </p>
       <Link
         href="/reading/"
         className="home-reading-go"
-        aria-label={`『${book.title}』の読書を記録する`}
+        aria-label={`${quotedTitle(book)}の読書を記録する`}
       >
         記録する
       </Link>

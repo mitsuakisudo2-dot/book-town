@@ -16,6 +16,7 @@ import {
 import { journalTown, useTownBackend } from "../lib/store";
 import type { Notify } from "../lib/types";
 import { Modal } from "./ui";
+import { quote } from "../lib/book-name";
 
 // The 登録 tab's lines about books kept on this device by the scanner:
 // titles still to be typed (書名待ち), and books the database refused. Each
@@ -164,12 +165,12 @@ function TitleForm({
     const name = done?.item.title ?? typed;
     notify(
       done?.result === "added"
-        ? `『${name}』を登録しました`
+        ? `${quote(name)}を登録しました`
         : done?.result === "already"
-          ? `『${name}』はもうライブラリにあります`
+          ? `${quote(name)}はもうライブラリにあります`
           : done?.result === "unavailable"
-            ? `『${name}』は端末に控えました。ページを読み込み直すと登録します`
-            : `『${name}』は、読み込みが終わったら登録します`,
+            ? `${quote(name)}は端末に控えました。ページを読み込み直すと登録します`
+            : `${quote(name)}は、読み込みが終わったら登録します`,
     );
   }
   function leave() {

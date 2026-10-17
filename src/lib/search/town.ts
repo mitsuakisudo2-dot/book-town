@@ -1,4 +1,5 @@
 import { findReader, wordsFolded } from "../social";
+import { booksById } from "../book-name";
 import type { Book, Reader, Shop, TownState } from "../types";
 import { searchBooks } from "./rank";
 import { romajiToKana } from "./romaji";
@@ -8,14 +9,12 @@ import { byMatch, readTextQuery, textRank, TEXT_MATCH } from "./text";
 
 /** The books on a shop's public shelves; private shelves never count. */
 export function publicStock(state: TownState, shop: Shop): Book[] {
-  return shop.shelves
-    .filter((shelf) => shelf.isPublic)
-    .flatMap((shelf) =>
-      shelf.items.map((item) =>
-        state.books.find((book) => book.id === item.bookId),
-      ),
-    )
-    .filter((book): book is Book => Boolean(book));
+  return booksById(
+    state.books,
+    shop.shelves
+      .filter((shelf) => shelf.isPublic)
+      .flatMap((shelf) => shelf.items.map((item) => item.bookId)),
+  );
 }
 
 /**
