@@ -180,6 +180,13 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   "private.edition_sources": { people: {}, readers: "nobody" },
   "private.edition_fixes": { people: {}, readers: "nobody" },
   "private.book_checks": { people: {}, readers: "nobody" },
+  // Books to compare again that an answer could not mark (bibliography_holds).
+  "private.book_rechecks": {
+    people: {},
+    // A book's id, with no reference (making one would wait on the book's row).
+    notPeople: ["book_id"],
+    readers: "nobody",
+  },
   "private.bibliography_review": {
     people: {},
     // A book of the edition, for the operator's tools.
