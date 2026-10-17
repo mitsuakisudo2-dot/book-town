@@ -25,7 +25,8 @@ type Shared = {
 export function NotificationsView({ state, actions }: Shared) {
   const clock = useClock(30_000);
   const savedIn = useTownBackend();
-  const holds = useBookHolds();
+  // Asked again as it opens: a book can be held while the page stays open.
+  const holds = useBookHolds(true);
   const notices = notificationsFor(state, clock?.openedAt ?? 0, holds);
   // Notices that were unread when this page showed them keep their mark until it closes.
   const [fresh, setFresh] = useState<string[]>([]);

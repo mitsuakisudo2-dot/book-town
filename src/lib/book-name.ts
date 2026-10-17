@@ -95,28 +95,34 @@ function roleWord(role: string | undefined): string {
 }
 
 /**
- * The people of the master, in the book's order: "宮沢賢治", "ジェーン・ドウ、
- * 山田花子". What they did is said when it is not all 著: "ジェーン・ドウ 著／
- * 山田一郎 訳", one role after the names that share it.
+ * The people of the master, in the book's order, a part for each thing they
+ * did: ["宮沢賢治"], ["ジェーン・ドウ、山田花子"]. What they did is said when
+ * it is not all 著: ["ジェーン・ドウ 著", "山田一郎 訳"], one role after the
+ * names that share it. None when the master names no one.
  */
-export function masterAuthor(bib: Pick<Bibliography, "creators">): string {
+export function masterAuthorParts(bib: Pick<Bibliography, "creators">): string[] {
   const people = bib.creators.map((person) => ({
     name: person.name,
     role: roleWord(person.role),
   }));
+  if (!people.length) return [];
   if (people.every((person) => person.role === "" || person.role === "著"))
-    return people.map((person) => person.name).join("、");
+    return [people.map((person) => person.name).join("、")];
   const groups: { role: string; names: string[] }[] = [];
   for (const person of people) {
     const last = groups.at(-1);
     if (last && last.role === person.role) last.names.push(person.name);
     else groups.push({ role: person.role, names: [person.name] });
   }
-  return groups
+  return groups.map(
     // A no-break space: the role stays on the line of its last name.
-    .map(({ role, names }) => names.join("、") + (role ? "\u00a0" + role : ""))
-    .join("／");
+    ({ role, names }) => names.join("、") + (role ? "\u00a0" + role : ""),
+  );
 }
+
+/** The same in a line: "ジェーン・ドウ 著／山田一郎 訳". */
+export const masterAuthor = (bib: Pick<Bibliography, "creators">): string =>
+  masterAuthorParts(bib).join("／");
 
 /** "2014年6月" for "2014-06", "2014年" for "2014". */
 const issuedWords = (issued: string): string => {
@@ -158,8 +164,9 @@ export interface BookHeading {
   title: string;
   /** The subtitle and the edition. */
   subtitle?: string;
-  author: string;
-  /** The publisher, the series and the date, each kept whole on a line. */
+  /** The people, a part for each role ("ジェーン・ドウ 著", "山田一郎 訳"). */
+  author: string[];
+  /** The publisher, the series and the date. */
   publication: string[];
 }
 
@@ -171,12 +178,14 @@ export function bookHeading(
   book: Named,
   master: Bibliography | null,
 ): BookHeading {
+  const typed = bookAuthor(book);
   if (!master)
-    return { title: bookTitle(book), author: bookAuthor(book), publication: [] };
+    return { title: bookTitle(book), author: typed ? [typed] : [], publication: [] };
+  const people = masterAuthorParts(master);
   return {
     title: masterTitle(master),
     subtitle: masterSubtitle(master),
-    author: masterAuthor(master) || bookAuthor(book),
+    author: people.length ? people : typed ? [typed] : [],
     publication: masterPublicationParts(master),
   };
 }

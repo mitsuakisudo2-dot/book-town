@@ -4,6 +4,7 @@ import {
   bookHeading,
   bookNamedBy,
   masterAuthor,
+  masterAuthorParts,
   masterPublication,
   masterSubtitle,
   masterTitle,
@@ -151,6 +152,26 @@ check("people who did other things are named with what they did", () => {
   assert.equal(masterAuthor({ creators: [] }), "");
 });
 
+check("the page has the people a part for each role, to break between them", () => {
+  assert.deepEqual(
+    masterAuthorParts({
+      creators: [
+        { name: "Jane Doe", role: "著" },
+        { name: "山田一郎", role: "訳" },
+        { name: "山田花子", role: "訳" },
+      ],
+    }),
+    ["Jane Doe\u00a0著", "山田一郎、山田花子\u00a0訳"],
+  );
+  assert.deepEqual(
+    masterAuthorParts({
+      creators: [{ name: "Jane Doe", role: "著" }, { name: "山田花子" }],
+    }),
+    ["Jane Doe、山田花子"],
+  );
+  assert.deepEqual(masterAuthorParts({ creators: [] }), []);
+});
+
 check("who published it, in which series, and when", () => {
   assert.equal(
     masterPublication({
@@ -168,9 +189,10 @@ check("a book's page is headed by the master, else by what its reader typed", ()
   const typed = { title: "みほんのものがたり", author: "Doe,Jane,1950-" };
   assert.deepEqual(bookHeading(typed, null), {
     title: "みほんのものがたり",
-    author: "Jane Doe",
+    author: ["Jane Doe"],
     publication: [],
   });
+  assert.deepEqual(bookHeading({ title: "みほんのものがたり", author: "" }, null).author, []);
   assert.deepEqual(
     bookHeading(
       typed,
@@ -186,12 +208,12 @@ check("a book's page is headed by the master, else by what its reader typed", ()
     {
       title: "見本の物語 上",
       subtitle: "ある町の話",
-      author: "Jane Doe\u00a0著／山田一郎\u00a0訳",
+      author: ["Jane Doe\u00a0著", "山田一郎\u00a0訳"],
       publication: ["見本書房", "2003年9月"],
     },
   );
   // A master that names no one keeps the reader's author.
-  assert.equal(bookHeading(typed, master({ creators: [] })).author, "Jane Doe");
+  assert.deepEqual(bookHeading(typed, master({ creators: [] })).author, ["Jane Doe"]);
 });
 
 check("the cover and the shop links go by the heading's name, people by name only", () => {

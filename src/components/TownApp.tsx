@@ -2,7 +2,6 @@
 // First, so the CSS keeps its order (screen-styles.ts).
 import "./screen-styles";
 import {
-  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -107,7 +106,7 @@ import {
   bookTitle,
   quotedTitle,
 } from "../lib/book-name";
-import { SOURCE_NAMES, type Bibliography } from "../lib/bibliography";
+import type { Bibliography } from "../lib/bibliography";
 import { useBibliography, useBookHolds } from "../lib/bibliography-session";
 import { HeldBook } from "./HeldBook";
 import { counted, whenSome } from "../lib/words";
@@ -1049,30 +1048,50 @@ function BookHeadingLines({
     <>
       <h1>{title}</h1>
       {subtitle && <p className="book-page-subtitle">{subtitle}</p>}
-      <p className="book-page-author">{author}</p>
+      {author.length > 0 && (
+        <Parts className="book-page-author" parts={author} mark="／" />
+      )}
       {publication.length > 0 && (
-        <p className="book-page-publication">
-          {publication.map((part, at) => (
-            <Fragment key={at}>
-              {at > 0 && "・"}
-              <span>{part}</span>
-            </Fragment>
-          ))}
-        </p>
+        <Parts className="book-page-publication" parts={publication} mark="・" />
       )}
     </>
   );
 }
 
-/** Where the heading came from, beside the cover's credit; the credits page has the rest. */
+/**
+ * A line of parts with a mark between them ("見本書房・見本文庫・2003年9月").
+ * It breaks between parts, and a mark that would end or start a line is out
+ * of sight (usability.css), so none is left on its own.
+ */
+function Parts({
+  className,
+  parts,
+  mark,
+}: {
+  className: string;
+  parts: string[];
+  mark: string;
+}) {
+  return (
+    <p className={className + " parts-line"}>
+      <span>
+        {parts.map((part, at) => (
+          <span key={at}>
+            {at > 0 && <span className="parts-mark">{mark}</span>}
+            {part}
+          </span>
+        ))}
+      </span>
+    </p>
+  );
+}
+
+/** Where the heading came from, beside the cover's credit: the credits page. */
 function BibliographyCredit({ master }: { master: Bibliography | null }) {
   if (!master?.from.length) return null;
   return (
     <span className="cover-credit">
-      書誌:{" "}
-      <Link href="/credits/">
-        {master.from.map((source) => SOURCE_NAMES[source]).join("・")}
-      </Link>
+      <Link href="/credits/">書誌の出典</Link>
     </span>
   );
 }

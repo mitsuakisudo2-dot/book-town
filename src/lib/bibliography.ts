@@ -41,13 +41,7 @@ export interface Bibliography {
 /** The sources a master's fields come from (an operator's correction aside). */
 export type BibliographySource = "ndl" | "openbd";
 
-/** The sources by name, as a credit says them (the credits page has the rest). */
-export const SOURCE_NAMES: Record<BibliographySource, string> = {
-  ndl: "国立国会図書館",
-  openbd: "openBD",
-};
-
-/** The fields a screen shows, whose sources it names. */
+/** The fields a screen shows, whose sources it credits. */
 const SHOWN = [
   "title",
   "subtitle",

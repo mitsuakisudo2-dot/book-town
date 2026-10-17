@@ -39,7 +39,7 @@ import {
 import { loadWalkRows } from "../src/lib/supabase/walk-backend";
 import { emptyArrived, takeIn, type Arrived } from "../src/lib/arrived";
 import { createLetterReads } from "../src/lib/arrivals";
-import { createTownStore } from "../src/lib/store";
+import { createTownStore, townSettled } from "../src/lib/store";
 import { counterId, type TownBackend } from "../src/lib/town-backend";
 import {
   ME_ID,
@@ -2593,6 +2593,42 @@ async function main() {
       assert.ok(
         !store.getSnapshot().posts.some((entry) => entry.id === NEW_POST),
       );
+    },
+  );
+
+  await check(
+    "a change settles once the account has it, and fails when turned away",
+    async () => {
+      const town = loadedTown();
+      let listener: Parameters<NonNullable<TownBackend["watch"]>>[0] | null =
+        null;
+      const backend: TownBackend = {
+        kind: "account",
+        newId: () => crypto.randomUUID(),
+        load: async () => ({ state: town, status: "saved" }),
+        save: () => "saving",
+        watch(next) {
+          listener = next;
+          return () => undefined;
+        },
+      };
+      const store = createTownStore(backend);
+      store.initialize();
+      await settle(() => store.getPersistenceSnapshot() === "saved");
+      // Nothing on its way: settled at once.
+      assert.equal(await townSettled(store), true);
+      listener!.status("saving");
+      let heard: boolean | null = null;
+      const saved = townSettled(store).then((taken) => (heard = taken));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.equal(heard, null);
+      listener!.status("saved");
+      assert.equal(await saved, true);
+      // Turned away: the town goes back to what is saved, and says so.
+      listener!.status("saving");
+      const refused = townSettled(store);
+      listener!.replace(town, "recovered");
+      assert.equal(await refused, false);
     },
   );
 

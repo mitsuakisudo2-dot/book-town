@@ -104,10 +104,12 @@ const coverAsks = [];
 let masters = [];
 const bibliographyAsks = [];
 // The reader's books held back (book_holds' rows), the books they said are
-// right after all, and the fixes of books written.
+// right after all, the fixes of books written, and whether the database
+// turns a fix away (no row changed).
 let holds = [];
 const confirmAsks = [];
 const booksFixed = [];
+let fixesRefused = false;
 const inserted = [];
 const codeRequests = [];
 const townReads = [];
@@ -369,6 +371,7 @@ const standIn = async (route) => {
   if (url.pathname === "/rest/v1/books" && request.method() === "PATCH") {
     townWrites.push(url.pathname);
     const id = (url.searchParams.get("id") ?? "").replace(/^eq\./, "");
+    if (fixesRefused) return json(200, []);
     booksFixed.push({ id, ...body });
     return json(200, [{ id }]);
   }
@@ -3752,7 +3755,7 @@ try {
       await expect(title).toHaveText("こころの本");
       await expect(hero.locator(".book-page-author")).toHaveText("試験 作家");
       await expect(hero.locator(".book-page-publication")).toHaveCount(0);
-      await expect(hero.getByText("書誌:")).toHaveCount(0);
+      await expect(hero.getByRole("link", { name: "書誌の出典" })).toHaveCount(0);
       expect(bibliographyAsks).toContain(COVER_BOOK);
       // Only books of the database are asked about: no 見本, no demo book.
       expect(
@@ -3806,9 +3809,7 @@ try {
         path: path.join(output, "18-book-master-390.png"),
       });
       // Where it came from: one page for every book, no date of any book's.
-      const credit = hero.getByRole("link", {
-        name: "国立国会図書館・openBD",
-      });
+      const credit = hero.getByRole("link", { name: "書誌の出典" });
       await expect(credit).toHaveAttribute("href", "/credits/");
       await credit.click();
       await expect(page).toHaveURL(/\/credits\/$/);
@@ -3818,6 +3819,7 @@ try {
       await expect(page.locator("main")).toContainText(
         "出典：国立国会図書館書誌データ（https://ndlsearch.ndl.go.jp/）をもとに BookTown が編集・加工して作成",
       );
+      await expect(page.locator("main")).toContainText("2026年10月から随時取得");
       await noOverflow("credits page");
       await page.goBack();
       await expect(title).toHaveText("こころ 上");
@@ -3840,13 +3842,13 @@ try {
         .locator(".notice-list li")
         .filter({ hasText: "のISBNは" });
       await expect(notice).toContainText(
-        "登録した『こころの本』のISBNは、『別の本』の本のようです。本のページで確かめてください",
+        "登録した『こころの本』のISBNは、『別の本』のものです。本のページで確かめてください",
       );
       await notice.getByRole("link").click();
       await expect(page).toHaveURL(new RegExp("id=" + COVER_BOOK));
       const note = page.locator(".book-held");
       await expect(note).toContainText(
-        `この ISBN（${OPENBD_ISBN}）は、『別の本』（山田一郎）の本のようです。`,
+        `登録したISBN（${OPENBD_ISBN}）は、『別の本』（山田一郎）のものです。`,
       );
       // Until it is answered, the page shows what the reader typed.
       await expect(
@@ -3859,12 +3861,20 @@ try {
       });
 
       // Fixing it: the words wait in this browser while they are written.
-      const fixButton = note.getByRole("button", { name: "ISBN を直す" });
+      const fixButton = note.getByRole("button", { name: "ISBNを直す" });
       await fixButton.click();
       const sheet = page.getByRole("dialog", { name: "本の登録を直す" });
       await expect(sheet.getByLabel("題名")).toHaveValue("こころの本");
       const isbnField = sheet.getByLabel("ISBN（なくてもかまいません）");
       await expect(isbnField).toHaveValue(OPENBD_ISBN);
+      // The ISBN first, the thing to fix; then the title and the author.
+      expect(
+        await sheet
+          .locator("input")
+          .evaluateAll((fields) =>
+            fields.map((field) => field.closest("label")?.textContent ?? ""),
+          ),
+      ).toEqual(["ISBN（なくてもかまいません）", "題名", "著者"]);
       // Pictured once it has finished coming in.
       await sheet.evaluate((element) =>
         Promise.all(
@@ -3889,6 +3899,28 @@ try {
       await expect(sheet.getByText("書きかけを続けています")).toBeVisible();
       await isbnField.fill("978-4-00-000000-0");
       await sheet.getByLabel("題名").fill("こころの本 新版");
+      // The database turns the fix away: the town goes back to the book as
+      // saved, the note comes back, and the words wait to be sent again.
+      fixesRefused = true;
+      await sheet.getByRole("button", { name: "保存する" }).click();
+      await expect(sheet).toHaveCount(0);
+      await expect(page.locator(".toast")).toContainText(
+        "うまく保存できませんでした。書きかけは残しています。",
+        { timeout: 10000 },
+      );
+      await expect(note).toContainText(`登録したISBN（${OPENBD_ISBN}）は`);
+      await expect(
+        page.locator(".book-page-hero").getByRole("heading", { level: 1 }),
+      ).toHaveText("こころの本");
+      expect(booksFixed).toEqual([]);
+      await page.screenshot({
+        path: path.join(output, "19-held-book-refused-390.png"),
+      });
+      await fixButton.click();
+      await expect(sheet.getByText("書きかけを続けています")).toBeVisible();
+      await expect(isbnField).toHaveValue("9784000000000");
+      await expect(sheet.getByLabel("題名")).toHaveValue("こころの本 新版");
+      fixesRefused = false;
       await sheet.getByRole("button", { name: "保存する" }).click();
       await expect(sheet).toHaveCount(0);
       await expect(page.locator(".toast")).toContainText("直しました");
@@ -3918,9 +3950,9 @@ try {
       await page.reload();
       await expect(note).toBeVisible();
       const asked = bibliographyAsks.length;
-      await note.getByRole("button", { name: "この本で合っている" }).click();
+      await note.getByRole("button", { name: "このISBNで合っている" }).click();
       await expect(page.locator(".toast")).toContainText(
-        "この本で合っていると伝えました",
+        "このISBNで合っていると伝えました",
       );
       expect(confirmAsks).toEqual([COVER_BOOK]);
       await expect(note).toHaveCount(0);
@@ -3929,9 +3961,23 @@ try {
         .toContain(COVER_BOOK);
       // Read again, nothing is held: no notice, no note.
       await page.goto(base + "/notifications/");
-      await expect(
-        page.locator(".notice-list li").filter({ hasText: "のISBNは" }),
-      ).toHaveCount(0);
+      const heldNotices = page
+        .locator(".notice-list li")
+        .filter({ hasText: "のISBNは" });
+      await expect(heldNotices).toHaveCount(0);
+      // A book held while the page stays open is told when お知らせ opens
+      // again: asked anew then, not over and over.
+      await page
+        .getByRole("navigation", { name: "スマートフォンナビゲーション" })
+        .getByRole("link", { name: "ホーム" })
+        .click();
+      await expect(page).not.toHaveURL(/\/notifications\//);
+      holds = [heldRow];
+      await page.waitForTimeout(5_100);
+      await page.getByRole("link", { name: /^お知らせ/ }).first().click();
+      await expect(page).toHaveURL(/\/notifications\/$/);
+      await expect(heldNotices).toHaveCount(1);
+      holds = [];
       booksFixed.length = 0;
     },
   );

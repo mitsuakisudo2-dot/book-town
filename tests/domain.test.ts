@@ -2609,7 +2609,7 @@ check("a book held back is told once in お知らせ, leading to its page", () =
   assert.ok(notice);
   assert.equal(
     notice.text,
-    "登録した『よるのとしょかん』のISBNは、『見本の物語』の本のようです。本のページで確かめてください",
+    "登録した『よるのとしょかん』のISBNは、『見本の物語』のものです。本のページで確かめてください",
   );
   assert.equal(notice.href, bookPath(id));
   assert.equal(unreadCount(state, [hold]), unreadCount(state) + 1);

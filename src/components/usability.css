@@ -83,9 +83,33 @@
 .town-shell .book-page-publication {
   margin-top: 2px;
 }
-/* A line breaks between the publisher, the series and the date, not in them. */
-.town-shell .book-page-publication span {
-  display: inline-block;
+/* A title breaks into lines of a like length, so 「上」 or a closing bracket
+   never stands alone on the last. */
+.town-shell .book-page-hero h1 {
+  text-wrap: balance;
+  line-break: strict;
+}
+/* The people, and the publisher, series and date, break between their parts,
+   not in them; the mark between two parts (／, ・) stays at the start of a
+   line's second part, and is cut off where a line starts with it. */
+.town-shell .parts-line {
+  overflow: hidden;
+}
+.town-shell .parts-line > span {
+  display: flex;
+  flex-wrap: wrap;
+  margin-inline-start: -1em;
+}
+.town-shell .parts-line > span > span {
+  position: relative;
+  min-width: 0;
+  padding-inline-start: 1em;
+}
+.town-shell .parts-line .parts-mark {
+  position: absolute;
+  inset-inline-start: 0;
+  width: 1em;
+  text-align: center;
 }
 @media (max-width: 640px) {
   .town-shell .book-page-subtitle {

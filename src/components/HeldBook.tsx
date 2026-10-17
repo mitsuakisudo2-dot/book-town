@@ -5,6 +5,7 @@ import type { BookHold } from "../lib/bibliography";
 import {
   forgetBibliography,
   forgetHold,
+  settleHold,
   useBookHold,
 } from "../lib/bibliography-session";
 import {
@@ -20,7 +21,7 @@ import { bookById, masterTitle, quote } from "../lib/book-name";
 import { focusField } from "../lib/coarse-pointer";
 import { useKeptDraft } from "../lib/kept-draft";
 import { SCAN_COPY } from "../lib/scan";
-import { getTownSnapshot } from "../lib/store";
+import { getTownSnapshot, townSettled } from "../lib/store";
 import {
   overSaved,
   SAVE_REFUSED,
@@ -74,7 +75,8 @@ export function HeldBook({
         base: bookFixOf(book),
       });
     setFixing(false);
-    forgetHold(book.id);
+    // Gone from the page meanwhile; turned away, it comes back as it was.
+    settleHold(book.id, townSettled());
     notify("直しました。本の情報（書誌）とあらためて照らし合わせます");
     return result;
   };
@@ -126,22 +128,19 @@ function HeldBookNote({
       );
     forgetHold(book.id);
     forgetBibliography(book.id);
-    notify("この本で合っていると伝えました。本の情報（書誌）を出します");
+    notify("このISBNで合っていると伝えました。本の情報（書誌）を出します");
   }
 
   return (
     <section className="note-box book-held" aria-labelledby={id}>
-      <h2 id={id}>この本の ISBN を確かめてください</h2>
+      <h2 id={id}>この本のISBNを確かめてください</h2>
       <p>
-        この ISBN（{book.isbn}）は、{quote(masterTitle(hold.master))}
-        {names && `（${names}）`}の本のようです。
-      </p>
-      <p>
-        確かめるまで、この本のページには、あなたが登録した題名と著者を出しています。このお知らせは、あなたにだけ出ています。
+        登録したISBN（{book.isbn}）は、{quote(masterTitle(hold.master))}
+        {names && `（${names}）`}のものです。このお知らせは、あなたにだけ出ています。
       </p>
       <div className="btns">
         <button type="button" className="btn fill" onClick={onFix}>
-          ISBN を直す
+          ISBNを直す
         </button>
         <button
           type="button"
@@ -149,7 +148,7 @@ function HeldBookNote({
           disabled={asking}
           onClick={() => void confirm()}
         >
-          この本で合っている
+          このISBNで合っている
         </button>
       </div>
     </section>
@@ -159,7 +158,7 @@ function HeldBookNote({
 /** What went wrong with a fix, in the sheet; nothing for one that went. */
 const PROBLEMS: Partial<Record<BookFixResult, string>> = {
   "bad-isbn": SCAN_COPY.typing.badIsbn,
-  already: "この ISBN の本は、もうライブラリにあります",
+  already: "このISBNの本は、もうライブラリにあります",
 };
 
 function FixBookSheet({
@@ -182,7 +181,7 @@ function FixBookSheet({
   const continuing = useOpenedWithWork(kept.loaded, work !== null);
   const [problem, setProblem] = useState<BookFixResult | null>(null);
   const notTaken = useNotTakenWords();
-  const titleField = useRef<HTMLInputElement>(null);
+  const isbnField = useRef<HTMLInputElement>(null);
 
   function change(patch: Partial<BookFixWork>) {
     setProblem(null);
@@ -209,17 +208,30 @@ function FixBookSheet({
           onDiscard={() => {
             kept.clear();
             setProblem(null);
-            focusField(titleField.current);
+            focusField(isbnField.current);
           }}
         />
         <p className="book-fix-note">
-          ISBN は、本の裏表紙のバーコードの上にある、978か979で始まる13桁の数字です。
+          ISBNは、本の裏表紙のバーコードの上にある、978か979で始まる13桁の数字です。
         </p>
+        <label className="form-label" htmlFor={id + "-isbn"}>
+          ISBN（なくてもかまいません）
+          <input
+            id={id + "-isbn"}
+            ref={isbnField}
+            className="field"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={ISBN_FIELD_MAX_LENGTH}
+            placeholder="978…"
+            value={isbn}
+            onChange={(event) => change({ isbn: event.target.value })}
+          />
+        </label>
         <label className="form-label" htmlFor={id + "-title"}>
           題名
           <input
             id={id + "-title"}
-            ref={titleField}
             className="field"
             required
             maxLength={BOOK_TEXT_MAX}
@@ -235,19 +247,6 @@ function FixBookSheet({
             maxLength={BOOK_TEXT_MAX}
             value={author}
             onChange={(event) => change({ author: event.target.value })}
-          />
-        </label>
-        <label className="form-label" htmlFor={id + "-isbn"}>
-          ISBN（なくてもかまいません）
-          <input
-            id={id + "-isbn"}
-            className="field"
-            inputMode="numeric"
-            autoComplete="off"
-            maxLength={ISBN_FIELD_MAX_LENGTH}
-            placeholder="978…"
-            value={isbn}
-            onChange={(event) => change({ isbn: event.target.value })}
           />
         </label>
         {problem && (

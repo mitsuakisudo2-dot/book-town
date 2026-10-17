@@ -1396,6 +1396,25 @@ export function usePersistenceStatus(): PersistenceStatus {
   );
 }
 
+/**
+ * Whether the account takes what the town holds now: true once it is all
+ * saved, false when a change is turned away (the town then goes back to
+ * what is saved) or the account cannot be reached.
+ */
+export function townSettled(store = townStore): Promise<boolean> {
+  return new Promise((resolve) => {
+    let stop: (() => void) | null = null;
+    const look = () => {
+      const status = store.getPersistenceSnapshot();
+      if (status === "loading" || status === "saving") return false;
+      stop?.();
+      resolve(status === "saved");
+      return true;
+    };
+    if (!look()) stop = store.subscribe(look);
+  });
+}
+
 /** Whether the town can read 便り after it was read (not in the demo). */
 export function useTownReads(): boolean {
   return useSyncExternalStore(

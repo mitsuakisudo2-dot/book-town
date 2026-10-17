@@ -126,14 +126,52 @@ export function useBibliography(bookId: string): Bibliography | null {
 }
 
 // The reader's own books held back (「食い違いの判定と保留」), asked once per
-// account and page load. A visitor and the demo have none. A call that fails
-// leaves the list empty until the next page load.
+// account and page load, and again whenever お知らせ opens (a book can be held
+// while the page stays open). A visitor and the demo have none. A call that
+// fails keeps what was known.
 
 const NO_HOLDS: BookHold[] = [];
-let holds: { reader: string; list: BookHold[] | null } | null = null;
+let holds: { reader: string; list: BookHold[] | null; at: number } | null = null;
+let holdsAsked: { reader: string } | null = null;
+/** Books whose fix the account took, and when: the database judges them again. */
+const answered = new Map<string, number>();
 
-/** The reader's books held back, oldest first. */
-export function useBookHolds(): BookHold[] {
+/** How long after one answer お知らせ asks again: not twice for one opening. */
+const HOLDS_FRESH_MS = 5_000;
+/**
+ * How long a fixed book is left out of a new answer: an ISBN fixed lets the
+ * hold go at once, a title or author fixed when the book is next judged
+ * (every 20 seconds or so). Still held after this, it is told again.
+ */
+const ANSWERED_MS = 3 * 60_000;
+
+function askHoldsOf(reader: string) {
+  const client = getSupabase();
+  if (!client) return;
+  const asking = { reader };
+  holdsAsked = asking;
+  void askHolds(client).then((answer) => {
+    // Someone else signed in meanwhile, or a newer question is under way.
+    if (holdsAsked !== asking) return;
+    holdsAsked = null;
+    const now = Date.now();
+    const fresh = answer?.filter(
+      (hold) => now - (answered.get(hold.bookId) ?? -Infinity) >= ANSWERED_MS,
+    );
+    holds = {
+      reader,
+      list: fresh ?? (holds?.reader === reader ? holds.list : []),
+      at: now,
+    };
+    tell();
+  });
+}
+
+/**
+ * The reader's books held back, oldest first. `fresh` (お知らせ) asks the
+ * database again when it opens.
+ */
+export function useBookHolds(fresh = false): BookHold[] {
   const asker = ownerOf(useAccountState());
   const reader = asker === "visitor" ? null : asker;
   const list = useSyncExternalStore(
@@ -143,18 +181,13 @@ export function useBookHolds(): BookHold[] {
     () => NO_HOLDS,
   );
   useEffect(() => {
-    if (!reader || holds?.reader === reader) return;
-    const client = getSupabase();
-    if (!client) return;
-    const asking: typeof holds = { reader, list: null };
-    holds = asking;
-    void askHolds(client).then((answer) => {
-      // Someone else signed in meanwhile: their own question is under way.
-      if (holds !== asking) return;
-      holds = { reader, list: answer ?? [] };
-      tell();
-    });
-  }, [reader]);
+    if (!reader || holdsAsked?.reader === reader) return;
+    if (holds?.reader !== reader) {
+      holds = { reader, list: null, at: 0 };
+      askHoldsOf(reader);
+    } else if (fresh && Date.now() - holds.at >= HOLDS_FRESH_MS)
+      askHoldsOf(reader);
+  }, [reader, fresh]);
   return list;
 }
 
@@ -167,8 +200,33 @@ export function useBookHold(bookId: string): BookHold | null {
 export function forgetHold(bookId: string) {
   if (!holds?.list) return;
   holds = {
-    reader: holds.reader,
+    ...holds,
     list: holds.list.filter((hold) => hold.bookId !== bookId),
   };
   tell();
+}
+
+/**
+ * The reader fixed a held book: it goes from the screen at once, and comes
+ * back if the account turns the fix away (`saved` false; the town then goes
+ * back to the book as saved). Taken, it stays out of new answers while the
+ * database judges it again.
+ */
+export function settleHold(bookId: string, saved: Promise<boolean>) {
+  const reader = holds?.reader;
+  const hold = holds?.list?.find((one) => one.bookId === bookId);
+  if (!hold) return;
+  answered.set(bookId, Date.now());
+  forgetHold(bookId);
+  void saved.then((taken) => {
+    if (taken) return void answered.set(bookId, Date.now());
+    answered.delete(bookId);
+    const list = holds?.reader === reader ? holds?.list : null;
+    if (!holds || !list || list.some((one) => one.bookId === bookId)) return;
+    holds = {
+      ...holds,
+      list: [...list, hold].sort((a, b) => a.heldAt.localeCompare(b.heldAt)),
+    };
+    tell();
+  });
 }
