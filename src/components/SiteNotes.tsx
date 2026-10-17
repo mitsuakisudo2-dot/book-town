@@ -383,7 +383,7 @@ const SAVE_FAILED = failure({
 });
 const HOURLY_LIMIT = failure({
   what: `1時間に残せる注釈は${counted(SITE_NOTE_LIMITS.perHour, "件")}までです`,
-  next: "少し時間をおいてから残してください",
+  next: AGAIN.later,
 });
 const first = (text: string, count: number) =>
   Array.from(text).slice(0, count).join("");
