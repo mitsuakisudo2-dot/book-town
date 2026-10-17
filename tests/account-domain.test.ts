@@ -437,6 +437,40 @@ async function main() {
   });
 
   await check(
+    "a restored session is known while its profile is read, and read once",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      control.holdLoads = true;
+      let tell: (user: AccountUser | null) => void = () => {};
+      // A page opening with a session kept in this browser: no sign-out is
+      // told first, and Supabase tells the same session twice.
+      const restored: AccountBackend = {
+        ...backend,
+        onUserChange(next) {
+          tell = next;
+          return () => {};
+        },
+      };
+      const store = createAccountStore(() => restored, true);
+      store.subscribe(() => {});
+      assert.deepEqual(store.getSnapshot(), { status: "loading" });
+      tell(AKI);
+      tell(AKI);
+      await settle();
+      assert.deepEqual(store.getSnapshot(), {
+        status: "loading",
+        pending: AKI,
+      });
+      assert.equal(control.calls.loadProfile, 1);
+      control.release();
+      await settle();
+      assert.equal(store.getSnapshot().status, "signed-in");
+      assert.equal(control.calls.loadProfile, 1);
+    },
+  );
+
+  await check(
     "signing out wins over a profile read still on its way",
     async () => {
       const { backend, control } = fakeBackend();
