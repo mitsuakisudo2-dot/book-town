@@ -21,6 +21,39 @@ const LESS_MOTION = "(prefers-reduced-motion: reduce)";
 /** Whether the reader asked for less motion (the browser's setting). */
 export const reducedMotion = (): boolean => matchMedia(LESS_MOTION).matches;
 
+/** The most, in ms, a movement played by playByFrames moves on per frame. */
+const MAX_FRAME_MS = 34;
+
+/**
+ * Plays `animation` frame by frame, at most MAX_FRAME_MS on per frame, and
+ * then lets it go (cancel) and calls `done`. A page that holds the screen
+ * still while it is drawn (書店めぐり, ホーム coming back from 便りだけ)
+ * would otherwise spend the movement's time then: driven by the clock, it
+ * jumps to the end. Cancelling the animation stops it on the next frame.
+ */
+export function playByFrames(
+  animation: Animation,
+  duration: number,
+  done?: () => void,
+) {
+  animation.pause();
+  let shown = 0;
+  let last: number | null = null;
+  const frame = (time: number) => {
+    if (animation.playState === "idle") return;
+    shown += last === null ? 0 : Math.min(time - last, MAX_FRAME_MS);
+    last = time;
+    if (shown < duration) {
+      animation.currentTime = shown;
+      requestAnimationFrame(frame);
+      return;
+    }
+    animation.cancel();
+    done?.();
+  };
+  requestAnimationFrame(frame);
+}
+
 /** Scroll behavior that keeps still when less motion is asked for. */
 export const scrollBehavior = (): ScrollBehavior =>
   reducedMotion() ? "instant" : "smooth";
