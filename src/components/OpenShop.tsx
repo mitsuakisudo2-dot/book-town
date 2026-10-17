@@ -35,6 +35,7 @@ import {
 } from "../lib/open-shop-draft";
 import { townTook, useKeptUntilSaved } from "../lib/shop-draft";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
+import { bookById, bookTitle } from "../lib/book-name";
 
 type Shared = {
   state: TownState;
@@ -221,7 +222,7 @@ export function OpenShop({
   const { pop, name, tagline, theme } = work;
   const chosen = KINDS.find((entry) => entry.kind === kind);
   const max = chosen?.max ?? 0;
-  const book = (id: string) => state.books.find((entry) => entry.id === id);
+  const book = (id: string) => bookById(state.books, id);
   // A kind not touched yet starts from its usual books; books no longer in
   // the town drop out of what was kept.
   const usual = (next: Kind) => (next === "nine" ? state.me.lifeNine : []);
@@ -533,7 +534,7 @@ export function OpenShop({
               <BookJacket book={entry} />
               <button
                 type="button"
-                aria-label={entry.title + "を棚から外す"}
+                aria-label={bookTitle(entry) + "を棚から外す"}
                 onClick={() => toggle(entry.id)}
               >
                 <Icon name="close" size={12} />
@@ -565,10 +566,10 @@ export function OpenShop({
                           type="button"
                           onClick={() => toggle(id)}
                           disabled={picked.length >= max && max > 1}
-                          aria-label={entry.title + "を棚に並べる"}
+                          aria-label={bookTitle(entry) + "を棚に並べる"}
                         >
                           <BookJacket book={entry} />
-                          <small>{entry.title}</small>
+                          <small>{bookTitle(entry)}</small>
                         </button>
                       </li>
                     );

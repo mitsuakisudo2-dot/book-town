@@ -86,7 +86,7 @@
   display: block;
   min-width: 0;
   filter: drop-shadow(0 0.7cqw 1.1cqw rgb(0 0 0 / 0.24));
-  transition: transform 0.2s;
+  transition: transform var(--dur-move);
 }
 a.poster-cover:hover {
   transform: translateY(-2px);
@@ -376,8 +376,8 @@ a.poster-cover:hover {
   border-radius: var(--r-pill);
   background: var(--line-2);
   transition:
-    width 0.2s,
-    background 0.2s;
+    width var(--dur-move),
+    background var(--dur-move);
 }
 .poster-dots button.is-current::before {
   width: 14px;
@@ -577,8 +577,8 @@ a.poster-cover:hover {
     0 1px 2px color-mix(in srgb, var(--shade) 8%, transparent),
     0 4px 12px color-mix(in srgb, var(--shade) 10%, transparent);
   transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+    transform var(--dur-move),
+    box-shadow var(--dur-move);
 }
 .poster-thumb:hover .poster-thumb-tile {
   transform: translateY(-2px);

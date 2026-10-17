@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import type { Tables } from "../src/lib/supabase/database.types";
 import {
   arrivedFromRows,
@@ -25,12 +27,15 @@ import {
   RowsChangedError,
   TownSyncError,
   type Outcome,
+  type Pageable,
 } from "../src/lib/supabase/sync";
 import {
   accountTownBackend,
+  loadPublicTown,
   loadTown,
   visitorTownBackend,
 } from "../src/lib/supabase/town-backend";
+import { loadWalkRows } from "../src/lib/supabase/walk-backend";
 import { emptyArrived, takeIn, type Arrived } from "../src/lib/arrived";
 import { createLetterReads } from "../src/lib/arrivals";
 import { createTownStore } from "../src/lib/store";
@@ -200,6 +205,7 @@ interface FakeQuery extends PromiseLike<Outcome<AnyRow[]>> {
   lt(column: string, value: string): FakeQuery;
   lte(column: string, value: string): FakeQuery;
   is(column: string, value: unknown): FakeQuery;
+  not(column: string, operator: "is", value: null): FakeQuery;
   in(column: string, values: unknown[]): FakeQuery;
   order(column: string, options?: { ascending?: boolean }): FakeQuery;
   limit(count: number): FakeQuery;
@@ -282,6 +288,11 @@ function fakeReads(
       is(column, value) {
         filters.push(`${column}=is.${value}`);
         rows = rows.filter((row) => row[column] === value);
+        return query;
+      },
+      not(column, operator, value) {
+        filters.push(`${column}=not.${operator}.${value}`);
+        rows = rows.filter((row) => row[column] !== value);
         return query;
       },
       in(column, values) {
@@ -691,6 +702,28 @@ async function main() {
               sessions().every((row, n) => n === removed || ids.has(row.id)),
             );
           }
+      // A row added ahead of a last page that would end just on the last
+      // row counted pushes that row out of it: the read is tried again.
+      for (const [cap, count] of [
+        [7, 13],
+        [1000, 1999],
+      ]) {
+        const rows = Array.from({ length: count }, (_, n) => ({
+          id: uuid(10 * n + 10),
+        }));
+        const fake = fakeReads(
+          { reading_sessions: rows },
+          {
+            cap,
+            between: (_, from) =>
+              from === 0 && rows.splice(cap, 0, { id: uuid(10 * cap + 5) }),
+          },
+        );
+        await assert.rejects(
+          allRows(fake.pages("reading_sessions"), ["id"]),
+          changed,
+        );
+      }
       // Without a count there is no telling the list is whole.
       const uncounted = fakeReads({ reading_sessions: sessions() });
       await assert.rejects(
@@ -873,6 +906,333 @@ async function main() {
         statuses: ["unavailable"],
         reads: 5,
       });
+    },
+  );
+
+  await check(
+    "every read of the database is whole, or a stretch on purpose",
+    () => {
+      // Supabase stops at 1000 rows a request without a word, so a list is
+      // read with allRows (sync.ts). A read that stops at a number has to
+      // be one of these, each read on past it another way: the newest 便り
+      // and books (with newer, older and the books the rows point to), and
+      // the newest 注釈 of a page.
+      const root = path.resolve(__dirname, "..");
+      const found: Record<string, string[]> = {};
+      for (const entry of readdirSync(path.join(root, "src"), {
+        recursive: true,
+        withFileTypes: true,
+      })) {
+        if (!entry.isFile() || !/\.tsx?$/.test(entry.name)) continue;
+        const file = path.join(entry.parentPath, entry.name);
+        const limits = [
+          ...readFileSync(file, "utf8").matchAll(/\.limit\(([^)]*)\)/g),
+        ].map((match) => match[1]);
+        if (limits.length) found[path.relative(root, file)] = limits;
+      }
+      assert.deepEqual(found, {
+        "src/lib/supabase/site-notes.ts": ["200"],
+        "src/lib/supabase/town-backend.ts": [
+          "CATALOG",
+          "POSTS",
+          "NEWER_MAX",
+          "NEWER_MAX",
+          "size",
+        ],
+      });
+    },
+  );
+
+  await check(
+    "past the limit, the pages after the first are asked for together",
+    async () => {
+      // Waits a moment on every answer, counting the requests on their way.
+      const rows = Array.from({ length: 3500 }, (_, n) => ({
+        id: uuid(n + 1),
+      }));
+      const starts: number[] = [];
+      let open = 0;
+      let most = 0;
+      const select = (count?: "exact"): Pageable<AnyRow> => {
+        const query: Pageable<AnyRow> = {
+          order: () => query,
+          async range(from, to) {
+            starts.push(from);
+            most = Math.max(most, (open += 1));
+            await new Promise((done) => setTimeout(done, 5));
+            open -= 1;
+            return {
+              data: rows.slice(from, Math.min(to + 1, from + 1000)),
+              error: null,
+              status: 200,
+              count: count ? rows.length : null,
+            };
+          },
+        };
+        return query;
+      };
+      assert.deepEqual(await allRows(select, ["id"]), rows);
+      // The first counts them; the other three go at once, each starting at
+      // the last row of the one before.
+      assert.deepEqual(starts, [0, 999, 1998, 2997]);
+      assert.equal(most, 3);
+    },
+  );
+
+  const entry = (
+    id: string,
+    userId: string,
+    extra: Partial<Tables<"reading_entries">> = {},
+  ): Tables<"reading_entries"> => ({
+    id,
+    user_id: userId,
+    book_id: BOOK,
+    kind: "finished",
+    body: "",
+    feelings: ["quiet"],
+    spoiler: false,
+    is_public: extra.is_public ?? true,
+    audience: (extra.is_public ?? true) ? "everyone" : "private",
+    created_at: at,
+    updated_at: at,
+    ...extra,
+  });
+
+  // A town past the server's 1000 rows a request in every list it shows.
+  const many = (count: number, from: number) =>
+    Array.from({ length: count }, (_, n) => uuid(from + n));
+  const crowd = many(1500, 0x10000);
+  const crowdedTown = () => ({
+    profiles: [
+      profile(AKI, "aki"),
+      ...crowd.map((id, n) => ({
+        ...profile(id, "r" + n),
+        created_at: minutes(n),
+      })),
+    ],
+    books: [book(BOOK)],
+    // 1200 shops, all open.
+    shops: crowd.slice(0, 1200).map((owner, n) => ({
+      ...shop(uuid(0x20000 + n), owner),
+      created_at: minutes(n),
+    })),
+    // 1350 rows of nines: 150 readers' whole nine.
+    profile_nine: crowd.slice(0, 150).flatMap((profile_id) =>
+      Array.from({ length: 9 }, (_, n) => ({
+        profile_id,
+        position: n + 1,
+        book_id: BOOK,
+        note: "",
+      })),
+    ),
+    // 2299 public records, and one the reader keeps to themselves.
+    reading_entries: [
+      ...crowd.map((user, n) =>
+        entry(uuid(0x30000 + n), user, { created_at: minutes(n) }),
+      ),
+      ...crowd
+        .slice(0, 799)
+        .map((user, n) =>
+          entry(uuid(0x31000 + n), user, { created_at: minutes(n) }),
+        ),
+      entry(uuid(0x32000), AKI, { is_public: false }),
+    ],
+    // 1100 posters put up.
+    posters: crowd
+      .slice(0, 1100)
+      .map((author, n) =>
+        posterRow(uuid(0x40000 + n), author, { created_at: minutes(n) }),
+      ),
+    // 1100 shops folded by reports.
+    moderation_folds: crowd.slice(0, 1100).map((_, n) => ({
+      target_kind: "shop",
+      target_id: uuid(0x20000 + n),
+      state: "folded",
+      since: at,
+    })),
+    // 1100 reading together right now.
+    reading_sessions: crowd.slice(0, 1100).map((user_id, n) => ({
+      id: uuid(0x50000 + n),
+      user_id,
+      book_id: BOOK,
+      mode: "together",
+      started_at: minutes(n),
+      ended_at: null,
+    })),
+  });
+
+  await check(
+    "a town past 1000 in every list is read whole, signed in or not",
+    async () => {
+      const crowded = (state: TownState) => ({
+        readers: state.readers.length,
+        shops: state.shops.length,
+        nines: state.readers.filter((reader) => reader.lifeNine.length === 9)
+          .length,
+        records: state.readingRecords.length,
+        posters: state.posters.length,
+        folds: Object.keys(state.reviewFolds ?? {}).length,
+        reading: state.readingNow.length,
+      });
+      const whole = {
+        readers: 1500,
+        shops: 1200,
+        nines: 150,
+        records: 2300,
+        posters: 1100,
+        folds: 1100,
+        reading: 1100,
+      };
+      const signedIn = fakeReads(crowdedTown());
+      const { state } = await loadTown(
+        signedIn.client,
+        AKI,
+        [],
+        () => AKI_SHOP,
+      );
+      assert.deepEqual(crowded(state), whole);
+      // The reader's own private record too.
+      assert.ok(
+        state.readingRecords.some((record) => record.readerId === ME_ID),
+      );
+      // The order they opened in, as before: the walk goes that way.
+      assert.deepEqual(
+        state.shops.slice(0, 2).map((entry) => entry.ownerId),
+        [crowd[1199], crowd[1198]],
+      );
+      const visiting = fakeReads(crowdedTown());
+      const visited = await loadPublicTown(visiting.client);
+      assert.deepEqual(crowded(visited), {
+        ...whole,
+        // Aki is someone else to a visitor, whose record is Aki's own.
+        readers: 1501,
+        records: 2299,
+      });
+      // Two answers a list of up to 1998, three past that; nothing else.
+      for (const fake of [signedIn, visiting]) {
+        const starts = (table: string) =>
+          fake.asked
+            .filter((ask) => ask.table === table)
+            .map((ask) => ask.from);
+        for (const table of [
+          "profiles",
+          "shops",
+          "profile_nine",
+          "posters",
+          "moderation_folds",
+        ])
+          assert.deepEqual(starts(table), [0, 999], table);
+        assert.deepEqual(starts("reading_entries"), [0, 999, 1998]);
+      }
+    },
+  );
+
+  await check(
+    "a walk past 1000 shops and 1000 of one's own is read whole",
+    async () => {
+      const scene = { name: "店内" };
+      const tables = {
+        shops: [
+          { id: AKI_SHOP, owner_id: AKI, public_scene: scene },
+          ...many(1200, 0x20000).map((id, n) => ({
+            id,
+            owner_id: crowd[n],
+            public_scene: scene,
+          })),
+          // No public scene yet: not on the walk.
+          { id: uuid(0x2ffff), owner_id: crowd[1300], public_scene: null },
+        ],
+        shop_private: [{ shop_id: AKI_SHOP, scene }],
+        ...Object.fromEntries(
+          ["shop_reactions", "saved_shops", "shop_visits"].map((table) => [
+            table,
+            many(1100, 0x20000).map((shop_id) => ({
+              user_id: AKI,
+              shop_id,
+              liked: true,
+              message: "",
+              visited_at: at,
+            })),
+          ]),
+        ),
+        pop_reactions: many(1100, 0x20000).map((shop_id) => ({
+          user_id: AKI,
+          shop_id,
+          placement_key: JSON.stringify({ scene: "p1" }),
+          reaction: "want",
+        })),
+      };
+      const fake = fakeReads(tables);
+      const read = await loadWalkRows(
+        fake.client as unknown as Parameters<typeof loadWalkRows>[0],
+        AKI,
+      );
+      assert.equal(read.shopId, AKI_SHOP);
+      assert.deepEqual(read.rows.ownScene, scene);
+      assert.deepEqual(
+        [
+          read.rows.scenes.length,
+          read.rows.reactions.length,
+          read.rows.saved.length,
+          read.rows.popReactions.length,
+          read.rows.visits.length,
+        ],
+        [1200, 1100, 1100, 1100, 1100],
+      );
+      const visitor = await loadWalkRows(
+        fakeReads(tables).client as unknown as Parameters<
+          typeof loadWalkRows
+        >[0],
+        null,
+      );
+      assert.equal(visitor.shopId, null);
+      // A visitor sees every shop's public scene, and keeps nothing.
+      assert.deepEqual(
+        [visitor.rows.scenes.length, visitor.rows.reactions.length],
+        [1201, 0],
+      );
+    },
+  );
+
+  await check(
+    "older 便り come past a town holding more than 1000 of their writer's",
+    async () => {
+      // Ben wrote 1030; the town holds the newest 1010 of them.
+      const letters = many(1030, 0x60000).map((id, n) =>
+        post(id, BEN, { created_at: minutes(n) }),
+      );
+      const fake = fakeReads({
+        profiles: [profile(AKI, "aki"), profile(BEN, "ben")],
+        posts: letters,
+      });
+      const backend = visitorTownBackend(fake.client);
+      const { state } = await backend.load();
+      const held = state.posts.filter((entry) => entry.authorId === BEN);
+      assert.equal(held.length, 500);
+      backend.absorb!((town) => ({
+        ...town,
+        posts: [
+          ...town.posts,
+          ...letters.slice(500, 1010).map((row) => ({
+            ...held[0],
+            id: row.id,
+            createdAt: row.created_at,
+          })),
+        ],
+      }));
+      fake.asked.length = 0;
+      const older = await backend.older!(at, [BEN]);
+      assert.deepEqual(
+        older.posts.map((entry) => entry.id),
+        letters.slice(1010).map((row) => row.id),
+      );
+      // The first 1000, then on from the oldest of them.
+      assert.deepEqual(
+        fake.asked
+          .filter((ask) => ask.table === "posts" && ask.ids === 1)
+          .map((ask) => ask.filters.at(-1)),
+        ["limit=1000", "limit=1000"],
+      );
     },
   );
 
@@ -1286,25 +1646,6 @@ async function main() {
       });
     },
   );
-
-  const entry = (
-    id: string,
-    userId: string,
-    extra: Partial<Tables<"reading_entries">> = {},
-  ): Tables<"reading_entries"> => ({
-    id,
-    user_id: userId,
-    book_id: BOOK,
-    kind: "finished",
-    body: "",
-    feelings: ["quiet"],
-    spoiler: false,
-    is_public: extra.is_public ?? true,
-    audience: (extra.is_public ?? true) ? "everyone" : "private",
-    created_at: at,
-    updated_at: at,
-    ...extra,
-  });
 
   await check(
     "reading records: own ones always, others' only as far as they let",
@@ -2643,7 +2984,7 @@ async function main() {
   });
 
   await check(
-    "the blocked are read by name, even past the profiles read",
+    "the blocked are known, however many readers there are a request",
     async () => {
       const CAL = "00000000-0000-4000-8000-00000000000c";
       const fake = fakeReads(
@@ -2663,11 +3004,15 @@ async function main() {
         fake.asked
           .filter((ask) => ask.table === "blocks")
           .map((ask) => ask.filters),
-        [["blocker_id=eq." + AKI]],
+        [["blocker_id=eq." + AKI, "order=blocked_id.asc", "limit=1000"]],
       );
-      assert.equal(
-        fake.asked.filter((ask) => ask.table === "profiles").length,
-        2,
+      // Every reader, two a request: the first page, then the pages after
+      // it together, the last starting at the last reader counted.
+      assert.deepEqual(
+        fake.asked
+          .filter((ask) => ask.table === "profiles")
+          .map((ask) => ask.from),
+        [0, 1, 2],
       );
     },
   );

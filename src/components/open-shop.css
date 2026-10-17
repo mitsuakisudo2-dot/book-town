@@ -47,9 +47,9 @@
   color: inherit;
   cursor: pointer;
   transition:
-    transform 0.2s,
-    border-color 0.2s,
-    box-shadow 0.2s;
+    transform var(--dur-move),
+    border-color var(--dur-move),
+    box-shadow var(--dur-move);
 }
 .open-kind:hover,
 .open-kind:focus-visible {
@@ -163,7 +163,7 @@
 .open-shelf-book {
   position: relative;
   flex: 0 0 56px;
-  animation: open-slide-in 0.35s ease-out;
+  animation: open-slide-in var(--dur-enter-l) ease-out;
 }
 .open-shelf-book button {
   position: absolute;
@@ -342,18 +342,19 @@
   border-top: 0;
   background: radial-gradient(circle at 50% 0%, #fff6d8, #f2e2b4 70%);
   overflow: hidden;
-  animation: open-lights 1.4s ease-out both;
+  animation: open-lights var(--dur-lights) ease-out both;
 }
 .open-window-book {
   width: 34px;
-  animation: open-slide-in 0.4s ease-out both;
+  animation: open-slide-in var(--dur-slide-in) ease-out both;
 }
 .open-shutter {
   position: absolute;
   inset: 0;
   z-index: 1;
   background: repeating-linear-gradient(#8f9488 0 6px, #7d8277 6px 8px);
-  animation: open-shutter-up 1.2s cubic-bezier(0.6, 0, 0.3, 1) 0.2s forwards;
+  animation: open-shutter-up var(--dur-skeleton) var(--ease-shutter)
+    var(--dur-move) forwards;
 }
 @keyframes open-shutter-up {
   to {
@@ -411,7 +412,7 @@
     transition: none;
   }
   .open-shutter {
-    animation: open-shutter-fade 0.4s forwards;
+    animation: open-shutter-fade var(--dur-slide-in) forwards;
   }
   @keyframes open-shutter-fade {
     to {

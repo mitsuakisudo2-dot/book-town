@@ -25,6 +25,7 @@ import {
   OWN_SHOP_ID,
   reviewKey,
   type PersistenceStatus,
+  type TownState,
 } from "../src/lib/types";
 import { demoBooks, demoPosts } from "../src/lib/data";
 import { isDatabaseId } from "../src/lib/paths";
@@ -1431,6 +1432,116 @@ async function main() {
         .in("id", ids.slice(0, 100));
       assert.ifError(anonymous.error);
       assert.deepEqual(anonymous.data, []);
+    },
+  );
+
+  await check(
+    "the app's library is written by the app, and comes back as the reader left it",
+    async () => {
+      const ren = await reader("ren");
+      // The app's own client sends this header (src/lib/supabase/client.ts).
+      const client = createClient<Database>(API_URL, PUBLISHABLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { headers: { "x-booktown-library": "1" } },
+      });
+      const session = (await ren.client.auth.getSession()).data.session!;
+      assert.ifError(
+        (
+          await client.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          })
+        ).error,
+      );
+      const person = { id: ren.id, client };
+      const store = await townOf(person);
+      const done = store.actions.registerBook(
+        { title: "レンの本", author: "誰か" },
+        "manual",
+      );
+      assert.ok(done && done.result === "added");
+      const other = store.actions.registerBook(
+        { title: "レンのもう一冊", author: "誰か" },
+        "manual",
+      );
+      assert.ok(other && other.result === "added");
+      await settled(store);
+      assert.ok(
+        store.actions.changeLibrary([done.bookId], {
+          status: "tsundoku",
+          owned: "yes",
+        }),
+      );
+      store.actions.toggleWish(other.bookId);
+      await settled(store);
+      store.actions.toggleWish(other.bookId);
+      store.actions.toggleLibrary(other.bookId);
+      await settled(store);
+      const rows = await client
+        .from("library_entries")
+        .select("book_id, status, owned, source, wanted_at, removed_at")
+        .eq("user_id", ren.id);
+      assert.ifError(rows.error);
+      const row = (id: string) =>
+        rows.data.find((entry) => entry.book_id === id);
+      // Written by the app, with how the book came in: the database's copy of
+      // marks would have said legacy.
+      assert.deepEqual(row(done.bookId), {
+        book_id: done.bookId,
+        status: "tsundoku",
+        owned: "yes",
+        source: "manual",
+        wanted_at: null,
+        removed_at: null,
+      });
+      assert.equal(row(other.bookId)?.wanted_at, null);
+      assert.ok(row(other.bookId)?.removed_at);
+      const back = (await townOf(person)).getSnapshot();
+      assert.equal(back.libraryEntries[done.bookId].status, "tsundoku");
+      assert.equal(back.libraryEntries[done.bookId].owned, "yes");
+      assert.ok(back.libraryEntries[other.bookId].removedAt);
+      assert.ok(!back.wishlist.includes(other.bookId));
+      assert.ok(!back.library.includes(other.bookId));
+    },
+  );
+
+  await check(
+    "more than 1000 public records reach every reader and visitor, each one",
+    async () => {
+      const rin = await reader("rin");
+      // Rin's records of a book from the catalog, which anyone may read, put
+      // in as the operator so no insert answers with more rows than one
+      // request holds.
+      const book = crypto.randomUUID();
+      const catalog = await admin
+        .from("books")
+        .insert({ id: book, title: "夜の図書館", source: "ndl" });
+      assert.ifError(catalog.error);
+      const ids = Array.from({ length: 1001 }, () => crypto.randomUUID());
+      const records = await admin.from("reading_entries").insert(
+        ids.map((id) => ({
+          id,
+          user_id: rin.id,
+          book_id: book,
+          feelings: ["quiet"],
+          is_public: true,
+          audience: "everyone",
+        })),
+      );
+      assert.ifError(records.error);
+      const rinsIn = (town: TownState) =>
+        town.readingRecords
+          .filter((record) => record.readerId === rin.id)
+          .map((record) => record.id)
+          .sort();
+      assert.deepEqual(
+        rinsIn((await townOf(ben)).getSnapshot()),
+        [...ids].sort(),
+      );
+      const visitor = createTownStore(visitorTownBackend(newClient()));
+      visitor.initialize();
+      await settled(visitor);
+      assert.deepEqual(rinsIn(visitor.getSnapshot()), [...ids].sort());
     },
   );
 

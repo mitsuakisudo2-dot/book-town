@@ -98,6 +98,8 @@ import {
   usePostLayer,
 } from "./letter/post-layer";
 import { useAnnouncement } from "../lib/live-region";
+import { reducedMotion } from "../lib/motion";
+import { bookAuthor, bookById, bookTitle, quotedTitle } from "../lib/book-name";
 
 // Every screen but Home comes in its own file, read when it is first shown
 // (and after Home is drawn, below), so a phone opening the town reads and
@@ -818,9 +820,7 @@ function ShopView({
               if (!shelf) return;
               event.preventDefault();
               shelf.scrollIntoView({
-                behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-                  ? "auto"
-                  : "smooth",
+                behavior: reducedMotion() ? "auto" : "smooth",
               });
               replaceAddress({ hash: "shelf-" + s.id });
             }}
@@ -874,7 +874,7 @@ function ShopView({
                         <span className="store-shelf-pop-words">
                           {item.pop}
                         </span>
-                        <small>『{book.title}』</small>
+                        <small>{quotedTitle(book)}</small>
                       </button>
                     </li>
                   ))}
@@ -1013,7 +1013,7 @@ function shelfPops(shelf: Shelf, books: Book[]) {
     .filter((item) => item.pop.trim())
     .map((item) => ({
       item,
-      book: books.find((book) => book.id === item.bookId),
+      book: bookById(books, item.bookId),
     }))
     .filter((entry): entry is { item: ShelfItem; book: Book } => !!entry.book)
     .slice(0, 3);
@@ -1025,7 +1025,7 @@ function BookView({
   bookId,
 }: Shared & { bookId: string }) {
   const persistence = usePersistenceStatus();
-  const book = state.books.find((b) => b.id === bookId);
+  const book = bookById(state.books, bookId);
   if (!book)
     return persistence === "loading" ? (
       <p role="status">本を開いています…</p>
@@ -1057,8 +1057,8 @@ function BookView({
         <div className="book-hero-head">
           <span className="eyebrow">ONE BOOK, MANY WORLDS</span>
           <span className="genre-tag">{book.genre}</span>
-          <h1>{book.title}</h1>
-          <p className="book-page-author">{book.author}</p>
+          <h1>{bookTitle(book)}</h1>
+          <p className="book-page-author">{bookAuthor(book)}</p>
           <BookPrice book={book} />
           <BookPurchase book={book} />
           <CoverCredit book={book} />
@@ -1218,7 +1218,7 @@ function Wishlist({ state, actions, notify }: Shared) {
             entry.pop.trim() &&
             state.books.some((book) => book.id === entry.bookId),
         );
-      const book = item && state.books.find((b) => b.id === item.bookId);
+      const book = item && bookById(state.books, item.bookId);
       return owner && item && book ? [{ shop, owner, item, book }] : [];
     })
     .slice(0, 3);
@@ -1233,8 +1233,8 @@ function Wishlist({ state, actions, notify }: Shared) {
             <article className="catalog-book" key={b.id}>
               <Link href={bookPath(b.id)}>
                 <BookJacket book={b} />
-                <h3>{b.title}</h3>
-                <p>{b.author}</p>
+                <h3>{bookTitle(b)}</h3>
+                <p>{bookAuthor(b)}</p>
               </Link>
               <span>{b.genre}</span>
               <button
@@ -1273,7 +1273,7 @@ function Wishlist({ state, actions, notify }: Shared) {
                 <Link href={bookPath(book.id)}>
                   <BookJacket book={book} />
                   <span>
-                    <b>{book.title}</b>
+                    <b>{bookTitle(book)}</b>
                     <q>{item.pop.trim()}</q>
                     <small>
                       {shop.name}・店主 {owner.name}のPOP

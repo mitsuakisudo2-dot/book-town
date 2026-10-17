@@ -23,7 +23,9 @@ import { profilePath, shopPath } from "../lib/paths";
 import { useBackLayer } from "../lib/back-layer";
 import { focusBack } from "../lib/coarse-pointer";
 import { lockPageScroll } from "../lib/scroll-lock";
+import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import { heldBookName } from "../lib/held-book";
+import { reducedMotion } from "../lib/motion";
 
 export interface SceneReading {
   entries: ReadEntry[];
@@ -117,7 +119,7 @@ export function BookInHand({
   );
   const item = availableItems[index];
   const shop = catalog.find((s) => s.id === item?.shopId) ?? legacyShop;
-  const book = state.books.find((entry) => entry.id === item?.bookId);
+  const book = bookById(state.books, item?.bookId);
   const reactionKey = item ? entryKey(item) : "";
   // The book remains open while this list flips through words written
   // about that same edition by other public shelves.
@@ -193,9 +195,7 @@ export function BookInHand({
   function glidePop(track: HTMLDivElement, page: number) {
     track.scrollTo({
       left: page * track.clientWidth,
-      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "instant"
-        : "smooth",
+      behavior: reducedMotion() ? "instant" : "smooth",
     });
   }
   // The page the track rests on or is gliding to: where a button sent it,
@@ -484,7 +484,7 @@ export function BookInHand({
               className="bh-cover"
               href={bookPath(book.id)}
               onNavigate={leaveForPage}
-              aria-label={`${book.title}の作品ページへ`}
+              aria-label={`${bookTitle(book)}の作品ページへ`}
             >
               <BookJacket book={book} illustrated={sceneMode} />
             </Link>
@@ -492,10 +492,10 @@ export function BookInHand({
               <span className="bh-genre">{book.genre}</span>
               <h2 id={titleId}>
                 <Link href={bookPath(book.id)} onNavigate={leaveForPage}>
-                  {book.title}
+                  {bookTitle(book)}
                 </Link>
               </h2>
-              <p className="bh-author">{book.author}</p>
+              <p className="bh-author">{bookAuthor(book)}</p>
               <CoverCredit book={book} />
               <CoverRemovalLink book={book} />
               <BookPrice book={book} />
@@ -758,7 +758,7 @@ export function BookInHand({
               <small> · 左右にスワイプ</small>
             </span>
             <span className="bh-sr-only">
-              {availableItems.length}冊中{index + 1}冊目、{book.title}
+              {availableItems.length}冊中{index + 1}冊目、{bookTitle(book)}
             </span>
           </span>
         </span>

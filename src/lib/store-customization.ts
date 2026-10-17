@@ -21,6 +21,7 @@ import {
   type SceneObject,
 } from "./store-scene";
 import { woodScene } from "./store-scene-adapter";
+import { bookById } from "./book-name";
 
 export const STORE_TEMPLATES = [
   {
@@ -65,16 +66,16 @@ export const placementReactionKey = (scene: StoreScene, p: SceneObject) =>
 
 /**
  * Old private items are kept unplaced and private. The old Shop is never
- * mutated. A scene the owner already manages keeps all it has (template,
- * rows, placements with their POPs, privacy and order); shelf books it does
- * not have yet join it unplaced, with their shelf POPs.
+ * mutated. A scene the owner already manages keeps what they arranged
+ * (template, rows, placements with their POPs, privacy and order) and
+ * follows the shelves for the rest: see followShelves.
  */
 export function migrateShopScene(
   shop: Shop,
   books: Book[],
   existing?: StoreScene,
 ): StoreScene {
-  if (existing?.ownerManaged) return withShelfBooks(existing, shop, books);
+  if (existing?.ownerManaged) return followShelves(existing, shop, books);
   let scene = structuredClone(existing ?? woodScene(shop, books, 0));
   scene.ownerManaged = true;
   scene.templateId ??= "warm";
@@ -82,7 +83,7 @@ export function migrateShopScene(
     for (const item of shelf.items) {
       const id = "placement:" + shop.id + ":" + item.id;
       let p = objectById(scene, id);
-      const book = books.find((b) => b.id === item.bookId);
+      const book = bookById(books, item.bookId);
       if (!book) continue;
       if (!p) {
         scene = addBookPlacement(scene, book, null, id, item.display);
@@ -94,16 +95,64 @@ export function migrateShopScene(
     }
   return scene;
 }
-/** Adds shelf books missing from a managed scene, unplaced; nothing else changes. */
-function withShelfBooks(
+/** Whether a placement still stands for a book on one of the shelves. */
+const shelfKey = (itemId: string, bookId: string) =>
+  JSON.stringify([itemId, bookId]);
+/**
+ * A managed scene follows the shelves (the shelf is where an owner puts a
+ * book in the shop). A book taken off a shelf leaves the shop's rows and
+ * waits unplaced with its POP and reactions, no longer tied to the shelf,
+ * so the owner can still set it out by hand. A book put on a public shelf
+ * goes after the books of its shelf, or on a row with no books yet, where
+ * it fits; otherwise, and from a private shelf, it waits unplaced. Nothing
+ * else the owner arranged changes, and a scene that already follows its
+ * shelves comes back equal.
+ */
+function followShelves(
   existing: StoreScene,
   shop: Shop,
   books: Book[],
 ): StoreScene {
   let scene = structuredClone(existing);
+  const onShelf = new Set(
+    shop.shelves.flatMap((shelf) =>
+      shelf.items.map((item) => shelfKey(item.id, item.bookId)),
+    ),
+  );
+  const emptied = new Set<string>();
+  for (const o of scene.objects)
+    if (
+      o.kind === "book" &&
+      o.source &&
+      !onShelf.has(shelfKey(o.source.itemId, o.bookId!))
+    ) {
+      if (o.parentId) emptied.add(o.parentId);
+      o.parentId = null;
+      delete o.source;
+    }
+  for (const rowId of emptied)
+    if (objectById(scene, rowId)?.kind === "row")
+      scene = relayoutRow(scene, rowId);
+  const rows = scene.objects.filter((o) => o.kind === "row").map((o) => o.id);
+  const placedOn = (rowId: string) =>
+    scene.objects.filter((o) => o.kind === "book" && o.parentId === rowId);
+  /** Sets a placement out after the books of its shelf, if a row has room. */
+  const setOut = (id: string, shelfId: string) => {
+    const ofShelf = rows.filter((rowId) =>
+      placedOn(rowId).some((o) => o.source?.shelfId === shelfId),
+    );
+    const empty = rows.filter((rowId) => placedOn(rowId).length === 0);
+    for (const rowId of [...ofShelf.reverse(), ...empty]) {
+      const trial = insertPlacement(scene, id, rowId, Infinity);
+      if (objectById(trial, id)!.parentId === rowId) {
+        scene = trial;
+        return;
+      }
+    }
+  };
   for (const shelf of shop.shelves)
     for (const item of shelf.items) {
-      const book = books.find((b) => b.id === item.bookId);
+      const book = bookById(books, item.bookId);
       // Already in the scene, wherever the owner put it.
       if (
         !book ||
@@ -115,21 +164,66 @@ function withShelfBooks(
         )
       )
         continue;
-      // A shelf gives a removed book's item id to the next book it takes
-      // (counterId), so the plain id may already name an earlier book.
-      const plain = "placement:" + shop.id + ":" + item.id;
-      const taken = (id: string) =>
-        objectById(scene, id) !== undefined ||
-        objectById(scene, "pop:" + id) !== undefined;
-      let id = taken(plain) ? plain + ":" + item.bookId : plain;
-      for (let n = 2; taken(id); n++) id = plain + ":" + item.bookId + ":" + n;
-      scene = addBookPlacement(scene, book, null, id, item.display);
-      scene = setBookPop(scene, id, item.pop);
+      // The same book waiting unplaced (taken off and put back) is used
+      // again, with its POP and reactions.
+      const waiting = scene.objects.find(
+        (o) =>
+          o.kind === "book" &&
+          !o.source &&
+          !o.parentId &&
+          o.bookId === item.bookId,
+      );
+      let id: string;
+      if (waiting) {
+        id = waiting.id;
+        if (item.pop && !bookPop(scene, id)?.text)
+          scene = setBookPop(scene, id, item.pop);
+      } else {
+        // A shelf gives a removed book's item id to the next book it takes
+        // (counterId), so the plain id may already name an earlier book.
+        const plain = "placement:" + shop.id + ":" + item.id;
+        const taken = (id: string) =>
+          objectById(scene, id) !== undefined ||
+          objectById(scene, "pop:" + id) !== undefined;
+        id = taken(plain) ? plain + ":" + item.bookId : plain;
+        for (let n = 2; taken(id); n++)
+          id = plain + ":" + item.bookId + ":" + n;
+        scene = addBookPlacement(scene, book, null, id, item.display);
+        scene = setBookPop(scene, id, item.pop);
+      }
       const p = objectById(scene, id)!;
       p.source = { shopId: shop.id, shelfId: shelf.id, itemId: item.id };
       p.isPublic = shelf.isPublic;
+      if (shelf.isPublic) setOut(id, shelf.id);
     }
   return scene;
+}
+/**
+ * A decorated shop brought up to its shelves, to be saved: null when it
+ * already shows them. `waiting` names the books put on a public shelf that
+ * found no room in the rows.
+ */
+export function sceneForShelves(
+  scene: StoreScene,
+  shop: Shop,
+  books: Book[],
+): { scene: StoreScene; waiting: string[] } | null {
+  if (!scene.ownerManaged) return null;
+  const next = followShelves(scene, shop, books);
+  if (JSON.stringify(next) === JSON.stringify(scene)) return null;
+  const tied = (o: SceneObject) => JSON.stringify([o.id, o.source?.itemId]);
+  const before = new Set(scene.objects.map(tied));
+  const waiting = next.objects
+    .filter(
+      (o) =>
+        o.kind === "book" &&
+        o.source &&
+        o.isPublic &&
+        !o.parentId &&
+        !before.has(tied(o)),
+    )
+    .map((o) => o.bookId!);
+  return { scene: next, waiting };
 }
 export function importedPlacementReactions(
   scene: StoreScene,
@@ -236,7 +330,7 @@ export function applyStoreTemplate(
   // Books keep the size rule of the furniture they move onto, so a scene
   // saved before a size change still fits its new rows.
   const fit = (p: SceneObject, row: SceneObject) => {
-    const book = books.find((b) => b.id === p.bookId);
+    const book = bookById(books, p.bookId);
     if (book) p.preferredSize = placementSize(book, p.display!, row.bookHeight);
   };
   const last = (rowId: string, objects: SceneObject[]) =>
@@ -343,7 +437,7 @@ export function changePlacement(
   if (p?.kind !== "book") throw new Error("Unknown placement");
   if (patch.isPublic !== undefined) p.isPublic = patch.isPublic;
   if (patch.display) {
-    const book = books.find((b) => b.id === p.bookId);
+    const book = bookById(books, p.bookId);
     if (!book) throw new Error("Unknown book");
     p.display = patch.display;
     p.preferredSize = {

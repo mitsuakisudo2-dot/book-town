@@ -9,6 +9,7 @@ import {
   type RelationTable,
   type RemoteIds,
   type RemoteRows,
+  type ShopRow,
   type Write,
 } from "../town-remote";
 import {
@@ -36,10 +37,11 @@ import {
   allRows,
   backgroundSync,
   chunks,
+  PAGE,
   settled,
   shouldRetry,
+  steadily,
   TownSyncError,
-  type Outcome,
   type SyncOptions,
 } from "./sync";
 
@@ -47,20 +49,32 @@ type Client = SupabaseClient<Database>;
 
 export { TownSyncError, shouldRetry };
 
-// Supabase returns at most 1000 rows a request. The person's own marks,
-// readings and records are read a page at a time (allRows), and their own nine
-// on its own, so none is left out; the rest stops at 1000, which covers
-// everyone while Booktown is invite-only.
-const LIMIT = 1000;
+// Supabase answers at most 1000 rows a request (PAGE). Every list the town
+// shows is read whole, a page at a time (allRows), the pages after the first
+// together: a town past 1000 waits for one more answer, and nothing is left
+// out without a word. Only 便り and books are read a stretch at a time on
+// purpose: the newest POSTS, with newer and older ones read after the town
+// (remoteReads), and the newest CATALOG books with every book the rows point
+// to (booksFor).
 const POSTS = 500;
 const CATALOG = 300;
+
+/** Rows matching `ids`, read 100 ids at a time (a URL has room for that). */
+async function byIds<T>(
+  ids: string[],
+  read: (some: string[]) => Promise<T[]>,
+): Promise<T[]> {
+  const pages = await Promise.all(chunks(ids, 100).map(read));
+  return pages.flat();
+}
 
 // Everything but who typed the book in, which the database does not show.
 const BOOK_COLUMNS =
   "id, isbn, title, author, publisher, price, source, work_id, created_at, updated_at";
 
+// created_at puts the shops in the order they opened, as the walk goes.
 const SHOP_COLUMNS =
-  "id, owner_id, name, description, tagline, theme, is_open, public_shelves, public_scene_books";
+  "id, owner_id, name, description, tagline, theme, is_open, public_shelves, public_scene_books, created_at";
 
 // Everything folded for everyone; the person's own held things too.
 const FOLD_COLUMNS = "target_kind, target_id, state, since";
@@ -85,26 +99,32 @@ async function booksFor(
   const catalog = await reading;
   const have = new Set(catalog.map((book) => book.id));
   const missing = referencedBookIds(rows).filter((id) => !have.has(id));
-  const more = await Promise.all(
-    chunks(missing, 100).map((ids) =>
+  return [
+    ...catalog,
+    ...(await byIds(missing, (ids) =>
       all(client.from("books").select(BOOK_COLUMNS).in("id", ids)),
-    ),
-  );
-  return [...catalog, ...more.flat()];
+    )),
+  ];
 }
 
-/** Reads everything the signed-in person's town shows. */
-export async function loadTown(
+/**
+ * Reads the rows of the town `userId` sees, or a visitor (null) sees: the
+ * same reads for both, the database deciding what each may read
+ * (supabase/migrations). What only the signed-in person has (their marks,
+ * follows, reactions, settings, shop) is not asked for a visitor. Their own
+ * shop's id is handed back, if they have one.
+ */
+async function readTown(
   client: Client,
-  userId: string,
-  seenNotifications: string[] = [],
-  newShopId: () => string = () => crypto.randomUUID(),
-): Promise<{ state: TownState; ids: RemoteIds }> {
+  userId: string | null,
+): Promise<{ rows: Omit<RemoteRows, "seenNotifications">; shopId?: string }> {
+  /** What only the signed-in person reads: nothing for a visitor. */
+  const own = async <T>(read: (id: string) => Promise<T[]>): Promise<T[]> =>
+    userId === null ? [] : read(userId);
   const catalog = catalogOf(client);
   const [
-    someProfiles,
-    ownNine,
-    othersNine,
+    profiles,
+    nine,
     shops,
     follows,
     blocks,
@@ -115,33 +135,53 @@ export async function loadTown(
     popReactions,
     ownSessions,
     together,
-    ownRecords,
-    othersRecords,
+    records,
     folds,
     myReports,
     readerSettings,
     posters,
+    libraryEntries,
   ] = await Promise.all([
-    all(client.from("profiles").select("*").limit(LIMIT)),
-    // The person's own nine, whole, as changing it rewrites the list; and
-    // others'.
-    all(client.from("profile_nine").select("*").eq("profile_id", userId)),
-    all(
-      client
-        .from("profile_nine")
-        .select("*")
-        .neq("profile_id", userId)
-        .limit(LIMIT),
+    // In the order they joined.
+    allRows<Tables<"profiles">>(
+      (count) => client.from("profiles").select("*", { count }),
+      ["created_at", "id"],
     ),
-    all(client.from("shops").select(SHOP_COLUMNS).limit(LIMIT)),
-    all(
-      client.from("shop_follows").select("shop_id").eq("follower_id", userId),
+    allRows<Tables<"profile_nine">>(
+      (count) => client.from("profile_nine").select("*", { count }),
+      ["profile_id", "position"],
     ),
-    all(client.from("blocks").select("blocked_id").eq("blocker_id", userId)),
-    allRows(
-      (count) =>
-        client.from("book_marks").select("*", { count }).eq("user_id", userId),
-      ["book_id", "kind"],
+    // Open shops, and the person's own whether it is open or not.
+    allRows<ShopRow & Pick<Tables<"shops">, "created_at">>(
+      (count) => client.from("shops").select(SHOP_COLUMNS, { count }),
+      ["created_at", "id"],
+    ),
+    own((id) =>
+      allRows(
+        (count) =>
+          client
+            .from("shop_follows")
+            .select("shop_id", { count })
+            .eq("follower_id", id),
+        ["shop_id"],
+      ),
+    ),
+    own((id) =>
+      allRows(
+        (count) =>
+          client
+            .from("blocks")
+            .select("blocked_id", { count })
+            .eq("blocker_id", id),
+        ["blocked_id"],
+      ),
+    ),
+    own((id) =>
+      allRows(
+        (count) =>
+          client.from("book_marks").select("*", { count }).eq("user_id", id),
+        ["book_id", "kind"],
+      ),
     ),
     all(
       client
@@ -151,117 +191,125 @@ export async function loadTown(
         .limit(POSTS),
     ),
     // The person's own reactions, and others' reactions to their posts.
-    all(client.from("post_reactions").select("*").limit(LIMIT)),
-    all(
-      client
-        .from("spoiler_reports")
-        .select("post_id")
-        .eq("reporter_id", userId),
+    own(() =>
+      allRows<Tables<"post_reactions">>(
+        (count) => client.from("post_reactions").select("*", { count }),
+        ["user_id", "post_id", "kind"],
+      ),
     ),
-    all(client.from("pop_reactions").select("*").eq("user_id", userId)),
+    own((id) =>
+      allRows(
+        (count) =>
+          client
+            .from("spoiler_reports")
+            .select("post_id", { count })
+            .eq("reporter_id", id),
+        ["post_id"],
+      ),
+    ),
+    own((id) =>
+      allRows(
+        (count) =>
+          client.from("pop_reactions").select("*", { count }).eq("user_id", id),
+        ["shop_id", "placement_key", "reaction"],
+      ),
+    ),
+    own((id) =>
+      allRows(
+        (count) =>
+          client
+            .from("reading_sessions")
+            .select("*", { count })
+            .eq("user_id", id),
+        ["id"],
+      ),
+    ),
+    // Who is reading together right now; the person's own are read above.
     allRows(
-      (count) =>
-        client
+      (count) => {
+        const open = client
           .from("reading_sessions")
           .select("*", { count })
-          .eq("user_id", userId),
+          .eq("mode", "together")
+          .is("ended_at", null);
+        return userId === null ? open : open.neq("user_id", userId);
+      },
       ["id"],
     ),
-    all(
-      client
-        .from("reading_sessions")
-        .select("*")
-        .eq("mode", "together")
-        .is("ended_at", null)
-        .neq("user_id", userId)
-        .limit(LIMIT),
+    // Every one of the person's own records, and others' they may read.
+    allRows<Tables<"reading_entries">>(
+      (count) => client.from("reading_entries").select("*", { count }),
+      ["id"],
     ),
-    // Every one of the person's own records, and the newest of others'
-    // public ones.
-    allRows(
+    allRows<RemoteRows["folds"][number]>(
       (count) =>
-        client
-          .from("reading_entries")
-          .select("*", { count })
-          .eq("user_id", userId),
+        client.from("moderation_folds").select(FOLD_COLUMNS, { count }),
+      ["target_kind", "target_id"],
+    ),
+    own(() =>
+      allRows<RemoteRows["myReports"][number]>(
+        (count) =>
+          client
+            .from("reports")
+            // Only the reader's own come back (the policy); reporter_id
+            // itself is not theirs to read, so it cannot be filtered on.
+            .select(REPORT_COLUMNS, { count }),
+        ["id"],
+      ),
+    ),
+    own((id) =>
+      all(client.from("reader_settings").select("*").eq("user_id", id)),
+    ),
+    // The person's own posters, drafts too, and others' put up.
+    allRows<Tables<"posters">>(
+      (count) => client.from("posters").select("*", { count }),
       ["id"],
     ),
-    all(
-      client
-        .from("reading_entries")
-        .select("*")
-        .neq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(LIMIT),
-    ),
-    all(client.from("moderation_folds").select(FOLD_COLUMNS).limit(LIMIT)),
-    all(
-      client
-        .from("reports")
-        // Only the reader's own come back (the policy); reporter_id itself is
-        // not theirs to read, so it cannot be filtered on.
-        .select(REPORT_COLUMNS)
-        .order("created_at", { ascending: false })
-        .limit(200),
-    ),
-    all(client.from("reader_settings").select("*").eq("user_id", userId)),
-    // The person's own posters, drafts too, and others' put up.
-    all(
-      client
-        .from("posters")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(LIMIT),
+    // The person's own library, every row.
+    own((id) =>
+      allRows(
+        (count) =>
+          client
+            .from("library_entries")
+            .select("*", { count })
+            .eq("user_id", id),
+        ["book_id"],
+      ),
     ),
   ]);
 
-  // Whoever the person blocked is named in their list, even past the
-  // profiles read for the town.
-  const unread = [
-    ...new Set(
-      blocks
-        .map((row) => row.blocked_id)
-        .filter((id) => !someProfiles.some((row) => row.id === id)),
-    ),
-  ];
-  const profiles = unread.length
-    ? [
-        ...someProfiles,
-        ...(
-          await all(client.from("profiles").select("*").in("id", unread))
-        ).filter((row) => unread.includes(row.id)),
-      ]
-    : someProfiles;
-
-  const own = shops.find((shop) => shop.owner_id === userId);
+  const ownShop =
+    userId === null
+      ? undefined
+      : shops.find((shop) => shop.owner_id === userId);
   let ownShelves: Json = [];
   let ownSceneBooks: Json = [];
   let ownShopFollowers = 0;
   let ownShopVisitors: RemoteRows["ownShopVisitors"] = null;
   let shopMessages: RemoteRows["shopMessages"] = [];
-  if (own) {
+  if (ownShop && userId !== null) {
     const [privateRows, followers, messages, visitors] = await Promise.all([
       all(
         client
           .from("shop_private")
           .select("shelves, scene_books")
-          .eq("shop_id", own.id),
+          .eq("shop_id", ownShop.id),
       ),
       settled(
         client
           .from("shop_follows")
           .select("shop_id", { count: "exact", head: true })
-          .eq("shop_id", own.id),
+          .eq("shop_id", ownShop.id),
       ),
-      all(
-        client
-          .from("shop_reactions")
-          .select("user_id, message, updated_at")
-          .eq("shop_id", own.id)
-          .neq("user_id", userId)
-          .neq("message", "")
-          .order("updated_at", { ascending: false })
-          .limit(LIMIT),
+      allRows(
+        (count) =>
+          client
+            .from("shop_reactions")
+            .select("user_id, message, updated_at", { count })
+            .eq("shop_id", ownShop.id)
+            .neq("user_id", userId)
+            .neq("message", ""),
+        ["user_id"],
       ),
       // A nice-to-know: the town still opens if this cannot be read.
       client.rpc("shop_visitors", { days: 7 }).then(
@@ -276,9 +324,9 @@ export async function loadTown(
     shopMessages = messages;
   }
 
-  const rows: Omit<RemoteRows, "books"> = {
+  const rows: Omit<RemoteRows, "books" | "seenNotifications"> = {
     profiles,
-    nine: [...ownNine, ...othersNine],
+    nine,
     shops,
     ownShelves,
     ownSceneBooks,
@@ -288,120 +336,60 @@ export async function loadTown(
     follows,
     blocks,
     marks,
+    libraryEntries,
     posts,
     postReactions,
     spoilerReports,
     popReactions,
     sessions: [...ownSessions, ...together],
-    records: [...ownRecords, ...othersRecords],
+    records,
     posters,
-    seenNotifications,
     folds,
+    // A visitor files no reports and keeps no settings: the defaults.
     myReports,
     readerSettings: readerSettings[0] ?? null,
   };
-  const ids: RemoteIds = { userId, shopId: own?.id ?? newShopId() };
   return {
-    state: townFromRows(
-      { ...rows, books: await booksFor(client, rows, catalog) },
-      ids,
-    ),
+    rows: {
+      ...rows,
+      books: await booksFor(
+        client,
+        { ...rows, seenNotifications: [] },
+        catalog,
+      ),
+    },
+    shopId: ownShop?.id,
+  };
+}
+
+/** Reads everything the signed-in person's town shows. */
+export async function loadTown(
+  client: Client,
+  userId: string,
+  seenNotifications: string[] = [],
+  newShopId: () => string = () => crypto.randomUUID(),
+): Promise<{ state: TownState; ids: RemoteIds }> {
+  const read = await readTown(client, userId);
+  const ids: RemoteIds = { userId, shopId: read.shopId ?? newShopId() };
+  return {
+    state: townFromRows({ ...read.rows, seenNotifications }, ids),
     ids,
   };
 }
 
 /**
  * Reads what anyone may see without signing in: profiles, open shops, posts
- * that are not private notes, and who is reading together right now. The
- * database decides what is public (supabase/migrations); this only asks.
+ * that are not private notes, and who is reading together right now.
  */
 export async function loadPublicTown(client: Client): Promise<TownState> {
-  const catalog = catalogOf(client);
-  const [profiles, nine, shops, posts, together, records, folds, posters] =
-    await Promise.all([
-      all(client.from("profiles").select("*").limit(LIMIT)),
-      all(client.from("profile_nine").select("*").limit(LIMIT)),
-      all(
-        client
-          .from("shops")
-          .select(SHOP_COLUMNS)
-          .eq("is_open", true)
-          .limit(LIMIT),
-      ),
-      all(
-        client
-          .from("posts")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(POSTS),
-      ),
-      all(
-        client
-          .from("reading_sessions")
-          .select("*")
-          .eq("mode", "together")
-          .is("ended_at", null)
-          .limit(LIMIT),
-      ),
-      all(
-        client
-          .from("reading_entries")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(LIMIT),
-      ),
-      all(client.from("moderation_folds").select(FOLD_COLUMNS).limit(LIMIT)),
-      all(
-        client
-          .from("posters")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(LIMIT),
-      ),
-    ]);
-  const rows: Omit<RemoteRows, "books"> = {
-    profiles,
-    nine,
-    shops,
-    ownShelves: [],
-    ownSceneBooks: [],
-    ownShopFollowers: 0,
-    ownShopVisitors: null,
-    shopMessages: [],
-    follows: [],
-    blocks: [],
-    marks: [],
-    posts,
-    postReactions: [],
-    spoilerReports: [],
-    popReactions: [],
-    sessions: together,
-    records,
-    posters,
-    seenNotifications: [],
-    folds,
-    // A visitor files no reports and keeps no settings: the defaults.
-    myReports: [],
-    readerSettings: null,
-  };
+  const read = await readTown(client, null);
   return townFromRows(
-    { ...rows, books: await booksFor(client, rows, catalog) },
+    { ...read.rows, seenNotifications: [] },
     { userId: null, shopId: "" },
   );
 }
 
 type PostRow = Tables<"posts">;
-
-/** Rows matching `ids`, read 100 ids at a time. */
-async function byIds<T>(
-  ids: string[],
-  read: (some: string[]) => PromiseLike<Outcome<T[]>>,
-): Promise<T[]> {
-  const pages = await Promise.all(
-    chunks(ids, 100).map((some) => all(read(some))),
-  );
-  return pages.flat();
-}
 
 /**
  * Posts read after the town, with what the town needs to show them: their
@@ -427,31 +415,44 @@ async function arrivedFor(
   const [profiles, bookRows, postReactions, spoilerReports, folds] =
     await Promise.all([
       byIds(authors, (some) =>
-        client.from("profiles").select("*").in("id", some),
+        all(client.from("profiles").select("*").in("id", some)),
       ),
       byIds(missing, (some) =>
-        client.from("books").select(BOOK_COLUMNS).in("id", some),
+        all(client.from("books").select(BOOK_COLUMNS).in("id", some)),
       ),
+      // A hundred of the reader's own 便り may hold more than a page of
+      // others' reactions.
       userId
         ? byIds(ids, (some) =>
-            client.from("post_reactions").select("*").in("post_id", some),
+            allRows(
+              (count) =>
+                client
+                  .from("post_reactions")
+                  .select("*", { count })
+                  .in("post_id", some),
+              ["user_id", "post_id", "kind"],
+            ),
           )
         : [],
       userId
         ? byIds(ids, (some) =>
-            client
-              .from("spoiler_reports")
-              .select("post_id")
-              .eq("reporter_id", userId)
-              .in("post_id", some),
+            all(
+              client
+                .from("spoiler_reports")
+                .select("post_id")
+                .eq("reporter_id", userId)
+                .in("post_id", some),
+            ),
           )
         : [],
       byIds(ids, (some) =>
-        client
-          .from("moderation_folds")
-          .select(FOLD_COLUMNS)
-          .eq("target_kind", "post")
-          .in("target_id", some),
+        all(
+          client
+            .from("moderation_folds")
+            .select(FOLD_COLUMNS)
+            .eq("target_kind", "post")
+            .in("target_id", some),
+        ),
       ),
     ]);
   return arrivedFromRows(
@@ -480,7 +481,13 @@ function remoteReads(
 ): Required<Pick<TownBackend, "newer" | "older" | "post">> {
   const complete = (rows: PostRow[]) =>
     arrivedFor(client, rows, town(), userId);
-  const posts = () => client.from("posts").select("*");
+  const posts = (count?: "exact") =>
+    client.from("posts").select("*", { count });
+  /** Every reply to the 便り `parents` (a 便り may have many). */
+  const repliesTo = (parents: string[]) =>
+    byIds(parents, (some) =>
+      allRows((count) => posts(count).in("parent_id", some), ["id"]),
+    );
   /** Rows the town lacks, each once: never one it has, nor the reader's own. */
   const lacking = (rows: PostRow[]) => {
     const have = new Set(town()?.posts.map((post) => post.id));
@@ -533,7 +540,8 @@ function remoteReads(
       // moment may lie on both sides of the last page, or of the town's own
       // reading, and none of them may be skipped. What the town has of
       // these writers at that moment is left out, and asked for that many
-      // more, so a page is still full when there is more. One read alone
+      // more, so a page is still full when there is more; past the
+      // server's limit a request, from the oldest read on. One read alone
       // by its id is not: the page brings it to its place in 便りだけ.
       const state = town();
       const at = Date.parse(before);
@@ -549,22 +557,27 @@ function remoteReads(
           )
           .map((post) => post.id),
       );
-      const found = (
-        await all(
+      const wanted = OLDER_PAGE + have.size;
+      const read = new Map<string, PostRow>();
+      for (let until = before, size = Math.min(wanted, PAGE); ; size = PAGE) {
+        const page = await all(
           posts()
             .is("parent_id", null)
             .in("author_id", ids)
-            .lte("created_at", before)
+            .lte("created_at", until)
             .order("created_at", { ascending: false })
-            .limit(OLDER_PAGE + have.size),
-        )
-      )
+            .limit(size),
+        );
+        const known = read.size;
+        for (const row of page) if (!read.has(row.id)) read.set(row.id, row);
+        if (page.length < size || read.size === known || read.size >= wanted)
+          break;
+        until = page[page.length - 1].created_at;
+      }
+      const found = [...read.values()]
         .filter((row) => !have.has(row.id))
         .slice(0, OLDER_PAGE);
-      const replies = await byIds(
-        found.map((row) => row.id),
-        (some) => posts().in("parent_id", some),
-      );
+      const replies = await repliesTo(found.map((row) => row.id));
       return complete([...found, ...replies]);
     },
     async post(id) {
@@ -574,7 +587,7 @@ function remoteReads(
       const top = found.parent_id ?? found.id;
       const [heads, replies] = await Promise.all([
         found.parent_id ? all(posts().eq("id", top)) : [found],
-        all(posts().eq("parent_id", top)),
+        repliesTo([top]),
       ]);
       return complete([...heads, ...replies, found]);
     },
@@ -594,7 +607,9 @@ export function visitorTownBackend(client: Client): TownBackend {
     newId: counterId,
     async load() {
       try {
-        const state = withSamples(await loadPublicTown(client));
+        // Rows that move while being read are read again at once, as for
+        // the signed-in town (sync.ts).
+        const state = withSamples(await steadily(() => loadPublicTown(client)));
         shown = state;
         return { state, status: "saved" as const };
       } catch {
@@ -796,6 +811,37 @@ export async function applyWrite(
           .eq("author_id", ids.userId),
       );
       return;
+    case "library-entries": {
+      // New rows in, ignoring one already there; then what the reader
+      // changed, of the rows already there. Never a partial upsert, which
+      // would write every column it sends.
+      const made = new Set<string>();
+      for (const some of chunks(write.rows, 500))
+        for (const row of await all(
+          client
+            .from("library_entries")
+            .upsert(some, { onConflict: "user_id,book_id", ...ignore })
+            .select("book_id"),
+        ))
+          made.add(row.book_id);
+      const patches = write.patches.filter(
+        (row) => !(row.made && made.has(row.book_id)),
+      );
+      // A few at a time: changing fifty books at once is fifty rows.
+      for (const some of chunks(patches, 8))
+        await Promise.all(
+          some.map((row) =>
+            settled(
+              client
+                .from("library_entries")
+                .update(row.patch)
+                .eq("user_id", ids.userId)
+                .eq("book_id", row.book_id),
+            ),
+          ),
+        );
+      return;
+    }
     case "remove":
       for (const row of write.rows)
         await settled(client.from(write.table).delete().match(row));

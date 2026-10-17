@@ -6,10 +6,10 @@
 // (x-web-search://, #70) was tried on the iPhone and put back to Google
 // (2026-10-17).
 
-type Named = { title: string };
+import { bookTitle, type Named } from "./book-name";
 
 /** The words searched for: the title alone. */
-export const lookupQuery = (book: Named) => book.title;
+export const lookupQuery = (book: Named) => bookTitle(book);
 
 /** Google's results, without "www." (see BookPurchase). */
 export const googleLookupUrl = (book: Named) =>

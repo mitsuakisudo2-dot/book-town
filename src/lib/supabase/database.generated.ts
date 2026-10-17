@@ -1432,6 +1432,24 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      book_bibliography: {
+        Args: { ids: string[] };
+        Returns: {
+          book_id: string;
+          creators: Json;
+          credits: Json;
+          edition: string;
+          issued: string;
+          ndc: string;
+          publisher: string;
+          series: Json;
+          sources: Json;
+          subtitle: string;
+          title: string;
+          title_reading: string;
+          volume: string;
+        }[];
+      };
       can_annotate: { Args: Record<PropertyKey, never>; Returns: boolean };
       delete_my_account: {
         Args: Record<PropertyKey, never>;

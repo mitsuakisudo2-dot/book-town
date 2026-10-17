@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { bookPath } from "../../lib/books";
+import { bookAuthor, bookTitle, quotedTitle } from "../../lib/book-name";
 import { isDatabaseId } from "../../lib/paths";
 import { useTownBackend } from "../../lib/store";
 import type {
@@ -38,8 +39,8 @@ export function BookRow({
           <BookJacket book={book} sizes="44px" />
         </span>
         <span className="letter-book-words">
-          <b className="letter-book-title">{book.title}</b>
-          <span className="letter-book-author">{book.author}</span>
+          <b className="letter-book-title">{bookTitle(book)}</b>
+          <span className="letter-book-author">{bookAuthor(book)}</span>
           {feelings.length > 0 && (
             <span className="letter-feelings">
               {feelings.map((feeling) => (
@@ -97,7 +98,7 @@ export function WantButton({
         notify(
           wanted
             ? "この便りで出会った記録を外しました。読みたい本には残っています"
-            : `『${book.title}』を読みたいに入れました。` +
+            : `${quotedTitle(book)}を読みたいに入れました。` +
                 (keepsMeeting
                   ? `${author.name}さんの便りで出会った本として残します。`
                   : ""),

@@ -197,7 +197,7 @@
   height: 8px;
   border-radius: 50%;
   background: var(--alert);
-  animation: live-pulse 1.6s ease-in-out infinite;
+  animation: live-pulse var(--dur-pulse) ease-in-out infinite;
 }
 .readers-now ul,
 .people-list {
@@ -264,7 +264,7 @@
 }
 .readers-now-finished a {
   display: block;
-  transition: transform 0.2s;
+  transition: transform var(--dur-move);
 }
 .readers-now-finished a:hover {
   transform: translateY(-3px);
@@ -722,7 +722,7 @@
 }
 .reading-peek > summary svg {
   transform: rotate(90deg);
-  transition: transform 0.2s ease;
+  transition: transform var(--dur-move) ease;
 }
 .reading-peek[open] > summary svg {
   transform: rotate(-90deg);
@@ -750,7 +750,7 @@
   border: 1px solid var(--line);
   border-radius: var(--r-box);
   background: var(--sheet);
-  animation: reading-closed-in 0.35s ease-out;
+  animation: reading-closed-in var(--dur-enter-l) ease-out;
 }
 .reading-closed-jacket {
   flex: none;

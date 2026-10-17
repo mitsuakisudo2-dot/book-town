@@ -30,8 +30,11 @@ import { findReader } from "../lib/social";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { SortableShelf } from "./SortableShelf";
 import { StoreSceneEditor } from "./StoreSceneEditor";
-import { useWalkStore } from "../lib/walk-store";
-import { hasPublicSceneBooks } from "../lib/store-customization";
+import { saveOwnedScene, useWalkStore } from "../lib/walk-store";
+import {
+  hasPublicSceneBooks,
+  sceneForShelves,
+} from "../lib/store-customization";
 import { publicWalkShops } from "../lib/store-scene-adapter";
 import { OpenShop, ThemePicker } from "./OpenShop";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
@@ -52,6 +55,7 @@ import {
 import { booksBeforeSearch } from "../lib/book-lists";
 import { focusField } from "../lib/coarse-pointer";
 import "./editor.css";
+import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 
 type ShopEditorProps = {
   state: TownState;
@@ -302,17 +306,17 @@ function AddBookPicker({
       // Placed in this visit: a second tap only takes the placing back.
       actions.removeShelfBook(shelf.id, placed.id);
       setAddedHere(addedHere.filter((id) => id !== book.id));
-      notify(`「${book.title}」を棚から外しました。`);
+      notify(`「${bookTitle(book)}」を棚から外しました。`);
     } else if (placed) {
-      takeOff(placed, book.title);
+      takeOff(placed, bookTitle(book));
       setRemovedNow([...removedNow.filter((id) => id !== book.id), book.id]);
     } else if (taken) {
-      if (putBack(book.id, book.title))
+      if (putBack(book.id, bookTitle(book)))
         setRemovedNow(removedNow.filter((id) => id !== book.id));
     } else if (actions.addShelfBook(shelf.id, book.id, display)) {
       // The editor stays open so several books can be placed in a row.
       setAddedHere([...addedHere, book.id]);
-      notify(`「${book.title}」を本棚に並べました。`);
+      notify(`「${bookTitle(book)}」を本棚に並べました。`);
     } else {
       notify("棚の空きスペースが足りません。並べ方を変えてみてください。");
     }
@@ -333,8 +337,8 @@ function AddBookPicker({
         onClick={() => choose(book)}
       >
         <BookJacket book={book} className="editor-picker-jacket" />
-        <span className="editor-book-choice-title">{book.title}</span>
-        <span className="editor-book-choice-author">{book.author}</span>
+        <span className="editor-book-choice-title">{bookTitle(book)}</span>
+        <span className="editor-book-choice-author">{bookAuthor(book)}</span>
         <span className="editor-book-choice-add">
           {placed ? (
             <>
@@ -566,7 +570,7 @@ function ShelfEditingPanel({
     return () => removeEventListener("pagehide", leave);
   }, []);
   const selected = shelf.items.find((item) => item.id === selectedId) ?? null;
-  const selectedBook = books.find((book) => book.id === selected?.bookId);
+  const selectedBook = bookById(books, selected?.bookId);
   const used = shelfUsed(shelf);
   const remaining = shelf.capacity - used;
   const selectedIndex = selected
@@ -705,8 +709,8 @@ function ShelfEditingPanel({
           <div className="editor-selected-heading">
             <div>
               <span className="editor-kicker">いま編集している本</span>
-              <h3>{selectedBook.title}</h3>
-              <p>{selectedBook.author}</p>
+              <h3>{bookTitle(selectedBook)}</h3>
+              <p>{bookAuthor(selectedBook)}</p>
             </div>
             <button
               className="icon-btn"
@@ -723,7 +727,7 @@ function ShelfEditingPanel({
               <div
                 className="editor-segment"
                 role="group"
-                aria-label={`${selectedBook.title}の並べ方`}
+                aria-label={`${bookTitle(selectedBook)}の並べ方`}
               >
                 <button
                   type="button"
@@ -767,7 +771,7 @@ function ShelfEditingPanel({
                 <button
                   type="button"
                   className="btn"
-                  aria-label={`${selectedBook.title}を一つ左へ移動`}
+                  aria-label={`${bookTitle(selectedBook)}を一つ左へ移動`}
                   disabled={selectedIndex <= 0}
                   onClick={() =>
                     actions.moveShelfBook(
@@ -783,7 +787,7 @@ function ShelfEditingPanel({
                 <button
                   type="button"
                   className="btn"
-                  aria-label={`${selectedBook.title}を一つ右へ移動`}
+                  aria-label={`${bookTitle(selectedBook)}を一つ右へ移動`}
                   disabled={selectedIndex >= shelf.items.length - 1}
                   onClick={() =>
                     actions.moveShelfBook(
@@ -823,7 +827,7 @@ function ShelfEditingPanel({
               type="button"
               className="text-btn quiet editor-remove-book"
               onClick={() => {
-                takeOff(selected, selectedBook.title);
+                takeOff(selected, bookTitle(selectedBook));
                 setSelectedId(null);
               }}
             >
@@ -911,6 +915,40 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       )
         shelfNameDraftStore.clear(key);
   }, [shop, owner, settled]);
+  // A decorated shop follows its shelves: books put on a shelf go into the
+  // shop's rows and books taken off leave them. Saved only once the town and
+  // the walk are both read from the same place, so a shelf not read yet
+  // never empties the shop.
+  const followed = useRef("");
+  const walkKnown =
+    walk.ready &&
+    walk.kind === savedIn &&
+    (walk.kind === "local" || walk.kind === "account") &&
+    walk.status !== "unavailable" &&
+    walk.status !== "recovered";
+  const townKnown =
+    persistenceStatus !== "loading" &&
+    persistenceStatus !== "unavailable" &&
+    persistenceStatus !== "recovered";
+  useEffect(() => {
+    if (!shop || shop.demo || !ownScene || !walkKnown || !townKnown) return;
+    const next = sceneForShelves(ownScene, shop, state.books);
+    if (!next) return;
+    // Tried once for each pair of shelves and scene, saved or not.
+    const pair = JSON.stringify([shop.shelves, next.scene]);
+    if (followed.current === pair) return;
+    followed.current = pair;
+    if (!saveOwnedScene(next.scene, state).ok) return;
+    const titles = next.waiting.map((id) => {
+      const book = bookById(state.books, id);
+      return book ? bookTitle(book) : "";
+    });
+    if (titles.length)
+      notify(
+        (titles.length === 1 ? `「${titles[0]}」は` : "棚に並べた本の一部は") +
+          "店内の棚に入りきらないため、飾りつけの「まだ並べていない本」に置きました。",
+      );
+  }, [shop, ownScene, walkKnown, townKnown, state, notify]);
   // Shelves removed here, counted by id: a new shelf can be given the id of
   // one removed, and must not get its books from an old 元に戻す.
   const removedShelves = useRef<Record<string, number>>({});
@@ -1032,7 +1070,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           {/* Two places to arrange books; say in one line where each one shows. */}
           <p>
             {ownScene
-              ? "店内は、飾りつけた形で書店めぐりに出ています。下の本棚に新しく並べた本は、飾りつけの「まだ並べていない本」から店内に置けます。"
+              ? "店内は、飾りつけた形で書店めぐりに出ています。下の本棚に並べた本は店内にも並び、棚から外した本は店内からも下がります。"
               : "下の本棚に並べた本が、そのまま書店めぐりの店内に並びます。飾りつけると、棚の形や看板、本の置き場所を自由に変えられます。"}
           </p>
           {!inWalk && (

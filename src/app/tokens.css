@@ -38,6 +38,39 @@
  * @pair --alert --sheet
  */
 :root {
+  /* Motion: how long a movement takes and how it eases. Screens and
+     src/lib/motion.ts use these names; tests/tokens.test.ts stops a time or
+     a cubic-bezier written out anywhere else. */
+  --dur-stagger-1: 0.06s;
+  --dur-stagger-2: 0.12s;
+  --dur-press: 0.15s;
+  --dur-fade-in: 0.16s;
+  --dur-appear: 0.18s;
+  --dur-move: 0.2s;
+  --dur-enter-s: 0.22s;
+  --dur-enter: 0.24s;
+  --dur-slide: 0.25s;
+  --dur-arrive-s: 0.26s;
+  --dur-tab: 0.28s;
+  --dur-grow: 0.3s;
+  --dur-enter-l: 0.35s;
+  --dur-slide-in: 0.4s;
+  --dur-pop: 0.42s;
+  --dur-settle: 0.45s;
+  --dur-flash: 0.6s;
+  --dur-lamp: 0.8s;
+  --dur-glow: 0.9s;
+  --dur-pill: 1s;
+  --dur-skeleton: 1.2s;
+  --dur-shutter: 1.2s;
+  --dur-lights: 1.4s;
+  --dur-pulse: 1.6s;
+  --dur-arrive: 2.6s;
+  --dur-hint: 3.6s;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-tab: cubic-bezier(0.3, 0, 0, 1);
+  --ease-arrive: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-shutter: cubic-bezier(0.6, 0, 0.3, 1);
   color-scheme: light;
 
   /* Paper, ink and lines */

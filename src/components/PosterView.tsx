@@ -36,6 +36,14 @@ import { isDatabaseId, posterPath, profilePath } from "../lib/paths";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./social.css";
 import "./poster.css";
+import { reducedMotion } from "../lib/motion";
+import {
+  bookAuthor,
+  bookById,
+  booksById,
+  bookTitle,
+  quotedTitle,
+} from "../lib/book-name";
 
 type Look = Pick<Poster, "template" | "theme" | "font" | "pages">;
 
@@ -68,7 +76,11 @@ function SheetCover({
   // The cover as served: never cropped or drawn over (see BookJacket).
   const jacket = <BookJacket book={book} className="poster-jacket" />;
   return linkBooks ? (
-    <Link href={bookPath(book.id)} className={className} title={book.title}>
+    <Link
+      href={bookPath(book.id)}
+      className={className}
+      title={bookTitle(book)}
+    >
       {jacket}
     </Link>
   ) : (
@@ -130,9 +142,7 @@ function Sheet({
 }) {
   const sheet: PosterPage =
     poster.pages[Math.min(page, poster.pages.length - 1)] ?? emptyPage();
-  const shown = sheet.bookIds
-    .map((id) => books.find((book) => book.id === id))
-    .filter((book): book is Book => Boolean(book));
+  const shown = booksById(books, sheet.bookIds);
   const body = useRef<HTMLDivElement>(null);
   const cut = useCut(
     body,
@@ -175,8 +185,8 @@ function Sheet({
             ))}
           {book && (
             <span className="poster-book-name">
-              <b>『{book.title}』</b>
-              <small>{book.author}</small>
+              <b>{quotedTitle(book)}</b>
+              <small>{bookAuthor(book)}</small>
             </span>
           )}
         </div>
@@ -279,8 +289,7 @@ export function PosterSheet(props: {
   return <Sheet {...props} />;
 }
 
-const quietScroll = () =>
-  matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+const quietScroll = () => (reducedMotion() ? "auto" : "smooth");
 
 /**
  * A whole poster: its pages side by side, turned by a swipe, the arrows or
@@ -331,7 +340,7 @@ export function PosterPages({
   const pending = useRef<number | null>(null);
   const report = useRef(onTurn);
   const page = poster.pages[Math.min(index, count - 1)] ?? emptyPage();
-  const firstBook = books.find((book) => book.id === posterBookIds(poster)[0]);
+  const firstBook = bookById(books, posterBookIds(poster)[0]);
 
   useEffect(() => {
     report.current = onTurn;
@@ -404,7 +413,7 @@ export function PosterPages({
             <Icon name="lock" size={18} />
           </span>
           <p>ネタバレを含みます</p>
-          {firstBook && <small>『{firstBook.title}』</small>}
+          {firstBook && <small>{quotedTitle(firstBook)}</small>}
           <button type="button" ref={door} onClick={() => toggle(true)}>
             <Icon name="eye" size={15} />
             表示する
@@ -617,7 +626,7 @@ export function PosterThumb({
   /** The maker's own, folded or held by reports (reviewNoteOf). */
   note?: "folded" | "held" | null;
 }) {
-  const firstBook = books.find((book) => book.id === posterBookIds(poster)[0]);
+  const firstBook = bookById(books, posterBookIds(poster)[0]);
   const review = note ? OWN_POSTER_REVIEW_WORDS[note] : "";
   return (
     <Link
@@ -641,7 +650,7 @@ export function PosterThumb({
           <span className="poster-thumb-door" style={themeStyle(poster)}>
             <Icon name="lock" size={16} />
             ネタバレを含む
-            {firstBook && <small>『{firstBook.title}』</small>}
+            {firstBook && <small>{quotedTitle(firstBook)}</small>}
           </span>
         ) : (
           <div aria-hidden="true">

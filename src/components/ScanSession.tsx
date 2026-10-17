@@ -68,6 +68,7 @@ import type { Book, Notify, TownActions, TownState } from "../lib/types";
 import { BarcodeRegister } from "./BarcodeRegister";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
+import { bookAuthor, bookById, bookByIsbn, bookTitle } from "../lib/book-name";
 
 // The continuous scanner (plan 7-1, flow A): the camera stays open and every
 // book read is registered at once, with no question about reading status,
@@ -463,7 +464,7 @@ export function ScanSession({
       townReady
         ? {
             inLibrary: (code) => libraryBookByIsbn(town, code),
-            known: (code) => town.books.find((book) => book.isbn === code),
+            known: (code) => bookByIsbn(town.books, code),
           }
         : null,
       (code) => heldItem(libraryJournal, reader, generation, code),
@@ -1049,8 +1050,7 @@ export function ScanSession({
     if (row) row.scrollLeft = row.scrollWidth;
   }, [cards.length]);
 
-  const bookOf = (bookId?: string) =>
-    bookId ? state.books.find((book) => book.id === bookId) : undefined;
+  const bookOf = (bookId?: string) => bookById(state.books, bookId);
 
   // The banner: one line, the most pressing first.
   const banner = !owner
@@ -1086,13 +1086,13 @@ export function ScanSession({
   const untitled = cardShows === "untitled" || cardShows === "offline";
   const line1 = !current
     ? null
-    : (cardBook?.title ??
+    : ((cardBook && bookTitle(cardBook)) ??
       card?.title ??
       current.title ??
       (untitled || current.say === "held"
         ? SCAN_COPY.card.untitledTitle
         : (cardIsbn ?? "")));
-  const author = cardBook?.author ?? card?.author;
+  const author = (cardBook && bookAuthor(cardBook)) ?? card?.author;
   // Typing, the field's own line says it: the card waits empty.
   const line2 = !current
     ? !owner

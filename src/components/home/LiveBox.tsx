@@ -33,8 +33,10 @@ import {
   spoilerViewOf,
 } from "../../lib/social";
 import { useTownReads } from "../../lib/store";
+import { bookById, bookTitle, quotedTitle } from "../../lib/book-name";
 import { isSample } from "../../lib/tonight";
 import type { Post, TownState } from "../../lib/types";
+import { DUR_MS, EASE, reducedMotion } from "../../lib/motion";
 import { BookJacket, Icon } from "../ui";
 import { spoilerWords } from "../letter/LetterCard";
 import { forgetOpened, noteOpened, openPost } from "../letter/post-layer";
@@ -100,7 +102,7 @@ function usePageShown(): boolean {
   );
 }
 
-const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const still = reducedMotion;
 
 // A tap on these does their own thing, never the line's.
 const OWN_TAPS = "a,button,[role=dialog],.modal-backdrop";
@@ -213,7 +215,7 @@ export function LiveBox({
         { transform: `translateY(${-count * LIVE_ROW}px)` },
         { transform: "none" },
       ],
-      { duration: 450, easing: "cubic-bezier(.2,0,0,1)" },
+      { duration: DUR_MS.settle, easing: EASE.standard },
     );
     const glow = getComputedStyle(element)
       .getPropertyValue("--lamp-soft")
@@ -224,7 +226,7 @@ export function LiveBox({
         ?.animate(
           [{ backgroundColor: glow }, { backgroundColor: "transparent" }],
           {
-            duration: 800,
+            duration: DUR_MS.lamp,
             easing: "ease-out",
           },
         );
@@ -332,7 +334,7 @@ function LiveLine({
   onTakeLine: (id: string) => boolean;
 }) {
   const author = findReader(town, post.authorId);
-  const book = town.books.find((entry) => entry.id === post.bookId);
+  const book = bookById(town.books, post.bookId);
   const [guardOpen, setGuardOpen] = useState(false);
   const [spoilerOpen, setSpoilerOpen] = useState(false);
   const [focusText, setFocusText] = useState(false);
@@ -352,9 +354,7 @@ function LiveLine({
   const guarded = !guardOpen && isGuarded(town, post);
   const askedByMe = town.spoilerReports.includes(post.id);
   const covered = !spoilerOpen && spoilerViewOf(town, post) === "folded";
-  const spoilerBook = town.books.find(
-    (entry) => entry.id === spoilerBookOf(town, post),
-  );
+  const spoilerBook = bookById(town.books, spoilerBookOf(town, post));
 
   function openPage() {
     // Brought by polling and not in the town yet: this one is taken in
@@ -403,7 +403,7 @@ function LiveLine({
           </span>
           <b className="home-live-name">{author.name}</b>
           {isSample(author.id) && <span className="home-tag">見本</span>}
-          <span className="home-live-book">『{book.title}』</span>
+          <span className="home-live-book">{quotedTitle(book)}</span>
           <a
             ref={timeLink}
             className="home-live-time"
@@ -442,7 +442,7 @@ function LiveLine({
         ) : covered ? (
           <SpoilerCover
             words={spoilerWords(post, askedByMe)}
-            title={spoilerBook?.title}
+            title={spoilerBook && bookTitle(spoilerBook)}
             bars={1}
             onOpen={() => {
               setSpoilerOpen(true);
