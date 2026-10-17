@@ -122,7 +122,9 @@ export async function allRows<T extends Record<string, unknown>>(
   const step = rows.length - 1;
   if (step > 0 && rows.length < total) {
     const starts: number[] = [];
-    for (let from = step; from < total - 1; from += step) starts.push(from);
+    // Up to a page that starts at or after the last row counted: a full
+    // page ending just on it would not tell a row pushed past it.
+    for (let from = step; from < total; from += step) starts.push(from);
     const pages = await Promise.all(
       starts.map((from) => ask(from, from + step)),
     );

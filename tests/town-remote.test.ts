@@ -702,6 +702,28 @@ async function main() {
               sessions().every((row, n) => n === removed || ids.has(row.id)),
             );
           }
+      // A row added ahead of a last page that would end just on the last
+      // row counted pushes that row out of it: the read is tried again.
+      for (const [cap, count] of [
+        [7, 13],
+        [1000, 1999],
+      ]) {
+        const rows = Array.from({ length: count }, (_, n) => ({
+          id: uuid(10 * n + 10),
+        }));
+        const fake = fakeReads(
+          { reading_sessions: rows },
+          {
+            cap,
+            between: (_, from) =>
+              from === 0 && rows.splice(cap, 0, { id: uuid(10 * cap + 5) }),
+          },
+        );
+        await assert.rejects(
+          allRows(fake.pages("reading_sessions"), ["id"]),
+          changed,
+        );
+      }
       // Without a count there is no telling the list is whole.
       const uncounted = fakeReads({ reading_sessions: sessions() });
       await assert.rejects(
@@ -2984,12 +3006,13 @@ async function main() {
           .map((ask) => ask.filters),
         [["blocker_id=eq." + AKI, "order=blocked_id.asc", "limit=1000"]],
       );
-      // Every reader, two a request: the first page and the one after it.
+      // Every reader, two a request: the first page, then the pages after
+      // it together, the last starting at the last reader counted.
       assert.deepEqual(
         fake.asked
           .filter((ask) => ask.table === "profiles")
           .map((ask) => ask.from),
-        [0, 1],
+        [0, 1, 2],
       );
     },
   );
