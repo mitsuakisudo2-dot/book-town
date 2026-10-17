@@ -1532,7 +1532,11 @@ try {
       await expect(dialog).toHaveCount(0);
       await expect
         .poll(() => sent)
-        .toEqual(["/rest/v1/books", "/rest/v1/book_marks"]);
+        .toEqual([
+          "/rest/v1/books",
+          "/rest/v1/library_entries",
+          "/rest/v1/book_marks",
+        ]);
       await scanner.getByRole("button", { name: "終わる" }).click();
       await expect(scanner).toHaveCount(0);
       await page.unroute(supabase + "/rest/v1/**", hold);
@@ -1614,8 +1618,12 @@ try {
       await expect(scanner.locator(".scan-count")).toHaveText("この回 1冊");
       await expect
         .poll(() => sent.map((write) => write.path))
-        .toEqual(["/rest/v1/books", "/rest/v1/book_marks"]);
-      const [books, marks] = sent.map((write) => [write.rows].flat());
+        .toEqual([
+          "/rest/v1/books",
+          "/rest/v1/library_entries",
+          "/rest/v1/book_marks",
+        ]);
+      const [books, entries, marks] = sent.map((write) => [write.rows].flat());
       expect(books).toHaveLength(1);
       expect(books[0]).toEqual(
         expect.objectContaining({ isbn: READ_ISBN, title: "車輪の下" }),
@@ -1626,6 +1634,10 @@ try {
       // The id decided at the read: sent twice, it would be one book.
       expect(books[0].id).toBe(decided);
       expect(marks.map((mark) => mark.book_id)).toEqual([books[0].id]);
+      // Its library row says it came in by an ISBN typed, written before the mark.
+      expect(entries).toEqual([
+        expect.objectContaining({ book_id: books[0].id, source: "isbn" }),
+      ]);
       // Saved: the device lets it go.
       await expect.poll(journal).toBeNull();
       await scanner.getByRole("button", { name: "終わる" }).click();
