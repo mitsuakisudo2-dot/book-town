@@ -638,7 +638,7 @@ function StartReading({
                 className="button"
                 onClick={() => start(confirm.mode)}
               >
-                はじめる
+                {chosen ? "本を開く" : "はじめる"}
               </button>
             </div>
           </div>
