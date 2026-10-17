@@ -230,8 +230,11 @@ const SPINE_TONES: Array<[string, string] | null> = [
   ["#e9dcc3", "#2a2420"],
   ["#5f7a90", "#f3ead8"],
 ];
-const shortAuthor = (author: string) =>
-  author.split("・").pop()?.trim() || author;
+/** The first author's family name, for a spine: "テッド・チャン、浅倉久志" is "チャン". */
+const shortAuthor = (author: string) => {
+  const first = author.split("、")[0];
+  return first.split("・").pop()?.trim() || first;
+};
 export function StoreBook({
   book,
   display,
