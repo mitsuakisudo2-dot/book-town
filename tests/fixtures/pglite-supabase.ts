@@ -85,6 +85,33 @@ export function migrationText(file: string): string {
   return readFileSync(join(MIGRATIONS, file), "utf8");
 }
 
+/**
+ * Gives each statement a moment of its own, as production's clock does.
+ * PGlite reads the time in milliseconds (production, in microseconds), so two
+ * statements run one after the other can read the same now(), and an order
+ * the time decides (which edition is asked about first) falls to something
+ * else, such as a random id. Each query and exec waits until the clock has
+ * moved on from the end of the one before.
+ */
+export function oneMomentEach(db: PGlite): PGlite {
+  let last = 0;
+  const after =
+    <A extends unknown[], R>(run: (...args: A) => Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      while (Date.now() <= last) {
+        // the clock moves on
+      }
+      try {
+        return await run(...args);
+      } finally {
+        last = Date.now();
+      }
+    };
+  db.query = after(db.query.bind(db)) as typeof db.query;
+  db.exec = after(db.exec.bind(db)) as typeof db.exec;
+  return db;
+}
+
 /** A fresh database with every migration applied, each file as one batch. */
 export async function migratedDatabase(): Promise<PGlite> {
   const db = new PGlite();
