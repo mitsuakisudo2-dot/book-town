@@ -99,6 +99,10 @@ const REPORT_GRANTED = [
 ];
 const reportReadsRefused = [];
 const coverAsks = [];
+// The bibliographic master the stand-in has, by book (book_bibliography's
+// rows), and the IDs each call asked about.
+let masters = [];
+const bibliographyAsks = [];
 const inserted = [];
 const codeRequests = [];
 const townReads = [];
@@ -349,6 +353,13 @@ const standIn = async (route) => {
       profile = { ...profile, ...body };
       return route.fulfill({ status: 204, body: "" });
     }
+  }
+  if (url.pathname === "/rest/v1/rpc/book_bibliography") {
+    bibliographyAsks.push(...body.ids);
+    return json(
+      200,
+      masters.filter((row) => body.ids.includes(row.book_id)),
+    );
   }
   if (url.pathname === "/rest/v1/rpc/can_annotate") {
     annotateAsks.push(staff);
@@ -3695,6 +3706,89 @@ try {
       );
       // Back to the posts' town for what follows.
       town = filled();
+    },
+  );
+
+  await check(
+    "a book's page is headed by its bibliographic master once there is one, and says where it came from",
+    async () => {
+      const hero = page.locator(".book-page-hero");
+      const title = hero.getByRole("heading", { level: 1 });
+      // No master yet: what its reader typed, and no credit for one.
+      await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
+      await expect(title).toHaveText("こころの本");
+      await expect(hero.locator(".book-page-author")).toHaveText("試験 作家");
+      await expect(hero.locator(".book-page-publication")).toHaveCount(0);
+      await expect(hero.getByText("書誌:")).toHaveCount(0);
+      expect(bibliographyAsks).toContain(COVER_BOOK);
+      // Only books of the database are asked about: no 見本, no demo book.
+      expect(
+        bibliographyAsks.filter(
+          (id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id),
+        ),
+      ).toEqual([]);
+      masters = [
+        {
+          book_id: COVER_BOOK,
+          title: "こころ",
+          title_reading: "ココロ",
+          subtitle: "ある先生の話",
+          volume: "上",
+          edition: "新版",
+          series: [{ name: "試験文庫", number: "3" }],
+          creators: [
+            { name: "ジェーン・ドウ", role: "著" },
+            { name: "山田一郎", role: "訳" },
+          ],
+          credits: [],
+          publisher: "試験書房",
+          issued: "2003-09",
+          ndc: "913",
+          sources: {
+            title: "ndl",
+            volume: "ndl",
+            creators: "ndl",
+            publisher: "openbd",
+            issued: "ndl",
+          },
+        },
+      ];
+      await page.reload();
+      await expect(title).toHaveText("こころ 上");
+      await expect(hero.locator(".book-page-subtitle")).toHaveText(
+        "ある先生の話 新版",
+      );
+      await expect(hero.locator(".book-page-author")).toHaveText(
+        "ジェーン・ドウ 著／山田一郎 訳",
+      );
+      await expect(hero.locator(".book-page-publication")).toHaveText(
+        "試験書房・試験文庫・2003年9月",
+      );
+      // The shop links look for the master's title too.
+      await expect(
+        hero.getByRole("link", { name: /^Amazonで探す/ }),
+      ).toHaveAttribute("href", new RegExp(encodeURIComponent("こころ 上")));
+      await noOverflow("book page with its master");
+      await page.screenshot({
+        path: path.join(output, "18-book-master-390.png"),
+      });
+      // Where it came from: one page for every book, no date of any book's.
+      const credit = hero.getByRole("link", {
+        name: "国立国会図書館・openBD",
+      });
+      await expect(credit).toHaveAttribute("href", "/credits/");
+      await credit.click();
+      await expect(page).toHaveURL(/\/credits\/$/);
+      await expect(
+        page.getByRole("heading", { level: 1, name: "本のデータの出典" }),
+      ).toBeVisible();
+      await expect(page.locator("main")).toContainText(
+        "出典：国立国会図書館書誌データ（https://ndlsearch.ndl.go.jp/）をもとに BookTown が編集・加工して作成",
+      );
+      await noOverflow("credits page");
+      await page.goBack();
+      await expect(title).toHaveText("こころ 上");
+      masters = [];
     },
   );
 
