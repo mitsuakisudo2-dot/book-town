@@ -37,6 +37,6 @@
   },
   "captcha": {
     "provider": "turnstile",
-    "on": false
+    "on": true
   }
 }
