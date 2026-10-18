@@ -194,8 +194,8 @@ begin
 end;
 $$;
 
--- Only the count above moves the version (it runs as the table's owner); a
--- reader's own update of their profile leaves it as it is.
+-- Only count_nine_version moves the version (it runs as the table's owner);
+-- a reader's own update of their profile leaves it as it is.
 create function private.keep_nine_version() returns trigger
 language plpgsql set search_path = '' as $$
 begin
