@@ -87,6 +87,7 @@ import {
   shelfUsed,
   SPOILER_DISPLAYS,
   type FiledReport,
+  type Liker,
   type Post,
   type SpoilerDisplay,
   type TownState,
@@ -1890,14 +1891,44 @@ check("the writer learns who liked their post and how many times", () => {
   assert.equal(post.authorId, ME_ID);
   assert.deepEqual(likesReceived(post), { people: 2, taps: 8 });
   const notices = notificationsFor(withLikers).filter((notice) =>
-    notice.id.startsWith("like:"),
+    notice.id.startsWith("likes:"),
   );
+  // Gathered into one, and never by whom: no liker's name, no liker's face.
   assert.deepEqual(
     notices.map((notice) => notice.text),
-    [
-      `${nagi.name}さんが、あなたの投稿にいいねしました 「再読して、また泣いた。」`,
-      `${haru.name}さんが、あなたの投稿に7回いいねしました 「再読して、また泣いた。」`,
-    ],
+    ["あなたの投稿に、2人が合わせて8回いいねしました 「再読して、また泣いた。」"],
+  );
+  assert.equal(notices[0].id, `likes:${own}:2`);
+  assert.equal(notices[0].readerId, ME_ID);
+  assert.equal(notices[0].createdAt, "2026-10-13T02:00:00Z");
+  for (const reader of [haru, nagi])
+    assert.ok(!notices[0].text.includes(reader.name));
+  // One liker: how many times, without 合わせて. Taken back to none: no notice.
+  const one = (likers: Liker[]) =>
+    notificationsFor({
+      ...withLikers,
+      posts: withLikers.posts.map((entry) =>
+        entry.id === own ? { ...entry, likes: likers.length, likers } : entry,
+      ),
+    }).filter((notice) => notice.id.startsWith("likes:"));
+  assert.deepEqual(
+    one([{ readerId: haru.id, taps: 3, at: "2026-10-13T01:00:00Z" }]).map(
+      (notice) => notice.text,
+    ),
+    ["あなたの投稿に、1人が3回いいねしました 「再読して、また泣いた。」"],
+  );
+  assert.deepEqual(
+    one([
+      { readerId: haru.id, taps: 1, at: "2026-10-13T01:00:00Z" },
+      { readerId: nagi.id, taps: 1, at: "2026-10-13T02:00:00Z" },
+    ]).map((notice) => notice.text),
+    ["あなたの投稿に、2人がいいねしました 「再読して、また泣いた。」"],
+  );
+  assert.deepEqual(one([]), []);
+  // A liker not in the town (left, or out of sight) is not counted.
+  assert.deepEqual(
+    one([{ readerId: "r-gone", taps: 1, at: "2026-10-13T01:00:00Z" }]),
+    [],
   );
 });
 

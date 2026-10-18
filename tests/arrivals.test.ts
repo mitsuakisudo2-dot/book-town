@@ -779,7 +779,7 @@ async function main() {
       );
       assert.deepEqual(unmarked.sort(), [
         "follow:" + theirs.id,
-        `like:${mine.id}:r-nagi`,
+        `likes:${mine.id}:1`,
         "reply:" + reply.id,
         `wants:${mine.id}:2`,
       ]);

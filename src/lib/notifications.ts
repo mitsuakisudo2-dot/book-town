@@ -173,24 +173,34 @@ export function notificationsFor(
         href: post.bookId ? bookPath(post.bookId) : "/profiles/me/",
       });
   }
-  // いいね: one notice per reader and post, with how many times they pressed.
+  // いいね: one notice per post, gathered, never by whom (a liker's name is
+  // the reader's own to show, and starts unshown). A new liker makes it new.
   for (const post of state.posts) {
     if (post.authorId !== ME_ID || old(post)) continue;
-    for (const liker of post.likers ?? []) {
-      const who = name(liker.readerId);
-      if (!who) continue;
-      notices.push({
-        id: `like:${post.id}:${liker.readerId}`,
-        readerId: liker.readerId,
-        createdAt: liker.at,
-        text: `${who}さんが、あなたの投稿に${liker.taps > 1 ? counted(liker.taps, "回") : ""}いいねしました ${quote(post.body)}`,
-        href: pageOr(
-          state,
-          post,
-          post.bookId ? bookPath(post.bookId) : "/profiles/me/",
-        ),
-      });
-    }
+    const likers = (post.likers ?? []).filter((liker) =>
+      findReader(state, liker.readerId),
+    );
+    const people = someCount(likers.length, "人");
+    if (!people) continue;
+    const taps = likers.reduce((sum, liker) => sum + liker.taps, 0);
+    const times =
+      taps <= likers.length
+        ? ""
+        : (likers.length > 1 ? "合わせて" : "") + counted(taps, "回");
+    notices.push({
+      id: `likes:${post.id}:${likers.length}`,
+      readerId: ME_ID,
+      createdAt: likers.reduce(
+        (latest, liker) => (liker.at > latest ? liker.at : latest),
+        likers[0].at,
+      ),
+      text: `あなたの投稿に、${people}が${times}いいねしました ${quote(post.body)}`,
+      href: pageOr(
+        state,
+        post,
+        post.bookId ? bookPath(post.bookId) : "/profiles/me/",
+      ),
+    });
   }
   const followed = new Set(
     state.shops
