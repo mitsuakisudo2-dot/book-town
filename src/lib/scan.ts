@@ -284,6 +284,12 @@ export const SCAN_COPY = {
   undo: "登録を取り消す",
   undoName: (name: string) => `${name}の登録を取り消す`,
   statuses: (name: string) => `${name}の読書状況`,
+  /** The card's second row (資料 4章の自由3枠): 未所持・お気に入り・＋本棚. */
+  marks: (name: string) => `${name}の所有とお気に入りと本棚`,
+  notOwned: "未所持",
+  shelf: "本棚",
+  shelvesOf: (name: string) => `${name}を入れる本棚`,
+  noShelves: "本棚はライブラリでつくれます",
   paused: "一時停止しています",
   banner: {
     offline:

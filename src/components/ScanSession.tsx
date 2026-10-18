@@ -42,7 +42,9 @@ import {
 } from "../lib/library-journal";
 import {
   DEFAULT_SHELVES,
+  liveShelves,
   READING_STATUSES,
+  type LibrarySet,
   type ReadingStatus,
 } from "../lib/library";
 import { saveWarning } from "../lib/persistence";
@@ -174,6 +176,10 @@ const STATUS_BUTTONS = DEFAULT_SHELVES.flatMap((shelf) =>
     ? [{ status: shelf.key as ReadingStatus, label: shelf.label }]
     : [],
 );
+const NONE: ReadonlySet<string> = new Set();
+const FAVORITE =
+  DEFAULT_SHELVES.find((shelf) => shelf.key === "favorite")?.label ??
+  "お気に入り";
 
 /** What a card shows once its read was sent. */
 function showsOf(
@@ -400,6 +406,8 @@ export function ScanSession({
   const [flash, setFlash] = useState<{ id: string; at: number } | null>(null);
   /** The card whose ⋮ is open: the camera reads nothing new meanwhile. */
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  /** The card whose ＋本棚 is open: the reader's shelves to put it on. */
+  const [shelvesFor, setShelvesFor] = useState<string | null>(null);
   /** The camera made larger (カメラ集中表示), for a code it does not catch. */
   const [large, setLarge] = useState(false);
   /** Books entered by hand whose save is not confirmed yet. */
@@ -431,8 +439,8 @@ export function ScanSession({
   const inView = useRef<InView>({});
   const paused = useRef(false);
   useEffect(() => {
-    paused.current = menuFor !== null;
-  }, [menuFor]);
+    paused.current = menuFor !== null || shelvesFor !== null;
+  }, [menuFor, shelvesFor]);
   const manualCount = useRef(0);
   const closed = useRef(false);
   const layer = useRef<HTMLDivElement>(null);
@@ -1068,9 +1076,13 @@ export function ScanSession({
 
   /** 読了・積読・読書中 on a card: set, or pressed again, taken off. */
   function sort(bookId: string, status: ReadingStatus) {
-    refocus();
     const lit = state.libraryEntries[bookId]?.status === status;
-    actions.changeLibrary([bookId], { status: lit ? null : status });
+    change(bookId, { status: lit ? null : status });
+  }
+  /** A button of a card's second row: 未所持, お気に入り, a shelf. */
+  function change(bookId: string, set: LibrarySet) {
+    refocus();
+    actions.changeLibrary([bookId], set);
   }
 
   // ［手で入力］: the one-book form over the scanner. What it registers joins
@@ -1237,6 +1249,23 @@ export function ScanSession({
   useScreenKeptOn(input.kind === "camera" && input.phase === "running");
 
   const bookOf = (bookId?: string) => bookById(state.books, bookId);
+  const favorites = useMemo(() => new Set(state.favorites), [state.favorites]);
+  // The shelves the reader fills by hand (a smart shelf gathers its own
+  // books), and the ones each book is on.
+  const handShelves = useMemo(
+    () =>
+      liveShelves(state.libraryShelves).filter((shelf) => shelf.rule === null),
+    [state.libraryShelves],
+  );
+  const onShelves = useMemo(() => {
+    const on = new Map<string, Set<string>>();
+    for (const row of state.libraryShelfBooks) {
+      const shelves = on.get(row.bookId) ?? new Set<string>();
+      shelves.add(row.shelfId);
+      on.set(row.bookId, shelves);
+    }
+    return on;
+  }, [state.libraryShelfBooks]);
   /**
    * The library's book a card is now: its own, or, for one found in the
    * library while it was sent, that one.
@@ -1526,6 +1555,12 @@ export function ScanSession({
             const kept = KEPT.includes(now as Shows) || now === "refused";
             const canUndo = UNDOABLE.includes(now as Shows) || now === "saving";
             const menuId = `${id}-menu-${card.id}`;
+            const shelvesId = `${id}-shelves-${card.id}`;
+            const notOwned = libraryId
+              ? state.libraryEntries[libraryId]?.owned === "no"
+              : false;
+            const favorite = libraryId ? favorites.has(libraryId) : false;
+            const shelvesOn = (libraryId && onShelves.get(libraryId)) || NONE;
             return (
               <li
                 key={card.id}
@@ -1565,6 +1600,7 @@ export function ScanSession({
                       onPointerDown={typing ? keepFocus : undefined}
                       onClick={() => {
                         refocus();
+                        setShelvesFor(null);
                         setMenuFor((was) => (was === card.id ? null : card.id));
                       }}
                     >
@@ -1604,6 +1640,88 @@ export function ScanSession({
                         {button.label}
                       </button>
                     ))}
+                  </div>
+                )}
+                {libraryId && (
+                  <div
+                    className="scan-item-marks"
+                    role="group"
+                    aria-label={SCAN_COPY.marks(name)}
+                  >
+                    <button
+                      type="button"
+                      className="chip"
+                      aria-pressed={notOwned}
+                      onPointerDown={typing ? keepFocus : undefined}
+                      onClick={() =>
+                        change(libraryId, { owned: notOwned ? null : "no" })
+                      }
+                    >
+                      {SCAN_COPY.notOwned}
+                    </button>
+                    <button
+                      type="button"
+                      className="chip"
+                      aria-pressed={favorite}
+                      onPointerDown={typing ? keepFocus : undefined}
+                      onClick={() => change(libraryId, { favorite: !favorite })}
+                    >
+                      {FAVORITE}
+                    </button>
+                    <button
+                      type="button"
+                      className="chip scan-item-add"
+                      aria-expanded={shelvesFor === card.id}
+                      aria-controls={
+                        shelvesFor === card.id ? shelvesId : undefined
+                      }
+                      onPointerDown={typing ? keepFocus : undefined}
+                      onClick={() => {
+                        refocus();
+                        setMenuFor(null);
+                        setShelvesFor((was) =>
+                          was === card.id ? null : card.id,
+                        );
+                      }}
+                    >
+                      <Icon name="plus" size={16} />
+                      {SCAN_COPY.shelf}
+                    </button>
+                  </div>
+                )}
+                {libraryId && shelvesFor === card.id && (
+                  <div
+                    className="scan-item-shelves"
+                    id={shelvesId}
+                    role="group"
+                    aria-label={SCAN_COPY.shelvesOf(name)}
+                  >
+                    {handShelves.length ? (
+                      handShelves.map((shelf) => {
+                        const on = shelvesOn.has(shelf.id);
+                        return (
+                          <button
+                            key={shelf.id}
+                            type="button"
+                            className="chip"
+                            aria-pressed={on}
+                            onPointerDown={typing ? keepFocus : undefined}
+                            onClick={() =>
+                              change(
+                                libraryId,
+                                on
+                                  ? { removeShelf: shelf.id }
+                                  : { addShelf: shelf.id },
+                              )
+                            }
+                          >
+                            {shelf.name}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="scan-item-none">{SCAN_COPY.noShelves}</p>
+                    )}
                   </div>
                 )}
               </li>

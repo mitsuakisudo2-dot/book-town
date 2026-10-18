@@ -362,16 +362,44 @@
   padding-top: 4px;
   border-top: 1px solid var(--line);
 }
-.scan-item-statuses {
+.scan-item-statuses,
+.scan-item-marks {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
-.scan-item-statuses .chip {
+.scan-item :is(.scan-item-statuses, .scan-item-marks, .scan-item-shelves)
+  .chip {
   justify-content: center;
   min-width: 0;
   padding: 0 8px;
   border-radius: var(--r-box);
+}
+/* 未所持・お気に入り・＋本棚: marks, lighter than the reading status above. */
+.scan-item-marks .chip {
+  gap: 2px;
+  font-size: var(--t-meta);
+}
+.scan-item-add[aria-expanded="true"] {
+  border-color: var(--green);
+}
+/* The reader's own shelves, under ＋本棚: each on or off. */
+.scan-item-shelves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.scan-item-shelves .chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scan-item-none {
+  font-size: var(--t-cap);
+  line-height: 1.6;
+  color: var(--ink-2);
 }
 .scan-bottom {
   flex: none;

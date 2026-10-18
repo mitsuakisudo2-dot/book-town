@@ -1469,6 +1469,83 @@ try {
   );
 
   await check(
+    "読了・積読・読書中, 未所持 and お気に入り are pressed on the book itself, and ＋本棚 waits for the reader",
+    async () => {
+      const sorting = await scanningPage();
+      await go("/profiles/me/?books=library", sorting);
+      await openScanner(sorting);
+      await cameraRunning(sorting);
+      const book = isbnOf(36);
+      const id = "isbn-" + book;
+      await show(sorting, book);
+      await expect(count(sorting)).toHaveText("1冊 登録済み");
+      const statuses = scanner(sorting).getByRole("group", {
+        name: "試験の本 36の読書状況",
+      });
+      const marks = scanner(sorting).getByRole("group", {
+        name: "試験の本 36の所有とお気に入りと本棚",
+      });
+      const entry = async () => (await stored(sorting)).libraryEntries[id];
+      // 積読 says 持っている; 未所持 then takes 積読 off: never both.
+      await statuses.getByRole("button", { name: "積読" }).click();
+      await expect
+        .poll(async () => {
+          const now = await entry();
+          return [now.status, now.owned];
+        })
+        .toEqual(["tsundoku", "yes"]);
+      await marks.getByRole("button", { name: "未所持" }).click();
+      await expect(
+        marks.getByRole("button", { name: "未所持" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        statuses.getByRole("button", { name: "積読" }),
+      ).toHaveAttribute("aria-pressed", "false");
+      await expect
+        .poll(async () => {
+          const now = await entry();
+          return [now.status, now.owned];
+        })
+        .toEqual([null, "no"]);
+      // 読了 stays 未所持: a book read, and not had.
+      await statuses.getByRole("button", { name: "読了" }).click();
+      await expect
+        .poll(async () => {
+          const now = await entry();
+          return [now.status, now.owned];
+        })
+        .toEqual(["finished", "no"]);
+      // Pressed again, taken off.
+      await marks.getByRole("button", { name: "未所持" }).click();
+      await expect.poll(async () => (await entry()).owned).toBeNull();
+      await marks.getByRole("button", { name: "お気に入り" }).click();
+      await expect
+        .poll(async () => (await stored(sorting)).favorites)
+        .toContain(id);
+      // ＋本棚 with no shelf of the reader's own says where shelves are made,
+      // and the camera waits meanwhile.
+      await marks.getByRole("button", { name: "本棚" }).click();
+      await expect(
+        scanner(sorting).getByRole("group", {
+          name: "試験の本 36を入れる本棚",
+        }),
+      ).toHaveText("本棚はライブラリでつくれます");
+      // Held to the camera meanwhile, a book is not read until it closes.
+      await sorting.evaluate(
+        (code) => window.__barcodes.push(code),
+        isbnOf(37),
+      );
+      await sorting.waitForTimeout(1200);
+      expect(await sorting.evaluate(() => window.__barcodes.length)).toBe(1);
+      await expect(scanner(sorting).locator(".scan-item")).toHaveCount(1);
+      await marks.getByRole("button", { name: "本棚" }).click();
+      await expect(count(sorting)).toHaveText("2冊 登録済み");
+      await expect(scanner(sorting)).not.toContainText(/(^|\D)0(冊|件)/);
+      await sorting.context().close();
+    },
+  );
+
+  await check(
     "with no WebAssembly either, the browser cannot read barcodes",
     async () => {
       const bare = await browser.newContext(phone);
