@@ -9,7 +9,11 @@
 // script positions of our own, the build, and the kind of browser. Never who
 // the reader is, what they wrote, or a book's title.
 
+import { DATABASE_ID } from "./record-kind";
 import { deviceLabel } from "./site-notes";
+
+/** A database id anywhere in a text. */
+const ANY_ID = new RegExp(`\\b${DATABASE_ID.source.slice(1, -1)}\\b`, "gi");
 
 /** How many reports one page may send before it stops. */
 export const REPORTS_PER_PAGE = 5;
@@ -44,10 +48,7 @@ export function scrubText(text: string, length = MESSAGE_LENGTH): string {
       // An address keeps its origin and path; its query and hash may hold
       // what the reader searched for.
       .replace(/(https?:\/\/[^\s?#"'<>)]+)[?#][^\s"'<>)]*/g, "$1")
-      .replace(
-        /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
-        "(id)",
-      )
+      .replace(ANY_ID, "(id)")
       .replace(/「[^」]*」|『[^』]*』|"[^"]*"|'[^']*'|“[^”]*”/g, "(…)")
       // A database's "Key (name)=(value)" names what a reader saved.
       .replace(/=\([^)]*\)/g, "=(…)")
