@@ -34,5 +34,9 @@
     "relyingParty": "booktown.page",
     "name": "BookTown",
     "origins": ["https://booktown.page", "https://www.booktown.page"]
+  },
+  "captcha": {
+    "provider": "turnstile",
+    "on": false
   }
 }

@@ -82,6 +82,11 @@
   opacity: 0.5;
   cursor: default;
 }
+/* Cloudflare's check (HumanCheck.tsx): takes no room in the card's column
+   until Turnstile puts something in it. */
+.account-human-check:empty {
+  display: none;
+}
 .account-choice {
   border: 0;
   padding: 0;

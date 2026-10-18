@@ -8,6 +8,8 @@
 //                                    (only once the plan in watch.json has them)
 //   node scripts/watch.mjs usage     how much of the plan's database and file
 //                                    space is used
+//   node scripts/watch.mjs errors    how many errors readers' screens sent in
+//                                    the last day (private.screen_errors)
 //   node scripts/watch.mjs report <kind> ok|failed
 //                                    tells about a check run elsewhere (the
 //                                    production journey)
@@ -36,6 +38,7 @@ export const TITLES = {
   backups: "毎日の控えが止まっています",
   usage: "Supabase の使用量が上限に近づいています",
   journey: "本番の通しが失敗しました",
+  errors: "読書家の画面でエラーが起きています",
 };
 
 const marker = (kind) => `<!-- watch:${kind} -->`;
@@ -116,6 +119,30 @@ export function usageVerdict(row, included, warnPercent) {
       ok = false;
     }
   }
+  return { ok, lines };
+}
+
+/**
+ * How many errors readers' screens sent in the last day: kinds (rows) and
+ * times, numbers only. The words are read with a select, never printed here.
+ *
+ * @returns {{ ok: boolean, lines: string[] }}
+ */
+export function errorsVerdict(row, perDay) {
+  const kinds = Number(row?.kinds ?? NaN);
+  const times = Number(row?.times ?? NaN);
+  if (!Number.isFinite(kinds) || !Number.isFinite(times))
+    return { ok: false, lines: ["Screen errors: not reported."] };
+  if (kinds === 0)
+    return { ok: true, lines: ["Screen errors: none in the last day."] };
+  const lines = [
+    `Screen errors: ${kinds} kind(s), ${times} time(s) in the last day.`,
+  ];
+  const ok = kinds < perDay;
+  if (!ok)
+    lines.push(
+      "Read them with the select in docs/09「画面のエラーの記録」 (the words stay out of this log).",
+    );
   return { ok, lines };
 }
 
@@ -331,7 +358,11 @@ async function main(action, kind, outcome) {
       await new Promise((resolve) => setTimeout(resolve, retry));
       result = await checkSite(config, call);
     }
-  } else if (action === "backups" || action === "usage") {
+  } else if (
+    action === "backups" ||
+    action === "usage" ||
+    action === "errors"
+  ) {
     if (!call) {
       console.log(
         `::warning::SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_ID is not set, so the ${action} were not checked.`,
@@ -339,7 +370,28 @@ async function main(action, kind, outcome) {
       return;
     }
     try {
-      if (action === "backups")
+      if (action === "errors") {
+        let rows;
+        try {
+          rows = await call("POST", "/database/query/read-only", {
+            query:
+              "select count(*)::int as kinds, coalesce(sum(e.times), 0)::int as times " +
+              "from private.screen_errors e where e.last_at > now() - interval '1 day'",
+          });
+        } catch (error) {
+          // Before the table's migration is on main there is nothing to count.
+          if (/screen_errors.*does not exist/.test(error.message)) rows = null;
+          else throw error;
+        }
+        result = rows
+          ? errorsVerdict(rows[0], config.screenErrorsPerDay)
+          : { ok: true, lines: ["Screen errors: not recorded yet."] };
+        if (process.env.GITHUB_STEP_SUMMARY)
+          await appendFile(
+            process.env.GITHUB_STEP_SUMMARY,
+            `### Screen errors (${iso(Date.now())})\n\n- ${result.lines[0]}\n`,
+          );
+      } else if (action === "backups")
         result = backupVerdict(
           await call("GET", "/database/backups"),
           Date.now(),
@@ -395,7 +447,7 @@ async function main(action, kind, outcome) {
     action = kind;
   } else {
     console.error(
-      "Usage: node scripts/watch.mjs site|backups|usage | report <site|backups|usage|journey> ok|failed",
+      "Usage: node scripts/watch.mjs site|backups|usage|errors | report <site|backups|usage|journey> ok|failed",
     );
     process.exit(2);
   }

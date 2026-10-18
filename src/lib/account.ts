@@ -58,7 +58,8 @@ export type AccountFailure =
   | "passkey-exists"
   | "passkey-too-many"
   | "passkey-expired"
-  | "passkey-failed";
+  | "passkey-failed"
+  | "human-check";
 
 export const failureMessages: Record<AccountFailure, string> = {
   "invalid-email": failure({ next: "メールアドレスの形を確かめてください" }),
@@ -94,6 +95,11 @@ export const failureMessages: Record<AccountFailure, string> = {
     what: "退会できませんでした",
     kept: KEPT.nothing,
     next: AGAIN.later,
+  }),
+  // Cloudflare Turnstile could not tell, or its answer had run out.
+  "human-check": failure({
+    what: "ボットではないことを確かめられませんでした",
+    next: AGAIN.now,
   }),
   // Closed by the reader in the browser's own window: nothing to say.
   "passkey-cancelled": "",
@@ -160,7 +166,11 @@ export type PasskeysResult =
 export interface AccountBackend {
   /** Calls the listener with the current user right away, then on every change. */
   onUserChange(listener: (user: AccountUser | null) => void): () => void;
-  sendCode(email: string): Promise<AccountFailure | null>;
+  /**
+   * Sends the login email. `humanCheck` is Cloudflare Turnstile's answer for
+   * this one try, once the hosted project asks for it (turnstile.ts).
+   */
+  sendCode(email: string, humanCheck?: string): Promise<AccountFailure | null>;
   verifyCode(email: string, code: string): Promise<AccountFailure | null>;
   /**
    * Asks to change the signed-in reader's address: a code goes to the new
@@ -179,7 +189,7 @@ export interface AccountBackend {
    * Signs in with a passkey kept by this device or a password manager: no
    * address is asked, the passkey says whose it is.
    */
-  signInWithPasskey(): Promise<AccountFailure | null>;
+  signInWithPasskey(humanCheck?: string): Promise<AccountFailure | null>;
   /** Makes a passkey for the signed-in reader, kept by this device. */
   addPasskey(): Promise<AccountFailure | null>;
   /** The signed-in reader's passkeys; throws when they cannot be read. */
@@ -420,12 +430,15 @@ export function createAccountStore(
   }
 
   const actions = {
-    async sendCode(rawEmail: string): Promise<AccountResult> {
+    async sendCode(
+      rawEmail: string,
+      humanCheck?: string,
+    ): Promise<AccountResult> {
       start();
       const email = normalizeEmail(rawEmail);
       if (!validEmail(email)) return failed("invalid-email");
       if (!backend) return failed("network");
-      const failure = await backend.sendCode(email);
+      const failure = await backend.sendCode(email, humanCheck);
       return failure ? failed(failure) : { ok: true };
     },
     async verifyCode(
@@ -505,10 +518,10 @@ export function createAccountStore(
       return refuse("invalid-code", "new");
     },
     /** Signs in with a passkey; the session it starts is told as usual. */
-    async signInWithPasskey(): Promise<AccountResult> {
+    async signInWithPasskey(humanCheck?: string): Promise<AccountResult> {
       start();
       if (!backend) return failed("network");
-      const failure = await backend.signInWithPasskey();
+      const failure = await backend.signInWithPasskey(humanCheck);
       return failure ? failed(failure) : { ok: true };
     },
     /** Makes a passkey for the signed-in reader on this device. */

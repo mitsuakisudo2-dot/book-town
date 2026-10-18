@@ -200,6 +200,9 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   // reads through shop_visitors() (shop_visitors_weekly); it goes with the
   // shop.
   "private.shop_visitor_weeks": { people: {}, readers: "nobody" },
+  // Errors heard on readers' screens, with what could name a reader taken out
+  // (screen_errors); they name no one.
+  "private.screen_errors": { people: {}, readers: "nobody" },
   // A copy's own rows are cleared by forget_in_copies (moving_copies).
   "keep.copies": { people: {}, readers: "nobody" },
 };
