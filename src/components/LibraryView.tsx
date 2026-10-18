@@ -611,7 +611,7 @@ export function LibraryView({
       <JournalNotes notify={notify} onTypeTitles={() => setSheet("titles")} />
 
       <div
-        className="library-chips"
+        className="chips"
         role="group"
         aria-label="棚"
         inert={Boolean(picking)}
@@ -706,7 +706,7 @@ export function LibraryView({
       )}
       {filterChips.length > 0 && (
         <div
-          className="library-chips"
+          className="chips"
           role="group"
           aria-label="絞り込み"
           inert={Boolean(picking)}

@@ -103,6 +103,29 @@ export const REGISTER = {
   removeAskAgain: "本当に外しますか？",
 } as const;
 
+// ── Placing a book in the reader's shop ─────────────────────────────────
+
+/**
+ * How a book of the library is put on a shelf of the reader's own shop,
+ * said the same on the book's page, the shop's book picker and the opening
+ * of a shop (管理表 103).
+ */
+export const PLACE = {
+  /** The book's page: opens the shop with this book chosen. */
+  toShop: "自分の書店へ",
+  /** The picker's two groups before anything is typed: the reader's first. */
+  yours: "あなたの本棚",
+  town: "街の本",
+  /** The book chosen on its page, first in the picker. */
+  chosen: "本のページから選んだ本",
+  /** Asked when the shop has more than one shelf. */
+  whichShelf: "どの棚に並べますか？",
+  /** Opening a shop: the books picked for the kind of shop chosen. */
+  suggested: "おすすめ",
+  /** Shows the next books of a long shelf. */
+  more: "もっと見る",
+} as const;
+
 // ── Failure notices ─────────────────────────────────────────────────────
 
 /**

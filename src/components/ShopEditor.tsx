@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   POP_MAX_LENGTH,
@@ -56,7 +56,12 @@ import { booksBeforeSearch } from "../lib/book-lists";
 import { focusField } from "../lib/coarse-pointer";
 import "./editor.css";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
-import { counted, whenSome, failure, AGAIN } from "../lib/words";
+import { counted, whenSome, failure, AGAIN, PLACE } from "../lib/words";
+import { libraryBookIds, ownFirst } from "../lib/shop-picks";
+import { useUrlParam } from "../lib/url-state";
+
+/** How many books a group of the shelf picker shows at a time. */
+const PAGE = 24;
 
 type ShopEditorProps = {
   state: TownState;
@@ -247,7 +252,8 @@ function AddBookPicker({
   shelf,
   books,
   shown,
-  library,
+  own,
+  chosen,
   actions,
   notify,
   removedHere,
@@ -262,8 +268,13 @@ function AddBookPicker({
    * finds (booksBeforeSearch).
    */
   shown: Book[];
-  /** The reader's own books: first among equal matches. */
-  library: string[];
+  /**
+   * The reader's own books, in the library's order: offered first before
+   * anything is typed, and first among equal matches.
+   */
+  own: string[];
+  /** A book chosen on its page (自分の書店へ): offered first of all. */
+  chosen?: string | null;
   /**
    * Books taken off this shelf on this page, kept with their display, POP
    * and place, so a second tap puts them back, even after the picker closes.
@@ -275,7 +286,7 @@ function AddBookPicker({
 } & Pick<ShopEditorProps, "actions" | "notify">) {
   const [search, setSearch] = useState("");
   const results = useBookSearch(books, search, {
-    own: library,
+    own,
     limit: books.length,
     genreFinds: shown,
   });
@@ -298,6 +309,27 @@ function AddBookPicker({
     ? results.found.map((match) => match.book)
     : books.filter((book) => shownIds.has(book.id) || removedHere[book.id]);
   const near = searching ? results.near.map((match) => match.book) : [];
+  // A long group shows a page of books at a time.
+  const [pages, setPages] = useState<Record<string, number>>({});
+  const shownOf = (key: string) => (pages[key] ?? 1) * PAGE;
+  // Before anything is typed: the book chosen on its page, then the reader's
+  // own books, then the town's, each under its own heading (AUD-053).
+  const chosenBook = chosen ? bookById(books, chosen) : undefined;
+  const groups = searching
+    ? []
+    : (() => {
+        const rest = filtered.filter((book) => book.id !== chosenBook?.id);
+        const split = ownFirst(rest, own);
+        return [
+          {
+            key: "chosen",
+            heading: PLACE.chosen,
+            books: chosenBook ? [chosenBook] : [],
+          },
+          { key: "yours", heading: PLACE.yours, books: split.own },
+          { key: "town", heading: PLACE.town, books: split.town },
+        ].filter((group) => group.books.length > 0);
+      })();
 
   function choose(book: Book) {
     const placed = shelf.items.find((item) => item.bookId === book.id);
@@ -441,10 +473,44 @@ function AddBookPicker({
             })}
           </p>
         )}
-        {filtered.length > 0 && (
+        {searching && filtered.length > 0 && (
           <div className="editor-picker-grid">{filtered.map(choice)}</div>
         )}
-        {!searching && filtered.length === 0 && (
+        {groups.map((group) => (
+          <Fragment key={group.key}>
+            <h3
+              className="editor-picker-group"
+              id={`editor-picker-${group.key}`}
+            >
+              {group.heading}
+            </h3>
+            <div
+              className={
+                "editor-picker-grid" +
+                (group.key === "chosen" ? " is-chosen" : "")
+              }
+              role="group"
+              aria-labelledby={`editor-picker-${group.key}`}
+            >
+              {group.books.slice(0, shownOf(group.key)).map(choice)}
+            </div>
+            {group.books.length > shownOf(group.key) && (
+              <button
+                type="button"
+                className="text-btn editor-picker-more"
+                onClick={() =>
+                  setPages({
+                    ...pages,
+                    [group.key]: shownOf(group.key) / PAGE + 1,
+                  })
+                }
+              >
+                {PLACE.more}
+              </button>
+            )}
+          </Fragment>
+        ))}
+        {!searching && groups.length === 0 && (
           <div className="editor-empty-search">
             <Icon name="book" size={28} />
             <p>題名や著者で、並べる本を探してください。</p>
@@ -698,10 +764,10 @@ function ShelfEditingPanel({
           const targetIndex = shelf.items.findIndex(
             (item) => item.id === overId,
           );
-          if (targetIndex >= 0 && activeId !== overId) {
+          // Moved by dragging, the book stays where it was put: the sheet
+          // opens only for a book pressed.
+          if (targetIndex >= 0 && activeId !== overId)
             actions.moveShelfBook(shelf.id, activeId, targetIndex);
-            setSelectedId(activeId);
-          }
         }}
       />
       <div className="editor-shelf-below">
@@ -714,137 +780,134 @@ function ShelfEditingPanel({
           本棚を編集
         </button>
       </div>
+      {/* The book pressed: its POP and how it stands, in a sheet from the
+          bottom, so it shows where the reader is looking (AUD-054). */}
       {selected && selectedBook && (
-        <div className="editor-selected-book">
-          <div className="editor-selected-heading">
-            <div>
+        <Modal
+          title={bookTitle(selectedBook)}
+          onClose={() => setSelectedId(null)}
+          fromBottom
+        >
+          <div className="editor-selected-book">
+            <p className="editor-selected-heading">
               <span className="editor-kicker">いま編集している本</span>
-              <h3>{bookTitle(selectedBook)}</h3>
-              <p>{bookAuthor(selectedBook)}</p>
+              {bookAuthor(selectedBook)}
+            </p>
+            <div className="editor-selected-controls">
+              <div className="editor-control-group">
+                <span className="editor-control-label">並べ方</span>
+                <div
+                  className="editor-segment"
+                  role="group"
+                  aria-label={`${bookTitle(selectedBook)}の並べ方`}
+                >
+                  <button
+                    type="button"
+                    className={selected.display === "spine" ? "is-active" : ""}
+                    aria-pressed={selected.display === "spine"}
+                    onClick={() => {
+                      if (actions.changeDisplay(shelf.id, selected.id, "spine"))
+                        notify("背表紙で並べました。");
+                    }}
+                  >
+                    背表紙 <small>1</small>
+                  </button>
+                  <button
+                    type="button"
+                    className={selected.display === "face" ? "is-active" : ""}
+                    aria-pressed={selected.display === "face"}
+                    disabled={!canFace}
+                    title={
+                      !canFace
+                        ? "面陳にするには、あと2スペース必要です。"
+                        : undefined
+                    }
+                    onClick={() => {
+                      if (actions.changeDisplay(shelf.id, selected.id, "face"))
+                        notify("表紙が見えるように並べました。");
+                      else notify("面陳にするには、あと2スペース必要です。");
+                    }}
+                  >
+                    面陳 <small>3</small>
+                  </button>
+                </div>
+                {!canFace && (
+                  <span className="editor-control-note">
+                    面陳には、あと2スペース必要です。
+                  </span>
+                )}
+              </div>
+              <div className="editor-control-group">
+                <span className="editor-control-label">並び順</span>
+                <div className="editor-move-buttons">
+                  <button
+                    type="button"
+                    className="btn"
+                    aria-label={`${bookTitle(selectedBook)}を一つ左へ移動`}
+                    disabled={selectedIndex <= 0}
+                    onClick={() =>
+                      actions.moveShelfBook(
+                        shelf.id,
+                        selected.id,
+                        selectedIndex - 1,
+                      )
+                    }
+                  >
+                    <Icon name="back" size={16} />
+                    左へ
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    aria-label={`${bookTitle(selectedBook)}を一つ右へ移動`}
+                    disabled={selectedIndex >= shelf.items.length - 1}
+                    onClick={() =>
+                      actions.moveShelfBook(
+                        shelf.id,
+                        selected.id,
+                        selectedIndex + 1,
+                      )
+                    }
+                  >
+                    右へ
+                    <Icon name="arrow" size={16} />
+                  </button>
+                </div>
+              </div>
             </div>
-            <button
-              className="icon-btn"
-              type="button"
-              aria-label="本の編集を閉じる"
-              onClick={() => setSelectedId(null)}
-            >
-              <Icon name="close" size={18} />
-            </button>
-          </div>
-          <div className="editor-selected-controls">
-            <div className="editor-control-group">
-              <span className="editor-control-label">並べ方</span>
-              <div
-                className="editor-segment"
-                role="group"
-                aria-label={`${bookTitle(selectedBook)}の並べ方`}
+            <label className="editor-label editor-pop-label">
+              この本へのPOP <span className="editor-optional">任意</span>
+              <textarea
+                value={selected.pop}
+                maxLength={POP_MAX_LENGTH}
+                rows={3}
+                onChange={(event) =>
+                  actions.updatePop(shelf.id, selected.id, event.target.value)
+                }
+                placeholder="この本のどんなところを、誰かに届けたいですか？"
+              />
+              <span className="editor-field-note">
+                書いた言葉は、この棚と本の詳細ページに表示されます。
+              </span>
+            </label>
+            <div className="editor-selected-footer">
+              <Link href={bookPath(selectedBook.id)} className="text-btn">
+                本の詳細を見る
+                <Icon name="arrow" size={15} />
+              </Link>
+              <button
+                type="button"
+                className="text-btn quiet editor-remove-book"
+                onClick={() => {
+                  takeOff(selected, bookTitle(selectedBook));
+                  setSelectedId(null);
+                }}
               >
-                <button
-                  type="button"
-                  className={selected.display === "spine" ? "is-active" : ""}
-                  aria-pressed={selected.display === "spine"}
-                  onClick={() => {
-                    if (actions.changeDisplay(shelf.id, selected.id, "spine"))
-                      notify("背表紙で並べました。");
-                  }}
-                >
-                  背表紙 <small>1</small>
-                </button>
-                <button
-                  type="button"
-                  className={selected.display === "face" ? "is-active" : ""}
-                  aria-pressed={selected.display === "face"}
-                  disabled={!canFace}
-                  title={
-                    !canFace
-                      ? "面陳にするには、あと2スペース必要です。"
-                      : undefined
-                  }
-                  onClick={() => {
-                    if (actions.changeDisplay(shelf.id, selected.id, "face"))
-                      notify("表紙が見えるように並べました。");
-                    else notify("面陳にするには、あと2スペース必要です。");
-                  }}
-                >
-                  面陳 <small>3</small>
-                </button>
-              </div>
-              {!canFace && (
-                <span className="editor-control-note">
-                  面陳には、あと2スペース必要です。
-                </span>
-              )}
-            </div>
-            <div className="editor-control-group">
-              <span className="editor-control-label">並び順</span>
-              <div className="editor-move-buttons">
-                <button
-                  type="button"
-                  className="btn"
-                  aria-label={`${bookTitle(selectedBook)}を一つ左へ移動`}
-                  disabled={selectedIndex <= 0}
-                  onClick={() =>
-                    actions.moveShelfBook(
-                      shelf.id,
-                      selected.id,
-                      selectedIndex - 1,
-                    )
-                  }
-                >
-                  <Icon name="back" size={16} />
-                  左へ
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  aria-label={`${bookTitle(selectedBook)}を一つ右へ移動`}
-                  disabled={selectedIndex >= shelf.items.length - 1}
-                  onClick={() =>
-                    actions.moveShelfBook(
-                      shelf.id,
-                      selected.id,
-                      selectedIndex + 1,
-                    )
-                  }
-                >
-                  右へ
-                  <Icon name="arrow" size={16} />
-                </button>
-              </div>
+                この本を棚から外す
+              </button>
             </div>
           </div>
-          <label className="editor-label editor-pop-label">
-            この本へのPOP <span className="editor-optional">任意</span>
-            <textarea
-              value={selected.pop}
-              maxLength={POP_MAX_LENGTH}
-              rows={3}
-              onChange={(event) =>
-                actions.updatePop(shelf.id, selected.id, event.target.value)
-              }
-              placeholder="この本のどんなところを、誰かに届けたいですか？"
-            />
-            <span className="editor-field-note">
-              書いた言葉は、この棚と本の詳細ページに表示されます。
-            </span>
-          </label>
-          <div className="editor-selected-footer">
-            <Link href={bookPath(selectedBook.id)} className="text-btn">
-              本の詳細を見る
-              <Icon name="arrow" size={15} />
-            </Link>
-            <button
-              type="button"
-              className="text-btn quiet editor-remove-book"
-              onClick={() => {
-                takeOff(selected, bookTitle(selectedBook));
-                setSelectedId(null);
-              }}
-            >
-              この本を棚から外す
-            </button>
-          </div>
-        </div>
+        </Modal>
       )}
     </section>
   );
@@ -898,6 +961,26 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   // Keeps the opening flow on screen after the shop exists, for its last step.
   const [opening, setOpening] = useState(false);
   const shop = state.ownShop;
+  // A book chosen on its page (自分の書店へ, ?place=): once the town is in,
+  // its shelf picker opens with that book first. The address goes back to
+  // the page's own, so a reload does not open it again.
+  const [placeParam, setPlaceParam] = useUrlParam("place");
+  const [placing, setPlacing] = useState<string | null>(null);
+  const [choosingShelf, setChoosingShelf] = useState(false);
+  const townIn = persistenceStatus !== "loading";
+  useEffect(() => {
+    if (!placeParam || !townIn) return;
+    setPlaceParam(null);
+    if (!bookById(state.books, placeParam)) return;
+    setPlacing(placeParam);
+    const shelves = getTownSnapshot().ownShop?.shelves;
+    if (!shelves) return; // No shop yet: the opening offers the book first.
+    if (shelves.length === 1) setAddBookShelfId(shelves[0].id);
+    else if (shelves.length > 1) setChoosingShelf(true);
+    else setAddShelfOpen(true);
+  }, [placeParam, setPlaceParam, townIn, state.books]);
+  // The library, in its own order: the shelf picker offers it first.
+  const own = useMemo(() => libraryBookIds(state), [state]);
   const ownScene = walk.scenes.find((s) => s.storeId === shop?.id);
   // Whether the shop stands in the walk now, decorated or as its shelves are.
   const inWalk = ownScene
@@ -1055,7 +1138,11 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         state={state}
         actions={actions}
         notify={notify}
-        onOpen={() => setOpening(true)}
+        startBook={placing}
+        onOpen={() => {
+          setOpening(true);
+          setPlacing(null);
+        }}
         onDone={() => setOpening(false)}
       />
     );
@@ -1187,7 +1274,10 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       {addShelfOpen && (
         <Modal
           title="新しい本棚をつくる"
-          onClose={() => setAddShelfOpen(false)}
+          onClose={() => {
+            setAddShelfOpen(false);
+            setPlacing(null);
+          }}
         >
           <form
             className="editor-add-shelf-form"
@@ -1198,6 +1288,9 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
               setNewShelfName("");
               setAddShelfOpen(false);
               notify("新しい本棚ができました。");
+              // Made for a book chosen on its page: it goes on this shelf.
+              const made = getTownSnapshot().ownShop?.shelves.at(-1);
+              if (placing && made) setAddBookShelfId(made.id);
             }}
           >
             <p>同じ本も、棚の名前ひとつで違って見えます。</p>
@@ -1230,14 +1323,55 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           shelf={addBookShelf}
           books={state.books}
           shown={booksBeforeSearch(state)}
-          library={state.library}
+          own={own}
+          chosen={placing}
           actions={actions}
           notify={notify}
           removedHere={takenOff[addBookShelf.id] ?? {}}
           takeOff={(item, title) => takeOff(addBookShelf, item, title)}
           putBack={(bookId, title) => putBack(addBookShelf.id, bookId, title)}
-          onClose={() => setAddBookShelfId(null)}
+          onClose={() => {
+            setAddBookShelfId(null);
+            setPlacing(null);
+          }}
         />
+      )}
+      {choosingShelf && placing && (
+        <Modal
+          title={PLACE.whichShelf}
+          onClose={() => {
+            setChoosingShelf(false);
+            setPlacing(null);
+          }}
+        >
+          <ul className="editor-shelf-choices">
+            {shop.shelves.map((shelf) => {
+              const room = shelf.capacity - shelfUsed(shelf);
+              const there = shelf.items.some((item) => item.bookId === placing);
+              return (
+                <li key={shelf.id}>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      setChoosingShelf(false);
+                      setAddBookShelfId(shelf.id);
+                    }}
+                  >
+                    <b>{shelf.name}</b>
+                    <small>
+                      {there
+                        ? "この本が並んでいます"
+                        : room > 0
+                          ? `あと ${room} スペース`
+                          : "満席です"}
+                    </small>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </Modal>
       )}
       {removeShelf && (
         <Modal

@@ -420,3 +420,11 @@
     }
   }
 }
+/* 開店の本選び: which shelf of the library the books come from. */
+.open-shop .chips {
+  margin-bottom: 14px;
+}
+.open-more {
+  display: block;
+  margin: -12px auto 24px;
+}

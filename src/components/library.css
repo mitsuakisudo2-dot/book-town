@@ -30,17 +30,6 @@
 }
 
 /* A row of chips that scrolls sideways on a phone, never wrapping under. */
-.library-chips {
-  display: flex;
-  gap: 8px;
-  margin: 0 -16px;
-  padding: 0 16px 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.library-chips::-webkit-scrollbar {
-  display: none;
-}
 .library-count {
   color: inherit;
   font-weight: 400;
