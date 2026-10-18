@@ -104,8 +104,9 @@ export interface Shop {
   tagline: string;
   followers: number;
   /**
-   * How many readers stopped by in the 7 days before `at`. Only the owner's own
-   * shop has it, with an account, and only when someone came.
+   * How many readers stopped by last week, the week (Monday to Sunday, Japan
+   * time) that ended at `at`. Only the owner's own shop has it, with an
+   * account, and only when someone came.
    */
   weekVisitors?: { count: number; at: string };
   shelves: Shelf[];

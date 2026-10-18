@@ -334,16 +334,19 @@ async function readTown(
             .neq("message", ""),
         ["user_id"],
       ),
-      // A nice-to-know: the town still opens if this cannot be read.
-      client.rpc("shop_visitors", { days: 7 }).then(
-        (outcome) => (outcome.error ? 0 : (outcome.data ?? 0)),
-        () => 0,
+      // A nice-to-know: the town still opens if this cannot be read. The
+      // number is last week's, settled by the database when the week ended.
+      client.rpc("shop_visitors").then(
+        (outcome) => (outcome.error ? undefined : outcome.data?.[0]),
+        () => undefined,
       ),
     ]);
     ownShelves = privateRows[0]?.shelves ?? [];
     ownSceneBooks = privateRows[0]?.scene_books ?? [];
     ownShopFollowers = followers.count ?? 0;
-    ownShopVisitors = { count: visitors, at: new Date().toISOString() };
+    ownShopVisitors = visitors
+      ? { count: visitors.visitors, at: visitors.week_end }
+      : null;
     shopMessages = messages;
   }
 

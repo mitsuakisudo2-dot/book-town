@@ -1372,11 +1372,12 @@ check("an owner hears once a week how many stopped by", () => {
       notice.id.startsWith("visitors:"),
     ),
   );
-  const [notice] = notificationsFor(visitors(3, "2026-10-14T03:00:00Z")).filter(
+  // Last week's number, settled when the week ended (Monday 00:00 in Japan).
+  const [notice] = notificationsFor(visitors(3, "2026-10-11T15:00:00Z")).filter(
     (entry) => entry.id.startsWith("visitors:"),
   );
-  assert.equal(notice.text, "この1週間で、3人があなたの本屋に立ち寄りました");
-  // The same week (Monday to Sunday, Japan time) keeps the same notice.
+  assert.equal(notice.text, "先週、3人があなたの本屋に立ち寄りました");
+  // One notice for each week (Monday to Sunday, Japan time).
   assert.equal(notice.id, "visitors:2026-10-12");
   assert.equal(weekOf("2026-10-11T15:30:00Z"), "2026-10-12");
   assert.equal(weekOf("2026-10-11T14:30:00Z"), "2026-10-05");

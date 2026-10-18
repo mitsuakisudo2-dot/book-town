@@ -1152,45 +1152,134 @@ async function main() {
   });
 
   await check(
-    "an owner learns how many stopped by this week, never who",
+    "an owner learns how many stopped by last week, never who",
     async () => {
-      const count = async (visitor: Visitor, days = 7) =>
+      const count = async (visitor: Visitor) =>
         (
-          await as<{ n: number }>(visitor, "select shop_visitors($1) as n", [
-            days,
-          ])
-        )[0].n;
-      // Ben came ten days ago, Chi yesterday; Aki's own visit is not counted.
-      await db.exec(
-        `update shop_visits set visited_at = now() - interval '10 days' where user_id = '${BEN}'`,
-      );
-      await as(
-        CHI,
-        "insert into shop_visits (user_id, shop_id, visited_at) values ($1, $2, now() - interval '1 day')",
-        [CHI, akiShop.id],
-      );
-      await as(
-        AKI,
-        "insert into shop_visits (user_id, shop_id) values ($1, $2)",
-        [AKI, akiShop.id],
-      );
-      assert.equal(await count(AKI), 1);
-      assert.equal(await count(AKI, 30), 2);
+          await as<{ visitors: number }>(
+            visitor,
+            "select visitors from shop_visitors()",
+          )
+        )[0]?.visitors ?? 0;
+      const weekEnd = async () =>
+        (
+          await as<{ same: boolean }>(
+            AKI,
+            `select week_end = (date_trunc('week', now() at time zone 'Asia/Tokyo')
+               at time zone 'Asia/Tokyo') as same from shop_visitors()`,
+          )
+        )[0]?.same;
+      const countTheWeek = () =>
+        db.exec("select private.count_shop_visitors()");
+      // Times in and around last week (Monday to Sunday, Japan time).
+      const lastWeek = (offset: string) =>
+        `private.last_visit_week()::timestamp at time zone 'Asia/Tokyo' + interval '${offset}'`;
+      const visit = (who: string, when: string) =>
+        db.exec(
+          `insert into shop_visits (user_id, shop_id, visited_at)
+           values ('${who}', '${akiShop.id}', ${when})
+           on conflict (user_id, shop_id) do update set visited_at = excluded.visited_at`,
+        );
+      // Ben and Chi came last week; Aki's own visit is not counted.
+      await visit(BEN, lastWeek("1 day"));
+      await visit(CHI, lastWeek("6 days 23 hours"));
+      await visit(AKI, lastWeek("2 days"));
+      // Nothing is told until the week is counted.
+      assert.equal(await count(AKI), 0);
+      await countTheWeek();
+      assert.equal(await count(AKI), 2);
+      assert.equal(await weekEnd(), true);
       // Others hear nothing about Aki's shop, and visitors without an account
-      // cannot ask at all.
+      // cannot ask at all. Nobody reads the weekly numbers directly.
       assert.equal(await count(BEN), 0);
       assert.equal(await count(CHI), 0);
-      await refused(null, "select shop_visitors(7)", [], /permission/);
-      // Someone either of them blocked is not counted.
+      await refused(null, "select * from shop_visitors()", [], /permission/);
+      await refused(
+        AKI,
+        "select * from private.shop_visitor_weeks",
+        [],
+        /permission/,
+      );
+      await refused(
+        AKI,
+        "select private.count_shop_visitors()",
+        [],
+        /permission/,
+      );
+      // There is one span, the week the database counted.
+      await refused(AKI, "select shop_visitors(7)", [], /does not exist/);
+      // The number stays the same all week: a block either way, coming back,
+      // forgetting the visit, or counting again does not move it.
       await as(
         AKI,
         "insert into blocks (blocker_id, blocked_id) values ($1, $2)",
         [AKI, CHI],
       );
-      assert.equal(await count(AKI), 0);
+      assert.equal(await count(AKI), 2);
       await as(AKI, "delete from blocks where blocker_id = $1", [AKI]);
+      await as(
+        CHI,
+        "insert into blocks (blocker_id, blocked_id) values ($1, $2)",
+        [CHI, AKI],
+      );
+      assert.equal(await count(AKI), 2);
+      await as(CHI, "delete from blocks where blocker_id = $1", [CHI]);
+      await visit(BEN, "now()");
+      await as(CHI, "delete from shop_visits where shop_id = $1", [
+        akiShop.id,
+      ]);
+      await countTheWeek();
+      assert.equal(await count(AKI), 2);
+      // A week counts only its own visits: before it, after it, or dated
+      // ahead by a device are not in it.
+      await db.exec("delete from private.shop_visitor_weeks");
+      await visit(BEN, lastWeek("-1 second"));
+      await visit(CHI, lastWeek("7 days"));
+      await countTheWeek();
+      assert.equal(await count(AKI), 0);
+      await visit(CHI, "'2099-01-01T00:00:00Z'");
+      await countTheWeek();
+      assert.equal(await count(AKI), 0);
+      // Readers blocked when they came still count, as a number.
+      await visit(CHI, lastWeek("3 days"));
       await db.exec(
-        `delete from shop_visits where user_id in ('${CHI}', '${AKI}')`,
+        `insert into blocks (blocker_id, blocked_id) values ('${AKI}', '${CHI}')`,
+      );
+      await db.exec("delete from private.shop_visitor_weeks");
+      await countTheWeek();
+      assert.equal(await count(AKI), 1);
+      await db.exec(`delete from blocks where blocker_id = '${AKI}'`);
+      // Only the last week is kept, and the count runs each Monday 00:00 in
+      // Japan (Sunday 15:00 UTC).
+      await db.exec(
+        `update private.shop_visitor_weeks set week = week - 7;
+         select private.count_shop_visitors();`,
+      );
+      assert.deepEqual(
+        (
+          await db.query<{ old: boolean }>(
+            "select week < private.last_visit_week() as old from private.shop_visitor_weeks",
+          )
+        ).rows,
+        [{ old: false }],
+      );
+      assert.deepEqual(
+        (
+          await db.query(
+            "select schedule, command from cron.job where jobname = 'shop-visitors'",
+          )
+        ).rows,
+        [
+          {
+            schedule: "0 15 * * 0",
+            command: "select private.count_shop_visitors()",
+          },
+        ],
+      );
+      // Ben's visit stays for the account deletion below.
+      await db.exec(
+        `delete from shop_visits where user_id in ('${CHI}', '${AKI}');
+         delete from private.shop_visitor_weeks;`,
       );
     },
   );
@@ -5581,7 +5670,17 @@ async function main() {
       insert into private.staff (user_id) values ('${BEN}') on conflict do nothing;
       insert into site_notes (user_id, page, x, y, viewport_w, viewport_h, scroll_y, body)
         values ('${BEN}', '/', 1, 1, 390, 844, 0, 'ベンの注釈');
+      insert into private.shop_visitor_weeks (shop_id, week, visitors)
+        select id, private.last_visit_week(), 1 from shops where owner_id = '${BEN}';
     `);
+    const bensWeeks = async () =>
+      (
+        await db.query<{ n: number }>(
+          "select count(*)::int as n from private.shop_visitor_weeks where shop_id = $1",
+          [benShop.id],
+        )
+      ).rows[0].n;
+    assert.equal(await bensWeeks(), 1, "before: shop_visitor_weeks");
     const kept: [string, string][] = [
       ["library_entries", "user_id"],
       ["library_shelves", "user_id"],
@@ -5654,6 +5753,8 @@ async function main() {
     const gone = async () => {
       for (const [table, column] of owned)
         assert.equal(await left(table, column), 0, table);
+      // His shop's weekly number went with the shop.
+      assert.equal(await bensWeeks(), 0, "shop_visitor_weeks");
       // Nothing anywhere still names him, in any column of any table (text and
       // json included), but what account-tables.ts says stays for the operator.
       // Copies taken by migrations (keep) have names that need quoting.

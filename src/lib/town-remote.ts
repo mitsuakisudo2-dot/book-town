@@ -172,7 +172,10 @@ export interface RemoteRows {
   >[];
   /** Only owners can count their followers; nobody else sees the number. */
   ownShopFollowers: number;
-  /** Readers who stopped by the person's own shop in the 7 days before `at`. */
+  /**
+   * Readers who stopped by the person's own shop in the week (Monday to
+   * Sunday, Japan time) that ended at `at`, as the database counted it.
+   */
   ownShopVisitors: { count: number; at: string } | null;
   follows: Pick<Tables<"shop_follows">, "shop_id">[];
   /** Whom the person blocked (only the blocker reads their blocks). */

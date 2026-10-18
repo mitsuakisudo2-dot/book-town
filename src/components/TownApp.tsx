@@ -922,7 +922,7 @@ function ShopView({
                 whenSome(
                   shop.weekVisitors.count,
                   "人",
-                  (c) => `この1週間に${c}が立ち寄り`,
+                  (c) => `先週${c}が立ち寄り`,
                 ),
               "この数はあなたにだけ見えています",
             ]
