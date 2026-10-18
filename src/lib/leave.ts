@@ -21,9 +21,15 @@ import "./shop-draft";
 import { JOURNAL_KEY, libraryJournal } from "./library-journal";
 import { POSITION_KEY } from "./walk-repository";
 import { SEEN_KEY } from "./supabase/town-backend";
+import { FIRST_STEPS_KEY } from "./home-feed";
 
 /** The browser storage keys kept per account: the key, then the account id. */
-export const PER_ACCOUNT_KEYS = [JOURNAL_KEY, POSITION_KEY, SEEN_KEY];
+export const PER_ACCOUNT_KEYS = [
+  JOURNAL_KEY,
+  POSITION_KEY,
+  SEEN_KEY,
+  FIRST_STEPS_KEY,
+];
 
 /** Lets go of everything this browser keeps for `userId`. */
 export function forgetReaderHere(userId: string) {

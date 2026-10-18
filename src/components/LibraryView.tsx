@@ -234,6 +234,14 @@ export function LibraryView({
   const [sheet, setSheet] = useState<"scan" | "titles" | null>(null);
   // The shelf being made (NEW_SHELF_KEY) or changed (its id).
   const [shelfSheet, setShelfSheet] = useState<string | null>(null);
+  // 「棚を作る」 asked for from elsewhere (ホームのはじめの3つ): opened once,
+  // and the address goes back to the library's own.
+  const [makeParam, setMakeParam] = useUrlParam("make");
+  useEffect(() => {
+    if (makeParam !== "shelf") return;
+    setMakeParam(null);
+    setShelfSheet(NEW_SHELF_KEY);
+  }, [makeParam, setMakeParam]);
   // One of the shelves every library has, its 見せる範囲 being chosen.
   const [audienceSheet, setAudienceSheet] = useState<string | null>(null);
   const owner = useDraftOwner();

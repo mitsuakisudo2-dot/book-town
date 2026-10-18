@@ -16,7 +16,8 @@ export function CreditsView() {
       <h1 className="page-title">本のデータの出典</h1>
       <p>
         本のページの題名・著者・出版社・出版年月は、国立国会図書館と openBD
-        の書誌データから、BookTown が項目ごとに選んでまとめたものです（2026年10月から随時取得）。読書家が自分の本棚に登録した題名と著者は、その人が書いたままです。
+        の書誌データから、BookTown
+        が項目ごとに選んでまとめたものです（2026年10月から随時取得）。読書家が自分の本棚に登録した題名と著者は、その人が書いたままです。
       </p>
       <section aria-labelledby="credits-ndl">
         <h2 id="credits-ndl">国立国会図書館</h2>
@@ -38,8 +39,9 @@ export function CreditsView() {
       <section aria-labelledby="credits-covers">
         <h2 id="credits-covers">表紙</h2>
         <p>
-          表紙の画像は openBD と Google Books から取り、そのまま出しています。Google Books
-          の表紙には「powered by Google」と、その本の Google Books
+          表紙の画像は openBD と Google Books
+          から取り、そのまま出しています。Google Books の表紙には「powered by
+          Google」と、その本の Google Books
           のページへのリンクを添えています。どちらにも表紙がない本は、題名と著者から作った
           BookTown の装丁カードで表しています。
         </p>

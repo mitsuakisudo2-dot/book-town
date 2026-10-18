@@ -1004,7 +1004,12 @@ export type Write =
   // whose ISBN changed to that ISBN's edition and work.
   | {
       kind: "fix-books";
-      rows: { id: string; title: string; author: string; isbn: string | null }[];
+      rows: {
+        id: string;
+        title: string;
+        author: string;
+        isbn: string | null;
+      }[];
     }
   | {
       kind: "profile";
