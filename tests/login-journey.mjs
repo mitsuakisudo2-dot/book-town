@@ -677,6 +677,38 @@ const standIn = async (route) => {
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "HEAD")
     return route.fulfill({ status: 200, headers: { "content-range": "*/0" } });
   if (url.pathname === "/rest/v1/rpc/shop_visitors") return json(200, []);
+  // The town in one answer (town_view), and the books it names (town_books):
+  // like the database, all of it at one moment.
+  if (url.pathname === "/rest/v1/rpc/town_view") {
+    townReads.push(url.pathname);
+    if (townHold) await townHold;
+    const rows = (table) => town?.[table] ?? [];
+    return json(200, {
+      profiles: [...(profile ? [profile] : []), ...rows("profiles")],
+      nine: rows("profile_nine"),
+      shops: rows("shops"),
+      posts: postsAsked(
+        rows("posts"),
+        new URLSearchParams("order=created_at.desc"),
+      ).slice(0, body.post_limit ?? 500),
+      post_reactions: rows("post_reactions"),
+      together: rows("reading_sessions").filter(
+        (row) => row.mode === "together" && !row.ended_at,
+      ),
+      records: rows("reading_entries"),
+      folds: rows("moderation_folds"),
+      posters: rows("posters"),
+      catalog: rows("books").slice(0, body.catalog_limit ?? 300),
+    });
+  }
+  if (url.pathname === "/rest/v1/rpc/town_books") {
+    townReads.push(url.pathname);
+    const ids = new Set(body.ids);
+    return json(
+      200,
+      (town?.books ?? []).filter((row) => ids.has(row.id)),
+    );
+  }
   // The books the reader typed in (my_books): a town may name some.
   if (url.pathname === "/rest/v1/rpc/my_books")
     return rowsAsked(town?.my_books ?? []);
@@ -857,7 +889,7 @@ try {
           name: "あなたのページは、ログインしてから。",
         }),
       ).toBeVisible();
-      expect(townReads).toContain("/rest/v1/shops");
+      expect(townReads).toContain("/rest/v1/rpc/town_view");
       townReads.length = 0;
       // No one is signed in, so no one is asked whether they are staff.
       expect(annotateAsks).toHaveLength(0);
@@ -1312,7 +1344,7 @@ try {
     await expect(page.locator(".town-topbar")).toBeVisible();
     await expect(page.getByRole("link", { name: "ログイン" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /本の街/ })).toBeVisible();
-    expect(townReads).toContain("/rest/v1/shops");
+    expect(townReads).toContain("/rest/v1/rpc/town_view");
     await page.goto(base + "/profiles/me/");
     await expect(page.getByRole("heading", { name: "アキ" })).toBeVisible();
     await expect(page.getByText("@aki_books")).toBeVisible();
@@ -1862,11 +1894,13 @@ try {
           url.pathname === "/rest/v1/rpc/book_holds"
         )
           return route.fallback();
-        // Which books the reader typed in (my_books) is asked with the
-        // town, so it waits with it.
+        // Which books the reader typed in (my_books), and the town itself
+        // (town_view, town_books), are asked for with POST, and wait too.
         const read =
           request.method() === "GET" ||
-          url.pathname === "/rest/v1/rpc/my_books";
+          url.pathname === "/rest/v1/rpc/my_books" ||
+          url.pathname === "/rest/v1/rpc/town_view" ||
+          url.pathname === "/rest/v1/rpc/town_books";
         if (!read) {
           sent.push(url.pathname);
           return route.fulfill({ status: 201, body: "" });
@@ -1941,11 +1975,13 @@ try {
           url.pathname === "/rest/v1/rpc/book_holds"
         )
           return route.fallback();
-        // Which books the reader typed in (my_books) is asked with the
-        // town, so it waits with it.
+        // Which books the reader typed in (my_books), and the town itself
+        // (town_view, town_books), are asked for with POST, and wait too.
         const read =
           request.method() === "GET" ||
-          url.pathname === "/rest/v1/rpc/my_books";
+          url.pathname === "/rest/v1/rpc/my_books" ||
+          url.pathname === "/rest/v1/rpc/town_view" ||
+          url.pathname === "/rest/v1/rpc/town_books";
         if (!read) {
           sent.push({ path: url.pathname, rows: request.postDataJSON() });
           return route.fulfill({ status: 201, body: "" });
@@ -2605,7 +2641,7 @@ try {
         .toContain("/rest/v1/shop_follows");
       await expect
         .poll(() => townReads.slice(reads))
-        .toContain("/rest/v1/moderation_folds");
+        .toContain("/rest/v1/rpc/town_view");
       await expect(
         page.getByRole("button", { name: "レンの夜の本屋をフォロー" }),
       ).toBeVisible();

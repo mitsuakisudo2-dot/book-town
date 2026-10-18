@@ -1537,6 +1537,15 @@ export type Database = {
           week_end: string;
         }[];
       };
+      town_books: { Args: { ids: string[] }; Returns: Json };
+      town_view: {
+        Args: {
+          catalog_limit?: number;
+          post_limit?: number;
+          record_notes?: boolean;
+        };
+        Returns: Json;
+      };
       valid_links: { Args: { links: string[] }; Returns: boolean };
     };
     Enums: {

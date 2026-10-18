@@ -331,9 +331,16 @@ function fakeReads(
       select: (_columns?: string, options: { count?: string } = {}) =>
         select(table, options.count === "exact"),
     }),
-    // A function returning rows, as a table of its name.
+    // A function returning rows, as a table of its name. A database
+    // before town_view (the town is read table by table) has neither.
     rpc: (name: string, _args?: unknown, options: { count?: string } = {}) =>
-      select(name, options.count === "exact"),
+      (name === "town_view" || name === "town_books") && !(name in tables)
+        ? Promise.resolve({
+            data: null,
+            error: { message: "no " + name, code: "PGRST202" },
+            status: 404,
+          })
+        : select(name, options.count === "exact"),
   };
   return {
     asked,
@@ -940,8 +947,8 @@ async function main() {
       assert.deepEqual(found, {
         "src/lib/supabase/site-notes.ts": ["200"],
         "src/lib/supabase/town-backend.ts": [
-          "CATALOG",
           "POSTS",
+          "CATALOG",
           "NEWER_MAX",
           "NEWER_MAX",
           "size",
