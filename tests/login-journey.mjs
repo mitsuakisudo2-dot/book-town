@@ -1741,7 +1741,12 @@ try {
           url.pathname === "/rest/v1/rpc/book_holds"
         )
           return route.fallback();
-        if (request.method() !== "GET") {
+        // Which books the reader typed in (my_books) is asked with the
+        // town, so it waits with it.
+        const read =
+          request.method() === "GET" ||
+          url.pathname === "/rest/v1/rpc/my_books";
+        if (!read) {
           sent.push(url.pathname);
           return route.fulfill({ status: 201, body: "" });
         }
@@ -1815,7 +1820,12 @@ try {
           url.pathname === "/rest/v1/rpc/book_holds"
         )
           return route.fallback();
-        if (request.method() !== "GET") {
+        // Which books the reader typed in (my_books) is asked with the
+        // town, so it waits with it.
+        const read =
+          request.method() === "GET" ||
+          url.pathname === "/rest/v1/rpc/my_books";
+        if (!read) {
           sent.push({ path: url.pathname, rows: request.postDataJSON() });
           return route.fulfill({ status: 201, body: "" });
         }
