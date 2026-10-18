@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
-import { loadPublicTown, loadTown } from "../src/lib/supabase/town-backend";
+import {
+  accountTownBackend,
+  loadPublicTown,
+  loadTown,
+} from "../src/lib/supabase/town-backend";
+import { ME_ID, type TownState } from "../src/lib/types";
 import { fakeSupabase } from "./fixtures/fake-supabase";
 
 // The town in one answer (AUD-006 6a; supabase/migrations/*_town_view.sql):
@@ -144,6 +149,19 @@ function madeUpTown(readers: number, books: number) {
   return tables;
 }
 
+/**
+ * The town as town_view leaves it: others' records without their words,
+ * which their profile's page reads (notes).
+ */
+const withoutOthersWords = (state: TownState): TownState => ({
+  ...state,
+  readingRecords: state.readingRecords.map((record) =>
+    record.readerId === ME_ID
+      ? record
+      : { ...record, note: "", spoiler: false },
+  ),
+});
+
 /** The client of a fake town, counting the requests asked of it. */
 function counted(fake: ReturnType<typeof fakeSupabase>) {
   const asked: string[] = [];
@@ -187,7 +205,7 @@ async function main() {
       assert.ok(viewed.state.readers.length > 30);
       assert.ok(viewed.state.posts.length > 100);
       assert.ok(viewed.state.readingRecords.length > 100);
-      assert.deepEqual(viewed.state, tabled.state);
+      assert.deepEqual(viewed.state, withoutOthersWords(tabled.state));
       assert.deepEqual(viewed.ids, tabled.ids);
       assert.deepEqual(viewed.versions, tabled.versions);
       assert.equal(viewed.ownBooksKnown, tabled.ownBooksKnown);
@@ -204,8 +222,42 @@ async function main() {
       const byTables = fakeSupabase(AKI, small());
       assert.deepEqual(
         await loadPublicTown(byView.client),
-        await loadPublicTown(byTables.client),
+        withoutOthersWords(await loadPublicTown(byTables.client)),
       );
+    },
+  );
+
+  await check(
+    "another reader's words come when asked for, as the tables hold them",
+    async () => {
+      const seed = small();
+      const other = uuid(1, 3);
+      for (const row of seed.reading_entries)
+        if (row.user_id === other) {
+          row.body = "ネタバレあり：" + String(row.id).slice(-2);
+          row.spoiler = true;
+        }
+      const fake = fakeSupabase(AKI, seed, { versions: true, townView: true });
+      const backend = accountTownBackend(fake.client, AKI, {
+        delay: 0,
+        storage: false,
+      });
+      const { state } = await backend.load();
+      const theirs = state.readingRecords.filter((r) => r.readerId === other);
+      assert.equal(theirs.length, 5);
+      assert.ok(theirs.every((r) => r.note === "" && !r.spoiler));
+      const words = await backend.notes!(other);
+      assert.deepEqual(
+        theirs.map((r) => words.get(r.id)),
+        theirs.map((r) => ({
+          note: "ネタバレあり：" + r.id.slice(-2),
+          spoiler: true,
+        })),
+      );
+      // The reader's own words come with the town; nothing more to ask.
+      assert.equal((await backend.notes!(ME_ID)).size, 0);
+      assert.equal((await backend.notes!(AKI)).size, 0);
+      backend.close?.();
     },
   );
 

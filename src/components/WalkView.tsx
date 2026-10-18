@@ -138,7 +138,10 @@ export function WalkView({
     // With an account, words left for an owner reach them.
     delivers = saved.kind === "account",
     // A visitor is asked to sign in before leaving words.
-    visitor = saved.kind === "visitor";
+    visitor = saved.kind === "visitor",
+    // Shops whose scene is read when walked to (AUD-006).
+    unread = saved.unread,
+    need = saved.need;
   const shops = useMemo(() => {
     if (orderedStores) return orderedStores;
     const publicIds = new Set(
@@ -151,13 +154,25 @@ export function WalkView({
     return [...state.shops, ...(state.ownShop ? [state.ownShop] : [])].filter(
       (shop) => {
         const override = saved.scenes.find((s) => s.storeId === shop.id);
-        return override
-          ? hasPublicSceneBooks(override, state.books)
-          : publicIds.has(shop.id);
+        if (override) return hasPublicSceneBooks(override, state.books);
+        // A scene not read yet stands as the books the database says it
+        // shows (public_scene_books).
+        if (unread.has(shop.id)) return Boolean(shop.sceneBookIds?.length);
+        return publicIds.has(shop.id);
       },
     );
-  }, [orderedStores, state.books, state.shops, state.ownShop, saved.scenes]);
-  const ids = useMemo(() => shops.map((s) => s.id), [shops]);
+  }, [
+    orderedStores,
+    state.books,
+    state.shops,
+    state.ownShop,
+    saved.scenes,
+    unread,
+  ]);
+  // The same shops in the same order are the same walk: a scene read, or a
+  // town read again, does not start it over.
+  const idsKey = shops.map((s) => s.id).join("\n");
+  const ids = useMemo(() => (idsKey ? idsKey.split("\n") : []), [idsKey]);
   const reviewFolds = state.reviewFolds;
   // A 見本's shelves are filled out only with books a list may show before
   // anything is typed: never one another reader only typed in.
@@ -170,18 +185,21 @@ export function WalkView({
   }, [state.books, shownKey]);
   const scenes = useMemo(
     () =>
-      shops.map((s) =>
-        resolveStoreScene(
-          // An introduction folded by reports is not said in passing.
-          wordsFolded({ reviewFolds }, "shop", s.id)
-            ? { ...s, description: "" }
-            : s,
-          sceneBooks,
-          state.shops.findIndex((shop) => shop.id === s.id),
-          saved.scenes,
-        ),
+      // A shop's scene not read yet is not made up from its shelves.
+      shops.flatMap((s) =>
+        unread.has(s.id)
+          ? []
+          : resolveStoreScene(
+              // An introduction folded by reports is not said in passing.
+              wordsFolded({ reviewFolds }, "shop", s.id)
+                ? { ...s, description: "" }
+                : s,
+              sceneBooks,
+              state.shops.findIndex((shop) => shop.id === s.id),
+              saved.scenes,
+            ),
       ),
-    [shops, sceneBooks, state.shops, saved.scenes, reviewFolds],
+    [shops, sceneBooks, state.shops, saved.scenes, reviewFolds, unread],
   );
   const pops = useMemo(() => publicScenePops(scenes), [scenes]);
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -208,6 +226,17 @@ export function WalkView({
     session && !session.ended ? session.ids[session.index] : null;
   const scene = scenes.find((s) => s.storeId === currentId);
   const shop = shops.find((s) => s.id === currentId);
+  // The shop walked to waits for its scene, read with its neighbours'.
+  const sceneWaiting = Boolean(currentId && unread.has(currentId));
+  useEffect(() => {
+    if (!session || session.ended || !session.ids.length) return;
+    const count = session.ids.length;
+    void need(
+      [0, 1, -1].map(
+        (step) => session.ids[(session.index + step + count) % count],
+      ),
+    );
+  }, [session, need]);
   // Back from a book's own page, the same book is in hand again.
   useLayerReturn((name) => {
     const held = heldBookOf(name);
@@ -303,7 +332,7 @@ export function WalkView({
     replaceAddress({ hash: encodeURIComponent(currentId) });
   }, [ready, currentId]);
   useEffect(() => {
-    if (!currentId || overlay || walk.visits[currentId]) return;
+    if (!currentId || overlay || walk.visits[currentId] || sceneWaiting) return;
     let remaining = 3000,
       started = 0,
       timer: ReturnType<typeof setTimeout> | undefined;
@@ -327,7 +356,7 @@ export function WalkView({
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, [currentId, overlay, walk.visits, update]);
+  }, [currentId, overlay, walk.visits, update, sceneWaiting]);
   function markVisit() {
     if (currentId) update((previous) => visitStore(previous, currentId));
   }
@@ -498,6 +527,20 @@ export function WalkView({
     scene && selectedRow?.parentId
       ? readingEntries(scene, selectedRow.parentId)
       : [];
+  // The words other shops wrote for the books in hand (allPops) are in
+  // their scenes: read the ones that show these books.
+  const heldBooks = neighbors.map((entry) => entry.bookId).join("\n");
+  useEffect(() => {
+    if (!heldBooks) return;
+    const held = new Set(heldBooks.split("\n"));
+    void need(
+      shops
+        .filter(
+          (s) => unread.has(s.id) && s.sceneBookIds?.some((id) => held.has(id)),
+        )
+        .map((s) => s.id),
+    );
+  }, [heldBooks, shops, unread, need]);
   const adjacent = session
     ? [-1, 1]
         .map((n) =>
@@ -709,7 +752,7 @@ export function WalkView({
           key={currentId ?? "end"}
           inert={overlay !== null}
         >
-          {!ready ? (
+          {!ready || sceneWaiting ? (
             <div className="walk-end">
               <p>書店の灯りをともしています</p>
             </div>

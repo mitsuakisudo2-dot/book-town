@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { seedState } from "./data";
 import { localTownRepository, type TownRepository } from "./repository";
 import {
@@ -8,6 +8,7 @@ import {
   unavailableBackend,
   type RecordKind,
   type TownBackend,
+  type RecordWords,
   type TownReads,
 } from "./town-backend";
 import { cleanShelves, emptyTown, type Write } from "./town-remote";
@@ -1461,6 +1462,14 @@ export function createTownStore(
       if (loading || !newer || !older || !post) return null;
       return { generation, newer, older, post };
     },
+    /**
+     * The words of another reader's records (TownBackend.notes); null in
+     * the demo, where the town holds them, and while the town is on its way.
+     */
+    recordWords(readerId: string): Promise<Map<string, RecordWords>> | null {
+      if (loading || !backend.notes) return null;
+      return backend.notes(readerId);
+    },
     /** Whether reads() has any: a build with the database, the town read. */
     getReadsSnapshot: () => !loading && Boolean(backend.newer),
     getServerReadsSnapshot: () => false,
@@ -1588,6 +1597,45 @@ export function useTownReads(): boolean {
     townStore.getReadsSnapshot,
     townStore.getServerReadsSnapshot,
   );
+}
+
+/**
+ * The words of `readerId`'s records of finished books, read when their
+ * shelf is shown (AUD-006): by record, for records whose `note` the town
+ * read empty. Empty for the reader's own, in the demo, until read, or when
+ * they could not be (asked again once, a little later).
+ */
+export function useRecordWords(
+  readerId: string,
+  recordIds: string[],
+): ReadonlyMap<string, RecordWords> {
+  const reads = useTownReads();
+  const [words, setWords] = useState<ReadonlyMap<string, RecordWords>>(
+    () => new Map(),
+  );
+  const key = recordIds.join("\n");
+  useEffect(() => {
+    if (!reads || readerId === ME_ID || !key) return;
+    let live = true;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const ask = (again: boolean) => {
+      const asked = townStore.recordWords(readerId);
+      asked?.then(
+        (found) => {
+          if (live) setWords(found);
+        },
+        () => {
+          if (live && again) retry = setTimeout(() => ask(false), 5000);
+        },
+      );
+    };
+    ask(true);
+    return () => {
+      live = false;
+      if (retry) clearTimeout(retry);
+    };
+  }, [reads, readerId, key]);
+  return words;
 }
 
 /** Counts the town's readings (store.getReadCount). */

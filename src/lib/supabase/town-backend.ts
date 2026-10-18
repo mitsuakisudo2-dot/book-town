@@ -192,6 +192,8 @@ async function townViewOf(
         client.rpc("town_view", {
           post_limit: POSTS,
           catalog_limit: CATALOG,
+          // Others' words are read on their profile's page (notes below).
+          record_notes: false,
         }),
       )
     ).data;
@@ -733,7 +735,7 @@ function remoteReads(
   userId: string | null,
   town: () => TownState | null,
   ownBooksKnown: () => boolean = () => false,
-): Required<Pick<TownBackend, "newer" | "older" | "post">> {
+): Required<Pick<TownBackend, "newer" | "older" | "post" | "notes">> {
   const complete = (rows: PostRow[]) =>
     arrivedFor(client, rows, town(), userId, ownBooksKnown());
   const posts = (count?: "exact") =>
@@ -834,6 +836,21 @@ function remoteReads(
         .slice(0, OLDER_PAGE);
       const replies = await repliesTo(found.map((row) => row.id));
       return complete([...found, ...replies]);
+    },
+    async notes(readerId) {
+      if (!isDatabaseId(readerId) || readerId === userId) return new Map();
+      const rows = await allRows(
+        (count) =>
+          client
+            .from("reading_entries")
+            .select("id, body, spoiler", { count })
+            .eq("user_id", readerId)
+            .eq("kind", "finished"),
+        ["id"],
+      );
+      return new Map(
+        rows.map((row) => [row.id, { note: row.body, spoiler: row.spoiler }]),
+      );
     },
     async post(id) {
       if (!isDatabaseId(id)) return emptyArrived();

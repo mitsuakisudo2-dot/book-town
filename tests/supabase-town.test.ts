@@ -599,7 +599,11 @@ async function main() {
         scene,
       );
 
-      const visitor = (await walkOf(ben)).getSnapshot();
+      const benWalk = await walkOf(ben);
+      // Read when walked to (AUD-006).
+      assert.ok(benWalk.getSnapshot().unread.has(akiShopId));
+      await benWalk.need([akiShopId]);
+      const visitor = benWalk.getSnapshot();
       const seen = visitor.scenes.find((entry) => entry.storeId === akiShopId);
       assert.ok(seen, "Aki's scene is on Ben's walk");
       assert.deepEqual(
@@ -617,6 +621,7 @@ async function main() {
     "likes, saves, visits, POP reactions and words are kept, and the words reach the owner",
     async () => {
       const walk = await walkOf(ben);
+      await walk.need([akiShopId]);
       const seen = walk
         .getSnapshot()
         .scenes.find((entry) => entry.storeId === akiShopId)!;
@@ -789,6 +794,7 @@ async function main() {
       const walk = createWalkStore(visitorWalkBackend(visitor), { onVisitor });
       walk.initialize();
       await walked(walk);
+      await walk.need([akiShopId]);
       const scene = walk
         .getSnapshot()
         .scenes.find((entry) => entry.storeId === akiShopId);

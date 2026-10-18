@@ -29,8 +29,10 @@ export interface WalkIds {
 export interface WalkRows {
   /** The whole scene of the person's own shop, private parts included. */
   ownScene: unknown;
-  /** Other shops' public scenes, as the database copied them. */
+  /** Other shops' public scenes read with the walk, as the database copied them. */
   scenes: { id: string; public_scene: unknown }[];
+  /** Other shops with a public scene, read when walked to. */
+  elsewhere?: string[];
   reactions: Pick<Tables<"shop_reactions">, "shop_id" | "liked" | "message">[];
   saved: Pick<Tables<"saved_shops">, "shop_id">[];
   popReactions: Pick<
@@ -151,6 +153,11 @@ export function walkFromRows(
     },
     scenes: own ? [own, ...scenes] : scenes,
     backups: [],
+    ...(rows.elsewhere && {
+      elsewhere: rows.elsewhere.filter(
+        (id) => id !== ids.shopId && !scenes.some((s) => s.storeId === id),
+      ),
+    }),
   };
 }
 
