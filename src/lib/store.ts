@@ -1447,17 +1447,17 @@ export function townSettled(store = townStore): Promise<boolean> {
 }
 
 /**
- * The line telling what last did not reach the database, while the town says
- * so ("recovered"); null otherwise.
+ * What last did not reach the database, with the line telling it, while the
+ * town says so ("recovered"); null otherwise.
  */
-export function useTownMissedLine(): string | null {
+export function useTownMissed(): TownMissed | null {
   const status = usePersistenceStatus();
   const missed = useSyncExternalStore(
     townStore.subscribe,
     townStore.getMissedSnapshot,
     () => null,
   );
-  return status === "recovered" ? (missed?.line ?? null) : null;
+  return status === "recovered" ? missed : null;
 }
 
 /**

@@ -17,7 +17,7 @@ import {
   journalTown,
   useTownStore,
   usePersistenceStatus,
-  useTownMissedLine,
+  useTownMissed,
   useTownBackend,
 } from "../lib/store";
 import { useJournalSender } from "../lib/library-journal";
@@ -238,8 +238,9 @@ export default function TownApp({
   // Changes still waiting on this device tell of a sign-in that ended
   // without ログアウト (which lets them go), even before this page opened.
   const waiting = useAnyOutboxWaiting(signedOut);
+  const missed = useTownMissed();
   const warning = saveWarning(savedIn, persistence, {
-    missed: useTownMissedLine(),
+    missed: missed?.line ?? null,
     lapsed:
       (signedOut && account.lapsed) || waiting ? lapsedLine(waiting) : null,
   });
@@ -269,6 +270,13 @@ export default function TownApp({
     const timer = setTimeout(() => setToast(null), toast.undo ? 8000 : 3500);
     return () => clearTimeout(timer);
   }, [toast]);
+  // A change the database turned away is told above (missed-changes.ts):
+  // the message that said it was done gives way, in the same frame. One with
+  // an undo stays, the only way back.
+  useLayoutEffect(() => {
+    if (missed?.line)
+      setToast((shown) => (shown && !shown.undo ? null : shown));
+  }, [missed]);
   const holdToast = useCallback(
     (held: boolean) =>
       setToast((shown) =>

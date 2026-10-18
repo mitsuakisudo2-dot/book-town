@@ -1564,6 +1564,8 @@ try {
       await expect(page.locator(".persistence-warning")).toHaveText(
         "便りを保存できませんでした。書きかけは残しています。",
       );
+      // What said it was posted gives way to what says it was not.
+      expect(await page.locator(".toast").count()).toBe(0);
       await expect(fab).toContainText("下書き");
       expect(await keptDraftKeys(POST_DRAFTS)).toEqual([user.id + ":new-post"]);
       // Turned away, it waits for nothing more.
