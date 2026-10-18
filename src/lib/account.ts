@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { handleProblem, normalizeHandle } from "./handles";
 import type { ProfileInsert, ProfileRow } from "./supabase/database.types";
+import { EMAIL_MAX_LENGTH } from "./types";
 import { counted, failure, AGAIN, KEPT, NOT_CONNECTED } from "./words";
 
 /** Sign-in sends a six-digit code by email; the reader types it back in. */
@@ -8,6 +9,8 @@ export const CODE_LENGTH = 6;
 /** The youngest age Booktown is offered to. */
 export const MINIMUM_AGE = 13;
 export const NAME_MAX_LENGTH = 40;
+/** How many passkeys one account can have (the auth server's own limit). */
+export const PASSKEY_LIMIT = 10;
 
 export interface AccountUser {
   id: string;
@@ -37,6 +40,8 @@ export type AccountState =
 
 export type AccountFailure =
   | "invalid-email"
+  | "same-email"
+  | "email-taken"
   | "not-invited"
   | "invalid-code"
   | "invalid-link"
@@ -46,10 +51,21 @@ export type AccountFailure =
   | "network"
   | "misconfigured"
   | "server"
-  | "leave-failed";
+  | "leave-failed"
+  | "passkey-cancelled"
+  | "passkey-unavailable"
+  | "passkey-unknown"
+  | "passkey-exists"
+  | "passkey-too-many"
+  | "passkey-expired"
+  | "passkey-failed";
 
 export const failureMessages: Record<AccountFailure, string> = {
   "invalid-email": failure({ next: "メールアドレスの形を確かめてください" }),
+  "same-email": failure({ what: "いまログインに使っているアドレスと同じです" }),
+  "email-taken": failure({
+    what: "このメールアドレスは、ほかのアカウントで使われています",
+  }),
   "not-invited": failure({
     what: "このメールアドレスは、まだ招待されていません",
     next: "招待を受けたアドレスで入ってください",
@@ -79,6 +95,30 @@ export const failureMessages: Record<AccountFailure, string> = {
     kept: KEPT.nothing,
     next: AGAIN.later,
   }),
+  // Closed by the reader in the browser's own window: nothing to say.
+  "passkey-cancelled": "",
+  "passkey-unavailable": failure({
+    what: "このページやブラウザでは、パスキーを使えません",
+  }),
+  "passkey-unknown": failure({
+    what: "このパスキーでは入れませんでした",
+    next: "ほかのパスキーを選ぶか、メールのコードで入ってください",
+  }),
+  "passkey-exists": failure({
+    what: "この端末のパスキーは、もう作ってあります",
+  }),
+  "passkey-too-many": failure({
+    what: `パスキーは${counted(PASSKEY_LIMIT, "個")}まで作れます`,
+    next: "使っていないものを消すと、作れます",
+  }),
+  "passkey-expired": failure({
+    what: "時間がたって、パスキーの確認が切れました",
+    next: AGAIN.now,
+  }),
+  "passkey-failed": failure({
+    what: "パスキーで確かめられませんでした",
+    next: AGAIN.now,
+  }),
 };
 
 /** The ID typed to confirm 退会 is not the reader's. */
@@ -87,12 +127,64 @@ export const LEAVE_HANDLE_MISMATCH =
 
 export type AccountResult = { ok: true } | { ok: false; message: string };
 
+/**
+ * A change of address, checked with the code sent to each address. The new
+ * address's code goes first, so the change is never made to an address
+ * nobody has read mail at. `field` is the code the message is about, and
+ * `newConfirmed` says the new address's code was taken (it works once).
+ */
+export type EmailChangeResult =
+  | { ok: true }
+  | {
+      ok: false;
+      message: string;
+      field: "new" | "current";
+      newConfirmed: boolean;
+    };
+
+/**
+ * A passkey the signed-in reader made. `name` is what keeps it (iCloud
+ * Keychain, Google Password Manager…), when the auth server knows.
+ */
+export interface Passkey {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export type PasskeysResult =
+  { ok: true; passkeys: Passkey[] } | { ok: false; message: string };
+
 /** The few calls the account needs, so tests can stand in for Supabase. */
 export interface AccountBackend {
   /** Calls the listener with the current user right away, then on every change. */
   onUserChange(listener: (user: AccountUser | null) => void): () => void;
   sendCode(email: string): Promise<AccountFailure | null>;
   verifyCode(email: string, code: string): Promise<AccountFailure | null>;
+  /**
+   * Asks to change the signed-in reader's address: a code goes to the new
+   * address, and one to the current address.
+   */
+  changeEmail(email: string): Promise<AccountFailure | null>;
+  /**
+   * Checks a code of a change of address, sent to `email`. `done` once the
+   * change is made; until then the other address's code is still to come.
+   */
+  confirmEmailChange(
+    email: string,
+    code: string,
+  ): Promise<{ done: boolean } | { failure: AccountFailure }>;
+  /**
+   * Signs in with a passkey kept by this device or a password manager: no
+   * address is asked, the passkey says whose it is.
+   */
+  signInWithPasskey(): Promise<AccountFailure | null>;
+  /** Makes a passkey for the signed-in reader, kept by this device. */
+  addPasskey(): Promise<AccountFailure | null>;
+  /** The signed-in reader's passkeys; throws when they cannot be read. */
+  listPasskeys(): Promise<Passkey[]>;
+  removePasskey(id: string): Promise<AccountFailure | null>;
   signOut(): Promise<void>;
   /**
    * Deletes the signed-in account and everything it owns (the database
@@ -109,7 +201,7 @@ export interface AccountBackend {
 export const normalizeEmail = (raw: string): string => raw.trim().toLowerCase();
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const validEmail = (email: string): boolean =>
-  email.length <= 254 && EMAIL_PATTERN.test(email);
+  email.length <= EMAIL_MAX_LENGTH && EMAIL_PATTERN.test(email);
 
 /**
  * A sign-in link from the email that did not work comes back with the reason
@@ -164,7 +256,7 @@ export function profileDraftProblem(draft: ProfileDraft): string | null {
   return profileDraftIssue(draft)?.message ?? null;
 }
 
-const failed = (reason: AccountFailure): AccountResult => ({
+const failed = (reason: AccountFailure): { ok: false; message: string } => ({
   ok: false,
   message: failureMessages[reason],
 });
@@ -239,13 +331,21 @@ export function createAccountStore(
     if (user) signedOut.mark(false);
     const current = userOf(state);
     // Token refreshes repeat the same user; their profile is already known.
+    // A changed address is taken as it is.
     if (
       !force &&
       user &&
       current?.id === user.id &&
       (state.status === "signed-in" || state.status === "needs-profile")
-    )
+    ) {
+      if (current.email !== user.email)
+        set(
+          state.status === "signed-in"
+            ? { ...state, user }
+            : { status: "needs-profile", user },
+        );
       return;
+    }
     if (!user && deleting) {
       outWhileDeleting = true;
       return;
@@ -338,6 +438,100 @@ export function createAccountStore(
       if (code.length !== CODE_LENGTH) return failed("invalid-code");
       if (!backend) return failed("network");
       const failure = await backend.verifyCode(email, code);
+      return failure ? failed(failure) : { ok: true };
+    },
+    /** Sends the codes for a change of the signed-in reader's address. */
+    async changeEmail(rawEmail: string): Promise<AccountResult> {
+      start();
+      const email = normalizeEmail(rawEmail);
+      if (!validEmail(email)) return failed("invalid-email");
+      if (!backend || state.status !== "signed-in") return failed("network");
+      if (email === normalizeEmail(state.user.email))
+        return failed("same-email");
+      const failure = await backend.changeEmail(email);
+      return failure ? failed(failure) : { ok: true };
+    },
+    /**
+     * Makes the change of address with its two codes: the new address's
+     * first (unless it was taken already), then the current address's.
+     */
+    async confirmEmailChange(change: {
+      email: string;
+      newCode: string;
+      currentCode: string;
+      newConfirmed: boolean;
+    }): Promise<EmailChangeResult> {
+      start();
+      let newConfirmed = change.newConfirmed;
+      const refuse = (
+        reason: AccountFailure,
+        field: "new" | "current",
+      ): EmailChangeResult => ({
+        ok: false,
+        message: failureMessages[reason],
+        field,
+        newConfirmed,
+      });
+      const email = normalizeEmail(change.email);
+      const newCode = normalizeCode(change.newCode);
+      const currentCode = normalizeCode(change.currentCode);
+      if (!newConfirmed && newCode.length !== CODE_LENGTH)
+        return refuse("invalid-code", "new");
+      if (currentCode.length !== CODE_LENGTH)
+        return refuse("invalid-code", "current");
+      if (!backend || state.status !== "signed-in")
+        return refuse("network", newConfirmed ? "current" : "new");
+      const current = normalizeEmail(state.user.email);
+      const steps: ["new" | "current", string, string][] = [
+        ["new", email, newCode],
+        ["current", current, currentCode],
+      ];
+      for (const [field, address, code] of steps) {
+        if (field === "new" && newConfirmed) continue;
+        const answer = await backend.confirmEmailChange(address, code);
+        if ("failure" in answer) return refuse(answer.failure, field);
+        if (answer.done) {
+          // The new session says so too; the page need not wait for it.
+          if (state.status === "signed-in")
+            set({ ...state, user: { ...state.user, email } });
+          return { ok: true };
+        }
+        if (field === "new") newConfirmed = true;
+      }
+      // The server still waits after both: the codes were sent again from
+      // somewhere else, so this page's count was behind. New codes, sent
+      // again, start over.
+      newConfirmed = false;
+      return refuse("invalid-code", "new");
+    },
+    /** Signs in with a passkey; the session it starts is told as usual. */
+    async signInWithPasskey(): Promise<AccountResult> {
+      start();
+      if (!backend) return failed("network");
+      const failure = await backend.signInWithPasskey();
+      return failure ? failed(failure) : { ok: true };
+    },
+    /** Makes a passkey for the signed-in reader on this device. */
+    async addPasskey(): Promise<AccountResult> {
+      start();
+      if (!backend || state.status !== "signed-in") return failed("network");
+      const failure = await backend.addPasskey();
+      return failure ? failed(failure) : { ok: true };
+    },
+    async listPasskeys(): Promise<PasskeysResult> {
+      start();
+      if (!backend || state.status !== "signed-in") return failed("network");
+      try {
+        const passkeys = await backend.listPasskeys();
+        return { ok: true, passkeys };
+      } catch {
+        return failed("network");
+      }
+    },
+    async removePasskey(id: string): Promise<AccountResult> {
+      start();
+      if (!backend || state.status !== "signed-in") return failed("network");
+      const failure = await backend.removePasskey(id);
       return failure ? failed(failure) : { ok: true };
     },
     async createProfile(draft: ProfileDraft): Promise<AccountResult> {

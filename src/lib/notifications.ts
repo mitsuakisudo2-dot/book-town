@@ -1,4 +1,5 @@
 import { activeSession, readersNow } from "./reading";
+import { japanFormat, weekOf } from "./japan-time";
 import { bookPath } from "./books";
 import {
   bookById,
@@ -17,7 +18,15 @@ import {
   type TownState,
 } from "./types";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
-import { postPath, posterPath, profilePath, shopPath } from "./paths";
+import {
+  myShopPath,
+  notificationsPath,
+  postPath,
+  posterPath,
+  profilePath,
+  readingPath,
+  shopPath,
+} from "./paths";
 import { letterPageOf, postPageOf } from "./letter";
 import { posterTitle, type Poster } from "./posters";
 import { coverHidden } from "./hidden-words";
@@ -33,16 +42,10 @@ export interface Notice {
   href: string;
 }
 
-/** The Monday (Japan time) of the week a moment falls in, as YYYY-MM-DD. */
-export function weekOf(at: string): string {
-  const japan = new Date(Date.parse(at) + 9 * 3_600_000);
-  japan.setUTCDate(japan.getUTCDate() - ((japan.getUTCDay() + 6) % 7));
-  return japan.toISOString().slice(0, 10);
-}
+export { weekOf };
 
 /** A day as 10月13日, in Japan time. */
-const dayWords = new Intl.DateTimeFormat("ja-JP", {
-  timeZone: "Asia/Tokyo",
+const dayWords = japanFormat({
   month: "long",
   day: "numeric",
 });
@@ -178,7 +181,7 @@ export function notificationsFor(
         href: pageOr(
           state,
           parent,
-          parent.bookId ? bookPath(parent.bookId) : "/profiles/me/",
+          parent.bookId ? bookPath(parent.bookId) : profilePath("me"),
         ),
       });
   }
@@ -197,7 +200,7 @@ export function notificationsFor(
       href: pageOr(
         state,
         post,
-        post.parentId && bookId ? bookPath(bookId) : "/profiles/me/",
+        post.parentId && bookId ? bookPath(bookId) : profilePath("me"),
       ),
     });
   }
@@ -209,7 +212,7 @@ export function notificationsFor(
         readerId: ME_ID,
         createdAt: post.createdAt,
         text: `あなたの感想で、${wanted}が${quoteTitle(title(post.bookId))}を読みたくなりました`,
-        href: post.bookId ? bookPath(post.bookId) : "/profiles/me/",
+        href: post.bookId ? bookPath(post.bookId) : profilePath("me"),
       });
   }
   // いいね: one notice per post, by how many readers, never how many taps.
@@ -236,7 +239,7 @@ export function notificationsFor(
       href: pageOr(
         state,
         post,
-        post.bookId ? bookPath(post.bookId) : "/profiles/me/",
+        post.bookId ? bookPath(post.bookId) : profilePath("me"),
       ),
     });
   }
@@ -324,7 +327,7 @@ export function notificationsFor(
             ? posterPath(id)
             : post?.bookId
               ? bookPath(post.bookId)
-              : "/profiles/me/",
+              : profilePath("me"),
     });
   }
   // The reader's own reports: when the operator starts looking, and when they
@@ -350,7 +353,7 @@ export function notificationsFor(
                 ? "確認しました。知らせてくださって、ありがとうございます"
                 : "確認しています"
             }`,
-      href: "/notifications/#reports",
+      href: notificationsPath("reports"),
     });
   }
   for (const message of state.shopMessages)
@@ -359,7 +362,7 @@ export function notificationsFor(
       readerId: message.readerId,
       createdAt: message.at,
       text: `${name(message.readerId)}さんが、あなたの本屋にひとことを残しました ${quote(message.text)}`,
-      href: "/my-shop/#messages",
+      href: myShopPath({ at: "messages" }),
     });
   // Someone else finished a book the viewer finished too (of its work): a
   // reader to meet.
@@ -411,7 +414,7 @@ export function notificationsFor(
           readerId: entry.readerId,
           createdAt: active.startedAt,
           text: `${name(entry.readerId)}さんも今${quoteTitle(title(entry.bookId))}を読んでいます`,
-          href: "/reading/",
+          href: readingPath(),
         });
   return notices
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))

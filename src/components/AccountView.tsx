@@ -1,10 +1,17 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   CODE_LENGTH,
   MINIMUM_AGE,
   NAME_MAX_LENGTH,
+  type Passkey,
   failureMessages,
   linkFailure,
   normalizeCode,
@@ -16,10 +23,14 @@ import { accountActions, useAccountState } from "../lib/account-session";
 import {
   HANDLE_FIELD_MAX_LENGTH,
   SENT_CODE,
+  emailChangeStore,
   profileWorkStore,
   sentCodeStore,
   type ProfileWork,
 } from "../lib/account-draft";
+import { EMAIL_MAX_LENGTH } from "../lib/types";
+import { shortDate } from "../lib/japan-time";
+import { useUrlParam } from "../lib/url-state";
 import { useKeptDraft } from "../lib/kept-draft";
 import { adoptVisitorRecords } from "../lib/record-draft";
 import { adoptVisitorPosts } from "../lib/post-draft";
@@ -80,6 +91,8 @@ export default function AccountView() {
         {account.status === "unavailable" && <Unavailable />}
         {account.status === "signed-in" && (
           <SignedIn
+            userId={account.user.id}
+            email={account.user.email}
             handle={account.profile.handle}
             name={account.profile.name}
           />
@@ -148,6 +161,20 @@ function SignIn() {
     setCode("");
   }
 
+  // A passkey says whose it is: no address to type, no code to wait for.
+  // Its own line: a passkey's failure is not about the address field.
+  const [passkeyError, setPasskeyError] = useState("");
+  async function signInWithPasskey() {
+    setBusy(true);
+    setError("");
+    setPasskeyError("");
+    const result = await accountActions.signInWithPasskey();
+    // Signed in, the page waits for the profile with nothing to press.
+    if (result.ok) return;
+    setBusy(false);
+    setPasskeyError(result.message);
+  }
+
   async function verify(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -183,7 +210,7 @@ function SignIn() {
             autoCapitalize="none"
             spellCheck={false}
             required
-            maxLength={254}
+            maxLength={EMAIL_MAX_LENGTH}
             value={email}
             onChange={(event) => setTyped(event.target.value)}
             aria-describedby={error ? "account-error" : undefined}
@@ -193,6 +220,18 @@ function SignIn() {
             {busy ? "送っています…" : "コードを送る"}
           </button>
         </form>
+        {passkeysPossible() && (
+          <button
+            type="button"
+            className="btn account-passkey-in"
+            onClick={() => void signInWithPasskey()}
+            disabled={busy}
+          >
+            <Icon name="lock" size={18} />
+            パスキーでログイン
+          </button>
+        )}
+        <ErrorLine id="account-passkey-error" message={passkeyError} />
       </>
     );
 
@@ -411,7 +450,33 @@ function Unavailable() {
   );
 }
 
-function SignedIn({ handle, name }: { handle: string; name: string }) {
+function SignedIn({
+  userId,
+  email,
+  handle,
+  name,
+}: {
+  userId: string;
+  email: string;
+  handle: string;
+  name: string;
+}) {
+  // 「メールアドレスを変える」 is open while the address says so (設定 opens it).
+  const [change, setChange] = useUrlParam("change");
+  // The address just changed to, said once below it.
+  const [changedTo, setChangedTo] = useState("");
+  if (change === "email")
+    return (
+      <ChangeEmail
+        userId={userId}
+        current={email}
+        onClose={(changed) => {
+          setChangedTo(changed ?? "");
+          setChange(null);
+        }}
+      />
+    );
+  if (change === "passkey") return <Passkeys onClose={() => setChange(null)} />;
   return (
     <>
       <h1>ログインしています</h1>
@@ -421,7 +486,393 @@ function SignedIn({ handle, name }: { handle: string; name: string }) {
       <Link className="btn fill" href="/">
         本の街へ
       </Link>
+      <div className="account-email">
+        <span>ログインのメールアドレス</span>
+        <b>{email}</b>
+        <button type="button" onClick={() => setChange("email")}>
+          変える
+        </button>
+      </div>
+      {changedTo === email && (
+        <p className="account-changed" role="status">
+          メールアドレスを変えました。次からは、このアドレスにログインのコードが届きます。
+        </p>
+      )}
+      <div className="account-row">
+        <span>メールのコードなしでログイン</span>
+        <b>パスキー</b>
+        <button type="button" onClick={() => setChange("passkey")}>
+          開く
+        </button>
+      </div>
       <SignOut leave />
+    </>
+  );
+}
+
+/**
+ * Changing the address takes two codes: one sent to the new address (it
+ * reads mail) and one to the current address (its owner asked). The step
+ * reached is kept for this tab like the sign-in's (account-draft.ts).
+ */
+function ChangeEmail({
+  userId,
+  current,
+  onClose,
+}: {
+  userId: string;
+  current: string;
+  /** With the new address once it is changed; empty when given up. */
+  onClose: (changedTo?: string) => void;
+}) {
+  const sent = useKeptDraft(emailChangeStore, userId);
+  const sentTo = sent.draft?.email ?? "";
+  const newConfirmed = sent.draft?.newConfirmed ?? false;
+  const [typed, setTyped] = useState<string | null>(null);
+  const email = typed ?? sentTo;
+  const [newCode, setNewCode] = useState("");
+  const [currentCode, setCurrentCode] = useState("");
+  const [error, setError] = useState<{
+    message: string;
+    field: "email" | "new" | "current";
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const coarse = useCoarsePointer();
+  const heading = useRef<HTMLHeadingElement>(null);
+  const emailField = useRef<HTMLInputElement>(null);
+  const newField = useRef<HTMLInputElement>(null);
+  const currentField = useRef<HTMLInputElement>(null);
+  // Until this tab's kept step is read, neither step is shown (a reload in
+  // the middle of a change would show the address form for a moment).
+  useFocusFieldOnShow(emailField, {
+    instead: heading,
+    when: sent.loaded && !sentTo,
+  });
+  useFocusFieldOnShow(newConfirmed ? currentField : newField, {
+    instead: heading,
+    when: sent.loaded && Boolean(sentTo),
+  });
+
+  async function send(event?: FormEvent) {
+    event?.preventDefault();
+    setBusy(true);
+    setError(null);
+    const result = await accountActions.changeEmail(email);
+    setBusy(false);
+    if (!result.ok) {
+      setError({ message: result.message, field: "email" });
+      if (coarse) markField(emailField.current);
+      return;
+    }
+    // New codes went to both addresses; none is taken yet.
+    sent.set({
+      email: normalizeEmail(email),
+      sentAt: Date.now(),
+      newConfirmed: false,
+    });
+    setNewCode("");
+    setCurrentCode("");
+  }
+
+  async function confirm(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    const result = await accountActions.confirmEmailChange({
+      email: sentTo,
+      newCode,
+      currentCode,
+      newConfirmed,
+    });
+    setBusy(false);
+    if (result.ok) {
+      sent.clear();
+      onClose(sentTo);
+      return;
+    }
+    if (result.newConfirmed !== newConfirmed)
+      sent.set({
+        email: sentTo,
+        sentAt: sent.draft?.sentAt ?? Date.now(),
+        newConfirmed: result.newConfirmed,
+      });
+    setError({ message: result.message, field: result.field });
+    if (coarse)
+      markField(
+        result.field === "new" ? newField.current : currentField.current,
+      );
+  }
+
+  const describe = (field: "email" | "new" | "current") =>
+    error?.field === field ? "account-error" : undefined;
+
+  if (!sent.loaded) return null;
+  if (!sentTo)
+    return (
+      <>
+        <h1 ref={heading} tabIndex={-1}>
+          メールアドレスを変える
+        </h1>
+        <p className="account-lead">
+          いまは <b>{current}</b>{" "}
+          でログインしています。新しいアドレスと今のアドレスに、{CODE_LENGTH}
+          桁のコードを1通ずつ送ります。
+        </p>
+        <form className="profile-form" onSubmit={send} noValidate={coarse}>
+          <label htmlFor="account-new-email">新しいメールアドレス</label>
+          <input
+            id="account-new-email"
+            ref={emailField}
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            maxLength={EMAIL_MAX_LENGTH}
+            value={email}
+            onChange={(event) => setTyped(event.target.value)}
+            aria-describedby={describe("email")}
+          />
+          <ErrorLine message={error?.message ?? ""} />
+          <button className="btn fill" disabled={busy || !email.trim()}>
+            {busy ? "送っています…" : "コードを送る"}
+          </button>
+        </form>
+        <div className="account-links">
+          <button type="button" onClick={() => onClose()}>
+            やめる
+          </button>
+        </div>
+      </>
+    );
+
+  return (
+    <>
+      <h1 ref={heading} tabIndex={-1}>
+        届いたコードを入れる
+      </h1>
+      <p className="account-lead">
+        2つのアドレスに、{CODE_LENGTH}
+        桁のコードを1通ずつ送りました。届かないときは、迷惑メールのフォルダに入っていることもあります。
+      </p>
+      <form className="profile-form" onSubmit={confirm} noValidate={coarse}>
+        <label htmlFor="account-new-code" className="account-code-label">
+          新しいアドレス
+          <b>{sentTo}</b>
+        </label>
+        {newConfirmed ? (
+          <p className="account-code-done">
+            <Icon name="check" size={16} /> 確かめました
+          </p>
+        ) : (
+          <input
+            id="account-new-code"
+            ref={newField}
+            className="account-code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9 ]*"
+            required
+            value={newCode}
+            onChange={(event) => setNewCode(normalizeCode(event.target.value))}
+            aria-describedby={describe("new")}
+          />
+        )}
+        <label htmlFor="account-current-code" className="account-code-label">
+          今のアドレス
+          <b>{current}</b>
+        </label>
+        <input
+          id="account-current-code"
+          ref={currentField}
+          className="account-code"
+          inputMode="numeric"
+          autoComplete="off"
+          pattern="[0-9 ]*"
+          required
+          value={currentCode}
+          onChange={(event) =>
+            setCurrentCode(normalizeCode(event.target.value))
+          }
+          aria-describedby={describe("current")}
+        />
+        <ErrorLine message={error?.message ?? ""} />
+        <button
+          className="btn fill"
+          disabled={
+            busy ||
+            (!newConfirmed && newCode.length !== CODE_LENGTH) ||
+            currentCode.length !== CODE_LENGTH
+          }
+        >
+          {busy ? "確かめています…" : "メールアドレスを変える"}
+        </button>
+      </form>
+      <div className="account-links">
+        <button type="button" onClick={() => send()} disabled={busy}>
+          コードを送り直す
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setTyped(sentTo);
+            sent.clear();
+            setError(null);
+          }}
+        >
+          アドレスを入れ直す
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            sent.clear();
+            onClose();
+          }}
+        >
+          やめる
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** Whether this browser can make and use passkeys at all. */
+const passkeysPossible = () =>
+  typeof window !== "undefined" &&
+  typeof window.PublicKeyCredential === "function";
+
+/**
+ * The reader's passkeys: each signs in without the email code, from the
+ * device or password manager that keeps it, so a lost mailbox does not lock
+ * them out. One is made on this device; any can be removed.
+ */
+function Passkeys({ onClose }: { onClose: () => void }) {
+  const [passkeys, setPasskeys] = useState<Passkey[] | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [made, setMade] = useState(false);
+  // The passkey whose removal is being asked about.
+  const [asking, setAsking] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
+
+  const load = useCallback(async () => {
+    setLoadError("");
+    const result = await accountActions.listPasskeys();
+    if (result.ok) setPasskeys(result.passkeys);
+    else setLoadError(result.message);
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function add() {
+    setBusy(true);
+    setError("");
+    setMade(false);
+    const result = await accountActions.addPasskey();
+    setBusy(false);
+    if (!result.ok) return setError(result.message);
+    setMade(true);
+    await load();
+  }
+
+  async function remove(id: string) {
+    setBusy(true);
+    setError("");
+    setMade(false);
+    const result = await accountActions.removePasskey(id);
+    setBusy(false);
+    setAsking(null);
+    if (!result.ok) setError(result.message);
+    await load();
+  }
+
+  return (
+    <>
+      <h1 ref={heading} tabIndex={-1}>
+        パスキー
+      </h1>
+      <p className="account-lead">
+        パスキーがあれば、メールのコードを待たずに、指紋や顔、端末の画面ロックでログインできます。メールが読めなくなったときも、パスキーで入れます。
+      </p>
+      {loadError ? (
+        <>
+          <ErrorLine message={loadError} />
+          <button type="button" className="btn" onClick={() => void load()}>
+            もう一度読み込む
+          </button>
+        </>
+      ) : passkeys === null ? (
+        <p className="account-lead">読み込んでいます…</p>
+      ) : (
+        passkeys.length > 0 && (
+          <ul className="account-passkeys">
+            {passkeys.map((passkey) => (
+              <li key={passkey.id}>
+                <b>{passkey.name || "パスキー"}</b>
+                <span>
+                  {shortDate(passkey.createdAt)}に作成
+                  {passkey.lastUsedAt &&
+                    `・${shortDate(passkey.lastUsedAt)}に使用`}
+                </span>
+                {asking === passkey.id ? (
+                  <span className="account-passkey-ask" role="group">
+                    消すと、このパスキーではログインできなくなります。
+                    <span>
+                      <button
+                        type="button"
+                        onClick={() => void remove(passkey.id)}
+                        disabled={busy}
+                      >
+                        消す
+                      </button>
+                      <button type="button" onClick={() => setAsking(null)}>
+                        残す
+                      </button>
+                    </span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="account-passkey-remove"
+                    onClick={() => setAsking(passkey.id)}
+                    disabled={busy}
+                  >
+                    消す
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )
+      )}
+      {made && (
+        <p className="account-changed" role="status">
+          パスキーを作りました。次からは、ログインの画面で「パスキーでログイン」を選べます。
+        </p>
+      )}
+      <ErrorLine message={error} />
+      {passkeysPossible() ? (
+        <button
+          type="button"
+          // Once there is one, another is there to make, not asked for.
+          className={passkeys?.length ? "btn" : "btn fill"}
+          onClick={() => void add()}
+          disabled={busy || passkeys === null}
+        >
+          {busy ? "確かめています…" : "この端末でパスキーを作る"}
+        </button>
+      ) : (
+        <p className="account-lead">このブラウザでは、パスキーを作れません。</p>
+      )}
+      <div className="account-links">
+        <button type="button" onClick={onClose}>
+          戻る
+        </button>
+      </div>
     </>
   );
 }
@@ -471,10 +922,16 @@ function SignOut({ leave = false }: { leave?: boolean }) {
   );
 }
 
-function ErrorLine({ message }: { message: string }) {
+function ErrorLine({
+  message,
+  id = "account-error",
+}: {
+  message: string;
+  id?: string;
+}) {
   if (!message) return null;
   return (
-    <p id="account-error" className="profile-link-error" role="alert">
+    <p id={id} className="profile-link-error" role="alert">
       {message}
     </p>
   );

@@ -12,7 +12,7 @@ import {
 } from "../../lib/types";
 import { Icon, ReaderAvatar } from "../ui";
 import { WoodenShelf } from "../WoodenShelf";
-import { profilePath, shopPath, walkPath } from "../../lib/paths";
+import { myShopPath, profilePath, shopPath, walkPath } from "../../lib/paths";
 import { useTownBackend } from "../../lib/store";
 import { bookById, quotedTitle } from "../../lib/book-name";
 import type { Shared } from "./Letters";
@@ -116,7 +116,7 @@ export function ShopFront({
             </Link>
           )}
           {shop.ownerId === ME_ID ? (
-            <Link href="/my-shop/" className="street-follow">
+            <Link href={myShopPath()} className="street-follow">
               <Icon name="edit" size={14} />
               棚を整える
             </Link>

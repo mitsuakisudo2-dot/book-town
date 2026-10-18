@@ -131,3 +131,129 @@
   line-height: 1.7;
   color: var(--lamp);
 }
+.account-email,
+.account-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+}
+.account-email span,
+.account-row span {
+  grid-column: 1 / -1;
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+}
+.account-email b,
+.account-row b {
+  font-size: var(--t-meta);
+  font-weight: 500;
+  word-break: break-all;
+}
+.account-email button,
+.account-row button {
+  border: 0;
+  background: none;
+  padding: 8px 0 8px 8px;
+  font-size: var(--t-meta);
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.account-changed {
+  font-size: var(--t-cap);
+  line-height: 1.8;
+  color: var(--ink-2);
+}
+.profile-form .account-code-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--t-cap);
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.account-code-label b {
+  font-size: var(--t-meta);
+  font-weight: 500;
+  color: var(--ink);
+  word-break: break-all;
+}
+.account-code-done {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: var(--t-meta);
+  color: var(--green);
+}
+.account-passkey-in {
+  justify-content: center;
+}
+.account-passkeys {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.account-passkeys li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+}
+.account-passkeys b {
+  font-size: var(--t-meta);
+  font-weight: 500;
+  word-break: break-word;
+}
+.account-passkeys li > span:not(.account-passkey-ask) {
+  grid-column: 1;
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+}
+.account-passkey-remove {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.account-passkey-ask {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: var(--t-cap);
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+.account-passkey-ask > span {
+  display: flex;
+  gap: 16px;
+}
+.account-passkeys button {
+  border: 0;
+  background: none;
+  padding: 8px 0 8px 8px;
+  font-size: var(--t-meta);
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.account-passkey-ask button {
+  padding: 8px 0;
+}
+.account-passkeys button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

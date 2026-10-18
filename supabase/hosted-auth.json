@@ -23,5 +23,16 @@
   "magicLink": {
     "subject": "BookTown のログインコード",
     "template": "templates/magic_link.html"
+  },
+  "emailChange": {
+    "confirmBoth": true,
+    "subject": "BookTown のメールアドレスの変更",
+    "template": "templates/email_change.html"
+  },
+  "passkey": {
+    "enabled": true,
+    "relyingParty": "booktown.page",
+    "name": "BookTown",
+    "origins": ["https://booktown.page", "https://www.booktown.page"]
   }
 }

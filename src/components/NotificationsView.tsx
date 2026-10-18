@@ -15,6 +15,7 @@ import { findReader, formatPostTime } from "../lib/social";
 import { useClock } from "./useClock";
 import { Icon, ReaderAvatar } from "./ui";
 import "./reading.css";
+import { myShopPath, walkPath } from "../lib/paths";
 
 type Shared = {
   state: TownState;
@@ -78,11 +79,11 @@ export function NotificationsView({ state, actions }: Shared) {
           </p>
           <div className="empty-state-actions">
             {!state.ownShop && (
-              <Link className="btn fill" href="/my-shop/">
+              <Link className="btn fill" href={myShopPath()}>
                 本屋を開く
               </Link>
             )}
-            <Link className="btn" href="/walk/">
+            <Link className="btn" href={walkPath()}>
               書店めぐりに出かける
             </Link>
           </div>

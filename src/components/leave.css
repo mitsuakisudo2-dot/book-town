@@ -35,7 +35,21 @@
   font-size: var(--t-cap);
 }
 .leave-entry .btn {
+  display: flex;
   margin-left: -18px;
+}
+.leave-entry-email {
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0;
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+}
+.leave-entry-email b {
+  font-size: var(--t-meta);
+  font-weight: 500;
+  color: var(--ink);
+  word-break: break-all;
 }
 
 /* ログインの画面: 退会 beside ログアウト, in the same quiet words. */
