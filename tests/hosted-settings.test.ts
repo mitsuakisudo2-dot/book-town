@@ -1291,6 +1291,25 @@ async function main() {
       const none = await run("scripts/watch.mjs", ["backups"], {});
       assert.equal(none.code, 0);
       assert.match(none.output, /::warning::SUPABASE_ACCESS_TOKEN/);
+      const refusing = await standIn(() => ({
+        status: 403,
+        body: { message: "Missing required permission(s): database_read" },
+      }));
+      const refusedEnv = { ...env, SUPABASE_API_URL: refusing.url };
+      const tried = await run("scripts/watch.mjs", ["usage"], refusedEnv);
+      assert.equal(tried.code, 0, tried.output);
+      assert.match(tried.output, /::warning::.*Backups and Database read/);
+      const watched = await run("scripts/watch.mjs", ["usage"], {
+        ...refusedEnv,
+        REPORT_ISSUES: "on",
+      });
+      assert.equal(watched.code, 1, watched.output);
+      const freeBackups = await run("scripts/watch.mjs", ["backups"], {
+        ...refusedEnv,
+        REPORT_ISSUES: "on",
+      });
+      assert.equal(freeBackups.code, 0, freeBackups.output);
+      await refusing.close();
       const odd = await run(
         "scripts/watch.mjs",
         ["report", "nothing", "ok"],

@@ -363,7 +363,21 @@ async function main(action, kind, outcome) {
         }
       }
     } catch (error) {
-      result = { ok: false, lines: [error.message] };
+      const refused = error.status === 401 || error.status === 403;
+      const lines = [error.message];
+      if (refused)
+        lines.push(
+          `The token may not read the ${action}. Give SUPABASE_ACCESS_TOKEN Backups and Database read access (docs/09「毎日の控えと見張り」).`,
+        );
+      // A pull request only tries the watch, and a free plan has no backups
+      // to miss: a refused token there is a warning, not a red check.
+      const quiet =
+        refused &&
+        (process.env.REPORT_ISSUES !== "on" ||
+          (action === "backups" && config.plan === "free"));
+      result = quiet
+        ? { ok: true, lines: lines.map((line) => `::warning::${line}`) }
+        : { ok: false, lines };
     }
   } else if (
     action === "report" &&
