@@ -1892,7 +1892,7 @@
     gap: 1px;
   }
   .town-bottom-nav span {
-    font-size: var(--t-cap);
+    font-size: var(--frame-tab);
   }
 }
 /* Wide screens: the owner and the page turner sit beside the store. */

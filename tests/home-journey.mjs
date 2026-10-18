@@ -2763,7 +2763,11 @@ try {
           await page.evaluate(() =>
             JSON.parse(localStorage.getItem("book-town-appearance-v1")),
           ),
-        ).toEqual({ palette: "green", brightness: "system" });
+        ).toEqual({
+          palette: "green",
+          brightness: "system",
+          text: "normal",
+        });
         await page.keyboard.press("Escape");
       }),
   );

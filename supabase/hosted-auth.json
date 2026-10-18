@@ -7,6 +7,11 @@
     "length": 6,
     "expiresInSeconds": 600
   },
+  "limits": {
+    "codeRequestsPer5Minutes": 30,
+    "codeChecksPer5Minutes": 30,
+    "sessionRefreshesPer5Minutes": 150
+  },
   "email": {
     "smtpHost": "smtp.resend.com",
     "smtpPort": 465,

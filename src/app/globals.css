@@ -1568,8 +1568,9 @@ div.book-jacket:hover {
   }
   .mobile-brand span {
     font-family: Georgia, serif;
-    font-size: var(--t-head);
+    font-size: var(--frame-mark);
     letter-spacing: -0.5px;
+    white-space: nowrap;
   }
   .top-search {
     justify-content: flex-end;
@@ -1639,7 +1640,7 @@ div.book-jacket:hover {
     color: var(--green);
   }
   .town-bottom-nav span {
-    font-size: var(--t-cap);
+    font-size: var(--frame-tab);
   }
   /* On a narrow phone six equal tabs are narrower than 書店めぐり and
      ライブラリ, so each tab takes its name's width and shares the room left. */
@@ -1913,7 +1914,7 @@ div.book-jacket:hover {
     gap: 12px;
   }
   .mobile-brand span {
-    font-size: var(--t-title);
+    font-size: var(--frame-mark-narrow);
   }
   .mobile-brand > svg {
     width: 22px;

@@ -1,0 +1,85 @@
+name: Watch production
+
+# Watches https://booktown.page and the Supabase project (scripts/watch.mjs,
+# settings in scripts/watch.json). Every 15 minutes: the pages open and
+# Supabase is healthy. Every morning at 06:17 Japan time: the daily backup is
+# recent, how much of the plan is used (in the run's summary), and a visitor's
+# walk through the production site (tests/production-journey.mjs). A failure
+# opens an issue that mentions the owner, so GitHub emails them; the next
+# passing run closes it. Needs SUPABASE_ACCESS_TOKEN and SUPABASE_PROJECT_ID;
+# without them only the site is checked. Pull requests that change the watch
+# run it once without opening issues.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+    - cron: "17 21 * * *"
+  workflow_dispatch:
+    inputs:
+      check:
+        description: site checks the pages and Supabase; daily also checks the backups and usage and walks through the site
+        type: choice
+        options: [site, daily]
+        default: daily
+  pull_request:
+    paths:
+      - scripts/watch.mjs
+      - scripts/watch.json
+      - tests/production-journey.mjs
+      - .github/workflows/watch.yml
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: watch-${{ github.event_name == 'pull_request' && github.head_ref || github.event.schedule || inputs.check }}
+  cancel-in-progress: false
+
+env:
+  SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+  SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  REPORT_ISSUES: ${{ github.event_name == 'pull_request' && 'off' || 'on' }}
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/watch.mjs site
+
+  daily:
+    if: github.event.schedule == '17 21 * * *' || inputs.check == 'daily' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: The daily backup is recent
+        if: always()
+        run: node scripts/watch.mjs backups
+      - name: How much of the plan is used
+        if: always()
+        run: node scripts/watch.mjs usage
+      - run: pnpm install --frozen-lockfile
+        if: always()
+      - run: pnpm exec playwright install --with-deps chromium
+        if: always()
+      - name: A visitor's walk through the production site
+        id: journey
+        if: always()
+        run: node tests/production-journey.mjs
+      - name: Tell about the walk
+        if: always() && (steps.journey.outcome == 'success' || steps.journey.outcome == 'failure')
+        run: node scripts/watch.mjs report journey "$OUTCOME"
+        env:
+          OUTCOME: ${{ steps.journey.outcome == 'success' && 'ok' || 'failed' }}
