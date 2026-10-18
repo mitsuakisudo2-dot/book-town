@@ -374,6 +374,14 @@ try {
       await shelf
         .locator(".editor-selected-book textarea")
         .fill("理解できないもののそばに、静かに立ってみたい夜に。");
+      // The book pressed opens in a sheet over the page (AUD-054); closing
+      // it gives the shelf back to drag.
+      const sheet = page.getByRole("dialog", { name: /.+/ }).filter({
+        has: page.locator(".editor-selected-book"),
+      });
+      await expect(sheet).toBeVisible();
+      await sheet.getByRole("button", { name: "閉じる", exact: true }).click();
+      await expect(sheet).toHaveCount(0);
       await expect(shelf.locator(".shelf-book").first()).toHaveAttribute(
         "data-display",
         "face",
@@ -416,7 +424,14 @@ try {
       ]);
       expect(after[2].pop).toContain("理解できないもの");
       reorderedBookId = after[2].bookId;
-      await shelf.locator(".shelf-book-button").last().click();
+      // The drop settles before a press opens the book's sheet: a click
+      // while the dragged book is still landing is the drag's own.
+      await expect(async () => {
+        await shelf.locator(".shelf-book-button").last().click();
+        await expect(shelf.locator(".editor-selected-book")).toBeVisible({
+          timeout: 1000,
+        });
+      }).toPass();
       await shelf
         .locator(".editor-selected-book")
         .getByRole("button", { name: /^背表紙/ })
@@ -425,6 +440,8 @@ try {
         "aria-valuenow",
         "3",
       );
+      await page.keyboard.press("Escape");
+      await expect(shelf.locator(".editor-selected-book")).toHaveCount(0);
     },
   );
   await check(
@@ -514,6 +531,7 @@ try {
           .locator(".editor-selected-book")
           .getByRole("button", { name: /^面陳/ }),
       ).toBeDisabled();
+      await page.keyboard.press("Escape");
       const dialog = await openEditor();
       await dialog.getByRole("button", { name: /^面陳/ }).click();
       await expect(dialog.locator(".editor-capacity-warning")).toBeVisible();
@@ -586,15 +604,15 @@ try {
       await expect(page.locator(".shop-shelf-index")).not.toContainText(
         "まだ内緒",
       );
-      const popBook = page
-        .locator(".shelf-book-button")
-        .filter({ hasText: "ソラリス" });
+      // The book given a POP above (the picker offers the reader's own
+      // books first, so which one it is follows the demo's library).
+      const popBook = page.locator('.shelf-book-button[aria-label*="POPあり"]');
       await popBook.click();
       await expect(
         page.getByRole("dialog").locator(".owner-pop .bh-pop-page.is-current"),
       ).toContainText("理解できないもの");
       await page.getByRole("link", { name: "作品のページを開く" }).click();
-      await expect(page).toHaveURL(/\/books\/solaris\/$/);
+      await expect(page).toHaveURL(new RegExp(`/books/${reorderedBookId}/$`));
       const own = page.locator(".stockist").filter({
         has: page.getByRole("heading", {
           name: "夜と寄り道書房",

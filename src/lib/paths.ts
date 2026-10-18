@@ -49,5 +49,11 @@ export function posterNewPath(
 export const libraryPath = (options: { makeShelf?: boolean } = {}): string =>
   options.makeShelf ? "/library/?make=shelf" : "/library/";
 
-/** The reader's own shop, or the door to open one. */
-export const myShopPath = (): string => "/my-shop/";
+/**
+ * The reader's own shop, or the door to open one; `place` opens it with that
+ * book chosen, ready to put on a shelf (管理表 103).
+ */
+export const myShopPath = (options: { place?: string } = {}): string =>
+  options.place
+    ? "/my-shop/?place=" + encodeURIComponent(options.place)
+    : "/my-shop/";

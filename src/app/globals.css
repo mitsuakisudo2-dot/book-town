@@ -423,6 +423,29 @@ input[type="checkbox"] {
 .modal.wide {
   max-width: 650px;
 }
+/* A sheet from the bottom (Modal's `fromBottom`): on a phone it rises from the
+   bottom edge, the page above still in sight; wider, the card it always is. */
+@media (max-width: 720px) {
+  .modal-backdrop.is-sheet {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal.is-sheet {
+    max-width: none;
+    max-height: 76dvh;
+    border-radius: var(--r-card) var(--r-card) 0 0;
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
+    animation: sheet-up var(--dur-enter) var(--ease-standard);
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
 /* A sheet for writing (Modal's `writing`, useWritingSheet.ts). With a finger
    it is as tall as what the keyboard leaves (--vv-top and --vv-height, set
    while a field in it has the focus): the title at the top, its buttons (the

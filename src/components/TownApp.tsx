@@ -64,6 +64,7 @@ import {
   searchPath,
   shopPath,
   walkPath,
+  myShopPath,
 } from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
 import { requestSearch } from "../lib/tags";
@@ -111,7 +112,7 @@ import {
 import type { Bibliography } from "../lib/bibliography";
 import { useBibliography, useBookHolds } from "../lib/bibliography-session";
 import { HeldBook } from "./HeldBook";
-import { counted, TABS, whenSome } from "../lib/words";
+import { counted, PLACE, TABS, whenSome } from "../lib/words";
 
 // Every screen but Home comes in its own file, read when it is first shown
 // (and after Home is drawn, below), so a phone opening the town reads and
@@ -1183,6 +1184,7 @@ function BookView({
             actions={actions}
             notify={notify}
             register
+            toShop
           />
           <span className="jacket-disclaimer">{bookNote(book)}</span>
         </div>
@@ -1242,8 +1244,8 @@ function BookView({
           <div className="empty-state">
             <h3>この本の、最初の居場所を。</h3>
             <p>あなたの書店に並べて、POPを書いてみませんか。</p>
-            <Link href="/my-shop/" className="btn">
-              自分の書店へ
+            <Link href={myShopPath({ place: book.id })} className="btn">
+              {PLACE.toShop}
             </Link>
           </div>
         )}

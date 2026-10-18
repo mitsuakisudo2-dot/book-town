@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useId, useState } from "react";
+import { Fragment, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ME_ID,
@@ -36,7 +36,12 @@ import {
 import { townTook, useKeptUntilSaved } from "../lib/shop-draft";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import { bookById, bookTitle } from "../lib/book-name";
-import { counted, nth, failure, AGAIN, KEPT } from "../lib/words";
+import { counted, nth, failure, AGAIN, KEPT, PLACE } from "../lib/words";
+import { pickSources } from "../lib/shop-picks";
+import { useUrlParam } from "../lib/url-state";
+
+/** How many books of a library shelf the opening shows at a time. */
+const FROM_PAGE = 24;
 
 type Shared = {
   state: TownState;
@@ -184,7 +189,13 @@ export function OpenShop({
   notify,
   onOpen,
   onDone,
+  startBook = null,
 }: Shared & {
+  /**
+   * A book chosen on its page (自分の書店へ): it is on the shelf of the kind
+   * of shop chosen first, while there is room.
+   */
+  startBook?: string | null;
   /** Called just before the shop is created, so the page keeps this flow on screen. */
   onOpen: () => void;
   /** Leaves the flow for the full shop editor. */
@@ -238,6 +249,13 @@ export function OpenShop({
     .filter((entry): entry is Book => Boolean(entry));
   const own = candidates(state, kind);
   const suggested = own.filter((id) => !picked.includes(id)).slice(0, 12);
+  // Or a shelf of the library, 読了 or one the reader made (AUD-053): the
+  // choice lives in the address, as a screen's small choices do.
+  const sources = useMemo(() => pickSources(state), [state]);
+  const [fromParam, setFrom] = useUrlParam("from");
+  const source = sources.find((entry) => entry.key === fromParam);
+  const [fromPages, setFromPages] = useState(1);
+  const fromShelf = (source?.ids ?? []).filter((id) => !picked.includes(id));
   // Until the reader has a shelf of their own, books the town reads help.
   const fromTown = [
     ...recentlyFinished(state, 12),
@@ -271,12 +289,38 @@ export function OpenShop({
     if (draft && at !== "kind" && (draft.step !== at || draft.kind !== kind))
       kept.set({ ...draft, kind, step: at });
   }
+  // The kinds the book chosen on its page was put on already: taken off
+  // there, it stays off.
+  const [startedOn, setStartedOn] = useState<Kind[]>([]);
   function choose(
     next: Kind,
     at: "books" | "sign" = next === "free" ? "sign" : "books",
   ) {
     setKind(next);
     setStep(at);
+    const room = KINDS.find((entry) => entry.kind === next)?.max ?? 0;
+    const had =
+      next === "free"
+        ? []
+        : (work.picks[next] ?? usual(next)).filter((id) => book(id));
+    if (
+      startBook &&
+      next !== "free" &&
+      !startedOn.includes(next) &&
+      book(startBook) &&
+      !had.includes(startBook) &&
+      had.length < room
+    ) {
+      // First on the shelf, so it faces out.
+      setStartedOn([...startedOn, next]);
+      kept.set({
+        ...work,
+        kind: next,
+        step: at,
+        picks: { ...work.picks, [next]: [startBook, ...had] },
+      });
+      return;
+    }
     // The kept work follows to the kind chosen; the books chosen for each
     // kind stay with it.
     if (draft) kept.set({ ...draft, kind: next, step: at });
@@ -330,6 +374,7 @@ export function OpenShop({
     const shopName = name.trim();
     if (!shopName || !ready) return;
     onOpen();
+    setFrom(null);
     if (!townTook(() => actions.createShop(shopName, "", theme))) {
       // Turned away (the town was still on its way): nothing opened, and
       // the work stays as it is.
@@ -557,14 +602,45 @@ export function OpenShop({
             />
           ))}
         </div>
-        {[
-          { title: "あなたの本棚から", ids: suggested },
-          { title: "街で読まれている本から", ids: fromTown },
-        ].map(
+        {sources.length > 0 && (
+          <>
+            <h2 className="open-subtitle">あなたの本棚から</h2>
+            <div className="chips" role="group" aria-label="選ぶ棚">
+              {[{ key: null, label: PLACE.suggested }, ...sources].map(
+                (entry) => (
+                  <button
+                    type="button"
+                    key={entry.key ?? ""}
+                    className="chip"
+                    aria-pressed={(source?.key ?? null) === entry.key}
+                    onClick={() => {
+                      setFrom(entry.key);
+                      setFromPages(1);
+                    }}
+                  >
+                    {entry.label}
+                  </button>
+                ),
+              )}
+            </div>
+          </>
+        )}
+        {(source
+          ? [{ heading: "", ids: fromShelf.slice(0, fromPages * FROM_PAGE) }]
+          : [
+              {
+                heading: sources.length ? "" : "あなたの本棚から",
+                ids: suggested,
+              },
+              { heading: "街で読まれている本から", ids: fromTown },
+            ]
+        ).map(
           (group) =>
             group.ids.length > 0 && (
-              <Fragment key={group.title}>
-                <h2 className="open-subtitle">{group.title}</h2>
+              <Fragment key={group.heading || "shelf"}>
+                {group.heading && (
+                  <h2 className="open-subtitle">{group.heading}</h2>
+                )}
                 <ul className="open-candidates">
                   {group.ids.map((id) => {
                     const entry = book(id)!;
@@ -585,6 +661,15 @@ export function OpenShop({
                 </ul>
               </Fragment>
             ),
+        )}
+        {source && fromShelf.length > fromPages * FROM_PAGE && (
+          <button
+            type="button"
+            className="text-btn open-more"
+            onClick={() => setFromPages(fromPages + 1)}
+          >
+            {PLACE.more}
+          </button>
         )}
         <h2 className="open-subtitle">本を探す</h2>
         <BookPicker
