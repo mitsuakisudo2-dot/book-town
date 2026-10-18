@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import {
   SUPABASE_STANDIN,
@@ -13,6 +14,7 @@ import {
   scrubText,
 } from "../src/lib/screen-errors";
 import { SITE_NOTE_LIMITS, deviceLabel } from "../src/lib/site-notes";
+import { SCREEN_ERRORS_QUERY, errorsVerdict } from "../scripts/watch.mjs";
 
 // 画面のエラーの記録 (supabase/migrations/*_screen_errors.sql, AUD-032): anyone
 // may report an error from their screen, nobody reads the reports through the
@@ -424,6 +426,69 @@ async function main() {
       assert.ok(ok, label);
     }
   });
+
+  await check(
+    "the morning watch notices a full table and a flood",
+    async () => {
+      const watch = JSON.parse(readFileSync("scripts/watch.json", "utf8"));
+      const limits = {
+        perDay: watch.screenErrorsPerDay,
+        rowsWarn: watch.screenErrorsRowsWarn,
+        perHour: watch.screenErrorsPerHour,
+      };
+      // The watch's numbers are the migration's.
+      assert.match(TEXT, new RegExp(`\\) >= ${limits.perHour} or`));
+      const cap = Number(/screen_errors\) >= (\d+) then/.exec(TEXT)?.[1]);
+      assert.ok(limits.rowsWarn < cap && limits.rowsWarn >= cap * 0.9);
+      const read = async () =>
+        errorsVerdict((await rows(SCREEN_ERRORS_QUERY))[0], limits);
+
+      await clear();
+      assert.deepEqual(await read(), {
+        ok: true,
+        lines: ["Screen errors: none in the last day."],
+      });
+
+      // Filled two days ago: nothing in the last day, yet nothing new is kept.
+      await db.exec(`
+        insert into private.screen_errors (day, kind, message, place, first_at, last_at)
+        select current_date - 2, 'error', 'old ' || i, '/',
+          now() - interval '2 days', now() - interval '2 days'
+        from generate_series(1, ${cap}) i`);
+      await report(null, "error", "a real one");
+      const full = await read();
+      assert.equal(full.ok, false);
+      assert.equal(full.lines[0], "Screen errors: none in the last day.");
+      assert.match(full.lines[1], /nearly full/);
+
+      // A flood reaches the hourly limit; the watch says so even when the
+      // kinds alone would pass.
+      await clear();
+      for (let i = 0; i < 230; i += 1)
+        await report(null, "error", `flood ${i}`);
+      const [counted] = await rows<{ busiest_hour: number; rows: number }>(
+        SCREEN_ERRORS_QUERY,
+      );
+      assert.equal(counted.rows, 200);
+      assert.equal(counted.busiest_hour, 200);
+      const flooded = errorsVerdict(counted, { ...limits, perDay: 1000 });
+      assert.equal(flooded.ok, false);
+      assert.match(flooded.lines[1], /hourly limit/);
+
+      // Spread over the day, the same rows are not a flood.
+      await db.exec(`
+        update private.screen_errors
+        set first_at = now() - (substring(message from 7)::int % 20) * interval '1 hour'`);
+      const [spread] = await rows<{ busiest_hour: number }>(
+        SCREEN_ERRORS_QUERY,
+      );
+      assert.ok(
+        spread.busiest_hour < limits.perHour,
+        String(spread.busiest_hour),
+      );
+      await clear();
+    },
+  );
 
   await check("the limits are the app's", async () => {
     assert.match(TEXT, new RegExp(`between 1 and ${MESSAGE_LENGTH}\\)`));

@@ -449,6 +449,10 @@ async function main() {
         /site_url: "https:\/\/book-town-851k\.vercel\.app" -> "https:\/\/booktown\.page"/,
       );
       assert.match(looked.output, /RESEND_API_KEY is not set/);
+      assert.match(
+        looked.output,
+        /TURNSTILE_SECRET_KEY: not set among the repository secrets/,
+      );
       assert.deepEqual(
         api.seen.map((s) => s.method),
         ["GET"],
@@ -1280,18 +1284,45 @@ async function main() {
     () => {
       const watch = JSON.parse(readFileSync("scripts/watch.json", "utf8"));
       assert.equal(watch.screenErrorsPerDay, 1);
-      assert.deepEqual(errorsVerdict({ kinds: 0, times: 0 }, 1), {
+      const limits = { perDay: 1, rowsWarn: 2800, perHour: 200 };
+      const quiet = { kinds: 0, times: 0, rows: 0, busiest_hour: 0 };
+      assert.deepEqual(errorsVerdict(quiet, limits), {
         ok: true,
         lines: ["Screen errors: none in the last day."],
       });
-      const some = errorsVerdict({ kinds: 2, times: 7 }, 1);
+      const some = errorsVerdict(
+        { kinds: 2, times: 7, rows: 2, busiest_hour: 2 },
+        limits,
+      );
       assert.equal(some.ok, false);
       assert.equal(
         some.lines[0],
         "Screen errors: 2 kind(s), 7 time(s) in the last day.",
       );
-      assert.equal(errorsVerdict({ kinds: 2, times: 7 }, 5).ok, true);
-      assert.equal(errorsVerdict(undefined, 1).ok, false);
+      assert.equal(
+        errorsVerdict(
+          { kinds: 2, times: 7, rows: 2, busiest_hour: 2 },
+          { ...limits, perDay: 5 },
+        ).ok,
+        true,
+      );
+      assert.equal(errorsVerdict(undefined, limits).ok, false);
+      assert.equal(errorsVerdict({ kinds: 0, times: 0 }, limits).ok, false);
+      // A full table drops new errors, so a quiet day there is not quiet.
+      const full = errorsVerdict({ ...quiet, rows: 2800 }, limits);
+      assert.equal(full.ok, false);
+      assert.equal(full.lines[0], "Screen errors: none in the last day.");
+      assert.match(full.lines[1], /nearly full/);
+      assert.equal(errorsVerdict({ ...quiet, rows: 2799 }, limits).ok, true);
+      const flooded = errorsVerdict(
+        { kinds: 200, times: 200, rows: 200, busiest_hour: 200 },
+        { ...limits, perDay: 1000 },
+      );
+      assert.equal(flooded.ok, false);
+      assert.match(flooded.lines[1], /hourly limit/);
+      // Numbers only: no row's words in what is printed.
+      for (const line of [...full.lines, ...flooded.lines])
+        assert.doesNotMatch(line, /message|place|stack/i);
     },
   );
 

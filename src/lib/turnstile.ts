@@ -10,8 +10,8 @@
 // secret key is a repository secret that only the auth settings workflow
 // hands to Supabase.
 
-/** The site key of the BookTown widget; "" until the widget is made. */
-export const TURNSTILE_SITE_KEY = "";
+/** The site key of the BookTown widget (public, made 2026-10-18). */
+export const TURNSTILE_SITE_KEY = "0x4AAAAAAFaNk_RZsadkkqJf";
 
 /** The addresses the widget is made for. Elsewhere the key would be refused. */
 export const TURNSTILE_HOSTS = ["booktown.page", "book-town-851k.vercel.app"];

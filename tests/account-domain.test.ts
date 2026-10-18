@@ -17,7 +17,11 @@ import {
   type SignedOut,
 } from "../src/lib/account";
 import { RESERVED_HANDLES } from "../src/lib/handles";
-import { humanCheckKey, TURNSTILE_HOSTS } from "../src/lib/turnstile";
+import {
+  humanCheckKey,
+  TURNSTILE_HOSTS,
+  TURNSTILE_SITE_KEY,
+} from "../src/lib/turnstile";
 import {
   authFailure,
   emailChangeFailure,
@@ -255,7 +259,10 @@ async function main() {
       assert.match(failureMessages["human-check"], /ボットではない/);
       // Without a site key, or away from BookTown's own addresses, the login
       // asks no check; a build may name a test key of its own.
-      assert.equal(humanCheckKey("booktown.page", ""), null);
+      assert.equal(humanCheckKey("booktown.page", ""), TURNSTILE_SITE_KEY);
+      assert.equal(humanCheckKey("localhost", ""), null);
+      assert.equal(humanCheckKey("book-town-git-x.vercel.app", ""), null);
+      assert.match(TURNSTILE_SITE_KEY, /^0x4[A-Za-z0-9_-]{20,}$/);
       assert.equal(
         humanCheckKey("localhost", "1x00000000000000000000AA"),
         "1x00000000000000000000AA",

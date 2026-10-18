@@ -275,6 +275,11 @@ async function main(mode) {
     console.log(
       "  security_captcha_secret: set from TURNSTILE_SECRET_KEY (not shown)",
     );
+  // Whether the secret is among the repository secrets, never its value, so
+  // the check can be turned on knowing it is there.
+  console.log(
+    `TURNSTILE_SECRET_KEY: ${turnstileSecret ? "set" : "not set"} among the repository secrets`,
+  );
   console.log("Left as they are:");
   for (const key of UNMANAGED)
     console.log(`  ${key}: ${shown(key, current[key])}`);

@@ -81,6 +81,8 @@ const titleOf = (isbn) => {
 };
 /** The price code printed under every Japanese book's ISBN. */
 const PRICE = "1920193006000";
+/** How long a code missed stays in view (LEAVE_MS in scan.ts). */
+const LEAVE_MS = 600;
 
 // "stall": openBD takes the question and never answers. "slow": it answers
 // after a second and a half, well within the four seconds it is given.
@@ -148,8 +150,8 @@ async function answerOutside(context) {
  * A phone whose browser reads barcodes: the stand-in reader gives the codes
  * pushed to `__barcodes`, one frame each (an array is several codes in one
  * frame), and nothing in the frames between. `__emptyRun` counts the frames
- * with nothing since the last code, and the next `__throws` frames fail to
- * be read. What the phone did back is kept too: each vibration in `__buzz`,
+ * with nothing since the last code, `__codeAt` is when that code was given,
+ * and the next `__throws` frames fail to be read. What the phone did back is kept too: each vibration in `__buzz`,
  * and the tones started in `__tones`.
  */
 async function scanningPage() {
@@ -189,6 +191,7 @@ async function scanningPage() {
           return [];
         }
         window.__emptyRun = 0;
+        window.__codeAt = performance.now();
         return [].concat(code).map((rawValue) => ({
           rawValue,
           format: "ean_13",
@@ -326,14 +329,21 @@ async function finishScanning(on = page) {
   await scanner(on).getByRole("button", { name: "終わる" }).click();
   await expect(scanner(on)).toHaveCount(0);
 }
-/** Shows the camera these frames, and waits until they have left its view. */
+/**
+ * Shows the camera these frames, and waits until they have left its view:
+ * missed for longer than LEAVE_MS (scan.ts), however fast frames come.
+ */
 async function show(on, ...frames) {
   await on.evaluate((codes) => {
     window.__emptyRun = 0;
     window.__barcodes.push(...codes);
   }, frames);
   await on.waitForFunction(
-    () => window.__barcodes.length === 0 && window.__emptyRun >= 4,
+    (leave) =>
+      window.__barcodes.length === 0 &&
+      window.__emptyRun >= 4 &&
+      performance.now() - window.__codeAt > leave + 100,
+    LEAVE_MS,
   );
 }
 /** The vibrations and the number of tones so far. */
@@ -1395,6 +1405,7 @@ try {
       const kept = await stored(timed);
       // Past the first flash, within the 3 seconds.
       await timed.clock.setFixedTime(start + 900);
+      await flashOver(timed);
       await show(timed, first);
       await expect(cardStatus(timed)).toHaveText("同じ本です");
       await expect.poll(flashed).toBe(true);

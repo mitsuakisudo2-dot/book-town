@@ -12,11 +12,12 @@ import { counted, failure, AGAIN } from "./words";
 /** The same book read again within this long of last being in view is one read. */
 export const SAME_BOOK_MS = 3000;
 /**
- * A code stays in view until this many frames in a row have missed it. A
- * camera held over a book misses single frames (a blur, the focus moving),
- * and a book held still must not be read again for that.
+ * A code stays in view until it has been missed for longer than this. A
+ * camera held over a book misses frames (a blur, the focus moving), and a
+ * book held still must not be read again for that, however many frames a
+ * second the camera is read (three frames at 200ms before 10-18).
  */
-export const MISSES_TO_LEAVE = 3;
+export const LEAVE_MS = 600;
 /** A hint comes at this read of a barcode that is not a book's ISBN. */
 export const HINT_AT = 2;
 
@@ -40,7 +41,7 @@ export function readBarcode(raw: string): Barcode {
 const keyOf = (barcode: Barcode) =>
   barcode.kind === "isbn" ? barcode.isbn : barcode.code;
 
-/** The codes in view, each with how many frames in a row have missed it. */
+/** The codes in view, each with when it was last in a frame. */
 export type InView = Readonly<Record<string, number>>;
 
 /**
@@ -52,7 +53,9 @@ export type InView = Readonly<Record<string, number>>;
 export function nextFrame(
   inView: InView,
   frame: readonly string[],
+  now: number,
 ): { inView: InView; fresh: Barcode[]; staying: string[] } {
+  const seen = (key: string) => key in inView && now - inView[key] <= LEAVE_MS;
   const all = frame.map(readBarcode);
   const codes = all.some((barcode) => barcode.kind === "isbn")
     ? all.filter((barcode) => barcode.kind === "isbn")
@@ -63,12 +66,12 @@ export function nextFrame(
   for (const barcode of codes) {
     const key = keyOf(barcode);
     if (key in next) continue;
-    next[key] = 0;
-    if (!(key in inView)) fresh.push(barcode);
+    next[key] = now;
+    if (!seen(key)) fresh.push(barcode);
     else if (barcode.kind === "isbn") staying.push(key);
   }
-  for (const [key, misses] of Object.entries(inView))
-    if (!(key in next) && misses + 1 < MISSES_TO_LEAVE) next[key] = misses + 1;
+  for (const [key, at] of Object.entries(inView))
+    if (!(key in next) && seen(key)) next[key] = at;
   return { inView: next, fresh, staying };
 }
 
