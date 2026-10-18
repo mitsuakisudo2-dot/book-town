@@ -114,15 +114,32 @@ export function PosterEditor({
     ? props.state.posters.find((entry) => entry.id === posterId)
     : undefined;
   // Work kept for a poster that is gone (turned away, or taken down on
-  // another device) opens as a new poster.
-  const kept = useSyncExternalStore(
+  // another device) opens as a new poster, once the town is read. It stays
+  // open as one, its work saved or thrown away, until the reader moves on.
+  const savedIn = useTownBackend();
+  const drafts = useSyncExternalStore(
     posterDrafts.subscribe,
     posterDrafts.getSnapshot,
     posterDrafts.getServerSnapshot,
-  ).drafts;
-  if (owner === null || (posterId && !poster && persistence === "loading"))
+  );
+  useEffect(() => posterDrafts.initialize(), []);
+  const [gone, setGone] = useState<string | null>(null);
+  const missing =
+    posterId !== undefined && !poster && savedIn !== "unavailable";
+  if (
+    missing &&
+    gone !== posterId &&
+    owner !== null &&
+    persistence !== "loading" &&
+    drafts.drafts[posterWorkKey({ owner, posterId })]
+  )
+    setGone(posterId);
+  if (
+    owner === null ||
+    (posterId && !poster && (persistence === "loading" || !drafts.loaded))
+  )
     return <p role="status">ポスターを開いています…</p>;
-  if (posterId && !poster && kept[posterWorkKey({ owner, posterId })])
+  if (missing && gone === posterId)
     return <PosterMaker key={"gone/" + posterId} {...props} gone={posterId} />;
   if (posterId && !poster)
     return (
@@ -281,6 +298,9 @@ function PosterMaker({
   const [openedOver, setOpenedOver] = useState(false);
   // Opened work saved or thrown away: new work is the reader's own again.
   if (openedOver && !inHand) setOpenedOver(false);
+  // Work for a poster that is gone, opened as a new one, until thrown away.
+  const [openedGone, setOpenedGone] = useState(gone !== undefined);
+  if (openedGone && !inHand) setOpenedGone(false);
   const openStale = useRef<HTMLButtonElement>(null);
   const waiting = stale !== null;
   useEffect(() => {
@@ -306,7 +326,11 @@ function PosterMaker({
   const [enlarged, setEnlarged] = useState(false);
   const elsewhere =
     !poster && !bookId && !gone
-      ? workElsewhere(all, state, persistence !== "loading")
+      ? workElsewhere(
+          all,
+          state,
+          persistence !== "loading" && savedIn !== "unavailable",
+        )
       : [];
   // Folded or held by reports: the maker is told here too, as on its page.
   const reviewNote = poster
@@ -849,7 +873,7 @@ function PosterMaker({
               saved={saved}
               wordsLost
               lead={
-                gone
+                openedGone
                   ? "もとのポスターが見つからないため、書きかけを新しいポスターとして開いています"
                   : openedOver
                     ? "書きかけを開いています。保存すると、いま保存されているポスターと入れ替わります"

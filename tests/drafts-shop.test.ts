@@ -40,8 +40,12 @@ import {
   keepShelvesNotSent,
   readKeptShelves,
   SHELVES_DRAFT_KEY,
+  KEPT_SHELVES_MAX,
+  keptArrangements,
+  keptShelvesOf,
   shelvesDraftOptions,
   shelvesLoseWords,
+  shelvesStillKept,
 } from "../src/lib/shelves-draft";
 import type { Shelf } from "../src/lib/types";
 
@@ -399,6 +403,36 @@ check("shelves not sent are kept for their owner, to put back", () => {
   );
   assert.deepEqual(store.get("u-1")?.shelves, shelves);
   assert.ok(storage.data.has(SHELVES_DRAFT_KEY));
+  // Not sent again, other shelves: kept before them, not in their place.
+  // The same shelves once more are kept once, newest first.
+  const later = structuredClone(shelves);
+  later[0].name = "晴れの日に";
+  keepShelvesNotSent("u-1", [{ kind: "shelves", shelves: later }], store);
+  const names = () =>
+    keptArrangements(store.get("u-1")).map((entry) => entry.shelves[0].name);
+  assert.deepEqual(names(), ["晴れの日に", "雨の日に"]);
+  keepShelvesNotSent("u-1", [{ kind: "shelves", shelves }], store);
+  assert.deepEqual(names(), ["雨の日に", "晴れの日に"]);
+  // Put back and turned away, they are still kept.
+  assert.equal(
+    shelvesStillKept("u-1", [{ kind: "shelves", shelves: later }], store),
+    true,
+  );
+  const other = structuredClone(shelves);
+  other[0].name = "別の棚";
+  assert.equal(
+    shelvesStillKept("u-1", [{ kind: "shelves", shelves: other }], store),
+    false,
+  );
+  // At most a few wait; the oldest goes beyond that.
+  for (let at = 0; at < KEPT_SHELVES_MAX + 1; at++) {
+    const more = structuredClone(shelves);
+    more[0].name = "棚" + at;
+    keepShelvesNotSent("u-1", [{ kind: "shelves", shelves: more }], store);
+  }
+  assert.equal(keptArrangements(store.get("u-1")).length, KEPT_SHELVES_MAX);
+  assert.equal(names()[0], "棚" + KEPT_SHELVES_MAX);
+  store.set("u-1", keptShelvesOf([{ shelves, at: "2026-10-18T00:00:00Z" }]));
   // Read back by a new page as they were; what is not a shelf is not.
   const again = createKeptDraftStore(shelvesDraftOptions, () => storage);
   assert.deepEqual(again.get("u-1")?.shelves, shelves);

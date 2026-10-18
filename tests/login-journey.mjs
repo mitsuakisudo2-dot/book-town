@@ -4184,6 +4184,10 @@ try {
           page.getByRole("button", { name: "本棚を公開する" }),
         ).toBeVisible();
         await expect(page.getByText("この端末の棚にしました。")).toBeVisible();
+        // The note's buttons are gone: the hand is on 本棚を追加.
+        await expect(
+          page.getByRole("button", { name: "本棚を追加" }),
+        ).toBeFocused();
         await expect.poll(() => sent.length).toBe(2);
         expect(sent[1].base).toBe(2);
         expect(
@@ -4287,6 +4291,9 @@ try {
           ),
         ).toBeVisible();
         await shot("poster-refused-opened");
+        // Read again from the start, the page opens it the same way.
+        await page.reload();
+        await expect(heading).toHaveValue(HEADING);
         // Put up as a new poster: its work is let go once the account has it.
         refuse = false;
         await page

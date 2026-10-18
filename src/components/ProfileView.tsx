@@ -242,7 +242,8 @@ export function ProfileView({
     const selector = handTo.current;
     if (!selector) return;
     handTo.current = null;
-    document.querySelector<HTMLElement>(selector)?.focus();
+    // A text field takes the hand only where a keyboard does not rise.
+    focusField(document.querySelector<HTMLElement>(selector));
   });
   // The nine last sent, by its mark: work begun over it goes on from the
   // nine saved, if the account turned it away.

@@ -19,7 +19,7 @@ import {
 } from "../lib/social";
 import { posterNewPath, profilePath } from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
-import { usePersistenceStatus } from "../lib/store";
+import { usePersistenceStatus, useTownBackend } from "../lib/store";
 import { posterMark, posterWorkKey, usePosterDraft } from "../lib/poster-draft";
 import { useUrlParam } from "../lib/url-state";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
@@ -75,6 +75,9 @@ export function PosterScreen({
   useEffect(() => {
     if (done) letGo();
   }, [done, letGo]);
+  // Gone, its work opens as a new poster (not while the town is unread).
+  const savedIn = useTownBackend();
+  const opensGone = keptWork !== null && savedIn !== "unavailable";
   const author = poster && findReader(state, poster.authorId);
   if (!poster || !author)
     return persistence === "loading" ? (
@@ -88,13 +91,13 @@ export function PosterScreen({
           <p>
             作った人が外したのかもしれません。ほかのポスターは、タイムラインで見られます。
           </p>
-          {keptWork && (
+          {opensGone && (
             <p>
               このポスターの書きかけを、このブラウザに残しています。新しいポスターとして開けます。
             </p>
           )}
           <div className="empty-state-actions">
-            {keptWork && (
+            {opensGone && (
               <Link href={posterNewPath({ posterId })} className="btn fill">
                 書きかけを開く
               </Link>
@@ -104,7 +107,7 @@ export function PosterScreen({
             </Link>
             <Link
               href={posterNewPath()}
-              className={keptWork ? "btn" : "btn fill"}
+              className={opensGone ? "btn" : "btn fill"}
             >
               ポスターを作る
               <Icon name="arrow" size={16} />
