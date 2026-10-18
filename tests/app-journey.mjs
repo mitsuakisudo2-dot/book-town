@@ -448,72 +448,106 @@ try {
   await check(
     "a shelf's long name ends in … on a book's card, and the page keeps to the screen",
     async () => {
-      await go("/library/");
       const shelves = page.getByRole("group", { name: "棚" });
       const books = page.locator(".library-book");
-      // The town as it was, put back at the end.
-      const town = await page.evaluate(() =>
-        localStorage.getItem("book-town-v1"),
-      );
-      // As long as a shelf's name can be (40), on the book at the right of
-      // the first row (it is on 雨の日に読みたい too, from the check before).
-      const name =
-        "遠い国の旅と海と星の物語を、雨の降る静かな夜にゆっくり読みたい本をそっと集めた棚";
-      expect([...name]).toHaveLength(40);
-      await shelves.getByRole("button", { name: "棚を作る" }).click();
-      const sheet = page.getByRole("dialog", { name: "棚を作る" });
-      await sheet.getByLabel("棚の名前").fill(name);
-      await sheet.getByRole("button", { name: "作る", exact: true }).click();
-      await expect(page).toHaveURL(/\/library\/\?shelf=[\w-]+$/);
-      await page.getByRole("button", { name: "ライブラリから選ぶ" }).click();
-      const bar = page.getByRole("region", { name: "選んだ本を変える" });
-      await books.nth(2).click();
-      await bar.getByRole("button", { name: `「${name}」に入れる` }).click();
-      await expect(bar).toHaveCount(0);
-      await shelves
-        .getByRole("button", { name: "すべて", exact: true })
-        .click();
+      const toast = page.locator(".toast");
       const nav = page.getByRole("navigation", {
         name: "スマートフォンナビゲーション",
       });
-      for (const width of [390, 320]) {
-        await page.setViewportSize({ width, height: 844 });
-        const mark = books.locator(".library-marks span", {
-          hasText: "遠い国",
-        });
-        await expect(mark).toHaveCount(1);
-        // The whole name is there to be read out; the eye sees it end in ….
-        await expect(mark).toContainText(name);
-        const fit = await mark.evaluate((span) => {
-          const own = span.getBoundingClientRect();
-          const box = span.closest(".library-book").getBoundingClientRect();
-          return {
-            cut: span.scrollWidth > span.clientWidth,
-            ellipsis: getComputedStyle(span).textOverflow,
-            inside: own.left >= box.left - 0.5 && own.right <= box.right + 0.5,
-          };
-        });
-        expect(fit, `${width}px: the mark ends in …`).toEqual({
-          cut: true,
-          ellipsis: "ellipsis",
-          inside: true,
-        });
-        await noOverflow(`${width}px library with a long shelf name`);
-        // The bottom tabs stay on the screen.
-        const tabs = await nav.boundingBox();
-        expect(tabs.x).toBeGreaterThanOrEqual(0);
-        expect(tabs.x + tabs.width).toBeLessThanOrEqual(width + 1);
-        expect(tabs.y + tabs.height).toBeLessThanOrEqual(844 + 1);
+      await go("/library/");
+      // The town as it was, put back after each name.
+      const town = await page.evaluate(() =>
+        localStorage.getItem("book-town-v1"),
+      );
+      const names = [
+        // As long as a shelf's name can be (40)…
+        [
+          "ja",
+          "遠い国の旅と海と星の物語を、雨の降る静かな夜にゆっくり読みたい本をそっと集めた棚",
+        ],
+        // …one English word with nowhere to break…
+        ["en", "Supercalifragilisticexpialidociousbooksz"],
+        // …and emoji among the words.
+        ["emoji", "📚🌙夜更けに読む本 Late night reads☕👨‍👩‍👧"],
+      ];
+      expect([...names[0][1]]).toHaveLength(40);
+      expect([...names[1][1]]).toHaveLength(40);
+      for (const [key, name] of names) {
+        await go("/library/");
+        await page.setViewportSize({ width: 320, height: 844 });
+        await shelves.getByRole("button", { name: "棚を作る" }).click();
+        const sheet = page.getByRole("dialog", { name: "棚を作る" });
+        await sheet.getByLabel("棚の名前").fill(name);
+        await sheet.getByRole("button", { name: "作る", exact: true }).click();
+        await expect(page).toHaveURL(/\/library\/\?shelf=[\w-]+$/);
+        // On the book at the right of the first row (it is on 雨の日に読みたい
+        // too, from the check before).
+        await page.getByRole("button", { name: "ライブラリから選ぶ" }).click();
+        const bar = page.getByRole("region", { name: "選んだ本を変える" });
+        await books.nth(2).click();
+        await bar.getByRole("button", { name: `「${name}」に入れる` }).click();
+        await expect(bar).toHaveCount(0);
+        // What was done, and the way back, fold into the narrow screen.
+        const undo = toast.getByRole("button", { name: "元に戻す" });
+        await expect(undo).toBeVisible();
+        expect(
+          await toast.evaluate((t) => t.scrollWidth <= t.clientWidth),
+          `${key}: the toast holds its words`,
+        ).toBe(true);
+        const tick = await toast.locator("svg").first().boundingBox();
+        expect(tick.width, `${key}: the tick keeps its size`).toBeCloseTo(
+          17,
+          0,
+        );
+        const back = await undo.boundingBox();
+        expect(back.x, `${key}: 元に戻す on the screen`).toBeGreaterThanOrEqual(
+          0,
+        );
+        expect(back.x + back.width).toBeLessThanOrEqual(320 + 1);
         await page.screenshot({
-          path: path.join(output, `library-long-shelf-${width}.png`),
+          path: path.join(output, `library-long-shelf-${key}-toast-320.png`),
         });
+        await shelves
+          .getByRole("button", { name: "すべて", exact: true })
+          .click();
+        for (const width of [390, 320]) {
+          await page.setViewportSize({ width, height: 844 });
+          const mark = books.locator(".library-marks span", { hasText: name });
+          await expect(mark).toHaveCount(1);
+          // The whole name is there to be read out; the eye sees it end in ….
+          await expect(mark).toContainText(name);
+          const fit = await mark.evaluate((span) => {
+            const own = span.getBoundingClientRect();
+            const box = span.closest(".library-book").getBoundingClientRect();
+            return {
+              cut: span.scrollWidth > span.clientWidth,
+              ellipsis: getComputedStyle(span).textOverflow,
+              inside:
+                own.left >= box.left - 0.5 && own.right <= box.right + 0.5,
+            };
+          });
+          expect(fit, `${key} ${width}px: the mark ends in …`).toEqual({
+            cut: true,
+            ellipsis: "ellipsis",
+            inside: true,
+          });
+          await noOverflow(`${key} ${width}px library with a long shelf name`);
+          // The bottom tabs stay on the screen.
+          const tabs = await nav.boundingBox();
+          expect(tabs.x).toBeGreaterThanOrEqual(0);
+          expect(tabs.x + tabs.width).toBeLessThanOrEqual(width + 1);
+          expect(tabs.y + tabs.height).toBeLessThanOrEqual(844 + 1);
+          await page.screenshot({
+            path: path.join(output, `library-long-shelf-${key}-${width}.png`),
+          });
+        }
+        await page.evaluate(
+          (kept) => localStorage.setItem("book-town-v1", kept),
+          town,
+        );
+        await page.reload();
       }
       await page.setViewportSize({ width: 390, height: 844 });
-      await page.evaluate(
-        (kept) => localStorage.setItem("book-town-v1", kept),
-        town,
-      );
-      await page.reload();
     },
   );
 

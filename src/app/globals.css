@@ -552,7 +552,14 @@ input[type="checkbox"] {
   align-items: center;
   font-size: var(--t-cap);
   max-width: 90vw;
+  /* A long word (a shelf named in one English word) folds rather than
+     pushing 元に戻す off the screen. */
+  overflow-wrap: anywhere;
   animation: fade-in var(--dur-appear) ease;
+}
+/* The words make room as they fold; the tick keeps its size. */
+.toast > svg {
+  flex: none;
 }
 .book-jacket {
   position: relative;
