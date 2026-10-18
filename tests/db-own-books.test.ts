@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import type { PGlite } from "@electric-sql/pglite";
 import { demoBooks } from "../src/lib/data";
 import { sampleBookRowId } from "../src/lib/samples";
-import { migrationFiles, migrationText } from "./fixtures/pglite-supabase";
+import {
+  deleteAccounts,
+  migrationFiles,
+  migrationText,
+} from "./fixtures/pglite-supabase";
 import {
   answerAll,
   catalog,
@@ -480,191 +484,49 @@ async function main() {
         );
       },
     );
+
+    await check(
+      "a typist and a reader given a copy can each leave: their own rows go, and the copies stay books",
+      async () => {
+        const [bensX] = await copyOf(BEN, AKIS_X);
+        const copies = await count("select count(*) from private.book_copies");
+        await deleteAccounts(db, [AKI]);
+        assert.deepEqual(
+          await rows(
+            "select book_id from book_marks where user_id = $1 and book_id = $2",
+            [BEN, bensX],
+          ),
+          [{ book_id: bensX }, { book_id: bensX }],
+        );
+        assert.deepEqual(
+          await rows(
+            "select created_by from books where id = any ($1::uuid[]) order by created_by",
+            [[AKIS_X, bensX]],
+          ),
+          [{ created_by: BEN }, { created_by: null }],
+        );
+        await deleteAccounts(db, [BEN]);
+        assert.equal(
+          await count("select count(*) from book_marks where user_id = $1", [
+            BEN,
+          ]),
+          0,
+        );
+        assert.equal(
+          await count("select count(*) from private.book_copies"),
+          copies,
+        );
+      },
+    );
     await db.close();
   }
 
-  // From now on ------------------------------------------------------------------------
+  // Who may call what ------------------------------------------------------------------
 
   {
     const db = await migrated();
-    const { rows, as, count } = helpers(db);
+    const { rows, as } = helpers(db);
     await db.exec(PEOPLE);
-    const register = (
-      reader: string,
-      book: string,
-      isbnOf: string | null,
-      title: string,
-    ) =>
-      as(
-        reader,
-        "insert into books (id, isbn, title, author, created_by) values ($1, $2, $3, '', $4)",
-        [book, isbnOf, title, reader],
-      );
-    const wish = (reader: string, book: string) =>
-      as(
-        reader,
-        "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
-        [reader, book],
-      );
-    const post = (reader: string, book: string) =>
-      as(
-        reader,
-        "insert into posts (author_id, body, book_id) values ($1, 'よかった', $2)",
-        [reader, book],
-      );
-    const fix = (reader: string, book: string, set: string) =>
-      as<{ n: number }>(
-        reader,
-        `with fixed as (update books set ${set} where id = $1 returning 1)
-         select count(*)::int as n from fixed`,
-        [book],
-      ).then((r) => r[0].n);
-    const marked = (reader: string) =>
-      rows<{ book_id: string; title: string; isbn: string | null }>(
-        `select m.book_id, b.title, b.isbn from book_marks m join books b on b.id = m.book_id
-         where m.user_id = $1 order by b.title`,
-        [reader],
-      );
-
-    await check(
-      "before a typist edits a book, every other reader whose rows name it is given their copy as it was; the edit reaches only the typist",
-      async () => {
-        const akis = id(8, 1);
-        await register(AKI, akis, X(2), "はじめの題名");
-        // Ben was shown Aki's book and wrote about it, as the app still lets him.
-        await wish(BEN, akis);
-        await post(BEN, akis);
-        assert.equal(
-          await fix(AKI, akis, "title = 'なおした題名'"),
-          1,
-          "Aki's edit goes through",
-        );
-        const [bens] = await marked(BEN);
-        assert.notEqual(bens.book_id, akis);
-        assert.deepEqual(
-          { title: bens.title, isbn: bens.isbn },
-          { title: "はじめの題名", isbn: X(2) },
-        );
-        assert.deepEqual(
-          await rows("select book_id from posts where author_id = $1", [BEN]),
-          [{ book_id: bens.book_id }],
-        );
-        assert.equal(
-          (
-            await rows<{ title: string }>(
-              "select title from books where id = $1",
-              [akis],
-            )
-          )[0].title,
-          "なおした題名",
-        );
-        assert.deepEqual(
-          await rows(
-            "select copied_from, reason from private.book_copies where book_id = $1",
-            [bens.book_id],
-          ),
-          [{ copied_from: akis, reason: "edited" }],
-        );
-        // In the same edition, so in the same work.
-        assert.equal(
-          await count(
-            "select count(distinct edition_id) from books where id = any ($1::uuid[])",
-            [[akis, bens.book_id]],
-          ),
-          1,
-        );
-        // Sent again unchanged, or edited when nobody else uses it, an edit
-        // makes no copy.
-        const copies = await count("select count(*) from private.book_copies");
-        assert.equal(await fix(AKI, akis, "title = 'なおした題名'"), 1);
-        assert.equal(await fix(AKI, akis, "title = 'もう一度なおした題名'"), 1);
-        assert.equal(
-          await count("select count(*) from private.book_copies"),
-          copies,
-        );
-        // Ben edits his own copy: nobody else's book changes.
-        assert.equal(await fix(BEN, bens.book_id, "title = 'ベンの題名'"), 1);
-        assert.equal(
-          (
-            await rows<{ title: string }>(
-              "select title from books where id = $1",
-              [akis],
-            )
-          )[0].title,
-          "もう一度なおした題名",
-        );
-      },
-    );
-
-    await check(
-      "an ISBN edited moves the typist's book alone; a book without one keeps its copies in its edition",
-      async () => {
-        const akis = id(8, 2);
-        await register(AKI, akis, X(3), "版のある本");
-        await wish(CHI, akis);
-        assert.equal(await fix(AKI, akis, `isbn = '${X(4)}'`), 1);
-        const [chis] = await marked(CHI);
-        assert.equal(chis.isbn, X(3));
-        assert.deepEqual(
-          await rows(
-            `select e.isbn from books b join editions e on e.id = b.edition_id
-             where b.id = any ($1::uuid[]) order by e.isbn`,
-            [[akis, chis.book_id]],
-          ),
-          [{ isbn: X(3) }, { isbn: X(4) }],
-        );
-        const notes = id(8, 3);
-        await register(AKI, notes, null, "手帖");
-        await wish(BEN, notes);
-        assert.equal(await fix(AKI, notes, "title = '手帖・二'"), 1);
-        const bens = (await marked(BEN)).find((m) => m.title === "手帖")!;
-        assert.ok(bens, "Ben keeps the notebook as it was");
-        assert.deepEqual(
-          await rows(
-            `select count(distinct edition_id)::int as editions, count(distinct work_id)::int as works
-             from books where id = any ($1::uuid[])`,
-            [[notes, bens.book_id]],
-          ),
-          [{ editions: 1, works: 1 }],
-        );
-      },
-    );
-
-    await check(
-      "catalog rows and the 見本's books are everyone's: an edit of one gives nobody a copy",
-      async () => {
-        const catalogRow = id(8, 4);
-        await rows(
-          "insert into books (id, title, source) values ($1, '目録の本', 'ndl')",
-          [catalogRow],
-        );
-        await wish(BEN, catalogRow);
-        const sample = sampleBookRowId(demoBooks[2].id);
-        await wish(BEN, sample);
-        const copies = await count("select count(*) from private.book_copies");
-        await rows("update books set title = '目録の本・改' where id = $1", [
-          catalogRow,
-        ]);
-        await rows("update books set title = title || '・改' where id = $1", [
-          sample,
-        ]);
-        await rows("update books set title = $2 where id = $1", [
-          sample,
-          demoBooks[2].title,
-        ]);
-        assert.equal(
-          await count("select count(*) from private.book_copies"),
-          copies,
-        );
-        assert.equal(
-          await count(
-            "select count(*) from book_marks where user_id = $1 and book_id = any ($2::uuid[])",
-            [BEN, [catalogRow, sample]],
-          ),
-          2,
-        );
-      },
-    );
 
     await check(
       "nobody reads the copies or calls what makes them through the API",
@@ -682,8 +544,7 @@ async function main() {
         const callable = await rows<{ name: string }>(
           `select p.oid::regprocedure::text as name from pg_proc p
            where p.pronamespace = 'private'::regnamespace
-             and p.proname in ('is_sample_book', 'swap_book', 'book_users',
-               'give_own_copy', 'split_others', 'copies_before_edit', 'copies_before_hold')
+             and p.proname in ('is_sample_book', 'swap_book', 'book_users', 'give_own_copy')
              and (has_function_privilege('anon', p.oid, 'EXECUTE')
                or has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
         );
@@ -693,10 +554,10 @@ async function main() {
     await db.close();
   }
 
-  // A hold -----------------------------------------------------------------------------
+  // A held book, a book taken out, a catalog row ---------------------------------------
 
   {
-    const db = await migrated();
+    const db = await migrated(OWN);
     const { rows, as, register, tick, later } = helpers(db);
     await db.exec(PEOPLE);
     const MASTER = {
@@ -708,36 +569,59 @@ async function main() {
         reader,
         "select book_id, title from book_holds()",
       );
-
-    await check(
-      "when a book is held, every other reader whose rows name it is given their copy, told of it as of their own, and answers for their own",
-      async () => {
-        const akis = id(9, 1);
-        await register(AKI, akis, X(5), "まったく別の本");
-        await as(
-          BEN,
-          "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
-          [BEN, akis],
-        );
-        await tick();
-        await answerAll(db, MASTER.library, MASTER.open);
-        await tick();
-        await later(11);
-        await tick();
-        assert.deepEqual(
-          (await holds(AKI)).map((h) => [h.book_id, h.title]),
-          [[akis, "架空の図書館"]],
-        );
-        const [bens] = await rows<{ book_id: string; reason: string }>(
+    const copyOf = async (reader: string, book: string) =>
+      (
+        await rows<{ book_id: string; reason: string }>(
           `select c.book_id, c.reason from private.book_copies c join books b on b.id = c.book_id
            where c.copied_from = $1 and b.created_by = $2`,
-          [akis, BEN],
-        );
-        assert.equal(bens.reason, "held");
+          [book, reader],
+        )
+      )[0];
+    const akis = id(9, 1);
+    const catalogRow = id(9, 2);
+
+    // Aki's book is held; Ben wanted it, and Chi had it in her library and
+    // took it out. Ben wanted a catalog row too.
+    await register(AKI, akis, X(5), "まったく別の本");
+    await as(
+      BEN,
+      "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
+      [BEN, akis],
+    );
+    await rows(
+      "insert into library_entries (user_id, book_id, source, removed_at) values ($1, $2, 'isbn', now())",
+      [CHI, akis],
+    );
+    await rows(
+      "insert into books (id, title, source) values ($1, '目録の本', 'ndl')",
+      [catalogRow],
+    );
+    await as(
+      BEN,
+      "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
+      [BEN, catalogRow],
+    );
+    await tick();
+    await answerAll(db, MASTER.library, MASTER.open);
+    await tick();
+    await later(11);
+    await tick();
+    assert.deepEqual(
+      (await holds(AKI)).map((h) => [h.book_id, h.title]),
+      [[akis, "架空の図書館"]],
+    );
+    await db.exec(TEXT);
+
+    await check(
+      "a reader given a copy of a held book is told of it on the next tick, as of their own, and answers for their own",
+      async () => {
+        const bens = await copyOf(BEN, akis);
+        assert.equal(bens.reason, "moved");
         assert.deepEqual(
-          await rows("select book_id from book_marks where user_id = $1", [
-            BEN,
-          ]),
+          await rows(
+            "select book_id from book_marks where user_id = $1 and book_id <> $2",
+            [BEN, catalogRow],
+          ),
           [{ book_id: bens.book_id }],
         );
         // Not told until his copy is judged, on the next tick.
@@ -756,6 +640,35 @@ async function main() {
         );
         await as(BEN, "select confirm_book_isbn($1)", [bens.book_id]);
         assert.deepEqual(await holds(BEN), []);
+      },
+    );
+
+    await check(
+      "a library row taken out names the reader's own copy too, still taken out; a catalog row stays everyone's",
+      async () => {
+        const chis = await copyOf(CHI, akis);
+        assert.ok(chis, "Chi's copy");
+        assert.deepEqual(
+          await rows(
+            "select book_id, removed_at is not null as out from library_entries where user_id = $1",
+            [CHI],
+          ),
+          [{ book_id: chis.book_id, out: true }],
+        );
+        assert.deepEqual(
+          await rows(
+            "select count(*)::int as n from private.book_copies where copied_from = $1",
+            [catalogRow],
+          ),
+          [{ n: 0 }],
+        );
+        assert.deepEqual(
+          await rows(
+            "select count(*)::int as n from book_marks where user_id = $1 and book_id = $2",
+            [BEN, catalogRow],
+          ),
+          [{ n: 1 }],
+        );
       },
     );
     await db.close();
@@ -798,6 +711,8 @@ async function main() {
            union all select 'nine', to_jsonb(n)::text from profile_nine n
            union all select 'poster', to_jsonb(p)::text from posters p
            union all select 'shop', to_jsonb(s)::text from shop_private s
+           union all select 'session', to_jsonb(r)::text from reading_sessions r
+           union all select 'shops', to_jsonb(s)::text from shops s
            order by 1, 2`,
         );
       const were = await everything();

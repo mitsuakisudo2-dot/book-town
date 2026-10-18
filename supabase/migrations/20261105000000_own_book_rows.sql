@@ -20,12 +20,10 @@
 -- the book it was copied from), judged against the master as their own
 -- registration, from when that book was placed. Every row of theirs naming
 -- the book then names the copy, and the copy is written down
--- (private.book_copies). This is done to what there is now, once, below, and
--- from now on before a book's typist edits it (books_own_copies) and when it
--- is held (work_changes_held): each other reader whose rows name it is given
--- their copy first, as the book was. A reader given a copy of a held book is
--- told of it as of their own. Catalog rows ('ndl') and the 見本's books stay
--- everyone's. The 見本's books are rows made here, with nobody's name
+-- (private.book_copies). This file does it once, to what there is now. A
+-- copy of a held book is judged again, so its reader is told of it as of
+-- their own. Catalog rows ('ndl') and the 見本's books stay everyone's. The
+-- 見本's books are rows made here, with nobody's name
 -- (private.is_sample_book), the same row for every reader as before and
 -- nobody's to edit; a 見本's book added later needs a migration.
 --
@@ -33,28 +31,26 @@
 -- read where it is used, as its book was, and has the same columns, created_at
 -- and updated_at included; the rows moved to it keep their own times
 -- (touch_updated_at leaves them while a copy is made). The app goes on as it
--- is, reading each reader's books from their rows. Making every registration
--- a row of its reader's own, and gathering a book's readers by its work, are
--- the app's next step.
+-- is, reading each reader's books from their rows, and sharing a row as it
+-- did: a typist's edit reaches the readers it shares with until the app's
+-- next step makes every registration its reader's own (and gathers a book's
+-- readers by its work), and the migration coming with that step copies what
+-- it shared meanwhile, with the same function.
 --
 -- Rollback: the copies are their readers' registrations and stay; who made
 -- the 見本's rows is not put back. A new migration undoes the rest with
---   drop trigger books_own_copies on public.books;
---   drop trigger work_changes_held on private.work_changes;
---   drop function private.copies_before_edit(), private.copies_before_hold(),
---     private.split_others(uuid, text), private.give_own_copy(uuid, uuid, text),
---     private.book_users(uuid), private.swap_book(jsonb, text, text),
---     private.is_sample_book(uuid);
+--   drop function private.give_own_copy(uuid, uuid, text), private.book_users(uuid),
+--     private.swap_book(jsonb, text, text), private.is_sample_book(uuid);
 --   drop table private.book_copies;
---   drop index public.library_entries_book, public.book_marks_book,
---     public.book_encounters_book_id, public.reading_entries_book,
---     public.shop_private_shelves, public.shop_private_scene_books;
 
 -- and then makes public.touch_updated_at() again as
 -- 20261012000000_initial_schema.sql has it, with create or replace. pnpm
 -- test:db runs exactly that. Should the move itself need undoing (readers'
--- rows naming the books they named before), before the rollback, while no
--- reader has written to the copies since:
+-- rows naming the books they named before), before the rollback and before
+-- anyone has written to these tables since: restore_copy puts every row of
+-- them back as it was kept, so it would undo a reader's later change too,
+-- and the deletes take every row naming a copy. (On 2026-10-18 production
+-- had no rows to move.)
 --   select * from private.restore_copy('20261105000000_own_book_rows', array[
 --     'public.library_entries', 'public.library_shelf_books', 'public.book_marks',
 --     'public.book_encounters', 'public.posts', 'public.reading_entries',
@@ -75,9 +71,12 @@
 -- each before the ones a write to it goes on to (a mark to its library row, a
 -- shelf's book to that row, an encounter to its post, a poster to its list of
 -- books, a shop's private part to its public copy, and every one of them to
--- the book it names), so a reader's write already under way finishes first
--- and the two never wait on each other. Books come last of them, and then
--- the tables a registration goes on to from its book, in its order.
+-- the book it names), so a reader's write already under way finishes first.
+-- A delete can go the other way (a post's encounters, a shop's private part):
+-- should one meet this file half way, Postgres stops one of the two, and if
+-- it is this file, nothing has changed and the deploy is run again. Books
+-- come last of them, and then the tables a registration goes on to from its
+-- book, in its order.
 select set_config('lock_timeout', '10s', true);
 select private.keep_copy('20261105000000_own_book_rows', array[
   'public.book_marks', 'public.library_shelf_books', 'public.library_entries',
@@ -172,13 +171,14 @@ where (books.isbn, books.title, books.author, books.publisher, books.price, book
 
 -- Copies --------------------------------------------------------------------------
 
--- Which book each copy was made from, and why: moved (by this file), edited
--- (its typist edited it) or held. Nobody reads it through the API; it names
--- books only (whose a copy is, is the copy's created_by).
+-- Which book each copy was made from, and why: moved, by a migration moving
+-- readers' rows to their copies (another way of making copies adds its own
+-- reason). Nobody reads it through the API; it names books only (whose a
+-- copy is, is the copy's created_by).
 create table private.book_copies (
   book_id uuid primary key references public.books (id) on delete cascade,
   copied_from uuid not null references public.books (id) on delete cascade,
-  reason text not null check (reason in ('moved', 'edited', 'held')),
+  reason text not null check (reason in ('moved')),
   copied_at timestamptz not null default now()
 );
 create index book_copies_from on private.book_copies (copied_from);
@@ -213,7 +213,8 @@ $$;
 revoke all on function private.swap_book(jsonb, text, text) from public, anon, authenticated;
 
 -- The readers whose rows name a book: every use book_is_mine asks about (a
--- shelf of their library is a row of it).
+-- shelf of their library is a row of it), and a library row taken out, so
+-- that putting it back brings back their own book.
 create function private.book_users(b uuid) returns setof uuid
 language sql stable set search_path = '' as $$
   select m.user_id from public.book_marks m where m.book_id = b
@@ -239,9 +240,10 @@ revoke all on function private.book_users(uuid) from public, anon, authenticated
 -- edition, so it stays in that work when the operator joins or parts it),
 -- and the book's place there: it is shown the master the book was shown,
 -- and judged again on the next tick, as its own registration, from when the
--- book was placed. One the book was apart from, or held (reason held), starts
--- with no verdict, so its reader is told when it is held. The rows moved keep
--- their times.
+-- book was placed. One the book was apart from (held) starts with no
+-- verdict, so its reader is told when it is held. The rows moved keep their
+-- times. It runs under a move's locks (keep_copy), so nobody writes the
+-- reader's rows meanwhile.
 create function private.give_own_copy(original uuid, reader uuid, reason text)
 returns uuid
 language plpgsql security definer set search_path = '' as $$
@@ -270,11 +272,9 @@ begin
   update private.book_checks c set placed_at = o.placed_at,
     checked_at = case when x.isbn is null then o.checked_at end,
     verdict = case when x.isbn is null then o.verdict
-      when give_own_copy.reason = 'held' or o.verdict = 'apart' then null
-      else o.verdict end,
+      when o.verdict = 'apart' then null else o.verdict end,
     judged_at = case when x.isbn is null then o.judged_at
-      when give_own_copy.reason = 'held' or o.verdict = 'apart' then null
-      else o.judged_at end,
+      when o.verdict = 'apart' then null else o.judged_at end,
     confirmed_at = null, held_work = null
   from private.book_checks o
   where c.book_id = own and o.book_id = original;
@@ -323,42 +323,6 @@ begin
 end;
 $$;
 revoke all on function private.give_own_copy(uuid, uuid, text) from public, anon, authenticated;
-
--- Gives every reader but its typist whose rows name a book their copy of it,
--- as it is now; returns how many. A catalog row or a 見本's book is
--- everyone's and gives none.
-create function private.split_others(book uuid, reason text) returns integer
-language plpgsql security definer set search_path = '' as $$
-declare
-  x record;
-  reader uuid;
-  n integer := 0;
-begin
-  select b.created_by, b.source into x from public.books b where b.id = book;
-  if not found or x.source <> 'manual' or private.is_sample_book(book) then
-    return 0;
-  end if;
-  for reader in
-    select u.id from private.book_users(book) u (id)
-    where u.id is distinct from x.created_by
-    order by u.id
-  loop
-    perform private.give_own_copy(book, reader, split_others.reason);
-    n := n + 1;
-  end loop;
-  return n;
-end;
-$$;
-revoke all on function private.split_others(uuid, text) from public, anon, authenticated;
-
--- Each reader's rows of a book, found by the book: who uses it (book_users).
-create index library_entries_book on public.library_entries (book_id);
-create index book_marks_book on public.book_marks (book_id);
-create index book_encounters_book_id on public.book_encounters (book_id);
-create index reading_entries_book on public.reading_entries (book_id);
-create index shop_private_shelves on public.shop_private using gin (shelves jsonb_path_ops);
-create index shop_private_scene_books on public.shop_private
-  using gin (scene_books jsonb_path_ops);
 
 -- The move ----------------------------------------------------------------------
 
@@ -481,43 +445,3 @@ select private.check_copy('20261105000000_own_book_rows',
     'public.library_entries', 'public.library_shelf_books', 'public.book_marks',
     'public.poster_books'
   ]::regclass[]);
-
--- From now on --------------------------------------------------------------------
-
--- Before a book's typist changes what they typed (its title, author, ISBN,
--- publisher or price), every other reader whose rows name it is given their
--- copy of it as it is.
-create function private.copies_before_edit() returns trigger
-language plpgsql security definer set search_path = '' as $$
-begin
-  perform private.split_others(old.id, 'edited');
-  return new;
-end;
-$$;
-revoke all on function private.copies_before_edit() from public, anon, authenticated;
-create trigger books_own_copies before update of isbn, title, author, publisher, price
-  on public.books
-  for each row when ((old.isbn, old.title, old.author, old.publisher, old.price)
-    is distinct from (new.isbn, new.title, new.author, new.publisher, new.price))
-  execute function private.copies_before_edit();
-
--- When a book is held (bib_judge), every other reader whose rows name it is
--- given their copy, judged on the next tick as their own: they are told if
--- it is held too, and answer for their own; what its typist answers is
--- theirs. Should giving them their copies fail (it should not), the hold
--- goes on and the database's log has the warning.
-create function private.copies_before_hold() returns trigger
-language plpgsql security definer set search_path = '' as $$
-begin
-  begin
-    perform private.split_others(new.book_id, 'held');
-  exception when others then
-    raise warning 'copies of a held book failed: %', sqlstate;
-  end;
-  return null;
-end;
-$$;
-revoke all on function private.copies_before_hold() from public, anon, authenticated;
-create trigger work_changes_held after insert on private.work_changes
-  for each row when (new.kind = 'hold')
-  execute function private.copies_before_hold();
