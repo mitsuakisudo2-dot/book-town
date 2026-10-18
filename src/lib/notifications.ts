@@ -83,6 +83,25 @@ const ownPosterWords = (
   return "あなたのポスター" + (title.startsWith("『") ? title : quote(title));
 };
 
+const LIKES = "likes:";
+
+/**
+ * Whether the reader has seen this notice. A post's いいね are seen up to the
+ * newest like they saw: when one is taken back, the gathering that is left
+ * is not news, and does not tell that someone took theirs back.
+ */
+export function seenNotice(seen: readonly string[], id: string): boolean {
+  if (seen.includes(id)) return true;
+  const at = id.lastIndexOf("@");
+  if (!id.startsWith(LIKES) || at < 0) return false;
+  const post = id.slice(0, at + 1);
+  const newest = Date.parse(id.slice(at + 1));
+  return seen.some(
+    (key) =>
+      key.startsWith(post) && Date.parse(key.slice(post.length)) >= newest,
+  );
+}
+
 /**
  * Who liked: 凪さん, 凪さんとほか2人, 匿名の読書家, 凪さん、ほか1人、匿名の読書家1人.
  * Only the lead is named; an anonymous liker is never named nor told apart.
@@ -194,21 +213,24 @@ export function notificationsFor(
   }
   // いいね: one notice per post, by how many readers, never how many taps.
   // The newest named liker leads; the rest are counted, and anonymous ones
-  // only ever as 匿名の読書家. A new liker makes it new; another tap does not.
+  // only ever as 匿名の読書家. Known by its newest like (seenNotice): a new
+  // liker makes it new; another tap, or a like taken back, does not.
   for (const post of state.posts) {
     if (post.authorId !== ME_ID || old(post)) continue;
     const named = (post.likers ?? [])
       .filter((liker) => findReader(state, liker.readerId))
       .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-    const anonymous = post.anonymousLikers ?? 0;
-    const people = named.length + anonymous;
-    if (!people) continue;
+    const anonymous = post.anonymousLikes?.people ?? 0;
+    if (!named.length && !anonymous) continue;
     const lead = named[0];
+    const newest = [lead?.at, anonymous ? post.anonymousLikes?.at : undefined]
+      .filter((at): at is string => Boolean(at))
+      .reduce((a, b) => (Date.parse(a) >= Date.parse(b) ? a : b));
     notices.push({
-      id: `likes:${post.id}:${people}`,
+      id: LIKES + post.id + "@" + newest,
       // No face for 匿名の読書家, not even the viewer's own.
       readerId: lead?.readerId ?? "",
-      createdAt: lead?.at ?? post.createdAt,
+      createdAt: newest,
       text: `${likersWords(lead && name(lead.readerId), named.length - 1, anonymous)}があなたの投稿にいいねしました ${quote(post.body)}`,
       href: pageOr(
         state,
@@ -388,5 +410,5 @@ export const unreadCount = (
   holds: readonly BookHold[] = [],
 ): number =>
   notificationsFor(state, 0, holds).filter(
-    (notice) => !state.seenNotifications.includes(notice.id),
+    (notice) => !seenNotice(state.seenNotifications, notice.id),
   ).length;

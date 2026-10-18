@@ -92,8 +92,15 @@ export const REGISTER = {
   added: (quoted: string) => `${quoted}を登録しました`,
   already: (quoted: string) => `${quoted}はもうライブラリにあります`,
   undone: (quoted: string) => `${quoted}の登録を取り消しました`,
-  /** The notice's button that takes a registering back. */
-  undo: "元に戻す",
+  /** Asked before a book is taken out (けにー 10-18), and again when it has a trace. */
+  removeAsk: "本当に本棚から外しますか？",
+  remove: "本棚から外す",
+  keep: "外さない",
+  traces: "この本には記録やメモが含まれています",
+  finished: "読了した本です",
+  reading: "読書中です",
+  traceStays: "外しても、記録とメモは消えません",
+  removeAskAgain: "本当に外しますか？",
 } as const;
 
 // ── Failure notices ─────────────────────────────────────────────────────
