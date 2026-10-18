@@ -518,7 +518,7 @@ const standIn = async (route) => {
   // What an owner's shop counts (followers, visitors): nobody yet.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "HEAD")
     return route.fulfill({ status: 200, headers: { "content-range": "*/0" } });
-  if (url.pathname === "/rest/v1/rpc/shop_visitors") return json(200, 0);
+  if (url.pathname === "/rest/v1/rpc/shop_visitors") return json(200, []);
   if (url.pathname.startsWith("/rest/v1/") && request.method() !== "GET")
     townWrites.push(url.pathname);
   // The rest of the signed-in town: a new reader has nothing yet.

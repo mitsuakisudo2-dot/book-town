@@ -339,7 +339,7 @@ export function notificationsFor(
       id: "visitors:" + weekOf(visitors.at),
       readerId: ME_ID,
       createdAt: visitors.at,
-      text: `この1週間で、${came}があなたの本屋に立ち寄りました`,
+      text: `先週、${came}があなたの本屋に立ち寄りました`,
       href: shopPath(OWN_SHOP_ID),
     });
   const active = activeSession(state);
