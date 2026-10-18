@@ -5,10 +5,12 @@ import {
   migrationFiles,
   migrationText,
 } from "./fixtures/pglite-supabase";
+import { catalog } from "./fixtures/bibliography";
 import {
   MESSAGE_LENGTH,
   PLACE_LENGTH,
   STACK_LENGTH,
+  scrubText,
 } from "../src/lib/screen-errors";
 import { SITE_NOTE_LIMITS } from "../src/lib/site-notes";
 
@@ -25,12 +27,17 @@ const TEXT = migrationText(FILE);
 
 const AKI = "00000000-0000-4000-8000-00000000000a";
 
-async function migrated(): Promise<PGlite> {
+async function before(): Promise<PGlite> {
   const db = new PGlite();
   await db.exec(SUPABASE_STANDIN);
   for (const file of FILES.filter((file) => file < FILE!))
     await db.exec(migrationText(file));
   await db.exec(`insert into auth.users (id) values ('${AKI}');`);
+  return db;
+}
+
+async function migrated(): Promise<PGlite> {
+  const db = await before();
   await db.exec(TEXT);
   return db;
 }
@@ -168,7 +175,7 @@ async function main() {
       "error",
       "kept",
       "/",
-      "s".repeat(STACK_LENGTH + 50),
+      Array(100).fill("chunk.js:12:345").join(" "),
       "not a commit",
       "d".repeat(100),
     );
@@ -177,7 +184,9 @@ async function main() {
       build: string;
       device: string;
     }>("select stack, build, device from private.screen_errors");
-    assert.equal(kept.stack.length, STACK_LENGTH);
+    assert.ok(kept.stack.length <= STACK_LENGTH);
+    assert.ok(kept.stack.length > STACK_LENGTH - 20);
+    assert.match(kept.stack, /^(chunk\.js:12:345 ?)+$/);
     assert.equal(kept.build, "");
     assert.equal(kept.device.length, SITE_NOTE_LIMITS.device);
   });
@@ -212,6 +221,156 @@ async function main() {
       ["new"],
     );
   });
+
+  await check(
+    "the database takes out what could name a reader, whatever the sender did",
+    async () => {
+      await clear();
+      const token =
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJlLWhlcmU";
+      const raw =
+        `Error: aki@example.jp saw 「人間失格」 at https://booktown.page/search/?q=secret#x ` +
+        `id 0b9f6c3e-1a2b-4c3d-8e9f-0a1b2c3d4e5f key ${token} ` +
+        `sb_secret_abcdefghijkl "typed words" 'more' Key (handle)=(aki) 1234567`;
+      await report(
+        null,
+        "error",
+        raw,
+        "/books/?isbn=9784101006055#top",
+        "chunk-1a2b.js:1:23456 https://evil.example/x.js?token=1:2:3 <img> app.js:7:8",
+      );
+      const [row] = await rows<{
+        message: string;
+        place: string;
+        stack: string;
+      }>("select message, place, stack from private.screen_errors");
+      for (const kept of [
+        "aki@example.jp",
+        "人間失格",
+        "secret",
+        "0b9f6c3e",
+        token.slice(0, 20),
+        "sb_secret",
+        "typed words",
+        "more",
+        "=(aki)",
+        "1234567",
+      ])
+        assert.ok(!row.message.includes(kept), kept);
+      assert.equal(row.place, "/books/");
+      // Column numbers of a minified script are long, and stay.
+      assert.equal(row.stack, "chunk-1a2b.js:1:23456 app.js:7:8");
+      // The same steps as the app's: what the app cleaned comes out as it went.
+      for (const sample of [
+        raw,
+        "TypeError: Cannot read properties of undefined (reading 'x')",
+        "AuthApiError: Invalid login credentials for x@y.co",
+        "  spaced\n  out  ",
+      ]) {
+        const [{ scrubbed }] = await rows<{ scrubbed: string }>(
+          "select private.scrub_screen_text($1) as scrubbed",
+          [sample],
+        );
+        assert.equal(scrubbed, scrubText(sample, 10_000), sample);
+        const [{ again }] = await rows<{ again: string }>(
+          "select private.scrub_screen_text($1) as again",
+          [scrubText(sample)],
+        );
+        assert.equal(again, scrubText(sample));
+      }
+      // Nothing left once cleaned, or a page that is no path: dropped.
+      await clear();
+      await report(null, "error", "   ");
+      await report(null, "error", "x", "?q=only");
+      assert.deepEqual(await all(), []);
+    },
+  );
+
+  await check(
+    "a flood of one error is one row, and a flood of long ones is refused",
+    async () => {
+      await clear();
+      for (let i = 0; i < 500; i += 1) await report(null, "error", "same");
+      const [row] = await rows<{ times: number }>(
+        "select times from private.screen_errors",
+      );
+      assert.equal(row.times, 500);
+      await db.exec("update private.screen_errors set times = 999999");
+      await report(null, "error", "same");
+      await report(null, "error", "same");
+      const [capped] = await rows<{ times: number }>(
+        "select times from private.screen_errors",
+      );
+      assert.equal(capped.times, 1000000);
+      await report(null, "error", "x".repeat(100_000));
+      await report(null, "error", "x", "/" + "y".repeat(100_000));
+      assert.equal((await all()).length, 1);
+    },
+  );
+
+  await check(
+    "every night rows older than 30 days go, and newer ones stay",
+    async () => {
+      const jobs = await rows<{ schedule: string; command: string }>(
+        "select schedule, command from cron.job where jobname = 'screen-errors'",
+      );
+      assert.deepEqual(jobs, [
+        {
+          schedule: "43 18 * * *",
+          command: "select private.forget_screen_errors()",
+        },
+      ]);
+      await clear();
+      await report(null, "error", "thirty-one days");
+      await report(null, "error", "thirty days");
+      await report(null, "error", "today");
+      await db.exec(
+        "update private.screen_errors set day = day - 31 where message = 'thirty-one days'",
+      );
+      await db.exec(
+        "update private.screen_errors set day = day - 30 where message = 'thirty days'",
+      );
+      await db.exec(jobs[0].command);
+      assert.deepEqual(
+        (await all()).map((row) => row.message),
+        ["thirty days", "today"],
+      );
+      // Neither the job's function nor the cleaning one is the API's.
+      for (const visitor of [null, AKI]) {
+        await refused(
+          () => as(visitor, "select private.forget_screen_errors()"),
+          "running the nightly job",
+        );
+        await refused(
+          () => as(visitor, "select private.scrub_screen_text('x')"),
+          "calling the cleaning",
+        );
+      }
+    },
+  );
+
+  await check(
+    "the rollback, as the header writes it, leaves the database as it was",
+    async () => {
+      // The rollback is the indented lines of the header, the comment
+      // before the file's first blank line.
+      const rollback = TEXT.slice(0, TEXT.indexOf("\n\n"))
+        .split("\n")
+        .filter((line) => line.startsWith("--   "))
+        .map((line) => line.slice(5))
+        .join("\n");
+      assert.match(rollback, /drop table private\.screen_errors/);
+      const earlier = await before();
+      const was = await catalog(earlier);
+      await earlier.exec(TEXT);
+      await earlier.exec(
+        "select public.report_screen_error('error', 'x', '/')",
+      );
+      await earlier.exec(rollback);
+      assert.deepEqual(await catalog(earlier), was);
+      await earlier.close();
+    },
+  );
 
   await check("the limits are the app's", async () => {
     assert.match(TEXT, new RegExp(`between 1 and ${MESSAGE_LENGTH}\\)`));
