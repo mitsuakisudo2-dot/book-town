@@ -3,7 +3,8 @@ name: Watch production
 # Watches https://booktown.page and the Supabase project (scripts/watch.mjs,
 # settings in scripts/watch.json). Every 15 minutes: the pages open and
 # Supabase is healthy. Every morning at 06:17 Japan time: the daily backup is
-# recent, how much of the plan is used (in the run's summary), and a visitor's
+# recent, how much of the plan is used (in the run's summary), how many errors
+# readers' screens sent in the last day, and a visitor's
 # walk through the production site (tests/production-journey.mjs). A failure
 # opens an issue that mentions the owner, so GitHub emails them; the next
 # passing run closes it. Needs SUPABASE_ACCESS_TOKEN and SUPABASE_PROJECT_ID;
@@ -70,6 +71,9 @@ jobs:
       - name: How much of the plan is used
         if: always()
         run: node scripts/watch.mjs usage
+      - name: Errors on readers' screens
+        if: always()
+        run: node scripts/watch.mjs errors
       - run: pnpm install --frozen-lockfile
         if: always()
       - run: pnpm exec playwright install --with-deps chromium

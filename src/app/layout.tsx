@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { supabaseConfigured, supabaseUrl } from "../lib/supabase/config";
 import { APPEARANCE_BOOT } from "../lib/appearance";
 import { HOME_TAB_BOOT } from "../lib/home-tab";
+import { ERROR_BOOT } from "../lib/screen-errors";
+import { ErrorWatch } from "../components/ErrorWatch";
 import "./globals.css";
 export const metadata: Metadata = {
   title: {
@@ -51,6 +53,9 @@ export default function RootLayout({
     // opens and the reader's palette before React hydrates.
     <html lang="ja" suppressHydrationWarning>
       <head>
+        {/* First of all: keeps the errors that happen before React starts,
+            for ErrorWatch to send (screen-errors.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: ERROR_BOOT }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -74,7 +79,10 @@ export default function RootLayout({
           <link href={FONTS_CSS} rel="stylesheet" />
         </noscript>
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ErrorWatch />
+      </body>
     </html>
   );
 }

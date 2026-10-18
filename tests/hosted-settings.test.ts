@@ -29,6 +29,7 @@ import {
   issuePlan,
   pageVerdict,
   usageVerdict,
+  errorsVerdict,
 } from "../scripts/watch.mjs";
 
 // The scripts that change the hosted Supabase and Vercel settings, without
@@ -1142,6 +1143,26 @@ async function main() {
         backupVerdict(recent, now, free).lines.join("\n"),
         /::warning::/,
       );
+    },
+  );
+
+  await check(
+    "the screen error watch counts, and never prints the words",
+    () => {
+      const watch = JSON.parse(readFileSync("scripts/watch.json", "utf8"));
+      assert.equal(watch.screenErrorsPerDay, 1);
+      assert.deepEqual(errorsVerdict({ kinds: 0, times: 0 }, 1), {
+        ok: true,
+        lines: ["Screen errors: none in the last day."],
+      });
+      const some = errorsVerdict({ kinds: 2, times: 7 }, 1);
+      assert.equal(some.ok, false);
+      assert.equal(
+        some.lines[0],
+        "Screen errors: 2 kind(s), 7 time(s) in the last day.",
+      );
+      assert.equal(errorsVerdict({ kinds: 2, times: 7 }, 5).ok, true);
+      assert.equal(errorsVerdict(undefined, 1).ok, false);
     },
   );
 
