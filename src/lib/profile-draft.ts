@@ -6,6 +6,7 @@ import {
   keptText,
   type KeptDraftOptions,
 } from "./kept-draft";
+import { valueMark } from "./canonical";
 import { PROFILE_LINK_LIMIT } from "./links";
 import {
   ownerKeyPattern,
@@ -107,6 +108,12 @@ export type NineWork = {
   ids: string[];
   /** A word for each book; a book taken off keeps its word to come back to. */
   notes: Record<string, string>;
+  /**
+   * The mark of the saved nine the work began from (nineMark), so a nine
+   * saved since (on another device) is told apart. Work kept before marks
+   * were kept has none, and goes on as it is.
+   */
+  from?: string;
 };
 
 export const nineForm = (
@@ -123,6 +130,17 @@ export const sameNine = (a: NineWork, b: NineWork) =>
     (id, index) =>
       id === b.ids[index] && (a.notes[id] ?? "") === (b.notes[id] ?? ""),
   );
+
+/** A short mark of a saved nine: its books in order, each with its word. */
+export const nineMark = (nine: NineWork) =>
+  valueMark(nine.ids.map((id) => [id, nine.notes[id] ?? ""]));
+
+/**
+ * Kept work begun from a nine that another was saved over since: not used
+ * unless the reader asks for it.
+ */
+export const nineIsStale = (work: NineWork, saved: NineWork) =>
+  work.from !== undefined && work.from !== nineMark(saved);
 
 /** Whether letting the work go would lose a word written for a book in it. */
 export const nineLosesWords = (work: NineWork, saved: NineWork) =>
@@ -143,7 +161,9 @@ export function readNineWork(value: unknown): NineWork | null {
     new Set(work.ids).size !== work.ids.length ||
     !work.notes ||
     typeof work.notes !== "object" ||
-    Array.isArray(work.notes)
+    Array.isArray(work.notes) ||
+    (work.from !== undefined &&
+      (typeof work.from !== "string" || !work.from || work.from.length > 40))
   )
     return null;
   const notes = Object.entries(work.notes);
@@ -154,7 +174,11 @@ export function readNineWork(value: unknown): NineWork | null {
     )
   )
     return null;
-  return { ids: [...work.ids], notes: Object.fromEntries(notes) };
+  return {
+    ids: [...work.ids],
+    notes: Object.fromEntries(notes),
+    ...(work.from === undefined ? {} : { from: work.from }),
+  };
 }
 
 /** Keyed by owner (draftOwner): the reader's own card, over the saved one. */

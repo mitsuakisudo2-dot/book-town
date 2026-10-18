@@ -211,7 +211,7 @@ async function main() {
       });
       assert.equal(
         phone.getMissedSnapshot()?.line,
-        "別の端末で先に変わっていたため、人生の9冊の変更は送りませんでした。",
+        "別の端末で先に変わっていたため、人生の9冊の変更は送りませんでした。書きかけは残しています。",
       );
 
       const draft = (heading: string, theme: "navy" | "kinari" | "sumi") => ({
@@ -243,7 +243,7 @@ async function main() {
       );
       assert.equal(
         phoneAgain.getMissedSnapshot()?.line,
-        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。",
+        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。書きかけは残しています。",
       );
     },
   );
@@ -409,7 +409,7 @@ async function main() {
       assert.ok(recovered?.missed);
       assert.equal(
         walkMissedLine(recovered.missed),
-        "別の端末で先に変わっていたため、店内の飾りつけの変更は送りませんでした。",
+        "別の端末で先に変わっていたため、店内の飾りつけの変更は送りませんでした。書きかけは残しています。",
       );
       assert.equal(
         (db.tables.shop_private[0].scene as { objects: { text: string }[] })
@@ -523,7 +523,7 @@ async function main() {
       assert.deepEqual(posterThemes(db), { 夜の本: "kinari" });
       assert.equal(
         phone.getMissedSnapshot()?.line,
-        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。",
+        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。書きかけは残しています。",
       );
       assert.ok(
         !db.writes.some(
@@ -563,7 +563,7 @@ async function main() {
       assert.deepEqual(posterThemes(db), { 一枚目: "kinari", 二枚目: "navy" });
       assert.equal(
         phone.getMissedSnapshot()?.line,
-        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。",
+        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。書きかけは残しています。",
       );
     },
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ME_ID, type TownActions, type TownState } from "../lib/types";
 import {
@@ -17,14 +17,16 @@ import {
   reviewNoteOf,
   reviewNoteWords,
 } from "../lib/social";
-import { posterNewPath, profilePath } from "../lib/paths";
+import { posterNewPath, profilePath, timelinePath } from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
-import { usePersistenceStatus } from "../lib/store";
+import { usePersistenceStatus, useTownBackend } from "../lib/store";
+import { posterMark, posterWorkKey, usePosterDraft } from "../lib/poster-draft";
 import { useUrlParam } from "../lib/url-state";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import { PosterFoldCover, PosterPages } from "./PosterView";
 import { ReportButton } from "./Report";
 import { BackLink } from "./BackLink";
+import { useDraftOwner } from "./KeptDraftNote";
 import "./poster-screen.css";
 import { bookAuthor, booksById, bookTitle } from "../lib/book-name";
 import { counted } from "../lib/words";
@@ -53,11 +55,29 @@ export function PosterScreen({
   const [read, setRead] = useState(false);
   const startPage = Math.max(0, parseInt(pageParam ?? "", 10) - 1 || 0);
   const found = state.posters.find((entry) => entry.id === posterId);
+  // Work on the reader's own poster kept in this browser (a change not
+  // saved yet, or not sent because it was changed on another device first).
+  const owner = useDraftOwner();
+  const { work: keptWork, clear: letGo } = usePosterDraft(
+    owner === null ? null : posterWorkKey({ owner, posterId }),
+  );
   // Someone else's draft is theirs alone, as if it were not there.
   const poster =
     found && (found.status === "published" || found.authorId === ME_ID)
       ? found
       : undefined;
+  // The work kept is the very poster the account has now: nothing to keep.
+  const done =
+    poster?.authorId === ME_ID &&
+    keptWork !== null &&
+    posterMark(keptWork) === posterMark(poster) &&
+    persistence === "saved";
+  useEffect(() => {
+    if (done) letGo();
+  }, [done, letGo]);
+  // Gone, its work opens as a new poster (not while the town is unread).
+  const savedIn = useTownBackend();
+  const opensGone = keptWork !== null && savedIn !== "unavailable";
   const author = poster && findReader(state, poster.authorId);
   if (!poster || !author)
     return persistence === "loading" ? (
@@ -71,11 +91,24 @@ export function PosterScreen({
           <p>
             作った人が外したのかもしれません。ほかのポスターは、タイムラインで見られます。
           </p>
+          {opensGone && (
+            <p>
+              このポスターの書きかけを、このブラウザに残しています。新しいポスターとして開けます。
+            </p>
+          )}
           <div className="empty-state-actions">
-            <Link href="/timeline/" className="btn">
+            {opensGone && (
+              <Link href={posterNewPath({ posterId })} className="btn fill">
+                書きかけを開く
+              </Link>
+            )}
+            <Link href={timelinePath()} className="btn">
               タイムラインへ
             </Link>
-            <Link href={posterNewPath()} className="btn fill">
+            <Link
+              href={posterNewPath()}
+              className={opensGone ? "btn" : "btn fill"}
+            >
               ポスターを作る
               <Icon name="arrow" size={16} />
             </Link>
@@ -173,6 +206,11 @@ export function PosterScreen({
               {posterBookIds(poster).length
                 ? "タイムラインには出さず、プロフィールと作品ページに貼っています。"
                 : "タイムラインには出さず、プロフィールに貼っています。"}
+            </p>
+          )}
+          {mine && keptWork && posterMark(keptWork) !== posterMark(poster) && (
+            <p className="poster-screen-fact">
+              このポスターの書きかけを、このブラウザに残しています。
             </p>
           )}
           {mine ? (

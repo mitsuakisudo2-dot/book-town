@@ -367,7 +367,7 @@ async function main() {
       });
       assert.equal(
         next.getMissedSnapshot()?.line,
-        "別の端末で先に変わっていたため、人生の9冊の変更は送りませんでした。",
+        "別の端末で先に変わっていたため、人生の9冊の変更は送りませんでした。書きかけは残しています。",
       );
       // The device keeps nothing more of it.
       assert.equal(outboxWaiting(AKI, device), false);
@@ -462,7 +462,7 @@ async function main() {
       assert.equal(later.theme, "kinari");
       assert.equal(
         next.getMissedSnapshot()?.line,
-        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。",
+        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。書きかけは残しています。",
       );
     },
   );

@@ -207,6 +207,41 @@ check("private shelf and edits survive repository reload", () => {
   assert.equal(ownShop(reloaded.getSnapshot()).shelves[1].isPublic, false);
 });
 
+check(
+  "shelves kept on this device are put back whole, without books gone from the town",
+  () => {
+    const before = ownShop(store.getSnapshot()).shelves;
+    const kept = structuredClone(before);
+    kept[1].name = "この端末の棚";
+    kept[1].items[0].pop = "この端末で書いたPOP";
+    kept.push({
+      id: "shelf-here",
+      name: "この端末で足した棚",
+      capacity: 5,
+      isPublic: true,
+      items: [
+        { id: "item-gone", bookId: "missing", display: "spine", pop: "" },
+      ],
+    });
+    actions.restoreShelves(kept);
+    const now = ownShop(store.getSnapshot()).shelves;
+    assert.deepEqual(
+      now.map((shelf) => shelf.name),
+      [before[0].name, "この端末の棚", "この端末で足した棚"],
+    );
+    assert.equal(now[1].items[0].pop, "この端末で書いたPOP");
+    assert.deepEqual(now[2].items, []);
+    // Put back in turn (元に戻す), the shelves are as they were.
+    actions.restoreShelves(before);
+    assert.deepEqual(ownShop(store.getSnapshot()).shelves, before);
+    // Nothing well formed changes nothing.
+    const same = store.getSnapshot();
+    actions.restoreShelves([]);
+    actions.restoreShelves([{ id: "", name: "", capacity: 0 }] as never);
+    assert.equal(store.getSnapshot(), same);
+  },
+);
+
 check("profile nine books are normalized and persisted", () => {
   actions.updateNine(
     ["momo", "momo", "missing", ...seedState.books.map((book) => book.id)],

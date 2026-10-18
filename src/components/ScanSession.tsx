@@ -65,7 +65,19 @@ import {
   useTownReady,
 } from "../lib/store";
 import type { Book, Notify, TownActions, TownState } from "../lib/types";
+import {
+  keepTiming,
+  noteDone,
+  noteFrame,
+  noteReadAt,
+  NO_TIMING,
+  tabTiming,
+  USUAL,
+  type Timing,
+  type TimingSettings,
+} from "../lib/scan-timing";
 import { BarcodeRegister } from "./BarcodeRegister";
+import { ScanTiming } from "./ScanTiming";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
 import { bookAuthor, bookById, bookByIsbn, bookTitle } from "../lib/book-name";
@@ -348,6 +360,23 @@ export function ScanSession({
   const [typed, setTyped] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
+  // The timing mode (?scan-timing): null for every reader who did not ask.
+  const [timingSettings, setTimingSettings] = useState<TimingSettings | null>(
+    tabTiming,
+  );
+  const timing = useRef<Timing>(NO_TIMING);
+  const timingOn = useRef(timingSettings !== null);
+  const readerUsed = useRef("");
+  const gap = timingSettings?.gap ?? USUAL.gap;
+  const pictureWidth = timingSettings?.size ?? USUAL.size;
+  const area = timingSettings?.area ?? USUAL.area;
+  const gapRef = useRef(gap);
+  const areaRef = useRef(area);
+  useEffect(() => {
+    gapRef.current = gap;
+    areaRef.current = area;
+    timingOn.current = timingSettings !== null;
+  }, [gap, area, timingSettings]);
   const reads = useRef<SessionReads>(NO_READS);
   const inView = useRef<InView>({});
   const flashedAt = useRef(0);
@@ -371,6 +400,23 @@ export function ScanSession({
     latest.current = { owner, ready, online, savedIn, manual, cards };
   });
 
+  /** Notes a moment in the timing mode's record; nothing without the mode. */
+  const time = useCallback((change: (now: Timing) => Timing) => {
+    if (timingOn.current) timing.current = change(timing.current);
+  }, []);
+  /** The timing mode: a new book is saved once it leaves the journal. */
+  const timeSaves = useCallback(() => {
+    const reader = latest.current.owner;
+    if (!timingOn.current || !reader) return;
+    const waiting = new Set(
+      libraryJournal.items(reader).map((item) => item.id),
+    );
+    const at = performance.now();
+    for (const read of timing.current.reads)
+      if (read.fresh && read.titleAt !== undefined && !waiting.has(read.id))
+        timing.current = noteDone(timing.current, read.id, "savedAt", at);
+  }, []);
+
   // An open session handles its own items; the page's sender leaves them.
   useEffect(() => {
     libraryJournal.live.add(session);
@@ -380,41 +426,49 @@ export function ScanSession({
   }, [session]);
 
   const states = new Map(items.map((item) => [item.id, item.state]));
+  useEffect(timeSaves, [items, timeSaves]);
   const shown = (card: Card): Shows =>
     states.get(card.id) === "refused" ? "refused" : card.shows;
   const { added, waiting, later } = tally(cards, states);
 
   /** Updates the cards from what sending their items came to. */
-  const settle = useCallback((sent: Sent[]) => {
-    if (!sent.length) return;
-    const { savedIn: where } = latest.current;
-    for (const { item, result } of sent) {
-      if (result === "added")
-        reads.current = noteTaken(reads.current, item.isbn, "in");
-      if (result === "already")
-        reads.current = noteTaken(reads.current, item.isbn, "already");
-    }
-    const byId = new Map(sent.map((entry) => [entry.item.id, entry]));
-    setCards((list) =>
-      list.map((card) => {
-        const entry = byId.get(card.id);
-        if (!entry || card.shows === "undone") return card;
-        return {
-          ...card,
-          shows: showsOf(entry.result, where),
-          bookId: entry.item.bookId,
-          title: entry.item.title ?? card.title,
-          author: entry.item.author ?? card.author,
-        };
-      }),
-    );
-    // The card shows what its read came to, over a remark about it.
-    setCurrent((shownNow) =>
-      shownNow?.cardId && byId.has(shownNow.cardId)
-        ? { cardId: shownNow.cardId }
-        : shownNow,
-    );
-  }, []);
+  const settle = useCallback(
+    (sent: Sent[]) => {
+      if (!sent.length) return;
+      const { savedIn: where } = latest.current;
+      const at = performance.now();
+      for (const { item, result } of sent) {
+        if (result === "added")
+          reads.current = noteTaken(reads.current, item.isbn, "in");
+        if (result === "already")
+          reads.current = noteTaken(reads.current, item.isbn, "already");
+        if (result === "added" || result === "already")
+          time((now) => noteDone(now, item.id, "titleAt", at));
+      }
+      timeSaves();
+      const byId = new Map(sent.map((entry) => [entry.item.id, entry]));
+      setCards((list) =>
+        list.map((card) => {
+          const entry = byId.get(card.id);
+          if (!entry || card.shows === "undone") return card;
+          return {
+            ...card,
+            shows: showsOf(entry.result, where),
+            bookId: entry.item.bookId,
+            title: entry.item.title ?? card.title,
+            author: entry.item.author ?? card.author,
+          };
+        }),
+      );
+      // The card shows what its read came to, over a remark about it.
+      setCurrent((shownNow) =>
+        shownNow?.cardId && byId.has(shownNow.cardId)
+          ? { cardId: shownNow.cardId }
+          : shownNow,
+      );
+    },
+    [time, timeSaves],
+  );
 
   // The sends this session started that have not answered yet (openBD is
   // being asked): ［終わる］ waits for them to say where those books went.
@@ -474,6 +528,11 @@ export function ScanSession({
     // Every read shows on the card: on an iPhone there is no vibration, and
     // in silent mode no sound either.
     flashCard();
+    const timedAt = performance.now();
+    if (reaction.kind !== "same" && reaction.kind !== "new")
+      time((now) =>
+        noteReadAt(now, `again-${now.reads.length}`, timedAt, false),
+      );
     if (reaction.kind === "same") {
       reads.current = noteRead(reads.current, isbn, at, null);
       setCurrent((shownNow) => ({ ...(shownNow ?? {}), say: "same" }));
@@ -515,6 +574,7 @@ export function ScanSession({
         : {}),
     });
     reads.current = noteRead(reads.current, isbn, at, "held");
+    time((now) => noteReadAt(now, item.id, timedAt, true));
     setCards((list) => [
       ...list,
       {
@@ -578,8 +638,8 @@ export function ScanSession({
     // ZXing is given a larger picture than the browser's own size, which
     // can be small (Safari).
     const larger: MediaTrackConstraints = {
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
+      width: { ideal: pictureWidth },
+      height: { ideal: Math.round((pictureWidth * 9) / 16) },
     };
     const wasm = readerKind() === "wasm";
     const size = wasm ? larger : {};
@@ -677,10 +737,12 @@ export function ScanSession({
       setInput((now) =>
         now.kind === "camera" ? { kind: "camera", phase: "running" } : now,
       );
+      readerUsed.current = reader.wasm ? "wasm" : "native";
       const detector = new reader.Detector({ formats: ["ean_13"] });
       // ZXing reads the guide's band only, drawn into the one canvas: the
       // whole frame would be a new canvas of its size at every read. The
-      // browser's own reader takes the video as it is.
+      // browser's own reader takes the video as it is. The timing mode can
+      // have ZXing read all of the picture shown instead (読む範囲 画面).
       const band = reader.wasm
         ? document
             .createElement("canvas")
@@ -689,7 +751,10 @@ export function ScanSession({
       const frame = () => {
         if (!band) return element;
         const view = element.getBoundingClientRect();
-        const box = guide.current?.getBoundingClientRect();
+        const box =
+          areaRef.current === "band"
+            ? guide.current?.getBoundingClientRect()
+            : undefined;
         const rect = guideRect(
           { width: element.videoWidth, height: element.videoHeight },
           view,
@@ -726,6 +791,7 @@ export function ScanSession({
         // held in view meanwhile is still new once it is.
         if (element.readyState >= 2 && latest.current.owner) {
           let codes: string[] = [];
+          const began = performance.now();
           try {
             const image = frame();
             if (image)
@@ -733,6 +799,8 @@ export function ScanSession({
                 (code) => code.rawValue,
               );
             failed = 0;
+            const ms = performance.now() - began;
+            time((now) => noteFrame(now, began, ms));
           } catch {
             // A frame the reader could not read: the next one may. Five in
             // a row, and the reader is not working: it is let go.
@@ -744,7 +812,7 @@ export function ScanSession({
           if (stopped) return;
           handlers.current.onFrame(codes);
         }
-        timer = setTimeout(look, 200);
+        timer = setTimeout(look, gapRef.current);
       };
       void look();
     })();
@@ -756,7 +824,7 @@ export function ScanSession({
       inView.current = {};
       torchTrack.current = null;
     };
-  }, [cameraOn]);
+  }, [cameraOn, pictureWidth, time]);
 
   /** ［ライト］: on, off. */
   function switchTorch() {
@@ -1258,6 +1326,21 @@ export function ScanSession({
               </div>
             )}
           </div>
+        )}
+        {timingSettings && input.kind === "camera" && (
+          <ScanTiming
+            timing={timing}
+            settings={timingSettings}
+            onSettings={(next) => {
+              // A record is one setting's: it starts again.
+              timing.current = NO_TIMING;
+              keepTiming(next);
+              setTimingSettings(next);
+            }}
+            reader={readerUsed}
+            video={video}
+            notify={notify}
+          />
         )}
         <div
           className={

@@ -21,6 +21,7 @@ import {
 import {
   getTownSnapshot,
   shelfUsed,
+  townStore,
   usePersistenceStatus,
   useTownBackend,
 } from "../lib/store";
@@ -42,6 +43,14 @@ import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { useKeptDraft } from "../lib/kept-draft";
 import { openShopDraftStore } from "../lib/open-shop-draft";
+import { sceneDraftStore, sceneMark, sceneWorkKey } from "../lib/scene-draft";
+import {
+  keepArrangements,
+  keptArrangements,
+  shelvesDraftStore,
+  shelvesLoseWords,
+} from "../lib/shelves-draft";
+import { canonical } from "../lib/canonical";
 import {
   SAVE_REFUSED,
   overSaved,
@@ -603,10 +612,12 @@ function ShelfEditingPanel({
   const [resumed, setResumed] = useState<boolean | null>(null);
   if (resumed === null && keptName.loaded) setResumed(typed !== null);
   const nameField = useRef<HTMLInputElement>(null);
-  const saving = useKeptUntilSaved(() => {
+  const saving = useKeptUntilSaved((_what, how) => {
     // Turned away by the account after all: the name waits to be set again.
+    // Not sent because the shelves had changed on another device first, the
+    // town says so above, and the shelves page offers them back.
     setResumed(true);
-    notify(SAVE_REFUSED);
+    if (how === "refused") notify(SAVE_REFUSED);
   });
   // A name kept that the shelf has now (set here or elsewhere) is let go.
   const nameSaved = Boolean(keptName.draft && typed === null);
@@ -629,9 +640,13 @@ function ShelfEditingPanel({
       (entry) => entry.id === shelf.id,
     );
     if (now && nameKey)
-      saving.hold("shelf-name", shelfNameDraftStore, nameKey, {
-        name: now.name,
-      });
+      saving.hold(
+        "shelf-name",
+        shelfNameDraftStore,
+        nameKey,
+        { name: now.name },
+        "shelves",
+      );
     setResumed(false);
   }
   const setNameRef = useRef(setName);
@@ -945,6 +960,32 @@ function ShopMessages({ state }: { state: TownState }) {
   );
 }
 
+/** Shelves handed to the town: what it had missed then, and which town. */
+type Handed = { after: number; generation: number };
+const handed = (): Handed => ({
+  after: townStore.getMissedSnapshot()?.id ?? 0,
+  generation: townStore.getGeneration(),
+});
+
+/**
+ * Whether shelves handed to the town did not reach the database: turned
+ * away, not sent for a change on another device first, or another town
+ * shown since (signed out meanwhile).
+ */
+function shelvesMissedSince({ after, generation }: Handed) {
+  const missed = townStore.getMissedSnapshot();
+  return (
+    generation !== townStore.getGeneration() ||
+    Boolean(
+      missed &&
+      missed.id > after &&
+      [...missed.refused, ...missed.elsewhere].some(
+        (write) => write.kind === "shelves",
+      ),
+    )
+  );
+}
+
 export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   const walk = useWalkStore();
   const owner = useDraftOwner();
@@ -981,12 +1022,132 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   // The library, in its own order: the shelf picker offers it first.
   const own = useMemo(() => libraryBookIds(state), [state]);
   const ownScene = walk.scenes.find((s) => s.storeId === shop?.id);
+  // Decorating kept in this browser: not saved yet, or not sent because the
+  // scene was saved on another device first.
+  const keptScene = useKeptDraft(
+    sceneDraftStore,
+    shop ? sceneWorkKey(owner, shop.id) : null,
+  ).draft;
+  const sceneKept = Boolean(
+    walk.ready &&
+    keptScene &&
+    keptScene.scene.storeId === shop?.id &&
+    sceneMark(keptScene.scene) !== sceneMark(ownScene),
+  );
   // Whether the shop stands in the walk now, decorated or as its shelves are.
   const inWalk = ownScene
     ? hasPublicSceneBooks(ownScene, state.books)
     : publicWalkShops({ books: state.books, shops: [], ownShop: shop }).length >
       0;
   const persistenceMessage = shelfSaveMessage(savedIn, persistenceStatus);
+  // The shelves as arranged here, not sent because they had changed on
+  // another device first, newest first: the reader can put each back, or
+  // throw it away. One the shop has saved now waits no more.
+  const keptShelves = useKeptDraft(shelvesDraftStore, owner);
+  const arrangements = keptArrangements(keptShelves.draft);
+  const shelvesNow = shop ? canonical(shop.shelves) : null;
+  // The arrangement put back here last, handed to the town: it waits no
+  // more once the town has it, even with a book or a POP changed since.
+  const [putHere, setPutHere] = useState<
+    (Handed & { owner: string; mark: string }) | null
+  >(null);
+  const inHand = putHere?.owner === owner ? putHere.mark : null;
+  const waiting = arrangements.filter(
+    (entry) =>
+      shelvesNow !== null &&
+      canonical(entry.shelves) !== shelvesNow &&
+      canonical(entry.shelves) !== inHand,
+  );
+  const shelvesHere = waiting[0] ?? null;
+  const shelvesSaved =
+    shelvesNow !== null &&
+    persistenceStatus === "saved" &&
+    waiting.length < arrangements.length;
+  useEffect(() => {
+    if (!owner || !shelvesSaved || shelvesNow === null) return;
+    keepArrangements(
+      owner,
+      keptArrangements(shelvesDraftStore.get(owner)).filter(
+        (entry) => canonical(entry.shelves) !== shelvesNow,
+      ),
+    );
+  }, [owner, shelvesSaved, shelvesNow]);
+  useEffect(() => {
+    if (
+      !putHere ||
+      (persistenceStatus !== "saved" && persistenceStatus !== "recovered")
+    )
+      return;
+    setPutHere(null);
+    // Not reached (or another reader's town now): they are offered again.
+    if (putHere.owner !== owner || shelvesMissedSince(putHere)) return;
+    keepArrangements(
+      putHere.owner,
+      keptArrangements(shelvesDraftStore.get(putHere.owner)).filter(
+        (entry) => canonical(entry.shelves) !== putHere.mark,
+      ),
+    );
+  }, [owner, persistenceStatus, putHere]);
+  // The note's buttons go with it: the hand goes on to 棚を追加.
+  const addShelfButton = useRef<HTMLButtonElement>(null);
+  const handToShelves = useRef(false);
+  useEffect(() => {
+    if (!handToShelves.current) return;
+    handToShelves.current = false;
+    addShelfButton.current?.focus();
+  });
+  /**
+   * Puts the shelves kept here in place of the shelves now, with 元に戻す.
+   * They stay kept until the account has them: turned away, or changed on
+   * another device first again, they are offered again.
+   */
+  function putShelvesBack() {
+    if (!owner || !shop || !shelvesHere) return;
+    const before = shop.shelves;
+    const entry = shelvesHere;
+    if (!townTook(() => actions.restoreShelves(entry.shelves))) {
+      notify(
+        failure({ what: "棚を入れ替えられませんでした", next: AGAIN.later }),
+      );
+      return;
+    }
+    // As the town holds them now (books gone since are left out).
+    const put = {
+      shelves: getTownSnapshot().ownShop?.shelves ?? entry.shelves,
+      at: entry.at,
+    };
+    keepArrangements(
+      owner,
+      arrangements.map((other) => (other === entry ? put : other)),
+    );
+    const sent = handed();
+    setPutHere({ ...sent, owner, mark: canonical(put.shelves) });
+    handToShelves.current = true;
+    notify("この端末の棚にしました。", {
+      label: "元に戻す",
+      run: () => {
+        // Not sent, or turned away: the shelves now are not these, and
+        // nothing is put in their place (these are offered again).
+        const now = getTownSnapshot().ownShop?.shelves;
+        if (
+          !now ||
+          (shelvesMissedSince(sent) &&
+            canonical(now) !== canonical(put.shelves))
+        ) {
+          notify("この端末の棚は保存されなかったため、いまの棚のままです。");
+          return;
+        }
+        if (!townTook(() => actions.restoreShelves(before))) return;
+        // Offered again, as before (also once they were saved), with what
+        // was changed on them since.
+        setPutHere(null);
+        keepArrangements(owner, [
+          { shelves: now, at: put.at },
+          ...keptArrangements(shelvesDraftStore.get(owner)),
+        ]);
+      },
+    });
+  }
   const addBookShelf = shop?.shelves.find(
     (shelf) => shelf.id === addBookShelfId,
   );
@@ -1170,6 +1331,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           {!inWalk && (
             <p>公開する棚に本を並べると、書店めぐりに灯りがともります。</p>
           )}
+          {sceneKept && <p>店内の書きかけを、このブラウザに残しています。</p>}
         </div>
         <div>
           <button
@@ -1211,12 +1373,35 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         <button
           type="button"
           className="btn fill"
+          ref={addShelfButton}
           onClick={() => setAddShelfOpen(true)}
         >
           <Icon name="plus" size={18} />
           棚を追加
         </button>
       </div>
+      {shelvesHere && (
+        <KeptDraftNote
+          className="editor-shelves-kept"
+          continuing
+          saved={keptShelves.saved}
+          wordsLost={shelvesLoseWords(shelvesHere.shelves, shop.shelves)}
+          onDiscard={() => {
+            if (owner)
+              keepArrangements(
+                owner,
+                arrangements.filter((entry) => entry !== shelvesHere),
+              );
+            handToShelves.current = true;
+          }}
+          lead="別の端末で先に棚が変わっていたため、この端末で直した棚を残しています。この端末の棚にすると、いまの棚と入れ替わります"
+          action={
+            <button type="button" onClick={putShelvesBack}>
+              この端末の棚にする
+            </button>
+          }
+        />
+      )}
       <div className="editor-shelf-list">
         {shop.shelves.map((shelf) => (
           <ShelfEditingPanel

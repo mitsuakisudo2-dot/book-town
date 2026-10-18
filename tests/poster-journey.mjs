@@ -267,6 +267,81 @@ try {
     });
 
     await check(
+      `${at}: work begun before the poster changed elsewhere waits for the maker`,
+      async () => {
+        const id = new URL(baseURL + posterUrl).searchParams.get("id");
+        await go(posterUrl);
+        await page.getByRole("link", { name: "直す" }).click();
+        const heading = page.getByRole("textbox", { name: "見出し" });
+        await heading.fill("書きかけの見出し");
+        await go(posterUrl);
+        // Another device changes the poster meanwhile.
+        await page.evaluate((posterId) => {
+          const town = JSON.parse(localStorage.getItem("book-town-v1"));
+          town.data.posters.find(
+            (poster) => poster.id === posterId,
+          ).pages[0].heading = "別の端末の見出し";
+          localStorage.setItem("book-town-v1", JSON.stringify(town));
+        }, id);
+        await page.reload();
+        await expect(
+          page.getByText(
+            "このポスターの書きかけを、このブラウザに残しています。",
+          ),
+        ).toBeVisible();
+        await page.screenshot({
+          path: path.join(output, `${at}-poster-work-kept.png`),
+          fullPage: true,
+        });
+        await page.getByRole("link", { name: "直す" }).click();
+        const note = editor().locator(".poster-editor-kept").first();
+        await expect(note).toContainText(
+          "書きかけより新しいポスターが保存されています",
+        );
+        // The poster saved now is shown, and nothing is written over the
+        // older work before the maker chooses: the hand is on the choice.
+        await expect(heading).toHaveValue("別の端末の見出し");
+        await expect(heading).toBeDisabled();
+        await expect(
+          editor().getByRole("button", { name: "直して貼り出す" }),
+        ).toBeDisabled();
+        const open = note.getByRole("button", { name: "書きかけを開く" });
+        await expect(open).toBeFocused();
+        await page.screenshot({
+          path: path.join(output, `${at}-poster-work-waits.png`),
+        });
+        // Asked for, the older work opens, and putting it up is said to
+        // replace the poster saved now.
+        await open.click();
+        await expect(heading).toHaveValue("書きかけの見出し");
+        await expect(heading).toBeEnabled();
+        await expect(editor().locator(".poster-editor-kept")).toContainText(
+          "保存すると、いま保存されているポスターと入れ替わります",
+        );
+        await editor().locator(".poster-editor-kept").scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: path.join(output, `${at}-poster-work-opened.png`),
+        });
+        await heading.fill("海を前にした長い夜に");
+        await editor().getByRole("button", { name: "直して貼り出す" }).click();
+        await toast("ポスターを直しました。");
+        await expect(
+          page.getByRole("heading", { name: "海を前にした長い夜に", level: 1 }),
+        ).toBeVisible();
+        await expect(
+          page.getByText(
+            "このポスターの書きかけを、このブラウザに残しています。",
+          ),
+        ).toHaveCount(0);
+        expect(
+          await page.evaluate(() =>
+            localStorage.getItem("book-town-poster-drafts-v1"),
+          ),
+        ).toBeNull();
+      },
+    );
+
+    await check(
       `${at}: a lineup kept as a draft is the maker's alone`,
       async () => {
         // From the writing sheet, as the timeline's own button is gone.

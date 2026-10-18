@@ -9,6 +9,7 @@ import {
 import type { Missed } from "./supabase/sync";
 import { writtenWords, type RelationTable, type Write } from "./town-remote";
 import type { ShopTable, WalkWrite } from "./walk-remote";
+import { keepShelvesNotSent, shelvesStillKept } from "./shelves-draft";
 import { failure, KEPT } from "./words";
 import { NAMES } from "./words";
 
@@ -122,14 +123,15 @@ export function walkWriteLabels(write: WalkWrite): string[] {
 const named = (labels: string[]) => [...new Set(labels)].join("、");
 
 /**
- * The line that tells what did not reach the database: what it turned away
- * (and that the words written are kept, when they were put back), and what
- * was not sent because it had changed on another device. Null for nothing.
+ * The line that tells what did not reach the database: what it turned away,
+ * and what was not sent because it had changed on another device, each with
+ * whether the work is kept to go on with. Null for nothing.
  */
 export function missedLine(
   refused: string[],
   elsewhere: string[],
   wordsKept: boolean,
+  elsewhereKept = false,
 ): string | null {
   const lines = [
     refused.length &&
@@ -140,6 +142,7 @@ export function missedLine(
     elsewhere.length &&
       failure({
         what: `別の端末で先に変わっていたため、${named(elsewhere)}の変更は送りませんでした`,
+        kept: elsewhereKept ? KEPT.draft : undefined,
       }),
   ].filter((line): line is string => Boolean(line));
   return lines.length ? lines.join("") : null;
@@ -192,16 +195,43 @@ export function keepMissedWords(owner: string, writes: Write[]): boolean {
   return kept;
 }
 
-/** What the town tells of a batch it missed, its words kept for `owner`. */
+/**
+ * Changes whose work the screen it was made on keeps in this browser until
+ * the database has it (人生の9冊, a poster, the scene of 店内).
+ */
+const KEPT_TOWN = new Set<Write["kind"]>(["nine", "posters", "update-poster"]);
+const KEPT_WALK = new Set<WalkWrite["kind"]>(["scene"]);
+
+/** Some changes, every one of them kept to go on with. */
+const allKept = <W extends { kind: string }>(writes: W[], kept: Set<string>) =>
+  writes.length > 0 && writes.every((write) => kept.has(write.kind));
+
+/**
+ * What the town tells of a batch it missed, its words kept for `owner`, and
+ * the shelves not sent because they had changed on another device (or put
+ * back from those kept, and turned away: they are still kept).
+ */
 export function townMissedLine(
   missed: Missed<Write>,
   owner: string | null,
 ): string | null {
   const wordsKept = owner !== null && keepMissedWords(owner, missed.refused);
+  const withShelves = (kept: boolean) =>
+    kept ? new Set([...KEPT_TOWN, "shelves"]) : KEPT_TOWN;
   return missedLine(
     missed.refused.flatMap(townWriteLabels),
     missed.elsewhere.flatMap(townWriteLabels),
-    wordsKept,
+    wordsKept ||
+      allKept(
+        missed.refused,
+        withShelves(owner !== null && shelvesStillKept(owner, missed.refused)),
+      ),
+    allKept(
+      missed.elsewhere,
+      withShelves(
+        owner !== null && keepShelvesNotSent(owner, missed.elsewhere),
+      ),
+    ),
   );
 }
 
@@ -210,5 +240,6 @@ export const walkMissedLine = (missed: Missed<WalkWrite>) =>
   missedLine(
     missed.refused.flatMap(walkWriteLabels),
     missed.elsewhere.flatMap(walkWriteLabels),
-    false,
+    allKept(missed.refused, KEPT_WALK),
+    allKept(missed.elsewhere, KEPT_WALK),
   );

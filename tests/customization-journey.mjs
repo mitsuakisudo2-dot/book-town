@@ -552,6 +552,14 @@ try {
         localStorage.setItem("book-town-walk-v1", JSON.stringify(walk));
       });
       await page.reload();
+      const keptHere = page.getByText(
+        "店内の書きかけを、このブラウザに残しています。",
+      );
+      await expect(keptHere).toBeVisible();
+      await page.screenshot({
+        path: path.join(output, "scene-work-kept.png"),
+        animations: "disabled",
+      });
       await reopen();
       await expect(keptLine()).toContainText(
         "書きかけより新しい店内が保存されています",
@@ -590,7 +598,13 @@ try {
         "古い書きかけ",
       );
       await expect(dialog().getByLabel("看板の店名")).toHaveValue("夜道の本屋");
-      await expect(keptLine()).toContainText("書きかけを続けています");
+      await expect(keptLine()).toContainText(
+        "書きかけを開いています。保存すると、いま保存されている店内と入れ替わります",
+      );
+      await page.screenshot({
+        path: path.join(output, "scene-work-opened.png"),
+        animations: "disabled",
+      });
       await expect(dialog().getByLabel("店主からのひとこと")).toBeEnabled();
       await selectSolaris();
       await expect(dialog().getByLabel("この本のPOP")).toHaveValue(longPop);
@@ -601,6 +615,7 @@ try {
       await dialog().getByLabel("看板の店名").fill("夜道の本屋");
       await save();
       expect(await drafts()).toBe(null);
+      await expect(keptHere).toHaveCount(0);
     },
   );
   await check(
