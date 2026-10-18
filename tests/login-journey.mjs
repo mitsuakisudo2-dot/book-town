@@ -1917,6 +1917,102 @@ try {
     },
   );
 
+  await check(
+    "another reader's typed-in book is the reader's own copy on its page",
+    async () => {
+      // レン typed two books in; the reader has a copy of the first, wished.
+      const REN = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e01";
+      const THEIRS = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e02";
+      const COPY = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e03";
+      const UNTAKEN = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e04";
+      const at = "2026-10-12T00:00:00Z";
+      const typed = (id, created_by, title) => ({
+        id,
+        isbn: null,
+        title,
+        author: "試験 作家",
+        publisher: "",
+        price: null,
+        source: "manual",
+        created_by,
+        created_at: at,
+        updated_at: at,
+      });
+      town = {
+        books: [
+          typed(THEIRS, REN, "夜の手帖"),
+          typed(COPY, user.id, "夜の手帖"),
+          typed(UNTAKEN, REN, "朝の手帖"),
+        ],
+        book_marks: [
+          { user_id: user.id, book_id: COPY, kind: "wish", created_at: at },
+        ],
+        my_books: [{ id: COPY, copied_from: THEIRS }],
+      };
+      // What the page writes is answered here and noted, in order.
+      const sent = [];
+      const writes = [
+        "/rest/v1/rpc/copy_book",
+        "/rest/v1/book_marks",
+        "/rest/v1/library_entries",
+      ];
+      const answer = (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() === "GET" || !writes.includes(url.pathname))
+          return route.fallback();
+        sent.push({
+          path: url.pathname,
+          asked: url.search + " " + (request.postData() ?? ""),
+        });
+        return route.fulfill({ status: 201, body: "" });
+      };
+      await page.route(supabase + "/rest/v1/**", answer);
+      await page.goto(base + "/books/registered/?id=" + THEIRS);
+      // Asked of レン's book, the reader's copy answers.
+      const wished = page.getByRole("button", { name: "読みたいに登録済み" });
+      await expect(wished).toBeVisible();
+      await expect(page.locator(".bh-to-shop").first()).toHaveAttribute(
+        "href",
+        new RegExp("place=" + COPY),
+      );
+      await wished.click();
+      await expect(
+        page.getByRole("button", { name: "読みたいに加える" }),
+      ).toBeVisible();
+      await expect
+        .poll(() => sent.map((write) => write.path))
+        .toContain("/rest/v1/book_marks");
+      for (const write of sent) {
+        expect(write.asked).toContain(COPY);
+        expect(write.asked).not.toContain(THEIRS);
+      }
+      // One the reader has nothing of: the copy is made first, then named.
+      sent.splice(0);
+      await page.goto(base + "/books/registered/?id=" + UNTAKEN);
+      await page.getByRole("button", { name: "読みたいに加える" }).click();
+      await expect(
+        page.getByRole("button", { name: "読みたいに登録済み" }),
+      ).toBeVisible();
+      await expect
+        .poll(() => sent.map((write) => write.path))
+        .toContain("/rest/v1/book_marks");
+      const [made, ...named] = sent;
+      expect(made.path).toBe("/rest/v1/rpc/copy_book");
+      expect(made.asked).toContain(UNTAKEN);
+      const copy = /"copy":"([0-9a-f-]{36})"/.exec(made.asked)?.[1];
+      expect(copy).toBeTruthy();
+      for (const write of named) {
+        expect(write.path).not.toBe("/rest/v1/rpc/copy_book");
+        expect(write.asked).toContain(copy);
+        expect(write.asked).not.toContain(UNTAKEN);
+      }
+      await expect.poll(outboxKeys).toEqual([]);
+      await page.unroute(supabase + "/rest/v1/**", answer);
+      town = null;
+    },
+  );
+
   // Another reader, their shop and posts; what reports did; the reader's own
   // reports; and two books with outside covers.
   const OTHER = "3c1d2b4a-7e6f-4a5b-8c9d-0e1f2a3b4c5d";
