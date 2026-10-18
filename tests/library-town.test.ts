@@ -305,7 +305,8 @@ check("undo puts the books back, but not one changed again since", () => {
   assert.equal(restored, 2);
   const state = store.getSnapshot();
   assert.equal(state.libraryEntries.momo.status, "tsundoku");
-  assert.equal(state.libraryEntries.momo.owned, null);
+  // 積読 said 持っている before the op (2026-10-18).
+  assert.equal(state.libraryEntries.momo.owned, "yes");
   assert.equal(state.libraryEntries.solaris.owned, "yes");
   assert.equal(state.libraryEntries.solaris.status, "finished");
   // A book the op brought in from nothing goes out again.

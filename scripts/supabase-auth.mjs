@@ -22,6 +22,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 // Tests point this at a stand-in.
 const API = process.env.SUPABASE_API_URL ?? "https://api.supabase.com/v1";
+// How long to wait before reading the settings again after a change.
+const readAgainMs = Number(process.env.SETTINGS_READ_AGAIN_MS ?? 3000);
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 /** Settings whose values may appear in the public log. */
@@ -314,8 +316,16 @@ async function main(mode) {
       );
     throw error;
   }
-  const after = await request("GET");
-  const missed = authChanges(after, wanted, "");
+  // Supabase takes a few seconds to reload some settings (the human check
+  // did, 2026-10-18), so a read right after the change can still show the old
+  // values: read again a few times before calling it a failure.
+  let missed = [];
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (attempt)
+      await new Promise((resolve) => setTimeout(resolve, readAgainMs));
+    missed = authChanges(await request("GET"), wanted, "");
+    if (!missed.length) break;
+  }
   if (missed.length)
     throw new Error("These settings did not take: " + missed.join(", "));
   console.log(`Changed ${changed.length} setting(s).`);

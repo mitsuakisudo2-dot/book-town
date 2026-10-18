@@ -353,7 +353,7 @@ for (const c of LIBRARY_CASES.sequence)
 // ---------------------------------------------------------------- 問い2・3・5
 
 check(
-  "問い5 積読 on books owned, not owned and unset leaves each 所有 as it was",
+  "積読 on books owned, not owned and unset says each is 持っている (2026-10-18, over 問い5)",
   () => {
     const state = town({
       libraryEntries: rows(
@@ -372,7 +372,7 @@ check(
     );
     assert.deepEqual(
       ["yes", "no", "unset"].map((id) => next.libraryEntries[id].owned),
-      ["yes", "no", null],
+      ["yes", "yes", "yes"],
     );
     for (const id of ["yes", "no", "unset"])
       assert.equal(next.libraryEntries[id].status, "tsundoku");
