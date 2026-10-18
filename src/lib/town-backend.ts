@@ -1,5 +1,7 @@
 import type { Arrived } from "./arrived";
 import type { RepositorySnapshot, TownRepository } from "./repository";
+import type { Missed } from "./supabase/sync";
+import type { Write } from "./town-remote";
 import type { PersistenceStatus, TownState } from "./types";
 
 /** The kinds of record the town creates, each with its own ids. */
@@ -73,8 +75,16 @@ export type TownReads = Required<
 
 export interface TownBackendListener {
   status(status: PersistenceStatus): void;
-  /** The town as it really is, after the database refused a change. */
-  replace(state: TownState, status: PersistenceStatus): void;
+  /**
+   * The town as the database holds it, read again after a change was
+   * refused ("recovered", with the changes that did not reach it) or after
+   * changes kept on the device were sent (supabase/sync.ts).
+   */
+  replace(
+    state: TownState,
+    status: PersistenceStatus,
+    missed?: Missed<Write>,
+  ): void;
 }
 
 const PREFIXES: Record<RecordKind, string> = {

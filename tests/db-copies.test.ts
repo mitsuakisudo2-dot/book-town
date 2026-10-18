@@ -136,8 +136,11 @@ async function main() {
   }
 
   // Three readers: Aki with a shop, Ben who typed a book in and posted about
-  // it, Chi who replied to him and reported his profile.
+  // it, Chi who replied to him and reported his profile. The 見本's books,
+  // which every database has (own_book_rows), are taken out first, so the
+  // rows counted are these alone.
   await db.exec(`
+    delete from books where private.is_sample_book(id);
     insert into auth.users (id) values ('${AKI}'), ('${BEN}'), ('${CHI}');
     insert into profiles (id, handle, name) values
       ('${AKI}', 'aki', 'アキ'), ('${BEN}', 'ben', 'ベン'), ('${CHI}', 'chi', 'チー');

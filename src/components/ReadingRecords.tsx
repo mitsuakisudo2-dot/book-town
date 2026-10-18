@@ -40,6 +40,8 @@ import {
 import { LengthNearLimit } from "./Social";
 import { shownToOthers, type Audience } from "../lib/visibility";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
+import { townOffline } from "../lib/store";
+import { failure, offlineFor } from "../lib/words";
 import "./records.css";
 
 type Shared = {
@@ -177,6 +179,10 @@ export function RecordSheet({
   // out to others (with the way back), and when it came back to the reader.
   // A change the town did not take keeps the sheet open, with the work.
   function save() {
+    // The record waits on this device until it is saved (outbox.ts); should
+    // the database turn it away, its words come back to the draft
+    // (missed-changes.ts).
+    const offline = townOffline();
     if (record) {
       // Only what was changed: the rest stays as the record is by now.
       if (!actions.updateRecord(record.id, draft ?? {})) {
@@ -184,7 +190,8 @@ export function RecordSheet({
         return;
       }
       clear();
-      if (audience !== record.audience)
+      if (offline) notify(failure(offlineFor("記録")));
+      else if (audience !== record.audience)
         told(actions, notify, record.id, audience);
       else notify("記録を書き直しました");
     } else {
@@ -194,7 +201,8 @@ export function RecordSheet({
         return;
       }
       clear();
-      if (isPublic) told(actions, notify, id, audience);
+      if (offline) notify(failure(offlineFor("記録")));
+      else if (isPublic) told(actions, notify, id, audience);
       else notify(pick(KEPT));
     }
     onClose();

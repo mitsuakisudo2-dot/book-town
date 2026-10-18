@@ -126,3 +126,33 @@ export function adoptVisitorRecords(
         recordWorkKey({ owner, bookId: key.slice(visitor.length) }),
       );
 }
+
+/**
+ * Puts a record's words that were sent back into its draft: a record the
+ * database turned away. Work already kept there stays, and the words sent
+ * follow its note on a new line. False, and nothing kept, when the two notes
+ * are too long for one record or the browser cannot keep them.
+ */
+export function returnRecordWork(
+  key: string,
+  work: RecordChanges,
+  store: KeptDraftStore<RecordChanges> = recordDrafts,
+): boolean {
+  try {
+    const kept = store.get(key);
+    const before = kept?.note?.trim() ? kept.note.trimEnd() : "";
+    const sent = work.note?.trim() ?? "";
+    const note =
+      !sent || sent === before.trim()
+        ? before || work.note
+        : before
+          ? before + "\n" + sent
+          : work.note;
+    if (note !== undefined && [...note].length > RECORD_NOTE_MAX_LENGTH)
+      return false;
+    store.set(key, { ...work, ...kept, ...(note !== undefined && { note }) });
+    return store.getSnapshot().saved && store.get(key) !== null;
+  } catch {
+    return false;
+  }
+}
