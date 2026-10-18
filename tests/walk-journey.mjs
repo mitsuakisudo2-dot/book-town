@@ -63,13 +63,21 @@ async function swipe(dx, dy) {
   );
 }
 try {
+  // The first walk's hint leaves 3.6 seconds after it shows, and the first
+  // page waits for its fonts before the check can look: the page's clock
+  // stands still until the hint has been seen, so a slow runner cannot let
+  // it go first.
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now() + 60_000);
   await go();
   await check(
     "the first walk says once how to turn, and the circles say what they do",
     async () => {
-      await expect(page.locator(".walk-first-hint")).toContainText(
-        "上にめくると、となりの本屋へ",
-      );
+      const hint = page.locator(".walk-first-hint");
+      await expect(hint).toContainText("上にめくると、となりの本屋へ");
+      await page.clock.runFor(3600);
+      await expect(hint).toHaveCount(0);
+      await page.clock.resume();
       const tools = page.locator(".walk-header-tools");
       await expect(tools).toContainText("伝える");
       await expect(tools).toContainText("フォロー");

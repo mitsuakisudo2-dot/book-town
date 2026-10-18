@@ -76,8 +76,20 @@ const holdOwnProfile = () => {
 };
 // The rest of the town, once a test fills it: rows by table.
 let town = null;
-// How long the stand-in takes to read the rest of the town.
-let townDelay = 0;
+// Holds the rest of the town's reads until released, so a test that looks
+// at the page while the town is still being read does not race a timer: a
+// navigation waits for the page's fonts, and on a slow runner that took
+// longer than a fixed delay, which had ended by the time the test looked.
+let townHold = null;
+const holdTown = () => {
+  let release;
+  const held = new Promise((done) => (release = done));
+  townHold = held;
+  return () => {
+    if (townHold === held) townHold = null;
+    release();
+  };
+};
 const reportsSent = [];
 // Blocks made ([blocker, blocked]) and lifted (the query of each delete).
 const blocksSent = [];
@@ -87,6 +99,10 @@ let followsEnd = false;
 // A change carrying these words is refused by the stand-in, as the database
 // refuses one that breaks a rule, after the screen has moved on.
 const REFUSED_MARK = "（断られる）";
+// While set, the stand-in answers a 便り sent only once it settles.
+let postsHeld = null;
+// While set, a session cannot be renewed, as when its refresh token is gone.
+let refreshRefused = false;
 // What the database grants a reporter to read of their own reports.
 const REPORT_GRANTED = [
   "id",
@@ -320,6 +336,12 @@ const standIn = async (route) => {
   if (url.pathname === "/auth/v1/logout")
     return route.fulfill({ status: 204, body: "" });
   if (url.pathname === "/auth/v1/user") return json(200, user);
+  if (url.pathname === "/auth/v1/token" && refreshRefused)
+    return json(400, {
+      code: 400,
+      error_code: "refresh_token_not_found",
+      msg: "Invalid Refresh Token: Refresh Token Not Found",
+    });
   if (url.pathname === "/rest/v1/profiles") {
     if (request.method() === "GET") {
       if (url.searchParams.get("id") === "eq." + user.id) {
@@ -515,6 +537,21 @@ const standIn = async (route) => {
       return route.fulfill({ status: 204, body: "" });
     }
   }
+  // Like the database: a 便り is the author's own row, and one carrying the
+  // refusal mark is turned away. While postsHeld, the answer waits; a page
+  // gone meanwhile hears nothing.
+  if (url.pathname === "/rest/v1/posts" && request.method() === "POST") {
+    townWrites.push(url.pathname);
+    if (postsHeld) await postsHeld;
+    return (
+      JSON.stringify(body).includes(REFUSED_MARK)
+        ? json(400, {
+            code: "23514",
+            message: "new row violates check constraint",
+          })
+        : json(201, [])
+    ).catch(() => {});
+  }
   // What an owner's shop counts (followers, visitors): nobody yet.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "HEAD")
     return route.fulfill({ status: 200, headers: { "content-range": "*/0" } });
@@ -524,7 +561,7 @@ const standIn = async (route) => {
   // The rest of the signed-in town: a new reader has nothing yet.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "GET") {
     townReads.push(url.pathname);
-    if (townDelay) await new Promise((done) => setTimeout(done, townDelay));
+    if (townHold) await townHold;
     const table = url.pathname.slice("/rest/v1/".length);
     if (table === "posts") {
       postReads.push(url.search);
@@ -709,13 +746,14 @@ try {
     async () => {
       const bones = page.locator("main .home-skeletons");
       const empty = page.getByText("まだ便りがありません");
-      townDelay = 2500;
+      let release = holdTown();
       try {
         // 便りだけ: following nobody, it is empty, but only once it is known.
         await page.goto(base + "/timeline/");
         await expect(bones).toHaveAttribute("aria-busy", "true");
         await expect(bones.locator(".home-skel")).toHaveCount(3);
         await expect(empty).toHaveCount(0);
+        release();
         await expect(bones).toHaveCount(0, { timeout: 10000 });
         await expect(empty).toBeVisible();
         // ホーム, opened for the first time: nothing kept from last time.
@@ -723,6 +761,7 @@ try {
           localStorage.setItem("book-town-home-tab-v1", "home");
           localStorage.removeItem("book-town-home-snapshot-v1");
         });
+        release = holdTown();
         await page.goto(base + "/");
         await expect(bones).toHaveAttribute("aria-busy", "true");
         await expect(page.locator(".home-carousel")).toHaveAttribute(
@@ -732,9 +771,10 @@ try {
         await expect(page.locator("main")).not.toContainText(
           /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
         );
+        release();
         await expect(bones).toHaveCount(0, { timeout: 10000 });
       } finally {
-        townDelay = 0;
+        release();
       }
       // The real town is empty here: every tile, slide, paper and front
       // drawn is a 見本, and says so.
@@ -761,7 +801,7 @@ try {
         localStorage.getItem("book-town-home-snapshot-v1"),
       );
       expect(JSON.parse(words ?? "null")?.owner).toBe("visitor");
-      townDelay = 2500;
+      const release = holdTown();
       try {
         await page.goto(base + "/");
         await expect(kept).toHaveAttribute("aria-busy", "true");
@@ -771,9 +811,10 @@ try {
         await expect(page.locator("main")).not.toContainText(
           /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
         );
+        release();
         await expect(kept).toHaveCount(0, { timeout: 10000 });
       } finally {
-        townDelay = 0;
+        release();
       }
       await expect(page.locator("main article.letter").first()).toBeVisible();
     },
@@ -1506,6 +1547,179 @@ try {
     },
   );
 
+  /** The page at a narrow phone's width too, then back. */
+  const shotNarrow = async (name) => {
+    await shot(name + "-390");
+    await page.setViewportSize({ width: 320, height: 640 });
+    await shot(name + "-320");
+    await page.setViewportSize({ width: 390, height: 844 });
+  };
+  const outboxKeys = () =>
+    page.evaluate(() =>
+      Object.keys(localStorage).filter((key) =>
+        key.startsWith("book-town-outbox-v1:"),
+      ),
+    );
+
+  await check(
+    "a 便り the account turns away later comes back to 投稿する, and the banner names it",
+    async () => {
+      const REFUSED_POST = "雨の日に読む本を探しています。" + REFUSED_MARK;
+      const fab = page.locator(".compose-fab");
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      const text = compose.locator("textarea");
+      await page.goto(base + "/timeline/");
+      await fab.click();
+      await text.fill(REFUSED_POST);
+      await compose
+        .getByRole("button", { name: "投稿する", exact: true })
+        .click();
+      await expect(compose).toHaveCount(0);
+      // The town takes it at once; the account turns it away a moment
+      // later, and its words go back to the composer, said so.
+      await expect(page.locator(".persistence-warning")).toHaveText(
+        "便りを保存できませんでした。書きかけは残しています。",
+      );
+      // What said it was posted gives way to what says it was not.
+      expect(await page.locator(".toast").count()).toBe(0);
+      await expect(fab).toContainText("下書き");
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual([user.id + ":new-post"]);
+      // Turned away, it waits for nothing more.
+      expect(await outboxKeys()).toEqual([]);
+      await shotNarrow("9-refused-post");
+      await fab.click();
+      await expect(text).toHaveValue(REFUSED_POST);
+      // Thrown away here, so the rest of the journey starts without it.
+      await compose.getByRole("button", { name: "書きかけを消す" }).click();
+      await compose.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(text).toHaveValue("");
+      await page.keyboard.press("Escape");
+      await expect(compose).toHaveCount(0);
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
+    },
+  );
+
+  await check(
+    "a 便り written with no connection says it waits, and ログアウト says so until it is sent",
+    async () => {
+      const WAITING_POST = "電車の中で書いた便り。";
+      const fab = page.locator(".compose-fab");
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      await page.goto(base + "/timeline/");
+      await expect(page.locator("main.town-main")).toBeVisible();
+      let release = () => {};
+      postsHeld = new Promise((done) => (release = done));
+      try {
+        await context.setOffline(true);
+        await fab.click();
+        await compose.locator("textarea").fill(WAITING_POST);
+        await compose
+          .getByRole("button", { name: "投稿する", exact: true })
+          .click();
+        await expect(
+          page.getByText(
+            "つながらないため、まだ投稿できていません。つながりしだい投稿します。",
+          ),
+        ).toBeVisible();
+        // Kept on this device while it waits.
+        await expect
+          .poll(outboxKeys)
+          .toEqual(["book-town-outbox-v1:" + user.id]);
+        await expect(page.locator(".toast")).toHaveCSS("opacity", "1");
+        await shotNarrow("9-offline-post");
+        // Back online, it is sent but not answered yet: ログアウト says what
+        // it would let go of.
+        await context.setOffline(false);
+        await page.goto(base + "/login/");
+        await expect(
+          page.getByText(
+            "まだ送れていない変更があります。ログアウトすると、この端末から消えます",
+          ),
+        ).toBeVisible();
+        await shotNarrow("9-logout-warning");
+      } finally {
+        await context.setOffline(false);
+        postsHeld = null;
+        release();
+      }
+      // Answered, nothing waits any more.
+      await page.goto(base + "/timeline/");
+      await expect.poll(outboxKeys).toEqual([]);
+      await page.goto(base + "/login/");
+      await expect(
+        page.getByText("まだ送れていない変更があります"),
+      ).toHaveCount(0);
+    },
+  );
+
+  await check(
+    "a sign-in that ends by itself keeps what waits and says so, and sends it once signed in again",
+    async () => {
+      const LAPSED_POST = "ログインが切れる前に書いた便り。";
+      const fab = page.locator(".compose-fab");
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      const warning = page.locator(".persistence-warning");
+      await page.goto(base + "/timeline/");
+      await expect(page.locator("main.town-main")).toBeVisible();
+      let release = () => {};
+      postsHeld = new Promise((done) => (release = done));
+      try {
+        await fab.click();
+        await compose.locator("textarea").fill(LAPSED_POST);
+        await compose
+          .getByRole("button", { name: "投稿する", exact: true })
+          .click();
+        await expect
+          .poll(outboxKeys)
+          .toEqual(["book-town-outbox-v1:" + user.id]);
+        // The session runs out and cannot be renewed: nobody pressed
+        // ログアウト. The page looks at it again when it is shown.
+        refreshRefused = true;
+        await page.evaluate(() => {
+          const key = Object.keys(localStorage).find((name) =>
+            /^sb-.+-auth-token$/.test(name),
+          );
+          const kept = JSON.parse(localStorage.getItem(key));
+          kept.expires_at = Math.floor(Date.now() / 1000) - 60;
+          localStorage.setItem(key, JSON.stringify(kept));
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+        await expect(warning).toHaveText(
+          "ログインが切れました。まだ送れていない変更は、この端末に残しています。もう一度ログインすると送ります。",
+        );
+        // It was not posted after all: the message saying so gives way.
+        expect(await page.locator(".toast").count()).toBe(0);
+        expect(await outboxKeys()).toEqual(["book-town-outbox-v1:" + user.id]);
+        await shotNarrow("9-lapsed");
+      } finally {
+        refreshRefused = false;
+        postsHeld = null;
+        release();
+      }
+      // Signed in again by the link from the email: what waited is sent.
+      const link = session();
+      await page.goto("about:blank");
+      await page.goto(
+        base +
+          "/login/#" +
+          new URLSearchParams({
+            access_token: link.access_token,
+            expires_at: String(link.expires_at),
+            expires_in: "3600",
+            refresh_token: link.refresh_token,
+            token_type: "bearer",
+            type: "magiclink",
+          }),
+      );
+      await expect(
+        page.getByRole("heading", { name: "ログインしています" }),
+      ).toBeVisible();
+      await page.goto(base + "/timeline/");
+      await expect.poll(outboxKeys).toEqual([]);
+      await expect(warning).toBeHidden();
+    },
+  );
+
   await check(
     "a book registered while the town loads is not said to be registered",
     async () => {
@@ -2129,7 +2343,7 @@ try {
         shop_private: [{ shelves: [shelf], scene_books: [] }],
         books: [bookRow(COVER_BOOK, OPENBD_ISBN, "こころの本")],
       };
-      townDelay = 2500;
+      const release = holdTown();
       try {
         await openHome();
         await expect(bones).toHaveAttribute("aria-busy", "true");
@@ -2140,9 +2354,10 @@ try {
         await expect(
           homeDoors.locator(".home-entrance.is-waiting"),
         ).toHaveCount(2);
+        release();
         await expect(bones).toHaveCount(0, { timeout: 10000 });
       } finally {
-        townDelay = 0;
+        release();
       }
       await expect(
         homeDoors.getByRole("button", { name: "本を登録" }),
@@ -2818,15 +3033,16 @@ try {
         await expect(at).toHaveURL(base + "/search/");
         await at.clock.runFor(3 * 60_000);
         expect(newReads()).toBe(away);
-        // The read back on Home is let finish before the page goes out of
-        // view: one still on its way when it comes back is the read it
-        // gets, and on a slow runner none more would be made.
-        const backOnHome = at.waitForResponse((response) =>
-          response.url().includes("created_at=gte."),
-        );
+        // The read back on Home is let finish in the page before it goes
+        // out of view: a read is timed from when the page took its answer,
+        // and one taken while the clock below runs on looks just made when
+        // the page comes back. レン writes meanwhile, so the page has taken
+        // the answer once レン's face joins the pill (its network reply alone
+        // can come before that, on a slow runner).
+        arrive(4, REN, "レンの、ホームを離れていたあいだの便り。");
         await nav.getByRole("link", { name: "ホーム" }).click();
         await expect.poll(newReads).toBe(away + 1);
-        await (await backOnHome).finished();
+        await expect(pill.locator(".home-new-face")).toHaveCount(2);
         const seen = (state) =>
           at.evaluate((state) => {
             Object.defineProperty(document, "visibilityState", {
@@ -3763,12 +3979,17 @@ try {
       await expect(title).toHaveText("こころの本");
       await expect(hero.locator(".book-page-author")).toHaveText("試験 作家");
       await expect(hero.locator(".book-page-publication")).toHaveCount(0);
-      await expect(hero.getByRole("link", { name: "書誌の出典" })).toHaveCount(0);
+      await expect(hero.getByRole("link", { name: "書誌の出典" })).toHaveCount(
+        0,
+      );
       expect(bibliographyAsks).toContain(COVER_BOOK);
       // Only books of the database are asked about: no 見本, no demo book.
       expect(
         bibliographyAsks.filter(
-          (id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id),
+          (id) =>
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+              id,
+            ),
         ),
       ).toEqual([]);
       masters = [
@@ -3827,7 +4048,9 @@ try {
       await expect(page.locator("main")).toContainText(
         "出典：国立国会図書館書誌データ（https://ndlsearch.ndl.go.jp/）をもとに BookTown が編集・加工して作成",
       );
-      await expect(page.locator("main")).toContainText("2026年10月から随時取得");
+      await expect(page.locator("main")).toContainText(
+        "2026年10月から随時取得",
+      );
       await noOverflow("credits page");
       await page.goBack();
       await expect(title).toHaveText("こころ 上");
@@ -3982,7 +4205,10 @@ try {
       await expect(page).not.toHaveURL(/\/notifications\//);
       holds = [heldRow];
       await page.waitForTimeout(5_100);
-      await page.getByRole("link", { name: /^お知らせ/ }).first().click();
+      await page
+        .getByRole("link", { name: /^お知らせ/ })
+        .first()
+        .click();
       await expect(page).toHaveURL(/\/notifications\/$/);
       await expect(heldNotices).toHaveCount(1);
       holds = [];
@@ -5127,12 +5353,13 @@ try {
       });
       const elsewhere = settleBeforeNavigating(await context.newPage());
       elsewhere.on("pageerror", (e) => errors.push(e.message));
+      let release = () => {};
       try {
         await elsewhere.goto(base + "/login/");
         await expect(
           elsewhere.getByRole("heading", { name: "ログインしています" }),
         ).toBeVisible();
-        townDelay = 2500;
+        release = holdTown();
         await elsewhere.getByRole("button", { name: "ログアウト" }).click();
         // The home, signed out there, reads the visitor's town.
         await expect(bones).toHaveAttribute("aria-busy", "true");
@@ -5140,9 +5367,10 @@ try {
         // The account's kept 便り went with it, never drawn for a visitor.
         expect(await keptOwner()).not.toBe(user.id);
         await expect(page.getByText("レンの夜の一行、その1。")).toHaveCount(0);
+        release();
         await expect(bones).toHaveCount(0, { timeout: 10000 });
       } finally {
-        townDelay = 0;
+        release();
         await elsewhere.close();
       }
       expect(await page.evaluate(() => window.sawEmptyTown)).toBe(false);

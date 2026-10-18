@@ -171,9 +171,9 @@ export interface Post {
   likers?: Liker[];
   /**
    * On the viewer's own posts: how many readers liked it anonymously, counted
-   * once each. Only a count ever reaches the author, never who (管理表80).
+   * once each, and when the newest of them did. Never who (管理表80).
    */
-  anonymousLikers?: number;
+  anonymousLikes?: { people: number; at: string };
   /**
    * Written while reading. "together" memos are ordinary public posts with a reading badge;
    * "solo" memos are private notes only the writer sees.

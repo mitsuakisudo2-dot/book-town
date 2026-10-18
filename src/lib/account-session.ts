@@ -3,6 +3,7 @@ import {
   useAccount,
   type AccountState,
   type Leaving,
+  type SignedOut,
 } from "./account";
 import { supabaseAccountBackend } from "./supabase/account-backend";
 import { getSupabase } from "./supabase/client";
@@ -33,6 +34,27 @@ const leaving: Leaving = {
     import("./leave").then(({ forgetReaderHere }) => forgetReaderHere(userId)),
 };
 
+const SIGNED_OUT_KEY = "book-town-signed-out-v1";
+
+/** ログアウト pressed in this browser, for every tab (account.ts, SignedOut). */
+const signedOut: SignedOut = {
+  pressed() {
+    try {
+      return localStorage.getItem(SIGNED_OUT_KEY) !== null;
+    } catch {
+      return false;
+    }
+  },
+  mark(pressed) {
+    try {
+      if (pressed) localStorage.setItem(SIGNED_OUT_KEY, "1");
+      else localStorage.removeItem(SIGNED_OUT_KEY);
+    } catch {
+      // Without storage, another tab may call the sign-out a lapse.
+    }
+  },
+};
+
 /** The signed-in reader of this browser, shared by every screen. */
 export const accountStore = createAccountStore(
   () => {
@@ -41,6 +63,7 @@ export const accountStore = createAccountStore(
   },
   supabaseConfigured,
   leaving,
+  signedOut,
 );
 
 export const accountActions = accountStore.actions;

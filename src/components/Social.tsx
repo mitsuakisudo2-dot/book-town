@@ -52,7 +52,8 @@ import { notePosted } from "../lib/just-posted";
 import { coverSelection, splitHidden } from "../lib/hidden-words";
 import { focusField } from "../lib/coarse-pointer";
 import { bookTitle } from "../lib/book-name";
-import { counted, failure } from "../lib/words";
+import { counted, failure, offlineFor } from "../lib/words";
+import { townOffline } from "../lib/store";
 
 type Shared = {
   state: TownState;
@@ -257,6 +258,7 @@ export function PostComposer({
   ].filter((entry, index, list) => list.indexOf(entry) === index);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const offline = townOffline();
     const created = actions.createPost({
       body,
       bookId: attached,
@@ -269,16 +271,21 @@ export function PostComposer({
       return;
     }
     notePosted(created);
+    // The 便り waits on this device until it is saved (outbox.ts); should
+    // the database turn it away, its words come back to the draft
+    // (missed-changes.ts).
     clear();
     setPicking(false);
     notify(
-      isReply
-        ? "返信しました"
-        : spoiler
-          ? "ネタバレを隠して投稿しました"
-          : attached
-            ? "ホームと作品ページに投稿しました"
-            : "ホームに投稿しました",
+      offline
+        ? failure(offlineFor(isReply ? "返信" : "投稿"))
+        : isReply
+          ? "返信しました"
+          : spoiler
+            ? "ネタバレを隠して投稿しました"
+            : attached
+              ? "ホームと作品ページに投稿しました"
+              : "ホームに投稿しました",
     );
     onDone?.(created);
   }

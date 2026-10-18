@@ -1,6 +1,8 @@
 import type { SceneBackup } from "./store-customization";
 import type { StoreScene } from "./store-scene";
+import type { Missed } from "./supabase/sync";
 import type { PersistenceStatus } from "./types";
+import type { WalkWrite } from "./walk-remote";
 import { loadWalk, saveWalk } from "./walk-repository";
 import { emptyWalk, type WalkState } from "./walk-state";
 
@@ -26,8 +28,16 @@ export interface WalkSnapshot {
 
 export interface WalkBackendListener {
   status(status: PersistenceStatus): void;
-  /** The walk as it really is, after the database refused a change. */
-  replace(data: WalkData, status: PersistenceStatus): void;
+  /**
+   * The walk as the database holds it, read again after a change was
+   * refused ("recovered", with the changes that did not reach it) or after
+   * changes kept on the device were sent (supabase/sync.ts).
+   */
+  replace(
+    data: WalkData,
+    status: PersistenceStatus,
+    missed?: Missed<WalkWrite>,
+  ): void;
 }
 
 /** What the walk saves through: this browser, or the person's account. */

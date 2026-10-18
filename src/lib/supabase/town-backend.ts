@@ -2,7 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   arrivedFromRows,
   emptyTown,
+  isWrite,
   planWrites,
+  splitWrite,
+  writeStake,
   visitorReader,
   referencedBookIds,
   townFromRows,
@@ -32,6 +35,7 @@ import type {
   TablesInsert,
 } from "./database.generated";
 import { REPORT_COLUMNS } from "./reports";
+import { deviceOutbox, OUTBOX_KEY } from "../outbox";
 import {
   all,
   allRows,
@@ -122,6 +126,9 @@ async function readTown(
   const own = async <T>(read: (id: string) => Promise<T[]>): Promise<T[]> =>
     userId === null ? [] : read(userId);
   const catalog = catalogOf(client);
+  // Awaited after the other rows: should one of them fail first, the
+  // catalog's own failure (the same lost network) is not left unheard.
+  catalog.catch(() => {});
   const [
     profiles,
     nine,
@@ -718,13 +725,13 @@ export async function applyWrite(
       return;
     case "update-shop":
       await settled(
-        client.from("shops").update(write.patch).eq("id", ids.shopId),
+        client.from("shops").update(write.patch).eq("id", write.shopId),
       );
       return;
     case "shelves":
       await settled(
         client.from("shop_private").upsert({
-          shop_id: ids.shopId,
+          shop_id: write.shopId,
           shelves: write.shelves as unknown as Json[],
         }),
       );
@@ -958,14 +965,18 @@ function writeSeen(userId: string, seen: string[]) {
 }
 
 export interface AccountBackendOptions extends SyncOptions {
+  /** Keeps what is kept per account in this browser (off in tests). */
   storage?: boolean;
+  /** Where changes wait to be sent (outbox.ts): the browser's, with storage. */
+  device?: Parameters<typeof deviceOutbox>[2];
 }
 
 /**
  * The signed-in person's town: read from Supabase, kept in memory for the
  * screens, and saved back in the background. Changes are written by comparing
  * the town with the last one the database confirmed, so a failed save is simply
- * planned again on the next try.
+ * planned again on the next try; while they wait, they are kept on the device
+ * (outbox.ts) and sent from the next page if this one closes first.
  */
 export function accountTownBackend(
   client: Client,
@@ -973,8 +984,9 @@ export function accountTownBackend(
   options: AccountBackendOptions = {},
 ): TownBackend {
   const storage = options.storage ?? typeof window !== "undefined";
+  const device = options.device ?? (storage ? undefined : null);
   let ids: RemoteIds | null = null;
-  const sync = backgroundSync<TownState>(
+  const sync = backgroundSync<TownState, Write>(
     {
       async read() {
         const loaded = await loadTown(
@@ -988,13 +1000,24 @@ export function accountTownBackend(
         // shop; they are left out of what is written (planWrites).
         return withSamples(loaded.state);
       },
-      async write(base, target) {
+      plan(base, target) {
         if (!ids) throw new TownSyncError("The town is not loaded yet", true);
-        for (const write of planWrites(base, target, ids))
-          await applyWrite(client, write, ids);
+        return planWrites(base, target, ids);
+      },
+      async apply(write) {
+        if (!ids) throw new TownSyncError("The town is not loaded yet", true);
+        await applyWrite(client, write, ids);
+      },
+      split: splitWrite,
+      stake: writeStake,
+      landed(base, target) {
         if (storage && target.seenNotifications !== base.seenNotifications)
           writeSeen(userId, target.seenNotifications);
       },
+      outbox:
+        device === null
+          ? undefined
+          : deviceOutbox(OUTBOX_KEY + userId, isWrite, device),
     },
     options,
   );
@@ -1007,7 +1030,7 @@ export function accountTownBackend(
         ? counterId(kind, existing, isbn)
         : crypto.randomUUID();
     },
-    load: async () => ({ state: await sync.load(), status: "saved" as const }),
+    load: async () => ({ state: await sync.load(), status: sync.loaded() }),
     save: sync.save,
     watch: sync.watch,
     absorb: sync.absorb,

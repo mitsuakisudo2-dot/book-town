@@ -5,14 +5,18 @@ import {
   type WalkData,
 } from "../walk-backend";
 import {
+  isWalkWrite,
   planWalkWrites,
+  splitWalkWrite,
   walkFromRows,
+  walkStake,
   type WalkIds,
   type WalkRows,
   type WalkWrite,
 } from "../walk-remote";
 import { loadPosition, noPosition, savePosition } from "../walk-repository";
 import type { Database, Json } from "./database.generated";
+import { deviceOutbox, WALK_OUTBOX_KEY } from "../outbox";
 import {
   all,
   allRows,
@@ -187,6 +191,8 @@ export async function applyWalkWrite(
 export interface AccountWalkOptions extends SyncOptions {
   /** Keeps where the walk stopped in this browser (off in tests). */
   storage?: boolean;
+  /** Where changes wait to be sent (outbox.ts): the browser's, with storage. */
+  device?: Parameters<typeof deviceOutbox>[2];
 }
 
 /**
@@ -199,8 +205,13 @@ export function accountWalkBackend(
   options: AccountWalkOptions = {},
 ): WalkBackend {
   const storage = options.storage ?? typeof window !== "undefined";
+  const device = options.device ?? (storage ? undefined : null);
   let ids: WalkIds | null = null;
-  const sync = backgroundSync<WalkData>(
+  const loaded = () => {
+    if (!ids) throw new TownSyncError("The walk is not loaded yet", true);
+    return ids;
+  };
+  const sync = backgroundSync<WalkData, WalkWrite>(
     {
       async read() {
         const loaded = await loadWalkRows(client, userId);
@@ -211,19 +222,25 @@ export function accountWalkBackend(
           storage ? loadPosition(userId) : noPosition(),
         );
       },
-      async write(base, target) {
-        if (!ids) throw new TownSyncError("The walk is not loaded yet", true);
+      plan: (base, target) => planWalkWrites(base, target, loaded()),
+      async prepare() {
         // A shop opened since the walk was read: find it once it is saved.
-        ids.shopId ??= await ownShopId(client, userId);
-        for (const write of planWalkWrites(base, target, ids))
-          await applyWalkWrite(client, write, ids);
+        const known = loaded();
+        known.shopId ??= await ownShopId(client, userId);
       },
+      apply: (write) => applyWalkWrite(client, write, loaded()),
+      split: splitWalkWrite,
+      stake: walkStake,
+      outbox:
+        device === null
+          ? undefined
+          : deviceOutbox(WALK_OUTBOX_KEY + userId, isWalkWrite, device),
     },
     options,
   );
   return {
     kind: "account",
-    load: async () => ({ data: await sync.load(), status: "saved" as const }),
+    load: async () => ({ data: await sync.load(), status: sync.loaded() }),
     save(data) {
       if (storage) savePosition(userId, data.state);
       return sync.save(data);

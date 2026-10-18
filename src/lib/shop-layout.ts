@@ -1,4 +1,5 @@
 import type { Book, Shop } from "./types";
+import { canonical } from "./canonical";
 import {
   reachableOnly,
   safeBackgroundUrl,
@@ -581,18 +582,6 @@ export function discardDraft(source: LayoutSource): ShopLayout | null {
   );
   return withPrivate(source.baseLayout, new Set(hidden.map((o) => o.id)));
 }
-
-/** JSON with every object's keys in order, so equal content prints equal. */
-const canonical = (value: unknown) =>
-  JSON.stringify(value, (_key, v: unknown) =>
-    isRecord(v)
-      ? Object.fromEntries(
-          Object.keys(v)
-            .sort()
-            .map((k) => [k, v[k]]),
-        )
-      : v,
-  );
 
 /** What visitors would see, as one string, to tell whether a draft has
  * unpublished changes. Give it public scenes only. A v1 scene counts as
