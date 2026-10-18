@@ -700,7 +700,10 @@ const standIn = async (route) => {
     const rows = (table) => town?.[table] ?? [];
     return json(200, {
       profiles: [...(profile ? [profile] : []), ...rows("profiles")],
-      nine: rows("profile_nine"),
+      // Others' nines are read on their profile's page, when the app asks so.
+      nine: rows("profile_nine").filter(
+        (row) => body.others_nine !== false || row.profile_id === profile?.id,
+      ),
       shops: rows("shops"),
       posts: postsAsked(
         rows("posts"),
@@ -721,6 +724,51 @@ const standIn = async (route) => {
       posters: rows("posters"),
       catalog: rows("books").slice(0, body.catalog_limit ?? 300),
     });
+  }
+  // Which feelings anyone kept (the search), and a book's records (its page).
+  if (url.pathname === "/rest/v1/rpc/felt_in_town") {
+    townReads.push(url.pathname);
+    const kept = new Set(
+      (town?.reading_entries ?? [])
+        .filter((row) => row.kind === "finished")
+        .flatMap((row) => row.feelings),
+    );
+    return json(
+      200,
+      [
+        "cried",
+        "quiet",
+        "sleepless",
+        "warm",
+        "laughed",
+        "scared",
+        "shaken",
+        "again",
+        "recommend",
+        "talk",
+        "lingering",
+        "not_now",
+      ].filter((feeling) => kept.has(feeling)),
+    );
+  }
+  if (url.pathname === "/rest/v1/rpc/work_records") {
+    townReads.push(url.pathname);
+    const books = town?.books ?? [];
+    const work = books.find((row) => row.id === body.book)?.work_id;
+    const ofWork = new Set([
+      body.book,
+      ...books
+        .filter((row) => work && row.work_id === work)
+        .map((row) => row.id),
+    ]);
+    return json(
+      200,
+      (town?.reading_entries ?? [])
+        .filter((row) => row.kind === "finished" && ofWork.has(row.book_id))
+        .map((row) =>
+          row.user_id === profile?.id ? row : { ...row, body: "" },
+        ),
+    );
   }
   if (url.pathname === "/rest/v1/rpc/town_books") {
     townReads.push(url.pathname);

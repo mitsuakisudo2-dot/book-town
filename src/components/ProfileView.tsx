@@ -13,7 +13,7 @@ import {
   type TownActions,
   type TownState,
 } from "../lib/types";
-import { getTownSnapshot, useTownBackend } from "../lib/store";
+import { getTownSnapshot, useTownBackend, useTownMore } from "../lib/store";
 import { readerPosts, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
@@ -143,12 +143,18 @@ interface ProfileViewProps {
 }
 
 export function ProfileView({
-  state,
+  state: town,
   actions,
   readerId,
   notify,
 }: ProfileViewProps) {
-  const isSelf = readerId === state.me.id;
+  const isSelf = readerId === town.me.id;
+  // Another reader's 人生の9冊 and records, with their words, are read when
+  // their page opens (AUD-006): the town holds none of their nine.
+  const { state, ready: nineRead } = useTownMore(
+    town,
+    isSelf ? null : { reader: readerId },
+  );
   const router = useRouter();
   const savedIn = useTownBackend();
   const reader = isSelf
@@ -734,11 +740,16 @@ export function ProfileView({
                     <Icon name="plus" />
                     <small>一冊を選ぶ</small>
                   </button>
-                ) : (
+                ) : nineRead ? (
                   <div>
                     <span>0{index + 1}</span>
                     <Icon name="book" />
                     <small>これからの一冊</small>
+                  </div>
+                ) : (
+                  // Their nine is on its way: nothing said of it yet.
+                  <div aria-busy="true">
+                    <span>0{index + 1}</span>
                   </div>
                 )}
               </div>

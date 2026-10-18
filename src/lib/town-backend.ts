@@ -1,4 +1,5 @@
 import type { Arrived } from "./arrived";
+import type { MoreAsk, TownMore } from "./town-more";
 import type { RepositorySnapshot, TownRepository } from "./repository";
 import type { Missed } from "./supabase/sync";
 import type { Write } from "./town-remote";
@@ -50,11 +51,11 @@ export interface TownBackend {
   /** One post with its replies (a reply brings its post): a page by its id. */
   post?(id: string): Promise<Arrived>;
   /**
-   * The words of another reader's records of finished books, by record:
-   * the town reads others' records without them (AUD-006), and a profile's
-   * page reads them when it is opened. Nothing for the reader's own.
+   * What a page shows that the town does not read with it (town-more.ts):
+   * another reader's records and 人生の9冊, a book's records, the books felt
+   * with a feeling. Nothing of the reader's own, which the town has whole.
    */
-  notes?(readerId: string): Promise<Map<string, RecordWords>>;
+  more?(ask: MoreAsk): Promise<TownMore>;
   /** Stops background work once the store moves on to another backend. */
   close?(): void;
 }
@@ -78,12 +79,6 @@ export const OLDER_PAGE = 20;
 export type TownReads = Required<
   Pick<TownBackend, "newer" | "older" | "post">
 > & { generation: number };
-
-/** A record's words as its reader wrote them, and whether they give away the story. */
-export interface RecordWords {
-  note: string;
-  spoiler: boolean;
-}
 
 export interface TownBackendListener {
   status(status: PersistenceStatus): void;

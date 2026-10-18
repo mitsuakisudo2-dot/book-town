@@ -6,6 +6,17 @@ import {
   loadTown,
 } from "../src/lib/supabase/town-backend";
 import { ME_ID, type TownState } from "../src/lib/types";
+import { takeIn } from "../src/lib/arrived";
+import { bookById } from "../src/lib/book-name";
+import { letterFeelings } from "../src/lib/letter";
+import {
+  bookFeelings,
+  booksFelt,
+  feelingsInTown,
+  recordsOf,
+  talkersOf,
+} from "../src/lib/records";
+import { emptyMore, withMore } from "../src/lib/town-more";
 import { fakeSupabase } from "./fixtures/fake-supabase";
 
 // The town in one answer (AUD-006 6a; supabase/migrations/*_town_view.sql):
@@ -195,9 +206,12 @@ async function main() {
   await check(
     "the town read through town_view is the town read table by table",
     async () => {
+      // Without the window (a database from before town_window): the
+      // whole town, as the tables give it.
       const byView = fakeSupabase(AKI, small(), {
         versions: true,
         townView: true,
+        townWindow: false,
       });
       const byTables = fakeSupabase(AKI, small(), { versions: true });
       const viewed = await loadTown(byView.client, AKI, [], () => "shop");
@@ -217,6 +231,7 @@ async function main() {
     async () => {
       const byView = fakeSupabase(AKI, small(), {
         townView: true,
+        townWindow: false,
         visitor: true,
       });
       const byTables = fakeSupabase(AKI, small());
@@ -228,7 +243,84 @@ async function main() {
   );
 
   await check(
-    "another reader's words come when asked for, as the tables hold them",
+    "with the window, others' nines stay out and only a window of their records comes, the rest of the town as before",
+    async () => {
+      // 100 readers keep 500 records, more than the window of 300.
+      const seed = madeUpTown(100, 600);
+      const other = uuid(1, 7);
+      for (const row of seed.reading_entries)
+        row.feelings = row.user_id === other ? ["cried"] : ["quiet"];
+      // Ben finished the book of one of Aki's: someone else finished it too.
+      const met = seed.reading_entries.find((row) => row.user_id === AKI)!;
+      const benOld = seed.reading_entries.find(
+        (row) => row.user_id === uuid(1, 1),
+      )!;
+      benOld.book_id = met.book_id;
+      const whole = await loadTown(
+        fakeSupabase(AKI, seed, {
+          versions: true,
+          townView: true,
+          townWindow: false,
+        }).client,
+        AKI,
+        [],
+        () => "shop",
+      );
+      const viewed = await loadTown(
+        fakeSupabase(AKI, seed, { versions: true, townView: true }).client,
+        AKI,
+        [],
+        () => "shop",
+      );
+      const { state } = viewed;
+      const ids = (records: TownState["readingRecords"]) =>
+        new Set(records.map((record) => record.id));
+      const all = ids(whole.state.readingRecords);
+      const kept = ids(state.readingRecords);
+      assert.ok(kept.size < all.size, `${kept.size} of ${all.size} records`);
+      assert.ok([...kept].every((id) => all.has(id)));
+      // The reader's own, every one; others' newest 300 of all time.
+      const own = whole.state.readingRecords.filter(
+        (r) => r.readerId === ME_ID,
+      );
+      assert.ok(own.length && own.every((r) => kept.has(r.id)));
+      const othersNewest = whole.state.readingRecords
+        .filter((r) => r.readerId !== ME_ID)
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        .slice(0, 300);
+      assert.ok(othersNewest.every((r) => kept.has(r.id)));
+      // Ben's old record of the book Aki finished, for the notice.
+      assert.ok(!othersNewest.some((r) => r.id === benOld.id));
+      assert.ok(kept.has(benOld.id as string));
+      // No other reader's nine; the reader's own as before.
+      assert.ok(state.readers.every((r) => r.lifeNine.length === 0));
+      assert.deepEqual(state.me, whole.state.me);
+      // Feelings of all time, read when the search opens, though the reader
+      // who cried is out of the window.
+      assert.ok(
+        !state.readingRecords.some((r) => r.feelings.includes("cried")),
+      );
+      assert.equal(state.feltInTown, undefined);
+      const backend = accountTownBackend(
+        fakeSupabase(AKI, seed, { versions: true, townView: true }).client,
+        AKI,
+        { delay: 0, storage: false },
+      );
+      const felt = await backend.more!({ felt: true });
+      backend.close?.();
+      assert.deepEqual(felt.felt, ["cried", "quiet"]);
+      assert.deepEqual(feelingsInTown(withMore(state, [felt])), [
+        "cried",
+        "quiet",
+      ]);
+      assert.deepEqual(state.posts, whole.state.posts);
+      assert.deepEqual(state.shops, whole.state.shops);
+      assert.deepEqual(viewed.versions, whole.versions);
+    },
+  );
+
+  await check(
+    "a reader's page reads their records, with their words, and their nine",
     async () => {
       const seed = small();
       const other = uuid(1, 3);
@@ -246,17 +338,145 @@ async function main() {
       const theirs = state.readingRecords.filter((r) => r.readerId === other);
       assert.equal(theirs.length, 5);
       assert.ok(theirs.every((r) => r.note === "" && !r.spoiler));
-      const words = await backend.notes!(other);
+      assert.deepEqual(state.readers.find((r) => r.id === other)?.lifeNine, []);
+      const more = await backend.more!({ reader: other });
+      const shown = withMore(state, [more]);
       assert.deepEqual(
-        theirs.map((r) => words.get(r.id)),
-        theirs.map((r) => ({
-          note: "ネタバレあり：" + r.id.slice(-2),
-          spoiler: true,
-        })),
+        recordsOf(shown, other).map((r) => [r.note, r.spoiler]),
+        recordsOf(state, other).map((r) => [
+          "ネタバレあり：" + r.id.slice(-2),
+          true,
+        ]),
       );
-      // The reader's own words come with the town; nothing more to ask.
-      assert.equal((await backend.notes!(ME_ID)).size, 0);
-      assert.equal((await backend.notes!(AKI)).size, 0);
+      const nine = seed.profile_nine
+        .filter((row) => row.profile_id === other)
+        .map((row) => row.book_id);
+      const reader = shown.readers.find((r) => r.id === other)!;
+      assert.deepEqual(reader.lifeNine, nine);
+      assert.deepEqual(reader.nineNotes, { [nine[0] as string]: "最初の一冊" });
+      assert.ok(nine.every((id) => bookById(shown.books, id as string)));
+      // The reader's own come with the town: nothing more to ask.
+      assert.deepEqual(await backend.more!({ reader: ME_ID }), emptyMore());
+      assert.deepEqual(await backend.more!({ reader: AKI }), emptyMore());
+      backend.close?.();
+    },
+  );
+
+  await check(
+    "a book's page reads the records of its work, of every reader's copy",
+    async () => {
+      const seed = madeUpTown(100, 600);
+      // Three readers' own copies of one work, each finished.
+      const work = uuid(2, 5);
+      const copies = [uuid(2, 900), uuid(2, 901), uuid(2, 902)];
+      copies.forEach((id, n) =>
+        seed.books.push({ ...book(id, 900 + n), work_id: work }),
+      );
+      const readers = [uuid(1, 20), uuid(1, 21), uuid(1, 22)];
+      readers.forEach((user, n) =>
+        seed.reading_entries.push({
+          id: uuid(7, n),
+          user_id: user,
+          book_id: copies[n],
+          kind: "finished",
+          body: "",
+          feelings: ["talk"],
+          spoiler: false,
+          is_public: true,
+          audience: "everyone",
+          created_at: at(-100 - n),
+          updated_at: at(-100 - n),
+        }),
+      );
+      const fake = fakeSupabase(AKI, seed, { versions: true, townView: true });
+      const backend = accountTownBackend(fake.client, AKI, {
+        delay: 0,
+        storage: false,
+      });
+      const { state } = await backend.load();
+      // Old records, out of the window.
+      assert.ok(!state.readingRecords.some((r) => r.id === uuid(7, 0)));
+      const shown = withMore(state, [await backend.more!({ work })]);
+      assert.deepEqual(
+        talkersOf(shown, work)
+          .map((r) => r.id)
+          .sort(),
+        readers,
+      );
+      assert.deepEqual(bookFeelings(shown, copies[1]), ["talk"]);
+      backend.close?.();
+    },
+  );
+
+  await check(
+    "a feeling chosen in the search reads the books felt with it, of all time",
+    async () => {
+      const seed = madeUpTown(100, 600);
+      const old = seed.reading_entries.find(
+        (row) => row.user_id === uuid(1, 2),
+      )!;
+      old.feelings = ["lingering"];
+      const fake = fakeSupabase(AKI, seed, { versions: true, townView: true });
+      const backend = accountTownBackend(fake.client, AKI, {
+        delay: 0,
+        storage: false,
+      });
+      const { state } = await backend.load();
+      assert.ok(!state.readingRecords.some((r) => r.id === old.id));
+      const kept = await backend.more!({ felt: true });
+      assert.ok(kept.felt?.includes("lingering"));
+      assert.ok(feelingsInTown(withMore(state, [kept])).includes("lingering"));
+      const felt = await backend.more!({ feeling: "lingering" });
+      const shown = withMore(state, [felt]);
+      // Beside the 見本's.
+      assert.ok(!booksFelt(state, "lingering").includes(old.book_id as string));
+      assert.ok(booksFelt(shown, "lingering").includes(old.book_id as string));
+      // Others' words stay on their profile's page.
+      assert.ok(felt.records.length && felt.records.every((r) => !r.note));
+      backend.close?.();
+    },
+  );
+
+  await check(
+    "older 便り bring their writers' records of their books, for the feelings they show",
+    async () => {
+      const seed = madeUpTown(100, 600);
+      // The oldest 便り with a book, out of the town's newest 500.
+      const post = seed.posts.find(
+        (row) => row.book_id && row.author_id !== AKI,
+      )!;
+      seed.reading_entries.push({
+        id: uuid(8, 1),
+        user_id: post.author_id,
+        book_id: post.book_id,
+        kind: "finished",
+        body: "言葉",
+        feelings: ["warm"],
+        spoiler: false,
+        is_public: true,
+        audience: "everyone",
+        created_at: at(-500),
+        updated_at: at(-500),
+      });
+      const fake = fakeSupabase(AKI, seed, { versions: true, townView: true });
+      const backend = accountTownBackend(fake.client, AKI, {
+        delay: 0,
+        storage: false,
+      });
+      const { state } = await backend.load();
+      assert.ok(!state.posts.some((p) => p.id === post.id));
+      const arrived = await backend.older!(at(1000), [
+        post.author_id as string,
+      ]);
+      assert.ok(arrived.posts.some((p) => p.id === post.id));
+      const taken = takeIn(state, arrived);
+      const letter = taken.posts.find((p) => p.id === post.id)!;
+      assert.deepEqual(letterFeelings(taken, letter), ["あたたかくなった"]);
+      // Without its words, as the town reads others'.
+      assert.equal(
+        taken.readingRecords.find((r) => r.id === uuid(8, 1))?.note,
+        "",
+      );
       backend.close?.();
     },
   );
