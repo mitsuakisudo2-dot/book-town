@@ -21,6 +21,7 @@ import "./scene-draft";
 import "./shelves-draft";
 import "./shop-draft";
 import { JOURNAL_KEY, libraryJournal } from "./library-journal";
+import { LAST_SCAN_KEY } from "./scan-resume";
 import { POSITION_KEY } from "./walk-repository";
 import { SEEN_KEY } from "./supabase/town-backend";
 import { FIRST_STEPS_KEY } from "./home-feed";
@@ -29,6 +30,7 @@ import { OUTBOX_KEY, OUTBOX_KEY_BEFORE, WALK_OUTBOX_KEY } from "./outbox";
 /** The browser storage keys kept per account: the key, then the account id. */
 export const PER_ACCOUNT_KEYS = [
   JOURNAL_KEY,
+  LAST_SCAN_KEY,
   POSITION_KEY,
   SEEN_KEY,
   FIRST_STEPS_KEY,

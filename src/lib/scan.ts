@@ -335,6 +335,13 @@ export const SCAN_COPY = {
     library: "ライブラリを見る",
     close: "閉じる",
   },
+  /** 続きから再開 (Figma v4's 09). */
+  resume: {
+    name: "前回の登録を続けますか？",
+    kept: "保存済みの本は、そのまま残っています",
+    go: "続きから再開",
+    notNow: "今はしない",
+  },
   /** 重複の知らせ (Figma v4's 06) and 書誌の取得失敗 (07). */
   showBook: "登録済みの本を表示する",
   retry: "再試行",

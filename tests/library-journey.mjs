@@ -333,14 +333,23 @@ const field = (on) => scanner(on).getByLabel("ISBN", { exact: true });
  */
 const waitsForTap = (on = page) =>
   expectNoKeyboard(on, "typing ISBNs", scanner(on));
-/** The profile's own 「本を登録」, beside the reader's name. */
-async function openScanner(on = page) {
+/** 続きから再開's question, as the scanner opens after a time left. */
+const offer = (on = page) =>
+  on.getByRole("dialog", { name: "前回の登録を続けますか？" });
+/**
+ * The profile's own 「本を登録」, beside the reader's name. A time left
+ * without ［完了］ is offered again: 今はしない, unless `keepOffer`.
+ */
+async function openScanner(on = page, { keepOffer = false } = {}) {
   if (await scanner(on).count()) return;
   await on
     .locator(".profile-minor-actions")
     .getByRole("button", { name: "本を登録" })
     .click();
   await expect(scanner(on)).toBeVisible();
+  if (keepOffer || !(await offer(on).count())) return;
+  await offer(on).getByRole("button", { name: "今はしない" }).click();
+  await expect(offer(on)).toHaveCount(0);
 }
 /** 完了's summary (Figma v4's 08), over the scanner. */
 const summary = (on = page) =>
@@ -1774,6 +1783,70 @@ try {
         scanner(tidying).getByRole("button", { name: "一括整理" }),
       ).toBeFocused();
       await tidying.context().close();
+    },
+  );
+
+  await check(
+    "a time left without ［完了］ is offered again: its books come back and the count goes on",
+    async () => {
+      const left = await scanningPage();
+      await go("/profiles/me/?books=library", left);
+      await openScanner(left);
+      await cameraRunning(left);
+      const [first, second, third] = [51, 52, 53].map(isbnOf);
+      await show(left, first, second);
+      await expect(count(left)).toHaveText("2冊 登録済み");
+      // ✕: the time is left, not finished.
+      await scanner(left).getByRole("button", { name: "閉じる" }).click();
+      await expect(scanner(left)).toHaveCount(0);
+      await openScanner(left, { keepOffer: true });
+      await expect(offer(left)).toContainText("2冊 登録済み");
+      await expect(offer(left)).toContainText(
+        "保存済みの本は、そのまま残っています",
+      );
+      await left.screenshot({ path: path.join(output, "scan-resume.png") });
+      // Nothing is read meanwhile.
+      await left.evaluate((code) => window.__barcodes.push(code), third);
+      await left.waitForTimeout(800);
+      expect(await left.evaluate(() => window.__barcodes.length)).toBe(1);
+      await left.evaluate(() => window.__barcodes.splice(0));
+      await offer(left).getByRole("button", { name: "続きから再開" }).click();
+      await expect(offer(left)).toHaveCount(0);
+      await expect(scanner(left).locator(".scan-item")).toHaveCount(2);
+      await expect(count(left)).toHaveText("2冊 登録済み");
+      await expect(cardTitle(left)).toHaveText("試験の本 52");
+      // The same time: a book of it read again is one already put in, and a
+      // new one is counted on, in the same batch.
+      await show(left, first);
+      await expect(remark(left)).toContainText("この回でもう入れました");
+      await show(left, third);
+      await expect(count(left)).toHaveText("3冊 登録済み");
+      const entries = (await stored(left)).libraryEntries;
+      const batches = [first, second, third].map(
+        (isbn) => entries["isbn-" + isbn].batchId,
+      );
+      expect(batches[0]).toMatch(/^[0-9a-f-]{36}$/);
+      expect(new Set(batches).size).toBe(1);
+      // ［完了］ ends it: not offered again.
+      expect(await finishScanning(left)).toContain("3冊の登録が完了しました");
+      await openScanner(left, { keepOffer: true });
+      await cameraRunning(left);
+      await expect(offer(left)).toHaveCount(0);
+      // 今はしない starts a new time, and that one is not offered again.
+      await show(left, isbnOf(54));
+      await expect(count(left)).toHaveText("1冊 登録済み");
+      await scanner(left).getByRole("button", { name: "閉じる" }).click();
+      await openScanner(left, { keepOffer: true });
+      await expect(offer(left)).toContainText("1冊 登録済み");
+      await offer(left).getByRole("button", { name: "今はしない" }).click();
+      await expect(scanner(left).locator(".scan-item")).toHaveCount(0);
+      await expect(count(left)).toHaveText("");
+      await scanner(left).getByRole("button", { name: "閉じる" }).click();
+      await openScanner(left, { keepOffer: true });
+      await cameraRunning(left);
+      await expect(offer(left)).toHaveCount(0);
+      await scanner(left).getByRole("button", { name: "閉じる" }).click();
+      await left.context().close();
     },
   );
 

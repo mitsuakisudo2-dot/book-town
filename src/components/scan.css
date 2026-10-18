@@ -882,3 +882,33 @@ body:has(.scan-session) .toast {
   min-height: 44px;
   color: var(--ink-2);
 }
+
+/* 続きから再開 (Figma v4's 09): the time left, asked about as the scanner
+   opens. */
+.scan-resume {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.scan-resume .scan-done-mark {
+  margin-bottom: 4px;
+}
+.scan-resume-count {
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+.scan-resume-note {
+  font-size: var(--t-cap);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.scan-resume .btn {
+  justify-self: stretch;
+  min-height: 48px;
+  margin-top: 8px;
+}
+.scan-resume .text-btn {
+  min-height: 44px;
+  color: var(--ink-2);
+}

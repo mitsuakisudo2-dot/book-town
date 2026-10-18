@@ -50,6 +50,12 @@ import {
 } from "../lib/library";
 import { saveWarning } from "../lib/persistence";
 import {
+  endLastScan,
+  keepLastScan,
+  lastScan,
+  leftBooks,
+} from "../lib/scan-resume";
+import {
   closingNotice,
   forgetRead,
   nextFrame,
@@ -87,6 +93,7 @@ import {
 } from "../lib/scan-timing";
 import { BarcodeRegister } from "./BarcodeRegister";
 import { ScanDone } from "./ScanDone";
+import { ScanResume } from "./ScanResume";
 import { ScanSortSheet } from "./ScanSortSheet";
 import { ScanTidy, type TidyBook } from "./ScanTidy";
 import { ScanTiming } from "./ScanTiming";
@@ -398,7 +405,7 @@ export function ScanSession({
   const items = useJournal(owner);
   const journalKept = useJournalKept();
   const sound = useScanSound();
-  const [session] = useState(() => libraryJournal.newSession());
+  const [session, setSession] = useState(() => libraryJournal.newSession());
   const [input, setInput] = useState<Input>(() =>
     !canRead()
       ? { kind: "typing", why: "no-reader" }
@@ -421,6 +428,12 @@ export function ScanSession({
   /** 連続設定: what the next books read are given, until 解除 or 完了. */
   const [sort, setSort] = useState<ScanSort | null>(null);
   const [sortOpen, setSortOpen] = useState(false);
+  /** 続きから再開: the time left without ［完了］, offered as this one opens. */
+  const [offer, setOffer] = useState<{
+    session: string;
+    cards: Card[];
+  } | null>(null);
+  const offered = useRef(false);
   /** 一括整理 open over the scanner, the camera off. */
   const [tidying, setTidying] = useState(false);
   /** 完了's summary over the scanner, the camera off. */
@@ -465,8 +478,9 @@ export function ScanSession({
   const paused = useRef(false);
   // Nothing new is read while a menu or the 連続設定 is open (資料 仕様メモ06).
   useEffect(() => {
-    paused.current = menuFor !== null || shelvesFor !== null || sortOpen;
-  }, [menuFor, shelvesFor, sortOpen]);
+    paused.current =
+      menuFor !== null || shelvesFor !== null || sortOpen || offer !== null;
+  }, [menuFor, shelvesFor, sortOpen, offer]);
   const manualCount = useRef(0);
   const closed = useRef(false);
   const layer = useRef<HTMLDivElement>(null);
@@ -491,6 +505,7 @@ export function ScanSession({
     sortOpen,
     tidying,
     done,
+    offer,
     cards,
   });
   useEffect(() => {
@@ -503,6 +518,7 @@ export function ScanSession({
       sortOpen,
       tidying,
       done,
+      offer,
       cards,
     };
   });
@@ -523,6 +539,26 @@ export function ScanSession({
       if (read.fresh && read.titleAt !== undefined && !waiting.has(read.id))
         timing.current = noteDone(timing.current, read.id, "savedAt", at);
   }, []);
+
+  // Once the reader and their town are there, before a book is read: the
+  // time left without ［完了］, if it brought books in (資料 §9).
+  useLayoutEffect(() => {
+    if (offered.current || !owner || !ready) return;
+    offered.current = true;
+    const left = lastScan(owner);
+    if (!left || left.session === session || latest.current.cards.length)
+      return;
+    const books = leftBooks(left.session, libraryJournal.items(owner), state);
+    if (!books.length) return endLastScan(owner, left.session);
+    setOffer({ session: left.session, cards: books });
+    // Only on opening: what the town or the journal does next is not asked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner, ready]);
+  // A book read: this is the time to offer, until ［完了］.
+  const anyRead = cards.length;
+  useEffect(() => {
+    if (owner && anyRead) keepLastScan(owner, session);
+  }, [owner, anyRead, session]);
 
   // An open session handles its own items; the page's sender leaves them.
   useEffect(() => {
@@ -1217,6 +1253,29 @@ export function ScanSession({
       now.kind === "camera" ? { kind: "camera", phase: "manual" } : now,
     );
   };
+  /** 続きから再開: that time's books back, and its count goes on. */
+  const resume = () => {
+    if (!offer || !owner) return;
+    setSession(offer.session);
+    setCards(offer.cards);
+    for (const card of offer.cards) {
+      if (card.isbn)
+        reads.current = noteRead(reads.current, card.isbn, 0, "in");
+      // A book in the library: ⋮ can take it back out, as on that time.
+      if (card.shows === "added" && card.bookId && !states.has(card.id))
+        libraryJournal.added.set(card.id, card.bookId);
+    }
+    keepLastScan(owner, offer.session);
+    setOffer(null);
+    const held = offer.cards
+      .filter((card) => states.has(card.id))
+      .map((card) => card.id);
+    if (held.length) send(owner, held);
+  };
+  const notNow = () => {
+    if (offer && owner) endLastScan(owner, offer.session);
+    setOffer(null);
+  };
   /** 一括整理 or 完了 over the scanner: the camera off meanwhile. */
   const stepAside = () => {
     setMenuFor(null);
@@ -1246,7 +1305,7 @@ export function ScanSession({
     if (
       !cards.some((card) => card.shows !== "undone" && card.shows !== "already")
     )
-      return finish();
+      return finish({ ended: true });
     stepAside();
     setTidying(false);
     setDone(true);
@@ -1297,9 +1356,13 @@ export function ScanSession({
    * While a title is still being asked of openBD (OPENBD_TIMEOUT_MS at
    * most), the notice waits for the answer, to say where that book went.
    */
-  function finish(how: { land?: boolean; quiet?: boolean } = {}) {
+  function finish(
+    how: { land?: boolean; quiet?: boolean; ended?: boolean } = {},
+  ) {
     if (closed.current) return;
     closed.current = true;
+    // ［完了］: this time is over, and not offered again.
+    if (how.ended && owner) endLastScan(owner, session);
     const { added, waiting, later } = counts.closing;
     onClose(how.land !== false && added + waiting + later > 0);
     // Closed from 完了's summary, which said it all: nothing more, but for
@@ -1353,7 +1416,8 @@ export function ScanSession({
       // What is on top (the one-book form, 連続設定, 一括整理, 完了)
       // handles its own keys.
       const now = latest.current;
-      if (now.manual || now.sortOpen || now.tidying || now.done) return;
+      if (now.manual || now.sortOpen || now.tidying || now.done || now.offer)
+        return;
       if (event.key === "Escape") {
         event.preventDefault();
         // The Escape that cancels a kana conversion in the ISBN field is the
@@ -2059,8 +2123,8 @@ export function ScanSession({
           checking={counts.checking}
           attention={counts.attention}
           sortEnded={sort !== null}
-          onLibrary={() => finish({ quiet: true })}
-          onClose={() => finish({ land: false, quiet: true })}
+          onLibrary={() => finish({ quiet: true, ended: true })}
+          onClose={() => finish({ land: false, quiet: true, ended: true })}
           onBack={backFromDone}
         />
       )}
@@ -2074,6 +2138,13 @@ export function ScanSession({
             actions.changeLibrary(ids, set);
           }}
           onClose={closeTidy}
+        />
+      )}
+      {offer && (
+        <ScanResume
+          count={scanCount(tally(offer.cards, shown))}
+          onResume={resume}
+          onNotNow={notNow}
         />
       )}
       {sortOpen && (
