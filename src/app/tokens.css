@@ -139,6 +139,12 @@
   --t-display: calc(36px * var(--t-scale));
   /* The reading timer's numbers. */
   --t-clock: calc(44px * var(--t-scale));
+  /* The town's frame keeps its size when 字の大きさ grows, as a phone's own
+     tab bar does: six tab names must fit across a 320px phone, and
+     "Book Town" at the top is a mark more than words to read. */
+  --frame-tab: 12px;
+  --frame-mark: 22px;
+  --frame-mark-narrow: 18px;
 
   /* Corners */
   --r-edge: 2px;
@@ -180,6 +186,17 @@
      the web fonts first, whatever letters the device has. */
   --poster-mincho: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
   --poster-gothic: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+}
+
+/*
+ * 字の大きさ, chosen in 設定 (src/lib/appearance.ts marks <html> with it
+ * before the first paint). ふつう is :root itself, with no mark.
+ */
+:root[data-text="large"] {
+  --t-scale: 1.15;
+}
+:root[data-text="larger"] {
+  --t-scale: 1.3;
 }
 
 /*

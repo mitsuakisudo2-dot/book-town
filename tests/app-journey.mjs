@@ -1105,6 +1105,57 @@ try {
   });
 
   await check(
+    "字の大きさ makes every word larger, before the first paint too",
+    async () => {
+      const scale = () =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement)
+            .getPropertyValue("--t-scale")
+            .trim(),
+        );
+      await go("/profiles/me/");
+      await page
+        .locator(".profile-minor-actions")
+        .getByRole("button", { name: "設定" })
+        .click();
+      // A group of choices a screen reader names by its legend.
+      const sizes = page
+        .getByRole("dialog", { name: "設定" })
+        .getByRole("group", { name: "字の大きさ" });
+      await expect(sizes.getByRole("radio")).toHaveCount(3);
+      await expect(
+        sizes.getByRole("radio", { name: "ふつう", exact: true }),
+      ).toBeChecked();
+      await sizes.getByText("もっと大きい", { exact: true }).click();
+      await expect(
+        sizes.getByRole("radio", { name: "もっと大きい", exact: true }),
+      ).toBeChecked();
+      expect(await scale()).toBe("1.3");
+      await page.keyboard.press("Escape");
+      // Read again before the town draws: the page opens in the large words.
+      await page.reload();
+      expect(
+        await page.evaluate(() => document.documentElement.dataset.text),
+      ).toBe("larger");
+      expect(await scale()).toBe("1.3");
+      await page
+        .locator(".profile-minor-actions")
+        .getByRole("button", { name: "設定" })
+        .click();
+      await page
+        .getByRole("dialog", { name: "設定" })
+        .getByRole("group", { name: "字の大きさ" })
+        .getByText("ふつう", { exact: true })
+        .click();
+      expect(await scale()).toBe("1");
+      expect(
+        await page.evaluate(() => document.documentElement.dataset.text),
+      ).toBeUndefined();
+      await page.keyboard.press("Escape");
+    },
+  );
+
+  await check(
     "a book registered by ISBN can be read and attached to posts",
     async () => {
       await go("/profiles/me/");

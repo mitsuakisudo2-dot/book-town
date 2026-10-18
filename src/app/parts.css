@@ -27,6 +27,13 @@
   line-height: 1.4;
   white-space: nowrap;
 }
+/* With 字の大きさ larger, a name that no longer fits goes onto a second
+   line rather than out of the button. */
+:root[data-text] .btn {
+  white-space: normal;
+  text-align: center;
+  word-break: auto-phrase;
+}
 /* The one thing the screen is for: filled. At most one on a screen. */
 .btn.fill {
   background: var(--green);

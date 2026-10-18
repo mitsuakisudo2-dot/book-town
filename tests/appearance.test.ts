@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   APPEARANCE_BOOT,
   APPEARANCE_KEY,
@@ -6,7 +7,9 @@ import {
   DEVICE_DARK,
   FIRST_BRIGHTNESS,
   FIRST_PALETTE,
+  FIRST_TEXT_SIZE,
   PALETTES,
+  TEXT_SIZES,
   appearanceOf,
   isNight,
   paletteOf,
@@ -105,12 +108,13 @@ check("a kept brightness is read back; anything else is 端末に合わせる", 
   for (const { id } of BRIGHTNESSES)
     assert.deepEqual(
       appearanceOf(JSON.stringify({ palette: "ai", brightness: id })),
-      { palette: "ai", brightness: id },
+      { palette: "ai", brightness: id, text: FIRST_TEXT_SIZE },
     );
   // An entry kept before the night has only the palette.
   assert.deepEqual(appearanceOf(JSON.stringify({ palette: "fuji" })), {
     palette: "fuji",
     brightness: "system",
+    text: "normal",
   });
   for (const kept of [null, "{", JSON.stringify({ brightness: "dark" })])
     assert.equal(appearanceOf(kept).brightness, FIRST_BRIGHTNESS);
@@ -171,5 +175,61 @@ check(
     assert.equal(day.dataset.theme, "dark");
   },
 );
+
+check("a kept size of the words is read back; anything else is ふつう", () => {
+  assert.equal(FIRST_TEXT_SIZE, "normal");
+  for (const { id } of TEXT_SIZES)
+    assert.deepEqual(
+      appearanceOf(JSON.stringify({ palette: "ai", text: id })),
+      { palette: "ai", brightness: FIRST_BRIGHTNESS, text: id },
+    );
+  for (const kept of [
+    null,
+    "{",
+    JSON.stringify({ text: "huge" }),
+    JSON.stringify({ text: 1.3 }),
+    JSON.stringify({ text: "toString" }),
+  ])
+    assert.equal(appearanceOf(kept).text, FIRST_TEXT_SIZE, String(kept));
+});
+
+check(
+  "before the first paint, <html> is marked with exactly the size appearanceOf reads",
+  () => {
+    for (const { id } of TEXT_SIZES) {
+      const kept = JSON.stringify({ palette: "sumi", text: id });
+      const { dataset } = boot(kept);
+      const read = appearanceOf(kept).text;
+      assert.equal(dataset.text, read === FIRST_TEXT_SIZE ? undefined : read);
+      assert.equal(dataset.palette, "sumi");
+    }
+    for (const kept of [null, "{", JSON.stringify({ text: "huge" })] as const)
+      assert.equal(boot(kept).dataset.text, undefined, String(kept));
+    assert.equal(boot("refused").dataset.text, undefined);
+  },
+);
+
+check("every size but ふつう sets --t-scale in tokens.css", () => {
+  const tokens = readFileSync(
+    new URL("../src/app/tokens.css", import.meta.url),
+    "utf8",
+  );
+  const scales = TEXT_SIZES.filter(({ id }) => id !== FIRST_TEXT_SIZE).map(
+    ({ id }) => {
+      const rule = tokens.match(
+        new RegExp(
+          `:root\\[data-text="${id}"\\]\\s*\\{\\s*--t-scale:\\s*([\\d.]+);`,
+        ),
+      );
+      assert.ok(rule, `:root[data-text="${id}"] sets --t-scale`);
+      return Number(rule[1]);
+    },
+  );
+  // Each step is larger than the one before it, starting above ふつう's 1.
+  scales.reduce((before, scale) => {
+    assert.ok(scale > before, `${scale} > ${before}`);
+    return scale;
+  }, 1);
+});
 
 console.log(`appearance ok (${passed})`);

@@ -620,6 +620,7 @@
 }
 .book-price {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 4px;
   margin-top: 6px;
