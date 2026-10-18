@@ -38,6 +38,11 @@ const memory = () => {
     removeItem: (key: string) => void data.delete(key),
   };
 };
+/** One browser's storage, the same at every read and write. */
+const oneMemory = () => {
+  const storage = memory();
+  return () => storage;
+};
 
 check("a line written while reading is kept by its sitting", () => {
   const storage = memory();
@@ -64,7 +69,7 @@ check("a line written while reading is kept by its sitting", () => {
 });
 
 check("a reading line is carried into a review only when that is empty", () => {
-  const drafts = createPostDraftStore(() => memory());
+  const drafts = createPostDraftStore(oneMemory());
   const line = readingDraftKey("u-1", "s1");
   drafts.update(line, { body: "灰色の男たち。", spoiler: true });
   assert.equal(drafts.carry(line, "u-1:review:momo"), true);
@@ -94,7 +99,7 @@ check("a reading line is carried into a review only when that is empty", () => {
 });
 
 check("a reading line can be added after a review's own words", () => {
-  const drafts = createPostDraftStore(() => memory());
+  const drafts = createPostDraftStore(oneMemory());
   const line = readingDraftKey("u-1", "s2");
   drafts.update("u-1:review:momo", { body: "前から書いていた感想。\n" });
   drafts.update(line, { body: " 時間の花。", spoiler: true });

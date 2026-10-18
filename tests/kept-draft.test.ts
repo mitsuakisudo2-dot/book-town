@@ -49,6 +49,72 @@ const options = {
 }
 
 {
+  // Two tabs of the same store: each keeps what the other wrote, and a
+  // change in one is heard by the other (the storage event).
+  const storage = memory();
+  const heard: ((event: { key: string | null }) => void)[] = [];
+  const realWindow = (globalThis as { window?: unknown }).window;
+  (globalThis as { window?: unknown }).window = {
+    addEventListener: (type: string, listener: never) => {
+      if (type === "storage") heard.push(listener);
+    },
+  };
+  const tabA = createKeptDraftStore<Note>(options, () => storage);
+  const tabB = createKeptDraftStore<Note>(options, () => storage);
+  const stopA = tabA.subscribe(() => {});
+  tabA.set("note:a", { text: "Aの感想", ids: [] });
+  tabB.initialize();
+  tabB.set("note:b", { text: "B", ids: [] });
+  // Tab A's next keystroke does not take tab B's work out of storage.
+  tabA.set("note:a", { text: "Aの感想です", ids: [] });
+  const kept = () =>
+    Object.keys(JSON.parse(storage.getItem("test-drafts-v1")!).drafts).sort();
+  assert.deepEqual(kept(), ["note:a", "note:b"]);
+  // Nor does tab B's clearing of its own work take tab A's.
+  tabB.clear("note:b");
+  assert.deepEqual(kept(), ["note:a"]);
+  assert.deepEqual(tabB.get("note:a"), { text: "Aの感想です", ids: [] });
+  // A move in one tab keeps the other's work too.
+  tabB.set("new", { text: "新しい", ids: [] });
+  tabA.move("new", "note:c");
+  assert.deepEqual(kept(), ["note:a", "note:c"]);
+  // The other tab hears of a change and shows it.
+  tabB.set("note:b", { text: "またB", ids: [] });
+  assert.equal(tabA.get("note:b"), null);
+  for (const listener of heard) listener({ key: "test-drafts-v1" });
+  assert.deepEqual(tabA.get("note:b"), { text: "またB", ids: [] });
+  for (const listener of heard) listener({ key: "another-key" });
+  assert.deepEqual(tabA.get("note:b"), { text: "またB", ids: [] });
+  stopA();
+  (globalThis as { window?: unknown }).window = realWindow;
+}
+
+{
+  // Work that only this tab holds (storage refused it) is kept on the next
+  // change, with what storage holds from other tabs.
+  const storage = memory();
+  let refuse = true;
+  const tab = createKeptDraftStore<Note>(options, () => ({
+    ...storage,
+    setItem: (key, value) => {
+      if (refuse) throw new Error("full");
+      storage.setItem(key, value);
+    },
+  }));
+  tab.set("note:mine", { text: "ここだけ", ids: [] });
+  assert.equal(tab.getSnapshot().saved, false);
+  const other = createKeptDraftStore<Note>(options, () => storage);
+  other.set("note:other", { text: "ほかのタブ", ids: [] });
+  refuse = false;
+  tab.set("new", { text: "次", ids: [] });
+  assert.deepEqual(
+    Object.keys(JSON.parse(storage.getItem("test-drafts-v1")!).drafts).sort(),
+    ["new", "note:mine", "note:other"],
+  );
+  assert.equal(tab.getSnapshot().saved, true);
+}
+
+{
   // Empty work is not kept; keys outside the store are ignored.
   const storage = memory();
   const store = createKeptDraftStore<Note>(options, () => storage);
