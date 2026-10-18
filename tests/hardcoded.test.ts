@@ -70,11 +70,8 @@ check("a text limit is a name from types.ts, not a number", () => {
   hits(
     /maxLength=\{\d+\}/g,
     [],
-    // スキャンの画面 (102 のとき) と メールの画面 (107 のあと)
-    {
-      "src/components/BarcodeRegister.tsx": 3,
-      "src/components/AccountView.tsx": 1,
-    },
+    // スキャンの画面 (102 のとき)
+    { "src/components/BarcodeRegister.tsx": 3 },
   );
 });
 

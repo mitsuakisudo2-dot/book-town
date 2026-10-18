@@ -16,7 +16,10 @@ import {
   type SignedOut,
 } from "../src/lib/account";
 import { RESERVED_HANDLES } from "../src/lib/handles";
-import { authFailure } from "../src/lib/supabase/account-backend";
+import {
+  authFailure,
+  emailChangeFailure,
+} from "../src/lib/supabase/account-backend";
 import type { ProfileRow } from "../src/lib/supabase/database.types";
 
 // Checks the sign-in and first-profile flow against a stand-in for Supabase.
@@ -46,6 +49,8 @@ function fakeBackend() {
     verifyCode: 0,
     loadProfile: 0,
     deleteAccount: 0,
+    changeEmail: 0,
+    confirmEmailChange: [] as string[],
   };
   const control = {
     calls,
@@ -60,6 +65,12 @@ function fakeBackend() {
     /** Resolves profile reads only when release() is called. */
     holdLoads: false,
     held: [] as (() => void)[],
+    /** Addresses another account uses. */
+    taken: new Set(["ren@example.jp"]),
+    /** The change of address asked for: its two codes, and which were taken. */
+    change: null as null | { email: string; confirmed: Set<string> },
+    /** Like the auth server while email confirmations are off. */
+    oneCodeEnough: false,
     emit: (user: AccountUser | null) => listener(user),
     release() {
       control.held.splice(0).forEach((resume) => resume());
@@ -80,6 +91,32 @@ function fakeBackend() {
       if (code !== "123456") return "invalid-code";
       listener(email === AKI.email ? AKI : null);
       return null;
+    },
+    async changeEmail(email) {
+      calls.changeEmail += 1;
+      if (control.taken.has(email)) return "email-taken";
+      // Asked again, new codes go out and none is taken yet.
+      control.change = { email, confirmed: new Set() };
+      return null;
+    },
+    async confirmEmailChange(email, code) {
+      calls.confirmEmailChange.push(email);
+      const change = control.change;
+      // The new address's code is 111111; the current one's 222222.
+      const which =
+        change && email === change.email && code === "111111"
+          ? "new"
+          : email === AKI.email && code === "222222"
+            ? "current"
+            : null;
+      if (!change || !which || change.confirmed.has(which))
+        return { failure: "invalid-code" as AccountFailure };
+      change.confirmed.add(which);
+      if (!control.oneCodeEnough && change.confirmed.size < 2)
+        return { done: false };
+      control.change = null;
+      setTimeout(() => listener({ ...AKI, email: change.email }), 0);
+      return { done: true };
     },
     async signOut() {
       listener(null);
@@ -561,6 +598,174 @@ async function main() {
     },
   );
 
+  await check(
+    "a change of address takes a code from each address, the new one first",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      const { changeEmail, confirmEmailChange } = store.actions;
+      // Checked here before anything is sent.
+      assert.deepEqual(await changeEmail("aki@"), {
+        ok: false,
+        message: failureMessages["invalid-email"],
+      });
+      assert.deepEqual(await changeEmail(" AKI@example.jp "), {
+        ok: false,
+        message: failureMessages["same-email"],
+      });
+      assert.equal(control.calls.changeEmail, 0);
+      assert.deepEqual(await changeEmail("ren@example.jp"), {
+        ok: false,
+        message: failureMessages["email-taken"],
+      });
+      assert.deepEqual(await changeEmail(" Aki.New@example.jp"), { ok: true });
+      assert.equal(control.change?.email, "aki.new@example.jp");
+
+      const both = {
+        email: "aki.new@example.jp",
+        newCode: "111111",
+        currentCode: "222222",
+        newConfirmed: false,
+      };
+      // A code not yet whole is pointed at, and nothing is checked.
+      assert.deepEqual(
+        await confirmEmailChange({ ...both, currentCode: "22" }),
+        {
+          ok: false,
+          message: failureMessages["invalid-code"],
+          field: "current",
+          newConfirmed: false,
+        },
+      );
+      assert.deepEqual(control.calls.confirmEmailChange, []);
+      // A wrong new code stops before the current one is used.
+      assert.deepEqual(
+        await confirmEmailChange({ ...both, newCode: "999999" }),
+        {
+          ok: false,
+          message: failureMessages["invalid-code"],
+          field: "new",
+          newConfirmed: false,
+        },
+      );
+      assert.deepEqual(control.calls.confirmEmailChange, [
+        "aki.new@example.jp",
+      ]);
+      // The new code taken, a wrong current one: said so, and remembered.
+      const half = await confirmEmailChange({
+        ...both,
+        currentCode: "999999",
+      });
+      assert.deepEqual(half, {
+        ok: false,
+        message: failureMessages["invalid-code"],
+        field: "current",
+        newConfirmed: true,
+      });
+      assert.equal(store.getSnapshot().status, "signed-in");
+      // Then only the current code is checked, and the address changes.
+      control.calls.confirmEmailChange.length = 0;
+      assert.deepEqual(
+        await confirmEmailChange({ ...both, newCode: "", newConfirmed: true }),
+        { ok: true },
+      );
+      assert.deepEqual(control.calls.confirmEmailChange, ["aki@example.jp"]);
+      const after = store.getSnapshot();
+      assert.equal(after.status, "signed-in");
+      assert.equal("user" in after && after.user.email, "aki.new@example.jp");
+      // The new session tells the same: the profile is not read again.
+      const reads = control.calls.loadProfile;
+      await settle();
+      const told = store.getSnapshot();
+      assert.equal("user" in told && told.user.email, "aki.new@example.jp");
+      assert.equal(control.calls.loadProfile, reads);
+    },
+  );
+
+  await check(
+    "codes sent again from another tab start the change over here too",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      await store.actions.changeEmail("new@example.jp");
+      // This page took the new code before; the codes were sent again since.
+      const result = await store.actions.confirmEmailChange({
+        email: "new@example.jp",
+        newCode: "",
+        currentCode: "222222",
+        newConfirmed: true,
+      });
+      assert.deepEqual(result, {
+        ok: false,
+        message: failureMessages["invalid-code"],
+        field: "new",
+        newConfirmed: false,
+      });
+      assert.match(failureMessages["invalid-code"], /もう一度コードを送って/);
+    },
+  );
+
+  await check(
+    "where one code is enough, the new address's is the one used",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      control.oneCodeEnough = true;
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      assert.deepEqual(await store.actions.changeEmail("new@example.jp"), {
+        ok: true,
+      });
+      assert.deepEqual(
+        await store.actions.confirmEmailChange({
+          email: "new@example.jp",
+          newCode: "111111",
+          currentCode: "222222",
+          newConfirmed: false,
+        }),
+        { ok: true },
+      );
+      assert.deepEqual(control.calls.confirmEmailChange, ["new@example.jp"]);
+    },
+  );
+
+  await check(
+    "an address seen changed elsewhere is taken as it is",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      const reads = control.calls.loadProfile;
+      // Another tab made the change: the same person, a new address.
+      control.emit({ ...AKI, email: "other@example.jp" });
+      await settle();
+      const now = store.getSnapshot();
+      assert.equal(now.status, "signed-in");
+      assert.equal("user" in now && now.user.email, "other@example.jp");
+      assert.equal(control.calls.loadProfile, reads);
+      // Signed out, nothing can be changed.
+      control.emit(null);
+      await settle();
+      assert.deepEqual(await store.actions.changeEmail("x@example.jp"), {
+        ok: false,
+        message: failureMessages.network,
+      });
+    },
+  );
+
   await check("Supabase errors become the messages the screen shows", () => {
     assert.equal(
       authFailure({ code: "otp_disabled", status: 422 }),
@@ -595,6 +800,24 @@ async function main() {
     assert.equal(
       authFailure({ code: "unexpected_failure", status: 500 }),
       "server",
+    );
+    // Changing the address: the address may be another account's, and an
+    // address refused is not about an invitation.
+    assert.equal(
+      emailChangeFailure({ code: "email_exists", status: 422 }),
+      "email-taken",
+    );
+    assert.equal(
+      emailChangeFailure({ code: "email_address_not_authorized", status: 400 }),
+      "server",
+    );
+    assert.equal(
+      emailChangeFailure({ code: "otp_expired", status: 403 }),
+      "invalid-code",
+    );
+    assert.equal(
+      emailChangeFailure({ code: "over_email_send_rate_limit", status: 429 }),
+      "rate-limited",
     );
   });
 

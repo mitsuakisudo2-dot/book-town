@@ -230,7 +230,11 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+# Also, while it is off, either of the two codes of an address change is
+# enough (the auth server skips double_confirm_changes). On, as on the hosted
+# project (mailer_autoconfirm off, supabase/hosted-auth.json), so both codes
+# are needed. Invited readers are created confirmed.
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -245,6 +249,13 @@ otp_expiry = 600
 [auth.email.template.magic_link]
 subject = "BookTown のログインコード"
 content_path = "./supabase/templates/magic_link.html"
+
+# Changing the address sends a code to the current address and one to the new
+# one (double_confirm_changes above); the hosted project uses the same subject
+# and template (supabase/hosted-auth.json).
+[auth.email.template.email_change]
+subject = "BookTown のメールアドレスの変更"
+content_path = "./supabase/templates/email_change.html"
 
 # Use a production-ready SMTP server
 # [auth.email.smtp]
