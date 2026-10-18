@@ -478,9 +478,10 @@ check(
 );
 
 check("only what the reader changed is written, never a partial upsert", () => {
+  // 読書中: 持ってない takes 積読 off, and would write the status too.
   const base = townFromRows(
     rows({
-      libraryEntries: [entryRow(BOOK, { status: "tsundoku", status_at: at })],
+      libraryEntries: [entryRow(BOOK, { status: "reading", status_at: at })],
       marks: [{ user_id: AKI, book_id: OTHER, kind: "wish", created_at: at }],
     }),
     ids,
