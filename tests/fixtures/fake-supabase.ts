@@ -13,6 +13,10 @@ import type { Database } from "../../src/lib/supabase/database.generated";
 // and the copies copy_book makes; with one, a row of theirs that names
 // another reader's typed-in book is turned away, as the database does
 // (own_books_only). Without one, the database is one before that rule.
+// With `versions`, it counts versions of what is saved whole and writes
+// those through save_shelves, save_scene, save_nine and save_poster, only
+// over the version named (write_versions); without, it is a database from
+// before them, with no such columns.
 
 type Row = Record<string, unknown>;
 
@@ -105,11 +109,57 @@ const POINTS_AT: Record<string, [string, string, string][]> = {
   saved_shops: [["shop_id", "shops", "id"]],
 };
 
-export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
+/** The columns write_versions adds, by table, with what a row begins at. */
+const VERSION_COLUMNS: Record<string, string[]> = {
+  profiles: ["nine_version"],
+  posters: ["version"],
+  shop_private: ["shelves_version", "scene_version"],
+};
+
+/** The fields of a poster that count toward its version. */
+const POSTER_FIELDS = [
+  "template",
+  "theme",
+  "font",
+  "pages",
+  "spoiler",
+  "show_in_timeline",
+  "status",
+];
+
+/** Two values as jsonb compares them: the same keys and values, any order. */
+function sameValue(a: unknown, b: unknown): boolean {
+  const sorted = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(sorted)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.keys(value as Row)
+              .sort()
+              .map((key) => [key, sorted((value as Row)[key])]),
+          )
+        : value;
+  return (
+    JSON.stringify(sorted(a ?? null)) === JSON.stringify(sorted(b ?? null))
+  );
+}
+
+export function fakeSupabase(
+  userId: string,
+  seed: Record<string, Row[]> = {},
+  options: { versions?: boolean } = {},
+) {
+  const versions = options.versions ?? false;
   const tables: Record<string, Row[]> = Object.fromEntries(
     Object.entries(seed).map(([table, rows]) => [
       table,
-      rows.map((row) => ({ ...row })),
+      rows.map((row) => {
+        const copy = { ...row };
+        for (const column of VERSION_COLUMNS[table] ?? [])
+          if (versions) copy[column] ??= 0;
+          else delete copy[column];
+        return copy;
+      }),
     ]),
   );
   const writes: FakeWrite[] = [];
@@ -129,6 +179,39 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
     client: null as unknown as SupabaseClient<Database>,
   };
   const table = (name: string) => (tables[name] ??= []);
+
+  /**
+   * Counts the versions of a row written (write_versions): `was` is the row
+   * before, or undefined for one made. A version sent is never taken.
+   */
+  function count(name: string, row: Row, was: Row | undefined) {
+    if (!versions) {
+      for (const column of VERSION_COLUMNS[name] ?? []) delete row[column];
+      return;
+    }
+    if (name === "shop_private") {
+      row.shelves_version = was
+        ? Number(was.shelves_version) +
+          Number(!sameValue(row.shelves, was.shelves))
+        : Number(!sameValue(row.shelves ?? [], []));
+      row.scene_version = was
+        ? Number(was.scene_version) + Number(!sameValue(row.scene, was.scene))
+        : Number((row.scene ?? null) !== null);
+    } else if (name === "posters")
+      row.version = was
+        ? Number(was.version) +
+          Number(
+            POSTER_FIELDS.some((field) => !sameValue(row[field], was[field])),
+          )
+        : 0;
+    else if (name === "profiles") row.nine_version = was ? was.nine_version : 0;
+  }
+  /** One up for the reader's nine (each statement that changed it). */
+  const nineChanged = (by: number) => {
+    const profile = table("profiles").find((row) => row.id === userId);
+    if (versions && profile && by)
+      profile.nine_version = Number(profile.nine_version) + by;
+  };
 
   /** The reader's own books, or undefined before the database has them. */
   const myBooks = (): Row[] | undefined => {
@@ -202,6 +285,7 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
     private counted = false;
     private head = false;
     private returning = false;
+    private columns = "*";
     constructor(
       private name: string,
       private op: "select" | "upsert" | "update" | "delete",
@@ -215,6 +299,7 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
       if (this.op === "select") {
         this.counted = options.count === "exact";
         this.head = options.head ?? false;
+        this.columns = _columns ?? "*";
       } else this.returning = true;
       return this;
     }
@@ -298,6 +383,16 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
               code: "PGRST202",
               message: "no my_books",
             });
+      if (
+        this.op === "select" &&
+        !versions &&
+        /(^|[\s,])(\w+_)?version\b/.test(this.columns)
+      )
+        return failed({
+          status: 400,
+          code: "42703",
+          message: "column does not exist",
+        });
       if (this.op === "select") {
         const rows = this.matching().sort((a, b) => {
           for (const [column, up] of this.orders) {
@@ -336,10 +431,13 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
           );
           if (there) {
             if (this.options.ignoreDuplicates) continue;
+            const was = { ...there };
             Object.assign(there, row);
+            count(this.name, there, was);
             taken.push(there);
           } else {
             const fresh = { ...DEFAULTS[this.name]?.(now()), ...row };
+            count(this.name, fresh, undefined);
             table(this.name).push(fresh);
             taken.push(fresh);
           }
@@ -365,7 +463,11 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
           : null);
       if (refusal) return failed(refusal);
       if (this.op === "update")
-        for (const row of rows) Object.assign(row, this.payload);
+        for (const row of rows) {
+          const was = { ...row };
+          Object.assign(row, this.payload);
+          count(this.name, row, was);
+        }
       else
         tables[this.name] = table(this.name).filter(
           (row) => !rows.includes(row),
@@ -425,6 +527,11 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
         if (refusal) return failed(refusal);
         const ids = args.book_ids as string[];
         const notes = args.notes as string[];
+        nineChanged(
+          Number(
+            table("profile_nine").some((row) => row.profile_id === userId),
+          ) + Number(ids.length > 0),
+        );
         tables.profile_nine = [
           ...table("profile_nine").filter((row) => row.profile_id !== userId),
           ...ids.map((book_id, index) => ({
@@ -437,8 +544,145 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
         writes.push(write);
         return { data: null, error: null, status: 204, count: null };
       }
+      if (versions && name in SAVES) {
+        const write: FakeWrite = {
+          table: SAVES[name],
+          op: "rpc",
+          rows: [{ name, ...args }],
+        };
+        const refusal = fake.refuse(write);
+        if (refusal) return failed(refusal);
+        const answer = saved(name, args);
+        if (typeof answer !== "number") return failed(answer);
+        writes.push(write);
+        return fake.loseAnswers
+          ? lost()
+          : { data: answer, error: null, status: 200, count: null };
+      }
       return failed({ status: 404, code: "PGRST202", message: "no " + name });
     });
+
+  /** The tables the save_ functions write. */
+  const SAVES: Record<string, string> = {
+    save_shelves: "shop_private",
+    save_scene: "shop_private",
+    save_nine: "profile_nine",
+    save_poster: "posters",
+  };
+  const changedSince = (what: string): Refusal => ({
+    status: 409,
+    code: "PT409",
+    message: `the ${what} changed since`,
+  });
+  const notYours: Refusal = {
+    status: 403,
+    code: "42501",
+    message: "new row violates row-level security policy",
+  };
+  /**
+   * Runs a save_ function as the database does: written only over the
+   * version named; what is held already is taken as written. Its version,
+   * or why it was refused.
+   */
+  function saved(name: string, args: Row): number | Refusal {
+    if (name === "save_shelves" || name === "save_scene") {
+      const part = name === "save_shelves" ? "shelves" : "scene";
+      const column = part + "_version";
+      if (
+        !table("shops").some(
+          (shop) => shop.id === args.shop && shop.owner_id === userId,
+        )
+      )
+        return notYours;
+      let row = table("shop_private").find(
+        (other) => other.shop_id === args.shop,
+      );
+      if (!row) {
+        row = {
+          ...DEFAULTS.shop_private(now()),
+          shop_id: args.shop,
+          [part]: args.value,
+        };
+        count("shop_private", row, undefined);
+        table("shop_private").push(row);
+        return Number(row[column]);
+      }
+      if (sameValue(row[part], args.value)) return Number(row[column]);
+      if (row[column] !== args.base) return changedSince(part);
+      const was = { ...row };
+      row[part] = args.value;
+      count("shop_private", row, was);
+      return Number(row[column]);
+    }
+    if (name === "save_nine") {
+      const profile = table("profiles").find((row) => row.id === userId);
+      if (!profile) return notYours;
+      const ids = args.book_ids as string[];
+      const notes = args.notes as string[];
+      const held = table("profile_nine")
+        .filter((row) => row.profile_id === userId)
+        .sort((a, b) => Number(a.position) - Number(b.position));
+      if (
+        sameValue(
+          held.map((row) => row.book_id),
+          ids,
+        ) &&
+        sameValue(
+          held.map((row) => row.note),
+          notes,
+        )
+      )
+        return Number(profile.nine_version);
+      if (profile.nine_version !== args.base) return changedSince("nine");
+      const refusal = othersBook(ids);
+      if (refusal) return refusal;
+      nineChanged(Number(held.length > 0) + Number(ids.length > 0));
+      tables.profile_nine = [
+        ...table("profile_nine").filter((row) => row.profile_id !== userId),
+        ...ids.map((book_id, index) => ({
+          profile_id: userId,
+          book_id,
+          note: notes[index] ?? "",
+          position: index,
+        })),
+      ];
+      return Number(profile.nine_version);
+    }
+    // save_poster
+    const value = args.value as Row;
+    const fields = Object.fromEntries(
+      POSTER_FIELDS.map((field) => [field, value[field]]),
+    );
+    const base = args.base ?? null;
+    const row = table("posters").find(
+      (other) => other.id === args.poster && other.author_id === userId,
+    );
+    if (!row) {
+      if (base !== null) return changedSince("poster");
+      if (table("posters").some((other) => other.id === args.poster))
+        return {
+          status: 409,
+          code: "23505",
+          message: "duplicate key value violates unique constraint",
+        };
+      const fresh = {
+        ...DEFAULTS.posters(now()),
+        id: args.poster,
+        author_id: userId,
+        ...fields,
+      };
+      count("posters", fresh, undefined);
+      table("posters").push(fresh);
+      return 0;
+    }
+    if (POSTER_FIELDS.every((field) => sameValue(row[field], fields[field])))
+      return Number(row.version);
+    if (row.version !== (base ?? 0)) return changedSince("poster");
+    const was = { ...row };
+    Object.assign(row, fields);
+    count("posters", row, was);
+    return Number(row.version);
+  }
 
   fake.client = {
     from: (name: string) => ({

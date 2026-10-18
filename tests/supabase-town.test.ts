@@ -284,6 +284,52 @@ async function main() {
   );
 
   await check(
+    "two devices: what one saved whole is not written over from the other",
+    async () => {
+      const ota = await reader("ota");
+      const first = await townOf(ota);
+      first.actions.createShop("二台の本屋", "", "sage");
+      await settled(first);
+      const phone = await townOf(ota);
+      const laptop = await townOf(ota);
+      const sample = demoBooks[0].id;
+      laptop.actions.addShelf("ノートの棚");
+      laptop.actions.updateNine([sample], { [sample]: "ノートで書いた" });
+      await settled(laptop);
+      phone.actions.addShelf("電話の棚");
+      phone.actions.updateNine([sample], { [sample]: "電話で書いた" });
+      await settled(phone, "recovered");
+      // The database keeps the laptop's, and the phone shows it.
+      const kept = await admin
+        .from("shop_private")
+        .select("shelves, shelves_version, shops!inner(owner_id)")
+        .eq("shops.owner_id", ota.id)
+        .single();
+      assert.ifError(kept.error);
+      assert.deepEqual(
+        (kept.data.shelves as { name: string }[]).map((shelf) => shelf.name),
+        ["はじめの本棚", "ノートの棚"],
+      );
+      assert.ok(kept.data.shelves_version > 0);
+      const town = phone.getSnapshot();
+      assert.deepEqual(
+        town.ownShop?.shelves.map((shelf) => shelf.name),
+        ["はじめの本棚", "ノートの棚"],
+      );
+      assert.deepEqual(town.me.nineNotes, { [sample]: "ノートで書いた" });
+      // Read again, the phone's next change goes in.
+      phone.actions.addShelf("電話の棚");
+      await settled(phone);
+      assert.deepEqual(
+        (await townOf(ota))
+          .getSnapshot()
+          .ownShop?.shelves.map((shelf) => shelf.name),
+        ["はじめの本棚", "ノートの棚", "電話の棚"],
+      );
+    },
+  );
+
+  await check(
     "another reader sees the public shelf and never the private one",
     async () => {
       const town = (await townOf(ben)).getSnapshot();

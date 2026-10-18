@@ -6319,6 +6319,8 @@ async function main() {
              ('${liker}', '${writersShop}', 's1:i1', 'read');`,
       );
       await earlier.exec(sql.join("\n"));
+      const LATER =
+        "to_jsonb(t) - 'work_id' - 'edition_id' - 'shelves_version' - 'scene_version'";
       const snapshot = async () => {
         const out: Record<string, unknown[]> = {};
         for (const table of [
@@ -6329,13 +6331,14 @@ async function main() {
           "books",
           "book_marks",
         ])
-          // Every column but a book's edition and work, which later
-          // migrations add; and not the 見本's books, which a later one adds.
+          // Every column but a book's edition and work and a shop's
+          // versions, which later migrations add; and not the 見本's books,
+          // which a later one adds.
           out[table] = (
             await earlier.query(
-              `select to_jsonb(t) - 'work_id' - 'edition_id' as row from ${table} t
+              `select ${LATER} as row from ${table} t
                ${table === "books" ? "where t.id <> all ($1::uuid[])" : ""}
-               order by (to_jsonb(t) - 'work_id' - 'edition_id')::text`,
+               order by (${LATER})::text`,
               table === "books"
                 ? [demoBooks.map((book) => sampleBookRowId(book.id))]
                 : [],

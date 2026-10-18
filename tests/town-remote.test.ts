@@ -73,6 +73,7 @@ const profile = (id: string, handle: string): Tables<"profiles"> => ({
   links: [],
   compose_icon: "pen",
   reading_visibility: "private",
+  nine_version: 0,
   created_at: at,
   updated_at: at,
 });
@@ -185,6 +186,7 @@ const posterRow = (
   show_in_timeline: true,
   allow_display: true,
   status: "published",
+  version: 0,
   created_at: at,
   updated_at: at,
   ...extra,
@@ -920,7 +922,8 @@ async function main() {
       // read with allRows (sync.ts). A read that stops at a number has to
       // be one of these, each read on past it another way: the newest 便り
       // and books (with newer, older and the books the rows point to), and
-      // the newest 注釈 of a page.
+      // the newest 注釈 of a page; or one that reads no row at all (whether
+      // the database counts versions, before the reader has a shop).
       const root = path.resolve(__dirname, "..");
       const found: Record<string, string[]> = {};
       for (const entry of readdirSync(path.join(root, "src"), {
@@ -943,6 +946,7 @@ async function main() {
           "NEWER_MAX",
           "size",
         ],
+        "src/lib/supabase/walk-backend.ts": ["0"],
       });
     },
   );
