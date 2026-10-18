@@ -912,3 +912,54 @@ body:has(.scan-session) .toast {
   min-height: 44px;
   color: var(--ink-2);
 }
+
+/* コンパクト表示: a book of the library on one line, its title and the
+   three statuses; what else it has comes back with the toggle. */
+.scan-compact[aria-pressed="true"] {
+  color: var(--green);
+  background: var(--green-soft);
+}
+.scan-item.is-compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+}
+.scan-item.is-compact .scan-item-head {
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 44px;
+}
+.scan-item.is-compact .scan-item-cover .book-jacket,
+.scan-item.is-compact .scan-item-tile {
+  width: 24px;
+}
+.scan-item.is-compact .scan-item-tile {
+  height: 32px;
+}
+.scan-item.is-compact .scan-item-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  line-height: 1.35;
+}
+.scan-item.is-compact
+  :is(
+    .scan-item-author,
+    .scan-item-state,
+    .scan-item-more,
+    .scan-item-menu,
+    .scan-item-marks,
+    .scan-item-shelves
+  ) {
+  display: none;
+}
+.scan-item.is-compact .scan-item-statuses {
+  grid-template-columns: repeat(3, auto);
+  gap: 4px;
+}
+.scan-item.is-compact .scan-item-statuses .chip {
+  padding: 0 8px;
+  font-size: var(--t-meta);
+}

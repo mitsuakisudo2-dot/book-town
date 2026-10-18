@@ -335,6 +335,7 @@ export const SCAN_COPY = {
     library: "ライブラリを見る",
     close: "閉じる",
   },
+  compact: "コンパクト表示",
   /** 続きから再開 (Figma v4's 09). */
   resume: {
     name: "前回の登録を続けますか？",

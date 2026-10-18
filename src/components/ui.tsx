@@ -269,6 +269,14 @@ const shapes: Record<string, ReactNode> = {
   light: <path d="M13 2.5 5 13.5h6l-1 8 8-11h-6z" />,
   expand: <path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5" />,
   shrink: <path d="M4 14h6v6M20 10h-6V4M14 10l6.5-6.5M10 14l-6.5 6.5" />,
+  rows: (
+    <>
+      <rect x="3" y="4" width="4" height="4" rx="1" />
+      <rect x="3" y="10" width="4" height="4" rx="1" />
+      <rect x="3" y="16" width="4" height="4" rx="1" />
+      <path d="M10 6h11M10 12h11M10 18h11" />
+    </>
+  ),
   again: <path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.6M20 3.5v5.1h-5.1" />,
 };
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {

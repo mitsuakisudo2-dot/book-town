@@ -265,6 +265,34 @@ const useOnline = () =>
   );
 
 const SOUND_KEY = "book-town-scan-sound";
+const COMPACT_KEY = "book-town-scan-compact";
+
+/**
+ * コンパクト表示 (資料 4章, by the reader's choice only): each book of the
+ * library on one line, its title and 読了・積読・読書中, so that more of
+ * them are in sight. This device remembers it. A book that waits for the
+ * reader stays as it was.
+ */
+function useCompact() {
+  const [on, setOn] = useState(() => {
+    try {
+      return localStorage.getItem(COMPACT_KEY) === "on";
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () =>
+    setOn((was) => {
+      try {
+        if (was) localStorage.removeItem(COMPACT_KEY);
+        else localStorage.setItem(COMPACT_KEY, "on");
+      } catch {
+        // Not remembered: this time only.
+      }
+      return !was;
+    });
+  return [on, toggle] as const;
+}
 type Sound = "in" | "nothing-new";
 
 /**
@@ -405,6 +433,7 @@ export function ScanSession({
   const items = useJournal(owner);
   const journalKept = useJournalKept();
   const sound = useScanSound();
+  const [compact, toggleCompact] = useCompact();
   const [session, setSession] = useState(() => libraryJournal.newSession());
   const [input, setInput] = useState<Input>(() =>
     !canRead()
@@ -1897,6 +1926,9 @@ export function ScanSession({
                 key={card.id}
                 className={
                   "scan-item" +
+                  (compact && libraryId && !kept && now !== "undone"
+                    ? " is-compact"
+                    : "") +
                   (kept ? " is-kept" : "") +
                   (now === "undone" ? " is-undone" : "") +
                   (flash?.id === card.id ? " is-flash" : "")
@@ -2097,6 +2129,15 @@ export function ScanSession({
         </ol>
         <GoogleCoversCredit />
         <div className="scan-bottom">
+          <button
+            type="button"
+            className="icon-btn scan-compact"
+            aria-label={SCAN_COPY.compact}
+            aria-pressed={compact}
+            onClick={toggleCompact}
+          >
+            <Icon name="rows" />
+          </button>
           {tidyBooks.length > 0 && (
             <button
               ref={tidyButton}
