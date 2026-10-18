@@ -76,8 +76,20 @@ const holdOwnProfile = () => {
 };
 // The rest of the town, once a test fills it: rows by table.
 let town = null;
-// How long the stand-in takes to read the rest of the town.
-let townDelay = 0;
+// Holds the rest of the town's reads until released, so a test that looks
+// at the page while the town is still being read does not race a timer: a
+// navigation waits for the page's fonts, and on a slow runner that took
+// longer than a fixed delay, which had ended by the time the test looked.
+let townHold = null;
+const holdTown = () => {
+  let release;
+  const held = new Promise((done) => (release = done));
+  townHold = held;
+  return () => {
+    if (townHold === held) townHold = null;
+    release();
+  };
+};
 const reportsSent = [];
 // Blocks made ([blocker, blocked]) and lifted (the query of each delete).
 const blocksSent = [];
@@ -552,7 +564,7 @@ const standIn = async (route) => {
   // The rest of the signed-in town: a new reader has nothing yet.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "GET") {
     townReads.push(url.pathname);
-    if (townDelay) await new Promise((done) => setTimeout(done, townDelay));
+    if (townHold) await townHold;
     const table = url.pathname.slice("/rest/v1/".length);
     if (table === "posts") {
       postReads.push(url.search);
@@ -737,13 +749,14 @@ try {
     async () => {
       const bones = page.locator("main .home-skeletons");
       const empty = page.getByText("まだ便りがありません");
-      townDelay = 2500;
+      let release = holdTown();
       try {
         // 便りだけ: following nobody, it is empty, but only once it is known.
         await page.goto(base + "/timeline/");
         await expect(bones).toHaveAttribute("aria-busy", "true");
         await expect(bones.locator(".home-skel")).toHaveCount(3);
         await expect(empty).toHaveCount(0);
+        release();
         await expect(bones).toHaveCount(0, { timeout: 10000 });
         await expect(empty).toBeVisible();
         // ホーム, opened for the first time: nothing kept from last time.
@@ -751,6 +764,7 @@ try {
           localStorage.setItem("book-town-home-tab-v1", "home");
           localStorage.removeItem("book-town-home-snapshot-v1");
         });
+        release = holdTown();
         await page.goto(base + "/");
         await expect(bones).toHaveAttribute("aria-busy", "true");
         await expect(page.locator(".home-carousel")).toHaveAttribute(
@@ -760,9 +774,10 @@ try {
         await expect(page.locator("main")).not.toContainText(
           /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
         );
+        release();
         await expect(bones).toHaveCount(0, { timeout: 10000 });
       } finally {
-        townDelay = 0;
+        release();
       }
       // The real town is empty here: every tile, slide, paper and front
       // drawn is a 見本, and says so.
@@ -789,7 +804,7 @@ try {
         localStorage.getItem("book-town-home-snapshot-v1"),
       );
       expect(JSON.parse(words ?? "null")?.owner).toBe("visitor");
-      townDelay = 2500;
+      const release = holdTown();
       try {
         await page.goto(base + "/");
         await expect(kept).toHaveAttribute("aria-busy", "true");
@@ -799,9 +814,10 @@ try {
         await expect(page.locator("main")).not.toContainText(
           /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
         );
+        release();
         await expect(kept).toHaveCount(0, { timeout: 10000 });
       } finally {
-        townDelay = 0;
+        release();
       }
       await expect(page.locator("main article.letter").first()).toBeVisible();
     },
@@ -2330,7 +2346,7 @@ try {
         shop_private: [{ shelves: [shelf], scene_books: [] }],
         books: [bookRow(COVER_BOOK, OPENBD_ISBN, "こころの本")],
       };
-      townDelay = 2500;
+      const release = holdTown();
       try {
         await openHome();
         await expect(bones).toHaveAttribute("aria-busy", "true");
@@ -2341,9 +2357,10 @@ try {
         await expect(
           homeDoors.locator(".home-entrance.is-waiting"),
         ).toHaveCount(2);
+        release();
         await expect(bones).toHaveCount(0, { timeout: 10000 });
       } finally {
-        townDelay = 0;
+        release();
       }
       await expect(
         homeDoors.getByRole("button", { name: "本を登録" }),
@@ -3019,15 +3036,16 @@ try {
         await expect(at).toHaveURL(base + "/search/");
         await at.clock.runFor(3 * 60_000);
         expect(newReads()).toBe(away);
-        // The read back on Home is let finish before the page goes out of
-        // view: one still on its way when it comes back is the read it
-        // gets, and on a slow runner none more would be made.
-        const backOnHome = at.waitForResponse((response) =>
-          response.url().includes("created_at=gte."),
-        );
+        // The read back on Home is let finish in the page before it goes
+        // out of view: a read is timed from when the page took its answer,
+        // and one taken while the clock below runs on looks just made when
+        // the page comes back. レン writes meanwhile, so the page has taken
+        // the answer once レン's face joins the pill (its network reply alone
+        // can come before that, on a slow runner).
+        arrive(4, REN, "レンの、ホームを離れていたあいだの便り。");
         await nav.getByRole("link", { name: "ホーム" }).click();
         await expect.poll(newReads).toBe(away + 1);
-        await (await backOnHome).finished();
+        await expect(pill.locator(".home-new-face")).toHaveCount(2);
         const seen = (state) =>
           at.evaluate((state) => {
             Object.defineProperty(document, "visibilityState", {
@@ -3964,12 +3982,17 @@ try {
       await expect(title).toHaveText("こころの本");
       await expect(hero.locator(".book-page-author")).toHaveText("試験 作家");
       await expect(hero.locator(".book-page-publication")).toHaveCount(0);
-      await expect(hero.getByRole("link", { name: "書誌の出典" })).toHaveCount(0);
+      await expect(hero.getByRole("link", { name: "書誌の出典" })).toHaveCount(
+        0,
+      );
       expect(bibliographyAsks).toContain(COVER_BOOK);
       // Only books of the database are asked about: no 見本, no demo book.
       expect(
         bibliographyAsks.filter(
-          (id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id),
+          (id) =>
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+              id,
+            ),
         ),
       ).toEqual([]);
       masters = [
@@ -4028,7 +4051,9 @@ try {
       await expect(page.locator("main")).toContainText(
         "出典：国立国会図書館書誌データ（https://ndlsearch.ndl.go.jp/）をもとに BookTown が編集・加工して作成",
       );
-      await expect(page.locator("main")).toContainText("2026年10月から随時取得");
+      await expect(page.locator("main")).toContainText(
+        "2026年10月から随時取得",
+      );
       await noOverflow("credits page");
       await page.goBack();
       await expect(title).toHaveText("こころ 上");
@@ -4183,7 +4208,10 @@ try {
       await expect(page).not.toHaveURL(/\/notifications\//);
       holds = [heldRow];
       await page.waitForTimeout(5_100);
-      await page.getByRole("link", { name: /^お知らせ/ }).first().click();
+      await page
+        .getByRole("link", { name: /^お知らせ/ })
+        .first()
+        .click();
       await expect(page).toHaveURL(/\/notifications\/$/);
       await expect(heldNotices).toHaveCount(1);
       holds = [];
@@ -5328,12 +5356,13 @@ try {
       });
       const elsewhere = settleBeforeNavigating(await context.newPage());
       elsewhere.on("pageerror", (e) => errors.push(e.message));
+      let release = () => {};
       try {
         await elsewhere.goto(base + "/login/");
         await expect(
           elsewhere.getByRole("heading", { name: "ログインしています" }),
         ).toBeVisible();
-        townDelay = 2500;
+        release = holdTown();
         await elsewhere.getByRole("button", { name: "ログアウト" }).click();
         // The home, signed out there, reads the visitor's town.
         await expect(bones).toHaveAttribute("aria-busy", "true");
@@ -5341,9 +5370,10 @@ try {
         // The account's kept 便り went with it, never drawn for a visitor.
         expect(await keptOwner()).not.toBe(user.id);
         await expect(page.getByText("レンの夜の一行、その1。")).toHaveCount(0);
+        release();
         await expect(bones).toHaveCount(0, { timeout: 10000 });
       } finally {
-        townDelay = 0;
+        release();
         await elsewhere.close();
       }
       expect(await page.evaluate(() => window.sawEmptyTown)).toBe(false);
