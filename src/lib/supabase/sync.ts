@@ -32,6 +32,13 @@ export class RowsChangedError extends TownSyncError {
 }
 
 /**
+ * The database's answer to a write of a whole thing over a version it no
+ * longer holds (save_shelves and the like, HTTP 409): it was changed on
+ * another device since this one read it, and nothing was written.
+ */
+export const CHANGED_ELSEWHERE = "PT409";
+
+/**
  * Network trouble, a busy server and an expired login get another try. Anything
  * else is the database saying no (a rule, a limit, a taken ID) and would only
  * fail again.
@@ -168,6 +175,21 @@ export const chunks = <T>(list: T[], size: number): T[][] =>
   );
 
 /**
+ * The versions the database counts for the things set whole (a shop's
+ * shelves, the nine, a poster), by the key `stake` gives each. A thing
+ * without one is written the old way (a database from before versions).
+ */
+export type Versions = Record<string, number>;
+
+/** A value read with the versions of the things it holds whole. */
+export class Versioned<T> {
+  constructor(
+    readonly value: T,
+    readonly versions: Versions,
+  ) {}
+}
+
+/**
  * One change kept on the device until the database takes it. A change that
  * sets a whole thing at once (a shop's shelves, the nine) keeps the marks of
  * that thing before it and after it (valueMark), so one sent again later is
@@ -234,12 +256,21 @@ const online = () =>
   typeof navigator === "undefined" || navigator.onLine !== false;
 
 export interface SyncSpec<T, W> {
-  /** Reads the value once; throws TownSyncError. */
-  read(): Promise<T>;
+  /**
+   * Reads the value once, with the versions of what it holds whole where
+   * the database keeps them; throws TownSyncError.
+   */
+  read(): Promise<T | Versioned<T>>;
   /** The writes that make the database, holding `base`, hold `target`. */
   plan(base: T, target: T): W[];
-  /** Runs one write; throws TownSyncError. Each can run twice without harm. */
-  apply(write: W): Promise<void>;
+  /**
+   * Runs one write; throws TownSyncError. Each can run twice without harm.
+   * A write that sets a whole thing is handed the version of it the value
+   * it was planned from holds (`base`, none where it has none): written only
+   * over that, or refused with CHANGED_ELSEWHERE. It answers the versions
+   * the database holds after it, by key.
+   */
+  apply(write: W, base?: number): Promise<Versions | void>;
   /** Runs before a round of writes (finding what they need). */
   prepare?(): Promise<void>;
   /**
@@ -272,6 +303,13 @@ export interface SyncSpec<T, W> {
  *   when the value is next read: before anything else, each change set
  *   whole sent only over the version it began from. Then the value is read
  *   again, with them.
+ * - A thing set whole (`stake`) is written over the version the database
+ *   counted when the value it was planned from was read or written
+ *   (`Versioned`): one changed on another device since is not written but
+ *   told with the others that were not (`elsewhere`), and the value read
+ *   again. After network trouble, what was on its way is sent again first,
+ *   as it was, before any later change: the database may have taken it, and
+ *   a later change planned from before it would be refused.
  */
 export function backgroundSync<T, W>(
   spec: SyncSpec<T, W>,
@@ -284,6 +322,11 @@ export function backgroundSync<T, W>(
       ? crypto.randomUUID()
       : String(Math.random()).slice(2);
   let synced: T | null = null;
+  // The versions of what `synced` holds whole, by key.
+  let versions: Versions = {};
+  // What a round of writes cut off by network trouble set out to save: sent
+  // again before anything later.
+  let tried: T | null = null;
   let latest: T | null = null;
   let listener: SyncListener<T, W> | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -313,7 +356,10 @@ export function backgroundSync<T, W>(
     if (!closed) listener?.status(status);
   };
   const shown = () => latest ?? synced;
-  const pending = () => latest !== null && latest !== synced;
+  const pending = () =>
+    (latest !== null && latest !== synced) || tried !== null;
+  const opened = (read: T | Versioned<T>) =>
+    read instanceof Versioned ? read : new Versioned(read, {});
 
   const schedule = (wait: number) => {
     if (closed) return;
@@ -333,7 +379,8 @@ export function backgroundSync<T, W>(
    * Puts what waits now on the device, in place of what was kept. What the
    * database turned away stays too until the listener is told (with the
    * words written, missed-changes.ts): a page closed before that leaves it
-   * to the next, which sends it again and tells it.
+   * to the next, which sends it again and tells it (a thing set whole is
+   * only told: see send).
    */
   function keep() {
     if (!spec.outbox || closed || synced === null) return;
@@ -364,22 +411,32 @@ export function backgroundSync<T, W>(
     error instanceof TownSyncError && error.retry;
 
   /**
-   * Sends `writes` in order. A write turned away is split and its parts
-   * sent one by one; what is turned away whole joins `into.refused`. A
-   * kept write set whole is sent only over the version it began from, as
-   * `there` holds it (the marks of what the database holds, by key): one
-   * already there is passed over, one changed since joins `into.elsewhere`.
-   * Network trouble is thrown, to be tried again.
+   * Sends `writes`, planned from `from`, in order. A write set whole goes
+   * over the version `known` holds of it, and `known` takes the version it
+   * is written at. A write turned away is split and its parts sent one by
+   * one; what is turned away whole joins `into.refused`, and one changed on
+   * another device since joins `into.elsewhere`. A kept write set whole is
+   * sent only over the version it began from, as `there` holds it (the
+   * marks of what the database holds, by key): one already there is passed
+   * over, one changed since joins `into.elsewhere`. Network trouble is
+   * thrown, to be tried again.
    */
   async function send(
     writes: KeptWrite<W>[],
     into: Missed<W>,
+    from: T,
+    known: Versions,
     there?: (write: W) => { key: string; mark: string } | undefined,
     placed?: Map<string, string>,
   ) {
     async function one(write: W): Promise<void> {
       try {
-        await spec.apply(write);
+        const key = spec.stake?.(from, write)?.key;
+        const now = await spec.apply(
+          write,
+          key === undefined ? undefined : known[key],
+        );
+        if (now) Object.assign(known, now);
       } catch (error) {
         if (isRetry(error)) throw error;
         let parts: W[] = [];
@@ -388,12 +445,26 @@ export function backgroundSync<T, W>(
         } catch {
           // A write that cannot be taken apart is turned away whole.
         }
+        // Each part alone: only the one changed elsewhere, or turned away,
+        // is left out (two posters made at once, one changed since).
         if (parts.length > 1) for (const part of parts) await one(part);
+        else if (
+          error instanceof TownSyncError &&
+          error.code === CHANGED_ELSEWHERE
+        )
+          into.elsewhere.push(write);
         else into.refused.push(write);
       }
     }
     for (const kept of writes) {
       if (closed) return;
+      // A thing set whole kept with no marks is one the database turned
+      // away (keep): told again, not sent, as sent over the version this
+      // page read it could write an old copy over a newer one.
+      if (kept.was === undefined && there?.(kept.write)) {
+        into.refused.push(kept.write);
+        continue;
+      }
       const now = kept.was !== undefined ? there?.(kept.write) : undefined;
       if (now) {
         const mark = placed?.get(now.key) ?? now.mark;
@@ -403,9 +474,9 @@ export function backgroundSync<T, W>(
           continue;
         }
       }
-      const refused = into.refused.length;
+      const missed = into.refused.length + into.elsewhere.length;
       await one(kept.write);
-      if (now && into.refused.length === refused)
+      if (now && into.refused.length + into.elsewhere.length === missed)
         placed?.set(now.key, kept.to as string);
     }
   }
@@ -419,12 +490,15 @@ export function backgroundSync<T, W>(
       const stake = spec.stake?.(against, write);
       return stake && { key: stake.key, mark: valueMark(stake.value) };
     };
+    // The versions these writes leave are not this page's: its own changes,
+    // planned without them, are refused over them until it reads again.
+    const sent = { ...versions };
     while (left.length) {
       const [entry] = left;
       // Told once the page's changes are all sent: sent again after network
       // trouble, a refusal would otherwise be told twice.
       const into: Missed<W> = { refused: [], elsewhere: [] };
-      await send(entry.writes, into, there, placed);
+      await send(entry.writes, into, against, sent, there, placed);
       if (closed) return;
       missed.refused.push(...into.refused);
       missed.elsewhere.push(...into.elsewhere);
@@ -441,9 +515,9 @@ export function backgroundSync<T, W>(
   /** Reads the value again and shows it, unless changes were made meanwhile. */
   async function reread() {
     const before = shown();
-    let fresh: T;
+    let read: Versioned<T>;
     try {
-      fresh = await steadily(() => spec.read());
+      read = opened(await steadily(() => spec.read()));
     } catch {
       return backOff();
     }
@@ -451,7 +525,10 @@ export function backgroundSync<T, W>(
     // A change made while reading goes out first; then the value is read
     // again, with it.
     if (shown() !== before) return schedule(0);
+    const fresh = read.value;
     synced = fresh;
+    versions = { ...read.versions };
+    tried = null;
     latest = fresh;
     stale = false;
     failures = 0;
@@ -477,19 +554,26 @@ export function backgroundSync<T, W>(
         return;
       } else {
         const base = synced;
-        const target = latest as T;
+        const target = tried ?? (latest as T);
         await spec.prepare?.();
         const into: Missed<W> = { refused: [], elsewhere: [] };
+        const next = { ...versions };
+        tried = target;
         await send(
           spec.plan(base, target).map((write) => ({ write })),
           into,
+          base,
+          next,
         );
         synced = target;
+        versions = next;
+        tried = null;
         for (const take of absorbedWhileWriting) synced = take(synced);
         failures = 0;
         spec.landed?.(base, target);
-        if (into.refused.length) {
+        if (into.refused.length || into.elsewhere.length) {
           missed.refused.push(...into.refused);
+          missed.elsewhere.push(...into.elsewhere);
           stale = true;
         }
         keep();
@@ -533,11 +617,12 @@ export function backgroundSync<T, W>(
     let rereads = 0;
     for (let attempt = 0; ;) {
       try {
-        const value = await spec.read();
-        synced = value;
+        const read = opened(await spec.read());
+        synced = read.value;
+        versions = { ...read.versions };
         left = spec.outbox?.left(page) ?? [];
         if (left.length) schedule(0);
-        return value;
+        return read.value;
       } catch (error) {
         if (closed || !(error instanceof TownSyncError && error.retry))
           throw error;
@@ -591,6 +676,8 @@ export function backgroundSync<T, W>(
       const now = latest ?? saved;
       synced = take(saved, saved);
       latest = now === saved ? synced : take(now, saved);
+      // What waits to be sent again takes them in too.
+      if (tried !== null) tried = take(tried, saved);
       if (busy) absorbedWhileWriting.push((value) => take(value, saved));
       return latest;
     },

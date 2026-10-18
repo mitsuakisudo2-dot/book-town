@@ -24,7 +24,9 @@ import {
   settled,
   steadily,
   TownSyncError,
+  Versioned,
   type SyncOptions,
+  type Versions,
 } from "./sync";
 
 type Client = SupabaseClient<Database>;
@@ -37,15 +39,44 @@ async function ownShopId(client: Client, userId: string) {
 }
 
 /**
+ * The person's own scene and the version the database counts of it
+ * (write_versions): 0 while their shop has none, or there is no shop yet.
+ * A database from before versions has none, and the scene is read alone.
+ */
+async function ownSceneOf(
+  client: Client,
+  shopId: string | null,
+): Promise<{ scene: Json | null; versions: Versions }> {
+  const asked = client.from("shop_private").select("scene, scene_version");
+  const outcome = await (shopId ? asked.eq("shop_id", shopId) : asked.limit(0));
+  if (outcome.error?.code === "42703") {
+    const rows = shopId
+      ? await all(
+          client.from("shop_private").select("scene").eq("shop_id", shopId),
+        )
+      : [];
+    return { scene: rows[0]?.scene ?? null, versions: {} };
+  }
+  const rows = (await settled(Promise.resolve(outcome))).data ?? [];
+  const version = rows.length ? rows[0].scene_version : 0;
+  return {
+    scene: rows[0]?.scene ?? null,
+    // Only a version the database named: a row without one is written the
+    // old way, as the town does a profile without nine_version.
+    versions: typeof version === "number" ? { scene: version } : {},
+  };
+}
+
+/**
  * Reads the walk `userId` sees, or a visitor (null) sees: the public scene of
  * every shop the database lets them see, each list whole, a page at a time
- * (allRows, as the town). Signed in, also their own scene and what they did
- * on their walks, and their own shop's id.
+ * (allRows, as the town). Signed in, also their own scene (with its version)
+ * and what they did on their walks, and their own shop's id.
  */
 export async function loadWalkRows(
   client: Client,
   userId: string | null,
-): Promise<{ rows: WalkRows; shopId: string | null }> {
+): Promise<{ rows: WalkRows; shopId: string | null; versions: Versions }> {
   /** What only the signed-in person reads: nothing for a visitor. */
   const own = async <T>(read: (id: string) => Promise<T[]>): Promise<T[]> =>
     userId === null ? [] : read(userId);
@@ -104,14 +135,13 @@ export async function loadWalkRows(
         ),
       ),
     ]);
-  const ownScene = shopId
-    ? await all(
-        client.from("shop_private").select("scene").eq("shop_id", shopId),
-      )
-    : [];
+  const mine =
+    userId === null
+      ? { scene: null, versions: {} }
+      : await ownSceneOf(client, shopId);
   return {
     rows: {
-      ownScene: ownScene[0]?.scene ?? null,
+      ownScene: mine.scene,
       scenes,
       reactions,
       saved,
@@ -119,21 +149,43 @@ export async function loadWalkRows(
       visits,
     },
     shopId,
+    versions: mine.versions,
   };
 }
 
-/** Runs one planned write. Each can run twice without harm. */
+/**
+ * Runs one planned write. Each can run twice without harm. The scene with
+ * the version it began from (`base`) is written only over that version
+ * (save_scene), and the version it is at handed back; without one (a
+ * database from before versions), the old way.
+ */
 export async function applyWalkWrite(
   client: Client,
   write: WalkWrite,
   ids: WalkIds,
-): Promise<void> {
+  base?: number,
+): Promise<Versions | void> {
   switch (write.kind) {
     case "scene": {
       // The shop is saved by the town; the scene waits for it.
       if (!ids.shopId)
         throw new TownSyncError("The shop is not saved yet", true);
       const scene = write.scene && { ...write.scene, storeId: ids.shopId };
+      if (base !== undefined) {
+        const { data } = await settled(
+          client.rpc("save_scene", {
+            shop: ids.shopId,
+            value: scene as unknown as Json,
+            base,
+          }),
+        );
+        if (typeof data !== "number")
+          throw new TownSyncError(
+            "The database did not answer a version",
+            true,
+          );
+        return { scene: data };
+      }
       await settled(
         client.from("shop_private").upsert({
           shop_id: ids.shopId,
@@ -216,10 +268,13 @@ export function accountWalkBackend(
       async read() {
         const loaded = await loadWalkRows(client, userId);
         ids = { userId, shopId: loaded.shopId };
-        return walkFromRows(
-          loaded.rows,
-          ids,
-          storage ? loadPosition(userId) : noPosition(),
+        return new Versioned(
+          walkFromRows(
+            loaded.rows,
+            ids,
+            storage ? loadPosition(userId) : noPosition(),
+          ),
+          loaded.versions,
         );
       },
       plan: (base, target) => planWalkWrites(base, target, loaded()),
@@ -228,7 +283,7 @@ export function accountWalkBackend(
         const known = loaded();
         known.shopId ??= await ownShopId(client, userId);
       },
-      apply: (write) => applyWalkWrite(client, write, loaded()),
+      apply: (write, base) => applyWalkWrite(client, write, loaded(), base),
       split: splitWalkWrite,
       stake: walkStake,
       outbox:

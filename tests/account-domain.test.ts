@@ -38,6 +38,7 @@ const profileOf = (id: string, handle: string, name: string): ProfileRow => ({
   links: [],
   compose_icon: "pen",
   reading_visibility: "private",
+  nine_version: 0,
   created_at: "2026-10-12T00:00:00Z",
   updated_at: "2026-10-12T00:00:00Z",
 });
