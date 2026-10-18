@@ -32,6 +32,7 @@ import { isDatabaseId } from "../src/lib/record-kind";
 import { sampleBookRowId } from "../src/lib/samples";
 import { bookById } from "../src/lib/book-name";
 import { mine } from "../src/lib/own-books";
+import { moreKey, withMore, type MoreAsk } from "../src/lib/town-more";
 
 // Two readers use the town against a real local Supabase (`supabase start`):
 // what one saves comes back after a reload, what is public reaches the other,
@@ -103,6 +104,14 @@ async function townOf(person: { id: string; client: Client }) {
 }
 
 type Store = ReturnType<typeof createTownStore>;
+
+/** The town as a page that asks for more sees it (useTownMore). */
+async function townWith(store: Store, ask: MoreAsk): Promise<TownState> {
+  await store.more(ask);
+  const read = store.getMore(moreKey(ask));
+  assert.ok(read, "read for the page");
+  return withMore(store.getSnapshot(), [read]);
+}
 
 /** The walk store for this reader, as the app makes one after signing in. */
 async function walkOf(person: { id: string; client: Client }) {
@@ -390,7 +399,8 @@ async function main() {
   await check(
     "another reader sees the public shelf and never the private one",
     async () => {
-      const town = (await townOf(ben)).getSnapshot();
+      const benStore = await townOf(ben);
+      const town = benStore.getSnapshot();
       const shop = town.shops.find((entry) => entry.id === akiShopId);
       assert.ok(shop, "Aki's shop is in Ben's town");
       assert.equal(shop.ownerId, aki.id);
@@ -398,7 +408,13 @@ async function main() {
         shop.shelves.map((shelf) => shelf.name),
         ["はじめの棚"],
       );
-      const akiInTown = town.readers.find((entry) => entry.id === aki.id);
+      // Aki's nine comes with her profile's page, not with the town.
+      assert.deepEqual(
+        town.readers.find((entry) => entry.id === aki.id)?.lifeNine,
+        [],
+      );
+      const onHerPage = await townWith(benStore, { reader: aki.id });
+      const akiInTown = onHerPage.readers.find((entry) => entry.id === aki.id);
       assert.deepEqual(akiInTown?.lifeNine, [bookId]);
       assert.equal(
         town.posts.find((entry) => entry.id === postId)?.authorId,
@@ -769,17 +785,18 @@ async function main() {
         shop?.shelves.map((shelf) => shelf.name),
         ["はじめの棚"],
       );
-      // The books the visitor sees used come with them: the shelf's, and the
-      // nine's, read as Aki typed them in.
+      // The books the visitor sees used come with them: the shelf's, and,
+      // on Aki's page, the nine's, read as Aki typed them in.
+      const onHerPage = await townWith(store, { reader: aki.id });
       const titles = new Map(
-        town.books.map((entry) => [entry.id, entry.title]),
+        onHerPage.books.map((entry) => [entry.id, entry.title]),
       );
       assert.deepEqual(
         shop?.shelves[0].items.map((item) => titles.get(item.bookId)),
         ["華氏451度"],
       );
       assert.deepEqual(
-        town.readers.find((entry) => entry.id === aki.id)?.lifeNine,
+        onHerPage.readers.find((entry) => entry.id === aki.id)?.lifeNine,
         [bookId],
       );
       assert.ok(town.posts.some((entry) => entry.id === open));
@@ -1789,14 +1806,19 @@ async function main() {
           .filter((record) => record.readerId === rin.id)
           .map((record) => record.id)
           .sort();
+      // The town reads a window of others' records; Rin's page reads all
+      // of hers, past a page of a thousand.
       assert.deepEqual(
-        rinsIn((await townOf(ben)).getSnapshot()),
+        rinsIn(await townWith(await townOf(ben), { reader: rin.id })),
         [...ids].sort(),
       );
       const visitor = createTownStore(visitorTownBackend(newClient()));
       visitor.initialize();
       await settled(visitor);
-      assert.deepEqual(rinsIn(visitor.getSnapshot()), [...ids].sort());
+      assert.deepEqual(
+        rinsIn(await townWith(visitor, { reader: rin.id })),
+        [...ids].sort(),
+      );
     },
   );
 

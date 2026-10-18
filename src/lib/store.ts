@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { seedState } from "./data";
 import { localTownRepository, type TownRepository } from "./repository";
 import {
@@ -8,9 +8,15 @@ import {
   unavailableBackend,
   type RecordKind,
   type TownBackend,
-  type RecordWords,
   type TownReads,
 } from "./town-backend";
+import {
+  askOfKey,
+  moreKey,
+  withMore,
+  type MoreAsk,
+  type TownMore,
+} from "./town-more";
 import { cleanShelves, emptyTown, type Write } from "./town-remote";
 import type { Missed } from "./supabase/sync";
 import { townMissedLine } from "./missed-changes";
@@ -220,9 +226,15 @@ export function createTownStore(
   let unwatch: (() => void) | null = null;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
+  // What pages read after the town (more), by ask, from this backend; and
+  // the readings on their way.
+  let kept = new Map<string, TownMore>();
+  const asking = new Map<string, Promise<void>>();
 
   function start(next: TownBackend) {
     const mine = ++generation;
+    kept = new Map();
+    asking.clear();
     const previous = backend;
     unwatch?.();
     backend = next;
@@ -1463,13 +1475,33 @@ export function createTownStore(
       return { generation, newer, older, post };
     },
     /**
-     * The words of another reader's records (TownBackend.notes); null in
-     * the demo, where the town holds them, and while the town is on its way.
+     * Reads what a page shows that the town does not read with it
+     * (TownBackend.more, town-more.ts), and keeps it by its ask for this
+     * backend: asked again while it is on its way, the same reading is
+     * waited on. Null in the demo, where the town holds everything, and
+     * while the town is on its way.
      */
-    recordWords(readerId: string): Promise<Map<string, RecordWords>> | null {
-      if (loading || !backend.notes) return null;
-      return backend.notes(readerId);
+    more(ask: MoreAsk): Promise<void> | null {
+      const read = backend.more;
+      if (loading || !read) return null;
+      const key = moreKey(ask);
+      const waiting = asking.get(key);
+      if (waiting) return waiting;
+      const from = generation;
+      const reading = read(ask).then((found) => {
+        if (from !== generation) return;
+        kept = new Map(kept).set(key, found);
+        notify();
+      });
+      const done = () => {
+        if (asking.get(key) === reading) asking.delete(key);
+      };
+      reading.then(done, done);
+      asking.set(key, reading);
+      return reading;
     },
+    /** What more() read for `key` (moreKey), if it has. */
+    getMore: (key: string): TownMore | undefined => kept.get(key),
     /** Whether reads() has any: a build with the database, the town read. */
     getReadsSnapshot: () => !loading && Boolean(backend.newer),
     getServerReadsSnapshot: () => false,
@@ -1600,42 +1632,48 @@ export function useTownReads(): boolean {
 }
 
 /**
- * The words of `readerId`'s records of finished books, read when their
- * shelf is shown (AUD-006): by record, for records whose `note` the town
- * read empty. Empty for the reader's own, in the demo, until read, or when
- * they could not be (asked again once, a little later).
+ * The town with what this page shows that the town does not read with it
+ * (town-more.ts): another reader's records and 人生の9冊 (`reader`), a
+ * book's records (`work`), which feelings anyone kept (`felt`), the books
+ * felt with a feeling (`feeling`). Read
+ * when the page opens, each time it opens, and laid over the town; asked
+ * again once, a little later, when it could not be read. `ready` is false
+ * while it is on its way (the page may hold back what would look empty),
+ * and in the demo, the town itself, ready.
  */
-export function useRecordWords(
-  readerId: string,
-  recordIds: string[],
-): ReadonlyMap<string, RecordWords> {
+export function useTownMore(
+  state: TownState,
+  ask: MoreAsk | null,
+): { state: TownState; ready: boolean } {
   const reads = useTownReads();
-  const [words, setWords] = useState<ReadonlyMap<string, RecordWords>>(
-    () => new Map(),
+  const key =
+    ask && !("reader" in ask && ask.reader === ME_ID) ? moreKey(ask) : null;
+  const read = useSyncExternalStore(
+    townStore.subscribe,
+    () => (key ? townStore.getMore(key) : undefined),
+    () => undefined,
   );
-  const key = recordIds.join("\n");
   useEffect(() => {
-    if (!reads || readerId === ME_ID || !key) return;
+    // By its key: a page draws a new ask each time.
+    const ask = key && askOfKey(key);
+    if (!reads || !ask) return;
     let live = true;
     let retry: ReturnType<typeof setTimeout> | undefined;
-    const ask = (again: boolean) => {
-      const asked = townStore.recordWords(readerId);
-      asked?.then(
-        (found) => {
-          if (live) setWords(found);
-        },
-        () => {
-          if (live && again) retry = setTimeout(() => ask(false), 5000);
-        },
-      );
-    };
-    ask(true);
+    const tryRead = (again: boolean) =>
+      townStore.more(ask)?.catch(() => {
+        if (live && again) retry = setTimeout(() => tryRead(false), 5000);
+      });
+    tryRead(true);
     return () => {
       live = false;
       if (retry) clearTimeout(retry);
     };
-  }, [reads, readerId, key]);
-  return words;
+  }, [reads, key]);
+  const shown = useMemo(
+    () => (read ? withMore(state, [read]) : state),
+    [state, read],
+  );
+  return { state: shown, ready: !reads || !key || read !== undefined };
 }
 
 /** Counts the town's readings (store.getReadCount). */

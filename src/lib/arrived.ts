@@ -5,6 +5,7 @@ import {
   type OlderRead,
   type Post,
   type Reader,
+  type ReadingRecord,
   type TownState,
 } from "./types";
 
@@ -27,6 +28,11 @@ export interface Arrived {
   spoilerReports: string[];
   /** What reports folded among those posts. */
   reviewFolds: TownState["reviewFolds"];
+  /**
+   * The writers' records of their posts' books, for the feelings a post
+   * shows (letter.ts): the town reads only a window of others' records.
+   */
+  records?: ReadingRecord[];
   /**
    * Read by the reader's asking, and old: an older page of 便りだけ, or one
    * 便り by its id. Its posts are marked so (TownState.readAfter). New ones
@@ -67,6 +73,7 @@ export function mergeArrived(a: Arrived, b: Arrived): Arrived {
     wantedPosts: [...new Set([...a.wantedPosts, ...b.wantedPosts])],
     spoilerReports: [...new Set([...a.spoilerReports, ...b.spoilerReports])],
     reviewFolds: { ...a.reviewFolds, ...b.reviewFolds },
+    records: unique([...(a.records ?? []), ...(b.records ?? [])]),
   };
 }
 
@@ -179,6 +186,19 @@ export function takeIn(
       posts.some((post) => key === reviewKey("post", post.id)) &&
       !(key in state.reviewFolds),
   );
+  // The writers' records of the books of the posts taken, ones the town lacks.
+  const stands = new Set(
+    posts.flatMap((post) =>
+      post.bookId ? [post.authorId + "\n" + post.bookId] : [],
+    ),
+  );
+  const hadRecords = new Set(state.readingRecords.map((record) => record.id));
+  const records = unique(arrived.records ?? []).filter(
+    (record) =>
+      record.readerId !== ME_ID &&
+      !hadRecords.has(record.id) &&
+      stands.has(record.readerId + "\n" + record.bookId),
+  );
   return {
     ...state,
     readers: newReaders.length
@@ -195,6 +215,11 @@ export function takeIn(
     reviewFolds: folds.length
       ? { ...state.reviewFolds, ...Object.fromEntries(folds) }
       : state.reviewFolds,
+    readingRecords: records.length
+      ? [...state.readingRecords, ...records].sort(
+          (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
+        )
+      : state.readingRecords,
     readAfter,
     olderRead,
   };

@@ -41,7 +41,7 @@ import {
 import { LengthNearLimit } from "./Social";
 import { shownToOthers, type Audience } from "../lib/visibility";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
-import { townOffline, useRecordWords } from "../lib/store";
+import { townOffline, useTownMore } from "../lib/store";
 import { failure, offlineFor } from "../lib/words";
 import "./records.css";
 
@@ -348,8 +348,11 @@ export function BookFeelings({
   book,
 }: Shared & { book: Book }) {
   const [open, setOpen] = useState(false);
-  const words = bookFeelings(state, book.id);
-  const talkers = talkersOf(state, book.id);
+  // The records of the book's work, read when its page opens (AUD-006): the
+  // town holds only a window of others'.
+  const { state: shown } = useTownMore(state, { work: book.id });
+  const words = bookFeelings(shown, book.id);
+  const talkers = talkersOf(shown, book.id);
   const own = ownRecordFor(state, book.id);
   // Feelings chosen and left for later are picked up where they were.
   const keptNew = useRecordWorkKept({ bookId: book.id });
@@ -437,18 +440,9 @@ export function RecordShelf({
 }: Shared & { readerId: string }) {
   const [editing, setEditing] = useState<ReadingRecord | null>(null);
   const [opened, setOpened] = useState<string[]>([]);
-  const kept = recordsOf(state, readerId);
-  // Others' words come when their shelf is shown (AUD-006).
-  const words = useRecordWords(
-    readerId,
-    kept.map((record) => record.id),
-  );
-  const records = kept.map((record) => {
-    const found = !record.note && words.get(record.id);
-    if (!found) return record;
-    const note = found.note.trim();
-    return { ...record, note, spoiler: found.spoiler && note.length > 0 };
-  });
+  // Another reader's, with their words, as their profile's page read them
+  // (useTownMore in ProfileView, AUD-006).
+  const records = recordsOf(state, readerId);
   if (!records.length) return null;
   const mine = readerId === ME_ID;
   // The record as it is now, if it was changed after 見直す was tapped.

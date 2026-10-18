@@ -146,11 +146,16 @@ export function recentlyFinished(state: TownState, limit = 6): string[] {
   return uniqueBooks(visibleRecords(state), state).slice(0, limit);
 }
 
-/** The feelings someone in the town has kept, in the order they are offered. */
+/**
+ * The feelings someone in the town has kept, in the order they are offered:
+ * of all time, as the database told them when the town has only a window of
+ * others' records (feltInTown), and of the records it has.
+ */
 export function feelingsInTown(state: TownState): Feeling[] {
-  const kept = new Set(
-    visibleRecords(state).flatMap((record) => record.feelings),
-  );
+  const kept = new Set([
+    ...(state.feltInTown ?? []),
+    ...visibleRecords(state).flatMap((record) => record.feelings),
+  ]);
   return FEELINGS.filter((feeling) => kept.has(feeling));
 }
 
