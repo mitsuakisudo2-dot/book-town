@@ -8,6 +8,7 @@ import { ReportButton } from "../Report";
 import { useTownBackend } from "../../lib/store";
 import { requestAccount } from "../../lib/visitor";
 import { Modal } from "../ui";
+import { NAMES } from "../../lib/words";
 
 /** What 「…」 offers on a 便り, for this reader. */
 export type LetterMenuRows = {
@@ -66,11 +67,15 @@ export function LetterMenu({
   if (deleting)
     return (
       <Modal title="その他の操作" onClose={onClose}>
-        <div className="letter-menu" role="group" aria-label="投稿の削除">
+        <div
+          className="letter-menu"
+          role="group"
+          aria-label={`${NAMES.letter}の削除`}
+        >
           <p className="letter-menu-question">
             {hasReplies(state, post.id)
-              ? "この投稿と返信を削除しますか？"
-              : "この投稿を削除しますか？"}
+              ? `この${NAMES.letter}と返信を削除しますか？`
+              : `この${NAMES.letter}を削除しますか？`}
           </p>
           <div className="letter-confirm">
             <button
@@ -79,7 +84,7 @@ export function LetterMenu({
               onClick={() => {
                 onClose();
                 actions.deletePost(post.id);
-                notify("投稿を削除しました");
+                notify(`${NAMES.letter}を削除しました`);
               }}
             >
               削除する
@@ -135,10 +140,10 @@ export function LetterMenu({
             target={{
               kind: "post",
               id: post.id,
-              name: authorName + "さんの投稿",
+              name: authorName + `さんの${NAMES.letter}`,
             }}
           >
-            この投稿を通報
+            この{NAMES.letter}を通報
           </ReportButton>
         )}
         {rows.block && (

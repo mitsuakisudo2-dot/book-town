@@ -359,7 +359,7 @@ function AddBookPicker({
     } else if (actions.addShelfBook(shelf.id, book.id, display)) {
       // The editor stays open so several books can be placed in a row.
       setAddedHere([...addedHere, book.id]);
-      notify(`「${bookTitle(book)}」を本棚に並べました。`);
+      notify(`「${bookTitle(book)}」を棚に並べました。`);
     } else {
       notify(
         failure({
@@ -415,7 +415,7 @@ function AddBookPicker({
   };
 
   return (
-    <Modal title="本棚を編集" onClose={onClose} wide>
+    <Modal title="棚を編集" onClose={onClose} wide>
       <div className="editor-book-picker">
         <p className="editor-picker-context">
           {remaining > 0 ? (
@@ -677,7 +677,7 @@ function ShelfEditingPanel({
             <Icon name="book" size={18} />
           </span>
           <label className="editor-shelf-name-label">
-            <span className="sr-only">本棚の名前</span>
+            <span className="sr-only">棚の名前</span>
             <input
               ref={nameField}
               value={shelfName}
@@ -694,8 +694,8 @@ function ShelfEditingPanel({
                 // The Enter that confirms a kana conversion is the keyboard's.
                 if (enterPressed(event)) event.currentTarget.blur();
               }}
-              placeholder="本棚の名前"
-              aria-label="本棚の名前"
+              placeholder="棚の名前"
+              aria-label="棚の名前"
             />
           </label>
         </div>
@@ -706,9 +706,7 @@ function ShelfEditingPanel({
             onClick={() =>
               actions.updateShelf(shelf.id, { isPublic: !shelf.isPublic })
             }
-            aria-label={
-              shelf.isPublic ? "本棚を非公開にする" : "本棚を公開する"
-            }
+            aria-label={shelf.isPublic ? "棚を非公開にする" : "棚を公開する"}
           >
             <Icon name={shelf.isPublic ? "eye" : "lock"} size={15} />
             {shelf.isPublic ? "公開" : "非公開"}
@@ -793,7 +791,7 @@ function ShelfEditingPanel({
         </p>
         <button type="button" className="btn" onClick={onAdd}>
           <Icon name="edit" size={17} />
-          本棚を編集
+          棚を編集
         </button>
       </div>
       {/* The book pressed: its POP and how it stands, in a sheet from the
@@ -1038,7 +1036,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       ),
     );
   }, [owner, shelvesSaved, shelvesNow]);
-  // The note's buttons go with it: the hand goes on to 本棚を追加.
+  // The note's buttons go with it: the hand goes on to 棚を追加.
   const addShelfButton = useRef<HTMLButtonElement>(null);
   const handToShelves = useRef(false);
   useEffect(() => {
@@ -1143,9 +1141,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   /** Removes a shelf, and the work kept for it here: its books and name. */
   function removeShelfAndWork(shelfId: string) {
     if (!townTook(() => actions.removeShelf(shelfId))) {
-      notify(
-        failure({ what: "本棚を削除できませんでした", next: AGAIN.later }),
-      );
+      notify(failure({ what: "棚を削除できませんでした", next: AGAIN.later }));
       return false;
     }
     removedShelves.current[shelfId] =
@@ -1262,8 +1258,8 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           {/* Two places to arrange books; say in one line where each one shows. */}
           <p>
             {ownScene
-              ? "店内は、飾りつけた形で書店めぐりに出ています。下の本棚に並べた本は店内にも並び、棚から外した本は店内からも下がります。"
-              : "下の本棚に並べた本が、そのまま書店めぐりの店内に並びます。飾りつけると、棚の形や看板、本の置き場所を自由に変えられます。"}
+              ? "店内は、飾りつけた形で書店めぐりに出ています。下の棚に並べた本は店内にも並び、棚から外した本は店内からも下がります。"
+              : "下の棚に並べた本が、そのまま書店めぐりの店内に並びます。飾りつけると、棚の形や看板、本の置き場所を自由に変えられます。"}
           </p>
           {!inWalk && (
             <p>公開する棚に本を並べると、書店めぐりに灯りがともります。</p>
@@ -1304,7 +1300,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       />
       <div className="editor-shelves-heading">
         <div>
-          <h2>本棚をつくる</h2>
+          <h2>棚をつくる</h2>
           <p>背表紙は1、面陳は3スペース。棚の名前も、並べ方も自由です。</p>
         </div>
         <button
@@ -1314,7 +1310,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           onClick={() => setAddShelfOpen(true)}
         >
           <Icon name="plus" size={18} />
-          本棚を追加
+          棚を追加
         </button>
       </div>
       {shelvesHere && (
@@ -1353,7 +1349,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             onRemove={() => {
               if (shelf.items.length > 0) setRemoveShelfId(shelf.id);
               else if (removeShelfAndWork(shelf.id))
-                notify("空の本棚を削除しました。");
+                notify("空の棚を削除しました。");
             }}
           />
         ))}
@@ -1373,7 +1369,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             onClick={() => setAddShelfOpen(true)}
           >
             <Icon name="plus" size={18} />
-            本棚をつくる
+            棚をつくる
           </button>
         </section>
       )}
@@ -1392,7 +1388,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       </div>
       {addShelfOpen && (
         <Modal
-          title="新しい本棚をつくる"
+          title="新しい棚をつくる"
           onClose={() => {
             setAddShelfOpen(false);
             setPlacing(null);
@@ -1406,7 +1402,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
               actions.addShelf(newShelfName.trim(), 20);
               setNewShelfName("");
               setAddShelfOpen(false);
-              notify("新しい本棚ができました。");
+              notify("新しい棚ができました。");
               // Made for a book chosen on its page: it goes on this shelf.
               const made = getTownSnapshot().ownShop?.shelves.at(-1);
               if (placing && made) setAddBookShelfId(made.id);
@@ -1414,7 +1410,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           >
             <p>同じ本も、棚の名前ひとつで違って見えます。</p>
             <label className="editor-label">
-              本棚の名前
+              棚の名前
               <input
                 value={newShelfName}
                 onChange={(event) => setNewShelfName(event.target.value)}
@@ -1432,7 +1428,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
               disabled={!newShelfName.trim()}
             >
               <Icon name="plus" size={17} />
-              この名前で本棚をつくる
+              この名前で棚をつくる
             </button>
           </form>
         </Modal>
@@ -1494,7 +1490,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       )}
       {removeShelf && (
         <Modal
-          title="この本棚を削除しますか？"
+          title="この棚を削除しますか？"
           onClose={() => setRemoveShelfId(null)}
         >
           <div className="editor-remove-shelf-dialog">
@@ -1520,10 +1516,10 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
                 onClick={() => {
                   if (!removeShelfAndWork(removeShelf.id)) return;
                   setRemoveShelfId(null);
-                  notify("本棚を削除しました。");
+                  notify("棚を削除しました。");
                 }}
               >
-                本棚を削除する
+                棚を削除する
               </button>
             </div>
           </div>

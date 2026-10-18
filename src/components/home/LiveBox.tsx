@@ -436,7 +436,7 @@ function LiveLine({
               setFocusText(true);
             }}
           >
-            あなたの本棚の、読み終えていない本のひとことです。
+            あなたのライブラリの、読み終えていない本のひとことです。
             <span className="home-live-show">表示する</span>
           </button>
         ) : covered ? (

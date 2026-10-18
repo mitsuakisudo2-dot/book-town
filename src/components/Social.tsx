@@ -52,7 +52,7 @@ import { notePosted } from "../lib/just-posted";
 import { coverSelection, splitHidden } from "../lib/hidden-words";
 import { focusField } from "../lib/coarse-pointer";
 import { bookTitle } from "../lib/book-name";
-import { counted, failure, offlineFor } from "../lib/words";
+import { counted, failure, offlineFor, NAMES } from "../lib/words";
 import { townOffline } from "../lib/store";
 
 type Shared = {
@@ -75,7 +75,9 @@ export function BookReviews({ book, ...props }: Shared & { book: Book }) {
       <div className="book-path-heading">
         <span className="eyebrow">REVIEWS AND CONVERSATIONS</span>
         <h2 id="book-reviews-title">この本のレビュー</h2>
-        <p>本を添えた投稿は、ここにも並びます。返信で、会話の続きを。</p>
+        <p>
+          本を添えた{NAMES.letter}は、ここにも並びます。返信で、会話の続きを。
+        </p>
       </div>
       {sources.length > 0 && (
         <p className="want-source">
@@ -152,7 +154,7 @@ export function ProfilePosts({
     <section className="profile-posts" aria-labelledby="profile-posts-title">
       <div className="book-path-heading">
         <span className="eyebrow">POSTS</span>
-        <h2 id="profile-posts-title">投稿</h2>
+        <h2 id="profile-posts-title">{NAMES.letter}</h2>
       </div>
       <div className="post-feed">
         {posts.map((post) => (
@@ -160,7 +162,11 @@ export function ProfilePosts({
         ))}
         {!posts.length && (
           <div className="empty-state">
-            <p>{self ? "まだ投稿していません。" : "まだ投稿はありません。"}</p>
+            <p>
+              {self
+                ? "まだ投稿していません。"
+                : `まだ${NAMES.letter}はありません。`}
+            </p>
             {self && (
               <Link href="/timeline/" className="btn">
                 タイムラインで書く
@@ -328,7 +334,7 @@ export function PostComposer({
       <span className="composer-send">
         <LengthNearLimit length={body.length} max={POST_MAX_LENGTH} />
         <button className="btn fill" type="submit" disabled={!body.trim()}>
-          {isReply ? "返信する" : "投稿する"}
+          {isReply ? "返信する" : NAMES.post}
         </button>
       </span>
     </div>
@@ -418,13 +424,13 @@ export function ComposeFab({
         // The sheet opens within the tap, so a phone's keyboard rises with
         // its text box (Modal's `writing`).
         onClick={() => flushSync(() => setOpen(true))}
-        aria-label="投稿する"
+        aria-label={NAMES.post}
       >
         <Icon name={icon} size={22} />
-        <span>{draft.body || draft.bookId ? "下書き" : "投稿"}</span>
+        <span>{draft.body || draft.bookId ? "下書き" : NAMES.postTap}</span>
       </button>
       {open && (
-        <Modal title="投稿する" onClose={() => setOpen(false)} writing>
+        <Modal title={NAMES.post} onClose={() => setOpen(false)} writing>
           <PostComposer
             {...props}
             sheet

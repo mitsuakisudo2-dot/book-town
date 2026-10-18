@@ -11,6 +11,7 @@ import { writtenWords, type RelationTable, type Write } from "./town-remote";
 import type { ShopTable, WalkWrite } from "./walk-remote";
 import { keepShelvesNotSent, shelvesStillKept } from "./shelves-draft";
 import { failure, KEPT } from "./words";
+import { NAMES } from "./words";
 
 // Changes that did not reach the database (supabase/sync.ts): what the
 // screens call each one, the line that tells the reader, and the words of a
@@ -28,7 +29,7 @@ const RELATIONS: Record<RelationTable, string> = {
 const MARKS: Record<string, string> = {
   wish: "読みたい",
   favorite: "好きな本",
-  library: "本棚の本",
+  library: "ライブラリの本",
   finished: "読了",
 };
 
@@ -51,9 +52,9 @@ export function townWriteLabels(write: Write): string[] {
     case "shelves":
       return ["書店の棚"];
     case "delete-posts":
-      return ["便りの削除"];
+      return [`${NAMES.letter}の削除`];
     case "posts":
-      return write.rows.map((row) => (row.parent_id ? "返信" : "便り"));
+      return write.rows.map((row) => (row.parent_id ? "返信" : NAMES.letter));
     case "mark-spoilers":
       return ["ネタバレの印"];
     case "like-taps":
@@ -83,7 +84,7 @@ export function townWriteLabels(write: Write): string[] {
             : RELATIONS[write.table],
       );
     case "library-shelves":
-      return ["本棚の棚"];
+      return ["本棚"];
     case "shelf-books":
       return ["棚の本"];
     case "library-entries":

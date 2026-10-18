@@ -84,8 +84,8 @@ const unplaced = (dialog) =>
     '.editor-book-choice:not([disabled]):not([aria-pressed="true"])',
   );
 async function addFirstBook(page, shelf) {
-  await shelf.getByRole("button", { name: "本棚を編集", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "本棚を編集" });
+  await shelf.getByRole("button", { name: "棚を編集", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "棚を編集" });
   const title = await unplaced(dialog)
     .first()
     .locator(".editor-book-choice-title")
@@ -326,24 +326,24 @@ try {
       await settings.locator("summary").click();
       const shelf = page.locator(".editor-shelf-panel").first();
       await shelf
-        .getByRole("textbox", { name: "本棚の名前", exact: true })
+        .getByRole("textbox", { name: "棚の名前", exact: true })
         .fill("夜にひらく異世界");
       await shelf
-        .getByRole("textbox", { name: "本棚の名前", exact: true })
+        .getByRole("textbox", { name: "棚の名前", exact: true })
         .press("Enter");
       await page
-        .getByRole("button", { name: "本棚を追加", exact: true })
+        .getByRole("button", { name: "棚を追加", exact: true })
         .click();
       await page
         .getByRole("dialog")
-        .getByRole("textbox", { name: "本棚の名前", exact: true })
+        .getByRole("textbox", { name: "棚の名前", exact: true })
         .fill("まだ内緒の一冊");
       await page
-        .getByRole("button", { name: "この名前で本棚をつくる", exact: true })
+        .getByRole("button", { name: "この名前で棚をつくる", exact: true })
         .click();
       const privateShelf = page.locator(".editor-shelf-panel").nth(1);
       await privateShelf
-        .getByRole("button", { name: "本棚を非公開にする" })
+        .getByRole("button", { name: "棚を非公開にする" })
         .click();
       await addFirstBook(page, privateShelf);
       const data = await stored(page);
@@ -450,9 +450,9 @@ try {
       const shelf = page.locator(".editor-shelf-panel").first();
       const openEditor = async () => {
         await shelf
-          .getByRole("button", { name: "本棚を編集", exact: true })
+          .getByRole("button", { name: "棚を編集", exact: true })
           .click();
-        return page.getByRole("dialog", { name: "本棚を編集" });
+        return page.getByRole("dialog", { name: "棚を編集" });
       };
       // One visit places many books in a row; a book just placed can be taken back.
       const picker = await openEditor();
@@ -551,7 +551,7 @@ try {
         "20",
       );
       await expect(
-        shelf.getByRole("button", { name: "本棚を編集", exact: true }),
+        shelf.getByRole("button", { name: "棚を編集", exact: true }),
       ).toBeEnabled();
       expect((await stored(page)).ownShop.shelves[0].items).toHaveLength(20);
       await expect(shelf.locator(".editor-space-row")).toContainText(
@@ -678,7 +678,7 @@ try {
       // field is left.
       const second = page.locator(".editor-shelf-panel").nth(1);
       const shelfName = second.getByRole("textbox", {
-        name: "本棚の名前",
+        name: "棚の名前",
         exact: true,
       });
       await shelfName.fill("まだ内緒の二冊");
@@ -708,14 +708,14 @@ try {
       const count = await panels.count();
       const addShelf = async (name) => {
         await page
-          .getByRole("button", { name: "本棚を追加", exact: true })
+          .getByRole("button", { name: "棚を追加", exact: true })
           .click();
         await page
           .getByRole("dialog")
-          .getByRole("textbox", { name: "本棚の名前", exact: true })
+          .getByRole("textbox", { name: "棚の名前", exact: true })
           .fill(name);
         await page
-          .getByRole("button", { name: "この名前で本棚をつくる", exact: true })
+          .getByRole("button", { name: "この名前で棚をつくる", exact: true })
           .click();
         await expect(panels).toHaveCount(count + 1);
         return (await stored(page)).ownShop.shelves.at(-1).id;
@@ -737,7 +737,7 @@ try {
       await page.reload();
       const gone = panels.nth(count);
       const goneName = gone.getByRole("textbox", {
-        name: "本棚の名前",
+        name: "棚の名前",
         exact: true,
       });
       await expect(goneName).toHaveValue("消えた棚の書きかけ");
@@ -747,9 +747,9 @@ try {
       await gone.locator(".shelf-book-button").first().click();
       await gone.getByRole("button", { name: "この本を棚から外す" }).click();
       await gone
-        .getByRole("button", { name: "本棚を編集", exact: true })
+        .getByRole("button", { name: "棚を編集", exact: true })
         .click();
-      const picker = page.getByRole("dialog", { name: "本棚を編集" });
+      const picker = page.getByRole("dialog", { name: "棚を編集" });
       await expect(
         picker.locator(".editor-book-choice").filter({ hasText: title }),
       ).toContainText("外しました・押すと戻す");
@@ -763,13 +763,13 @@ try {
       expect(await addShelf("新しい棚")).toBe(goneId);
       const fresh = panels.nth(count);
       const freshName = fresh.getByRole("textbox", {
-        name: "本棚の名前",
+        name: "棚の名前",
         exact: true,
       });
       await expect(freshName).toHaveValue("新しい棚");
       await expect(fresh.locator(".kept-note")).toHaveCount(0);
       await fresh
-        .getByRole("button", { name: "本棚を編集", exact: true })
+        .getByRole("button", { name: "棚を編集", exact: true })
         .click();
       await expect(picker.getByText("外しました・押すと戻す")).toHaveCount(0);
       await expect(
@@ -1029,7 +1029,7 @@ try {
     "a page opened directly leads to the town; one walked into goes back",
     async () => {
       await go(page, "/shops/shop-orbit/");
-      await expect(page).toHaveTitle(/ \| Book Town$/);
+      await expect(page).toHaveTitle(/ \| BookTown$/);
       const nav = page.locator(".shop-journey-nav");
       await expect(nav.getByRole("link", { name: /本の街へ/ })).toBeVisible();
       // Each shop along the row is a step: 戻る returns to the one before,
@@ -1086,20 +1086,20 @@ try {
       const editShelf = page
         .locator(".editor-shelf-panel")
         .first()
-        .getByRole("button", { name: "本棚を編集", exact: true });
-      const picker = page.getByRole("dialog", { name: "本棚を編集" });
+        .getByRole("button", { name: "棚を編集", exact: true });
+      const picker = page.getByRole("dialog", { name: "棚を編集" });
       await editShelf.click();
       await expect(picker.getByRole("searchbox")).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(editShelf).toBeFocused();
       const addShelf = page.getByRole("button", {
-        name: "本棚を追加",
+        name: "棚を追加",
         exact: true,
       });
-      const newShelf = page.getByRole("dialog", { name: "新しい本棚をつくる" });
+      const newShelf = page.getByRole("dialog", { name: "新しい棚をつくる" });
       await addShelf.click();
       await expect(
-        newShelf.getByRole("textbox", { name: "本棚の名前" }),
+        newShelf.getByRole("textbox", { name: "棚の名前" }),
       ).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(addShelf).toBeFocused();
@@ -1261,22 +1261,22 @@ try {
       const editShelf = phone
         .locator(".editor-shelf-panel")
         .first()
-        .getByRole("button", { name: "本棚を編集", exact: true });
-      const picker = phone.getByRole("dialog", { name: "本棚を編集" });
+        .getByRole("button", { name: "棚を編集", exact: true });
+      const picker = phone.getByRole("dialog", { name: "棚を編集" });
       await editShelf.tap();
       await expectNoKeyboard(phone, "shelf books", picker);
       await expectTapWrites(picker.getByRole("searchbox"));
       await phone.keyboard.press("Escape");
       await expect(editShelf).toBeFocused();
       const newShelf = phone.getByRole("dialog", {
-        name: "新しい本棚をつくる",
+        name: "新しい棚をつくる",
       });
       await phone
-        .getByRole("button", { name: "本棚を追加", exact: true })
+        .getByRole("button", { name: "棚を追加", exact: true })
         .tap();
       await expectNoKeyboard(phone, "new shelf", newShelf);
       await expectTapWrites(
-        newShelf.getByRole("textbox", { name: "本棚の名前" }),
+        newShelf.getByRole("textbox", { name: "棚の名前" }),
       );
       await phone.keyboard.press("Escape");
       // The sign's words thrown away: the field waits, and the form of the

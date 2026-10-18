@@ -2,10 +2,11 @@
 
 import { useRef, type KeyboardEvent } from "react";
 import type { HomeTab } from "../../lib/home-tab";
+import { NAMES } from "../../lib/words";
 
 export const HOME_TABS: [HomeTab, string][] = [
   ["home", "ホーム"],
-  ["letters", "便りだけ"],
+  ["letters", `${NAMES.letter}だけ`],
 ];
 
 export const paneId = (tab: HomeTab) => "home-pane-" + tab;
@@ -72,7 +73,9 @@ export function HomeTabs({
           aria-controls={mounted.has(key) ? paneId(key) : undefined}
           tabIndex={key === tab ? 0 : -1}
           aria-label={
-            waiting.has(key) ? label + "（新しい便りがあります）" : undefined
+            waiting.has(key)
+              ? label + `（新しい${NAMES.letter}があります）`
+              : undefined
           }
           onClick={() => onSelect(key)}
         >

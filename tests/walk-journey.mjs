@@ -74,7 +74,7 @@ try {
     "the first walk says once how to turn, and the circles say what they do",
     async () => {
       const hint = page.locator(".walk-first-hint");
-      await expect(hint).toContainText("上にめくると、となりの本屋へ");
+      await expect(hint).toContainText("上にめくると、となりの書店へ");
       await page.clock.runFor(3600);
       await expect(hint).toHaveCount(0);
       await page.clock.resume();

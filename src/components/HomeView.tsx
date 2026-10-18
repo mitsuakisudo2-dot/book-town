@@ -44,6 +44,7 @@ import { announce } from "../lib/live-region";
 import { findReader } from "../lib/social";
 import { getTownSnapshot, townStore } from "../lib/store";
 import { DUR_MS, EASE, playByFrames, reducedMotion } from "../lib/motion";
+import { HOME_TITLE, NAMES, pageTitle } from "../lib/words";
 import "./home/home.css";
 
 type Shared = {
@@ -54,8 +55,8 @@ type Shared = {
 
 /** Each tab's page title, as its address's static page names it. */
 const TITLES: Record<HomeTab, string> = {
-  home: "Book Town | 本を読みたくなるSNS",
-  letters: "便りだけ | Book Town",
+  home: HOME_TITLE,
+  letters: pageTitle(`${NAMES.letter}だけ`),
 };
 
 const toTop = () => window.scrollTo({ top: 0, behavior: motion() });
@@ -258,7 +259,7 @@ export function HomeView({
   useEffect(() => {
     if (!pillOn || toldFor === waiting.arrived) return;
     toldFor = waiting.arrived;
-    announce("新しい便りがあります");
+    announce(`新しい${NAMES.letter}があります`);
   }, [pillOn, waiting.arrived]);
   const generation = townStore.getGeneration();
   const staleTabs =
@@ -304,7 +305,7 @@ export function HomeView({
     const taken = townArrivals.take();
     renew(which);
     if (taken && took(before, taken, which))
-      announce("新しい便りを上に出しました");
+      announce(`新しい${NAMES.letter}を上に出しました`);
   }
   /**
    * A line of Live tapped before it is in the town: that memo alone goes in,

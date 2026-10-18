@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "./database.types";
+import { NAMES } from "../words";
 
 export type ReportKind = "post" | "shop" | "profile" | "poster" | "book";
 /** What the app sends. A report about a book is always a cover removal request. */
@@ -35,8 +36,8 @@ export interface FiledReport {
 
 /** How a report's thing is spoken of. */
 export const REPORT_KIND_WORDS: Record<ReportKind, string> = {
-  post: "投稿",
-  shop: "本屋",
+  post: NAMES.letter,
+  shop: "書店",
   profile: "読書家",
   poster: "ポスター",
   book: "本の表紙",

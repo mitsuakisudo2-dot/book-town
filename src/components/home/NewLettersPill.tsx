@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import type { Reader } from "../../lib/types";
+import { NAMES } from "../../lib/words";
 
 /**
  * 「新しい便り ↑」 (決定 H:120-122, v37 §3.8): new 便り came and wait above.
@@ -38,7 +39,7 @@ export function NewLettersPill({
       ref={button}
       type="button"
       className="home-new"
-      aria-label="新しい便りを見る"
+      aria-label={`新しい${NAMES.letter}を見る`}
       onClick={onTap}
       onFocus={() => onFocusChange(true)}
       onBlur={() => onFocusChange(false)}
@@ -57,7 +58,7 @@ export function NewLettersPill({
           ))}
         </span>
       )}
-      <span>新しい便り</span>
+      <span>新しい{NAMES.letter}</span>
       <svg
         aria-hidden="true"
         width="16"

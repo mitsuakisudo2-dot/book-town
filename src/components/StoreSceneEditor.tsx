@@ -706,7 +706,7 @@ export function StoreSceneEditor({
                   まだ並べていない本 · {counted(unplaced.length, "冊")}
                 </legend>
                 <p className="scene-hint">
-                  棚に入りきらない本、下ろした本、本棚に新しく並べた本です。POPも残っています。本を選び、置く棚を指定してください。
+                  棚に入りきらない本、下ろした本、棚に新しく並べた本です。POPも残っています。本を選び、置く棚を指定してください。
                 </p>
                 <div className="scene-placement-list">
                   {unplaced.map((p) => (
@@ -744,8 +744,8 @@ export function StoreSceneEditor({
           )}
           <p className="scene-hint">
             {saved.kind === "account"
-              ? "あなたのアカウントに保存します。公開した棚だけが、書店めぐりで誰でも眺められます。これまでの本棚の内容は残ります。"
-              : "このブラウザに保存します。これまでの本棚の内容は残ります。"}
+              ? "あなたのアカウントに保存します。公開した棚だけが、書店めぐりで誰でも眺められます。これまでの棚の内容は残ります。"
+              : "このブラウザに保存します。これまでの棚の内容は残ります。"}
           </p>
           {error && (
             <p className="scene-error" role="alert">
