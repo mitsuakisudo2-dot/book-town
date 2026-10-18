@@ -9,6 +9,8 @@ export const CODE_LENGTH = 6;
 /** The youngest age Booktown is offered to. */
 export const MINIMUM_AGE = 13;
 export const NAME_MAX_LENGTH = 40;
+/** How many passkeys one account can have (the auth server's own limit). */
+export const PASSKEY_LIMIT = 10;
 
 export interface AccountUser {
   id: string;
@@ -49,7 +51,14 @@ export type AccountFailure =
   | "network"
   | "misconfigured"
   | "server"
-  | "leave-failed";
+  | "leave-failed"
+  | "passkey-cancelled"
+  | "passkey-unavailable"
+  | "passkey-unknown"
+  | "passkey-exists"
+  | "passkey-too-many"
+  | "passkey-expired"
+  | "passkey-failed";
 
 export const failureMessages: Record<AccountFailure, string> = {
   "invalid-email": failure({ next: "メールアドレスの形を確かめてください" }),
@@ -86,6 +95,30 @@ export const failureMessages: Record<AccountFailure, string> = {
     kept: KEPT.nothing,
     next: AGAIN.later,
   }),
+  // Closed by the reader in the browser's own window: nothing to say.
+  "passkey-cancelled": "",
+  "passkey-unavailable": failure({
+    what: "このページやブラウザでは、パスキーを使えません",
+  }),
+  "passkey-unknown": failure({
+    what: "このパスキーでは入れませんでした",
+    next: "ほかのパスキーを選ぶか、メールのコードで入ってください",
+  }),
+  "passkey-exists": failure({
+    what: "この端末のパスキーは、もう作ってあります",
+  }),
+  "passkey-too-many": failure({
+    what: `パスキーは${counted(PASSKEY_LIMIT, "個")}まで作れます`,
+    next: "使っていないものを消すと、作れます",
+  }),
+  "passkey-expired": failure({
+    what: "時間がたって、パスキーの確認が切れました",
+    next: AGAIN.now,
+  }),
+  "passkey-failed": failure({
+    what: "パスキーで確かめられませんでした",
+    next: AGAIN.now,
+  }),
 };
 
 /** The ID typed to confirm 退会 is not the reader's. */
@@ -109,6 +142,20 @@ export type EmailChangeResult =
       newConfirmed: boolean;
     };
 
+/**
+ * A passkey the signed-in reader made. `name` is what keeps it (iCloud
+ * Keychain, Google Password Manager…), when the auth server knows.
+ */
+export interface Passkey {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export type PasskeysResult =
+  { ok: true; passkeys: Passkey[] } | { ok: false; message: string };
+
 /** The few calls the account needs, so tests can stand in for Supabase. */
 export interface AccountBackend {
   /** Calls the listener with the current user right away, then on every change. */
@@ -128,6 +175,16 @@ export interface AccountBackend {
     email: string,
     code: string,
   ): Promise<{ done: boolean } | { failure: AccountFailure }>;
+  /**
+   * Signs in with a passkey kept by this device or a password manager: no
+   * address is asked, the passkey says whose it is.
+   */
+  signInWithPasskey(): Promise<AccountFailure | null>;
+  /** Makes a passkey for the signed-in reader, kept by this device. */
+  addPasskey(): Promise<AccountFailure | null>;
+  /** The signed-in reader's passkeys; throws when they cannot be read. */
+  listPasskeys(): Promise<Passkey[]>;
+  removePasskey(id: string): Promise<AccountFailure | null>;
   signOut(): Promise<void>;
   /**
    * Deletes the signed-in account and everything it owns (the database
@@ -199,7 +256,7 @@ export function profileDraftProblem(draft: ProfileDraft): string | null {
   return profileDraftIssue(draft)?.message ?? null;
 }
 
-const failed = (reason: AccountFailure): AccountResult => ({
+const failed = (reason: AccountFailure): { ok: false; message: string } => ({
   ok: false,
   message: failureMessages[reason],
 });
@@ -446,6 +503,36 @@ export function createAccountStore(
       // again, start over.
       newConfirmed = false;
       return refuse("invalid-code", "new");
+    },
+    /** Signs in with a passkey; the session it starts is told as usual. */
+    async signInWithPasskey(): Promise<AccountResult> {
+      start();
+      if (!backend) return failed("network");
+      const failure = await backend.signInWithPasskey();
+      return failure ? failed(failure) : { ok: true };
+    },
+    /** Makes a passkey for the signed-in reader on this device. */
+    async addPasskey(): Promise<AccountResult> {
+      start();
+      if (!backend || state.status !== "signed-in") return failed("network");
+      const failure = await backend.addPasskey();
+      return failure ? failed(failure) : { ok: true };
+    },
+    async listPasskeys(): Promise<PasskeysResult> {
+      start();
+      if (!backend || state.status !== "signed-in") return failed("network");
+      try {
+        const passkeys = await backend.listPasskeys();
+        return { ok: true, passkeys };
+      } catch {
+        return failed("network");
+      }
+    },
+    async removePasskey(id: string): Promise<AccountResult> {
+      start();
+      if (!backend || state.status !== "signed-in") return failed("network");
+      const failure = await backend.removePasskey(id);
+      return failure ? failed(failure) : { ok: true };
     },
     async createProfile(draft: ProfileDraft): Promise<AccountResult> {
       start();

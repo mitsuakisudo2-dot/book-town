@@ -72,7 +72,14 @@ export const readingPath = (): string => "/reading/";
 
 /**
  * The login page, which is the account's page once signed in;
- * `changeEmail` opens 「メールアドレスを変える」 on it (管理表 107).
+ * `changeEmail` opens 「メールアドレスを変える」 on it, `passkeys` the
+ * reader's passkeys (管理表 107).
  */
-export const loginPath = (options: { changeEmail?: boolean } = {}): string =>
-  options.changeEmail ? "/login/?change=email" : "/login/";
+export const loginPath = (
+  options: { changeEmail?: boolean; passkeys?: boolean } = {},
+): string =>
+  options.changeEmail
+    ? "/login/?change=email"
+    : options.passkeys
+      ? "/login/?change=passkey"
+      : "/login/";

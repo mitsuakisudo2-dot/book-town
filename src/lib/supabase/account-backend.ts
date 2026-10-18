@@ -1,6 +1,16 @@
-import type { AuthError, SupabaseClient, User } from "@supabase/supabase-js";
+import {
+  isAuthApiError,
+  type AuthError,
+  type SupabaseClient,
+  type User,
+} from "@supabase/supabase-js";
 import { loginPath } from "../paths";
-import type { AccountBackend, AccountFailure, AccountUser } from "../account";
+import type {
+  AccountBackend,
+  AccountFailure,
+  AccountUser,
+  Passkey,
+} from "../account";
 import type { Database } from "./database.types";
 
 const accountUser = (user: User | null | undefined): AccountUser | null =>
@@ -46,6 +56,74 @@ export function emailChangeFailure(error: Pick<AuthError, "code" | "status">) {
   // reason is the server's (its built-in email sends to the team only).
   return failure === "not-invited" ? "server" : failure;
 }
+
+/**
+ * The same for a passkey: the browser's own window (closed, no passkey for
+ * this site, a page outside booktown.page) or the auth server's answer.
+ */
+export function passkeyFailure(error: unknown): AccountFailure {
+  // supabase-js's WebAuthnError: the browser's window, not the server.
+  if (isBrowserPasskeyError(error)) {
+    const cause = (error.cause as { name?: string } | undefined)?.name;
+    if (
+      error.code === "ERROR_CEREMONY_ABORTED" ||
+      cause === "NotAllowedError" ||
+      cause === "AbortError" ||
+      cause === "TimeoutError"
+    )
+      return "passkey-cancelled";
+    if (error.code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED")
+      return "passkey-exists";
+    if (
+      error.code === "ERROR_INVALID_DOMAIN" ||
+      error.code === "ERROR_INVALID_RP_ID" ||
+      cause === "SecurityError" ||
+      cause === "NotSupportedError"
+    )
+      return "passkey-unavailable";
+    return "passkey-failed";
+  }
+  const auth = error as Pick<AuthError, "code" | "status" | "message">;
+  switch (auth.code) {
+    case "passkey_disabled":
+      return "passkey-unavailable";
+    case "too_many_passkeys":
+      return "passkey-too-many";
+    case "webauthn_credential_exists":
+      return "passkey-exists";
+    // A passkey the auth server does not know (removed, or its account is
+    // gone) is told as a failed check.
+    case "webauthn_credential_not_found":
+    case "webauthn_verification_failed":
+      return "passkey-unknown";
+    case "webauthn_challenge_not_found":
+    case "webauthn_challenge_expired":
+      return "passkey-expired";
+  }
+  // supabase-js says so itself when the browser has no WebAuthn.
+  if (!isAuthApiError(error) && /WebAuthn/i.test(auth.message ?? ""))
+    return "passkey-unavailable";
+  return authFailure(auth);
+}
+
+const isBrowserPasskeyError = (
+  error: unknown,
+): error is { code: string; cause?: unknown } =>
+  typeof error === "object" &&
+  error !== null &&
+  (error as { __isWebAuthnError?: boolean }).__isWebAuthnError === true;
+
+const passkeyOf = (row: {
+  id: string;
+  friendly_name?: string;
+  created_at: string;
+  last_used_at?: string;
+}): Passkey => ({
+  id: row.id,
+  name: row.friendly_name ?? "",
+  createdAt: row.created_at,
+  lastUsedAt: row.last_used_at ?? null,
+});
 
 export function supabaseAccountBackend(
   client: SupabaseClient<Database>,
@@ -97,6 +175,26 @@ export function supabaseAccountBackend(
       // The first of the two codes is taken without a session; the second
       // makes the change and signs in again with the new address.
       return { done: Boolean(data.session) };
+    },
+    async signInWithPasskey() {
+      const { error } = await client.auth.signInWithPasskey();
+      return error ? passkeyFailure(error) : null;
+    },
+    async addPasskey() {
+      const { error } = await client.auth.registerPasskey();
+      if (!error) return null;
+      // Making one, a failed check is not about a passkey it does not know.
+      const failure = passkeyFailure(error);
+      return failure === "passkey-unknown" ? "passkey-failed" : failure;
+    },
+    async listPasskeys() {
+      const { data, error } = await client.auth.passkey.list();
+      if (error) throw error;
+      return data.map(passkeyOf);
+    },
+    async removePasskey(id) {
+      const { error } = await client.auth.passkey.delete({ passkeyId: id });
+      return error ? passkeyFailure(error) : null;
     },
     async signOut() {
       await client.auth.signOut();

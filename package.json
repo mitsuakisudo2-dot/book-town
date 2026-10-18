@@ -21,7 +21,7 @@
     "test:account": "tsx tests/account-domain.test.ts",
     "test:site-notes": "tsx tests/site-notes.test.ts",
     "test:town-sync": "tsx tests/town-remote.test.ts && tsx tests/walk-remote.test.ts && tsx tests/save-guards.test.ts && tsx tests/own-books.test.ts",
-    "test:supabase": "tsx tests/supabase-login.test.ts && tsx tests/supabase-town.test.ts",
+    "test:supabase": "tsx tests/supabase-login.test.ts && tsx tests/supabase-town.test.ts && tsx tests/supabase-passkey.test.ts",
     "test:customization": "node tests/customization-journey.mjs",
     "test:library-journey": "node tests/library-journey.mjs",
     "test:walk": "node tests/walk-journey.mjs",

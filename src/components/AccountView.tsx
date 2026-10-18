@@ -1,10 +1,17 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   CODE_LENGTH,
   MINIMUM_AGE,
   NAME_MAX_LENGTH,
+  type Passkey,
   failureMessages,
   linkFailure,
   normalizeCode,
@@ -22,6 +29,7 @@ import {
   type ProfileWork,
 } from "../lib/account-draft";
 import { EMAIL_MAX_LENGTH } from "../lib/types";
+import { shortDate } from "../lib/japan-time";
 import { useUrlParam } from "../lib/url-state";
 import { useKeptDraft } from "../lib/kept-draft";
 import { adoptVisitorRecords } from "../lib/record-draft";
@@ -153,6 +161,15 @@ function SignIn() {
     setCode("");
   }
 
+  // A passkey says whose it is: no address to type, no code to wait for.
+  async function signInWithPasskey() {
+    setBusy(true);
+    setError("");
+    const result = await accountActions.signInWithPasskey();
+    setBusy(false);
+    if (!result.ok) setError(result.message);
+  }
+
   async function verify(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -198,6 +215,17 @@ function SignIn() {
             {busy ? "送っています…" : "コードを送る"}
           </button>
         </form>
+        {passkeysPossible() && (
+          <button
+            type="button"
+            className="btn account-passkey-in"
+            onClick={() => void signInWithPasskey()}
+            disabled={busy}
+          >
+            <Icon name="lock" size={18} />
+            パスキーでログイン
+          </button>
+        )}
       </>
     );
 
@@ -442,6 +470,7 @@ function SignedIn({
         }}
       />
     );
+  if (change === "passkey") return <Passkeys onClose={() => setChange(null)} />;
   return (
     <>
       <h1>ログインしています</h1>
@@ -463,6 +492,13 @@ function SignedIn({
           メールアドレスを変えました。次からは、このアドレスにログインのコードが届きます。
         </p>
       )}
+      <div className="account-row">
+        <span>メールのコードなしでログイン</span>
+        <b>パスキー</b>
+        <button type="button" onClick={() => setChange("passkey")}>
+          開く
+        </button>
+      </div>
       <SignOut leave />
     </>
   );
@@ -689,6 +725,146 @@ function ChangeEmail({
           }}
         >
           やめる
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** Whether this browser can make and use passkeys at all. */
+const passkeysPossible = () =>
+  typeof window !== "undefined" &&
+  typeof window.PublicKeyCredential === "function";
+
+/**
+ * The reader's passkeys: each signs in without the email code, from the
+ * device or password manager that keeps it, so a lost mailbox does not lock
+ * them out. One is made on this device; any can be removed.
+ */
+function Passkeys({ onClose }: { onClose: () => void }) {
+  const [passkeys, setPasskeys] = useState<Passkey[] | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [made, setMade] = useState(false);
+  // The passkey whose removal is being asked about.
+  const [asking, setAsking] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
+
+  const load = useCallback(async () => {
+    setLoadError("");
+    const result = await accountActions.listPasskeys();
+    if (result.ok) setPasskeys(result.passkeys);
+    else setLoadError(result.message);
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function add() {
+    setBusy(true);
+    setError("");
+    setMade(false);
+    const result = await accountActions.addPasskey();
+    setBusy(false);
+    if (!result.ok) return setError(result.message);
+    setMade(true);
+    await load();
+  }
+
+  async function remove(id: string) {
+    setBusy(true);
+    setError("");
+    setMade(false);
+    const result = await accountActions.removePasskey(id);
+    setBusy(false);
+    setAsking(null);
+    if (!result.ok) return setError(result.message);
+    await load();
+  }
+
+  return (
+    <>
+      <h1 ref={heading} tabIndex={-1}>
+        パスキー
+      </h1>
+      <p className="account-lead">
+        パスキーがあれば、メールのコードを待たずに、指紋や顔、端末の画面ロックでログインできます。メールが読めなくなったときも、パスキーで入れます。
+      </p>
+      {loadError ? (
+        <>
+          <ErrorLine message={loadError} />
+          <button type="button" className="btn" onClick={() => void load()}>
+            もう一度読み込む
+          </button>
+        </>
+      ) : passkeys === null ? (
+        <p className="account-lead">読み込んでいます…</p>
+      ) : (
+        passkeys.length > 0 && (
+          <ul className="account-passkeys">
+            {passkeys.map((passkey) => (
+              <li key={passkey.id}>
+                <b>{passkey.name || "パスキー"}</b>
+                <span>
+                  {shortDate(passkey.createdAt)}に作成
+                  {passkey.lastUsedAt &&
+                    `・${shortDate(passkey.lastUsedAt)}に使用`}
+                </span>
+                {asking === passkey.id ? (
+                  <span className="account-passkey-ask" role="group">
+                    消すと、このパスキーではログインできなくなります。
+                    <span>
+                      <button
+                        type="button"
+                        onClick={() => void remove(passkey.id)}
+                        disabled={busy}
+                      >
+                        消す
+                      </button>
+                      <button type="button" onClick={() => setAsking(null)}>
+                        残す
+                      </button>
+                    </span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="account-passkey-remove"
+                    onClick={() => setAsking(passkey.id)}
+                    disabled={busy}
+                  >
+                    消す
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )
+      )}
+      {made && (
+        <p className="account-changed" role="status">
+          パスキーを作りました。次からは、ログインの画面で「パスキーでログイン」を選べます。
+        </p>
+      )}
+      <ErrorLine message={error} />
+      {passkeysPossible() ? (
+        <button
+          type="button"
+          // Once there is one, another is there to make, not asked for.
+          className={passkeys?.length ? "btn" : "btn fill"}
+          onClick={() => void add()}
+          disabled={busy || passkeys === null}
+        >
+          {busy ? "確かめています…" : "この端末でパスキーを作る"}
+        </button>
+      ) : (
+        <p className="account-lead">このブラウザでは、パスキーを作れません。</p>
+      )}
+      <div className="account-links">
+        <button type="button" onClick={onClose}>
+          戻る
         </button>
       </div>
     </>
