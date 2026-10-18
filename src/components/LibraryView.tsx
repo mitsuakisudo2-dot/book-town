@@ -44,7 +44,7 @@ import {
 } from "./LibraryShelfSheet";
 import { ScanSession } from "./ScanSession";
 import { BookJacket, Icon } from "./ui";
-import { counted, whenSome } from "../lib/words";
+import { counted, TABS, whenSome } from "../lib/words";
 import { CHOICE_NAMES, type Audience } from "../lib/visibility";
 
 // The reader's library (管理表14): every book they have met in the town,
@@ -567,7 +567,7 @@ export function LibraryView({
     return (
       <div className="library-page">
         <header className="library-head">
-          <h1>ライブラリ</h1>
+          <h1>{TABS.library}</h1>
         </header>
         <JournalNotes notify={notify} onTypeTitles={() => setSheet("titles")} />
         <section className="library-start">
@@ -597,7 +597,7 @@ export function LibraryView({
     <div className={"library-page" + (picking ? " is-picking" : "")}>
       <header className="library-head" inert={Boolean(picking)}>
         <div>
-          <h1>ライブラリ</h1>
+          <h1>{TABS.library}</h1>
           {counts.works > 0 && <p>{counted(counts.works, "冊")}</p>}
         </div>
         <button
