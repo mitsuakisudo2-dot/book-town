@@ -8,20 +8,27 @@ name: Vercel
 # domains shows the project's addresses and domains-apply adds SITE_DOMAIN (www
 # sent on to it); mail and mail-apply set up sending the
 # login email from MAIL_DOMAIN through Resend (RESEND_ADMIN_KEY, a Full access
-# key, adds the domain; the sending key in RESEND_API_KEY cannot).
+# key, adds the domain; the sending key in RESEND_API_KEY cannot). rollback
+# points the site back at the production build before the current one (it
+# refuses when the migrations differ, unless allow_migrations is ticked), and
+# promote-latest publishes the newest build again (docs/09「本番を直前の版に戻す」).
 
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: status lists recent deployments; deploy builds the branch again; domains shows the addresses, domains-apply adds SITE_DOMAIN; mail shows what sending from MAIL_DOMAIN needs, mail-apply does it
+        description: status lists recent deployments; deploy builds the branch again; domains shows the addresses, domains-apply adds SITE_DOMAIN; mail shows what sending from MAIL_DOMAIN needs, mail-apply does it; rollback goes back one production build, promote-latest undoes it
         type: choice
-        options: [status, deploy, domains, domains-apply, mail, mail-apply]
+        options: [status, deploy, domains, domains-apply, mail, mail-apply, rollback, promote-latest]
         default: status
       branch:
         description: Branch to look at or build (main goes to production)
         type: string
         default: main
+      allow_migrations:
+        description: rollback even though the migrations changed since that build (only when the database still works with it)
+        type: boolean
+        default: false
   push:
     branches: [main]
   pull_request:
@@ -37,6 +44,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # rollback compares the migrations of two commits.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -46,6 +56,7 @@ jobs:
           ACTION: ${{ inputs.action || (github.event_name == 'push' && 'ensure') || 'status' }}
           BRANCH: ${{ inputs.branch || github.head_ref || github.ref_name }}
           DEPLOY_SHA: ${{ github.sha }}
+          ALLOW_MIGRATIONS: ${{ inputs.allow_migrations && 'yes' || 'no' }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_TEAM: booktown1
           VERCEL_PROJECT: book-town-851k

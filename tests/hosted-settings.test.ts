@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -16,10 +16,20 @@ import {
   domainLine,
   siteDomainPlan,
   logLines,
+  migrationsBetween,
   recordLine,
   relativeName,
+  rollbackTarget,
   validBranch,
 } from "../scripts/vercel.mjs";
+import {
+  backupVerdict,
+  firstScript,
+  issueBody,
+  issuePlan,
+  pageVerdict,
+  usageVerdict,
+} from "../scripts/watch.mjs";
 
 // The scripts that change the hosted Supabase and Vercel settings, without
 // calling either: what they ask for, and what they let into the public log.
@@ -52,7 +62,7 @@ interface Seen {
 
 /** A stand-in API: answers each request with `answer`, and remembers it. */
 async function standIn(
-  answer: (seen: Seen) => { status?: number; body: unknown },
+  answer: (seen: Seen) => { status?: number; body: unknown; html?: boolean },
 ) {
   const seen: Seen[] = [];
   const read = async (request: IncomingMessage) => {
@@ -67,7 +77,12 @@ async function standIn(
       body: await read(request),
     };
     seen.push(entry);
-    const { status = 200, body } = answer(entry);
+    const { status = 200, body, html } = answer(entry);
+    if (html) {
+      response.writeHead(status, { "Content-Type": "text/html" });
+      response.end(String(body));
+      return;
+    }
     response.writeHead(status, { "Content-Type": "application/json" });
     response.end(JSON.stringify(body));
   });
@@ -902,6 +917,387 @@ async function main() {
       assert.equal(vercel.seen.length, 0);
       await resend.close();
       await vercel.close();
+    },
+  );
+
+  await check(
+    "rollback goes back to the production build before the current one",
+    () => {
+      const current = { id: "dpl_c", created: 30, readyState: "READY" };
+      const list = [
+        {
+          uid: "dpl_n",
+          created: 40,
+          readyState: "READY",
+          target: "production",
+        },
+        {
+          uid: "dpl_c",
+          created: 30,
+          readyState: "READY",
+          target: "production",
+        },
+        {
+          uid: "dpl_e",
+          created: 25,
+          readyState: "ERROR",
+          target: "production",
+        },
+        { uid: "dpl_p", created: 20, readyState: "READY", target: null },
+        {
+          uid: "dpl_b",
+          created: 10,
+          readyState: "READY",
+          target: "production",
+        },
+        { uid: "dpl_a", created: 5, readyState: "READY", target: "production" },
+      ];
+      assert.equal(rollbackTarget(list, current)?.uid, "dpl_b");
+      assert.equal(rollbackTarget([list[1]], current), null);
+      // A commit git cannot see is never taken as "nothing changed".
+      assert.equal(migrationsBetween("0".repeat(40), "1".repeat(40)), null);
+      assert.equal(migrationsBetween("$(x)", "1".repeat(40)), null);
+    },
+  );
+
+  await check(
+    "rollback refuses when the database may have changed, and promote-latest undoes it",
+    async () => {
+      const head = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+      let olderSha = head;
+      const api = await standIn(({ method, url }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (pathname === "/v13/deployments/booktown.page")
+          return {
+            body: {
+              id: "dpl_c",
+              created: 30,
+              readyState: "READY",
+              target: "production",
+              url: "c.vercel.app",
+              meta: { githubCommitSha: head },
+            },
+          };
+        if (pathname === "/v7/deployments") {
+          assert.match(url, /target=production/);
+          return {
+            body: {
+              deployments: [
+                {
+                  uid: "dpl_n",
+                  created: 40,
+                  readyState: "READY",
+                  target: "production",
+                  url: "n.vercel.app",
+                  meta: { githubCommitSha: head },
+                },
+                {
+                  uid: "dpl_c",
+                  created: 30,
+                  readyState: "READY",
+                  target: "production",
+                  url: "c.vercel.app",
+                  meta: { githubCommitSha: head },
+                },
+                {
+                  uid: "dpl_b",
+                  created: 10,
+                  readyState: "READY",
+                  target: "production",
+                  url: "b.vercel.app",
+                  meta: { githubCommitSha: olderSha },
+                },
+              ],
+            },
+          };
+        }
+        if (method === "POST") return { body: {} };
+        return { status: 404, body: {} };
+      });
+      const env = {
+        VERCEL_API_URL: api.url,
+        VERCEL_TOKEN: "vcp_token_for_tests",
+        VERCEL_TEAM: "booktown1",
+        VERCEL_PROJECT: "book-town-851k",
+        SITE_DOMAIN: "booktown.page",
+      };
+      const posts = () => api.seen.filter((s) => s.method === "POST");
+
+      const same = await run("scripts/vercel.mjs", ["rollback", "main"], env);
+      assert.equal(same.code, 0, same.output);
+      assert.match(same.output, /Rolled back to: .*\/\/b\.vercel\.app/);
+      assert.equal(
+        posts()[0].url.split("?")[0],
+        "/v1/projects/book-town-851k/rollback/dpl_b",
+      );
+
+      olderSha = "0".repeat(40);
+      const unknown = await run(
+        "scripts/vercel.mjs",
+        ["rollback", "main"],
+        env,
+      );
+      assert.equal(unknown.code, 1, unknown.output);
+      assert.match(unknown.output, /nothing was rolled back/);
+      assert.equal(posts().length, 1);
+      const agreed = await run("scripts/vercel.mjs", ["rollback", "main"], {
+        ...env,
+        ALLOW_MIGRATIONS: "yes",
+      });
+      assert.equal(agreed.code, 0, agreed.output);
+      assert.equal(posts().length, 2);
+
+      const preview = await run(
+        "scripts/vercel.mjs",
+        ["rollback", "claude/x"],
+        env,
+      );
+      assert.equal(preview.code, 1);
+      assert.equal(posts().length, 2);
+
+      const latest = await run(
+        "scripts/vercel.mjs",
+        ["promote-latest", "main"],
+        env,
+      );
+      assert.equal(latest.code, 0, latest.output);
+      assert.equal(
+        posts()[2].url.split("?")[0],
+        "/v10/projects/book-town-851k/promote/dpl_n",
+      );
+      for (const output of [same.output, unknown.output, latest.output])
+        assert.ok(!output.includes("vcp_token_for_tests"));
+      await api.close();
+    },
+  );
+
+  await check(
+    "the backup watch fails only when a plan with backups has none recent",
+    () => {
+      const now = Date.parse("2026-10-18T22:00:00Z");
+      const recent = {
+        backups: [
+          { status: "COMPLETED", inserted_at: "2026-10-17T21:00:00Z" },
+          { status: "COMPLETED", inserted_at: "2026-10-16T21:00:00Z" },
+          { status: "FAILED", inserted_at: "2026-10-18T21:00:00Z" },
+        ],
+      };
+      const pro = { plan: "pro", maxHours: 30 };
+      assert.equal(backupVerdict(recent, now, pro).ok, true);
+      assert.match(
+        backupVerdict(recent, now, pro).lines[0],
+        /2026-10-17T21:00:00Z \(25\.0 hours ago\), 2 kept/,
+      );
+      assert.equal(backupVerdict(recent, now + 6 * 3_600_000, pro).ok, false);
+      assert.equal(backupVerdict({ backups: [] }, now, pro).ok, false);
+      assert.equal(
+        backupVerdict({ pitr_enabled: true, backups: [] }, now, pro).ok,
+        true,
+      );
+      const free = { plan: "free", maxHours: 30 };
+      assert.equal(backupVerdict({ backups: [] }, now, free).ok, true);
+      assert.match(
+        backupVerdict({ backups: [] }, now, free).lines[0],
+        /scripts\/watch\.json is free/,
+      );
+      assert.match(
+        backupVerdict(recent, now, free).lines.join("\n"),
+        /::warning::/,
+      );
+    },
+  );
+
+  await check(
+    "the usage watch speaks in sizes and warns near the plan's limit",
+    () => {
+      const free = { databaseMB: 500, storageMB: 1024 };
+      const small = usageVerdict(
+        { database_bytes: 16 * 1024 * 1024, storage_bytes: 0 },
+        free,
+        80,
+      );
+      assert.equal(small.ok, true);
+      assert.deepEqual(small.lines, [
+        "Database: 16.0 MB of 500 MB (3.2%).",
+        "Files: 0.0 MB of 1024 MB (0.0%).",
+      ]);
+      const full = usageVerdict(
+        { database_bytes: 420 * 1024 * 1024, storage_bytes: "0" },
+        free,
+        80,
+      );
+      assert.equal(full.ok, false);
+      assert.equal(usageVerdict(undefined, free, 80).ok, false);
+    },
+  );
+
+  await check(
+    "a page is the site's page, and an issue is opened once and closed once",
+    () => {
+      assert.equal(
+        pageVerdict("/", 200, '<html><main class="x"></main></html>'),
+        null,
+      );
+      assert.match(pageVerdict("/", 503, "") ?? "", /answered 503/);
+      assert.match(
+        pageVerdict("/", 200, "<html>Parked domain</html>") ?? "",
+        /without the site's page/,
+      );
+      assert.equal(
+        firstScript(
+          '<script src="/_next/static/chunks/a-1.js" async=""></script>',
+        ),
+        "/_next/static/chunks/a-1.js",
+      );
+      assert.equal(firstScript("<html></html>"), null);
+      const body = issueBody("site", ["/ answered 503."], {
+        owner: "mitsuakisudo2-dot",
+        runUrl: "https://github.com/r/actions/runs/1",
+      });
+      assert.match(body, /^@mitsuakisudo2-dot 本番のページが開けません。/);
+      assert.match(body, /<!-- watch:site -->$/);
+      const open = [{ number: 7, body }];
+      assert.deepEqual(issuePlan([], "site", false), { open: true });
+      assert.deepEqual(issuePlan(open, "site", false), { already: 7 });
+      assert.deepEqual(issuePlan(open, "site", true), { close: 7 });
+      assert.deepEqual(issuePlan(open, "backups", true), {});
+      assert.deepEqual(issuePlan(open, "backups", false), { open: true });
+    },
+  );
+
+  await check(
+    "the site watch opens an issue for a broken page and closes it once fixed",
+    async () => {
+      let broken = true;
+      let issues: { number: number; body: string }[] = [];
+      const site = await standIn(({ url }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (pathname === "/_next/static/chunks/main.js")
+          return { html: true, body: "1" };
+        if (broken && pathname === "/walk/")
+          return { status: 502, html: true, body: "Bad gateway" };
+        return {
+          html: true,
+          body: '<main></main><script src="/_next/static/chunks/main.js"></script>',
+        };
+      });
+      const api = await standIn(({ method, url, body }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (pathname === "/projects/ref_test/health")
+          return {
+            body: [
+              { name: "db", healthy: true },
+              { name: "auth", healthy: true },
+              { name: "rest", healthy: true },
+            ],
+          };
+        if (
+          pathname === "/repos/mitsuakisudo2-dot/book-town/issues" &&
+          method === "GET"
+        ) {
+          assert.match(url, /state=open/);
+          return { body: issues };
+        }
+        if (
+          pathname === "/repos/mitsuakisudo2-dot/book-town/issues" &&
+          method === "POST"
+        ) {
+          issues = [{ number: 9, body: String(body?.body) }];
+          return { body: { number: 9 } };
+        }
+        if (
+          pathname === "/repos/mitsuakisudo2-dot/book-town/issues/9" &&
+          method === "PATCH"
+        ) {
+          issues = [];
+          return { body: {} };
+        }
+        if (method === "POST") return { body: {} };
+        return { status: 404, body: {} };
+      });
+      const env = {
+        WATCH_SITE: site.url,
+        WATCH_RETRY_SECONDS: "0",
+        SUPABASE_API_URL: api.url,
+        SUPABASE_ACCESS_TOKEN: TOKEN,
+        SUPABASE_PROJECT_ID: "ref_test",
+        GITHUB_API_URL: api.url,
+        GITHUB_TOKEN: "ghs_token_for_tests",
+        GITHUB_REPOSITORY: "mitsuakisudo2-dot/book-town",
+        GITHUB_REPOSITORY_OWNER: "mitsuakisudo2-dot",
+        REPORT_ISSUES: "on",
+      };
+      const down = await run("scripts/watch.mjs", ["site"], env);
+      assert.equal(down.code, 1, down.output);
+      assert.match(down.output, /\/walk\/ answered 502/);
+      assert.match(down.output, /Opened issue #9/);
+      const opened = api.seen.find(
+        (s) => s.method === "POST" && s.url.endsWith("/issues"),
+      );
+      assert.equal(opened?.body?.title, "[見張り] 本番のページが開けません");
+      const again = await run("scripts/watch.mjs", ["site"], env);
+      assert.match(again.output, /Issue #9 already says so/);
+      assert.equal(
+        api.seen.filter((s) => s.method === "POST" && s.url.endsWith("/issues"))
+          .length,
+        1,
+      );
+      broken = false;
+      const up = await run("scripts/watch.mjs", ["site"], env);
+      assert.equal(up.code, 0, up.output);
+      assert.match(up.output, /Supabase auth is healthy/);
+      assert.match(up.output, /Closed issue #9/);
+      const quiet = await run("scripts/watch.mjs", ["site"], {
+        ...env,
+        REPORT_ISSUES: "off",
+      });
+      assert.equal(quiet.code, 0);
+      for (const output of [down.output, again.output, up.output]) {
+        assert.ok(!output.includes(TOKEN));
+        assert.ok(!output.includes("ghs_token_for_tests"));
+      }
+      await site.close();
+      await api.close();
+    },
+  );
+
+  await check(
+    "the backup and usage watches read only, and say so without a token",
+    async () => {
+      const api = await standIn(({ method, url, body }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (pathname === "/projects/ref_test/database/backups")
+          return { body: { pitr_enabled: false, backups: [] } };
+        if (
+          method === "POST" &&
+          pathname === "/projects/ref_test/database/query/read-only"
+        ) {
+          assert.match(String(body?.query), /^select /);
+          return { body: [{ database_bytes: 16777216, storage_bytes: 0 }] };
+        }
+        return { status: 404, body: {} };
+      });
+      const env = {
+        SUPABASE_API_URL: api.url,
+        SUPABASE_ACCESS_TOKEN: TOKEN,
+        SUPABASE_PROJECT_ID: "ref_test",
+      };
+      const backups = await run("scripts/watch.mjs", ["backups"], env);
+      assert.equal(backups.code, 0, backups.output);
+      assert.match(backups.output, /No daily backups/);
+      const usage = await run("scripts/watch.mjs", ["usage"], env);
+      assert.equal(usage.code, 0, usage.output);
+      assert.match(usage.output, /Database: 16\.0 MB of 500 MB/);
+      const none = await run("scripts/watch.mjs", ["backups"], {});
+      assert.equal(none.code, 0);
+      assert.match(none.output, /::warning::SUPABASE_ACCESS_TOKEN/);
+      const odd = await run(
+        "scripts/watch.mjs",
+        ["report", "nothing", "ok"],
+        {},
+      );
+      assert.equal(odd.code, 2);
+      await api.close();
     },
   );
 
