@@ -28,7 +28,7 @@ const AT = 10_000;
 const BOOKS = 9;
 const RECORDS = 5;
 const POSTS = 3;
-// Bytes may move a little with the made-up dates; time moves with the machine.
+// Bytes may move a little with the made-up town; time moves with the machine.
 const BYTES_SLACK = 1.1;
 const MS_SLACK = 3;
 
@@ -90,6 +90,18 @@ async function town(readers: number): Promise<PGlite> {
 }
 
 /**
+ * The answer with every time written to the microsecond. Postgres drops a
+ * time's trailing zeros, so the same town, made a moment later, would
+ * otherwise be a few bytes longer or shorter (times come from now() and the
+ * stamping triggers); every time is counted as long as it can be.
+ */
+const steady = (text: string) =>
+  text.replace(
+    /(T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(?=[+-]\d{2}:\d{2}"|Z")/g,
+    (_, clock: string, fraction = "") => `${clock}.${fraction.padEnd(6, "0")}`,
+  );
+
+/**
  * A visitor's town (the quickest of three askings), and the books it points
  * to after it.
  */
@@ -109,7 +121,7 @@ async function answer(db: PGlite): Promise<Answer> {
       );
       const ms = performance.now() - started;
       if (best && best.ms <= ms) continue;
-      const text = result.rows[0].town;
+      const text = steady(result.rows[0].town);
       const parts = Object.fromEntries(
         Object.entries(JSON.parse(text) as Record<string, unknown>).map(
           ([part, rows]) => [part, Buffer.byteLength(JSON.stringify(rows))],
@@ -139,7 +151,7 @@ async function answer(db: PGlite): Promise<Answer> {
         "select public.town_books($1::uuid[])::text as books",
         [ids.slice(at, at + 1000)],
       );
-      books += Buffer.byteLength(result.rows[0].books);
+      books += Buffer.byteLength(steady(result.rows[0].books));
     }
     const booksMs = performance.now() - started;
     return {
