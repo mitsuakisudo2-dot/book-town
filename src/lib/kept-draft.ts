@@ -7,6 +7,9 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 // dialog, a slip of 戻る, a reload or the phone dropping the tab does not lose
 // it. Each kind of work has its own store and storage key; the screen clears
 // its entry once the work is kept for real or the reader throws it away.
+//
+// Every change reads the key again and writes it back, so two tabs never
+// write over each other's work, and each tab hears of the other's changes.
 
 type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -114,6 +117,7 @@ export function createKeptDraftStore<T>(
   let snapshot = server;
   let initialized = false;
   let claimed = false;
+  let listening = false;
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((listener) => listener());
   const belongs = (key: string) =>
@@ -142,6 +146,28 @@ export function createKeptDraftStore<T>(
       if (draft !== null) drafts[key] = draft;
     }
     return drafts;
+  }
+
+  /**
+   * The work to change from: what storage holds now, so the work another tab
+   * kept is not written over. Work only this tab holds (its last write did
+   * not reach storage) stays too; when storage cannot be read, this tab's.
+   */
+  function latest(): Record<string, T> {
+    let there: Record<string, T>;
+    try {
+      there = readAll(stored());
+    } catch {
+      return { ...snapshot.drafts };
+    }
+    return snapshot.saved ? there : { ...there, ...snapshot.drafts };
+  }
+
+  /** Another tab changed the store: show what storage holds now. */
+  function refresh() {
+    if (!initialized) return;
+    snapshot = { ...snapshot, drafts: latest() };
+    emit();
   }
 
   function initialize() {
@@ -227,11 +253,12 @@ export function createKeptDraftStore<T>(
     initialize();
     if (!belongs(key)) return;
     claimFor(key);
-    const drafts = { ...snapshot.drafts };
+    const drafts = latest();
     const had = key in drafts;
     delete drafts[key];
     if (value === null || options.isEmpty?.(value)) {
-      if (had) write(drafts);
+      // Gone from storage already (another tab let it go): gone here too.
+      if (had || key in snapshot.drafts) write(drafts);
       return;
     }
     // Most recently written last, so the oldest goes first past the limit.
@@ -243,9 +270,10 @@ export function createKeptDraftStore<T>(
     initialize();
     if (!belongs(from) || !belongs(to)) return;
     claimFor(to);
-    if (!(from in snapshot.drafts) || to in snapshot.drafts) return;
+    const current = latest();
+    if (!(from in current) || to in current) return;
     const drafts: Record<string, T> = {};
-    for (const [key, value] of Object.entries(snapshot.drafts))
+    for (const [key, value] of Object.entries(current))
       drafts[key === from ? to : key] = value;
     write(drafts);
   }
@@ -313,6 +341,13 @@ export function createKeptDraftStore<T>(
     getServerSnapshot: () => server,
     subscribe(listener) {
       listeners.add(listener);
+      // Another tab kept or let go of work in this store: read it again.
+      if (!listening && typeof window !== "undefined") {
+        listening = true;
+        window.addEventListener?.("storage", (event) => {
+          if (event.key === null || event.key === options.storageKey) refresh();
+        });
+      }
       return () => {
         listeners.delete(listener);
       };
