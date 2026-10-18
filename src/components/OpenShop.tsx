@@ -36,7 +36,15 @@ import {
 import { townTook, useKeptUntilSaved } from "../lib/shop-draft";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import { bookById, bookTitle } from "../lib/book-name";
-import { counted, nth, failure, AGAIN, KEPT, PLACE } from "../lib/words";
+import {
+  counted,
+  nth,
+  failure,
+  AGAIN,
+  KEPT,
+  PLACE,
+  FIRST_SHELF_NAME,
+} from "../lib/words";
 import { pickSources } from "../lib/shop-picks";
 import { useUrlParam } from "../lib/url-state";
 import { walkPath } from "../lib/paths";
@@ -147,7 +155,7 @@ const shelfName = (kind: Kind) =>
       ? `${japanYear()}年の5冊`
       : kind === "one"
         ? "たった1冊"
-        : "はじめの本棚";
+        : FIRST_SHELF_NAME;
 
 const kindTitle = (kind: Kind) =>
   KINDS.find((entry) => entry.kind === kind)?.title ?? "空の棚から始める書店";

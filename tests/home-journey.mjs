@@ -2494,7 +2494,7 @@ try {
   );
 
   await check(
-    "A first-timer's Home has はじめの3つ, each one tap away: 本を登録 opens the scanner, 棚を作る the library's form, 書店を開く the door",
+    "A first-timer's Home has はじめの3つ, each one tap away: 本を登録 opens the scanner, 本棚をつくる the library's form, 書店を開く the door",
     () =>
       withPage({ viewport: { width: 320, height: 640 } }, async () => {
         await goHome();
@@ -2512,7 +2512,7 @@ try {
         await expect(scanner).toBeVisible();
         await scanner.getByRole("button", { name: "閉じる" }).tap();
         await expect(scanner).toHaveCount(0);
-        await steps.getByRole("link", { name: /棚を作る/ }).tap();
+        await steps.getByRole("link", { name: /本棚をつくる/ }).tap();
         await expect(page).toHaveURL(`${baseURL}/library/`);
         await expect(
           page.getByRole("dialog", { name: "本棚をつくる" }),

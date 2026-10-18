@@ -17,7 +17,7 @@ import {
   reviewNoteOf,
   reviewNoteWords,
 } from "../lib/social";
-import { posterNewPath, profilePath } from "../lib/paths";
+import { posterNewPath, profilePath, timelinePath } from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
 import { usePersistenceStatus, useTownBackend } from "../lib/store";
 import { posterMark, posterWorkKey, usePosterDraft } from "../lib/poster-draft";
@@ -102,7 +102,7 @@ export function PosterScreen({
                 書きかけを開く
               </Link>
             )}
-            <Link href="/timeline/" className="btn">
+            <Link href={timelinePath()} className="btn">
               タイムラインへ
             </Link>
             <Link

@@ -13,6 +13,7 @@ import {
 import { cleanShelves, emptyTown, type Write } from "./town-remote";
 import type { Missed } from "./supabase/sync";
 import { townMissedLine } from "./missed-changes";
+import { FIRST_SHELF_NAME } from "./words";
 import { draftOwner } from "./draft-owner";
 import { takeIn, type Arrived } from "./arrived";
 import { supabaseConfigured } from "./supabase/config";
@@ -395,7 +396,7 @@ export function createTownStore(
         shelves: [
           {
             id: FIRST_SHELF_ID,
-            name: "はじめの本棚",
+            name: FIRST_SHELF_NAME,
             capacity: 20,
             items: [],
             isPublic: true,

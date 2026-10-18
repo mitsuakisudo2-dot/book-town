@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { FirstSteps as Steps } from "../../lib/home-feed";
 import { libraryPath, myShopPath } from "../../lib/paths";
-import { REGISTER } from "../../lib/words";
+import { LIBRARY_SHELF, REGISTER } from "../../lib/words";
 import { Icon } from "../ui";
 
 /**
@@ -51,12 +51,17 @@ export function FirstSteps({
             href={libraryPath({ makeShelf: true })}
             className={at(steps.shelf)}
           >
-            {step(2, steps.shelf, "棚を作る", "好きな名前で、本をまとめる")}
+            {step(
+              2,
+              steps.shelf,
+              LIBRARY_SHELF.make,
+              "好きな名前で、本をまとめる",
+            )}
           </Link>
         </li>
         <li>
           <Link href={myShopPath()} className={at(steps.shop)}>
-            {step(3, steps.shop, "書店を開く", "棚の本を、街に並べる")}
+            {step(3, steps.shop, "書店を開く", "本棚の本を、街に並べる")}
           </Link>
         </li>
       </ol>
