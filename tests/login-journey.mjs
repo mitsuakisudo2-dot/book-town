@@ -4112,14 +4112,25 @@ try {
         ],
       };
       const sent = [];
-      const answer = (route) => {
+      // The saves another device makes first, before the one sent here: its
+      // shelves and their version.
+      const first = {
+        1: [there, 2],
+        4: [shelfOf("もう一台で直した棚", "solaris"), 4],
+        5: [shelfOf("三台目で直した棚", "solaris"), 5],
+      };
+      // A save held on its way, while the shelves are changed again here.
+      let letGo = () => {};
+      const held = new Promise((resolve) => (letGo = resolve));
+      const answer = async (route) => {
         const asked = JSON.parse(route.request().postData());
         sent.push(asked);
-        if (sent.length === 1) {
-          // Another device saved its shelves first: version 2.
-          town.shops[0].public_shelves = [there];
+        if (sent.length === 6) await held;
+        const other = first[sent.length];
+        if (other) {
+          town.shops[0].public_shelves = [other[0]];
           town.shop_private = [
-            { shelves: [there], scene_books: [], shelves_version: 2 },
+            { shelves: [other[0]], scene_books: [], shelves_version: other[1] },
           ];
           return route.fulfill({
             status: 409,
@@ -4237,7 +4248,49 @@ try {
             ),
           )
           .not.toContain("momo");
+        // Put back, and changed on another device first again: 元に戻す
+        // puts nothing in place of the shelves saved there.
+        const toast = page.locator(".toast");
+        await page.getByRole("button", { name: "棚を非公開にする" }).click();
+        await expect(name).toHaveValue("もう一台で直した棚");
+        await kept
+          .getByRole("button", { name: "この端末の棚にする", exact: true })
+          .click();
+        await expect.poll(() => sent.length).toBe(5);
+        await expect(name).toHaveValue("三台目で直した棚");
+        await toast.getByRole("button", { name: "元に戻す" }).click();
+        await expect(toast).toContainText(
+          "この端末の棚は保存されなかったため、いまの棚のままです。",
+        );
+        await expect(name).toHaveValue("三台目で直した棚");
+        await expect(kept).toContainText("この端末で直した棚を残しています");
+        await page.waitForTimeout(600);
+        expect(sent.length).toBe(5);
+        // Put back, and changed here again before the save lands: once
+        // saved, it waits no more.
+        await kept
+          .getByRole("button", { name: "この端末の棚にする", exact: true })
+          .click();
+        await expect.poll(() => sent.length).toBe(6);
+        await expect(name).toHaveValue("別の端末で直した棚");
+        await page.getByRole("button", { name: "棚を公開する" }).click();
+        await expect(kept).toHaveCount(0);
+        letGo();
+        await expect.poll(() => sent.length).toBe(7);
+        expect(sent[6].value.map((shelf) => shelf.isPublic)).toEqual([true]);
+        await expect(
+          page.getByText("棚の変更は、あなたのアカウントに保存済みです。"),
+        ).toBeVisible();
+        await expect(kept).toHaveCount(0);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => localStorage.getItem("book-town-shelves-drafts-v1") ?? "",
+            ),
+          )
+          .not.toContain("別の端末で直した棚");
       } finally {
+        letGo();
         await page.unroute(supabase + "/rest/v1/rpc/save_shelves", answer);
         await page.unroute(supabase + "/rest/v1/library_entries*", library);
         delete profile.nine_version;
