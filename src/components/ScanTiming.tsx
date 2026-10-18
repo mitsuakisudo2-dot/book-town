@@ -3,6 +3,7 @@
 import { useEffect, useState, type RefObject } from "react";
 import { japanFormat } from "../lib/japan-time";
 import {
+  AREAS,
   GAPS,
   nextOf,
   readLine,
@@ -24,7 +25,7 @@ const RECORDED_AT = japanFormat({
 
 /**
  * The scanner's timing panel (scan-timing.ts), under the camera: a frame's
- * read, the books so far and the last book's times, the two settings to try,
+ * read, the books so far and the last book's times, the settings to try,
  * and ［記録を写す］. It reads the scanner's record twice a second, so the
  * scanner itself never renders for a frame.
  */
@@ -104,6 +105,15 @@ export function ScanTiming({
           }
         >
           {TIMING_COPY.size(settings.size)}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() =>
+            onSettings({ ...settings, area: nextOf(AREAS, settings.area) })
+          }
+        >
+          {TIMING_COPY.area(settings.area)}
         </button>
         <button type="button" className="btn" onClick={copy}>
           {TIMING_COPY.copy}
