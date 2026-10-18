@@ -156,6 +156,8 @@ check("each thing is said by one name (管理表 90)", () => {
   // 便り may yet change (けにー 10-16「統一しといたら変える時も楽」): it is
   // said only through NAMES.letter.
   assert.deepEqual(where(/便り/g), []);
+  // A book is put in the ライブラリ, not a 本棚 (AUD-057).
+  assert.deepEqual(where(/本棚(に登録|から外)|あなたの本棚/g), []);
   // 投稿 is only the doing of it (投稿する, 投稿しました, the button that
   // does it), never the name of what was written: that is NAMES.letter.
   // (offlineFor says it as a doing: まだ投稿できていません.)

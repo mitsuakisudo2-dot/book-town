@@ -811,7 +811,7 @@ try {
       // tapped again it comes back out, as 読みたい does.
       await box.fill("銀河 鉄道");
       const tap = page.getByRole("button", {
-        name: "『銀河鉄道の夜』を本棚に登録",
+        name: "『銀河鉄道の夜』をライブラリに登録",
       });
       await expect(tap).toHaveAttribute("aria-pressed", "false");
       await tap.click();
@@ -822,30 +822,30 @@ try {
       // Taking it out is asked first; 外さない leaves it in.
       await tap.click();
       const ask = page.getByRole("dialog", {
-        name: "本当に本棚から外しますか？",
+        name: "本当にライブラリから外しますか？",
       });
       await ask.getByRole("button", { name: "外さない" }).click();
       await expect(ask).toHaveCount(0);
       await expect(tap).toHaveAttribute("aria-pressed", "true");
       await tap.click();
-      await ask.getByRole("button", { name: "本棚から外す" }).click();
+      await ask.getByRole("button", { name: "ライブラリから外す" }).click();
       await expect(notice).toContainText(
         "『銀河鉄道の夜』の登録を取り消しました",
       );
       await expect(tap).toHaveAttribute("aria-pressed", "false");
-      // On its page the same: 本棚に登録, then 本棚に登録済み, and back.
+      // On its page the same: ライブラリに登録, then ライブラリに登録済み, and back.
       await found.first().click();
       const onPage = page.getByRole("button", {
-        name: "本棚に登録",
+        name: "ライブラリに登録",
         exact: true,
       });
       await onPage.click();
       await expect(onPage).toHaveAttribute("aria-pressed", "true");
-      await expect(onPage).toContainText("本棚に登録済み");
+      await expect(onPage).toContainText("ライブラリに登録済み");
       await onPage.click();
       await page
-        .getByRole("dialog", { name: "本当に本棚から外しますか？" })
-        .getByRole("button", { name: "本棚から外す" })
+        .getByRole("dialog", { name: "本当にライブラリから外しますか？" })
+        .getByRole("button", { name: "ライブラリから外す" })
         .click();
       await expect(onPage).toHaveAttribute("aria-pressed", "false");
       // A book read is asked about once more, saying so.
@@ -863,8 +863,8 @@ try {
       await expect(onPage).toHaveAttribute("aria-pressed", "true");
       await onPage.click();
       await page
-        .getByRole("dialog", { name: "本当に本棚から外しますか？" })
-        .getByRole("button", { name: "本棚から外す" })
+        .getByRole("dialog", { name: "本当にライブラリから外しますか？" })
+        .getByRole("button", { name: "ライブラリから外す" })
         .click();
       const again = page.getByRole("dialog", { name: "本当に外しますか？" });
       await expect(again).toContainText("読了した本です");
@@ -873,10 +873,10 @@ try {
       await expect(onPage).toHaveAttribute("aria-pressed", "true");
       await onPage.click();
       await page
-        .getByRole("dialog", { name: "本当に本棚から外しますか？" })
-        .getByRole("button", { name: "本棚から外す" })
+        .getByRole("dialog", { name: "本当にライブラリから外しますか？" })
+        .getByRole("button", { name: "ライブラリから外す" })
         .click();
-      await again.getByRole("button", { name: "本棚から外す" }).click();
+      await again.getByRole("button", { name: "ライブラリから外す" }).click();
       await expect(onPage).toHaveAttribute("aria-pressed", "false");
       // (Read, it stays read: the next checks begin from a book unread.)
       await page.evaluate(() => {
@@ -1866,7 +1866,7 @@ try {
       await page.getByRole("link", { name: "自分の書店へ" }).first().click();
       // One shelf: its picker opens at once, the book chosen first, then the
       // reader's own books, then the town's. The address is the page's own.
-      const picker = page.getByRole("dialog", { name: "本棚を編集" });
+      const picker = page.getByRole("dialog", { name: "棚を編集" });
       await expect(picker).toBeVisible();
       await expect(page).toHaveURL(/\/my-shop\/$/);
       const chosen = picker.getByRole("group", {
@@ -1877,7 +1877,7 @@ try {
       );
       await expect(
         picker.locator(".editor-picker-group").allTextContents(),
-      ).resolves.toEqual(["本のページから選んだ本", "あなたの本棚", "街の本"]);
+      ).resolves.toEqual(["本のページから選んだ本", "あなたのライブラリ", "街の本"]);
       await chosen.locator(".editor-book-choice").click();
       await expect(chosen.locator(".editor-book-choice")).toHaveAttribute(
         "aria-pressed",
@@ -1929,9 +1929,9 @@ try {
       await page
         .locator(".editor-shelf-panel")
         .first()
-        .getByRole("button", { name: "本棚を編集", exact: true })
+        .getByRole("button", { name: "棚を編集", exact: true })
         .click();
-      const shelfPicker = page.getByRole("dialog", { name: "本棚を編集" });
+      const shelfPicker = page.getByRole("dialog", { name: "棚を編集" });
       const shelfSearch = shelfPicker.getByLabel("追加する本を検索");
       const shelfTitles = shelfPicker.locator(
         ".editor-picker-grid:not([role]) .editor-book-choice-title",

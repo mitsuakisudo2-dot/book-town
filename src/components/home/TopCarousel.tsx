@@ -233,7 +233,7 @@ function SlideBody({ slide, state }: { slide: Slide; state: TownState }) {
         <>
           <div className="home-slide-text">
             <p className="home-slide-title">
-              本棚をのぞくと、
+              棚をのぞくと、
               <br />
               人に出会う。
             </p>

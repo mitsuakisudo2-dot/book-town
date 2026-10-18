@@ -660,7 +660,7 @@ export function WalkView({
               : "あなたの書店は、まだありません。3分で開けます。"}
           </span>
           <Link href={myShopPath()}>
-            {state.ownShop ? "本棚を整える" : "書店を開く"}
+            {state.ownShop ? "自分の書店を整える" : "書店を開く"}
           </Link>
           <button aria-label="閉じる" onClick={() => setOwnMissing(false)}>
             <Icon name="close" size={14} />

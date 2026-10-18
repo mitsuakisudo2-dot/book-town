@@ -826,7 +826,7 @@ function ownBooks(state: TownState): { book: Book; from: string }[] {
       shelf.items.map((item) => item.bookId),
     ) ?? [];
   const sources: [string[], string][] = [
-    [shelved, "本棚"],
+    [shelved, "書店の棚"],
     [reading ? [reading] : [], "読んでいる"],
     [state.finishedBooks, "読んだ"],
     [state.library, "登録した本"],

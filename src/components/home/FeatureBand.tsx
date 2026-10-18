@@ -61,7 +61,7 @@ export function FeatureView({
     case "shelves":
       return (
         <FeatureBand
-          title="本棚をのぞく"
+          title="棚をのぞく"
           lead="本好きが開いている書店です。気になる店に入ってみてください。"
         >
           <ShelvesRail shops={feature.shops} state={shared.state} />

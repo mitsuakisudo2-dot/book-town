@@ -1704,8 +1704,8 @@ try {
               bands.push(part);
             }
           expect(bands).toHaveLength(12);
-          // 企画展 and 本棚をのぞく by turns; once the posters not yet on
-          // the page run out, 本棚をのぞく.
+          // 企画展 and 棚をのぞく by turns; once the posters not yet on
+          // the page run out, 棚をのぞく.
           const out = bands.findIndex(
             (band, index) => index % 2 === 0 && band !== "企画展",
           );
@@ -1713,7 +1713,7 @@ try {
             expect(band, `特集 ${index + 1}`).toBe(
               index % 2 === 0 && (out === -1 || index < out)
                 ? "企画展"
-                : "本棚をのぞく",
+                : "棚をのぞく",
             ),
           );
         }),
@@ -1949,7 +1949,7 @@ try {
           `);
           await goHome();
           const guards = live.getByRole("button", {
-            name: /あなたの本棚の、読み終えていない本のひとことです。/,
+            name: /あなたのライブラリの、読み終えていない本のひとことです。/,
           });
           await expect(guards).toHaveCount(2);
           await expect(live).not.toContainText("海の描写のところで");

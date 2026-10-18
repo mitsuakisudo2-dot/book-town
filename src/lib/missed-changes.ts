@@ -28,7 +28,7 @@ const RELATIONS: Record<RelationTable, string> = {
 const MARKS: Record<string, string> = {
   wish: "読みたい",
   favorite: "好きな本",
-  library: "本棚の本",
+  library: "ライブラリの本",
   finished: "読了",
 };
 
@@ -83,7 +83,7 @@ export function townWriteLabels(write: Write): string[] {
             : RELATIONS[write.table],
       );
     case "library-shelves":
-      return ["本棚の棚"];
+      return ["本棚"];
     case "shelf-books":
       return ["棚の本"];
     case "library-entries":

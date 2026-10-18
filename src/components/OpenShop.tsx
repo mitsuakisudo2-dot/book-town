@@ -605,7 +605,7 @@ export function OpenShop({
         </div>
         {sources.length > 0 && (
           <>
-            <h2 className="open-subtitle">あなたの本棚から</h2>
+            <h2 className="open-subtitle">あなたのライブラリから</h2>
             <div className="chips" role="group" aria-label="選ぶ棚">
               {[{ key: null, label: PLACE.suggested }, ...sources].map(
                 (entry) => (
@@ -630,7 +630,7 @@ export function OpenShop({
           ? [{ heading: "", ids: fromShelf.slice(0, fromPages * FROM_PAGE) }]
           : [
               {
-                heading: sources.length ? "" : "あなたの本棚から",
+                heading: sources.length ? "" : "あなたのライブラリから",
                 ids: suggested,
               },
               { heading: "街で読まれている本から", ids: fromTown },

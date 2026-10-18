@@ -2446,7 +2446,7 @@ try {
   const homeDoors = page.getByRole("navigation", { name: "できること" });
 
   await check(
-    "the home never shows a shelf kept private nor covered words: not on 今夜の一軒, 本棚をのぞく, 書店のPOP, 感想が面白い本 or the 掲示板",
+    "the home never shows a shelf kept private nor covered words: not on 今夜の一軒, 棚をのぞく, 書店のPOP, 感想が面白い本 or the 掲示板",
     async () => {
       // ミナ's shop: a private shelf first (a book and a POP on it), as the
       // database would never send it, then a public one of three books.
@@ -2544,7 +2544,7 @@ try {
         page.locator(".home-carousel .home-slide.is-tonight"),
       ).toContainText("ミナの角の本屋");
       await expect(
-        page.getByRole("region", { name: "本棚をのぞく" }).first(),
+        page.getByRole("region", { name: "棚をのぞく" }).first(),
       ).toContainText("ミナの角の本屋");
       await expect(
         page.getByRole("region", { name: "書店のPOP" }).first(),

@@ -861,7 +861,7 @@ export function ProfileView({
             {(isSelf || publicShelves.length > 0) && (
               <div className="profile-public-shelves">
                 <h3>
-                  <Icon name="book" /> 公開している本棚
+                  <Icon name="book" /> 公開している棚
                 </h3>
                 {publicShelves.length ? (
                   <div className="profile-shelf-links">
@@ -899,7 +899,7 @@ export function ProfileView({
             )}
             {isSelf && (
               <Link className="btn" href={myShopPath()}>
-                <Icon name="edit" /> 書店と本棚を編集する
+                <Icon name="edit" /> 書店と棚を編集する
               </Link>
             )}
           </>

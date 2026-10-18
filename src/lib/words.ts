@@ -72,7 +72,9 @@ export function whenSome<T>(
 
 /**
  * What the town calls its things, one word each (管理表 90). A reader's shop
- * is a 書店, never a 本屋 (けにー 10-16 23:28Z). A reader's short writing is
+ * is a 書店, never a 本屋 (けにー 10-16 23:28Z). What a book is put in is
+ * the ライブラリ, a shelf the reader makes in it is a 本棚, and a shelf of a
+ * 書店 is a 棚 (けにー 10-18, AUD-057). A reader's short writing is
  * a 便り, for now (10-16 23:29Z「とりあえず便りでいいかな。統一しといたら
  * 変える時も楽」): every screen says it through {@link NAMES}.letter, so that
  * it changes here once. Only the button that sends one says 投稿する.
@@ -106,8 +108,8 @@ export const HOME_TITLE = `${NAMES.service} | ${NAMES.catchphrase}`;
  * in their order (管理表 48: the row for the β, which its readers' voices
  * may change). A tab's name changes here once, and the page it opens says
  * the same name over it: ライブラリ is both the tab and the library's
- * heading (けにー 10-18 03:33Z「なら一旦ライブラリで」). What a book is put
- * in is still called 本棚 ({@link REGISTER}) until 管理表 90 asks.
+ * heading (けにー 10-18 03:33Z「なら一旦ライブラリで」), and what a book is
+ * put in ({@link REGISTER}).
  */
 export const TABS = {
   home: "ホーム",
@@ -123,7 +125,7 @@ export const TABS = {
 // ── Registering a book ──────────────────────────────────────────────────
 
 /**
- * How a book is put in the reader's library (本棚), said the same on every
+ * How a book is put in the reader's library, said the same on every
  * screen that offers it: a found book's one tap, the ways in when a search
  * finds nothing, and what is said once it is in (管理表 12).
  */
@@ -131,10 +133,10 @@ export const REGISTER = {
   /** The one tap beside a found book, short. */
   tap: "登録",
   /** The same, where there is room: a book's page. */
-  button: "本棚に登録",
+  button: "ライブラリに登録",
   /** A book already in, short and where there is room. */
   doneTap: "登録済み",
-  done: "本棚に登録済み",
+  done: "ライブラリに登録済み",
   /** The doors when a search finds nothing. */
   byBarcode: "バーコードで登録",
   byTitle: "この書名で登録",
@@ -146,8 +148,8 @@ export const REGISTER = {
   already: (quoted: string) => `${quoted}はもうライブラリにあります`,
   undone: (quoted: string) => `${quoted}の登録を取り消しました`,
   /** Asked before a book is taken out (けにー 10-18), and again when it has a trace. */
-  removeAsk: "本当に本棚から外しますか？",
-  remove: "本棚から外す",
+  removeAsk: "本当にライブラリから外しますか？",
+  remove: "ライブラリから外す",
   keep: "外さない",
   traces: "この本には記録やメモが含まれています",
   finished: "読了した本です",
@@ -167,7 +169,7 @@ export const PLACE = {
   /** The book's page: opens the shop with this book chosen. */
   toShop: "自分の書店へ",
   /** The picker's two groups before anything is typed: the reader's first. */
-  yours: "あなたの本棚",
+  yours: "あなたのライブラリ",
   town: "街の本",
   /** The book chosen on its page, first in the picker. */
   chosen: "本のページから選んだ本",
