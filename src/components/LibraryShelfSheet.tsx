@@ -5,7 +5,7 @@ import { focusField } from "../lib/coarse-pointer";
 import { useKeptDraft } from "../lib/kept-draft";
 import {
   AUTHOR_MAX_LENGTH,
-  DEFAULT_SHELVES,
+  shelfLabel,
   MET_PLACES,
   READING_STATUSES,
   readRule,
@@ -52,9 +52,7 @@ const AUDIENCE_HINTS: Partial<Record<Audience, string>> = {
 };
 
 const statusName = (status: string) =>
-  status === "none"
-    ? "未設定"
-    : (DEFAULT_SHELVES.find((shelf) => shelf.key === status)?.label ?? status);
+  status === "none" ? "未設定" : shelfLabel(status);
 
 /** A list of the rule with one value in or out; an empty list is no condition. */
 function toggled<T>(list: readonly T[] | undefined, values: readonly T[]) {

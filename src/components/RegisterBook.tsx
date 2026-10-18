@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Book, Notify, TownActions, TownState } from "../lib/types";
 import { getTownSnapshot } from "../lib/store";
-import { bookTraces } from "../lib/library-town";
+import { bookTraces, isInLibrary, myBook } from "../lib/library-town";
 import { quotedTitle } from "../lib/book-name";
 import { REGISTER } from "../lib/words";
 import { Icon, Modal } from "./ui";
@@ -16,6 +16,11 @@ import "./reading.css";
  * 押して戻す方がいい」), after asking: once, and once more when the book
  * has records, memos or a reading status. Said only when it was done: a
  * visitor is asked to sign in instead, and nothing changes.
+ *
+ * 登録済み is being in the library, however the book came in (AUD-148): a
+ * book in the reader's shop, their 人生の9冊 or 読みたい is in already, and
+ * taking it out takes it out of the library as the library's 外す does,
+ * not only the registering.
  */
 export function RegisterBook({
   book,
@@ -34,11 +39,15 @@ export function RegisterBook({
   className?: string;
 }) {
   const [asking, setAsking] = useState<"remove" | "again" | null>(null);
-  const registered = state.library.includes(book.id);
+  const registered = isInLibrary(state, book.id);
   const traces = bookTraces(state, book.id);
+  const inShop = myBook(state, book.id).inShop;
   const toggle = () => {
-    actions.toggleLibrary(book.id);
-    const now = getTownSnapshot().library.includes(book.id);
+    if (registered) actions.changeLibrary([book.id], { removed: true });
+    else if (state.library.includes(book.id))
+      actions.changeLibrary([book.id], { removed: false });
+    else actions.toggleLibrary(book.id);
+    const now = isInLibrary(getTownSnapshot(), book.id);
     if (now === registered) return;
     notify(
       now
@@ -88,6 +97,7 @@ export function RegisterBook({
       {asking === "remove" && (
         <Modal title={REGISTER.removeAsk} onClose={close}>
           <p className="modal-lead">{quotedTitle(book)}</p>
+          {inShop && <p className="muted">{REGISTER.shopStays}</p>}
           {choices(() => {
             if (traces.written || traces.finished || traces.reading)
               setAsking("again");
@@ -107,6 +117,7 @@ export function RegisterBook({
             {traces.reading && !traces.finished && <li>{REGISTER.reading}</li>}
           </ul>
           {traces.written && <p className="muted">{REGISTER.traceStays}</p>}
+          {inShop && <p className="muted">{REGISTER.shopStays}</p>}
           {choices(() => {
             close();
             toggle();

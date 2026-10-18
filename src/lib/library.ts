@@ -300,6 +300,10 @@ export const DEFAULT_SHELVES: readonly DefaultShelf[] = [
   },
 ];
 
+/** A default shelf's name by its key (a status is one: 読了・積読・読書中). */
+export const shelfLabel = (key: string): string =>
+  DEFAULT_SHELVES.find((shelf) => shelf.key === key)?.label ?? key;
+
 /** Who may see one of the shelves every library has: its own choice, or the starting one. */
 export const defaultShelfAudience = (
   settings: Pick<Settings, "shelfAudiences" | "visibility">,
@@ -1522,8 +1526,6 @@ export function ruleWords(
   shelves: readonly LibraryShelf[],
 ): string[] {
   const words: string[] = [];
-  const shelfLabel = (key: string) =>
-    DEFAULT_SHELVES.find((shelf) => shelf.key === key)?.label ?? key;
   if (rule.status)
     words.push(
       rule.status

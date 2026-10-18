@@ -809,14 +809,19 @@ try {
       await expect(typed).toHaveCount(0);
       // A found book is registered in one tap, its status left for later;
       // tapped again it comes back out, as 読みたい does.
+      // A book of the 人生の9冊 is in the library already: 登録済み (AUD-148).
       await box.fill("銀河 鉄道");
+      await expect(
+        page.getByRole("button", { name: "『銀河鉄道の夜』を本棚に登録" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await box.fill("夢十夜");
       const tap = page.getByRole("button", {
-        name: "『銀河鉄道の夜』を本棚に登録",
+        name: "『夢十夜』を本棚に登録",
       });
       await expect(tap).toHaveAttribute("aria-pressed", "false");
       await tap.click();
       const notice = page.locator(".toast");
-      await expect(notice).toContainText("『銀河鉄道の夜』を登録しました");
+      await expect(notice).toContainText("『夢十夜』を登録しました");
       await expect(tap).toHaveAttribute("aria-pressed", "true");
       await expect(tap).toContainText("登録済み");
       // Taking it out is asked first; 外さない leaves it in.
@@ -829,9 +834,7 @@ try {
       await expect(tap).toHaveAttribute("aria-pressed", "true");
       await tap.click();
       await ask.getByRole("button", { name: "本棚から外す" }).click();
-      await expect(notice).toContainText(
-        "『銀河鉄道の夜』の登録を取り消しました",
-      );
+      await expect(notice).toContainText("『夢十夜』の登録を取り消しました");
       await expect(tap).toHaveAttribute("aria-pressed", "false");
       // On its page the same: 本棚に登録, then 本棚に登録済み, and back.
       await found.first().click();
@@ -877,6 +880,22 @@ try {
         .getByRole("button", { name: "本棚から外す" })
         .click();
       await again.getByRole("button", { name: "本棚から外す" }).click();
+      await expect(onPage).toHaveAttribute("aria-pressed", "false");
+      // Its status is set on its page too, bringing it in (AUD-052).
+      const finished = page
+        .getByRole("group", { name: "読書の状態" })
+        .getByRole("button", { name: "読了", exact: true });
+      await finished.click();
+      await expect(finished).toHaveAttribute("aria-pressed", "true");
+      await expect(notice).toContainText("『夢十夜』を読了にしました");
+      await expect(onPage).toHaveAttribute("aria-pressed", "true");
+      await finished.click();
+      await expect(finished).toHaveAttribute("aria-pressed", "false");
+      await onPage.click();
+      await page
+        .getByRole("dialog", { name: "本当に本棚から外しますか？" })
+        .getByRole("button", { name: "本棚から外す" })
+        .click();
       await expect(onPage).toHaveAttribute("aria-pressed", "false");
       // (Read, it stays read: the next checks begin from a book unread.)
       await page.evaluate(() => {
@@ -1132,6 +1151,10 @@ try {
       await expect(dialog).toHaveCount(0);
       await scanner.getByRole("button", { name: "終わる" }).click();
       await expect(scanner).toHaveCount(0);
+      // It ends on 「この回の本」 (AUD-139), closed as it is.
+      const tidy = page.getByRole("dialog", { name: "この回の本" });
+      await tidy.getByRole("button", { name: "完了" }).click();
+      await expect(tidy).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: /^登録\s*\d*$/ }),
       ).toHaveAttribute("aria-pressed", "true");
@@ -1200,6 +1223,10 @@ try {
       await expect(dialog).toHaveCount(0);
       await scanner.getByRole("button", { name: "終わる" }).click();
       await expect(scanner).toHaveCount(0);
+      // It ends on 「この回の本」 (AUD-139), closed as it is.
+      const tidy = page.getByRole("dialog", { name: "この回の本" });
+      await tidy.getByRole("button", { name: "完了" }).click();
+      await expect(tidy).toHaveCount(0);
 
       const openBd = page
         .locator(".profile-saved-book", { hasText: "表紙のある本" })

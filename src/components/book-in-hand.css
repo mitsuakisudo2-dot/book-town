@@ -878,3 +878,16 @@
 .bh-to-shop {
   margin-top: 12px;
 }
+/* The reader's own place for the book, on its page (AUD-052). */
+.bh-mine {
+  margin-top: 12px;
+}
+.bh-in-shop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--green);
+  font-size: var(--t-ui);
+  font-weight: 700;
+}

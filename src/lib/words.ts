@@ -100,6 +100,8 @@ export const REGISTER = {
   finished: "読了した本です",
   reading: "読書中です",
   traceStays: "外しても、記録とメモは消えません",
+  /** A book in the reader's shop leaves the library, not the shop. */
+  shopStays: "外しても、書店の棚には残ります",
   removeAskAgain: "本当に外しますか？",
 } as const;
 
@@ -124,6 +126,51 @@ export const PLACE = {
   suggested: "おすすめ",
   /** Shows the next books of a long shelf. */
   more: "もっと見る",
+} as const;
+
+// ── A book's marks in the library ───────────────────────────────────────
+
+/**
+ * What the reader sets on a book of their library besides its status (積読・
+ * 読書中・読了, named by DEFAULT_SHELVES), and how it is said once done: the
+ * library's ［選ぶ］, the book's page and this scan's books.
+ */
+export const MARKS = {
+  owned: "持っている",
+  notOwned: "持ってない",
+  ownedOn: "持っている本にしました",
+  ownedOff: "持っている本から外しました",
+  notOwnedOn: "持ってない本にしました",
+  notOwnedOff: "持ってない本から外しました",
+  /** A status or a shelf, named: put on or taken off. */
+  set: (name: string) => `${name}にしました`,
+  unset: (name: string) => `${name}から外しました`,
+  /** A shelf of the reader's own, named in 「」. */
+  intoShelf: (name: string) => `「${name}」に入れました`,
+  outOfShelf: (name: string) => `「${name}」から外しました`,
+} as const;
+
+/** The reader's own place for a book, on its page (AUD-052). */
+export const MY_BOOK = {
+  status: "読書の状態",
+  inShop: "あなたの書店に並んでいます",
+} as const;
+
+/**
+ * The books one scan registered, tidied together once it ends (AUD-139,
+ * the light form of 管理表 16).
+ */
+export const THIS_SCAN = {
+  heading: "この回の本",
+  lead: (books: string) => `この回に登録した${books}を、まとめて片づけられます`,
+  status: "読書の状態",
+  shelves: "棚に入れる",
+  done: "完了",
+  remove: "この回の本をライブラリから外す",
+  removeAsk: "この回の本をライブラリから外しますか？",
+  removeLead: "読み間違えた本などを、まとめて外します",
+  removeButton: "ライブラリから外す",
+  removed: (books: string) => `この回の${books}をライブラリから外しました`,
 } as const;
 
 // ── Failure notices ─────────────────────────────────────────────────────

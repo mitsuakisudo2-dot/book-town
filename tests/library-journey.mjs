@@ -322,9 +322,20 @@ async function openScanner(on = page) {
     .click();
   await expect(scanner(on)).toBeVisible();
 }
-async function finishScanning(on = page) {
+const tidy = (on = page) => on.getByRole("dialog", { name: "この回の本" });
+/**
+ * ［終わる］. A session that registered books ends on 「この回の本」
+ * (AUD-139), closed here with ［完了］ unless `keepTidy`.
+ */
+async function finishScanning(on = page, { keepTidy = false } = {}) {
+  const added = /この回/.test((await count(on).textContent()) ?? "");
   await scanner(on).getByRole("button", { name: "終わる" }).click();
   await expect(scanner(on)).toHaveCount(0);
+  if (!added) return expect(tidy(on)).toHaveCount(0);
+  await expect(tidy(on)).toBeVisible();
+  if (keepTidy) return;
+  await tidy(on).getByRole("button", { name: "完了" }).click();
+  await expect(tidy(on)).toHaveCount(0);
 }
 /** Shows the camera these frames, and waits until they have left its view. */
 async function show(on, ...frames) {
@@ -988,11 +999,17 @@ try {
       );
       expect(counted).not.toBeNull();
       await scanner(scan).getByRole("button", { name: "終わる" }).click();
-      // No question first.
-      await expect(scan.getByRole("dialog")).toHaveCount(0);
+      // No question first: the scanner closes and says what was read in,
+      // and 「この回の本」 offers to tidy those books, nothing asked (AUD-139).
+      await expect(scanner(scan)).toHaveCount(0);
       await expect(scan.locator(".toast")).toContainText(
         `${counted[1]}冊を登録しました・書名待ち 1冊`,
       );
+      await expect(tidy(scan)).toContainText(
+        `この回に登録した${counted[1]}冊を`,
+      );
+      await tidy(scan).getByRole("button", { name: "完了" }).click();
+      await expect(scan.getByRole("dialog")).toHaveCount(0);
       expect(Number(counted[1])).toBe(inLibrary.size);
       await expect(scan).toHaveURL(/[?&]books=library/);
       const waiting = scan
@@ -1113,6 +1130,57 @@ try {
       await expectLibrary();
       await scan.goBack();
       await expect(scan).toHaveURL(base + "/");
+    },
+  );
+
+  await check(
+    "この回の本: the books one scan read in are sorted or taken out together (AUD-139)",
+    async () => {
+      await go("/profiles/me/?books=library", scan);
+      await openScanner(scan);
+      await cameraRunning(scan);
+      const [first, second] = [isbnOf(36), isbnOf(37)];
+      await show(scan, first);
+      await expect(count(scan)).toHaveText("この回 1冊");
+      await show(scan, second);
+      await expect(count(scan)).toHaveText("この回 2冊");
+      await finishScanning(scan, { keepTidy: true });
+      const sheet = tidy(scan);
+      await expect(sheet).toContainText("この回に登録した2冊を");
+      await expect(sheet.locator(".scan-tidy-books li")).toHaveCount(2);
+      await toasts(scan);
+      // A status for both at once, said once; pressed again it comes off.
+      const read = sheet.getByRole("button", { name: "読了", exact: true });
+      await read.click();
+      await expect(read).toHaveAttribute("aria-pressed", "true");
+      expect(await toasts(scan)).toEqual(["この回の2冊を読了にしました"]);
+      const status = async () => {
+        const entries = (await stored(scan)).libraryEntries;
+        return ["isbn-" + first, "isbn-" + second].map(
+          (id) => entries[id]?.status ?? null,
+        );
+      };
+      await expect.poll(status).toEqual(["finished", "finished"]);
+      await read.click();
+      await expect.poll(status).toEqual([null, null]);
+      // Taken out again, asked first: neither stays in the library.
+      await sheet
+        .getByRole("button", { name: "この回の本をライブラリから外す" })
+        .click();
+      const ask = scan.getByRole("dialog", {
+        name: "この回の本をライブラリから外しますか？",
+      });
+      await ask.getByRole("button", { name: "外さない" }).click();
+      await expect(sheet).toBeVisible();
+      await sheet
+        .getByRole("button", { name: "この回の本をライブラリから外す" })
+        .click();
+      await ask.getByRole("button", { name: "ライブラリから外す" }).click();
+      await expect(scan.getByRole("dialog")).toHaveCount(0);
+      await expect(scan.locator(".toast")).toContainText(
+        "この回の2冊をライブラリから外しました",
+      );
+      await expectLibrary();
     },
   );
 

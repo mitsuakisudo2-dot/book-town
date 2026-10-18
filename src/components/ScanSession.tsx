@@ -13,7 +13,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { useAccountState } from "../lib/account-session";
-import { useBackLayer } from "../lib/back-layer";
+import { afterLayerCloses, useBackLayer } from "../lib/back-layer";
 import {
   forgetReader,
   guideRect,
@@ -66,6 +66,7 @@ import {
 } from "../lib/store";
 import type { Book, Notify, TownActions, TownState } from "../lib/types";
 import { BarcodeRegister } from "./BarcodeRegister";
+import { ScanTidy } from "./ScanTidy";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
 import { bookAuthor, bookById, bookByIsbn, bookTitle } from "../lib/book-name";
@@ -309,6 +310,10 @@ function useScanSound() {
   return { on, toggle, play, wake };
 }
 
+/**
+ * The scanner, and once it ends, 「この回の本」 for the books it registered
+ * (ScanTidy, AUD-139). `onClose` is told when both are closed.
+ */
 export function ScanSession({
   state,
   actions,
@@ -320,6 +325,47 @@ export function ScanSession({
   notify: Notify;
   /** `kept`: whether any book was registered or kept in this session. */
   onClose: (kept: boolean) => void;
+}) {
+  const [tidy, setTidy] = useState<string[] | null>(null);
+  if (tidy)
+    return (
+      <ScanTidy
+        bookIds={tidy}
+        state={state}
+        actions={actions}
+        notify={notify}
+        onClose={() => onClose(true)}
+      />
+    );
+  return (
+    <Scanner
+      state={state}
+      actions={actions}
+      notify={notify}
+      onClose={(kept, added, back) => {
+        // 戻る leaves: the books stay as they are, marked 今回追加.
+        if (!added.length || back) return onClose(kept);
+        // After the scanner's step is off the history: the sheet takes its own.
+        afterLayerCloses(() => setTidy(added));
+      }}
+    />
+  );
+}
+
+function Scanner({
+  state,
+  actions,
+  notify,
+  onClose,
+}: {
+  state: TownState;
+  actions: TownActions;
+  notify: Notify;
+  /**
+   * `added`: the books this session registered, in the order read. `back`:
+   * closed by 戻る.
+   */
+  onClose: (kept: boolean, added: string[], back: boolean) => void;
 }) {
   const id = useId();
   const savedIn = useTownBackend();
@@ -965,10 +1011,16 @@ export function ScanSession({
    * While a title is still being asked of openBD (OPENBD_TIMEOUT_MS at
    * most), the notice waits for the answer, to say where that book went.
    */
-  function finish() {
+  function finish(back = false) {
     if (closed.current) return;
     closed.current = true;
-    onClose(added + waiting + later > 0);
+    onClose(
+      added + waiting + later > 0,
+      cards.flatMap((card) =>
+        shown(card) === "added" && card.bookId ? [card.bookId] : [],
+      ),
+      back,
+    );
     const asking = [...inFlight.current];
     const tell = (counts: ReturnType<typeof tally>) => {
       const notice = closingNotice(counts);
@@ -1003,7 +1055,7 @@ export function ScanSession({
   useEffect(() => {
     finishRef.current = finish;
   });
-  useBackLayer(useCallback(() => finishRef.current(), []));
+  useBackLayer(useCallback(() => finishRef.current(true), []));
 
   // As a dialog: the page beneath stays still, Escape closes, Tab stays
   // inside, and the focus goes back where it was.
@@ -1147,7 +1199,7 @@ export function ScanSession({
             type="button"
             className="icon-btn"
             aria-label="閉じる"
-            onClick={finish}
+            onClick={() => finish()}
           >
             <Icon name="close" />
           </button>
@@ -1359,7 +1411,7 @@ export function ScanSession({
           <button type="button" className="btn" onClick={openManual}>
             手で入力
           </button>
-          <button type="button" className="btn fill" onClick={finish}>
+          <button type="button" className="btn fill" onClick={() => finish()}>
             終わる
           </button>
         </div>

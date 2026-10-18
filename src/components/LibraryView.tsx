@@ -13,6 +13,7 @@ import {
   filterLibrary,
   liveShelves,
   READING_STATUSES,
+  shelfLabel,
   ruleWords,
   worksIn,
   type LibraryEntry,
@@ -44,7 +45,7 @@ import {
 } from "./LibraryShelfSheet";
 import { ScanSession } from "./ScanSession";
 import { BookJacket, Icon } from "./ui";
-import { counted, whenSome } from "../lib/words";
+import { counted, MARKS, whenSome } from "../lib/words";
 import { CHOICE_NAMES, type Audience } from "../lib/visibility";
 
 // The reader's library (管理表14): every book they have met in the town,
@@ -58,8 +59,7 @@ import { CHOICE_NAMES, type Audience } from "../lib/visibility";
 // change again. A book is on as many of the reader's shelves as they like,
 // and stays on them whatever its status.
 
-const label = (key: string) =>
-  DEFAULT_SHELVES.find((shelf) => shelf.key === key)?.label ?? key;
+const label = shelfLabel;
 
 /** The shelf a status is, for its name. */
 const statusLabel = (status: ReadingStatus) => label(status);
@@ -89,9 +89,7 @@ const STATUS_CHANGES: Change[] = READING_STATUSES.map((status) => ({
   lit: (e) => e?.status === status,
   change: (lit) => ({ status: lit ? null : status }),
   done: (lit) =>
-    lit
-      ? `${statusLabel(status)}から外しました`
-      : `${statusLabel(status)}にしました`,
+    lit ? MARKS.unset(statusLabel(status)) : MARKS.set(statusLabel(status)),
 }));
 
 const WANT: Change = {
@@ -106,19 +104,17 @@ const WANT: Change = {
 const OTHER_CHANGES: Change[] = [
   {
     key: "owned",
-    label: "持っている",
+    label: MARKS.owned,
     lit: (e) => e?.owned === "yes",
     change: (lit) => ({ owned: lit ? null : "yes" }),
-    done: (lit) =>
-      lit ? "持っている本から外しました" : "持っている本にしました",
+    done: (lit) => (lit ? MARKS.ownedOff : MARKS.ownedOn),
   },
   {
     key: "not-owned",
-    label: "持ってない",
+    label: MARKS.notOwned,
     lit: (e) => e?.owned === "no",
     change: (lit) => ({ owned: lit ? null : "no" }),
-    done: (lit) =>
-      lit ? "持ってない本から外しました" : "持ってない本にしました",
+    done: (lit) => (lit ? MARKS.notOwnedOff : MARKS.notOwnedOn),
   },
   {
     key: "favorite",
@@ -139,7 +135,7 @@ const shelfChange = (shelf: LibraryShelf): Change => ({
   lit: (_, __, on) => on.has(shelf.id),
   change: (lit) => (lit ? { removeShelf: shelf.id } : { addShelf: shelf.id }),
   done: (lit) =>
-    lit ? `「${shelf.name}」から外しました` : `「${shelf.name}」に入れました`,
+    lit ? MARKS.outOfShelf(shelf.name) : MARKS.intoShelf(shelf.name),
 });
 
 const REMOVE: Change = {

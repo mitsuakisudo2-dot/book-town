@@ -1,4 +1,4 @@
-import { DEFAULT_SHELVES, filterLibrary, liveShelves } from "./library";
+import { filterLibrary, liveShelves, shelfLabel } from "./library";
 import { libraryStateOf, townShopBooks } from "./library-town";
 import type { Book, TownState } from "./types";
 
@@ -15,8 +15,7 @@ export interface PickSource {
   ids: string[];
 }
 
-const label = (key: string) =>
-  DEFAULT_SHELVES.find((shelf) => shelf.key === key)?.label ?? key;
+const label = shelfLabel;
 
 /** Every book in the reader's library, newest first (ライブラリ（全部）). */
 export function libraryBookIds(state: TownState): string[] {

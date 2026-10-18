@@ -1,6 +1,7 @@
 import { ME_ID, type Post, type TownState } from "./types";
 import { followedTimelinePosts, timelinePosts } from "./social";
 import { timelinePosters, type Poster } from "./posters";
+import { libraryIds } from "./library-town";
 
 // The 便り of the home: what the reader follows, newest first, and when that
 // is quiet, 「街の便り」 from everyone else. Features are woven in between.
@@ -50,13 +51,14 @@ export const isNewcomer = (state: TownState): boolean =>
 
 /**
  * はじめの3つ (管理表 48, AUD-050・140): what a first-time reader can do
- * first, each with whether it is done. A book registered, a shelf of their
- * own made in the library (one put away still counts), a shop opened.
+ * first, each with whether it is done. A book in the library, however it
+ * came in (AUD-148), a shelf of their own made in the library (one put
+ * away still counts), a shop opened.
  */
 export type FirstSteps = { book: boolean; shelf: boolean; shop: boolean };
 
 export const firstSteps = (state: TownState): FirstSteps => ({
-  book: state.library.length > 0,
+  book: libraryIds(state).size > 0,
   shelf: state.libraryShelves.length > 0,
   shop: !!state.ownShop,
 });

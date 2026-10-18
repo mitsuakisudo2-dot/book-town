@@ -1792,6 +1792,10 @@ try {
         ]);
       await scanner.getByRole("button", { name: "終わる" }).click();
       await expect(scanner).toHaveCount(0);
+      // It ends on 「この回の本」 (AUD-139), closed as it is.
+      const tidy = page.getByRole("dialog", { name: "この回の本" });
+      await tidy.getByRole("button", { name: "完了" }).click();
+      await expect(tidy).toHaveCount(0);
       await page.unroute(supabase + "/rest/v1/**", hold);
     },
   );
@@ -1899,6 +1903,10 @@ try {
       await expect.poll(journal).toBeNull();
       await scanner.getByRole("button", { name: "終わる" }).click();
       await expect(page.locator(".toast")).toContainText("1冊を登録しました");
+      // It ends on 「この回の本」 (AUD-139), closed as it is.
+      const tidy = page.getByRole("dialog", { name: "この回の本" });
+      await tidy.getByRole("button", { name: "完了" }).click();
+      await expect(tidy).toHaveCount(0);
       await page.unroute(supabase + "/rest/v1/**", hold);
       await page.unroute("https://api.openbd.jp/**", titles);
     },

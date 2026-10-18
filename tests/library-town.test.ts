@@ -4,7 +4,9 @@ import { countsOf, filterLibrary, inLibrary } from "../src/lib/library";
 import {
   bookTraces,
   entriesOf,
+  isInLibrary,
   LEGACY_AT,
+  myBook,
   libraryStateOf,
   townShopBooks,
 } from "../src/lib/library-town";
@@ -1066,6 +1068,51 @@ check(
       id,
     );
     assert.deepEqual(reading, { ...none, reading: true });
+  },
+);
+
+check(
+  "登録済み is being in the library, and taking it out takes it out (AUD-148)",
+  () => {
+    const initial = createInitialState();
+    const id = initial.books.find(
+      (book) =>
+        !initial.library.includes(book.id) &&
+        !initial.wishlist.includes(book.id) &&
+        !initial.favorites.includes(book.id) &&
+        !initial.finishedBooks.includes(book.id) &&
+        !initial.me.lifeNine.includes(book.id),
+    )!.id;
+    const store = fresh({
+      ...initial,
+      me: { ...initial.me, lifeNine: [...initial.me.lifeNine, id] },
+    });
+    const { actions } = store;
+    // In the library by the nine alone: 登録済み, though not registered on purpose.
+    assert.equal(store.getSnapshot().library.includes(id), false);
+    assert.equal(isInLibrary(store.getSnapshot(), id), true);
+    assert.deepEqual(myBook(store.getSnapshot(), id), {
+      inLibrary: true,
+      status: null,
+      owned: null,
+      inShop: false,
+    });
+    // Taken out as the library's 外す does: out, the nine as it was.
+    assert.ok(actions.changeLibrary([id], { removed: true }));
+    const after = store.getSnapshot();
+    assert.equal(isInLibrary(after, id), false);
+    assert.ok(after.me.lifeNine.includes(id));
+    // A status set on its page brings it back in, with that status.
+    assert.ok(actions.changeLibrary([id], { removed: false }));
+    assert.ok(
+      actions.changeLibrary([id], { status: "finished", owned: "yes" }),
+    );
+    assert.deepEqual(myBook(store.getSnapshot(), id), {
+      inLibrary: true,
+      status: "finished",
+      owned: "yes",
+      inShop: false,
+    });
   },
 );
 

@@ -5,7 +5,10 @@ import { formatPrice, REGISTERED_GENRE } from "../lib/books";
 import { bookLookup, lookupQuery } from "../lib/book-lookup";
 import Link from "next/link";
 import { myShopPath } from "../lib/paths";
-import { PLACE } from "../lib/words";
+import { MARKS, MY_BOOK, PLACE } from "../lib/words";
+import { quotedTitle } from "../lib/book-name";
+import { pressStatus, READING_STATUSES, shelfLabel } from "../lib/library";
+import { myBook, type LibraryChange } from "../lib/library-town";
 import { Icon } from "./ui";
 import { RegisterBook } from "./RegisterBook";
 
@@ -86,6 +89,80 @@ export function bookNote(book: Book): string {
   ].join("");
 }
 
+/**
+ * The reader's own place for the book, on its page (AUD-052): its reading
+ * status and 持っている, set here as in the library, and whether it is in
+ * their shop. Set on a book not in the library, it brings the book in.
+ */
+function MyBookMarks({
+  book,
+  state,
+  actions,
+  notify,
+}: {
+  book: Book;
+  state: TownState;
+  actions: TownActions;
+  notify: Notify;
+}) {
+  const mine = myBook(state, book.id);
+  const name = quotedTitle(book);
+  // A book not in the library (or taken out) comes in with it, as 本棚に登録 does.
+  const change = (set: LibraryChange) =>
+    actions.changeLibrary(
+      [book.id],
+      mine.inLibrary ? set : { ...set, removed: false },
+    );
+  return (
+    <div className="bh-mine">
+      <div className="btns" role="group" aria-label={MY_BOOK.status}>
+        {READING_STATUSES.map((status) => {
+          const lit = mine.status === status;
+          return (
+            <button
+              key={status}
+              type="button"
+              className="chip"
+              aria-pressed={lit}
+              onClick={() => {
+                const next = pressStatus(mine.status, status);
+                if (change({ status: next }))
+                  notify(
+                    name +
+                      "を" +
+                      (lit
+                        ? MARKS.unset(shelfLabel(status))
+                        : MARKS.set(shelfLabel(status))),
+                  );
+              }}
+            >
+              {shelfLabel(status)}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className="chip"
+          aria-pressed={mine.owned === "yes"}
+          onClick={() => {
+            const lit = mine.owned === "yes";
+            if (change({ owned: lit ? null : "yes" }))
+              notify(name + "を" + (lit ? MARKS.ownedOff : MARKS.ownedOn));
+          }}
+        >
+          {MARKS.owned}
+        </button>
+      </div>
+      {mine.inShop && (
+        <p className="bh-in-shop">
+          <Icon name="store" size={16} />
+          {MY_BOOK.inShop}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function BookActions({
   book,
   state,
@@ -153,6 +230,14 @@ export function BookActions({
           {favorite ? "お気に入りに登録済み" : "お気に入り"}
         </button>
       </div>
+      {register && (
+        <MyBookMarks
+          book={book}
+          state={state}
+          actions={actions}
+          notify={notify}
+        />
+      )}
       {toShop && (
         <Link
           className="text-btn bh-to-shop"

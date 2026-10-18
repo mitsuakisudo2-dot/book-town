@@ -363,3 +363,40 @@ body:has(.scan-session) .toast {
     box-shadow: 0 0 40px color-mix(in srgb, var(--shade) 20%, transparent);
   }
 }
+
+/* この回の本 (ScanTidy): the scan's books in a row, then what to set on them. */
+.scan-tidy-books {
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px 12px;
+  padding: 0 16px 4px;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: none;
+}
+.scan-tidy-books::-webkit-scrollbar {
+  display: none;
+}
+.scan-tidy-books li {
+  flex: 0 0 56px;
+}
+.scan-tidy-heading {
+  margin: 12px 0 8px;
+  color: var(--muted);
+  font-size: var(--t-meta);
+  font-weight: 700;
+}
+.scan-tidy-end {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin-top: 20px;
+}
+.scan-tidy-end .btn {
+  width: 100%;
+}
+/* Taking them out again: quiet, under ［完了］, in the colour of what cannot be undone. */
+.scan-tidy-remove {
+  color: var(--alert);
+  font-weight: 400;
+}

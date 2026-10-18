@@ -79,12 +79,34 @@ check(
 check(
   "はじめの3つ: each step ticked when done, shown until all three are",
   () => {
-    const empty = town({ library: [], libraryShelves: [], ownShop: null });
+    // Nothing in the library: no mark, record, post, poster, nine or like.
+    const empty = town({
+      library: [],
+      wishlist: [],
+      favorites: [],
+      finishedBooks: [],
+      readingRecords: [],
+      readingSessions: [],
+      libraryEntries: {},
+      libraryShelves: [],
+      likedPosts: [],
+      wantedPosts: [],
+      popReactions: {},
+      posts: seedState.posts.filter((entry) => entry.authorId !== ME_ID),
+      posters: seedState.posters.filter((entry) => entry.authorId !== ME_ID),
+      me: { ...seedState.me, lifeNine: [] },
+      ownShop: null,
+    });
     assert.deepEqual(firstSteps(empty), {
       book: false,
       shelf: false,
       shop: false,
     });
+    // A book in the library however it came in ticks 本を登録 (AUD-148).
+    assert.equal(
+      firstSteps({ ...empty, wishlist: [seedState.books[0].id] }).book,
+      true,
+    );
     assert.equal(showsFirstSteps(empty), true);
     const shelf = {
       ...structuredClone(seedState.libraryShelves[0] ?? {}),

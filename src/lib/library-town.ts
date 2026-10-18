@@ -2,6 +2,7 @@ import {
   applyOp,
   blankEntry,
   contextsOf,
+  filterLibrary,
   keptByNothing,
   LIBRARY_SETTINGS,
   legacyToLibrary,
@@ -14,6 +15,8 @@ import {
   type LibrarySet,
   type LibraryState,
   type OpBefore,
+  type Owned,
+  type ReadingStatus,
 } from "./library";
 import { posterBookIds } from "./posters";
 import { ME_ID, type TownState } from "./types";
@@ -508,5 +511,51 @@ export function bookTraces(
         state.readingSessions.some(
           (session) => session.bookId === bookId && session.endedAt === null,
         )),
+  };
+}
+
+const shown = new WeakMap<TownState, ReadonlySet<string>>();
+
+/**
+ * The books in ライブラリ（全部）: what 登録済み means wherever a book is
+ * offered to register (AUD-148). A book the reader put in their shop, their
+ * 人生の9冊, 読みたい or liked is in already, registered on purpose or not.
+ */
+export function libraryIds(state: TownState): ReadonlySet<string> {
+  const known = shown.get(state);
+  if (known) return known;
+  const ids = new Set(
+    filterLibrary(
+      libraryStateOf(state),
+      { showWanted: true },
+      townShopBooks(state),
+    ),
+  );
+  shown.set(state, ids);
+  return ids;
+}
+
+export const isInLibrary = (state: TownState, bookId: string): boolean =>
+  libraryIds(state).has(bookId);
+
+/** What a book is to the reader, as its page says it (AUD-052). */
+export interface MyBook {
+  inLibrary: boolean;
+  /** Its reading status, while it is in the library. */
+  status: ReadingStatus | null;
+  /** 持っている / 持ってない, while it is in the library. */
+  owned: Owned | null;
+  /** On a shelf of the reader's own shop, or in its store scene. */
+  inShop: boolean;
+}
+
+export function myBook(state: TownState, bookId: string): MyBook {
+  const inLibrary = isInLibrary(state, bookId);
+  const row = inLibrary ? entriesOf(state)[bookId] : undefined;
+  return {
+    inLibrary,
+    status: row?.status ?? null,
+    owned: row?.owned ?? null,
+    inShop: townShopBooks(state).has(bookId),
   };
 }
