@@ -3955,6 +3955,444 @@ try {
   );
 
   await check(
+    "a nine saved on another device first is not written over, and the reader's own waits to be opened",
+    async () => {
+      // The database counts the nine's versions; the page reads version 1.
+      profile.nine_version = 1;
+      town.profile_nine = [];
+      const sent = [];
+      const answer = (route) => {
+        sent.push(JSON.parse(route.request().postData()));
+        if (sent.length === 1) {
+          // Another device saved its nine first: version 2.
+          profile.nine_version = 2;
+          town.profile_nine = [
+            {
+              profile_id: user.id,
+              position: 0,
+              book_id: "solaris",
+              note: "別の端末で選んだ一冊",
+            },
+          ];
+          return route.fulfill({
+            status: 409,
+            contentType: "application/json",
+            body: JSON.stringify({
+              code: "PT409",
+              message: "changed elsewhere",
+              details: null,
+              hint: null,
+            }),
+          });
+        }
+        profile.nine_version = 3;
+        town.profile_nine = [
+          { profile_id: user.id, position: 0, book_id: "momo", note: "" },
+        ];
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "3",
+        });
+      };
+      await page.route(supabase + "/rest/v1/rpc/save_nine", answer);
+      try {
+        await page.goto(base + "/profiles/me/");
+        const section = page.getByRole("region", { name: "人生の9冊" });
+        const nine = page.getByRole("dialog", { name: "人生の9冊を選ぶ" });
+        const note = nine.locator(".profile-kept");
+        await section.getByRole("button", { name: "編集" }).click();
+        await nine
+          .getByRole("searchbox", { name: "人生の9冊に追加する本を検索" })
+          .fill("モモ");
+        await nine
+          .getByRole("button", { name: "モモを人生の9冊に加える" })
+          .click();
+        await nine
+          .getByRole("button", { name: "この並びを保存", exact: true })
+          .click();
+        await expect(nine).toHaveCount(0);
+        // Sent over version 1, and not written over the one saved since:
+        // the page reads it again, says so once, and keeps the work.
+        await expect(
+          page.getByText(
+            "別の端末で先に変わっていたため、人生の9冊の変更は送りませんでした。書きかけは残しています。",
+          ),
+        ).toBeVisible();
+        expect(sent[0].base).toBe(1);
+        await shot("nine-elsewhere-told");
+        await expect(
+          page.getByText("人生の9冊を保存できませんでした"),
+        ).toHaveCount(0);
+        await expect(section.locator(".profile-nine-title")).toHaveText([
+          "ソラリス",
+        ]);
+        // The dialog shows the nine saved now, and waits on the choice.
+        await section.getByRole("button", { name: "編集" }).click();
+        await expect(note).toContainText(
+          "書きかけより新しい人生の9冊が保存されています",
+        );
+        const items = nine.locator(".profile-nine-editor-item strong");
+        await expect(items).toHaveText(["ソラリス"]);
+        await shot("nine-elsewhere-waits");
+        // キャンセル leaves the work it never showed, still waiting.
+        await nine
+          .getByRole("button", { name: "キャンセル", exact: true })
+          .click();
+        await expect(nine).toHaveCount(0);
+        await section.getByRole("button", { name: "編集" }).click();
+        await expect(note).toContainText(
+          "書きかけより新しい人生の9冊が保存されています",
+        );
+        await note
+          .getByRole("button", { name: "書きかけを開く", exact: true })
+          .click();
+        await expect(items).toHaveText(["モモ"]);
+        await expect(note).toContainText(
+          "保存すると、いま保存されている人生の9冊と入れ替わります",
+        );
+        await shot("nine-elsewhere-opened");
+        // Saved again, over the version read since, the work is let go.
+        await nine
+          .getByRole("button", { name: "この並びを保存", exact: true })
+          .click();
+        await expect(nine).toHaveCount(0);
+        await expect.poll(() => sent.length).toBe(2);
+        expect(sent[1].base).toBe(2);
+        await expect(section.locator(".profile-nine-title")).toHaveText([
+          "モモ",
+        ]);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => localStorage.getItem("book-town-nine-drafts-v1") ?? "",
+            ),
+          )
+          .not.toContain("momo");
+      } finally {
+        await page.unroute(supabase + "/rest/v1/rpc/save_nine", answer);
+        delete profile.nine_version;
+        delete town.profile_nine;
+      }
+    },
+  );
+
+  await check(
+    "shelves changed on another device first are not written over, and this device's can be put back",
+    async () => {
+      const was = town;
+      const SHOP = "6f4e5d7c-1a2b-4c3d-9e8f-7a6b5c4d3e2f";
+      const shelfOf = (name, bookId) => ({
+        id: "first",
+        name,
+        capacity: 10,
+        isPublic: true,
+        items: [{ id: "first-1", bookId, display: "face", pop: "" }],
+      });
+      const here = shelfOf("はじめの本棚", "momo");
+      const there = shelfOf("別の端末で直した棚", "solaris");
+      // The database counts versions; the page reads the shelves' first.
+      profile.nine_version = 1;
+      town = {
+        shops: [
+          {
+            id: SHOP,
+            owner_id: user.id,
+            name: "アキの本屋",
+            description: "",
+            tagline: "",
+            theme: "sage",
+            is_open: true,
+            public_shelves: [here],
+            public_scene_books: [],
+          },
+        ],
+        shop_private: [
+          { shelves: [here], scene_books: [], shelves_version: 1 },
+        ],
+      };
+      const sent = [];
+      // The saves another device makes first, before the one sent here: its
+      // shelves and their version.
+      const first = {
+        1: [there, 2],
+        4: [shelfOf("もう一台で直した棚", "solaris"), 4],
+        5: [shelfOf("三台目で直した棚", "solaris"), 5],
+      };
+      // A save held on its way, while the shelves are changed again here.
+      let letGo = () => {};
+      const held = new Promise((resolve) => (letGo = resolve));
+      const answer = async (route) => {
+        const asked = JSON.parse(route.request().postData());
+        sent.push(asked);
+        if (sent.length === 6) await held;
+        const other = first[sent.length];
+        if (other) {
+          town.shops[0].public_shelves = [other[0]];
+          town.shop_private = [
+            { shelves: [other[0]], scene_books: [], shelves_version: other[1] },
+          ];
+          return route.fulfill({
+            status: 409,
+            contentType: "application/json",
+            body: JSON.stringify({
+              code: "PT409",
+              message: "changed elsewhere",
+              details: null,
+              hint: null,
+            }),
+          });
+        }
+        town.shops[0].public_shelves = asked.value;
+        town.shop_private = [
+          { shelves: asked.value, scene_books: [], shelves_version: 3 },
+        ];
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "3",
+        });
+      };
+      // The book put back joins the library, as on the other device.
+      const library = (route) =>
+        route.request().method() === "GET"
+          ? route.fallback()
+          : route.fulfill({ status: 201, body: "" });
+      await page.route(supabase + "/rest/v1/rpc/save_shelves", answer);
+      await page.route(supabase + "/rest/v1/library_entries*", library);
+      try {
+        await page.goto(base + "/my-shop/");
+        const name = page.getByRole("textbox", { name: "棚の名前" });
+        const kept = page.locator(".editor-shelves-kept");
+        await expect(name).toHaveValue("はじめの本棚");
+        await page.getByRole("button", { name: "棚を非公開にする" }).click();
+        // Sent over version 1, and not written over the shelves saved
+        // since: the page reads them again, says so once, and keeps these.
+        await expect(
+          page.getByText(
+            "別の端末で先に変わっていたため、書店の棚の変更は送りませんでした。書きかけは残しています。",
+          ),
+        ).toBeVisible();
+        expect(sent[0].base).toBe(1);
+        await expect(name).toHaveValue("別の端末で直した棚");
+        await expect(
+          page.getByText("書店の棚を保存できませんでした"),
+        ).toHaveCount(0);
+        await expect(kept).toContainText(
+          "別の端末で先に棚が変わっていたため、この端末で直した棚を残しています",
+        );
+        await shot("shelves-elsewhere-kept");
+        await kept.evaluate((note) => note.scrollIntoView({ block: "center" }));
+        await page.screenshot({
+          path: path.join(output, "shelves-elsewhere-kept-view.png"),
+        });
+        // Put back in place of the shelves saved since, over their version.
+        await kept
+          .getByRole("button", { name: "この端末の棚にする", exact: true })
+          .click();
+        await expect(name).toHaveValue("はじめの本棚");
+        await expect(
+          page.getByRole("button", { name: "棚を公開する" }),
+        ).toBeVisible();
+        await expect(page.getByText("この端末の棚にしました。")).toBeVisible();
+        // The note's buttons are gone: the hand is on 棚を追加.
+        await expect(
+          page.getByRole("button", { name: "棚を追加" }),
+        ).toBeFocused();
+        await expect.poll(() => sent.length).toBe(2);
+        expect(sent[1].base).toBe(2);
+        expect(
+          sent[1].value.map((shelf) => [shelf.name, shelf.isPublic]),
+        ).toEqual([["はじめの本棚", false]]);
+        await expect(page.getByText(/保存できませんでした/)).toHaveCount(0);
+        await shot("shelves-elsewhere-put-back");
+        await name.evaluate((field) =>
+          field.scrollIntoView({ block: "center" }),
+        );
+        await page.screenshot({
+          path: path.join(output, "shelves-elsewhere-put-back-view.png"),
+        });
+        // Saved: nothing is left to keep.
+        await expect(kept).toHaveCount(0);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => localStorage.getItem("book-town-shelves-drafts-v1") ?? "",
+            ),
+          )
+          .not.toContain("momo");
+        // 元に戻す puts back the shelves saved elsewhere, and these wait
+        // again to be put back: nothing done here is lost by it.
+        await page
+          .locator(".toast")
+          .getByRole("button", { name: "元に戻す" })
+          .click();
+        await expect(name).toHaveValue("別の端末で直した棚");
+        await expect(kept).toContainText("この端末で直した棚を残しています");
+        await expect.poll(() => sent.length).toBe(3);
+        expect(sent[2].base).toBe(3);
+        expect(sent[2].value.map((shelf) => shelf.name)).toEqual([
+          "別の端末で直した棚",
+        ]);
+        // Thrown away, after the question (a name written here goes too).
+        await kept.getByRole("button", { name: "書きかけを消す" }).click();
+        await kept.getByRole("button", { name: "消す", exact: true }).click();
+        await expect(kept).toHaveCount(0);
+        await expect(
+          page.getByRole("button", { name: "棚を追加" }),
+        ).toBeFocused();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => localStorage.getItem("book-town-shelves-drafts-v1") ?? "",
+            ),
+          )
+          .not.toContain("momo");
+        // Put back, and changed on another device first again: 元に戻す
+        // puts nothing in place of the shelves saved there.
+        const toast = page.locator(".toast");
+        await page.getByRole("button", { name: "棚を非公開にする" }).click();
+        await expect(name).toHaveValue("もう一台で直した棚");
+        await kept
+          .getByRole("button", { name: "この端末の棚にする", exact: true })
+          .click();
+        await expect.poll(() => sent.length).toBe(5);
+        await expect(name).toHaveValue("三台目で直した棚");
+        await toast.getByRole("button", { name: "元に戻す" }).click();
+        await expect(toast).toContainText(
+          "この端末の棚は保存されなかったため、いまの棚のままです。",
+        );
+        await expect(name).toHaveValue("三台目で直した棚");
+        await expect(kept).toContainText("この端末で直した棚を残しています");
+        await page.waitForTimeout(600);
+        expect(sent.length).toBe(5);
+        // Put back, and changed here again before the save lands: once
+        // saved, it waits no more.
+        await kept
+          .getByRole("button", { name: "この端末の棚にする", exact: true })
+          .click();
+        await expect.poll(() => sent.length).toBe(6);
+        await expect(name).toHaveValue("別の端末で直した棚");
+        await page.getByRole("button", { name: "棚を公開する" }).click();
+        await expect(kept).toHaveCount(0);
+        letGo();
+        await expect.poll(() => sent.length).toBe(7);
+        expect(sent[6].value.map((shelf) => shelf.isPublic)).toEqual([true]);
+        await expect(
+          page.getByText("棚の変更は、あなたのアカウントに保存済みです。"),
+        ).toBeVisible();
+        await expect(kept).toHaveCount(0);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => localStorage.getItem("book-town-shelves-drafts-v1") ?? "",
+            ),
+          )
+          .not.toContain("別の端末で直した棚");
+      } finally {
+        letGo();
+        await page.unroute(supabase + "/rest/v1/rpc/save_shelves", answer);
+        await page.unroute(supabase + "/rest/v1/library_entries*", library);
+        delete profile.nine_version;
+        town = was;
+      }
+    },
+  );
+
+  await check(
+    "a new poster turned away waits on its page, and opens again as a new one",
+    async () => {
+      const was = town;
+      town = { posters: [] };
+      const HEADING = "断られたポスターの見出し";
+      let refuse = true;
+      const answer = (route) => {
+        const request = route.request();
+        if (request.method() === "GET") return route.fallback();
+        const rows = [].concat(JSON.parse(request.postData()));
+        if (refuse)
+          return route.fulfill({
+            status: 403,
+            contentType: "application/json",
+            body: JSON.stringify({
+              code: "42501",
+              message:
+                'new row violates row-level security policy for table "posters"',
+            }),
+          });
+        const at = new Date().toISOString();
+        for (const row of rows)
+          town.posters.push({
+            allow_display: true,
+            ...row,
+            created_at: at,
+            updated_at: at,
+          });
+        return route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify(rows.map((row) => ({ id: row.id }))),
+        });
+      };
+      await page.route(supabase + "/rest/v1/posters*", answer);
+      try {
+        await page.goto(base + "/posters/new/?book=solaris");
+        const heading = page.getByRole("textbox", { name: "見出し" });
+        await heading.fill(HEADING);
+        await page
+          .getByRole("textbox", { name: "この本のこと" })
+          .fill("断られても、言葉はここに残る。");
+        await page
+          .getByRole("button", { name: "貼り出す", exact: true })
+          .click();
+        await expect(page).toHaveURL(/\/posters\/\?id=/);
+        const id = new URL(page.url()).searchParams.get("id");
+        // Turned away: the poster is not there, and its work waits under
+        // the poster it went as, not in the place of a new one.
+        await expect(
+          page.getByRole("heading", {
+            name: "このポスターは、いまは貼られていません。",
+          }),
+        ).toBeVisible();
+        await expect(
+          page.getByText(
+            "このポスターの書きかけを、このブラウザに残しています",
+          ),
+        ).toBeVisible();
+        expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([
+          user.id + ":poster:" + id,
+        ]);
+        await shot("poster-refused-kept");
+        await page.getByRole("link", { name: "書きかけを開く" }).click();
+        await expect(heading).toHaveValue(HEADING);
+        await expect(
+          page.getByText(
+            "もとのポスターが見つからないため、書きかけを新しいポスターとして開いています",
+          ),
+        ).toBeVisible();
+        await shot("poster-refused-opened");
+        // Read again from the start, the page opens it the same way.
+        await page.reload();
+        await expect(heading).toHaveValue(HEADING);
+        // Put up as a new poster: its work is let go once the account has it.
+        refuse = false;
+        await page
+          .getByRole("button", { name: "貼り出す", exact: true })
+          .click();
+        await expect(page).toHaveURL(/\/posters\/\?id=/);
+        expect(new URL(page.url()).searchParams.get("id")).not.toBe(id);
+        await expect(
+          page.getByRole("heading", { name: HEADING, level: 1 }),
+        ).toBeVisible();
+        await expect.poll(() => keptDraftKeys(POSTER_DRAFTS)).toEqual([]);
+      } finally {
+        await page.unroute(supabase + "/rest/v1/posters*", answer);
+        town = was;
+      }
+    },
+  );
+
+  await check(
     "on a phone, the sheet of words for an owner opens ready to write, with 届ける just above the keyboard",
     async () => {
       expect(await coarse(page)).toBe(true);

@@ -444,6 +444,14 @@
 .kept-note.profile-kept {
   margin: 0 0 4px;
 }
+/* The nine being chosen, which wait while older work is the reader's to
+   open or throw away first. */
+.profile-nine-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 .profile-nine-editor-list {
   display: flex;
   flex-direction: column;

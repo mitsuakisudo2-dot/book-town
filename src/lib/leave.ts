@@ -18,6 +18,7 @@ import "./profile-draft";
 import "./record-draft";
 import "./report-draft";
 import "./scene-draft";
+import "./shelves-draft";
 import "./shop-draft";
 import { JOURNAL_KEY, libraryJournal } from "./library-journal";
 import { POSITION_KEY } from "./walk-repository";

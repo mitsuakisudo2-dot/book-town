@@ -160,6 +160,14 @@
   :is(input, textarea, button, a) {
   scroll-margin-top: calc(79px + min(58svh, 525px) + 84px);
 }
+/* The steps, which wait while older work is the maker's to open or throw
+   away first. */
+.poster-editor-steps {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
 .poster-step {
   border: 0;
   padding: 0;

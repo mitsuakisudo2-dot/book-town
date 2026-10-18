@@ -12,7 +12,9 @@ import {
 import {
   nineDraftOptions,
   nineForm,
+  nineIsStale,
   nineLosesWords,
+  nineMark,
   profileDraftOptions,
   profileForm,
   profileLosesWords,
@@ -34,6 +36,19 @@ import {
   townTook,
 } from "../src/lib/shop-draft";
 import { townActions, townStore } from "../src/lib/store";
+import {
+  keepArrangements,
+  keepShelvesNotSent,
+  readKeptShelves,
+  SHELVES_DRAFT_KEY,
+  KEPT_SHELVES_MAX,
+  keptArrangements,
+  keptShelvesOf,
+  shelvesDraftOptions,
+  shelvesLoseWords,
+  shelvesStillKept,
+} from "../src/lib/shelves-draft";
+import type { Shelf } from "../src/lib/types";
 
 let passed = 0;
 function check(name: string, run: () => void) {
@@ -227,6 +242,41 @@ check("the nine keep their order and words, up to nine books", () => {
     assert.equal(readNineWork(broken), null, JSON.stringify(broken));
 });
 
+check("the nine keep the mark of the saved nine they began from", () => {
+  const saved = nineForm(reader);
+  const work: NineWork = {
+    ids: ["solaris", "momo"],
+    notes: { solaris: "遠い惑星で、他者を思う。" },
+    from: nineMark(saved),
+  };
+  assert.equal(nineIsStale(work, saved), false);
+  assert.deepEqual(readNineWork(work), work);
+  // The mark reads the books in order and the word for each, not a word
+  // kept for a book taken off.
+  assert.equal(
+    nineMark({ ...saved, notes: { ...saved.notes, gone: "外した本" } }),
+    nineMark(saved),
+  );
+  assert.notEqual(
+    nineMark({ ...saved, ids: [...saved.ids].reverse() }),
+    nineMark(saved),
+  );
+  assert.notEqual(
+    nineMark({ ...saved, notes: { ...saved.notes, momo: "別の端末で" } }),
+    nineMark(saved),
+  );
+  // Another nine saved since (on another device): the work is not used on
+  // its own.
+  const elsewhere = { ...saved, ids: ["momo"] };
+  assert.equal(nineIsStale(work, elsewhere), true);
+  // Work kept before marks were kept goes on as it is.
+  const unmarked: NineWork = { ids: work.ids, notes: work.notes };
+  assert.equal(nineIsStale(unmarked, elsewhere), false);
+  assert.deepEqual(readNineWork(unmarked), unmarked);
+  for (const from of ["", 5, "x".repeat(41)])
+    assert.equal(readNineWork({ ...work, from }), null, String(from));
+});
+
 check("the shop's sign and a shelf's new name are kept as written", () => {
   const saved = {
     name: "夜と寄り道書房",
@@ -323,6 +373,120 @@ check("kept work follows what was saved since, but for its own changes", () => {
   const sent = { ...sign, tagline: "新しいひとこと" };
   assert.equal(overSaved({ work: sent, base: sign }, sent), null);
   assert.deepEqual(overSaved({ work: sent, base: sign }, sign), sent);
+});
+
+check("shelves not sent are kept for their owner, to put back", () => {
+  const shelves: Shelf[] = [
+    {
+      id: "shelf-1",
+      name: "雨の日に",
+      capacity: 10,
+      isPublic: true,
+      items: [
+        { id: "i-1", bookId: "momo", display: "face", pop: "雨音と読む。" },
+      ],
+    },
+  ];
+  const storage = memory();
+  const store = createKeptDraftStore(shelvesDraftOptions, () => storage);
+  assert.equal(shelvesDraftOptions.keyPattern.test("u-1"), true);
+  assert.equal(shelvesDraftOptions.keyPattern.test("u-1/mine"), false);
+  // Only the shelves of the writes not sent are kept.
+  assert.equal(keepShelvesNotSent("u-1", [{ kind: "nine" }], store), false);
+  assert.equal(store.get("u-1"), null);
+  assert.equal(
+    keepShelvesNotSent(
+      "u-1",
+      [{ kind: "nine" }, { kind: "shelves", shelves }],
+      store,
+    ),
+    true,
+  );
+  assert.deepEqual(store.get("u-1")?.shelves, shelves);
+  assert.ok(storage.data.has(SHELVES_DRAFT_KEY));
+  // Not sent again, other shelves: kept before them, not in their place.
+  // The same shelves once more are kept once, newest first.
+  const later = structuredClone(shelves);
+  later[0].name = "晴れの日に";
+  keepShelvesNotSent("u-1", [{ kind: "shelves", shelves: later }], store);
+  const names = () =>
+    keptArrangements(store.get("u-1")).map((entry) => entry.shelves[0].name);
+  assert.deepEqual(names(), ["晴れの日に", "雨の日に"]);
+  keepShelvesNotSent("u-1", [{ kind: "shelves", shelves }], store);
+  assert.deepEqual(names(), ["雨の日に", "晴れの日に"]);
+  // Put back and turned away, they are still kept.
+  assert.equal(
+    shelvesStillKept("u-1", [{ kind: "shelves", shelves: later }], store),
+    true,
+  );
+  const other = structuredClone(shelves);
+  other[0].name = "別の棚";
+  assert.equal(
+    shelvesStillKept("u-1", [{ kind: "shelves", shelves: other }], store),
+    false,
+  );
+  // At most a few wait; the oldest goes beyond that.
+  for (let at = 0; at < KEPT_SHELVES_MAX + 1; at++) {
+    const more = structuredClone(shelves);
+    more[0].name = "棚" + at;
+    keepShelvesNotSent("u-1", [{ kind: "shelves", shelves: more }], store);
+  }
+  assert.equal(keptArrangements(store.get("u-1")).length, KEPT_SHELVES_MAX);
+  assert.equal(names()[0], "棚" + KEPT_SHELVES_MAX);
+  store.set("u-1", keptShelvesOf([{ shelves, at: "2026-10-18T00:00:00Z" }]));
+  // Read back by a new page as they were; what is not a shelf is not.
+  const again = createKeptDraftStore(shelvesDraftOptions, () => storage);
+  assert.deepEqual(again.get("u-1")?.shelves, shelves);
+  for (const broken of [
+    null,
+    { shelves, at: 5 },
+    { shelves: "雨の日に", at: "2026-10-18T00:00:00Z" },
+    { shelves: [{ id: "", name: "" }], at: "2026-10-18T00:00:00Z" },
+  ])
+    assert.equal(readKeptShelves(broken), null, JSON.stringify(broken));
+  // A browser that will not keep them says so: nothing is promised.
+  const full = createKeptDraftStore(shelvesDraftOptions, () => ({
+    ...memory(),
+    setItem: () => {
+      throw new Error("quota");
+    },
+  }));
+  assert.equal(
+    keepShelvesNotSent("u-1", [{ kind: "shelves", shelves }], full),
+    false,
+  );
+  assert.equal(
+    shelvesStillKept("u-1", [{ kind: "shelves", shelves }], full),
+    false,
+  );
+  // Kept again by hand (put back, then 元に戻す): each once, the first of
+  // the same; none left lets them go.
+  keepArrangements(
+    "u-1",
+    [
+      { shelves: later, at: "2026-10-18T02:00:00Z" },
+      { shelves, at: "2026-10-18T01:00:00Z" },
+      { shelves: structuredClone(later), at: "2026-10-18T00:00:00Z" },
+    ],
+    store,
+  );
+  assert.deepEqual(names(), ["晴れの日に", "雨の日に"]);
+  assert.equal(
+    keptArrangements(store.get("u-1"))[0].at,
+    "2026-10-18T02:00:00Z",
+  );
+  keepArrangements("u-1", [], store);
+  assert.equal(store.get("u-1"), null);
+  // Throwing them away loses a POP or a name written here, not an order.
+  const saved = structuredClone(shelves);
+  assert.equal(shelvesLoseWords(shelves, saved), false);
+  saved[0].items[0].pop = "別の端末のPOP";
+  assert.equal(shelvesLoseWords(shelves, saved), true);
+  assert.equal(shelvesLoseWords([{ ...shelves[0], items: [] }], saved), false);
+  assert.equal(
+    shelvesLoseWords([{ ...shelves[0], name: "晴れの日に", items: [] }], saved),
+    true,
+  );
 });
 
 check("a change the town turns away is told apart from one it took", () => {
