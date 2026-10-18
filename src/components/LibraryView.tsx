@@ -44,7 +44,7 @@ import {
 } from "./LibraryShelfSheet";
 import { ScanSession } from "./ScanSession";
 import { BookJacket, Icon } from "./ui";
-import { counted, TABS, whenSome } from "../lib/words";
+import { counted, LIBRARY_SHELF, TABS, whenSome } from "../lib/words";
 import { CHOICE_NAMES, type Audience } from "../lib/visibility";
 import { walkPath } from "../lib/paths";
 
@@ -664,7 +664,7 @@ export function LibraryView({
           onClick={() => setShelfSheet(NEW_SHELF_KEY)}
         >
           <Icon name="plus" size={16} />
-          棚を作る
+          {LIBRARY_SHELF.make}
         </button>
       </div>
       {theme && (
@@ -687,7 +687,7 @@ export function LibraryView({
             className="text-btn"
             onClick={() => setShelfSheet(theme.id)}
           >
-            棚を編集
+            {LIBRARY_SHELF.edit}
           </button>
         </section>
       )}

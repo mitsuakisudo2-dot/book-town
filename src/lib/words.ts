@@ -101,6 +101,12 @@ export const pageTitle = (name: string) => `${name} | ${NAMES.service}`;
 /** The title of the home, and of a page that has no name of its own. */
 export const HOME_TITLE = `${NAMES.service} | ${NAMES.catchphrase}`;
 
+/** What the ライブラリ calls making and editing a 本棚 (AUD-057); a 書店's own shelf is a 棚. */
+export const LIBRARY_SHELF = {
+  make: "本棚をつくる",
+  edit: "本棚を編集",
+} as const;
+
 // ── The tabs ────────────────────────────────────────────────────────────
 
 /**

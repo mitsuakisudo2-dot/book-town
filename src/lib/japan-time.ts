@@ -32,6 +32,10 @@ export const japanFormat = (
 ): Intl.DateTimeFormat =>
   new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", ...options });
 
+/** The year (Japan time) it is now. */
+export const japanYear = (now: number = Date.now()): number =>
+  inJapan(now).getUTCFullYear();
+
 const wholeDate = japanFormat({});
 
 /** A date as 2026/10/18, in Japan time; "" for a moment that is not a date. */

@@ -51,6 +51,27 @@ check("a page's address comes from paths.ts", () => {
   assert.equal(myShopPath({ at: "messages" }), "/my-shop/#messages");
 });
 
+check(
+  "a page's address (timeline, credits, reading list) comes from paths.ts",
+  () => {
+    const found: Record<string, number> = {};
+    for (const file of sources) {
+      if (["src/lib/paths.ts", "src/lib/home-tab.ts"].includes(file)) continue;
+      // comments may name an address
+      const code = text(file)
+        .split("\n")
+        .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+        .join("\n");
+      const count =
+        code.match(/["'`]\/(timeline|credits|reading-list)\/["'`]/g)?.length ??
+        0;
+      if (count) found[file] = count;
+    }
+    // PosterScreen.tsx is written by AUD-003 (#183); the address moves when it is merged
+    assert.deepEqual(found, { "src/components/PosterScreen.tsx": 1 });
+  },
+);
+
 check("a date is read in Japan time, from japan-time.ts", () => {
   hits(
     /toLocale(Date|Time)String|getTimezoneOffset|9 \* 3_?600_?000|9 \* 60 \* 60/g,

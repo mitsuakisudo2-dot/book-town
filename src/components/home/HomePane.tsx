@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
+import { timelinePath } from "../../lib/paths";
 import dynamic from "next/dynamic";
 import {
   boardPicks,
@@ -454,7 +455,7 @@ export function HomePane({
       )}
       {!partial && followed.length > 0 && (
         <Link
-          href="/timeline/"
+          href={timelinePath()}
           className="home-older"
           onClick={(event) => {
             if (!plainClick(event)) return;
