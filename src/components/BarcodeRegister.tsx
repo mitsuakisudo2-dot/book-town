@@ -7,7 +7,7 @@ import { libraryBookByIsbn, useTownBackend } from "../lib/store";
 import type { TownActions, TownState } from "../lib/types";
 import { Icon, Modal } from "./ui";
 import { bookAuthor, bookByIsbn, quotedTitle } from "../lib/book-name";
-import { failure, AGAIN } from "../lib/words";
+import { failure, AGAIN, REGISTER } from "../lib/words";
 
 type Detector = {
   detect(source: CanvasImageSource): Promise<Array<{ rawValue: string }>>;
@@ -36,6 +36,8 @@ export function BarcodeRegister({
   onClose,
   lead = "バーコードで本を登録",
   camera = true,
+  startTitle = "",
+  startIsbn = null,
 }: {
   state: TownState;
   actions: TownActions;
@@ -45,6 +47,10 @@ export function BarcodeRegister({
   lead?: string;
   /** False over a scanner, which reads barcodes itself: no camera here. */
   camera?: boolean;
+  /** The title the form opens with: what was searched for and not found. */
+  startTitle?: string;
+  /** An ISBN searched for and not found: looked up as the form opens. */
+  startIsbn?: string | null;
 }) {
   const id = useId();
   const savedIn = useTownBackend();
@@ -53,7 +59,7 @@ export function BarcodeRegister({
   const [isbnText, setIsbnText] = useState("");
   // The ISBN the camera read, to tell a scanned book from a typed one.
   const [scanned, setScanned] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(startTitle);
   const [author, setAuthor] = useState("");
   const [price, setPrice] = useState("");
   const [message, setMessage] = useState("");
@@ -121,6 +127,13 @@ export function BarcodeRegister({
     // accept is stable enough for a scan session; restarting on every render would reopen the camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning]);
+
+  // An ISBN brought from a search is looked up at once, as if typed here.
+  useEffect(() => {
+    if (startIsbn) void accept(startIsbn);
+    // Once, as the form opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Forgets what was found or said for another ISBN than `isbn`. */
   function moveTo(isbn: string | null) {
@@ -242,8 +255,8 @@ export function BarcodeRegister({
     // Named as kept: a book the town knew by its own title, a long one cut.
     notify(
       done.result === "already"
-        ? `${quotedTitle(done)}はもうライブラリにあります`
-        : `${quotedTitle(done)}を登録しました`,
+        ? REGISTER.already(quotedTitle(done))
+        : REGISTER.added(quotedTitle(done)),
     );
     onClose();
   }

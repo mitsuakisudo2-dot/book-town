@@ -43,4 +43,3 @@ export function browserName(userAgent: string, ios: boolean): string {
                         ? "アプリ内"
                         : "";
 }
-

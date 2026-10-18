@@ -1,9 +1,10 @@
 "use client";
 
-import type { Book, TownActions, TownState } from "../lib/types";
+import type { Book, Notify, TownActions, TownState } from "../lib/types";
 import { formatPrice, REGISTERED_GENRE } from "../lib/books";
 import { bookLookup, lookupQuery } from "../lib/book-lookup";
 import { Icon } from "./ui";
+import { RegisterBook } from "./RegisterBook";
 
 /** 定価, tax included. Books without a known price show nothing. */
 export function BookPrice({
@@ -87,17 +88,29 @@ export function BookActions({
   state,
   actions,
   notify,
+  register = false,
 }: {
   book: Book;
   state: TownState;
   actions: TownActions;
-  notify: (message: string) => void;
+  notify: Notify;
+  /** On the book's own page: 本棚に登録 in one tap, first (管理表 12). */
+  register?: boolean;
 }) {
   const wished = state.wishlist.includes(book.id);
   const favorite = state.favorites.includes(book.id);
   return (
     <div className="bh-actions">
       <div className="bh-save-row">
+        {register && (
+          <RegisterBook
+            book={book}
+            state={state}
+            actions={actions}
+            notify={notify}
+            className="bh-save"
+          />
+        )}
         <button
           type="button"
           className={`btn bh-save ${wished ? "soft bh-saved" : "fill"}`}

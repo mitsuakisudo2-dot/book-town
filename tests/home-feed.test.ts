@@ -4,6 +4,9 @@ import {
   LETTERS_MAX,
   TOWN_MAX,
   authorOf,
+  createFirstStepsBegun,
+  FIRST_STEPS_KEY,
+  firstSteps,
   followedAuthors,
   followedLetters,
   homeLetters,
@@ -11,6 +14,7 @@ import {
   isQuiet,
   letterOf,
   ownLettersSince,
+  showsFirstSteps,
   sinceMark,
   weave,
 } from "../src/lib/home-feed";
@@ -71,6 +75,70 @@ check(
     assert.equal(isQuiet(town(), NOW), false);
   },
 );
+
+check(
+  "はじめの3つ: each step ticked when done, shown until all three are",
+  () => {
+    const empty = town({ library: [], libraryShelves: [], ownShop: null });
+    assert.deepEqual(firstSteps(empty), {
+      book: false,
+      shelf: false,
+      shop: false,
+    });
+    assert.equal(showsFirstSteps(empty), true);
+    const shelf = {
+      ...structuredClone(seedState.libraryShelves[0] ?? {}),
+      id: "shelf-1",
+      deletedAt: null,
+    } as TownState["libraryShelves"][number];
+    // Opening the shop first does not end them, as isNewcomer would.
+    const opened = { ...empty, ownShop: seedState.shops[0] };
+    assert.equal(isNewcomer(opened), false);
+    assert.equal(showsFirstSteps(opened), true);
+    const all = {
+      ...opened,
+      library: [seedState.books[0].id],
+      libraryShelves: [shelf],
+    };
+    assert.deepEqual(firstSteps(all), { book: true, shelf: true, shop: true });
+    assert.equal(showsFirstSteps(all), false);
+    // A reader already with others is not shown them...
+    const followed = { ...empty, following: ["shop-orbit"] };
+    const posted = {
+      ...empty,
+      posts: [...seedState.posts, post("mine", ME_ID, NOW)],
+    };
+    assert.equal(showsFirstSteps(followed), false);
+    assert.equal(showsFirstSteps(posted), false);
+    // ...but one shown them before keeps them until all three are done, a
+    // follow or a post on the way notwithstanding (けにー 10-18).
+    assert.equal(showsFirstSteps(followed, true), true);
+    assert.equal(showsFirstSteps(posted, true), true);
+    assert.equal(
+      showsFirstSteps({ ...all, following: ["shop-orbit"] }, true),
+      false,
+    );
+  },
+);
+
+check("はじめの3つ begun are kept per reader in this browser", () => {
+  const store = new Map<string, string>();
+  const begun = createFirstStepsBegun(() => ({
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => void store.set(key, value),
+  }));
+  assert.equal(begun.has("ben"), false);
+  begun.mark("ben");
+  assert.equal(begun.has("ben"), true);
+  assert.equal(begun.has("visitor"), false);
+  assert.deepEqual([...store.keys()], [FIRST_STEPS_KEY + "ben"]);
+  // Closed storage keeps nothing and says nothing was begun.
+  const closed = createFirstStepsBegun(() => {
+    throw new Error("closed");
+  });
+  closed.mark("ben");
+  assert.equal(closed.has("ben"), false);
+});
 
 check("a first-timer's 便り are the town's, newest first, at most ten", () => {
   const { followed, town: others } = homeLetters(town(), NOW);
