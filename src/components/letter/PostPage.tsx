@@ -44,7 +44,7 @@ import {
 } from "./post-layer";
 import { useSwipeBack } from "./useSwipeBack";
 import "./letter.css";
-import { failure } from "../../lib/words";
+import { failure, NAMES } from "../../lib/words";
 
 type Shared = {
   state: TownState;
@@ -184,7 +184,7 @@ function OpenLayer({ postId, ...props }: Shared & { postId: string }) {
       role="dialog"
       aria-modal="true"
       // Its own name, as the layer has no address of its own (注釈モード).
-      aria-label={`${author.name}さんの便り（${formatPostTime(post.createdAt)}）`}
+      aria-label={`${author.name}さんの${NAMES.letter}（${formatPostTime(post.createdAt)}）`}
     >
       <PostPageHead backRef={backButton} onBack={closePost} />
       <PostPageContent {...props} post={post} author={author} scrolls />
@@ -266,7 +266,7 @@ export function PostPageView({
           <PostPageContent {...props} post={shown.post} author={shown.author} />
         ) : loading || reading ? (
           <p className="post-page-none" role="status">
-            便りを開いています…
+            {NAMES.letter}を開いています…
           </p>
         ) : failed ? (
           <div className="post-page-missing">
@@ -279,7 +279,7 @@ export function PostPageView({
           </div>
         ) : (
           <div className="post-page-missing">
-            <p>この便りは、いまは開けません</p>
+            <p>この{NAMES.letter}は、いまは開けません</p>
             <Link href="/" className="btn">
               本の街へ
             </Link>
@@ -314,7 +314,7 @@ function PostPageHead({
       >
         <LetterIcon name="back" size={22} />
       </button>
-      <Heading>便り</Heading>
+      <Heading>{NAMES.letter}</Heading>
       <span />
     </header>
   );

@@ -16,6 +16,7 @@ import { useClock } from "./useClock";
 import { Icon, ReaderAvatar } from "./ui";
 import "./reading.css";
 import { myShopPath, walkPath } from "../lib/paths";
+import { NAMES } from "../lib/words";
 
 type Shared = {
   state: TownState;
@@ -75,12 +76,13 @@ export function NotificationsView({ state, actions }: Shared) {
           <Icon name="bell" size={34} />
           <h2>まだ静かです</h2>
           <p>
-            同じ本を読み終えた人、あなたの本屋に残されたひとこと、投稿への返信が、ここに届きます。
+            同じ本を読み終えた人、あなたの書店に残されたひとこと、{NAMES.letter}
+            への返信が、ここに届きます。
           </p>
           <div className="empty-state-actions">
             {!state.ownShop && (
               <Link className="btn fill" href={myShopPath()}>
-                本屋を開く
+                書店を開く
               </Link>
             )}
             <Link className="btn" href={walkPath()}>
@@ -92,8 +94,8 @@ export function NotificationsView({ state, actions }: Shared) {
       <OwnReports state={state} />
       <p className="search-note">
         {savedIn === "local"
-          ? "お知らせはこのブラウザの中の出来事から作っています。デモの読書家の投稿は架空のデモデータです。"
-          : "お知らせは、この街の投稿と、あなたの投稿への反応から作っています。"}
+          ? `お知らせはこのブラウザの中の出来事から作っています。デモの読書家の${NAMES.letter}は架空のデモデータです。`
+          : `お知らせは、この街の${NAMES.letter}と、あなたの${NAMES.letter}への反応から作っています。`}
       </p>
     </div>
   );

@@ -121,7 +121,7 @@ try {
       const missing = page.locator(".walk-own-missing");
       await expect(missing).toContainText("まだ棚に本がないので");
       await expect(
-        missing.getByRole("link", { name: "本棚を整える" }),
+        missing.getByRole("link", { name: "自分の書店を整える" }),
       ).toHaveAttribute("href", "/my-shop/");
       await missing.getByRole("button", { name: "閉じる" }).click();
       await expect(missing).toHaveCount(0);

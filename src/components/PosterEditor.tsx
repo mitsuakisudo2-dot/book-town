@@ -55,7 +55,7 @@ import {
   bookTitle,
   quotedTitle,
 } from "../lib/book-name";
-import { counted, nth, failure, AGAIN } from "../lib/words";
+import { counted, nth, failure, AGAIN, NAMES } from "../lib/words";
 
 type Shared = {
   state: TownState;
@@ -669,8 +669,8 @@ function PosterMaker({
                 <small>
                   {/* A poster of words alone is on no book's page. */}
                   {work.template === "text"
-                    ? "文字の投稿と並んで流れます。プロフィールには、いつも載ります。"
-                    : "文字の投稿と並んで流れます。プロフィールと作品ページには、いつも載ります。"}
+                    ? `文字の${NAMES.letter}と並んで流れます。プロフィールには、いつも載ります。`
+                    : `文字の${NAMES.letter}と並んで流れます。プロフィールと作品ページには、いつも載ります。`}
                 </small>
               </span>
             </label>
@@ -826,7 +826,7 @@ function ownBooks(state: TownState): { book: Book; from: string }[] {
       shelf.items.map((item) => item.bookId),
     ) ?? [];
   const sources: [string[], string][] = [
-    [shelved, "本棚"],
+    [shelved, "書店の棚"],
     [reading ? [reading] : [], "読んでいる"],
     [state.finishedBooks, "読んだ"],
     [state.library, "登録した本"],

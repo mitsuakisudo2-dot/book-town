@@ -811,7 +811,7 @@ try {
       // tapped again it comes back out, as 読みたい does.
       await box.fill("銀河 鉄道");
       const tap = page.getByRole("button", {
-        name: "『銀河鉄道の夜』を本棚に登録",
+        name: "『銀河鉄道の夜』をライブラリに登録",
       });
       await expect(tap).toHaveAttribute("aria-pressed", "false");
       await tap.click();
@@ -822,30 +822,30 @@ try {
       // Taking it out is asked first; 外さない leaves it in.
       await tap.click();
       const ask = page.getByRole("dialog", {
-        name: "本当に本棚から外しますか？",
+        name: "本当にライブラリから外しますか？",
       });
       await ask.getByRole("button", { name: "外さない" }).click();
       await expect(ask).toHaveCount(0);
       await expect(tap).toHaveAttribute("aria-pressed", "true");
       await tap.click();
-      await ask.getByRole("button", { name: "本棚から外す" }).click();
+      await ask.getByRole("button", { name: "ライブラリから外す" }).click();
       await expect(notice).toContainText(
         "『銀河鉄道の夜』の登録を取り消しました",
       );
       await expect(tap).toHaveAttribute("aria-pressed", "false");
-      // On its page the same: 本棚に登録, then 本棚に登録済み, and back.
+      // On its page the same: ライブラリに登録, then ライブラリに登録済み, and back.
       await found.first().click();
       const onPage = page.getByRole("button", {
-        name: "本棚に登録",
+        name: "ライブラリに登録",
         exact: true,
       });
       await onPage.click();
       await expect(onPage).toHaveAttribute("aria-pressed", "true");
-      await expect(onPage).toContainText("本棚に登録済み");
+      await expect(onPage).toContainText("ライブラリに登録済み");
       await onPage.click();
       await page
-        .getByRole("dialog", { name: "本当に本棚から外しますか？" })
-        .getByRole("button", { name: "本棚から外す" })
+        .getByRole("dialog", { name: "本当にライブラリから外しますか？" })
+        .getByRole("button", { name: "ライブラリから外す" })
         .click();
       await expect(onPage).toHaveAttribute("aria-pressed", "false");
       // A book read is asked about once more, saying so.
@@ -863,8 +863,8 @@ try {
       await expect(onPage).toHaveAttribute("aria-pressed", "true");
       await onPage.click();
       await page
-        .getByRole("dialog", { name: "本当に本棚から外しますか？" })
-        .getByRole("button", { name: "本棚から外す" })
+        .getByRole("dialog", { name: "本当にライブラリから外しますか？" })
+        .getByRole("button", { name: "ライブラリから外す" })
         .click();
       const again = page.getByRole("dialog", { name: "本当に外しますか？" });
       await expect(again).toContainText("読了した本です");
@@ -873,10 +873,10 @@ try {
       await expect(onPage).toHaveAttribute("aria-pressed", "true");
       await onPage.click();
       await page
-        .getByRole("dialog", { name: "本当に本棚から外しますか？" })
-        .getByRole("button", { name: "本棚から外す" })
+        .getByRole("dialog", { name: "本当にライブラリから外しますか？" })
+        .getByRole("button", { name: "ライブラリから外す" })
         .click();
-      await again.getByRole("button", { name: "本棚から外す" }).click();
+      await again.getByRole("button", { name: "ライブラリから外す" }).click();
       await expect(onPage).toHaveAttribute("aria-pressed", "false");
       // (Read, it stays read: the next checks begin from a book unread.)
       await page.evaluate(() => {
@@ -935,7 +935,7 @@ try {
       // Everyone's reading posts show before starting, whatever book they are on.
       const feed = page.locator(".reading-memos");
       await expect(
-        page.getByRole("heading", { name: "みんなの読書中のつぶやき" }),
+        page.getByRole("heading", { name: "みんなの読書中の便り" }),
       ).toBeVisible();
       await expect(feed).toContainText("もう三つ目");
       await expect(feed).toContainText("時計の音がよく聞こえる");
@@ -959,7 +959,7 @@ try {
       });
       await expect(nav.getByRole("link", { name: "読書中" })).toBeVisible();
       await page
-        .getByRole("textbox", { name: "読書中のつぶやき" })
+        .getByRole("textbox", { name: "読書中の便り" })
         .fill("ちょうど第二章。");
       await page.getByRole("button", { name: "つぶやく" }).click();
       const memo = page
@@ -1055,7 +1055,7 @@ try {
       });
       await expect(others).toBeHidden();
       await expect(
-        page.getByRole("heading", { name: "みんなの読書中のつぶやき" }),
+        page.getByRole("heading", { name: "みんなの読書中の便り" }),
       ).toBeHidden();
       await page.getByText("ひと休みに、街の読書をのぞく").click();
       await expect(others).toBeVisible();
@@ -1443,7 +1443,7 @@ try {
     await page.getByRole("link", { name: "#積読" }).first().click();
     await expect(page).toHaveURL(/\/search\//);
     await expect(
-      page.getByRole("heading", { name: /#積読 の投稿/ }),
+      page.getByRole("heading", { name: /#積読 の便り/ }),
     ).toBeVisible();
     await expect(page.locator(".search-results")).toContainText(
       "今週は一冊も買わない",
@@ -1464,7 +1464,7 @@ try {
       .click();
     await expect(page).toHaveURL(/\/search\//);
     await expect(
-      page.getByRole("heading", { name: /#雨読 の投稿/ }),
+      page.getByRole("heading", { name: /#雨読 の便り/ }),
     ).toBeVisible();
     await expect(page.locator(".search-results")).toContainText(
       "雨の日は #雨読 にかぎる",
@@ -1579,7 +1579,7 @@ try {
         "この1冊を渡したい理由（POPになります）",
       );
       await go("/my-shop/");
-      await page.getByRole("button", { name: /たった1冊の本屋/ }).click();
+      await page.getByRole("button", { name: /たった1冊の書店/ }).click();
       await page
         .getByRole("searchbox", { name: "棚に並べる本" })
         .fill("ソラリス");
@@ -1632,7 +1632,7 @@ try {
       // 戻る to the kinds and 進む again finds the same book and words.
       await page.goBack();
       await expect(
-        page.getByRole("button", { name: /たった1冊の本屋/ }),
+        page.getByRole("button", { name: /たった1冊の書店/ }),
       ).toBeVisible();
       await page.goForward();
       await expect(popField).toHaveValue("眠れない夜に、そっと渡したい。");
@@ -1645,10 +1645,10 @@ try {
       expect(await kept()).toBeNull();
       await page.reload();
       await expect(
-        page.getByRole("heading", { name: "3分で、あなたの本屋を開く" }),
+        page.getByRole("heading", { name: "3分で、あなたの書店を開く" }),
       ).toBeVisible();
       await expect(
-        page.getByRole("button", { name: /たった1冊の本屋/ }),
+        page.getByRole("button", { name: /たった1冊の書店/ }),
       ).toBeEnabled();
       await expect(
         page.getByRole("button", { name: "続きから", exact: true }),
@@ -1672,7 +1672,7 @@ try {
       const cdp = await page.context().newCDPSession(page);
       await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
       try {
-        await page.getByRole("button", { name: /たった1冊の本屋/ }).click();
+        await page.getByRole("button", { name: /たった1冊の書店/ }).click();
         await page
           .getByRole("searchbox", { name: "棚に並べる本" })
           .fill("ソラリス");
@@ -1699,7 +1699,7 @@ try {
         );
         await page.goBack();
         await expect(
-          page.getByRole("button", { name: /たった1冊の本屋/ }),
+          page.getByRole("button", { name: /たった1冊の書店/ }),
         ).toBeVisible(slow);
         await expect(page).toHaveURL(/\/my-shop\/$/);
       } finally {
@@ -1721,7 +1721,7 @@ try {
       await go("/books/fictions/");
       await page.getByRole("link", { name: "自分の書店へ" }).first().click();
       await expect(page).toHaveURL(/\/my-shop\/$/);
-      await page.getByRole("button", { name: /人生の9冊の本屋/ }).click();
+      await page.getByRole("button", { name: /人生の9冊の書店/ }).click();
       // The life nine already on the profile stand on the shelf, after it.
       await expect(page.locator(".open-shelf-book")).toHaveCount(5);
       await expect(
@@ -1755,7 +1755,7 @@ try {
       await expect(page.locator(".open-shelf-book")).toHaveCount(5);
       await page.goBack();
       await expect(
-        page.getByRole("button", { name: /人生の9冊の本屋/ }),
+        page.getByRole("button", { name: /人生の9冊の書店/ }),
       ).toBeVisible();
       await expect(page).toHaveURL(/\/my-shop\/$/);
       await page.goForward();
@@ -1866,7 +1866,7 @@ try {
       await page.getByRole("link", { name: "自分の書店へ" }).first().click();
       // One shelf: its picker opens at once, the book chosen first, then the
       // reader's own books, then the town's. The address is the page's own.
-      const picker = page.getByRole("dialog", { name: "本棚を編集" });
+      const picker = page.getByRole("dialog", { name: "棚を編集" });
       await expect(picker).toBeVisible();
       await expect(page).toHaveURL(/\/my-shop\/$/);
       const chosen = picker.getByRole("group", {
@@ -1877,7 +1877,7 @@ try {
       );
       await expect(
         picker.locator(".editor-picker-group").allTextContents(),
-      ).resolves.toEqual(["本のページから選んだ本", "あなたの本棚", "街の本"]);
+      ).resolves.toEqual(["本のページから選んだ本", "あなたのライブラリ", "街の本"]);
       await chosen.locator(".editor-book-choice").click();
       await expect(chosen.locator(".editor-book-choice")).toHaveAttribute(
         "aria-pressed",
@@ -1929,9 +1929,9 @@ try {
       await page
         .locator(".editor-shelf-panel")
         .first()
-        .getByRole("button", { name: "本棚を編集", exact: true })
+        .getByRole("button", { name: "棚を編集", exact: true })
         .click();
-      const shelfPicker = page.getByRole("dialog", { name: "本棚を編集" });
+      const shelfPicker = page.getByRole("dialog", { name: "棚を編集" });
       const shelfSearch = shelfPicker.getByLabel("追加する本を検索");
       const shelfTitles = shelfPicker.locator(
         ".editor-picker-grid:not([role]) .editor-book-choice-title",

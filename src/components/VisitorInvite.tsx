@@ -4,8 +4,9 @@ import { closeAccountRequest, useAccountRequest } from "../lib/visitor";
 import { Icon, Modal } from "./ui";
 import "./visitor.css";
 import { loginPath, walkPath } from "../lib/paths";
+import { NAMES } from "../lib/words";
 
-const INVITE_NOTE = "Book Town は今、招待した方から少しずつ始めています。";
+const INVITE_NOTE = `${NAMES.service} は今、招待した方から少しずつ始めています。`;
 
 /** Shown when a visitor who is not signed in tries to change something. */
 export function AccountInvite() {
@@ -15,7 +16,7 @@ export function AccountInvite() {
     <Modal title="本の街の住人になりませんか" onClose={closeAccountRequest}>
       <p className="modal-lead">見るだけなら、このまま歩けます。</p>
       <p className="muted">
-        本屋を開く、棚に本を並べる、投稿する、好きやひとことを届けるには、ログインが必要です。
+        書店を開く、棚に本を並べる、投稿する、好きやひとことを届けるには、ログインが必要です。
       </p>
       <div className="note-box">{INVITE_NOTE}</div>
       <div className="visitor-invite-actions">
@@ -39,21 +40,21 @@ const PAGES = {
   profile: {
     icon: "user",
     title: "あなたのページは、ログインしてから。",
-    text: "人生の9冊や、読んだ本、投稿が並ぶ、あなただけのページができます。",
+    text: `人生の9冊や、読んだ本、${NAMES.letter}が並ぶ、あなただけのページができます。`,
   },
   shop: {
     icon: "store",
     title: "あなたも、店主に。",
-    text: "ログインすると、自分の本屋を開いて、好きな本を棚に並べられます。並べた棚は、街を歩く誰かの出会いになります。",
+    text: "ログインすると、自分の書店を開いて、好きな本を棚に並べられます。並べた棚は、街を歩く誰かの出会いになります。",
   },
   notifications: {
     icon: "bell",
     title: "お知らせは、ログインしてから。",
-    text: "あなたの本屋や投稿への反応、フォローしている人の新しい投稿が、ここに届きます。",
+    text: `あなたの書店や${NAMES.letter}への反応、フォローしている人の新しい${NAMES.letter}が、ここに届きます。`,
   },
   library: {
     icon: "shelf",
-    title: "あなたの本棚は、ログインしてから。",
+    title: "あなたのライブラリは、ログインしてから。",
     text: "読み取った本、読みたい本、いいねした本が、ここに集まります。積読や読了に分けて、まとめて整理できます。",
   },
   wishlist: {

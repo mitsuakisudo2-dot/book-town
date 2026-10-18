@@ -76,7 +76,7 @@ const SPOILER_CHOICES: {
   {
     value: "leave_out",
     label: "ネタバレの印があるもの・可能性があるものは出さない",
-    told: "ネタバレの印があるもの・可能性があるものは、出さないようにします（読み終えた本の投稿は出します）",
+    told: `ネタバレの印があるもの・可能性があるものは、出さないようにします（読み終えた本の${NAMES.letter}は出します）`,
   },
 ];
 import "./profile.css";
@@ -117,7 +117,15 @@ import { focusField } from "../lib/coarse-pointer";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { VisibilitySettings } from "./VisibilitySettings";
 import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
-import { counted, nth, outOf, whenSome, failure, KEPT } from "../lib/words";
+import {
+  counted,
+  nth,
+  outOf,
+  whenSome,
+  failure,
+  KEPT,
+  NAMES,
+} from "../lib/words";
 
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
 type Collection = (typeof COLLECTIONS)[number];
@@ -511,7 +519,7 @@ export function ProfileView({
             <div className="profile-stats">
               {postCount > 0 && (
                 <span>
-                  <b>{postCount}</b> 投稿
+                  <b>{postCount}</b> {NAMES.letter}
                 </span>
               )}
               {isSelf && state.following.length > 0 && (
@@ -853,7 +861,7 @@ export function ProfileView({
             {(isSelf || publicShelves.length > 0) && (
               <div className="profile-public-shelves">
                 <h3>
-                  <Icon name="book" /> 公開している本棚
+                  <Icon name="book" /> 公開している棚
                 </h3>
                 {publicShelves.length ? (
                   <div className="profile-shelf-links">
@@ -891,7 +899,7 @@ export function ProfileView({
             )}
             {isSelf && (
               <Link className="btn" href={myShopPath()}>
-                <Icon name="edit" /> 書店と本棚を編集する
+                <Icon name="edit" /> 書店と棚を編集する
               </Link>
             )}
           </>
@@ -905,7 +913,7 @@ export function ProfileView({
             </p>
             {isSelf && (
               <Link className="btn fill" href={myShopPath()}>
-                3分で本屋を開く <Icon name="arrow" />
+                3分で書店を開く <Icon name="arrow" />
               </Link>
             )}
           </div>
@@ -1084,7 +1092,7 @@ export function ProfileView({
                   );
                 }}
               />
-              みんなのつぶやきを、たたまずに開いておく
+              みんなの{NAMES.letter}を、たたまずに開いておく
             </label>
           </fieldset>
           <fieldset className="icon-choices">

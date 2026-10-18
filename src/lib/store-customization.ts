@@ -32,7 +32,7 @@ import {
 export const STORE_TEMPLATES = [
   {
     id: "warm",
-    name: "灯りの本屋",
+    name: "灯りの書店",
     description: "琥珀の灯りと、使い込んだ木の棚。",
     variant: 0,
     wood: "#6a371d",
@@ -297,7 +297,7 @@ export function applyStoreTemplate(
   const emptyShop: Shop = {
     id: scene.storeId,
     ownerId: "",
-    name: objectById(scene, "sign")?.text ?? "私の本屋",
+    name: objectById(scene, "sign")?.text ?? "私の書店",
     tagline: objectById(scene, "greeting")?.text ?? "",
     description: "",
     theme: "sage",

@@ -393,7 +393,7 @@ async function main() {
       );
       assert.equal(
         reviewCoverWords("post", "reported"),
-        "あなたが通報した投稿です",
+        "あなたが通報した便りです",
       );
       assert.equal(
         reviewNoteWords("poster", "folded"),
@@ -401,7 +401,7 @@ async function main() {
       );
       assert.equal(
         reviewNoteWords("post", "folded"),
-        "通報があったため、運営が確かめるまで、みんなの画面ではたたんで表示しています。投稿は消えていません。",
+        "通報があったため、運営が確かめるまで、みんなの画面ではたたんで表示しています。便りは消えていません。",
       );
       assert.equal(
         reviewNoteWords("poster", "held"),

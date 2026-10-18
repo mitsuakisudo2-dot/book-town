@@ -14,6 +14,7 @@ import { FollowSuggestions } from "./FollowSuggestions";
 import { useHeld, usePaneParam, useTownReading } from "./hooks";
 import { LetterSkeletons, Letters, type Shared } from "./Letters";
 import { readOlder } from "./useArrivals";
+import { NAMES } from "../../lib/words";
 
 /** 便り drawn at a time; more come as the reader nears the end. */
 const PAGE = 20;
@@ -140,8 +141,10 @@ export function LettersOnly({
     return (
       <div className="home-letters-only">
         <div className="home-placeholder">
-          <b>まだ便りがありません</b>
-          <p>フォローした人と本屋の便りだけが、新しい順に並ぶ場所です。</p>
+          <b>まだ{NAMES.letter}がありません</b>
+          <p>
+            フォローした人と書店の{NAMES.letter}だけが、新しい順に並ぶ場所です。
+          </p>
           <button type="button" className="btn fill" onClick={onHome}>
             ホームに戻る
           </button>
@@ -161,7 +164,7 @@ export function LettersOnly({
       <div ref={further} className="home-letters-further" tabIndex={-1}>
         {!more && older.state === "reading" && (
           <p className="home-letters-more" role="status">
-            前の便りを読んでいます
+            前の{NAMES.letter}を読んでいます
           </p>
         )}
         {!more && older.state === "failed" && (
@@ -174,7 +177,7 @@ export function LettersOnly({
                 readOlderPage();
               }}
             >
-              前の便りをもう一度読む
+              前の{NAMES.letter}をもう一度読む
             </button>
           </div>
         )}
@@ -182,13 +185,13 @@ export function LettersOnly({
       {end && (
         <div className="home-letters-end">
           <Icon name="leaf" size={22} />
-          <b>便りは、ここまでです</b>
+          <b>{NAMES.letter}は、ここまでです</b>
           <button
             type="button"
             className="text-btn home-letters-home"
             onClick={onHome}
           >
-            ホームで本屋の特集を見る
+            ホームで書店の特集を見る
             <Icon name="chevron" size={16} />
           </button>
         </div>

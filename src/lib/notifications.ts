@@ -33,6 +33,7 @@ import { coverHidden } from "./hidden-words";
 import { shownToOthers } from "./visibility";
 import { someCount } from "./words";
 import { workOfId } from "./works";
+import { NAMES } from "./words";
 
 export interface Notice {
   id: string;
@@ -176,7 +177,7 @@ export function notificationsFor(
         createdAt: post.createdAt,
         // A spoiler reply is not quoted where it cannot be covered.
         text:
-          `${name(post.authorId)}さんがあなたの投稿に返信しました` +
+          `${name(post.authorId)}さんがあなたの${NAMES.letter}に返信しました` +
           (quotable(post) ? " " + quote(post.body) : ""),
         href: pageOr(
           state,
@@ -196,7 +197,7 @@ export function notificationsFor(
       id: "folded:" + post.id,
       readerId: ME_ID,
       createdAt: post.createdAt,
-      text: `ネタバレかもしれないという声があったので、あなたの投稿${quote(post.body)}をたたんで表示しています`,
+      text: `ネタバレかもしれないという声があったので、あなたの${NAMES.letter}${quote(post.body)}をたたんで表示しています`,
       href: pageOr(
         state,
         post,
@@ -235,7 +236,7 @@ export function notificationsFor(
       // No face for 匿名の読書家, not even the viewer's own.
       readerId: lead?.readerId ?? "",
       createdAt: newest,
-      text: `${likersWords(lead && name(lead.readerId), named.length - 1, anonymous)}があなたの投稿にいいねしました ${quote(post.body)}`,
+      text: `${likersWords(lead && name(lead.readerId), named.length - 1, anonymous)}があなたの${NAMES.letter}にいいねしました ${quote(post.body)}`,
       href: pageOr(
         state,
         post,
@@ -307,7 +308,7 @@ export function notificationsFor(
     const thing =
       kind === "poster"
         ? ownPosterWords(poster, state.books)
-        : "あなたの投稿" + (post ? quote(post.body) : "");
+        : `あなたの${NAMES.letter}` + (post ? quote(post.body) : "");
     notices.push({
       id: `review-${fold.state}:${key}`,
       readerId: ME_ID,
@@ -318,7 +319,7 @@ export function notificationsFor(
           : kind === "profile"
             ? "通報があったため、運営が確かめるまで、あなたの紹介文をたたんでいます"
             : kind === "shop"
-              ? "通報があったため、運営が確かめるまで、あなたの本屋の紹介文をたたんでいます"
+              ? "通報があったため、運営が確かめるまで、あなたの書店の紹介文をたたんでいます"
               : `通報があったため、運営が確かめるまで、${thing}をみんなの画面ではたたんでいます。${REPORT_KIND_WORDS[kind]}は消えていません`,
       href:
         kind === "shop"
@@ -361,7 +362,7 @@ export function notificationsFor(
       id: `message:${message.readerId}:${message.at}`,
       readerId: message.readerId,
       createdAt: message.at,
-      text: `${name(message.readerId)}さんが、あなたの本屋にひとことを残しました ${quote(message.text)}`,
+      text: `${name(message.readerId)}さんが、あなたの書店にひとことを残しました ${quote(message.text)}`,
       href: myShopPath({ at: "messages" }),
     });
   // Someone else finished a book the viewer finished too (of its work): a
@@ -397,7 +398,7 @@ export function notificationsFor(
       id: "visitors:" + weekOf(visitors.at),
       readerId: ME_ID,
       createdAt: visitors.at,
-      text: `先週、${came}があなたの本屋に立ち寄りました`,
+      text: `先週、${came}があなたの書店に立ち寄りました`,
       href: shopPath(OWN_SHOP_ID),
     });
   const active = activeSession(state);

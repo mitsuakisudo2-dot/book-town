@@ -12,7 +12,7 @@ import type { ShelfId } from "./shop-layout";
 export const SHELF_PRESETS = [
   {
     id: "warm",
-    name: "灯りの本屋",
+    name: "灯りの書店",
     variant: 0,
     wood: "#6a371d",
     paper: "#f2dfb9",

@@ -8,8 +8,8 @@ type Where = TownBackend["kind"];
 export function shelfSaveMessage(where: Where, status: PersistenceStatus) {
   if (where === "local")
     return {
-      saved: "本棚の変更は、このブラウザに保存済みです。",
-      saving: "本棚の変更は、このブラウザに保存済みです。",
+      saved: "棚の変更は、このブラウザに保存済みです。",
+      saving: "棚の変更は、このブラウザに保存済みです。",
       loading: "このブラウザの保存データを読み込んでいます。",
       unavailable: failure({
         what: "ブラウザに保存できません",
@@ -18,9 +18,9 @@ export function shelfSaveMessage(where: Where, status: PersistenceStatus) {
       recovered: "保存データを読み込めなかったため、初期状態に戻しました。",
     }[status];
   return {
-    saved: "本棚の変更は、あなたのアカウントに保存済みです。",
-    saving: "本棚の変更を保存しています…",
-    loading: "あなたの本屋を読み込んでいます。",
+    saved: "棚の変更は、あなたのアカウントに保存済みです。",
+    saving: "棚の変更を保存しています…",
+    loading: "あなたの書店を読み込んでいます。",
     unavailable: failure(WHILE_OFFLINE),
     recovered: "保存できない変更があったため、保存されている状態に戻しました。",
   }[status];
