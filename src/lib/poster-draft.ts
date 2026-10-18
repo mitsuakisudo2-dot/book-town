@@ -8,19 +8,23 @@ import {
   handOverDrafts,
   useOwnedDraft,
   type KeptDraftOptions,
+  type KeptDraftStore,
 } from "./kept-draft";
 import {
   POSTER_FONTS,
   POSTER_LIMITS,
   POSTER_TEMPLATES,
   POSTER_THEMES,
+  type Poster,
   type PosterDraft,
   type PosterPage,
 } from "./posters";
+import type { PersistenceStatus } from "./types";
 
 // A poster being made is kept in this browser while it is made, so a closed
 // tab or a slip of the 戻る button does not lose it. Cleared once it is kept
-// for real (put up, or left as a draft in the town), or thrown away.
+// for real (put up, or left as a draft in the town, and the account has it),
+// or thrown away.
 
 export const POSTER_DRAFT_KEY = "book-town-poster-drafts-v1";
 
@@ -185,4 +189,67 @@ export function usePosterDraft(key: string | null) {
     },
     clear,
   };
+}
+
+/**
+ * How kept work on one of the reader's posters stands against the poster
+ * as saved now (`savedMark`, its posterMark): still to be saved ("fresh"),
+ * begun before another version was saved over it ("stale"), or the very
+ * poster saved now ("saved", nothing left to keep).
+ */
+export function posterWorkState(
+  work: KeptPosterWork,
+  savedMark: string,
+): "fresh" | "stale" | "saved" {
+  if (posterMark(work) === savedMark) return "saved";
+  return work.from === savedMark ? "fresh" : "stale";
+}
+
+/** The town as far as a poster's save is heard from it (store.ts). */
+export interface PosterSaves {
+  subscribe(listener: () => void): () => void;
+  getSnapshot(): { posters: Poster[] };
+  getPersistenceSnapshot(): PersistenceStatus;
+}
+
+/**
+ * An account takes a poster in the background, after the editor has moved
+ * on. The work sent stays kept under `key` until the account has the very
+ * poster `posterId` sent, and is let go then. Turned away, or not sent
+ * because the poster was changed on another device, it stays kept, to be
+ * opened again; work begun since the save is never let go here.
+ */
+export function keepPosterUntilSaved(
+  store: KeptDraftStore<KeptPosterWork>,
+  key: string,
+  posterId: string,
+  saves: PosterSaves,
+) {
+  const sent = store.get(key);
+  if (!sent) return;
+  const mark = posterMark(sent);
+  let settled = false;
+  let stop = () => {};
+  const settle = () => {
+    if (settled) return;
+    const status = saves.getPersistenceSnapshot();
+    // Still on its way, or waiting out network trouble.
+    if (status !== "saved" && status !== "recovered") return;
+    settled = true;
+    stop();
+    const held = saves
+      .getSnapshot()
+      .posters.find((poster) => poster.id === posterId);
+    const work = store.get(key);
+    if (
+      status === "saved" &&
+      held &&
+      posterMark(held) === mark &&
+      work !== null &&
+      posterMark(work) === mark
+    )
+      store.clear(key);
+  };
+  stop = saves.subscribe(settle);
+  settle();
 }

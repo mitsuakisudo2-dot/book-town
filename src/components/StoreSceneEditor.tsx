@@ -106,6 +106,9 @@ export function StoreSceneEditor({
   const [resumed, setResumed] = useState<boolean | null>(null);
   if (resumed === null && kept.loaded)
     setResumed(fresh !== null || stale !== null);
+  // The reader opened work begun before the scene saved now: saving puts it
+  // in that one's place, which the editor says.
+  const [openedOver, setOpenedOver] = useState(false);
   // キャンセル with work in hand asks once whether to throw it away.
   const [stopping, setStopping] = useState(false);
   // Saved to the account, the work is let go once the account has it (also
@@ -219,6 +222,7 @@ export function StoreSceneEditor({
     kept.clear();
     setStopping(false);
     setResumed(false);
+    setOpenedOver(false);
     setPlacementId(null);
     setError("");
     handTo.current = () => signInput.current;
@@ -275,6 +279,7 @@ export function StoreSceneEditor({
                   // since, and saving puts it in that one's place.
                   kept.set({ scene: stale.scene, from: mark });
                   setResumed(true);
+                  setOpenedOver(true);
                   handTo.current = () =>
                     document.querySelector<HTMLElement>(
                       ".scene-editor-kept .kept-note-button",
@@ -728,6 +733,11 @@ export function StoreSceneEditor({
               saved={kept.saved}
               wordsLost
               onDiscard={discard}
+              lead={
+                openedOver
+                  ? "書きかけを開いています。保存すると、いま保存されている店内と入れ替わります"
+                  : undefined
+              }
             />
           )}
           <p className="scene-hint">

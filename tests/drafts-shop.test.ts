@@ -12,7 +12,9 @@ import {
 import {
   nineDraftOptions,
   nineForm,
+  nineIsStale,
   nineLosesWords,
+  nineMark,
   profileDraftOptions,
   profileForm,
   profileLosesWords,
@@ -225,6 +227,41 @@ check("the nine keep their order and words, up to nine books", () => {
     { ids: "momo", notes: {} },
   ])
     assert.equal(readNineWork(broken), null, JSON.stringify(broken));
+});
+
+check("the nine keep the mark of the saved nine they began from", () => {
+  const saved = nineForm(reader);
+  const work: NineWork = {
+    ids: ["solaris", "momo"],
+    notes: { solaris: "遠い惑星で、他者を思う。" },
+    from: nineMark(saved),
+  };
+  assert.equal(nineIsStale(work, saved), false);
+  assert.deepEqual(readNineWork(work), work);
+  // The mark reads the books in order and the word for each, not a word
+  // kept for a book taken off.
+  assert.equal(
+    nineMark({ ...saved, notes: { ...saved.notes, gone: "外した本" } }),
+    nineMark(saved),
+  );
+  assert.notEqual(
+    nineMark({ ...saved, ids: [...saved.ids].reverse() }),
+    nineMark(saved),
+  );
+  assert.notEqual(
+    nineMark({ ...saved, notes: { ...saved.notes, momo: "別の端末で" } }),
+    nineMark(saved),
+  );
+  // Another nine saved since (on another device): the work is not used on
+  // its own.
+  const elsewhere = { ...saved, ids: ["momo"] };
+  assert.equal(nineIsStale(work, elsewhere), true);
+  // Work kept before marks were kept goes on as it is.
+  const unmarked: NineWork = { ids: work.ids, notes: work.notes };
+  assert.equal(nineIsStale(unmarked, elsewhere), false);
+  assert.deepEqual(readNineWork(unmarked), unmarked);
+  for (const from of ["", 5, "x".repeat(41)])
+    assert.equal(readNineWork({ ...work, from }), null, String(from));
 });
 
 check("the shop's sign and a shelf's new name are kept as written", () => {

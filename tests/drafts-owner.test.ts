@@ -11,12 +11,18 @@ import {
 } from "../src/lib/post-draft";
 import {
   adoptVisitorPosters,
+  keepPosterUntilSaved,
   POSTER_DRAFT_KEY,
   POSTER_DRAFT_OPTIONS,
+  posterMark,
   posterWorkFor,
   posterWorkKey,
+  posterWorkState,
   type KeptPosterWork,
+  type PosterSaves,
 } from "../src/lib/poster-draft";
+import type { Poster } from "../src/lib/posters";
+import type { PersistenceStatus } from "../src/lib/types";
 
 // Post and poster drafts are kept by owner, like every other kept draft, and
 // what a browser kept before they were is given to the first owner to come.
@@ -433,6 +439,96 @@ check("signing in first takes the old drafts for the account", () => {
     "u-1:new-post",
     "u-1:review:momo",
   ]);
+});
+
+check(
+  "poster work is fresh, stale after another save, or already saved",
+  () => {
+    const saved = posterWork("海を前にした夜に");
+    const work = { ...posterWork("書きかけの見出し"), from: posterMark(saved) };
+    assert.equal(posterWorkState(work, posterMark(saved)), "fresh");
+    // Saved over since on another device: the work is not used on its own.
+    const elsewhere = posterWork("別の端末の見出し");
+    assert.equal(posterWorkState(work, posterMark(elsewhere)), "stale");
+    // The poster saved now is the very work: nothing left to keep.
+    assert.equal(posterWorkState(work, posterMark(work)), "saved");
+  },
+);
+
+/** A town whose poster saves the check settles by hand. */
+function accountTown(posters: Poster[]) {
+  const listeners = new Set<() => void>();
+  let status: PersistenceStatus = "saving";
+  const town = { posters };
+  const saves: PosterSaves = {
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getSnapshot: () => town,
+    getPersistenceSnapshot: () => status,
+  };
+  return {
+    saves,
+    report(next: PersistenceStatus, held = town.posters) {
+      status = next;
+      town.posters = held;
+      listeners.forEach((listener) => listener());
+    },
+  };
+}
+const asPoster = (work: KeptPosterWork, id = "p-1"): Poster => ({
+  id,
+  authorId: "me",
+  template: work.template,
+  theme: work.theme,
+  font: work.font,
+  pages: work.pages,
+  spoiler: work.spoiler,
+  inTimeline: work.inTimeline,
+  status: "published",
+  createdAt: work.at,
+  updatedAt: work.at,
+});
+
+check("a poster's work is kept until the account has the very poster", () => {
+  const key = posterWorkKey({ owner: "u-1", posterId: "p-1" });
+  const before = posterWork("海を前にした夜に");
+  const sent = { ...posterWork("書きかけの見出し"), from: posterMark(before) };
+  const store = posterDrafts(memory());
+  // Saved: on its way, and waiting out network trouble, it is still kept;
+  // let go once the account has it.
+  const town = accountTown([asPoster(sent)]);
+  store.set(key, sent);
+  keepPosterUntilSaved(store, key, "p-1", town.saves);
+  town.report("unavailable");
+  assert.deepEqual(store.get(key), sent);
+  town.report("saved");
+  assert.equal(store.get(key), null);
+  // Changed on another device first: the account's poster comes back and
+  // the work stays, older than it, to be opened again.
+  const raced = accountTown([asPoster(sent)]);
+  store.set(key, sent);
+  keepPosterUntilSaved(store, key, "p-1", raced.saves);
+  const elsewhere = asPoster(posterWork("別の端末の見出し"));
+  raced.report("recovered", [elsewhere]);
+  assert.deepEqual(store.get(key), sent);
+  assert.equal(posterWorkState(sent, posterMark(elsewhere)), "stale");
+  // Nothing heard afterwards lets it go.
+  raced.report("saved", [elsewhere]);
+  assert.deepEqual(store.get(key), sent);
+  // Turned away, the account's own poster comes back: the work goes on.
+  const refused = accountTown([asPoster(sent)]);
+  keepPosterUntilSaved(store, key, "p-1", refused.saves);
+  refused.report("recovered", [asPoster(before)]);
+  assert.equal(posterWorkState(store.get(key)!, posterMark(before)), "fresh");
+  // Work begun after the save is not let go with it.
+  const more = accountTown([asPoster(sent)]);
+  keepPosterUntilSaved(store, key, "p-1", more.saves);
+  const next = { ...posterWork("続きの見出し"), from: posterMark(sent) };
+  store.set(key, next);
+  more.report("saved");
+  assert.deepEqual(store.get(key), next);
 });
 
 console.log(`${passed} owned draft checks passed.`);

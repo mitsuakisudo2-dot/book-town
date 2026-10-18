@@ -20,11 +20,13 @@ import {
 import { posterNewPath, profilePath } from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
 import { usePersistenceStatus } from "../lib/store";
+import { posterMark, posterWorkKey, usePosterDraft } from "../lib/poster-draft";
 import { useUrlParam } from "../lib/url-state";
 import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import { PosterFoldCover, PosterPages } from "./PosterView";
 import { ReportButton } from "./Report";
 import { BackLink } from "./BackLink";
+import { useDraftOwner } from "./KeptDraftNote";
 import "./poster-screen.css";
 import { bookAuthor, booksById, bookTitle } from "../lib/book-name";
 import { counted } from "../lib/words";
@@ -53,6 +55,12 @@ export function PosterScreen({
   const [read, setRead] = useState(false);
   const startPage = Math.max(0, parseInt(pageParam ?? "", 10) - 1 || 0);
   const found = state.posters.find((entry) => entry.id === posterId);
+  // Work on the reader's own poster kept in this browser (a change not
+  // saved yet, or not sent because it was changed on another device first).
+  const owner = useDraftOwner();
+  const { work: keptWork } = usePosterDraft(
+    owner === null ? null : posterWorkKey({ owner, posterId }),
+  );
   // Someone else's draft is theirs alone, as if it were not there.
   const poster =
     found && (found.status === "published" || found.authorId === ME_ID)
@@ -173,6 +181,11 @@ export function PosterScreen({
               {posterBookIds(poster).length
                 ? "タイムラインには出さず、プロフィールと作品ページに貼っています。"
                 : "タイムラインには出さず、プロフィールに貼っています。"}
+            </p>
+          )}
+          {mine && keptWork && posterMark(keptWork) !== posterMark(poster) && (
+            <p className="poster-screen-fact">
+              このポスターの書きかけを、このブラウザに残しています。
             </p>
           )}
           {mine ? (

@@ -27,9 +27,12 @@ import {
   type PosterTemplate,
 } from "../lib/posters";
 import {
+  keepPosterUntilSaved,
+  posterDrafts,
   posterMark,
   posterWorkFor,
   posterWorkKey,
+  posterWorkState,
   usePosterDraft,
   type KeptPosterWork,
   type PosterWork,
@@ -38,7 +41,12 @@ import { leavePageFor } from "../lib/in-town";
 import { reviewNoteOf, reviewNoteWords } from "../lib/social";
 import { currentBookId } from "../lib/reading";
 import { booksBeforeSearch } from "../lib/book-lists";
-import { usePersistenceStatus } from "../lib/store";
+import {
+  getTownSnapshot,
+  townStore,
+  usePersistenceStatus,
+  useTownBackend,
+} from "../lib/store";
 import { posterNewPath, posterPath, profilePath } from "../lib/paths";
 import { accountRequested } from "../lib/visitor";
 import { refusedForSample } from "../lib/sample-notice";
@@ -167,7 +175,8 @@ function EditorRefusal({
 /**
  * The maker's work kept in this browser for other posters, newest first,
  * each named by its heading or its book. Work on a poster that is gone, or
- * changed since elsewhere, would not open, so it is left out.
+ * that is the very poster saved now, is nothing to go on with, so it is
+ * left out.
  */
 function workElsewhere(
   all: Record<string, KeptPosterWork>,
@@ -183,7 +192,7 @@ function workElsewhere(
         const poster = state.posters.find(
           (entry) => entry.id === posterId && entry.authorId === ME_ID,
         );
-        if (!poster || work.from !== posterMark(workOf(poster))) return [];
+        if (!poster || posterMark(work) === posterMark(poster)) return [];
       }
       const heading = work.pages
         .map((page) => page.heading.trim())
@@ -218,25 +227,41 @@ function PosterMaker({
 }: Shared & { poster?: Poster; bookId?: string }) {
   const router = useRouter();
   const owner = useDraftOwner();
-  const {
-    work: inHand,
-    kept,
-    all,
-    saved,
-    keep,
-    clear,
-  } = usePosterDraft(
+  const savedIn = useTownBackend();
+  const persistence = usePersistenceStatus();
+  const key =
     owner === null
       ? null
-      : posterWorkKey({ owner, posterId: poster?.id, bookId }),
-  );
-  // Work begun from another version of the poster (changed since, on
-  // another device) is out of date.
+      : posterWorkKey({ owner, posterId: poster?.id, bookId });
+  const { work: inHand, kept, all, saved, keep, clear } = usePosterDraft(key);
+  // Work on a poster begun from another version of it (saved since, on
+  // another device) is out of date; work that is the poster saved now is
+  // nothing left to keep.
   const from = poster ? posterMark(workOf(poster)) : undefined;
+  const standing = (entry: KeptPosterWork | null) =>
+    entry && (from === undefined ? "fresh" : posterWorkState(entry, from));
   const fresh = (entry: KeptPosterWork | null) =>
-    entry && entry.from === from ? entry : null;
+    standing(entry) === "fresh" ? entry : null;
+  // Not used unless the reader asks for it. Until they open it or throw it
+  // away the editor waits, so nothing new is written over it unasked.
+  const stale = standing(inHand) === "stale" ? inHand : null;
   const work: PosterWork =
     fresh(inHand) ?? (poster ? workOf(poster) : freshWork(bookId));
+  // Saved to the account, the work is let go once the account has it (also
+  // when it was sent from a page left since).
+  const done = standing(inHand) === "saved" && persistence === "saved";
+  useEffect(() => {
+    if (done && key) posterDrafts.clear(key);
+  }, [done, key]);
+  // The reader opened work begun before the poster saved now: saving puts
+  // it in that one's place, which the editor says.
+  const [openedOver, setOpenedOver] = useState(false);
+  const openStale = useRef<HTMLButtonElement>(null);
+  const waiting = stale !== null;
+  useEffect(() => {
+    // The editor waits on the reader's choice: the hand goes to it.
+    if (waiting) openStale.current?.focus();
+  }, [waiting]);
   const [pageIndex, setPageIndex] = useState(0);
   const at = Math.min(pageIndex, work.pages.length - 1);
   const page = work.pages[at];
@@ -309,6 +334,8 @@ function PosterMaker({
   }
 
   function change(next: PosterWork, step: Undo | null = null) {
+    // The older work is the reader's to open or throw away first.
+    if (stale) return;
     keep(next, from);
     setUndo(step);
     setFailed(null);
@@ -364,6 +391,7 @@ function PosterMaker({
   }
 
   function save(status: PosterDraft["status"]) {
+    if (stale) return;
     if (status === "published" && problem) {
       setAsked(true);
       say(problem);
@@ -386,7 +414,15 @@ function PosterMaker({
       else fail("save");
       return;
     }
-    clear();
+    // A save in this browser is done. An account takes the poster in the
+    // background, so the work stays kept, as the town now holds it, until
+    // the account has it: turned away, or changed on another device first,
+    // it is here to open again.
+    const sent = getTownSnapshot().posters.find((entry) => entry.id === id);
+    if (savedIn === "account" && key && sent) {
+      keep(workOf(sent), from);
+      keepPosterUntilSaved(posterDrafts, key, id, townStore);
+    } else clear();
     notify(
       status === "draft"
         ? "下書きに残しました。"
@@ -490,6 +526,7 @@ function PosterMaker({
                 <button
                   type="button"
                   className="poster-page-add"
+                  disabled={waiting}
                   onClick={addPage}
                 >
                   <Icon name="plus" size={14} />
@@ -501,6 +538,7 @@ function PosterMaker({
               <button
                 type="button"
                 className="text-btn quiet poster-page-remove"
+                disabled={waiting}
                 onClick={removePage}
               >
                 {nth(at + 1, "ページ")}を外す
@@ -529,6 +567,42 @@ function PosterMaker({
           // Enter in a text box never puts the poster up: only 貼り出す does.
           onSubmit={(event) => event.preventDefault()}
         >
+          {/* Work older than the poster saved since waits here, first, and
+              takes the focus; the steps wait under it. */}
+          {stale && (
+            <KeptDraftNote
+              className="poster-editor-kept"
+              continuing
+              saved={saved}
+              wordsLost
+              onDiscard={() => {
+                clear();
+                handTo.current = () =>
+                  form.current?.querySelector<HTMLElement>(
+                    "input[name='poster-template']:checked",
+                  );
+              }}
+              lead="書きかけより新しいポスターが保存されています。書きかけを開くか消すと、続けて作れます"
+              action={
+                <button
+                  type="button"
+                  ref={openStale}
+                  onClick={() => {
+                    // The reader chose it: it now goes on from the poster
+                    // saved since, and saving puts it in that one's place.
+                    keep(stale, from);
+                    setOpenedOver(true);
+                    handTo.current = () =>
+                      form.current?.querySelector<HTMLElement>(
+                        ".poster-editor-actions .kept-note-button",
+                      );
+                  }}
+                >
+                  書きかけを開く
+                </button>
+              }
+            />
+          )}
           <div role="status">
             {undo && (
               <p className="poster-editor-undo">
@@ -547,148 +621,152 @@ function PosterMaker({
             )}
           </div>
 
-          <fieldset className="poster-step">
-            <legend>
-              <span className="poster-step-number">1</span>型を選ぶ
-            </legend>
-            <div className="poster-templates">
-              {POSTER_TEMPLATES.map((template) => (
-                <label
-                  key={template}
-                  className={"poster-template is-" + template}
-                >
-                  <input
-                    type="radio"
-                    name="poster-template"
-                    value={template}
-                    checked={work.template === template}
-                    onChange={() => chooseTemplate(template)}
-                  />
-                  <TemplateSketch template={template} />
-                  <b>{POSTER_TEMPLATE_WORDS[template].name}</b>
-                  <small>{POSTER_TEMPLATE_WORDS[template].hint}</small>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          {limit.max > 0 && (
-            <BookChoice
-              state={state}
-              template={work.template}
-              chosen={page.bookIds.slice(0, limit.max)}
-              waiting={
-                page.bookIds.slice(limit.max).filter((id) => known.has(id))
-                  .length
-              }
-              onChange={chooseBooks}
-              where={work.pages.length > 1 ? `${nth(at + 1, "ページ")}に` : ""}
-            />
-          )}
-
-          <Words
-            template={work.template}
-            page={page}
-            where={work.pages.length > 1 ? `${nth(at + 1, "ページ")}の` : ""}
-            onChange={changePage}
-            step={limit.max > 0 ? 3 : 2}
-          />
-
-          <fieldset className="poster-step">
-            <legend>
-              <span className="poster-step-number">
-                {limit.max > 0 ? 4 : 3}
-              </span>
-              見た目
-            </legend>
-            <p className="poster-step-note">
-              はじめから選んであります。このままでも貼り出せます。
-            </p>
-            <div className="poster-themes" role="radiogroup" aria-label="色">
-              {POSTER_THEMES.map((theme) => {
-                const look = POSTER_THEME_STYLES[theme];
-                return (
-                  <label key={theme} className="poster-theme">
+          <fieldset className="poster-editor-steps" disabled={waiting}>
+            <fieldset className="poster-step">
+              <legend>
+                <span className="poster-step-number">1</span>型を選ぶ
+              </legend>
+              <div className="poster-templates">
+                {POSTER_TEMPLATES.map((template) => (
+                  <label
+                    key={template}
+                    className={"poster-template is-" + template}
+                  >
                     <input
                       type="radio"
-                      name="poster-theme"
-                      value={theme}
-                      checked={work.theme === theme}
-                      onChange={() => change({ ...work, theme })}
+                      name="poster-template"
+                      value={template}
+                      checked={work.template === template}
+                      onChange={() => chooseTemplate(template)}
                     />
-                    <span
-                      className="poster-swatch"
-                      style={{
-                        background: look.paper,
-                        color: look.ink,
-                        borderColor: look.accent,
-                      }}
-                      aria-hidden="true"
-                    >
-                      <i style={{ background: look.accent }} />本
-                    </span>
-                    {look.name}
+                    <TemplateSketch template={template} />
+                    <b>{POSTER_TEMPLATE_WORDS[template].name}</b>
+                    <small>{POSTER_TEMPLATE_WORDS[template].hint}</small>
                   </label>
-                );
-              })}
-            </div>
-            <div className="poster-fonts" role="radiogroup" aria-label="書体">
-              {POSTER_FONTS.map((font) => (
-                <label key={font} className={"poster-font is-" + font}>
-                  <input
-                    type="radio"
-                    name="poster-font"
-                    value={font}
-                    checked={work.font === font}
-                    onChange={() => change({ ...work, font })}
-                  />
-                  <span aria-hidden="true">本の街</span>
-                  {POSTER_FONT_NAMES[font]}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+                ))}
+              </div>
+            </fieldset>
 
-          <fieldset className="poster-step">
-            <legend>
-              <span className="poster-step-number">
-                {limit.max > 0 ? 5 : 4}
-              </span>
-              貼り出す前に
-            </legend>
-            <label className="poster-option">
-              <input
-                type="checkbox"
-                checked={work.inTimeline}
-                onChange={(event) =>
-                  change({ ...work, inTimeline: event.target.checked })
+            {limit.max > 0 && (
+              <BookChoice
+                state={state}
+                template={work.template}
+                chosen={page.bookIds.slice(0, limit.max)}
+                waiting={
+                  page.bookIds.slice(limit.max).filter((id) => known.has(id))
+                    .length
+                }
+                onChange={chooseBooks}
+                where={
+                  work.pages.length > 1 ? `${nth(at + 1, "ページ")}に` : ""
                 }
               />
-              <span>
-                タイムラインにも出す
-                <small>
-                  {/* A poster of words alone is on no book's page. */}
-                  {work.template === "text"
-                    ? "文字の投稿と並んで流れます。プロフィールには、いつも載ります。"
-                    : "文字の投稿と並んで流れます。プロフィールと作品ページには、いつも載ります。"}
-                </small>
-              </span>
-            </label>
-            <label className="poster-option">
-              <input
-                type="checkbox"
-                checked={work.spoiler}
-                onChange={(event) =>
-                  change({ ...work, spoiler: event.target.checked })
-                }
-              />
-              <span>
-                ネタバレを含む
-                <small>
-                  ポスター全体を隠して、「表示する」を押した人だけが見られます。
-                </small>
-              </span>
-            </label>
+            )}
+
+            <Words
+              template={work.template}
+              page={page}
+              where={work.pages.length > 1 ? `${nth(at + 1, "ページ")}の` : ""}
+              onChange={changePage}
+              step={limit.max > 0 ? 3 : 2}
+            />
+
+            <fieldset className="poster-step">
+              <legend>
+                <span className="poster-step-number">
+                  {limit.max > 0 ? 4 : 3}
+                </span>
+                見た目
+              </legend>
+              <p className="poster-step-note">
+                はじめから選んであります。このままでも貼り出せます。
+              </p>
+              <div className="poster-themes" role="radiogroup" aria-label="色">
+                {POSTER_THEMES.map((theme) => {
+                  const look = POSTER_THEME_STYLES[theme];
+                  return (
+                    <label key={theme} className="poster-theme">
+                      <input
+                        type="radio"
+                        name="poster-theme"
+                        value={theme}
+                        checked={work.theme === theme}
+                        onChange={() => change({ ...work, theme })}
+                      />
+                      <span
+                        className="poster-swatch"
+                        style={{
+                          background: look.paper,
+                          color: look.ink,
+                          borderColor: look.accent,
+                        }}
+                        aria-hidden="true"
+                      >
+                        <i style={{ background: look.accent }} />本
+                      </span>
+                      {look.name}
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="poster-fonts" role="radiogroup" aria-label="書体">
+                {POSTER_FONTS.map((font) => (
+                  <label key={font} className={"poster-font is-" + font}>
+                    <input
+                      type="radio"
+                      name="poster-font"
+                      value={font}
+                      checked={work.font === font}
+                      onChange={() => change({ ...work, font })}
+                    />
+                    <span aria-hidden="true">本の街</span>
+                    {POSTER_FONT_NAMES[font]}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset className="poster-step">
+              <legend>
+                <span className="poster-step-number">
+                  {limit.max > 0 ? 5 : 4}
+                </span>
+                貼り出す前に
+              </legend>
+              <label className="poster-option">
+                <input
+                  type="checkbox"
+                  checked={work.inTimeline}
+                  onChange={(event) =>
+                    change({ ...work, inTimeline: event.target.checked })
+                  }
+                />
+                <span>
+                  タイムラインにも出す
+                  <small>
+                    {/* A poster of words alone is on no book's page. */}
+                    {work.template === "text"
+                      ? "文字の投稿と並んで流れます。プロフィールには、いつも載ります。"
+                      : "文字の投稿と並んで流れます。プロフィールと作品ページには、いつも載ります。"}
+                  </small>
+                </span>
+              </label>
+              <label className="poster-option">
+                <input
+                  type="checkbox"
+                  checked={work.spoiler}
+                  onChange={(event) =>
+                    change({ ...work, spoiler: event.target.checked })
+                  }
+                />
+                <span>
+                  ネタバレを含む
+                  <small>
+                    ポスター全体を隠して、「表示する」を押した人だけが見られます。
+                  </small>
+                </span>
+              </label>
+            </fieldset>
           </fieldset>
 
           <div className="poster-editor-actions">
@@ -696,6 +774,7 @@ function PosterMaker({
               <button
                 type="button"
                 className="btn fill"
+                disabled={waiting}
                 onClick={() => save("published")}
               >
                 {published ? "直して貼り出す" : "貼り出す"}
@@ -704,6 +783,7 @@ function PosterMaker({
                 <button
                   type="button"
                   className="btn"
+                  disabled={waiting}
                   onClick={() => save("draft")}
                 >
                   下書きに残す
@@ -735,9 +815,14 @@ function PosterMaker({
               continuing={saved && fresh(kept) !== null}
               saved={saved}
               wordsLost
-              lead="書きかけは、このブラウザに残しています"
+              lead={
+                openedOver
+                  ? "書きかけを開いています。保存すると、いま保存されているポスターと入れ替わります"
+                  : "書きかけは、このブラウザに残しています"
+              }
               onDiscard={() => {
                 clear();
+                setOpenedOver(false);
                 setUndo(null);
                 setPageIndex(0);
                 // Back to the start, where the first step is.

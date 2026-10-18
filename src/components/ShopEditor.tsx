@@ -42,6 +42,7 @@ import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { useKeptDraft } from "../lib/kept-draft";
 import { openShopDraftStore } from "../lib/open-shop-draft";
+import { sceneDraftStore, sceneMark, sceneWorkKey } from "../lib/scene-draft";
 import {
   SAVE_REFUSED,
   overSaved,
@@ -983,6 +984,15 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   // The library, in its own order: the shelf picker offers it first.
   const own = useMemo(() => libraryBookIds(state), [state]);
   const ownScene = walk.scenes.find((s) => s.storeId === shop?.id);
+  // Decorating kept in this browser: not saved yet, or not sent because the
+  // scene was saved on another device first.
+  const keptScene = useKeptDraft(
+    sceneDraftStore,
+    shop ? sceneWorkKey(owner, shop.id) : null,
+  ).draft;
+  const sceneKept = Boolean(
+    keptScene && sceneMark(keptScene.scene) !== sceneMark(ownScene),
+  );
   // Whether the shop stands in the walk now, decorated or as its shelves are.
   const inWalk = ownScene
     ? hasPublicSceneBooks(ownScene, state.books)
@@ -1174,6 +1184,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           {!inWalk && (
             <p>公開する棚に本を並べると、書店めぐりに灯りがともります。</p>
           )}
+          {sceneKept && <p>店内の書きかけを、このブラウザに残しています。</p>}
         </div>
         <div>
           <button
