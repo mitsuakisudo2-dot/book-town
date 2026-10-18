@@ -284,6 +284,110 @@ async function main() {
   );
 
   await check(
+    "two devices: what one saved whole is not written over from the other",
+    async () => {
+      const ota = await reader("ota");
+      const first = await townOf(ota);
+      first.actions.createShop("二台の本屋", "", "sage");
+      await settled(first);
+      const phone = await townOf(ota);
+      const laptop = await townOf(ota);
+      const sample = demoBooks[0].id;
+      laptop.actions.addShelf("ノートの棚");
+      laptop.actions.updateNine([sample], { [sample]: "ノートで書いた" });
+      await settled(laptop);
+      phone.actions.addShelf("電話の棚");
+      phone.actions.updateNine([sample], { [sample]: "電話で書いた" });
+      await settled(phone, "recovered");
+      // The database keeps the laptop's, and the phone shows it.
+      const kept = await admin
+        .from("shop_private")
+        .select("shelves, shelves_version, shops!inner(owner_id)")
+        .eq("shops.owner_id", ota.id)
+        .single();
+      assert.ifError(kept.error);
+      assert.deepEqual(
+        (kept.data.shelves as { name: string }[]).map((shelf) => shelf.name),
+        ["はじめの本棚", "ノートの棚"],
+      );
+      assert.ok(kept.data.shelves_version > 0);
+      const town = phone.getSnapshot();
+      assert.deepEqual(
+        town.ownShop?.shelves.map((shelf) => shelf.name),
+        ["はじめの本棚", "ノートの棚"],
+      );
+      assert.deepEqual(town.me.nineNotes, { [sample]: "ノートで書いた" });
+      // Read again, the phone's next change goes in.
+      phone.actions.addShelf("電話の棚");
+      await settled(phone);
+      assert.deepEqual(
+        (await townOf(ota))
+          .getSnapshot()
+          .ownShop?.shelves.map((shelf) => shelf.name),
+        ["はじめの本棚", "ノートの棚", "電話の棚"],
+      );
+    },
+  );
+
+  await check(
+    "the scene and a poster are refused over another version, and a poster made twice at once is one",
+    async () => {
+      const uno = await reader("uno");
+      const town = await townOf(uno);
+      town.actions.createShop("飾りの本屋", "", "sage");
+      await settled(town);
+      const shop = await uno.client
+        .from("shops")
+        .select("id")
+        .eq("owner_id", uno.id)
+        .single();
+      assert.ifError(shop.error);
+      const scene = await uno.client.rpc("save_scene", {
+        shop: shop.data.id,
+        value: { objects: [] },
+        base: 5,
+      });
+      assert.equal(scene.error?.code, "PT409");
+      assert.equal(scene.status, 409);
+      // Sent twice at once (a try whose answer seemed lost, and the next):
+      // one poster, and both told it is at version 0.
+      const value = {
+        template: "text",
+        theme: "kinari",
+        font: "mincho",
+        pages: [{ blocks: [{ type: "text", text: "二度送る" }] }],
+        spoiler: false,
+        show_in_timeline: false,
+        status: "draft",
+      };
+      for (let round = 0; round < 5; round++) {
+        const id = crypto.randomUUID();
+        const answers = await Promise.all(
+          [0, 1].map(() =>
+            uno.client.rpc("save_poster", { poster: id, value }),
+          ),
+        );
+        for (const answer of answers) {
+          assert.ifError(answer.error);
+          assert.equal(answer.data, 0);
+        }
+        const over = await uno.client.rpc("save_poster", {
+          poster: id,
+          value: { ...value, theme: "navy" },
+          base: 3,
+        });
+        assert.equal(over.error?.code, "PT409");
+        assert.equal(over.status, 409);
+      }
+      const made = await admin
+        .from("posters")
+        .select("id")
+        .eq("author_id", uno.id);
+      assert.equal(made.data?.length, 5);
+    },
+  );
+
+  await check(
     "another reader sees the public shelf and never the private one",
     async () => {
       const town = (await townOf(ben)).getSnapshot();

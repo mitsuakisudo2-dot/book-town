@@ -46,7 +46,9 @@ import {
   shouldRetry,
   steadily,
   TownSyncError,
+  Versioned,
   type SyncOptions,
+  type Versions,
 } from "./sync";
 
 type Client = SupabaseClient<Database>;
@@ -135,12 +137,17 @@ async function myBooksOf(client: Client): Promise<RemoteRows["myBooks"]> {
  * same reads for both, the database deciding what each may read
  * (supabase/migrations). What only the signed-in person has (their marks,
  * follows, reactions, settings, shop) is not asked for a visitor. Their own
- * shop's id is handed back, if they have one.
+ * shop's id is handed back, if they have one, and the versions of what they
+ * save whole (versionsOf).
  */
 async function readTown(
   client: Client,
   userId: string | null,
-): Promise<{ rows: Omit<RemoteRows, "seenNotifications">; shopId?: string }> {
+): Promise<{
+  rows: Omit<RemoteRows, "seenNotifications">;
+  shopId?: string;
+  versions: Versions;
+}> {
   /** What only the signed-in person reads: nothing for a visitor. */
   const own = async <T>(read: (id: string) => Promise<T[]>): Promise<T[]> =>
     userId === null ? [] : read(userId);
@@ -334,6 +341,21 @@ async function readTown(
     userId === null
       ? undefined
       : shops.find((shop) => shop.owner_id === userId);
+  // A database that counts versions has one on every profile (write_versions).
+  const versioned =
+    typeof profiles.find((profile) => profile.id === userId)?.nine_version ===
+    "number";
+  // The person's own nine is read again after its version (read with the
+  // profiles), so the page never holds a nine older than the version it
+  // writes over: one saved on another device between the two reads is
+  // refused once and read again, not written over.
+  const ownNine =
+    versioned && userId !== null
+      ? all(client.from("profile_nine").select("*").eq("profile_id", userId))
+      : null;
+  // Waited on below; the town fails as one if it cannot be read.
+  ownNine?.catch(() => {});
+  let shelvesVersion = 0;
   let ownShelves: Json = [];
   let ownSceneBooks: Json = [];
   let ownShopFollowers = 0;
@@ -344,7 +366,12 @@ async function readTown(
       all(
         client
           .from("shop_private")
-          .select("shelves, scene_books")
+          // A database from before versions has no such column.
+          .select(
+            (versioned
+              ? "shelves, scene_books, shelves_version"
+              : "shelves, scene_books") as "shelves, scene_books, shelves_version",
+          )
           .eq("shop_id", ownShop.id),
       ),
       settled(
@@ -372,6 +399,7 @@ async function readTown(
     ]);
     ownShelves = privateRows[0]?.shelves ?? [];
     ownSceneBooks = privateRows[0]?.scene_books ?? [];
+    shelvesVersion = privateRows[0]?.shelves_version ?? 0;
     ownShopFollowers = followers.count ?? 0;
     ownShopVisitors = visitors
       ? { count: visitors.visitors, at: visitors.week_end }
@@ -381,7 +409,9 @@ async function readTown(
 
   const rows: Omit<RemoteRows, "books" | "seenNotifications"> = {
     profiles,
-    nine,
+    nine: ownNine
+      ? [...nine.filter((row) => row.profile_id !== userId), ...(await ownNine)]
+      : nine,
     shops,
     ownShelves,
     ownSceneBooks,
@@ -417,7 +447,31 @@ async function readTown(
       ),
     },
     shopId: ownShop?.id,
+    versions:
+      userId !== null && versioned
+        ? versionsOf(userId, profiles, shelvesVersion, posters)
+        : {},
   };
+}
+
+/**
+ * The versions the database counts of what the person saves whole, by the
+ * key writeStake gives each: their shelves (0 while their shop has none, or
+ * there is no shop yet), 人生の9冊 and each of their posters.
+ */
+function versionsOf(
+  userId: string,
+  profiles: Tables<"profiles">[],
+  shelves: number,
+  posters: Tables<"posters">[],
+): Versions {
+  const versions: Versions = { shelves };
+  const own = profiles.find((profile) => profile.id === userId);
+  if (own) versions.nine = own.nine_version;
+  for (const poster of posters)
+    if (poster.author_id === userId && typeof poster.version === "number")
+      versions["poster:" + poster.id] = poster.version;
+  return versions;
 }
 
 /** Reads everything the signed-in person's town shows. */
@@ -426,7 +480,13 @@ export async function loadTown(
   userId: string,
   seenNotifications: string[] = [],
   newShopId: () => string = () => crypto.randomUUID(),
-): Promise<{ state: TownState; ids: RemoteIds; ownBooksKnown: boolean }> {
+): Promise<{
+  state: TownState;
+  ids: RemoteIds;
+  ownBooksKnown: boolean;
+  /** Of what the person saves whole; none from a database without them. */
+  versions: Versions;
+}> {
   const read = await readTown(client, userId);
   const ids: RemoteIds = { userId, shopId: read.shopId ?? newShopId() };
   return {
@@ -434,6 +494,7 @@ export async function loadTown(
     ids,
     // Whether the town tells the person's own books from others' (my_books).
     ownBooksKnown: read.rows.myBooks !== undefined,
+    versions: read.versions,
   };
 }
 
@@ -704,12 +765,36 @@ const KEYS: Record<RelationTable, string> = {
   spoiler_reports: "reporter_id,post_id",
 };
 
-/** Runs one planned write. Each can run twice without harm. */
+/** The version a save_ function answers it wrote at (or already held). */
+async function savedAt(
+  request: PromiseLike<{
+    data: number | null;
+    error: { message: string; code?: string } | null;
+    status: number;
+  }>,
+): Promise<number> {
+  const { data } = await settled(request);
+  if (typeof data !== "number")
+    throw new TownSyncError("The database did not answer a version", true);
+  return data;
+}
+
+/**
+ * Runs one planned write. Each can run twice without harm. A thing saved
+ * whole (the shelves, the nine, a poster) with the version it began from
+ * (`base`) goes through the database's save_ functions, written only over
+ * that version (docs/09「版を確かめて書く」), and the versions they answer
+ * are handed back; without one (a database from before versions) it is
+ * written the old way. `versioned`: whether the database counts versions,
+ * for a poster made, which begins with none.
+ */
 export async function applyWrite(
   client: Client,
   write: Write,
   ids: RemoteIds,
-): Promise<void> {
+  base?: number,
+  versioned = false,
+): Promise<Versions | void> {
   const ignore = { ignoreDuplicates: true } as const;
   switch (write.kind) {
     case "books":
@@ -746,6 +831,16 @@ export async function applyWrite(
       );
       return;
     case "nine":
+      if (base !== undefined)
+        return {
+          nine: await savedAt(
+            client.rpc("save_nine", {
+              book_ids: write.bookIds,
+              notes: write.notes,
+              base,
+            }),
+          ),
+        };
       await settled(
         client.rpc("replace_profile_nine", {
           book_ids: write.bookIds,
@@ -764,6 +859,16 @@ export async function applyWrite(
       );
       return;
     case "shelves":
+      if (base !== undefined)
+        return {
+          shelves: await savedAt(
+            client.rpc("save_shelves", {
+              shop: write.shopId,
+              value: write.shelves as unknown as Json[],
+              base,
+            }),
+          ),
+        };
       await settled(
         client.from("shop_private").upsert({
           shop_id: write.shopId,
@@ -855,6 +960,20 @@ export async function applyWrite(
       );
       return;
     case "posters": {
+      if (versioned) {
+        // Made where it is not there yet; one there already (an earlier
+        // try whose answer was lost) takes these fields.
+        const versions: Versions = {};
+        for (const { id, author_id: _author, ...fields } of write.rows)
+          if (id)
+            versions["poster:" + id] = await savedAt(
+              client.rpc("save_poster", {
+                poster: id,
+                value: fields as unknown as Json,
+              }),
+            );
+        return versions;
+      }
       const made = await all(
         client
           .from("posters")
@@ -884,6 +1003,20 @@ export async function applyWrite(
       return;
     }
     case "update-poster":
+      // On a database that counts versions, never the old way: a poster
+      // whose version this page does not know (its making was refused, or
+      // changed elsewhere) is written only over the version it was made at,
+      // and one not there is told as taken down.
+      if (base !== undefined || versioned)
+        return {
+          ["poster:" + write.id]: await savedAt(
+            client.rpc("save_poster", {
+              poster: write.id,
+              value: write.patch as unknown as Json,
+              base: base ?? 0,
+            }),
+          ),
+        };
       await settled(
         client
           .from("posters")
@@ -1022,6 +1155,8 @@ export function accountTownBackend(
   const device = options.device ?? (storage ? undefined : null);
   let ids: RemoteIds | null = null;
   let ownBooksKnown = false;
+  // Whether the database counts versions (write_versions), as last read.
+  let versioned = false;
   const sync = backgroundSync<TownState, Write>(
     {
       async read() {
@@ -1033,17 +1168,18 @@ export function accountTownBackend(
         );
         ids = loaded.ids;
         ownBooksKnown = loaded.ownBooksKnown;
+        versioned = "nine" in loaded.versions;
         // The 見本 keep the town from feeling empty while few have opened a
         // shop; they are left out of what is written (planWrites).
-        return withSamples(loaded.state);
+        return new Versioned(withSamples(loaded.state), loaded.versions);
       },
       plan(base, target) {
         if (!ids) throw new TownSyncError("The town is not loaded yet", true);
         return planWrites(base, target, ids);
       },
-      async apply(write) {
+      async apply(write, base) {
         if (!ids) throw new TownSyncError("The town is not loaded yet", true);
-        await applyWrite(client, write, ids);
+        return applyWrite(client, write, ids, base, versioned);
       },
       split: splitWrite,
       stake: writeStake,

@@ -73,6 +73,7 @@ const profile = (id: string, handle: string): Tables<"profiles"> => ({
   links: [],
   compose_icon: "pen",
   reading_visibility: "private",
+  nine_version: 0,
   created_at: at,
   updated_at: at,
 });
@@ -185,6 +186,7 @@ const posterRow = (
   show_in_timeline: true,
   allow_display: true,
   status: "published",
+  version: 0,
   created_at: at,
   updated_at: at,
   ...extra,
@@ -920,7 +922,8 @@ async function main() {
       // read with allRows (sync.ts). A read that stops at a number has to
       // be one of these, each read on past it another way: the newest 便り
       // and books (with newer, older and the books the rows point to), and
-      // the newest 注釈 of a page.
+      // the newest 注釈 of a page; or one that reads no row at all (whether
+      // the database counts versions, before the reader has a shop).
       const root = path.resolve(__dirname, "..");
       const found: Record<string, string[]> = {};
       for (const entry of readdirSync(path.join(root, "src"), {
@@ -943,6 +946,7 @@ async function main() {
           "NEWER_MAX",
           "size",
         ],
+        "src/lib/supabase/walk-backend.ts": ["0"],
       });
     },
   );
@@ -1116,7 +1120,11 @@ async function main() {
       for (const fake of [signedIn, visiting]) {
         const starts = (table: string) =>
           fake.asked
-            .filter((ask) => ask.table === table)
+            .filter(
+              (ask) =>
+                ask.table === table &&
+                !ask.filters.includes("profile_id=eq." + AKI),
+            )
             .map((ask) => ask.from);
         for (const table of [
           "profiles",
@@ -1128,6 +1136,16 @@ async function main() {
           assert.deepEqual(starts(table), [0, 999], table);
         assert.deepEqual(starts("reading_entries"), [0, 999, 1998]);
       }
+      // The reader's own nine is read once more, after its version
+      // (write_versions); a visitor has none.
+      const ownNine = (fake: typeof signedIn) =>
+        fake.asked.filter(
+          (ask) =>
+            ask.table === "profile_nine" &&
+            ask.filters.includes("profile_id=eq." + AKI),
+        ).length;
+      assert.equal(ownNine(signedIn), 1);
+      assert.equal(ownNine(visiting), 0);
     },
   );
 
