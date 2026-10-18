@@ -39,7 +39,7 @@ import { booksBeforeSearch } from "../lib/book-lists";
 import { Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
 import "./poster-screen.css";
-import { posterNewPath, searchPath } from "../lib/paths";
+import { posterNewPath, searchPath, timelinePath } from "../lib/paths";
 import { leaveLayers } from "../lib/back-layer";
 import { LetterCard } from "./letter/LetterCard";
 import {
@@ -168,7 +168,7 @@ export function ProfilePosts({
                 : `まだ${NAMES.letter}はありません。`}
             </p>
             {self && (
-              <Link href="/timeline/" className="btn">
+              <Link href={timelinePath()} className="btn">
                 タイムラインで書く
               </Link>
             )}

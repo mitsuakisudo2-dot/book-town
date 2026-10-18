@@ -2515,7 +2515,7 @@ try {
         await steps.getByRole("link", { name: /棚を作る/ }).tap();
         await expect(page).toHaveURL(`${baseURL}/library/`);
         await expect(
-          page.getByRole("dialog", { name: "棚を作る" }),
+          page.getByRole("dialog", { name: "本棚をつくる" }),
         ).toBeVisible();
         await page.goBack();
         await goHome();

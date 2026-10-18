@@ -64,6 +64,15 @@ export const myShopPath = (
 export const notificationsPath = (at?: string): string =>
   "/notifications/" + (at ? "#" + at : "");
 
+/** Home's second page, the 便り (rewritten in place with `/` by the home tab). */
+export const timelinePath = (): string => "/timeline/";
+
+/** Where the sources of the book data are named. */
+export const creditsPath = (): string => "/credits/";
+
+/** The reading list. */
+export const readingListPath = (): string => "/reading-list/";
+
 /** Leaving Booktown (退会). */
 export const leavePath = (): string => "/leave/";
 
