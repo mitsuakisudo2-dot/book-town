@@ -4171,6 +4171,10 @@ try {
           "別の端末で先に棚が変わっていたため、この端末で直した棚を残しています",
         );
         await shot("shelves-elsewhere-kept");
+        await kept.evaluate((note) => note.scrollIntoView({ block: "center" }));
+        await page.screenshot({
+          path: path.join(output, "shelves-elsewhere-kept-view.png"),
+        });
         // Put back in place of the shelves saved since, over their version.
         await kept
           .getByRole("button", { name: "この端末の棚にする", exact: true })
@@ -4187,6 +4191,12 @@ try {
         ).toEqual([["はじめの本棚", false]]);
         await expect(page.getByText(/保存できませんでした/)).toHaveCount(0);
         await shot("shelves-elsewhere-put-back");
+        await name.evaluate((field) =>
+          field.scrollIntoView({ block: "center" }),
+        );
+        await page.screenshot({
+          path: path.join(output, "shelves-elsewhere-put-back-view.png"),
+        });
         // Saved: nothing is left to keep.
         await expect(kept).toHaveCount(0);
         await expect
