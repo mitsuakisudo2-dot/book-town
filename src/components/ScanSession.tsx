@@ -38,9 +38,13 @@ import {
   undoScan,
   useJournal,
   useJournalKept,
-  type ScanItemState,
   type Sent,
 } from "../lib/library-journal";
+import {
+  DEFAULT_SHELVES,
+  READING_STATUSES,
+  type ReadingStatus,
+} from "../lib/library";
 import { saveWarning } from "../lib/persistence";
 import {
   closingNotice,
@@ -49,8 +53,10 @@ import {
   noteOther,
   noteRead,
   noteTaken,
+  NOTICE_MS,
   NO_READS,
   readBarcode,
+  scanCount,
   scanReaction,
   SCAN_COPY,
   stillInView,
@@ -64,7 +70,7 @@ import {
   useTownBackend,
   useTownReady,
 } from "../lib/store";
-import type { Book, Notify, TownActions, TownState } from "../lib/types";
+import type { Notify, TownActions, TownState } from "../lib/types";
 import {
   keepTiming,
   noteDone,
@@ -81,17 +87,19 @@ import { ScanTiming } from "./ScanTiming";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
 import { bookAuthor, bookById, bookByIsbn, bookTitle } from "../lib/book-name";
-import { counted } from "../lib/words";
 
-// The continuous scanner (plan 7-1, flow A): the camera stays open and every
-// book read is registered at once, with no question about reading status,
-// shelf or visibility. Two taps in all: open, and ［終わる］. Barcodes are
-// read by the browser's own reader, or by ZXing in WebAssembly where there is
-// none (Safari on the iPhone; barcode-reader.ts). Where neither can, or the
-// camera is refused, ISBNs are typed one after another instead. Every read
-// goes into the scan journal first (library-journal.ts), so a book read
-// offline, while the town loads, or just before the tab is closed is
-// registered later.
+// The continuous scanner (plan 7-1, flow A; けにーさんの引き継ぎ資料 v1.1 and
+// Figma v4's 01, 2026-10-18): the camera stays open, small, over the list of
+// this time's books, newest first, and every book read is registered at
+// once, with no question about reading status, shelf or visibility. A book
+// in the list can be given 読了・積読・読書中 there and then, or never. Two
+// taps in all: open, and ［完了］. Barcodes are read by the browser's own
+// reader, or by ZXing in WebAssembly where there is none (Safari on the
+// iPhone; barcode-reader.ts). Where neither can, or the camera is refused,
+// ISBNs are typed one after another instead. Every read goes into the scan
+// journal first (library-journal.ts), so a book read offline, while the town
+// loads, or just before the tab is closed is registered later; it says
+// 登録しました only once the journal let it go, its save confirmed.
 
 const canRead = () =>
   Boolean(readerKind() && navigator.mediaDevices?.getUserMedia);
@@ -136,23 +144,19 @@ interface Card {
   author?: string;
   shows: Shows;
 }
-/** What the card says instead of its own state, for a read that changed nothing. */
+/**
+ * What a card shows now: as it came to, but "saving" for a book in the
+ * library whose save is not confirmed yet, and "refused" once the database
+ * turned it away after all.
+ */
+type ShownNow = Shows | "saving";
+/** A remark over the camera about a read that changed nothing new. */
 type Say =
-  | "same"
-  | "again-in"
-  | "again-already"
-  | "again-held"
-  | "already"
-  | "held"
-  | "undone"
-  | "not-yet";
-interface Current {
-  cardId?: string;
-  /** A book not in this session's cards (in the library, or held). */
-  book?: Book;
-  isbn?: string;
-  title?: string;
-  say?: Say;
+  "again-in" | "again-already" | "again-held" | "already" | "held" | "not-yet";
+interface Notice {
+  /** The book's title, or its ISBN. */
+  name: string;
+  say: Say;
 }
 
 const KEPT: Shows[] = [
@@ -163,6 +167,13 @@ const KEPT: Shows[] = [
   "unavailable",
 ];
 const UNDOABLE: Shows[] = ["added", ...KEPT];
+
+/** 読了・積読・読書中 on every card, in the library's order (資料 4章). */
+const STATUS_BUTTONS = DEFAULT_SHELVES.flatMap((shelf) =>
+  READING_STATUSES.includes(shelf.key as ReadingStatus)
+    ? [{ status: shelf.key as ReadingStatus, label: shelf.label }]
+    : [],
+);
 
 /** What a card shows once its read was sent. */
 function showsOf(
@@ -185,30 +196,33 @@ function showsOf(
 }
 
 /**
- * The session's books by what they came to: registered, waiting for a
- * title (書名待ち), and kept on the device for another reason. A refusal
- * after the card said 登録しました takes it back.
+ * The session's books by what they came to. For the count at the top:
+ * saved, on their way (a title asked for, saving, the town loading, no
+ * network), and waiting for the reader (書名待ち, the account unreadable, a
+ * save refused). For the notice on closing: registered (saved or saving),
+ * waiting for a title, and kept on the device for another reason.
  */
-function tally(cards: Card[], states: Map<string, ScanItemState>) {
-  const shown = (card: Card): Shows =>
-    states.get(card.id) === "refused" ? "refused" : card.shows;
-  const count = (...kinds: Shows[]) =>
+function tally(cards: Card[], shown: (card: Card) => ShownNow) {
+  const count = (...kinds: ShownNow[]) =>
     cards.filter((card) => kinds.includes(shown(card))).length;
   return {
-    added: count("added"),
-    waiting: count("untitled", "offline"),
-    later: count("looking", "waiting", "unavailable"),
+    saved: count("added"),
+    checking: count("looking", "saving", "waiting", "offline"),
+    attention: count("untitled", "unavailable", "refused"),
+    closing: {
+      added: count("added", "saving"),
+      waiting: count("untitled", "offline"),
+      later: count("looking", "waiting", "unavailable"),
+    },
   };
 }
 
 const SAYS: Record<Say, string> = {
-  same: SCAN_COPY.card.same,
   "again-in": SCAN_COPY.card.againIn,
   "again-already": SCAN_COPY.card.already,
   "again-held": SCAN_COPY.card.held,
   already: SCAN_COPY.card.already,
   held: SCAN_COPY.card.held,
-  undone: SCAN_COPY.card.undone,
   "not-yet": SCAN_COPY.card.notYet,
 };
 
@@ -323,6 +337,30 @@ function useScanSound() {
   return { on, toggle, play, wake };
 }
 
+/**
+ * The screen stays on while the camera reads (資料 10章 ⑩): a phone that
+ * dims halfway through fifty books stops the reading. Where the browser
+ * cannot keep it on, it dims as it would.
+ */
+function useScreenKeptOn(on: boolean) {
+  useEffect(() => {
+    if (!on || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let stopped = false;
+    void navigator.wakeLock.request("screen").then(
+      (got) => {
+        if (stopped) void got.release().catch(() => {});
+        else lock = got;
+      },
+      () => {},
+    );
+    return () => {
+      stopped = true;
+      void lock?.release().catch(() => {});
+    };
+  }, [on]);
+}
+
 export function ScanSession({
   state,
   actions,
@@ -356,8 +394,18 @@ export function ScanSession({
   const [torch, setTorch] = useState<boolean | null>(null);
   const torchTrack = useRef<MediaStreamTrack | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
-  const [current, setCurrent] = useState<Current | null>(null);
-  const [flash, setFlash] = useState(0);
+  /** A remark over the camera about the last read. */
+  const [notice, setNotice] = useState<Notice | null>(null);
+  /** The card that lights up for a read of its book. */
+  const [flash, setFlash] = useState<{ id: string; at: number } | null>(null);
+  /** The card whose ⋮ is open: the camera reads nothing new meanwhile. */
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  /** The camera made larger (カメラ集中表示), for a code it does not catch. */
+  const [large, setLarge] = useState(false);
+  /** Books entered by hand whose save is not confirmed yet. */
+  const [savingByHand, setSavingByHand] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [hint, setHint] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
@@ -381,7 +429,10 @@ export function ScanSession({
   }, [gap, area, timingSettings]);
   const reads = useRef<SessionReads>(NO_READS);
   const inView = useRef<InView>({});
-  const flashedAt = useRef(0);
+  const paused = useRef(false);
+  useEffect(() => {
+    paused.current = menuFor !== null;
+  }, [menuFor]);
   const manualCount = useRef(0);
   const closed = useRef(false);
   const layer = useRef<HTMLDivElement>(null);
@@ -389,7 +440,7 @@ export function ScanSession({
   const video = useRef<HTMLVideoElement>(null);
   const guide = useRef<HTMLSpanElement>(null);
   const field = useRef<HTMLInputElement>(null);
-  const shelf = useRef<HTMLOListElement>(null);
+  const list = useRef<HTMLOListElement>(null);
   // What had the focus as the scanner opened, before anything in it took it.
   const opener = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
@@ -429,9 +480,26 @@ export function ScanSession({
 
   const states = new Map(items.map((item) => [item.id, item.state]));
   useEffect(timeSaves, [items, timeSaves]);
-  const shown = (card: Card): Shows =>
-    states.get(card.id) === "refused" ? "refused" : card.shows;
-  const { added, waiting, later } = tally(cards, states);
+  const shown = (card: Card): ShownNow =>
+    states.get(card.id) === "refused"
+      ? "refused"
+      : card.shows !== "added"
+        ? card.shows
+        : // The town cannot be saved here: the journal keeps the book until
+          // it can, or until the page is opened again.
+          states.has(card.id) && persistence === "unavailable"
+          ? "unavailable"
+          : states.has(card.id) || savingByHand.has(card.id)
+            ? "saving"
+            : "added";
+  const counts = tally(cards, shown);
+
+  // A book entered by hand is saved once the town says all it had is: the
+  // same as the journal lets its items go (settleJournal).
+  useEffect(() => {
+    if (persistence === "saved" && savingByHand.size)
+      setSavingByHand(new Set());
+  }, [persistence, savingByHand]);
 
   /** Updates the cards from what sending their items came to. */
   const settle = useCallback(
@@ -462,12 +530,6 @@ export function ScanSession({
           };
         }),
       );
-      // The card shows what its read came to, over a remark about it.
-      setCurrent((shownNow) =>
-        shownNow?.cardId && byId.has(shownNow.cardId)
-          ? { cardId: shownNow.cardId }
-          : shownNow,
-      );
     },
     [time, timeSaves],
   );
@@ -490,18 +552,24 @@ export function ScanSession({
     [settle],
   );
 
-  const flashCard = () => {
+  /** Lights the card up; once, not again while it still is. */
+  const flashCard = (id: string) => {
     const now = Date.now();
-    // Once: not again while a flash is still showing.
-    if (now - flashedAt.current < 800) return;
-    flashedAt.current = now;
-    setFlash(now);
+    setFlash((was) =>
+      was?.id === id && now - was.at < 800 ? was : { id, at: now },
+    );
   };
   useEffect(() => {
     if (!flash) return;
-    const timer = setTimeout(() => setFlash(0), 900);
+    const timer = setTimeout(() => setFlash(null), 900);
     return () => clearTimeout(timer);
   }, [flash]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  const nameOf = (card: Card) => card.title ?? card.isbn ?? "";
 
   /** One ISBN read, by the camera or typed. */
   function onRead(isbn: string, via: "scan" | "isbn") {
@@ -527,35 +595,36 @@ export function ScanSession({
       (code) => heldItem(libraryJournal, reader, generation, code),
     );
     setHint(null);
-    // Every read shows on the card: on an iPhone there is no vibration, and
+    // Every read shows on its card: on an iPhone there is no vibration, and
     // in silent mode no sound either.
-    flashCard();
+    const shownCard = shownCards.findLast((entry) => entry.isbn === isbn);
+    if (shownCard) flashCard(shownCard.id);
     const timedAt = performance.now();
     if (reaction.kind !== "same" && reaction.kind !== "new")
       time((now) =>
         noteReadAt(now, `again-${now.reads.length}`, timedAt, false),
       );
+    // The same book again within 3 seconds: its card lights up, and that
+    // is all.
     if (reaction.kind === "same") {
       reads.current = noteRead(reads.current, isbn, at, null);
-      setCurrent((shownNow) => ({ ...(shownNow ?? {}), say: "same" }));
       return;
     }
     if (reaction.kind !== "new") {
       sound.play("nothing-new");
       if (reaction.kind === "again") {
         reads.current = noteRead(reads.current, isbn, at, null);
-        const card = shownCards.findLast((entry) => entry.isbn === isbn);
         const book = libraryBookByIsbn(town, isbn);
-        setCurrent({
-          ...(card ? { cardId: card.id } : book ? { book } : { isbn }),
+        setNotice({
+          name: shownCard ? nameOf(shownCard) : book ? bookTitle(book) : isbn,
           say: `again-${reaction.was}`,
         });
       } else if (reaction.kind === "already") {
         reads.current = noteRead(reads.current, isbn, at, "already");
-        setCurrent({ book: reaction.book, say: "already" });
+        setNotice({ name: bookTitle(reaction.book), say: "already" });
       } else {
         reads.current = noteRead(reads.current, isbn, at, "held");
-        setCurrent({ isbn, title: reaction.item.title, say: "held" });
+        setNotice({ name: reaction.item.title ?? isbn, say: "held" });
       }
       return;
     }
@@ -588,7 +657,8 @@ export function ScanSession({
         shows: "looking",
       },
     ]);
-    setCurrent({ cardId: item.id });
+    setNotice(null);
+    flashCard(item.id);
     send(reader, [item.id]);
   }
 
@@ -794,7 +864,13 @@ export function ScanSession({
         if (stopped) return;
         // Until the reader's account is known nothing is read, and a book
         // held in view meanwhile is still new once it is.
-        if (element.readyState >= 2 && latest.current.owner) {
+        // Nor while a card's ⋮ is open (資料 10章 ④): what the camera holds
+        // then is new once it closes.
+        if (
+          element.readyState >= 2 &&
+          latest.current.owner &&
+          !paused.current
+        ) {
           let codes: string[] = [];
           const began = performance.now();
           try {
@@ -967,23 +1043,34 @@ export function ScanSession({
     focusField(field.current, { asked: true, preventScroll: true });
   }
 
-  const lastCard = cards.at(-1);
-  function undo() {
+  /** ⋮ ［登録を取り消す］: any book of this time, whatever its card last showed. */
+  function undo(card: Card) {
     refocus();
-    if (!owner || !lastCard) return;
-    if (
-      undoScan(libraryJournal, owner, journalTown, lastCard.id) === "not-yet"
-    ) {
-      setCurrent({ cardId: lastCard.id, say: "not-yet" });
+    setMenuFor(null);
+    if (!owner) return;
+    if (undoScan(libraryJournal, owner, journalTown, card.id) === "not-yet") {
+      setNotice({ name: nameOf(card), say: "not-yet" });
       return;
     }
-    if (lastCard.isbn) reads.current = forgetRead(reads.current, lastCard.isbn);
+    if (card.isbn) reads.current = forgetRead(reads.current, card.isbn);
     setCards((list) =>
-      list.map((card) =>
-        card.id === lastCard.id ? { ...card, shows: "undone" } : card,
+      list.map((entry) =>
+        entry.id === card.id ? { ...entry, shows: "undone" } : entry,
       ),
     );
-    setCurrent({ cardId: lastCard.id, say: "undone" });
+    setSavingByHand((was) => {
+      if (!was.has(card.id)) return was;
+      const next = new Set(was);
+      next.delete(card.id);
+      return next;
+    });
+  }
+
+  /** 読了・積読・読書中 on a card: set, or pressed again, taken off. */
+  function sort(bookId: string, status: ReadingStatus) {
+    refocus();
+    const lit = state.libraryEntries[bookId]?.status === status;
+    actions.changeLibrary([bookId], { status: lit ? null : status });
   }
 
   // ［手で入力］: the one-book form over the scanner. What it registers joins
@@ -1019,7 +1106,10 @@ export function ScanSession({
               shows: "added",
             },
           ]);
-          setCurrent({ cardId });
+          // Saved at once in the demo; an account's save is waited for.
+          if (journalTown.status() !== "saved")
+            setSavingByHand((was) => new Set(was).add(cardId));
+          flashCard(cardId);
         }
         return done;
       },
@@ -1049,13 +1139,14 @@ export function ScanSession({
   function finish() {
     if (closed.current) return;
     closed.current = true;
+    const { added, waiting, later } = counts.closing;
     onClose(added + waiting + later > 0);
     const asking = [...inFlight.current];
-    const tell = (counts: ReturnType<typeof tally>) => {
-      const notice = closingNotice(counts);
-      if (notice) notify(notice);
+    const tell = (closing: typeof counts.closing) => {
+      const told = closingNotice(closing);
+      if (told) notify(told);
     };
-    if (!asking.length) return tell({ added, waiting, later });
+    if (!asking.length) return tell(counts.closing);
     const { savedIn: where, owner: reader } = latest.current;
     void Promise.allSettled(asking).then((answers) => {
       const came = new Map<string, Shows>();
@@ -1063,6 +1154,11 @@ export function ScanSession({
         if (answer.status === "fulfilled")
           for (const { item, result } of answer.value)
             came.set(item.id, showsOf(result, where));
+      const refused = new Set(
+        (reader ? libraryJournal.items(reader) : [])
+          .filter((item) => item.state === "refused")
+          .map((item) => item.id),
+      );
       tell(
         tally(
           cards.map((card) =>
@@ -1070,13 +1166,8 @@ export function ScanSession({
               ? card
               : { ...card, shows: came.get(card.id) ?? card.shows },
           ),
-          new Map(
-            (reader ? libraryJournal.items(reader) : []).map((item) => [
-              item.id,
-              item.state,
-            ]),
-          ),
-        ),
+          (card) => (refused.has(card.id) ? "refused" : card.shows),
+        ).closing,
       );
     });
   }
@@ -1126,13 +1217,36 @@ export function ScanSession({
     };
   }, []);
 
-  // The newest spine stays in sight.
-  useEffect(() => {
-    const row = shelf.current;
-    if (row) row.scrollLeft = row.scrollWidth;
+  // A new book goes on top of the list. While the reader is down the list,
+  // or has a finger on it, what they look at stays where it is: the list
+  // moves by the new card (資料 4章: a button about to be pressed never moves).
+  const touching = useRef(false);
+  const shownCount = useRef(0);
+  useLayoutEffect(() => {
+    const element = list.current;
+    const added = cards.length - shownCount.current;
+    shownCount.current = cards.length;
+    if (!element || added <= 0) return;
+    if (element.scrollTop <= 0 && !touching.current) return;
+    const first = element.children[added]?.getBoundingClientRect().top;
+    const top = element.firstElementChild?.getBoundingClientRect().top;
+    if (first !== undefined && top !== undefined)
+      element.scrollTop += first - top;
   }, [cards.length]);
 
+  useScreenKeptOn(input.kind === "camera" && input.phase === "running");
+
   const bookOf = (bookId?: string) => bookById(state.books, bookId);
+  /**
+   * The library's book a card is now: its own, or, for one found in the
+   * library while it was sent, that one.
+   */
+  const libraryIdOf = (card: Card): string | undefined =>
+    card.bookId && state.library.includes(card.bookId)
+      ? card.bookId
+      : card.isbn
+        ? libraryBookByIsbn(state, card.isbn)?.id
+        : undefined;
 
   // The banner: one line, the most pressing first.
   const banner = !owner
@@ -1147,71 +1261,36 @@ export function ScanSession({
             ? SCAN_COPY.banner.notKept
             : saveWarning(savedIn, persistence);
 
-  const countText =
-    added > 0
-      ? `この回 ${counted(added, "冊")}` +
-        (waiting > 0 ? `・書名待ち ${counted(waiting, "冊")}` : "")
-      : waiting > 0
-        ? `書名待ち ${counted(waiting, "冊")}`
-        : "";
+  const countText = scanCount(counts);
 
-  // The card: what the last read came to.
-  const card = current?.cardId
-    ? cards.find((entry) => entry.id === current.cardId)
-    : undefined;
-  const cardShows = card ? shown(card) : undefined;
-  const cardBook =
-    current?.book ??
-    (card && cardShows && !KEPT.includes(cardShows)
-      ? bookOf(card.bookId)
-      : undefined);
-  const cardIsbn = card?.isbn ?? current?.isbn ?? cardBook?.isbn;
-  const untitled = cardShows === "untitled" || cardShows === "offline";
-  const line1 = !current
-    ? null
-    : ((cardBook && bookTitle(cardBook)) ??
-      card?.title ??
-      current.title ??
-      (untitled || current.say === "held"
-        ? SCAN_COPY.card.untitledTitle
-        : (cardIsbn ?? "")));
-  const author = (cardBook && bookAuthor(cardBook)) ?? card?.author;
-  // Typing, the field's own line says it: the card waits empty.
-  const line2 = !current
-    ? !owner
-      ? SCAN_COPY.preparing
-      : typing
-        ? ""
-        : SCAN_COPY.firstCamera
-    : current.say
-      ? SAYS[current.say]
-      : cardShows === "untitled"
-        ? `${cardIsbn}・${SCAN_COPY.card.untitled}`
-        : cardShows === "offline"
-          ? `${cardIsbn}・${SCAN_COPY.card.offline}`
-          : cardShows
-            ? {
-                looking: SCAN_COPY.card.looking,
-                added: SCAN_COPY.card.added,
-                already: SCAN_COPY.card.already,
-                waiting: SCAN_COPY.card.waiting,
-                unavailable: SCAN_COPY.card.unavailable,
-                refused: SCAN_COPY.card.refused,
-                undone: SCAN_COPY.card.undone,
-              }[cardShows as Exclude<Shows, "untitled" | "offline">]
-            : "";
-  const canUndo =
-    Boolean(card) &&
-    card === lastCard &&
-    cardShows !== undefined &&
-    UNDOABLE.includes(cardShows) &&
-    current?.say !== "undone";
-  const undoName = card?.title ?? card?.isbn ?? "";
+  /** What a card says under its title. */
+  const stateLine = (card: Card, now: ShownNow): string =>
+    now === "untitled"
+      ? `${card.isbn}・${SCAN_COPY.card.untitled}`
+      : now === "offline"
+        ? `${card.isbn}・${SCAN_COPY.card.offline}`
+        : {
+            looking: SCAN_COPY.card.looking,
+            saving: SCAN_COPY.card.saving,
+            added: SCAN_COPY.card.added,
+            already: SCAN_COPY.card.already,
+            waiting: SCAN_COPY.card.waiting,
+            unavailable: SCAN_COPY.card.unavailable,
+            refused: SCAN_COPY.card.refused,
+            undone: SCAN_COPY.card.undone,
+          }[now];
 
   const typingNote =
     input.kind === "typing" && input.why !== "chosen"
       ? SCAN_COPY.note[input.why]
       : null;
+  // Back to the camera only where asking again could help: not for a
+  // browser that cannot read barcodes, a camera refused, or none at all.
+  const cameraAgain =
+    input.kind === "typing" &&
+    input.why !== "denied" &&
+    input.why !== "no-reader" &&
+    input.why !== "no-camera";
 
   return (
     <div
@@ -1235,20 +1314,27 @@ export function ScanSession({
           <p className="scan-count" aria-live="polite">
             {countText}
           </p>
-          <button
-            type="button"
-            className={"icon-btn scan-sound" + (sound.on ? "" : " is-off")}
-            aria-label="音"
-            aria-pressed={sound.on}
-            onPointerDown={typing ? keepFocus : undefined}
-            onClick={() => {
-              sound.toggle();
-              refocus();
-            }}
-          >
-            <span aria-hidden="true">♪</span>
-            {!sound.on && <small aria-hidden="true">オフ</small>}
-          </button>
+          {input.kind === "camera" ? (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={SCAN_COPY.typeIsbn}
+              onClick={typeIsbn}
+            >
+              <Icon name="keyboard" />
+            </button>
+          ) : cameraAgain ? (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={SCAN_COPY.useCamera}
+              onClick={() => setInput({ kind: "camera", phase: "starting" })}
+            >
+              <Icon name="camera" />
+            </button>
+          ) : (
+            <span aria-hidden="true" />
+          )}
         </div>
         {banner && (
           <p className="scan-banner" role="status">
@@ -1292,9 +1378,31 @@ export function ScanSession({
                 <p>{SCAN_COPY.note.settings}</p>
               )}
             </div>
+            <div className="scan-typing-foot">
+              <button
+                type="button"
+                className="text-btn scan-by-hand"
+                onClick={openManual}
+              >
+                {SCAN_COPY.byHand}
+              </button>
+              <button
+                type="button"
+                className={"icon-btn scan-sound" + (sound.on ? "" : " is-off")}
+                aria-label={SCAN_COPY.sound}
+                aria-pressed={sound.on}
+                onPointerDown={keepFocus}
+                onClick={() => {
+                  sound.toggle();
+                  refocus();
+                }}
+              >
+                <Icon name={sound.on ? "sound" : "sound-off"} size={20} />
+              </button>
+            </div>
           </form>
         ) : (
-          <div className="scan-camera">
+          <div className={"scan-camera" + (large ? " is-large" : "")}>
             <video ref={video} muted playsInline aria-label="カメラの映像" />
             {input.phase === "running" ? (
               <>
@@ -1303,22 +1411,42 @@ export function ScanSession({
                   ref={guide}
                   aria-hidden="true"
                 />
-                {torch !== null && (
-                  <button
-                    type="button"
-                    className={"scan-torch" + (torch ? " is-on" : "")}
-                    aria-pressed={torch}
-                    onClick={switchTorch}
-                  >
-                    ライト
-                  </button>
-                )}
                 <p
                   className={"scan-guide" + (hint ? " is-hint" : "")}
                   aria-live="polite"
                 >
                   {hint ?? SCAN_COPY.guide}
                 </p>
+                <button
+                  type="button"
+                  className={
+                    "scan-over scan-sound" + (sound.on ? "" : " is-off")
+                  }
+                  aria-label={SCAN_COPY.sound}
+                  aria-pressed={sound.on}
+                  onClick={sound.toggle}
+                >
+                  <Icon name={sound.on ? "sound" : "sound-off"} size={20} />
+                </button>
+                {torch !== null && (
+                  <button
+                    type="button"
+                    className={"scan-over scan-torch" + (torch ? " is-on" : "")}
+                    aria-label={SCAN_COPY.light}
+                    aria-pressed={torch}
+                    onClick={switchTorch}
+                  >
+                    <Icon name="light" size={20} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="scan-over scan-size"
+                  aria-label={large ? SCAN_COPY.smaller : SCAN_COPY.larger}
+                  onClick={() => setLarge((was) => !was)}
+                >
+                  <Icon name={large ? "shrink" : "expand"} size={18} />
+                </button>
               </>
             ) : input.phase === "starting" ? (
               <p className="scan-camera-note">{SCAN_COPY.cameraStarting}</p>
@@ -1338,6 +1466,14 @@ export function ScanSession({
                 )}
               </div>
             )}
+            <p className="scan-notice" role="status">
+              {notice && (
+                <>
+                  <strong>{notice.name}</strong>
+                  <span>{SAYS[notice.say]}</span>
+                </>
+              )}
+            </p>
           </div>
         )}
         {timingSettings && input.kind === "camera" && (
@@ -1355,111 +1491,131 @@ export function ScanSession({
             notify={notify}
           />
         )}
-        <div
-          className={
-            "scan-card" +
-            (cardShows && KEPT.includes(cardShows) ? " is-kept" : "") +
-            (flash ? " is-flash" : "")
-          }
+        {typing && notice && (
+          <p className="scan-notice is-typing" role="status">
+            <strong>{notice.name}</strong>
+            <span>{SAYS[notice.say]}</span>
+          </p>
+        )}
+        <ol
+          className="scan-list"
+          ref={list}
+          aria-label={SCAN_COPY.list}
+          onPointerDown={() => (touching.current = true)}
+          onPointerUp={() => (touching.current = false)}
+          onPointerCancel={() => (touching.current = false)}
         >
-          <div className="scan-card-cover" aria-hidden={!cardBook}>
-            {cardBook ? (
-              <BookJacket book={cardBook} />
-            ) : (
-              <span className="scan-card-tile">
-                <Icon name="barcode" size={22} />
-              </span>
-            )}
-          </div>
-          <div className="scan-card-text">
-            {line1 && (
-              <p className="scan-card-title">
-                <span>{line1}</span>
-                {author && <small>{author}</small>}
-              </p>
-            )}
-            <p className="scan-card-status" role="status">
-              {line2}
-            </p>
-          </div>
-          {canUndo && (
-            <button
-              type="button"
-              className="btn scan-undo"
-              aria-label={`${undoName}の登録を取り消す`}
-              onPointerDown={typing ? keepFocus : undefined}
-              onClick={undo}
-            >
-              取り消す
-            </button>
+          {cards.length === 0 && (!owner || !typing) && (
+            <li className="scan-list-empty">
+              {owner ? SCAN_COPY.firstCamera : SCAN_COPY.preparing}
+            </li>
           )}
-        </div>
-        <div
-          className="scan-shelf"
-          role="img"
-          aria-label={
-            "この回に入れた本" + (added > 0 ? ` ${counted(added, "冊")}` : "")
-          }
-        >
-          <ol ref={shelf}>
-            {cards.map((entry) => {
-              const showsNow = shown(entry);
-              if (showsNow === "added") {
-                const book = bookOf(entry.bookId);
-                return (
-                  <li
-                    key={entry.id}
-                    className="scan-spine is-added"
-                    style={
-                      book
-                        ? {
-                            background: book.color,
-                            height: Math.round(book.height / 4.4),
-                            width: Math.min(
-                              11,
-                              Math.max(6, book.thickness / 4),
-                            ),
-                          }
-                        : undefined
-                    }
-                  />
-                );
-              }
-              return KEPT.includes(showsNow) ? (
-                <li key={entry.id} className="scan-spine is-kept" />
-              ) : null;
-            })}
-          </ol>
-          <span className="scan-plank" aria-hidden="true" />
-        </div>
-        <div className="scan-bottom">
-          {input.kind === "camera" ? (
-            <button type="button" className="btn" onClick={typeIsbn}>
-              ISBNを打つ
-            </button>
-          ) : (
-            // Only where asking again could help: not for a browser that
-            // cannot read barcodes, a camera refused, or none at all.
-            input.why !== "denied" &&
-            input.why !== "no-reader" &&
-            input.why !== "no-camera" && (
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setInput({ kind: "camera", phase: "starting" })}
+          {[...cards].reverse().map((card) => {
+            const now = shown(card);
+            const libraryId =
+              now === "added" || now === "saving" || now === "already"
+                ? libraryIdOf(card)
+                : undefined;
+            const book = libraryId ? bookOf(libraryId) : undefined;
+            const titled = book ? bookTitle(book) : card.title;
+            const name = titled ?? card.isbn ?? "";
+            const author = (book && bookAuthor(book)) ?? card.author;
+            const status = libraryId
+              ? state.libraryEntries[libraryId]?.status
+              : undefined;
+            const kept = KEPT.includes(now as Shows) || now === "refused";
+            const canUndo = UNDOABLE.includes(now as Shows) || now === "saving";
+            const menuId = `${id}-menu-${card.id}`;
+            return (
+              <li
+                key={card.id}
+                className={
+                  "scan-item" +
+                  (kept ? " is-kept" : "") +
+                  (now === "undone" ? " is-undone" : "") +
+                  (flash?.id === card.id ? " is-flash" : "")
+                }
               >
-                カメラで読む
-              </button>
-            )
-          )}
-          <button type="button" className="btn" onClick={openManual}>
-            手で入力
-          </button>
+                <div className="scan-item-head">
+                  <div className="scan-item-cover" aria-hidden="true">
+                    {book ? (
+                      <BookJacket book={book} />
+                    ) : (
+                      <span className="scan-item-tile">
+                        <Icon name="barcode" size={18} />
+                      </span>
+                    )}
+                  </div>
+                  <div className="scan-item-text">
+                    <p className="scan-item-title">
+                      {now === "untitled" || now === "offline"
+                        ? SCAN_COPY.card.untitledTitle
+                        : (titled ?? `ISBN ${card.isbn ?? ""}`)}
+                    </p>
+                    {author && <p className="scan-item-author">{author}</p>}
+                    <p className="scan-item-state">{stateLine(card, now)}</p>
+                  </div>
+                  {canUndo && (
+                    <button
+                      type="button"
+                      className="icon-btn scan-item-more"
+                      aria-label={SCAN_COPY.more(name)}
+                      aria-expanded={menuFor === card.id}
+                      aria-controls={menuFor === card.id ? menuId : undefined}
+                      onPointerDown={typing ? keepFocus : undefined}
+                      onClick={() => {
+                        refocus();
+                        setMenuFor((was) => (was === card.id ? null : card.id));
+                      }}
+                    >
+                      <Icon name="kebab" />
+                    </button>
+                  )}
+                </div>
+                {menuFor === card.id && canUndo && (
+                  <div className="scan-item-menu" id={menuId} role="menu">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="btn quiet"
+                      aria-label={SCAN_COPY.undoName(name)}
+                      onPointerDown={typing ? keepFocus : undefined}
+                      onClick={() => undo(card)}
+                    >
+                      {SCAN_COPY.undo}
+                    </button>
+                  </div>
+                )}
+                {libraryId && (
+                  <div
+                    className="scan-item-statuses"
+                    role="group"
+                    aria-label={SCAN_COPY.statuses(name)}
+                  >
+                    {STATUS_BUTTONS.map((button) => (
+                      <button
+                        key={button.status}
+                        type="button"
+                        className="chip"
+                        aria-pressed={status === button.status}
+                        onPointerDown={typing ? keepFocus : undefined}
+                        onClick={() => sort(libraryId, button.status)}
+                      >
+                        {button.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+        <GoogleCoversCredit />
+        <div className="scan-bottom">
           <button type="button" className="btn fill" onClick={finish}>
-            終わる
+            {SCAN_COPY.done}
           </button>
         </div>
-        <GoogleCoversCredit />
       </div>
       {manual && (
         <BarcodeRegister

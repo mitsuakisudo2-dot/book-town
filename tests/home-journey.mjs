@@ -2620,7 +2620,7 @@ try {
               return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
             };
             const pictures =
-              ".reader-avatar, .book-spine, .book-jacket, .shelf-scroll, .street-shelf, .poster-sheet, .poster-swatch, .walk-view, .store-canvas, .scan-shelf, .profile-shop-sign, img, svg";
+              ".reader-avatar, .book-spine, .book-jacket, .shelf-scroll, .street-shelf, .poster-sheet, .poster-swatch, .walk-view, .store-canvas, .scan-camera, .profile-shop-sign, img, svg";
             const found = [];
             for (const element of document.querySelectorAll("main *, nav *")) {
               const own = [...element.childNodes].some(

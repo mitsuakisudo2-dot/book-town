@@ -1181,7 +1181,7 @@ try {
       await expect(dialog.getByLabel("著者")).toHaveValue("試験 太郎");
       await dialog.getByRole("button", { name: "登録する" }).click();
       await expect(dialog).toHaveCount(0);
-      await scanner.getByRole("button", { name: "終わる" }).click();
+      await scanner.getByRole("button", { name: "完了" }).click();
       await expect(scanner).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: /^登録\s*\d*$/ }),
@@ -1249,7 +1249,7 @@ try {
       await dialog.getByLabel("著者").fill("試験 次郎");
       await dialog.getByRole("button", { name: "登録する" }).click();
       await expect(dialog).toHaveCount(0);
-      await scanner.getByRole("button", { name: "終わる" }).click();
+      await scanner.getByRole("button", { name: "完了" }).click();
       await expect(scanner).toHaveCount(0);
 
       const openBd = page
