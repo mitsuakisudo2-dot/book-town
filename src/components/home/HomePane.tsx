@@ -68,6 +68,7 @@ import { ReadingLine } from "./ReadingLine";
 import type { Picked } from "./ShopFront";
 import { StartReadingSheet } from "./StartReadingSheet";
 import { TopCarousel, type Slide } from "./TopCarousel";
+import { NAMES } from "../../lib/words";
 
 /**
  * The 特集 slots in turn after every two 便り: Live first when it has a band
@@ -461,13 +462,15 @@ export function HomePane({
             onLetters();
           }}
         >
-          前の便りは『便りだけ』で
+          前の{NAMES.letter}は『{NAMES.letter}だけ』で
         </Link>
       )}
       {!partial && (
         <header className="home-alley-head" id="home-alley">
           <h2>ここから、まだ知らない路地</h2>
-          {followed.length > 0 && <p>フォロー中の便りは、ここまでです。</p>}
+          {followed.length > 0 && (
+            <p>フォロー中の{NAMES.letter}は、ここまでです。</p>
+          )}
         </header>
       )}
       {drawn && stage >= 2 && (
@@ -551,7 +554,7 @@ function WovenLetters({
         flush();
         parts.push(
           <header className="home-town-head" key="town-head">
-            <h2>街の便り</h2>
+            <h2>街の{NAMES.letter}</h2>
             <p>フォローしなくても読めます。</p>
           </header>,
         );

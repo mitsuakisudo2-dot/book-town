@@ -451,7 +451,7 @@ try {
         await card("凪", "十年ぶりに再読")
           .getByRole("link", { name: "凪", exact: true })
           .click();
-        await expect(page.getByRole("heading", { name: "投稿" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "便り" })).toBeVisible();
         await expect(card("凪", "十年ぶりに再読")).toBeVisible();
         await expect(page.getByText("最後の数章を読んだ夜は")).toHaveCount(0);
         await go("/profiles/me/");
@@ -460,7 +460,7 @@ try {
         // Deleting is under 「…」, asked once more there.
         await own.getByRole("button", { name: "その他の操作" }).click();
         await menu().getByRole("button", { name: "削除する" }).click();
-        await expect(menu()).toContainText("この投稿を削除しますか？");
+        await expect(menu()).toContainText("この便りを削除しますか？");
         await menu().getByRole("button", { name: "やめる" }).click();
         await page.keyboard.press("Escape");
         await expect(menu()).toHaveCount(0);
@@ -469,7 +469,7 @@ try {
         await menu().getByRole("button", { name: "削除する" }).click();
         await menu().getByRole("button", { name: "削除する" }).click();
         await expect(menu()).toHaveCount(0);
-        await expect(page.locator(".toast")).toHaveText("投稿を削除しました");
+        await expect(page.locator(".toast")).toHaveText("便りを削除しました");
         await expect(card("あなた", "灰色の男たち")).toHaveCount(0);
         await noOverflow(`${label} profile`);
       },
@@ -524,7 +524,7 @@ try {
           .getByLabel("ネタバレの印があるもの・可能性があるものは出さない")
           .check();
         await expect(page.locator(".toast")).toContainText(
-          "ネタバレの印があるもの・可能性があるものは、出さないようにします（読み終えた本の投稿は出します）",
+          "ネタバレの印があるもの・可能性があるものは、出さないようにします（読み終えた本の便りは出します）",
         );
         await noOverflow(`${label} settings`);
         await page.screenshot({
@@ -1105,7 +1105,7 @@ try {
           const empty = page.getByRole("tabpanel");
           await expect(empty).toContainText("まだ便りがありません");
           const suggestions = page.getByRole("region", {
-            name: "フォローすると、その店主の投稿がここに届きます",
+            name: "フォローすると、その店主の便りがここに届きます",
           });
           await expect(suggestions.getByRole("listitem")).toHaveCount(3);
           await expect(suggestions).toContainText("POP：");

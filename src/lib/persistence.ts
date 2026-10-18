@@ -20,7 +20,7 @@ export function shelfSaveMessage(where: Where, status: PersistenceStatus) {
   return {
     saved: "本棚の変更は、あなたのアカウントに保存済みです。",
     saving: "本棚の変更を保存しています…",
-    loading: "あなたの本屋を読み込んでいます。",
+    loading: "あなたの書店を読み込んでいます。",
     unavailable: failure(WHILE_OFFLINE),
     recovered: "保存できない変更があったため、保存されている状態に戻しました。",
   }[status];

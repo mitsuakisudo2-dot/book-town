@@ -47,6 +47,7 @@ import { LikeButton, LikeUndo } from "./LikeButton";
 import { forgetOpened, noteOpened, openPost, wasOpened } from "./post-layer";
 import { SpoilerCover } from "./SpoilerCover";
 import "./letter.css";
+import { NAMES } from "../../lib/words";
 
 type Shared = {
   state: TownState;
@@ -227,7 +228,7 @@ export function LetterCard({
         <span className="letter-tag">自分だけのメモ</span>
       )}
       {post.readingMode === "together" && (
-        <span className="letter-tag">読書中のつぶやき</span>
+        <span className="letter-tag">読書中の{NAMES.letter}</span>
       )}
       {(post.spoiler || post.folded || askedByMe) && (
         <span className="letter-tag is-spoiler">
@@ -250,7 +251,7 @@ export function LetterCard({
           (isReply ? " is-reply" : "") +
           (arriving ? " is-arriving" : "")
         }
-        aria-label={author.name + "の" + (isReply ? "返信" : "投稿")}
+        aria-label={author.name + "の" + (isReply ? "返信" : NAMES.letter)}
         data-post-id={post.id}
         onPointerDown={pointerDown}
         onClick={tap}
@@ -352,7 +353,8 @@ export function LetterCard({
           {mine && post.folded && !post.spoiler && (
             <div className="letter-note" role="note">
               <p>
-                読んだ人から「ネタバレでは？」という声があったので、みんなの画面ではたたんで表示しています。投稿は消えていません。
+                読んだ人から「ネタバレでは？」という声があったので、みんなの画面ではたたんで表示しています。
+                {NAMES.letter}は消えていません。
               </p>
               {(book || post.parentId) && (
                 <button

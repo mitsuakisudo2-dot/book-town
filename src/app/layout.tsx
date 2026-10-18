@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
+import { HOME_TITLE, pageTitle } from "../lib/words";
 import { supabaseConfigured, supabaseUrl } from "../lib/supabase/config";
 import { APPEARANCE_BOOT } from "../lib/appearance";
 import { HOME_TAB_BOOT } from "../lib/home-tab";
 import "./globals.css";
 export const metadata: Metadata = {
   title: {
-    default: "Book Town | 本を読みたくなるSNS",
-    template: "%s | Book Town",
+    default: HOME_TITLE,
+    template: pageTitle("%s"),
   },
   description:
     "読書の終わりを、交流の始まりに。あなたの愛した一冊が、誰かの愛する一冊になる。読書家の小さな書店が集まる、本の街。",

@@ -16,6 +16,7 @@ import type {
 } from "../../lib/types";
 import { BookJacket } from "../ui";
 import { LetterIcon } from "./icons";
+import { NAMES } from "../../lib/words";
 
 /**
  * The book a 便り is about, in a thin frame: its cover whole, its title and
@@ -97,10 +98,10 @@ export function WantButton({
         actions.toggleWant(post.id);
         notify(
           wanted
-            ? "この便りで出会った記録を外しました。読みたい本には残っています"
+            ? `この${NAMES.letter}で出会った記録を外しました。読みたい本には残っています`
             : `${quotedTitle(book)}を読みたいに入れました。` +
                 (keepsMeeting
-                  ? `${author.name}さんの便りで出会った本として残します。`
+                  ? `${author.name}さんの${NAMES.letter}で出会った本として残します。`
                   : ""),
         );
       }}

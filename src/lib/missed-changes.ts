@@ -10,6 +10,7 @@ import type { Missed } from "./supabase/sync";
 import { writtenWords, type RelationTable, type Write } from "./town-remote";
 import type { ShopTable, WalkWrite } from "./walk-remote";
 import { failure, KEPT } from "./words";
+import { NAMES } from "./words";
 
 // Changes that did not reach the database (supabase/sync.ts): what the
 // screens call each one, the line that tells the reader, and the words of a
@@ -50,9 +51,9 @@ export function townWriteLabels(write: Write): string[] {
     case "shelves":
       return ["書店の棚"];
     case "delete-posts":
-      return ["便りの削除"];
+      return [`${NAMES.letter}の削除`];
     case "posts":
-      return write.rows.map((row) => (row.parent_id ? "返信" : "便り"));
+      return write.rows.map((row) => (row.parent_id ? "返信" : NAMES.letter));
     case "mark-spoilers":
       return ["ネタバレの印"];
     case "like-taps":

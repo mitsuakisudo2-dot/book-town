@@ -369,7 +369,7 @@ async function main() {
         (notice) =>
           // Three taps by one reader: one notice, one reader.
           notice.id.startsWith(`likes:${postId}@`) &&
-          notice.text.includes("さんがあなたの投稿にいいねしました"),
+          notice.text.includes("さんがあなたの便りにいいねしました"),
       ),
     );
     assert.ok(
@@ -599,7 +599,7 @@ async function main() {
         notificationsFor(countedTown)
           .filter((notice) => notice.id.startsWith("visitors:"))
           .map((notice) => [notice.id, notice.text]),
-        [["visitors:2026-10-19", "先週、2人があなたの本屋に立ち寄りました"]],
+        [["visitors:2026-10-19", "先週、2人があなたの書店に立ち寄りました"]],
       );
       assert.ok(
         notificationsFor(akiTown).some((notice) =>

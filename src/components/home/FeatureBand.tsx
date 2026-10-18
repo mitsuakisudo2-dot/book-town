@@ -62,7 +62,7 @@ export function FeatureView({
       return (
         <FeatureBand
           title="本棚をのぞく"
-          lead="本好きが開いている本屋です。気になる店に入ってみてください。"
+          lead="本好きが開いている書店です。気になる店に入ってみてください。"
         >
           <ShelvesRail shops={feature.shops} state={shared.state} />
         </FeatureBand>
@@ -79,7 +79,7 @@ export function FeatureView({
     case "pops":
       return (
         <FeatureBand
-          title="本屋のPOP"
+          title="書店のPOP"
           lead="店主たちが棚の本に添えた言葉です。"
         >
           <Pops pops={feature.pops} state={shared.state} onPick={onPick} />

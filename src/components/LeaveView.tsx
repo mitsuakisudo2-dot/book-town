@@ -16,7 +16,7 @@ import "./profile.css";
 import "./reading.css";
 import "./account.css";
 import "./leave.css";
-import { failure, AGAIN, NOT_CONNECTED } from "../lib/words";
+import { failure, AGAIN, NAMES, NOT_CONNECTED } from "../lib/words";
 import { loginPath } from "../lib/paths";
 
 /**
@@ -32,7 +32,7 @@ export default function LeaveView() {
     <main className="account-page">
       <Link href="/" className="account-brand">
         <Icon name="store" size={26} />
-        <span>Book Town</span>
+        <span>{NAMES.service}</span>
       </Link>
       <section className="account-card leave-card" aria-live="polite">
         {left ? (
@@ -145,8 +145,8 @@ function LeaveForm({
         <>
           <h2 className="leave-heading">消えるもの</h2>
           <ul className="leave-list">
-            <li>あなたの本屋（棚・POP・店内の飾りつけ）</li>
-            <li>投稿、ポスター、読書の記録、ひとこと</li>
+            <li>あなたの書店（棚・POP・店内の飾りつけ）</li>
+            <li>{NAMES.letter}、ポスター、読書の記録、ひとこと</li>
             <li>読みたい本、登録した本、人生の9冊</li>
             <li>フォロー、いいね、保存、書店めぐりの記録</li>
             <li>この端末に残っている書きかけ</li>
@@ -211,7 +211,7 @@ function Left() {
     <>
       <h1>退会しました</h1>
       <p className="account-lead">
-        あなたのアカウントと、作ったものはすべて消えました。Book Town
+        あなたのアカウントと、作ったものはすべて消えました。{NAMES.service}
         を使ってくださって、ありがとうございました。
       </p>
       <Link className="btn fill" href="/">

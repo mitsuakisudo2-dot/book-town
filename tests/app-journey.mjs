@@ -935,7 +935,7 @@ try {
       // Everyone's reading posts show before starting, whatever book they are on.
       const feed = page.locator(".reading-memos");
       await expect(
-        page.getByRole("heading", { name: "みんなの読書中のつぶやき" }),
+        page.getByRole("heading", { name: "みんなの読書中の便り" }),
       ).toBeVisible();
       await expect(feed).toContainText("もう三つ目");
       await expect(feed).toContainText("時計の音がよく聞こえる");
@@ -959,7 +959,7 @@ try {
       });
       await expect(nav.getByRole("link", { name: "読書中" })).toBeVisible();
       await page
-        .getByRole("textbox", { name: "読書中のつぶやき" })
+        .getByRole("textbox", { name: "読書中の便り" })
         .fill("ちょうど第二章。");
       await page.getByRole("button", { name: "つぶやく" }).click();
       const memo = page
@@ -1055,7 +1055,7 @@ try {
       });
       await expect(others).toBeHidden();
       await expect(
-        page.getByRole("heading", { name: "みんなの読書中のつぶやき" }),
+        page.getByRole("heading", { name: "みんなの読書中の便り" }),
       ).toBeHidden();
       await page.getByText("ひと休みに、街の読書をのぞく").click();
       await expect(others).toBeVisible();
@@ -1443,7 +1443,7 @@ try {
     await page.getByRole("link", { name: "#積読" }).first().click();
     await expect(page).toHaveURL(/\/search\//);
     await expect(
-      page.getByRole("heading", { name: /#積読 の投稿/ }),
+      page.getByRole("heading", { name: /#積読 の便り/ }),
     ).toBeVisible();
     await expect(page.locator(".search-results")).toContainText(
       "今週は一冊も買わない",
@@ -1464,7 +1464,7 @@ try {
       .click();
     await expect(page).toHaveURL(/\/search\//);
     await expect(
-      page.getByRole("heading", { name: /#雨読 の投稿/ }),
+      page.getByRole("heading", { name: /#雨読 の便り/ }),
     ).toBeVisible();
     await expect(page.locator(".search-results")).toContainText(
       "雨の日は #雨読 にかぎる",
@@ -1579,7 +1579,7 @@ try {
         "この1冊を渡したい理由（POPになります）",
       );
       await go("/my-shop/");
-      await page.getByRole("button", { name: /たった1冊の本屋/ }).click();
+      await page.getByRole("button", { name: /たった1冊の書店/ }).click();
       await page
         .getByRole("searchbox", { name: "棚に並べる本" })
         .fill("ソラリス");
@@ -1632,7 +1632,7 @@ try {
       // 戻る to the kinds and 進む again finds the same book and words.
       await page.goBack();
       await expect(
-        page.getByRole("button", { name: /たった1冊の本屋/ }),
+        page.getByRole("button", { name: /たった1冊の書店/ }),
       ).toBeVisible();
       await page.goForward();
       await expect(popField).toHaveValue("眠れない夜に、そっと渡したい。");
@@ -1645,10 +1645,10 @@ try {
       expect(await kept()).toBeNull();
       await page.reload();
       await expect(
-        page.getByRole("heading", { name: "3分で、あなたの本屋を開く" }),
+        page.getByRole("heading", { name: "3分で、あなたの書店を開く" }),
       ).toBeVisible();
       await expect(
-        page.getByRole("button", { name: /たった1冊の本屋/ }),
+        page.getByRole("button", { name: /たった1冊の書店/ }),
       ).toBeEnabled();
       await expect(
         page.getByRole("button", { name: "続きから", exact: true }),
@@ -1672,7 +1672,7 @@ try {
       const cdp = await page.context().newCDPSession(page);
       await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
       try {
-        await page.getByRole("button", { name: /たった1冊の本屋/ }).click();
+        await page.getByRole("button", { name: /たった1冊の書店/ }).click();
         await page
           .getByRole("searchbox", { name: "棚に並べる本" })
           .fill("ソラリス");
@@ -1699,7 +1699,7 @@ try {
         );
         await page.goBack();
         await expect(
-          page.getByRole("button", { name: /たった1冊の本屋/ }),
+          page.getByRole("button", { name: /たった1冊の書店/ }),
         ).toBeVisible(slow);
         await expect(page).toHaveURL(/\/my-shop\/$/);
       } finally {
@@ -1721,7 +1721,7 @@ try {
       await go("/books/fictions/");
       await page.getByRole("link", { name: "自分の書店へ" }).first().click();
       await expect(page).toHaveURL(/\/my-shop\/$/);
-      await page.getByRole("button", { name: /人生の9冊の本屋/ }).click();
+      await page.getByRole("button", { name: /人生の9冊の書店/ }).click();
       // The life nine already on the profile stand on the shelf, after it.
       await expect(page.locator(".open-shelf-book")).toHaveCount(5);
       await expect(
@@ -1755,7 +1755,7 @@ try {
       await expect(page.locator(".open-shelf-book")).toHaveCount(5);
       await page.goBack();
       await expect(
-        page.getByRole("button", { name: /人生の9冊の本屋/ }),
+        page.getByRole("button", { name: /人生の9冊の書店/ }),
       ).toBeVisible();
       await expect(page).toHaveURL(/\/my-shop\/$/);
       await page.goForward();

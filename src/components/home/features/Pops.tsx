@@ -10,7 +10,7 @@ import { SampleTag } from "../FeatureBand";
 import type { Picked } from "../ShopFront";
 
 /**
- * 本屋のPOP: one POP from each shop's public shelves, on a card of paper. A
+ * 書店のPOP: one POP from each shop's public shelves, on a card of paper. A
  * tap takes the book off its shelf into the hand.
  */
 export function Pops({

@@ -648,7 +648,7 @@ export function WalkView({
             <Icon name="chevron" size={16} />
           </button>
           <small className="walk-journey-hint">
-            上下にめくって、次の本屋へ
+            上下にめくって、次の書店へ
           </small>
         </div>
       </header>
@@ -656,11 +656,11 @@ export function WalkView({
         <p className="walk-own-missing" role="status">
           <span>
             {state.ownShop
-              ? "あなたの本屋は、まだ棚に本がないので書店めぐりに出ていません。一冊並べると、ここに灯りがともります。"
-              : "あなたの本屋は、まだありません。3分で開けます。"}
+              ? "あなたの書店は、まだ棚に本がないので書店めぐりに出ていません。一冊並べると、ここに灯りがともります。"
+              : "あなたの書店は、まだありません。3分で開けます。"}
           </span>
           <Link href={myShopPath()}>
-            {state.ownShop ? "本棚を整える" : "本屋を開く"}
+            {state.ownShop ? "本棚を整える" : "書店を開く"}
           </Link>
           <button aria-label="閉じる" onClick={() => setOwnMissing(false)}>
             <Icon name="close" size={14} />
@@ -796,7 +796,7 @@ export function WalkView({
               {firstHint && (
                 <p className="walk-first-hint" role="status">
                   <i aria-hidden="true">↑</i>
-                  上にめくると、となりの本屋へ
+                  上にめくると、となりの書店へ
                 </p>
               )}
               <div
@@ -884,7 +884,7 @@ export function WalkView({
                   <h1>まだ、灯りのついた書店がありません</h1>
                   <p>最初の一軒を開くと、ここから街の人が訪ねてこられます。</p>
                   <Link className="btn fill" href={myShopPath()}>
-                    {state.ownShop ? "自分の書店を整える" : "本屋を開く"}
+                    {state.ownShop ? "自分の書店を整える" : "書店を開く"}
                     <Icon name="arrow" />
                   </Link>
                 </>

@@ -49,7 +49,8 @@ import "./profile.css";
 import "./reading.css";
 import "./account.css";
 import "./leave.css";
-import { counted, failure, AGAIN, NOT_CONNECTED } from "../lib/words";
+import { counted, failure, AGAIN, NAMES, NOT_CONNECTED } from "../lib/words";
+import { leavePath } from "../lib/paths";
 
 /** Sign-in with a code from email, then the first profile. One page for both. */
 export default function AccountView() {
@@ -77,7 +78,7 @@ export default function AccountView() {
     <main className="account-page">
       <Link href="/" className="account-brand">
         <Icon name="store" size={26} />
-        <span>Book Town</span>
+        <span>{NAMES.service}</span>
       </Link>
       <section className="account-card" aria-live="polite">
         {account.status === "demo" && <DemoNotice />}
@@ -914,7 +915,7 @@ function SignOut({ leave = false }: { leave?: boolean }) {
         ログアウト
       </button>
       {leave && (
-        <Link className="account-leave" href="/leave/">
+        <Link className="account-leave" href={leavePath()}>
           退会する
         </Link>
       )}

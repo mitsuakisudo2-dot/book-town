@@ -40,7 +40,7 @@ export const authorOf = (entry: LetterEntry): string =>
 
 /**
  * A first-time reader: no shop of their own, following nobody, and no post
- * yet. A visitor is one too. They get the welcome, 本屋を開く and the town's
+ * yet. A visitor is one too. They get the welcome, 書店を開く and the town's
  * 便り.
  */
 export const isNewcomer = (state: TownState): boolean =>

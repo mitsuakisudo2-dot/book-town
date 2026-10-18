@@ -939,7 +939,7 @@ try {
     },
   );
   await check(
-    "Private shelf names, books and POPs stay out of Home (the alley, 本棚をのぞく, 本屋のPOP, 今夜の一軒) and search",
+    "Private shelf names, books and POPs stay out of Home (the alley, 本棚をのぞく, 書店のPOP, 今夜の一軒) and search",
     async () => {
       await page.evaluate(() => {
         const envelope = JSON.parse(localStorage.getItem("book-town-v1"));
@@ -1096,11 +1096,11 @@ try {
         await go(phone);
         await expect(phone.locator(".street-shop")).toHaveCount(6);
         await noOverflow(phone, `${width}px street`);
-        // 本屋をのぞく, among the doors at the top, brings the alley's first
+        // 書店をのぞく, among the doors at the top, brings the alley's first
         // shelves into sight.
         await phone
           .getByRole("navigation", { name: "できること" })
-          .getByRole("button", { name: "本屋をのぞく" })
+          .getByRole("button", { name: "書店をのぞく" })
           .tap();
         await expect
           .poll(() =>

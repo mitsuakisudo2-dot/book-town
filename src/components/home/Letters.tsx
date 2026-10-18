@@ -5,6 +5,7 @@ import type { Notify, TownActions, TownState } from "../../lib/types";
 import type { LetterEntry } from "../../lib/home-feed";
 import { LetterCard } from "../letter/LetterCard";
 import { PosterCard } from "../PosterView";
+import { NAMES } from "../../lib/words";
 
 export type Shared = {
   state: TownState;
@@ -47,7 +48,7 @@ export function Letters({
 export function LetterSkeletons() {
   return (
     <div className="home-skeletons" aria-busy="true">
-      <span className="sr-only">便りを読み込んでいます</span>
+      <span className="sr-only">{NAMES.letter}を読み込んでいます</span>
       <div className="home-skel" />
       <div className="home-skel" />
       <div className="home-skel" />

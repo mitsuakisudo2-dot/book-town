@@ -44,8 +44,7 @@ check("a page's address comes from paths.ts", () => {
   hits(
     /["'`]\/(shops?|profiles?|walk|search|posters?|post|library|my-shop|notifications|leave|reading|login)[/?#"'`]/g,
     ["src/lib/paths.ts"],
-    // 退会へのリンク (107 のあと)
-    { "src/components/AccountView.tsx": 1 },
+    {},
   );
   assert.equal(walkPath(), "/walk/");
   assert.equal(walkPath("mine"), "/walk/#mine");

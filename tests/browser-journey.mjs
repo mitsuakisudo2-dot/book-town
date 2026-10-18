@@ -964,7 +964,7 @@ try {
     "a page opened directly leads to the town; one walked into goes back",
     async () => {
       await go(page, "/shops/shop-orbit/");
-      await expect(page).toHaveTitle(/ \| Book Town$/);
+      await expect(page).toHaveTitle(/ \| BookTown$/);
       const nav = page.locator(".shop-journey-nav");
       await expect(nav.getByRole("link", { name: /本の街へ/ })).toBeVisible();
       // Each shop along the row is a step: 戻る returns to the one before,

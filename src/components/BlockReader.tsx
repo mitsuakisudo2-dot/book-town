@@ -7,7 +7,7 @@ import type { Notify, Reader, TownActions, TownState } from "../lib/types";
 import { requestAccount } from "../lib/visitor";
 import { Modal, ReaderAvatar } from "./ui";
 import "./block.css";
-import { failure, AGAIN } from "../lib/words";
+import { failure, AGAIN, NAMES } from "../lib/words";
 
 // Blocking a reader (管理表43): asked once, then done at once. The database
 // keeps the two apart both ways (docs/09「ブロックは双方向に効く」); the
@@ -44,7 +44,8 @@ export function BlockQuestion({
         {reader.name}さんをブロックしますか？
       </p>
       <p className="block-question-words">
-        お互いの本屋・投稿・記録・ポスターが見えなくなり、フォローも外れます。相手には知らされません。あとで設定から外せます。
+        お互いの書店・{NAMES.letter}
+        ・記録・ポスターが見えなくなり、フォローも外れます。相手には知らされません。あとで設定から外せます。
       </p>
       <div className="btns">
         <button
@@ -127,7 +128,7 @@ export function BlockButton({
 }
 
 const liftedWords = (name: string) =>
-  `${name}さんのブロックを解除しました。本屋や投稿は、次にBookTownを開いたときから見えます`;
+  `${name}さんのブロックを解除しました。書店や${NAMES.letter}は、次に${NAMES.service}を開いたときから見えます`;
 
 /** Lifts a block, with a way back in the toast (a slip of the finger). */
 function lift(
@@ -155,7 +156,8 @@ export function BlockedNote({
   return (
     <div className="blocked-note" role="note">
       <p>
-        ブロックしています。お互いの本屋・投稿・記録・ポスターは見えません。
+        ブロックしています。お互いの書店・{NAMES.letter}
+        ・記録・ポスターは見えません。
       </p>
       <button
         type="button"

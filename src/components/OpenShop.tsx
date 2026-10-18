@@ -102,19 +102,19 @@ const KINDS: {
 }[] = [
   {
     kind: "nine",
-    title: "人生の9冊の本屋",
+    title: "人生の9冊の書店",
     lead: "あなたを少し語ってくれる9冊を。",
     max: OPEN_SHOP_MAX.nine,
   },
   {
     kind: "five",
-    title: "今年の5冊の本屋",
+    title: "今年の5冊の書店",
     lead: "今年出会ってよかった5冊を。",
     max: OPEN_SHOP_MAX.five,
   },
   {
     kind: "one",
-    title: "たった1冊の本屋",
+    title: "たった1冊の書店",
     lead: "いちばん渡したい1冊だけを、言葉を添えて。",
     max: OPEN_SHOP_MAX.one,
   },
@@ -125,12 +125,12 @@ const NAME_EXAMPLES = [
   "夜更かし文庫",
   "二番目の本棚",
   "寄り道書房",
-  "午後三時の本屋",
+  "午後三時の書店",
   "しおり堂",
   "遠回り書店",
   "木漏れ日文庫",
   "月曜日の本棚",
-  "灯りの下の本屋",
+  "灯りの下の書店",
 ];
 
 const OPENED = [
@@ -149,7 +149,7 @@ const shelfName = (kind: Kind) =>
         : "はじめの本棚";
 
 const kindTitle = (kind: Kind) =>
-  KINDS.find((entry) => entry.kind === kind)?.title ?? "空の棚から始める本屋";
+  KINDS.find((entry) => entry.kind === kind)?.title ?? "空の棚から始める書店";
 
 /** Books the reader already knows, nearest to the shop they chose first. */
 function candidates(state: TownState, kind: Kind): string[] {
@@ -476,7 +476,7 @@ export function OpenShop({
         <p role="status">
           「{opened.name}」が開店しました。本の街の
           {nth(state.shops.length + 1, "軒")}
-          の本屋です。
+          の書店です。
         </p>
         <div className="open-next">
           <Link className="btn fill" href={walkPath("mine")}>
@@ -495,9 +495,9 @@ export function OpenShop({
     return (
       <section className="open-shop" aria-labelledby="open-kind-title">
         <span className="editor-kicker">YOUR LITTLE BOOKSHOP</span>
-        <h1 id="open-kind-title">3分で、あなたの本屋を開く</h1>
+        <h1 id="open-kind-title">3分で、あなたの書店を開く</h1>
         <p className="open-lead">
-          まずは、どんな本屋にするかだけ。本も名前も、あとから自由に変えられます。
+          まずは、どんな書店にするかだけ。本も名前も、あとから自由に変えられます。
         </p>
         {/* Work kept from before waits here, to go on from where it was. */}
         {ready && draft && (
@@ -564,7 +564,7 @@ export function OpenShop({
           className="text-btn open-back"
           onClick={() => go("kind")}
         >
-          <Icon name="back" size={14} /> 本屋の形を選び直す
+          <Icon name="back" size={14} /> 書店の形を選び直す
         </button>
         <span className="editor-kicker">{chosen?.title}</span>
         <h1 id="open-books-title">
@@ -721,7 +721,7 @@ export function OpenShop({
         onClick={() => go(kind === "free" ? "kind" : "books")}
       >
         <Icon name="back" size={14} />
-        {kind === "free" ? "本屋の形を選び直す" : "本を選び直す"}
+        {kind === "free" ? "書店の形を選び直す" : "本を選び直す"}
       </button>
       <span className="editor-kicker">まずは、看板から。</span>
       <h1 id="open-sign-title">店の名前と看板</h1>

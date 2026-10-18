@@ -218,15 +218,15 @@ export function pickAt(state: TownState, place: PlaceRef): PopPick | null {
   return shop && shelf && item && book ? { shop, shelf, item, book } : null;
 }
 
-/** Whether a POP may be in 本屋のPOP: on another reader's public shelf, with words. */
+/** Whether a POP may be in 書店のPOP: on another reader's public shelf, with words. */
 export const isOpenPop = (state: TownState, pick: PopPick): boolean =>
   !isOwnShop(state, pick.shop) &&
   pick.shelf.isPublic &&
   pick.item.pop.trim() !== "";
 
 /**
- * 本屋のPOP: one POP from each shop's public shelves, the day's pick, the
- * shops in the day's order. Titled 本屋のPOP: they are not newest first.
+ * 書店のPOP: one POP from each shop's public shelves, the day's pick, the
+ * shops in the day's order. Titled 書店のPOP: they are not newest first.
  */
 export function popsFeature(
   state: TownState,

@@ -3,8 +3,8 @@
 // Screens build these with the functions here instead of writing "${n}冊" or
 // "もう一度お試しください" themselves, so that a way of saying it changes
 // here once. tests/words.test.ts keeps counts and failure words from being
-// written by hand again. (The names of things, 書店 and 便り, are to join
-// them here: 管理表 90.)
+// written by hand again, and the names of things (書店, 便り) from being
+// said another way (管理表 90).
 
 // ── Counts ──────────────────────────────────────────────────────────────
 
@@ -67,6 +67,37 @@ export function whenSome<T>(
   const counted = someCount(n, unit);
   return counted === null ? null : say(counted);
 }
+
+// ── The names of things ─────────────────────────────────────────────────
+
+/**
+ * What the town calls its things, one word each (管理表 90). A reader's shop
+ * is a 書店, never a 本屋 (けにー 10-16 23:28Z). A reader's short writing is
+ * a 便り, for now (10-16 23:29Z「とりあえず便りでいいかな。統一しといたら
+ * 変える時も楽」): every screen says it through {@link NAMES}.letter, so that
+ * it changes here once. Only the button that sends one says 投稿する.
+ * tests/words.test.ts stops 本屋, つぶやき, the noun 投稿 and a 便り
+ * written by hand.
+ */
+export const NAMES = {
+  /** The service, in one spelling (AUD-064). */
+  service: "BookTown",
+  /** Said beside the service's name in the page's title. */
+  catchphrase: "本を読みたくなるSNS",
+  shop: "書店",
+  /** A reader's short writing, and what a reply answers. */
+  letter: "便り",
+  /** The button that sends a 便り. */
+  post: "投稿する",
+  /** The same, short, on the round button that opens the writing. */
+  postTap: "投稿",
+} as const;
+
+/** The page's title: "便りだけ | BookTown". */
+export const pageTitle = (name: string) => `${name} | ${NAMES.service}`;
+
+/** The title of the home, and of a page that has no name of its own. */
+export const HOME_TITLE = `${NAMES.service} | ${NAMES.catchphrase}`;
 
 // ── The tabs ────────────────────────────────────────────────────────────
 

@@ -893,7 +893,7 @@ try {
           "true",
         );
         await expect(page.locator("main")).not.toContainText(
-          /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+          /(^|\D)0(人|件|軒|分|回|冊| 便り| フォロ)/,
         );
         release();
         await expect(bones).toHaveCount(0, { timeout: 10000 });
@@ -933,7 +933,7 @@ try {
         await expect(kept.locator("article.letter").first()).toBeVisible();
         await expect(page.locator("main .home-skeletons")).toHaveCount(0);
         await expect(page.locator("main")).not.toContainText(
-          /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+          /(^|\D)0(人|件|軒|分|回|冊| 便り| フォロ)/,
         );
         release();
         await expect(kept).toHaveCount(0, { timeout: 10000 });
@@ -1332,7 +1332,7 @@ try {
     await expect(
       page.getByRole("heading", { name: "まだ静かです" }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "本屋を開く" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "書店を開く" })).toBeVisible();
     await shot("7-notices-quiet");
     await page.goto(base + "/search/");
     await expect(page.getByRole("heading", { name: "検索" })).toBeVisible();
@@ -1364,7 +1364,7 @@ try {
         ).toBeVisible();
       }
       await expect(page.locator("main")).not.toContainText(
-        /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+        /(^|\D)0(人|件|軒|分|回|冊| 便り| フォロ)/,
       );
     }
     // A shop just opened has nothing on its shelf, nor may another reader's
@@ -1415,7 +1415,7 @@ try {
       const label = page.locator(".store-shelf-label");
       await expect(label).toContainText("はじめの本棚");
       await expect(page.locator("main")).not.toContainText(
-        /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+        /(^|\D)0(人|件|軒|分|回|冊| 便り| フォロ)/,
       );
       await expect(label.getByRole("link", { name: "本を並べる" })).toHaveCount(
         path === "/shops/mine/" ? 1 : 0,
@@ -1619,7 +1619,7 @@ try {
       const writes = townWrites.length;
       await sample.getByRole("button", { name: /いいね/ }).click();
       await expect(
-        page.getByText("見本の書店と投稿には、いいねやフォローは届きません"),
+        page.getByText("見本の書店と便りには、いいねやフォローは届きません"),
       ).toBeVisible();
       await expect(
         sample.getByRole("button", { name: /いいね/ }),
@@ -2446,7 +2446,7 @@ try {
   const homeDoors = page.getByRole("navigation", { name: "できること" });
 
   await check(
-    "the home never shows a shelf kept private nor covered words: not on 今夜の一軒, 本棚をのぞく, 本屋のPOP, 感想が面白い本 or the 掲示板",
+    "the home never shows a shelf kept private nor covered words: not on 今夜の一軒, 本棚をのぞく, 書店のPOP, 感想が面白い本 or the 掲示板",
     async () => {
       // ミナ's shop: a private shelf first (a book and a POP on it), as the
       // database would never send it, then a public one of three books.
@@ -2547,7 +2547,7 @@ try {
         page.getByRole("region", { name: "本棚をのぞく" }).first(),
       ).toContainText("ミナの角の本屋");
       await expect(
-        page.getByRole("region", { name: "本屋のPOP" }).first(),
+        page.getByRole("region", { name: "書店のPOP" }).first(),
       ).toBeVisible();
       const reviews = page.getByRole("region", { name: "感想が面白い本" });
       for (const [, , name] of READERS)
@@ -2619,7 +2619,7 @@ try {
   );
 
   await check(
-    "while the town is read, the doors that depend on it wait: never 本屋を開く for a shop's owner, never a 掲示板 with no board",
+    "while the town is read, the doors that depend on it wait: never 書店を開く for a shop's owner, never a 掲示板 with no board",
     async () => {
       const OWN_SHOP = "0f1e2d3c-4b5a-4968-8776-655443322110";
       const shelf = {
@@ -2650,7 +2650,7 @@ try {
       try {
         await openHome();
         await expect(bones).toHaveAttribute("aria-busy", "true");
-        for (const name of ["本屋を開く", "本を登録", "掲示板"])
+        for (const name of ["書店を開く", "本を登録", "掲示板"])
           await expect(homeDoors.getByText(name)).toHaveCount(0);
         // Their places kept, as shapes.
         await expect(homeDoors.locator(".home-entrance")).toHaveCount(4);
@@ -2666,7 +2666,7 @@ try {
         homeDoors.getByRole("button", { name: "本を登録" }),
       ).toBeVisible();
       await expect(
-        homeDoors.getByRole("link", { name: "本屋を開く" }),
+        homeDoors.getByRole("link", { name: "書店を開く" }),
       ).toHaveCount(0);
       await homeDoors.getByRole("button", { name: "掲示板" }).click();
       await expect(page.locator("#home-board")).toBeInViewport();
@@ -2842,7 +2842,7 @@ try {
         ).toBeVisible();
         expect(await order()).toEqual(drawn);
         await expect(at.locator("main")).not.toContainText(
-          /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+          /(^|\D)0(人|件|軒|分|回|冊| 便り| フォロ)/,
         );
 
         // Down the page and back up a little, the tab shown is tapped: the
@@ -2989,7 +2989,7 @@ try {
         ).toBe(minas[2].id);
         await expectReadable(line, "「前に開いたのはここまで」");
         await expect(at.locator("main")).not.toContainText(
-          /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+          /(^|\D)0(人|件|軒|分|回|冊| 便り| フォロ)/,
         );
         await at.screenshot({
           path: path.join(output, "2a-older.png"),
@@ -3193,7 +3193,7 @@ try {
         ).toHaveCount(1);
         expect(await lettersOrder()).toEqual(inOrder);
         await expect(at.locator("main")).not.toContainText(
-          /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/,
+          /(^|\D)0(人|件|軒|分|回|冊| 便り| フォロ)/,
         );
 
         // What the town says is counted from here, each time it says it.
@@ -3743,7 +3743,7 @@ try {
       await post.getByRole("button", { name: "その他の操作" }).click();
       await page
         .getByRole("dialog", { name: "その他の操作" })
-        .getByRole("button", { name: "この投稿を通報" })
+        .getByRole("button", { name: "この便りを通報" })
         .click();
       const dialog = page.getByRole("dialog", { name: "通報する" });
       await expect(dialog.locator("label:has(input[type=radio])")).toHaveText([
@@ -3768,7 +3768,7 @@ try {
       await post.getByRole("button", { name: "その他の操作" }).click();
       await page
         .getByRole("dialog", { name: "その他の操作" })
-        .getByRole("button", { name: "この投稿を通報" })
+        .getByRole("button", { name: "この便りを通報" })
         .click();
       await expect(
         dialog.getByLabel("脅し・危害を加えるという言葉"),
@@ -3783,7 +3783,7 @@ try {
         "運営が確認を始めたときと、確認し終えたときに、お知らせでお伝えします。相手への対応の中身は、お伝えしていません。",
       );
       await expect(dialog).toContainText(
-        "この投稿は、あなたの画面ではたたんでおきます。",
+        "この便りは、あなたの画面ではたたんでおきます。",
       );
       // What the reporter will be told, and that it folds, can be read.
       await expectReadable(dialog.locator("p"), "report sent");
@@ -3800,7 +3800,7 @@ try {
       await dialog.getByRole("button", { name: "閉じる" }).last().click();
       const mine = page
         .locator("article.post-card")
-        .filter({ hasText: "あなたが通報した投稿です" });
+        .filter({ hasText: "あなたが通報した便りです" });
       await expect(mine).toBeVisible();
       await expect(page.getByText("これから通報される言葉。")).toHaveCount(0);
       await mine.getByRole("button", { name: "読む" }).click();
@@ -3819,18 +3819,18 @@ try {
       ).toBeVisible();
       await expect(
         page.getByText(
-          "本屋について10月11日にいただいた通報を、運営が確認しました。知らせてくださって、ありがとうございます",
+          "書店について10月11日にいただいた通報を、運営が確認しました。知らせてくださって、ありがとうございます",
         ),
       ).toBeVisible();
       // The writer of the held post is told too, never who or how many.
       await expect(
-        page.getByText(/運営が確かめるまで、あなたの投稿「運営が確かめている/),
+        page.getByText(/運営が確かめるまで、あなたの便り「運営が確かめている/),
       ).toBeVisible();
       const own = page.getByRole("region", { name: "あなたの通報" });
       await expect(own.getByRole("listitem")).toHaveText([
-        /^\d+月\d+日 · 投稿 · 脅し・危害を加えるという言葉 · 受け付けました$/,
+        /^\d+月\d+日 · 便り · 脅し・危害を加えるという言葉 · 受け付けました$/,
         "10月12日 · 読書家 · 嫌がらせ・攻撃的な言葉 · 確認中",
-        "10月11日 · 本屋 · 宣伝・スパム · 確認しました",
+        "10月11日 · 書店 · 宣伝・スパム · 確認しました",
       ]);
       await expect(own.getByRole("link")).toHaveCount(0);
       await expectReadable(own.getByRole("listitem"), "own reports");
@@ -4097,7 +4097,7 @@ try {
       await expect(dialog).toContainText(
         "このポスターは、あなたの画面ではたたんでおきます。",
       );
-      await expect(dialog).not.toContainText("この投稿は");
+      await expect(dialog).not.toContainText("この便りは");
       await expectReadable(dialog.locator("p"), "poster report sent");
       expect(reportsSent.at(-1)).toEqual({
         reporter_id: user.id,
@@ -5142,7 +5142,7 @@ try {
     async () => {
       await loadAsked("/");
       await page.getByRole("button", { name: "本の街について" }).click();
-      const about = page.getByRole("dialog", { name: "Book Townへようこそ" });
+      const about = page.getByRole("dialog", { name: "BookTownへようこそ" });
       await expect(about).toBeVisible();
       await expect(annotate).toBeVisible();
       const corner = await annotate.boundingBox();
@@ -5150,12 +5150,12 @@ try {
         expect(overlaps(corner, await control.boundingBox())).toBe(false);
       await annotate.click();
       const heading = about.getByRole("heading", {
-        name: "Book Townへようこそ",
+        name: "BookTownへようこそ",
       });
       const at = await heading.boundingBox();
       await page.touchscreen.tap(at.x + 20, at.y + at.height / 2);
       await expect(notesSheet).toContainText(
-        "見出し「Book Townへようこそ」　小窓「Book Townへようこそ」の中",
+        "見出し「BookTownへようこそ」　小窓「BookTownへようこそ」の中",
       );
       await notesField.fill("ようこその字が細い");
       await notesSheet
@@ -5164,8 +5164,8 @@ try {
       await expect(toast).toContainText("注釈を残しました");
       expect(notesSent.at(-1)).toMatchObject({
         page: "/",
-        target: "見出し「Book Townへようこそ」",
-        layer: "Book Townへようこそ",
+        target: "見出し「BookTownへようこそ」",
+        layer: "BookTownへようこそ",
         body: "ようこその字が細い",
       });
       await expect(about).toBeVisible();
@@ -5532,7 +5532,7 @@ try {
       const asking = page.getByRole("dialog", { name: "ブロック" });
       await expect(asking).toContainText("レンさんをブロックしますか？");
       await expect(asking).toContainText(
-        "お互いの本屋・投稿・記録・ポスターが見えなくなり、フォローも外れます。相手には知らされません。あとで設定から外せます。",
+        "お互いの書店・便り・記録・ポスターが見えなくなり、フォローも外れます。相手には知らされません。あとで設定から外せます。",
       );
       await expectReadable(asking.locator("p"), "block question");
       await shot("block-1-question");
@@ -5583,7 +5583,7 @@ try {
       await page.setViewportSize({ width: 390, height: 844 });
       await list.getByRole("button", { name: "解除" }).click();
       await expect(toast).toContainText(
-        "レンさんのブロックを解除しました。本屋や投稿は、次にBookTownを開いたときから見えます",
+        "レンさんのブロックを解除しました。書店や便りは、次にBookTownを開いたときから見えます",
       );
       await expect(list).toHaveCount(0);
       await expect.poll(() => blocksLifted.length).toBe(1);
