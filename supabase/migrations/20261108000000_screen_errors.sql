@@ -7,9 +7,10 @@
 --
 -- The database does not trust the sender to have done so: before anything
 -- is kept, private.scrub_screen_text takes out the same things again (keys
--- and tokens, email addresses, an address's query, IDs, quoted words, a
--- value in "=(...)", runs of 5 or more digits), the page loses its query,
--- and the stack keeps only "file.js:line:column" positions.
+-- and tokens, email addresses, an address's query, IDs, everything after a
+-- quote mark, a value in "=(...)", phone numbers and long numbers), the page
+-- loses its query and keeps only an address's letters, the device is one of
+-- the app's labels, and the stack keeps only "file.js:line:column" positions.
 --
 -- The same error on the same page, build and device on the same day (Japan
 -- time) is one row with a count, so a busy day is a few rows. Nobody reads
@@ -17,8 +18,9 @@
 -- query and Claude reads it with a select (docs/09「画面のエラーの記録」).
 -- Rows go after 30 days, every night (pg_cron, screen-errors) and on each new
 -- report. A page gone wrong, or someone calling the function by hand, can
--- add at most 200 new rows an hour; past that it is quietly dropped, and a
--- row's count stops at a million.
+-- add at most 200 new rows an hour and 3,000 in all; past that it is quietly
+-- dropped (so a flood can also hide new errors for a while; repeats of a row
+-- already kept are still counted), and a row's count stops at a million.
 --
 -- Nothing moves: one table, three functions and one nightly job are added,
 -- and nothing else refers to them.
@@ -28,7 +30,7 @@
 --   select cron.unschedule('screen-errors');
 --   drop function public.report_screen_error(text, text, text, text, text, text);
 --   drop function private.forget_screen_errors();
---   drop function private.scrub_screen_text(text, boolean);
+--   drop function private.scrub_screen_text(text);
 --   drop table private.screen_errors;
 
 create table private.screen_errors (
@@ -36,12 +38,13 @@ create table private.screen_errors (
   day date not null,
   kind text not null check (kind in ('error', 'rejection')),
   message text not null check (char_length(message) between 1 and 300),
-  place text not null check (
-    char_length(place) between 1 and 200 and left(place, 1) = '/'
-  ),
+  -- A path of the site's own, in its address's letters.
+  place text not null check (place ~ '^/[A-Za-z0-9_.~%()/-]{0,199}$'),
   stack text not null default '' check (char_length(stack) <= 600),
   build text not null default '' check (build ~ '^([0-9a-f]{7,40})?$'),
-  device text not null default '' check (char_length(device) <= 40),
+  -- One of the app's few labels, such as "iPhone Safari" or "iPhone アプリ内"
+  -- (src/lib/user-agent.ts).
+  device text not null default '' check (device ~ '^[A-Za-z アプリ内]{0,40}$'),
   times integer not null default 1 check (times between 1 and 1000000),
   first_at timestamptz not null default now(),
   last_at timestamptz not null default now(),
@@ -53,29 +56,33 @@ revoke all on private.screen_errors from public, anon, authenticated;
 
 -- What could name a reader, taken out of a report's words. The same steps as
 -- scrubText in src/lib/screen-errors.ts, so text the app already cleaned
--- comes out as it went in. `numbers` false keeps long digit runs, for the
--- device label's version numbers.
-create function private.scrub_screen_text(t text, numbers boolean default true)
+-- comes out as it went in (tests/db-screen-errors.test.ts compares the two).
+create function private.scrub_screen_text(t text)
 returns text
 language sql immutable set search_path = '' as $$
   select btrim(regexp_replace(
-    case when numbers then regexp_replace(s, '[0-9]{5,}', '(n)', 'g') else s end,
+    regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+    regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+    regexp_replace(regexp_replace(
+      coalesce(t, ''),
+      -- Keys and tokens before anything else touches their dots.
+      'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)?', '***', 'g'),
+      '(sb|sbp|re|vcp)_[A-Za-z0-9_-]{8,}', '***', 'g'),
+      '[A-Za-z0-9_.+-]+(@|＠|%40)[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+', '(email)', 'g'),
+      -- An address keeps its origin and path, not its query and hash.
+      '(https?://[^[:space:]?#"''<>)]+)[?#][^[:space:]"''<>)]*', '\1', 'g'),
+      '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', '(id)', 'g'),
+      -- What follows a quote mark may be a title, a name or what was typed,
+      -- and quotes do not always pair, so all of it goes.
+      '["''“”‘’「」『』].*$', '(…)'),
+      '=\([^)]*\)', '=(…)', 'g'),
+      -- A long run of letters with a digit in it is a token, not a word.
+      '(?=[A-Za-z0-9_-]*[0-9])[A-Za-z0-9_-]{24,}', '***', 'g'),
+      '[0-9]+(-[0-9]+){2,}', '(n)', 'g'),
+      '[0-9]{5,}', '(n)', 'g'),
     '[[:space:]]+', ' ', 'g'))
-  from (
-    select regexp_replace(regexp_replace(regexp_replace(regexp_replace(
-      regexp_replace(regexp_replace(regexp_replace(
-        coalesce(t, ''),
-        -- Keys and tokens before anything else touches their dots.
-        '\yeyJ[[:alnum:]_-]+\.[[:alnum:]_-]+(\.[[:alnum:]_-]+)?', '***', 'g'),
-        '\y(sb|sbp|re|vcp)_[[:alnum:]_-]{8,}', '***', 'g'),
-        '[[:alnum:]_.+-]+@[[:alnum:]_-]+(\.[[:alnum:]_-]+)+', '(email)', 'g'),
-        '(https?://[^[:space:]?#"''<>)]+)[?#][^[:space:]"''<>)]*', '\1', 'g'),
-        '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', '(id)', 'g'),
-        '「[^」]*」|『[^』]*』|"[^"]*"|''[^'']*''|“[^”]*”', '(…)', 'g'),
-        '=\([^)]*\)', '=(…)', 'g') as s
-  ) cleaned
 $$;
-revoke all on function private.scrub_screen_text(text, boolean)
+revoke all on function private.scrub_screen_text(text)
   from public, anon, authenticated;
 
 -- Anyone may report, signed in or not: the error happened on their screen.
@@ -95,7 +102,7 @@ declare
   v_place text;
   v_stack text;
   v_build text := coalesce(p_build, '');
-  v_device text := left(private.scrub_screen_text(p_device, false), 40);
+  v_device text := coalesce(p_device, '');
 begin
   if p_kind is null or p_kind not in ('error', 'rejection')
      or p_message is null or char_length(p_message) not between 1 and 300
@@ -106,7 +113,7 @@ begin
   v_message := left(private.scrub_screen_text(p_message), 300);
   v_place := left(private.scrub_screen_text(
     split_part(split_part(p_place, '?', 1), '#', 1)), 200);
-  if v_message = '' or left(v_place, 1) <> '/' then
+  if v_message = '' or v_place !~ '^/[A-Za-z0-9_.~%()/-]{0,199}$' then
     return;
   end if;
   -- Only the site's own script positions, as the app writes them.
@@ -118,6 +125,9 @@ begin
   if v_build !~ '^([0-9a-f]{7,40})?$' then
     v_build := '';
   end if;
+  if v_device !~ '^[A-Za-z アプリ内]{0,40}$' then
+    v_device := '';
+  end if;
   -- Reports are taken one at a time, so many at once still see each other
   -- and the 200 an hour holds.
   perform pg_advisory_xact_lock(hashtext('book-town.screen-errors'));
@@ -128,10 +138,12 @@ begin
   if found then
     return;
   end if;
+  -- 200 new rows an hour, and 3,000 in all (a few megabytes at most), so a
+  -- flood can neither fill the database nor go on for the whole month.
   if (
     select count(*) from private.screen_errors e
     where e.first_at > now() - interval '1 hour'
-  ) >= 200 then
+  ) >= 200 or (select count(*) from private.screen_errors) >= 3000 then
     return;
   end if;
   delete from private.screen_errors e where e.day < today - 30;

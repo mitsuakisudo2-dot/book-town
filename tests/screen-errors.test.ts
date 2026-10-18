@@ -45,7 +45,7 @@ check("an error's words lose what could name a reader", () => {
   );
   assert.equal(
     scrubText("Could not save 『ノルウェイの森』 to 「夜の本棚」"),
-    "Could not save (…) to (…)",
+    "Could not save (…)",
   );
   assert.equal(
     scrubText(`Unexpected token in "my secret note"`),
@@ -64,7 +64,7 @@ check("an error's words lose what could name a reader", () => {
     scrubText(
       'duplicate key value violates unique constraint "shops_name_key" Key (name)=(夜の本棚) already exists.',
     ),
-    "duplicate key value violates unique constraint (…) Key (name)=(…) already exists.",
+    "duplicate key value violates unique constraint (…)",
   );
   assert.equal(
     scrubText(
@@ -78,7 +78,36 @@ check("an error's words lose what could name a reader", () => {
     scrubText(
       "TypeError: Cannot read properties of undefined (reading 'title')",
     ),
-    "TypeError: Cannot read properties of undefined (reading (…))",
+    "TypeError: Cannot read properties of undefined (reading (…)",
+  );
+  assert.equal(
+    scrubText("Key (handle)=(aki) already exists."),
+    "Key (handle)=(…) already exists.",
+  );
+  // Quotes that do not pair: whatever follows the first one goes.
+  assert.equal(
+    scrubText(
+      `Unexpected token 'u', "{"title":"ノルウェイの森","email":"a"... is not valid JSON`,
+    ),
+    "Unexpected token (…)",
+  );
+  assert.equal(scrubText("can't open 'ノルウェイの森'"), "can(…)");
+  assert.equal(
+    scrubText("call 090-1234-5678 or ISBN 978-4-10-100605-5"),
+    "call (n) or ISBN (n)",
+  );
+  assert.equal(
+    scrubText("mail aki%40example.jp or aki＠example.jp"),
+    "mail (email) or (email)",
+  );
+  assert.equal(
+    scrubText("token abcdEFGH1234ijklMNOP5678qrst failed"),
+    "token *** failed",
+  );
+  // A long error code without digits is a word, and stays.
+  assert.equal(
+    scrubText("ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED"),
+    "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED",
   );
 });
 

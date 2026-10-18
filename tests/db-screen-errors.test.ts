@@ -12,7 +12,7 @@ import {
   STACK_LENGTH,
   scrubText,
 } from "../src/lib/screen-errors";
-import { SITE_NOTE_LIMITS } from "../src/lib/site-notes";
+import { SITE_NOTE_LIMITS, deviceLabel } from "../src/lib/site-notes";
 
 // 画面のエラーの記録 (supabase/migrations/*_screen_errors.sql, AUD-032): anyone
 // may report an error from their screen, nobody reads the reports through the
@@ -188,7 +188,8 @@ async function main() {
     assert.ok(kept.stack.length > STACK_LENGTH - 20);
     assert.match(kept.stack, /^(chunk\.js:12:345 ?)+$/);
     assert.equal(kept.build, "");
-    assert.equal(kept.device.length, SITE_NOTE_LIMITS.device);
+    // A device that is not one of the app's labels is left out.
+    assert.equal(kept.device, "");
   });
 
   await check("a flood stops at 200 new rows an hour", async () => {
@@ -231,7 +232,7 @@ async function main() {
       const raw =
         `Error: aki@example.jp saw 「人間失格」 at https://booktown.page/search/?q=secret#x ` +
         `id 0b9f6c3e-1a2b-4c3d-8e9f-0a1b2c3d4e5f key ${token} ` +
-        `sb_secret_abcdefghijkl "typed words" 'more' Key (handle)=(aki) 1234567`;
+        `sb_secret_abcdefghijkl 1234567 call 090-1234-5678 Key (handle)=(aki) "typed words" 'more'`;
       await report(
         null,
         "error",
@@ -255,6 +256,7 @@ async function main() {
         "more",
         "=(aki)",
         "1234567",
+        "090-1234",
       ])
         assert.ok(!row.message.includes(kept), kept);
       assert.equal(row.place, "/books/");
@@ -264,6 +266,11 @@ async function main() {
       for (const sample of [
         raw,
         "TypeError: Cannot read properties of undefined (reading 'x')",
+        `Unexpected token 'u', "{"title":"ノルウェイの森"... is not valid JSON`,
+        "can't open 'ノルウェイの森'",
+        "mail aki%40example.jp or aki＠example.jp, token abcdEFGH1234ijklMNOP5678qrst",
+        "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED at 978-4-10-100605-5",
+        "トークンeyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc",
         "AuthApiError: Invalid login credentials for x@y.co",
         "  spaced\n  out  ",
       ]) {
@@ -305,6 +312,30 @@ async function main() {
       await report(null, "error", "x".repeat(100_000));
       await report(null, "error", "x", "/" + "y".repeat(100_000));
       assert.equal((await all()).length, 1);
+    },
+  );
+
+  await check(
+    "however long a flood goes on, the table stops at 3,000 rows",
+    async () => {
+      await clear();
+      await db.exec(`
+        insert into private.screen_errors (day, kind, message, place, first_at)
+        select current_date, 'error', 'old ' || i, '/', now() - interval '2 hours'
+        from generate_series(1, 2999) i`);
+      await report(null, "error", "the last one");
+      await report(null, "error", "one too many");
+      const [{ n }] = await rows<{ n: number }>(
+        "select count(*)::int as n from private.screen_errors",
+      );
+      assert.equal(n, 3000);
+      // A row already kept still counts up.
+      await report(null, "error", "the last one");
+      const [last] = await rows<{ times: number }>(
+        "select times from private.screen_errors where message = 'the last one'",
+      );
+      assert.equal(last.times, 2);
+      await clear();
     },
   );
 
@@ -372,11 +403,36 @@ async function main() {
     },
   );
 
+  await check("every device label the app makes is kept", async () => {
+    const agents = [
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Line/13.0.0",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+      "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36",
+      "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0 Mobile Safari/537.36",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36 Edg/129.0",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7; rv:131.0) Gecko/20100101 Firefox/131.0",
+      "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36",
+      "",
+    ];
+    for (const agent of agents) {
+      const label = deviceLabel(agent, 5);
+      const [{ ok }] = await rows<{ ok: boolean }>(
+        "select $1 ~ '^[A-Za-z アプリ内]{0,40}$' as ok",
+        [label],
+      );
+      assert.ok(ok, label);
+    }
+  });
+
   await check("the limits are the app's", async () => {
     assert.match(TEXT, new RegExp(`between 1 and ${MESSAGE_LENGTH}\\)`));
-    assert.match(TEXT, new RegExp(`between 1 and ${PLACE_LENGTH} and`));
+    assert.match(TEXT, new RegExp(`\\]\\{0,${PLACE_LENGTH - 1}\\}\\$'\\)`));
     assert.match(TEXT, new RegExp(`<= ${STACK_LENGTH}\\)`));
-    assert.match(TEXT, new RegExp(`<= ${SITE_NOTE_LIMITS.device}\\)`));
+    assert.match(
+      TEXT,
+      new RegExp(`\\]\\{0,${SITE_NOTE_LIMITS.device}\\}\\$'\\)`),
+    );
   });
 
   console.log(`${passed} screen error database checks passed`);

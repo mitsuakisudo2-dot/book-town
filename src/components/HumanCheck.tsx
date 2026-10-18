@@ -21,6 +21,9 @@ export function useHumanCheck() {
   const widget = useRef<string | null>(null);
   const answer = useRef<string | null>(null);
   const needed = useRef(false);
+  // Cloudflare's script did not load, or the check failed: a press then goes
+  // on at once without an answer instead of waiting for one that won't come.
+  const broken = useRef(false);
   const waiting = useRef<((answer: string | undefined) => void)[]>([]);
 
   const hand = (value: string | undefined) => {
@@ -44,6 +47,7 @@ export function useHumanCheck() {
           size: "flexible",
           "refresh-expired": "auto",
           callback: (token) => {
+            broken.current = false;
             answer.current = token;
             hand(token);
           },
@@ -51,6 +55,7 @@ export function useHumanCheck() {
             answer.current = null;
           },
           "error-callback": () => {
+            broken.current = true;
             answer.current = null;
             hand(undefined);
           },
@@ -58,7 +63,10 @@ export function useHumanCheck() {
       })
       // Without Cloudflare's script the try goes without an answer, and
       // Supabase's refusal says what happened.
-      .catch(() => hand(undefined));
+      .catch(() => {
+        broken.current = true;
+        hand(undefined);
+      });
     return () => {
       gone = true;
       if (widget.current) turnstile.current?.remove(widget.current);
@@ -68,7 +76,8 @@ export function useHumanCheck() {
   }, []);
 
   const take = useCallback(async (): Promise<string | undefined> => {
-    if (!needed.current) return undefined;
+    if (!needed.current || (broken.current && !answer.current))
+      return undefined;
     let value = answer.current ?? undefined;
     if (!value)
       value = await new Promise<string | undefined>((resolve) => {
