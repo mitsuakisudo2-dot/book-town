@@ -177,7 +177,8 @@ jobs:
 
   # Signs in and saves a town against a real local Supabase: auth, the code
   # email, the REST API and row level security, with the migrations and
-  # supabase/config.toml applied.
+  # supabase/config.toml applied. Passkeys are made in Chromium, with its
+  # stand-in authenticator.
   supabase:
     runs-on: ubuntu-latest
     steps:
@@ -188,6 +189,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
       - uses: supabase/setup-cli@v1
         with:
           version: 2.120.0

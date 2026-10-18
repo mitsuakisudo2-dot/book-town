@@ -55,7 +55,7 @@ const where = (pattern: RegExp, keep: (line: string) => boolean = () => true) =>
       .map((line) => `${file}:${line}`);
   });
 
-const UNITS = "冊|人|件|軒|回|枚|ページ|段|文字|字|分|時間";
+const UNITS = "冊|人|件|軒|回|枚|個|ページ|段|文字|字|分|時間";
 
 check("a count, a place in a row, and how many of the most", () => {
   assert.equal(counted(3, "冊"), "3冊");

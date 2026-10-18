@@ -13,12 +13,14 @@ import {
   type AccountFailure,
   type AccountUser,
   type Leaving,
+  type Passkey,
   type SignedOut,
 } from "../src/lib/account";
 import { RESERVED_HANDLES } from "../src/lib/handles";
 import {
   authFailure,
   emailChangeFailure,
+  passkeyFailure,
 } from "../src/lib/supabase/account-backend";
 import type { ProfileRow } from "../src/lib/supabase/database.types";
 
@@ -72,6 +74,9 @@ function fakeBackend() {
     change: null as null | { email: string; confirmed: Set<string> },
     /** Like the auth server while email confirmations are off. */
     oneCodeEnough: false,
+    /** Aki's passkeys, and what this device's passkey window answers. */
+    passkeys: [] as Passkey[],
+    passkeyWindow: null as AccountFailure | null,
     emit: (user: AccountUser | null) => listener(user),
     release() {
       control.held.splice(0).forEach((resume) => resume());
@@ -118,6 +123,32 @@ function fakeBackend() {
       control.change = null;
       setTimeout(() => listener({ ...AKI, email: change.email }), 0);
       return { done: true };
+    },
+    async signInWithPasskey() {
+      if (control.passkeyWindow) return control.passkeyWindow;
+      if (!control.passkeys.length) return "passkey-unknown";
+      control.passkeys[0].lastUsedAt = "2026-10-18T10:00:00Z";
+      listener(AKI);
+      return null;
+    },
+    async addPasskey() {
+      if (control.passkeyWindow) return control.passkeyWindow;
+      if (control.passkeys.length) return "passkey-exists";
+      control.passkeys.push({
+        id: "passkey-1",
+        name: "iCloud Keychain",
+        createdAt: "2026-10-18T09:00:00Z",
+        lastUsedAt: null,
+      });
+      return null;
+    },
+    async listPasskeys() {
+      if (control.loadFails) throw new Error("offline");
+      return control.passkeys.map((passkey) => ({ ...passkey }));
+    },
+    async removePasskey(id) {
+      control.passkeys = control.passkeys.filter((p) => p.id !== id);
+      return null;
     },
     async signOut() {
       listener(null);
@@ -820,6 +851,136 @@ async function main() {
       emailChangeFailure({ code: "over_email_send_rate_limit", status: 429 }),
       "rate-limited",
     );
+  });
+
+  await check(
+    "a passkey is made while signed in, and signs in without a code",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "あき"));
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      await settle();
+      // Signed out, there is nobody to make one for.
+      assert.deepEqual(await store.actions.addPasskey(), {
+        ok: false,
+        message: failureMessages.network,
+      });
+      // None made yet: the passkey offered is not this town's.
+      assert.deepEqual(await store.actions.signInWithPasskey(), {
+        ok: false,
+        message: failureMessages["passkey-unknown"],
+      });
+      await store.actions.verifyCode(AKI.email, "123456");
+      await settle();
+      assert.equal(store.getSnapshot().status, "signed-in");
+      assert.deepEqual(await store.actions.addPasskey(), { ok: true });
+      assert.deepEqual(await store.actions.addPasskey(), {
+        ok: false,
+        message: failureMessages["passkey-exists"],
+      });
+      const listed = await store.actions.listPasskeys();
+      assert.ok(listed.ok);
+      assert.deepEqual(
+        listed.passkeys.map((p) => p.name),
+        ["iCloud Keychain"],
+      );
+      await store.actions.signOut();
+      assert.equal(store.getSnapshot().status, "signed-out");
+      // Closing the browser's window says nothing.
+      control.passkeyWindow = "passkey-cancelled";
+      assert.deepEqual(await store.actions.signInWithPasskey(), {
+        ok: false,
+        message: "",
+      });
+      control.passkeyWindow = null;
+      assert.deepEqual(await store.actions.signInWithPasskey(), { ok: true });
+      await settle();
+      const state = store.getSnapshot();
+      assert.equal(state.status, "signed-in");
+      // Removed, it no longer signs anyone in.
+      assert.deepEqual(await store.actions.removePasskey("passkey-1"), {
+        ok: true,
+      });
+      const after = await store.actions.listPasskeys();
+      assert.deepEqual(after, { ok: true, passkeys: [] });
+      control.loadFails = true;
+      assert.deepEqual(await store.actions.listPasskeys(), {
+        ok: false,
+        message: failureMessages.network,
+      });
+    },
+  );
+
+  await check("passkey errors become the messages the screen shows", () => {
+    const browser = (code: string, cause?: string) => ({
+      __isWebAuthnError: true,
+      code,
+      cause: cause ? { name: cause } : undefined,
+    });
+    assert.equal(
+      passkeyFailure(
+        browser("ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY", "NotAllowedError"),
+      ),
+      "passkey-cancelled",
+    );
+    assert.equal(
+      passkeyFailure(browser("ERROR_CEREMONY_ABORTED")),
+      "passkey-cancelled",
+    );
+    assert.equal(
+      passkeyFailure(browser("ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED")),
+      "passkey-exists",
+    );
+    assert.equal(
+      passkeyFailure(browser("ERROR_INVALID_DOMAIN", "SecurityError")),
+      "passkey-unavailable",
+    );
+    assert.equal(
+      passkeyFailure(browser("ERROR_AUTHENTICATOR_GENERAL_ERROR")),
+      "passkey-failed",
+    );
+    const server = (code: string, status = 400) => ({ code, status });
+    assert.equal(
+      passkeyFailure(server("passkey_disabled", 403)),
+      "passkey-unavailable",
+    );
+    assert.equal(
+      passkeyFailure(server("too_many_passkeys")),
+      "passkey-too-many",
+    );
+    assert.equal(
+      passkeyFailure(server("webauthn_credential_exists", 422)),
+      "passkey-exists",
+    );
+    assert.equal(
+      passkeyFailure(server("webauthn_credential_not_found", 404)),
+      "passkey-unknown",
+    );
+    assert.equal(
+      passkeyFailure(server("webauthn_challenge_expired")),
+      "passkey-expired",
+    );
+    assert.equal(
+      passkeyFailure(server("webauthn_verification_failed")),
+      "passkey-unknown",
+    );
+    assert.equal(
+      passkeyFailure({ message: "Browser does not support WebAuthn" }),
+      "passkey-unavailable",
+    );
+    assert.equal(
+      passkeyFailure(server("over_request_rate_limit", 429)),
+      "rate-limited",
+    );
+    // A session ended elsewhere is not about a code this screen lacks.
+    assert.equal(
+      passkeyFailure(server("session_not_found", 403)),
+      "passkey-failed",
+    );
+    assert.equal(passkeyFailure({ message: "Failed to fetch" }), "network");
+    assert.equal(failureMessages["passkey-cancelled"], "");
+    assert.match(failureMessages["passkey-too-many"], /10個まで/);
   });
 
   await check("a link that did not work is recognized", () => {

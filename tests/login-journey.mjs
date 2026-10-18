@@ -132,6 +132,15 @@ const codeRequests = [];
 // and which of its two codes were taken. The new address's code is 111111,
 // the current address's 222222; ren@example.jp is another account's.
 let emailChange = null;
+// The reader's passkeys, as the auth server keeps them: the credential each
+// was made with (the browser's stand-in authenticator holds its key).
+let passkeys = [];
+const passkeyChallenge = () => ({
+  challenge_id: crypto.randomUUID(),
+  expires_at: Math.floor(Date.now() / 1000) + 300,
+});
+const randomBase64url = () =>
+  Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 const townReads = [];
 const townWrites = [];
 // The posts the town's own read leaves out, as older than the newest 500
@@ -370,6 +379,81 @@ const standIn = async (route) => {
           error_code: "otp_expired",
           msg: "Token has expired or is invalid",
         });
+  // Passkeys, like the auth server's, for pages on localhost (a passkey's
+  // relying party cannot be an IP address). Signatures are not checked.
+  if (url.pathname === "/auth/v1/passkeys/registration/options")
+    return json(200, {
+      ...passkeyChallenge(),
+      options: {
+        rp: { name: "BookTown", id: "localhost" },
+        user: {
+          name: user.email,
+          displayName: user.email,
+          id: Buffer.from(user.id).toString("base64url"),
+        },
+        challenge: randomBase64url(),
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+        timeout: 300000,
+        excludeCredentials: passkeys.map((passkey) => ({
+          type: "public-key",
+          id: passkey.credential,
+        })),
+        authenticatorSelection: {
+          residentKey: "required",
+          userVerification: "preferred",
+        },
+        attestation: "none",
+      },
+    });
+  if (url.pathname === "/auth/v1/passkeys/registration/verify") {
+    const made = {
+      id: crypto.randomUUID(),
+      credential: body.credential.id,
+      friendly_name: "Google Password Manager",
+      created_at: new Date().toISOString(),
+    };
+    passkeys.push(made);
+    return json(200, {
+      id: made.id,
+      friendly_name: made.friendly_name,
+      created_at: made.created_at,
+    });
+  }
+  if (url.pathname === "/auth/v1/passkeys/authentication/options")
+    return json(200, {
+      ...passkeyChallenge(),
+      options: {
+        challenge: randomBase64url(),
+        timeout: 300000,
+        rpId: "localhost",
+        userVerification: "preferred",
+      },
+    });
+  if (url.pathname === "/auth/v1/passkeys/authentication/verify") {
+    const known = passkeys.find((p) => p.credential === body.credential.id);
+    if (!known)
+      return json(400, {
+        code: 400,
+        error_code: "webauthn_verification_failed",
+        msg: "Credential verification failed",
+      });
+    known.last_used_at = new Date().toISOString();
+    return json(200, session());
+  }
+  if (url.pathname === "/auth/v1/passkeys")
+    return json(
+      200,
+      passkeys.map((passkey) => ({
+        id: passkey.id,
+        friendly_name: passkey.friendly_name,
+        created_at: passkey.created_at,
+        last_used_at: passkey.last_used_at,
+      })),
+    );
+  if (url.pathname.startsWith("/auth/v1/passkeys/")) {
+    passkeys = passkeys.filter((p) => !url.pathname.endsWith("/" + p.id));
+    return route.fulfill({ status: 204, body: "" });
+  }
   if (url.pathname === "/auth/v1/logout")
     return route.fulfill({ status: 204, body: "" });
   if (url.pathname === "/auth/v1/user") return json(200, user);
@@ -6043,6 +6127,151 @@ try {
       } finally {
         user.email = INVITED;
         emailChange = null;
+      }
+    },
+  );
+
+  await check(
+    "パスキー from 設定: made on this phone, it signs in without a code; removed, it does not",
+    async () => {
+      // A passkey works only on pages under its relying party, and an IP
+      // address cannot be one: this phone opens the site at localhost.
+      const local = base.replace("127.0.0.1", "localhost");
+      const phone = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
+        reducedMotion: "reduce",
+      });
+      try {
+        await phone.route(supabase + "/**", standIn);
+        const at = settleBeforeNavigating(await phone.newPage());
+        at.on("pageerror", (e) => errors.push(e.message));
+        const snap = (name) =>
+          at.screenshot({
+            path: path.join(output, name + ".png"),
+            fullPage: true,
+          });
+        // The phone's fingerprint, stood in for: it keeps what it makes.
+        const cdp = await phone.newCDPSession(at);
+        await cdp.send("WebAuthn.enable");
+        await cdp.send("WebAuthn.addVirtualAuthenticator", {
+          options: {
+            protocol: "ctap2",
+            transport: "internal",
+            hasResidentKey: true,
+            hasUserVerification: true,
+            isUserVerified: true,
+            automaticPresenceSimulation: true,
+          },
+        });
+        const link = session();
+        await at.goto(
+          local +
+            "/login/#" +
+            new URLSearchParams({
+              access_token: link.access_token,
+              expires_at: String(link.expires_at),
+              expires_in: "3600",
+              refresh_token: link.refresh_token,
+              token_type: "bearer",
+              type: "magiclink",
+            }),
+        );
+        const signedIn = at.getByRole("heading", {
+          name: "ログインしています",
+        });
+        await expect(signedIn).toBeVisible();
+        await expect(at.locator(".account-row")).toContainText("パスキー");
+        await snap("passkey-0-account-390");
+        await at.goto(local + "/profiles/me/");
+        await at.getByRole("button", { name: "設定" }).click();
+        await at
+          .getByRole("dialog", { name: "設定" })
+          .getByRole("button", { name: "パスキー", exact: true })
+          .scrollIntoViewIfNeeded();
+        await snap("passkey-0-settings-390");
+        await at
+          .getByRole("dialog", { name: "設定" })
+          .getByRole("button", { name: "パスキー", exact: true })
+          .click();
+        await expect(at).toHaveURL(local + "/login/?change=passkey");
+        const heading = at.getByRole("heading", { name: "パスキー" });
+        await expect(heading).toBeFocused();
+        // None made yet: no list, no count, only the way to make one.
+        const make = at.getByRole("button", {
+          name: "この端末でパスキーを作る",
+        });
+        await expect(make).toBeEnabled();
+        await expect(at.locator(".account-passkeys")).toHaveCount(0);
+        await expect(at.locator(".account-card")).not.toContainText("0");
+        await snap("passkey-1-none-390");
+
+        await make.click();
+        await expect(at.getByRole("status")).toContainText(
+          "パスキーを作りました",
+        );
+        const items = at.locator(".account-passkeys li");
+        await expect(items).toHaveCount(1);
+        await expect(items.first()).toContainText("Google Password Manager");
+        await snap("passkey-2-made-390");
+        // The same phone makes one; asked again, it says so.
+        await make.click();
+        await expect(at.locator("#account-error")).toContainText(
+          "この端末のパスキーは、もう作ってあります",
+        );
+        await expect(items).toHaveCount(1);
+
+        // 戻る, then signed out: the passkey signs in with no code.
+        await at.getByRole("button", { name: "戻る" }).click();
+        await expect(signedIn).toBeVisible();
+        await at.getByRole("button", { name: "ログアウト" }).click();
+        const passkeyIn = at.getByRole("button", {
+          name: "パスキーでログイン",
+        });
+        await expect(passkeyIn).toBeVisible();
+        await snap("passkey-3-sign-in-390");
+        const asked = codeRequests.length;
+        await passkeyIn.click();
+        await expect(signedIn).toBeVisible();
+        expect(codeRequests.length).toBe(asked);
+
+        // Removed after asking, it signs nobody in.
+        await at.goto(local + "/login/?change=passkey");
+        await expect(items).toHaveCount(1);
+        await expect(items.first()).toContainText("に使用");
+        await items.first().getByRole("button", { name: "消す" }).click();
+        await expect(items.first()).toContainText(
+          "このパスキーではログインできなくなります",
+        );
+        await snap("passkey-4-remove-390");
+        await items.first().getByRole("button", { name: "残す" }).click();
+        await expect(items).toHaveCount(1);
+        await items.first().getByRole("button", { name: "消す" }).click();
+        await items.first().getByRole("button", { name: "消す" }).click();
+        await expect(at.locator(".account-passkeys")).toHaveCount(0);
+        expect(passkeys).toEqual([]);
+        await at.getByRole("button", { name: "戻る" }).click();
+        await at.getByRole("button", { name: "ログアウト" }).click();
+        await passkeyIn.click();
+        await expect(at.locator("#account-passkey-error")).toContainText(
+          "このパスキーでは入れませんでした",
+        );
+        // Its line is the passkey's, not the address field's.
+        await expect(at.getByLabel("メールアドレス")).not.toHaveAttribute(
+          "aria-describedby",
+          "account-passkey-error",
+        );
+        await expect(
+          at.getByRole("heading", { name: "本の街に入る" }),
+        ).toBeVisible();
+        const width = await at.evaluate(() => ({
+          page: innerWidth,
+          document: document.documentElement.scrollWidth,
+        }));
+        expect(width.document).toBeLessThanOrEqual(width.page + 1);
+      } finally {
+        passkeys = [];
+        await phone.close();
       }
     },
   );

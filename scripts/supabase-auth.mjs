@@ -6,6 +6,7 @@
 // email itself (supabase/templates/magic_link.html, the same file the local
 // Supabase uses). Changing the address asks for a code from the current
 // address and one from the new one (supabase/templates/email_change.html).
+// A reader may also sign in with a passkey made on booktown.page.
 // .github/workflows/supabase-auth.yml runs it.
 //
 //   node scripts/supabase-auth.mjs check   prints what would change
@@ -45,6 +46,10 @@ const SHOWN = new Set([
   "mailer_autoconfirm",
   "mailer_subjects_email_change",
   "mailer_templates_email_change_content",
+  "passkey_enabled",
+  "webauthn_rp_id",
+  "webauthn_rp_display_name",
+  "webauthn_rp_origins",
   "site_url",
   "uri_allow_list",
   "disable_signup",
@@ -97,6 +102,12 @@ export function desiredAuth(
     // sign-ups are closed, and invited readers are created confirmed.
     mailer_secure_email_change_enabled: settings.emailChange.confirmBoth,
     mailer_autoconfirm: !settings.emailChange.confirmBoth,
+    // A passkey belongs to its relying party for good: changing it later
+    // leaves every passkey made so far unusable.
+    passkey_enabled: settings.passkey.enabled,
+    webauthn_rp_id: settings.passkey.relyingParty,
+    webauthn_rp_display_name: settings.passkey.name,
+    webauthn_rp_origins: settings.passkey.origins.join(","),
   };
   if (!resendKey) return wanted;
   return {

@@ -1129,6 +1129,15 @@ export function ProfileView({
               <button
                 type="button"
                 className="btn quiet"
+                onClick={() =>
+                  leaveLayers(() => router.push(loginPath({ passkeys: true })))
+                }
+              >
+                パスキー
+              </button>
+              <button
+                type="button"
+                className="btn quiet"
                 onClick={() => leaveLayers(() => router.push(leavePath()))}
               >
                 退会する
