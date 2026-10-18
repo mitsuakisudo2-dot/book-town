@@ -13,7 +13,7 @@ import {
 import { booksFelt, feelingsInTown } from "../lib/records";
 import { booksBeforeSearch } from "../lib/book-lists";
 import { findReader } from "../lib/social";
-import { bookPath } from "../lib/books";
+import { bookPath, normalizeIsbn } from "../lib/books";
 import {
   bookSignals,
   findReaders,
@@ -38,7 +38,16 @@ import "./records.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { useTownBackend } from "../lib/store";
 import { bookAuthor, bookTitle } from "../lib/book-name";
-import { counted, whenSome } from "../lib/words";
+import { counted, REGISTER, whenSome } from "../lib/words";
+import { RegisterBook } from "./RegisterBook";
+import { BarcodeRegister } from "./BarcodeRegister";
+import dynamic from "next/dynamic";
+
+// The scanner is only fetched when a search sends the reader to it.
+const ScanSession = dynamic(
+  () => import("./ScanSession").then((file) => file.ScanSession),
+  { ssr: false },
+);
 
 type Shared = {
   state: TownState;
@@ -175,7 +184,7 @@ export function SearchView({ state, actions, notify }: Shared) {
         : "",
     );
   const bookRow = (book: Book, meta: string) => (
-    <li key={book.id}>
+    <li key={book.id} className="search-book-row">
       <Link href={bookPath(book.id)} className="search-book">
         <BookJacket book={book} className="search-jacket" />
         <span>
@@ -185,10 +194,20 @@ export function SearchView({ state, actions, notify }: Shared) {
           </small>
           {meta && <em>{meta}</em>}
         </span>
-        <Icon name="chevron" size={15} />
       </Link>
+      <RegisterBook
+        book={book}
+        state={state}
+        actions={actions}
+        notify={notify}
+        short
+      />
     </li>
   );
+  // Not found in the town: in by its barcode, or by what was typed (an
+  // ISBN looked up, or words as its title). AUD-051.
+  const [adding, setAdding] = useState<"scan" | "title" | null>(null);
+  const typedIsbn = normalizeIsbn(query.trim());
 
   return (
     <div className="search-page">
@@ -279,11 +298,34 @@ export function SearchView({ state, actions, notify }: Shared) {
               <ul className="search-list">{found.map(matchRow)}</ul>
             ) : (
               books.settled && (
-                <p className="search-empty">
-                  {near.length
-                    ? "ぴったり合う本はありませんでした。"
-                    : "合う本は見つかりませんでした。"}
-                </p>
+                <div className="search-add">
+                  <p className="search-empty">
+                    {near.length
+                      ? "ぴったり合う本はありませんでした。"
+                      : "合う本は見つかりませんでした。"}
+                  </p>
+                  <p className="search-empty">
+                    まだ街にない本は、ここから登録できます。
+                  </p>
+                  <div className="btns">
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setAdding("scan")}
+                    >
+                      <Icon name="barcode" size={18} />
+                      {REGISTER.byBarcode}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setAdding("title")}
+                    >
+                      <Icon name="plus" size={18} />
+                      {typedIsbn ? REGISTER.byIsbn : REGISTER.byTitle}
+                    </button>
+                  </div>
+                </div>
               )
             )}
             {near.length > 0 && (
@@ -412,6 +454,26 @@ export function SearchView({ state, actions, notify }: Shared) {
             の本と書店から探します。並び順は、この街の棚と投稿から数えています。
           </p>
         </div>
+      )}
+      {adding === "scan" && (
+        <ScanSession
+          state={state}
+          actions={actions}
+          notify={notify}
+          onClose={() => setAdding(null)}
+        />
+      )}
+      {adding === "title" && (
+        <BarcodeRegister
+          state={state}
+          actions={actions}
+          notify={notify}
+          onClose={() => setAdding(null)}
+          lead={typedIsbn ? REGISTER.byIsbn : REGISTER.byTitle}
+          camera={false}
+          startTitle={typedIsbn ? "" : query.trim()}
+          startIsbn={typedIsbn}
+        />
       )}
     </div>
   );

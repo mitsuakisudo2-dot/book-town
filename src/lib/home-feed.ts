@@ -49,6 +49,33 @@ export const isNewcomer = (state: TownState): boolean =>
   !state.posts.some((post) => post.authorId === ME_ID);
 
 /**
+ * はじめの3つ (管理表 48, AUD-050・140): what a first-time reader can do
+ * first, each with whether it is done. A book registered, a shelf of their
+ * own made in the library (one put away still counts), a shop opened.
+ */
+export type FirstSteps = { book: boolean; shelf: boolean; shop: boolean };
+
+export const firstSteps = (state: TownState): FirstSteps => ({
+  book: state.library.length > 0,
+  shelf: state.libraryShelves.length > 0,
+  shop: !!state.ownShop,
+});
+
+/**
+ * Whether ホーム shows はじめの3つ: until all three are done, for a reader
+ * who has not yet begun with others (following nobody, no post). Not by
+ * isNewcomer alone, which ends with the shop, the third of them.
+ */
+export const showsFirstSteps = (state: TownState): boolean => {
+  const steps = firstSteps(state);
+  return (
+    !(steps.book && steps.shelf && steps.shop) &&
+    state.following.length === 0 &&
+    !state.posts.some((post) => post.authorId === ME_ID)
+  );
+};
+
+/**
  * Every 便り the reader follows (the owners of followed shops, and their
  * own), posts and posters together, newest first: 便りだけ.
  */

@@ -87,6 +87,32 @@
   border: 1px solid var(--line);
   color: var(--ink);
 }
+/* A found book and its one tap to 登録 (管理表 12): the button beside the card. */
+.search-book-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.search-book-row > .search-book {
+  flex: 1;
+  min-width: 0;
+}
+/* Narrow: the mark over the word, so the title keeps the room. */
+.search-book-row > .register-book {
+  flex-direction: column;
+  gap: 0;
+  min-width: 64px;
+  padding: 4px 8px;
+  font-size: var(--t-cap);
+}
+/* Nothing found: the ways to register it anyway (AUD-051). */
+.search-add {
+  display: grid;
+  gap: 10px;
+}
+.search-add .search-empty {
+  margin: 0;
+}
 .search-book:hover,
 .search-shop:hover {
   border-color: var(--line-2);

@@ -761,6 +761,49 @@ try {
         page.getByText("合う本は見つかりませんでした。"),
       ).toBeVisible();
       await expect(page.locator(".search-results")).not.toContainText(/0/);
+      // Not in the town, it can be registered anyway: by its barcode, or by
+      // the words searched as its title (管理表 12, AUD-051).
+      const results = page.locator(".search-results");
+      await expect(
+        results.getByRole("button", { name: "バーコードで登録" }),
+      ).toBeVisible();
+      await results.getByRole("button", { name: "この書名で登録" }).click();
+      const typed = page.getByRole("dialog", { name: "本を登録" });
+      await expect(typed.getByLabel("タイトル")).toHaveValue("量子力学");
+      await typed.getByRole("button", { name: "登録する" }).click();
+      await expect(typed).toHaveCount(0);
+      await expect(found.first()).toContainText("量子力学");
+      await expect(
+        page.getByRole("button", { name: "『量子力学』を本棚に登録" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      // A tap again takes it back (the checks after this one count the
+      // registered books).
+      await page
+        .getByRole("button", { name: "『量子力学』を本棚に登録" })
+        .click();
+      await expect(
+        page.getByText("『量子力学』の登録を取り消しました"),
+      ).toBeVisible();
+      // A found book is registered in one tap, its status left for later.
+      await box.fill("銀河 鉄道");
+      const tap = page.getByRole("button", {
+        name: "『銀河鉄道の夜』を本棚に登録",
+      });
+      await expect(tap).toHaveAttribute("aria-pressed", "false");
+      await tap.click();
+      await expect(tap).toHaveAttribute("aria-pressed", "true");
+      await expect(tap).toContainText("登録済み");
+      await expect(
+        page.getByText("『銀河鉄道の夜』を登録しました"),
+      ).toBeVisible();
+      // On its page, it says so: and one tap there takes it back.
+      await found.first().click();
+      const onPage = page.getByRole("button", { name: "本棚に登録済み" });
+      await expect(onPage).toHaveAttribute("aria-pressed", "true");
+      await onPage.click();
+      await expect(
+        page.getByRole("button", { name: "本棚に登録", exact: true }),
+      ).toHaveAttribute("aria-pressed", "false");
       // In a picker, Enter never sends the post being written, and takes
       // only a sure match: several equal ones or a near one wait for a tap.
       await go("/timeline/");

@@ -4,6 +4,7 @@ import {
   LETTERS_MAX,
   TOWN_MAX,
   authorOf,
+  firstSteps,
   followedAuthors,
   followedLetters,
   homeLetters,
@@ -11,6 +12,7 @@ import {
   isQuiet,
   letterOf,
   ownLettersSince,
+  showsFirstSteps,
   sinceMark,
   weave,
 } from "../src/lib/home-feed";
@@ -69,6 +71,47 @@ check(
     assert.equal(isNewcomer(town({ ownShop: seedState.shops[0] })), false);
     // A first-timer is never "quiet": they get the town's 便り instead.
     assert.equal(isQuiet(town(), NOW), false);
+  },
+);
+
+check(
+  "はじめの3つ: each step ticked when done, shown until all three are",
+  () => {
+    const empty = town({ library: [], libraryShelves: [], ownShop: null });
+    assert.deepEqual(firstSteps(empty), {
+      book: false,
+      shelf: false,
+      shop: false,
+    });
+    assert.equal(showsFirstSteps(empty), true);
+    const shelf = {
+      ...structuredClone(seedState.libraryShelves[0] ?? {}),
+      id: "shelf-1",
+      deletedAt: null,
+    } as TownState["libraryShelves"][number];
+    // Opening the shop first does not end them, as isNewcomer would.
+    const opened = { ...empty, ownShop: seedState.shops[0] };
+    assert.equal(isNewcomer(opened), false);
+    assert.equal(showsFirstSteps(opened), true);
+    const all = {
+      ...opened,
+      library: [seedState.books[0].id],
+      libraryShelves: [shelf],
+    };
+    assert.deepEqual(firstSteps(all), { book: true, shelf: true, shop: true });
+    assert.equal(showsFirstSteps(all), false);
+    // A reader already with others is not shown them.
+    assert.equal(
+      showsFirstSteps({ ...empty, following: ["shop-orbit"] }),
+      false,
+    );
+    assert.equal(
+      showsFirstSteps({
+        ...empty,
+        posts: [...seedState.posts, post("mine", ME_ID, NOW)],
+      }),
+      false,
+    );
   },
 );
 

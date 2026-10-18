@@ -29,10 +29,12 @@ import {
   type PopPick,
 } from "../../lib/features";
 import {
+  firstSteps,
   homeLetters,
   isNewcomer,
   letterOf,
   ownLettersSince,
+  showsFirstSteps,
   sinceMark,
   weave,
   type LetterEntry,
@@ -48,6 +50,7 @@ import { heldBookOf } from "../../lib/held-book";
 import { Alley } from "./Alley";
 import { CorkBoard } from "./CorkBoard";
 import { Entrances } from "./Entrances";
+import { FirstSteps } from "./FirstSteps";
 import { FeatureView } from "./FeatureBand";
 import { LiveBox, type LiveSlot } from "./LiveBox";
 import { useHeld, useNow, useTownReading } from "./hooks";
@@ -84,6 +87,8 @@ type HeldSlot =
 type Drawn = {
   at: number;
   newcomer: boolean;
+  /** はじめの3つ is shown: held, so the last one ticked stays to be seen. */
+  firstSteps: boolean;
   followed: string[];
   town: string[];
   tonight: string | null;
@@ -239,6 +244,7 @@ export function HomePane({
     return {
       at: now,
       newcomer: isNewcomer(state),
+      firstSteps: showsFirstSteps(state),
       followed: followed.map((entry) => entry.id),
       town: town.map((entry) => entry.id),
       tonight: tonightsShop(state, now)?.id ?? null,
@@ -399,6 +405,9 @@ export function HomePane({
         onRead={() => setSheet("read")}
         onScan={() => setSheet("scan")}
       />
+      {drawn?.firstSteps && (
+        <FirstSteps steps={firstSteps(state)} onScan={() => setSheet("scan")} />
+      )}
       {drawn && <ReadingLine state={state} />}
       {drawn ? (
         <WovenLetters
