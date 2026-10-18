@@ -67,8 +67,7 @@ check(
         0;
       if (count) found[file] = count;
     }
-    // PosterScreen.tsx is written by AUD-003 (#183); the address moves when it is merged
-    assert.deepEqual(found, { "src/components/PosterScreen.tsx": 1 });
+    assert.deepEqual(found, {});
   },
 );
 
