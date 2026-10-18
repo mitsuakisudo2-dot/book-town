@@ -314,12 +314,7 @@ export interface NewBook {
  * library has (`already`), or not kept (the town is not in yet).
  */
 export type BookFixResult =
-  | "fixed"
-  | "unchanged"
-  | "no-title"
-  | "bad-isbn"
-  | "already"
-  | "not-saved";
+  "fixed" | "unchanged" | "no-title" | "bad-isbn" | "already" | "not-saved";
 
 /** How a book came to be registered: read by the camera, its ISBN typed, or by hand. */
 export type RegisterVia = "scan" | "isbn" | "manual";

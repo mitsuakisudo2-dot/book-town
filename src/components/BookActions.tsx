@@ -1,6 +1,6 @@
 "use client";
 
-import type { Book, TownActions, TownState } from "../lib/types";
+import type { Book, Notify, TownActions, TownState } from "../lib/types";
 import { formatPrice, REGISTERED_GENRE } from "../lib/books";
 import { bookLookup, lookupQuery } from "../lib/book-lookup";
 import { Icon } from "./ui";
@@ -93,7 +93,7 @@ export function BookActions({
   book: Book;
   state: TownState;
   actions: TownActions;
-  notify: (message: string) => void;
+  notify: Notify;
   /** On the book's own page: 本棚に登録 in one tap, first (管理表 12). */
   register?: boolean;
 }) {

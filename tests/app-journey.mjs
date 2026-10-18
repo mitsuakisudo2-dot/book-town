@@ -770,40 +770,39 @@ try {
       await results.getByRole("button", { name: "この書名で登録" }).click();
       const typed = page.getByRole("dialog", { name: "本を登録" });
       await expect(typed.getByLabel("タイトル")).toHaveValue("量子力学");
-      await typed.getByRole("button", { name: "登録する" }).click();
+      // (Registered by this form, as the scanner's ［手で入力］ checks.)
+      await typed.getByRole("button", { name: "閉じる" }).click();
       await expect(typed).toHaveCount(0);
-      await expect(found.first()).toContainText("量子力学");
-      await expect(
-        page.getByRole("button", { name: "『量子力学』を本棚に登録" }),
-      ).toHaveAttribute("aria-pressed", "true");
-      // A tap again takes it back (the checks after this one count the
-      // registered books).
-      await page
-        .getByRole("button", { name: "『量子力学』を本棚に登録" })
-        .click();
-      await expect(
-        page.getByText("『量子力学』の登録を取り消しました"),
-      ).toBeVisible();
-      // A found book is registered in one tap, its status left for later.
+      // A found book is registered in one tap, its status left for later;
+      // the notice takes a tap by mistake back.
       await box.fill("銀河 鉄道");
+      const row = page.locator(".search-book-row").first();
       const tap = page.getByRole("button", {
         name: "『銀河鉄道の夜』を本棚に登録",
       });
-      await expect(tap).toHaveAttribute("aria-pressed", "false");
       await tap.click();
-      await expect(tap).toHaveAttribute("aria-pressed", "true");
-      await expect(tap).toContainText("登録済み");
-      await expect(
-        page.getByText("『銀河鉄道の夜』を登録しました"),
-      ).toBeVisible();
-      // On its page, it says so: and one tap there takes it back.
+      const notice = page.locator(".toast");
+      await expect(notice).toContainText("『銀河鉄道の夜』を登録しました");
+      // Once in, it says so, and a tap there takes nothing out.
+      await expect(tap).toHaveCount(0);
+      await expect(row).toContainText("登録済み");
+      await row.getByText("登録済み").click();
+      await expect(row).toContainText("登録済み");
+      await notice.getByRole("button", { name: "元に戻す" }).click();
+      await expect(tap).toBeVisible();
+      // On its page the same: 本棚に登録, then 本棚に登録済み, and back.
       await found.first().click();
-      const onPage = page.getByRole("button", { name: "本棚に登録済み" });
-      await expect(onPage).toHaveAttribute("aria-pressed", "true");
-      await onPage.click();
+      await page
+        .getByRole("button", { name: "本棚に登録", exact: true })
+        .click();
+      await expect(page.getByText("本棚に登録済み")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /本棚に登録/ }),
+      ).toHaveCount(0);
+      await notice.getByRole("button", { name: "元に戻す" }).click();
       await expect(
         page.getByRole("button", { name: "本棚に登録", exact: true }),
-      ).toHaveAttribute("aria-pressed", "false");
+      ).toBeVisible();
       // In a picker, Enter never sends the post being written, and takes
       // only a sure match: several equal ones or a near one wait for a tap.
       await go("/timeline/");

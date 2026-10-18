@@ -889,7 +889,9 @@ export function createTownStore(
       if (moved) delete fixed.workId;
       return commit({
         ...state,
-        books: state.books.map((entry) => (entry.id === bookId ? fixed : entry)),
+        books: state.books.map((entry) =>
+          entry.id === bookId ? fixed : entry,
+        ),
       })
         ? "fixed"
         : "not-saved";

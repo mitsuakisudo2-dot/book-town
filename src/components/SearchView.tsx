@@ -7,6 +7,7 @@ import {
   FEELING_WORDS,
   type Book,
   type Feeling,
+  type Notify,
   type TownActions,
   type TownState,
 } from "../lib/types";
@@ -52,7 +53,7 @@ const ScanSession = dynamic(
 type Shared = {
   state: TownState;
   actions: TownActions;
-  notify: (message: string) => void;
+  notify: Notify;
 };
 
 export function SearchView({ state, actions, notify }: Shared) {

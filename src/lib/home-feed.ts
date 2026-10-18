@@ -63,17 +63,62 @@ export const firstSteps = (state: TownState): FirstSteps => ({
 
 /**
  * Whether ホーム shows はじめの3つ: until all three are done, for a reader
- * who has not yet begun with others (following nobody, no post). Not by
- * isNewcomer alone, which ends with the shop, the third of them.
+ * who was a first-timer (following nobody, no post yet) when they were
+ * first shown. `begun`: they were shown to this reader before, in this
+ * browser (FIRST_STEPS_KEY), so a follow or a post on the way does not take
+ * them away before they are done (けにー 10-18). Not by isNewcomer alone,
+ * which ends with the shop, the third of them.
  */
-export const showsFirstSteps = (state: TownState): boolean => {
+export const showsFirstSteps = (state: TownState, begun = false): boolean => {
   const steps = firstSteps(state);
   return (
     !(steps.book && steps.shelf && steps.shop) &&
-    state.following.length === 0 &&
-    !state.posts.some((post) => post.authorId === ME_ID)
+    (begun ||
+      (state.following.length === 0 &&
+        !state.posts.some((post) => post.authorId === ME_ID)))
   );
 };
+
+/**
+ * はじめの3つ shown in this browser, kept per account as the key and then
+ * whose they are (the account id, or "visitor"): leave.ts lets it go with
+ * the account.
+ */
+export const FIRST_STEPS_KEY = "book-town-first-steps-v1:";
+
+type KeptStorage = Pick<Storage, "getItem" | "setItem">;
+
+function local(): KeptStorage | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether はじめの3つ were begun here. Nothing is kept where storage is closed. */
+export function createFirstStepsBegun(
+  storage: () => KeptStorage | null = local,
+) {
+  return {
+    has(owner: string): boolean {
+      try {
+        return storage()?.getItem(FIRST_STEPS_KEY + owner) === "1";
+      } catch {
+        return false;
+      }
+    },
+    mark(owner: string) {
+      try {
+        storage()?.setItem(FIRST_STEPS_KEY + owner, "1");
+      } catch {
+        // Kept for this page only: they go as before.
+      }
+    },
+  };
+}
+
+export const firstStepsBegun = createFirstStepsBegun();
 
 /**
  * Every 便り the reader follows (the owners of followed shops, and their

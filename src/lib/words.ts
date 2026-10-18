@@ -92,6 +92,8 @@ export const REGISTER = {
   added: (quoted: string) => `${quoted}を登録しました`,
   already: (quoted: string) => `${quoted}はもうライブラリにあります`,
   undone: (quoted: string) => `${quoted}の登録を取り消しました`,
+  /** The notice's button that takes a registering back. */
+  undo: "元に戻す",
 } as const;
 
 // ── Failure notices ─────────────────────────────────────────────────────

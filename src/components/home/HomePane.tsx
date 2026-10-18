@@ -30,6 +30,7 @@ import {
 } from "../../lib/features";
 import {
   firstSteps,
+  firstStepsBegun,
   homeLetters,
   isNewcomer,
   letterOf,
@@ -231,6 +232,15 @@ export function HomePane({
   onTakeLine: (id: string) => boolean;
 }) {
   const { state } = shared;
+  // Whose Home this is, for the 便り kept from the last time (home-snapshot):
+  // null while the account is being checked or cannot be.
+  const account = useAccountState();
+  const owner =
+    account.status === "signed-in"
+      ? account.user.id
+      : account.status === "signed-out"
+        ? "visitor"
+        : null;
   const reading = useTownReading();
   const drawn = useHeld<Drawn>(reading, refresh, (now) => {
     // Live's memos (PR 2b) leave the 便り, so none appears twice.
@@ -244,7 +254,10 @@ export function HomePane({
     return {
       at: now,
       newcomer: isNewcomer(state),
-      firstSteps: showsFirstSteps(state),
+      firstSteps: showsFirstSteps(
+        state,
+        owner !== null && firstStepsBegun.has(owner),
+      ),
       followed: followed.map((entry) => entry.id),
       town: town.map((entry) => entry.id),
       tonight: tonightsShop(state, now)?.id ?? null,
@@ -275,6 +288,12 @@ export function HomePane({
   // out and paints the first screen before the rest, which took it as long
   // again as everything before (docs/09 「速さ」). Back on Home later, it is
   // all there at once, where the reader left it.
+  // はじめの3つ once shown stay until done, whatever the reader does on the
+  // way (showsFirstSteps).
+  const stepsShown = !!drawn?.firstSteps;
+  useEffect(() => {
+    if (stepsShown && owner !== null) firstStepsBegun.mark(owner);
+  }, [stepsShown, owner]);
   const [stage, setStage] = useState(homeDrawn);
   useEffect(() => {
     if (drawn && stage >= 2) readBookInHandAhead();
@@ -293,15 +312,6 @@ export function HomePane({
       clearTimeout(timer);
     };
   }, [drawn, stage]);
-  // Whose Home this is, for the 便り kept from the last time (home-snapshot):
-  // null while the account is being checked or cannot be.
-  const account = useAccountState();
-  const owner =
-    account.status === "signed-in"
-      ? account.user.id
-      : account.status === "signed-out"
-        ? "visitor"
-        : null;
   const kept = useSyncExternalStore(still, readKeptSnapshot, () => null);
   const now = useNow();
   const snapshot =

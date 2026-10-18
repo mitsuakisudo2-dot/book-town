@@ -4,6 +4,8 @@ import {
   LETTERS_MAX,
   TOWN_MAX,
   authorOf,
+  createFirstStepsBegun,
+  FIRST_STEPS_KEY,
   firstSteps,
   followedAuthors,
   followedLetters,
@@ -100,20 +102,43 @@ check(
     };
     assert.deepEqual(firstSteps(all), { book: true, shelf: true, shop: true });
     assert.equal(showsFirstSteps(all), false);
-    // A reader already with others is not shown them.
+    // A reader already with others is not shown them...
+    const followed = { ...empty, following: ["shop-orbit"] };
+    const posted = {
+      ...empty,
+      posts: [...seedState.posts, post("mine", ME_ID, NOW)],
+    };
+    assert.equal(showsFirstSteps(followed), false);
+    assert.equal(showsFirstSteps(posted), false);
+    // ...but one shown them before keeps them until all three are done, a
+    // follow or a post on the way notwithstanding (けにー 10-18).
+    assert.equal(showsFirstSteps(followed, true), true);
+    assert.equal(showsFirstSteps(posted, true), true);
     assert.equal(
-      showsFirstSteps({ ...empty, following: ["shop-orbit"] }),
-      false,
-    );
-    assert.equal(
-      showsFirstSteps({
-        ...empty,
-        posts: [...seedState.posts, post("mine", ME_ID, NOW)],
-      }),
+      showsFirstSteps({ ...all, following: ["shop-orbit"] }, true),
       false,
     );
   },
 );
+
+check("はじめの3つ begun are kept per reader in this browser", () => {
+  const store = new Map<string, string>();
+  const begun = createFirstStepsBegun(() => ({
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => void store.set(key, value),
+  }));
+  assert.equal(begun.has("ben"), false);
+  begun.mark("ben");
+  assert.equal(begun.has("ben"), true);
+  assert.equal(begun.has("visitor"), false);
+  assert.deepEqual([...store.keys()], [FIRST_STEPS_KEY + "ben"]);
+  // Closed storage keeps nothing and says nothing was begun.
+  const closed = createFirstStepsBegun(() => {
+    throw new Error("closed");
+  });
+  closed.mark("ben");
+  assert.equal(closed.has("ben"), false);
+});
 
 check("a first-timer's 便り are the town's, newest first, at most ten", () => {
   const { followed, town: others } = homeLetters(town(), NOW);
