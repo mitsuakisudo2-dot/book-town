@@ -1151,8 +1151,8 @@ try {
       await expect(dialog).toHaveCount(0);
       await scanner.getByRole("button", { name: "終わる" }).click();
       await expect(scanner).toHaveCount(0);
-      // It ends on 「この回の本」 (AUD-139), closed as it is.
-      const tidy = page.getByRole("dialog", { name: "この回の本" });
+      // It ends on 「今回登録した本」 (AUD-139), closed with nothing set.
+      const tidy = page.getByRole("dialog", { name: "今回登録した本" });
       await tidy.getByRole("button", { name: "完了" }).click();
       await expect(tidy).toHaveCount(0);
       await expect(
@@ -1223,8 +1223,8 @@ try {
       await expect(dialog).toHaveCount(0);
       await scanner.getByRole("button", { name: "終わる" }).click();
       await expect(scanner).toHaveCount(0);
-      // It ends on 「この回の本」 (AUD-139), closed as it is.
-      const tidy = page.getByRole("dialog", { name: "この回の本" });
+      // It ends on 「今回登録した本」 (AUD-139), closed with nothing set.
+      const tidy = page.getByRole("dialog", { name: "今回登録した本" });
       await tidy.getByRole("button", { name: "完了" }).click();
       await expect(tidy).toHaveCount(0);
 

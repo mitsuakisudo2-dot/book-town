@@ -364,7 +364,7 @@ body:has(.scan-session) .toast {
   }
 }
 
-/* この回の本 (ScanTidy): the scan's books in a row, then what to set on them. */
+/* 今回登録した本 (ScanTidy): the scan's books in a row, then what to set on them. */
 .scan-tidy-books {
   display: flex;
   gap: 8px;

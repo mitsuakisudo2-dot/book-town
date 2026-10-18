@@ -10,11 +10,13 @@ import { BookJacket, Modal } from "./ui";
 import "./scan.css";
 
 /**
- * 「この回の本」(AUD-139, the light form of 管理表 16): once a scan ends,
- * the books it registered are given a status, 持っている or a shelf of the
- * reader's own together, or taken out of the library again, in one sheet.
- * Each choice is made at once, as in the library's ［選ぶ］; ［完了］ only
- * closes. A book taken out or gone meanwhile is left out of the sheet.
+ * 「今回登録した本」(AUD-139, the light form of 管理表 16): once a scan
+ * ends, its books can be given a status, 持っている / 持ってない or a shelf
+ * of the reader's own together, or taken out of the library again. Each
+ * choice is made at once, as in the library's ［選ぶ］; ［完了］ only
+ * closes, and closing with nothing set is as good an end as any: the
+ * sheet offers, it never asks (けにー 10-18). A book taken out or gone
+ * meanwhile is left out of it.
  */
 export function ScanTidy({
   bookIds,
@@ -42,7 +44,7 @@ export function ScanTidy({
     ids.length > 0 && ids.every(has);
   const these = counted(ids.length, "冊");
   const change = (set: LibraryChange, done: string) => {
-    if (actions.changeLibrary(ids, set)) notify(`この回の${these}を${done}`);
+    if (actions.changeLibrary(ids, set)) notify(THIS_SCAN.did(these, done));
   };
   // Every book gone meanwhile (taken out elsewhere): nothing to tidy.
   const none = ids.length === 0;
@@ -52,7 +54,10 @@ export function ScanTidy({
   if (none) return null;
   if (asking)
     return (
-      <Modal title={THIS_SCAN.removeAsk} onClose={() => setAsking(false)}>
+      <Modal
+        title={THIS_SCAN.removeAsk(these)}
+        onClose={() => setAsking(false)}
+      >
         <p className="modal-lead">{THIS_SCAN.removeLead}</p>
         <div className="btns">
           <button
@@ -80,7 +85,9 @@ export function ScanTidy({
     );
   return (
     <Modal title={THIS_SCAN.heading} onClose={onClose} fromBottom>
-      <p className="modal-lead">{THIS_SCAN.lead(these)}</p>
+      <p className="modal-lead">
+        {THIS_SCAN.lead(these, handShelves.length > 0)}
+      </p>
       <ol className="scan-tidy-books" aria-label={THIS_SCAN.heading}>
         {books.map((book) => (
           <li key={book.id}>
@@ -111,24 +118,30 @@ export function ScanTidy({
             </button>
           );
         })}
-        {(() => {
-          const lit = all((id) => rows[id]?.owned === "yes");
+      </div>
+      <h3 className="scan-tidy-heading">{THIS_SCAN.owned}</h3>
+      <div className="btns" role="group" aria-label={THIS_SCAN.owned}>
+        {(
+          [
+            ["yes", MARKS.owned, MARKS.ownedOn, MARKS.ownedOff],
+            ["no", MARKS.notOwned, MARKS.notOwnedOn, MARKS.notOwnedOff],
+          ] as const
+        ).map(([owned, name, on, off]) => {
+          const lit = all((id) => rows[id]?.owned === owned);
           return (
             <button
+              key={owned}
               type="button"
               className="chip"
               aria-pressed={lit}
               onClick={() =>
-                change(
-                  { owned: lit ? null : "yes" },
-                  lit ? MARKS.ownedOff : MARKS.ownedOn,
-                )
+                change({ owned: lit ? null : owned }, lit ? off : on)
               }
             >
-              {MARKS.owned}
+              {name}
             </button>
           );
-        })()}
+        })}
       </div>
       {handShelves.length > 0 && (
         <>

@@ -311,7 +311,7 @@ function useScanSound() {
 }
 
 /**
- * The scanner, and once it ends, 「この回の本」 for the books it registered
+ * The scanner, and once it ends, 「今回登録した本」 for the books it registered
  * (ScanTidy, AUD-139). `onClose` is told when both are closed.
  */
 export function ScanSession({

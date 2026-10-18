@@ -157,20 +157,26 @@ export const MY_BOOK = {
 } as const;
 
 /**
- * The books one scan registered, tidied together once it ends (AUD-139,
- * the light form of 管理表 16).
+ * The books one scan registered, set together once it ends (AUD-139, the
+ * light form of 管理表 16). Registering was the whole of it: the sheet says
+ * what can be set, never that something is left to do (けにー 10-18).
  */
 export const THIS_SCAN = {
-  heading: "この回の本",
-  lead: (books: string) => `この回に登録した${books}を、まとめて片づけられます`,
+  heading: "今回登録した本",
+  /** Said of the books as a whole, so a choice is seen to set every one. */
+  lead: (books: string, shelves: boolean) =>
+    `登録した${books}の読書状況${shelves ? "や本棚" : ""}を、まとめて設定できます`,
   status: "読書の状態",
-  shelves: "棚に入れる",
+  owned: "持っている本",
+  shelves: "本棚に追加",
   done: "完了",
-  remove: "この回の本をライブラリから外す",
-  removeAsk: "この回の本をライブラリから外しますか？",
-  removeLead: "読み間違えた本などを、まとめて外します",
+  /** What a choice did, said of them all. */
+  did: (books: string, done: string) => `登録した${books}を${done}`,
+  remove: "登録した本をまとめてライブラリから外す",
+  removeAsk: (books: string) => `登録した${books}をライブラリから外しますか？`,
+  removeLead: "読み間違えた本などを、まとめて外せます",
   removeButton: "ライブラリから外す",
-  removed: (books: string) => `この回の${books}をライブラリから外しました`,
+  removed: (books: string) => `登録した${books}をライブラリから外しました`,
 } as const;
 
 // ── Failure notices ─────────────────────────────────────────────────────

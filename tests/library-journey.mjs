@@ -322,9 +322,9 @@ async function openScanner(on = page) {
     .click();
   await expect(scanner(on)).toBeVisible();
 }
-const tidy = (on = page) => on.getByRole("dialog", { name: "この回の本" });
+const tidy = (on = page) => on.getByRole("dialog", { name: "今回登録した本" });
 /**
- * ［終わる］. A session that registered books ends on 「この回の本」
+ * ［終わる］. A session that registered books ends on 「今回登録した本」
  * (AUD-139), closed here with ［完了］ unless `keepTidy`.
  */
 async function finishScanning(on = page, { keepTidy = false } = {}) {
@@ -1000,13 +1000,13 @@ try {
       expect(counted).not.toBeNull();
       await scanner(scan).getByRole("button", { name: "終わる" }).click();
       // No question first: the scanner closes and says what was read in,
-      // and 「この回の本」 offers to tidy those books, nothing asked (AUD-139).
+      // and 「今回登録した本」 offers what can be set, nothing asked (AUD-139).
       await expect(scanner(scan)).toHaveCount(0);
       await expect(scan.locator(".toast")).toContainText(
         `${counted[1]}冊を登録しました・書名待ち 1冊`,
       );
       await expect(tidy(scan)).toContainText(
-        `この回に登録した${counted[1]}冊を`,
+        `登録した${counted[1]}冊の読書状況`,
       );
       await tidy(scan).getByRole("button", { name: "完了" }).click();
       await expect(scan.getByRole("dialog")).toHaveCount(0);
@@ -1134,7 +1134,7 @@ try {
   );
 
   await check(
-    "この回の本: the books one scan read in are sorted or taken out together (AUD-139)",
+    "今回登録した本: the books one scan read in are set or taken out together (AUD-139)",
     async () => {
       await go("/profiles/me/?books=library", scan);
       await openScanner(scan);
@@ -1146,14 +1146,14 @@ try {
       await expect(count(scan)).toHaveText("この回 2冊");
       await finishScanning(scan, { keepTidy: true });
       const sheet = tidy(scan);
-      await expect(sheet).toContainText("この回に登録した2冊を");
+      await expect(sheet).toContainText("登録した2冊の読書状況");
       await expect(sheet.locator(".scan-tidy-books li")).toHaveCount(2);
       await toasts(scan);
       // A status for both at once, said once; pressed again it comes off.
       const read = sheet.getByRole("button", { name: "読了", exact: true });
       await read.click();
       await expect(read).toHaveAttribute("aria-pressed", "true");
-      expect(await toasts(scan)).toEqual(["この回の2冊を読了にしました"]);
+      expect(await toasts(scan)).toEqual(["登録した2冊を読了にしました"]);
       const status = async () => {
         const entries = (await stored(scan)).libraryEntries;
         return ["isbn-" + first, "isbn-" + second].map(
@@ -1165,20 +1165,20 @@ try {
       await expect.poll(status).toEqual([null, null]);
       // Taken out again, asked first: neither stays in the library.
       await sheet
-        .getByRole("button", { name: "この回の本をライブラリから外す" })
+        .getByRole("button", { name: "登録した本をまとめてライブラリから外す" })
         .click();
       const ask = scan.getByRole("dialog", {
-        name: "この回の本をライブラリから外しますか？",
+        name: "登録した2冊をライブラリから外しますか？",
       });
       await ask.getByRole("button", { name: "外さない" }).click();
       await expect(sheet).toBeVisible();
       await sheet
-        .getByRole("button", { name: "この回の本をライブラリから外す" })
+        .getByRole("button", { name: "登録した本をまとめてライブラリから外す" })
         .click();
       await ask.getByRole("button", { name: "ライブラリから外す" }).click();
       await expect(scan.getByRole("dialog")).toHaveCount(0);
       await expect(scan.locator(".toast")).toContainText(
-        "この回の2冊をライブラリから外しました",
+        "登録した2冊をライブラリから外しました",
       );
       await expectLibrary();
     },
