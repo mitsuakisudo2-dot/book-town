@@ -440,8 +440,11 @@ export function createAccountStore(
         }
         if (field === "new") newConfirmed = true;
       }
-      // Both codes were taken and the server still waits: not expected.
-      return refuse("server", "current");
+      // The server still waits after both: the codes were sent again from
+      // somewhere else, so this page's count was behind. New codes, sent
+      // again, start over.
+      newConfirmed = false;
+      return refuse("invalid-code", "new");
     },
     async createProfile(draft: ProfileDraft): Promise<AccountResult> {
       start();

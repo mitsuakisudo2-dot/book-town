@@ -184,7 +184,12 @@ async function main() {
         local("auth.email.template.email_change", "content_path"),
       );
       assert.match(emailChangeTemplate, /\{\{ \.Token \}\}/);
-      assert.match(emailChangeTemplate, /\{\{ \.NewEmail \}\}/);
+      // Neither address is written in it: a mistyped new address must not
+      // learn the reader's current one.
+      assert.doesNotMatch(
+        emailChangeTemplate,
+        /\.(NewEmail|Email|SendingTo)\b/,
+      );
       assert.match(emailChangeTemplate, /10分/);
       // A code, not a link: the screen asks for each address's code.
       assert.doesNotMatch(emailChangeTemplate, /ConfirmationURL/);

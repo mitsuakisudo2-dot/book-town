@@ -5936,6 +5936,10 @@ try {
         await expect(settings.getByText(INVITED)).toBeVisible();
         await settings
           .getByRole("button", { name: "メールアドレスを変える" })
+          .scrollIntoViewIfNeeded();
+        await shot("email-change-0-settings-390");
+        await settings
+          .getByRole("button", { name: "メールアドレスを変える" })
           .click();
         await expect(page).toHaveURL(base + "/login/?change=email");
         const heading = page.getByRole("heading", {

@@ -687,6 +687,33 @@ async function main() {
   );
 
   await check(
+    "codes sent again from another tab start the change over here too",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      await store.actions.changeEmail("new@example.jp");
+      // This page took the new code before; the codes were sent again since.
+      const result = await store.actions.confirmEmailChange({
+        email: "new@example.jp",
+        newCode: "",
+        currentCode: "222222",
+        newConfirmed: true,
+      });
+      assert.deepEqual(result, {
+        ok: false,
+        message: failureMessages["invalid-code"],
+        field: "new",
+        newConfirmed: false,
+      });
+      assert.match(failureMessages["invalid-code"], /もう一度コードを送って/);
+    },
+  );
+
+  await check(
     "where one code is enough, the new address's is the one used",
     async () => {
       const { backend, control } = fakeBackend();

@@ -499,10 +499,15 @@ function ChangeEmail({
   const emailField = useRef<HTMLInputElement>(null);
   const newField = useRef<HTMLInputElement>(null);
   const currentField = useRef<HTMLInputElement>(null);
-  useFocusFieldOnShow(emailField, { instead: heading, when: !sentTo });
+  // Until this tab's kept step is read, neither step is shown (a reload in
+  // the middle of a change would show the address form for a moment).
+  useFocusFieldOnShow(emailField, {
+    instead: heading,
+    when: sent.loaded && !sentTo,
+  });
   useFocusFieldOnShow(newConfirmed ? currentField : newField, {
     instead: heading,
-    when: Boolean(sentTo),
+    when: sent.loaded && Boolean(sentTo),
   });
 
   async function send(event?: FormEvent) {
@@ -546,7 +551,7 @@ function ChangeEmail({
       sent.set({
         email: sentTo,
         sentAt: sent.draft?.sentAt ?? Date.now(),
-        newConfirmed: true,
+        newConfirmed: result.newConfirmed,
       });
     setError({ message: result.message, field: result.field });
     if (coarse)
@@ -558,6 +563,7 @@ function ChangeEmail({
   const describe = (field: "email" | "new" | "current") =>
     error?.field === field ? "account-error" : undefined;
 
+  if (!sent.loaded) return null;
   if (!sentTo)
     return (
       <>
@@ -605,7 +611,7 @@ function ChangeEmail({
       </h1>
       <p className="account-lead">
         2つのアドレスに、{CODE_LENGTH}
-        桁のコードを1通ずつ送りました。届かないときは、迷惑メールのフォルダも見てください。
+        桁のコードを1通ずつ送りました。届かないときは、迷惑メールのフォルダに入っていることもあります。
       </p>
       <form className="profile-form" onSubmit={confirm} noValidate={coarse}>
         <label htmlFor="account-new-code" className="account-code-label">
