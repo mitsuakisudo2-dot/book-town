@@ -65,7 +65,14 @@ import {
   bookTitle,
   quotedTitle,
 } from "../lib/book-name";
-import { counted, whenSome, failure } from "../lib/words";
+import {
+  counted,
+  whenSome,
+  failure,
+  offlineFor,
+  WHILE_OFFLINE,
+} from "../lib/words";
+import { townOffline } from "../lib/store";
 
 type Shared = {
   state: TownState;
@@ -742,8 +749,15 @@ function ReadingRoom({
   }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const offline = townOffline();
     if (send())
-      notify(together ? "つぶやきました" : "メモしました（自分だけ）");
+      notify(
+        offline
+          ? failure(together ? offlineFor("投稿") : WHILE_OFFLINE)
+          : together
+            ? "つぶやきました"
+            : "メモしました（自分だけ）",
+      );
   }
   /** Closes the book; `sent` is a line sent just now, for the closing card. */
   function close(finished: boolean, sent?: string) {

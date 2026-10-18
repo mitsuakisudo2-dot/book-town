@@ -472,12 +472,13 @@ export function handOverDrafts<T>(store: KeptDraftStore<T>, owner: string) {
 /**
  * Whether a notice says a save was turned away or put off and the work kept:
  * a draft's say 残しています, the scanner's (books kept on the device to
- * register later) 控えました, まだ保存できません or 終わったら登録します, and
- * none that tells of something done says any of these. The toast shows these
+ * register later) 控えました, まだ保存できません or 終わったら登録します, a
+ * change made offline (offlineFor) つながりしだい, and none that tells of
+ * something done says any of these. The toast shows these
  * with a leaf, not the tick of a save.
  */
 export const isKeptNotice = (message: string) =>
-  /残しています|控えました|まだ保存できません|終わったら登録します/.test(
+  /残しています|控えました|まだ保存できません|終わったら登録します|つながりしだい/.test(
     message,
   );
 

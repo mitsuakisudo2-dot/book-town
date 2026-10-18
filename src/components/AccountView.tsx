@@ -25,6 +25,7 @@ import { adoptVisitorRecords } from "../lib/record-draft";
 import { adoptVisitorPosts } from "../lib/post-draft";
 import { adoptVisitorPosters } from "../lib/poster-draft";
 import { libraryJournal, useJournal } from "../lib/library-journal";
+import { forgetOutboxes, useOutboxWaiting } from "../lib/outbox";
 import {
   focusField,
   markField,
@@ -426,14 +427,16 @@ function SignedIn({ handle, name }: { handle: string; name: string }) {
 }
 
 /**
- * ログアウト lets this reader's scan journal go from the device (a shared
- * device keeps nothing of theirs), saying first when books still wait in it.
- * A sign-out the reader did not press (a failed token refresh) keeps it.
+ * ログアウト lets this reader's scan journal and the changes still waiting to
+ * be sent (outbox.ts) go from the device (a shared device keeps nothing of
+ * theirs), saying first when anything still waits. A sign-out the reader did
+ * not press (a failed token refresh) keeps both.
  */
 function SignOut({ leave = false }: { leave?: boolean }) {
   const account = useAccountState();
   const userId = "user" in account ? account.user.id : null;
   const waiting = useJournal(userId).length;
+  const unsent = useOutboxWaiting(userId);
   return (
     <div className="account-links">
       {waiting > 0 && (
@@ -442,11 +445,19 @@ function SignOut({ leave = false }: { leave?: boolean }) {
           あります。ログアウトすると、この端末の控えから消えます
         </p>
       )}
+      {unsent && (
+        <p className="account-journal-warning">
+          まだ送れていない変更があります。ログアウトすると、この端末から消えます
+        </p>
+      )}
       <button
         type="button"
         onClick={() => {
-          if (userId) libraryJournal.forget(userId);
-          void accountActions.signOut();
+          if (!userId) return void accountActions.signOut();
+          libraryJournal.forget(userId);
+          // Once signed out, the town has stopped saving: nothing it still
+          // had waiting is kept after the outbox is let go.
+          void accountActions.signOut().then(() => forgetOutboxes(userId));
         }}
       >
         ログアウト

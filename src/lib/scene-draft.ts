@@ -6,6 +6,7 @@ import {
   type KeptDraftOptions,
   type KeptDraftStore,
 } from "./kept-draft";
+import { valueMark } from "./canonical";
 import { DRAFT_OWNER } from "./draft-owner";
 import { validateScene, type SceneKind, type StoreScene } from "./store-scene";
 import {
@@ -91,22 +92,6 @@ export const sceneDraftOptions: KeptDraftOptions<KeptScene> = {
 
 export const sceneDraftStore = createKeptDraftStore(sceneDraftOptions);
 
-/** The same value written the same way, whatever order its keys came in. */
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
-  if (value && typeof value === "object")
-    return (
-      "{" +
-      Object.entries(value)
-        .filter(([, entry]) => entry !== undefined)
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([key, entry]) => JSON.stringify(key) + ":" + canonical(entry))
-        .join(",") +
-      "}"
-    );
-  return JSON.stringify(value) ?? "null";
-}
-
 /**
  * A short mark of a saved scene. Work keeps the mark of the scene it began
  * from, so a scene saved since (on another device) is told apart. The mark
@@ -115,14 +100,7 @@ function canonical(value: unknown): string {
  */
 export function sceneMark(scene: StoreScene | undefined): string {
   if (!scene) return "none";
-  const value = canonical({ ...scene, storeId: "" });
-  // FNV-1a, enough to tell one version from the next.
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index++) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(36);
+  return valueMark({ ...scene, storeId: "" });
 }
 
 /**

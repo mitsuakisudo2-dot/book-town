@@ -18,13 +18,16 @@ import { followAccountWalk } from "./town-session";
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isSampleId } from "./record-kind";
-import { parseScreenKey } from "./walk-remote";
+import { parseScreenKey, type WalkWrite } from "./walk-remote";
+import type { Missed } from "./supabase/sync";
 import { OWN_SHOP_ID, type PersistenceStatus, type TownState } from "./types";
 import { failure } from "./words";
 
 export interface WalkSnapshot extends WalkData {
   ready: boolean;
   status: PersistenceStatus;
+  /** The changes that last did not reach the database, or null. */
+  missed: Missed<WalkWrite> | null;
   /** Where the walk is saved: this browser, or the person's account. */
   kind: WalkBackend["kind"];
 }
@@ -63,6 +66,7 @@ export function createWalkStore(
     ...emptyWalkData(),
     ready: false,
     status: "loading",
+    missed: null,
     kind: source.kind,
   };
   let backend = source;
@@ -89,8 +93,16 @@ export function createWalkStore(
         status(status) {
           if (current()) set({ status });
         },
-        replace(data, status) {
-          if (current()) set({ ...data, status });
+        replace(data, status, lost) {
+          if (!current()) return;
+          set({
+            ...data,
+            status,
+            ...(lost &&
+              (lost.refused.length || lost.elsewhere.length) && {
+                missed: lost,
+              }),
+          });
         },
       }) ?? null;
     const result = next.load();

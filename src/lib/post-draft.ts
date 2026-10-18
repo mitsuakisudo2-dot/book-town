@@ -181,6 +181,28 @@ export const appendPostDraft = (from: string, to: string) =>
 
 export const clearPostDraft = (key: string) => postDraftStore.clear(key);
 
+/**
+ * Puts words that were sent back into a composer's draft, after the words
+ * already there (joinPostDrafts): a post the database turned away. False,
+ * and nothing kept, when both would be too long for one post or the browser
+ * cannot keep them.
+ */
+export function returnPostWords(
+  key: string,
+  words: PostDraft,
+  store: ReturnType<typeof createPostDraftStore> = postDraftStore,
+): boolean {
+  try {
+    const kept = store.get(key);
+    const joined = kept ? joinPostDrafts(kept, words) : words;
+    if (!joined) return false;
+    store.set(key, joined);
+    return store.getSnapshot().saved && store.get(key) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** A visitor's drafts, handed to the account they sign in to. */
 export const adoptVisitorPosts = (
   owner: string,

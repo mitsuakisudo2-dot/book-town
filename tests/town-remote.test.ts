@@ -2379,12 +2379,15 @@ async function main() {
   const plannedSync = (town: TownState, hold?: Promise<void>) => {
     const planned: Write[] = [];
     let writes = 0;
-    const sync = backgroundSync<TownState>(
+    const sync = backgroundSync<TownState, Write>(
       {
         read: async () => town,
-        async write(base, target) {
-          planned.push(...planWrites(base, target, ids));
+        plan: (base, target) => planWrites(base, target, ids),
+        async apply(write) {
+          planned.push(write);
           await hold;
+        },
+        landed() {
           writes += 1;
         },
       },
