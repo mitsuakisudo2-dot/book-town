@@ -5,6 +5,8 @@
   "backupMaxHours": 30,
   "usageWarnPercent": 80,
   "screenErrorsPerDay": 1,
+  "screenErrorsRowsWarn": 2800,
+  "screenErrorsPerHour": 200,
   "included": {
     "free": { "databaseMB": 500, "storageMB": 1024 },
     "pro": { "databaseMB": 8192, "storageMB": 102400 }
