@@ -33,6 +33,7 @@ import {
   sceneWorkState,
 } from "../lib/scene-draft";
 import { useWalkStore, walkStore } from "../lib/walk-store";
+import { getTownSnapshot, townActions } from "../lib/store";
 import type { Book, TownState } from "../lib/types";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { booksBeforeSearch } from "../lib/book-lists";
@@ -43,7 +44,7 @@ import { KeptDraftNote, StopConfirm, useDraftOwner } from "./KeptDraftNote";
 import "./walk.css";
 import "./scene-editor.css";
 import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
-import { counted, nth, failure } from "../lib/words";
+import { counted, nth, failure, TABS } from "../lib/words";
 
 /**
  * A small owner-only form editor. Scene geometry stays with the template.
@@ -147,7 +148,23 @@ export function StoreSceneEditor({
     ? found.found.map((match) => match.book)
     : state.books.filter((b) => state.library.includes(b.id)).slice(0, 10);
   const nearChoices = searching ? found.near.map((match) => match.book) : [];
-  function placeBook(b: Book) {
+  function placeBook(given: Book) {
+    // Another reader's book goes on as the reader's own copy of it, read
+    // from the town once the copy is in it.
+    let b: Book | undefined = given;
+    if (given.theirs) {
+      const copy = townActions.ownBook(given.id);
+      b = bookById(getTownSnapshot().books, copy);
+    }
+    if (!b) {
+      setError(
+        failure({
+          what: "この本を、いまは並べられませんでした",
+          next: "少しおいて、もう一度選んでください",
+        }),
+      );
+      return;
+    }
     const id = "placement:" + shop.id + ":" + crypto.randomUUID();
     edit((s) => {
       const next = addBookPlacement(
@@ -468,7 +485,7 @@ export function StoreSceneEditor({
                 <p className="scene-hint">
                   {nearChoices.length
                     ? "ぴったり合う本はありませんでした。"
-                    : "見つかりませんでした。「本棚」から本を登録すると、ここでも選べます。"}
+                    : `見つかりませんでした。「${TABS.library}」から本を登録すると、ここでも選べます。`}
                 </p>
               )}
               {nearChoices.length > 0 && (

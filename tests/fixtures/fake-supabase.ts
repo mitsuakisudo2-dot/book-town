@@ -8,7 +8,11 @@ import type { Database } from "../../src/lib/supabase/database.generated";
 // statement that is taken whole or not at all, like PostgREST. It keeps a few
 // of the database's own rules (a reply's post, a row's book must be there),
 // can be cut off from the network (or lose the answers to writes it took),
-// and can be told to turn a write away.
+// and can be told to turn a write away. The reader's own books (my_books)
+// are what a `my_books` table in the seed says, with the books they write
+// and the copies copy_book makes; with one, a row of theirs that names
+// another reader's typed-in book is turned away, as the database does
+// (own_books_only). Without one, the database is one before that rule.
 
 type Row = Record<string, unknown>;
 
@@ -125,6 +129,35 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
     client: null as unknown as SupabaseClient<Database>,
   };
   const table = (name: string) => (tables[name] ??= []);
+
+  /** The reader's own books, or undefined before the database has them. */
+  const myBooks = (): Row[] | undefined => {
+    if (!tables.my_books) return undefined;
+    const listed = new Set(tables.my_books.map((row) => row.id));
+    return [
+      ...tables.my_books,
+      ...table("books")
+        .filter((row) => row.created_by === userId && !listed.has(row.id))
+        .map((row) => ({ id: row.id, copied_from: null })),
+    ];
+  };
+
+  /** Why the rows cannot go in: one names another reader's typed-in book. */
+  function othersBook(bookIds: unknown[]): Refusal | null {
+    const mine = myBooks();
+    if (!mine) return null;
+    const own = new Set(mine.map((row) => row.id));
+    for (const id of bookIds) {
+      const book = table("books").find((row) => row.id === id);
+      if (book && book.source === "manual" && !own.has(book.id))
+        return {
+          status: 400,
+          code: "23514",
+          message: "a reader's rows name their own books",
+        };
+    }
+    return null;
+  }
 
   /** Why the rows cannot go in: one points at a row that is not there. */
   function missingTarget(name: string, rows: Row[]): Refusal | null {
@@ -243,9 +276,9 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
         .then(resolve, reject);
     }
     private matching() {
-      return table(this.name).filter((row) =>
-        this.filters.every((test) => test(row)),
-      );
+      return (
+        (this.name === "my_books" ? myBooks() : undefined) ?? table(this.name)
+      ).filter((row) => this.filters.every((test) => test(row)));
     }
     private answer(): Answer {
       const answer = this.run();
@@ -255,6 +288,16 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
     }
     private run(): Answer {
       if (fake.offline) return lost();
+      if (this.name === "my_books" && !tables.my_books)
+        // As postgrest-js answers it: a refused HEAD has no body to read
+        // the refusal from.
+        return this.head
+          ? { data: null, error: null, status: 204, count: null }
+          : failed({
+              status: 404,
+              code: "PGRST202",
+              message: "no my_books",
+            });
       if (this.op === "select") {
         const rows = this.matching().sort((a, b) => {
           for (const [column, up] of this.orders) {
@@ -277,7 +320,12 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
       if (this.op === "upsert") {
         const rows = [this.payload as Row | Row[]].flat();
         const write: FakeWrite = { table: this.name, op: "upsert", rows };
-        const refusal = fake.refuse(write) ?? missingTarget(this.name, rows);
+        const refusal =
+          fake.refuse(write) ??
+          missingTarget(this.name, rows) ??
+          (this.name === "books"
+            ? null
+            : othersBook(rows.map((row) => row.book_id)));
         if (refusal) return failed(refusal);
         const keys = this.options.onConflict?.split(",") ??
           PRIMARY[this.name] ?? ["id"];
@@ -332,18 +380,48 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
     }
   }
 
-  const rpc = (name: string, args: Row): PromiseLike<Answer> =>
+  const rpc = (
+    name: string,
+    args: Row,
+    options?: { count?: string; head?: boolean },
+  ): PromiseLike<Answer> =>
+    name === "my_books"
+      ? new Query(name, "select").select("*", options)
+      : called(name, args);
+  const called = (name: string, args: Row): PromiseLike<Answer> =>
     Promise.resolve().then((): Answer => {
       if (fake.offline) return lost();
       if (name === "shop_visitors")
         return { data: [], error: null, status: 200, count: null };
+      if (name === "copy_book") {
+        const write: FakeWrite = { table: "books", op: "rpc", rows: [args] };
+        const refusal = fake.refuse(write);
+        if (refusal) return failed(refusal);
+        const mine = (tables.my_books ??= []);
+        if (!mine.some((row) => row.id === args.copy)) {
+          const original = table("books").find(
+            (row) => row.id === args.original,
+          );
+          if (!original)
+            return failed({
+              status: 404,
+              code: "P0002",
+              message: "no book has that id",
+            });
+          table("books").push({ ...original, id: args.copy });
+          mine.push({ id: args.copy, copied_from: args.original });
+        }
+        writes.push(write);
+        return { data: null, error: null, status: 204, count: null };
+      }
       if (name === "replace_profile_nine") {
         const write: FakeWrite = {
           table: "profile_nine",
           op: "rpc",
           rows: [args],
         };
-        const refusal = fake.refuse(write);
+        const refusal =
+          fake.refuse(write) ?? othersBook(args.book_ids as string[]);
         if (refusal) return failed(refusal);
         const ids = args.book_ids as string[];
         const notes = args.notes as string[];

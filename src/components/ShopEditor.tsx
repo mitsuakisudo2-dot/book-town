@@ -58,6 +58,7 @@ import "./editor.css";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import { counted, whenSome, failure, AGAIN, PLACE } from "../lib/words";
 import { libraryBookIds, ownFirst } from "../lib/shop-picks";
+import { mine } from "../lib/own-books";
 import { useUrlParam } from "../lib/url-state";
 
 /** How many books a group of the shelf picker shows at a time. */
@@ -972,7 +973,8 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     if (!placeParam || !townIn) return;
     setPlaceParam(null);
     if (!bookById(state.books, placeParam)) return;
-    setPlacing(placeParam);
+    // Offered as the reader's own book for it, when they have one.
+    setPlacing(mine(getTownSnapshot(), placeParam));
     const shelves = getTownSnapshot().ownShop?.shelves;
     if (!shelves) return; // No shop yet: the opening offers the book first.
     if (shelves.length === 1) setAddBookShelfId(shelves[0].id);

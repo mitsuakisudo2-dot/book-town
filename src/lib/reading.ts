@@ -2,18 +2,24 @@ import { ME_ID, type Post, type ReadingSession, type TownState } from "./types";
 import { uncoverHidden } from "./hidden-words";
 import { notLeftOut } from "./social";
 import { counted } from "./words";
+import { booksOfWork } from "./works";
 
 export const activeSession = (state: TownState): ReadingSession | undefined =>
   state.readingSessions.find((session) => session.endedAt === null);
 
 /**
- * Whether the reader has finished the book. Read from finishedBooks today;
- * the library's status (L1) takes its place here, and nothing else changes.
+ * Whether the reader has finished the book: their own of its work, whoever's
+ * book is asked about (booksOfWork). Read from finishedBooks today; the
+ * library's status (L1) takes its place here, and nothing else changes.
  */
-export const hasFinished = (
-  state: Pick<TownState, "finishedBooks">,
+export function hasFinished(
+  state: Pick<TownState, "finishedBooks" | "books">,
   bookId: string | null,
-): boolean => bookId !== null && state.finishedBooks.includes(bookId);
+): boolean {
+  if (bookId === null) return false;
+  const work = booksOfWork(state.books, bookId);
+  return state.finishedBooks.some((id) => work.has(id));
+}
 
 /** The book a new session starts with: the one being read, else the last one left unfinished. */
 export function currentBookId(state: TownState): string | null {

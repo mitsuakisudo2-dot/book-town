@@ -2,6 +2,7 @@ import { ME_ID, type Book, type TownState } from "./types";
 import type { ReviewCover, SpoilerView } from "./social";
 import { bookById, quotedTitle } from "./book-name";
 import { counted, nth } from "./words";
+import { booksOfWork } from "./works";
 
 // A poster is what a reader makes about books: a few pages, each set by its
 // template (one book told at length, a lineup of covers, or words alone) in a
@@ -350,19 +351,21 @@ export function postersOf(state: TownState, readerId: string): Poster[] {
     .sort(newestFirst);
 }
 
-const showsBook = (poster: Poster, bookId: string) =>
+/** Whether a poster put up shows a book of the work (booksOfWork). */
+const showsWork = (poster: Poster, work: ReadonlySet<string>) =>
   isPublished(poster) &&
-  poster.pages.some((page) => page.bookIds.includes(bookId));
+  poster.pages.some((page) => page.bookIds.some((id) => work.has(id)));
 
 /**
- * The posters a book appears in, as this reader gets them: those that show
- * it on their first page first, then newest first.
+ * The posters a book appears in (a book of its work), as this reader gets
+ * them: those that show it on their first page first, then newest first.
  */
 export function postersOfBook(state: TownState, bookId: string): Poster[] {
+  const work = booksOfWork(state.books, bookId);
   const firstPage = (poster: Poster) =>
-    poster.pages[0]?.bookIds.includes(bookId) ? 0 : 1;
+    poster.pages[0]?.bookIds.some((id) => work.has(id)) ? 0 : 1;
   return state.posters
-    .filter((poster) => showsBook(poster, bookId) && listed(state, poster))
+    .filter((poster) => showsWork(poster, work) && listed(state, poster))
     .sort((a, b) => firstPage(a) - firstPage(b) || newestFirst(a, b));
 }
 
@@ -375,7 +378,9 @@ export const postersLeftOutOfBook = (
   bookId: string,
 ): boolean =>
   state.posters.some(
-    (poster) => showsBook(poster, bookId) && !listed(state, poster),
+    (poster) =>
+      showsWork(poster, booksOfWork(state.books, bookId)) &&
+      !listed(state, poster),
   );
 
 /**

@@ -1470,11 +1470,22 @@ export type Database = {
       };
       can_annotate: { Args: Record<PropertyKey, never>; Returns: boolean };
       confirm_book_isbn: { Args: { book: string }; Returns: undefined };
+      copy_book: {
+        Args: { copy: string; original: string };
+        Returns: undefined;
+      };
       delete_my_account: {
         Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
       isbn13_valid: { Args: { isbn: string }; Returns: boolean };
+      my_books: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          copied_from: string;
+          id: string;
+        }[];
+      };
       public_scene_of: { Args: { scene: Json; shop: string }; Returns: Json };
       replace_profile_nine: {
         Args: { book_ids: string[]; notes: string[] };

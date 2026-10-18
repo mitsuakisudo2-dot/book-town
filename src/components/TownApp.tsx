@@ -110,9 +110,11 @@ import {
   quotedTitle,
 } from "../lib/book-name";
 import type { Bibliography } from "../lib/bibliography";
+import { booksOfWork } from "../lib/works";
+import { mine } from "../lib/own-books";
 import { useBibliography, useBookHolds } from "../lib/bibliography-session";
 import { HeldBook } from "./HeldBook";
-import { counted, whenSome, PLACE } from "../lib/words";
+import { counted, PLACE, TABS, whenSome } from "../lib/words";
 
 // Every screen but Home comes in its own file, read when it is first shown
 // (and after Home is drawn, below), so a phone opening the town reads and
@@ -172,24 +174,29 @@ type Shared = {
   notify: Notify;
 };
 type Section = "home" | "search" | "walk" | "shelf" | "reading" | "profile";
-// Six for now, while けにー alone uses the town and the final row is decided
-// (10-16). 本棚 opens the library; 記録 opens 読書を開始 as it is.
+// The row for the β (管理表 48), its names in TABS. ライブラリ opens the
+// library; 記録 opens 読書を開始 as it is.
 const links: { href: string; icon: string; label: string; section: Section }[] =
   [
-    { href: "/", icon: "home", label: "ホーム", section: "home" },
-    { href: "/search/", icon: "search", label: "検索", section: "search" },
-    { href: "/walk/", icon: "store", label: "書店めぐり", section: "walk" },
+    { href: "/", icon: "home", label: TABS.home, section: "home" },
+    { href: "/search/", icon: "search", label: TABS.search, section: "search" },
+    { href: "/walk/", icon: "store", label: TABS.walk, section: "walk" },
     {
       href: "/library/",
       icon: "shelf",
-      label: "本棚",
+      label: TABS.library,
       section: "shelf",
     },
-    { href: "/reading/", icon: "reading", label: "記録", section: "reading" },
+    {
+      href: "/reading/",
+      icon: "reading",
+      label: TABS.reading,
+      section: "reading",
+    },
     {
       href: "/profiles/me/",
       icon: "user",
-      label: "わたし",
+      label: TABS.profile,
       section: "profile",
     },
   ];
@@ -438,7 +445,7 @@ export default function TownApp({
               aria-current={section === l.section ? "page" : undefined}
             >
               <Icon name={l.icon} size={21} />
-              {l.section === "reading" && reading ? "読書中" : l.label}
+              {l.section === "reading" && reading ? TABS.readingNow : l.label}
               {l.section === "reading" && reading && (
                 <i className="nav-live" aria-hidden="true" />
               )}
@@ -623,7 +630,7 @@ export default function TownApp({
           >
             <Icon name={l.icon} size={22} />
             <span>
-              {l.section === "reading" && reading ? "読書中" : l.label}
+              {l.section === "reading" && reading ? TABS.readingNow : l.label}
             </span>
           </Link>
         ))}
@@ -1143,6 +1150,9 @@ function BookView({
     );
   // The cover, its lookup and the shop links go by the heading's name.
   const named = bookNamedBy(book, master);
+  // Shops show the book as their owner's own registration of it: the same
+  // work is the same book here.
+  const work = booksOfWork(state.books, book.id);
   const matches = [
     ...state.shops,
     ...(state.ownShop ? [state.ownShop] : []),
@@ -1151,7 +1161,7 @@ function BookView({
       .filter((s) => s.isPublic)
       .flatMap((shelf) =>
         shelf.items
-          .filter((i) => i.bookId === book.id)
+          .filter((i) => work.has(i.bookId))
           .map((item) => ({ shop, shelf, item })),
       ),
   );
@@ -1239,7 +1249,10 @@ function BookView({
           <div className="empty-state">
             <h3>この本の、最初の居場所を。</h3>
             <p>あなたの書店に並べて、POPを書いてみませんか。</p>
-            <Link href={myShopPath({ place: book.id })} className="btn">
+            <Link
+              href={myShopPath({ place: mine(state, book.id) })}
+              className="btn"
+            >
               {PLACE.toShop}
             </Link>
           </div>

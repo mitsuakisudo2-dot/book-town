@@ -1641,6 +1641,13 @@ div.book-jacket:hover {
   .town-bottom-nav span {
     font-size: var(--t-cap);
   }
+  /* On a narrow phone six equal tabs are narrower than 書店めぐり and
+     ライブラリ, so each tab takes its name's width and shares the room left. */
+  @media (max-width: 380px) {
+    .town-bottom-nav a {
+      flex: 1 1 auto;
+    }
+  }
   .toast {
     left: 50%;
     bottom: 91px;
