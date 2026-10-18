@@ -40,7 +40,9 @@ import {
   PROFILE_FIELDS,
   nineDraftStore,
   nineForm,
+  nineIsStale,
   nineLosesWords,
+  nineMark,
   profileDraftStore,
   profileForm,
   profileLosesWords,
@@ -198,6 +200,12 @@ export function ProfileView({
     keptNine.draft && savedNine && !sameNine(keptNine.draft, savedNine)
       ? keptNine.draft
       : null;
+  // Begun from a nine saved over since (on another device): not used unless
+  // the reader asks for it. Until they open it or throw it away the dialog
+  // shows the nine saved now and waits, so nothing is written over it unasked.
+  const nineStale =
+    nineWork && savedNine && nineIsStale(nineWork, savedNine) ? nineWork : null;
+  const nineFresh = nineStale ? null : nineWork;
   const profile = profileWork ?? savedProfile;
   const {
     name: draftName = "",
@@ -206,16 +214,38 @@ export function ProfileView({
     handle: draftHandle = "",
   } = profile ?? {};
   // Books no longer in the town drop out of the nine being chosen.
-  const draftNine = ((nineWork ?? savedNine)?.ids ?? []).filter((id) =>
+  const draftNine = ((nineFresh ?? savedNine)?.ids ?? []).filter((id) =>
     state.books.some((book) => book.id === id),
   );
-  const draftNotes = (nineWork ?? savedNine)?.notes ?? {};
+  const draftNotes = (nineFresh ?? savedNine)?.notes ?? {};
   // Whether each dialog opened on work kept from before.
   const [resumedProfile, setResumedProfile] = useState(false);
   const [resumedNine, setResumedNine] = useState(false);
+  // The reader opened work begun before the nine saved now: saving puts it
+  // in that one's place, which the dialog says.
+  const [openedOver, setOpenedOver] = useState(false);
+  const openStale = useRef<HTMLButtonElement>(null);
+  const handToKept = useRef(false);
+  const nineWaits = editingNine && nineStale !== null;
+  useEffect(() => {
+    // The dialog waits on the reader's choice: the hand goes to it.
+    if (nineWaits) openStale.current?.focus();
+  }, [nineWaits]);
+  useEffect(() => {
+    // 書きかけを開く is gone once pressed: the hand goes on to the line
+    // that took its place.
+    if (!handToKept.current) return;
+    handToKept.current = false;
+    document
+      .querySelector<HTMLElement>(".profile-nine-editor .kept-note-button")
+      ?.focus();
+  });
   const [confirming, setConfirming] = useState<"profile" | "nine" | null>(null);
   const [refused, setRefused] = useState<"profile" | "nine" | null>(null);
-  const saving = useKeptUntilSaved((what) => {
+  const saving = useKeptUntilSaved((what, how) => {
+    // Not sent, the nine having been saved over on another device: the town
+    // says so above, and the work kept waits in the dialog for the reader.
+    if (how === "elsewhere") return;
     // Turned away by the account after all: the work is still kept, and
     // the editor shows it again, with a word about it, when it is opened.
     setRefused(what === "nine" ? "nine" : "profile");
@@ -349,10 +379,13 @@ export function ProfileView({
       return setRefused("profile");
     // Kept until the account has it too, as the town now holds it.
     if (owner && savedProfile)
-      saving.hold("profile", profileDraftStore, owner, {
-        work: profileForm(getTownSnapshot().me),
-        base: savedProfile,
-      });
+      saving.hold(
+        "profile",
+        profileDraftStore,
+        owner,
+        { work: profileForm(getTownSnapshot().me), base: savedProfile },
+        "profile",
+      );
     setEditingProfile(false);
     notify("プロフィールを保存しました");
   }
@@ -376,10 +409,16 @@ export function ProfileView({
 
   /** Writes the nine being chosen, kept for the reader as they change. */
   function changeNine(patch: Partial<NineWork>) {
-    if (!savedNine) return;
+    // The older work is the reader's to open or throw away first.
+    if (!savedNine || nineStale) return;
     setConfirming(null);
     setRefused(null);
-    const next = { ids: draftNine, notes: draftNotes, ...patch };
+    const next = {
+      ids: draftNine,
+      notes: draftNotes,
+      ...patch,
+      from: nineFresh?.from ?? nineMark(savedNine),
+    };
     // A book taken off keeps its word to come back to, if it has one.
     next.notes = Object.fromEntries(
       Object.entries(next.notes).filter(
@@ -396,6 +435,7 @@ export function ProfileView({
   function beginNineEdit() {
     if (!reader) return;
     setResumedNine(nineWork !== null);
+    setOpenedOver(false);
     setConfirming(null);
     setRefused((was) => (was === "nine" && nineWork ? was : null));
     setSearch("");
@@ -425,6 +465,8 @@ export function ProfileView({
   }
 
   function saveNine() {
+    if (!savedNine || nineStale) return;
+    const from = nineFresh?.from ?? nineMark(savedNine);
     const notes = Object.fromEntries(
       draftNine
         .map((id) => [id, (draftNotes[id] ?? "").trim()])
@@ -433,13 +475,16 @@ export function ProfileView({
     // Turned away, the dialog stays open on the nine chosen, kept.
     if (!townTook(() => actions.updateNine(draftNine, notes)))
       return setRefused("nine");
-    // Kept until the account has them too, as the town now holds them.
+    // Kept until the account has them too, as the town now holds them,
+    // with the nine they began from: saved over on another device meanwhile,
+    // they wait to be opened again.
     if (owner)
       saving.hold(
         "nine",
         nineDraftStore,
         owner,
-        nineForm(getTownSnapshot().me),
+        { ...nineForm(getTownSnapshot().me), from },
+        "nine",
       );
     setEditingNine(false);
     notify("人生の9冊を保存しました");
@@ -1333,7 +1378,7 @@ export function ProfileView({
             <KeptDraftNote
               className="profile-kept"
               work={nineWork !== null}
-              continuing={resumedNine}
+              continuing={resumedNine || nineStale !== null || openedOver}
               saved={keptNine.saved}
               wordsLost={Boolean(
                 nineWork && savedNine && nineLosesWords(nineWork, savedNine),
@@ -1341,138 +1386,175 @@ export function ProfileView({
               onDiscard={() => {
                 keptNine.clear();
                 setResumedNine(false);
+                setOpenedOver(false);
                 setConfirming(null);
                 setRefused(null);
               }}
-            />
-            <p className="profile-form-hint">
-              何冊でも、好きな順番で。ひとことは任意です。
-            </p>
-            <div className="profile-nine-editor-list">
-              {draftNine.map((id, index) => {
-                const book = bookById(state.books, id);
-                if (!book) return null;
-                return (
-                  <div className="profile-nine-editor-item" key={id}>
-                    <span className="profile-editor-order">{index + 1}</span>
-                    <div className="profile-editor-jacket">
-                      <BookJacket book={book} />
-                    </div>
-                    <div className="profile-editor-book-info">
-                      <strong>{bookTitle(book)}</strong>
-                      <span>{bookAuthor(book)}</span>
-                      <input
-                        aria-label={`${bookTitle(book)}へのひとこと`}
-                        placeholder="この本へのひとこと（任意）"
-                        maxLength={PROFILE_FIELDS.note}
-                        value={draftNotes[id] ?? ""}
-                        onChange={(event) =>
-                          changeNine({
-                            notes: { ...draftNotes, [id]: event.target.value },
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="profile-order-controls">
-                      <button
-                        aria-label={`${bookTitle(book)}を前へ移動`}
-                        disabled={index === 0}
-                        onClick={() => moveNine(index, -1)}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        aria-label={`${bookTitle(book)}を後ろへ移動`}
-                        disabled={index === draftNine.length - 1}
-                        onClick={() => moveNine(index, 1)}
-                      >
-                        ↓
-                      </button>
-                      <button
-                        aria-label={`${bookTitle(book)}を人生の9冊から外す`}
-                        onClick={() =>
-                          changeNine({
-                            ids: draftNine.filter((entry) => entry !== id),
-                          })
-                        }
-                      >
-                        <Icon name="close" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {!draftNine.length && (
-              <p className="profile-editor-empty">
-                まだ選ばれていません。下の本から、最初の一冊を。
-              </p>
-            )}
-            <div className="profile-nine-picker-heading">
-              <h3>一冊を加える</h3>
-              <span>
-                {draftNine.length
-                  ? outOf(draftNine.length, NINE_MAX, "冊")
-                  : `${counted(NINE_MAX, "冊")}まで`}
-              </span>
-            </div>
-            <input
-              className="profile-book-search"
-              type="search"
-              aria-label="人生の9冊に追加する本を検索"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                // The Enter that confirms a kana conversion is the keyboard's.
-                if (!enterPressed(event)) return;
-                event.preventDefault();
-                // Enter adds a book only when it is surely the one meant.
-                const sure = nineSearch.sure();
-                if (
-                  !sure ||
-                  draftNine.includes(sure.id) ||
-                  draftNine.length >= NINE_MAX
+              lead={
+                nineStale
+                  ? "書きかけより新しい人生の9冊が保存されています。書きかけを開くか消すと、続けて選べます"
+                  : openedOver
+                    ? "書きかけを開いています。保存すると、いま保存されている人生の9冊と入れ替わります"
+                    : undefined
+              }
+              action={
+                nineStale && (
+                  <button
+                    type="button"
+                    ref={openStale}
+                    onClick={() => {
+                      // The reader chose it: it now goes on from the nine
+                      // saved since, and saving puts it in that one's place.
+                      if (savedNine)
+                        keptNine.set({
+                          ...nineStale,
+                          from: nineMark(savedNine),
+                        });
+                      setOpenedOver(true);
+                      handToKept.current = true;
+                    }}
+                  >
+                    書きかけを開く
+                  </button>
                 )
-                  return;
-                addNine(sure.id);
-                setSearch("");
-              }}
-              placeholder="タイトル・著者・ジャンルで探す"
+              }
             />
-            {draftNine.length >= NINE_MAX && (
-              <p className="profile-picker-limit">
-                9冊を選びました。新しい本を加えるには、いずれかの本を外してください。
+            <fieldset
+              className="profile-nine-fields"
+              disabled={nineStale !== null}
+            >
+              <p className="profile-form-hint">
+                何冊でも、好きな順番で。ひとことは任意です。
               </p>
-            )}
-            {selectableBooks.length > 0 && (
-              <div className="profile-book-picker">
-                {selectableBooks.map(nineChoice)}
+              <div className="profile-nine-editor-list">
+                {draftNine.map((id, index) => {
+                  const book = bookById(state.books, id);
+                  if (!book) return null;
+                  return (
+                    <div className="profile-nine-editor-item" key={id}>
+                      <span className="profile-editor-order">{index + 1}</span>
+                      <div className="profile-editor-jacket">
+                        <BookJacket book={book} />
+                      </div>
+                      <div className="profile-editor-book-info">
+                        <strong>{bookTitle(book)}</strong>
+                        <span>{bookAuthor(book)}</span>
+                        <input
+                          aria-label={`${bookTitle(book)}へのひとこと`}
+                          placeholder="この本へのひとこと（任意）"
+                          maxLength={PROFILE_FIELDS.note}
+                          value={draftNotes[id] ?? ""}
+                          onChange={(event) =>
+                            changeNine({
+                              notes: {
+                                ...draftNotes,
+                                [id]: event.target.value,
+                              },
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="profile-order-controls">
+                        <button
+                          aria-label={`${bookTitle(book)}を前へ移動`}
+                          disabled={index === 0}
+                          onClick={() => moveNine(index, -1)}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          aria-label={`${bookTitle(book)}を後ろへ移動`}
+                          disabled={index === draftNine.length - 1}
+                          onClick={() => moveNine(index, 1)}
+                        >
+                          ↓
+                        </button>
+                        <button
+                          aria-label={`${bookTitle(book)}を人生の9冊から外す`}
+                          onClick={() =>
+                            changeNine({
+                              ids: draftNine.filter((entry) => entry !== id),
+                            })
+                          }
+                        >
+                          <Icon name="close" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            )}
-            {!selectableBooks.length &&
-              (!searchingNine || nineSearch.settled) && (
-                <p className="profile-muted">
-                  {!searchingNine
-                    ? "題名や著者で、本を探してください。"
-                    : nearNine.length
-                      ? "ぴったり合う本はありませんでした。"
-                      : "条件に合う本がありません。"}
+              {!draftNine.length && (
+                <p className="profile-editor-empty">
+                  まだ選ばれていません。下の本から、最初の一冊を。
                 </p>
               )}
-            {nearNine.length > 0 && (
-              <>
-                <h3 className="search-near" id="profile-near-title">
-                  {nineSearch.nearHeading}
-                </h3>
-                <div
-                  className="profile-book-picker"
-                  role="group"
-                  aria-labelledby="profile-near-title"
-                >
-                  {nearNine.map(nineChoice)}
+              <div className="profile-nine-picker-heading">
+                <h3>一冊を加える</h3>
+                <span>
+                  {draftNine.length
+                    ? outOf(draftNine.length, NINE_MAX, "冊")
+                    : `${counted(NINE_MAX, "冊")}まで`}
+                </span>
+              </div>
+              <input
+                className="profile-book-search"
+                type="search"
+                aria-label="人生の9冊に追加する本を検索"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  // The Enter that confirms a kana conversion is the keyboard's.
+                  if (!enterPressed(event)) return;
+                  event.preventDefault();
+                  // Enter adds a book only when it is surely the one meant.
+                  const sure = nineSearch.sure();
+                  if (
+                    !sure ||
+                    draftNine.includes(sure.id) ||
+                    draftNine.length >= NINE_MAX
+                  )
+                    return;
+                  addNine(sure.id);
+                  setSearch("");
+                }}
+                placeholder="タイトル・著者・ジャンルで探す"
+              />
+              {draftNine.length >= NINE_MAX && (
+                <p className="profile-picker-limit">
+                  9冊を選びました。新しい本を加えるには、いずれかの本を外してください。
+                </p>
+              )}
+              {selectableBooks.length > 0 && (
+                <div className="profile-book-picker">
+                  {selectableBooks.map(nineChoice)}
                 </div>
-              </>
-            )}
+              )}
+              {!selectableBooks.length &&
+                (!searchingNine || nineSearch.settled) && (
+                  <p className="profile-muted">
+                    {!searchingNine
+                      ? "題名や著者で、本を探してください。"
+                      : nearNine.length
+                        ? "ぴったり合う本はありませんでした。"
+                        : "条件に合う本がありません。"}
+                  </p>
+                )}
+              {nearNine.length > 0 && (
+                <>
+                  <h3 className="search-near" id="profile-near-title">
+                    {nineSearch.nearHeading}
+                  </h3>
+                  <div
+                    className="profile-book-picker"
+                    role="group"
+                    aria-labelledby="profile-near-title"
+                  >
+                    {nearNine.map(nineChoice)}
+                  </div>
+                </>
+              )}
+            </fieldset>
             {refused === "nine" && (
               <p className="profile-link-error" role="alert">
                 {SAVE_REFUSED}
@@ -1492,7 +1574,11 @@ export function ProfileView({
                 <button className="btn" onClick={cancelNine}>
                   キャンセル
                 </button>
-                <button className="btn fill" onClick={saveNine}>
+                <button
+                  className="btn fill"
+                  disabled={nineStale !== null}
+                  onClick={saveNine}
+                >
                   この並びを保存
                 </button>
               </div>

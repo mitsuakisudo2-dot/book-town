@@ -8,7 +8,8 @@ import {
   type KeptDraftOptions,
   type KeptDraftStore,
 } from "./kept-draft";
-import { getTownSnapshot, usePersistenceStatus } from "./store";
+import { getTownSnapshot, townStore, usePersistenceStatus } from "./store";
+import type { Write } from "./town-remote";
 import {
   SHELF_NAME_MAX_LENGTH,
   SHOP_DESCRIPTION_MAX_LENGTH,
@@ -48,15 +49,29 @@ export function townTook(change: () => unknown): boolean {
   return getTownSnapshot() !== before;
 }
 
-type Held = { what: string; letGo: () => void };
+type Held = {
+  what: string;
+  letGo: () => void;
+  /** The kind of change it went as, and what the town had missed before. */
+  kind?: Write["kind"];
+  after: number;
+};
+
+/**
+ * How work handed to the town came back: turned away, or not sent because
+ * it had been saved over on another device (the town tells that above).
+ */
+export type NotSaved = "refused" | "elsewhere";
 
 /**
  * Work handed to the town stays kept until the town says it is saved. An
  * account's database can still turn a change away after the screen has moved
  * on; the town then goes back to what is saved, the work is still here to be
- * shown again, and `onRefused` hears which work it was.
+ * shown again, and `onRefused` hears which work it was, and how.
  */
-export function useKeptUntilSaved(onRefused: (what: string) => void) {
+export function useKeptUntilSaved(
+  onRefused: (what: string, how: NotSaved) => void,
+) {
   const status = usePersistenceStatus();
   const held = useRef<Held[]>([]);
   const [handed, setHanded] = useState(0);
@@ -69,9 +84,24 @@ export function useKeptUntilSaved(onRefused: (what: string) => void) {
       return;
     const settled = held.current;
     held.current = [];
-    for (const work of settled)
-      if (status === "saved") work.letGo();
-      else refused.current(work.what);
+    const missed = townStore.getMissedSnapshot();
+    for (const work of settled) {
+      if (status === "saved") {
+        work.letGo();
+        continue;
+      }
+      // What the town missed since the work was handed to it says how the
+      // work's own change went; without it, it is told as turned away.
+      const told = work.kind && missed && missed.id > work.after;
+      const kindOf = (writes: Write[]) =>
+        writes.some((write) => write.kind === work.kind);
+      if (!told || kindOf(missed.refused))
+        refused.current(work.what, "refused");
+      else if (kindOf(missed.elsewhere))
+        refused.current(work.what, "elsewhere");
+      // Saved with the rest: only another change was turned away.
+      else work.letGo();
+    }
   }, [status, handed]);
   return {
     /** All the town holds is saved: kept work that matches it can go. */
@@ -80,8 +110,15 @@ export function useKeptUntilSaved(onRefused: (what: string) => void) {
      * Keeps `value` under `key` until the town is saved, then lets it go
      * (unless it has been written over since). `value` is the work as the
      * town now holds it, so the screen shows what was saved meanwhile.
+     * `kind` is the change it goes as, which tells how it went.
      */
-    hold<T>(what: string, store: KeptDraftStore<T>, key: string, value: T) {
+    hold<T>(
+      what: string,
+      store: KeptDraftStore<T>,
+      key: string,
+      value: T,
+      kind?: Write["kind"],
+    ) {
       store.set(key, value);
       const kept = store.get(key);
       const letGo = () => {
@@ -89,7 +126,7 @@ export function useKeptUntilSaved(onRefused: (what: string) => void) {
       };
       held.current = [
         ...held.current.filter((work) => work.what !== what),
-        { what, letGo },
+        { what, letGo, kind, after: townStore.getMissedSnapshot()?.id ?? 0 },
       ];
       setHanded((count) => count + 1);
     },
