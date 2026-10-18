@@ -37,7 +37,7 @@ import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./reading.css";
 import "./records.css";
 import { profilePath, shopPath } from "../lib/paths";
-import { useTownBackend } from "../lib/store";
+import { useTownBackend, useTownMore } from "../lib/store";
 import { bookAuthor, bookTitle } from "../lib/book-name";
 import { counted, REGISTER, whenSome, NAMES } from "../lib/words";
 import { RegisterBook } from "./RegisterBook";
@@ -120,10 +120,26 @@ export function SearchView({ state, actions, notify }: Shared) {
   const feeling = FEELINGS.includes(feelingParam as Feeling)
     ? (feelingParam as Feeling)
     : null;
-  const feelings = feelingsInTown(state);
+  // Which feelings anyone kept, read when the search opens, and the records
+  // felt with the chosen one, read when it is chosen (AUD-006): the town
+  // holds only a window of others'.
+  const { state: feltKnown } = useTownMore(state, { felt: true });
+  const feelings = feelingsInTown(feltKnown);
+  const { state: feltTown } = useTownMore(
+    feltKnown,
+    feeling ? { feeling } : null,
+  );
+  const feltShown = useMemo(
+    () =>
+      feltTown.books === state.books &&
+      feltTown.readingRecords === state.readingRecords
+        ? shown
+        : booksBeforeSearch(feltTown),
+    [feltTown, state.books, state.readingRecords, shown],
+  );
   const felt = feeling
-    ? booksFelt(state, feeling).flatMap((bookId) =>
-        shown.filter((book) => book.id === bookId),
+    ? booksFelt(feltTown, feeling).flatMap((bookId) =>
+        feltShown.filter((book) => book.id === bookId),
       )
     : [];
   const shelvedAt = (bookId: string) => {

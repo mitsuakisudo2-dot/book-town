@@ -9,6 +9,9 @@ import {
   visitorReader,
   referencedBookIds,
   townFromRows,
+  moreFromRows,
+  type BookRow,
+  type MoreRows,
   type RelationTable,
   type RemoteIds,
   type RemoteRows,
@@ -26,8 +29,9 @@ import {
 } from "../town-backend";
 import { emptyArrived, type Arrived } from "../arrived";
 import { isDatabaseId } from "../record-kind";
-import { bookKind, withSamples } from "../samples";
-import { ME_ID, type TownState } from "../types";
+import { bookKind, sampleBookRowId, withSamples } from "../samples";
+import { emptyMore } from "../town-more";
+import { FEELINGS, ME_ID, type TownState } from "../types";
 import type {
   Database,
   Json,
@@ -55,15 +59,42 @@ type Client = SupabaseClient<Database>;
 
 export { TownSyncError, shouldRetry };
 
-// Supabase answers at most 1000 rows a request (PAGE). Every list the town
-// shows is read whole, a page at a time (allRows), the pages after the first
-// together: a town past 1000 waits for one more answer, and nothing is left
-// out without a word. Only 便り and books are read a stretch at a time on
-// purpose: the newest POSTS, with newer and older ones read after the town
-// (remoteReads), and the newest CATALOG books with every book the rows point
-// to (booksFor).
+// The rows every reader sees some of come in one answer (town_view), the
+// books they point to in another (town_books); the person's own rows are
+// read table by table, each whole, a page at a time (allRows: Supabase
+// answers at most 1000 rows a request, PAGE). Only 便り and books are read a
+// stretch at a time on purpose: the newest POSTS, with newer and older ones
+// read after the town (remoteReads), and the newest CATALOG books with every
+// book the rows point to (booksFor).
 const POSTS = 500;
 const CATALOG = 300;
+/**
+ * How many of others' newest records the town reads (town_view's
+ * record_window): for the books finished lately. The rest of others'
+ * records, and their 人生の9冊, are read on the page that shows them
+ * (more()).
+ */
+const RECORD_WINDOW = 300;
+
+/** What the town asks town_view for (also what tests/db-town-size.test.ts asks). */
+export const TOWN_VIEW_ARGS = {
+  post_limit: POSTS,
+  catalog_limit: CATALOG,
+  // Others' words are read on their profile's page (more below).
+  record_notes: false,
+  record_window: RECORD_WINDOW,
+  others_nine: false,
+};
+/** Of a book's work, the newest records its page reads (work_records). */
+const WORK_RECORDS = 200;
+/** Of a feeling, the newest records the search reads for its books. */
+const FELT_RECORDS = 100;
+// A record without its words, as the town reads others' (body is left out).
+const RECORD_COLUMNS =
+  "id, user_id, book_id, kind, feelings, spoiler, is_public, audience, created_at, updated_at";
+
+/** How many books one town_books request asks for (about 160KB of ids in its body). */
+const BOOKS_AT_ONCE = 4000;
 
 /** Rows matching `ids`, read 100 ids at a time (a URL has room for that). */
 async function byIds<T>(
@@ -85,31 +116,45 @@ const SHOP_COLUMNS =
 // Everything folded for everyone; the person's own held things too.
 const FOLD_COLUMNS = "target_kind, target_id, state, since";
 
-/** The newest books the reader may read. Asked for with the town's other
-    rows, not after them: on a slow line every step in turn is a wait. */
-const catalogOf = (client: Client) =>
-  all(
-    client
-      .from("books")
-      .select(BOOK_COLUMNS)
-      .order("created_at", { ascending: false })
-      .limit(CATALOG),
-  );
+/**
+ * The books `ids` that the reader may read, any number: in one request to
+ * town_books for each thousand, or, from a database without it (the app can
+ * be out before its migration), a hundred at a time by the table.
+ */
+async function booksByIds(client: Client, ids: string[]): Promise<BookRow[]> {
+  if (!ids.length) return [];
+  try {
+    const pages = await Promise.all(
+      chunks(ids, BOOKS_AT_ONCE).map(async (some) =>
+        rowsOf<BookRow>(
+          (await settled(client.rpc("town_books", { ids: some }))).data,
+        ),
+      ),
+    );
+    return pages.flat();
+  } catch (error) {
+    if (!(error instanceof TownSyncError && error.code === "PGRST202"))
+      throw error;
+    return byIds(ids, (some) =>
+      all(client.from("books").select(BOOK_COLUMNS).in("id", some)),
+    );
+  }
+}
 
 /** The catalog, and every book the rows refer to that it leaves out. */
 async function booksFor(
   client: Client,
   rows: Omit<RemoteRows, "books">,
-  reading: ReturnType<typeof catalogOf>,
+  catalog: BookRow[],
 ) {
-  const catalog = await reading;
   const have = new Set(catalog.map((book) => book.id));
   const missing = referencedBookIds(rows).filter((id) => !have.has(id));
+  // In the order the rows name them, however they come back.
+  const place = new Map(missing.map((id, index) => [id, index]));
+  const found = await booksByIds(client, missing);
   return [
     ...catalog,
-    ...(await byIds(missing, (ids) =>
-      all(client.from("books").select(BOOK_COLUMNS).in("id", ids)),
-    )),
+    ...found.sort((a, b) => place.get(a.id)! - place.get(b.id)!),
   ];
 }
 
@@ -133,6 +178,175 @@ async function myBooksOf(client: Client): Promise<RemoteRows["myBooks"]> {
 }
 
 /**
+ * The rows of the town every reader may see some of, read whole as the
+ * database lets the reader see them: who is in the town and their 人生の9冊,
+ * the shops, the newest 便り, reactions (the person's own and those on their
+ * 便り), others' reading together, records, folds, posters and the newest
+ * books.
+ */
+interface TownView {
+  /** Whether all of it was read at one moment (town_view). */
+  oneMoment: boolean;
+  profiles: Tables<"profiles">[];
+  nine: Tables<"profile_nine">[];
+  shops: (ShopRow & Pick<Tables<"shops">, "created_at">)[];
+  posts: Tables<"posts">[];
+  postReactions: Tables<"post_reactions">[];
+  together: Tables<"reading_sessions">[];
+  records: Tables<"reading_entries">[];
+  folds: RemoteRows["folds"];
+  posters: Tables<"posters">[];
+  catalog: BookRow[];
+}
+
+/** A list in town_view's answer; none when it is missing. */
+const rowsOf = <T>(value: unknown): T[] =>
+  Array.isArray(value) ? (value as T[]) : [];
+
+/**
+ * The town's shared rows in one answer from town_view: one request, all from
+ * one moment, so nothing moves between pages and the town is not read again
+ * for it (AUD-006, AUD-135). A database without it (the app can be out
+ * before its migration) is read table by table, as before.
+ */
+async function townViewOf(
+  client: Client,
+  userId: string | null,
+): Promise<TownView> {
+  let data: Json;
+  try {
+    data = (await settled(client.rpc("town_view", TOWN_VIEW_ARGS))).data;
+  } catch (error) {
+    if (!(error instanceof TownSyncError && error.code === "PGRST202"))
+      throw error;
+    // A database from before the window (20261110000000_town_window) answers
+    // the whole town, and one from before town_view is read table by table.
+    try {
+      const { post_limit, catalog_limit, record_notes } = TOWN_VIEW_ARGS;
+      data = (
+        await settled(
+          client.rpc("town_view", { post_limit, catalog_limit, record_notes }),
+        )
+      ).data;
+    } catch (again) {
+      if (again instanceof TownSyncError && again.code === "PGRST202")
+        return townByTables(client, userId);
+      throw again;
+    }
+  }
+  const view = (data ?? {}) as Record<string, unknown>;
+  return {
+    oneMoment: true,
+    profiles: rowsOf(view.profiles),
+    nine: rowsOf(view.nine),
+    shops: rowsOf(view.shops),
+    posts: rowsOf(view.posts),
+    postReactions: rowsOf(view.post_reactions),
+    together: rowsOf(view.together),
+    records: rowsOf(view.records),
+    folds: rowsOf(view.folds),
+    posters: rowsOf(view.posters),
+    catalog: rowsOf(view.catalog),
+  };
+}
+
+/** The same rows table by table, a page at a time: before town_view. */
+async function townByTables(
+  client: Client,
+  userId: string | null,
+): Promise<TownView> {
+  const [
+    profiles,
+    nine,
+    shops,
+    posts,
+    postReactions,
+    together,
+    records,
+    folds,
+    posters,
+    catalog,
+  ] = await Promise.all([
+    // In the order they joined.
+    allRows<Tables<"profiles">>(
+      (count) => client.from("profiles").select("*", { count }),
+      ["created_at", "id"],
+    ),
+    allRows<Tables<"profile_nine">>(
+      (count) => client.from("profile_nine").select("*", { count }),
+      ["profile_id", "position"],
+    ),
+    // Open shops, and the person's own whether it is open or not.
+    allRows<ShopRow & Pick<Tables<"shops">, "created_at">>(
+      (count) => client.from("shops").select(SHOP_COLUMNS, { count }),
+      ["created_at", "id"],
+    ),
+    all(
+      client
+        .from("posts")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(POSTS),
+    ),
+    // The person's own reactions, and others' reactions to their posts.
+    userId === null
+      ? []
+      : allRows<Tables<"post_reactions">>(
+          (count) => client.from("post_reactions").select("*", { count }),
+          ["user_id", "post_id", "kind"],
+        ),
+    // Who is reading together right now; the person's own are read apart.
+    allRows(
+      (count) => {
+        const open = client
+          .from("reading_sessions")
+          .select("*", { count })
+          .eq("mode", "together")
+          .is("ended_at", null);
+        return userId === null ? open : open.neq("user_id", userId);
+      },
+      ["id"],
+    ),
+    // Every one of the person's own records, and others' they may read.
+    allRows<Tables<"reading_entries">>(
+      (count) => client.from("reading_entries").select("*", { count }),
+      ["id"],
+    ),
+    allRows<RemoteRows["folds"][number]>(
+      (count) =>
+        client.from("moderation_folds").select(FOLD_COLUMNS, { count }),
+      ["target_kind", "target_id"],
+    ),
+    // The person's own posters, drafts too, and others' put up.
+    allRows<Tables<"posters">>(
+      (count) => client.from("posters").select("*", { count }),
+      ["id"],
+    ),
+    // The newest books the reader may read.
+    all(
+      client
+        .from("books")
+        .select(BOOK_COLUMNS)
+        .order("created_at", { ascending: false })
+        .limit(CATALOG),
+    ),
+  ]);
+  return {
+    oneMoment: false,
+    profiles,
+    nine,
+    shops,
+    posts,
+    postReactions,
+    together,
+    records,
+    folds,
+    posters,
+    catalog,
+  };
+}
+
+/**
  * Reads the rows of the town `userId` sees, or a visitor (null) sees: the
  * same reads for both, the database deciding what each may read
  * (supabase/migrations). What only the signed-in person has (their marks,
@@ -151,47 +365,22 @@ async function readTown(
   /** What only the signed-in person reads: nothing for a visitor. */
   const own = async <T>(read: (id: string) => Promise<T[]>): Promise<T[]> =>
     userId === null ? [] : read(userId);
-  const catalog = catalogOf(client);
-  // Awaited after the other rows: should one of them fail first, the
-  // catalog's own failure (the same lost network) is not left unheard.
-  catalog.catch(() => {});
   const [
-    profiles,
-    nine,
-    shops,
+    view,
     follows,
     blocks,
     marks,
-    posts,
-    postReactions,
     spoilerReports,
     popReactions,
     ownSessions,
-    together,
-    records,
-    folds,
     myReports,
     readerSettings,
-    posters,
     libraryEntries,
     libraryShelves,
     libraryShelfBooks,
     myBooks,
   ] = await Promise.all([
-    // In the order they joined.
-    allRows<Tables<"profiles">>(
-      (count) => client.from("profiles").select("*", { count }),
-      ["created_at", "id"],
-    ),
-    allRows<Tables<"profile_nine">>(
-      (count) => client.from("profile_nine").select("*", { count }),
-      ["profile_id", "position"],
-    ),
-    // Open shops, and the person's own whether it is open or not.
-    allRows<ShopRow & Pick<Tables<"shops">, "created_at">>(
-      (count) => client.from("shops").select(SHOP_COLUMNS, { count }),
-      ["created_at", "id"],
-    ),
+    townViewOf(client, userId),
     own((id) =>
       allRows(
         (count) =>
@@ -217,20 +406,6 @@ async function readTown(
         (count) =>
           client.from("book_marks").select("*", { count }).eq("user_id", id),
         ["book_id", "kind"],
-      ),
-    ),
-    all(
-      client
-        .from("posts")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(POSTS),
-    ),
-    // The person's own reactions, and others' reactions to their posts.
-    own(() =>
-      allRows<Tables<"post_reactions">>(
-        (count) => client.from("post_reactions").select("*", { count }),
-        ["user_id", "post_id", "kind"],
       ),
     ),
     own((id) =>
@@ -260,28 +435,6 @@ async function readTown(
         ["id"],
       ),
     ),
-    // Who is reading together right now; the person's own are read above.
-    allRows(
-      (count) => {
-        const open = client
-          .from("reading_sessions")
-          .select("*", { count })
-          .eq("mode", "together")
-          .is("ended_at", null);
-        return userId === null ? open : open.neq("user_id", userId);
-      },
-      ["id"],
-    ),
-    // Every one of the person's own records, and others' they may read.
-    allRows<Tables<"reading_entries">>(
-      (count) => client.from("reading_entries").select("*", { count }),
-      ["id"],
-    ),
-    allRows<RemoteRows["folds"][number]>(
-      (count) =>
-        client.from("moderation_folds").select(FOLD_COLUMNS, { count }),
-      ["target_kind", "target_id"],
-    ),
     own(() =>
       allRows<RemoteRows["myReports"][number]>(
         (count) =>
@@ -295,11 +448,6 @@ async function readTown(
     ),
     own((id) =>
       all(client.from("reader_settings").select("*").eq("user_id", id)),
-    ),
-    // The person's own posters, drafts too, and others' put up.
-    allRows<Tables<"posters">>(
-      (count) => client.from("posters").select("*", { count }),
-      ["id"],
     ),
     // The person's own library, every row.
     own((id) =>
@@ -336,6 +484,17 @@ async function readTown(
     // The books the person typed in, to tell others' apart.
     userId === null ? undefined : myBooksOf(client),
   ]);
+  const {
+    profiles,
+    nine,
+    shops,
+    posts,
+    postReactions,
+    together,
+    records,
+    folds,
+    posters,
+  } = view;
 
   const ownShop =
     userId === null
@@ -345,12 +504,13 @@ async function readTown(
   const versioned =
     typeof profiles.find((profile) => profile.id === userId)?.nine_version ===
     "number";
-  // The person's own nine is read again after its version (read with the
-  // profiles), so the page never holds a nine older than the version it
-  // writes over: one saved on another device between the two reads is
-  // refused once and read again, not written over.
+  // Read table by table, the person's own nine is read again after its
+  // version (read with the profiles), so the page never holds a nine older
+  // than the version it writes over: one saved on another device between
+  // the two reads is refused once and read again, not written over.
+  // town_view answers both from one moment.
   const ownNine =
-    versioned && userId !== null
+    versioned && userId !== null && !view.oneMoment
       ? all(client.from("profile_nine").select("*").eq("profile_id", userId))
       : null;
   // Waited on below; the town fails as one if it cannot be read.
@@ -409,9 +569,14 @@ async function readTown(
 
   const rows: Omit<RemoteRows, "books" | "seenNotifications"> = {
     profiles,
-    nine: ownNine
-      ? [...nine.filter((row) => row.profile_id !== userId), ...(await ownNine)]
-      : nine,
+    // The person's own last, read again or not, so the town comes out the
+    // same either way.
+    nine: [
+      ...nine.filter((row) => row.profile_id !== userId),
+      ...(ownNine
+        ? await ownNine
+        : nine.filter((row) => row.profile_id === userId)),
+    ],
     shops,
     ownShelves,
     ownSceneBooks,
@@ -443,7 +608,7 @@ async function readTown(
       books: await booksFor(
         client,
         { ...rows, seenNotifications: [] },
-        catalog,
+        view.catalog,
       ),
     },
     shopId: ownShop?.id,
@@ -534,7 +699,13 @@ async function arrivedFor(
   const missing = [...new Set(rows.flatMap((row) => row.book_id ?? []))].filter(
     (id) => bookKind(id) === "database" && !books.has(id),
   );
-  const [profiles, bookRows, postReactions, spoilerReports, folds] =
+  // The writers' records of these posts' books, for the feelings a post
+  // shows: the town reads only a window of others' records.
+  const writers = [...new Set(rows.map((row) => row.author_id))].filter(
+    (id) => id !== userId,
+  );
+  const named = [...new Set(rows.flatMap((row) => row.book_id ?? []))];
+  const [profiles, bookRows, postReactions, spoilerReports, folds, records] =
     await Promise.all([
       byIds(authors, (some) =>
         all(client.from("profiles").select("*").in("id", some)),
@@ -576,6 +747,20 @@ async function arrivedFor(
             .in("target_id", some),
         ),
       ),
+      named.length
+        ? byIds(writers, async (some) =>
+            (
+              await all(
+                client
+                  .from("reading_entries")
+                  .select(RECORD_COLUMNS)
+                  .in("user_id", some)
+                  .in("book_id", named)
+                  .eq("kind", "finished"),
+              )
+            ).map((row) => ({ ...row, body: "" })),
+          )
+        : [],
     ]);
   return arrivedFromRows(
     {
@@ -585,6 +770,7 @@ async function arrivedFor(
       postReactions,
       spoilerReports,
       folds,
+      records,
     },
     userId,
     ownBooksKnown,
@@ -602,7 +788,7 @@ function remoteReads(
   userId: string | null,
   town: () => TownState | null,
   ownBooksKnown: () => boolean = () => false,
-): Required<Pick<TownBackend, "newer" | "older" | "post">> {
+): Required<Pick<TownBackend, "newer" | "older" | "post" | "more">> {
   const complete = (rows: PostRow[]) =>
     arrivedFor(client, rows, town(), userId, ownBooksKnown());
   const posts = (count?: "exact") =>
@@ -703,6 +889,103 @@ function remoteReads(
         .slice(0, OLDER_PAGE);
       const replies = await repliesTo(found.map((row) => row.id));
       return complete([...found, ...replies]);
+    },
+    async more(ask) {
+      const known = new Set(town()?.books.map((book) => book.id));
+      let rows: Omit<MoreRows, "books">;
+      if ("reader" in ask) {
+        if (!isDatabaseId(ask.reader) || ask.reader === userId)
+          return emptyMore();
+        // Every record of the reader's the database lets this reader see,
+        // with its words, and their nine.
+        const [records, nine] = await Promise.all([
+          allRows<Tables<"reading_entries">>(
+            (count) =>
+              client
+                .from("reading_entries")
+                .select("*", { count })
+                .eq("user_id", ask.reader)
+                .eq("kind", "finished"),
+            ["id"],
+          ),
+          all(
+            client
+              .from("profile_nine")
+              .select("*")
+              .eq("profile_id", ask.reader),
+          ),
+        ]);
+        rows = { records, nine };
+      } else if ("work" in ask) {
+        const kind = bookKind(ask.work);
+        if (kind === "local") return emptyMore();
+        const book =
+          kind === "sample" && !isDatabaseId(ask.work)
+            ? sampleBookRowId(ask.work)
+            : ask.work;
+        let records: Tables<"reading_entries">[];
+        try {
+          records = rowsOf(
+            (
+              await settled(
+                client.rpc("work_records", {
+                  book,
+                  record_limit: WORK_RECORDS,
+                }),
+              )
+            ).data,
+          );
+        } catch (error) {
+          // A database from before work_records reads every record with
+          // the town: there is nothing more to read.
+          if (error instanceof TownSyncError && error.code === "PGRST202")
+            return emptyMore();
+          throw error;
+        }
+        rows = { records, nine: [] };
+      } else if ("felt" in ask) {
+        let felt: Json;
+        try {
+          felt = (await settled(client.rpc("felt_in_town"))).data;
+        } catch (error) {
+          // A database from before felt_in_town reads every record with the
+          // town, and the town knows what was felt.
+          if (error instanceof TownSyncError && error.code === "PGRST202")
+            return emptyMore();
+          throw error;
+        }
+        return {
+          ...emptyMore(),
+          felt: FEELINGS.filter((feeling) =>
+            rowsOf<string>(felt).includes(feeling),
+          ),
+        };
+      } else {
+        const records = await all(
+          client
+            .from("reading_entries")
+            .select(RECORD_COLUMNS)
+            .contains("feelings", [ask.feeling])
+            .eq("kind", "finished")
+            .order("created_at", { ascending: false })
+            .limit(FELT_RECORDS),
+        );
+        rows = {
+          records: records.map((row) => ({ ...row, body: "" })),
+          nine: [],
+        };
+      }
+      const missing = [
+        ...new Set([
+          ...rows.records.map((row) => row.book_id),
+          ...rows.nine.map((row) => row.book_id),
+        ]),
+      ].filter((id) => bookKind(id) === "database" && !known.has(id));
+      return moreFromRows(
+        { ...rows, books: await booksByIds(client, missing) },
+        userId,
+        ownBooksKnown(),
+      );
     },
     async post(id) {
       if (!isDatabaseId(id)) return emptyArrived();

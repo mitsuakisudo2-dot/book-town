@@ -1490,6 +1490,7 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
+      felt_in_town: { Args: Record<PropertyKey, never>; Returns: Json };
       isbn13_valid: { Args: { isbn: string }; Returns: boolean };
       my_books: {
         Args: Record<PropertyKey, never>;
@@ -1537,7 +1538,22 @@ export type Database = {
           week_end: string;
         }[];
       };
+      town_books: { Args: { ids: string[] }; Returns: Json };
+      town_view: {
+        Args: {
+          catalog_limit?: number;
+          others_nine?: boolean;
+          post_limit?: number;
+          record_notes?: boolean;
+          record_window?: number;
+        };
+        Returns: Json;
+      };
       valid_links: { Args: { links: string[] }; Returns: boolean };
+      work_records: {
+        Args: { book: string; record_limit?: number };
+        Returns: Json;
+      };
     };
     Enums: {
       [_ in never]: never;

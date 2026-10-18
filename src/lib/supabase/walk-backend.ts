@@ -8,6 +8,7 @@ import {
   isWalkWrite,
   planWalkWrites,
   splitWalkWrite,
+  sceneFromRow,
   walkFromRows,
   walkStake,
   type WalkIds,
@@ -15,6 +16,8 @@ import {
   type WalkWrite,
 } from "../walk-remote";
 import { loadPosition, noPosition, savePosition } from "../walk-repository";
+import { isDatabaseId } from "../record-kind";
+import type { StoreScene } from "../store-scene";
 import type { Database, Json } from "./database.generated";
 import { deviceOutbox, WALK_OUTBOX_KEY } from "../outbox";
 import {
@@ -67,11 +70,41 @@ async function ownSceneOf(
   };
 }
 
+/** Shops asked for their scenes in one request: well within a URL. */
+const SCENES_AT_ONCE = 50;
+
 /**
- * Reads the walk `userId` sees, or a visitor (null) sees: the public scene of
- * every shop the database lets them see, each list whole, a page at a time
- * (allRows, as the town). Signed in, also their own scene (with its version)
- * and what they did on their walks, and their own shop's id.
+ * The public scenes of the shops `ids`, as walk-backend's `scenes` hands
+ * them over: each shop asked for once, null for one the database has no
+ * scene of (or does not let the reader see), or one not well formed.
+ */
+export async function scenesOf(
+  client: Client,
+  ids: string[],
+): Promise<Map<string, StoreScene | null>> {
+  const asked = [...new Set(ids)].filter(isDatabaseId);
+  const found = new Map<string, StoreScene | null>(
+    asked.map((id) => [id, null]),
+  );
+  for (let at = 0; at < asked.length; at += SCENES_AT_ONCE) {
+    const rows = await all(
+      client
+        .from("shops")
+        .select("id, public_scene")
+        .in("id", asked.slice(at, at + SCENES_AT_ONCE)),
+    );
+    for (const row of rows)
+      found.set(row.id, sceneFromRow(row.public_scene, row.id));
+  }
+  return found;
+}
+
+/**
+ * Reads the walk `userId` sees, or a visitor (null) sees: which shops the
+ * database lets them see a public scene of, each list whole, a page at a
+ * time (allRows, as the town); the scenes themselves are read when a shop is
+ * walked to (scenesOf, AUD-006). Signed in, also their own scene (with its
+ * version) and what they did on their walks, and their own shop's id.
  */
 export async function loadWalkRows(
   client: Client,
@@ -80,7 +113,7 @@ export async function loadWalkRows(
   /** What only the signed-in person reads: nothing for a visitor. */
   const own = async <T>(read: (id: string) => Promise<T[]>): Promise<T[]> =>
     userId === null ? [] : read(userId);
-  const [shopId, scenes, reactions, saved, popReactions, visits] =
+  const [shopId, elsewhere, reactions, saved, popReactions, visits] =
     await Promise.all([
       userId === null ? null : ownShopId(client, userId),
       // Others' shops: the person's own scene is read whole below.
@@ -88,12 +121,12 @@ export async function loadWalkRows(
         (count) => {
           const shown = client
             .from("shops")
-            .select("id, public_scene", { count })
+            .select("id", { count })
             .not("public_scene", "is", null);
           return userId === null ? shown : shown.neq("owner_id", userId);
         },
         ["id"],
-      ),
+      ).then((rows) => rows.map((row) => row.id)),
       own((id) =>
         allRows(
           (count) =>
@@ -142,7 +175,8 @@ export async function loadWalkRows(
   return {
     rows: {
       ownScene: mine.scene,
-      scenes,
+      scenes: [],
+      elsewhere,
       reactions,
       saved,
       popReactions,
@@ -301,6 +335,7 @@ export function accountWalkBackend(
       return sync.save(data);
     },
     writable: () => true,
+    scenes: (ids) => scenesOf(client, ids),
     watch: sync.watch,
     close: sync.close,
   };
@@ -328,5 +363,6 @@ export function visitorWalkBackend(client: Client): WalkBackend {
     },
     save: () => "saved",
     writable: () => true,
+    scenes: (ids) => scenesOf(client, ids),
   };
 }

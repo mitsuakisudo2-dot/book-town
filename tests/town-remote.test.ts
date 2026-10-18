@@ -331,9 +331,16 @@ function fakeReads(
       select: (_columns?: string, options: { count?: string } = {}) =>
         select(table, options.count === "exact"),
     }),
-    // A function returning rows, as a table of its name.
+    // A function returning rows, as a table of its name. A database
+    // before town_view (the town is read table by table) has neither.
     rpc: (name: string, _args?: unknown, options: { count?: string } = {}) =>
-      select(name, options.count === "exact"),
+      (name === "town_view" || name === "town_books") && !(name in tables)
+        ? Promise.resolve({
+            data: null,
+            error: { message: "no " + name, code: "PGRST202" },
+            status: 404,
+          })
+        : select(name, options.count === "exact"),
   };
   return {
     asked,
@@ -922,8 +929,10 @@ async function main() {
       // read with allRows (sync.ts). A read that stops at a number has to
       // be one of these, each read on past it another way: the newest 便り
       // and books (with newer, older and the books the rows point to), and
-      // the newest 注釈 of a page; or one that reads no row at all (whether
-      // the database counts versions, before the reader has a shop).
+      // the newest 注釈 of a page; the newest records felt with a feeling,
+      // the books a search shows for it, newest first (town-more.ts); or one
+      // that reads no row at all (whether the database counts versions,
+      // before the reader has a shop).
       const root = path.resolve(__dirname, "..");
       const found: Record<string, string[]> = {};
       for (const entry of readdirSync(path.join(root, "src"), {
@@ -940,11 +949,12 @@ async function main() {
       assert.deepEqual(found, {
         "src/lib/supabase/site-notes.ts": ["200"],
         "src/lib/supabase/town-backend.ts": [
-          "CATALOG",
           "POSTS",
+          "CATALOG",
           "NEWER_MAX",
           "NEWER_MAX",
           "size",
+          "FELT_RECORDS",
         ],
         "src/lib/supabase/walk-backend.ts": ["0"],
       });
@@ -1193,7 +1203,7 @@ async function main() {
       assert.deepEqual(read.rows.ownScene, scene);
       assert.deepEqual(
         [
-          read.rows.scenes.length,
+          read.rows.elsewhere?.length,
           read.rows.reactions.length,
           read.rows.saved.length,
           read.rows.popReactions.length,
@@ -1208,9 +1218,10 @@ async function main() {
         null,
       );
       assert.equal(visitor.shopId, null);
-      // A visitor sees every shop's public scene, and keeps nothing.
+      // A visitor sees every shop with a public scene (each read when
+      // walked to), and keeps nothing.
       assert.deepEqual(
-        [visitor.rows.scenes.length, visitor.rows.reactions.length],
+        [visitor.rows.elsewhere?.length, visitor.rows.reactions.length],
         [1201, 0],
       );
     },

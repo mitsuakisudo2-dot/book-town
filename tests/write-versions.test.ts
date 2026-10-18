@@ -156,7 +156,7 @@ async function main() {
   await check(
     "shelves saved on another device since are not written over, and the reader is told",
     async () => {
-      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const db = fakeSupabase(AKI, seed(), { versions: true, townView: true });
       const phone = await device(db);
       const laptop = await device(db);
       // On the laptop, two shelves one after the other: each goes over the
@@ -195,7 +195,7 @@ async function main() {
   await check(
     "人生の9冊 and a poster saved on another device since are not written over",
     async () => {
-      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const db = fakeSupabase(AKI, seed(), { versions: true, townView: true });
       const phone = await device(db);
       const laptop = await device(db);
       laptop.actions.updateNine([BOOK], { [BOOK]: "ノートで書いた" });
@@ -251,7 +251,7 @@ async function main() {
   await check(
     "an answer lost on the way, then another change: both are saved, and nothing is told",
     async () => {
-      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const db = fakeSupabase(AKI, seed(), { versions: true, townView: true });
       const laptop = await device(db);
       // The database takes the shelf, but the answer is lost; meanwhile the
       // reader goes on.
@@ -292,7 +292,7 @@ async function main() {
   await check(
     "changes kept on the device go over the version the next page reads",
     async () => {
-      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const db = fakeSupabase(AKI, seed(), { versions: true, townView: true });
       const storage = memoryStorage();
       const phone = await device(db, storage);
       db.offline = true;
@@ -355,7 +355,7 @@ async function main() {
   await check(
     "the store scene saved on another device since is not written over",
     async () => {
-      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const db = fakeSupabase(AKI, seed(), { versions: true, townView: true });
       /** Aki's walk on one device, with what it was told when read again. */
       async function walkOn() {
         const backend = accountWalkBackend(db.client, AKI, {
@@ -458,6 +458,8 @@ async function main() {
   await check(
     "a nine saved between the reads of its version and of its books is not written over",
     async () => {
+      // Read table by table (a database before town_view): the version and
+      // the nine come from two requests. town_view answers both at once.
       const db = fakeSupabase(AKI, seed(), { versions: true });
       const phone = await device(db);
       // The laptop reads the nine's books at once, its version only after
@@ -494,7 +496,7 @@ async function main() {
   await check(
     "a poster whose making went unanswered is written only over the version it was made at",
     async () => {
-      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const db = fakeSupabase(AKI, seed(), { versions: true, townView: true });
       const phone = await device(db);
       // The phone makes a poster; the database takes it, the answer is lost.
       db.loseAnswers = true;
@@ -537,7 +539,7 @@ async function main() {
   await check(
     "two posters made at once, one changed elsewhere since: the other is still made",
     async () => {
-      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const db = fakeSupabase(AKI, seed(), { versions: true, townView: true });
       const phone = await device(db);
       // The first goes in; the connection drops before the second.
       let cut = true;
@@ -571,7 +573,7 @@ async function main() {
   await check(
     "shelves turned away and kept for the next page are told there, not sent again",
     async () => {
-      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const db = fakeSupabase(AKI, seed(), { versions: true, townView: true });
       const storage = memoryStorage();
       const phone = await device(db, storage);
       // Turned away; then the page loses the network before it can tell it,

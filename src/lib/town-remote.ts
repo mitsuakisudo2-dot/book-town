@@ -59,6 +59,7 @@ import { withoutReaders } from "./blocks";
 import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
 import { filedReportFrom } from "./supabase/reports";
 import type { Arrived } from "./arrived";
+import type { TownMore } from "./town-more";
 import {
   cleanVisibilities,
   isAudience,
@@ -199,7 +200,10 @@ export interface RemoteRows {
   popReactions: Tables<"pop_reactions">[];
   /** The person's own reading, and others' reading together right now. */
   sessions: Tables<"reading_sessions">[];
-  /** The person's own reading records, and others' public ones. */
+  /**
+   * The person's own reading records, and others' they may read: every one,
+   * or, from town_view's window, the ones the town shows (TOWN_VIEW_ARGS).
+   */
   records: Tables<"reading_entries">[];
   /** The person's own posters, drafts too, and others' put up. */
   posters: Tables<"posters">[];
@@ -555,9 +559,17 @@ export function townFromRows(
   const bookIds = new Set(books.map((book) => book.id));
   const readerId = (id: string) => (id === userId ? ME_ID : id);
 
+  // Each reader's rows, gathered once: looked for reader by reader, the
+  // whole list was gone through once a reader (AUD-006).
+  const nineRows = new Map<string, Tables<"profile_nine">[]>();
+  for (const row of rows.nine) {
+    if (!bookIds.has(row.book_id)) continue;
+    const list = nineRows.get(row.profile_id);
+    if (list) list.push(row);
+    else nineRows.set(row.profile_id, [row]);
+  }
   const nineOf = (profileId: string) => {
-    const entries = rows.nine
-      .filter((row) => row.profile_id === profileId && bookIds.has(row.book_id))
+    const entries = (nineRows.get(profileId) ?? [])
       .sort((a, b) => a.position - b.position)
       .slice(0, 9);
     return {
@@ -794,25 +806,7 @@ export function townFromRows(
           (row.user_id === userId ||
             (shownToOthers(recordAudience(row)) && known.has(row.user_id))),
       )
-      .flatMap((row): ReadingRecord[] => {
-        const fields = cleanRecord({
-          feelings: row.feelings as Feeling[],
-          note: row.body,
-          spoiler: row.spoiler,
-          audience: recordAudience(row),
-        });
-        return fields
-          ? [
-              {
-                id: row.id,
-                readerId: readerId(row.user_id),
-                bookId: row.book_id,
-                ...fields,
-                createdAt: row.created_at,
-              },
-            ]
-          : [];
-      })
+      .flatMap((row) => recordFromRow(row, userId) ?? [])
       .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
     settings: {
       composeIcon: COMPOSE_ICONS.includes(
@@ -910,6 +904,8 @@ export interface ArrivedRows {
     Tables<"moderation_folds">,
     "target_kind" | "target_id" | "state" | "since"
   >[];
+  /** The writers' records of those posts' books, without their words. */
+  records?: Tables<"reading_entries">[];
 }
 
 /**
@@ -983,6 +979,20 @@ export function arrivedFromRows(
     spoilerReports: rows.spoilerReports
       .map((row) => row.post_id)
       .filter((id) => ids.has(id)),
+    records: (rows.records ?? [])
+      .filter(
+        (row) =>
+          row.kind === "finished" &&
+          row.user_id !== userId &&
+          shownToOthers(recordAudience(row)),
+      )
+      .flatMap(
+        (row) =>
+          recordFromRow(
+            { ...row, book_id: sampleBookOfRow(row.book_id) ?? row.book_id },
+            userId,
+          ) ?? [],
+      ),
     reviewFolds: Object.fromEntries(
       rows.folds
         .filter(
@@ -996,6 +1006,93 @@ export function arrivedFromRows(
           { state: row.state as ReviewFold["state"], since: row.since },
         ]),
     ),
+  };
+}
+
+/**
+ * A record as the town keeps it: the reader's own as "me", its fields as
+ * cleanRecord keeps them. Null for one cleanRecord turns away.
+ */
+function recordFromRow(
+  row: Tables<"reading_entries">,
+  userId: string | null,
+): ReadingRecord | null {
+  const fields = cleanRecord({
+    feelings: row.feelings as Feeling[],
+    note: row.body,
+    spoiler: row.spoiler,
+    audience: recordAudience(row),
+  });
+  return fields
+    ? {
+        id: row.id,
+        readerId: row.user_id === userId ? ME_ID : row.user_id,
+        bookId: row.book_id,
+        ...fields,
+        createdAt: row.created_at,
+      }
+    : null;
+}
+
+/** What a page read after the town (town-more.ts), as the database sent it. */
+export interface MoreRows {
+  records: Tables<"reading_entries">[];
+  nine: Tables<"profile_nine">[];
+  /** The books they name that the town may not know. */
+  books: BookRow[];
+}
+
+/**
+ * What a page read, in the town's shapes, as townFromRows makes them: only
+ * others' finished records and nines (the reader's own are in the town
+ * whole), a 見本's book by its own name. A book another reader typed in is
+ * told as theirs when the town tells the reader's own apart
+ * (`ownBooksKnown`), as arrivedFromRows tells them.
+ */
+export function moreFromRows(
+  rows: MoreRows,
+  userId: string | null,
+  ownBooksKnown = false,
+): TownMore {
+  const id = (bookId: string) => sampleBookOfRow(bookId) ?? bookId;
+  const nines = new Map<string, Tables<"profile_nine">[]>();
+  for (const row of rows.nine) {
+    if (row.profile_id === userId) continue;
+    const list = nines.get(row.profile_id);
+    if (list) list.push(row);
+    else nines.set(row.profile_id, [row]);
+  }
+  return {
+    records: rows.records
+      .filter(
+        (row) =>
+          row.kind === "finished" &&
+          row.user_id !== userId &&
+          shownToOthers(recordAudience(row)),
+      )
+      .flatMap(
+        (row) =>
+          recordFromRow({ ...row, book_id: id(row.book_id) }, userId) ?? [],
+      ),
+    nines: [...nines].map(([readerId, list]) => {
+      const entries = list.sort((a, b) => a.position - b.position).slice(0, 9);
+      return {
+        readerId,
+        lifeNine: entries.map((row) => id(row.book_id)),
+        nineNotes: Object.fromEntries(
+          entries
+            .filter((row) => row.note)
+            .map((row) => [id(row.book_id), row.note as string]),
+        ),
+      };
+    }),
+    books: rows.books
+      .filter((row) => !sampleBookOfRow(row.id))
+      .map((row) =>
+        ownBooksKnown && userId !== null && row.source === "manual"
+          ? { ...bookFromRow(row, false), theirs: true as const }
+          : bookFromRow(row, false),
+      ),
   };
 }
 

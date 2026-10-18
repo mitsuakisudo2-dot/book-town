@@ -394,8 +394,18 @@ export interface TownState {
    * search), newest last. Registering says nothing about owning a copy.
    */
   library: string[];
-  /** The viewer's own reading records, and others' public ones, oldest first. */
+  /**
+   * The viewer's own reading records, and others' public ones, oldest first:
+   * with an account, a window of others' (town-more.ts reads the rest on the
+   * page that shows them).
+   */
   readingRecords: ReadingRecord[];
+  /**
+   * The feelings someone in the town kept, of all time, read when the
+   * search opens (town-more.ts), since the town has only a window of others'
+   * records. Without it, the records tell.
+   */
+  feltInTown?: Feeling[];
   /**
    * The rows of the viewer's library (library_entries) as they are kept, by
    * book. A book with none yet is worked out from the rest of the town each

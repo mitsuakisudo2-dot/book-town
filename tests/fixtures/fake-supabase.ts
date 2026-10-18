@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../../src/lib/supabase/database.generated";
+import { FEELINGS } from "../../src/lib/types";
 
 // A stand-in for Supabase's REST API over tables in memory, enough for the
 // town and the walk to read and write through the real backends
@@ -16,7 +17,10 @@ import type { Database } from "../../src/lib/supabase/database.generated";
 // With `versions`, it counts versions of what is saved whole and writes
 // those through save_shelves, save_scene, save_nine and save_poster, only
 // over the version named (write_versions); without, it is a database from
-// before them, with no such columns.
+// before them, with no such columns. With `townView`, it answers town_view
+// and town_books as the database does (town_view), all from one moment, as
+// `userId`, or as a visitor with `visitor`; without, it is a database from
+// before them, and the town is read table by table.
 
 type Row = Record<string, unknown>;
 
@@ -147,9 +151,19 @@ function sameValue(a: unknown, b: unknown): boolean {
 export function fakeSupabase(
   userId: string,
   seed: Record<string, Row[]> = {},
-  options: { versions?: boolean } = {},
+  options: {
+    versions?: boolean;
+    townView?: boolean;
+    /** Whether town_view takes a window (town_window); with townView unless said. */
+    townWindow?: boolean;
+    visitor?: boolean;
+  } = {},
 ) {
   const versions = options.versions ?? false;
+  const townView = options.townView ?? false;
+  const townWindow = townView && (options.townWindow ?? true);
+  /** Who town_view answers as: the reader, or nobody signed in. */
+  const asked = options.visitor ? null : userId;
   const tables: Record<string, Row[]> = Object.fromEntries(
     Object.entries(seed).map(([table, rows]) => [
       table,
@@ -357,6 +371,13 @@ export function fakeSupabase(
     in(column: string, values: unknown[]) {
       return this.where((row) => values.includes(row[column]));
     }
+    contains(column: string, values: unknown[]) {
+      return this.where(
+        (row) =>
+          Array.isArray(row[column]) &&
+          values.every((value) => (row[column] as unknown[]).includes(value)),
+      );
+    }
     match(values: Row) {
       return this.where((row) =>
         Object.entries(values).every(([key, value]) => row[key] === value),
@@ -374,6 +395,21 @@ export function fakeSupabase(
       this.from = start;
       this.size = end - start + 1;
       return this;
+    }
+    /** Every row matched, in order, up to the limit: inside one statement. */
+    now(): Row[] {
+      return this.sorted()
+        .slice(0, this.size)
+        .map((row) => ({ ...row }));
+    }
+    private sorted() {
+      return this.matching().sort((a, b) => {
+        for (const [column, up] of this.orders) {
+          const [x, y] = [String(a[column]), String(b[column])];
+          if (x !== y) return x < y === up ? -1 : 1;
+        }
+        return 0;
+      });
     }
     then<A = Answer, B = never>(
       resolve?: ((value: Answer) => A | PromiseLike<A>) | null,
@@ -418,13 +454,7 @@ export function fakeSupabase(
           message: "column does not exist",
         });
       if (this.op === "select") {
-        const rows = this.matching().sort((a, b) => {
-          for (const [column, up] of this.orders) {
-            const [x, y] = [String(a[column]), String(b[column])];
-            if (x !== y) return x < y === up ? -1 : 1;
-          }
-          return 0;
-        });
+        const rows = this.sorted();
         return {
           data: this.head
             ? null
@@ -506,6 +536,120 @@ export function fakeSupabase(
     }
   }
 
+  /** A book as the reader may read it: without who typed it in. */
+  const untyped = (row: Row): Row => {
+    const copy = { ...row };
+    delete copy.created_by;
+    return copy;
+  };
+  /** Newest first, as the window reads them. */
+  const newest = (rows: Row[]) =>
+    [...rows].sort((a, b) =>
+      String(b.created_at) === String(a.created_at)
+        ? String(b.id) < String(a.id)
+          ? -1
+          : 1
+        : String(b.created_at) < String(a.created_at)
+          ? -1
+          : 1,
+    );
+  /**
+   * town_view's records with a window (town_window): the reader's own,
+   * others' newest finished, the ones the newest posts stand on, and others'
+   * of the works the reader finished.
+   */
+  const recordsWindow = (size: number, postLimit: number): Row[] => {
+    const all = table("reading_entries");
+    const others = all.filter(
+      (row) => row.kind === "finished" && row.user_id !== asked,
+    );
+    const works = new Map(
+      table("books").map((row) => [row.id, row.work_id] as const),
+    );
+    const work = (bookId: unknown) => works.get(bookId);
+    const stands = new Set(
+      newest(table("posts"))
+        .slice(0, postLimit)
+        .flatMap((row) =>
+          row.book_id ? [`${row.author_id} ${row.book_id}`] : [],
+        ),
+    );
+    const finished = new Set(
+      asked === null
+        ? []
+        : [
+            ...table("book_marks").filter(
+              (row) => row.user_id === asked && row.kind === "finished",
+            ),
+            ...all.filter(
+              (row) => row.user_id === asked && row.kind === "finished",
+            ),
+          ].map((row) => work(row.book_id)),
+    );
+    const kept = new Set([
+      ...all.filter((row) => row.user_id === asked),
+      ...newest(others).slice(0, size),
+      ...others.filter((row) => stands.has(`${row.user_id} ${row.book_id}`)),
+      ...newest(others.filter((row) => finished.has(work(row.book_id)))).slice(
+        0,
+        size,
+      ),
+    ]);
+    return [...kept]
+      .sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1))
+      .map((row) => ({ ...row }));
+  };
+  /** town_view's answer: the rows the town reads table by table, at once. */
+  const viewNow = (args: Row) => {
+    const ask = (name: string, ...keys: string[]) => {
+      const query = new Query(name, "select").select("*");
+      for (const key of keys) query.order(key);
+      return query;
+    };
+    const together = ask("reading_sessions", "id")
+      .eq("mode", "together")
+      .is("ended_at", null);
+    return {
+      profiles: ask("profiles", "created_at", "id").now(),
+      nine: ask("profile_nine", "profile_id", "position")
+        .now()
+        .filter(
+          (row) => args.others_nine !== false || row.profile_id === asked,
+        ),
+      shops: ask("shops", "created_at", "id").now(),
+      posts: ask("posts")
+        .order("created_at", { ascending: false })
+        .limit(Number(args.post_limit ?? 500))
+        .now(),
+      post_reactions:
+        asked === null
+          ? []
+          : ask("post_reactions", "user_id", "post_id", "kind").now(),
+      together: (asked === null
+        ? together
+        : together.neq("user_id", asked)
+      ).now(),
+      records: (typeof args.record_window === "number"
+        ? recordsWindow(
+            Number(args.record_window),
+            Number(args.post_limit ?? 500),
+          )
+        : ask("reading_entries", "id").now()
+      ).map((row) =>
+        args.record_notes === false && row.user_id !== asked
+          ? { ...row, body: "" }
+          : row,
+      ),
+      folds: ask("moderation_folds", "target_kind", "target_id").now(),
+      posters: ask("posters", "id").now(),
+      catalog: ask("books")
+        .order("created_at", { ascending: false })
+        .limit(Number(args.catalog_limit ?? 300))
+        .now()
+        .map(untyped),
+    };
+  };
+
   const rpc = (
     name: string,
     args: Row,
@@ -519,6 +663,61 @@ export function fakeSupabase(
       if (fake.offline) return lost();
       if (name === "shop_visitors")
         return { data: [], error: null, status: 200, count: null };
+      if (
+        townView &&
+        name === "town_view" &&
+        (townWindow ||
+          (args.record_window === undefined && args.others_nine === undefined))
+      )
+        return { data: viewNow(args), error: null, status: 200, count: null };
+      if (townWindow && name === "felt_in_town")
+        return {
+          data: FEELINGS.filter((feeling) =>
+            table("reading_entries").some(
+              (row) =>
+                row.kind === "finished" &&
+                (row.feelings as string[]).includes(feeling),
+            ),
+          ),
+          error: null,
+          status: 200,
+          count: null,
+        };
+      if (townWindow && name === "work_records") {
+        const work = table("books").find(
+          (row) => row.id === args.book,
+        )?.work_id;
+        const books = new Set(
+          table("books")
+            .filter((row) => work !== undefined && row.work_id === work)
+            .map((row) => row.id),
+        );
+        return {
+          data: newest(
+            table("reading_entries").filter(
+              (row) => row.kind === "finished" && books.has(row.book_id),
+            ),
+          )
+            .slice(0, Number(args.record_limit ?? 200))
+            .map((row) =>
+              row.user_id === asked ? { ...row } : { ...row, body: "" },
+            ),
+          error: null,
+          status: 200,
+          count: null,
+        };
+      }
+      if (townView && name === "town_books") {
+        const ids = new Set(args.ids as string[]);
+        return {
+          data: table("books")
+            .filter((row) => ids.has(row.id as string))
+            .map(untyped),
+          error: null,
+          status: 200,
+          count: null,
+        };
+      }
       if (name === "copy_book") {
         const write: FakeWrite = { table: "books", op: "rpc", rows: [args] };
         const refusal = fake.refuse(write);

@@ -1,4 +1,5 @@
 import type { Arrived } from "./arrived";
+import type { MoreAsk, TownMore } from "./town-more";
 import type { RepositorySnapshot, TownRepository } from "./repository";
 import type { Missed } from "./supabase/sync";
 import type { Write } from "./town-remote";
@@ -49,6 +50,12 @@ export interface TownBackend {
   older?(before: string, authors: string[]): Promise<Arrived>;
   /** One post with its replies (a reply brings its post): a page by its id. */
   post?(id: string): Promise<Arrived>;
+  /**
+   * What a page shows that the town does not read with it (town-more.ts):
+   * another reader's records and 人生の9冊, a book's records, the books felt
+   * with a feeling. Nothing of the reader's own, which the town has whole.
+   */
+  more?(ask: MoreAsk): Promise<TownMore>;
   /** Stops background work once the store moves on to another backend. */
   close?(): void;
 }
