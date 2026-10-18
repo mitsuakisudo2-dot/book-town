@@ -17,6 +17,7 @@ import {
   type SignedOut,
 } from "../src/lib/account";
 import { RESERVED_HANDLES } from "../src/lib/handles";
+import { humanCheckKey, TURNSTILE_HOSTS } from "../src/lib/turnstile";
 import {
   authFailure,
   emailChangeFailure,
@@ -54,6 +55,7 @@ function fakeBackend() {
     deleteAccount: 0,
     changeEmail: 0,
     confirmEmailChange: [] as string[],
+    humanChecks: [] as (string | undefined)[],
   };
   const control = {
     calls,
@@ -88,8 +90,9 @@ function fakeBackend() {
       next(null);
       return () => {};
     },
-    async sendCode(email) {
+    async sendCode(email, humanCheck) {
       calls.sendCode += 1;
+      calls.humanChecks.push(humanCheck);
       return control.invited.has(email) ? null : "not-invited";
     },
     async verifyCode(email, code) {
@@ -124,7 +127,8 @@ function fakeBackend() {
       setTimeout(() => listener({ ...AKI, email: change.email }), 0);
       return { done: true };
     },
-    async signInWithPasskey() {
+    async signInWithPasskey(humanCheck) {
+      calls.humanChecks.push(humanCheck);
       if (control.passkeyWindow) return control.passkeyWindow;
       if (!control.passkeys.length) return "passkey-unknown";
       control.passkeys[0].lastUsedAt = "2026-10-18T10:00:00Z";
@@ -222,6 +226,42 @@ async function main() {
         message: failureMessages["invalid-email"],
       });
       assert.equal(control.calls.sendCode, 2);
+    },
+  );
+
+  await check(
+    "the human check's answer goes with the code and the passkey",
+    async () => {
+      const { backend, control } = fakeBackend();
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      await settle();
+      await store.actions.sendCode(AKI.email, "answer-1");
+      await store.actions.sendCode(AKI.email);
+      await store.actions.signInWithPasskey("answer-2");
+      assert.deepEqual(control.calls.humanChecks, [
+        "answer-1",
+        undefined,
+        "answer-2",
+      ]);
+      assert.equal(
+        authFailure({ code: "captcha_failed", status: 400 }),
+        "human-check",
+      );
+      assert.equal(
+        passkeyFailure({ code: "captcha_failed", status: 400 }),
+        "human-check",
+      );
+      assert.match(failureMessages["human-check"], /ボットではない/);
+      // Without a site key, or away from BookTown's own addresses, the login
+      // asks no check; a build may name a test key of its own.
+      assert.equal(humanCheckKey("booktown.page", ""), null);
+      assert.equal(
+        humanCheckKey("localhost", "1x00000000000000000000AA"),
+        "1x00000000000000000000AA",
+      );
+      for (const host of TURNSTILE_HOSTS)
+        assert.match(host, /^(booktown\.page|[a-z0-9-]+\.vercel\.app)$/);
     },
   );
 

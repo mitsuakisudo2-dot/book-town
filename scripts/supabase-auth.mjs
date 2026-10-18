@@ -40,6 +40,7 @@ const SHOWN = new Set([
   "rate_limit_token_refresh",
   "external_anonymous_users_enabled",
   "security_captcha_enabled",
+  "security_captcha_provider",
   "mailer_subjects_magic_link",
   "mailer_templates_magic_link_content",
   "mailer_secure_email_change_enabled",
@@ -62,7 +63,6 @@ const UNMANAGED = [
   "external_email_enabled",
   "smtp_max_frequency",
   "external_anonymous_users_enabled",
-  "security_captcha_enabled",
 ];
 
 /**
@@ -88,8 +88,13 @@ export function allowList(current, wanted) {
  */
 export function desiredAuth(
   settings,
-  { template, emailChangeTemplate, resendKey },
+  { template, emailChangeTemplate, resendKey, captchaSecret = "" },
 ) {
+  // Turned on only with its secret, or every login would be refused.
+  if (settings.captcha.on && !captchaSecret)
+    throw new Error(
+      "captcha.on needs TURNSTILE_SECRET_KEY, Cloudflare Turnstile's secret key, among the repository secrets.",
+    );
   const wanted = {
     site_url: settings.site.url,
     mailer_otp_length: settings.code.length,
@@ -108,6 +113,12 @@ export function desiredAuth(
     webauthn_rp_id: settings.passkey.relyingParty,
     webauthn_rp_display_name: settings.passkey.name,
     webauthn_rp_origins: settings.passkey.origins.join(","),
+    // 人間の確認 (src/lib/turnstile.ts): the login email and the passkey
+    // login then need Turnstile's answer. On only once the site sends it.
+    security_captcha_enabled: settings.captcha.on,
+    ...(settings.captcha.on
+      ? { security_captcha_provider: settings.captcha.provider }
+      : {}),
   };
   if (!resendKey) return wanted;
   return {
@@ -130,13 +141,15 @@ const same = (a, b) =>
   a === b || (a != null && b != null && String(a) === String(b));
 
 /** The settings that differ between the project and what is wanted. */
-export function authChanges(current, wanted, resendKey) {
+export function authChanges(current, wanted, resendKey, captchaSecret = "") {
   const changed = Object.keys(wanted).filter(
     (key) => !same(current[key], wanted[key]),
   );
   // The password may come back hidden. Send it unless it is known to match,
   // so that a replaced key reaches the project too.
   if (resendKey && current.smtp_pass !== resendKey) changed.push("smtp_pass");
+  if (captchaSecret && current.security_captcha_secret !== captchaSecret)
+    changed.push("security_captcha_secret");
   return changed;
 }
 
@@ -176,6 +189,7 @@ async function main(mode) {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   const project = process.env.SUPABASE_PROJECT_ID;
   const resendKey = process.env.RESEND_API_KEY || "";
+  const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || "";
   if (!token || !project) {
     console.log(
       "::warning::SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_ID is not set, so the settings were not checked.",
@@ -198,10 +212,13 @@ async function main(mode) {
     path.join(root, "supabase", settings.emailChange.template),
     "utf8",
   );
+  // Sent only while the check is on; off, Supabase keeps whatever it had.
+  const captchaSecret = settings.captcha.on ? turnstileSecret : "";
   const wanted = desiredAuth(settings, {
     template,
     emailChangeTemplate,
     resendKey,
+    captchaSecret,
   });
 
   const request = async (method, body) => {
@@ -215,7 +232,10 @@ async function main(mode) {
     });
     const text = await response.text();
     if (!response.ok)
-      throw new ApiError(response.status, redact(text, [token, resendKey]));
+      throw new ApiError(
+        response.status,
+        redact(text, [token, resendKey, turnstileSecret]),
+      );
     return JSON.parse(text);
   };
 
@@ -241,7 +261,7 @@ async function main(mode) {
     current.uri_allow_list,
     settings.site.returnTo,
   );
-  const changed = authChanges(current, wanted, resendKey);
+  const changed = authChanges(current, wanted, resendKey, captchaSecret);
   console.log("Sign-in settings on the hosted project:");
   for (const key of Object.keys(wanted))
     console.log(
@@ -251,6 +271,10 @@ async function main(mode) {
     );
   if (changed.includes("smtp_pass"))
     console.log("  smtp_pass: set from RESEND_API_KEY (not shown)");
+  if (changed.includes("security_captcha_secret"))
+    console.log(
+      "  security_captcha_secret: set from TURNSTILE_SECRET_KEY (not shown)",
+    );
   console.log("Left as they are:");
   for (const key of UNMANAGED)
     console.log(`  ${key}: ${shown(key, current[key])}`);
@@ -267,7 +291,14 @@ async function main(mode) {
   }
 
   const patch = Object.fromEntries(
-    changed.map((key) => [key, key === "smtp_pass" ? resendKey : wanted[key]]),
+    changed.map((key) => [
+      key,
+      key === "smtp_pass"
+        ? resendKey
+        : key === "security_captcha_secret"
+          ? captchaSecret
+          : wanted[key],
+    ]),
   );
   try {
     await request("PATCH", patch);

@@ -19,6 +19,7 @@ const accountUser = (user: User | null | undefined): AccountUser | null =>
 /** Turns Supabase Auth errors into the few cases the sign-in screen explains. */
 export function authFailure(error: Pick<AuthError, "code" | "status">) {
   const code = error.code ?? "";
+  if (code === "captcha_failed") return "human-check" satisfies AccountFailure;
   if (
     code === "over_email_send_rate_limit" ||
     code === "over_request_rate_limit" ||
@@ -103,10 +104,12 @@ export function passkeyFailure(error: unknown): AccountFailure {
   // supabase-js says so itself when the browser has no WebAuthn.
   if (!isAuthApiError(error) && /WebAuthn/i.test(auth.message ?? ""))
     return "passkey-unavailable";
-  // Of the sign-in's own answers, only a wait or a lost connection are
-  // the same here; the rest are about codes this screen does not have.
+  // Of the sign-in's own answers, only a wait, a lost connection and the
+  // human check are the same here; the rest are about codes this screen does not have.
   const failure = authFailure(auth);
-  return failure === "rate-limited" || failure === "network"
+  return failure === "rate-limited" ||
+    failure === "network" ||
+    failure === "human-check"
     ? failure
     : "passkey-failed";
 }
@@ -142,11 +145,12 @@ export function supabaseAccountBackend(
       });
       return () => data.subscription.unsubscribe();
     },
-    async sendCode(email) {
+    async sendCode(email, humanCheck) {
       const { error } = await client.auth.signInWithOtp({
         email,
         options: {
           shouldCreateUser: false,
+          ...(humanCheck ? { captchaToken: humanCheck } : {}),
           // Supabase uses this only when it is on the project's list of
           // redirect URLs, and falls back to the Site URL otherwise.
           ...(typeof window !== "undefined"
@@ -181,8 +185,10 @@ export function supabaseAccountBackend(
       // makes the change and signs in again with the new address.
       return { done: Boolean(data.session) };
     },
-    async signInWithPasskey() {
-      const { error } = await client.auth.signInWithPasskey();
+    async signInWithPasskey(humanCheck) {
+      const { error } = await client.auth.signInWithPasskey(
+        humanCheck ? { options: { captchaToken: humanCheck } } : undefined,
+      );
       return error ? passkeyFailure(error) : null;
     },
     async addPasskey() {
