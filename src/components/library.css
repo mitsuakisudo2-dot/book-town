@@ -256,8 +256,12 @@
   font-size: var(--t-cap);
   font-weight: 700;
 }
-/* A mark is never broken in two. */
+/* A mark is never broken in two; one longer than the card (a shelf's long
+   name) ends in "…" instead of running over the next book. */
 .library-marks span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 /* Taken out of the library while picking: said, and no longer picked. */

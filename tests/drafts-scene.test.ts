@@ -40,6 +40,11 @@ const memory = () => {
     removeItem: (key: string) => void data.delete(key),
   };
 };
+/** One browser's storage, the same at every read and write. */
+const oneMemory = () => {
+  const storage = memory();
+  return () => storage;
+};
 const shop: Shop = {
   id: "mine",
   ownerId: "me",
@@ -268,7 +273,7 @@ check("an account's save lets the work go once the account has it", () => {
 check(
   "a refused save keeps the work, to go on from the account's scene",
   () => {
-    const store = createKeptDraftStore(sceneDraftOptions, () => memory());
+    const store = createKeptDraftStore(sceneDraftOptions, oneMemory());
     const account = accountWalk([saved]);
     send(account, store, work);
     account.refuse([saved]);
@@ -286,7 +291,7 @@ check(
 );
 
 check("work begun after a save is not let go with it", () => {
-  const store = createKeptDraftStore(sceneDraftOptions, () => memory());
+  const store = createKeptDraftStore(sceneDraftOptions, oneMemory());
   const account = accountWalk([saved]);
   send(account, store, work);
   // Reopened before the account answered, and written on.
