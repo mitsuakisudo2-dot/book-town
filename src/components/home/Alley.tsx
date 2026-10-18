@@ -11,6 +11,7 @@ import { FeatureView } from "./FeatureBand";
 import { motion, usePaneParam } from "./hooks";
 import type { Shared } from "./Letters";
 import { ShopFront, type Picked } from "./ShopFront";
+import { myShopPath } from "../../lib/paths";
 
 /** The most rounds of the alley kept on the page at once. */
 const MAX_ROUNDS = 30;
@@ -157,7 +158,7 @@ export function Alley({
           <Icon name="leaf" size={28} />
           <h2>この街は、まだ朝です。</h2>
           <p>最初の一軒になりませんか。好きな本を一冊並べれば開店です。</p>
-          <Link className="btn fill" href="/my-shop/">
+          <Link className="btn fill" href={myShopPath()}>
             書店をひらく
           </Link>
         </div>
@@ -185,7 +186,7 @@ export function Alley({
             通りの入口へ
             <Icon name="back" size={15} />
           </button>
-          <Link href="/my-shop/">
+          <Link href={myShopPath()}>
             {state.ownShop ? "自分の棚を整える" : "あなたの一冊を並べる"}
             <Icon name="plus" size={15} />
           </Link>

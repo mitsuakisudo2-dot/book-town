@@ -39,6 +39,7 @@ import { bookById, bookTitle } from "../lib/book-name";
 import { counted, nth, failure, AGAIN, KEPT, PLACE } from "../lib/words";
 import { pickSources } from "../lib/shop-picks";
 import { useUrlParam } from "../lib/url-state";
+import { walkPath } from "../lib/paths";
 
 /** How many books of a library shelf the opening shows at a time. */
 const FROM_PAGE = 24;
@@ -478,7 +479,7 @@ export function OpenShop({
           の本屋です。
         </p>
         <div className="open-next">
-          <Link className="btn fill" href="/walk/#mine">
+          <Link className="btn fill" href={walkPath("mine")}>
             <Icon name="store" size={17} />
             街を歩いてみる
           </Link>

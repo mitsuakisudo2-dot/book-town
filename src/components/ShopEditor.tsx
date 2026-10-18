@@ -1,5 +1,6 @@
 "use client";
 
+import { shortDate } from "../lib/japan-time";
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -25,7 +26,7 @@ import {
 } from "../lib/store";
 import { shelfSaveMessage } from "../lib/persistence";
 import { bookPath } from "../lib/books";
-import { profilePath } from "../lib/paths";
+import { profilePath, shopPath, walkPath } from "../lib/paths";
 import { findReader } from "../lib/social";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { SortableShelf } from "./SortableShelf";
@@ -936,9 +937,7 @@ function ShopMessages({ state }: { state: TownState }) {
                 {reader && <ReaderAvatar reader={reader} size={32} />}
                 <b>{reader?.name ?? "読書家"}</b>
               </Link>
-              <time dateTime={message.at}>
-                {new Date(message.at).toLocaleDateString("ja-JP")}
-              </time>
+              <time dateTime={message.at}>{shortDate(message.at)}</time>
               <p>{message.text}</p>
             </li>
           );
@@ -1158,7 +1157,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             本を並べて、言葉を添えて。あなたの感性が、この街の景色になります。
           </p>
         </div>
-        <Link className="btn" href="/shops/mine">
+        <Link className="btn" href={shopPath("mine")}>
           <Icon name="eye" size={17} />
           お店を眺める
         </Link>
@@ -1187,7 +1186,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             店内を飾りつける
           </button>
           {inWalk && (
-            <Link className="btn" href="/walk/#mine">
+            <Link className="btn" href={walkPath("mine")}>
               店内を眺める
             </Link>
           )}
@@ -1268,7 +1267,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         <p role="status" aria-live="polite">
           {persistenceMessage}
         </p>
-        <Link href="/profiles/me">
+        <Link href={profilePath("me")}>
           自分のプロフィール
           <Icon name="arrow" size={15} />
         </Link>

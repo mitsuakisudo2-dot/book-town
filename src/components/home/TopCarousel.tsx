@@ -241,7 +241,7 @@ function SlideBody({ slide, state }: { slide: Slide; state: TownState }) {
               本好きが一人ずつ小さな本屋を開いている街です。登録しなくても見られます。
             </p>
           </div>
-          <Link href="/walk/" className="home-slide-go">
+          <Link href={walkPath()} className="home-slide-go">
             歩いてみる
             <Icon name="chevron" size={18} />
           </Link>

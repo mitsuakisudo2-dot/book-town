@@ -1,4 +1,5 @@
 import { isSampleId } from "./record-kind";
+import { japanMonth } from "./japan-time";
 import { posterBookIds, type Poster } from "./posters";
 import type { ShopLayout } from "./shop-layout";
 import {
@@ -1162,8 +1163,7 @@ export interface LibraryFilter {
 }
 
 /** The month (Japan time) a moment falls in, as YYYY-MM. */
-const monthOf = (at: string) =>
-  new Date(Date.parse(at) + 9 * 3_600_000).toISOString().slice(0, 7);
+const monthOf = japanMonth;
 const timeOf = (at: string | null) =>
   at === null ? Number.NEGATIVE_INFINITY : Date.parse(at);
 const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);

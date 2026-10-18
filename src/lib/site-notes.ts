@@ -3,6 +3,7 @@
 // screen hands in the elements it found (or plain objects, in the tests).
 
 import { browserName, iosDevice } from "./user-agent";
+import { walkPath } from "./paths";
 
 /** The same limits as public.site_notes (tests check them against the migration). */
 export const SITE_NOTE_LIMITS = {
@@ -85,7 +86,7 @@ export function pageOf(place: {
     if (APP_PARAMS.has(name)) kept.append(name, value);
   const query = kept.toString();
   const hash =
-    place.pathname === "/walk/" && /^#[\w%.-]{1,80}$/.test(place.hash)
+    place.pathname === walkPath() && /^#[\w%.-]{1,80}$/.test(place.hash)
       ? place.hash
       : "";
   return (place.pathname + (query ? "?" + query : "") + hash).slice(
@@ -101,7 +102,7 @@ export function pageKey(page: string): string {
   return (
     url.pathname +
     (id ? "?id=" + encodeURIComponent(id) : "") +
-    (url.pathname === "/walk/" ? url.hash : "")
+    (url.pathname === walkPath() ? url.hash : "")
   );
 }
 

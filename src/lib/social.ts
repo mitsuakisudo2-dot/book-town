@@ -7,6 +7,7 @@ import {
   type ReviewKind,
   type TownState,
 } from "./types";
+import { japanFormat } from "./japan-time";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
 import { hasFinished } from "./reading";
 import { bookById } from "./book-name";
@@ -274,8 +275,7 @@ export function wantSources(state: TownState, bookId: string): Post[] {
 }
 
 /** Fixed to Japan time so the static render and the browser always agree. */
-const postTime = new Intl.DateTimeFormat("ja-JP", {
-  timeZone: "Asia/Tokyo",
+const postTime = japanFormat({
   month: "numeric",
   day: "numeric",
   hour: "2-digit",

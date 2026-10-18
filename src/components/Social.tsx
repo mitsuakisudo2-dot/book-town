@@ -39,7 +39,7 @@ import { booksBeforeSearch } from "../lib/book-lists";
 import { Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
 import "./poster-screen.css";
-import { posterNewPath } from "../lib/paths";
+import { posterNewPath, searchPath } from "../lib/paths";
 import { leaveLayers } from "../lib/back-layer";
 import { LetterCard } from "./letter/LetterCard";
 import {
@@ -584,7 +584,7 @@ export function PostText({ body }: { body: string }) {
                 <Link
                   key={at}
                   className="post-tag"
-                  href={"/search/?q=" + encodeURIComponent("#" + piece.tag)}
+                  href={searchPath("#" + piece.tag)}
                   onClick={() => requestSearch("#" + piece.tag)}
                 >
                   {piece.text}
