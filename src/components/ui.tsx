@@ -240,6 +240,35 @@ const shapes: Record<string, ReactNode> = {
   ),
   pause: <path d="M9 6.5v11M15 6.5v11" />,
   play: <path d="M8.5 6v12l9.5-6z" />,
+  /** ⋮: a row's other actions, where ··· would not fit beside it. */
+  kebab: (
+    <>
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="12" cy="19" r="1" />
+    </>
+  ),
+  keyboard: (
+    <>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+    </>
+  ),
+  sound: (
+    <>
+      <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" />
+      <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
+    </>
+  ),
+  "sound-off": (
+    <>
+      <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" />
+      <path d="m16 9.5 5 5M21 9.5l-5 5" />
+    </>
+  ),
+  light: <path d="M13 2.5 5 13.5h6l-1 8 8-11h-6z" />,
+  expand: <path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5" />,
+  shrink: <path d="M4 14h6v6M20 10h-6V4M14 10l6.5-6.5M10 14l-6.5 6.5" />,
 };
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return (

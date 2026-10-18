@@ -239,13 +239,51 @@ export function closingNotice(counts: {
   return null;
 }
 
+/** How long a remark about a read (もうライブラリにあります …) stays over the camera. */
+export const NOTICE_MS = 3600;
+
+/**
+ * The count at the scanner's top (資料 8章): the books whose saving is
+ * confirmed, the books on their way (a title being looked up, saving, the
+ * town loading) and the books that wait for the reader. A part with none is
+ * left out, so nothing says 0; with nothing at all it is empty.
+ */
+export function scanCount(counts: {
+  saved: number;
+  checking: number;
+  attention: number;
+}): string {
+  const { saved, checking, attention } = counts;
+  return [
+    saved > 0 ? `${counted(saved, "冊")} 登録済み` : "",
+    checking > 0 ? `${counted(checking, "冊")}確認中` : "",
+    attention > 0 ? `${counted(attention, "冊")}要確認` : "",
+  ]
+    .filter(Boolean)
+    .join("・");
+}
+
 /** The scanner's words. */
 export const SCAN_COPY = {
   name: "本を続けて登録",
   preparing: "準備しています…",
   cameraStarting: "カメラを起動しています…",
-  guide: "上の段（978…）を枠に",
+  guide: "ISBNバーコードをかざす",
   firstCamera: "読むと、その場で登録します",
+  /** The list of this time's books, newest first. */
+  list: "この回に読んだ本",
+  done: "完了",
+  typeIsbn: "ISBNを打つ",
+  useCamera: "カメラで読む",
+  byHand: "手で入力",
+  sound: "音",
+  light: "ライト",
+  larger: "カメラを大きくする",
+  smaller: "カメラを小さくする",
+  more: (name: string) => `${name}のほかの操作`,
+  undo: "登録を取り消す",
+  undoName: (name: string) => `${name}の登録を取り消す`,
+  statuses: (name: string) => `${name}の読書状況`,
   paused: "一時停止しています",
   banner: {
     offline:
@@ -297,11 +335,14 @@ export const SCAN_COPY = {
   },
   hint: {
     price: "上の段のバーコード（978…）を読んでください",
-    magazine: "雑誌は［手で入力］から書名で登録できます",
+    magazine: "雑誌は右上のキーボードから書名で登録できます",
     other: "本のバーコード（978・979で始まる段）を読んでください",
   } satisfies Record<OtherKind, string>,
   card: {
     looking: "書名を調べています…",
+    /** In the library, and the save not confirmed yet. */
+    saving: "保存しています…",
+    /** In the library, and saved. */
     added: "登録しました",
     untitledTitle: "書名がわからない本",
     untitled: "控えに置きました",
