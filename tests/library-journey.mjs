@@ -1589,7 +1589,8 @@ try {
         name: "試験の本 36の所有とお気に入りと本棚",
       });
       const entry = async () => (await stored(sorting)).libraryEntries[id];
-      // 積読 says 持っている; 未所持 then takes 積読 off: never both.
+      // 積読 says 持っている; 未所持 after it leaves 積読: both stay
+      // (けにーさん 2026-10-18).
       await statuses.getByRole("button", { name: "積読" }).click();
       await expect
         .poll(async () => {
@@ -1603,13 +1604,13 @@ try {
       ).toHaveAttribute("aria-pressed", "true");
       await expect(
         statuses.getByRole("button", { name: "積読" }),
-      ).toHaveAttribute("aria-pressed", "false");
+      ).toHaveAttribute("aria-pressed", "true");
       await expect
         .poll(async () => {
           const now = await entry();
           return [now.status, now.owned];
         })
-        .toEqual([null, "no"]);
+        .toEqual(["tsundoku", "no"]);
       // 読了 stays 未所持: a book read, and not had.
       await statuses.getByRole("button", { name: "読了" }).click();
       await expect
@@ -1664,14 +1665,13 @@ try {
       const owned = sheet.getByRole("switch", { name: /持っている/ });
       await expect(owned).toBeChecked();
       await expect(sheet.getByRole("radio", { name: "未指定" })).toBeChecked();
-      // 積読 and 持っている off never stand together.
-      await sheet.getByRole("radio", { name: "積読" }).click();
+      // 積読 turns 持っている on; turned off after, both stay.
       await owned.click();
-      await expect(owned).not.toBeChecked();
-      await expect(sheet.getByRole("radio", { name: "未指定" })).toBeChecked();
       await sheet.getByRole("radio", { name: "積読" }).click();
       await expect(owned).toBeChecked();
       await owned.click();
+      await expect(owned).not.toBeChecked();
+      await expect(sheet.getByRole("radio", { name: "積読" })).toBeChecked();
       await sheet.getByRole("radio", { name: "読了" }).click();
       await expect(sheet).toContainText("本棚はライブラリでつくれます");
       // While it is open, nothing is read.

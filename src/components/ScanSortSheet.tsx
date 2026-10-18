@@ -7,9 +7,8 @@ import { SCAN_COPY } from "../lib/scan";
 import { Modal } from "./ui";
 
 // 連続設定 (資料 3章, Figma v4's 02): what the next books read are given as
-// they come in. Its 積読 and 持っている off never stand together, as in the
-// library (applySet): 積読 turns 持っている on, and 持っている off takes 積読
-// off.
+// they come in. As in the library (applySet), 積読 turns 持っている on, and
+// 持っている turned off after leaves 積読 as it is (けにーさん 2026-10-18).
 
 const COPY = SCAN_COPY.sort;
 
@@ -76,11 +75,7 @@ export function ScanSortSheet({
             role="switch"
             className="scan-switch"
             checked={owned}
-            onChange={(event) => {
-              setOwned(event.target.checked);
-              if (!event.target.checked && status === "tsundoku")
-                setStatus(null);
-            }}
+            onChange={(event) => setOwned(event.target.checked)}
           />
         </label>
         <fieldset className="scan-sort-shelves">

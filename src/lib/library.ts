@@ -660,16 +660,6 @@ export function applySet(
   // 積読 is a book the reader has and has not read yet: set, it says they
   // own it, however it is set (けにーさん 2026-10-18, over 問い5 of 10-14).
   if (s.status === "tsundoku") next.owned = "yes";
-  // And so 持ってない, set, takes 積読 off: the two never stand together
-  // (資料 4章、けにーさん 2026-10-18). 読了 and 読書中 stay.
-  else if (
-    s.owned === "no" &&
-    next.owned === "no" &&
-    next.status === "tsundoku"
-  ) {
-    next.status = null;
-    next.statusAt = null;
-  }
   // A use marks a row taken out too, without bringing it back (N19).
   if (s.meet === true) next.everUsed = true;
   if (s.liked === true) next.likedAt = next.likedAt ?? at;

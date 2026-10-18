@@ -148,11 +148,12 @@ export function readSort(value: unknown): ScanSort | undefined {
 
 /** What a 連続設定 writes on a book: its status and 所有, then each shelf. */
 export function sortChanges(sort: ScanSort): LibrarySet[] {
+  // The status first: 積読 says 持っている, and a 持っている turned off in
+  // the setting is the reader's own, after it (both stay, けにーさん
+  // 2026-10-18).
   return [
-    {
-      owned: sort.owned,
-      ...(sort.status ? { status: sort.status } : {}),
-    },
+    ...(sort.status ? [{ status: sort.status }] : []),
+    { owned: sort.owned },
     ...sort.shelves.map((shelf) => ({ addShelf: shelf })),
   ];
 }

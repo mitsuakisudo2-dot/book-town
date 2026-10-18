@@ -1180,6 +1180,19 @@ async function main() {
       const other = demo.getSnapshot().libraryEntries["isbn-" + Y];
       assert.equal(other.status, null);
       assert.equal(other.owned, "yes");
+      // 積読 with 持っている turned off: both stay (けにーさん 2026-10-18).
+      const third = "9784101010144";
+      keepRead(journal, "demo", {
+        session,
+        isbn: third,
+        via: "scan",
+        known: { title: "明暗", author: "" },
+        sort: { status: "tsundoku", owned: "no", shelves: [] },
+      });
+      await sendJournal(journal, "demo", town);
+      const both = demo.getSnapshot().libraryEntries["isbn-" + third];
+      assert.equal(both.status, "tsundoku");
+      assert.equal(both.owned, "no");
       // Read again under another setting: in the library, it stays as it was.
       keepRead(journal, "demo", {
         session,
