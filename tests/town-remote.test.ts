@@ -1200,7 +1200,7 @@ async function main() {
       assert.deepEqual(read.rows.ownScene, scene);
       assert.deepEqual(
         [
-          read.rows.scenes.length,
+          read.rows.elsewhere?.length,
           read.rows.reactions.length,
           read.rows.saved.length,
           read.rows.popReactions.length,
@@ -1215,9 +1215,10 @@ async function main() {
         null,
       );
       assert.equal(visitor.shopId, null);
-      // A visitor sees every shop's public scene, and keeps nothing.
+      // A visitor sees every shop with a public scene (each read when
+      // walked to), and keeps nothing.
       assert.deepEqual(
-        [visitor.rows.scenes.length, visitor.rows.reactions.length],
+        [visitor.rows.elsewhere?.length, visitor.rows.reactions.length],
         [1201, 0],
       );
     },

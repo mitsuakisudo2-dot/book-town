@@ -41,7 +41,7 @@ import {
 import { LengthNearLimit } from "./Social";
 import { shownToOthers, type Audience } from "../lib/visibility";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
-import { townOffline } from "../lib/store";
+import { townOffline, useRecordWords } from "../lib/store";
 import { failure, offlineFor } from "../lib/words";
 import "./records.css";
 
@@ -437,7 +437,18 @@ export function RecordShelf({
 }: Shared & { readerId: string }) {
   const [editing, setEditing] = useState<ReadingRecord | null>(null);
   const [opened, setOpened] = useState<string[]>([]);
-  const records = recordsOf(state, readerId);
+  const kept = recordsOf(state, readerId);
+  // Others' words come when their shelf is shown (AUD-006).
+  const words = useRecordWords(
+    readerId,
+    kept.map((record) => record.id),
+  );
+  const records = kept.map((record) => {
+    const found = !record.note && words.get(record.id);
+    if (!found) return record;
+    const note = found.note.trim();
+    return { ...record, note, spoiler: found.spoiler && note.length > 0 };
+  });
   if (!records.length) return null;
   const mine = readerId === ME_ID;
   // The record as it is now, if it was changed after 見直す was tapped.

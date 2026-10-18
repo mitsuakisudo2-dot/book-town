@@ -20,7 +20,7 @@
     "test:db": "tsx tests/database-policies.test.ts && tsx tests/account-tables.test.ts && tsx tests/db-copies.test.ts && tsx tests/db-works.test.ts && tsx tests/db-visibility.test.ts && tsx tests/db-editions.test.ts && tsx tests/db-bibliography.test.ts && tsx tests/db-shelf-audience.test.ts && tsx tests/db-holds.test.ts && tsx tests/db-own-books.test.ts && tsx tests/db-own-books-only.test.ts && tsx tests/db-write-versions.test.ts && tsx tests/db-screen-errors.test.ts && tsx tests/db-town-view.test.ts",
     "test:account": "tsx tests/account-domain.test.ts",
     "test:site-notes": "tsx tests/site-notes.test.ts",
-    "test:town-sync": "tsx tests/town-remote.test.ts && tsx tests/walk-remote.test.ts && tsx tests/save-guards.test.ts && tsx tests/write-versions.test.ts && tsx tests/own-books.test.ts && tsx tests/town-view.test.ts",
+    "test:town-sync": "tsx tests/town-remote.test.ts && tsx tests/walk-remote.test.ts && tsx tests/save-guards.test.ts && tsx tests/write-versions.test.ts && tsx tests/own-books.test.ts && tsx tests/town-view.test.ts && tsx tests/walk-scenes.test.ts",
     "test:supabase": "tsx tests/supabase-login.test.ts && tsx tests/supabase-town.test.ts && tsx tests/supabase-passkey.test.ts",
     "test:customization": "node tests/customization-journey.mjs",
     "test:library-journey": "node tests/library-journey.mjs",

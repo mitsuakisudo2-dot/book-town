@@ -13,6 +13,12 @@ export interface WalkData {
   scenes: StoreScene[];
   /** The demo's copies of a shop from before its scene was first saved. */
   backups: SceneBackup[];
+  /**
+   * Others' shops with a public scene that is not in `scenes`: it is read
+   * when the shop is walked to (walk-store's `need`, AUD-006). Absent where
+   * every scene is at hand (the demo).
+   */
+  elsewhere?: string[];
 }
 
 export const emptyWalkData = (): WalkData => ({
@@ -48,6 +54,11 @@ export interface WalkBackend {
   save(data: WalkData): PersistenceStatus;
   /** False while saving would overwrite data that could not be read. */
   writable(): boolean;
+  /**
+   * The public scenes of the shops `ids` (each of `elsewhere`), by shop:
+   * null for one with none, or one not well formed.
+   */
+  scenes?(ids: string[]): Promise<Map<string, StoreScene | null>>;
   watch?(listener: WalkBackendListener): () => void;
   close?(): void;
 }

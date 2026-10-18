@@ -30,6 +30,8 @@ export interface WalkSnapshot extends WalkData {
   missed: Missed<WalkWrite> | null;
   /** Where the walk is saved: this browser, or the person's account. */
   kind: WalkBackend["kind"];
+  /** Shops of `elsewhere` whose scene is not read yet (`need` reads it). */
+  unread: ReadonlySet<string>;
 }
 
 export interface WalkStoreOptions {
@@ -68,6 +70,7 @@ export function createWalkStore(
     status: "loading",
     missed: null,
     kind: source.kind,
+    unread: new Set(),
   };
   let backend = source;
   let snapshot = initial;
@@ -80,9 +83,29 @@ export function createWalkStore(
     snapshot = { ...snapshot, ...patch };
     notify();
   };
+  // Others' scenes read since the walk was (`need`), by shop, null for one
+  // with none: kept when the walk is read again, which reads none of them.
+  let looked = new Map<string, StoreScene | null>();
+  const asking = new Map<string, Promise<void>>();
+  let failures = 0;
+  /** `data` with the scenes read since, and which shops are still to read. */
+  const withLooked = (data: WalkData): Partial<WalkSnapshot> => {
+    const have = new Set(data.scenes.map((scene) => scene.storeId));
+    const more = [...looked.values()].filter(
+      (scene): scene is StoreScene => !!scene && !have.has(scene.storeId),
+    );
+    return {
+      ...data,
+      scenes: more.length ? [...data.scenes, ...more] : data.scenes,
+      unread: new Set(data.elsewhere?.filter((id) => !looked.has(id))),
+    };
+  };
 
   function start(next: WalkBackend) {
     const mine = ++generation;
+    looked = new Map();
+    asking.clear();
+    failures = 0;
     const previous = backend;
     unwatch?.();
     backend = next;
@@ -96,7 +119,7 @@ export function createWalkStore(
         replace(data, status, lost) {
           if (!current()) return;
           set({
-            ...data,
+            ...withLooked(data),
             status,
             ...(lost &&
               (lost.refused.length || lost.elsewhere.length) && {
@@ -109,14 +132,20 @@ export function createWalkStore(
     if ("then" in result) {
       set({
         ...emptyWalkData(),
+        elsewhere: undefined,
         ready: false,
         status: "loading",
         kind: next.kind,
+        unread: new Set(),
       });
       result.then(
         (loaded) => {
           if (current())
-            set({ ...loaded.data, ready: true, status: loaded.status });
+            set({
+              ...withLooked(loaded.data),
+              ready: true,
+              status: loaded.status,
+            });
         },
         () => {
           // The account could not be read: show that, and save nothing.
@@ -126,7 +155,7 @@ export function createWalkStore(
       return;
     }
     set({
-      ...result.data,
+      ...withLooked(result.data),
       ready: true,
       status: result.status,
       kind: next.kind,
@@ -144,7 +173,49 @@ export function createWalkStore(
     state: snapshot.state,
     scenes: snapshot.scenes,
     backups: snapshot.backups,
+    ...(snapshot.elsewhere && { elsewhere: snapshot.elsewhere }),
   });
+
+  /**
+   * Reads the scenes of the shops `ids` the walk has not read yet (AUD-006:
+   * the shop walked to and its neighbours, the shops a book in hand stands
+   * in). Settles once each is read, or could not be: one that could not is
+   * asked again a little later, and whenever it is needed again.
+   */
+  function need(ids: string[]): Promise<void> {
+    const read = backend.scenes?.bind(backend);
+    const waits = ids.flatMap((id) => asking.get(id) ?? []);
+    const want = [
+      ...new Set(
+        ids.filter((id) => snapshot.unread.has(id) && !asking.has(id)),
+      ),
+    ];
+    if (!read || !want.length) return Promise.all(waits).then(() => {});
+    const mine = generation;
+    const done = read(want).then(
+      (found) => {
+        if (mine !== generation) return;
+        failures = 0;
+        for (const id of want) looked.set(id, found.get(id) ?? null);
+        set(withLooked(data()));
+      },
+      () => {
+        if (mine !== generation) return;
+        failures += 1;
+        setTimeout(
+          () => {
+            if (mine === generation) void need(want);
+          },
+          Math.min(60_000, 2_000 * 2 ** failures),
+        );
+      },
+    );
+    const settledDone = done.finally(() => {
+      for (const id of want) asking.delete(id);
+    });
+    for (const id of want) asking.set(id, settledDone);
+    return Promise.all([settledDone, ...waits]).then(() => {});
+  }
 
   /** Returns whether the change is saved, or on its way to the account. */
   function update(change: (state: WalkState) => WalkState) {
@@ -242,6 +313,7 @@ export function createWalkStore(
   return {
     update,
     saveScene,
+    need,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
@@ -267,6 +339,7 @@ export const walkStore = createWalkStore(
 
 export const updateWalk = walkStore.update;
 export const saveOwnedScene = walkStore.saveScene;
+export const needScenes = walkStore.need;
 
 export function useWalkStore() {
   const data = useSyncExternalStore(
@@ -275,5 +348,10 @@ export function useWalkStore() {
     walkStore.getServerSnapshot,
   );
   useEffect(() => walkStore.initialize(), []);
-  return { ...data, update: updateWalk, saveScene: saveOwnedScene };
+  return {
+    ...data,
+    update: updateWalk,
+    saveScene: saveOwnedScene,
+    need: needScenes,
+  };
 }

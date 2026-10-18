@@ -311,6 +311,21 @@ const standIn = async (route) => {
   const body = request.postData() ? JSON.parse(request.postData()) : {};
   // Like PostgREST, the page asked for (offset, limit) and the total, which
   // the app reads to know it has every row of a list.
+  // The walk reads shops by their owner and ids, and those with a scene.
+  const shopsAsked = (rows, params) =>
+    rows.filter((row) =>
+      [...params].every(([column, filter]) => {
+        if (["select", "offset", "limit", "order"].includes(column))
+          return true;
+        const value = row[column] ?? null;
+        if (filter === "not.is.null") return value !== null;
+        if (filter.startsWith("eq.")) return value === filter.slice(3);
+        if (filter.startsWith("neq.")) return value !== filter.slice(4);
+        if (filter.startsWith("in.("))
+          return filter.slice(4, -1).split(",").includes(value);
+        return true;
+      }),
+    );
   const rowsAsked = (rows) => {
     const from = Number(url.searchParams.get("offset") ?? 0);
     const page = rows.slice(
@@ -695,7 +710,13 @@ const standIn = async (route) => {
       together: rows("reading_sessions").filter(
         (row) => row.mode === "together" && !row.ended_at,
       ),
-      records: rows("reading_entries"),
+      // Others' records without their words, when the app asks so: their
+      // profile's page reads them.
+      records: rows("reading_entries").map((row) =>
+        body.record_notes === false && row.user_id !== profile?.id
+          ? { ...row, body: "" }
+          : row,
+      ),
       folds: rows("moderation_folds"),
       posters: rows("posters"),
       catalog: rows("books").slice(0, body.catalog_limit ?? 300),
@@ -733,7 +754,9 @@ const standIn = async (route) => {
     return rowsAsked(
       table === "posts"
         ? postsAsked(town?.posts ?? [], url.searchParams)
-        : (town?.[table] ?? []),
+        : table === "shops"
+          ? shopsAsked(town?.shops ?? [], url.searchParams)
+          : (town?.[table] ?? []),
     );
   }
   return json(404, { message: "not mocked: " + url.pathname });
@@ -5975,6 +5998,151 @@ try {
       await page.keyboard.press("Escape");
       await expect(inHand).not.toBeVisible();
       town = null;
+    },
+  );
+
+  await check(
+    "another reader's words on the books they finished come with their profile, a spoiler folded",
+    async () => {
+      const record = (id, book, body, spoiler) => ({
+        id,
+        user_id: OTHER,
+        book_id: book,
+        kind: "finished",
+        body,
+        feelings: ["quiet"],
+        spoiler,
+        is_public: true,
+        audience: "everyone",
+        created_at: ago(5),
+        updated_at: ago(5),
+      });
+      town = {
+        ...filled(),
+        reading_entries: [
+          record(
+            "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+            COVER_BOOK,
+            "夜に読み終えた。",
+            false,
+          ),
+          record(
+            "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4e",
+            REFUSED_BOOK,
+            "最後に星が落ちる。",
+            true,
+          ),
+        ],
+      };
+      townReads.length = 0;
+      await page.goto(base + "/profile/?id=" + OTHER);
+      const shelf = page.locator(".record-shelf");
+      await expect(shelf.getByText("夜に読み終えた。")).toBeVisible();
+      // The town came without them; the page read them, by their reader.
+      expect(townReads).toContain("/rest/v1/reading_entries");
+      const open = shelf.getByRole("button", {
+        name: "ネタバレを含むひとことを読む",
+      });
+      await expect(open).toBeVisible();
+      await expect(shelf.getByText("最後に星が落ちる。")).toHaveCount(0);
+      await open.click();
+      await expect(shelf.getByText("最後に星が落ちる。")).toBeVisible();
+      town = filled();
+    },
+  );
+
+  await check(
+    "the walk reads a shop's own store scene when it is walked to, and shows it",
+    async () => {
+      const at = (x, y, w, h) => ({ x, y, w, h, rotation: 0 });
+      const scene = {
+        schemaVersion: 1,
+        storeId: OTHER_SHOP,
+        ownerManaged: true,
+        theme: {
+          id: "woodshop",
+          light: "#f5dbaa",
+          wood: "#6a371d",
+          paper: "#f1dfb7",
+          font: "serif",
+        },
+        background: { kind: "preset", blur: 0, darkness: 0 },
+        forbidden: [],
+        objects: [
+          {
+            id: "sign",
+            kind: "sign",
+            parentId: null,
+            rect: at(0.1, 0.02, 0.5, 0.1),
+            z: 4,
+            text: "レンの看板",
+          },
+          {
+            id: "f1",
+            kind: "furniture",
+            parentId: null,
+            rect: at(0.1, 0.2, 0.6, 0.6),
+            z: 1,
+          },
+          {
+            id: "r1",
+            kind: "row",
+            parentId: "f1",
+            isPublic: true,
+            rect: at(0.1, 0.1, 0.8, 0.3),
+            z: 2,
+          },
+          {
+            id: "b1",
+            kind: "book",
+            parentId: "r1",
+            bookId: COVER_BOOK,
+            display: "face",
+            order: 0,
+            preferredSize: { w: 0.2, h: 0.3 },
+            rect: at(0.1, 0.1, 0.3, 0.8),
+            z: 3,
+          },
+        ],
+      };
+      const plain = filled();
+      town = {
+        ...plain,
+        shops: plain.shops.map((shop) => ({
+          ...shop,
+          public_scene: scene,
+          public_scene_books: [COVER_BOOK],
+        })),
+      };
+      const asked = [];
+      const watch = (request) => {
+        const url = new URL(request.url());
+        if (url.pathname === "/rest/v1/shops") asked.push(url.searchParams);
+      };
+      page.on("request", watch);
+      try {
+        await page.goto(base + "/walk/#" + OTHER_SHOP);
+        // Its own sign, not one made up from its shelves.
+        await expect(page.locator(".walk-sign-name")).toHaveText("レンの看板");
+        // The walk asked which shops have a scene, then this one's by its id.
+        const scenes = asked.filter(
+          (params) => params.get("select") === "id,public_scene",
+        );
+        expect(scenes.length).toBeGreaterThan(0);
+        expect(
+          scenes.every((params) => params.get("id")?.startsWith("in.")),
+        ).toBe(true);
+        expect(
+          asked.some(
+            (params) =>
+              params.get("select") === "id" &&
+              params.get("public_scene") === "not.is.null",
+          ),
+        ).toBe(true);
+      } finally {
+        page.off("request", watch);
+        town = filled();
+      }
     },
   );
 
