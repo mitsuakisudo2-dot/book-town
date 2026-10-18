@@ -1,7 +1,8 @@
 // Brings the hosted Supabase project's sign-in settings in line with
 // supabase/hosted-auth.json: the site's address and the addresses a login link
-// may return to, how long the login code lasts and, once a Resend key is
-// stored, who sends the login email, how many it may send an hour, and the
+// may return to, how long the login code lasts, how many sign-ins, code
+// checks and session refreshes one address may make in five minutes and, once
+// a Resend key is stored, who sends the login email, how many it may send an hour, and the
 // email itself (supabase/templates/magic_link.html, the same file the local
 // Supabase uses). .github/workflows/supabase-auth.yml runs it.
 //
@@ -34,9 +35,6 @@ const SHOWN = new Set([
   "rate_limit_otp",
   "rate_limit_verify",
   "rate_limit_token_refresh",
-  "rate_limit_anonymous_users",
-  "rate_limit_sms_sent",
-  "rate_limit_web3",
   "external_anonymous_users_enabled",
   "security_captcha_enabled",
   "mailer_subjects_magic_link",
@@ -52,12 +50,6 @@ const UNMANAGED = [
   "disable_signup",
   "external_email_enabled",
   "smtp_max_frequency",
-  "rate_limit_otp",
-  "rate_limit_verify",
-  "rate_limit_token_refresh",
-  "rate_limit_anonymous_users",
-  "rate_limit_sms_sent",
-  "rate_limit_web3",
   "external_anonymous_users_enabled",
   "security_captcha_enabled",
 ];
@@ -88,6 +80,9 @@ export function desiredAuth(settings, { template, resendKey }) {
     site_url: settings.site.url,
     mailer_otp_length: settings.code.length,
     mailer_otp_exp: settings.code.expiresInSeconds,
+    rate_limit_otp: settings.limits.codeRequestsPer5Minutes,
+    rate_limit_verify: settings.limits.codeChecksPer5Minutes,
+    rate_limit_token_refresh: settings.limits.sessionRefreshesPer5Minutes,
   };
   if (!resendKey) return wanted;
   return {
