@@ -1161,6 +1161,13 @@ async function main() {
       const entry = demo.getSnapshot().libraryEntries[id];
       assert.equal(entry.status, "finished");
       assert.equal(entry.owned, "no");
+      // The row knows the time it came in by: the session, a UUID as the
+      // database keeps it.
+      assert.match(
+        session,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      assert.equal(entry.batchId, session);
       assert.ok(
         demo
           .getSnapshot()
@@ -1207,6 +1214,19 @@ async function main() {
       );
       assert.equal(demo.getSnapshot().libraryEntries[id].status, "finished");
       assert.equal(demo.getSnapshot().libraryEntries[id].owned, "no");
+      // A read kept before sessions were UUIDs comes in with no time.
+      const older = "9784101010151";
+      keepRead(journal, "demo", {
+        session: "lq3x8k2ab-s1",
+        isbn: older,
+        via: "scan",
+        known: { title: "行人", author: "" },
+      });
+      await sendJournal(journal, "demo", town);
+      assert.equal(
+        demo.getSnapshot().libraryEntries["isbn-" + older].batchId,
+        null,
+      );
       // Kept on the device as it was set, and a broken one is let go with
       // the read kept.
       assert.deepEqual(readSort(sort), sort);

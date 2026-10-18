@@ -913,7 +913,7 @@ export function createTownStore(
           : ended,
       );
     },
-    registerBook(input, via, bookId) {
+    registerBook(input, via, bookId, batchId) {
       initialize();
       const title = bookText(input.title);
       const author = bookText(input.author);
@@ -940,11 +940,13 @@ export function createTownStore(
         sent && sent.isbn === isbn && !sent.theirs ? sent : undefined;
       const existing = decided ?? bookByIsbn(state.books, isbn);
       // The library remembers how a book first came in.
+      // A scan session's id, as the database keeps it (a UUID).
+      const batch = batchId && isDatabaseId(batchId) ? { batchId } : {};
       const register = (town: TownState, id: string) =>
         withLibraryOp(
           town,
           [id],
-          { removed: false },
+          { removed: false, ...batch },
           now().toISOString(),
           via === "scan" || via === "isbn" ? via : "manual",
         );
@@ -1707,8 +1709,8 @@ export function journalTownOf(
     generation: store.getGeneration,
     where: store.getBackendSnapshot,
     owner,
-    register: (book, via, bookId) =>
-      store.actions.registerBook(book, via, bookId),
+    register: (book, via, bookId, batchId) =>
+      store.actions.registerBook(book, via, bookId, batchId),
     toggleLibrary: (bookId) => store.actions.toggleLibrary(bookId),
     changeLibrary: (bookId, set) => {
       store.actions.changeLibrary([bookId], set);

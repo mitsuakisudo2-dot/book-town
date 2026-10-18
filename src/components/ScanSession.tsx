@@ -1150,8 +1150,14 @@ export function ScanSession({
   const manualActions = useMemo<TownActions>(
     () => ({
       ...actions,
-      registerBook(book, via, bookId) {
-        const done = actions.registerBook(book, via, bookId);
+      registerBook(book, via, bookId, batchId) {
+        // Entered by hand in this session, it came in by it too.
+        const done = actions.registerBook(
+          book,
+          via,
+          bookId,
+          batchId ?? session,
+        );
         const isbn = book.isbn ? normalizeIsbn(book.isbn) : null;
         const reader = latest.current.owner;
         // The same book read before and kept for want of its title is in

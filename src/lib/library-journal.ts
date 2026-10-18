@@ -280,7 +280,6 @@ export function createLibraryJournal(
   const listeners = new Set<() => void>();
   let keptLast = true;
   let sending: ReadonlySet<string> = new Set();
-  let sessions = 0;
   let counted = 0;
   let listening = false;
   const emit = () => listeners.forEach((listener) => listener());
@@ -405,7 +404,8 @@ export function createLibraryJournal(
       handedTo.set(id, generation);
     },
     handed: (id, generation) => handedTo.get(id) === generation,
-    newSession: () => `${page}-s${++sessions}`,
+    // A UUID, as the library row keeps it (batch_id).
+    newSession: newUuid,
     newItemId: (session) => `${session}-${++counted}`,
     kept: () => keptLast,
     now: clock,
@@ -447,6 +447,20 @@ export function journalOwner(
   )
     return account.user.id;
   return null;
+}
+
+/** A random UUID, also outside a secure context (a dev server's address). */
+function newUuid(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
+    "",
+  );
+  return [8, 12, 16, 20, 32]
+    .map((end, at, ends) => hex.slice(at ? ends[at - 1] : 0, end))
+    .join("-");
 }
 
 /**
@@ -545,6 +559,7 @@ export interface JournalTown {
     book: NewBook,
     via: RegisterVia,
     bookId?: string,
+    batchId?: string,
   ): Registration | null;
   toggleLibrary(bookId: string): void;
   /** A change of the reader's library (a 連続設定 put on a book). */
@@ -712,6 +727,8 @@ export async function sendJournal(
         },
         item.via,
         item.bookId,
+        // The session it was read in: the library knows which time it was.
+        item.session,
       );
       if (!done) sent.push({ item, result: "unavailable" });
       else if (done.result === "not-saved")
