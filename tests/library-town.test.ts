@@ -24,6 +24,7 @@ import {
   type Write,
 } from "../src/lib/town-remote";
 import { ME_ID, type TownState } from "../src/lib/types";
+import { libraryBookIds, ownFirst, pickSources } from "../src/lib/shop-picks";
 
 // The library in the town (library-town.ts): the books worked out from the
 // rest of the town, the store's ops and their undoing, the demo's storage,
@@ -978,6 +979,41 @@ check("who may see a shelf and its rule are read and written", () => {
     user_id: AKI,
     shelf_audiences: { finished: "everyone", want: "everyone" },
   });
+});
+
+check("a shop's books are picked from the library first (103)", () => {
+  const store = fresh();
+  const { actions } = store;
+  actions.changeLibrary(["momo"], { status: "finished" });
+  const sf = actions.makeLibraryShelf("SF", "")!;
+  actions.changeLibrary(["solaris"], { addShelf: sf });
+  actions.makeLibraryShelf("空の棚", "");
+  const state = store.getSnapshot();
+  const sources = pickSources(state);
+  // 読了, the shelves made in their order, then the whole library; an
+  // empty shelf is not offered.
+  assert.deepEqual(
+    sources.map((source) => source.key),
+    ["finished", sf, "all"],
+  );
+  assert.equal(sources[0].label, "読了");
+  assert.ok(sources[0].ids.includes("momo"));
+  assert.deepEqual(sources[1].ids, ["solaris"]);
+  assert.deepEqual(sources[2].ids, libraryBookIds(state));
+  // Before anything is typed: the reader's own books in the library's
+  // order, then the town's in the town's.
+  const own = libraryBookIds(state);
+  const split = ownFirst(state.books, own);
+  assert.deepEqual(
+    split.own.map((book) => book.id),
+    own.filter((id) => state.books.some((book) => book.id === id)),
+  );
+  assert.equal(split.own.length + split.town.length, state.books.length);
+  assert.ok(split.town.every((book) => !own.includes(book.id)));
+  assert.deepEqual(
+    split.town.map((book) => book.id),
+    state.books.filter((book) => !own.includes(book.id)).map((b) => b.id),
+  );
 });
 
 console.log(`${passed} library town checks passed`);

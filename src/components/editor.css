@@ -353,29 +353,12 @@
   line-height: 1.7;
   margin: 0;
 }
-.editor-selected-book {
-  margin-top: 19px;
-  background: var(--band);
-  border: 1px solid var(--line);
-  padding: 22px;
-  border-radius: var(--r-tag);
-  animation: editor-fade-in var(--dur-enter-s) ease-out;
-}
+/* The book pressed on a shelf, in a sheet from the bottom (Modal's fromBottom). */
 .editor-selected-heading {
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  justify-content: space-between;
-}
-.editor-selected-heading h3 {
-  color: var(--ink);
-  font-family: var(--font-serif, "Noto Serif JP"), "Yu Mincho", serif;
-  font-size: var(--t-title);
-  font-weight: 600;
-  margin: 5px 0 5px;
-}
-.editor-selected-heading p {
-  margin: 0;
+  flex-direction: column;
+  gap: 5px;
+  margin: -10px 0 0;
   color: var(--ink-2);
   font-size: var(--t-cap);
 }
@@ -542,6 +525,7 @@
   margin: 17px 0 20px;
 }
 .editor-picker-display > span {
+  flex: none;
   font-size: var(--t-cap);
   color: var(--ink-2);
   font-weight: 600;
@@ -683,16 +667,6 @@
   gap: 10px;
   margin-top: 23px;
 }
-@keyframes editor-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 @media (max-width: 900px) {
   .editor-page-heading {
     align-items: flex-start;
@@ -813,12 +787,6 @@
     flex-shrink: 0;
     margin-top: 2px;
   }
-  .editor-selected-book {
-    padding: 16px 13px;
-  }
-  .editor-selected-heading h3 {
-    font-size: var(--t-page);
-  }
   .editor-selected-controls {
     gap: 18px;
     margin: 19px 0;
@@ -874,12 +842,14 @@
     font-size: var(--t-cap);
   }
   .editor-picker-display {
+    flex-wrap: wrap;
     gap: 7px;
   }
   .editor-picker-display .editor-segment button {
     font-size: var(--t-cap);
     padding: 6px 8px;
     gap: 4px;
+    white-space: nowrap;
   }
   .editor-picker-display .editor-segment small {
     font-size: var(--t-cap);
@@ -890,9 +860,6 @@
   .editor-segment button,
   .editor-book-choice {
     transition: none;
-  }
-  .editor-selected-book {
-    animation: none;
   }
 }
 
@@ -916,4 +883,48 @@
   font-size: var(--t-cap);
   font-weight: 700;
   box-shadow: var(--lift-1);
+}
+
+/* The shelf picker's groups before anything is typed: the book chosen on its
+   page, the reader's own books, then the town's (管理表 103). */
+.editor-picker-group {
+  margin: 18px 0 10px;
+  font-size: var(--t-cap);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.editor-picker-grid.is-chosen .editor-book-choice {
+  border-color: var(--green);
+}
+
+/* Which shelf a book chosen on its page goes on. */
+.editor-shelf-choices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.editor-shelf-choices .btn {
+  width: 100%;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  text-align: left;
+}
+.editor-shelf-choices b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.editor-shelf-choices small {
+  flex: none;
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+}
+.editor-picker-group + .editor-picker-grid {
+  max-height: none;
+  overflow: visible;
+}
+.editor-picker-more {
+  margin: 4px auto 0;
 }

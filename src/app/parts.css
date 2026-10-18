@@ -90,6 +90,20 @@
   font-weight: 700;
 }
 
+/* A row of chips that scrolls sideways on a narrow phone, edge to edge of
+   the page's 16px gutter (ライブラリの棚, 開店の本選び). */
+.chips {
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 0 16px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
 /* An icon alone (閉じる, 戻る, …): it needs an aria-label. */
 .icon-btn {
   display: grid;

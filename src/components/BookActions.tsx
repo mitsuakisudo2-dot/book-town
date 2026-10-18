@@ -3,6 +3,9 @@
 import type { Book, Notify, TownActions, TownState } from "../lib/types";
 import { formatPrice, REGISTERED_GENRE } from "../lib/books";
 import { bookLookup, lookupQuery } from "../lib/book-lookup";
+import Link from "next/link";
+import { myShopPath } from "../lib/paths";
+import { PLACE } from "../lib/words";
 import { Icon } from "./ui";
 import { RegisterBook } from "./RegisterBook";
 
@@ -89,6 +92,7 @@ export function BookActions({
   actions,
   notify,
   register = false,
+  toShop = false,
 }: {
   book: Book;
   state: TownState;
@@ -96,6 +100,11 @@ export function BookActions({
   notify: Notify;
   /** On the book's own page: 本棚に登録 in one tap, first (管理表 12). */
   register?: boolean;
+  /**
+   * On the book's own page: 自分の書店へ, which opens the reader's shop with
+   * this book chosen (管理表 103).
+   */
+  toShop?: boolean;
 }) {
   const wished = state.wishlist.includes(book.id);
   const favorite = state.favorites.includes(book.id);
@@ -144,6 +153,15 @@ export function BookActions({
           {favorite ? "お気に入りに登録済み" : "お気に入り"}
         </button>
       </div>
+      {toShop && (
+        <Link
+          className="text-btn bh-to-shop"
+          href={myShopPath({ place: book.id })}
+        >
+          <Icon name="store" size={16} />
+          {PLACE.toShop}
+        </Link>
+      )}
     </div>
   );
 }

@@ -1618,11 +1618,31 @@ try {
   await check(
     "a shop opens in three minutes: the nine, a sign, the lights",
     async () => {
-      await go("/my-shop/");
+      // From a book's page, 自分の書店へ: with no shop yet, the opening has
+      // that book first on the shelf (103).
+      await go("/books/fictions/");
+      await page.getByRole("link", { name: "自分の書店へ" }).first().click();
+      await expect(page).toHaveURL(/\/my-shop\/$/);
       await page.getByRole("button", { name: /人生の9冊の本屋/ }).click();
-      // The life nine already on the profile stand on the shelf.
+      // The life nine already on the profile stand on the shelf, after it.
+      await expect(page.locator(".open-shelf-book")).toHaveCount(5);
+      await expect(
+        page.getByRole("button", { name: "伝奇集を棚から外す" }),
+      ).toBeVisible();
+      await expect(page.getByText("あと4冊まで並べられます。")).toBeVisible();
+      // Taken off, it stays off; the shop goes on with the nine.
+      await page.getByRole("button", { name: "伝奇集を棚から外す" }).click();
       await expect(page.locator(".open-shelf-book")).toHaveCount(4);
       await expect(page.getByText("あと5冊まで並べられます。")).toBeVisible();
+      // The books can come from a shelf of the library, chosen in the address.
+      const from = page.getByRole("group", { name: "選ぶ棚" });
+      await expect(
+        from.getByRole("button", { name: "おすすめ" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await from.getByRole("button", { name: "ライブラリ" }).click();
+      await expect(page).toHaveURL(/\?from=all$/);
+      await from.getByRole("button", { name: "おすすめ" }).click();
+      await expect(page).toHaveURL(/\/my-shop\/$/);
       await page
         .getByRole("searchbox", { name: "棚に並べる本" })
         .fill("見えない都市");
@@ -1738,6 +1758,52 @@ try {
       await expect(form).toBeFocused();
       await expectNoKeyboard(page, "the shop's words", form);
       await expectTapWrites(words.getByLabel("ひとこと"));
+    },
+  );
+
+  await check(
+    "a book's page opens the shop with it chosen; a book pressed opens a sheet (103)",
+    async () => {
+      await go("/books/walking/");
+      await page.getByRole("link", { name: "自分の書店へ" }).first().click();
+      // One shelf: its picker opens at once, the book chosen first, then the
+      // reader's own books, then the town's. The address is the page's own.
+      const picker = page.getByRole("dialog", { name: "本棚を編集" });
+      await expect(picker).toBeVisible();
+      await expect(page).toHaveURL(/\/my-shop\/$/);
+      const chosen = picker.getByRole("group", {
+        name: "本のページから選んだ本",
+      });
+      await expect(chosen.locator(".editor-book-choice-title")).toHaveText(
+        "散歩",
+      );
+      await expect(
+        picker.locator(".editor-picker-group").allTextContents(),
+      ).resolves.toEqual(["本のページから選んだ本", "あなたの本棚", "街の本"]);
+      await chosen.locator(".editor-book-choice").click();
+      await expect(chosen.locator(".editor-book-choice")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await picker.getByRole("button", { name: "完了", exact: true }).click();
+      await expect(picker).toHaveCount(0);
+      const items = (await stored()).ownShop.shelves[0].items;
+      expect(items.map((item) => item.bookId)).toContain("walking");
+      // A book pressed on the shelf: its POP rises in a sheet from the
+      // bottom, in sight, and 戻る puts it away.
+      await page.locator(".shelf-book-button").first().click();
+      const sheet = page.locator(".modal.is-sheet");
+      await expect(sheet.getByRole("textbox")).toBeInViewport();
+      // Risen all the way: it sits on the bottom edge.
+      await expect
+        .poll(async () => {
+          const box = await sheet.boundingBox();
+          return Math.round(box.y + box.height);
+        })
+        .toBe(844);
+      await page.goBack();
+      await expect(sheet).toHaveCount(0);
+      await expect(page).toHaveURL(/\/my-shop\/$/);
     },
   );
 
