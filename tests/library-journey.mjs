@@ -1621,6 +1621,60 @@ try {
   );
 
   await check(
+    "一括整理 gives this time's books a status at once, with the camera off",
+    async () => {
+      const tidying = await scanningPage();
+      await go("/profiles/me/?books=library", tidying);
+      await openScanner(tidying);
+      await cameraRunning(tidying);
+      // Nothing to sort yet: no 一括整理.
+      await expect(
+        scanner(tidying).getByRole("button", { name: "一括整理" }),
+      ).toHaveCount(0);
+      const books = [41, 42, 43].map(isbnOf);
+      await show(tidying, ...books);
+      await expect(count(tidying)).toHaveText("3冊 登録済み");
+      await scanner(tidying)
+        .getByRole("group", { name: "試験の本 42の読書状況" })
+        .getByRole("button", { name: "読了" })
+        .click();
+      await scanner(tidying).getByRole("button", { name: "一括整理" }).click();
+      const tidy = scanner(tidying).getByRole("region", { name: "一括整理" });
+      await expect(tidy.getByRole("listitem")).toHaveCount(3);
+      // 未設定のみ: the two with no status.
+      await tidy.getByRole("button", { name: "未設定のみ" }).click();
+      await expect(tidy.getByRole("listitem")).toHaveCount(2);
+      // Nothing chosen, nothing to press.
+      await expect(tidy.getByRole("button", { name: "積読" })).toBeDisabled();
+      await tidy.getByRole("checkbox", { name: "すべて選択" }).check();
+      await expect(tidy).toContainText("選択中の2冊に適用");
+      // The camera reads nothing meanwhile.
+      await tidying.evaluate(
+        (code) => window.__barcodes.push(code),
+        isbnOf(44),
+      );
+      await tidy.getByRole("button", { name: "積読" }).click();
+      const entries = async () => (await stored(tidying)).libraryEntries;
+      await expect
+        .poll(async () => {
+          const all = await entries();
+          return books.map((isbn) => all["isbn-" + isbn].status);
+        })
+        .toEqual(["tsundoku", "finished", "tsundoku"]);
+      expect(await tidying.evaluate(() => window.__barcodes.length)).toBe(1);
+      // 戻る goes back to the scanner, where the camera reads again.
+      await tidying.goBack();
+      await expect(tidy).toHaveCount(0);
+      await expect(scanner(tidying)).toBeVisible();
+      await expect(count(tidying)).toHaveText("4冊 登録済み");
+      await expect(
+        scanner(tidying).getByRole("button", { name: "一括整理" }),
+      ).toBeFocused();
+      await tidying.context().close();
+    },
+  );
+
+  await check(
     "with no WebAssembly either, the browser cannot read barcodes",
     async () => {
       const bare = await browser.newContext(phone);

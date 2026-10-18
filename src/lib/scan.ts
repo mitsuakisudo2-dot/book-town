@@ -309,6 +309,21 @@ export const SCAN_COPY = {
     go: "この設定でスキャン",
     anytime: "設定はいつでも変更・解除できます",
   },
+  /** 一括整理 (Figma v4's 05): this time's books, several at once. */
+  tidy: {
+    name: "一括整理",
+    back: "連続登録に戻る",
+    picked: (n: number) => `${counted(n, "冊")}選択中`,
+    all: "すべて選択",
+    unsorted: "未設定のみ",
+    list: "この回の本",
+    none: "未設定",
+    allSet: "どの本にも読書状況があります",
+    to: (n: number) => `選択中の${counted(n, "冊")}に適用`,
+    toNone: "選んだ本に適用",
+    shelvesTo: "選んだ本を入れる本棚",
+    done: "整理を終える",
+  },
   paused: "一時停止しています",
   banner: {
     offline:

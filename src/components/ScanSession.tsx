@@ -87,6 +87,7 @@ import {
 } from "../lib/scan-timing";
 import { BarcodeRegister } from "./BarcodeRegister";
 import { ScanSortSheet } from "./ScanSortSheet";
+import { ScanTidy, type TidyBook } from "./ScanTidy";
 import { ScanTiming } from "./ScanTiming";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
@@ -125,7 +126,11 @@ const FRAME_MS = 100;
 type TypingWhy =
   "no-reader" | "reader-failed" | "denied" | "no-camera" | "busy" | "chosen";
 type Input =
-  | { kind: "camera"; phase: "starting" | "running" | "hidden" | "manual" }
+  | {
+      kind: "camera";
+      /** manual, tidy: the one-book form or 一括整理 is open, the camera off. */
+      phase: "starting" | "running" | "hidden" | "manual" | "tidy";
+    }
   | { kind: "typing"; why: TypingWhy };
 
 /** What a book read in this session came to, as its card shows it. */
@@ -413,6 +418,9 @@ export function ScanSession({
   /** 連続設定: what the next books read are given, until 解除 or 完了. */
   const [sort, setSort] = useState<ScanSort | null>(null);
   const [sortOpen, setSortOpen] = useState(false);
+  /** 一括整理 open over the scanner, the camera off. */
+  const [tidying, setTidying] = useState(false);
+  const tidyButton = useRef<HTMLButtonElement>(null);
   /** The camera made larger (カメラ集中表示), for a code it does not catch. */
   const [large, setLarge] = useState(false);
   /** Books entered by hand whose save is not confirmed yet. */
@@ -469,10 +477,20 @@ export function ScanSession({
     savedIn,
     manual,
     sortOpen,
+    tidying,
     cards,
   });
   useEffect(() => {
-    latest.current = { owner, ready, online, savedIn, manual, sortOpen, cards };
+    latest.current = {
+      owner,
+      ready,
+      online,
+      savedIn,
+      manual,
+      sortOpen,
+      tidying,
+      cards,
+    };
   });
 
   /** Notes a moment in the timing mode's record; nothing without the mode. */
@@ -1149,6 +1167,23 @@ export function ScanSession({
       now.kind === "camera" ? { kind: "camera", phase: "manual" } : now,
     );
   };
+  const openTidy = () => {
+    setMenuFor(null);
+    setShelvesFor(null);
+    setTidying(true);
+    setInput((now) =>
+      now.kind === "camera" ? { kind: "camera", phase: "tidy" } : now,
+    );
+  };
+  const closeTidy = () => {
+    setTidying(false);
+    setInput((now) =>
+      now.kind === "camera" && now.phase === "tidy"
+        ? { kind: "camera", phase: "starting" }
+        : now,
+    );
+    requestAnimationFrame(() => tidyButton.current?.focus());
+  };
   const closeManual = () => {
     setManual(false);
     setInput((now) =>
@@ -1213,8 +1248,13 @@ export function ScanSession({
     if (!field.current)
       layer.current?.querySelector<HTMLElement>("button")?.focus();
     const key = (event: KeyboardEvent) => {
-      // The one-book form and the 連続設定 on top handle their own keys.
-      if (latest.current.manual || latest.current.sortOpen) return;
+      // The one-book form, the 連続設定 and 一括整理 on top handle their own keys.
+      const {
+        manual: form,
+        sortOpen: sheetOpen,
+        tidying: tidy,
+      } = latest.current;
+      if (form || sheetOpen || tidy) return;
       if (event.key === "Escape") {
         event.preventDefault();
         // The Escape that cancels a kana conversion in the ISBN field is the
@@ -1301,6 +1341,25 @@ export function ScanSession({
       : card.isbn
         ? libraryBookByIsbn(state, card.isbn)?.id
         : undefined;
+  /**
+   * What a card shows of its book: the library's book once it is there
+   * (named as the library names it), else what the read found.
+   */
+  const faceOf = (card: Card, now: ShownNow) => {
+    const libraryId =
+      now === "added" || now === "saving" || now === "already"
+        ? libraryIdOf(card)
+        : undefined;
+    const book = libraryId ? bookOf(libraryId) : undefined;
+    const titled = book ? bookTitle(book) : card.title;
+    return {
+      libraryId,
+      book,
+      titled,
+      name: titled ?? card.isbn ?? "",
+      byline: (book && bookAuthor(book)) ?? card.author,
+    };
+  };
 
   // The banner: one line, the most pressing first.
   const banner = !owner
@@ -1316,6 +1375,23 @@ export function ScanSession({
             : saveWarning(savedIn, persistence);
 
   const countText = scanCount(counts);
+  // 一括整理's books: this time's, in the library, newest first.
+  const tidyBooks: TidyBook[] = [];
+  for (const card of [...cards].reverse()) {
+    const now = shown(card);
+    if (now !== "added" && now !== "saving") continue;
+    const face = faceOf(card, now);
+    if (!face.libraryId || tidyBooks.some((b) => b.id === face.libraryId))
+      continue;
+    tidyBooks.push({
+      id: face.libraryId,
+      name: face.name,
+      byline: face.byline ?? "",
+      book: face.book,
+      status: state.libraryEntries[face.libraryId]?.status ?? null,
+      shelves: onShelves.get(face.libraryId) ?? NONE,
+    });
+  }
 
   /** What a card says under its title. */
   const stateLine = (card: Card, now: ShownNow): string =>
@@ -1619,14 +1695,13 @@ export function ScanSession({
           )}
           {[...cards].reverse().map((card) => {
             const now = shown(card);
-            const libraryId =
-              now === "added" || now === "saving" || now === "already"
-                ? libraryIdOf(card)
-                : undefined;
-            const book = libraryId ? bookOf(libraryId) : undefined;
-            const titled = book ? bookTitle(book) : card.title;
-            const name = titled ?? card.isbn ?? "";
-            const author = (book && bookAuthor(book)) ?? card.author;
+            const {
+              libraryId,
+              book,
+              titled,
+              name,
+              byline: author,
+            } = faceOf(card, now);
             const status = libraryId
               ? state.libraryEntries[libraryId]?.status
               : undefined;
@@ -1808,11 +1883,33 @@ export function ScanSession({
         </ol>
         <GoogleCoversCredit />
         <div className="scan-bottom">
+          {tidyBooks.length > 0 && (
+            <button
+              ref={tidyButton}
+              type="button"
+              className="btn"
+              onClick={openTidy}
+            >
+              {SCAN_COPY.tidy.name}
+            </button>
+          )}
           <button type="button" className="btn fill" onClick={finish}>
             {SCAN_COPY.done}
           </button>
         </div>
       </div>
+      {tidying && (
+        <ScanTidy
+          books={tidyBooks}
+          count={countText}
+          statuses={STATUS_BUTTONS}
+          shelves={handShelves}
+          onChange={(ids, set) => {
+            actions.changeLibrary(ids, set);
+          }}
+          onClose={closeTidy}
+        />
+      )}
       {sortOpen && (
         <ScanSortSheet
           sort={sort}
