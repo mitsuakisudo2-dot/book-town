@@ -10,7 +10,10 @@ import {
   type TownBackend,
   type TownReads,
 } from "./town-backend";
-import { emptyTown } from "./town-remote";
+import { emptyTown, type Write } from "./town-remote";
+import type { Missed } from "./supabase/sync";
+import { townMissedLine } from "./missed-changes";
+import { draftOwner } from "./draft-owner";
 import { takeIn, type Arrived } from "./arrived";
 import { supabaseConfigured } from "./supabase/config";
 import { followAccount } from "./town-session";
@@ -136,6 +139,20 @@ export interface TownStoreOptions {
   onVisitor?: () => void;
   /** Called when a signed-in reader's like or follow would go to a 見本. */
   onSample?: () => void;
+  /**
+   * Called once for each batch of changes that did not reach the database
+   * (supabase/sync.ts): it keeps what can be kept of them and answers the
+   * line that tells the reader (missed-changes.ts).
+   */
+  onMissed?: (missed: Missed<Write>) => string | null;
+}
+
+/** Changes that did not reach the database, as the town last told them. */
+export interface TownMissed extends Missed<Write> {
+  /** Counts the batches, so each is told once. */
+  id: number;
+  /** What the reader is told, or null with nothing to tell. */
+  line: string | null;
 }
 
 /** Actions a visitor's page runs by itself, which need no invitation. */
@@ -196,6 +213,7 @@ export function createTownStore(
   // Counts the town's readings: each load, and each reading again after a
   // refused change, which leaves out what was read after the town.
   let readCount = 0;
+  let missed: TownMissed | null = null;
   let unwatch: (() => void) | null = null;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
@@ -214,11 +232,17 @@ export function createTownStore(
           status = update;
           notify();
         },
-        replace(update, updateStatus) {
+        replace(update, updateStatus, lost) {
           if (!current()) return;
           readCount += 1;
           state = update;
           status = updateStatus;
+          if (lost && (lost.refused.length || lost.elsewhere.length))
+            missed = {
+              ...lost,
+              id: (missed?.id ?? 0) + 1,
+              line: options.onMissed?.(lost) ?? null,
+            };
           notify();
         },
       }) ?? null;
@@ -1294,6 +1318,8 @@ export function createTownStore(
     getServerBackendSnapshot: (): TownBackend["kind"] =>
       options.follow ? "account" : "local",
     getPersistenceSnapshot: () => status,
+    /** The changes that last did not reach the database, or null. */
+    getMissedSnapshot: () => missed,
     getServerPersistenceSnapshot: (): PersistenceStatus => "loading",
     /**
      * Whether a change made now is kept: the town has been read, and it is
@@ -1307,7 +1333,8 @@ export function createTownStore(
     /**
      * Counts the backends the town has used in this page. Changes waiting to
      * be written belong to one of them: a new one starts from what the
-     * database has, and what the old one had not written is gone.
+     * database has. What the old one had not written waits in the reader's
+     * outbox (outbox.ts), sent once that reader's town is read again.
      */
     getGeneration: () => generation,
     /**
@@ -1363,6 +1390,8 @@ export const townStore = createTownStore(
         follow: followAccount,
         onVisitor: requestAccount,
         onSample: refuseForSample,
+        onMissed: (lost) =>
+          townMissedLine(lost, draftOwner(accountStore.getSnapshot())),
       }
     : {},
 );
@@ -1413,6 +1442,33 @@ export function townSettled(store = townStore): Promise<boolean> {
     };
     if (!look()) stop = store.subscribe(look);
   });
+}
+
+/**
+ * The line telling what last did not reach the database, while the town says
+ * so ("recovered"); null otherwise.
+ */
+export function useTownMissedLine(): string | null {
+  const status = usePersistenceStatus();
+  const missed = useSyncExternalStore(
+    townStore.subscribe,
+    townStore.getMissedSnapshot,
+    () => null,
+  );
+  return status === "recovered" ? (missed?.line ?? null) : null;
+}
+
+/**
+ * Whether a change made now waits for the network: the account's town could
+ * not be reached, or the browser knows it is offline. Asked before the
+ * change, as the change itself sets the town saving.
+ */
+export function townOffline(store = townStore): boolean {
+  return (
+    store.getBackendSnapshot() === "account" &&
+    (store.getPersistenceSnapshot() === "unavailable" ||
+      (typeof navigator !== "undefined" && navigator.onLine === false))
+  );
 }
 
 /** Whether the town can read 便り after it was read (not in the demo). */

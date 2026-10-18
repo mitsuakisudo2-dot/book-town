@@ -87,6 +87,10 @@ let followsEnd = false;
 // A change carrying these words is refused by the stand-in, as the database
 // refuses one that breaks a rule, after the screen has moved on.
 const REFUSED_MARK = "（断られる）";
+// While set, the stand-in answers a 便り sent only once it settles.
+let postsHeld = null;
+// While set, a session cannot be renewed, as when its refresh token is gone.
+let refreshRefused = false;
 // What the database grants a reporter to read of their own reports.
 const REPORT_GRANTED = [
   "id",
@@ -320,6 +324,12 @@ const standIn = async (route) => {
   if (url.pathname === "/auth/v1/logout")
     return route.fulfill({ status: 204, body: "" });
   if (url.pathname === "/auth/v1/user") return json(200, user);
+  if (url.pathname === "/auth/v1/token" && refreshRefused)
+    return json(400, {
+      code: 400,
+      error_code: "refresh_token_not_found",
+      msg: "Invalid Refresh Token: Refresh Token Not Found",
+    });
   if (url.pathname === "/rest/v1/profiles") {
     if (request.method() === "GET") {
       if (url.searchParams.get("id") === "eq." + user.id) {
@@ -514,6 +524,21 @@ const standIn = async (route) => {
         );
       return route.fulfill({ status: 204, body: "" });
     }
+  }
+  // Like the database: a 便り is the author's own row, and one carrying the
+  // refusal mark is turned away. While postsHeld, the answer waits; a page
+  // gone meanwhile hears nothing.
+  if (url.pathname === "/rest/v1/posts" && request.method() === "POST") {
+    townWrites.push(url.pathname);
+    if (postsHeld) await postsHeld;
+    return (
+      JSON.stringify(body).includes(REFUSED_MARK)
+        ? json(400, {
+            code: "23514",
+            message: "new row violates check constraint",
+          })
+        : json(201, [])
+    ).catch(() => {});
   }
   // What an owner's shop counts (followers, visitors): nobody yet.
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "HEAD")
@@ -1503,6 +1528,175 @@ try {
       await expect(dialog).toHaveCount(0);
       await expect.poll(() => profile.bio).toBe("夜にだけ本を読みます。");
       await expect.poll(kept).toBeNull();
+    },
+  );
+
+  /** The page at a narrow phone's width too, then back. */
+  const shotNarrow = async (name) => {
+    await shot(name + "-390");
+    await page.setViewportSize({ width: 320, height: 640 });
+    await shot(name + "-320");
+    await page.setViewportSize({ width: 390, height: 844 });
+  };
+  const outboxKeys = () =>
+    page.evaluate(() =>
+      Object.keys(localStorage).filter((key) =>
+        key.startsWith("book-town-outbox-v1:"),
+      ),
+    );
+
+  await check(
+    "a 便り the account turns away later comes back to 投稿する, and the banner names it",
+    async () => {
+      const REFUSED_POST = "雨の日に読む本を探しています。" + REFUSED_MARK;
+      const fab = page.locator(".compose-fab");
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      const text = compose.locator("textarea");
+      await page.goto(base + "/timeline/");
+      await fab.click();
+      await text.fill(REFUSED_POST);
+      await compose
+        .getByRole("button", { name: "投稿する", exact: true })
+        .click();
+      await expect(compose).toHaveCount(0);
+      // The town takes it at once; the account turns it away a moment
+      // later, and its words go back to the composer, said so.
+      await expect(page.locator(".persistence-warning")).toHaveText(
+        "便りを保存できませんでした。書きかけは残しています。",
+      );
+      await expect(fab).toContainText("下書き");
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual([user.id + ":new-post"]);
+      // Turned away, it waits for nothing more.
+      expect(await outboxKeys()).toEqual([]);
+      await shotNarrow("9-refused-post");
+      await fab.click();
+      await expect(text).toHaveValue(REFUSED_POST);
+      // Thrown away here, so the rest of the journey starts without it.
+      await compose.getByRole("button", { name: "書きかけを消す" }).click();
+      await compose.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(text).toHaveValue("");
+      await page.keyboard.press("Escape");
+      await expect(compose).toHaveCount(0);
+      expect(await keptDraftKeys(POST_DRAFTS)).toEqual([]);
+    },
+  );
+
+  await check(
+    "a 便り written with no connection says it waits, and ログアウト says so until it is sent",
+    async () => {
+      const WAITING_POST = "電車の中で書いた便り。";
+      const fab = page.locator(".compose-fab");
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      await page.goto(base + "/timeline/");
+      await expect(page.locator("main.town-main")).toBeVisible();
+      let release = () => {};
+      postsHeld = new Promise((done) => (release = done));
+      try {
+        await context.setOffline(true);
+        await fab.click();
+        await compose.locator("textarea").fill(WAITING_POST);
+        await compose
+          .getByRole("button", { name: "投稿する", exact: true })
+          .click();
+        await expect(
+          page.getByText(
+            "つながらないため、まだ投稿できていません。つながりしだい投稿します。",
+          ),
+        ).toBeVisible();
+        // Kept on this device while it waits.
+        await expect
+          .poll(outboxKeys)
+          .toEqual(["book-town-outbox-v1:" + user.id]);
+        await expect(page.locator(".toast")).toHaveCSS("opacity", "1");
+        await shotNarrow("9-offline-post");
+        // Back online, it is sent but not answered yet: ログアウト says what
+        // it would let go of.
+        await context.setOffline(false);
+        await page.goto(base + "/login/");
+        await expect(
+          page.getByText(
+            "まだ送れていない変更があります。ログアウトすると、この端末から消えます",
+          ),
+        ).toBeVisible();
+        await shotNarrow("9-logout-warning");
+      } finally {
+        await context.setOffline(false);
+        postsHeld = null;
+        release();
+      }
+      // Answered, nothing waits any more.
+      await page.goto(base + "/timeline/");
+      await expect.poll(outboxKeys).toEqual([]);
+      await page.goto(base + "/login/");
+      await expect(
+        page.getByText("まだ送れていない変更があります"),
+      ).toHaveCount(0);
+    },
+  );
+
+  await check(
+    "a sign-in that ends by itself keeps what waits and says so, and sends it once signed in again",
+    async () => {
+      const LAPSED_POST = "ログインが切れる前に書いた便り。";
+      const fab = page.locator(".compose-fab");
+      const compose = page.getByRole("dialog", { name: "投稿する" });
+      const warning = page.locator(".persistence-warning");
+      await page.goto(base + "/timeline/");
+      await expect(page.locator("main.town-main")).toBeVisible();
+      let release = () => {};
+      postsHeld = new Promise((done) => (release = done));
+      try {
+        await fab.click();
+        await compose.locator("textarea").fill(LAPSED_POST);
+        await compose
+          .getByRole("button", { name: "投稿する", exact: true })
+          .click();
+        await expect
+          .poll(outboxKeys)
+          .toEqual(["book-town-outbox-v1:" + user.id]);
+        // The session runs out and cannot be renewed: nobody pressed
+        // ログアウト. The page looks at it again when it is shown.
+        refreshRefused = true;
+        await page.evaluate(() => {
+          const key = Object.keys(localStorage).find((name) =>
+            /^sb-.+-auth-token$/.test(name),
+          );
+          const kept = JSON.parse(localStorage.getItem(key));
+          kept.expires_at = Math.floor(Date.now() / 1000) - 60;
+          localStorage.setItem(key, JSON.stringify(kept));
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+        await expect(warning).toHaveText(
+          "ログインが切れました。まだ送れていない変更は、この端末に残しています。もう一度ログインすると送ります。",
+        );
+        expect(await outboxKeys()).toEqual(["book-town-outbox-v1:" + user.id]);
+        await shotNarrow("9-lapsed");
+      } finally {
+        refreshRefused = false;
+        postsHeld = null;
+        release();
+      }
+      // Signed in again by the link from the email: what waited is sent.
+      const link = session();
+      await page.goto("about:blank");
+      await page.goto(
+        base +
+          "/login/#" +
+          new URLSearchParams({
+            access_token: link.access_token,
+            expires_at: String(link.expires_at),
+            expires_in: "3600",
+            refresh_token: link.refresh_token,
+            token_type: "bearer",
+            type: "magiclink",
+          }),
+      );
+      await expect(
+        page.getByRole("heading", { name: "ログインしています" }),
+      ).toBeVisible();
+      await page.goto(base + "/timeline/");
+      await expect.poll(outboxKeys).toEqual([]);
+      await expect(warning).toBeHidden();
     },
   );
 

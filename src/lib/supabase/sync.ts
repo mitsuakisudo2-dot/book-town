@@ -1,3 +1,4 @@
+import { valueMark } from "../canonical";
 import type { PersistenceStatus } from "../types";
 
 /** What a Supabase request hands back, as far as saving needs to know. */
@@ -163,10 +164,56 @@ export const chunks = <T>(list: T[], size: number): T[][] =>
     list.slice(index * size, index * size + size),
   );
 
-export interface SyncListener<T> {
+/**
+ * One change kept on the device until the database takes it. A change that
+ * sets a whole thing at once (a shop's shelves, the nine) keeps the marks of
+ * that thing before it and after it (valueMark), so one sent again later is
+ * not sent over a version saved since on another device.
+ */
+export interface KeptWrite<W> {
+  write: W;
+  was?: string;
+  to?: string;
+}
+
+/** What one page kept and had not yet seen saved. */
+export interface KeptWrites<W> {
+  /** The page (one backgroundSync) that kept them. */
+  page: string;
+  /** When they were last kept (ISO). */
+  at: string;
+  writes: KeptWrite<W>[];
+}
+
+/** Where changes wait on the device until the database takes them (outbox.ts). */
+export interface Outbox<W> {
+  /** Keeps a page's changes in place of what it kept; false if it could not. */
+  keep(page: string, writes: KeptWrite<W>[]): boolean;
+  /** What other pages kept and did not see saved, oldest first. */
+  left(page: string): KeptWrites<W>[];
+  /** Lets go of what a page kept. */
+  drop(page: string): void;
+}
+
+/** Changes that did not reach the database, for the screens to tell. */
+export interface Missed<W> {
+  /** Turned away by the database. */
+  refused: W[];
+  /** Kept on the device, but changed on another device since: not sent. */
+  elsewhere: W[];
+}
+
+export const missedNothing = <W>(missed: Missed<W>) =>
+  !missed.refused.length && !missed.elsewhere.length;
+
+export interface SyncListener<T, W = unknown> {
   status(status: PersistenceStatus): void;
-  /** The value as it really is, after the database refused a change. */
-  replace(value: T, status: PersistenceStatus): void;
+  /**
+   * The value as the database holds it, read again after a change was
+   * turned away ("recovered", with what did not reach it) or after changes
+   * kept on the device were sent.
+   */
+  replace(value: T, status: PersistenceStatus, missed?: Missed<W>): void;
 }
 
 export interface SyncOptions {
@@ -176,30 +223,71 @@ export interface SyncOptions {
   retryDelays?: number[];
 }
 
+export interface SyncSpec<T, W> {
+  /** Reads the value once; throws TownSyncError. */
+  read(): Promise<T>;
+  /** The writes that make the database, holding `base`, hold `target`. */
+  plan(base: T, target: T): W[];
+  /** Runs one write; throws TownSyncError. Each can run twice without harm. */
+  apply(write: W): Promise<void>;
+  /** Runs before a round of writes (finding what they need). */
+  prepare?(): Promise<void>;
+  /**
+   * A write of several rows as one write a row, so one row turned away
+   * leaves the others to go; none for a write of one thing.
+   */
+  split?(write: W): W[];
+  /**
+   * For a write that sets a whole thing: which thing (`key`) and what of it
+   * `state` holds. Undefined for any other write.
+   */
+  stake?(state: T, write: W): { key: string; value: unknown } | undefined;
+  /** Told when the database has taken `target` (as far as it could). */
+  landed?(base: T, target: T): void;
+  /** Keeps the changes on the device while they wait. */
+  outbox?: Outbox<W>;
+}
+
 /**
- * Keeps a value in memory for the screens and saves it back in the background.
- * `write` gets the last value the database confirmed and the one to save, so a
- * failed save is simply planned again on the next try. Network trouble is
- * retried; a refusal reloads the value and hands it to the listener.
+ * Keeps a value in memory for the screens and saves it back in the background,
+ * by writing what changed between the last value the database confirmed and
+ * the one to save: a save that fails is simply planned again on the next try.
+ *
+ * - Network trouble is retried, with the changes kept as they are.
+ * - A write the database turns away is taken apart row by row (`split`) and
+ *   only what it refuses is left out; the other changes are saved. The value
+ *   is then read again and handed to the listener with what was left out.
+ * - While changes wait, they are kept on the device (`outbox`), so a page
+ *   closed, a sign-in ended or a tab lost before they went out sends them
+ *   when the value is next read: before anything else, each change set
+ *   whole sent only over the version it began from. Then the value is read
+ *   again, with them.
  */
-export function backgroundSync<T>(
-  spec: {
-    /** Reads the value once; throws TownSyncError. */
-    read(): Promise<T>;
-    /** Writes what changed between `base` and `target`; throws TownSyncError. */
-    write(base: T, target: T): Promise<void>;
-  },
+export function backgroundSync<T, W>(
+  spec: SyncSpec<T, W>,
   options: SyncOptions = {},
 ) {
   const delay = options.delay ?? 400;
   const retryDelays = options.retryDelays ?? [2000, 5000, 15000, 30000];
+  const page =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : String(Math.random()).slice(2);
   let synced: T | null = null;
   let latest: T | null = null;
-  let listener: SyncListener<T> | null = null;
+  let listener: SyncListener<T, W> | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let writing = false;
+  let busy = false;
   let failures = 0;
   let closed = false;
+  // What other pages kept and had not seen saved: sent before anything else.
+  let left: KeptWrites<W>[] = [];
+  // Some change did not reach the database (or reached it from another
+  // page's keeping), so the value is read again once nothing waits.
+  let stale = false;
+  let missed: Missed<W> = { refused: [], elsewhere: [] };
+  // Whether the device holds what waits now.
+  let kept = false;
   // Rows taken in while a write was on its way: the value it saves lacks
   // them, so they are taken into it again once it is saved (against what
   // was saved before, so a row the write removed stays removed).
@@ -208,64 +296,181 @@ export function backgroundSync<T>(
   const report = (status: PersistenceStatus) => {
     if (!closed) listener?.status(status);
   };
+  const shown = () => latest ?? synced;
   const pending = () => latest !== null && latest !== synced;
 
   const schedule = (wait: number) => {
+    if (closed) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
       void flush();
     }, wait);
   };
+  const backOff = () => {
+    report("unavailable");
+    schedule(retryDelays[Math.min(failures, retryDelays.length - 1)]);
+    failures += 1;
+  };
 
-  async function reload(status: PersistenceStatus) {
-    const fresh = await load();
+  /** Puts what waits now on the device, in place of what was kept. */
+  function keep() {
+    if (!spec.outbox || closed || synced === null) return;
+    const base = synced;
+    const target = shown() as T;
+    const writes =
+      target === base
+        ? []
+        : spec.plan(base, target).map((write): KeptWrite<W> => {
+            const was = spec.stake?.(base, write);
+            const to = spec.stake?.(target, write);
+            return was && to
+              ? { write, was: valueMark(was.value), to: valueMark(to.value) }
+              : { write };
+          });
+    kept = spec.outbox.keep(page, writes);
+  }
+
+  const isRetry = (error: unknown) =>
+    error instanceof TownSyncError && error.retry;
+
+  /**
+   * Sends `writes` in order. A write turned away is split and its parts
+   * sent one by one; what is turned away whole joins `into.refused`. A
+   * kept write set whole is sent only over the version it began from, as
+   * `there` holds it (the marks of what the database holds, by key): one
+   * already there is passed over, one changed since joins `into.elsewhere`.
+   * Network trouble is thrown, to be tried again.
+   */
+  async function send(
+    writes: KeptWrite<W>[],
+    into: Missed<W>,
+    there?: (write: W) => { key: string; mark: string } | undefined,
+    placed?: Map<string, string>,
+  ) {
+    async function one(write: W): Promise<void> {
+      try {
+        await spec.apply(write);
+      } catch (error) {
+        if (isRetry(error)) throw error;
+        const parts = spec.split?.(write) ?? [];
+        if (parts.length > 1) for (const part of parts) await one(part);
+        else into.refused.push(write);
+      }
+    }
+    for (const kept of writes) {
+      const now = kept.was !== undefined ? there?.(kept.write) : undefined;
+      if (now) {
+        const mark = placed?.get(now.key) ?? now.mark;
+        if (mark === kept.to) continue;
+        if (mark !== kept.was) {
+          into.elsewhere.push(kept.write);
+          continue;
+        }
+        placed?.set(now.key, kept.to as string);
+      }
+      await one(kept.write);
+    }
+  }
+
+  /** Sends what other pages kept, oldest first, each page's dropped once sent. */
+  async function sendLeft() {
+    report("saving");
+    await spec.prepare?.();
+    const against = synced as T;
+    const there = (write: W) => {
+      const stake = spec.stake?.(against, write);
+      return stake && { key: stake.key, mark: valueMark(stake.value) };
+    };
+    const placed = new Map<string, string>();
+    while (left.length) {
+      const [entry] = left;
+      // Told once the page's changes are all sent: sent again after network
+      // trouble, a refusal would otherwise be told twice.
+      const into: Missed<W> = { refused: [], elsewhere: [] };
+      await send(entry.writes, into, there, placed);
+      missed.refused.push(...into.refused);
+      missed.elsewhere.push(...into.elsewhere);
+      spec.outbox?.drop(entry.page);
+      left = left.slice(1);
+      stale = true;
+    }
+    failures = 0;
+  }
+
+  /** Reads the value again and shows it, unless changes were made meanwhile. */
+  async function reread() {
+    const before = shown();
+    let fresh: T;
+    try {
+      fresh = await steadily(() => spec.read());
+    } catch {
+      return backOff();
+    }
     if (closed) return;
+    // A change made while reading goes out first; then the value is read
+    // again, with it.
+    if (shown() !== before) return schedule(0);
+    synced = fresh;
     latest = fresh;
-    listener?.replace(fresh, status);
+    stale = false;
+    failures = 0;
+    keep();
+    const told = missed;
+    missed = { refused: [], elsewhere: [] };
+    listener?.replace(fresh, missedNothing(told) ? "saved" : "recovered", told);
   }
 
   async function flush() {
-    if (closed || writing || synced === null || latest === null) return;
-    if (!pending()) return report("saved");
-    writing = true;
-    const base = synced;
-    const target = latest;
+    if (closed || busy || synced === null) return;
+    // What other pages kept is sent once someone hears how it went.
+    if (left.length && !listener) return;
+    busy = true;
     try {
-      await spec.write(base, target);
-      synced = target;
-      for (const take of absorbedWhileWriting) synced = take(synced);
-      failures = 0;
-      report(pending() ? "saving" : "saved");
-    } catch (error) {
-      if (error instanceof TownSyncError && error.retry) {
-        report("unavailable");
-        schedule(retryDelays[Math.min(failures, retryDelays.length - 1)]);
-        failures += 1;
+      if (left.length) await sendLeft();
+      else if (!pending()) {
+        if (stale) await reread();
+        else report("saved");
         return;
+      } else {
+        const base = synced;
+        const target = latest as T;
+        await spec.prepare?.();
+        const into: Missed<W> = { refused: [], elsewhere: [] };
+        await send(
+          spec.plan(base, target).map((write) => ({ write })),
+          into,
+        );
+        synced = target;
+        for (const take of absorbedWhileWriting) synced = take(synced);
+        failures = 0;
+        spec.landed?.(base, target);
+        if (into.refused.length) {
+          missed.refused.push(...into.refused);
+          stale = true;
+        }
+        keep();
+        report(pending() || stale ? "saving" : "saved");
       }
-      // The database refused: show the value as it really is.
-      failures = 0;
-      try {
-        await reload("recovered");
-      } catch {
-        report("unavailable");
-        schedule(retryDelays[0]);
-      }
+    } catch (error) {
+      if (closed) return;
+      if (!isRetry(error)) console.error(error);
+      backOff();
       return;
     } finally {
-      writing = false;
+      busy = false;
       absorbedWhileWriting = [];
     }
-    if (pending()) schedule(delay);
+    if (pending() || stale || left.length) schedule(pending() ? delay : 0);
   }
 
   const online = () => {
-    if (pending()) schedule(0);
+    if (pending() || stale || left.length) schedule(0);
   };
   const leaving = (event: BeforeUnloadEvent) => {
-    // Ask before closing the page while changes are still on their way.
-    if (pending()) event.preventDefault();
+    // Ask before closing the page while changes are on their way and the
+    // device could not keep them.
+    if (pending() && !kept) event.preventDefault();
   };
 
   /** Reads the value, waiting out network trouble. */
@@ -275,6 +480,8 @@ export function backgroundSync<T>(
       try {
         const value = await spec.read();
         synced = value;
+        left = spec.outbox?.left(page) ?? [];
+        if (left.length) schedule(0);
         return value;
       } catch (error) {
         if (closed || !(error instanceof TownSyncError && error.retry))
@@ -304,15 +511,18 @@ export function backgroundSync<T>(
 
   return {
     load,
+    /** The status the value read has: saving while kept changes wait to go. */
+    loaded: (): PersistenceStatus => (left.length ? "saving" : "saved"),
     save(value: T): PersistenceStatus {
       if (synced === null) return "loading";
       latest = value;
-      if (!pending()) return "saved";
-      if (!writing) schedule(delay);
+      keep();
+      if (!pending() && !stale && !left.length) return "saved";
+      if (!busy) schedule(pending() ? delay : 0);
       return "saving";
     },
     /** The value as it is now, or null while none is read. */
-    current: (): T | null => latest ?? synced,
+    current: (): T | null => shown(),
     /**
      * Takes in what was read after the value (a 便り that arrived, an older
      * one): it joins both the value shown and the one the database is known
@@ -323,18 +533,23 @@ export function backgroundSync<T>(
     absorb(take: (value: T, saved: T) => T): T | null {
       if (closed || synced === null) return null;
       const saved = synced;
-      const shown = latest ?? saved;
+      const now = latest ?? saved;
       synced = take(saved, saved);
-      latest = shown === saved ? synced : take(shown, saved);
-      if (writing) absorbedWhileWriting.push((value) => take(value, saved));
+      latest = now === saved ? synced : take(now, saved);
+      if (busy) absorbedWhileWriting.push((value) => take(value, saved));
       return latest;
     },
-    watch(next: SyncListener<T>) {
+    watch(next: SyncListener<T, W>) {
       listener = next;
+      if (left.length) schedule(0);
       return () => {
         if (listener === next) listener = null;
       };
     },
+    /**
+     * Stops saving. What waits stays kept on the device, to be sent when
+     * the value is next read (by this person).
+     */
     close() {
       closed = true;
       if (timer) clearTimeout(timer);

@@ -17,10 +17,12 @@ import {
   journalTown,
   useTownStore,
   usePersistenceStatus,
+  useTownMissedLine,
   useTownBackend,
 } from "../lib/store";
 import { useJournalSender } from "../lib/library-journal";
-import { saveWarning } from "../lib/persistence";
+import { lapsedLine, saveWarning } from "../lib/persistence";
+import { useOutboxWaiting } from "../lib/outbox";
 import { playTabMove, tabMove } from "../lib/tab-motion";
 import { useAccountState } from "../lib/account-session";
 import {
@@ -231,8 +233,14 @@ export default function TownApp({
   const { state, actions } = useTownStore();
   const persistence = usePersistenceStatus();
   const savedIn = useTownBackend();
-  const warning = saveWarning(savedIn, persistence);
   const account = useAccountState();
+  const lapsed =
+    account.status === "signed-out" ? (account.lapsed ?? null) : null;
+  const lapsedWaiting = useOutboxWaiting(lapsed?.id ?? null);
+  const warning = saveWarning(savedIn, persistence, {
+    missed: useTownMissedLine(),
+    lapsed: lapsed && lapsedLine(lapsedWaiting),
+  });
   const router = useRouter();
   const [toast, setToast] = useState<ShownToast | null>(() => {
     const message = carriedToast();

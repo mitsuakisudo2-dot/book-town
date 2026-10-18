@@ -1,5 +1,6 @@
 import { ME_ID, type Shop, type ShelfItem, type TownState } from "./types";
 import { isSampleId } from "./record-kind";
+import { textHash } from "./canonical";
 
 // What the home shows "today": one shop a night, the day's POPs. Chosen by
 // the day in Japan over the shops' ids, so it holds all day for everyone and
@@ -11,16 +12,6 @@ const JST = 9 * 60 * 60 * 1000;
 
 /** The day in Japan that `now` falls on, counted from 1970-01-01. */
 export const jstDay = (now: number): number => Math.floor((now + JST) / DAY);
-
-/** A stable number for a text (FNV-1a), to order ids without counts. */
-export function hashOf(text: string): number {
-  let hash = 0x811c9dc5;
-  for (let at = 0; at < text.length; at += 1) {
-    hash ^= text.charCodeAt(at);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
-}
 
 /**
  * `items` in the day's order: a fixed order made from their ids (and
@@ -35,7 +26,7 @@ export function dayOrder<T>(
   if (!items.length) return [];
   const order = [...items].sort(
     (a, b) =>
-      hashOf(salt + idOf(a)) - hashOf(salt + idOf(b)) ||
+      textHash(salt + idOf(a)) - textHash(salt + idOf(b)) ||
       idOf(a).localeCompare(idOf(b)),
   );
   const turn = jstDay(now) % order.length;

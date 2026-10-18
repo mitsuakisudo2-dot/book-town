@@ -23,7 +23,12 @@ export type AccountState =
    * it (town-session.ts).
    */
   | { status: "loading"; pending?: AccountUser }
-  | { status: "signed-out" }
+  /**
+   * `lapsed` is who was signed in when the session ended without them
+   * pressing ログアウト (signed out on another device, a token that could
+   * not be renewed): what they had not sent waits on this device for them.
+   */
+  | { status: "signed-out"; lapsed?: AccountUser }
   /** Signed in, but the profile could not be read; retry() tries again. */
   | { status: "unavailable"; user: AccountUser }
   /** Signed in for the first time: a public ID and a name come next. */
@@ -184,10 +189,23 @@ const NO_LEAVING: Leaving = {
   forget: () => {},
 };
 
+/**
+ * Whether ログアウト was pressed in this browser since the last sign-in. The
+ * tabs share one session, so a sign-out pressed in one ends it in every
+ * other: none of them says the session lapsed.
+ */
+export interface SignedOut {
+  pressed(): boolean;
+  mark(pressed: boolean): void;
+}
+
+const NOT_PRESSED: SignedOut = { pressed: () => false, mark: () => {} };
+
 export function createAccountStore(
   connect: () => AccountBackend | null,
   configured: boolean,
   leaving: Leaving = NO_LEAVING,
+  signedOut: SignedOut = NOT_PRESSED,
 ) {
   const initial: AccountState = configured
     ? { status: "loading" }
@@ -204,6 +222,8 @@ export function createAccountStore(
   // the page goes from 退会する to 退会しました with nothing between.
   let deleting = false;
   let outWhileDeleting = false;
+  // While ログアウト, pressed, is on its way: the session it ends did not lapse.
+  let signingOut = false;
   const listeners = new Set<() => void>();
 
   const set = (next: AccountState) => {
@@ -216,6 +236,7 @@ export function createAccountStore(
 
   async function adopt(user: AccountUser | null, force = false) {
     if (!backend) return;
+    if (user) signedOut.mark(false);
     const current = userOf(state);
     // Token refreshes repeat the same user; their profile is already known.
     if (
@@ -245,7 +266,16 @@ export function createAccountStore(
         leaving.mark(null);
         await leaving.forget(left);
       }
-      if (mine === generation) set({ status: "signed-out" });
+      // Whoever was signed in, or whose session was being restored, and
+      // did not press ログアウト, here or in another tab.
+      const was =
+        state.status === "loading" ? (state.pending ?? null) : current;
+      if (mine === generation)
+        set(
+          was && !signingOut && !signedOut.pressed() && left !== was.id
+            ? { status: "signed-out", lapsed: was }
+            : { status: "signed-out" },
+        );
       return;
     }
     reading = { userId: user.id, generation: mine };
@@ -336,7 +366,13 @@ export function createAccountStore(
     async signOut() {
       start();
       generation += 1;
-      await backend?.signOut();
+      signingOut = true;
+      signedOut.mark(true);
+      try {
+        await backend?.signOut();
+      } finally {
+        signingOut = false;
+      }
       set({ status: "signed-out" });
     },
     /**
