@@ -37,6 +37,7 @@ import {
 } from "../src/lib/shop-draft";
 import { townActions, townStore } from "../src/lib/store";
 import {
+  keepArrangements,
   keepShelvesNotSent,
   readKeptShelves,
   SHELVES_DRAFT_KEY,
@@ -454,6 +455,28 @@ check("shelves not sent are kept for their owner, to put back", () => {
     keepShelvesNotSent("u-1", [{ kind: "shelves", shelves }], full),
     false,
   );
+  assert.equal(
+    shelvesStillKept("u-1", [{ kind: "shelves", shelves }], full),
+    false,
+  );
+  // Kept again by hand (put back, then 元に戻す): each once, the first of
+  // the same; none left lets them go.
+  keepArrangements(
+    "u-1",
+    [
+      { shelves: later, at: "2026-10-18T02:00:00Z" },
+      { shelves, at: "2026-10-18T01:00:00Z" },
+      { shelves: structuredClone(later), at: "2026-10-18T00:00:00Z" },
+    ],
+    store,
+  );
+  assert.deepEqual(names(), ["晴れの日に", "雨の日に"]);
+  assert.equal(
+    keptArrangements(store.get("u-1"))[0].at,
+    "2026-10-18T02:00:00Z",
+  );
+  keepArrangements("u-1", [], store);
+  assert.equal(store.get("u-1"), null);
   // Throwing them away loses a POP or a name written here, not an order.
   const saved = structuredClone(shelves);
   assert.equal(shelvesLoseWords(shelves, saved), false);

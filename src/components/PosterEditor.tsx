@@ -124,6 +124,8 @@ export function PosterEditor({
   );
   useEffect(() => posterDrafts.initialize(), []);
   const [gone, setGone] = useState<string | null>(null);
+  // Another poster asked for: what was latched for the last one goes.
+  if (gone !== null && gone !== posterId) setGone(null);
   const missing =
     posterId !== undefined && !poster && savedIn !== "unavailable";
   if (

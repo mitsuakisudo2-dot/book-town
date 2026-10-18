@@ -44,8 +44,8 @@ import { useKeptDraft } from "../lib/kept-draft";
 import { openShopDraftStore } from "../lib/open-shop-draft";
 import { sceneDraftStore, sceneMark, sceneWorkKey } from "../lib/scene-draft";
 import {
+  keepArrangements,
   keptArrangements,
-  keptShelvesOf,
   shelvesDraftStore,
   shelvesLoseWords,
 } from "../lib/shelves-draft";
@@ -1017,24 +1017,27 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   const persistenceMessage = shelfSaveMessage(savedIn, persistenceStatus);
   // The shelves as arranged here, not sent because they had changed on
   // another device first, newest first: the reader can put each back, or
-  // throw it away. One the shop has now waits no more.
+  // throw it away. One the shop has saved now waits no more.
   const keptShelves = useKeptDraft(shelvesDraftStore, owner);
   const arrangements = keptArrangements(keptShelves.draft);
   const shelvesNow = shop ? canonical(shop.shelves) : null;
-  const shelvesHere = shop
-    ? (arrangements.find((entry) => canonical(entry.shelves) !== shelvesNow) ??
-      null)
-    : null;
-  const shelvesSaved = Boolean(
-    shop &&
-    arrangements.length &&
-    !shelvesHere &&
-    persistenceStatus === "saved",
+  const waiting = arrangements.filter(
+    (entry) => shelvesNow !== null && canonical(entry.shelves) !== shelvesNow,
   );
+  const shelvesHere = waiting[0] ?? null;
+  const shelvesSaved =
+    shelvesNow !== null &&
+    persistenceStatus === "saved" &&
+    waiting.length < arrangements.length;
   useEffect(() => {
-    // The very shelves saved now: nothing left to keep.
-    if (owner && shelvesSaved) shelvesDraftStore.clear(owner);
-  }, [owner, shelvesSaved]);
+    if (!owner || !shelvesSaved || shelvesNow === null) return;
+    keepArrangements(
+      owner,
+      keptArrangements(shelvesDraftStore.get(owner)).filter(
+        (entry) => canonical(entry.shelves) !== shelvesNow,
+      ),
+    );
+  }, [owner, shelvesSaved, shelvesNow]);
   // The note's buttons go with it: the hand goes on to 本棚を追加.
   const addShelfButton = useRef<HTMLButtonElement>(null);
   const handToShelves = useRef(false);
@@ -1043,20 +1046,6 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     handToShelves.current = false;
     addShelfButton.current?.focus();
   });
-  /** The arrangements kept, with `entry` as `next` (or without it). */
-  function keepArrangements(
-    entry: (typeof arrangements)[number],
-    next?: (typeof arrangements)[number],
-  ) {
-    if (!owner) return;
-    const kept = keptShelvesOf(
-      arrangements.flatMap((other) =>
-        other !== entry ? [other] : next ? [next] : [],
-      ),
-    );
-    if (kept) shelvesDraftStore.set(owner, kept);
-    else shelvesDraftStore.clear(owner);
-  }
   /**
    * Puts the shelves kept here in place of the shelves now, with 元に戻す.
    * They stay kept until the account has them: turned away, or changed on
@@ -1073,13 +1062,25 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       return;
     }
     // As the town holds them now (books gone since are left out).
-    const now = getTownSnapshot().ownShop?.shelves;
-    if (now && canonical(now) !== canonical(entry.shelves))
-      keepArrangements(entry, { shelves: now, at: entry.at });
+    const put = {
+      shelves: getTownSnapshot().ownShop?.shelves ?? entry.shelves,
+      at: entry.at,
+    };
+    keepArrangements(
+      owner,
+      arrangements.map((other) => (other === entry ? put : other)),
+    );
     handToShelves.current = true;
     notify("この端末の棚にしました。", {
       label: "元に戻す",
-      run: () => townTook(() => actions.restoreShelves(before)),
+      run: () => {
+        if (!townTook(() => actions.restoreShelves(before))) return;
+        // Offered again, as before (also once they were saved).
+        keepArrangements(owner, [
+          put,
+          ...keptArrangements(shelvesDraftStore.get(owner)),
+        ]);
+      },
     });
   }
   const addBookShelf = shop?.shelves.find(
@@ -1323,7 +1324,11 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           saved={keptShelves.saved}
           wordsLost={shelvesLoseWords(shelvesHere.shelves, shop.shelves)}
           onDiscard={() => {
-            keepArrangements(shelvesHere);
+            if (owner)
+              keepArrangements(
+                owner,
+                arrangements.filter((entry) => entry !== shelvesHere),
+              );
             handToShelves.current = true;
           }}
           lead="別の端末で先に棚が変わっていたため、この端末で直した棚を残しています。この端末の棚にすると、いまの棚と入れ替わります"

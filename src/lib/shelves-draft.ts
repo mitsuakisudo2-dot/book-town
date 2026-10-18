@@ -112,18 +112,37 @@ export function keepShelvesNotSent(
 ): boolean {
   const shelves = lastShelves(writes);
   if (!shelves?.length) return false;
-  const mark = canonical(shelves);
-  const earlier = keptArrangements(store.get(owner)).filter(
-    (entry) => canonical(entry.shelves) !== mark,
-  );
-  store.set(
+  keepArrangements(
     owner,
-    keptShelvesOf([
+    [
       { shelves: structuredClone(shelves), at: new Date().toISOString() },
-      ...earlier,
-    ]),
+      ...keptArrangements(store.get(owner)),
+    ],
+    store,
   );
   return store.getSnapshot().saved && store.get(owner) !== null;
+}
+
+/**
+ * Keeps `all` for `owner`, newest first, each arrangement once (the newest
+ * of the same); none left lets them go.
+ */
+export function keepArrangements(
+  owner: string,
+  all: { shelves: Shelf[]; at: string }[],
+  store = shelvesDraftStore,
+) {
+  const seen = new Set<string>();
+  const kept = keptShelvesOf(
+    all.filter((entry) => {
+      const mark = canonical(entry.shelves);
+      if (seen.has(mark)) return false;
+      seen.add(mark);
+      return true;
+    }),
+  );
+  if (kept) store.set(owner, kept);
+  else store.clear(owner);
 }
 
 /**
@@ -136,7 +155,7 @@ export function shelvesStillKept(
   store = shelvesDraftStore,
 ): boolean {
   const shelves = lastShelves(writes);
-  if (!shelves) return false;
+  if (!shelves || !store.getSnapshot().saved) return false;
   const mark = canonical(shelves);
   return keptArrangements(store.get(owner)).some(
     (entry) => canonical(entry.shelves) === mark,

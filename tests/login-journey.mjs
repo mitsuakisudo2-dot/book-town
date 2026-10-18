@@ -4210,6 +4210,33 @@ try {
             ),
           )
           .not.toContain("momo");
+        // 元に戻す puts back the shelves saved elsewhere, and these wait
+        // again to be put back: nothing done here is lost by it.
+        await page
+          .locator(".toast")
+          .getByRole("button", { name: "元に戻す" })
+          .click();
+        await expect(name).toHaveValue("別の端末で直した棚");
+        await expect(kept).toContainText("この端末で直した棚を残しています");
+        await expect.poll(() => sent.length).toBe(3);
+        expect(sent[2].base).toBe(3);
+        expect(sent[2].value.map((shelf) => shelf.name)).toEqual([
+          "別の端末で直した棚",
+        ]);
+        // Thrown away, after the question (a name written here goes too).
+        await kept.getByRole("button", { name: "書きかけを消す" }).click();
+        await kept.getByRole("button", { name: "消す", exact: true }).click();
+        await expect(kept).toHaveCount(0);
+        await expect(
+          page.getByRole("button", { name: "本棚を追加" }),
+        ).toBeFocused();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => localStorage.getItem("book-town-shelves-drafts-v1") ?? "",
+            ),
+          )
+          .not.toContain("momo");
       } finally {
         await page.unroute(supabase + "/rest/v1/rpc/save_shelves", answer);
         await page.unroute(supabase + "/rest/v1/library_entries*", library);
