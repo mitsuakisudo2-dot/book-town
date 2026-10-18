@@ -520,6 +520,53 @@ async function main() {
   );
 
   await check(
+    "a change Supabase takes a moment to show is read again, not failed",
+    async () => {
+      const old = { mailer_otp_exp: 3600, site_url: "https://booktown.page" };
+      let project: Record<string, unknown> = { ...old };
+      // How many reads after a change still show the old settings, like the
+      // reload after the human check went on (2026-10-18).
+      let staleReads = 0;
+      let stale = 0;
+      const api = await standIn(({ method, body }) => {
+        if (method === "PATCH") {
+          project = { ...project, ...body };
+          stale = staleReads;
+          return { body: project };
+        }
+        if (stale > 0) {
+          stale -= 1;
+          return { body: old };
+        }
+        return { body: project };
+      });
+      const env = {
+        SUPABASE_API_URL: api.url,
+        SUPABASE_ACCESS_TOKEN: TOKEN,
+        SUPABASE_PROJECT_ID: "ref123",
+        TURNSTILE_SECRET_KEY: CAPTCHA,
+        SETTINGS_READ_AGAIN_MS: "10",
+      };
+
+      staleReads = 2;
+      const caughtUp = await run("scripts/supabase-auth.mjs", ["apply"], env);
+      assert.equal(caughtUp.code, 0, caughtUp.output);
+      assert.match(caughtUp.output, /Changed \d+ setting\(s\)/);
+
+      // A setting that never shows is still a failure.
+      project = { ...old };
+      staleReads = 100;
+      const never = await run("scripts/supabase-auth.mjs", ["apply"], env);
+      assert.equal(never.code, 1, never.output);
+      assert.match(
+        never.output,
+        /These settings did not take: .*mailer_otp_exp/,
+      );
+      await api.close();
+    },
+  );
+
+  await check(
     "a token that cannot change settings is reported, not hidden",
     async () => {
       const api = await standIn(() => ({
