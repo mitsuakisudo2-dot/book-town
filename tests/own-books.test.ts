@@ -6,7 +6,7 @@ import { booksBeforeSearch } from "../src/lib/book-lists";
 import { createRegisteredBook } from "../src/lib/books";
 import { entriesOf, townEncounters } from "../src/lib/library-town";
 import { townMissedLine } from "../src/lib/missed-changes";
-import { mine, withoutTwins } from "../src/lib/own-books";
+import { holds, mine, withoutTwins } from "../src/lib/own-books";
 import { postersOfBook } from "../src/lib/posters";
 import { ownRecordFor } from "../src/lib/records";
 import { bookReviews, spoilerViewOf, wantSources } from "../src/lib/social";
@@ -301,6 +301,106 @@ async function main() {
         [SNOW, own],
       );
       assert.ok(!booksBeforeSearch(town).some((book) => book.id === STARS));
+    },
+  );
+
+  await check(
+    "two copies of one book, made on two pages: each list is asked, and changed, by the one in it",
+    () => {
+      // Each page copied 雪の夜話 before it read the other's copy.
+      const copy = (id: string): Book => ({
+        ...createRegisteredBook(id, { title: "雪の夜話", author: "ベン" }),
+        workId: "w" + SNOW.slice(1),
+        copyOf: SNOW,
+      });
+      const [first, second] = [
+        "00000000-0000-4000-8000-000000000c91",
+        "00000000-0000-4000-8000-000000000c92",
+      ];
+      const town = akisTown();
+      const { store } = akisStore({
+        ...town,
+        books: [...town.books, copy(first), copy(second)],
+      });
+      store.actions.toggleWish(first);
+      store.actions.toggleLibrary(second);
+      const both = store.getSnapshot();
+      assert.ok(holds(both, both.wishlist, SNOW));
+      assert.ok(holds(both, both.library, SNOW));
+      // Taken off from 雪の夜話's page, the wish goes, and no copy is made.
+      store.actions.toggleWish(SNOW);
+      const after = store.getSnapshot();
+      assert.deepEqual(after.wishlist, []);
+      assert.ok(!holds(after, after.wishlist, SNOW));
+      assert.ok(holds(after, after.library, SNOW));
+      assert.equal(copiesIn(after).length, 2);
+    },
+  );
+
+  await check(
+    "another reader's book and the reader's own of it, given together, are named once",
+    () => {
+      const { store } = akisStore();
+      const done = store.actions.registerBook(
+        { title: "星を継ぐもの", author: "", isbn: STARS_ISBN },
+        "isbn",
+      );
+      const own = done && "bookId" in done ? done.bookId : "";
+      assert.ok(
+        store.actions.savePoster({
+          template: "one_book",
+          theme: "navy",
+          font: "gothic",
+          pages: [{ heading: "星", text: "", bookIds: [STARS, own] }],
+          spoiler: false,
+          inTimeline: true,
+          status: "published",
+        }),
+      );
+      assert.deepEqual(store.getSnapshot().posters[0]?.pages[0]?.bookIds, [
+        own,
+      ]);
+      // In the nine, the note written for Ben's goes with Aki's own.
+      store.actions.updateNine([own, STARS], { [STARS]: "星の一冊" });
+      assert.deepEqual(store.getSnapshot().me.lifeNine, [own]);
+      assert.deepEqual(store.getSnapshot().me.nineNotes, { [own]: "星の一冊" });
+      // Given twice as itself, a page is still turned away.
+      assert.equal(
+        store.actions.savePoster({
+          template: "lineup",
+          theme: "navy",
+          font: "gothic",
+          pages: [{ heading: "星", text: "", bookIds: [own, own] }],
+          spoiler: false,
+          inTimeline: true,
+          status: "draft",
+        }),
+        null,
+      );
+    },
+  );
+
+  await check(
+    "a book another reader typed in stays among the first books while the reader's own of it is not shown",
+    () => {
+      // Aki registered Ben's ISBN, then took it out of her library: her row
+      // is still in the town, but no list of hers shows it.
+      const { store } = akisStore();
+      const done = store.actions.registerBook(
+        { title: "星を継ぐもの", author: "", isbn: STARS_ISBN },
+        "isbn",
+      );
+      const own = done && "bookId" in done ? done.bookId : "";
+      store.actions.toggleLibrary(own);
+      const town = store.getSnapshot();
+      assert.ok(!town.library.includes(own));
+      assert.ok(town.books.some((book) => book.id === own));
+      const first = booksBeforeSearch({
+        ...town,
+        posts: [...town.posts],
+      }).map((book) => book.id);
+      assert.ok(!first.includes(own));
+      assert.ok(first.includes(STARS));
     },
   );
 

@@ -917,11 +917,14 @@ export interface ArrivedRows {
  * shapes, as townFromRows makes them: the reader's own as "me", a 見本's book
  * by its own name. Their writers come without their nine, which the town
  * reads with it next time. Which of them the town takes is takeIn's
- * (arrived.ts) to decide.
+ * (arrived.ts) to decide. A book another reader typed in is told as theirs
+ * only when the town tells the reader's own books apart (`ownBooksKnown`: it
+ * read my_books), as townFromRows tells them.
  */
 export function arrivedFromRows(
   rows: ArrivedRows,
   userId: string | null,
+  ownBooksKnown = false,
 ): Arrived {
   const seen = new Set<string>();
   const posts = rows.posts
@@ -963,7 +966,10 @@ export function arrivedFromRows(
     books: rows.books
       .filter((row) => books.has(row.id) && !sampleBookOfRow(row.id))
       .map((row) =>
-        userId !== null && row.source === "manual" && !typedByMe.has(row.id)
+        ownBooksKnown &&
+        userId !== null &&
+        row.source === "manual" &&
+        !typedByMe.has(row.id)
           ? { ...bookFromRow(row, false), theirs: true as const }
           : bookFromRow(row, false),
       ),

@@ -67,12 +67,16 @@ function publicBookIds(state: TownState): (string | null)[] {
  * The town's books a list may show before anything is typed, in the town's
  * order. A book not from the database is the 見本's, or was typed in this
  * browser (the demo has no other readers), so it always stays. A book
- * another reader typed in is left out where the reader has their own of it
- * (withoutTwins).
+ * another reader typed in is left out where the reader's own of it is shown
+ * too (withoutTwins).
  */
 export function booksBeforeSearch(state: TownState): Book[] {
   const used = new Set([...ownBookIds(state), ...publicBookIds(state)]);
-  return withoutTwins(state.books).filter(
-    (book) => bookKind(book.id) !== "database" || used.has(book.id),
-  );
+  return [
+    ...withoutTwins(
+      state.books.filter(
+        (book) => bookKind(book.id) !== "database" || used.has(book.id),
+      ),
+    ),
+  ];
 }

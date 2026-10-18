@@ -15,11 +15,21 @@ import type { KeptWrite, KeptWrites, Outbox } from "./supabase/sync";
 // what every page kept, by page. Every change reads the key again and writes
 // it back, so two tabs never write over each other's changes. What waited
 // longer than a week is let go, as the scan journal does. A change to the
-// shape of a write takes a new version of the key (-v2:), so a page never
-// sends what an older version kept in a shape it no longer makes.
+// shape of a write takes a new version of the key (-v3:), so a page never
+// sends what an older version kept in a shape it no longer makes, and an
+// older page, which lets go of what it cannot read whenever it writes the
+// key back, never meets a write it does not know.
 
-export const OUTBOX_KEY = "book-town-outbox-v1:";
+export const OUTBOX_KEY = "book-town-outbox-v2:";
+/**
+ * The town's key before a reader's copies of others' books were written
+ * (copy-books, own-books.ts). What waits there is in shapes this version
+ * still sends: a page sends it with the rest, and lets it go there.
+ */
+export const OUTBOX_KEY_BEFORE = "book-town-outbox-v1:";
 export const WALK_OUTBOX_KEY = "book-town-walk-outbox-v1:";
+/** Every key an outbox is kept under, then the reader's id. */
+export const OUTBOX_KEYS = [OUTBOX_KEY, OUTBOX_KEY_BEFORE, WALK_OUTBOX_KEY];
 /** Changes kept longer than this are let go. */
 export const OUTBOX_DAYS = 7;
 const DAY_MS = 86_400_000;
@@ -77,23 +87,30 @@ function browserStorage(): globalThis.Storage | null {
 /**
  * The outbox under `key` (OUTBOX_KEY or WALK_OUTBOX_KEY, then the reader's
  * id). `valid` tells a write as it was kept; anything else read back is let
- * go. Without storage it keeps nothing, and says so.
+ * go. Without storage it keeps nothing, and says so. What older pages kept
+ * under `before` (an earlier version's key) is left to be sent as well, and
+ * let go there once it is.
  */
 export function deviceOutbox<W>(
   key: string,
   valid: (write: unknown) => write is W,
   storage: Storage | null = browserStorage(),
   now: () => number = Date.now,
+  before?: string,
 ): Outbox<W> {
   // Whether this page has anything under the key, so a page with nothing
   // waiting does not read the key at every change.
   const mine = new Set<string>();
-  const read = (from: Storage) => readOutbox(from.getItem(key), now(), valid);
-  const write = (to: Storage, entries: KeptWrites<W>[]) => {
-    if (entries.length) to.setItem(key, JSON.stringify(entries));
-    else to.removeItem(key);
+  const readAt = (from: Storage, at: string) =>
+    readOutbox(from.getItem(at), now(), valid);
+  const read = (from: Storage) => readAt(from, key);
+  const writeAt = (to: Storage, at: string, entries: KeptWrites<W>[]) => {
+    if (entries.length) to.setItem(at, JSON.stringify(entries));
+    else to.removeItem(at);
     changed();
   };
+  const write = (to: Storage, entries: KeptWrites<W>[]) =>
+    writeAt(to, key, entries);
   return {
     keep(page, writes) {
       if (!storage) return false;
@@ -116,9 +133,10 @@ export function deviceOutbox<W>(
     left(page) {
       if (!storage) return [];
       try {
-        return read(storage)
-          .filter((entry) => entry.page !== page)
-          .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+        return [
+          ...(before ? readAt(storage, before) : []),
+          ...read(storage).filter((entry) => entry.page !== page),
+        ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
       } catch {
         return [];
       }
@@ -126,12 +144,15 @@ export function deviceOutbox<W>(
     drop(page) {
       if (!storage) return;
       try {
-        const entries = read(storage);
-        if (entries.some((entry) => entry.page === page))
-          write(
-            storage,
-            entries.filter((entry) => entry.page !== page),
-          );
+        for (const at of before ? [key, before] : [key]) {
+          const entries = readAt(storage, at);
+          if (entries.some((entry) => entry.page === page))
+            writeAt(
+              storage,
+              at,
+              entries.filter((entry) => entry.page !== page),
+            );
+        }
       } catch {
         // Kept a while longer: sent again, it is taken once.
       }
@@ -148,7 +169,7 @@ export function outboxWaiting(
 ): boolean {
   if (!storage) return false;
   try {
-    return [OUTBOX_KEY, WALK_OUTBOX_KEY].some(
+    return OUTBOX_KEYS.some(
       (key) =>
         readOutbox(storage.getItem(key + userId), Date.now(), anything).length >
         0,
@@ -175,7 +196,7 @@ export function anyOutboxWaiting(
       const key = storage.key(index);
       if (
         key &&
-        (key.startsWith(OUTBOX_KEY) || key.startsWith(WALK_OUTBOX_KEY)) &&
+        OUTBOX_KEYS.some((prefix) => key.startsWith(prefix)) &&
         readOutbox(storage.getItem(key), Date.now(), anything).length > 0
       )
         return true;
@@ -192,7 +213,7 @@ export function forgetOutboxes(
   storage: Storage | null = browserStorage(),
 ) {
   if (!storage) return;
-  for (const key of [OUTBOX_KEY, WALK_OUTBOX_KEY])
+  for (const key of OUTBOX_KEYS)
     try {
       storage.removeItem(key + userId);
     } catch {
@@ -204,12 +225,8 @@ export function forgetOutboxes(
 function subscribe(listener: () => void) {
   listeners.add(listener);
   // Another tab's changes reach this one by the storage event.
-  const heard = (event: StorageEvent) => {
-    if (
-      event.key === null ||
-      event.key.startsWith(OUTBOX_KEY) ||
-      event.key.startsWith(WALK_OUTBOX_KEY)
-    )
+  const heard = ({ key }: StorageEvent) => {
+    if (key === null || OUTBOX_KEYS.some((prefix) => key.startsWith(prefix)))
       listener();
   };
   window.addEventListener("storage", heard);

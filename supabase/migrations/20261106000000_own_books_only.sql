@@ -17,9 +17,10 @@
 -- book it was copied from), written down as taken (private.book_copies). It
 -- comes in as a registration of the reader's does, judged against the master
 -- from now. Only a book the reader may read, typed in by someone else, is
--- copied; any other is answered as a book that is not there. Sent again, it
--- does nothing. my_books() answers the reader's own books, each with the book
--- it was copied from, if it is a copy. An encounter on a post meets the
+-- copied; any other is answered as a book that is not there. Sent again, or
+-- from two pages at once, it does nothing more: a copy's id that is already
+-- the reader's own book is taken as made. my_books() answers the reader's own
+-- books, each with the book it was copied from, if it is a copy. An encounter on a post meets the
 -- reader's book of the post's book's edition, their copy of it, as well as
 -- the post's book itself (check_book_encounter).
 --
@@ -217,7 +218,8 @@ revoke all on function private.may_name_book(uuid, uuid) from public, anon, auth
 -- After a row is written, its book, if it names a new one, is one its reader
 -- may name: tg_argv[0] is the column naming whose the row is. Security
 -- definer, as who typed a book in is not readable; the refusal is the same
--- whatever the book, so it tells nothing about it.
+-- whatever the book is and whoever typed it in (that a book has the id at all
+-- the row's foreign key already says, as it did before).
 create function private.own_books_only() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -281,8 +283,9 @@ create trigger poster_books_own_books after insert or update
   for each row execute function private.poster_books_own();
 
 -- A shop's shelves and scene are its owner's. Only the books new to them are
--- asked about; ids that are no book here (a 見本's by the app's name, a
--- broken one) are passed over, as everywhere the shelves are read.
+-- asked about, by their ids however spelled; ids that are no book here (a
+-- 見本's by the app's name, a broken one) are passed over, as everywhere the
+-- shelves are read.
 create function private.shop_books_own() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -308,8 +311,10 @@ begin
   )
   select bool_or(not private.may_name_book(b.id, owner)) into refused
   from public.books b
-  where b.id::text in (select n.id from named n where not n.was
-                       except select n.id from named n where n.was);
+  where b.id = any (array(
+    select n.id::uuid from named n where not n.was and pg_input_is_valid(n.id, 'uuid')
+    except
+    select n.id::uuid from named n where n.was and pg_input_is_valid(n.id, 'uuid')));
   if refused then
     raise exception 'a reader''s rows name their own books'
       using errcode = '23514';
@@ -415,11 +420,8 @@ begin
   if reader is null then
     raise exception 'only a reader keeps books' using errcode = '42501';
   end if;
-  -- Sent again, its answer lost: made already.
-  if exists (
-    select 1 from private.book_copies c join public.books b on b.id = c.book_id
-    where c.book_id = copy and c.copied_from = original and b.created_by = reader
-  ) then
+  -- Sent again, its answer lost: made already, the reader's own book.
+  if exists (select 1 from public.books b where b.id = copy and b.created_by = reader) then
     return;
   end if;
   select * into x from public.books b
@@ -430,9 +432,18 @@ begin
   if not found then
     raise exception 'no book has that id' using errcode = 'P0002';
   end if;
-  insert into public.books (id, isbn, title, author, publisher, price, source, created_by)
-  values (copy, x.isbn, x.title, x.author, x.publisher, x.price, 'manual', reader)
-  returning edition_id, work_id into made;
+  begin
+    insert into public.books (id, isbn, title, author, publisher, price, source, created_by)
+    values (copy, x.isbn, x.title, x.author, x.publisher, x.price, 'manual', reader)
+    returning edition_id, work_id into made;
+  exception when unique_violation then
+    -- Sent from two pages at once: the other made it meanwhile (and the
+    -- edition and work this insert began are undone with it).
+    if exists (select 1 from public.books b where b.id = copy and b.created_by = reader) then
+      return;
+    end if;
+    raise;
+  end;
   if x.isbn is null then
     update public.books b set edition_id = x.edition_id, work_id = x.work_id
     where b.id = copy;

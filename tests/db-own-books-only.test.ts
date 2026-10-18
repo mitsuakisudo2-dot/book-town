@@ -264,6 +264,16 @@ async function main() {
           for (const book of [bens, catalogRow, SAMPLE])
             await as(BEN, sql, args(book));
         }
+        // However a shelf spells its id.
+        await refused(
+          () =>
+            as(BEN, "update shop_private set shelves = $2 where shop_id = $1", [
+              BENS_SHOP,
+              shelves("{" + AKIS_X.toUpperCase() + "}"),
+            ]),
+          /their own books/,
+          "an id spelled otherwise",
+        );
         // Aki's edit of her book reaches no row of Ben's, nor its title.
         await as(
           AKI,
@@ -343,10 +353,21 @@ async function main() {
               reason: "taken",
             },
           ]);
-        // Sent again, its answer lost: nothing more.
+        // Sent again, its answer lost: nothing more, even once the record
+        // of what it was copied from is gone (its original deleted).
         const books = await count("select count(*) from books");
         await copy(BEN, AKIS_X, bensX);
         assert.equal(await count("select count(*) from books"), books);
+        const kept = await rows(
+          "delete from private.book_copies where book_id = $1 returning *",
+          [bensY],
+        );
+        await copy(BEN, AKIS_Y, bensY);
+        assert.equal(await count("select count(*) from books"), books);
+        await rows(
+          "insert into private.book_copies select * from jsonb_populate_record(null::private.book_copies, $1)",
+          [JSON.stringify(kept[0])],
+        );
         // Aki's later edit stays hers.
         await as(
           AKI,
@@ -506,6 +527,29 @@ async function main() {
           ]),
           [{ mine: false }],
         );
+      },
+    );
+
+    await check(
+      "every reader's table that names a book asks whose the book is",
+      async () => {
+        // A new table with a book's id must have its own rule too. A jsonb
+        // column with book ids in it (a shop's shelves and scene, a poster's
+        // pages) cannot be seen here; shop_books_own and poster_books ask
+        // of those.
+        const unasked = await rows<{ ref: string }>(
+          `select distinct c.conrelid::regclass::text as ref
+           from pg_constraint c
+           where c.contype = 'f' and c.confrelid = 'public.books'::regclass
+             and c.connamespace = 'public'::regnamespace
+             and not exists (
+               select 1 from pg_trigger t join pg_proc p on p.oid = t.tgfoid
+               where t.tgrelid = c.conrelid and not t.tgisinternal
+                 and p.oid in ('private.own_books_only()'::regprocedure,
+                               'private.poster_books_own()'::regprocedure))
+           order by 1`,
+        );
+        assert.deepEqual(unasked, []);
       },
     );
     await db.close();

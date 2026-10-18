@@ -1560,7 +1560,7 @@ try {
   const outboxKeys = () =>
     page.evaluate(() =>
       Object.keys(localStorage).filter((key) =>
-        key.startsWith("book-town-outbox-v1:"),
+        key.startsWith("book-town-outbox-v2:"),
       ),
     );
 
@@ -1627,7 +1627,7 @@ try {
         // Kept on this device while it waits.
         await expect
           .poll(outboxKeys)
-          .toEqual(["book-town-outbox-v1:" + user.id]);
+          .toEqual(["book-town-outbox-v2:" + user.id]);
         await expect(page.locator(".toast")).toHaveCSS("opacity", "1");
         await shotNarrow("9-offline-post");
         // Back online, it is sent but not answered yet: ログアウト says what
@@ -1674,7 +1674,7 @@ try {
           .click();
         await expect
           .poll(outboxKeys)
-          .toEqual(["book-town-outbox-v1:" + user.id]);
+          .toEqual(["book-town-outbox-v2:" + user.id]);
         // The session runs out and cannot be renewed: nobody pressed
         // ログアウト. The page looks at it again when it is shown.
         refreshRefused = true;
@@ -1692,7 +1692,7 @@ try {
         );
         // It was not posted after all: the message saying so gives way.
         expect(await page.locator(".toast").count()).toBe(0);
-        expect(await outboxKeys()).toEqual(["book-town-outbox-v1:" + user.id]);
+        expect(await outboxKeys()).toEqual(["book-town-outbox-v2:" + user.id]);
         await shotNarrow("9-lapsed");
       } finally {
         refreshRefused = false;

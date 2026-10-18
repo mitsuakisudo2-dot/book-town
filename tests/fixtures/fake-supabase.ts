@@ -289,11 +289,15 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
     private run(): Answer {
       if (fake.offline) return lost();
       if (this.name === "my_books" && !tables.my_books)
-        return failed({
-          status: 404,
-          code: "PGRST202",
-          message: "no my_books",
-        });
+        // As postgrest-js answers it: a refused HEAD has no body to read
+        // the refusal from.
+        return this.head
+          ? { data: null, error: null, status: 204, count: null }
+          : failed({
+              status: 404,
+              code: "PGRST202",
+              message: "no my_books",
+            });
       if (this.op === "select") {
         const rows = this.matching().sort((a, b) => {
           for (const [column, up] of this.orders) {

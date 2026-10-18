@@ -39,7 +39,7 @@ import {
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId, isSampleId } from "./record-kind";
-import { bookAuthor, bookById, bookByIsbn } from "./book-name";
+import { bookAuthor, bookById, bookByIsbn, booksOfIsbn } from "./book-name";
 import { owning } from "./own-books";
 import {
   bookPrice,
@@ -348,16 +348,32 @@ export function createTownStore(
   let unowned: { before: TownState; staged: TownState } | null = null;
   /**
    * The books the reader's rows will name for `ids` (own-books.ts): another
-   * reader's book is named by the reader's own, a copy of it put in the
-   * town now when they have none. The copy stays if the action is taken.
+   * reader's book is named by the reader's own (one in `list`, the list the
+   * action changes, first), a copy of it put in the town now when they have
+   * none. The copy stays if the action is taken.
    */
-  function own<T extends string | null | undefined>(ids: readonly T[]): T[] {
-    const made = owning(state, ids, newBookId);
+  function own<T extends string | null | undefined>(
+    ids: readonly T[],
+    list?: readonly string[],
+  ): T[] {
+    const made = owning(state, ids, newBookId, list);
     if (made.state !== state) {
       unowned = { before: unowned?.before ?? state, staged: made.state };
       state = made.state;
     }
     return made.ids;
+  }
+  /**
+   * own(), and a book named twice only by two given for the same one (another
+   * reader's and the reader's own of it) once: what was given twice stays
+   * twice, for the check that turns that away.
+   */
+  function ownOnce(ids: readonly string[]): string[] {
+    const named = own(ids);
+    return named.filter((id, at) => {
+      const first = named.indexOf(id);
+      return first === at || ids[first] === ids[at];
+    });
   }
   // Words the reader wrote are not taken where they cannot be kept (an
   // account that could not be read): the screen keeps them as a draft instead.
@@ -447,7 +463,12 @@ export function createTownStore(
     },
     addShelfBook(shelfId, given, display, restore) {
       initialize();
-      const [bookId] = own([given]);
+      const [bookId] = own(
+        [given],
+        state.ownShop?.shelves
+          .find((entry) => entry.id === shelfId)
+          ?.items.map((item) => item.bookId),
+      );
       const shop = state.ownShop;
       const shelf = shop?.shelves.find((entry) => entry.id === shelfId);
       if (
@@ -577,7 +598,7 @@ export function createTownStore(
     },
     toggleWish(given) {
       initialize();
-      const [bookId] = own([given]);
+      const [bookId] = own([given], state.wishlist);
       if (!state.books.some((book) => book.id === bookId)) return;
       commit(
         withLibraryOp(
@@ -591,7 +612,7 @@ export function createTownStore(
     },
     toggleFavorite(given) {
       initialize();
-      const [bookId] = own([given]);
+      const [bookId] = own([given], state.favorites);
       if (!state.books.some((book) => book.id === bookId)) return;
       commit(
         withLibraryOp(
@@ -648,9 +669,14 @@ export function createTownStore(
     },
     updateNine(given, notes) {
       initialize();
-      const ids = own(given);
-      // A note written for another reader's book goes with the reader's own.
-      const noteOf = (id: string) => notes[id] ?? notes[given[ids.indexOf(id)]];
+      const ids = own(given, state.me.lifeNine);
+      // A note written for another reader's book goes with the reader's own,
+      // the first such note when two books given are the same one of theirs.
+      const noteOf = (id: string) =>
+        notes[id] ??
+        given
+          .map((entry, at) => (ids[at] === id ? notes[entry] : undefined))
+          .find((note) => typeof note === "string");
       const validIds = [...new Set(ids)]
         .filter((id) => state.books.some((book) => book.id === id))
         .slice(0, 9);
@@ -874,13 +900,9 @@ export function createTownStore(
       // town has with the ISBN, but never one another reader typed in: the
       // reader registers their own of it (own-books.ts), so what either of
       // them later fixes stays theirs.
+      const sent = isbn ? bookById(state.books, bookId) : undefined;
       const decided =
-        bookId && isbn
-          ? state.books.find(
-              (book) =>
-                book.id === bookId && book.isbn === isbn && !book.theirs,
-            )
-          : undefined;
+        sent && sent.isbn === isbn && !sent.theirs ? sent : undefined;
       const existing = decided ?? bookByIsbn(state.books, isbn);
       // The library remembers how a book first came in.
       const register = (town: TownState, id: string) =>
@@ -907,9 +929,9 @@ export function createTownStore(
       const price = bookPrice(input.price);
       // The database puts it in the work of its ISBN's edition; until it is
       // read again, the work of a book the town has with that ISBN stands in.
-      const workId = isbn
-        ? state.books.find((book) => book.isbn === isbn && book.workId)?.workId
-        : undefined;
+      const workId = booksOfIsbn(state.books, isbn).find(
+        (book) => book.workId,
+      )?.workId;
       const book = createRegisteredBook(id, {
         title,
         author,
@@ -967,7 +989,7 @@ export function createTownStore(
     },
     toggleLibrary(given) {
       initialize();
-      const [bookId] = own([given]);
+      const [bookId] = own([given], state.library);
       if (!state.books.some((book) => book.id === bookId)) return;
       const time = now().toISOString();
       commit(
@@ -985,7 +1007,7 @@ export function createTownStore(
     },
     changeLibrary(bookIds, change) {
       initialize();
-      const named = own(bookIds);
+      const named = own(bookIds, state.library);
       const known = new Set(state.books.map((book) => book.id));
       const books = [...new Set(named)].filter((id) => known.has(id));
       const set: Parameters<typeof withLibraryOp>[2] = {};
@@ -1236,7 +1258,7 @@ export function createTownStore(
       const pages = Array.isArray(draft.pages)
         ? draft.pages.map((page) =>
             Array.isArray(page?.bookIds)
-              ? { ...page, bookIds: own(page.bookIds) }
+              ? { ...page, bookIds: ownOnce(page.bookIds) }
               : page,
           )
         : draft.pages;

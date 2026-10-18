@@ -2753,6 +2753,24 @@ async function main() {
       arrived.books.map((entry) => entry.id),
       [NEW_BOOK],
     );
+    // Ben's typed-in book is told as his only by a town that tells the
+    // reader's own books apart (my_books read).
+    assert.equal(arrived.books[0].theirs, undefined);
+    assert.equal(
+      arrivedFromRows(
+        {
+          posts: [post(NEW_POST, BEN, { book_id: NEW_BOOK })],
+          profiles: [profile(BEN, "ben")],
+          books: [book(NEW_BOOK)],
+          postReactions: [],
+          spoilerReports: [],
+          folds: [],
+        },
+        AKI,
+        true,
+      ).books[0].theirs,
+      true,
+    );
     assert.deepEqual(arrived.likedPosts, [NEW_POST]);
     assert.deepEqual(arrived.likeTaps, { [NEW_POST]: 2 });
     assert.deepEqual(arrived.wantedPosts, [NEW_POST]);

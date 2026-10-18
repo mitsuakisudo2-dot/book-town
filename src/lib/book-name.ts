@@ -238,6 +238,19 @@ export function bookByIsbn<T extends Pick<Book, "isbn" | "theirs">>(
   return books.find((book) => book.isbn === isbn && !book.theirs);
 }
 
+/**
+ * Every book with this ISBN, another reader's too: for what the ISBN itself
+ * tells (its edition's work), never to take one or fill in its words
+ * (bookByIsbn).
+ */
+export function booksOfIsbn<T extends Pick<Book, "isbn">>(
+  books: readonly T[],
+  isbn: string | null | undefined,
+): T[] {
+  if (!isbn) return [];
+  return books.filter((book) => book.isbn === isbn);
+}
+
 /** The title of the book with this ID, if the town has it. */
 export const titleById = (
   books: readonly Book[],
