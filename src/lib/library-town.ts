@@ -476,3 +476,37 @@ export function keepingUses(prev: TownState, next: TownState): TownState {
     ? next
     : { ...next, libraryEntries: kept };
 }
+
+/**
+ * What the reader has of a book besides its registering: records and
+ * reading memos of their own (written), and whether it is read or being
+ * read. Asked about again before the book is taken out of the 本棚
+ * (RegisterBook, けにー 10-18).
+ */
+export function bookTraces(
+  state: TownState,
+  bookId: string,
+): { written: boolean; finished: boolean; reading: boolean } {
+  const status = entriesOf(state)[bookId]?.status ?? null;
+  const finished =
+    status === "finished" || state.finishedBooks.includes(bookId);
+  return {
+    written:
+      state.readingRecords.some(
+        (record) => record.readerId === ME_ID && record.bookId === bookId,
+      ) ||
+      state.posts.some(
+        (post) =>
+          post.authorId === ME_ID &&
+          post.bookId === bookId &&
+          post.readingMode !== null,
+      ),
+    finished,
+    reading:
+      !finished &&
+      (status === "reading" ||
+        state.readingSessions.some(
+          (session) => session.bookId === bookId && session.endedAt === null,
+        )),
+  };
+}
