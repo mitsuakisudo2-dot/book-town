@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createInitialState } from "../src/lib/data";
 import { countsOf, filterLibrary, inLibrary } from "../src/lib/library";
 import {
+  bookTraces,
   entriesOf,
   LEGACY_AT,
   libraryStateOf,
@@ -1015,5 +1016,57 @@ check("a shop's books are picked from the library first (103)", () => {
     state.books.filter((book) => !own.includes(book.id)).map((b) => b.id),
   );
 });
+
+check(
+  "what a book has besides its registering is asked about before it goes",
+  () => {
+    const town = createInitialState();
+    const id = town.books[0].id;
+    const none = { written: false, finished: false, reading: false };
+    assert.deepEqual(bookTraces({ ...town, library: [id] }, id), none);
+    assert.deepEqual(bookTraces({ ...town, finishedBooks: [id] }, id), {
+      ...none,
+      finished: true,
+    });
+    const record = {
+      id: "r1",
+      readerId: ME_ID,
+      bookId: id,
+      feelings: [],
+      note: "",
+      spoiler: false,
+      audience: "private",
+      createdAt: LEGACY_AT,
+    } as TownState["readingRecords"][number];
+    assert.equal(
+      bookTraces({ ...town, readingRecords: [record] }, id).written,
+      true,
+    );
+    // Another reader's record is not the reader's own.
+    assert.equal(
+      bookTraces(
+        { ...town, readingRecords: [{ ...record, readerId: "reader-x" }] },
+        id,
+      ).written,
+      false,
+    );
+    const reading = bookTraces(
+      {
+        ...town,
+        readingSessions: [
+          {
+            id: "s1",
+            bookId: id,
+            mode: "solo",
+            startedAt: LEGACY_AT,
+            endedAt: null,
+          },
+        ],
+      },
+      id,
+    );
+    assert.deepEqual(reading, { ...none, reading: true });
+  },
+);
 
 console.log(`${passed} library town checks passed`);

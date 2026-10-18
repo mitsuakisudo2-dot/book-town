@@ -354,8 +354,11 @@ async function main() {
     );
     assert.equal(post?.wants, 1);
     assert.ok(
-      notificationsFor(akiAgain).some((notice) =>
-        notice.text.includes("3回いいねしました"),
+      notificationsFor(akiAgain).some(
+        (notice) =>
+          // Three taps by one reader: one notice, one reader.
+          notice.id === `likes:${postId}:1` &&
+          notice.text.includes("さんがあなたの投稿にいいねしました"),
       ),
     );
     assert.ok(
