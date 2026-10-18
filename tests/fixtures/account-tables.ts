@@ -193,6 +193,9 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     notPeople: ["a_book"],
     readers: "nobody",
   },
+  // Which book each reader's copy was made from (own_book_rows); it names
+  // books only, whose a copy is being the copy's created_by.
+  "private.book_copies": { people: {}, readers: "nobody" },
   // How many came to each shop last week, a number only, which the owner
   // reads through shop_visitors() (shop_visitors_weekly); it goes with the
   // shop.
