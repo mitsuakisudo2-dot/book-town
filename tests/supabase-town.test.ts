@@ -214,7 +214,7 @@ async function main() {
     assert.deepEqual(
       again.ownShop?.shelves.map((shelf) => [shelf.name, shelf.isPublic]),
       [
-        ["はじめの本棚", true],
+        ["はじめの棚", true],
         ["秘密の棚", false],
       ],
     );
@@ -308,13 +308,13 @@ async function main() {
       assert.ifError(kept.error);
       assert.deepEqual(
         (kept.data.shelves as { name: string }[]).map((shelf) => shelf.name),
-        ["はじめの本棚", "ノートの棚"],
+        ["はじめの棚", "ノートの棚"],
       );
       assert.ok(kept.data.shelves_version > 0);
       const town = phone.getSnapshot();
       assert.deepEqual(
         town.ownShop?.shelves.map((shelf) => shelf.name),
-        ["はじめの本棚", "ノートの棚"],
+        ["はじめの棚", "ノートの棚"],
       );
       assert.deepEqual(town.me.nineNotes, { [sample]: "ノートで書いた" });
       // Read again, the phone's next change goes in.
@@ -324,7 +324,7 @@ async function main() {
         (await townOf(ota))
           .getSnapshot()
           .ownShop?.shelves.map((shelf) => shelf.name),
-        ["はじめの本棚", "ノートの棚", "電話の棚"],
+        ["はじめの棚", "ノートの棚", "電話の棚"],
       );
     },
   );
@@ -396,7 +396,7 @@ async function main() {
       assert.equal(shop.ownerId, aki.id);
       assert.deepEqual(
         shop.shelves.map((shelf) => shelf.name),
-        ["はじめの本棚"],
+        ["はじめの棚"],
       );
       const akiInTown = town.readers.find((entry) => entry.id === aki.id);
       assert.deepEqual(akiInTown?.lifeNine, [bookId]);
@@ -762,7 +762,7 @@ async function main() {
       assert.equal(shop?.demo, false);
       assert.deepEqual(
         shop?.shelves.map((shelf) => shelf.name),
-        ["はじめの本棚"],
+        ["はじめの棚"],
       );
       // The books the visitor sees used come with them: the shelf's, and the
       // nine's, read as Aki typed them in.
