@@ -160,7 +160,43 @@ async function main() {
         rate_limit_token_refresh: 150,
         mailer_secure_email_change_enabled: true,
         mailer_autoconfirm: false,
+        passkey_enabled: true,
+        webauthn_rp_id: "booktown.page",
+        webauthn_rp_display_name: "BookTown",
+        webauthn_rp_origins: "https://booktown.page,https://www.booktown.page",
       });
+    },
+  );
+
+  await check(
+    "passkeys are on, here as there, for booktown.page's own pages",
+    () => {
+      assert.equal(settings.passkey.enabled, true);
+      assert.equal(local("auth.passkey", "enabled"), true);
+      // Every origin is the relying party or under it, over https; the
+      // local one is localhost, for the real-browser check.
+      for (const origin of settings.passkey.origins) {
+        const host = new URL(origin).hostname;
+        assert.equal(new URL(origin).protocol, "https:");
+        assert.ok(
+          host === settings.passkey.relyingParty ||
+            host.endsWith("." + settings.passkey.relyingParty),
+          origin,
+        );
+      }
+      assert.ok(settings.passkey.origins.length <= 5);
+      assert.equal(new URL(settings.site.url).hostname, "booktown.page");
+      assert.equal(local("auth.webauthn", "rp_id"), "localhost");
+      assert.equal(
+        local("auth.webauthn", "rp_display_name"),
+        settings.passkey.name,
+      );
+      for (const key of [
+        "passkey_enabled",
+        "webauthn_rp_id",
+        "webauthn_rp_origins",
+      ])
+        assert.notEqual(shown(key, "x"), "(hidden)");
     },
   );
 
