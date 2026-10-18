@@ -3015,11 +3015,12 @@ async function main() {
       assert.deepEqual(await readersOf(ndl), EVERYONE);
       await operator(`delete from books where id = '${ndl}'`);
 
-      // A 見本's book is written under one id for everyone, by the first
-      // reader who keeps it (withSampleRows in src/lib/town-remote.ts). The
-      // next reader's write of it changes nothing and is not refused, though
-      // they cannot read that row, and their own mark of it is kept. The app
-      // shows a 見本's books from its own copy, row or no row.
+      // A 見本's book is one row for everyone, made by the database with
+      // nobody's name (own_book_rows). A reader's write of it, as the app
+      // still sends one (withSampleRows in src/lib/town-remote.ts), changes
+      // nothing and is not refused, though they cannot read that row, and
+      // their own mark of it is kept. The app shows a 見本's books from its
+      // own copy, row or no row.
       const sample = sampleBookRowId(demoBooks[1].id);
       const keep = async (visitor: string) => {
         const saved = await saveBook(visitor, sample, demoBooks[1].title);
@@ -3030,7 +3031,7 @@ async function main() {
         );
         return saved[0].count;
       };
-      assert.equal(await keep(AKI), 1);
+      assert.equal(await keep(AKI), 0);
       assert.deepEqual(await readersOf(sample), [false, true, false, false]);
       assert.equal(await keep(CHI), 0);
       assert.deepEqual(await readersOf(sample), [false, true, false, true]);
@@ -3061,8 +3062,9 @@ async function main() {
       // be taught to private.book_is_listed and private.book_is_mine (create
       // or replace), or its books go missing from the screens; so must a new
       // jsonb column with book ids in it, which this list cannot see. How
-      // books came to share a work (private.work_changes) and when a book was
-      // placed in its edition (private.book_checks) are no reader's use of a
+      // books came to share a work (private.work_changes), when a book was
+      // placed in its edition (private.book_checks) and which book a reader's
+      // copy was made from (private.book_copies) are no reader's use of a
       // book, and nobody reads them through the API.
       const keys = await db.query<{ ref: string }>(
         `select c.conrelid::regclass::text || '.' || a.attname as ref
@@ -3080,6 +3082,8 @@ async function main() {
           "poster_books.book_id",
           "posts.book_id",
           "private.book_checks.book_id",
+          "private.book_copies.book_id",
+          "private.book_copies.copied_from",
           "private.work_changes.book_id",
           "profile_nine.book_id",
           "reading_entries.book_id",
@@ -5781,10 +5785,11 @@ async function main() {
         { post: false, shop: false, other_reader_id: null, memo: "ベンのPOP" },
         { post: false, shop: false, other_reader_id: null, memo: "ベンの言葉" },
       ]);
-      // The books Ben typed in stay in the catalog without an owner. The one
-      // he only scanned is used nowhere, so nobody reads it any more.
+      // The books Ben typed in stay in the catalog without an owner, beside
+      // the 見本's, which have none. The one he only scanned is used
+      // nowhere, so nobody reads it any more.
       const orphan = await db.query<{ n: number }>(
-        "select count(*)::int as n from books where created_by is null",
+        "select count(*)::int as n from books where created_by is null and not private.is_sample_book(id)",
       );
       assert.equal(orphan.rows[0].n, 2);
       assert.deepEqual(await readersOf(scanned), [false, false, false, false]);
@@ -6036,11 +6041,12 @@ async function main() {
         (await read(null, "select profile_id as id from profile_nine")).length,
       ];
       // Every column but the edition and the work, which later migrations
-      // add to each book.
+      // add to each book; and not the 見本's books, which a later one adds.
       const catalog = () =>
         earlier
           .query(
-            "select to_jsonb(b) - 'work_id' - 'edition_id' as row from books b order by id",
+            "select to_jsonb(b) - 'work_id' - 'edition_id' as row from books b where b.id <> all ($1::uuid[]) order by id",
+            [demoBooks.map((book) => sampleBookRowId(book.id))],
           )
           .then((r) => r.rows);
       const before = {
@@ -6210,11 +6216,15 @@ async function main() {
           "book_marks",
         ])
           // Every column but a book's edition and work, which later
-          // migrations add.
+          // migrations add; and not the 見本's books, which a later one adds.
           out[table] = (
             await earlier.query(
               `select to_jsonb(t) - 'work_id' - 'edition_id' as row from ${table} t
+               ${table === "books" ? "where t.id <> all ($1::uuid[])" : ""}
                order by (to_jsonb(t) - 'work_id' - 'edition_id')::text`,
+              table === "books"
+                ? [demoBooks.map((book) => sampleBookRowId(book.id))]
+                : [],
             )
           ).rows;
         return out;
