@@ -363,3 +363,28 @@ body:has(.scan-session) .toast {
     box-shadow: 0 0 40px color-mix(in srgb, var(--shade) 20%, transparent);
   }
 }
+/* The timing mode (?scan-timing, ScanTiming.tsx): small, under the camera. */
+.scan-timing {
+  flex: none;
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-box);
+  background: var(--paper);
+  font-size: var(--t-cap);
+  line-height: 1.5;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.scan-timing-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.scan-timing-record {
+  width: 100%;
+  min-height: 96px;
+  font-size: var(--t-cap);
+}
