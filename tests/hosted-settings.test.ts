@@ -165,6 +165,7 @@ async function main() {
         webauthn_rp_id: "booktown.page",
         webauthn_rp_display_name: "BookTown",
         webauthn_rp_origins: "https://booktown.page,https://www.booktown.page",
+        security_captcha_enabled: false,
       });
     },
   );
@@ -329,6 +330,40 @@ async function main() {
     assert.deepEqual(
       authChanges({}, { mailer_otp_length: 6, mailer_otp_exp: 600 }, ""),
       ["mailer_otp_length", "mailer_otp_exp"],
+    );
+  });
+
+  await check("the human check goes on only with its secret", () => {
+    const on = { ...settings, captcha: { ...settings.captcha, on: true } };
+    assert.throws(
+      () => desiredAuth(on, { ...templates, resendKey: "" }),
+      /TURNSTILE_SECRET_KEY/,
+    );
+    const wanted = desiredAuth(on, {
+      ...templates,
+      resendKey: "",
+      captchaSecret: "0x4AAAAsecret",
+    });
+    assert.equal(wanted.security_captcha_enabled, true);
+    assert.equal(wanted.security_captcha_provider, "turnstile");
+    // Like the email password, the secret is sent apart and never logged.
+    assert.ok(!Object.values(wanted).includes("0x4AAAAsecret"));
+    assert.deepEqual(
+      authChanges(
+        { ...wanted, security_captcha_secret: "0x4AAAAsecret" },
+        wanted,
+        "",
+        "0x4AAAAsecret",
+      ),
+      [],
+    );
+    assert.deepEqual(authChanges(wanted, wanted, "", "0x4AAAAsecret"), [
+      "security_captcha_secret",
+    ]);
+    assert.equal(shown("security_captcha_secret", "0x4AAAAsecret"), "(hidden)");
+    assert.equal(
+      shown("security_captcha_provider", "turnstile"),
+      '"turnstile"',
     );
   });
 

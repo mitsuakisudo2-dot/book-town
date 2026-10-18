@@ -45,6 +45,7 @@ import {
 } from "../lib/coarse-pointer";
 import { Icon } from "./ui";
 import { KeptDraftNote } from "./KeptDraftNote";
+import { useHumanCheck } from "./HumanCheck";
 import "./profile.css";
 import "./reading.css";
 import "./account.css";
@@ -136,6 +137,8 @@ function SignIn() {
   const codeField = useRef<HTMLInputElement>(null);
   useFocusFieldOnShow(emailField, { instead: heading, when: !sentTo });
   useFocusFieldOnShow(codeField, { instead: heading, when: Boolean(sentTo) });
+  // Cloudflare's check for the login email and the passkey (turnstile.ts).
+  const { boxRef: humanBoxRef, take: humanCheck } = useHumanCheck();
 
   // A link from the email that did not work lands here with its reason.
   useEffect(() => {
@@ -149,7 +152,7 @@ function SignIn() {
     event?.preventDefault();
     setBusy(true);
     setError("");
-    const result = await accountActions.sendCode(email);
+    const result = await accountActions.sendCode(email, await humanCheck());
     setBusy(false);
     if (!result.ok) {
       setError(result.message);
@@ -168,7 +171,7 @@ function SignIn() {
     setBusy(true);
     setError("");
     setPasskeyError("");
-    const result = await accountActions.signInWithPasskey();
+    const result = await accountActions.signInWithPasskey(await humanCheck());
     // Signed in, the page waits for the profile with nothing to press.
     if (result.ok) return;
     setBusy(false);
@@ -190,7 +193,17 @@ function SignIn() {
     }
   }
 
-  if (!sentTo)
+  return (
+    <>
+      {sentTo ? codeStep() : emailStep()}
+      {/* Where Turnstile asks for a tap when it cannot tell; empty
+          otherwise. The same box through both steps, since
+          コードを送り直す asks too. */}
+      <div ref={humanBoxRef} className="account-human-check" />
+    </>
+  );
+
+  function emailStep() {
     return (
       <>
         <h1 ref={heading} tabIndex={-1}>
@@ -234,57 +247,60 @@ function SignIn() {
         <ErrorLine id="account-passkey-error" message={passkeyError} />
       </>
     );
+  }
 
-  return (
-    <>
-      <h1 ref={heading} tabIndex={-1}>
-        メールを確かめてください
-      </h1>
-      <p className="account-lead">
-        <b>{sentTo}</b>{" "}
-        にメールを送りました。メールのリンクを開くと、そのままログインできます。
-        {CODE_LENGTH}
-        桁のコードが書かれていれば、ここに入れてもかまいません。届かないときは、迷惑メールのフォルダも見てください。
-      </p>
-      <form className="profile-form" onSubmit={verify} noValidate={coarse}>
-        <label htmlFor="account-code">{CODE_LENGTH}桁のコード</label>
-        <input
-          id="account-code"
-          ref={codeField}
-          className="account-code"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          pattern="[0-9 ]*"
-          required
-          value={code}
-          onChange={(event) => setCode(normalizeCode(event.target.value))}
-          aria-describedby={error ? "account-error" : undefined}
-        />
-        <ErrorLine message={error} />
-        <button
-          className="btn fill"
-          disabled={busy || code.length !== CODE_LENGTH}
-        >
-          {busy ? "確かめています…" : "ログインする"}
-        </button>
-      </form>
-      <div className="account-links">
-        <button type="button" onClick={() => send()} disabled={busy}>
-          コードを送り直す
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setTyped(sentTo);
-            sent.clear();
-            setError("");
-          }}
-        >
-          メールアドレスを変える
-        </button>
-      </div>
-    </>
-  );
+  function codeStep() {
+    return (
+      <>
+        <h1 ref={heading} tabIndex={-1}>
+          メールを確かめてください
+        </h1>
+        <p className="account-lead">
+          <b>{sentTo}</b>{" "}
+          にメールを送りました。メールのリンクを開くと、そのままログインできます。
+          {CODE_LENGTH}
+          桁のコードが書かれていれば、ここに入れてもかまいません。届かないときは、迷惑メールのフォルダも見てください。
+        </p>
+        <form className="profile-form" onSubmit={verify} noValidate={coarse}>
+          <label htmlFor="account-code">{CODE_LENGTH}桁のコード</label>
+          <input
+            id="account-code"
+            ref={codeField}
+            className="account-code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9 ]*"
+            required
+            value={code}
+            onChange={(event) => setCode(normalizeCode(event.target.value))}
+            aria-describedby={error ? "account-error" : undefined}
+          />
+          <ErrorLine message={error} />
+          <button
+            className="btn fill"
+            disabled={busy || code.length !== CODE_LENGTH}
+          >
+            {busy ? "確かめています…" : "ログインする"}
+          </button>
+        </form>
+        <div className="account-links">
+          <button type="button" onClick={() => send()} disabled={busy}>
+            コードを送り直す
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTyped(sentTo);
+              sent.clear();
+              setError("");
+            }}
+          >
+            メールアドレスを変える
+          </button>
+        </div>
+      </>
+    );
+  }
 }
 
 const NO_PROFILE_WORK: ProfileWork = { name: "", handle: "" };
