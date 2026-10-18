@@ -63,6 +63,7 @@ import {
   myShopPath,
   notificationsPath,
   posterNewPath,
+  creditsPath,
   posterPath,
   profilePath,
   readingPath,
@@ -1137,7 +1138,7 @@ function BibliographyCredit({ master }: { master: Bibliography | null }) {
   if (!master?.from.length) return null;
   return (
     <span className="cover-credit">
-      <Link href="/credits/">書誌の出典</Link>
+      <Link href={creditsPath()}>書誌の出典</Link>
     </span>
   );
 }

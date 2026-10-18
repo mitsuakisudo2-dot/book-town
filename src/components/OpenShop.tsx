@@ -40,6 +40,7 @@ import { counted, nth, failure, AGAIN, KEPT, PLACE } from "../lib/words";
 import { pickSources } from "../lib/shop-picks";
 import { useUrlParam } from "../lib/url-state";
 import { walkPath } from "../lib/paths";
+import { japanYear } from "../lib/japan-time";
 
 /** How many books of a library shelf the opening shows at a time. */
 const FROM_PAGE = 24;
@@ -143,7 +144,7 @@ const shelfName = (kind: Kind) =>
   kind === "nine"
     ? "人生の9冊"
     : kind === "five"
-      ? `${new Date().getFullYear()}年の5冊`
+      ? `${japanYear()}年の5冊`
       : kind === "one"
         ? "たった1冊"
         : "はじめの本棚";
@@ -153,7 +154,7 @@ const kindTitle = (kind: Kind) =>
 
 /** Books the reader already knows, nearest to the shop they chose first. */
 function candidates(state: TownState, kind: Kind): string[] {
-  const year = String(new Date().getFullYear());
+  const year = String(japanYear());
   const records = state.readingRecords
     .filter((record) => record.readerId === ME_ID)
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
