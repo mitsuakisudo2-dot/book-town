@@ -46,7 +46,7 @@ $$;
 revoke all on function private.last_visit_week() from public, anon, authenticated;
 
 -- Runs once a week, just after Monday 00:00 in Japan. Running it again in the
--- same week changes nothing.
+-- same week leaves the shops already counted as they are.
 create function private.count_shop_visitors() returns void
 language sql security definer set search_path = '' as $$
   delete from private.shop_visitor_weeks where week < private.last_visit_week();

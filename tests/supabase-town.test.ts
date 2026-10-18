@@ -545,6 +545,48 @@ async function main() {
       const benAsked = await ben.client.rpc("shop_visitors");
       assert.ifError(benAsked.error);
       assert.deepEqual(benAsked.data, []);
+      // Once the week is counted, the answer has the shape PostgREST sends
+      // (this test cannot run the weekly count itself): Aki's town carries
+      // it to her shop and to one notice for that week.
+      const counted = createClient<Database>(API_URL, PUBLISHABLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: {
+          fetch: (input, init) =>
+            new URL(input instanceof Request ? input.url : input).pathname ===
+            "/rest/v1/rpc/shop_visitors"
+              ? Promise.resolve(
+                  new Response(
+                    JSON.stringify([
+                      { visitors: 2, week_end: "2026-10-18T15:00:00+00:00" },
+                    ]),
+                    { headers: { "content-type": "application/json" } },
+                  ),
+                )
+              : fetch(input, init),
+        },
+      });
+      const akiSession = (await aki.client.auth.getSession()).data.session!;
+      assert.ifError(
+        (
+          await counted.auth.setSession({
+            access_token: akiSession.access_token,
+            refresh_token: akiSession.refresh_token,
+          })
+        ).error,
+      );
+      const countedTown = (
+        await townOf({ id: aki.id, client: counted })
+      ).getSnapshot();
+      assert.deepEqual(countedTown.ownShop?.weekVisitors, {
+        count: 2,
+        at: "2026-10-18T15:00:00+00:00",
+      });
+      assert.deepEqual(
+        notificationsFor(countedTown)
+          .filter((notice) => notice.id.startsWith("visitors:"))
+          .map((notice) => [notice.id, notice.text]),
+        [["visitors:2026-10-19", "先週、2人があなたの本屋に立ち寄りました"]],
+      );
       assert.ok(
         notificationsFor(akiTown).some((notice) =>
           notice.text.includes("ひとことを残しました"),
