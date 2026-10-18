@@ -5,8 +5,10 @@ import { ITAIJI } from "./itaiji";
 // locale, so the database can repeat it exactly later (docs: search design §3):
 //   F1 NFKD, Latin marks removed, NFKC (full-width → ASCII, ｶﾞ → ガ, ō → o);
 //      then ヴァ ヴィ ヴェ ヴォ ヴュ as バ ビ ベ ボ ビュ, and ゝゞ written out (こゝろ → こころ)
-//   F2 one pass of a character map (A–Z, katakana, small kana, は→わ, old kanji)
-//   F3 only digits, a–z, hiragana, 々〆 and kanji are kept
+//   F2 one pass of a character map (A–Z and Greek and Cyrillic capitals,
+//      katakana, small kana, は→わ, old kanji)
+//   F3 only digits, a–z, hiragana, 々〆, kanji and the letters of Greek,
+//      Cyrillic, Arabic, Thai and Hangul are kept
 //   F4 long vowels go (とうきょう = ときょ = トーキョー = tokyo)
 
 const KATAKANA_FIRST = 0x30a1; // ァ
@@ -16,6 +18,28 @@ const LARGE = "あいうえおつやゆよわかけ";
 // Library spelling: a particle is read as it sounds, and old kana as today's.
 const SOUND_FROM = "はへをぢづゐゑゔ";
 const SOUND_TO = "わえおじずいえぶ";
+
+// Greek and Cyrillic capitals as small letters, by code point so the database
+// folds them without a locale: Α–Ω, Ѐ–Я, and the paired letters after я
+// (Ѣ ѣ, Ґ ґ, Ӏ ӏ…). Final ς is σ. Capitals with a mark (Ё, Ά) have lost it in F1.
+const SCRIPT_CASES: Array<[number, number]> = (() => {
+  const pairs: Array<[number, number]> = [
+    [0x3c2, 0x3c3],
+    [0x4c0, 0x4cf],
+  ];
+  for (let code = 0x391; code <= 0x3a9; code++)
+    if (code !== 0x3a2) pairs.push([code, code + 0x20]);
+  for (let code = 0x410; code <= 0x42f; code++) pairs.push([code, code + 0x20]);
+  for (let code = 0x400; code <= 0x40f; code++) pairs.push([code, code + 0x50]);
+  for (const [first, last] of [
+    [0x460, 0x481],
+    [0x48a, 0x4bf],
+    [0x4d0, 0x4ff],
+  ])
+    for (let code = first; code < last; code += 2) pairs.push([code, code + 1]);
+  for (let code = 0x4c1; code < 0x4ce; code += 2) pairs.push([code, code + 1]);
+  return pairs;
+})();
 
 /** The F2 map as two strings of equal length: each source character and its final form. */
 export function foldTable(): { from: string; to: string } {
@@ -31,6 +55,8 @@ export function foldTable(): { from: string; to: string } {
   for (const kana of SMALL + SOUND_FROM) map.set(kana, final(kana));
   for (let code = 0x41; code <= 0x5a; code++)
     map.set(String.fromCharCode(code), String.fromCharCode(code + 0x20));
+  for (const [upper, lower] of SCRIPT_CASES)
+    map.set(String.fromCharCode(upper), String.fromCharCode(lower));
   for (const [old, common] of ITAIJI) map.set(old, common);
   let from = "";
   let to = "";
@@ -49,8 +75,14 @@ const MAP = (() => {
 })();
 const OLD_KANJI = new Map(ITAIJI);
 
-const MARKS = /[̀-ͯ]/g;
-const DROPPED = /[^0-9a-zぁ-ゖ々〆㐀-䶿一-鿿豈-﫿\u{20000}-\u{2ffff}]/gu;
+const MARKS = /[\u0300-\u036f]/g;
+// What F3 keeps, written by code point (a literal 豈 turns into another 豈 in a
+// file normalized to NFC, AUD-084): ぁ–ゖ, 々〆, the kanji blocks and the
+// compatibility ideographs, Greek, Cyrillic, the Arabic letters and digits
+// (without the vowel marks, as Latin loses its accents), Thai, and Hangul.
+// private.fold_book_text (supabase/migrations/*_fold_scripts.sql) keeps the same.
+const DROPPED =
+  /[^0-9a-z\u3041-\u3096\u3005\u3006\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u{20000}-\u{2ffff}\u0386-\u03ff\u0400-\u04ff\u0620-\u064a\u0660-\u0669\u066e-\u06d3\u0e01-\u0e4e\u0e50-\u0e59\u1100-\u11ff\uac00-\ud7a3]/gu;
 
 // ヴェニス is as often ベニス, and ヴァイオリン バイオリン: the pair becomes the
 // バ row before the map, which turns a lone ヴ into ぶ.
@@ -155,4 +187,6 @@ export const hiragana = (text: string): string =>
 
 export const isKana = (char: string) => /^[ぁ-ゖ]$/.test(char);
 export const hasKanji = (text: string) =>
-  /[々〆㐀-䶿一-鿿豈-﫿\u{20000}-\u{2ffff}]/u.test(text);
+  /[\u3005\u3006\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u{20000}-\u{2ffff}]/u.test(
+    text,
+  );

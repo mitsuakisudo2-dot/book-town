@@ -180,10 +180,36 @@ async function main() {
           await verdict("ABC殺人事件", "", { title: "ＡＢＣ殺人事件" }),
           "same",
         );
-        // A script the folding drops is compared as it is written.
+        // Hangul is folded as the search folds it (AUD-084), spaces aside,
+        // and a volume tells volumes apart as in Japanese.
         assert.equal(
           await verdict("채식주의자", "", { title: "채식주의자" }),
           "same",
+        );
+        assert.equal(
+          await verdict("채식 주의자", "", { title: "채식주의자" }),
+          "same",
+        );
+        const korean = {
+          title: "소년이 온다",
+          volume: "1",
+          creators: [{ name: "한강" }],
+        };
+        assert.equal(await verdict("소년이 온다 1", "한강", korean), "same");
+        assert.equal(await verdict("소년이 온다 2", "한강", korean), "apart");
+        assert.equal(await verdict("작별하지 않는다", "한강", korean), "close");
+        assert.equal(
+          await verdict("작별하지 않는다", "한강 지음", korean),
+          "close",
+        );
+        assert.equal(await verdict("빛의 제국", "김영하", korean), "apart");
+        // An author line in Cyrillic has people in it, either way round.
+        assert.equal(
+          await verdict("Анна Каренина", "Толстой, Лев", {
+            title: "Война и мир",
+            creators: [{ name: "Лев Толстой" }],
+          }),
+          "close",
         );
         // The same volume written another way (the owner, 2026-10-17 04:15Z:
         // a way of writing is not another volume).
@@ -197,7 +223,10 @@ async function main() {
           ["銀河英雄伝説 二", { title: "銀河英雄伝説", volume: "2" }],
           ["銀河英雄伝説 第十二巻", { title: "銀河英雄伝説", volume: "12" }],
           ["架空の物語 Vol.3", { title: "架空の物語", volume: "3" }],
-          ["しんげきのきょじん 1", { ...shingeki, reading: "シンゲキ ノ キョジン" }],
+          [
+            "しんげきのきょじん 1",
+            { ...shingeki, reading: "シンゲキ ノ キョジン" },
+          ],
           ["ゴルゴ13", { title: "ゴルゴ13", volume: "2" }],
         ] as const)
           assert.equal(await verdict(typed, "", master), "same", typed);
@@ -346,7 +375,10 @@ async function main() {
           ["ノルウェイの森 下", { title: "ノルウェイの森", volume: "1" }],
           ["銀河英雄伝説 二", { title: "銀河英雄伝説", volume: "1" }],
           ["ゴルゴ13 2", { title: "ゴルゴ13", volume: "1" }],
-          ["しんげきのきょじん 2", { ...shingeki, reading: "シンゲキ ノ キョジン" }],
+          [
+            "しんげきのきょじん 2",
+            { ...shingeki, reading: "シンゲキ ノ キョジン" },
+          ],
         ] as const)
           assert.equal(await verdict(typed, "", master), "apart", typed);
         assert.equal(
@@ -1153,7 +1185,10 @@ async function main() {
       ]);
       await tick();
       assert.notEqual(await stamp(akis), was);
-      assert.equal(await count("select count(*) from private.book_rechecks"), 0);
+      assert.equal(
+        await count("select count(*) from private.book_rechecks"),
+        0,
+      );
       await settle();
     },
   );
