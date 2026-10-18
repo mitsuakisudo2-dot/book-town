@@ -9,6 +9,7 @@ import {
   nth,
   outOf,
   someCount,
+  TABS,
   whenSome,
   WHILE_OFFLINE,
 } from "../src/lib/words";
@@ -123,5 +124,26 @@ check("what did not work is said only as a Failure's what", () => {
     [],
   );
 });
+
+check(
+  "the tabs are named only through TABS, and the library says its tab's name",
+  () => {
+    assert.deepEqual(Object.values(TABS), [
+      "ホーム",
+      "検索",
+      "書店めぐり",
+      "ライブラリ",
+      "記録",
+      "読書中",
+      "わたし",
+    ]);
+    // A tab's label, or the library's heading, written in place would not
+    // change with TABS (管理表 48).
+    assert.deepEqual(
+      where(/label: "[^"]*",\s*section: "|<h1>(ライブラリ|本棚)<\/h1>/g),
+      [],
+    );
+  },
+);
 
 console.log(`${passed} words checks passed`);

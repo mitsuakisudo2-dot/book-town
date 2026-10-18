@@ -2422,10 +2422,10 @@ try {
         // It arrives and the moving mark goes.
         await expect(page.locator(".nav-mark")).toHaveCount(0);
         await expect(bar).not.toHaveClass(/is-moving/);
-        // ホーム to 本棚: one slide.
+        // ホーム to ライブラリ: one slide.
         await bar.getByRole("link", { name: "ホーム" }).tap();
         await expect(page.locator(".nav-mark")).toHaveCount(0);
-        await bar.getByRole("link", { name: "本棚" }).tap();
+        await bar.getByRole("link", { name: "ライブラリ" }).tap();
         await expect(page).toHaveURL(/\/library\//);
         const shelf = await marks();
         expect(shelf).toMatchObject({
@@ -2435,7 +2435,7 @@ try {
         expect(await page.locator(".nav-mark").count()).toBe(1);
         // The same tab again does not move it.
         await expect(page.locator(".nav-mark")).toHaveCount(0);
-        await bar.getByRole("link", { name: "本棚" }).tap();
+        await bar.getByRole("link", { name: "ライブラリ" }).tap();
         expect(await page.locator(".nav-mark").count()).toBe(0);
         // The page itself does not move as it opens: no slide, no rise.
         await bar.getByRole("link", { name: "検索" }).tap();

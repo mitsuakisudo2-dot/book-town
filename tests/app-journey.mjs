@@ -194,7 +194,7 @@ try {
         "ホーム",
         "検索",
         "書店めぐり",
-        "本棚",
+        "ライブラリ",
         "記録",
         "わたし",
       ]);
@@ -211,12 +211,12 @@ try {
   );
 
   await check(
-    "本棚 opens the library, its shelves stay in the address, and books change together",
+    "ライブラリ opens the library, its shelves stay in the address, and books change together",
     async () => {
       const nav = page.getByRole("navigation", {
         name: "スマートフォンナビゲーション",
       });
-      const shelfTab = nav.getByRole("link", { name: "本棚" });
+      const shelfTab = nav.getByRole("link", { name: "ライブラリ" });
       const meTab = nav.getByRole("link", { name: "わたし" });
       const lit = async (on, off) => {
         await expect(on).toHaveAttribute("aria-current", "page");
@@ -225,7 +225,7 @@ try {
         await expect(off).not.toHaveClass(/active/);
       };
 
-      // From another page, 本棚 opens the library.
+      // From another page, ライブラリ opens the library.
       await go("/reading/");
       await lit(nav.getByRole("link", { name: "記録" }), shelfTab);
       await shelfTab.click();
@@ -320,7 +320,7 @@ try {
           "ホーム",
           "検索",
           "書店めぐり",
-          "本棚",
+          "ライブラリ",
           "記録",
           "わたし",
         ]);

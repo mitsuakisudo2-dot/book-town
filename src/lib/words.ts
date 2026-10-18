@@ -67,6 +67,27 @@ export function whenSome<T>(
   return counted === null ? null : say(counted);
 }
 
+// ── The tabs ────────────────────────────────────────────────────────────
+
+/**
+ * The names of the tabs at the bottom (and down the side on a wide screen),
+ * in their order (管理表 48: the row for the β, which its readers' voices
+ * may change). A tab's name changes here once, and the page it opens says
+ * the same name over it: ライブラリ is both the tab and the library's
+ * heading (けにー 10-18 03:33Z「なら一旦ライブラリで」). What a book is put
+ * in is still called 本棚 ({@link REGISTER}) until 管理表 90 asks.
+ */
+export const TABS = {
+  home: "ホーム",
+  search: "検索",
+  walk: "書店めぐり",
+  library: "ライブラリ",
+  reading: "記録",
+  /** 記録, while a book is being read. */
+  readingNow: "読書中",
+  profile: "わたし",
+} as const;
+
 // ── Registering a book ──────────────────────────────────────────────────
 
 /**

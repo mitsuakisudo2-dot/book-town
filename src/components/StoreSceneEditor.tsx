@@ -43,7 +43,7 @@ import { KeptDraftNote, StopConfirm, useDraftOwner } from "./KeptDraftNote";
 import "./walk.css";
 import "./scene-editor.css";
 import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
-import { counted, nth, failure } from "../lib/words";
+import { counted, nth, failure, TABS } from "../lib/words";
 
 /**
  * A small owner-only form editor. Scene geometry stays with the template.
@@ -468,7 +468,7 @@ export function StoreSceneEditor({
                 <p className="scene-hint">
                   {nearChoices.length
                     ? "ぴったり合う本はありませんでした。"
-                    : "見つかりませんでした。「本棚」から本を登録すると、ここでも選べます。"}
+                    : `見つかりませんでした。「${TABS.library}」から本を登録すると、ここでも選べます。`}
                 </p>
               )}
               {nearChoices.length > 0 && (
