@@ -22,7 +22,7 @@ import {
 } from "../lib/store";
 import { useJournalSender } from "../lib/library-journal";
 import { lapsedLine, saveWarning } from "../lib/persistence";
-import { useOutboxWaiting } from "../lib/outbox";
+import { useAnyOutboxWaiting } from "../lib/outbox";
 import { playTabMove, tabMove } from "../lib/tab-motion";
 import { useAccountState } from "../lib/account-session";
 import {
@@ -234,12 +234,14 @@ export default function TownApp({
   const persistence = usePersistenceStatus();
   const savedIn = useTownBackend();
   const account = useAccountState();
-  const lapsed =
-    account.status === "signed-out" ? (account.lapsed ?? null) : null;
-  const lapsedWaiting = useOutboxWaiting(lapsed?.id ?? null);
+  const signedOut = account.status === "signed-out";
+  // Changes still waiting on this device tell of a sign-in that ended
+  // without ログアウト (which lets them go), even before this page opened.
+  const waiting = useAnyOutboxWaiting(signedOut);
   const warning = saveWarning(savedIn, persistence, {
     missed: useTownMissedLine(),
-    lapsed: lapsed && lapsedLine(lapsedWaiting),
+    lapsed:
+      (signedOut && account.lapsed) || waiting ? lapsedLine(waiting) : null,
   });
   const router = useRouter();
   const [toast, setToast] = useState<ShownToast | null>(() => {

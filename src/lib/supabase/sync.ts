@@ -223,6 +223,13 @@ export interface SyncOptions {
   retryDelays?: number[];
 }
 
+/** Rounds in a row kept changes may fail, online, before a page saves its own. */
+const LEFT_TRIES = 3;
+
+/** Whether the browser thinks it is online (always, where it cannot tell). */
+const online = () =>
+  typeof navigator === "undefined" || navigator.onLine !== false;
+
 export interface SyncSpec<T, W> {
   /** Reads the value once; throws TownSyncError. */
   read(): Promise<T>;
@@ -288,6 +295,12 @@ export function backgroundSync<T, W>(
   let missed: Missed<W> = { refused: [], elsewhere: [] };
   // Whether the device holds what waits now.
   let kept = false;
+  // What the kept changes sent so far set, by the key of what each changed
+  // whole, until the value is read again: a later change of the same thing
+  // is checked against it, after network trouble too.
+  let placed = new Map<string, string>();
+  // Rounds in a row the kept changes could not be sent, online.
+  let leftTries = 0;
   // Rows taken in while a write was on its way: the value it saves lacks
   // them, so they are taken into it again once it is saved (against what
   // was saved before, so a row the write removed stays removed).
@@ -313,22 +326,35 @@ export function backgroundSync<T, W>(
     failures += 1;
   };
 
-  /** Puts what waits now on the device, in place of what was kept. */
+  /**
+   * Puts what waits now on the device, in place of what was kept. What the
+   * database turned away stays too until the listener is told (with the
+   * words written, missed-changes.ts): a page closed before that leaves it
+   * to the next, which sends it again and tells it.
+   */
   function keep() {
     if (!spec.outbox || closed || synced === null) return;
-    const base = synced;
-    const target = shown() as T;
-    const writes =
-      target === base
-        ? []
-        : spec.plan(base, target).map((write): KeptWrite<W> => {
-            const was = spec.stake?.(base, write);
-            const to = spec.stake?.(target, write);
-            return was && to
-              ? { write, was: valueMark(was.value), to: valueMark(to.value) }
-              : { write };
-          });
-    kept = spec.outbox.keep(page, writes);
+    try {
+      const base = synced;
+      const target = shown() as T;
+      const planned =
+        target === base
+          ? []
+          : spec.plan(base, target).map((write): KeptWrite<W> => {
+              const was = spec.stake?.(base, write);
+              const to = spec.stake?.(target, write);
+              return was && to
+                ? { write, was: valueMark(was.value), to: valueMark(to.value) }
+                : { write };
+            });
+      kept = spec.outbox.keep(page, [
+        ...missed.refused.map((write) => ({ write })),
+        ...planned,
+      ]);
+    } catch (error) {
+      console.error(error);
+      kept = false;
+    }
   }
 
   const isRetry = (error: unknown) =>
@@ -353,12 +379,18 @@ export function backgroundSync<T, W>(
         await spec.apply(write);
       } catch (error) {
         if (isRetry(error)) throw error;
-        const parts = spec.split?.(write) ?? [];
+        let parts: W[] = [];
+        try {
+          parts = spec.split?.(write) ?? [];
+        } catch {
+          // A write that cannot be taken apart is turned away whole.
+        }
         if (parts.length > 1) for (const part of parts) await one(part);
         else into.refused.push(write);
       }
     }
     for (const kept of writes) {
+      if (closed) return;
       const now = kept.was !== undefined ? there?.(kept.write) : undefined;
       if (now) {
         const mark = placed?.get(now.key) ?? now.mark;
@@ -367,9 +399,11 @@ export function backgroundSync<T, W>(
           into.elsewhere.push(kept.write);
           continue;
         }
-        placed?.set(now.key, kept.to as string);
       }
+      const refused = into.refused.length;
       await one(kept.write);
+      if (now && into.refused.length === refused)
+        placed?.set(now.key, kept.to as string);
     }
   }
 
@@ -382,20 +416,23 @@ export function backgroundSync<T, W>(
       const stake = spec.stake?.(against, write);
       return stake && { key: stake.key, mark: valueMark(stake.value) };
     };
-    const placed = new Map<string, string>();
     while (left.length) {
       const [entry] = left;
       // Told once the page's changes are all sent: sent again after network
       // trouble, a refusal would otherwise be told twice.
       const into: Missed<W> = { refused: [], elsewhere: [] };
       await send(entry.writes, into, there, placed);
+      if (closed) return;
       missed.refused.push(...into.refused);
       missed.elsewhere.push(...into.elsewhere);
-      spec.outbox?.drop(entry.page);
       left = left.slice(1);
       stale = true;
+      // What was turned away is kept here before it is let go there.
+      keep();
+      spec.outbox?.drop(entry.page);
     }
     failures = 0;
+    leftTries = 0;
   }
 
   /** Reads the value again and shows it, unless changes were made meanwhile. */
@@ -415,10 +452,12 @@ export function backgroundSync<T, W>(
     latest = fresh;
     stale = false;
     failures = 0;
-    keep();
+    placed = new Map();
     const told = missed;
-    missed = { refused: [], elsewhere: [] };
+    if (listener) missed = { refused: [], elsewhere: [] };
     listener?.replace(fresh, missedNothing(told) ? "saved" : "recovered", told);
+    // Told: what was turned away waits no more.
+    keep();
   }
 
   async function flush() {
@@ -426,8 +465,9 @@ export function backgroundSync<T, W>(
     // What other pages kept is sent once someone hears how it went.
     if (left.length && !listener) return;
     busy = true;
+    const sendingLeft = left.length > 0;
     try {
-      if (left.length) await sendLeft();
+      if (sendingLeft) await sendLeft();
       else if (!pending()) {
         if (stale) await reread();
         else report("saved");
@@ -455,6 +495,18 @@ export function backgroundSync<T, W>(
     } catch (error) {
       if (closed) return;
       if (!isRetry(error)) console.error(error);
+      // Kept changes that do not go though the browser is online (one that
+      // waits for a shop never saved, one this version cannot send) stay on
+      // the device for a later page, and this one saves its own.
+      if (
+        sendingLeft &&
+        (!isRetry(error) || online()) &&
+        ++leftTries >= LEFT_TRIES
+      ) {
+        left = left.slice(1);
+        leftTries = 0;
+        failures = 0;
+      }
       backOff();
       return;
     } finally {
@@ -464,7 +516,7 @@ export function backgroundSync<T, W>(
     if (pending() || stale || left.length) schedule(pending() ? delay : 0);
   }
 
-  const online = () => {
+  const cameOnline = () => {
     if (pending() || stale || left.length) schedule(0);
   };
   const leaving = (event: BeforeUnloadEvent) => {
@@ -505,7 +557,7 @@ export function backgroundSync<T, W>(
   }
 
   if (typeof window !== "undefined") {
-    window.addEventListener("online", online);
+    window.addEventListener("online", cameOnline);
     window.addEventListener("beforeunload", leaving);
   }
 
@@ -554,7 +606,7 @@ export function backgroundSync<T, W>(
       closed = true;
       if (timer) clearTimeout(timer);
       if (typeof window !== "undefined") {
-        window.removeEventListener("online", online);
+        window.removeEventListener("online", cameOnline);
         window.removeEventListener("beforeunload", leaving);
       }
     },

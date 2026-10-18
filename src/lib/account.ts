@@ -413,6 +413,8 @@ export function createAccountStore(
       }
       // A profile read still running for them must not bring them back.
       const mine = ++generation;
+      // Gone, not lapsed, for the other tabs too.
+      signedOut.mark(true);
       leaving.mark(null);
       await leaving.forget(user.id);
       onLeft();

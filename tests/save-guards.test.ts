@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { townMissedLine, walkMissedLine } from "../src/lib/missed-changes";
 import {
+  anyOutboxWaiting,
   deviceOutbox,
   forgetOutboxes,
   OUTBOX_KEY,
@@ -373,6 +374,141 @@ async function main() {
   );
 
   await check(
+    "a 便り turned away is told, with its words, even when its page closes first",
+    async () => {
+      const db = fakeSupabase(AKI, seed());
+      const device = memoryStorage();
+      const store = await townOf(db, device);
+      const WORDS = "閉じる前に書いた返信。";
+      // The reply is turned away; then the page loses the network before
+      // it reads the town again to tell it, and is closed.
+      let first = true;
+      db.refuse = (write) => {
+        if (write.table !== "posts") return null;
+        db.offline = first;
+        first = false;
+        return {
+          status: 403,
+          code: "42501",
+          message: "new row violates row-level security policy",
+        };
+      };
+      store.actions.createPost({ body: WORDS, parentId: BEN_POST });
+      await until(
+        () => db.offline && store.getPersistenceSnapshot() === "unavailable",
+        "the page cannot read the town again",
+      );
+      const before = draftOf(POST_DRAFT_KEY, AKI + ":new-post")?.body ?? "";
+      assert.ok(!before.includes(WORDS));
+      closePage(store);
+      db.offline = false;
+      // The next page sends it again, and tells it.
+      const next = openTown(db, device);
+      assert.equal(await settled(next), "recovered");
+      assert.equal(
+        next.getMissedSnapshot()?.line,
+        "返信を保存できませんでした。書きかけは残しています。",
+      );
+      assert.ok(
+        draftOf(POST_DRAFT_KEY, AKI + ":new-post")?.body.includes(WORDS),
+      );
+      assert.equal(outboxWaiting(AKI, device), false);
+    },
+  );
+
+  await check(
+    "a poster made again from the device is not made over a later change",
+    async () => {
+      const db = fakeSupabase(AKI, seed());
+      const device = memoryStorage();
+      const poster = (heading: string) => ({
+        template: "lineup" as const,
+        theme: "navy" as const,
+        font: "mincho" as const,
+        pages: [{ heading, text: "", bookIds: [BOOK] }],
+        spoiler: false,
+        inTimeline: true,
+        status: "draft" as const,
+      });
+      const posterWrites = () =>
+        db.writes.filter((write) => write.table === "posters").length;
+      /** Makes a poster whose answer never comes back, and closes the page. */
+      async function madeUnanswered(heading: string) {
+        const store = await townOf(db, device);
+        db.loseAnswers = true;
+        assert.ok(store.actions.savePoster(poster(heading)));
+        await until(
+          () => store.getPersistenceSnapshot() === "unavailable",
+          "the answer is lost",
+        );
+        closePage(store);
+        db.loseAnswers = false;
+      }
+      // It went in: the next page finds it there and sends nothing.
+      await madeUnanswered("雨の本");
+      const sent = posterWrites();
+      await townOf(db, device);
+      assert.equal(posterWrites(), sent);
+      // It went in and was changed on another device: not made over it.
+      await madeUnanswered("夜の本");
+      const later = db.tables.posters.find((row) =>
+        JSON.stringify(row.pages).includes("夜の本"),
+      );
+      assert.ok(later);
+      later.theme = "kinari";
+      const next = openTown(db, device);
+      assert.equal(await settled(next), "recovered");
+      assert.equal(later.theme, "kinari");
+      assert.equal(
+        next.getMissedSnapshot()?.line,
+        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。",
+      );
+    },
+  );
+
+  await check(
+    "a kept change that cannot go does not hold up the page's own",
+    async () => {
+      const db = fakeSupabase(AKI, seed());
+      const device = memoryStorage();
+      const store = await townOf(db, device);
+      db.offline = true;
+      store.actions.toggleFollow(BEN_SHOP);
+      await until(
+        () => store.getPersistenceSnapshot() === "unavailable",
+        "the town waits for the network",
+      );
+      closePage(store);
+      db.offline = false;
+      // The follow cannot be written for now, however often it is tried.
+      db.refuse = (write) =>
+        write.table === "shop_follows"
+          ? { status: 503, code: "", message: "Service Unavailable" }
+          : null;
+      const next = openTown(db, device);
+      assert.equal(await settled(next), "saved");
+      next.actions.toggleLike(BEN_POST);
+      assert.equal(await settled(next), "saved");
+      assert.deepEqual(
+        db.tables.post_reactions?.map((row) => row.post_id),
+        [BEN_POST],
+      );
+      // The follow still waits on the device, for a later page.
+      assert.equal(db.tables.shop_follows?.length ?? 0, 0);
+      assert.equal(outboxWaiting(AKI, device), true);
+      closePage(next);
+      db.refuse = () => null;
+      const last = await townOf(db, device);
+      assert.deepEqual(
+        db.tables.shop_follows?.map((row) => row.shop_id),
+        [BEN_SHOP],
+      );
+      assert.deepEqual(last.getSnapshot().following, [BEN_SHOP]);
+      assert.equal(outboxWaiting(AKI, device), false);
+    },
+  );
+
+  await check(
     "what waits on the device is told per reader, kept a week, let go on ログアウト",
     async () => {
       const device = memoryStorage();
@@ -403,6 +539,8 @@ async function main() {
       );
       assert.equal(outboxWaiting(AKI, device), true);
       assert.equal(outboxWaiting(BEN, device), false);
+      // Signed out, anyone's waiting changes tell of a sign-in that ended.
+      assert.equal(anyOutboxWaiting(device), true);
       // A page with nothing left waiting lets its own go.
       assert.ok(second.keep("page-2", []));
       assert.deepEqual(
@@ -432,6 +570,7 @@ async function main() {
       );
       forgetOutboxes(AKI, device);
       assert.equal(outboxWaiting(AKI, device), false);
+      assert.equal(anyOutboxWaiting(device), false);
       // Storage that takes nothing: the page knows it kept nothing.
       const full = {
         ...memoryStorage(),

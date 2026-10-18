@@ -7,7 +7,8 @@ import type { Database } from "../../src/lib/supabase/database.generated";
 // ranges and counts for reads; upsert, update and delete for writes, each one
 // statement that is taken whole or not at all, like PostgREST. It keeps a few
 // of the database's own rules (a reply's post, a row's book must be there),
-// can be cut off from the network, and can be told to turn a write away.
+// can be cut off from the network (or lose the answers to writes it took),
+// and can be told to turn a write away.
 
 type Row = Record<string, unknown>;
 
@@ -117,6 +118,8 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
     writes,
     /** No answer at all: every request fails as a lost connection does. */
     offline: false,
+    /** Writes are taken, but their answers are lost on the way back. */
+    loseAnswers: false,
     /** Turns a write away: why, or null to take it. */
     refuse: (() => null) as (write: FakeWrite) => Refusal | null,
     client: null as unknown as SupabaseClient<Database>,
@@ -236,13 +239,19 @@ export function fakeSupabase(userId: string, seed: Record<string, Row[]> = {}) {
       reject?: ((reason: unknown) => B | PromiseLike<B>) | null,
     ): PromiseLike<A | B> {
       return Promise.resolve()
-        .then(() => this.run())
+        .then(() => this.answer())
         .then(resolve, reject);
     }
     private matching() {
       return table(this.name).filter((row) =>
         this.filters.every((test) => test(row)),
       );
+    }
+    private answer(): Answer {
+      const answer = this.run();
+      return fake.loseAnswers && this.op !== "select" && !answer.error
+        ? lost()
+        : answer;
     }
     private run(): Answer {
       if (fake.offline) return lost();
@@ -376,6 +385,10 @@ export function memoryStorage() {
   const items = new Map<string, string>();
   return {
     items,
+    get length() {
+      return items.size;
+    },
+    key: (index: number) => [...items.keys()][index] ?? null,
     getItem: (key: string) => items.get(key) ?? null,
     setItem: (key: string, value: string) => void items.set(key, value),
     removeItem: (key: string) => void items.delete(key),

@@ -1901,6 +1901,20 @@ export function writeStake(
         value: poster ? posterFields(poster) : null,
       };
     }
+    // A poster made may be there already (its answer lost) and changed
+    // since on another device: made again only where it is not.
+    case "posters": {
+      const ids = write.rows.map((row) => row.id ?? "").sort();
+      return {
+        key: "posters:" + ids.join(","),
+        value: ids.map((id) => {
+          const poster = state.posters.find(
+            (entry) => entry.id === id && entry.authorId === ME_ID,
+          );
+          return poster ? posterFields(poster) : null;
+        }),
+      };
+    }
     default:
       return undefined;
   }

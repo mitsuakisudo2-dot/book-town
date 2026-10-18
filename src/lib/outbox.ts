@@ -14,7 +14,9 @@ import type { KeptWrite, KeptWrites, Outbox } from "./supabase/sync";
 // One key per reader and per thing saved (the town, the walk), each holding
 // what every page kept, by page. Every change reads the key again and writes
 // it back, so two tabs never write over each other's changes. What waited
-// longer than a week is let go, as the scan journal does.
+// longer than a week is let go, as the scan journal does. A change to the
+// shape of a write takes a new version of the key (-v2:), so a page never
+// sends what an older version kept in a shape it no longer makes.
 
 export const OUTBOX_KEY = "book-town-outbox-v1:";
 export const WALK_OUTBOX_KEY = "book-town-walk-outbox-v1:";
@@ -64,7 +66,7 @@ const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((listener) => listener());
 
 /** The browser's storage, or null where there is none to reach. */
-function browserStorage(): Storage | null {
+function browserStorage(): globalThis.Storage | null {
   try {
     return typeof window === "undefined" ? null : window.localStorage;
   } catch {
@@ -156,6 +158,34 @@ export function outboxWaiting(
   }
 }
 
+/**
+ * Whether anyone's changes still wait on this device. A pressed ログアウト
+ * lets them go, so they tell of a sign-in that ended by itself, even one
+ * that ended before the page opened.
+ */
+export function anyOutboxWaiting(
+  storage: Pick<
+    globalThis.Storage,
+    "length" | "key" | "getItem"
+  > | null = browserStorage(),
+): boolean {
+  if (!storage) return false;
+  try {
+    for (let index = 0; index < storage.length; index++) {
+      const key = storage.key(index);
+      if (
+        key &&
+        (key.startsWith(OUTBOX_KEY) || key.startsWith(WALK_OUTBOX_KEY)) &&
+        readOutbox(storage.getItem(key), Date.now(), anything).length > 0
+      )
+        return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /** Lets go of what waits for `userId` on this device (a pressed ログアウト). */
 export function forgetOutboxes(
   userId: string,
@@ -194,6 +224,15 @@ export function useOutboxWaiting(userId: string | null): boolean {
   return useSyncExternalStore(
     subscribe,
     () => (userId ? outboxWaiting(userId) : false),
+    () => false,
+  );
+}
+
+/** Whether anyone's changes still wait on this device, while `asked`. */
+export function useAnyOutboxWaiting(asked: boolean): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => asked && anyOutboxWaiting(),
     () => false,
   );
 }
