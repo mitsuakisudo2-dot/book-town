@@ -449,6 +449,10 @@ async function main() {
         /site_url: "https:\/\/book-town-851k\.vercel\.app" -> "https:\/\/booktown\.page"/,
       );
       assert.match(looked.output, /RESEND_API_KEY is not set/);
+      assert.match(
+        looked.output,
+        /TURNSTILE_SECRET_KEY: not set among the repository secrets/,
+      );
       assert.deepEqual(
         api.seen.map((s) => s.method),
         ["GET"],
