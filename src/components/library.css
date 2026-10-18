@@ -371,3 +371,48 @@ body:has(.library-pick) .toast {
   bottom: calc(var(--library-pick-height, 0px) + 12px);
   left: 50%;
 }
+
+/* スキャンした回 (ScanTimes): one button for each time of scanning, the
+   latest first, with its books' number and first titles. */
+.scan-times {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.scan-time {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.scan-time:hover {
+  border-color: var(--green);
+}
+.scan-time-when {
+  font-size: var(--t-meta);
+  font-weight: 700;
+}
+.scan-time-count {
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+}
+.scan-time-books {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  line-height: 1.5;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

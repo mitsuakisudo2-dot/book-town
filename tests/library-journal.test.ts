@@ -21,7 +21,9 @@ import {
   type LibraryJournal,
   type ScanItem,
 } from "../src/lib/library-journal";
+import { blankEntry } from "../src/lib/library";
 import type { OpenBdAnswer } from "../src/lib/openbd";
+import { scanTimes, scanTimeWords } from "../src/lib/scan-history";
 import { createMemoryRepository } from "../src/lib/repository";
 import {
   closingNotice,
@@ -1378,6 +1380,40 @@ async function main() {
         "my-book-9",
       );
       assert.ok(odd?.result === "added" && odd.bookId === "isbn-" + Z);
+    },
+  );
+
+  await check(
+    "スキャンした回 are the library's books by the time they came in, the latest first",
+    () => {
+      const A = "00000000-0000-4000-8000-0000000000a1";
+      const B = "00000000-0000-4000-8000-0000000000b1";
+      const rows = [
+        blankEntry("b1", "scan", "2026-10-18T10:00:05Z", A),
+        blankEntry("b2", "scan", "2026-10-18T10:00:01Z", A),
+        blankEntry("b3", "scan", "2026-10-18T12:00:00Z", B),
+        // Taken out of the library: not in its time any more.
+        blankEntry("b4", "scan", "2026-10-18T12:00:09Z", B),
+        // Not brought in by a scan.
+        blankEntry("b5", "manual", "2026-10-18T13:00:00Z"),
+      ];
+      const times = scanTimes({
+        library: ["b1", "b2", "b3", "b5"],
+        libraryEntries: Object.fromEntries(rows.map((e) => [e.bookId, e])),
+      });
+      assert.deepEqual(times, [
+        { session: B, at: Date.parse("2026-10-18T12:00:00Z"), books: ["b3"] },
+        {
+          session: A,
+          at: Date.parse("2026-10-18T10:00:01Z"),
+          books: ["b2", "b1"],
+        },
+      ]);
+      // Written in Japan's time, whatever the browser's.
+      assert.equal(
+        scanTimeWords(Date.parse("2026-10-18T16:43:00Z")),
+        "10月19日(月) 1:43",
+      );
     },
   );
 

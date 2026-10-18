@@ -1851,6 +1851,52 @@ try {
   );
 
   await check(
+    "スキャンした回 narrows the library to one time's books, and 戻る leaves it",
+    async () => {
+      const times = await scanningPage();
+      await go("/profiles/me/?books=library", times);
+      for (const books of [
+        [61, 62],
+        [63, 64, 65],
+      ]) {
+        await openScanner(times);
+        await cameraRunning(times);
+        await show(times, ...books.map(isbnOf));
+        await expect(count(times)).toHaveText(`${books.length}冊 登録済み`);
+        await finishScanning(times);
+      }
+      await go("/library/", times);
+      const chip = times.getByRole("button", { name: "スキャンした回" });
+      await chip.click();
+      const sheet = times.getByRole("dialog", { name: "スキャンした回" });
+      // The latest first, each with its number and first titles.
+      await expect(sheet.locator(".scan-time")).toHaveCount(2);
+      await expect(sheet.locator(".scan-time").first()).toContainText("3冊");
+      await expect(sheet.locator(".scan-time").last()).toContainText(
+        "試験の本 61、試験の本 62",
+      );
+      await sheet.locator(".scan-time").last().click();
+      await expect(sheet).toHaveCount(0);
+      await expect(times).toHaveURL(/[?&]batch=[0-9a-f-]{36}/);
+      await expect(times.locator(".library-grid li")).toHaveCount(2);
+      await expect(times.locator(".library-page")).toContainText(
+        "に読み取って、いまライブラリにある本です。",
+      );
+      // Pressed again, the whole library is back.
+      await times.getByRole("button", { name: /の回$/ }).click();
+      await expect(times).not.toHaveURL(/batch=/);
+      await expect(chip).toBeVisible();
+      // The sheet took its step of 戻る with it: 戻る leaves the library.
+      await chip.click();
+      await sheet.locator(".scan-time").first().click();
+      await expect(times.locator(".library-grid li")).toHaveCount(3);
+      await times.goBack();
+      await expect(times).toHaveURL(/\/profiles\/me\//);
+      await times.context().close();
+    },
+  );
+
+  await check(
     "with no WebAssembly either, the browser cannot read barcodes",
     async () => {
       const bare = await browser.newContext(phone);

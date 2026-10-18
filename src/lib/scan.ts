@@ -343,6 +343,14 @@ export const SCAN_COPY = {
     go: "続きから再開",
     notNow: "今はしない",
   },
+  /** スキャンした回 (資料 §2 J), in the library. */
+  history: {
+    name: "スキャンした回",
+    of: (when: string) => `${when}の回`,
+    note: (when: string) => `${when}に読み取って、いまライブラリにある本です。`,
+    books: (titles: string[], more: number) =>
+      titles.join("、") + (more > 0 ? ` ほか${counted(more, "冊")}` : ""),
+  },
   /** 重複の知らせ (Figma v4's 06) and 書誌の取得失敗 (07). */
   showBook: "登録済みの本を表示する",
   retry: "再試行",
