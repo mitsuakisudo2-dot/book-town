@@ -369,11 +369,14 @@ export function ScanSession({
   const readerUsed = useRef("");
   const gap = timingSettings?.gap ?? USUAL.gap;
   const pictureWidth = timingSettings?.size ?? USUAL.size;
+  const area = timingSettings?.area ?? USUAL.area;
   const gapRef = useRef(gap);
+  const areaRef = useRef(area);
   useEffect(() => {
     gapRef.current = gap;
+    areaRef.current = area;
     timingOn.current = timingSettings !== null;
-  }, [gap, timingSettings]);
+  }, [gap, area, timingSettings]);
   const reads = useRef<SessionReads>(NO_READS);
   const inView = useRef<InView>({});
   const flashedAt = useRef(0);
@@ -738,7 +741,8 @@ export function ScanSession({
       const detector = new reader.Detector({ formats: ["ean_13"] });
       // ZXing reads the guide's band only, drawn into the one canvas: the
       // whole frame would be a new canvas of its size at every read. The
-      // browser's own reader takes the video as it is.
+      // browser's own reader takes the video as it is. The timing mode can
+      // have ZXing read all of the picture shown instead (読む範囲 画面).
       const band = reader.wasm
         ? document
             .createElement("canvas")
@@ -747,7 +751,10 @@ export function ScanSession({
       const frame = () => {
         if (!band) return element;
         const view = element.getBoundingClientRect();
-        const box = guide.current?.getBoundingClientRect();
+        const box =
+          areaRef.current === "band"
+            ? guide.current?.getBoundingClientRect()
+            : undefined;
         const rect = guideRect(
           { width: element.videoWidth, height: element.videoHeight },
           view,
