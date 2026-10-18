@@ -83,6 +83,7 @@ import "./profile.css";
 import "./reading.css";
 import {
   leavePath,
+  loginPath,
   myShopPath,
   posterNewPath,
   posterPath,
@@ -1110,6 +1111,21 @@ export function ProfileView({
           {account.status === "signed-in" && (
             <fieldset className="leave-entry">
               <legend>アカウント</legend>
+              <p className="leave-entry-email">
+                ログインのメールアドレス
+                <b>{account.user.email}</b>
+              </p>
+              <button
+                type="button"
+                className="btn quiet"
+                onClick={() =>
+                  leaveLayers(() =>
+                    router.push(loginPath({ changeEmail: true })),
+                  )
+                }
+              >
+                メールアドレスを変える
+              </button>
               <button
                 type="button"
                 className="btn quiet"

@@ -4,7 +4,9 @@
 // checks and session refreshes one address may make in five minutes and, once
 // a Resend key is stored, who sends the login email, how many it may send an hour, and the
 // email itself (supabase/templates/magic_link.html, the same file the local
-// Supabase uses). .github/workflows/supabase-auth.yml runs it.
+// Supabase uses). Changing the address asks for a code from the current
+// address and one from the new one (supabase/templates/email_change.html).
+// .github/workflows/supabase-auth.yml runs it.
 //
 //   node scripts/supabase-auth.mjs check   prints what would change
 //   node scripts/supabase-auth.mjs apply   changes it, then reads it back
@@ -39,6 +41,10 @@ const SHOWN = new Set([
   "security_captcha_enabled",
   "mailer_subjects_magic_link",
   "mailer_templates_magic_link_content",
+  "mailer_secure_email_change_enabled",
+  "mailer_autoconfirm",
+  "mailer_subjects_email_change",
+  "mailer_templates_email_change_content",
   "site_url",
   "uri_allow_list",
   "disable_signup",
@@ -75,7 +81,10 @@ export function allowList(current, wanted) {
  *
  * @returns {Record<string, string | number>}
  */
-export function desiredAuth(settings, { template, resendKey }) {
+export function desiredAuth(
+  settings,
+  { template, emailChangeTemplate, resendKey },
+) {
   const wanted = {
     site_url: settings.site.url,
     mailer_otp_length: settings.code.length,
@@ -83,6 +92,11 @@ export function desiredAuth(settings, { template, resendKey }) {
     rate_limit_otp: settings.limits.codeRequestsPer5Minutes,
     rate_limit_verify: settings.limits.codeChecksPer5Minutes,
     rate_limit_token_refresh: settings.limits.sessionRefreshesPer5Minutes,
+    // Both addresses confirm a change. The server skips the second one while
+    // email confirmations are off (mailer_autoconfirm), so that stays off;
+    // sign-ups are closed, and invited readers are created confirmed.
+    mailer_secure_email_change_enabled: settings.emailChange.confirmBoth,
+    mailer_autoconfirm: !settings.emailChange.confirmBoth,
   };
   if (!resendKey) return wanted;
   return {
@@ -95,6 +109,8 @@ export function desiredAuth(settings, { template, resendKey }) {
     rate_limit_email_sent: settings.email.perHour,
     mailer_subjects_magic_link: settings.magicLink.subject,
     mailer_templates_magic_link_content: template,
+    mailer_subjects_email_change: settings.emailChange.subject,
+    mailer_templates_email_change_content: emailChangeTemplate,
   };
 }
 
@@ -119,7 +135,10 @@ const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 export function shown(key, value) {
   if (!SHOWN.has(key)) return "(hidden)";
   if (value == null || value === "") return "(not set)";
-  if (key === "mailer_templates_magic_link_content")
+  if (
+    key === "mailer_templates_magic_link_content" ||
+    key === "mailer_templates_email_change_content"
+  )
     return `${value.length} characters, sha256 ${sha256(value).slice(0, 12)}`;
   return JSON.stringify(value);
 }
@@ -164,7 +183,15 @@ async function main(mode) {
     path.join(root, "supabase", settings.magicLink.template),
     "utf8",
   );
-  const wanted = desiredAuth(settings, { template, resendKey });
+  const emailChangeTemplate = await readFile(
+    path.join(root, "supabase", settings.emailChange.template),
+    "utf8",
+  );
+  const wanted = desiredAuth(settings, {
+    template,
+    emailChangeTemplate,
+    resendKey,
+  });
 
   const request = async (method, body) => {
     const response = await fetch(`${API}/projects/${project}/config/auth`, {

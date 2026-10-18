@@ -34,6 +34,19 @@ export function authFailure(error: Pick<AuthError, "code" | "status">) {
   return "server" satisfies AccountFailure;
 }
 
+/**
+ * The same for a change of address. Its codes are checked like a sign-in
+ * code; asking for one, the new address may belong to another account.
+ */
+export function emailChangeFailure(error: Pick<AuthError, "code" | "status">) {
+  if (error.code === "email_exists")
+    return "email-taken" satisfies AccountFailure;
+  const failure = authFailure(error);
+  // Nobody is invited by a change of address: an address refused for that
+  // reason is the server's (its built-in email sends to the team only).
+  return failure === "not-invited" ? "server" : failure;
+}
+
 export function supabaseAccountBackend(
   client: SupabaseClient<Database>,
 ): AccountBackend {
@@ -67,6 +80,23 @@ export function supabaseAccountBackend(
         type: "email",
       });
       return error ? authFailure(error) : null;
+    },
+    async changeEmail(email) {
+      // The emails carry codes only (supabase/templates/email_change.html),
+      // so no address to come back to is given.
+      const { error } = await client.auth.updateUser({ email });
+      return error ? emailChangeFailure(error) : null;
+    },
+    async confirmEmailChange(email, code) {
+      const { data, error } = await client.auth.verifyOtp({
+        email,
+        token: code,
+        type: "email_change",
+      });
+      if (error) return { failure: emailChangeFailure(error) };
+      // The first of the two codes is taken without a session; the second
+      // makes the change and signs in again with the new address.
+      return { done: Boolean(data.session) };
     },
     async signOut() {
       await client.auth.signOut();

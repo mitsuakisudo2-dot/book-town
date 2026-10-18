@@ -127,6 +127,8 @@ export interface Shop {
 }
 
 export const POST_MAX_LENGTH = 1000;
+/** The longest email address the sign-in takes (as the auth server does). */
+export const EMAIL_MAX_LENGTH = 254;
 /** The same limits as the database (supabase/migrations), so a save is never refused for length. */
 export const SHOP_NAME_MAX_LENGTH = 80;
 export const SHOP_TAGLINE_MAX_LENGTH = 500;

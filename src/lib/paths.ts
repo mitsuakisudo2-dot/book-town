@@ -70,5 +70,9 @@ export const leavePath = (): string => "/leave/";
 /** The reading records page (記録). */
 export const readingPath = (): string => "/reading/";
 
-/** The login page. */
-export const loginPath = (): string => "/login/";
+/**
+ * The login page, which is the account's page once signed in;
+ * `changeEmail` opens 「メールアドレスを変える」 on it (管理表 107).
+ */
+export const loginPath = (options: { changeEmail?: boolean } = {}): string =>
+  options.changeEmail ? "/login/?change=email" : "/login/";
