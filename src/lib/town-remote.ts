@@ -555,9 +555,17 @@ export function townFromRows(
   const bookIds = new Set(books.map((book) => book.id));
   const readerId = (id: string) => (id === userId ? ME_ID : id);
 
+  // Each reader's rows, gathered once: looked for reader by reader, the
+  // whole list was gone through once a reader (AUD-006).
+  const nineRows = new Map<string, Tables<"profile_nine">[]>();
+  for (const row of rows.nine) {
+    if (!bookIds.has(row.book_id)) continue;
+    const list = nineRows.get(row.profile_id);
+    if (list) list.push(row);
+    else nineRows.set(row.profile_id, [row]);
+  }
   const nineOf = (profileId: string) => {
-    const entries = rows.nine
-      .filter((row) => row.profile_id === profileId && bookIds.has(row.book_id))
+    const entries = (nineRows.get(profileId) ?? [])
       .sort((a, b) => a.position - b.position)
       .slice(0, 9);
     return {

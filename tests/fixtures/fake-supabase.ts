@@ -16,7 +16,10 @@ import type { Database } from "../../src/lib/supabase/database.generated";
 // With `versions`, it counts versions of what is saved whole and writes
 // those through save_shelves, save_scene, save_nine and save_poster, only
 // over the version named (write_versions); without, it is a database from
-// before them, with no such columns.
+// before them, with no such columns. With `townView`, it answers town_view
+// and town_books as the database does (town_view), all from one moment, as
+// `userId`, or as a visitor with `visitor`; without, it is a database from
+// before them, and the town is read table by table.
 
 type Row = Record<string, unknown>;
 
@@ -147,9 +150,12 @@ function sameValue(a: unknown, b: unknown): boolean {
 export function fakeSupabase(
   userId: string,
   seed: Record<string, Row[]> = {},
-  options: { versions?: boolean } = {},
+  options: { versions?: boolean; townView?: boolean; visitor?: boolean } = {},
 ) {
   const versions = options.versions ?? false;
+  const townView = options.townView ?? false;
+  /** Who town_view answers as: the reader, or nobody signed in. */
+  const asked = options.visitor ? null : userId;
   const tables: Record<string, Row[]> = Object.fromEntries(
     Object.entries(seed).map(([table, rows]) => [
       table,
@@ -375,6 +381,21 @@ export function fakeSupabase(
       this.size = end - start + 1;
       return this;
     }
+    /** Every row matched, in order, up to the limit: inside one statement. */
+    now(): Row[] {
+      return this.sorted()
+        .slice(0, this.size)
+        .map((row) => ({ ...row }));
+    }
+    private sorted() {
+      return this.matching().sort((a, b) => {
+        for (const [column, up] of this.orders) {
+          const [x, y] = [String(a[column]), String(b[column])];
+          if (x !== y) return x < y === up ? -1 : 1;
+        }
+        return 0;
+      });
+    }
     then<A = Answer, B = never>(
       resolve?: ((value: Answer) => A | PromiseLike<A>) | null,
       reject?: ((reason: unknown) => B | PromiseLike<B>) | null,
@@ -418,13 +439,7 @@ export function fakeSupabase(
           message: "column does not exist",
         });
       if (this.op === "select") {
-        const rows = this.matching().sort((a, b) => {
-          for (const [column, up] of this.orders) {
-            const [x, y] = [String(a[column]), String(b[column])];
-            if (x !== y) return x < y === up ? -1 : 1;
-          }
-          return 0;
-        });
+        const rows = this.sorted();
         return {
           data: this.head
             ? null
@@ -506,6 +521,49 @@ export function fakeSupabase(
     }
   }
 
+  /** A book as the reader may read it: without who typed it in. */
+  const untyped = (row: Row): Row => {
+    const copy = { ...row };
+    delete copy.created_by;
+    return copy;
+  };
+  /** town_view's answer: the rows the town reads table by table, at once. */
+  const viewNow = (args: Row) => {
+    const ask = (name: string, ...keys: string[]) => {
+      const query = new Query(name, "select").select("*");
+      for (const key of keys) query.order(key);
+      return query;
+    };
+    const together = ask("reading_sessions", "id")
+      .eq("mode", "together")
+      .is("ended_at", null);
+    return {
+      profiles: ask("profiles", "created_at", "id").now(),
+      nine: ask("profile_nine", "profile_id", "position").now(),
+      shops: ask("shops", "created_at", "id").now(),
+      posts: ask("posts")
+        .order("created_at", { ascending: false })
+        .limit(Number(args.post_limit ?? 500))
+        .now(),
+      post_reactions:
+        asked === null
+          ? []
+          : ask("post_reactions", "user_id", "post_id", "kind").now(),
+      together: (asked === null
+        ? together
+        : together.neq("user_id", asked)
+      ).now(),
+      records: ask("reading_entries", "id").now(),
+      folds: ask("moderation_folds", "target_kind", "target_id").now(),
+      posters: ask("posters", "id").now(),
+      catalog: ask("books")
+        .order("created_at", { ascending: false })
+        .limit(Number(args.catalog_limit ?? 300))
+        .now()
+        .map(untyped),
+    };
+  };
+
   const rpc = (
     name: string,
     args: Row,
@@ -519,6 +577,19 @@ export function fakeSupabase(
       if (fake.offline) return lost();
       if (name === "shop_visitors")
         return { data: [], error: null, status: 200, count: null };
+      if (townView && name === "town_view")
+        return { data: viewNow(args), error: null, status: 200, count: null };
+      if (townView && name === "town_books") {
+        const ids = new Set(args.ids as string[]);
+        return {
+          data: table("books")
+            .filter((row) => ids.has(row.id as string))
+            .map(untyped),
+          error: null,
+          status: 200,
+          count: null,
+        };
+      }
       if (name === "copy_book") {
         const write: FakeWrite = { table: "books", op: "rpc", rows: [args] };
         const refusal = fake.refuse(write);
