@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import { bookById, bookByIsbn } from "../src/lib/book-name";
 import { booksBeforeSearch } from "../src/lib/book-lists";
 import { createRegisteredBook } from "../src/lib/books";
@@ -621,6 +623,33 @@ async function main() {
         ]).includes(STARS),
       );
       assert.match(missed.join("\n"), /本の登録/);
+    },
+  );
+
+  await check(
+    "a screen asks the reader's lists about a book it shows through holds",
+    () => {
+      // A book on screen may be one another reader typed in: the reader's
+      // lists name their copy of it (holds, mine), never the book itself.
+      const root = path.resolve(__dirname, "..");
+      const asked = readdirSync(path.join(root, "src/components"), {
+        recursive: true,
+        withFileTypes: true,
+      })
+        .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name))
+        .flatMap((entry) => {
+          const file = path.join(entry.parentPath, entry.name);
+          const text = readFileSync(file, "utf8");
+          return [
+            ...text.matchAll(
+              /\b(?:wishlist|favorites|library|finishedBooks|lifeNine)\.includes\(\s*book\.id\s*\)/g,
+            ),
+          ].map(
+            (match) =>
+              `${path.relative(root, file)}:${text.slice(0, match.index).split("\n").length}`,
+          );
+        });
+      assert.deepEqual(asked, []);
     },
   );
 
