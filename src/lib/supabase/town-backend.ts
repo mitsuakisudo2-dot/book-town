@@ -112,6 +112,25 @@ async function booksFor(
 }
 
 /**
+ * The books the person typed in, their copies of others' among them
+ * (my_books). Undefined from a database that has no my_books yet (the app
+ * can be out before its migration): the town then tells no book apart as
+ * another reader's (own-books.ts).
+ */
+async function myBooksOf(client: Client): Promise<RemoteRows["myBooks"]> {
+  try {
+    return await allRows<{ id: string; copied_from: string | null }>(
+      (count) => client.rpc("my_books", {}, { count }),
+      ["id"],
+    );
+  } catch (error) {
+    const asked = await client.rpc("my_books", {}, { head: true });
+    if (asked.error?.code === "PGRST202") return undefined;
+    throw error;
+  }
+}
+
+/**
  * Reads the rows of the town `userId` sees, or a visitor (null) sees: the
  * same reads for both, the database deciding what each may read
  * (supabase/migrations). What only the signed-in person has (their marks,
@@ -150,6 +169,7 @@ async function readTown(
     libraryEntries,
     libraryShelves,
     libraryShelfBooks,
+    myBooks,
   ] = await Promise.all([
     // In the order they joined.
     allRows<Tables<"profiles">>(
@@ -306,6 +326,8 @@ async function readTown(
         ["shelf_id", "book_id"],
       ),
     ),
+    // The books the person typed in, to tell others' apart.
+    userId === null ? undefined : myBooksOf(client),
   ]);
 
   const ownShop =
@@ -369,6 +391,7 @@ async function readTown(
     follows,
     blocks,
     marks,
+    myBooks,
     libraryEntries,
     libraryShelves,
     libraryShelfBooks,
@@ -693,6 +716,13 @@ export async function applyWrite(
           ...ignore,
         }),
       );
+      return;
+    case "copy-books":
+      // Each copy is made once: asked again, the database leaves it be.
+      for (const row of write.rows)
+        await settled(
+          client.rpc("copy_book", { original: row.copied_from, copy: row.id }),
+        );
       return;
     case "fix-books":
       for (const { id, ...fix } of write.rows) {

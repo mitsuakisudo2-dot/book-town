@@ -35,6 +35,7 @@ const MARKS: Record<string, string> = {
 export function townWriteLabels(write: Write): string[] {
   switch (write.kind) {
     case "books":
+    case "copy-books":
       return ["本の登録"];
     case "fix-books":
       return ["本の直し"];

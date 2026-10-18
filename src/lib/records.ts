@@ -9,6 +9,9 @@ import {
   type TownState,
 } from "./types";
 import { isAudience, shownToOthers } from "./visibility";
+import { bookById } from "./book-name";
+import { mine } from "./own-books";
+import { booksOfWork, workOf, type WorkId } from "./works";
 
 type RecordFields = Pick<
   ReadingRecord,
@@ -57,20 +60,27 @@ export function recordNoteView(
   return state.settings.spoilerDisplay === "leave_out" ? "left_out" : "folded";
 }
 
-/** The viewer's latest record of a book, if they kept one. */
+/**
+ * The viewer's latest record of a book, if they kept one: of their own book
+ * for it, when another reader typed it in (own-books.ts).
+ */
 export function ownRecordFor(
   state: TownState,
   bookId: string,
 ): ReadingRecord | undefined {
-  return recordsOf(state, ME_ID).find((record) => record.bookId === bookId);
+  const own = mine(state, bookId);
+  return recordsOf(state, ME_ID).find((record) => record.bookId === own);
 }
 
-const publicRecordsOf = (state: TownState, bookId: string) =>
-  state.readingRecords.filter(
+/** The records of the book's work the viewer may see. */
+function publicRecordsOf(state: TownState, bookId: string) {
+  const work = booksOfWork(state.books, bookId);
+  return state.readingRecords.filter(
     (record) =>
-      record.bookId === bookId &&
+      work.has(record.bookId) &&
       (shownToOthers(record.audience) || record.readerId === ME_ID),
   );
+}
 
 /**
  * The feelings readers chose most for a book. Shown as words, never as
@@ -120,10 +130,16 @@ const visibleRecords = (state: TownState) =>
     )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
-const uniqueBooks = (records: ReadingRecord[], state: TownState) =>
-  [...new Set(records.map((record) => record.bookId))].filter((bookId) =>
-    state.books.some((book) => book.id === bookId),
-  );
+/** The records' books, each work once: as the viewer's own book where they have one. */
+function uniqueBooks(records: ReadingRecord[], state: TownState): string[] {
+  const works = new Set<WorkId>();
+  return records.flatMap((record) => {
+    const book = bookById(state.books, mine(state, record.bookId));
+    if (!book || works.has(workOf(book))) return [];
+    works.add(workOf(book));
+    return [book.id];
+  });
+}
 
 /** Books finished lately in the town, newest first, each once. */
 export function recentlyFinished(state: TownState, limit = 6): string[] {

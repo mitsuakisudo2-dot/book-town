@@ -1,4 +1,5 @@
 import type { TownState } from "../types";
+import { booksOfWork } from "../works";
 
 export interface BookSignal {
   /** Public shelves the book stands on. */
@@ -10,23 +11,30 @@ export interface BookSignal {
   wants: number;
 }
 
-/** How present each book is in the town: on public shelves, in posts, and in 読みたくなった. */
+/**
+ * How present each book is in the town: on public shelves, in posts, and in
+ * 読みたくなった, of any book of its work (booksOfWork).
+ */
 export function bookSignals(state: TownState): Map<string, BookSignal> {
   const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
   return new Map(
     state.books.map((book) => {
+      const work = booksOfWork(state.books, book.id);
       const shelves = shops.reduce(
         (count, shop) =>
           count +
           shop.shelves.filter(
             (shelf) =>
               shelf.isPublic &&
-              shelf.items.some((item) => item.bookId === book.id),
+              shelf.items.some((item) => work.has(item.bookId)),
           ).length,
         0,
       );
       const posts = state.posts.filter(
-        (post) => post.bookId === book.id && post.readingMode !== "solo",
+        (post) =>
+          post.bookId !== null &&
+          work.has(post.bookId) &&
+          post.readingMode !== "solo",
       );
       const reviews = posts.filter((post) => post.parentId === null).length;
       const wants =

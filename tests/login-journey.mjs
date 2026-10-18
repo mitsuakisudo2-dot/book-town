@@ -544,6 +544,9 @@ const standIn = async (route) => {
   if (url.pathname.startsWith("/rest/v1/") && request.method() === "HEAD")
     return route.fulfill({ status: 200, headers: { "content-range": "*/0" } });
   if (url.pathname === "/rest/v1/rpc/shop_visitors") return json(200, []);
+  // The books the reader typed in (my_books): a town may name some.
+  if (url.pathname === "/rest/v1/rpc/my_books")
+    return rowsAsked(town?.my_books ?? []);
   if (url.pathname.startsWith("/rest/v1/") && request.method() !== "GET")
     townWrites.push(url.pathname);
   // The rest of the signed-in town: a new reader has nothing yet.

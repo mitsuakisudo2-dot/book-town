@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Book, Notify, TownActions, TownState } from "../lib/types";
 import { getTownSnapshot } from "../lib/store";
 import { bookTraces } from "../lib/library-town";
+import { holds } from "../lib/own-books";
 import { quotedTitle } from "../lib/book-name";
 import { REGISTER } from "../lib/words";
 import { Icon, Modal } from "./ui";
@@ -34,11 +35,13 @@ export function RegisterBook({
   className?: string;
 }) {
   const [asking, setAsking] = useState<"remove" | "again" | null>(null);
-  const registered = state.library.includes(book.id);
+  // Asked of another reader's book, the reader's own of it answers.
+  const registered = holds(state, state.library, book.id);
   const traces = bookTraces(state, book.id);
   const toggle = () => {
     actions.toggleLibrary(book.id);
-    const now = getTownSnapshot().library.includes(book.id);
+    const town = getTownSnapshot();
+    const now = holds(town, town.library, book.id);
     if (now === registered) return;
     notify(
       now

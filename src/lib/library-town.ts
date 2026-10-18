@@ -16,6 +16,7 @@ import {
   type OpBefore,
 } from "./library";
 import { posterBookIds } from "./posters";
+import { mine } from "./own-books";
 import { ME_ID, type TownState } from "./types";
 
 // The library (library.ts) in the town. The rows the reader changed are kept
@@ -42,7 +43,11 @@ export const LEGACY_AT = "2026-10-01T00:00:00.000Z";
 const at = (base: string, i: number) =>
   new Date(Date.parse(base) + i).toISOString();
 
-/** The reader's likes, 私も好き！ and 読みたくなった, as the encounters they will be. */
+/**
+ * The reader's likes, 私も好き！ and 読みたくなった, as the encounters they
+ * will be: each of the reader's own book for the one met (own-books.ts), as
+ * the database names it.
+ */
 export function townEncounters(state: TownState): Encounter[] {
   const base = {
     shopId: null,
@@ -61,7 +66,7 @@ export function townEncounters(state: TownState): Encounter[] {
         {
           ...base,
           id: `${kind}:post:${postId}`,
-          bookId: post.bookId,
+          bookId: mine(state, post.bookId),
           kind,
           via: "post",
           postId,
@@ -91,7 +96,7 @@ export function townEncounters(state: TownState): Encounter[] {
         return {
           ...base,
           id: `${kind}:pop:${key}`,
-          bookId: item.bookId,
+          bookId: mine(state, item.bookId),
           kind,
           via: "pop",
           shopId,
@@ -485,8 +490,10 @@ export function keepingUses(prev: TownState, next: TownState): TownState {
  */
 export function bookTraces(
   state: TownState,
-  bookId: string,
+  given: string,
 ): { written: boolean; finished: boolean; reading: boolean } {
+  // Of the reader's own book for it (own-books.ts).
+  const bookId = mine(state, given);
   const status = entriesOf(state)[bookId]?.status ?? null;
   const finished =
     status === "finished" || state.finishedBooks.includes(bookId);

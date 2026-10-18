@@ -181,6 +181,12 @@ export interface RemoteRows {
   /** Whom the person blocked (only the blocker reads their blocks). */
   blocks: Pick<Tables<"blocks">, "blocked_id">[];
   marks: Tables<"book_marks">[];
+  /**
+   * The books the person typed in, their copies of others' among them
+   * (copied_from), as my_books answers. None in a visitor's town, nor from a
+   * database without it: then no book is told apart as another reader's.
+   */
+  myBooks?: { id: string; copied_from: string | null }[];
   /** The person's own library rows; none in a visitor's town. */
   libraryEntries?: Tables<"library_entries">[];
   /** The shelves the person made in their library, and their books; none in a visitor's town. */
@@ -267,6 +273,22 @@ export function bookFromRow(row: BookRow, registered: boolean): Book {
         ...book,
         summary: "読書家が登録した本です。あらすじは登録されていません。",
       };
+}
+
+/**
+ * A book typed in, as the reader's own or as another reader's (own-books.ts),
+ * by the reader's own books (`mine`, from my_books): undefined tells none
+ * apart.
+ */
+function withTypist(
+  book: Book,
+  row: BookRow,
+  mine: Map<string, string | null> | undefined,
+): Book {
+  if (!mine || row.source !== "manual") return book;
+  if (!mine.has(row.id)) return { ...book, theirs: true };
+  const original = mine.get(row.id);
+  return original ? { ...book, copyOf: original } : book;
 }
 
 /**
@@ -520,9 +542,14 @@ export function townFromRows(
       .filter((row) => row.kind === "library" && row.user_id === userId)
       .map((row) => row.book_id),
   );
+  const mine =
+    rows.myBooks &&
+    new Map(rows.myBooks.map((row) => [row.id, row.copied_from]));
   // The 見本's books are known to everyone, whoever kept them first.
   const books = [
-    ...rows.books.map((row) => bookFromRow(row, registered.has(row.id))),
+    ...rows.books.map((row) =>
+      withTypist(bookFromRow(row, registered.has(row.id)), row, mine),
+    ),
     ...structuredClone(demoBooks),
   ];
   const bookIds = new Set(books.map((book) => book.id));
@@ -907,6 +934,13 @@ export function arrivedFromRows(
   const ids = new Set(posts.map((row) => row.id));
   const authors = new Set(posts.map((row) => row.author_id));
   const books = new Set(posts.flatMap((row) => row.book_id ?? []));
+  // A reader's rows name their own books: a book typed in that no post of
+  // the reader's names is the writer's (own-books.ts).
+  const typedByMe = new Set(
+    posts.flatMap((row) =>
+      row.author_id === userId && row.book_id ? [row.book_id] : [],
+    ),
+  );
   const own = (kind: "like" | "want") =>
     rows.postReactions.filter(
       (row) =>
@@ -928,7 +962,11 @@ export function arrivedFromRows(
       })),
     books: rows.books
       .filter((row) => books.has(row.id) && !sampleBookOfRow(row.id))
-      .map((row) => bookFromRow(row, false)),
+      .map((row) =>
+        userId !== null && row.source === "manual" && !typedByMe.has(row.id)
+          ? { ...bookFromRow(row, false), theirs: true as const }
+          : bookFromRow(row, false),
+      ),
     likedPosts: own("like").map((row) => row.post_id),
     likeTaps: Object.fromEntries(
       own("like")
@@ -1000,6 +1038,9 @@ export type Write =
       kind: "books";
       rows: Omit<TablesInsert<"books">, "work_id" | "edition_id">[];
     }
+  // The reader's copies of books others typed in (own-books.ts), made by
+  // the database (copy_book) under the ids the town gave them.
+  | { kind: "copy-books"; rows: { id: string; copied_from: string }[] }
   // What a reader fixed of books they typed in. The database moves a book
   // whose ISBN changed to that ISBN's edition and work.
   | {
@@ -1235,10 +1276,14 @@ export function planWrites(
 
   const known = new Set(base.books.map((book) => book.id));
   const added = next.books.filter((book) => !known.has(book.id));
-  if (added.length)
+  const copies = added.flatMap((book) =>
+    book.copyOf ? [{ id: book.id, copied_from: book.copyOf }] : [],
+  );
+  const typed = added.filter((book) => !book.copyOf);
+  if (typed.length)
     writes.push({
       kind: "books",
-      rows: added.map((book) => ({
+      rows: typed.map((book) => ({
         id: book.id,
         title: book.title,
         author: book.author,
@@ -1248,6 +1293,8 @@ export function planWrites(
         created_by: user,
       })),
     });
+  // Before any row naming them.
+  if (copies.length) writes.push({ kind: "copy-books", rows: copies });
   // A book fixed: its title, author or ISBN (a book held back, answered).
   const booksBefore = new Map(base.books.map((book) => [book.id, book]));
   const fixed = next.books.filter((book) => {
@@ -1636,20 +1683,17 @@ export function planWrites(
     });
   if (pressed.length) writes.push({ kind: "like-taps", rows: pressed });
 
-  return withSampleRows(writes, user);
+  return withSampleRows(writes);
 }
 /**
- * The 見本 in what is written. Their books are written under their database
- * ids, each catalog row first; nobody stands behind their shops and posts, so
- * nothing addressed to those is written at all.
+ * The 見本 in what is written. Their books are named by their database ids,
+ * rows the database keeps for everyone and nobody's (AUD-078), so none is
+ * ever written; nobody stands behind their shops and posts, so nothing
+ * addressed to those is written at all.
  */
-function withSampleRows(writes: Write[], user: string): Write[] {
-  const kept = new Set<string>();
-  const keep = (bookId: string) => {
-    if (!isSampleBook(bookId)) return bookId;
-    kept.add(bookId);
-    return sampleBookRowId(bookId);
-  };
+function withSampleRows(writes: Write[]): Write[] {
+  const keep = (bookId: string) =>
+    isSampleBook(bookId) ? sampleBookRowId(bookId) : bookId;
   const named = <T extends { book_id?: string | null }>(row: T): T =>
     row.book_id ? { ...row, book_id: keep(row.book_id) } : row;
   const real = (row: Pair) =>
@@ -1714,52 +1758,32 @@ function withSampleRows(writes: Write[], user: string): Write[] {
             })),
             remove: write.remove.map((row) => ({
               ...row,
-              book_id: isSampleBook(row.book_id)
-                ? sampleBookRowId(row.book_id)
-                : row.book_id,
+              book_id: keep(row.book_id),
             })),
           },
         ];
       case "add":
       case "remove": {
-        const rows = write.rows.filter(real).map((row) =>
-          row.book_id === undefined
-            ? row
-            : {
-                ...row,
-                book_id:
-                  write.kind === "add"
-                    ? keep(row.book_id)
-                    : isSampleBook(row.book_id)
-                      ? sampleBookRowId(row.book_id)
-                      : row.book_id,
-              },
-        );
+        const rows = write.rows
+          .filter(real)
+          .map((row) =>
+            row.book_id === undefined
+              ? row
+              : { ...row, book_id: keep(row.book_id) },
+          );
         return rows.length ? [{ ...write, rows }] : [];
       }
       default:
         return [write];
     }
   });
-  if (!kept.size) return mapped;
-  const catalog: Write = {
-    kind: "books",
-    rows: demoBooks
-      .filter((book) => kept.has(book.id))
-      .map((book) => ({
-        id: sampleBookRowId(book.id),
-        title: book.title,
-        author: book.author,
-        source: "manual",
-        created_by: user,
-      })),
-  };
-  return [catalog, ...mapped];
+  return mapped;
 }
 
 /** Every kind of write, to tell one kept on the device (outbox.ts). */
 const WRITE_KINDS: Record<Write["kind"], true> = {
   books: true,
+  "copy-books": true,
   "fix-books": true,
   profile: true,
   nine: true,
@@ -1804,6 +1828,7 @@ export const isWrite = (value: unknown): value is Write =>
 export function splitWrite(write: Write): Write[] {
   switch (write.kind) {
     case "books":
+    case "copy-books":
     case "fix-books":
     case "posts":
     case "like-taps":

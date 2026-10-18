@@ -2,6 +2,7 @@ import { bookKind } from "./samples";
 import { isPublished, posterBookIds } from "./posters";
 import { ME_ID, type Book, type TownState } from "./types";
 import { shownToOthers } from "./visibility";
+import { withoutTwins } from "./own-books";
 
 // A list of the town's books shown before anything is typed (棚の隅の本, a
 // picker's first books, the 見本's shelves in the walk), or found by a genre
@@ -65,11 +66,13 @@ function publicBookIds(state: TownState): (string | null)[] {
 /**
  * The town's books a list may show before anything is typed, in the town's
  * order. A book not from the database is the 見本's, or was typed in this
- * browser (the demo has no other readers), so it always stays.
+ * browser (the demo has no other readers), so it always stays. A book
+ * another reader typed in is left out where the reader has their own of it
+ * (withoutTwins).
  */
 export function booksBeforeSearch(state: TownState): Book[] {
   const used = new Set([...ownBookIds(state), ...publicBookIds(state)]);
-  return state.books.filter(
+  return withoutTwins(state.books).filter(
     (book) => bookKind(book.id) !== "database" || used.has(book.id),
   );
 }

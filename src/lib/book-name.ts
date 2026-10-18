@@ -225,13 +225,17 @@ export const booksById = <T extends Pick<Book, "id">>(
     .map((id) => bookById(books, id))
     .filter((book): book is T => Boolean(book));
 
-/** A book with this ISBN, if the town has one. */
-export function bookByIsbn<T extends Pick<Book, "isbn">>(
+/**
+ * A book with this ISBN, if the town has one the reader may take as it is:
+ * one another reader typed in is theirs (own-books.ts), its words theirs too,
+ * so it is never taken, nor what it says filled in.
+ */
+export function bookByIsbn<T extends Pick<Book, "isbn" | "theirs">>(
   books: readonly T[],
   isbn: string | null | undefined,
 ): T | undefined {
   if (!isbn) return undefined;
-  return books.find((book) => book.isbn === isbn);
+  return books.find((book) => book.isbn === isbn && !book.theirs);
 }
 
 /** The title of the book with this ID, if the town has it. */
