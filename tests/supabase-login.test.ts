@@ -250,8 +250,10 @@ async function main() {
       assert.equal(data.session?.user.id, aki.id);
       // The profile stays the reader's.
       assert.equal((await backend.loadProfile(aki.id))?.handle, handle);
-      // The old address is no longer let in; the new one is.
+      // The old address is no longer let in; the new one is, once a second
+      // has passed since this reader's last code (max_frequency).
       assert.equal(await backend.sendCode(aki.email), "not-invited");
+      await new Promise((resolve) => setTimeout(resolve, 1100));
       assert.equal(await browserBackend().sendCode(next), null);
       aki.email = next;
     },
