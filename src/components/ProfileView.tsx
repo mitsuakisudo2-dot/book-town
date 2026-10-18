@@ -93,12 +93,14 @@ import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
-import { BRIGHTNESSES, PALETTES } from "../lib/appearance";
+import { BRIGHTNESSES, PALETTES, TEXT_SIZES } from "../lib/appearance";
 import {
   setBrightness,
   setPalette,
+  setTextSize,
   useBrightness,
   usePalette,
+  useTextSize,
 } from "../lib/appearance-store";
 import { useUrlParam } from "../lib/url-state";
 import { afterLayerCloses, leaveLayers } from "../lib/back-layer";
@@ -143,6 +145,7 @@ export function ProfileView({
   const peekOpen = useReadingPeekOpen();
   const palette = usePalette();
   const brightness = useBrightness();
+  const textSize = useTextSize();
   const [sheet, setSheet] = useState<
     "following" | "followers" | "settings" | "scan" | "titles" | null
   >(null);
@@ -1017,6 +1020,24 @@ export function ProfileView({
             <p className="palette-note">
               端末に合わせると、端末を暗い表示にしている間は夜の色になります。
             </p>
+          </fieldset>
+          <fieldset className="record-visibility palette-choices">
+            <legend>字の大きさ</legend>
+            {TEXT_SIZES.map((choice) => (
+              <label key={choice.id}>
+                <input
+                  type="radio"
+                  name="text-size"
+                  value={choice.id}
+                  checked={textSize === choice.id}
+                  onChange={() => {
+                    setTextSize(choice.id);
+                    notify(`字の大きさを${choice.name}にしました`);
+                  }}
+                />
+                {choice.name}
+              </label>
+            ))}
           </fieldset>
           <VisibilitySettings state={state} actions={actions} notify={notify} />
           <fieldset className="record-visibility spoiler-display">

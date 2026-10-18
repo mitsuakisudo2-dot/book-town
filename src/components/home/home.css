@@ -263,6 +263,16 @@ html[data-home-tab="letters"]
     width: 76px;
   }
 }
+/* With 字の大きさ larger, the words take more lines: the slides are taller
+   still, so they stay off the top edge. */
+:root[data-text] .home-slide {
+  aspect-ratio: 4 / 3;
+}
+@media (max-width: 360px) {
+  :root[data-text] .home-slide {
+    aspect-ratio: 1 / 1;
+  }
+}
 .home-slide .home-tag {
   color: var(--on-dark);
   border-color: color-mix(in srgb, var(--on-dark) 60%, transparent);

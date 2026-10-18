@@ -64,11 +64,11 @@
     row-gap: 0;
   }
   .town-shell .town-bottom-nav a {
-    font-size: var(--t-cap);
+    font-size: var(--frame-tab);
     color: var(--ink-2);
   }
   .town-shell .town-bottom-nav span {
-    font-size: var(--t-cap);
+    font-size: var(--frame-tab);
   }
 }
 
@@ -186,6 +186,21 @@
     align-self: center;
   }
 }
+/* With 字の大きさ larger on a phone, the title, the author and the shop
+   links no longer fit beside the cover: they go under it, full width. */
+@media (max-width: 480px) {
+  :root[data-text] .town-shell .book-page-hero {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "jacket"
+      "head"
+      "body";
+    row-gap: 16px;
+  }
+  :root[data-text] .town-shell .book-page-hero > .book-jacket {
+    width: clamp(104px, 40vw, 150px);
+  }
+}
 /* The two text buttons keep their own 12px either side, which reaches into
    the card's padding: their words line up with the shop's name above. On a
    narrow phone the second goes under the first, at the right, rather than
@@ -213,14 +228,14 @@
     min-width: 0;
   }
   .town-shell .town-bottom-nav span {
-    font-size: var(--t-cap);
+    font-size: var(--frame-tab);
     letter-spacing: -0.03em;
     white-space: nowrap;
   }
 }
 @media (max-width: 340px) {
   .town-shell .town-bottom-nav span {
-    font-size: var(--t-cap);
+    font-size: var(--frame-tab);
     letter-spacing: -0.05em;
   }
 }
