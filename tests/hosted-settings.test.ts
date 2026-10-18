@@ -144,13 +144,51 @@ async function main() {
   );
 
   await check(
-    "without a Resend key only the site and code settings change",
+    "without a Resend key only the site, code and limit settings change",
     () => {
       assert.deepEqual(desiredAuth(settings, { template, resendKey: "" }), {
         site_url: "https://booktown.page",
         mailer_otp_length: 6,
         mailer_otp_exp: 600,
+        rate_limit_otp: 30,
+        rate_limit_verify: 30,
+        rate_limit_token_refresh: 150,
       });
+    },
+  );
+
+  await check(
+    "the sign-in limits stay at or below Supabase's own defaults",
+    () => {
+      // Supabase starts a project at 30, 30 and 150 per five minutes. Raising
+      // them lets a script try more login codes, so it is a decision, not a
+      // tidy-up.
+      assert.ok(settings.limits.codeRequestsPer5Minutes <= 30);
+      assert.ok(settings.limits.codeChecksPer5Minutes <= 30);
+      assert.ok(settings.limits.sessionRefreshesPer5Minutes <= 150);
+      // A login code is six digits and lasts ten minutes, so one address can
+      // try only a tiny share of them before it runs out.
+      const tries = settings.limits.codeChecksPer5Minutes * 2 + 30;
+      assert.ok(tries / 10 ** settings.code.length < 0.001);
+      // The local Supabase counts the same way and starts at the same limits.
+      assert.equal(
+        settings.limits.codeRequestsPer5Minutes,
+        local("auth.rate_limit", "sign_in_sign_ups"),
+      );
+      assert.equal(
+        settings.limits.codeChecksPer5Minutes,
+        local("auth.rate_limit", "token_verifications"),
+      );
+      assert.equal(
+        settings.limits.sessionRefreshesPer5Minutes,
+        local("auth.rate_limit", "token_refresh"),
+      );
+      for (const key of [
+        "rate_limit_otp",
+        "rate_limit_verify",
+        "rate_limit_token_refresh",
+      ])
+        assert.equal(shown(key, 30), "30");
     },
   );
 
