@@ -150,11 +150,11 @@ check("notices about a post lead to its page while it is in the town", () => {
   const href = (id: string) =>
     notificationsFor(state).find((notice) => notice.id === id)?.href;
   assert.equal(href("reply:m-1-r1"), "/post/?id=m-1");
-  assert.equal(href("likes:m-1:1"), "/post/?id=m-1");
-  assert.equal(href("likes:m-2:1"), "/post/?id=p-1");
+  assert.equal(href("likes:m-1@2026-10-12T01:00:00Z"), "/post/?id=m-1");
+  assert.equal(href("likes:m-2@2026-10-12T01:00:00Z"), "/post/?id=p-1");
   assert.equal(href("folded:m-2"), "/post/?id=p-1");
   assert.equal(href("folded:m-3"), "/profiles/me/");
-  assert.equal(href("likes:m-3:1"), "/profiles/me/");
+  assert.equal(href("likes:m-3@2026-10-12T01:00:00Z"), "/profiles/me/");
   // 軌道書房's owner (凪) wrote p-1.
   assert.equal(href("follow:p-1"), "/post/?id=p-1");
   // Nor to a page that would not open: its post left out by 出さない, or
@@ -168,7 +168,7 @@ check("notices about a post lead to its page while it is in the town", () => {
   };
   assert.equal(
     notificationsFor(hiddenPost).find(
-      (notice) => notice.id === "likes:m-2:1",
+      (notice) => notice.id === "likes:m-2@2026-10-12T01:00:00Z",
     )?.href,
     "/profiles/me/",
   );
@@ -180,7 +180,7 @@ check("notices about a post lead to its page while it is in the town", () => {
   };
   assert.equal(
     notificationsFor(unknown).find(
-      (notice) => notice.id === "likes:m-4:1",
+      (notice) => notice.id === "likes:m-4@2026-10-12T01:00:00Z",
     )?.href,
     "/profiles/me/",
   );

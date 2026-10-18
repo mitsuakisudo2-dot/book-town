@@ -53,6 +53,7 @@ import {
 } from "../src/lib/reading";
 import {
   notificationsFor,
+  seenNotice,
   unreadCount,
   weekOf,
 } from "../src/lib/notifications";
@@ -1900,16 +1901,24 @@ check("the writer learns who liked their post and how many times", () => {
       `${nagi.name}さんとほか1人があなたの投稿にいいねしました 「再読して、また泣いた。」`,
     ],
   );
-  assert.equal(notices[0].id, `likes:${own}:2`);
+  assert.equal(notices[0].id, `likes:${own}@2026-10-13T02:00:00Z`);
   assert.equal(notices[0].readerId, nagi.id);
   assert.equal(notices[0].createdAt, "2026-10-13T02:00:00Z");
   assert.ok(!notices[0].text.includes(haru.name));
-  const likes = (likers: Liker[], anonymousLikers?: number) =>
+  const anonAt = "2026-10-13T03:00:00Z";
+  const likes = (likers: Liker[], anonymous?: number) =>
     notificationsFor({
       ...withLikers,
       posts: withLikers.posts.map((entry) =>
         entry.id === own
-          ? { ...entry, likes: likers.length, likers, anonymousLikers }
+          ? {
+              ...entry,
+              likes: likers.length,
+              likers,
+              anonymousLikes: anonymous
+                ? { people: anonymous, at: anonAt }
+                : undefined,
+            }
           : entry,
       ),
     }).filter((notice) => notice.id.startsWith("likes:"));
@@ -1937,9 +1946,43 @@ check("the writer learns who liked their post and how many times", () => {
       `${nagi.name}さん、ほか1人、匿名の読書家1人があなたの投稿にいいねしました`,
     ],
   );
-  // A new reader makes the notice new; another tap by the same one does not.
-  assert.equal(likes([haruOnce], 1)[0].id, `likes:${own}:2`);
-  assert.equal(likes([{ ...haruOnce, taps: 9 }], 1)[0].id, `likes:${own}:2`);
+  // Known by its newest like: another tap by the same reader is the same
+  // notice; anonymous ones count by when the newest of them liked.
+  assert.equal(likes([haruOnce])[0].id, `likes:${own}@${haruOnce.at}`);
+  assert.equal(
+    likes([{ ...haruOnce, taps: 9 }])[0].id,
+    likes([haruOnce])[0].id,
+  );
+  assert.equal(likes([haruOnce], 1)[0].id, `likes:${own}@${anonAt}`);
+  assert.equal(likes([haruOnce], 1)[0].createdAt, anonAt);
+  // Read with two, then one takes theirs back: what is left is not news,
+  // nor does it tell that someone took theirs back.
+  const nagiNow = { readerId: nagi.id, taps: 1, at: "2026-10-13T02:00:00Z" };
+  const seen = likes([haruOnce, nagiNow]).map((notice) => notice.id);
+  const left = (likers: Liker[]) =>
+    likes(likers).filter((notice) => !seenNotice(seen, notice.id));
+  assert.deepEqual(left([haruOnce]), []);
+  assert.deepEqual(left([nagiNow]), []);
+  // The same number, but a new reader: new, and they lead.
+  const tou = state.readers[2];
+  const touLater = { readerId: tou.id, taps: 1, at: "2026-10-13T04:00:00Z" };
+  assert.deepEqual(
+    left([haruOnce, touLater]).map((notice) => notice.readerId),
+    [tou.id],
+  );
+  assert.ok(left([haruOnce, touLater])[0].text.startsWith(`${tou.name}さんと`));
+  // And the bell counts it the same way.
+  const everything = notificationsFor(withLikers).map((notice) => notice.id);
+  assert.equal(
+    unreadCount({
+      ...withLikers,
+      seenNotifications: everything,
+      posts: withLikers.posts.map((entry) =>
+        entry.id === own ? { ...entry, likers: [haruOnce] } : entry,
+      ),
+    }),
+    0,
+  );
   assert.deepEqual(likes([]), []);
   // A liker not in the town (left, or out of sight) is not counted.
   assert.deepEqual(
