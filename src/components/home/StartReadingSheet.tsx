@@ -16,6 +16,7 @@ import { leaveLayers } from "../../lib/back-layer";
 import { BookPicker } from "../BookPicker";
 import { BookJacket, Icon, Modal } from "../ui";
 import type { Shared } from "./Letters";
+import { readingPath } from "../../lib/paths";
 
 /** How many of the 読みたい本 the sheet offers before 「ぜんぶ見る」. */
 const WISHES = 6;
@@ -51,7 +52,7 @@ export function StartReadingSheet({
         ? "一人で読み始めました。メモはあなただけに見えます"
         : "みんなで読み始めました。同じ時間に読んでいる人に見えます",
     );
-    leaveLayers(() => router.push("/reading/"));
+    leaveLayers(() => router.push(readingPath()));
   }
   return (
     <Modal title="読書をはじめる" onClose={onClose}>

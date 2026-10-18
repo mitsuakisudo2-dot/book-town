@@ -1,4 +1,5 @@
 "use client";
+import { shortDate } from "../lib/japan-time";
 import Link from "next/link";
 import { useId, useState } from "react";
 import { profilePath } from "../lib/paths";
@@ -489,7 +490,7 @@ export function RecordShelf({
                   ))}
                 <p className="record-card-meta">
                   <time dateTime={record.createdAt}>
-                    {new Date(record.createdAt).toLocaleDateString("ja-JP")}
+                    {shortDate(record.createdAt)}
                   </time>
                   {mine && !shownToOthers(record.audience) && (
                     <span>

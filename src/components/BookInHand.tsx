@@ -19,7 +19,7 @@ import { bookPath } from "../lib/books";
 import "./book-in-hand.css";
 import type { ReadEntry } from "../lib/store-scene-adapter";
 import { StoreStamp } from "./StoreCanvas";
-import { profilePath, shopPath } from "../lib/paths";
+import { profilePath, shopPath, walkPath } from "../lib/paths";
 import { useBackLayer } from "../lib/back-layer";
 import { focusBack } from "../lib/coarse-pointer";
 import { lockPageScroll } from "../lib/scroll-lock";
@@ -677,7 +677,7 @@ export function BookInHand({
                 href={
                   activePop.legacy
                     ? shopPath(activePop.shopId, activePop.legacy.shelfId)
-                    : `/walk/#${encodeURIComponent(activePop.shopId)}`
+                    : walkPath(activePop.shopId)
                 }
                 className="bh-shop-link"
                 onNavigate={leaveForPage}

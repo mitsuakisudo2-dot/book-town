@@ -21,6 +21,7 @@ import {
   sentCodeStore,
   type ProfileWork,
 } from "../lib/account-draft";
+import { EMAIL_MAX_LENGTH } from "../lib/types";
 import { useUrlParam } from "../lib/url-state";
 import { useKeptDraft } from "../lib/kept-draft";
 import { adoptVisitorRecords } from "../lib/record-draft";
@@ -187,7 +188,7 @@ function SignIn() {
             autoCapitalize="none"
             spellCheck={false}
             required
-            maxLength={254}
+            maxLength={EMAIL_MAX_LENGTH}
             value={email}
             onChange={(event) => setTyped(event.target.value)}
             aria-describedby={error ? "account-error" : undefined}
@@ -586,7 +587,7 @@ function ChangeEmail({
             autoCapitalize="none"
             spellCheck={false}
             required
-            maxLength={254}
+            maxLength={EMAIL_MAX_LENGTH}
             value={email}
             onChange={(event) => setTyped(event.target.value)}
             aria-describedby={describe("email")}

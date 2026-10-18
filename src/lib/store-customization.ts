@@ -22,6 +22,12 @@ import {
 } from "./store-scene";
 import { woodScene } from "./store-scene-adapter";
 import { bookById } from "./book-name";
+import {
+  SCENE_BOARD_TITLE_MAX_LENGTH,
+  SCENE_POP_MAX_LENGTH,
+  SCENE_ROW_TEXT_MAX_LENGTH,
+  SCENE_TEXT_MAX_LENGTH,
+} from "./types";
 
 export const STORE_TEMPLATES = [
   {
@@ -396,7 +402,10 @@ export function renameSceneObject(
     o = objectById(next, id);
   if (!o || !["row", "label", "sign", "ownerPop"].includes(o.kind))
     throw new Error("Unknown label");
-  o.text = text.slice(0, o.kind === "row" ? 80 : 500);
+  o.text = text.slice(
+    0,
+    o.kind === "row" ? SCENE_ROW_TEXT_MAX_LENGTH : SCENE_TEXT_MAX_LENGTH,
+  );
   return next;
 }
 /** Chalkboard heading and drawing for one shelf row; empty title removes it. */
@@ -409,7 +418,7 @@ export function setRowBoard(
     row = objectById(next, rowId);
   if (row?.kind !== "row") throw new Error("Unknown row");
   if (patch.boardTitle !== undefined) {
-    const title = patch.boardTitle.slice(0, 12);
+    const title = patch.boardTitle.slice(0, SCENE_BOARD_TITLE_MAX_LENGTH);
     if (title.trim()) row.boardTitle = title;
     else delete row.boardTitle;
   }
@@ -447,7 +456,7 @@ export function changePlacement(
     if (p.parentId) next = relayoutRow(next, p.parentId);
   }
   if (patch.pop !== undefined)
-    next = setBookPop(next, id, patch.pop.slice(0, 10000));
+    next = setBookPop(next, id, patch.pop.slice(0, SCENE_POP_MAX_LENGTH));
   if (patch.stamp !== undefined) {
     if (!["", "plane", "coffee", "leaf"].includes(patch.stamp))
       throw new Error("Unknown stamp");

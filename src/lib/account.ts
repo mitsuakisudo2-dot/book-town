@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { handleProblem, normalizeHandle } from "./handles";
 import type { ProfileInsert, ProfileRow } from "./supabase/database.types";
+import { EMAIL_MAX_LENGTH } from "./types";
 import { counted, failure, AGAIN, KEPT, NOT_CONNECTED } from "./words";
 
 /** Sign-in sends a six-digit code by email; the reader types it back in. */
@@ -143,7 +144,7 @@ export interface AccountBackend {
 export const normalizeEmail = (raw: string): string => raw.trim().toLowerCase();
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const validEmail = (email: string): boolean =>
-  email.length <= 254 && EMAIL_PATTERN.test(email);
+  email.length <= EMAIL_MAX_LENGTH && EMAIL_PATTERN.test(email);
 
 /**
  * A sign-in link from the email that did not work comes back with the reason

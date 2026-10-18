@@ -3,6 +3,7 @@ import Link from "next/link";
 import { closeAccountRequest, useAccountRequest } from "../lib/visitor";
 import { Icon, Modal } from "./ui";
 import "./visitor.css";
+import { loginPath, walkPath } from "../lib/paths";
 
 const INVITE_NOTE = "Book Town は今、招待した方から少しずつ始めています。";
 
@@ -18,7 +19,11 @@ export function AccountInvite() {
       </p>
       <div className="note-box">{INVITE_NOTE}</div>
       <div className="visitor-invite-actions">
-        <Link className="btn fill" href="/login/" onClick={closeAccountRequest}>
+        <Link
+          className="btn fill"
+          href={loginPath()}
+          onClick={closeAccountRequest}
+        >
           ログインする
           <Icon name="arrow" size={16} />
         </Link>
@@ -66,14 +71,14 @@ export function VisitorPage({ page }: { page: keyof typeof PAGES }) {
       <Icon name={copy.icon} size={34} />
       <h1>{copy.title}</h1>
       <p>{copy.text}</p>
-      <Link className="btn fill" href="/login/">
+      <Link className="btn fill" href={loginPath()}>
         ログインする
         <Icon name="arrow" size={16} />
       </Link>
       <p className="visitor-page-note">
         {INVITE_NOTE}
         <br />
-        <Link href="/walk/">ログインせずに、書店めぐりへ</Link>
+        <Link href={walkPath()}>ログインせずに、書店めぐりへ</Link>
       </p>
     </div>
   );

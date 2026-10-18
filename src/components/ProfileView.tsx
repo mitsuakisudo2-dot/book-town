@@ -82,10 +82,13 @@ const SPOILER_CHOICES: {
 import "./profile.css";
 import "./reading.css";
 import {
+  leavePath,
   loginPath,
+  myShopPath,
   posterNewPath,
   posterPath,
   profilePath,
+  readingPath,
   shopPath,
 } from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
@@ -523,7 +526,7 @@ export function ProfileView({
                 </button>
               )}
               {isSelf && Boolean(readingTime) && (
-                <Link href="/reading/">
+                <Link href={readingPath()}>
                   <b>{formatDuration(readingTime ?? 0)}</b> 読書時間
                 </Link>
               )}
@@ -533,7 +536,7 @@ export function ProfileView({
             {isSelf ? (
               <>
                 {/* One main step (the shop); the rest stay small beside it. */}
-                <Link className="btn fill" href="/my-shop/">
+                <Link className="btn fill" href={myShopPath()}>
                   <Icon name="store" /> {shop ? "書店を整える" : "書店をひらく"}
                 </Link>
                 <button
@@ -887,7 +890,7 @@ export function ProfileView({
               </div>
             )}
             {isSelf && (
-              <Link className="btn" href="/my-shop">
+              <Link className="btn" href={myShopPath()}>
                 <Icon name="edit" /> 書店と本棚を編集する
               </Link>
             )}
@@ -901,7 +904,7 @@ export function ProfileView({
                 : "この読書家の書店は、準備中です。"}
             </p>
             {isSelf && (
-              <Link className="btn fill" href="/my-shop">
+              <Link className="btn fill" href={myShopPath()}>
                 3分で本屋を開く <Icon name="arrow" />
               </Link>
             )}
@@ -1126,7 +1129,7 @@ export function ProfileView({
               <button
                 type="button"
                 className="btn quiet"
-                onClick={() => leaveLayers(() => router.push("/leave/"))}
+                onClick={() => leaveLayers(() => router.push(leavePath()))}
               >
                 退会する
               </button>
