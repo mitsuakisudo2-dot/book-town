@@ -874,3 +874,7 @@
   display: inline;
   margin: 0;
 }
+/* 自分の書店へ, under the book's own buttons on its page (管理表 103). */
+.bh-to-shop {
+  margin-top: 12px;
+}

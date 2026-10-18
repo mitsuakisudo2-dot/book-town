@@ -524,11 +524,18 @@ export function Modal({
   children,
   wide = false,
   writing = false,
+  fromBottom = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  /**
+   * A sheet from the bottom: on a phone it rises from the bottom edge with
+   * the page above still in sight (a book chosen on a shelf); on a wider
+   * screen it is the card any dialog is.
+   */
+  fromBottom?: boolean;
   /**
    * A sheet for writing (useWritingSheet). It opens with its text box
    * focused (on a phone the keyboard rises with it). Taps inside keep the
@@ -638,14 +645,21 @@ export function Modal({
   }, []);
   const sheet = (
     <div
-      className={"modal-backdrop" + (fitted ? " is-writing" : "")}
+      className={
+        "modal-backdrop" +
+        (fitted ? " is-writing" : "") +
+        (fromBottom ? " is-sheet" : "")
+      }
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className={
-          "modal " + (wide ? "wide" : "") + (fitted ? " is-writing" : "")
+          "modal " +
+          (wide ? "wide" : "") +
+          (fitted ? " is-writing" : "") +
+          (fromBottom ? " is-sheet" : "")
         }
         ref={ref}
         role="dialog"
