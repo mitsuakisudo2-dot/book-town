@@ -34,7 +34,15 @@ import {
 } from "../lib/scene-draft";
 import { useWalkStore, walkStore } from "../lib/walk-store";
 import { getTownSnapshot, townActions } from "../lib/store";
-import type { Book, TownState } from "../lib/types";
+import {
+  SCENE_BOARD_TITLE_MAX_LENGTH,
+  SCENE_POP_MAX_LENGTH,
+  SCENE_ROW_TEXT_MAX_LENGTH,
+  SCENE_TEXT_MAX_LENGTH,
+  SHOP_NAME_MAX_LENGTH,
+  type Book,
+  type TownState,
+} from "../lib/types";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { booksBeforeSearch } from "../lib/book-lists";
 import { focusField } from "../lib/coarse-pointer";
@@ -327,7 +335,7 @@ export function StoreSceneEditor({
                 <input
                   ref={signInput}
                   value={objectById(draft, "sign")?.text ?? ""}
-                  maxLength={80}
+                  maxLength={SHOP_NAME_MAX_LENGTH}
                   onChange={(e) =>
                     edit((s) => renameSceneObject(s, "sign", e.target.value))
                   }
@@ -337,7 +345,7 @@ export function StoreSceneEditor({
                 店主からのひとこと
                 <textarea
                   value={objectById(draft, "greeting")?.text ?? ""}
-                  maxLength={500}
+                  maxLength={SCENE_TEXT_MAX_LENGTH}
                   rows={2}
                   onChange={(e) =>
                     edit((s) =>
@@ -387,7 +395,7 @@ export function StoreSceneEditor({
                 棚の案内札
                 <input
                   value={row.text ?? ""}
-                  maxLength={80}
+                  maxLength={SCENE_ROW_TEXT_MAX_LENGTH}
                   onChange={(e) =>
                     edit((s) => renameSceneObject(s, row.id, e.target.value))
                   }
@@ -397,7 +405,7 @@ export function StoreSceneEditor({
                 黒板の見出し
                 <input
                   value={row.boardTitle ?? ""}
-                  maxLength={12}
+                  maxLength={SCENE_BOARD_TITLE_MAX_LENGTH}
                   placeholder="旅の本"
                   onChange={(e) =>
                     edit((s) =>
@@ -605,7 +613,7 @@ export function StoreSceneEditor({
                   この本のPOP
                   <textarea
                     value={pop?.text ?? ""}
-                    maxLength={10000}
+                    maxLength={SCENE_POP_MAX_LENGTH}
                     rows={4}
                     placeholder="この一冊を、誰かに手渡すなら。"
                     aria-describedby="scene-pop-hint"

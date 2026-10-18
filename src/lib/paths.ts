@@ -18,9 +18,9 @@ export const profilePath = (id: string): string =>
     ? "/profile/?id=" + encodeURIComponent(id)
     : "/profiles/" + encodeURIComponent(id) + "/";
 
-/** The walk through the shops, starting inside one of them. */
-export const walkPath = (id: string): string =>
-  "/walk/#" + encodeURIComponent(id);
+/** The walk through the shops; with an id it starts inside that shop ("mine" is the reader's own). */
+export const walkPath = (id?: string): string =>
+  id ? "/walk/#" + encodeURIComponent(id) : "/walk/";
 
 /** The search page for a query: books, readers and shops, or posts for a #tag. */
 export const searchPath = (query: string): string =>
@@ -53,7 +53,22 @@ export const libraryPath = (options: { makeShelf?: boolean } = {}): string =>
  * The reader's own shop, or the door to open one; `place` opens it with that
  * book chosen, ready to put on a shelf (管理表 103).
  */
-export const myShopPath = (options: { place?: string } = {}): string =>
-  options.place
+export const myShopPath = (
+  options: { place?: string; at?: string } = {},
+): string =>
+  (options.place
     ? "/my-shop/?place=" + encodeURIComponent(options.place)
-    : "/my-shop/";
+    : "/my-shop/") + (options.at ? "#" + options.at : "");
+
+/** The notifications page (お知らせ); `at` jumps to a part of it. */
+export const notificationsPath = (at?: string): string =>
+  "/notifications/" + (at ? "#" + at : "");
+
+/** Leaving Booktown (退会). */
+export const leavePath = (): string => "/leave/";
+
+/** The reading records page (記録). */
+export const readingPath = (): string => "/reading/";
+
+/** The login page. */
+export const loginPath = (): string => "/login/";

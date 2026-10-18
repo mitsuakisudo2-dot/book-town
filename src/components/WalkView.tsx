@@ -1,4 +1,5 @@
 "use client";
+import { shortDate } from "../lib/japan-time";
 import {
   useEffect,
   useMemo,
@@ -55,7 +56,13 @@ import {
   type TownState,
 } from "../lib/types";
 import "./walk.css";
-import { profilePath, shopPath } from "../lib/paths";
+import {
+  myShopPath,
+  profilePath,
+  readingPath,
+  shopPath,
+  walkPath,
+} from "../lib/paths";
 import { replaceAddress } from "../lib/url-state";
 import { useLayerReturn } from "../lib/back-layer";
 import {
@@ -468,10 +475,7 @@ export function WalkView({
   }
   async function share() {
     if (!currentId) return;
-    const url = new URL(
-      "/walk/#" + encodeURIComponent(currentId),
-      location.origin,
-    ).href;
+    const url = new URL(walkPath(currentId), location.origin).href;
     try {
       if (navigator.share) await navigator.share({ title: shop?.name, url });
       else {
@@ -655,7 +659,7 @@ export function WalkView({
               ? "あなたの本屋は、まだ棚に本がないので書店めぐりに出ていません。一冊並べると、ここに灯りがともります。"
               : "あなたの本屋は、まだありません。3分で開けます。"}
           </span>
-          <Link href="/my-shop/">
+          <Link href={myShopPath()}>
             {state.ownShop ? "本棚を整える" : "本屋を開く"}
           </Link>
           <button aria-label="閉じる" onClick={() => setOwnMissing(false)}>
@@ -759,7 +763,7 @@ export function WalkView({
                 focusText={focusText}
                 greetingHref={
                   ownShop && !scene.ownerManaged
-                    ? "/my-shop/#shop-words"
+                    ? myShopPath({ at: "shop-words" })
                     : undefined
                 }
                 onBook={(p) => open({ kind: "book", placementId: p.id })}
@@ -810,7 +814,7 @@ export function WalkView({
               >
                 {ownShop ? (
                   // One's own shop is tended, not liked or kept for later.
-                  <Link href="/my-shop/" aria-label="自分の店を整える">
+                  <Link href={myShopPath()} aria-label="自分の店を整える">
                     <span>
                       <Icon name="edit" />
                     </span>
@@ -879,13 +883,13 @@ export function WalkView({
                 <>
                   <h1>まだ、灯りのついた書店がありません</h1>
                   <p>最初の一軒を開くと、ここから街の人が訪ねてこられます。</p>
-                  <Link className="btn fill" href="/my-shop/">
+                  <Link className="btn fill" href={myShopPath()}>
                     {state.ownShop ? "自分の書店を整える" : "本屋を開く"}
                     <Icon name="arrow" />
                   </Link>
                 </>
               )}
-              <Link href="/reading/">読書を開始する</Link>
+              <Link href={readingPath()}>読書を開始する</Link>
             </div>
           )}
         </div>
@@ -1055,7 +1059,7 @@ export function WalkView({
           <div className="walk-menu">
             <Link
               className="btn"
-              href={ownShop ? "/my-shop/" : shopPath(shop.id)}
+              href={ownShop ? myShopPath() : shopPath(shop.id)}
             >
               <Icon name="store" />
               書店のページを見る
@@ -1089,7 +1093,7 @@ export function WalkView({
             {Object.entries(walk.visits).map(([id, date]) => (
               <li key={id}>
                 {shops.find((s) => s.id === id)?.name ?? id}
-                <time>{new Date(date).toLocaleDateString("ja-JP")}</time>
+                <time>{shortDate(date)}</time>
               </li>
             ))}
           </ul>

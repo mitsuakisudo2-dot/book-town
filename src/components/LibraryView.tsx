@@ -46,6 +46,7 @@ import { ScanSession } from "./ScanSession";
 import { BookJacket, Icon } from "./ui";
 import { counted, TABS, whenSome } from "../lib/words";
 import { CHOICE_NAMES, type Audience } from "../lib/visibility";
+import { walkPath } from "../lib/paths";
 
 // The reader's library (管理表14): every book they have met in the town,
 // sorted onto the default shelves (library.ts DEFAULT_SHELVES) and the
@@ -584,7 +585,7 @@ export function LibraryView({
             >
               <Icon name="plus" /> 本を登録
             </button>
-            <Link className="btn" href="/walk/">
+            <Link className="btn" href={walkPath()}>
               書店めぐりに出かける
             </Link>
           </div>
