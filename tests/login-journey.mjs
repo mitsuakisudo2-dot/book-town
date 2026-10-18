@@ -6100,6 +6100,36 @@ try {
   );
 
   await check(
+    "the search reads which feelings were kept, and a book's page its records, when they open",
+    async () => {
+      town = {
+        ...filled(),
+        reading_entries: [
+          {
+            id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4f",
+            user_id: OTHER,
+            book_id: COVER_BOOK,
+            kind: "finished",
+            body: "",
+            feelings: ["quiet"],
+            spoiler: false,
+            is_public: true,
+            audience: "everyone",
+            created_at: ago(5),
+            updated_at: ago(5),
+          },
+        ],
+      };
+      townReads.length = 0;
+      await page.goto(base + "/search/");
+      await expect.poll(() => townReads).toContain("/rest/v1/rpc/felt_in_town");
+      await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
+      await expect.poll(() => townReads).toContain("/rest/v1/rpc/work_records");
+      town = filled();
+    },
+  );
+
+  await check(
     "the walk reads a shop's own store scene when it is walked to, and shows it",
     async () => {
       const at = (x, y, w, h) => ({ x, y, w, h, rotation: 0 });
