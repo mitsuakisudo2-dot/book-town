@@ -17,6 +17,7 @@ import "./reading.css";
 import "./account.css";
 import "./leave.css";
 import { failure, AGAIN, NOT_CONNECTED } from "../lib/words";
+import { loginPath } from "../lib/paths";
 
 /**
  * 退会: the reader deletes their account here, from the web. Everything
@@ -54,7 +55,7 @@ export default function LeaveView() {
             <p className="account-lead">
               退会するには、消したいアカウントでログインしてください。
             </p>
-            <Link className="btn fill" href="/login/">
+            <Link className="btn fill" href={loginPath()}>
               ログインする
             </Link>
           </>

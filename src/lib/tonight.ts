@@ -1,17 +1,13 @@
 import { ME_ID, type Shop, type ShelfItem, type TownState } from "./types";
 import { isSampleId } from "./record-kind";
 import { textHash } from "./canonical";
+import { jstDay } from "./japan-time";
 
 // What the home shows "today": one shop a night, the day's POPs. Chosen by
 // the day in Japan over the shops' ids, so it holds all day for everyone and
 // moves on the next; never by followers, likes or any other count.
 
-const DAY = 24 * 60 * 60 * 1000;
-/** Japan has no summer time: JST is always UTC+9. */
-const JST = 9 * 60 * 60 * 1000;
-
-/** The day in Japan that `now` falls on, counted from 1970-01-01. */
-export const jstDay = (now: number): number => Math.floor((now + JST) / DAY);
+export { jstDay };
 
 /**
  * `items` in the day's order: a fixed order made from their ids (and

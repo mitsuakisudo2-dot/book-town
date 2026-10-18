@@ -6,6 +6,7 @@ import { activeSession, currentBookId } from "../../lib/reading";
 import { bookPath } from "../../lib/books";
 import { bookById, bookTitle, quotedTitle } from "../../lib/book-name";
 import { BookJacket } from "../ui";
+import { readingPath } from "../../lib/paths";
 
 /**
  * The book being read, one line under the doors (決定 H:103-105): its jacket
@@ -32,7 +33,7 @@ export function ReadingLine({ state }: { state: TownState }) {
         <b>{bookTitle(book)}</b>
       </p>
       <Link
-        href="/reading/"
+        href={readingPath()}
         className="home-reading-go"
         aria-label={`${quotedTitle(book)}の読書を記録する`}
       >

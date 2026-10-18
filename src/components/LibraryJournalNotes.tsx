@@ -1,5 +1,6 @@
 "use client";
 
+import { BOOK_TEXT_MAX } from "../lib/books";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { useAccountState } from "../lib/account-session";
 import {
@@ -196,7 +197,7 @@ function TitleForm({
           id={id + "-title"}
           className="field"
           required
-          maxLength={200}
+          maxLength={BOOK_TEXT_MAX}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
         />
@@ -206,7 +207,7 @@ function TitleForm({
         <input
           id={id + "-author"}
           className="field"
-          maxLength={200}
+          maxLength={BOOK_TEXT_MAX}
           value={author}
           onChange={(event) => setAuthor(event.target.value)}
         />

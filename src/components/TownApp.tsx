@@ -58,13 +58,17 @@ import "./usability.css";
 import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
 import {
+  libraryPath,
+  loginPath,
+  myShopPath,
+  notificationsPath,
   posterNewPath,
   posterPath,
   profilePath,
+  readingPath,
   searchPath,
   shopPath,
   walkPath,
-  myShopPath,
 } from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
 import { requestSearch } from "../lib/tags";
@@ -179,22 +183,27 @@ type Section = "home" | "search" | "walk" | "shelf" | "reading" | "profile";
 const links: { href: string; icon: string; label: string; section: Section }[] =
   [
     { href: "/", icon: "home", label: TABS.home, section: "home" },
-    { href: "/search/", icon: "search", label: TABS.search, section: "search" },
-    { href: "/walk/", icon: "store", label: TABS.walk, section: "walk" },
     {
-      href: "/library/",
+      href: searchPath(""),
+      icon: "search",
+      label: TABS.search,
+      section: "search",
+    },
+    { href: walkPath(), icon: "store", label: TABS.walk, section: "walk" },
+    {
+      href: libraryPath(),
       icon: "shelf",
       label: TABS.library,
       section: "shelf",
     },
     {
-      href: "/reading/",
+      href: readingPath(),
       icon: "reading",
       label: TABS.reading,
       section: "reading",
     },
     {
-      href: "/profiles/me/",
+      href: profilePath("me"),
       icon: "user",
       label: TABS.profile,
       section: "profile",
@@ -452,7 +461,7 @@ export default function TownApp({
             </Link>
           ))}
         </nav>
-        <Link className="open-shop-link" href="/my-shop/">
+        <Link className="open-shop-link" href={myShopPath()}>
           <Icon name="plus" size={18} />
           {state.ownShop ? "書店を整える" : "あなたも、店主に。"}
           <Icon name="arrow" size={15} />
@@ -467,7 +476,7 @@ export default function TownApp({
           <small>本を愛する人を、孤独にしない。</small>
         </div>
         {visitor ? (
-          <Link href="/login/" className="side-me">
+          <Link href={loginPath()} className="side-me">
             <span className="side-me-guest" aria-hidden="true">
               <Icon name="user" size={18} />
             </span>
@@ -478,7 +487,7 @@ export default function TownApp({
             <Icon name="chevron" size={15} />
           </Link>
         ) : (
-          <Link href="/profiles/me/" className="side-me">
+          <Link href={profilePath("me")} className="side-me">
             <ReaderAvatar reader={state.me} size={36} />
             <span>
               <b>{state.me.name}</b>
@@ -529,12 +538,12 @@ export default function TownApp({
               <Icon name="leaf" size={12} />
             </button>
             {account.status === "signed-out" && (
-              <Link className="demo-pill top-login" href="/login/">
+              <Link className="demo-pill top-login" href={loginPath()}>
                 ログイン
               </Link>
             )}
             <Link
-              href="/notifications/"
+              href={notificationsPath()}
               className={
                 "top-bell" + (view === "notifications" ? " active" : "")
               }
@@ -548,7 +557,7 @@ export default function TownApp({
             </Link>
             {!visitor && (
               <Link
-                href="/profiles/me/"
+                href={profilePath("me")}
                 className="top-avatar"
                 aria-label="自分のプロフィール"
               >
@@ -743,7 +752,7 @@ function ShopView({
         <Icon name="store" size={34} />
         <h1>あなたの小さな書店を、ここに。</h1>
         <p>店名と紹介を書いて、好きな本を並べてみましょう。</p>
-        <Link href="/my-shop/" className="btn fill">
+        <Link href={myShopPath()} className="btn fill">
           書店をひらく
           <Icon name="plus" size={17} />
         </Link>
@@ -754,7 +763,7 @@ function ShopView({
         <Icon name="store" size={34} />
         <h1>この書店は、いまは閉まっています。</h1>
         <p>ほかの書店の灯りは、今日もついています。</p>
-        <Link href="/walk/" className="btn fill">
+        <Link href={walkPath()} className="btn fill">
           ほかの書店をめぐる
           <Icon name="arrow" size={17} />
         </Link>
@@ -820,7 +829,7 @@ function ShopView({
             </Link>
           )}
           {shop.ownerId === "me" ? (
-            <Link href="/my-shop/" className="btn">
+            <Link href={myShopPath()} className="btn">
               <Icon name="edit" size={15} />
               書店を整える
             </Link>
@@ -884,7 +893,7 @@ function ShopView({
                 <small>{counted(s.items.length, "冊")}の選書</small>
               ) : (
                 shop.ownerId === ME_ID && (
-                  <Link href="/my-shop/" className="store-shelf-fill">
+                  <Link href={myShopPath()} className="store-shelf-fill">
                     本を並べる
                     <Icon name="arrow" size={12} />
                   </Link>
@@ -927,7 +936,7 @@ function ShopView({
           <Icon name="book" size={30} />
           <h3>この店の棚は、これから育ちます。</h3>
           {shop.ownerId === "me" && (
-            <Link href="/my-shop/" className="btn">
+            <Link href={myShopPath()} className="btn">
               最初の棚をつくる
             </Link>
           )}

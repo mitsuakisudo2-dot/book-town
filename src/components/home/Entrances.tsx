@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Icon } from "../ui";
 import { scrollToPart } from "./hooks";
+import { myShopPath } from "../../lib/paths";
 
 /** A door still on its way: its shape, saying nothing and doing nothing. */
 const Waiting = () => (
@@ -106,7 +107,7 @@ export function Entrances({
       {newcomer === null ? (
         <Waiting />
       ) : newcomer ? (
-        <Link href="/my-shop/" className="home-entrance is-open">
+        <Link href={myShopPath()} className="home-entrance is-open">
           <span className="home-entrance-icon">
             <Icon name="plus" size={26} />
           </span>

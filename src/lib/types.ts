@@ -145,6 +145,11 @@ export const READER_NAME_MAX_LENGTH = 80;
 export const BIO_MAX_LENGTH = 2000;
 export const NINE_NOTE_MAX_LENGTH = 500;
 export const SHOP_MESSAGE_MAX_LENGTH = 2000;
+/** Limits of the store scene's own text (kept in the scene, not a database column). */
+export const SCENE_ROW_TEXT_MAX_LENGTH = 80;
+export const SCENE_TEXT_MAX_LENGTH = 500;
+export const SCENE_BOARD_TITLE_MAX_LENGTH = 12;
+export const SCENE_POP_MAX_LENGTH = 10000;
 
 /** A like can be pressed again, up to this many times per person and post. */
 export const LIKE_TAPS_MAX = 10;

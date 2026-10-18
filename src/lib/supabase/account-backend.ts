@@ -1,4 +1,5 @@
 import type { AuthError, SupabaseClient, User } from "@supabase/supabase-js";
+import { loginPath } from "../paths";
 import type { AccountBackend, AccountFailure, AccountUser } from "../account";
 import type { Database } from "./database.types";
 
@@ -53,7 +54,7 @@ export function supabaseAccountBackend(
           // Supabase uses this only when it is on the project's list of
           // redirect URLs, and falls back to the Site URL otherwise.
           ...(typeof window !== "undefined"
-            ? { emailRedirectTo: window.location.origin + "/login/" }
+            ? { emailRedirectTo: window.location.origin + loginPath() }
             : {}),
         },
       });
