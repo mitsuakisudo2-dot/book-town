@@ -86,6 +86,7 @@ import {
   type TimingSettings,
 } from "../lib/scan-timing";
 import { BarcodeRegister } from "./BarcodeRegister";
+import { ScanDone } from "./ScanDone";
 import { ScanSortSheet } from "./ScanSortSheet";
 import { ScanTidy, type TidyBook } from "./ScanTidy";
 import { ScanTiming } from "./ScanTiming";
@@ -128,8 +129,8 @@ type TypingWhy =
 type Input =
   | {
       kind: "camera";
-      /** manual, tidy: the one-book form or 一括整理 is open, the camera off. */
-      phase: "starting" | "running" | "hidden" | "manual" | "tidy";
+      /** manual, aside: the one-book form, or 一括整理 or 完了, over the scanner: the camera off. */
+      phase: "starting" | "running" | "hidden" | "manual" | "aside";
     }
   | { kind: "typing"; why: TypingWhy };
 
@@ -166,6 +167,8 @@ interface Notice {
   /** The book's title, or its ISBN. */
   name: string;
   say: Say;
+  /** A book the library had: 登録済みの本を表示する puts it in the list. */
+  shows?: { bookId: string; isbn: string };
 }
 
 const KEPT: Shows[] = [
@@ -420,7 +423,16 @@ export function ScanSession({
   const [sortOpen, setSortOpen] = useState(false);
   /** 一括整理 open over the scanner, the camera off. */
   const [tidying, setTidying] = useState(false);
+  /** 完了's summary over the scanner, the camera off. */
+  const [done, setDone] = useState(false);
+  /** The ISBN the one-book form opens with (書名で検索・修正). */
+  const [manualIsbn, setManualIsbn] = useState<string | null>(null);
+  /** The card of a book with no title the one-book form is open for. */
+  const manualFor = useRef<string | null>(null);
+  /** Cards of books with no title that the one-book form registered. */
+  const byHand = useRef(new Set<string>());
   const tidyButton = useRef<HTMLButtonElement>(null);
+  const doneButton = useRef<HTMLButtonElement>(null);
   /** The camera made larger (カメラ集中表示), for a code it does not catch. */
   const [large, setLarge] = useState(false);
   /** Books entered by hand whose save is not confirmed yet. */
@@ -478,6 +490,7 @@ export function ScanSession({
     manual,
     sortOpen,
     tidying,
+    done,
     cards,
   });
   useEffect(() => {
@@ -489,6 +502,7 @@ export function ScanSession({
       manual,
       sortOpen,
       tidying,
+      done,
       cards,
     };
   });
@@ -563,7 +577,12 @@ export function ScanSession({
           if (!entry || card.shows === "undone") return card;
           return {
             ...card,
-            shows: showsOf(entry.result, where),
+            // Registered by its title (書名で検索・修正): the journal then
+            // finds it in the library, yet this card added it.
+            shows:
+              entry.result === "already" && byHand.current.has(card.id)
+                ? "added"
+                : showsOf(entry.result, where),
             bookId: entry.item.bookId,
             title: entry.item.title ?? card.title,
             author: entry.item.author ?? card.author,
@@ -606,7 +625,11 @@ export function ScanSession({
   }, [flash]);
   useEffect(() => {
     if (!notice) return;
-    const timer = setTimeout(() => setNotice(null), NOTICE_MS);
+    // One with something to press stays longer.
+    const timer = setTimeout(
+      () => setNotice(null),
+      notice.shows ? NOTICE_MS * 2 : NOTICE_MS,
+    );
     return () => clearTimeout(timer);
   }, [notice]);
   const nameOf = (card: Card) => card.title ?? card.isbn ?? "";
@@ -661,7 +684,11 @@ export function ScanSession({
         });
       } else if (reaction.kind === "already") {
         reads.current = noteRead(reads.current, isbn, at, "already");
-        setNotice({ name: bookTitle(reaction.book), say: "already" });
+        setNotice({
+          name: bookTitle(reaction.book),
+          say: "already",
+          shows: { bookId: reaction.book.id, isbn },
+        });
       } else {
         reads.current = noteRead(reads.current, isbn, at, "held");
         setNotice({ name: reaction.item.title ?? isbn, say: "held" });
@@ -1129,62 +1156,128 @@ export function ScanSession({
         const reader = latest.current.owner;
         // The same book read before and kept for want of its title is in
         // the library now: sent again, the journal lets it go.
-        if (done && done.result !== "not-saved" && isbn && reader) {
-          const held = libraryJournal
-            .items(reader)
-            .filter((item) => item.isbn === isbn)
-            .map((item) => item.id);
-          if (held.length) send(reader, held);
-        }
+        const held =
+          done && done.result !== "not-saved" && isbn && reader
+            ? libraryJournal
+                .items(reader)
+                .filter((item) => item.isbn === isbn)
+                .map((item) => item.id)
+            : [];
         if (done?.result === "added") {
-          const cardId = `${session}-m${++manualCount.current}`;
+          // Opened from a card with no title (書名で検索・修正): that card
+          // is the book now, rather than a second one.
+          const fixed =
+            manualFor.current && held.includes(manualFor.current)
+              ? manualFor.current
+              : null;
+          const cardId = fixed ?? `${session}-m${++manualCount.current}`;
+          const made = {
+            bookId: done.bookId,
+            title: done.title,
+            shows: "added" as const,
+          };
           libraryJournal.added.set(cardId, done.bookId);
-          if (isbn)
-            reads.current = noteRead(reads.current, isbn, Date.now(), "in");
-          setCards((list) => [
-            ...list,
-            {
-              id: cardId,
-              ...(isbn ? { isbn } : {}),
-              bookId: done.bookId,
-              title: done.title,
-              shows: "added",
-            },
-          ]);
+          if (fixed) {
+            byHand.current.add(fixed);
+            setCards((list) =>
+              list.map((card) =>
+                card.id === fixed ? { ...card, ...made } : card,
+              ),
+            );
+          } else {
+            if (isbn)
+              reads.current = noteRead(reads.current, isbn, Date.now(), "in");
+            setCards((list) => [
+              ...list,
+              { id: cardId, ...(isbn ? { isbn } : {}), ...made },
+            ]);
+          }
           // Saved at once in the demo; an account's save is waited for.
           if (journalTown.status() !== "saved")
             setSavingByHand((was) => new Set(was).add(cardId));
           flashCard(cardId);
         }
+        if (held.length && reader) send(reader, held);
         return done;
       },
     }),
     [actions, session, send],
   );
-  const openManual = () => {
+  const openManual = (isbn?: string, cardId?: string) => {
+    manualFor.current = cardId ?? null;
+    setManualIsbn(isbn ?? null);
     setManual(true);
     setInput((now) =>
       now.kind === "camera" ? { kind: "camera", phase: "manual" } : now,
     );
   };
-  const openTidy = () => {
+  /** 一括整理 or 完了 over the scanner: the camera off meanwhile. */
+  const stepAside = () => {
     setMenuFor(null);
     setShelvesFor(null);
-    setTidying(true);
     setInput((now) =>
-      now.kind === "camera" ? { kind: "camera", phase: "tidy" } : now,
+      now.kind === "camera" ? { kind: "camera", phase: "aside" } : now,
     );
   };
-  const closeTidy = () => {
-    setTidying(false);
+  const comeBack = (focus: HTMLElement | null) => {
     setInput((now) =>
-      now.kind === "camera" && now.phase === "tidy"
+      now.kind === "camera" && now.phase === "aside"
         ? { kind: "camera", phase: "starting" }
         : now,
     );
-    requestAnimationFrame(() => tidyButton.current?.focus());
+    requestAnimationFrame(() => focus?.focus());
+  };
+  const openTidy = () => {
+    stepAside();
+    setTidying(true);
+  };
+  const closeTidy = () => {
+    setTidying(false);
+    comeBack(tidyButton.current);
+  };
+  /** ［完了］: what this time came to; with nothing read, closed at once. */
+  const complete = () => {
+    if (
+      !cards.some((card) => card.shows !== "undone" && card.shows !== "already")
+    )
+      return finish();
+    stepAside();
+    setTidying(false);
+    setDone(true);
+  };
+  const backFromDone = () => {
+    setDone(false);
+    comeBack(doneButton.current);
+  };
+  /** 再試行 for a book openBD did not know: asked again. */
+  const retry = (card: Card) => {
+    refocus();
+    if (!owner) return;
+    libraryJournal.update(owner, card.id, { state: "lookup" });
+    setCards((list) =>
+      list.map((entry) =>
+        entry.id === card.id ? { ...entry, shows: "looking" } : entry,
+      ),
+    );
+    send(owner, [card.id]);
+  };
+  /** 登録済みの本を表示する: the book the library had, in this time's list. */
+  const showBook = (shows: { bookId: string; isbn: string }) => {
+    refocus();
+    setNotice(null);
+    const there = cards.find(
+      (card) => card.shows === "already" && card.bookId === shows.bookId,
+    );
+    if (there) return flashCard(there.id);
+    const cardId = `${session}-shown-${shows.bookId}`;
+    setCards((list) => [
+      ...list,
+      { id: cardId, isbn: shows.isbn, bookId: shows.bookId, shows: "already" },
+    ]);
+    flashCard(cardId);
   };
   const closeManual = () => {
+    manualFor.current = null;
     setManual(false);
     setInput((now) =>
       now.kind === "camera" && now.phase === "manual"
@@ -1198,11 +1291,14 @@ export function ScanSession({
    * While a title is still being asked of openBD (OPENBD_TIMEOUT_MS at
    * most), the notice waits for the answer, to say where that book went.
    */
-  function finish() {
+  function finish(how: { land?: boolean; quiet?: boolean } = {}) {
     if (closed.current) return;
     closed.current = true;
     const { added, waiting, later } = counts.closing;
-    onClose(added + waiting + later > 0);
+    onClose(how.land !== false && added + waiting + later > 0);
+    // Closed from 完了's summary, which said it all: nothing more, but for
+    // a book whose title is still on its way.
+    if (how.quiet && !inFlight.current.size) return;
     const asking = [...inFlight.current];
     const tell = (closing: typeof counts.closing) => {
       const told = closingNotice(closing);
@@ -1248,13 +1344,10 @@ export function ScanSession({
     if (!field.current)
       layer.current?.querySelector<HTMLElement>("button")?.focus();
     const key = (event: KeyboardEvent) => {
-      // The one-book form, the 連続設定 and 一括整理 on top handle their own keys.
-      const {
-        manual: form,
-        sortOpen: sheetOpen,
-        tidying: tidy,
-      } = latest.current;
-      if (form || sheetOpen || tidy) return;
+      // What is on top (the one-book form, 連続設定, 一括整理, 完了)
+      // handles its own keys.
+      const now = latest.current;
+      if (now.manual || now.sortOpen || now.tidying || now.done) return;
       if (event.key === "Escape") {
         event.preventDefault();
         // The Escape that cancels a kana conversion in the ISBN field is the
@@ -1396,7 +1489,7 @@ export function ScanSession({
   /** What a card says under its title. */
   const stateLine = (card: Card, now: ShownNow): string =>
     now === "untitled"
-      ? `${card.isbn}・${SCAN_COPY.card.untitled}`
+      ? SCAN_COPY.card.untitled
       : now === "offline"
         ? `${card.isbn}・${SCAN_COPY.card.offline}`
         : {
@@ -1431,13 +1524,18 @@ export function ScanSession({
       aria-label={SCAN_COPY.name}
       onPointerDown={sound.wake}
     >
-      <div className={"scan-sheet" + (typing ? " is-typing" : "")} ref={sheet}>
+      <div
+        className={"scan-sheet" + (typing ? " is-typing" : "")}
+        ref={sheet}
+        // Beneath 一括整理 and 完了: out of reach until they close.
+        inert={tidying || done}
+      >
         <div className="scan-top">
           <button
             type="button"
             className="icon-btn"
             aria-label="閉じる"
-            onClick={finish}
+            onClick={() => finish()}
           >
             <Icon name="close" />
           </button>
@@ -1512,7 +1610,7 @@ export function ScanSession({
               <button
                 type="button"
                 className="text-btn scan-by-hand"
-                onClick={openManual}
+                onClick={() => openManual()}
               >
                 {SCAN_COPY.byHand}
               </button>
@@ -1601,6 +1699,9 @@ export function ScanSession({
                 <>
                   <strong>{notice.name}</strong>
                   <span>{SAYS[notice.say]}</span>
+                  {notice.shows && (
+                    <ShowBook shows={notice.shows} onShow={showBook} />
+                  )}
                 </>
               )}
             </p>
@@ -1625,6 +1726,13 @@ export function ScanSession({
           <p className="scan-notice is-typing" role="status">
             <strong>{notice.name}</strong>
             <span>{SAYS[notice.say]}</span>
+            {notice.shows && (
+              <ShowBook
+                shows={notice.shows}
+                onShow={showBook}
+                keepFocus={keepFocus}
+              />
+            )}
           </p>
         )}
         {owner && (
@@ -1728,6 +1836,8 @@ export function ScanSession({
                   <div className="scan-item-cover" aria-hidden="true">
                     {book ? (
                       <BookJacket book={book} />
+                    ) : now === "untitled" ? (
+                      <span className="scan-item-tile is-alert">!</span>
                     ) : (
                       <span className="scan-item-tile">
                         <Icon name="barcode" size={18} />
@@ -1735,12 +1845,23 @@ export function ScanSession({
                     )}
                   </div>
                   <div className="scan-item-text">
-                    <p className="scan-item-title">
-                      {now === "untitled" || now === "offline"
-                        ? SCAN_COPY.card.untitledTitle
-                        : (titled ?? `ISBN ${card.isbn ?? ""}`)}
+                    <p
+                      className={
+                        "scan-item-title" +
+                        (now === "untitled" ? " is-said" : "")
+                      }
+                    >
+                      {now === "untitled"
+                        ? SCAN_COPY.card.noBib
+                        : now === "offline"
+                          ? SCAN_COPY.card.untitledTitle
+                          : (titled ?? `ISBN ${card.isbn ?? ""}`)}
                     </p>
-                    {author && <p className="scan-item-author">{author}</p>}
+                    {now === "untitled" ? (
+                      <p className="scan-item-author">ISBN {card.isbn}</p>
+                    ) : (
+                      author && <p className="scan-item-author">{author}</p>
+                    )}
                     <p className="scan-item-state">{stateLine(card, now)}</p>
                   </div>
                   {canUndo && (
@@ -1761,6 +1882,29 @@ export function ScanSession({
                     </button>
                   )}
                 </div>
+                {now === "untitled" && (
+                  <div
+                    className="scan-item-fix"
+                    role="group"
+                    aria-label={SCAN_COPY.fixOf(card.isbn ?? "")}
+                  >
+                    <button
+                      type="button"
+                      className="btn soft"
+                      onPointerDown={typing ? keepFocus : undefined}
+                      onClick={() => retry(card)}
+                    >
+                      {SCAN_COPY.retry}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => openManual(card.isbn, card.id)}
+                    >
+                      {SCAN_COPY.byTitle}
+                    </button>
+                  </div>
+                )}
                 {menuFor === card.id && canUndo && (
                   <div className="scan-item-menu" id={menuId} role="menu">
                     <button
@@ -1893,11 +2037,27 @@ export function ScanSession({
               {SCAN_COPY.tidy.name}
             </button>
           )}
-          <button type="button" className="btn fill" onClick={finish}>
-            {SCAN_COPY.done}
+          <button
+            ref={doneButton}
+            type="button"
+            className="btn fill"
+            onClick={complete}
+          >
+            {SCAN_COPY.finish}
           </button>
         </div>
       </div>
+      {done && (
+        <ScanDone
+          saved={counts.saved}
+          checking={counts.checking}
+          attention={counts.attention}
+          sortEnded={sort !== null}
+          onLibrary={() => finish({ quiet: true })}
+          onClose={() => finish({ land: false, quiet: true })}
+          onBack={backFromDone}
+        />
+      )}
       {tidying && (
         <ScanTidy
           books={tidyBooks}
@@ -1930,8 +2090,32 @@ export function ScanSession({
           onClose={closeManual}
           lead="書名やISBNを入れて1冊ずつ登録します"
           camera={false}
+          startIsbn={manualIsbn}
         />
       )}
     </div>
+  );
+}
+
+/** 登録済みの本を表示する ›, in a remark about a book the library had. */
+function ShowBook({
+  shows,
+  onShow,
+  keepFocus,
+}: {
+  shows: { bookId: string; isbn: string };
+  onShow: (shows: { bookId: string; isbn: string }) => void;
+  keepFocus?: (event: { preventDefault(): void }) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="text-btn scan-notice-show"
+      onPointerDown={keepFocus}
+      onClick={() => onShow(shows)}
+    >
+      {SCAN_COPY.showBook}
+      <Icon name="chevron" size={14} />
+    </button>
   );
 }

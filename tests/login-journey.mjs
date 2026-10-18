@@ -2025,6 +2025,10 @@ try {
           "/rest/v1/book_marks",
         ]);
       await scanner.getByRole("button", { name: "完了" }).click();
+      await scanner
+        .getByRole("region", { name: "登録完了" })
+        .getByRole("button", { name: "ライブラリを見る" })
+        .click();
       await expect(scanner).toHaveCount(0);
       await page.unroute(supabase + "/rest/v1/**", hold);
     },
@@ -2139,7 +2143,11 @@ try {
       // Saved: the device lets it go.
       await expect.poll(journal).toBeNull();
       await scanner.getByRole("button", { name: "完了" }).click();
-      await expect(page.locator(".toast")).toContainText("1冊を登録しました");
+      const summary = scanner.getByRole("region", { name: "登録完了" });
+      await expect(summary).toContainText("1冊の登録が完了しました");
+      await expect(summary).toContainText("すべての本が保存されています");
+      await summary.getByRole("button", { name: "ライブラリを見る" }).click();
+      await expect(scanner).toHaveCount(0);
       await page.unroute(supabase + "/rest/v1/**", hold);
       await page.unroute("https://api.openbd.jp/**", titles);
     },

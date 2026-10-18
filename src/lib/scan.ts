@@ -272,7 +272,7 @@ export const SCAN_COPY = {
   firstCamera: "読むと、その場で登録します",
   /** The list of this time's books, newest first. */
   list: "この回に読んだ本",
-  done: "完了",
+  finish: "完了",
   typeIsbn: "ISBNを打つ",
   useCamera: "カメラで読む",
   byHand: "手で入力",
@@ -324,6 +324,22 @@ export const SCAN_COPY = {
     shelvesTo: "選んだ本を入れる本棚",
     done: "整理を終える",
   },
+  /** 完了 (Figma v4's 08). */
+  done: {
+    name: "登録完了",
+    counted: "冊の登録が完了しました",
+    allSaved: "すべての本が保存されています",
+    checking: (n: number) => `${counted(n, "冊")}を確認しています…`,
+    attention: (n: number) => `${counted(n, "冊")}は要確認です`,
+    sortEnded: "連続設定も終了しました",
+    library: "ライブラリを見る",
+    close: "閉じる",
+  },
+  /** 重複の知らせ (Figma v4's 06) and 書誌の取得失敗 (07). */
+  showBook: "登録済みの本を表示する",
+  retry: "再試行",
+  byTitle: "書名で検索・修正",
+  fixOf: (isbn: string) => `ISBN ${isbn} の本を調べ直す`,
   paused: "一時停止しています",
   banner: {
     offline:
@@ -385,7 +401,9 @@ export const SCAN_COPY = {
     /** In the library, and saved. */
     added: "登録しました",
     untitledTitle: "書名がわからない本",
-    untitled: "控えに置きました",
+    /** openBD did not know it (Figma v4's 07). */
+    noBib: failure({ what: "書籍情報を取得できませんでした" }, ""),
+    untitled: "読み取り済み・再入力不要",
     offline: "つながったら書名を調べます",
     waiting: "読み込みが終わったら登録します",
     unavailable: "端末に控えました。ページを読み込み直すと登録します",

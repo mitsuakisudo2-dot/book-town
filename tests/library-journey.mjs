@@ -88,6 +88,8 @@ const LEAVE_MS = 600;
 // "stall": openBD takes the question and never answers. "slow": it answers
 // after a second and a half, well within the four seconds it is given.
 let openBd = "answer";
+/** How many times openBD was asked. */
+let openBdAsked = 0;
 const stalled = [];
 async function answerOutside(context) {
   await context.route(
@@ -95,6 +97,7 @@ async function answerOutside(context) {
     (route) => {
       const url = new URL(route.request().url());
       if (url.host === "api.openbd.jp") {
+        openBdAsked += 1;
         if (openBd === "stall") return void stalled.push(route);
         const isbns = url.searchParams.get("isbn").split(",");
         const answer = () =>
@@ -339,9 +342,26 @@ async function openScanner(on = page) {
     .click();
   await expect(scanner(on)).toBeVisible();
 }
+/** 完了's summary (Figma v4's 08), over the scanner. */
+const summary = (on = page) =>
+  scanner(on).getByRole("region", { name: "登録完了" });
+/**
+ * ［完了］, then ライブラリを見る on what this time came to (with nothing
+ * read, ［完了］ closes at once). Gives what the summary said.
+ */
 async function finishScanning(on = page) {
   await scanner(on).getByRole("button", { name: "完了" }).click();
+  await expect
+    .poll(
+      async () =>
+        (await scanner(on).count()) === 0 || (await summary(on).count()) > 0,
+    )
+    .toBe(true);
+  if (!(await summary(on).count())) return "";
+  const said = (await summary(on).textContent()) ?? "";
+  await summary(on).getByRole("button", { name: "ライブラリを見る" }).click();
   await expect(scanner(on)).toHaveCount(0);
+  return said;
 }
 /**
  * Shows the camera these frames, and waits until they have left its view:
@@ -568,8 +588,7 @@ try {
     "a book the town knows, but not the library, is registered as usual",
     async () => {
       // ［完了］ says what this time registered, and the library is there.
-      await finishScanning();
-      await expect(page.locator(".toast")).toContainText("3冊を登録しました");
+      expect(await finishScanning()).toContain("3冊の登録が完了しました");
       await page
         .getByRole("button", { name: "こころを登録した本から外す" })
         .click();
@@ -723,8 +742,7 @@ try {
         expect.arrayContaining(["isbn-" + typed, "isbn-" + ten]),
       );
       expect(data.library).toHaveLength(6);
-      await finishScanning();
-      await expect(page.locator(".toast")).toContainText("2冊を登録しました");
+      expect(await finishScanning()).toContain("2冊の登録が完了しました");
     },
   );
 
@@ -861,10 +879,29 @@ try {
     "a book openBD does not know is kept as 書名待ち, and the next one registers",
     async () => {
       await show(scan, untitled);
-      await expect(cardTitle(scan)).toHaveText("書名がわからない本");
-      await expect(cardStatus(scan)).toHaveText(
-        `${untitled}・控えに置きました`,
+      await expect(cardTitle(scan)).toHaveText(
+        "書籍情報を取得できませんでした",
       );
+      await expect(latest(scan).locator(".scan-item-author")).toHaveText(
+        `ISBN ${untitled}`,
+      );
+      await expect(cardStatus(scan)).toHaveText("読み取り済み・再入力不要");
+      await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
+      // 再試行 asks openBD again (Figma v4's 07); still unknown, the book
+      // stays as it was.
+      const fix = latest(scan).getByRole("group", {
+        name: `ISBN ${untitled} の本を調べ直す`,
+      });
+      await expect(
+        fix.getByRole("button", { name: "書名で検索・修正" }),
+      ).toBeVisible();
+      const asked = openBdAsked;
+      await fix.getByRole("button", { name: "再試行" }).click();
+      await expect.poll(() => openBdAsked).toBe(asked + 1);
+      await expect(latest(scan).locator(".scan-item-author")).toHaveText(
+        `ISBN ${untitled}`,
+      );
+      await expect(cardStatus(scan)).toHaveText("読み取り済み・再入力不要");
       await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
       await expect(scanner(scan).locator(".scan-item.is-kept")).toHaveCount(1);
       await show(scan, known);
@@ -1010,7 +1047,7 @@ try {
   });
 
   await check(
-    "［完了］ closes at once, says what was read in, and lands on the library",
+    "［完了］ says what this time came to, and ライブラリを見る lands on the library",
     async () => {
       await toasts(scan);
       const counted = /^(\d+)冊 登録済み・1冊要確認$/.exec(
@@ -1018,11 +1055,36 @@ try {
       );
       expect(counted).not.toBeNull();
       await scanner(scan).getByRole("button", { name: "完了" }).click();
-      // No question first.
-      await expect(scan.getByRole("dialog")).toHaveCount(0);
-      await expect(scan.locator(".toast")).toContainText(
-        `${counted[1]}冊を登録しました・書名待ち 1冊`,
+      // No question: what was registered, what waits, and the 連続設定 is
+      // not mentioned when there was none.
+      await expect(summary(scan)).toContainText(
+        `${counted[1]}冊の登録が完了しました`,
       );
+      await expect(summary(scan)).toContainText("1冊は要確認です");
+      await expect(summary(scan)).not.toContainText("連続設定");
+      const library = summary(scan).getByRole("button", {
+        name: "ライブラリを見る",
+      });
+      await expect(library).toBeFocused();
+      // The camera is off meanwhile.
+      await scan.evaluate((code) => window.__barcodes.push(code), isbnOf(30));
+      await scan.waitForTimeout(400);
+      expect(await scan.evaluate(() => window.__barcodes.length)).toBe(1);
+      await scan.evaluate(() => window.__barcodes.splice(0));
+      await scan.screenshot({ path: path.join(output, "scan-done.png") });
+      // 戻る goes back to scanning; ［完了］ again.
+      await scan.goBack();
+      await expect(summary(scan)).toHaveCount(0);
+      await expect(
+        scanner(scan).getByRole("button", { name: "完了" }),
+      ).toBeFocused();
+      await scanner(scan).getByRole("button", { name: "完了" }).click();
+      await summary(scan)
+        .getByRole("button", { name: "ライブラリを見る" })
+        .click();
+      await expect(scan.getByRole("dialog")).toHaveCount(0);
+      // The summary said it all: nothing more.
+      expect(await toasts(scan)).toEqual([]);
       expect(Number(counted[1])).toBe(inLibrary.size);
       await expect(scan).toHaveURL(/[?&]books=library/);
       const waiting = scan
@@ -1087,13 +1149,26 @@ try {
       const kept = await stored(scan);
       await show(scan, twenty[0]);
       await expect(remark(scan)).toHaveText(
-        "試験の本 1もうライブラリにあります",
+        "試験の本 1もうライブラリにあります登録済みの本を表示する",
       );
       await expect(scanner(scan).locator(".scan-item")).toHaveCount(0);
       await expect(count(scan)).toHaveText("");
       expect(await stored(scan)).toEqual(kept);
       expect(await journal(scan)).toBeNull();
       expect((await feedback(scan)).buzz).toEqual([[20, 60, 20]]);
+      // 登録済みの本を表示する (Figma v4's 06): the book, into the list,
+      // and still not counted.
+      await remark(scan)
+        .getByRole("button", { name: "登録済みの本を表示する" })
+        .click();
+      await expect(remark(scan)).toHaveText("");
+      await expect(cardTitle(scan)).toHaveText("試験の本 1");
+      await expect(cardStatus(scan)).toHaveText("もうライブラリにあります");
+      await expect(
+        latest(scan).getByRole("group", { name: "試験の本 1の読書状況" }),
+      ).toBeVisible();
+      await expect(count(scan)).toHaveText("");
+      expect(await stored(scan)).toEqual(kept);
       const isbn = isbnOf(24);
       await show(scan, isbn);
       await expect(count(scan)).toHaveText("1冊 登録済み");
@@ -1129,8 +1204,7 @@ try {
       const isbn = isbnOf(29);
       await show(scan, isbn);
       await expect(count(scan)).toHaveText("1冊 登録済み");
-      await finishScanning(scan);
-      await expect(scan.locator(".toast")).toContainText("1冊を登録しました");
+      expect(await finishScanning(scan)).toContain("1冊の登録が完了しました");
       await expect(scan).toHaveURL(/[?&]books=library/);
       await expect(
         scan.getByRole("button", { name: /^登録/, pressed: true }),
@@ -1192,10 +1266,14 @@ try {
       openBd = "stall";
       const asking = isbnOf(28);
       await show(scan, asking);
-      await expect(cardTitle(scan)).toHaveText("書名がわからない本", {
-        timeout: 8000,
-      });
-      await expect(cardStatus(scan)).toHaveText(`${asking}・控えに置きました`);
+      await expect(cardTitle(scan)).toHaveText(
+        "書籍情報を取得できませんでした",
+        { timeout: 8000 },
+      );
+      await expect(latest(scan).locator(".scan-item-author")).toHaveText(
+        `ISBN ${asking}`,
+      );
+      await expect(cardStatus(scan)).toHaveText("読み取り済み・再入力不要");
       await expect(count(scan)).toHaveText("4冊要確認");
       await expect
         .poll(async () =>
@@ -1340,7 +1418,7 @@ try {
   );
 
   await check(
-    "a 書名待ち book entered by hand is in, and ［完了］ waits for openBD",
+    "a 書名待ち book entered by hand is in, and ✕ waits for openBD",
     async () => {
       const typing = await scanningPage();
       await typing.addInitScript(() => {
@@ -1351,7 +1429,9 @@ try {
       await openScanner(typing);
       const unknown = isbnOf(902);
       await field(typing).fill(unknown);
-      await expect(cardTitle(typing)).toHaveText("書名がわからない本");
+      await expect(cardTitle(typing)).toHaveText(
+        "書籍情報を取得できませんでした",
+      );
       await expect(count(typing)).toHaveText("1冊要確認");
       // ［手で入力］ over the scanner offers no second camera.
       await scanner(typing).getByRole("button", { name: "手で入力" }).click();
@@ -1374,6 +1454,27 @@ try {
       await expect(count(typing)).toHaveText("1冊 登録済み");
       await expect.poll(() => journal(typing)).toBeNull();
       await expect(typing.locator(".journal-note")).toHaveCount(0);
+      // 書名で検索・修正 on such a book (Figma v4's 07): the form opens
+      // with its ISBN, and that card is the book then, not a second one.
+      const other = isbnOf(903);
+      await field(typing).fill(other);
+      await expect(cardTitle(typing)).toHaveText(
+        "書籍情報を取得できませんでした",
+      );
+      const listed = await scanner(typing).locator(".scan-item").count();
+      await latest(typing)
+        .getByRole("button", { name: "書名で検索・修正" })
+        .click();
+      await expect(form.getByLabel("ISBN")).toHaveValue(other);
+      await expect(form).toContainText("書籍情報を取得できませんでした");
+      await form.getByLabel("タイトル").fill("直した本");
+      await form.getByRole("button", { name: "登録する", exact: true }).click();
+      await expect(form).toHaveCount(0);
+      await expect(scanner(typing).locator(".scan-item")).toHaveCount(listed);
+      await expect(cardTitle(typing)).toHaveText("直した本");
+      await expect(cardStatus(typing)).toHaveText("登録しました");
+      await expect(count(typing)).toHaveText("2冊 登録済み");
+      await expect.poll(() => journal(typing)).toBeNull();
       // A title still on its way from openBD as the scanner closes: the
       // notice waits for it, and the 登録 tab never shows it as 書名待ち.
       await typing.evaluate(() => {
@@ -1387,9 +1488,11 @@ try {
       await field(typing).fill(slow);
       await expect(cardStatus(typing)).toHaveText("書名を調べています…");
       await toasts(typing);
-      await finishScanning(typing);
+      // ✕ closes at once, with no summary.
+      await scanner(typing).getByRole("button", { name: "閉じる" }).click();
+      await expect(scanner(typing)).toHaveCount(0);
       await typing.waitForFunction(() =>
-        window.__toasts.includes("2冊を登録しました"),
+        window.__toasts.includes("3冊を登録しました"),
       );
       expect(await typing.evaluate(() => window.__noted)).toBe(false);
       expect(
@@ -1769,7 +1872,7 @@ try {
       await finishScanning(on);
       await openScanner(on);
       await expect(remark(on)).toHaveText(
-        "試験の本 61もうライブラリにあります",
+        "試験の本 61もうライブラリにあります登録済みの本を表示する",
         { timeout: 15000 },
       );
       expect(fetched).toHaveLength(1);
