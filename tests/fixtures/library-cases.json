@@ -1329,6 +1329,7 @@
       "via": "search",
       "at": "2026-10-01T09:00:00.000Z",
       "expect": {
+        "owned": "yes",
         "status": "tsundoku",
         "statusAt": "2026-10-01T09:00:00.000Z",
         "wantedAt": "2026-09-01T00:00:00.000Z"
@@ -1380,6 +1381,7 @@
       },
       "at": "2026-10-01T09:00:00.000Z",
       "expect": {
+        "owned": "yes",
         "status": "tsundoku",
         "statusAt": "2026-10-01T09:00:00.000Z",
         "wantedAt": "2026-09-01T00:00:00.000Z"
@@ -2056,6 +2058,7 @@
       "expect": {
         "source": "scan",
         "likedAt": "2026-09-01T00:00:00.000Z",
+        "owned": "yes",
         "status": "tsundoku",
         "statusAt": "2026-10-01T09:00:00.000Z"
       }
@@ -2511,7 +2514,7 @@
       }
     },
     {
-      "name": "問い5 積読 leaves 所有 unset",
+      "name": "積読 says 持っている where 所有 was unset (2026-10-18, over 問い5)",
       "entry": {},
       "set": {
         "status": "tsundoku"
@@ -2519,12 +2522,13 @@
       "via": "search",
       "at": "2026-10-01T09:00:00.000Z",
       "expect": {
+        "owned": "yes",
         "status": "tsundoku",
         "statusAt": "2026-10-01T09:00:00.000Z"
       }
     },
     {
-      "name": "問い5 積読 leaves 持ってない as it is",
+      "name": "積読 turns 持ってない into 持っている (2026-10-18, over 問い5)",
       "entry": {
         "owned": "no"
       },
@@ -2534,7 +2538,7 @@
       "via": "search",
       "at": "2026-10-01T09:00:00.000Z",
       "expect": {
-        "owned": "no",
+        "owned": "yes",
         "status": "tsundoku",
         "statusAt": "2026-10-01T09:00:00.000Z"
       }
