@@ -959,6 +959,71 @@ try {
       expect(await kept("book-town-nine-drafts-v1")).toBeNull();
     },
   );
+  await check(
+    "a nine begun before another was saved waits for the reader's choice",
+    async () => {
+      const kept = () =>
+        page.evaluate(() => localStorage.getItem("book-town-nine-drafts-v1"));
+      await go(page, "/profiles/me/");
+      const nine = page.getByRole("dialog", { name: "人生の9冊を選ぶ" });
+      const items = nine.locator(".profile-nine-editor-item strong");
+      const note = nine.locator(".profile-kept");
+      const before = (await stored(page)).me.lifeNine;
+      await page.locator(".profile-edit-nine").click();
+      const first = await items.first().textContent();
+      await nine
+        .getByRole("button", { name: `${first}を後ろへ移動`, exact: true })
+        .click();
+      const order = await items.allTextContents();
+      await page.keyboard.press("Escape");
+      // Another device saves the nine meanwhile: one book fewer.
+      await page.evaluate(() => {
+        const town = JSON.parse(localStorage.getItem("book-town-v1"));
+        town.data.me.lifeNine = town.data.me.lifeNine.slice(0, -1);
+        localStorage.setItem("book-town-v1", JSON.stringify(town));
+      });
+      await page.reload();
+      await page.locator(".profile-edit-nine").click();
+      await expect(note).toContainText(
+        "書きかけより新しい人生の9冊が保存されています",
+      );
+      // The nine saved now is shown, and nothing is written over the older
+      // work before the reader chooses: the hand is on the choice.
+      await expect(items).toHaveCount(before.length - 1);
+      await expect(items.first()).toHaveText(first);
+      const open = note.getByRole("button", {
+        name: "書きかけを開く",
+        exact: true,
+      });
+      await expect(open).toBeFocused();
+      await expect(
+        nine.getByRole("button", { name: `${first}を後ろへ移動`, exact: true }),
+      ).toBeDisabled();
+      await expect(
+        nine.getByRole("button", { name: "この並びを保存", exact: true }),
+      ).toBeDisabled();
+      // Asked for, the older work opens, and saving it is said to replace
+      // the nine saved now.
+      await open.click();
+      await expect(items).toHaveText(order);
+      await expect(note).toContainText(
+        "保存すると、いま保存されている人生の9冊と入れ替わります",
+      );
+      await expect(
+        note.getByRole("button", { name: "書きかけを消す" }),
+      ).toBeFocused();
+      await nine
+        .getByRole("button", { name: "この並びを保存", exact: true })
+        .click();
+      await expect(nine).toHaveCount(0);
+      expect((await stored(page)).me.lifeNine).toEqual([
+        before[1],
+        before[0],
+        ...before.slice(2),
+      ]);
+      expect(await kept()).toBeNull();
+    },
+  );
   const storageState = await context.storageState();
   await check(
     "a page opened directly leads to the town; one walked into goes back",

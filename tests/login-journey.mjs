@@ -3955,6 +3955,120 @@ try {
   );
 
   await check(
+    "a nine saved on another device first is not written over, and the reader's own waits to be opened",
+    async () => {
+      // The database counts the nine's versions; the page reads version 1.
+      profile.nine_version = 1;
+      town.profile_nine = [];
+      const sent = [];
+      const answer = (route) => {
+        sent.push(JSON.parse(route.request().postData()));
+        if (sent.length === 1) {
+          // Another device saved its nine first: version 2.
+          profile.nine_version = 2;
+          town.profile_nine = [
+            {
+              profile_id: user.id,
+              position: 0,
+              book_id: "solaris",
+              note: "別の端末で選んだ一冊",
+            },
+          ];
+          return route.fulfill({
+            status: 409,
+            contentType: "application/json",
+            body: JSON.stringify({
+              code: "PT409",
+              message: "changed elsewhere",
+              details: null,
+              hint: null,
+            }),
+          });
+        }
+        profile.nine_version = 3;
+        town.profile_nine = [
+          { profile_id: user.id, position: 0, book_id: "momo", note: "" },
+        ];
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "3",
+        });
+      };
+      await page.route(supabase + "/rest/v1/rpc/save_nine", answer);
+      try {
+        await page.goto(base + "/profiles/me/");
+        const section = page.getByRole("region", { name: "人生の9冊" });
+        const nine = page.getByRole("dialog", { name: "人生の9冊を選ぶ" });
+        const note = nine.locator(".profile-kept");
+        await section.getByRole("button", { name: "編集" }).click();
+        await nine
+          .getByRole("searchbox", { name: "人生の9冊に追加する本を検索" })
+          .fill("モモ");
+        await nine
+          .getByRole("button", { name: "モモを人生の9冊に加える" })
+          .click();
+        await nine
+          .getByRole("button", { name: "この並びを保存", exact: true })
+          .click();
+        await expect(nine).toHaveCount(0);
+        // Sent over version 1, and not written over the one saved since:
+        // the page reads it again, says so once, and keeps the work.
+        await expect(
+          page.getByText(
+            "別の端末で先に変わっていたため、人生の9冊の変更は送りませんでした。書きかけは残しています。",
+          ),
+        ).toBeVisible();
+        expect(sent[0].base).toBe(1);
+        await shot("nine-elsewhere-told");
+        await expect(
+          page.getByText("人生の9冊を保存できませんでした"),
+        ).toHaveCount(0);
+        await expect(section.locator(".profile-nine-title")).toHaveText([
+          "ソラリス",
+        ]);
+        // The dialog shows the nine saved now, and waits on the choice.
+        await section.getByRole("button", { name: "編集" }).click();
+        await expect(note).toContainText(
+          "書きかけより新しい人生の9冊が保存されています",
+        );
+        const items = nine.locator(".profile-nine-editor-item strong");
+        await expect(items).toHaveText(["ソラリス"]);
+        await shot("nine-elsewhere-waits");
+        await note
+          .getByRole("button", { name: "書きかけを開く", exact: true })
+          .click();
+        await expect(items).toHaveText(["モモ"]);
+        await expect(note).toContainText(
+          "保存すると、いま保存されている人生の9冊と入れ替わります",
+        );
+        await shot("nine-elsewhere-opened");
+        // Saved again, over the version read since, the work is let go.
+        await nine
+          .getByRole("button", { name: "この並びを保存", exact: true })
+          .click();
+        await expect(nine).toHaveCount(0);
+        await expect.poll(() => sent.length).toBe(2);
+        expect(sent[1].base).toBe(2);
+        await expect(section.locator(".profile-nine-title")).toHaveText([
+          "モモ",
+        ]);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => localStorage.getItem("book-town-nine-drafts-v1") ?? "",
+            ),
+          )
+          .not.toContain("momo");
+      } finally {
+        await page.unroute(supabase + "/rest/v1/rpc/save_nine", answer);
+        delete profile.nine_version;
+        delete town.profile_nine;
+      }
+    },
+  );
+
+  await check(
     "on a phone, the sheet of words for an owner opens ready to write, with 届ける just above the keyboard",
     async () => {
       expect(await coarse(page)).toBe(true);
