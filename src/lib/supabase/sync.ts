@@ -379,7 +379,8 @@ export function backgroundSync<T, W>(
    * Puts what waits now on the device, in place of what was kept. What the
    * database turned away stays too until the listener is told (with the
    * words written, missed-changes.ts): a page closed before that leaves it
-   * to the next, which sends it again and tells it.
+   * to the next, which sends it again and tells it (a thing set whole is
+   * only told: see send).
    */
   function keep() {
     if (!spec.outbox || closed || synced === null) return;
@@ -438,25 +439,32 @@ export function backgroundSync<T, W>(
         if (now) Object.assign(known, now);
       } catch (error) {
         if (isRetry(error)) throw error;
-        if (
-          error instanceof TownSyncError &&
-          error.code === CHANGED_ELSEWHERE
-        ) {
-          into.elsewhere.push(write);
-          return;
-        }
         let parts: W[] = [];
         try {
           parts = spec.split?.(write) ?? [];
         } catch {
           // A write that cannot be taken apart is turned away whole.
         }
+        // Each part alone: only the one changed elsewhere, or turned away,
+        // is left out (two posters made at once, one changed since).
         if (parts.length > 1) for (const part of parts) await one(part);
+        else if (
+          error instanceof TownSyncError &&
+          error.code === CHANGED_ELSEWHERE
+        )
+          into.elsewhere.push(write);
         else into.refused.push(write);
       }
     }
     for (const kept of writes) {
       if (closed) return;
+      // A thing set whole kept with no marks is one the database turned
+      // away (keep): told again, not sent, as sent over the version this
+      // page read it could write an old copy over a newer one.
+      if (kept.was === undefined && there?.(kept.write)) {
+        into.refused.push(kept.write);
+        continue;
+      }
       const now = kept.was !== undefined ? there?.(kept.write) : undefined;
       if (now) {
         const mark = placed?.get(now.key) ?? now.mark;

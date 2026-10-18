@@ -487,7 +487,18 @@ async function main() {
         [AKI_BOOK],
         ["古いアプリから"],
       ]);
-      assert.ok((await nine(AKI)).version > nineAt);
+      const oldWay = (await nine(AKI)).version;
+      assert.ok(oldWay > nineAt);
+      // Sent again (its answer lost), the same nine writes nothing.
+      await as(AKI, "select public.replace_profile_nine($1, $2)", [
+        [AKI_BOOK],
+        ["古いアプリから"],
+      ]);
+      assert.equal((await nine(AKI)).version, oldWay);
+      assert.equal(
+        await save(AKI, "save_nine", [[AKI_BOOK], ["古いアプリから"], nineAt]),
+        oldWay,
+      );
       // A newer device that began before it is refused.
       assert.equal(
         await refusal(
@@ -507,6 +518,14 @@ async function main() {
         AKI_POSTER,
       ]);
       assert.equal((await posterRow(AKI_POSTER)).version, posterAt + 1);
+
+      // A nine's row changed in place counts too.
+      const inPlace = (await nine(AKI)).version;
+      await rows(
+        "update profile_nine set note = 'その場で' where profile_id = $1",
+        [AKI],
+      );
+      assert.equal((await nine(AKI)).version, inPlace + 1);
     },
   );
 
@@ -572,9 +591,12 @@ async function main() {
       assert.deepEqual(await shop(AKI_SHOP), at);
       // Ben's save of Aki's poster makes nothing of Aki's.
       const posterAt = await posterRow(AKI_POSTER);
-      await refusal(
-        () => save(BEN, "save_poster", [AKI_POSTER, poster("ベン"), null]),
-        "someone else's poster, as new",
+      assert.equal(
+        await refusal(
+          () => save(BEN, "save_poster", [AKI_POSTER, poster("ベン"), null]),
+          "someone else's poster, as new",
+        ),
+        "42501",
       );
       assert.equal(
         await refusal(
@@ -599,6 +621,35 @@ async function main() {
           await refusal(() => save(null, fn, [...args]), fn + " signed out"),
           "42501",
         );
+      // Signed out, none can even be called; what counts is nobody's to call.
+      const callable = await rows<{
+        fn: string;
+        anon: boolean;
+        reader: boolean;
+      }>(
+        `select p.oid::regprocedure::text as fn,
+           has_function_privilege('anon', p.oid, 'execute') as anon,
+           has_function_privilege('authenticated', p.oid, 'execute') as reader
+         from pg_proc p
+         where p.proname in ('save_shelves', 'save_scene', 'save_nine',
+           'save_poster', 'holds_nine', 'count_shop_versions',
+           'count_poster_version', 'count_nine_version', 'keep_nine_version')
+         order by 1`,
+      );
+      assert.deepEqual(
+        callable.map((row) => [row.fn, row.anon, row.reader]),
+        [
+          ["private.count_nine_version()", false, false],
+          ["private.count_poster_version()", false, false],
+          ["private.count_shop_versions()", false, false],
+          ["private.holds_nine(uuid,uuid[],text[])", false, true],
+          ["private.keep_nine_version()", false, false],
+          ["save_nine(uuid[],text[],bigint)", false, true],
+          ["save_poster(uuid,jsonb,bigint)", false, true],
+          ["save_scene(uuid,jsonb,bigint)", false, true],
+          ["save_shelves(uuid,jsonb,bigint)", false, true],
+        ],
+      );
     },
   );
 
@@ -636,6 +687,7 @@ async function main() {
                and not a.attisdropped
              union all
              select p.oid::regprocedure::text || ' ' || coalesce(p.proacl::text, '')
+                 || ' ' || md5(btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')))
              from pg_proc p
              where p.pronamespace in ('public'::regnamespace, 'private'::regnamespace)
              union all

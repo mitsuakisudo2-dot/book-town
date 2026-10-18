@@ -345,6 +345,16 @@ async function readTown(
   const versioned =
     typeof profiles.find((profile) => profile.id === userId)?.nine_version ===
     "number";
+  // The person's own nine is read again after its version (read with the
+  // profiles), so the page never holds a nine older than the version it
+  // writes over: one saved on another device between the two reads is
+  // refused once and read again, not written over.
+  const ownNine =
+    versioned && userId !== null
+      ? all(client.from("profile_nine").select("*").eq("profile_id", userId))
+      : null;
+  // Waited on below; the town fails as one if it cannot be read.
+  ownNine?.catch(() => {});
   let shelvesVersion = 0;
   let ownShelves: Json = [];
   let ownSceneBooks: Json = [];
@@ -399,7 +409,9 @@ async function readTown(
 
   const rows: Omit<RemoteRows, "books" | "seenNotifications"> = {
     profiles,
-    nine,
+    nine: ownNine
+      ? [...nine.filter((row) => row.profile_id !== userId), ...(await ownNine)]
+      : nine,
     shops,
     ownShelves,
     ownSceneBooks,
@@ -991,13 +1003,17 @@ export async function applyWrite(
       return;
     }
     case "update-poster":
-      if (base !== undefined)
+      // On a database that counts versions, never the old way: a poster
+      // whose version this page does not know (its making was refused, or
+      // changed elsewhere) is written only over the version it was made at,
+      // and one not there is told as taken down.
+      if (base !== undefined || versioned)
         return {
           ["poster:" + write.id]: await savedAt(
             client.rpc("save_poster", {
               poster: write.id,
               value: write.patch as unknown as Json,
-              base,
+              base: base ?? 0,
             }),
           ),
         };

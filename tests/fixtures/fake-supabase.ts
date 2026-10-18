@@ -176,6 +176,14 @@ export function fakeSupabase(
     loseAnswers: false,
     /** Turns a write away: why, or null to take it. */
     refuse: (() => null) as (write: FakeWrite) => Refusal | null,
+    /**
+     * Holds a request on `table` until what it gives settles: answered as
+     * the tables are then (two reads of one load at different moments).
+     */
+    hold: (() => undefined) as (
+      table: string,
+      op: string,
+    ) => PromiseLike<void> | undefined,
     client: null as unknown as SupabaseClient<Database>,
   };
   const table = (name: string) => (tables[name] ??= []);
@@ -207,6 +215,21 @@ export function fakeSupabase(
     else if (name === "profiles") row.nine_version = was ? was.nine_version : 0;
   }
   /** One up for the reader's nine (each statement that changed it). */
+  /** The reader's nine, in order. */
+  const ownNine = () =>
+    table("profile_nine")
+      .filter((row) => row.profile_id === userId)
+      .sort((a, b) => Number(a.position) - Number(b.position));
+  /** Whether the reader's nine is already these books with these notes. */
+  const holdsNine = (ids: string[], notes: string[]) =>
+    sameValue(
+      ownNine().map((row) => row.book_id),
+      ids,
+    ) &&
+    sameValue(
+      ownNine().map((row) => row.note),
+      notes,
+    );
   const nineChanged = (by: number) => {
     const profile = table("profiles").find((row) => row.id === userId);
     if (versions && profile && by)
@@ -357,6 +380,7 @@ export function fakeSupabase(
       reject?: ((reason: unknown) => B | PromiseLike<B>) | null,
     ): PromiseLike<A | B> {
       return Promise.resolve()
+        .then(() => fake.hold(this.name, this.op))
         .then(() => this.answer())
         .then(resolve, reject);
     }
@@ -522,11 +546,17 @@ export function fakeSupabase(
           op: "rpc",
           rows: [args],
         };
-        const refusal =
-          fake.refuse(write) ?? othersBook(args.book_ids as string[]);
-        if (refusal) return failed(refusal);
         const ids = args.book_ids as string[];
         const notes = args.notes as string[];
+        // What is held already is not written again (write_versions).
+        const refusal =
+          fake.refuse(write) ??
+          (holdsNine(ids, notes) ? null : othersBook(ids));
+        if (refusal) return failed(refusal);
+        if (holdsNine(ids, notes)) {
+          writes.push(write);
+          return { data: null, error: null, status: 204, count: null };
+        }
         nineChanged(
           Number(
             table("profile_nine").some((row) => row.profile_id === userId),
@@ -619,20 +649,8 @@ export function fakeSupabase(
       if (!profile) return notYours;
       const ids = args.book_ids as string[];
       const notes = args.notes as string[];
-      const held = table("profile_nine")
-        .filter((row) => row.profile_id === userId)
-        .sort((a, b) => Number(a.position) - Number(b.position));
-      if (
-        sameValue(
-          held.map((row) => row.book_id),
-          ids,
-        ) &&
-        sameValue(
-          held.map((row) => row.note),
-          notes,
-        )
-      )
-        return Number(profile.nine_version);
+      const held = ownNine();
+      if (holdsNine(ids, notes)) return Number(profile.nine_version);
       if (profile.nine_version !== args.base) return changedSince("nine");
       const refusal = othersBook(ids);
       if (refusal) return refusal;
@@ -660,11 +678,7 @@ export function fakeSupabase(
     if (!row) {
       if (base !== null) return changedSince("poster");
       if (table("posters").some((other) => other.id === args.poster))
-        return {
-          status: 409,
-          code: "23505",
-          message: "duplicate key value violates unique constraint",
-        };
+        return notYours;
       const fresh = {
         ...DEFAULTS.posters(now()),
         id: args.poster,

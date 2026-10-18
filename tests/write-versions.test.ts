@@ -426,6 +426,206 @@ async function main() {
     },
   );
 
+  const poster = (heading: string, theme: "navy" | "kinari" | "sumi") => ({
+    template: "lineup" as const,
+    theme,
+    font: "mincho" as const,
+    pages: [{ heading, text: "", bookIds: [BOOK] }],
+    spoiler: false,
+    inTimeline: true,
+    status: "draft" as const,
+  });
+  /** The heading on a poster's first page, as the database keeps it. */
+  const headingOf = (pages: unknown) =>
+    (
+      pages as { blocks: { type: string; text?: string }[] }[] | undefined
+    )?.[0]?.blocks.find((block) => block.type === "heading")?.text;
+  /** What a write to posters sends of a poster (save_poster or a row). */
+  const sentPoster = (write: { rows: Record<string, unknown>[] }) => {
+    const row = (write.rows[0]?.value ?? write.rows[0] ?? {}) as {
+      theme?: string;
+      pages?: unknown;
+    };
+    return { theme: row.theme, heading: headingOf(row.pages) };
+  };
+  /** Nothing gets through for now: as a connection that drops. */
+  const dropped = { status: 0, code: "", message: "Failed to fetch" };
+  const posterThemes = (db: Db) =>
+    Object.fromEntries(
+      db.tables.posters.map((row) => [headingOf(row.pages), row.theme]),
+    );
+
+  await check(
+    "a nine saved between the reads of its version and of its books is not written over",
+    async () => {
+      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const phone = await device(db);
+      // The laptop reads the nine's books at once, its version only after
+      // the phone has saved (two requests, two moments).
+      let saved!: () => void;
+      const phoneSaved = new Promise<void>((done) => (saved = done));
+      let holding = true;
+      let nineRead = false;
+      db.hold = (table, op) => {
+        if (!holding || op !== "select") return undefined;
+        if (table === "profile_nine") nineRead = true;
+        return table === "profiles" ? phoneSaved : undefined;
+      };
+      const opening = device(db);
+      await until(() => nineRead, "the laptop reads the nine's books");
+      phone.actions.updateNine([BOOK], { [BOOK]: "電話で書いた" });
+      assert.equal(await settled(phone), "saved");
+      holding = false;
+      saved();
+      const laptop = await opening;
+      // What the laptop holds is never older than the version it writes over.
+      assert.deepEqual(laptop.getSnapshot().me.nineNotes, {
+        [BOOK]: "電話で書いた",
+      });
+      laptop.actions.updateNine([BOOK], { [BOOK]: "ノートで書き足した" });
+      assert.equal(await settled(laptop), "saved");
+      assert.deepEqual(
+        db.tables.profile_nine.map((row) => row.note),
+        ["ノートで書き足した"],
+      );
+    },
+  );
+
+  await check(
+    "a poster whose making went unanswered is written only over the version it was made at",
+    async () => {
+      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const phone = await device(db);
+      // The phone makes a poster; the database takes it, the answer is lost.
+      db.loseAnswers = true;
+      const id = phone.actions.savePoster(poster("夜の本", "navy"));
+      assert.ok(id);
+      await until(
+        () => phone.getPersistenceSnapshot() === "unavailable",
+        "the answer is lost",
+      );
+      db.loseAnswers = false;
+      // The phone gets nothing through for a while, and the reader goes on
+      // changing it there; the laptop reads it and changes it meanwhile.
+      let away = true;
+      db.refuse = (write) =>
+        away &&
+        write.table === "posters" &&
+        sentPoster(write).theme !== "kinari"
+          ? dropped
+          : null;
+      phone.actions.savePoster(poster("夜の本", "sumi"), id);
+      const laptop = await device(db);
+      laptop.actions.savePoster(poster("夜の本", "kinari"), id);
+      assert.equal(await settled(laptop), "saved");
+      away = false;
+      assert.equal(await settled(phone), "recovered");
+      assert.deepEqual(posterThemes(db), { 夜の本: "kinari" });
+      assert.equal(
+        phone.getMissedSnapshot()?.line,
+        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。",
+      );
+      assert.ok(
+        !db.writes.some(
+          (write) => write.table === "posters" && write.op === "update",
+        ),
+        "never the old way",
+      );
+    },
+  );
+
+  await check(
+    "two posters made at once, one changed elsewhere since: the other is still made",
+    async () => {
+      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const phone = await device(db);
+      // The first goes in; the connection drops before the second.
+      let cut = true;
+      db.refuse = (write) =>
+        cut &&
+        write.table === "posters" &&
+        sentPoster(write).heading === "二枚目"
+          ? dropped
+          : null;
+      const first = phone.actions.savePoster(poster("一枚目", "navy"));
+      phone.actions.savePoster(poster("二枚目", "navy"));
+      assert.ok(first);
+      await until(
+        () => phone.getPersistenceSnapshot() === "unavailable",
+        "the second cannot be sent",
+      );
+      assert.deepEqual(posterThemes(db), { 一枚目: "navy" });
+      const laptop = await device(db);
+      laptop.actions.savePoster(poster("一枚目", "kinari"), first);
+      assert.equal(await settled(laptop), "saved");
+      cut = false;
+      assert.equal(await settled(phone), "recovered");
+      assert.deepEqual(posterThemes(db), { 一枚目: "kinari", 二枚目: "navy" });
+      assert.equal(
+        phone.getMissedSnapshot()?.line,
+        "別の端末で先に変わっていたため、ポスターの変更は送りませんでした。",
+      );
+    },
+  );
+
+  await check(
+    "shelves turned away and kept for the next page are told there, not sent again",
+    async () => {
+      const db = fakeSupabase(AKI, seed(), { versions: true });
+      const storage = memoryStorage();
+      const phone = await device(db, storage);
+      // Turned away; then the page loses the network before it can tell it,
+      // and is closed.
+      let first = true;
+      db.refuse = (write) => {
+        if (write.table !== "shop_private") return null;
+        db.offline = first;
+        first = false;
+        return {
+          status: 400,
+          code: "23514",
+          message: "new row violates check constraint",
+        };
+      };
+      phone.actions.addShelf("断られた棚", 10);
+      await until(
+        () => db.offline && phone.getPersistenceSnapshot() === "unavailable",
+        "the page cannot read the town again",
+      );
+      phone.use({
+        kind: "unavailable",
+        newId: () => "",
+        load: () => ({ state: phone.getSnapshot(), status: "unavailable" }),
+        save: () => "unavailable",
+      });
+      db.offline = false;
+      db.refuse = () => null;
+      // Another device saves the shelves meanwhile.
+      const laptop = await device(db);
+      laptop.actions.addShelf("ノートの棚", 10);
+      assert.equal(await settled(laptop), "saved");
+      const sent = saves(db, "save_shelves");
+      const next = createTownStore(
+        accountTownBackend(db.client, AKI, {
+          delay: 0,
+          retryDelays: [10],
+          storage: false,
+          device: storage,
+        }),
+        undefined,
+        { onMissed: (missed) => townMissedLine(missed, AKI) },
+      );
+      next.initialize();
+      assert.equal(await settled(next), "recovered");
+      assert.deepEqual(ownShelves(db), ["ノートの棚"]);
+      assert.equal(saves(db, "save_shelves"), sent);
+      assert.match(
+        next.getMissedSnapshot()?.line ?? "",
+        /^書店の棚を保存できませんでした。/,
+      );
+    },
+  );
+
   console.log(`${passed} write version checks passed`);
 }
 

@@ -19,14 +19,16 @@
 -- it writes nothing; otherwise it writes nothing and answers PT409 (HTTP
 -- 409), and the app reads again and tells the reader it changed on another
 -- device. Each answers the version it holds now. A thing never saved is at
--- version 0 (a shop with no private row, a nine never kept). The old ways of writing (an upsert of shop_private, an update
--- of posters, replace_profile_nine) still work for an app from before this
--- file, and still count a version, so a newer app's device sees their change.
+-- version 0 (a shop with no private row, a nine never kept). The old ways
+-- of writing (an upsert of shop_private, an update of posters,
+-- replace_profile_nine) still work for an app from before this file, and
+-- still count a version, so a newer app's device sees their change; sent
+-- again with what is already held, they write nothing and count nothing.
 -- Nobody can write a version themselves.
 --
 -- No row changes: the new columns begin at 0. The copy the last move kept
 -- (20261106000000_own_books_only, checked in production on 2026-10-18) is let
--- go, as that file planned.
+-- go, as that file planned; once let go it cannot be restored.
 --
 -- Rollback: a new migration with
 --   drop trigger shop_private_versions on public.shop_private;
@@ -41,6 +43,26 @@
 --     public.save_poster(uuid, jsonb, bigint),
 --     private.count_shop_versions(), private.count_poster_version(),
 --     private.count_nine_version(), private.keep_nine_version();
+--   create or replace function public.replace_profile_nine(book_ids uuid[], notes text[])
+--   returns void
+--   language plpgsql security invoker set search_path = '' as $$
+--   begin
+--     if (select auth.uid()) is null then
+--       raise exception 'not signed in' using errcode = '42501';
+--     end if;
+--     if coalesce(array_length(book_ids, 1), 0) > 9
+--       or coalesce(array_length(book_ids, 1), 0) <> coalesce(array_length(notes, 1), 0)
+--     then
+--       raise exception 'the nine takes up to nine books, each with a note'
+--         using errcode = '22023';
+--     end if;
+--     delete from public.profile_nine where profile_id = (select auth.uid());
+--     insert into public.profile_nine (profile_id, position, book_id, note)
+--     select (select auth.uid()), entry.position, entry.book_id, notes[entry.position]
+--     from unnest(book_ids) with ordinality as entry(book_id, position);
+--   end;
+--   $$;
+--   drop function private.holds_nine(uuid, uuid[], text[]);
 --   alter table public.shop_private drop column shelves_version,
 --     drop column scene_version;
 --   alter table public.posters drop column version;
@@ -50,6 +72,10 @@
 
 select private.drop_copy('20261106000000_own_books_only');
 
+-- Each table's writes wait while its column is added. A long write already
+-- holding one stops this file after 10s, rather than every write to the
+-- table waiting behind it.
+select set_config('lock_timeout', '10s', true);
 alter table public.shop_private
   add column shelves_version bigint not null default 0,
   add column scene_version bigint not null default 0;
@@ -124,6 +150,50 @@ create trigger profile_nine_versions_delete after delete on public.profile_nine
   referencing old table as changed
   for each statement execute function private.count_nine_version();
 
+-- Whether the reader's nine is already these books with these notes, in
+-- this order.
+create function private.holds_nine(reader uuid, book_ids uuid[], notes text[])
+returns boolean
+language sql stable security invoker set search_path = '' as $$
+  select coalesce(array_agg(n.book_id order by n.position), '{}')
+      = coalesce(book_ids, '{}')
+    and coalesce(array_agg(n.note order by n.position), '{}')
+      = coalesce(notes, '{}')
+  from public.profile_nine n where n.profile_id = reader;
+$$;
+revoke all on function private.holds_nine(uuid, uuid[], text[]) from public, anon, authenticated;
+grant execute on function private.holds_nine(uuid, uuid[], text[]) to authenticated;
+
+-- The old way of keeping the nine, for an app from before this file: as
+-- before, but it takes the profile first, as save_nine does (so the two
+-- never wait on each other), and writes nothing when the nine is already
+-- what it sends (sent again, its answer lost), so its version stays.
+create or replace function public.replace_profile_nine(book_ids uuid[], notes text[])
+returns void
+language plpgsql security invoker set search_path = '' as $$
+declare
+  reader uuid := (select auth.uid());
+begin
+  if reader is null then
+    raise exception 'not signed in' using errcode = '42501';
+  end if;
+  if coalesce(array_length(book_ids, 1), 0) > 9
+    or coalesce(array_length(book_ids, 1), 0) <> coalesce(array_length(notes, 1), 0)
+  then
+    raise exception 'the nine takes up to nine books, each with a note'
+      using errcode = '22023';
+  end if;
+  perform 1 from public.profiles p where p.id = reader for no key update;
+  if private.holds_nine(reader, book_ids, notes) then
+    return;
+  end if;
+  delete from public.profile_nine where profile_id = reader;
+  insert into public.profile_nine (profile_id, position, book_id, note)
+  select reader, entry.position, entry.book_id, notes[entry.position]
+  from unnest(book_ids) with ordinality as entry(book_id, position);
+end;
+$$;
+
 -- Only the count above moves the version (it runs as the table's owner); a
 -- reader's own update of their profile leaves it as it is.
 create function private.keep_nine_version() returns trigger
@@ -146,7 +216,9 @@ create trigger profiles_keep_nine_version before insert or update on public.prof
 -- Writing over a version ---------------------------------------------------------
 
 -- Each runs with the reader's own rights: the policies and the checks on the
--- tables apply as to any other write. A refusal names no value.
+-- tables apply as to any other write. A refusal names no value. The row is
+-- held while it is compared and written (for no key update: rows that point
+-- at it, a follow or a poster's books, are still written meanwhile).
 
 -- The shop's shelves. A shop with no private row yet gets one.
 create function public.save_shelves(shop uuid, value jsonb, base bigint)
@@ -157,7 +229,7 @@ declare
   now_at bigint;
 begin
   select sp.shelves, sp.shelves_version into held
-  from public.shop_private sp where sp.shop_id = shop for update;
+  from public.shop_private sp where sp.shop_id = shop for no key update;
   if not found then
     insert into public.shop_private as sp (shop_id, shelves) values (shop, value)
     on conflict (shop_id) do nothing
@@ -167,7 +239,7 @@ begin
     end if;
     -- Made meanwhile, from another page: written over its version as any is.
     select sp.shelves, sp.shelves_version into held
-    from public.shop_private sp where sp.shop_id = shop for update;
+    from public.shop_private sp where sp.shop_id = shop for no key update;
     if not found then
       raise exception 'only the owner writes a shop''s shelves' using errcode = '42501';
     end if;
@@ -195,7 +267,7 @@ declare
   now_at bigint;
 begin
   select sp.scene, sp.scene_version into held
-  from public.shop_private sp where sp.shop_id = shop for update;
+  from public.shop_private sp where sp.shop_id = shop for no key update;
   if not found then
     insert into public.shop_private as sp (shop_id, scene) values (shop, value)
     on conflict (shop_id) do nothing
@@ -204,7 +276,7 @@ begin
       return now_at;
     end if;
     select sp.scene, sp.scene_version into held
-    from public.shop_private sp where sp.shop_id = shop for update;
+    from public.shop_private sp where sp.shop_id = shop for no key update;
     if not found then
       raise exception 'only the owner writes a shop''s scene' using errcode = '42501';
     end if;
@@ -235,16 +307,11 @@ begin
     raise exception 'not signed in' using errcode = '42501';
   end if;
   select p.nine_version into held from public.profiles p
-  where p.id = reader for update;
+  where p.id = reader for no key update;
   if not found then
     raise exception 'only a reader keeps a nine' using errcode = '42501';
   end if;
-  if (select coalesce(array_agg(n.book_id order by n.position), '{}')
-      from public.profile_nine n where n.profile_id = reader)
-       = coalesce(book_ids, '{}')
-    and (select coalesce(array_agg(n.note order by n.position), '{}')
-      from public.profile_nine n where n.profile_id = reader)
-       = coalesce(notes, '{}') then
+  if private.holds_nine(reader, book_ids, notes) then
     return held;
   end if;
   if held is distinct from base then
@@ -260,8 +327,9 @@ grant execute on function public.save_nine(uuid[], text[], bigint) to authentica
 -- One of the reader's posters, by the fields the app writes (template, theme,
 -- font, pages, spoiler, show_in_timeline, status). A poster made here comes
 -- with no base: it is made if it is not there yet, and one already there (an
--- earlier try whose answer was lost) is written over as at version 0. A
--- poster known saved (with a base) that is gone was taken down elsewhere.
+-- earlier try whose answer was lost, or one still on its way) is written
+-- over as at version 0. A poster known saved (with a base) that is gone was
+-- taken down elsewhere.
 create function public.save_poster(poster uuid, value jsonb, base bigint default null)
 returns bigint
 language plpgsql security invoker set search_path = '' as $$
@@ -274,18 +342,26 @@ begin
     raise exception 'not signed in' using errcode = '42501';
   end if;
   select * into held from public.posters p
-  where p.id = poster and p.author_id = reader for update;
+  where p.id = poster and p.author_id = reader for no key update;
   if not found then
     if base is not null then
       raise exception 'the poster was taken down' using errcode = 'PT409';
     end if;
-    insert into public.posters (id, author_id, template, theme, font, pages,
-      spoiler, show_in_timeline, status)
+    insert into public.posters as p (id, author_id, template, theme, font,
+      pages, spoiler, show_in_timeline, status)
     values (poster, reader, value ->> 'template', value ->> 'theme',
       value ->> 'font', value -> 'pages', (value ->> 'spoiler')::boolean,
       (value ->> 'show_in_timeline')::boolean, value ->> 'status')
-    returning version into now_at;
-    return now_at;
+    on conflict (id) do nothing
+    returning p.version into now_at;
+    if now_at is not null then
+      return now_at;
+    end if;
+    select * into held from public.posters p
+    where p.id = poster and p.author_id = reader for no key update;
+    if not found then
+      raise exception 'only its maker writes a poster' using errcode = '42501';
+    end if;
   end if;
   if (held.template, held.theme, held.font, held.pages, held.spoiler,
       held.show_in_timeline, held.status)

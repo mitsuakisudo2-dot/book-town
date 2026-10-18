@@ -1120,7 +1120,11 @@ async function main() {
       for (const fake of [signedIn, visiting]) {
         const starts = (table: string) =>
           fake.asked
-            .filter((ask) => ask.table === table)
+            .filter(
+              (ask) =>
+                ask.table === table &&
+                !ask.filters.includes("profile_id=eq." + AKI),
+            )
             .map((ask) => ask.from);
         for (const table of [
           "profiles",
@@ -1132,6 +1136,16 @@ async function main() {
           assert.deepEqual(starts(table), [0, 999], table);
         assert.deepEqual(starts("reading_entries"), [0, 999, 1998]);
       }
+      // The reader's own nine is read once more, after its version
+      // (write_versions); a visitor has none.
+      const ownNine = (fake: typeof signedIn) =>
+        fake.asked.filter(
+          (ask) =>
+            ask.table === "profile_nine" &&
+            ask.filters.includes("profile_id=eq." + AKI),
+        ).length;
+      assert.equal(ownNine(signedIn), 1);
+      assert.equal(ownNine(visiting), 0);
     },
   );
 
