@@ -21,11 +21,22 @@
 //                                             Resend's DNS records (and DMARC)
 //                                             into Vercel's DNS, and waits for
 //                                             Resend to verify them
+//   node scripts/vercel.mjs rollback main     points SITE_DOMAIN back at the
+//                                             production build before the
+//                                             current one; refuses when the
+//                                             migrations differ between the
+//                                             two, unless ALLOW_MIGRATIONS=yes
+//   node scripts/vercel.mjs promote-latest main
+//                                             points production at the newest
+//                                             ready build again, which undoes a
+//                                             rollback (until then, Vercel
+//                                             builds main without publishing)
 //
 // Vercel sometimes stops a preview seconds after a push, before building; a
 // new build of the same branch is the fix. The logs are public, like the
 // repository: build output is printed, the token never is.
 
+import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 // Tests point this at a stand-in.
@@ -40,6 +51,8 @@ const ACTIONS = new Set([
   "domains-apply",
   "mail",
   "mail-apply",
+  "rollback",
+  "promote-latest",
 ]);
 const RESEND_API = process.env.RESEND_API_URL ?? "https://api.resend.com";
 // Tokyo, nearest to the readers.
@@ -188,12 +201,53 @@ export function domainLine(domain, config) {
   return parts.join(" ");
 }
 
+/**
+ * The production build to go back to: the newest ready one made before the
+ * build production shows now. Vercel's free plan allows only that one.
+ */
+export function rollbackTarget(deployments, current) {
+  const createdOf = (d) => d.created ?? d.createdAt ?? 0;
+  const now = createdOf(current);
+  return (
+    (deployments ?? [])
+      .filter(
+        (d) =>
+          (d.uid ?? d.id) !== current.id &&
+          d.readyState === "READY" &&
+          d.target === "production" &&
+          createdOf(d) < now,
+      )
+      .sort((a, b) => createdOf(b) - createdOf(a))[0] ?? null
+  );
+}
+
+/**
+ * The migrations that differ between two commits, or null when git cannot
+ * tell (a commit missing from the checkout). A site built before a migration
+ * may not work with the database after it.
+ */
+export function migrationsBetween(from, to) {
+  if (!/^[0-9a-f]{40}$/.test(from ?? "") || !/^[0-9a-f]{40}$/.test(to ?? ""))
+    return null;
+  try {
+    return execFileSync(
+      "git",
+      ["diff", "--name-only", from, to, "--", "supabase/migrations"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    )
+      .split("\n")
+      .filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
 const finished = (state) => ["READY", "ERROR", "CANCELED"].includes(state);
 
 async function main(action, branch) {
   if (!ACTIONS.has(action) || !validBranch(branch)) {
     console.error(
-      "Usage: node scripts/vercel.mjs status|deploy|ensure|domains|domains-apply|mail|mail-apply <branch>",
+      "Usage: node scripts/vercel.mjs status|deploy|ensure|domains|domains-apply|mail|mail-apply|rollback|promote-latest <branch>",
     );
     process.exit(2);
   }
@@ -397,6 +451,84 @@ async function main(action, branch) {
     return;
   }
 
+  const site = process.env.SITE_DOMAIN ?? "";
+  const shown = async () =>
+    call("GET", `/v13/deployments/${encodeURIComponent(site)}`);
+  const production = async () => {
+    const { deployments } = await call("GET", "/v7/deployments", {
+      projectId: project,
+      target: "production",
+      limit: 20,
+    });
+    return deployments ?? [];
+  };
+  // After a rollback Vercel keeps building main but stops publishing it.
+  async function warnIfRolledBack(own) {
+    if (!site) return;
+    try {
+      const current = await shown();
+      if (current.id !== own.uid && current.id !== own.id)
+        console.log(
+          `::warning::${site} still shows ${deploymentLine(current)}. If production was rolled back, promote-latest publishes main again.`,
+        );
+    } catch (error) {
+      console.log(`Could not tell what ${site} shows: ${error.message}`);
+    }
+  }
+
+  if (action === "rollback" || action === "promote-latest") {
+    if (branch !== "main") throw new Error("Only main goes to production.");
+    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(site))
+      throw new Error("SITE_DOMAIN is not a domain.");
+    const current = await shown();
+    console.log(`${site} shows ${deploymentLine(current)}`);
+    const list = await production();
+    if (action === "promote-latest") {
+      const latest = list.find((d) => d.readyState === "READY");
+      if (!latest) throw new Error("No ready production build.");
+      if (latest.uid === current.id) {
+        console.log("It is already the newest ready build.");
+        return;
+      }
+      await call(
+        "POST",
+        `/v10/projects/${encodeURIComponent(project)}/promote/${encodeURIComponent(latest.uid)}`,
+      );
+      console.log("Published again: " + deploymentLine(latest));
+      return;
+    }
+    const target = rollbackTarget(list, current);
+    if (!target) throw new Error("No earlier ready production build.");
+    const changed = migrationsBetween(
+      target.meta?.githubCommitSha,
+      current.meta?.githubCommitSha,
+    );
+    if (changed === null || changed.length) {
+      if (changed === null)
+        console.log(
+          "::warning::Could not compare the migrations of the two builds.",
+        );
+      for (const file of changed ?? [])
+        console.log(`  migration since then: ${file}`);
+      if (process.env.ALLOW_MIGRATIONS !== "yes")
+        throw new Error(
+          "The database may have changed since that build, so nothing was rolled back. Run it again with allow_migrations once the owner agrees.",
+        );
+    }
+    await call(
+      "POST",
+      `/v1/projects/${encodeURIComponent(project)}/rollback/${encodeURIComponent(target.uid)}`,
+      {
+        description: `Rolled back from ${current.meta?.githubCommitSha?.slice(0, 7) ?? current.id}`,
+      },
+    );
+    console.log("Rolled back to: " + deploymentLine(target));
+    console.log(
+      "Vercel now builds main without publishing it; promote-latest publishes the newest build again.",
+    );
+    return;
+  }
+
   if (action === "status") {
     const { projects } = await call("GET", "/v10/projects", { limit: 20 });
     console.log("Projects: " + projects.map((p) => p.name).join(", "));
@@ -434,6 +566,7 @@ async function main(action, branch) {
       );
       if (own?.readyState === "READY") {
         console.log("Vercel built it: " + deploymentLine(own));
+        await warnIfRolledBack(own);
         return;
       }
       if (own && finished(own.readyState)) {
