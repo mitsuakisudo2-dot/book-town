@@ -13,6 +13,7 @@ import {
   type AccountFailure,
   type AccountUser,
   type Leaving,
+  type SignedOut,
 } from "../src/lib/account";
 import { RESERVED_HANDLES } from "../src/lib/handles";
 import { authFailure } from "../src/lib/supabase/account-backend";
@@ -435,6 +436,78 @@ async function main() {
     await store.actions.retry();
     assert.equal(store.getSnapshot().status, "signed-in");
   });
+
+  await check(
+    "a sign-in that ends by itself says who it was; a pressed ログアウト does not",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      await settle();
+      // Nobody was signed in: nothing ended.
+      assert.deepEqual(store.getSnapshot(), { status: "signed-out" });
+      control.emit(AKI);
+      await settle();
+      assert.equal(store.getSnapshot().status, "signed-in");
+      // Signed out on another device, or the session could not be renewed.
+      control.emit(null);
+      await settle();
+      assert.deepEqual(store.getSnapshot(), {
+        status: "signed-out",
+        lapsed: AKI,
+      });
+      control.emit(AKI);
+      await settle();
+      assert.equal(store.getSnapshot().status, "signed-in");
+      await store.actions.signOut();
+      await settle();
+      assert.deepEqual(store.getSnapshot(), { status: "signed-out" });
+
+      // Two tabs share one session: ログアウト pressed in one ends it in the
+      // other, which does not call it a lapse. Signed in again, it would.
+      let pressed = false;
+      const browser: SignedOut = {
+        pressed: () => pressed,
+        mark: (next) => void (pressed = next),
+      };
+      const one = fakeBackend();
+      const two = fakeBackend();
+      for (const { control } of [one, two])
+        control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      const here = createAccountStore(
+        () => one.backend,
+        true,
+        undefined,
+        browser,
+      );
+      const there = createAccountStore(
+        () => two.backend,
+        true,
+        undefined,
+        browser,
+      );
+      here.subscribe(() => {});
+      there.subscribe(() => {});
+      await settle();
+      one.control.emit(AKI);
+      two.control.emit(AKI);
+      await settle();
+      await here.actions.signOut();
+      two.control.emit(null);
+      await settle();
+      assert.deepEqual(there.getSnapshot(), { status: "signed-out" });
+      two.control.emit(AKI);
+      await settle();
+      assert.equal(pressed, false);
+      two.control.emit(null);
+      await settle();
+      assert.deepEqual(there.getSnapshot(), {
+        status: "signed-out",
+        lapsed: AKI,
+      });
+    },
+  );
 
   await check(
     "a restored session is known while its profile is read, and read once",

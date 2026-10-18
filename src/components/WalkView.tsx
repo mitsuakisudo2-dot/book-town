@@ -71,6 +71,7 @@ import {
   titleById,
 } from "../lib/book-name";
 import { failure, WHILE_OFFLINE } from "../lib/words";
+import { walkMissedLine } from "../lib/missed-changes";
 
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
@@ -666,7 +667,8 @@ export function WalkView({
         <p className="walk-save-warning" role="status">
           {delivers
             ? saved.status === "recovered"
-              ? "保存できない変更があったため、保存されている状態に戻しました。"
+              ? ((saved.missed && walkMissedLine(saved.missed)) ??
+                failure({ what: "保存できない変更がありました" }))
               : failure(WHILE_OFFLINE)
             : saved.status === "recovered"
               ? failure({

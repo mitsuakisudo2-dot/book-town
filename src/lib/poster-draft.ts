@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { DRAFT_OWNER } from "./draft-owner";
+import { textHash } from "./canonical";
 import {
   createKeptDraftStore,
   handOverDrafts,
@@ -75,13 +76,7 @@ export function posterMark(work: PosterWork): string {
     work.inTimeline,
     work.pages.map((page) => [page.heading, page.text, page.bookIds]),
   ]);
-  // FNV-1a, enough to tell one version from the next.
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index++) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(36);
+  return textHash(value).toString(36);
 }
 
 const text = (value: unknown, limit: number): value is string =>

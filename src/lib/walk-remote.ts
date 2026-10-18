@@ -294,3 +294,55 @@ export function planWalkWrites(
     });
   return writes;
 }
+
+/** Every kind of walk write, to tell one kept on the device (outbox.ts). */
+const WALK_WRITE_KINDS: Record<WalkWrite["kind"], true> = {
+  scene: true,
+  reactions: true,
+  visits: true,
+  saved: true,
+  pops: true,
+  forget: true,
+  unpop: true,
+};
+
+/** Whether `value` is a walk write as this app keeps one (isWrite). */
+export const isWalkWrite = (value: unknown): value is WalkWrite =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { kind?: unknown }).kind === "string" &&
+  Object.hasOwn(WALK_WRITE_KINDS, (value as { kind: string }).kind);
+
+/**
+ * A walk write of several rows as one write a row (splitWrite in
+ * town-remote.ts); none for the scene, which is one thing.
+ */
+export function splitWalkWrite(write: WalkWrite): WalkWrite[] {
+  switch (write.kind) {
+    case "reactions":
+    case "visits":
+    case "saved":
+    case "pops":
+      return write.rows.map((row) => ({ ...write, rows: [row] }) as WalkWrite);
+    case "unpop":
+      return write.rows.map((row) => ({ ...write, rows: [row] }));
+    case "forget":
+      return write.shopIds.map((shopId) => ({ ...write, shopIds: [shopId] }));
+    case "scene":
+      return [];
+  }
+}
+
+/**
+ * The person's own scene as `data` holds it, for a scene write kept on the
+ * device (writeStake in town-remote.ts). The shop's id is left out, as the
+ * database and the screens name it apart (sceneMark).
+ */
+export function walkStake(
+  data: WalkData,
+  write: WalkWrite,
+): { key: string; value: unknown } | undefined {
+  if (write.kind !== "scene") return undefined;
+  const own = data.scenes.find((scene) => scene.storeId === OWN_SHOP_ID);
+  return { key: "scene", value: own ? { ...own, storeId: "" } : null };
+}

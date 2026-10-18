@@ -26,10 +26,28 @@ export function shelfSaveMessage(where: Where, status: PersistenceStatus) {
   }[status];
 }
 
-/** The warning above every page, or null when there is nothing to warn about. */
+/** The line said when the session ended without the reader pressing ログアウト. */
+export function lapsedLine(waiting: boolean): string {
+  return failure({
+    what: "ログインが切れました",
+    kept: waiting
+      ? "まだ送れていない変更は、この端末に残しています"
+      : undefined,
+    next: waiting
+      ? "もう一度ログインすると送ります"
+      : "続けるには、もう一度ログインしてください",
+  });
+}
+
+/**
+ * The warning above every page, or null when there is nothing to warn about.
+ * `missed` tells the changes the database did not take (missed-changes.ts),
+ * `lapsed` a sign-in that ended by itself (lapsedLine).
+ */
 export function saveWarning(
   where: Where,
   status: PersistenceStatus,
+  told: { missed?: string | null; lapsed?: string | null } = {},
 ): string | null {
   if (where === "unavailable")
     return failure({
@@ -37,25 +55,28 @@ export function saveWarning(
       next: "通信の状態を確かめて、ページを読み込み直してください",
     });
   if (where === "visitor")
-    return status === "unavailable"
-      ? failure({
-          what: "本の街の新しい様子を読み込めませんでした",
-          kept: "いまは見本の書店だけを表示しています",
-        })
-      : null;
+    return (
+      told.lapsed ??
+      (status === "unavailable"
+        ? failure({
+            what: "本の街の新しい様子を読み込めませんでした",
+            kept: "いまは見本の書店だけを表示しています",
+          })
+        : null)
+    );
   if (status === "unavailable")
     return where === "local"
       ? failure({
           what: "このブラウザに保存できません",
           next: "ブラウザの保存設定を確認してください。今の操作はページを閉じると失われます",
         })
-      : failure({
-          ...WHILE_OFFLINE,
-          kept: `${WHILE_OFFLINE.kept}。ページを閉じると、保存前の変更は失われます`,
-        });
+      : // Changes wait on the device meanwhile (outbox.ts); a page that
+        // could not keep them asks before it is closed (supabase/sync.ts).
+        failure(WHILE_OFFLINE);
   if (status === "recovered")
     return where === "local"
       ? "保存データを読み込めなかったため、デモの初期状態に戻しました。"
-      : "保存できない変更があったため、保存されている状態に戻しました。";
+      : (told.missed ??
+          "保存できない変更があったため、保存されている状態に戻しました。");
   return null;
 }

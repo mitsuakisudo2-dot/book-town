@@ -128,6 +128,16 @@ export const WHILE_OFFLINE = {
   kept: "つながりしだい保存します",
 } as const satisfies Failure;
 
+/**
+ * While offline, for a change with a name of its own (投稿, 返信, 記録): it
+ * waits on this device and goes once the town is back (outbox.ts).
+ */
+export const offlineFor = (change: string) =>
+  ({
+    what: `つながらないため、まだ${change}できていません`,
+    kept: `つながりしだい${change}します`,
+  }) satisfies Failure;
+
 /** What is still kept when something did not work. */
 export const KEPT = {
   /** The reader's work, kept in this browser (src/lib/kept-draft.ts). */

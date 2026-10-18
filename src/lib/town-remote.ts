@@ -1022,13 +1022,16 @@ export type Write =
     }
   | { kind: "nine"; bookIds: string[]; notes: string[] }
   | { kind: "create-shop"; row: TablesInsert<"shops"> }
+  // The shop's id goes with what is written to it: a write kept on the
+  // device is sent from another page, which may not know the shop yet.
   | {
       kind: "update-shop";
+      shopId: string;
       patch: Partial<
         Pick<Tables<"shops">, "name" | "description" | "tagline" | "theme">
       >;
     }
-  | { kind: "shelves"; shelves: Shelf[] }
+  | { kind: "shelves"; shopId: string; shelves: Shelf[] }
   | { kind: "delete-posts"; ids: string[] }
   | { kind: "posts"; rows: TablesInsert<"posts">[] }
   | { kind: "mark-spoilers"; ids: string[] }
@@ -1445,15 +1448,20 @@ export function planWrites(
           is_open: true,
         },
       },
-      { kind: "shelves", shelves: shop.shelves },
+      { kind: "shelves", shopId: ids.shopId, shelves: shop.shelves },
     );
   else if (shop && base.ownShop) {
     const patch: Extract<Write, { kind: "update-shop" }>["patch"] = {};
     for (const field of ["name", "description", "tagline", "theme"] as const)
       if (shop[field] !== base.ownShop[field]) patch[field] = shop[field];
-    if (Object.keys(patch).length) writes.push({ kind: "update-shop", patch });
+    if (Object.keys(patch).length)
+      writes.push({ kind: "update-shop", shopId: ids.shopId, patch });
     if (!sameJson(shop.shelves, base.ownShop.shelves))
-      writes.push({ kind: "shelves", shelves: shop.shelves });
+      writes.push({
+        kind: "shelves",
+        shopId: ids.shopId,
+        shelves: shop.shelves,
+      });
   }
 
   const own = (state: TownState) =>
@@ -1747,6 +1755,231 @@ function withSampleRows(writes: Write[], user: string): Write[] {
       })),
   };
   return [catalog, ...mapped];
+}
+
+/** Every kind of write, to tell one kept on the device (outbox.ts). */
+const WRITE_KINDS: Record<Write["kind"], true> = {
+  books: true,
+  "fix-books": true,
+  profile: true,
+  nine: true,
+  "create-shop": true,
+  "update-shop": true,
+  shelves: true,
+  "delete-posts": true,
+  posts: true,
+  "mark-spoilers": true,
+  "like-taps": true,
+  "end-sessions": true,
+  sessions: true,
+  "delete-records": true,
+  records: true,
+  "update-record": true,
+  "reader-settings": true,
+  "delete-posters": true,
+  posters: true,
+  "update-poster": true,
+  remove: true,
+  add: true,
+  "library-shelves": true,
+  "shelf-books": true,
+  "library-entries": true,
+};
+
+/**
+ * Whether `value` is a write as this app keeps one: read back from the
+ * device, a write of another shape (an older app's) is let go.
+ */
+export const isWrite = (value: unknown): value is Write =>
+  record(value) &&
+  typeof value.kind === "string" &&
+  Object.hasOwn(WRITE_KINDS, value.kind);
+
+/**
+ * A write of several rows as one write a row, in the order they go, so one
+ * row the database turns away leaves the others to go (sync.ts). A book's
+ * library row goes with what is changed of it, a shelf with its changes.
+ * None for a write of one thing.
+ */
+export function splitWrite(write: Write): Write[] {
+  switch (write.kind) {
+    case "books":
+    case "fix-books":
+    case "posts":
+    case "like-taps":
+    case "end-sessions":
+    case "sessions":
+    case "records":
+    case "posters":
+      return write.rows.map((row) => ({ ...write, rows: [row] }) as Write);
+    case "remove":
+    case "add":
+      return write.rows.map((row) => ({ ...write, rows: [row] }));
+    case "delete-posts":
+    case "mark-spoilers":
+    case "delete-records":
+    case "delete-posters":
+      return write.ids.map((id) => ({ ...write, ids: [id] }));
+    case "library-entries": {
+      const books = [
+        ...new Set([
+          ...write.rows.map((row) => row.book_id),
+          ...write.patches.map((row) => row.book_id),
+        ]),
+      ];
+      return books.map((book) => ({
+        ...write,
+        rows: write.rows.filter((row) => row.book_id === book),
+        patches: write.patches.filter((row) => row.book_id === book),
+      }));
+    }
+    case "library-shelves": {
+      const shelves = [
+        ...new Set([
+          ...write.rows.map((row) => row.id as string),
+          ...write.patches.map((row) => row.id),
+        ]),
+      ];
+      return shelves.map((shelf) => ({
+        ...write,
+        rows: write.rows.filter((row) => row.id === shelf),
+        patches: write.patches.filter((row) => row.id === shelf),
+      }));
+    }
+    case "shelf-books":
+      return [
+        ...write.remove.map((row) => ({ ...write, add: [], remove: [row] })),
+        ...write.add.map((row) => ({ ...write, add: [row], remove: [] })),
+      ];
+    default:
+      return [];
+  }
+}
+
+/**
+ * For a write that sets a whole thing (the shop's shelves, the nine, a
+ * poster's pages), which thing and what of it `state` holds, in the form
+ * the database hands it back: a change kept on the device is then sent only
+ * over the version it began from (sync.ts). Undefined for any other write.
+ */
+export function writeStake(
+  state: TownState,
+  write: Write,
+): { key: string; value: unknown } | undefined {
+  switch (write.kind) {
+    case "shelves":
+      return {
+        key: "shelves",
+        value: (state.ownShop?.shelves ?? []).map((shelf) => ({
+          id: shelf.id,
+          name: shelf.name,
+          capacity: shelf.capacity,
+          isPublic: shelf.isPublic,
+          board: shelf.board,
+          items: shelf.items.map((item) => ({
+            id: item.id,
+            bookId: item.bookId,
+            display: item.display,
+            pop: item.pop,
+          })),
+        })),
+      };
+    case "nine":
+      return {
+        key: "nine",
+        value: state.me.lifeNine.map((id) => [
+          id,
+          state.me.nineNotes[id] ?? "",
+        ]),
+      };
+    case "update-poster": {
+      const poster = state.posters.find(
+        (entry) => entry.id === write.id && entry.authorId === ME_ID,
+      );
+      return {
+        key: "poster:" + write.id,
+        value: poster ? posterFields(poster) : null,
+      };
+    }
+    // A poster made may be there already (its answer lost) and changed
+    // since on another device: made again only where it is not.
+    case "posters": {
+      const ids = write.rows.map((row) => row.id ?? "").sort();
+      return {
+        key: "posters:" + ids.join(","),
+        value: ids.map((id) => {
+          const poster = state.posters.find(
+            (entry) => entry.id === id && entry.authorId === ME_ID,
+          );
+          return poster ? posterFields(poster) : null;
+        }),
+      };
+    }
+    default:
+      return undefined;
+  }
+}
+
+/** The words a 便り or a record carries in a write, in the screens' ids. */
+export interface WrittenWords {
+  posts: {
+    body: string;
+    bookId: string | null;
+    spoiler: boolean;
+    parentId: string | null;
+  }[];
+  /** A new record (by its book), or one changed (by its id). */
+  records: (({ bookId: string } | { recordId: string }) &
+    Partial<
+      Pick<
+        Tables<"reading_entries">,
+        "body" | "feelings" | "spoiler" | "audience"
+      >
+    >)[];
+}
+
+/**
+ * What the reader wrote that `write` carries: the words of 便り and records,
+ * with a 見本's book named by its own id as the screens name it, not by its
+ * row's (withSampleRows). Nothing for any other write.
+ */
+export function writtenWords(write: Write): WrittenWords {
+  const book = (id: string | null | undefined) =>
+    id ? (sampleBookOfRow(id) ?? id) : null;
+  switch (write.kind) {
+    case "posts":
+      return {
+        posts: write.rows.map((row) => ({
+          body: row.body,
+          bookId: book(row.book_id),
+          spoiler: row.spoiler ?? false,
+          parentId: row.parent_id ?? null,
+        })),
+        records: [],
+      };
+    case "records":
+      return {
+        posts: [],
+        records: write.rows.flatMap((row) => {
+          const bookId = book(row.book_id);
+          return bookId
+            ? [
+                {
+                  bookId,
+                  body: row.body,
+                  feelings: row.feelings,
+                  spoiler: row.spoiler,
+                  audience: row.audience,
+                },
+              ]
+            : [];
+        }),
+      };
+    case "update-record":
+      return { posts: [], records: [{ recordId: write.id, ...write.patch }] };
+    default:
+      return { posts: [], records: [] };
+  }
 }
 
 /** Stands in for "me" while nobody is signed in. */
