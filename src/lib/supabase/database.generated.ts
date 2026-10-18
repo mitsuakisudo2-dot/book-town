@@ -654,6 +654,7 @@ export type Database = {
           template: string;
           theme: string;
           updated_at: string;
+          version: number;
         };
         ComputedFields: never;
         Insert: {
@@ -669,6 +670,7 @@ export type Database = {
           template: string;
           theme?: string;
           updated_at?: string;
+          version?: number;
         };
         Update: {
           allow_display?: boolean;
@@ -683,6 +685,7 @@ export type Database = {
           template?: string;
           theme?: string;
           updated_at?: string;
+          version?: number;
         };
         Relationships: [
           {
@@ -834,6 +837,7 @@ export type Database = {
           id: string;
           links: string[];
           name: string;
+          nine_version: number;
           reading_visibility: string;
           updated_at: string;
         };
@@ -847,6 +851,7 @@ export type Database = {
           id: string;
           links?: string[];
           name: string;
+          nine_version?: number;
           reading_visibility?: string;
           updated_at?: string;
         };
@@ -859,6 +864,7 @@ export type Database = {
           id?: string;
           links?: string[];
           name?: string;
+          nine_version?: number;
           reading_visibility?: string;
           updated_at?: string;
         };
@@ -1154,7 +1160,9 @@ export type Database = {
         Row: {
           scene: Json | null;
           scene_books: NonNullable<Json>;
+          scene_version: number;
           shelves: NonNullable<Json>;
+          shelves_version: number;
           shop_id: string;
           updated_at: string;
         };
@@ -1162,14 +1170,18 @@ export type Database = {
         Insert: {
           scene?: Json | null;
           scene_books?: never;
+          scene_version?: number;
           shelves?: NonNullable<Json>;
+          shelves_version?: number;
           shop_id: string;
           updated_at?: string;
         };
         Update: {
           scene?: Json | null;
           scene_books?: never;
+          scene_version?: number;
           shelves?: NonNullable<Json>;
+          shelves_version?: number;
           shop_id?: string;
           updated_at?: string;
         };
@@ -1501,6 +1513,22 @@ export type Database = {
           p_stack?: string;
         };
         Returns: undefined;
+      };
+      save_nine: {
+        Args: { base: number; book_ids: string[]; notes: string[] };
+        Returns: number;
+      };
+      save_poster: {
+        Args: { base?: number; poster: string; value: Json };
+        Returns: number;
+      };
+      save_scene: {
+        Args: { base: number; shop: string; value: Json };
+        Returns: number;
+      };
+      save_shelves: {
+        Args: { base: number; shop: string; value: Json };
+        Returns: number;
       };
       shop_visitors: {
         Args: Record<PropertyKey, never>;
