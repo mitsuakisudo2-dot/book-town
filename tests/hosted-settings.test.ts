@@ -118,6 +118,7 @@ function run(script: string, args: string[], env: Record<string, string>) {
 }
 
 const TOKEN = "sbp_token_for_tests_000";
+const CAPTCHA = "0x4AAAAcaptcha_secret_for_tests";
 
 // tsx compiles tests as CommonJS, so the checks run inside main().
 async function main() {
@@ -152,7 +153,12 @@ async function main() {
   await check(
     "without a Resend key only the site, code and limit settings change",
     () => {
-      assert.deepEqual(desiredAuth(settings, { ...templates, resendKey: "" }), {
+      const wanted = desiredAuth(settings, {
+        ...templates,
+        resendKey: "",
+        captchaSecret: "0x4AAAAsecret",
+      });
+      assert.deepEqual(wanted, {
         site_url: "https://booktown.page",
         mailer_otp_length: 6,
         mailer_otp_exp: 600,
@@ -165,7 +171,9 @@ async function main() {
         webauthn_rp_id: "booktown.page",
         webauthn_rp_display_name: "BookTown",
         webauthn_rp_origins: "https://booktown.page,https://www.booktown.page",
-        security_captcha_enabled: false,
+        // The human check is on (2026-10-18, step 2 in docs/09).
+        security_captcha_enabled: true,
+        security_captcha_provider: "turnstile",
       });
     },
   );
@@ -296,7 +304,11 @@ async function main() {
   );
 
   await check("with a Resend key the email goes through Resend", () => {
-    const wanted = desiredAuth(settings, { ...templates, resendKey: KEY });
+    const wanted = desiredAuth(settings, {
+      ...templates,
+      resendKey: KEY,
+      captchaSecret: "0x4AAAAsecret",
+    });
     assert.equal(wanted.smtp_host, "smtp.resend.com");
     assert.equal(wanted.smtp_port, "465");
     assert.equal(wanted.smtp_user, "resend");
@@ -315,7 +327,11 @@ async function main() {
   });
 
   await check("only what differs is changed", () => {
-    const wanted = desiredAuth(settings, { ...templates, resendKey: KEY });
+    const wanted = desiredAuth(settings, {
+      ...templates,
+      resendKey: KEY,
+      captchaSecret: "0x4AAAAsecret",
+    });
     const current = { ...wanted, smtp_port: 465, smtp_pass: KEY };
     assert.deepEqual(authChanges(current, wanted, KEY), []);
     assert.deepEqual(
@@ -441,7 +457,16 @@ async function main() {
         SUPABASE_PROJECT_ID: "ref123",
       };
 
-      const looked = await run("scripts/supabase-auth.mjs", ["check"], env);
+      // The human check is on, so without its secret nothing goes on.
+      const unset = await run("scripts/supabase-auth.mjs", ["check"], env);
+      assert.notEqual(unset.code, 0, unset.output);
+      assert.match(unset.output, /captcha\.on needs TURNSTILE_SECRET_KEY/);
+      api.seen.length = 0;
+
+      const looked = await run("scripts/supabase-auth.mjs", ["check"], {
+        ...env,
+        TURNSTILE_SECRET_KEY: CAPTCHA,
+      });
       assert.equal(looked.code, 0, looked.output);
       assert.match(looked.output, /mailer_otp_exp: 3600 -> 600/);
       assert.match(
@@ -451,8 +476,9 @@ async function main() {
       assert.match(looked.output, /RESEND_API_KEY is not set/);
       assert.match(
         looked.output,
-        /TURNSTILE_SECRET_KEY: not set among the repository secrets/,
+        /TURNSTILE_SECRET_KEY: set among the repository secrets/,
       );
+      assert.match(looked.output, /security_captcha_enabled: .*-> true/);
       assert.deepEqual(
         api.seen.map((s) => s.method),
         ["GET"],
@@ -461,6 +487,7 @@ async function main() {
       const applied = await run("scripts/supabase-auth.mjs", ["apply"], {
         ...env,
         RESEND_API_KEY: KEY,
+        TURNSTILE_SECRET_KEY: CAPTCHA,
       });
       assert.equal(applied.code, 0, applied.output);
       const patch = api.seen.find((s) => s.method === "PATCH")?.body ?? {};
@@ -479,7 +506,11 @@ async function main() {
         "https://book-town-851k.vercel.app/**,https://booktown.page/**",
       );
       assert.equal(project.rate_limit_email_sent, 30);
-      for (const output of [looked.output, applied.output]) {
+      assert.equal(patch.security_captcha_enabled, true);
+      assert.equal(patch.security_captcha_provider, "turnstile");
+      assert.equal(patch.security_captcha_secret, CAPTCHA);
+      for (const output of [unset.output, looked.output, applied.output]) {
+        assert.ok(!output.includes(CAPTCHA));
         assert.ok(!output.includes(KEY));
         assert.ok(!output.includes(TOKEN));
         assert.ok(!output.includes("{{ .Token }}"));
@@ -500,6 +531,7 @@ async function main() {
         SUPABASE_ACCESS_TOKEN: TOKEN,
         SUPABASE_PROJECT_ID: "ref123",
         RESEND_API_KEY: KEY,
+        TURNSTILE_SECRET_KEY: CAPTCHA,
       };
       // A pull request only warns, so an old token does not turn it red.
       const looked = await run("scripts/supabase-auth.mjs", ["check"], env);
