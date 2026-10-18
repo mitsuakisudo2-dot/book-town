@@ -37,6 +37,8 @@ export type AccountState =
 
 export type AccountFailure =
   | "invalid-email"
+  | "same-email"
+  | "email-taken"
   | "not-invited"
   | "invalid-code"
   | "invalid-link"
@@ -50,6 +52,10 @@ export type AccountFailure =
 
 export const failureMessages: Record<AccountFailure, string> = {
   "invalid-email": failure({ next: "メールアドレスの形を確かめてください" }),
+  "same-email": failure({ what: "いまログインに使っているアドレスと同じです" }),
+  "email-taken": failure({
+    what: "このメールアドレスは、ほかのアカウントで使われています",
+  }),
   "not-invited": failure({
     what: "このメールアドレスは、まだ招待されていません",
     next: "招待を受けたアドレスで入ってください",
@@ -87,12 +93,40 @@ export const LEAVE_HANDLE_MISMATCH =
 
 export type AccountResult = { ok: true } | { ok: false; message: string };
 
+/**
+ * A change of address, checked with the code sent to each address. The new
+ * address's code goes first, so the change is never made to an address
+ * nobody has read mail at. `field` is the code the message is about, and
+ * `newConfirmed` says the new address's code was taken (it works once).
+ */
+export type EmailChangeResult =
+  | { ok: true }
+  | {
+      ok: false;
+      message: string;
+      field: "new" | "current";
+      newConfirmed: boolean;
+    };
+
 /** The few calls the account needs, so tests can stand in for Supabase. */
 export interface AccountBackend {
   /** Calls the listener with the current user right away, then on every change. */
   onUserChange(listener: (user: AccountUser | null) => void): () => void;
   sendCode(email: string): Promise<AccountFailure | null>;
   verifyCode(email: string, code: string): Promise<AccountFailure | null>;
+  /**
+   * Asks to change the signed-in reader's address: a code goes to the new
+   * address, and one to the current address.
+   */
+  changeEmail(email: string): Promise<AccountFailure | null>;
+  /**
+   * Checks a code of a change of address, sent to `email`. `done` once the
+   * change is made; until then the other address's code is still to come.
+   */
+  confirmEmailChange(
+    email: string,
+    code: string,
+  ): Promise<{ done: boolean } | { failure: AccountFailure }>;
   signOut(): Promise<void>;
   /**
    * Deletes the signed-in account and everything it owns (the database
@@ -239,13 +273,21 @@ export function createAccountStore(
     if (user) signedOut.mark(false);
     const current = userOf(state);
     // Token refreshes repeat the same user; their profile is already known.
+    // A changed address is taken as it is.
     if (
       !force &&
       user &&
       current?.id === user.id &&
       (state.status === "signed-in" || state.status === "needs-profile")
-    )
+    ) {
+      if (current.email !== user.email)
+        set(
+          state.status === "signed-in"
+            ? { ...state, user }
+            : { status: "needs-profile", user },
+        );
       return;
+    }
     if (!user && deleting) {
       outWhileDeleting = true;
       return;
@@ -339,6 +381,67 @@ export function createAccountStore(
       if (!backend) return failed("network");
       const failure = await backend.verifyCode(email, code);
       return failure ? failed(failure) : { ok: true };
+    },
+    /** Sends the codes for a change of the signed-in reader's address. */
+    async changeEmail(rawEmail: string): Promise<AccountResult> {
+      start();
+      const email = normalizeEmail(rawEmail);
+      if (!validEmail(email)) return failed("invalid-email");
+      if (!backend || state.status !== "signed-in") return failed("network");
+      if (email === normalizeEmail(state.user.email))
+        return failed("same-email");
+      const failure = await backend.changeEmail(email);
+      return failure ? failed(failure) : { ok: true };
+    },
+    /**
+     * Makes the change of address with its two codes: the new address's
+     * first (unless it was taken already), then the current address's.
+     */
+    async confirmEmailChange(change: {
+      email: string;
+      newCode: string;
+      currentCode: string;
+      newConfirmed: boolean;
+    }): Promise<EmailChangeResult> {
+      start();
+      let newConfirmed = change.newConfirmed;
+      const refuse = (
+        reason: AccountFailure,
+        field: "new" | "current",
+      ): EmailChangeResult => ({
+        ok: false,
+        message: failureMessages[reason],
+        field,
+        newConfirmed,
+      });
+      const email = normalizeEmail(change.email);
+      const newCode = normalizeCode(change.newCode);
+      const currentCode = normalizeCode(change.currentCode);
+      if (!newConfirmed && newCode.length !== CODE_LENGTH)
+        return refuse("invalid-code", "new");
+      if (currentCode.length !== CODE_LENGTH)
+        return refuse("invalid-code", "current");
+      if (!backend || state.status !== "signed-in")
+        return refuse("network", newConfirmed ? "current" : "new");
+      const current = normalizeEmail(state.user.email);
+      const steps: ["new" | "current", string, string][] = [
+        ["new", email, newCode],
+        ["current", current, currentCode],
+      ];
+      for (const [field, address, code] of steps) {
+        if (field === "new" && newConfirmed) continue;
+        const answer = await backend.confirmEmailChange(address, code);
+        if ("failure" in answer) return refuse(answer.failure, field);
+        if (answer.done) {
+          // The new session says so too; the page need not wait for it.
+          if (state.status === "signed-in")
+            set({ ...state, user: { ...state.user, email } });
+          return { ok: true };
+        }
+        if (field === "new") newConfirmed = true;
+      }
+      // Both codes were taken and the server still waits: not expected.
+      return refuse("server", "current");
     },
     async createProfile(draft: ProfileDraft): Promise<AccountResult> {
       start();

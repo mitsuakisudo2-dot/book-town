@@ -128,6 +128,10 @@ const booksFixed = [];
 let fixesRefused = false;
 const inserted = [];
 const codeRequests = [];
+// A change of address asked for (メールアドレスを変える): the new address,
+// and which of its two codes were taken. The new address's code is 111111,
+// the current address's 222222; ren@example.jp is another account's.
+let emailChange = null;
 const townReads = [];
 const townWrites = [];
 // The posts the town's own read leaves out, as older than the newest 500
@@ -324,6 +328,39 @@ const standIn = async (route) => {
           error_code: "otp_disabled",
           msg: "Signups not allowed for otp",
         });
+  }
+  if (url.pathname === "/auth/v1/user" && request.method() === "PUT") {
+    if (body.email === "ren@example.jp")
+      return json(422, {
+        code: 422,
+        error_code: "email_exists",
+        msg: "A user with this email address has already been registered",
+      });
+    emailChange = { email: body.email, confirmed: new Set() };
+    return json(200, { ...user, new_email: body.email });
+  }
+  if (url.pathname === "/auth/v1/verify" && body.type === "email_change") {
+    const which =
+      body.email === emailChange?.email && body.token === "111111"
+        ? "new"
+        : body.email === user.email && body.token === "222222"
+          ? "current"
+          : null;
+    if (!which || emailChange.confirmed.has(which))
+      return json(403, {
+        code: 403,
+        error_code: "otp_expired",
+        msg: "Token has expired or is invalid",
+      });
+    emailChange.confirmed.add(which);
+    if (emailChange.confirmed.size < 2)
+      return json(200, {
+        msg: "Confirmation link accepted. Please proceed to confirm link sent to the other email",
+        code: "200",
+      });
+    user.email = emailChange.email;
+    emailChange = null;
+    return json(200, session());
   }
   if (url.pathname === "/auth/v1/verify")
     return body.token === "123456" && body.email === INVITED
@@ -5865,6 +5902,143 @@ try {
         profile = signedIn;
         staff = false;
         await desk.close();
+      }
+    },
+  );
+
+  await check(
+    "メールアドレスを変える from 設定: a code from each address, the new one first",
+    async () => {
+      const link = session();
+      try {
+        await page.goto("about:blank");
+        await page.goto(
+          base +
+            "/login/#" +
+            new URLSearchParams({
+              access_token: link.access_token,
+              expires_at: String(link.expires_at),
+              expires_in: "3600",
+              refresh_token: link.refresh_token,
+              token_type: "bearer",
+              type: "magiclink",
+            }),
+        );
+        await expect(
+          page.getByRole("heading", { name: "ログインしています" }),
+        ).toBeVisible();
+        // The address signed in with is on the account's page.
+        await expect(page.locator(".account-email")).toContainText(INVITED);
+
+        await page.goto(base + "/profiles/me/");
+        await page.getByRole("button", { name: "設定" }).click();
+        const settings = page.getByRole("dialog", { name: "設定" });
+        await expect(settings.getByText(INVITED)).toBeVisible();
+        await settings
+          .getByRole("button", { name: "メールアドレスを変える" })
+          .click();
+        await expect(page).toHaveURL(base + "/login/?change=email");
+        const heading = page.getByRole("heading", {
+          name: "メールアドレスを変える",
+        });
+        await expect(heading).toBeVisible();
+        // On a phone the keyboard waits for a tap.
+        await expect(heading).toBeFocused();
+        await noOverflow("change email");
+        await shotBoth("email-change-1-address");
+
+        const address = page.getByLabel("新しいメールアドレス");
+        await address.fill(INVITED);
+        await page.getByRole("button", { name: "コードを送る" }).click();
+        await expect(page.locator("#account-error")).toContainText(
+          "いまログインに使っているアドレスと同じです",
+        );
+        await address.fill("ren@example.jp");
+        await page.getByRole("button", { name: "コードを送る" }).click();
+        await expect(page.locator("#account-error")).toContainText(
+          "ほかのアカウントで使われています",
+        );
+        await address.fill(" Aki.New@example.jp ");
+        await page.getByRole("button", { name: "コードを送る" }).click();
+        const codes = page.getByRole("heading", {
+          name: "届いたコードを入れる",
+        });
+        await expect(codes).toBeVisible();
+        await expect(page.locator(".account-card")).toContainText(
+          "aki.new@example.jp",
+        );
+        await noOverflow("email change codes");
+        await shotBoth("email-change-2-codes");
+        // The step stays through a reload, and no code is kept.
+        await page.reload();
+        await expect(codes).toBeVisible();
+        expect(
+          await page.evaluate(() =>
+            sessionStorage.getItem("book-town-email-change-v1"),
+          ),
+        ).not.toMatch(/111111|222222/);
+
+        const change = page.getByRole("button", {
+          name: "メールアドレスを変える",
+        });
+        await expect(change).toBeDisabled();
+        await page.locator("#account-new-code").fill("111111");
+        await page.locator("#account-current-code").fill("999999");
+        await change.click();
+        await expect(page.locator("#account-error")).toContainText(
+          "コードが違うか、期限が切れています",
+        );
+        // The new address's code was taken; it is not asked again.
+        await expect(page.locator("#account-new-code")).toHaveCount(0);
+        await expect(page.getByText("確かめました")).toBeVisible();
+        await shot("email-change-3-one-taken-390");
+        await page.reload();
+        await expect(page.getByText("確かめました")).toBeVisible();
+        await page.locator("#account-current-code").fill("222 222");
+        await change.click();
+
+        await expect(
+          page.getByRole("heading", { name: "ログインしています" }),
+        ).toBeVisible();
+        await expect(page).toHaveURL(base + "/login/");
+        await expect(page.locator(".account-email")).toContainText(
+          "aki.new@example.jp",
+        );
+        await expect(page.getByRole("status")).toContainText(
+          "メールアドレスを変えました",
+        );
+        await shot("email-change-4-done-390");
+        expect(
+          await page.evaluate(() =>
+            sessionStorage.getItem("book-town-email-change-v1"),
+          ),
+        ).toBeNull();
+        // 戻る goes back to where 設定 was opened.
+        await page.goBack();
+        await expect(page).toHaveURL(base + "/profiles/me/");
+
+        // Given up halfway, nothing is kept; the address is as it was.
+        await page.goto(base + "/login/?change=email");
+        await page.getByLabel("新しいメールアドレス").fill("x@example.jp");
+        await page.getByRole("button", { name: "コードを送る" }).click();
+        await expect(codes).toBeVisible();
+        await page.getByRole("button", { name: "やめる" }).click();
+        await expect(
+          page.getByRole("heading", { name: "ログインしています" }),
+        ).toBeVisible();
+        await expect(page.getByRole("status")).toHaveCount(0);
+        await expect(page.locator(".account-email")).toContainText(
+          "aki.new@example.jp",
+        );
+        expect(
+          await page.evaluate(() =>
+            sessionStorage.getItem("book-town-email-change-v1"),
+          ),
+        ).toBeNull();
+        await page.getByRole("button", { name: "ログアウト" }).click();
+      } finally {
+        user.email = INVITED;
+        emailChange = null;
       }
     },
   );

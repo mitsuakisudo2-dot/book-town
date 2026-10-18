@@ -4,7 +4,9 @@ import {
   CODE_LIFE_MS,
   HANDLE_FIELD_MAX_LENGTH,
   SENT_CODE,
+  emailChangeStore,
   profileWorkStore,
+  readEmailChange,
   readProfileWork,
   readSentCode,
   sentCodeStore,
@@ -139,6 +141,44 @@ const memory = () => {
   assert.equal(sentCodeStore.get("other"), null);
   sentCodeStore.clear(SENT_CODE);
   assert.equal(session.data.size, 0);
+
+  // A change of address keeps the new address, when its codes went out and
+  // whether the new address's code was taken: never a code. By person.
+  emailChangeStore.set(aki, {
+    email: "aki.new@example.jp",
+    sentAt,
+    newConfirmed: true,
+  });
+  emailChangeStore.set("me", {
+    email: "x@example.jp",
+    sentAt,
+    newConfirmed: false,
+  });
+  assert.deepEqual(JSON.parse(session.data.get("book-town-email-change-v1")!), {
+    version: 1,
+    drafts: {
+      [aki]: { email: "aki.new@example.jp", sentAt, newConfirmed: true },
+    },
+  });
+  emailChangeStore.clear(aki);
+  assert.equal(session.data.size, 0);
+}
+
+{
+  // A change of address is kept while its codes work, like a sign-in's.
+  const now = Date.now();
+  const sent = { email: "aki@example.jp", sentAt: now, newConfirmed: false };
+  assert.deepEqual(readEmailChange(sent, now), sent);
+  assert.equal(
+    readEmailChange({ ...sent, sentAt: now - CODE_LIFE_MS }, now),
+    null,
+  );
+  assert.equal(
+    readEmailChange({ email: "aki@example.jp", sentAt: now }, now),
+    null,
+  );
+  assert.equal(readEmailChange({ ...sent, email: "aki@" }, now), null);
+  assert.equal(readEmailChange(null, now), null);
 }
 
 {

@@ -36,6 +36,11 @@ import {
 
 const settings = JSON.parse(readFileSync("supabase/hosted-auth.json", "utf8"));
 const template = readFileSync("supabase/templates/magic_link.html", "utf8");
+const emailChangeTemplate = readFileSync(
+  "supabase/templates/email_change.html",
+  "utf8",
+);
+const templates = { template, emailChangeTemplate };
 const KEY = "re_abcdefgh_12345678";
 
 let passed = 0;
@@ -146,14 +151,49 @@ async function main() {
   await check(
     "without a Resend key only the site, code and limit settings change",
     () => {
-      assert.deepEqual(desiredAuth(settings, { template, resendKey: "" }), {
+      assert.deepEqual(desiredAuth(settings, { ...templates, resendKey: "" }), {
         site_url: "https://booktown.page",
         mailer_otp_length: 6,
         mailer_otp_exp: 600,
         rate_limit_otp: 30,
         rate_limit_verify: 30,
         rate_limit_token_refresh: 150,
+        mailer_secure_email_change_enabled: true,
+        mailer_autoconfirm: false,
       });
+    },
+  );
+
+  await check(
+    "changing the address takes a code from both addresses, here as there",
+    () => {
+      assert.equal(settings.emailChange.confirmBoth, true);
+      assert.equal(
+        local("auth.email", "double_confirm_changes"),
+        settings.emailChange.confirmBoth,
+      );
+      // While confirmations are off, the auth server takes either code
+      // alone, so they stay on in both places.
+      assert.equal(local("auth.email", "enable_confirmations"), true);
+      assert.equal(
+        settings.emailChange.subject,
+        local("auth.email.template.email_change", "subject"),
+      );
+      assert.equal(
+        "./supabase/" + settings.emailChange.template,
+        local("auth.email.template.email_change", "content_path"),
+      );
+      assert.match(emailChangeTemplate, /\{\{ \.Token \}\}/);
+      assert.match(emailChangeTemplate, /\{\{ \.NewEmail \}\}/);
+      assert.match(emailChangeTemplate, /10分/);
+      // A code, not a link: the screen asks for each address's code.
+      assert.doesNotMatch(emailChangeTemplate, /ConfirmationURL/);
+      assert.equal(shown("mailer_secure_email_change_enabled", true), "true");
+      assert.equal(shown("mailer_autoconfirm", false), "false");
+      assert.match(
+        shown("mailer_templates_email_change_content", emailChangeTemplate),
+        /^\d+ characters, sha256 [0-9a-f]{12}$/,
+      );
     },
   );
 
@@ -213,18 +253,26 @@ async function main() {
   );
 
   await check("with a Resend key the email goes through Resend", () => {
-    const wanted = desiredAuth(settings, { template, resendKey: KEY });
+    const wanted = desiredAuth(settings, { ...templates, resendKey: KEY });
     assert.equal(wanted.smtp_host, "smtp.resend.com");
     assert.equal(wanted.smtp_port, "465");
     assert.equal(wanted.smtp_user, "resend");
     assert.equal(wanted.rate_limit_email_sent, 30);
     assert.equal(wanted.mailer_templates_magic_link_content, template);
+    assert.equal(
+      wanted.mailer_templates_email_change_content,
+      emailChangeTemplate,
+    );
+    assert.equal(
+      wanted.mailer_subjects_email_change,
+      "BookTown のメールアドレスの変更",
+    );
     // The key is sent as the password, never kept with the other settings.
     assert.ok(!Object.values(wanted).includes(KEY));
   });
 
   await check("only what differs is changed", () => {
-    const wanted = desiredAuth(settings, { template, resendKey: KEY });
+    const wanted = desiredAuth(settings, { ...templates, resendKey: KEY });
     const current = { ...wanted, smtp_port: 465, smtp_pass: KEY };
     assert.deepEqual(authChanges(current, wanted, KEY), []);
     assert.deepEqual(
@@ -338,6 +386,11 @@ async function main() {
       assert.equal(patch.smtp_pass, KEY);
       assert.equal(patch.smtp_host, "smtp.resend.com");
       assert.equal(patch.mailer_templates_magic_link_content, template);
+      assert.equal(
+        patch.mailer_templates_email_change_content,
+        emailChangeTemplate,
+      );
+      assert.equal(patch.mailer_secure_email_change_enabled, true);
       assert.equal(patch.mailer_otp_exp, 600);
       assert.equal(patch.site_url, "https://booktown.page");
       assert.equal(

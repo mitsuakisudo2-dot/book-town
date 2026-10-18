@@ -57,3 +57,10 @@ export const myShopPath = (options: { place?: string } = {}): string =>
   options.place
     ? "/my-shop/?place=" + encodeURIComponent(options.place)
     : "/my-shop/";
+
+/**
+ * The sign-in page, which is the account's page once signed in;
+ * `changeEmail` opens 「メールアドレスを変える」 on it (管理表 107).
+ */
+export const loginPath = (options: { changeEmail?: boolean } = {}): string =>
+  options.changeEmail ? "/login/?change=email" : "/login/";

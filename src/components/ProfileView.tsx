@@ -81,7 +81,13 @@ const SPOILER_CHOICES: {
 ];
 import "./profile.css";
 import "./reading.css";
-import { posterNewPath, posterPath, profilePath, shopPath } from "../lib/paths";
+import {
+  loginPath,
+  posterNewPath,
+  posterPath,
+  profilePath,
+  shopPath,
+} from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
 import { postersOf } from "../lib/posters";
 import { PosterThumb } from "./PosterView";
@@ -1102,6 +1108,21 @@ export function ProfileView({
           {account.status === "signed-in" && (
             <fieldset className="leave-entry">
               <legend>アカウント</legend>
+              <p className="leave-entry-email">
+                ログインのメールアドレス
+                <b>{account.user.email}</b>
+              </p>
+              <button
+                type="button"
+                className="btn quiet"
+                onClick={() =>
+                  leaveLayers(() =>
+                    router.push(loginPath({ changeEmail: true })),
+                  )
+                }
+              >
+                メールアドレスを変える
+              </button>
               <button
                 type="button"
                 className="btn quiet"

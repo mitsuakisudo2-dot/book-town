@@ -45,13 +45,18 @@ async function invite(name: string) {
   return { email, id: data.user!.id };
 }
 
-/** The newest code mailed to this address, read from the local mail catcher. */
-async function mailedCode(email: string) {
+/**
+ * The newest code mailed to this address (with this subject, when given),
+ * read from the local mail catcher.
+ */
+async function mailedCode(email: string, subject?: string) {
   for (let attempt = 0; attempt < 40; attempt++) {
     const search = await fetch(
       `${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent("to:" + email)}`,
     ).then((response) => response.json());
-    const id = search.messages?.[0]?.ID;
+    const id = (search.messages ?? []).find(
+      (message: { Subject: string }) => !subject || message.Subject === subject,
+    )?.ID;
     if (id) {
       const message = await fetch(`${MAILPIT_URL}/api/v1/message/${id}`).then(
         (response) => response.json(),
@@ -86,6 +91,11 @@ async function mailedLink(email: string) {
   throw new Error("No link arrived for " + email);
 }
 const linksRead = new Set<string>();
+const browserBackend = () => {
+  const backend = supabaseAccountBackend(browserClient());
+  backend.onUserChange(() => {});
+  return backend;
+};
 
 async function main() {
   let passed = 0;
@@ -200,6 +210,52 @@ async function main() {
     assert.ok(!elsewhere.startsWith("https://booktown.example.com"));
     assert.ok(elsewhere.startsWith("http://127.0.0.1:3000"));
   });
+
+  await check(
+    "changing the address takes a code from each address",
+    async () => {
+      const next = `aki-new-${run}@example.jp`;
+      // An address another account signs in with is not taken over.
+      const gen = await invite("gen");
+      assert.equal(await backend.changeEmail(gen.email), "email-taken");
+      assert.equal(await backend.changeEmail(next), null);
+      const subject = "BookTown のメールアドレスの変更";
+      const toNew = await mailedCode(next, subject);
+      const toCurrent = await mailedCode(aki.email, subject);
+      assert.notEqual(toNew.code, toCurrent.code);
+      const wrong = toNew.code === "000000" ? "111111" : "000000";
+      assert.deepEqual(await backend.confirmEmailChange(next, wrong), {
+        failure: "invalid-code",
+      });
+      // The new address's code alone changes nothing yet.
+      assert.deepEqual(await backend.confirmEmailChange(next, toNew.code), {
+        done: false,
+      });
+      const before = await admin.auth.admin.getUserById(aki.id);
+      assert.equal(before.data.user?.email, aki.email);
+      // Each code works once.
+      assert.deepEqual(await backend.confirmEmailChange(next, toNew.code), {
+        failure: "invalid-code",
+      });
+      // The current address's code makes the change, and the session goes on
+      // with the new address.
+      assert.deepEqual(
+        await backend.confirmEmailChange(aki.email, toCurrent.code),
+        { done: true },
+      );
+      const after = await admin.auth.admin.getUserById(aki.id);
+      assert.equal(after.data.user?.email, next);
+      const { data } = await client.auth.getSession();
+      assert.equal(data.session?.user.email, next);
+      assert.equal(data.session?.user.id, aki.id);
+      // The profile stays the reader's.
+      assert.equal((await backend.loadProfile(aki.id))?.handle, handle);
+      // The old address is no longer let in; the new one is.
+      assert.equal(await backend.sendCode(aki.email), "not-invited");
+      assert.equal(await browserBackend().sendCode(next), null);
+      aki.email = next;
+    },
+  );
 
   await check("signing out ends the session", async () => {
     await backend.signOut();

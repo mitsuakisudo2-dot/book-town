@@ -74,3 +74,36 @@ export const profileWorkStore = createKeptDraftStore<ProfileWork>(
   },
   () => window.sessionStorage,
 );
+
+/**
+ * A change of address under way: the new address, when its codes were sent
+ * (they work as long as a sign-in code), and whether the new address's code
+ * was taken already (each code works once). Never the codes themselves.
+ */
+export type EmailChangeSent = {
+  email: string;
+  sentAt: number;
+  newConfirmed: boolean;
+};
+
+/** The change of address read back, while its codes can still be used. */
+export function readEmailChange(
+  value: unknown,
+  now = Date.now(),
+): EmailChangeSent | null {
+  const change = value as Partial<EmailChangeSent> | null;
+  const sent = readSentCode(change, now);
+  if (!sent || typeof change?.newConfirmed !== "boolean") return null;
+  return { ...sent, newConfirmed: change.newConfirmed };
+}
+
+/** The change of address under way, by the signed-in person's id. */
+export const emailChangeStore = createKeptDraftStore<EmailChangeSent>(
+  {
+    storageKey: "book-town-email-change-v1",
+    keyPattern: DATABASE_ID,
+    read: (value) => readEmailChange(value),
+    limit: 3,
+  },
+  () => window.sessionStorage,
+);
