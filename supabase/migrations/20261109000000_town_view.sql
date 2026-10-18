@@ -21,14 +21,23 @@
 -- those on the reader's own 便り, through the index on each rather than
 -- by testing the policy on every row of the table (AUD-042).
 --
+-- With record_notes => false, others' reading records come without their
+-- words (body ''): a profile's page reads them when it is opened. The rest
+-- of a record (its book, feelings, audience, time) stays, for what the
+-- town counts and says from it.
+--
 -- No table or row changes. Nothing to copy (private.keep_copy) before it.
 --
 -- Rollback: a new migration with
---   drop function public.town_view(integer, integer);
+--   drop function public.town_view(integer, integer, boolean);
 --   drop function public.town_books(uuid[]);
 -- An app that finds neither reads the tables one by one, as before.
 
-create function public.town_view(post_limit integer default 500, catalog_limit integer default 300)
+create function public.town_view(
+  post_limit integer default 500,
+  catalog_limit integer default 300,
+  record_notes boolean default true
+)
 returns jsonb
 language plpgsql stable security invoker set search_path = '' as $$
 declare
@@ -67,7 +76,10 @@ begin
         and t.user_id is distinct from (select auth.uid())
     ), '[]'::jsonb),
     'records', coalesce((
-      select jsonb_agg(to_jsonb(e) order by e.id)
+      select jsonb_agg(case
+        when record_notes or e.user_id = (select auth.uid()) then to_jsonb(e)
+        else to_jsonb(e) || jsonb_build_object('body', '')
+      end order by e.id)
       from public.reading_entries e
     ), '[]'::jsonb),
     'folds', coalesce((
@@ -123,7 +135,7 @@ language sql stable security invoker set search_path = '' as $$
   where b.id = any(ids)
 $$;
 
-revoke all on function public.town_view(integer, integer) from public;
+revoke all on function public.town_view(integer, integer, boolean) from public;
 revoke all on function public.town_books(uuid[]) from public;
-grant execute on function public.town_view(integer, integer) to anon, authenticated;
+grant execute on function public.town_view(integer, integer, boolean) to anon, authenticated;
 grant execute on function public.town_books(uuid[]) to anon, authenticated;

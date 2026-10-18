@@ -553,7 +553,13 @@ export function fakeSupabase(
         ? together
         : together.neq("user_id", asked)
       ).now(),
-      records: ask("reading_entries", "id").now(),
+      records: ask("reading_entries", "id")
+        .now()
+        .map((row) =>
+          args.record_notes === false && row.user_id !== asked
+            ? { ...row, body: "" }
+            : row,
+        ),
       folds: ask("moderation_folds", "target_kind", "target_id").now(),
       posters: ask("posters", "id").now(),
       catalog: ask("books")

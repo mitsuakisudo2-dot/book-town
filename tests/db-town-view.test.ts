@@ -314,6 +314,39 @@ async function main() {
   );
 
   await check(
+    "without record notes, others' records come without their words, the reader's own with them",
+    async () => {
+      const words = async (who: Visitor) =>
+        (
+          (await view(who, "record_notes => false")).records as {
+            user_id: string;
+            body: string;
+          }[]
+        )
+          .map((r) => `${r.user_id.slice(-1)}:${r.body}`)
+          .sort();
+      assert.deepEqual(await words(null), ["a:", "c:"]);
+      assert.deepEqual(await words(AKI), [
+        "a:フォロワーにだけ",
+        "a:自分だけ",
+        "a:読み終えた",
+        "c:",
+      ]);
+      // Everything else of a record is as before.
+      const strip = (records: unknown[]) =>
+        (records as Record<string, unknown>[]).map((r) => ({
+          ...r,
+          body: "",
+        }));
+      for (const who of [null, BEN, CHI])
+        assert.deepEqual(
+          strip((await view(who, "record_notes => false")).records),
+          strip((await view(who)).records),
+        );
+    },
+  );
+
+  await check(
     "the newest 便り and books come up to the limits asked",
     async () => {
       const small = await view(null, "post_limit => 2, catalog_limit => 1");
@@ -365,7 +398,7 @@ async function main() {
         definer: boolean;
       }>(
         null,
-        `select has_function_privilege('anon', 'public.town_view(integer, integer)', 'execute') as view,
+        `select has_function_privilege('anon', 'public.town_view(integer, integer, boolean)', 'execute') as view,
          has_function_privilege('anon', 'public.town_books(uuid[])', 'execute') as books,
          bool_or(prosecdef) as definer
        from pg_proc where proname in ('town_view', 'town_books')`,
@@ -374,7 +407,7 @@ async function main() {
       await db.exec("create role nobody nologin");
       const [nobody] = (
         await db.query<{ can: boolean }>(
-          "select has_function_privilege('nobody', 'public.town_view(integer, integer)', 'execute') as can",
+          "select has_function_privilege('nobody', 'public.town_view(integer, integer, boolean)', 'execute') as can",
         )
       ).rows;
       assert.equal(nobody.can, false, "not opened to every role");
