@@ -58,9 +58,12 @@ async function ownSceneOf(
     return { scene: rows[0]?.scene ?? null, versions: {} };
   }
   const rows = (await settled(Promise.resolve(outcome))).data ?? [];
+  const version = rows.length ? rows[0].scene_version : 0;
   return {
     scene: rows[0]?.scene ?? null,
-    versions: { scene: rows[0]?.scene_version ?? 0 },
+    // Only a version the database named: a row without one is written the
+    // old way, as the town does a profile without nine_version.
+    versions: typeof version === "number" ? { scene: version } : {},
   };
 }
 
