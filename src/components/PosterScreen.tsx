@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ME_ID, type TownActions, type TownState } from "../lib/types";
 import {
@@ -58,7 +58,7 @@ export function PosterScreen({
   // Work on the reader's own poster kept in this browser (a change not
   // saved yet, or not sent because it was changed on another device first).
   const owner = useDraftOwner();
-  const { work: keptWork } = usePosterDraft(
+  const { work: keptWork, clear: letGo } = usePosterDraft(
     owner === null ? null : posterWorkKey({ owner, posterId }),
   );
   // Someone else's draft is theirs alone, as if it were not there.
@@ -66,6 +66,15 @@ export function PosterScreen({
     found && (found.status === "published" || found.authorId === ME_ID)
       ? found
       : undefined;
+  // The work kept is the very poster the account has now: nothing to keep.
+  const done =
+    poster?.authorId === ME_ID &&
+    keptWork !== null &&
+    posterMark(keptWork) === posterMark(poster) &&
+    persistence === "saved";
+  useEffect(() => {
+    if (done) letGo();
+  }, [done, letGo]);
   const author = poster && findReader(state, poster.authorId);
   if (!poster || !author)
     return persistence === "loading" ? (
@@ -79,11 +88,24 @@ export function PosterScreen({
           <p>
             作った人が外したのかもしれません。ほかのポスターは、タイムラインで見られます。
           </p>
+          {keptWork && (
+            <p>
+              このポスターの書きかけを、このブラウザに残しています。新しいポスターとして開けます。
+            </p>
+          )}
           <div className="empty-state-actions">
+            {keptWork && (
+              <Link href={posterNewPath({ posterId })} className="btn fill">
+                書きかけを開く
+              </Link>
+            )}
             <Link href="/timeline/" className="btn">
               タイムラインへ
             </Link>
-            <Link href={posterNewPath()} className="btn fill">
+            <Link
+              href={posterNewPath()}
+              className={keptWork ? "btn" : "btn fill"}
+            >
               ポスターを作る
               <Icon name="arrow" size={16} />
             </Link>

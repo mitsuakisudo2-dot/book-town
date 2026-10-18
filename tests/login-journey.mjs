@@ -4069,6 +4069,134 @@ try {
   );
 
   await check(
+    "shelves changed on another device first are not written over, and this device's can be put back",
+    async () => {
+      const was = town;
+      const SHOP = "6f4e5d7c-1a2b-4c3d-9e8f-7a6b5c4d3e2f";
+      const shelfOf = (name, bookId) => ({
+        id: "first",
+        name,
+        capacity: 10,
+        isPublic: true,
+        items: [{ id: "first-1", bookId, display: "face", pop: "" }],
+      });
+      const here = shelfOf("はじめの本棚", "momo");
+      const there = shelfOf("別の端末で直した棚", "solaris");
+      // The database counts versions; the page reads the shelves' first.
+      profile.nine_version = 1;
+      town = {
+        shops: [
+          {
+            id: SHOP,
+            owner_id: user.id,
+            name: "アキの本屋",
+            description: "",
+            tagline: "",
+            theme: "sage",
+            is_open: true,
+            public_shelves: [here],
+            public_scene_books: [],
+          },
+        ],
+        shop_private: [
+          { shelves: [here], scene_books: [], shelves_version: 1 },
+        ],
+      };
+      const sent = [];
+      const answer = (route) => {
+        const asked = JSON.parse(route.request().postData());
+        sent.push(asked);
+        if (sent.length === 1) {
+          // Another device saved its shelves first: version 2.
+          town.shops[0].public_shelves = [there];
+          town.shop_private = [
+            { shelves: [there], scene_books: [], shelves_version: 2 },
+          ];
+          return route.fulfill({
+            status: 409,
+            contentType: "application/json",
+            body: JSON.stringify({
+              code: "PT409",
+              message: "changed elsewhere",
+              details: null,
+              hint: null,
+            }),
+          });
+        }
+        town.shops[0].public_shelves = asked.value;
+        town.shop_private = [
+          { shelves: asked.value, scene_books: [], shelves_version: 3 },
+        ];
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "3",
+        });
+      };
+      // The book put back joins the library, as on the other device.
+      const library = (route) =>
+        route.request().method() === "GET"
+          ? route.fallback()
+          : route.fulfill({ status: 201, body: "" });
+      await page.route(supabase + "/rest/v1/rpc/save_shelves", answer);
+      await page.route(supabase + "/rest/v1/library_entries*", library);
+      try {
+        await page.goto(base + "/my-shop/");
+        const name = page.getByRole("textbox", { name: "本棚の名前" });
+        const kept = page.locator(".editor-shelves-kept");
+        await expect(name).toHaveValue("はじめの本棚");
+        await page.getByRole("button", { name: "本棚を非公開にする" }).click();
+        // Sent over version 1, and not written over the shelves saved
+        // since: the page reads them again, says so once, and keeps these.
+        await expect(
+          page.getByText(
+            "別の端末で先に変わっていたため、書店の棚の変更は送りませんでした。書きかけは残しています。",
+          ),
+        ).toBeVisible();
+        expect(sent[0].base).toBe(1);
+        await expect(name).toHaveValue("別の端末で直した棚");
+        await expect(
+          page.getByText("書店の棚を保存できませんでした"),
+        ).toHaveCount(0);
+        await expect(kept).toContainText(
+          "別の端末で先に棚が変わっていたため、この端末で直した棚を残しています",
+        );
+        await shot("shelves-elsewhere-kept");
+        // Put back in place of the shelves saved since, over their version.
+        await kept
+          .getByRole("button", { name: "この端末の棚にする", exact: true })
+          .click();
+        await expect(name).toHaveValue("はじめの本棚");
+        await expect(
+          page.getByRole("button", { name: "本棚を公開する" }),
+        ).toBeVisible();
+        await expect(page.getByText("この端末の棚にしました。")).toBeVisible();
+        await expect.poll(() => sent.length).toBe(2);
+        expect(sent[1].base).toBe(2);
+        expect(
+          sent[1].value.map((shelf) => [shelf.name, shelf.isPublic]),
+        ).toEqual([["はじめの本棚", false]]);
+        await expect(page.getByText(/保存できませんでした/)).toHaveCount(0);
+        await shot("shelves-elsewhere-put-back");
+        // Saved: nothing is left to keep.
+        await expect(kept).toHaveCount(0);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => localStorage.getItem("book-town-shelves-drafts-v1") ?? "",
+            ),
+          )
+          .not.toContain("momo");
+      } finally {
+        await page.unroute(supabase + "/rest/v1/rpc/save_shelves", answer);
+        await page.unroute(supabase + "/rest/v1/library_entries*", library);
+        delete profile.nine_version;
+        town = was;
+      }
+    },
+  );
+
+  await check(
     "on a phone, the sheet of words for an owner opens ready to write, with 届ける just above the keyboard",
     async () => {
       expect(await coarse(page)).toBe(true);

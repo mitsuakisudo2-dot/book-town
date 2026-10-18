@@ -109,6 +109,8 @@ export function StoreSceneEditor({
   // The reader opened work begun before the scene saved now: saving puts it
   // in that one's place, which the editor says.
   const [openedOver, setOpenedOver] = useState(false);
+  // Opened work saved or thrown away: new work is the reader's own again.
+  if (openedOver && !work) setOpenedOver(false);
   // キャンセル with work in hand asks once whether to throw it away.
   const [stopping, setStopping] = useState(false);
   // Saved to the account, the work is let go once the account has it (also

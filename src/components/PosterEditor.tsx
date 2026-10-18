@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -33,6 +40,7 @@ import {
   posterWorkFor,
   posterWorkKey,
   posterWorkState,
+  stampedWork,
   usePosterDraft,
   type KeptPosterWork,
   type PosterWork,
@@ -105,8 +113,17 @@ export function PosterEditor({
   const poster = posterId
     ? props.state.posters.find((entry) => entry.id === posterId)
     : undefined;
+  // Work kept for a poster that is gone (turned away, or taken down on
+  // another device) opens as a new poster.
+  const kept = useSyncExternalStore(
+    posterDrafts.subscribe,
+    posterDrafts.getSnapshot,
+    posterDrafts.getServerSnapshot,
+  ).drafts;
   if (owner === null || (posterId && !poster && persistence === "loading"))
     return <p role="status">ポスターを開いています…</p>;
+  if (posterId && !poster && kept[posterWorkKey({ owner, posterId })])
+    return <PosterMaker key={"gone/" + posterId} {...props} gone={posterId} />;
   if (posterId && !poster)
     return (
       <EditorRefusal title="このポスターは見つかりませんでした">
@@ -174,13 +191,14 @@ function EditorRefusal({
 
 /**
  * The maker's work kept in this browser for other posters, newest first,
- * each named by its heading or its book. Work on a poster that is gone, or
- * that is the very poster saved now, is nothing to go on with, so it is
- * left out.
+ * each named by its heading or its book. Work that is the very poster saved
+ * now is nothing to go on with, so it is left out; work on a poster that is
+ * gone opens as a new one, once the town is read (`loaded`).
  */
 function workElsewhere(
   all: Record<string, KeptPosterWork>,
   state: TownState,
+  loaded: boolean,
 ): { key: string; name: string; href: string }[] {
   const book = (id?: string) => bookById(state.books, id);
   return Object.entries(all)
@@ -189,10 +207,9 @@ function workElsewhere(
       const { posterId, bookId } = posterWorkFor(key);
       if (!posterId && !bookId) return [];
       if (posterId) {
-        const poster = state.posters.find(
-          (entry) => entry.id === posterId && entry.authorId === ME_ID,
-        );
-        if (!poster || posterMark(work) === posterMark(poster)) return [];
+        const poster = state.posters.find((entry) => entry.id === posterId);
+        if (poster ? poster.authorId !== ME_ID : !loaded) return [];
+        if (poster && posterMark(work) === posterMark(poster)) return [];
       }
       const heading = work.pages
         .map((page) => page.heading.trim())
@@ -224,7 +241,13 @@ function PosterMaker({
   notify,
   poster,
   bookId,
-}: Shared & { poster?: Poster; bookId?: string }) {
+  gone,
+}: Shared & {
+  poster?: Poster;
+  bookId?: string;
+  /** A poster that is gone, whose kept work is made into a new one. */
+  gone?: string;
+}) {
   const router = useRouter();
   const owner = useDraftOwner();
   const savedIn = useTownBackend();
@@ -232,7 +255,7 @@ function PosterMaker({
   const key =
     owner === null
       ? null
-      : posterWorkKey({ owner, posterId: poster?.id, bookId });
+      : posterWorkKey({ owner, posterId: poster?.id ?? gone, bookId });
   const { work: inHand, kept, all, saved, keep, clear } = usePosterDraft(key);
   // Work on a poster begun from another version of it (saved since, on
   // another device) is out of date; work that is the poster saved now is
@@ -256,6 +279,8 @@ function PosterMaker({
   // The reader opened work begun before the poster saved now: saving puts
   // it in that one's place, which the editor says.
   const [openedOver, setOpenedOver] = useState(false);
+  // Opened work saved or thrown away: new work is the reader's own again.
+  if (openedOver && !inHand) setOpenedOver(false);
   const openStale = useRef<HTMLButtonElement>(null);
   const waiting = stale !== null;
   useEffect(() => {
@@ -279,7 +304,10 @@ function PosterMaker({
   const [said, setSaid] = useState({ words: "", times: 0 });
   const [confirming, setConfirming] = useState(false);
   const [enlarged, setEnlarged] = useState(false);
-  const elsewhere = !poster && !bookId ? workElsewhere(all, state) : [];
+  const elsewhere =
+    !poster && !bookId && !gone
+      ? workElsewhere(all, state, persistence !== "loading")
+      : [];
   // Folded or held by reports: the maker is told here too, as on its page.
   const reviewNote = poster
     ? reviewNoteOf(state, "poster", poster.id, poster.authorId)
@@ -415,14 +443,18 @@ function PosterMaker({
       return;
     }
     // A save in this browser is done. An account takes the poster in the
-    // background, so the work stays kept, as the town now holds it, until
-    // the account has it: turned away, or changed on another device first,
-    // it is here to open again.
+    // background, so the work stays kept, as the town now holds it and under
+    // the poster it went as, until the account has it: turned away, or
+    // changed on another device first, it is here to open again. Nothing
+    // else is kept in its place meanwhile.
     const sent = getTownSnapshot().posters.find((entry) => entry.id === id);
-    if (savedIn === "account" && key && sent) {
-      keep(workOf(sent), from);
-      keepPosterUntilSaved(posterDrafts, key, id, townStore);
-    } else clear();
+    if (savedIn === "local") clear();
+    else if (savedIn === "account" && owner !== null && sent) {
+      const sentKey = posterWorkKey({ owner, posterId: id });
+      posterDrafts.set(sentKey, stampedWork(workOf(sent), from));
+      if (sentKey !== key) clear();
+      keepPosterUntilSaved(posterDrafts, sentKey, id, townStore);
+    }
     notify(
       status === "draft"
         ? "下書きに残しました。"
@@ -812,13 +844,16 @@ function PosterMaker({
                 not that it is being continued. */}
             <KeptDraftNote
               className="poster-editor-kept"
+              work={stale === null}
               continuing={saved && fresh(kept) !== null}
               saved={saved}
               wordsLost
               lead={
-                openedOver
-                  ? "書きかけを開いています。保存すると、いま保存されているポスターと入れ替わります"
-                  : "書きかけは、このブラウザに残しています"
+                gone
+                  ? "もとのポスターが見つからないため、書きかけを新しいポスターとして開いています"
+                  : openedOver
+                    ? "書きかけを開いています。保存すると、いま保存されているポスターと入れ替わります"
+                    : "書きかけは、このブラウザに残しています"
               }
               onDiscard={() => {
                 clear();

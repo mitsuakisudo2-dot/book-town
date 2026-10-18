@@ -9,6 +9,7 @@ import {
 import type { Missed } from "./supabase/sync";
 import { writtenWords, type RelationTable, type Write } from "./town-remote";
 import type { ShopTable, WalkWrite } from "./walk-remote";
+import { keepShelvesNotSent } from "./shelves-draft";
 import { failure, KEPT } from "./words";
 
 // Changes that did not reach the database (supabase/sync.ts): what the
@@ -204,17 +205,25 @@ const KEPT_WALK = new Set<WalkWrite["kind"]>(["scene"]);
 const allKept = <W extends { kind: string }>(writes: W[], kept: Set<string>) =>
   writes.length > 0 && writes.every((write) => kept.has(write.kind));
 
-/** What the town tells of a batch it missed, its words kept for `owner`. */
+/**
+ * What the town tells of a batch it missed, its words kept for `owner`, and
+ * the shelves not sent because they had changed on another device.
+ */
 export function townMissedLine(
   missed: Missed<Write>,
   owner: string | null,
 ): string | null {
   const wordsKept = owner !== null && keepMissedWords(owner, missed.refused);
+  const shelvesKept =
+    owner !== null && keepShelvesNotSent(owner, missed.elsewhere);
   return missedLine(
     missed.refused.flatMap(townWriteLabels),
     missed.elsewhere.flatMap(townWriteLabels),
     wordsKept || allKept(missed.refused, KEPT_TOWN),
-    allKept(missed.elsewhere, KEPT_TOWN),
+    allKept(
+      missed.elsewhere,
+      shelvesKept ? new Set([...KEPT_TOWN, "shelves"]) : KEPT_TOWN,
+    ),
   );
 }
 

@@ -36,6 +36,14 @@ import {
   townTook,
 } from "../src/lib/shop-draft";
 import { townActions, townStore } from "../src/lib/store";
+import {
+  keepShelvesNotSent,
+  readKeptShelves,
+  SHELVES_DRAFT_KEY,
+  shelvesDraftOptions,
+  shelvesLoseWords,
+} from "../src/lib/shelves-draft";
+import type { Shelf } from "../src/lib/types";
 
 let passed = 0;
 function check(name: string, run: () => void) {
@@ -360,6 +368,68 @@ check("kept work follows what was saved since, but for its own changes", () => {
   const sent = { ...sign, tagline: "新しいひとこと" };
   assert.equal(overSaved({ work: sent, base: sign }, sent), null);
   assert.deepEqual(overSaved({ work: sent, base: sign }, sign), sent);
+});
+
+check("shelves not sent are kept for their owner, to put back", () => {
+  const shelves: Shelf[] = [
+    {
+      id: "shelf-1",
+      name: "雨の日に",
+      capacity: 10,
+      isPublic: true,
+      items: [
+        { id: "i-1", bookId: "momo", display: "face", pop: "雨音と読む。" },
+      ],
+    },
+  ];
+  const storage = memory();
+  const store = createKeptDraftStore(shelvesDraftOptions, () => storage);
+  assert.equal(shelvesDraftOptions.keyPattern.test("u-1"), true);
+  assert.equal(shelvesDraftOptions.keyPattern.test("u-1/mine"), false);
+  // Only the shelves of the writes not sent are kept.
+  assert.equal(keepShelvesNotSent("u-1", [{ kind: "nine" }], store), false);
+  assert.equal(store.get("u-1"), null);
+  assert.equal(
+    keepShelvesNotSent(
+      "u-1",
+      [{ kind: "nine" }, { kind: "shelves", shelves }],
+      store,
+    ),
+    true,
+  );
+  assert.deepEqual(store.get("u-1")?.shelves, shelves);
+  assert.ok(storage.data.has(SHELVES_DRAFT_KEY));
+  // Read back by a new page as they were; what is not a shelf is not.
+  const again = createKeptDraftStore(shelvesDraftOptions, () => storage);
+  assert.deepEqual(again.get("u-1")?.shelves, shelves);
+  for (const broken of [
+    null,
+    { shelves, at: 5 },
+    { shelves: "雨の日に", at: "2026-10-18T00:00:00Z" },
+    { shelves: [{ id: "", name: "" }], at: "2026-10-18T00:00:00Z" },
+  ])
+    assert.equal(readKeptShelves(broken), null, JSON.stringify(broken));
+  // A browser that will not keep them says so: nothing is promised.
+  const full = createKeptDraftStore(shelvesDraftOptions, () => ({
+    ...memory(),
+    setItem: () => {
+      throw new Error("quota");
+    },
+  }));
+  assert.equal(
+    keepShelvesNotSent("u-1", [{ kind: "shelves", shelves }], full),
+    false,
+  );
+  // Throwing them away loses a POP or a name written here, not an order.
+  const saved = structuredClone(shelves);
+  assert.equal(shelvesLoseWords(shelves, saved), false);
+  saved[0].items[0].pop = "別の端末のPOP";
+  assert.equal(shelvesLoseWords(shelves, saved), true);
+  assert.equal(shelvesLoseWords([{ ...shelves[0], items: [] }], saved), false);
+  assert.equal(
+    shelvesLoseWords([{ ...shelves[0], name: "晴れの日に", items: [] }], saved),
+    true,
+  );
 });
 
 check("a change the town turns away is told apart from one it took", () => {

@@ -466,6 +466,11 @@ export interface TownActions {
     patch: { name?: string; isPublic?: boolean },
   ): void;
   removeShelf(shelfId: string): void;
+  /**
+   * Puts the shop's shelves as they were arranged on this device (kept when
+   * another device's change came first) in place of the shelves now.
+   */
+  restoreShelves(shelves: Shelf[]): void;
   addShelfBook(
     shelfId: string,
     bookId: string,

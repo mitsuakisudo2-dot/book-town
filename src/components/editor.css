@@ -210,6 +210,11 @@
   gap: 20px;
   margin-bottom: 20px;
 }
+/* The shelves kept here (not sent, another device's change came first),
+   above the shelves they would take the place of. */
+.kept-note.editor-shelves-kept {
+  margin: -6px 0 20px;
+}
 .editor-shelves-heading h2 {
   font-family: var(--font-serif, "Noto Serif JP"), "Yu Mincho", serif;
   font-size: var(--t-head);

@@ -121,6 +121,9 @@ import { VisibilitySettings } from "./VisibilitySettings";
 import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
 import { counted, nth, outOf, whenSome, failure, KEPT } from "../lib/words";
 
+/** The search for books to add to the nine, by its name. */
+const NINE_SEARCH = "人生の9冊に追加する本を検索";
+
 const COLLECTIONS = ["wishlist", "favorites", "library"] as const;
 type Collection = (typeof COLLECTIONS)[number];
 
@@ -224,22 +227,26 @@ export function ProfileView({
   // The reader opened work begun before the nine saved now: saving puts it
   // in that one's place, which the dialog says.
   const [openedOver, setOpenedOver] = useState(false);
+  // Opened work saved or thrown away: new work is the reader's own again.
+  if (openedOver && !nineWork) setOpenedOver(false);
   const openStale = useRef<HTMLButtonElement>(null);
-  const handToKept = useRef(false);
+  const handTo = useRef<string | null>(null);
   const nineWaits = editingNine && nineStale !== null;
   useEffect(() => {
     // The dialog waits on the reader's choice: the hand goes to it.
     if (nineWaits) openStale.current?.focus();
   }, [nineWaits]);
   useEffect(() => {
-    // 書きかけを開く is gone once pressed: the hand goes on to the line
-    // that took its place.
-    if (!handToKept.current) return;
-    handToKept.current = false;
-    document
-      .querySelector<HTMLElement>(".profile-nine-editor .kept-note-button")
-      ?.focus();
+    // The button pressed is gone (書きかけを開く, 書きかけを消す): the hand
+    // goes on to what took its place.
+    const selector = handTo.current;
+    if (!selector) return;
+    handTo.current = null;
+    document.querySelector<HTMLElement>(selector)?.focus();
   });
+  // The nine last sent, by its mark: work begun over it goes on from the
+  // nine saved, if the account turned it away.
+  const sentNine = useRef<string | null>(null);
   const [confirming, setConfirming] = useState<"profile" | "nine" | null>(null);
   const [refused, setRefused] = useState<"profile" | "nine" | null>(null);
   const saving = useKeptUntilSaved((what, how) => {
@@ -248,14 +255,17 @@ export function ProfileView({
     if (how === "elsewhere") return;
     // Turned away by the account after all: the work is still kept, and
     // the editor shows it again, with a word about it, when it is opened.
-    setRefused(what === "nine" ? "nine" : "profile");
+    if (what === "nine") {
+      // The town says so above, and that the work is kept. Work begun over
+      // the nine turned away goes on from the nine saved.
+      const work = keptNine.draft;
+      if (work && savedNine && work.from === sentNine.current)
+        keptNine.set({ ...work, from: nineMark(savedNine) });
+      return setRefused("nine");
+    }
+    setRefused("profile");
     notify(
-      what === "nine"
-        ? failure({ what: "人生の9冊を保存できませんでした", kept: KEPT.draft })
-        : failure({
-            what: "プロフィールを保存できませんでした",
-            kept: KEPT.draft,
-          }),
+      failure({ what: "プロフィールを保存できませんでした", kept: KEPT.draft }),
     );
   });
   // Saved since (here or on another device), it is let go.
@@ -452,6 +462,11 @@ export function ProfileView({
 
   /** キャンセル: the nine go back as saved (asked first, when words would go). */
   function cancelNine() {
+    // Older work, not opened: it waits for the reader's choice.
+    if (nineStale) {
+      setConfirming(null);
+      return setEditingNine(false);
+    }
     if (
       confirming !== "nine" &&
       nineWork &&
@@ -478,14 +493,11 @@ export function ProfileView({
     // Kept until the account has them too, as the town now holds them,
     // with the nine they began from: saved over on another device meanwhile,
     // they wait to be opened again.
-    if (owner)
-      saving.hold(
-        "nine",
-        nineDraftStore,
-        owner,
-        { ...nineForm(getTownSnapshot().me), from },
-        "nine",
-      );
+    if (owner) {
+      const sent = { ...nineForm(getTownSnapshot().me), from };
+      sentNine.current = nineMark(sent);
+      saving.hold("nine", nineDraftStore, owner, sent, "nine");
+    }
     setEditingNine(false);
     notify("人生の9冊を保存しました");
   }
@@ -1389,6 +1401,7 @@ export function ProfileView({
                 setOpenedOver(false);
                 setConfirming(null);
                 setRefused(null);
+                handTo.current = `.profile-nine-editor [aria-label="${NINE_SEARCH}"]`;
               }}
               lead={
                 nineStale
@@ -1411,7 +1424,7 @@ export function ProfileView({
                           from: nineMark(savedNine),
                         });
                       setOpenedOver(true);
-                      handToKept.current = true;
+                      handTo.current = ".profile-nine-editor .kept-note-button";
                     }}
                   >
                     書きかけを開く
@@ -1500,7 +1513,7 @@ export function ProfileView({
               <input
                 className="profile-book-search"
                 type="search"
-                aria-label="人生の9冊に追加する本を検索"
+                aria-label={NINE_SEARCH}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={(event) => {

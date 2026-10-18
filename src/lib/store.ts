@@ -10,7 +10,7 @@ import {
   type TownBackend,
   type TownReads,
 } from "./town-backend";
-import { emptyTown, type Write } from "./town-remote";
+import { cleanShelves, emptyTown, type Write } from "./town-remote";
 import type { Missed } from "./supabase/sync";
 import { townMissedLine } from "./missed-changes";
 import { draftOwner } from "./draft-owner";
@@ -460,6 +460,27 @@ export function createTownStore(
         ...state.ownShop,
         shelves: state.ownShop.shelves.filter((entry) => entry.id !== shelfId),
       });
+    },
+    restoreShelves(given) {
+      initialize();
+      const known = () => new Set(state.books.map((book) => book.id));
+      // Books gone from the town since are left out; another reader's book
+      // is named by the reader's own, as on every shelf.
+      const kept = cleanShelves(given, known());
+      const named = own(
+        kept.flatMap((shelf) => shelf.items.map((item) => item.bookId)),
+      );
+      let at = 0;
+      const shelves = cleanShelves(
+        kept.map((shelf) => ({
+          ...shelf,
+          items: shelf.items.map((item) => ({ ...item, bookId: named[at++] })),
+        })),
+        known(),
+      );
+      const shop = state.ownShop;
+      if (!shop || !shelves.length) return;
+      withShop({ ...shop, shelves });
     },
     addShelfBook(shelfId, given, display, restore) {
       initialize();

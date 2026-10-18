@@ -55,6 +55,8 @@ type Held = {
   /** The kind of change it went as, and what the town had missed before. */
   kind?: Write["kind"];
   after: number;
+  /** The town it was handed to (townStore's generation). */
+  generation: number;
 };
 
 /**
@@ -85,7 +87,11 @@ export function useKeptUntilSaved(
     const settled = held.current;
     held.current = [];
     const missed = townStore.getMissedSnapshot();
+    const generation = townStore.getGeneration();
     for (const work of settled) {
+      // Another town shown since (signed out meanwhile): the change may yet
+      // be sent from the account's outbox, so the work stays kept.
+      if (work.generation !== generation) continue;
       if (status === "saved") {
         work.letGo();
         continue;
@@ -126,7 +132,13 @@ export function useKeptUntilSaved(
       };
       held.current = [
         ...held.current.filter((work) => work.what !== what),
-        { what, letGo, kind, after: townStore.getMissedSnapshot()?.id ?? 0 },
+        {
+          what,
+          letGo,
+          kind,
+          after: townStore.getMissedSnapshot()?.id ?? 0,
+          generation: townStore.getGeneration(),
+        },
       ];
       setHanded((count) => count + 1);
     },
