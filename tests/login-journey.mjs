@@ -1920,13 +1920,17 @@ try {
   await check(
     "another reader's typed-in book is the reader's own copy on its page",
     async () => {
-      // レン typed two books in; the reader has a copy of the first, wished.
+      // レン typed three books in; the reader has a copy of the first, wished,
+      // on a shelf of their shop.
       const REN = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e01";
       const THEIRS = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e02";
       const COPY = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e03";
       const UNTAKEN = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e04";
+      const LATER = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e05";
+      const WORK = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e06";
+      const SHOP = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e07";
       const at = "2026-10-12T00:00:00Z";
-      const typed = (id, created_by, title) => ({
+      const typed = (id, created_by, title, work_id = id) => ({
         id,
         isbn: null,
         title,
@@ -1935,19 +1939,42 @@ try {
         price: null,
         source: "manual",
         created_by,
+        work_id,
         created_at: at,
         updated_at: at,
       });
+      const shelf = {
+        id: "evening",
+        name: "夕方の棚",
+        capacity: 10,
+        isPublic: true,
+        items: [{ id: "e1", bookId: COPY, display: "face", pop: "" }],
+      };
       town = {
         books: [
-          typed(THEIRS, REN, "夜の手帖"),
-          typed(COPY, user.id, "夜の手帖"),
+          typed(THEIRS, REN, "夜の手帖", WORK),
+          typed(COPY, user.id, "夜の手帖", WORK),
           typed(UNTAKEN, REN, "朝の手帖"),
+          typed(LATER, REN, "昼の手帖"),
         ],
         book_marks: [
           { user_id: user.id, book_id: COPY, kind: "wish", created_at: at },
         ],
         my_books: [{ id: COPY, copied_from: THEIRS }],
+        shops: [
+          {
+            id: SHOP,
+            owner_id: user.id,
+            name: "アキの夕方の本屋",
+            description: "",
+            tagline: "",
+            theme: "sage",
+            is_open: true,
+            public_shelves: [shelf],
+            public_scene_books: [],
+          },
+        ],
+        shop_private: [{ shelves: [shelf], scene_books: [] }],
       };
       // What the page writes is answered here and noted, in order.
       const sent = [];
@@ -1955,6 +1982,7 @@ try {
         "/rest/v1/rpc/copy_book",
         "/rest/v1/book_marks",
         "/rest/v1/library_entries",
+        "/rest/v1/shop_private",
       ];
       const answer = (route) => {
         const request = route.request();
@@ -1976,6 +2004,10 @@ try {
         "href",
         new RegExp("place=" + COPY),
       );
+      // The shop that has the reader's copy has this book.
+      await expect(page.locator(".stockist h3")).toHaveText([
+        "アキの夕方の本屋",
+      ]);
       await wished.click();
       await expect(
         page.getByRole("button", { name: "読みたいに加える" }),
@@ -2007,6 +2039,47 @@ try {
         expect(write.asked).toContain(copy);
         expect(write.asked).not.toContain(UNTAKEN);
       }
+      // No shop has it yet: the way to put it on a shelf takes the copy.
+      await expect(
+        page.locator(".stockist-list .empty-state a"),
+      ).toHaveAttribute("href", new RegExp("place=" + copy));
+      // Put among the shop's scene, a book the reader has nothing of goes on
+      // as their copy, made first.
+      sent.splice(0);
+      await page.goto(base + "/my-shop/");
+      await page
+        .getByRole("button", { name: "店内を飾りつける", exact: true })
+        .click();
+      const editor = page.getByRole("dialog", {
+        name: "店内を飾りつける",
+        exact: true,
+      });
+      await editor.getByLabel("棚に加える本を探す").fill("昼の手帖");
+      await editor
+        .locator(".scene-search-results button", { hasText: "昼の手帖" })
+        .click();
+      await editor
+        .getByRole("button", { name: "店内を保存", exact: true })
+        .click();
+      await expect(editor).toHaveCount(0);
+      await expect
+        .poll(() => sent.map((write) => write.path))
+        .toContain("/rest/v1/shop_private");
+      const [placed, ...scene] = sent;
+      expect(placed.path).toBe("/rest/v1/rpc/copy_book");
+      expect(placed.asked).toContain(LATER);
+      const later = /"copy":"([0-9a-f-]{36})"/.exec(placed.asked)?.[1];
+      expect(later).toBeTruthy();
+      expect(scene.map((write) => write.path)).toContain(
+        "/rest/v1/shop_private",
+      );
+      for (const write of scene) {
+        expect(write.path).not.toBe("/rest/v1/rpc/copy_book");
+        expect(write.asked).not.toContain(LATER);
+      }
+      expect(
+        scene.find((write) => write.path === "/rest/v1/shop_private").asked,
+      ).toContain(later);
       await expect.poll(outboxKeys).toEqual([]);
       await page.unroute(supabase + "/rest/v1/**", answer);
       town = null;

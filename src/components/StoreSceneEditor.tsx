@@ -33,6 +33,7 @@ import {
   sceneWorkState,
 } from "../lib/scene-draft";
 import { useWalkStore, walkStore } from "../lib/walk-store";
+import { getTownSnapshot, townActions } from "../lib/store";
 import type { Book, TownState } from "../lib/types";
 import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
 import { booksBeforeSearch } from "../lib/book-lists";
@@ -147,7 +148,23 @@ export function StoreSceneEditor({
     ? found.found.map((match) => match.book)
     : state.books.filter((b) => state.library.includes(b.id)).slice(0, 10);
   const nearChoices = searching ? found.near.map((match) => match.book) : [];
-  function placeBook(b: Book) {
+  function placeBook(given: Book) {
+    // Another reader's book goes on as the reader's own copy of it, read
+    // from the town once the copy is in it.
+    let b: Book | undefined = given;
+    if (given.theirs) {
+      const copy = townActions.ownBook(given.id);
+      b = bookById(getTownSnapshot().books, copy);
+    }
+    if (!b) {
+      setError(
+        failure({
+          what: "この本を、いまは並べられませんでした",
+          next: "少しおいて、もう一度選んでください",
+        }),
+      );
+      return;
+    }
     const id = "placement:" + shop.id + ":" + crypto.randomUUID();
     edit((s) => {
       const next = addBookPlacement(
