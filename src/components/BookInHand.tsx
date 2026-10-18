@@ -27,6 +27,7 @@ import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import { heldBookName } from "../lib/held-book";
 import { reducedMotion } from "../lib/motion";
 import { counted, nth } from "../lib/words";
+import { holds } from "../lib/own-books";
 
 export interface SceneReading {
   entries: ReadEntry[];
@@ -401,7 +402,7 @@ export function BookInHand({
   }, [context, availableItems, index]);
 
   if (!book || !item || !shop || !activeShop) return null;
-  const wished = state.wishlist.includes(book.id);
+  const wished = holds(state, state.wishlist, book.id);
 
   return (
     <dialog

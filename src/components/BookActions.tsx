@@ -8,6 +8,7 @@ import { myShopPath } from "../lib/paths";
 import { PLACE } from "../lib/words";
 import { Icon } from "./ui";
 import { RegisterBook } from "./RegisterBook";
+import { holds, mine } from "../lib/own-books";
 
 /** 定価, tax included. Books without a known price show nothing. */
 export function BookPrice({
@@ -106,8 +107,9 @@ export function BookActions({
    */
   toShop?: boolean;
 }) {
-  const wished = state.wishlist.includes(book.id);
-  const favorite = state.favorites.includes(book.id);
+  // Of the reader's own book for it, when another reader typed it in.
+  const wished = holds(state, state.wishlist, book.id);
+  const favorite = holds(state, state.favorites, book.id);
   return (
     <div className="bh-actions">
       <div className="bh-save-row">
@@ -156,7 +158,7 @@ export function BookActions({
       {toShop && (
         <Link
           className="text-btn bh-to-shop"
-          href={myShopPath({ place: book.id })}
+          href={myShopPath({ place: mine(state, book.id) })}
         >
           <Icon name="store" size={16} />
           {PLACE.toShop}

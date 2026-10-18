@@ -14,6 +14,8 @@ export class TownSyncError extends Error {
   constructor(
     message: string,
     readonly retry: boolean,
+    /** The database's code for it (PGRST202, 23514…), when it gave one. */
+    readonly code = "",
   ) {
     super(message);
   }
@@ -53,6 +55,7 @@ export async function settled<T>(
     throw new TownSyncError(
       outcome.error.message,
       shouldRetry(outcome.status, outcome.error.code),
+      outcome.error.code,
     );
   return outcome;
 }

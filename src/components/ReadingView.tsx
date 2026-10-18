@@ -73,6 +73,7 @@ import {
   WHILE_OFFLINE,
 } from "../lib/words";
 import { townOffline } from "../lib/store";
+import { booksOfWork } from "../lib/works";
 
 type Shared = {
   state: TownState;
@@ -261,7 +262,11 @@ function ReadersNow({
   bookId?: string;
 }) {
   const all = readersNow(state, clock?.openedAt ?? 0);
-  const readers = bookId ? all.filter((entry) => entry.bookId === bookId) : all;
+  // Readers of the book's work: whose own book it is does not matter here.
+  const work = bookId ? booksOfWork(state.books, bookId) : null;
+  const readers = work
+    ? all.filter((entry) => entry.bookId !== null && work.has(entry.bookId))
+    : all;
   // An empty room for one book says nothing; the room for the whole town
   // shows what was read lately instead of a zero.
   if (!readers.length && bookId) return null;

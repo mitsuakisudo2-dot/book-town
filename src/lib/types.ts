@@ -57,6 +57,14 @@ export interface Book {
   price?: number;
   /** The work this edition belongs to (books.work_id, read with the book). The demo's books and the 見本 have none: each is its own work. */
   workId?: string;
+  /**
+   * Typed in by another reader: shown as theirs, on their shelf, post or
+   * page, and named by none of this reader's rows, which name their own copy
+   * of it instead (own-books.ts).
+   */
+  theirs?: true;
+  /** The book of another reader's this is the reader's own copy of (own-books.ts). */
+  copyOf?: string;
   subtitle?: string;
   /** Lets a title written in kanji be found by its kana or romaji. */
   titleReading?: BookReading;
@@ -521,6 +529,14 @@ export interface TownActions {
    */
   fixBook(bookId: string, fix: Required<Omit<NewBook, "price">>): BookFixResult;
   toggleLibrary(bookId: string): void;
+  /**
+   * The book the reader's rows name for `bookId`: the book itself, or, for
+   * one another reader typed in, the reader's own copy of it, made now when
+   * they have none (own-books.ts). Null when the town lacks the book or
+   * cannot take the copy yet. For what is changed outside the town, as the
+   * store scene is.
+   */
+  ownBook(bookId: string): string | null;
   /**
    * Sorts books in the library: 積読・読書中・読了 (null for 未設定),
    * 読みたい, 所有 (null for 未設定), ☆, or taking them out (removed) and

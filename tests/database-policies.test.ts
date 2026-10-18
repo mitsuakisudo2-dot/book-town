@@ -135,6 +135,23 @@ async function main() {
     "insert into books (title, author, isbn, created_by) values ('華氏451度', 'レイ・ブラッドベリ', '9784150119553', $1) returning id",
     [AKI],
   );
+  /** A book typed in by `visitor`: a reader's rows name their own books (own_books_only). */
+  const newBook = async (visitor: string, title = "棚の本") =>
+    (
+      await as<{ id: string }>(
+        visitor,
+        "insert into books (title, created_by) values ($1, $2) returning id",
+        [title, visitor],
+      )
+    )[0].id;
+  /** A catalog row ('ndl'): everyone's, so anyone's rows may name it. */
+  const catalogBook = async (title = "目録の本") =>
+    (
+      await db.query<{ id: string }>(
+        "insert into books (title, source) values ($1, 'ndl') returning id",
+        [title],
+      )
+    ).rows[0].id;
   const [akiShop] = await as<{ id: string }>(
     AKI,
     "insert into shops (owner_id, name, is_open) values ($1, '夜の本屋', true) returning id",
@@ -363,11 +380,12 @@ async function main() {
       [[book.id], [""]],
       /permission denied/,
     );
+    const bens = await newBook(BEN, "砂の女");
     await as(BEN, "select replace_profile_nine($1, $2)", [
-      [second.id],
+      [bens],
       ["ベンの一冊"],
     ]);
-    assert.deepEqual(await nine(BEN), [[second.id, "ベンの一冊"]]);
+    assert.deepEqual(await nine(BEN), [[bens, "ベンの一冊"]]);
     assert.equal((await nine(AKI)).length, 2);
     await as(BEN, "select replace_profile_nine($1, $2)", [[], []]);
     assert.deepEqual(await nine(BEN), []);
@@ -1225,9 +1243,7 @@ async function main() {
       assert.equal(await count(AKI), 2);
       await as(CHI, "delete from blocks where blocker_id = $1", [CHI]);
       await visit(BEN, "now()");
-      await as(CHI, "delete from shop_visits where shop_id = $1", [
-        akiShop.id,
-      ]);
+      await as(CHI, "delete from shop_visits where shop_id = $1", [akiShop.id]);
       await countTheWeek();
       assert.equal(await count(AKI), 2);
       // A week counts only its own visits: before it, after it, or dated
@@ -1285,17 +1301,18 @@ async function main() {
   );
 
   await check("book lists are private", async () => {
+    const chis = await newBook(CHI);
     await as(
       CHI,
       "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
-      [CHI, book.id],
+      [CHI, chis],
     );
     assert.equal((await as(AKI, "select * from book_marks")).length, 0);
     assert.equal((await as(CHI, "select * from book_marks")).length, 1);
     await refused(
       AKI,
       "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
-      [CHI, book.id],
+      [CHI, chis],
       /row-level security/,
     );
   });
@@ -2661,7 +2678,6 @@ async function main() {
   ];
   const EVERYONE = [true, true, true, true];
   const BEN_ALONE = [false, false, true, false];
-  const BEN_AND_CHI = [false, false, true, true];
   const readBy = async (expected: boolean[], why: string) =>
     assert.deepEqual(await readersOf(scanned), expected, why);
   const hide = (kind: string, id: string) =>
@@ -2939,50 +2955,59 @@ async function main() {
   await check(
     "a reader's own use of a book, private ones too, shows it to them alone",
     async () => {
+      // Chi uses a 見本's book: nobody else's, read where it is used. A
+      // book Ben typed in she cannot use at all (own_books_only, below).
+      const sample = sampleBookRowId(demoBooks[3].id);
+      const NOBODY = [false, false, false, false];
+      const CHI_ALONE = [false, false, false, true];
+      const readsOf = async (expected: boolean[], why: string) =>
+        assert.deepEqual(await readersOf(sample), expected, why);
       const chi = (sql: string, params: unknown[]) =>
         as<{ id: string }>(CHI, sql, params);
+      await readsOf(NOBODY, "used by nobody");
       await chi(
         "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
-        [CHI, scanned],
+        [CHI, sample],
       );
-      await readBy(BEN_AND_CHI, "a wish");
+      await readsOf(CHI_ALONE, "a wish");
       await chi("delete from book_marks where user_id = $1", [CHI]);
-      await readBy(BEN_ALONE, "the wish taken back");
+      await operator(`delete from library_entries where user_id = '${CHI}'`);
+      await readsOf(NOBODY, "the wish taken back");
 
       const [note] = await chi(
         "insert into posts (author_id, body, book_id, reading_mode) values ($1, 'ひとりで', $2, 'solo') returning id",
-        [CHI, scanned],
+        [CHI, sample],
       );
-      await readBy(BEN_AND_CHI, "a private note");
+      await readsOf(CHI_ALONE, "a private note");
       // Her post held by a serious report is still hers.
       const [held] = await chi(
         "insert into posts (author_id, body, book_id) values ($1, '話したい', $2) returning id",
-        [CHI, scanned],
+        [CHI, sample],
       );
       await foldAs("post", held.id, "held", CHI);
-      await readBy(BEN_AND_CHI, "a held post");
+      await readsOf(CHI_ALONE, "a held post");
       await chi("delete from posts where id in ($1, $2)", [note.id, held.id]);
 
       const [record] = await chi(
         "insert into reading_entries (user_id, book_id) values ($1, $2) returning id",
-        [CHI, scanned],
+        [CHI, sample],
       );
-      await readBy(BEN_AND_CHI, "a private record");
+      await readsOf(CHI_ALONE, "a private record");
       await chi("delete from reading_entries where id = $1", [record.id]);
 
       const [draft] = await chi(
         "insert into posters (author_id, template, pages, status) values ($1, 'one_book', $2, 'draft') returning id",
-        [CHI, pages(scanned)],
+        [CHI, pages(sample)],
       );
-      await readBy(BEN_AND_CHI, "a draft poster");
+      await readsOf(CHI_ALONE, "a draft poster");
       await chi("delete from posters where id = $1", [draft.id]);
 
       // Her earlier session still runs, so this one has ended.
       const [alone] = await chi(
         "insert into reading_sessions (user_id, book_id, mode, ended_at) values ($1, $2, 'solo', now()) returning id",
-        [CHI, scanned],
+        [CHI, sample],
       );
-      await readBy(BEN_AND_CHI, "reading alone");
+      await readsOf(CHI_ALONE, "reading alone");
       await chi("delete from reading_sessions where id = $1", [alone.id]);
 
       // Her own shop, closed: a private shelf, then the scene's private row.
@@ -2992,15 +3017,101 @@ async function main() {
       );
       await chi("insert into shop_private (shop_id, shelves) values ($1, $2)", [
         shop.id,
-        shelvesWith(scanned, false),
+        shelvesWith(sample, false),
       ]);
-      await readBy(BEN_AND_CHI, "a private shelf");
+      await readsOf(CHI_ALONE, "a private shelf");
       await chi(
         "update shop_private set shelves = '[]', scene = $2 where shop_id = $1",
-        [shop.id, sceneWith(scanned, false)],
+        [shop.id, sceneWith(sample, false)],
       );
-      await readBy(BEN_AND_CHI, "a private row of the store scene");
+      await readsOf(CHI_ALONE, "a private row of the store scene");
       await chi("delete from shops where id = $1", [shop.id]);
+      await operator(`delete from library_entries where user_id = '${CHI}'`);
+      await readsOf(NOBODY, "used by nobody again");
+    },
+  );
+
+  await check(
+    "a reader's rows name only their own books, the catalog's and the 見本's",
+    async () => {
+      // Ben's book is shown to Chi (he wrote about it), and none of her rows
+      // may name it, private or not: she would use her own copy of it
+      // (copy_book), so what Ben does to his row never reaches hers. Nor may
+      // Aki's, who could read it too.
+      const [bens] = await as<{ id: string }>(
+        BEN,
+        "insert into posts (author_id, body, book_id) values ($1, '読んだ', $2) returning id",
+        [BEN, scanned],
+      );
+      await readBy(EVERYONE, "written about");
+      await refused(
+        AKI,
+        "update shop_private set shelves = $2 where shop_id = $1",
+        [akiShop.id, shelvesWith(scanned, true)],
+        /their own books/,
+      );
+      const chi = (sql: string, params: unknown[]) =>
+        refused(CHI, sql, params, /their own books/);
+      await chi(
+        "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
+        [CHI, scanned],
+      );
+      await chi(
+        "insert into library_entries (user_id, book_id, source) values ($1, $2, 'manual')",
+        [CHI, scanned],
+      );
+      await chi(
+        "insert into posts (author_id, body, book_id) values ($1, '話したい', $2)",
+        [CHI, scanned],
+      );
+      await chi(
+        "insert into reading_entries (user_id, book_id) values ($1, $2)",
+        [CHI, scanned],
+      );
+      await chi(
+        "insert into posters (author_id, template, pages, status) values ($1, 'one_book', $2, 'draft')",
+        [CHI, pages(scanned)],
+      );
+      await chi(
+        "insert into reading_sessions (user_id, book_id, mode, ended_at) values ($1, $2, 'solo', now())",
+        [CHI, scanned],
+      );
+      await chi("select replace_profile_nine($1, $2)", [[scanned], [""]]);
+      const [shop] = await as<{ id: string }>(
+        CHI,
+        "insert into shops (owner_id, name) values ($1, '小さな本屋') returning id",
+        [CHI],
+      );
+      await chi("insert into shop_private (shop_id, shelves) values ($1, $2)", [
+        shop.id,
+        shelvesWith(scanned, true),
+      ]);
+      await as(CHI, "insert into shop_private (shop_id) values ($1)", [
+        shop.id,
+      ]);
+      await chi("update shop_private set scene = $2 where shop_id = $1", [
+        shop.id,
+        sceneWith(scanned, true),
+      ]);
+      // Her own books stay hers to use, and her shelf holding one of them
+      // cannot take Ben's beside it.
+      const mine = await newBook(CHI, "砂の器");
+      await as(CHI, "update shop_private set shelves = $2 where shop_id = $1", [
+        shop.id,
+        shelvesWith(mine, true),
+      ]);
+      const both = JSON.parse(shelvesWith(mine, true));
+      both[0].items.push({ id: "i2", bookId: scanned, display: "spine" });
+      await chi("update shop_private set shelves = $2 where shop_id = $1", [
+        shop.id,
+        JSON.stringify(both),
+      ]);
+      await as(CHI, "delete from shops where id = $1", [shop.id]);
+      await operator(
+        `delete from library_entries where user_id = '${CHI}';
+         delete from books where id = '${mine}';`,
+      );
+      await as(BEN, "delete from posts where id = $1", [bens.id]);
       await readBy(BEN_ALONE, "used by nobody but Ben");
     },
   );
@@ -3808,15 +3919,6 @@ async function main() {
     "00000000-0000-4000-8000-0000004" + String(n).padStart(5, "0");
   let made = 0;
   const deviceId = () => lib((made += 1));
-  /** A book typed in by `visitor` and used nowhere yet. */
-  const newBook = async (visitor: string, title = "棚の本") =>
-    (
-      await as<{ id: string }>(
-        visitor,
-        "insert into books (title, created_by) values ($1, $2) returning id",
-        [title, visitor],
-      )
-    )[0].id;
   const libraryTables = [
     "library_entries",
     "library_shelves",
@@ -4145,15 +4247,18 @@ async function main() {
           ],
         ),
       ];
-      // Whether or not the books are in her own library.
-      for (const inHers of [false, true]) {
-        if (inHers) for (const bookId of [on, off]) await putEntry(CHI, bookId);
-        for (const sql of statements) {
-          const answer = (bookId: string) =>
-            refusal(() => as(CHI, sql, [shelf, CHI, bookId]));
-          assert.deepEqual(await answer(on), await answer(off), sql);
-        }
+      for (const sql of statements) {
+        const answer = (bookId: string) =>
+          refusal(() => as(CHI, sql, [shelf, CHI, bookId]));
+        assert.deepEqual(await answer(on), await answer(off), sql);
       }
+      // Nor can her own library hold them: a reader's rows name their own
+      // books (own_books_only), whether or not the book is on the shelf.
+      for (const bookId of [on, off])
+        assert.match(
+          (await refusal(() => putEntry(CHI, bookId))).message,
+          /their own books/,
+        );
       assert.deepEqual(await akis(), before);
     },
   );
@@ -5001,11 +5106,13 @@ async function main() {
   );
 
   await check(
-    "a typed-in book is read by whoever keeps it in their library or met it, and only while they do",
+    "a 見本's book is read by whoever keeps it in their library or met it, and only while they do",
     async () => {
-      const AKI_ALONE = [false, true, false, false];
-      const AKI_AND_CHI = [false, true, false, true];
-      const shelved = await newBook(AKI, "まだ誰にも見せない本");
+      // Nobody's, as a book typed in by someone else can be nobody else's
+      // (own_books_only): read where it is used, as theirs is.
+      const AKI_ALONE = [false, false, false, false];
+      const AKI_AND_CHI = [false, false, false, true];
+      const shelved = sampleBookRowId(demoBooks[4].id);
       assert.deepEqual(await readersOf(shelved), AKI_ALONE);
       await putEntry(CHI, shelved);
       assert.deepEqual(await readersOf(shelved), AKI_AND_CHI, "in Chi's");
@@ -5019,7 +5126,7 @@ async function main() {
       assert.deepEqual(await readersOf(shelved), AKI_ALONE, "taken out");
       await takeOut(null);
       assert.deepEqual(await readersOf(shelved), AKI_AND_CHI, "back in");
-      const met = await newBook(AKI, "まだ誰にも見せない本");
+      const met = sampleBookRowId(demoBooks[5].id);
       assert.deepEqual(await readersOf(met), AKI_ALONE);
       const want = encounterRow({
         book_id: met,
@@ -5074,7 +5181,9 @@ async function main() {
   for (const c of LIBRARY_CASES.encounter)
     await check(`book_encounters: ${c.name}`, async () => {
       const owner = c.owner === "me" ? CHI : AKI;
-      const b = await newBook(owner);
+      // A catalog book, which anyone's rows may name: Chi's encounter on
+      // Aki's post about a book she typed in names Chi's copy of it, below.
+      const b = await catalogBook();
       const row = encounterRow({
         book_id: b,
         kind: c.kind,
@@ -5084,7 +5193,7 @@ async function main() {
       if (c.via === "post") {
         if (c.sample) row.post_id = deviceId();
         else if (c.reply) {
-          const theirs = await newBook(owner);
+          const theirs = await catalogBook();
           const parent = await postAbout(owner, theirs);
           row.post_id = await postAbout(owner, b, { parent });
           // A reply is met by its own book, never its parent's.
@@ -5140,7 +5249,7 @@ async function main() {
   await check(
     "a post or a shop the reader cannot see is refused as one that does not exist",
     async () => {
-      const b = await newBook(AKI);
+      const b = await catalogBook();
       const onPost = (post: string) =>
         refusal(() =>
           meet(
@@ -5225,7 +5334,7 @@ async function main() {
       // inserted ignoring duplicates by its id, it adds nothing, whatever
       // has become of its post or shop since. A refusal here would take
       // every unsent change with it.
-      const b = await newBook(AKI);
+      const b = await catalogBook();
       const post = await postAbout(AKI, b);
       const liked = encounterRow({
         book_id: b,
@@ -5316,7 +5425,7 @@ async function main() {
   await check(
     "whose post or shop it was is copied by the database, never taken from the device",
     async () => {
-      const b = await newBook(AKI);
+      const b = await catalogBook();
       const post = await postAbout(AKI, b);
       const rows = [
         encounterRow({
@@ -5355,7 +5464,7 @@ async function main() {
   await check(
     "an encounter is its reader's: not the post's writer's nor the shop's owner's, and only its memo and its taking back change",
     async () => {
-      const b = await newBook(AKI);
+      const b = await catalogBook();
       const post = await postAbout(AKI, b);
       const liked = encounterRow({
         book_id: b,
@@ -5438,7 +5547,7 @@ async function main() {
   await check(
     "one encounter of each press, and pressing again brings the same one back",
     async () => {
-      const b = await newBook(AKI);
+      const b = await catalogBook();
       const post = await postAbout(AKI, b);
       const like = encounterRow({
         book_id: b,
@@ -5518,8 +5627,8 @@ async function main() {
         "insert into shops (owner_id, name, is_open) values ($1, '閉じる本屋', true) returning id",
         [GONE],
       );
-      // Chi's own book, so that no book is left without its maker.
-      const b = await newBook(CHI);
+      // A catalog book, which both may name and nobody made.
+      const b = await catalogBook();
       const post = await postAbout(GONE, b);
       const onPost = encounterRow({
         book_id: b,
@@ -5587,7 +5696,7 @@ async function main() {
   await check("deleting an account removes everything it owned", async () => {
     // Ben keeps a library too: a mark copied to its row, the row on a shelf,
     // his settings, a record, his nine and encounters.
-    const bens = await newBook(AKI, "ベンの棚の本");
+    const bens = await newBook(BEN, "ベンの棚の本");
     await mark("wish", bens, null, BEN);
     await shelve(await putShelf({ user_id: BEN }), bens, BEN);
     await as(
@@ -5622,20 +5731,25 @@ async function main() {
     // Chi met the book on Ben's post and on a POP of his shop, with a memo
     // each: once his account goes, hers stay, with nothing of his left
     // (decision 2).
+    // Her encounters name her own copy of his book (copy_book), as every
+    // row of hers names a book of her own.
     await operator(
       `update shops set is_open = true where id = '${benShop.id}'`,
     );
+    const onBens = await postAbout(BEN, bens);
+    const chis = deviceId();
+    await as(CHI, "select copy_book($1, $2)", [bens, chis]);
     const metBen = [
       encounterRow({
-        book_id: bens,
+        book_id: chis,
         kind: "like",
         via: "post",
-        post_id: await postAbout(BEN, bens),
+        post_id: onBens,
         memo: "ベンの言葉",
         memo_at: "2026-09-02T00:00:00.000Z",
       }),
       encounterRow({
-        book_id: bens,
+        book_id: chis,
         kind: "love",
         via: "pop",
         shop_id: benShop.id,
@@ -5789,9 +5903,9 @@ async function main() {
       // the 見本's, which have none. The one he only scanned is used
       // nowhere, so nobody reads it any more.
       const orphan = await db.query<{ n: number }>(
-        "select count(*)::int as n from books where created_by is null and not private.is_sample_book(id)",
+        "select count(*)::int as n from books where created_by is null and source = 'manual' and not private.is_sample_book(id)",
       );
-      assert.equal(orphan.rows[0].n, 2);
+      assert.equal(orphan.rows[0].n, 4);
       assert.deepEqual(await readersOf(scanned), [false, false, false, false]);
     };
     // 退会 from the web: Ben deletes his own account, as the app does. Undone

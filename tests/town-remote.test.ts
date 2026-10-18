@@ -329,6 +329,9 @@ function fakeReads(
       select: (_columns?: string, options: { count?: string } = {}) =>
         select(table, options.count === "exact"),
     }),
+    // A function returning rows, as a table of its name.
+    rpc: (name: string, _args?: unknown, options: { count?: string } = {}) =>
+      select(name, options.count === "exact"),
   };
   return {
     asked,
@@ -1407,38 +1410,69 @@ async function main() {
     assert.equal(shelves.shelves.length, 2);
   });
 
-  await check("a book fixed is written as its title, author and ISBN, and only that", () => {
-    const mine = createRegisteredBook("00000000-0000-4000-8000-0000000000b7", {
-      title: "よるのとしょかん",
-      author: "ドウ",
-      isbn: "9784000000000",
-    });
-    const local = createRegisteredBook("my-book-1", { title: "手元の本", author: "" });
-    const before: TownState = { ...base(), books: [...base().books, mine, local] };
-    const next: TownState = {
-      ...before,
-      books: before.books.map((book) =>
-        book.id === mine.id
-          ? { ...book, title: "夜の図書館", author: "ジェーン・ドウ", isbn: undefined }
-          : book.id === local.id
-            ? { ...book, title: "直した手元の本" }
-            : book,
-      ),
-    };
-    const writes = planWrites(before, next, ids);
-    // A book only in this browser has no row to fix.
-    assert.deepEqual(writes, [
-      {
-        kind: "fix-books",
-        rows: [{ id: mine.id, title: "夜の図書館", author: "ジェーン・ドウ", isbn: null }],
-      },
-    ]);
-    // A book's other fields changing on screen write nothing.
-    assert.deepEqual(
-      planWrites(before, { ...before, books: before.books.map((book) => ({ ...book, summary: "x" })) }, ids),
-      [],
-    );
-  });
+  await check(
+    "a book fixed is written as its title, author and ISBN, and only that",
+    () => {
+      const mine = createRegisteredBook(
+        "00000000-0000-4000-8000-0000000000b7",
+        {
+          title: "よるのとしょかん",
+          author: "ドウ",
+          isbn: "9784000000000",
+        },
+      );
+      const local = createRegisteredBook("my-book-1", {
+        title: "手元の本",
+        author: "",
+      });
+      const before: TownState = {
+        ...base(),
+        books: [...base().books, mine, local],
+      };
+      const next: TownState = {
+        ...before,
+        books: before.books.map((book) =>
+          book.id === mine.id
+            ? {
+                ...book,
+                title: "夜の図書館",
+                author: "ジェーン・ドウ",
+                isbn: undefined,
+              }
+            : book.id === local.id
+              ? { ...book, title: "直した手元の本" }
+              : book,
+        ),
+      };
+      const writes = planWrites(before, next, ids);
+      // A book only in this browser has no row to fix.
+      assert.deepEqual(writes, [
+        {
+          kind: "fix-books",
+          rows: [
+            {
+              id: mine.id,
+              title: "夜の図書館",
+              author: "ジェーン・ドウ",
+              isbn: null,
+            },
+          ],
+        },
+      ]);
+      // A book's other fields changing on screen write nothing.
+      assert.deepEqual(
+        planWrites(
+          before,
+          {
+            ...before,
+            books: before.books.map((book) => ({ ...book, summary: "x" })),
+          },
+          ids,
+        ),
+        [],
+      );
+    },
+  );
 
   await check("only the person's own posts are written, replies last", () => {
     const before = base();
@@ -2016,21 +2050,10 @@ async function main() {
       const before = withSamples(townFromRows(rows(), ids));
       const wished = { ...before, wishlist: [...before.wishlist, SOLARIS] };
       const writes = planWrites(before, wished, ids);
-      // The catalog row is written first, by the reader, under the shared id.
-      assert.deepEqual(kinds(writes), ["books", "add:book_marks"]);
-      assert.deepEqual(writes[0], {
-        kind: "books",
-        rows: [
-          {
-            id: row,
-            title: demoBooks[0].title,
-            author: demoBooks[0].author,
-            source: "manual",
-            created_by: AKI,
-          },
-        ],
-      });
-      assert.deepEqual((writes[1] as Extract<Write, { kind: "add" }>).rows, [
+      // The row is the database's, for everyone and nobody's (AUD-078): the
+      // reader names it by the shared id and never writes it.
+      assert.deepEqual(kinds(writes), ["add:book_marks"]);
+      assert.deepEqual((writes[0] as Extract<Write, { kind: "add" }>).rows, [
         { user_id: AKI, book_id: row, kind: "wish" },
       ]);
       // Read back, it is the 見本's book again, whatever its row says.
@@ -2090,15 +2113,9 @@ async function main() {
       };
       const next = { ...before, posters: [...before.posters, poster] };
       const writes = planWrites(before, next, ids);
-      assert.deepEqual(kinds(writes), ["books", "posters"]);
+      assert.deepEqual(kinds(writes), ["posters"]);
       assert.deepEqual(
-        (writes[0] as Extract<Write, { kind: "books" }>).rows.map(
-          (row) => row.id,
-        ),
-        [sampleBookRowId(SOLARIS)],
-      );
-      assert.deepEqual(
-        (writes[1] as Extract<Write, { kind: "posters" }>).rows[0].pages,
+        (writes[0] as Extract<Write, { kind: "posters" }>).rows[0].pages,
         [
           {
             blocks: [
@@ -2113,7 +2130,7 @@ async function main() {
         rows({
           posters: [
             posterRow(poster.id, AKI, {
-              pages: (writes[1] as Extract<Write, { kind: "posters" }>).rows[0]
+              pages: (writes[0] as Extract<Write, { kind: "posters" }>).rows[0]
                 .pages,
             }),
           ],
@@ -2136,8 +2153,8 @@ async function main() {
       wishlist: [post.bookId!],
     };
     const writes = planWrites(before, next, ids);
-    assert.deepEqual(kinds(writes), ["books", "add:book_marks"]);
-    assert.deepEqual((writes[1] as Extract<Write, { kind: "add" }>).rows, [
+    assert.deepEqual(kinds(writes), ["add:book_marks"]);
+    assert.deepEqual((writes[0] as Extract<Write, { kind: "add" }>).rows, [
       { user_id: AKI, book_id: sampleBookRowId(post.bookId!), kind: "wish" },
     ]);
   });
@@ -2735,6 +2752,24 @@ async function main() {
     assert.deepEqual(
       arrived.books.map((entry) => entry.id),
       [NEW_BOOK],
+    );
+    // Ben's typed-in book is told as his only by a town that tells the
+    // reader's own books apart (my_books read).
+    assert.equal(arrived.books[0].theirs, undefined);
+    assert.equal(
+      arrivedFromRows(
+        {
+          posts: [post(NEW_POST, BEN, { book_id: NEW_BOOK })],
+          profiles: [profile(BEN, "ben")],
+          books: [book(NEW_BOOK)],
+          postReactions: [],
+          spoilerReports: [],
+          folds: [],
+        },
+        AKI,
+        true,
+      ).books[0].theirs,
+      true,
     );
     assert.deepEqual(arrived.likedPosts, [NEW_POST]);
     assert.deepEqual(arrived.likeTaps, { [NEW_POST]: 2 });

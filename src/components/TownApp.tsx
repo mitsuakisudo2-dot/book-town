@@ -110,6 +110,8 @@ import {
   quotedTitle,
 } from "../lib/book-name";
 import type { Bibliography } from "../lib/bibliography";
+import { booksOfWork } from "../lib/works";
+import { mine } from "../lib/own-books";
 import { useBibliography, useBookHolds } from "../lib/bibliography-session";
 import { HeldBook } from "./HeldBook";
 import { counted, PLACE, TABS, whenSome } from "../lib/words";
@@ -1148,6 +1150,9 @@ function BookView({
     );
   // The cover, its lookup and the shop links go by the heading's name.
   const named = bookNamedBy(book, master);
+  // Shops show the book as their owner's own registration of it: the same
+  // work is the same book here.
+  const work = booksOfWork(state.books, book.id);
   const matches = [
     ...state.shops,
     ...(state.ownShop ? [state.ownShop] : []),
@@ -1156,7 +1161,7 @@ function BookView({
       .filter((s) => s.isPublic)
       .flatMap((shelf) =>
         shelf.items
-          .filter((i) => i.bookId === book.id)
+          .filter((i) => work.has(i.bookId))
           .map((item) => ({ shop, shelf, item })),
       ),
   );
@@ -1244,7 +1249,10 @@ function BookView({
           <div className="empty-state">
             <h3>この本の、最初の居場所を。</h3>
             <p>あなたの書店に並べて、POPを書いてみませんか。</p>
-            <Link href={myShopPath({ place: book.id })} className="btn">
+            <Link
+              href={myShopPath({ place: mine(state, book.id) })}
+              className="btn"
+            >
               {PLACE.toShop}
             </Link>
           </div>

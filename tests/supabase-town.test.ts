@@ -30,6 +30,8 @@ import {
 import { demoBooks, demoPosts } from "../src/lib/data";
 import { isDatabaseId } from "../src/lib/record-kind";
 import { sampleBookRowId } from "../src/lib/samples";
+import { bookById } from "../src/lib/book-name";
+import { mine } from "../src/lib/own-books";
 
 // Two readers use the town against a real local Supabase (`supabase start`):
 // what one saves comes back after a reload, what is public reaches the other,
@@ -341,7 +343,16 @@ async function main() {
     assert.deepEqual(benAgain.likedPosts, [postId]);
     assert.deepEqual(benAgain.likeTaps, { [postId]: 3 });
     assert.deepEqual(benAgain.wantedPosts, [postId]);
-    assert.deepEqual(benAgain.wishlist, [bookId]);
+    // The book Aki typed in stays hers: Ben wants his own copy of it
+    // (own-books.ts), which his town tells apart as his.
+    assert.equal(benAgain.wishlist.length, 1);
+    assert.notEqual(benAgain.wishlist[0], bookId);
+    assert.equal(
+      bookById(benAgain.books, benAgain.wishlist[0])?.copyOf,
+      bookId,
+    );
+    assert.equal(bookById(benAgain.books, bookId)?.theirs, true);
+    assert.equal(mine(benAgain, bookId), benAgain.wishlist[0]);
     assert.equal(Object.values(benAgain.popReactions)[0]?.[0], "love");
 
     const akiAgain = (await townOf(aki)).getSnapshot();
@@ -1133,10 +1144,11 @@ async function main() {
       );
       const [old, known] = [crypto.randomUUID(), crypto.randomUUID()];
       assert.ifError(
+        // Lia's own, as a reader's rows name their own books.
         (
           await admin.from("books").insert([
-            { id: old, title: "古いアプリの本" },
-            { id: known, title: "新しいアプリの本" },
+            { id: old, title: "古いアプリの本", created_by: lia.id },
+            { id: known, title: "新しいアプリの本", created_by: lia.id },
           ])
         ).error,
       );
@@ -1192,9 +1204,13 @@ async function main() {
       const books = [1, 2, 3].map(() => crypto.randomUUID());
       assert.ifError(
         (
-          await admin
-            .from("books")
-            .insert(books.map((id, n) => ({ id, title: `ノアの本 ${n + 1}` })))
+          await admin.from("books").insert(
+            books.map((id, n) => ({
+              id,
+              title: `ノアの本 ${n + 1}`,
+              created_by: noa.id,
+            })),
+          )
         ).error,
       );
       const entry = (book_id: string) => ({
@@ -1310,10 +1326,21 @@ async function main() {
         .select("id")
         .single();
       assert.ifError(post.error);
+      // What Noa met is named by her own copy of the book Aki typed in: a
+      // reader's rows name their own books (own-books.ts).
+      const noasCopy = crypto.randomUUID();
+      assert.ifError(
+        (
+          await noa.client.rpc("copy_book", {
+            original: bookId,
+            copy: noasCopy,
+          })
+        ).error,
+      );
       const met = {
         id: crypto.randomUUID(),
         user_id: noa.id,
-        book_id: bookId,
+        book_id: noasCopy,
         kind: "like",
         via: "post",
         post_id: post.data.id,
@@ -1449,9 +1476,13 @@ async function main() {
       // Put in as the operator, with ids made here, so no insert has to
       // answer with more rows than the server hands out at once.
       const ids = Array.from({ length: 1001 }, () => crypto.randomUUID());
-      const books = await admin
-        .from("books")
-        .insert(ids.map((id, n) => ({ id, title: `読みたい本 ${n + 1}` })));
+      const books = await admin.from("books").insert(
+        ids.map((id, n) => ({
+          id,
+          title: `読みたい本 ${n + 1}`,
+          created_by: mio.id,
+        })),
+      );
       assert.ifError(books.error);
       const marks = await admin
         .from("book_marks")

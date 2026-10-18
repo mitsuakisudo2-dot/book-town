@@ -10,6 +10,7 @@ import {
 import { REPORT_KIND_WORDS } from "./supabase/reports";
 import { hasFinished } from "./reading";
 import { bookById } from "./book-name";
+import { booksOfWork } from "./works";
 
 const time = (post: Post) => Date.parse(post.createdAt) || 0;
 const newestFirst = (a: Post, b: Post) => time(b) - time(a);
@@ -190,15 +191,20 @@ export function ownersToFollow(state: TownState, limit = 3) {
 }
 
 /**
- * Reviews are top-level posts with this book; spoilers are kept apart, behind
- * the door. A review folded by reports stays in its place, folded there.
- * `leftOut`: the reader's setting kept some out, which the page says once.
+ * Reviews are top-level posts with a book of this book's work (booksOfWork);
+ * spoilers are kept apart, behind the door. A review folded by reports stays
+ * in its place, folded there. `leftOut`: the reader's setting kept some out,
+ * which the page says once.
  */
 export function bookReviews(state: TownState, bookId: string) {
+  const work = booksOfWork(state.books, bookId);
   const reviews = state.posts
     .filter(
       (post) =>
-        post.parentId === null && post.bookId === bookId && isPublic(post),
+        post.parentId === null &&
+        post.bookId !== null &&
+        work.has(post.bookId) &&
+        isPublic(post),
     )
     .sort(newestFirst);
   const view = (post: Post) => spoilerViewOf(state, post);
@@ -254,13 +260,18 @@ export const likeCount = (state: TownState, post: Post): number =>
 export const wantCount = (state: TownState, post: Post): number =>
   post.wants + (state.wantedPosts.includes(post.id) ? 1 : 0);
 
-/** Whose words made the viewer want this book, oldest first. */
-export const wantSources = (state: TownState, bookId: string): Post[] =>
-  state.posts
+/** Whose words made the viewer want this book (its work's), oldest first. */
+export function wantSources(state: TownState, bookId: string): Post[] {
+  const work = booksOfWork(state.books, bookId);
+  return state.posts
     .filter(
-      (post) => post.bookId === bookId && state.wantedPosts.includes(post.id),
+      (post) =>
+        post.bookId !== null &&
+        work.has(post.bookId) &&
+        state.wantedPosts.includes(post.id),
     )
     .sort(oldestFirst);
+}
 
 /** Fixed to Japan time so the static render and the browser always agree. */
 const postTime = new Intl.DateTimeFormat("ja-JP", {

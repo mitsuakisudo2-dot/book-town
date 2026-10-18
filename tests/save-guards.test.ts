@@ -7,6 +7,7 @@ import {
   deviceOutbox,
   forgetOutboxes,
   OUTBOX_KEY,
+  OUTBOX_KEY_BEFORE,
   outboxWaiting,
 } from "../src/lib/outbox";
 import { POST_DRAFT_KEY } from "../src/lib/post-draft";
@@ -640,6 +641,56 @@ async function main() {
         walkMissedLine(missed),
         "あとで寄る書店を保存できませんでした。",
       );
+    },
+  );
+
+  await check(
+    "what an older version kept under its key is sent, and let go there; a page keeps under its own",
+    async () => {
+      const db = fakeSupabase(AKI, seed());
+      const device = memoryStorage();
+      // A page of the version before kept a follow, in its key.
+      device.setItem(
+        OUTBOX_KEY_BEFORE + AKI,
+        JSON.stringify([
+          {
+            page: "older-page",
+            at: new Date().toISOString(),
+            writes: [
+              {
+                write: {
+                  kind: "add",
+                  table: "shop_follows",
+                  rows: [{ user_id: AKI, shop_id: BEN_SHOP }],
+                },
+              },
+            ],
+          },
+        ]),
+      );
+      assert.equal(outboxWaiting(AKI, device), true);
+      const store = await townOf(db, device);
+      await until(
+        () => device.getItem(OUTBOX_KEY_BEFORE + AKI) === null,
+        "the older page's follow is let go once sent",
+      );
+      assert.deepEqual(
+        db.tables.shop_follows?.map((row) => row.shop_id),
+        [BEN_SHOP],
+      );
+      // What this page keeps goes under its own key, never the older one,
+      // whose pages would let go of a write they do not know.
+      db.offline = true;
+      store.actions.toggleLike(BEN_POST);
+      await until(
+        () => device.getItem(OUTBOX_KEY + AKI) !== null,
+        "the like waits under this version's key",
+      );
+      assert.equal(device.getItem(OUTBOX_KEY_BEFORE + AKI), null);
+      closePage(store);
+      db.offline = false;
+      forgetOutboxes(AKI, device);
+      assert.equal(outboxWaiting(AKI, device), false);
     },
   );
 

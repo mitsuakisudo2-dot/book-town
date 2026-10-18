@@ -35,7 +35,7 @@ import type {
   TablesInsert,
 } from "./database.generated";
 import { REPORT_COLUMNS } from "./reports";
-import { deviceOutbox, OUTBOX_KEY } from "../outbox";
+import { deviceOutbox, OUTBOX_KEY, OUTBOX_KEY_BEFORE } from "../outbox";
 import {
   all,
   allRows,
@@ -112,6 +112,25 @@ async function booksFor(
 }
 
 /**
+ * The books the person typed in, their copies of others' among them
+ * (my_books). Undefined from a database that has no my_books yet (the app
+ * can be out before its migration): the town then tells no book apart as
+ * another reader's (own-books.ts).
+ */
+async function myBooksOf(client: Client): Promise<RemoteRows["myBooks"]> {
+  try {
+    return await allRows<{ id: string; copied_from: string | null }>(
+      (count) => client.rpc("my_books", {}, { count }),
+      ["id"],
+    );
+  } catch (error) {
+    if (error instanceof TownSyncError && error.code === "PGRST202")
+      return undefined;
+    throw error;
+  }
+}
+
+/**
  * Reads the rows of the town `userId` sees, or a visitor (null) sees: the
  * same reads for both, the database deciding what each may read
  * (supabase/migrations). What only the signed-in person has (their marks,
@@ -150,6 +169,7 @@ async function readTown(
     libraryEntries,
     libraryShelves,
     libraryShelfBooks,
+    myBooks,
   ] = await Promise.all([
     // In the order they joined.
     allRows<Tables<"profiles">>(
@@ -306,6 +326,8 @@ async function readTown(
         ["shelf_id", "book_id"],
       ),
     ),
+    // The books the person typed in, to tell others' apart.
+    userId === null ? undefined : myBooksOf(client),
   ]);
 
   const ownShop =
@@ -369,6 +391,7 @@ async function readTown(
     follows,
     blocks,
     marks,
+    myBooks,
     libraryEntries,
     libraryShelves,
     libraryShelfBooks,
@@ -403,12 +426,14 @@ export async function loadTown(
   userId: string,
   seenNotifications: string[] = [],
   newShopId: () => string = () => crypto.randomUUID(),
-): Promise<{ state: TownState; ids: RemoteIds }> {
+): Promise<{ state: TownState; ids: RemoteIds; ownBooksKnown: boolean }> {
   const read = await readTown(client, userId);
   const ids: RemoteIds = { userId, shopId: read.shopId ?? newShopId() };
   return {
     state: townFromRows({ ...read.rows, seenNotifications }, ids),
     ids,
+    // Whether the town tells the person's own books from others' (my_books).
+    ownBooksKnown: read.rows.myBooks !== undefined,
   };
 }
 
@@ -436,6 +461,7 @@ async function arrivedFor(
   rows: PostRow[],
   town: TownState | null,
   userId: string | null,
+  ownBooksKnown: boolean,
 ): Promise<Arrived> {
   if (!rows.length) return emptyArrived();
   const ids = [...new Set(rows.map((row) => row.id))];
@@ -500,6 +526,7 @@ async function arrivedFor(
       folds,
     },
     userId,
+    ownBooksKnown,
   );
 }
 
@@ -513,9 +540,10 @@ function remoteReads(
   client: Client,
   userId: string | null,
   town: () => TownState | null,
+  ownBooksKnown: () => boolean = () => false,
 ): Required<Pick<TownBackend, "newer" | "older" | "post">> {
   const complete = (rows: PostRow[]) =>
-    arrivedFor(client, rows, town(), userId);
+    arrivedFor(client, rows, town(), userId, ownBooksKnown());
   const posts = (count?: "exact") =>
     client.from("posts").select("*", { count });
   /** Every reply to the 便り `parents` (a 便り may have many). */
@@ -693,6 +721,13 @@ export async function applyWrite(
           ...ignore,
         }),
       );
+      return;
+    case "copy-books":
+      // Each copy is made once: asked again, the database leaves it be.
+      for (const row of write.rows)
+        await settled(
+          client.rpc("copy_book", { original: row.copied_from, copy: row.id }),
+        );
       return;
     case "fix-books":
       for (const { id, ...fix } of write.rows) {
@@ -986,6 +1021,7 @@ export function accountTownBackend(
   const storage = options.storage ?? typeof window !== "undefined";
   const device = options.device ?? (storage ? undefined : null);
   let ids: RemoteIds | null = null;
+  let ownBooksKnown = false;
   const sync = backgroundSync<TownState, Write>(
     {
       async read() {
@@ -996,6 +1032,7 @@ export function accountTownBackend(
           () => ids?.shopId ?? crypto.randomUUID(),
         );
         ids = loaded.ids;
+        ownBooksKnown = loaded.ownBooksKnown;
         // The 見本 keep the town from feeling empty while few have opened a
         // shop; they are left out of what is written (planWrites).
         return withSamples(loaded.state);
@@ -1017,7 +1054,13 @@ export function accountTownBackend(
       outbox:
         device === null
           ? undefined
-          : deviceOutbox(OUTBOX_KEY + userId, isWrite, device),
+          : deviceOutbox(
+              OUTBOX_KEY + userId,
+              isWrite,
+              device,
+              undefined,
+              OUTBOX_KEY_BEFORE + userId,
+            ),
     },
     options,
   );
@@ -1034,7 +1077,7 @@ export function accountTownBackend(
     save: sync.save,
     watch: sync.watch,
     absorb: sync.absorb,
-    ...remoteReads(client, userId, sync.current),
+    ...remoteReads(client, userId, sync.current, () => ownBooksKnown),
     close: sync.close,
   };
 }

@@ -2,12 +2,15 @@
 
 import { useDeferredValue, useEffect, useMemo } from "react";
 import { imeKey } from "../keys";
+import { withoutTwins } from "../own-books";
 import type { Book } from "../types";
 import { prepareSearch } from "./postings";
 import { nearHeading, searchBooks, surePick, type BookMatch } from "./rank";
 
 // The book search as every search box uses it: typing stays quick while the
-// list is searched, and near titles wait under their own quiet heading.
+// list is searched, and near titles wait under their own quiet heading. A
+// book another reader typed in that the reader has their own of is found as
+// the reader's own, once (withoutTwins).
 
 export interface BookSearch {
   /** The query the results are for, trimmed: "" while nothing is typed. */
@@ -26,7 +29,7 @@ export interface BookSearch {
 }
 
 export function useBookSearch(
-  books: readonly Book[],
+  all: readonly Book[],
   typed: string,
   {
     own: ownIds,
@@ -45,6 +48,7 @@ export function useBookSearch(
     genreFinds?: readonly Book[];
   } = {},
 ): BookSearch {
+  const books = withoutTwins(all);
   useEffect(() => prepareSearch(books), [books]);
   const ownKey = ownIds?.join("\n") ?? "";
   const own = useMemo(

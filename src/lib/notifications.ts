@@ -23,6 +23,7 @@ import { posterTitle, type Poster } from "./posters";
 import { coverHidden } from "./hidden-words";
 import { shownToOthers } from "./visibility";
 import { someCount } from "./words";
+import { workOfId } from "./works";
 
 export interface Notice {
   id: string;
@@ -244,6 +245,10 @@ export function notificationsFor(
       .filter((shop) => state.following.includes(shop.id))
       .map((shop) => shop.ownerId),
   );
+  // The works the viewer wants to read, each with the viewer's own book.
+  const wished = new Map(
+    state.wishlist.map((id) => [workOfId(state.books, id), id]),
+  );
   for (const post of state.posts) {
     if (
       post.authorId === ME_ID ||
@@ -261,13 +266,13 @@ export function notificationsFor(
         text: `フォロー中の${name(post.authorId)}さんが投稿しました ${quote(post.body)}`,
         href: pageOr(state, post, profilePath(post.authorId)),
       });
-    else if (post.bookId && state.wishlist.includes(post.bookId))
+    else if (post.bookId && wished.has(workOfId(state.books, post.bookId)))
       notices.push({
         id: "wish:" + post.id,
         readerId: post.authorId,
         createdAt: post.createdAt,
         text: `読みたい本${quoteTitle(title(post.bookId))}に、${name(post.authorId)}さんの感想が届いています`,
-        href: bookPath(post.bookId),
+        href: bookPath(wished.get(workOfId(state.books, post.bookId))!),
       });
   }
   // Folded or held by reports: its owner is told, gently, and that it is
@@ -356,18 +361,21 @@ export function notificationsFor(
       text: `${name(message.readerId)}さんが、あなたの本屋にひとことを残しました ${quote(message.text)}`,
       href: "/my-shop/#messages",
     });
-  // Someone else finished a book the viewer finished too: a reader to meet.
-  const finished = new Set([
-    ...state.finishedBooks,
-    ...state.readingRecords
-      .filter((record) => record.readerId === ME_ID)
-      .map((record) => record.bookId),
-  ]);
+  // Someone else finished a book the viewer finished too (of its work): a
+  // reader to meet.
+  const finished = new Set(
+    [
+      ...state.finishedBooks,
+      ...state.readingRecords
+        .filter((record) => record.readerId === ME_ID)
+        .map((record) => record.bookId),
+    ].map((id) => workOfId(state.books, id)),
+  );
   for (const record of state.readingRecords)
     if (
       record.readerId !== ME_ID &&
       shownToOthers(record.audience) &&
-      finished.has(record.bookId)
+      finished.has(workOfId(state.books, record.bookId))
     )
       notices.push({
         id: "finished:" + record.id,
@@ -392,7 +400,12 @@ export function notificationsFor(
   const active = activeSession(state);
   if (active?.mode === "together" && active.bookId)
     for (const entry of readersNow(state, openedAt))
-      if (entry.readerId !== ME_ID && entry.bookId === active.bookId)
+      if (
+        entry.readerId !== ME_ID &&
+        entry.bookId !== null &&
+        workOfId(state.books, entry.bookId) ===
+          workOfId(state.books, active.bookId)
+      )
         notices.push({
           id: `reading:${active.id}:${entry.readerId}`,
           readerId: entry.readerId,

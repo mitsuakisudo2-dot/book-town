@@ -39,7 +39,8 @@ import {
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId, isSampleId } from "./record-kind";
-import { bookAuthor, bookById, bookByIsbn } from "./book-name";
+import { bookAuthor, bookById, bookByIsbn, booksOfIsbn } from "./book-name";
+import { owning } from "./own-books";
 import {
   bookPrice,
   bookText,
@@ -340,6 +341,40 @@ export function createTownStore(
 
   const nextId = (kind: RecordKind, ids: string[], isbn?: string | null) =>
     backend.newId(kind, ids, isbn);
+  const newBookId = (ids: string[], isbn: string | null) =>
+    nextId("book", ids, isbn);
+  // The town before the running action was given copies of others' books
+  // (own()), and the town with them: an action not taken leaves none.
+  let unowned: { before: TownState; staged: TownState } | null = null;
+  /**
+   * The books the reader's rows will name for `ids` (own-books.ts): another
+   * reader's book is named by the reader's own (one in `list`, the list the
+   * action changes, first), a copy of it put in the town now when they have
+   * none. The copy stays if the action is taken.
+   */
+  function own<T extends string | null | undefined>(
+    ids: readonly T[],
+    list?: readonly string[],
+  ): T[] {
+    const made = owning(state, ids, newBookId, list);
+    if (made.state !== state) {
+      unowned = { before: unowned?.before ?? state, staged: made.state };
+      state = made.state;
+    }
+    return made.ids;
+  }
+  /**
+   * own(), and a book named twice only by two given for the same one (another
+   * reader's and the reader's own of it) once: what was given twice stays
+   * twice, for the check that turns that away.
+   */
+  function ownOnce(ids: readonly string[]): string[] {
+    const named = own(ids);
+    return named.filter((id, at) => {
+      const first = named.indexOf(id);
+      return first === at || ids[first] === ids[at];
+    });
+  }
   // Words the reader wrote are not taken where they cannot be kept (an
   // account that could not be read): the screen keeps them as a draft instead.
   const keepsWords = () => backend.kind !== "unavailable";
@@ -426,8 +461,14 @@ export function createTownStore(
         shelves: state.ownShop.shelves.filter((entry) => entry.id !== shelfId),
       });
     },
-    addShelfBook(shelfId, bookId, display, restore) {
+    addShelfBook(shelfId, given, display, restore) {
       initialize();
+      const [bookId] = own(
+        [given],
+        state.ownShop?.shelves
+          .find((entry) => entry.id === shelfId)
+          ?.items.map((item) => item.bookId),
+      );
       const shop = state.ownShop;
       const shelf = shop?.shelves.find((entry) => entry.id === shelfId);
       if (
@@ -555,8 +596,9 @@ export function createTownStore(
         blocked: state.blocked.filter((id) => id !== readerId),
       });
     },
-    toggleWish(bookId) {
+    toggleWish(given) {
       initialize();
+      const [bookId] = own([given], state.wishlist);
       if (!state.books.some((book) => book.id === bookId)) return;
       commit(
         withLibraryOp(
@@ -568,8 +610,9 @@ export function createTownStore(
         ),
       );
     },
-    toggleFavorite(bookId) {
+    toggleFavorite(given) {
       initialize();
+      const [bookId] = own([given], state.favorites);
       if (!state.books.some((book) => book.id === bookId)) return;
       commit(
         withLibraryOp(
@@ -624,15 +667,23 @@ export function createTownStore(
       });
       return true;
     },
-    updateNine(ids, notes) {
+    updateNine(given, notes) {
       initialize();
+      const ids = own(given, state.me.lifeNine);
+      // A note written for another reader's book goes with the reader's own,
+      // the first such note when two books given are the same one of theirs.
+      const noteOf = (id: string) =>
+        notes[id] ??
+        given
+          .map((entry, at) => (ids[at] === id ? notes[entry] : undefined))
+          .find((note) => typeof note === "string");
       const validIds = [...new Set(ids)]
         .filter((id) => state.books.some((book) => book.id === id))
         .slice(0, 9);
       const validNotes = Object.fromEntries(
         validIds
-          .filter((id) => typeof notes[id] === "string")
-          .map((id) => [id, clean(notes[id], NINE_NOTE_MAX_LENGTH)]),
+          .filter((id) => typeof noteOf(id) === "string")
+          .map((id) => [id, clean(noteOf(id), NINE_NOTE_MAX_LENGTH)]),
       );
       commit({
         ...state,
@@ -648,7 +699,7 @@ export function createTownStore(
         : undefined;
       if (draft.fromReading && !session) return null;
       // A reading memo belongs to the running session's book and never starts a thread reply.
-      const bookId = session ? session.bookId : (draft.bookId ?? null);
+      const bookId = session ? session.bookId : own([draft.bookId ?? null])[0];
       const parentId = session ? null : (draft.parentId ?? null);
       const spoiler = draft.spoiler === true;
       const parent = parentId
@@ -736,6 +787,8 @@ export function createTownStore(
       const post = state.posts.find((entry) => entry.id === postId);
       if (!post?.bookId || post.authorId === ME_ID) return;
       const adding = !state.wantedPosts.includes(postId);
+      // What is saved is the reader's own book for it.
+      const [bookId] = adding ? own([post.bookId]) : [post.bookId];
       const wanted = {
         ...state,
         wantedPosts: toggled(state.wantedPosts, postId),
@@ -746,7 +799,7 @@ export function createTownStore(
         adding
           ? withLibraryOp(
               wanted,
-              [post.bookId],
+              [bookId],
               { want: true },
               now().toISOString(),
               "want",
@@ -754,8 +807,9 @@ export function createTownStore(
           : wanted,
       );
     },
-    startReading(bookId, mode) {
+    startReading(given, mode) {
       initialize();
+      const [bookId] = own([given]);
       if (
         (bookId !== null && !state.books.some((book) => book.id === bookId)) ||
         !READING_MODES.includes(mode)
@@ -842,12 +896,13 @@ export function createTownStore(
       if (mine)
         return { result: "already", bookId: mine.id, title: mine.title };
       // A book sent before under its decided id (its row arrived, its place
-      // in the library did not) is that book again; otherwise any book the
-      // town has with the ISBN.
+      // in the library did not) is that book again; otherwise a book the
+      // town has with the ISBN, but never one another reader typed in: the
+      // reader registers their own of it (own-books.ts), so what either of
+      // them later fixes stays theirs.
+      const sent = isbn ? bookById(state.books, bookId) : undefined;
       const decided =
-        bookId && isbn
-          ? state.books.find((book) => book.id === bookId && book.isbn === isbn)
-          : undefined;
+        sent && sent.isbn === isbn && !sent.theirs ? sent : undefined;
       const existing = decided ?? bookByIsbn(state.books, isbn);
       // The library remembers how a book first came in.
       const register = (town: TownState, id: string) =>
@@ -872,12 +927,18 @@ export function createTownStore(
           ? bookId
           : given;
       const price = bookPrice(input.price);
+      // The database puts it in the work of its ISBN's edition; until it is
+      // read again, the work of a book the town has with that ISBN stands in.
+      const workId = booksOfIsbn(state.books, isbn).find(
+        (book) => book.workId,
+      )?.workId;
       const book = createRegisteredBook(id, {
         title,
         author,
         ...(isbn ? { isbn } : {}),
         ...(price ? { price } : {}),
       });
+      if (workId) book.workId = workId;
       return commit(register({ ...state, books: [...state.books, book] }, id))
         ? { result: "added", bookId: id, title }
         : { result: "not-saved" };
@@ -894,7 +955,13 @@ export function createTownStore(
       const isbn = typed ? normalizeIsbn(typed) : null;
       if (!title) return "no-title";
       if (typed && !isbn) return "bad-isbn";
-      if (!book || status === "loading" || backend.kind === "unavailable")
+      // Only the reader's own book is theirs to fix.
+      if (
+        !book ||
+        book.theirs ||
+        status === "loading" ||
+        backend.kind === "unavailable"
+      )
         return "not-saved";
       // The form shows the author as the reader sees it (bookAuthor); left
       // as shown, the author stays as it was written.
@@ -920,8 +987,9 @@ export function createTownStore(
         ? "fixed"
         : "not-saved";
     },
-    toggleLibrary(bookId) {
+    toggleLibrary(given) {
       initialize();
+      const [bookId] = own([given], state.library);
       if (!state.books.some((book) => book.id === bookId)) return;
       const time = now().toISOString();
       commit(
@@ -930,10 +998,18 @@ export function createTownStore(
           : withLibraryOp(state, [bookId], { removed: false }, time, "manual"),
       );
     },
+    ownBook(given) {
+      initialize();
+      const made = owning(state, [given], newBookId);
+      const [bookId] = made.ids;
+      if (!made.state.books.some((book) => book.id === bookId)) return null;
+      return made.state === state || commit(made.state) ? bookId : null;
+    },
     changeLibrary(bookIds, change) {
       initialize();
+      const named = own(bookIds, state.library);
       const known = new Set(state.books.map((book) => book.id));
-      const books = bookIds.filter((id) => known.has(id));
+      const books = [...new Set(named)].filter((id) => known.has(id));
       const set: Parameters<typeof withLibraryOp>[2] = {};
       if (
         change.status === null ||
@@ -1086,19 +1162,16 @@ export function createTownStore(
     recordReading(draft) {
       initialize();
       const record = cleanRecord(draft);
-      if (
-        !keepsWords() ||
-        !record ||
-        !state.books.some((book) => book.id === draft.bookId)
-      )
-        return null;
+      if (!keepsWords() || !record) return null;
+      const [bookId] = own([draft.bookId]);
+      if (!state.books.some((book) => book.id === bookId)) return null;
       const entry: ReadingRecord = {
         id: nextId(
           "record",
           state.readingRecords.map((entry) => entry.id),
         ),
         readerId: ME_ID,
-        bookId: draft.bookId,
+        bookId,
         ...record,
         createdAt: now().toISOString(),
       };
@@ -1107,11 +1180,11 @@ export function createTownStore(
         readingRecords: [...state.readingRecords, entry],
       };
       const taken = commit(
-        state.finishedBooks.includes(draft.bookId)
+        state.finishedBooks.includes(bookId)
           ? recorded
           : withLibraryOp(
               recorded,
-              [draft.bookId],
+              [bookId],
               { status: "finished" },
               entry.createdAt,
               "record",
@@ -1182,8 +1255,15 @@ export function createTownStore(
     },
     savePoster(draft, posterId) {
       initialize();
+      const pages = Array.isArray(draft.pages)
+        ? draft.pages.map((page) =>
+            Array.isArray(page?.bookIds)
+              ? { ...page, bookIds: ownOnce(page.bookIds) }
+              : page,
+          )
+        : draft.pages;
       const poster = cleanPosterDraft(
-        draft,
+        { ...draft, pages },
         new Set(state.books.map((book) => book.id)),
       );
       if (!poster || (poster.status === "published" && posterProblem(poster)))
@@ -1299,7 +1379,13 @@ export function createTownStore(
           return refused(name);
         }
         if (backend.kind !== "visitor")
-          return (actions[name] as (...a: unknown[]) => unknown)(...args);
+          try {
+            return (actions[name] as (...a: unknown[]) => unknown)(...args);
+          } finally {
+            // Copies of others' books given to an action not taken go.
+            if (unowned && state === unowned.staged) state = unowned.before;
+            unowned = null;
+          }
         if (!QUIET_ACTIONS.has(name)) options.onVisitor?.();
         return refused(name);
       },
