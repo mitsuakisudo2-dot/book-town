@@ -346,12 +346,12 @@ try {
       const all = await books.count();
 
       // Made from the chip row: its words are kept while it is written.
-      await shelves.getByRole("button", { name: "棚を作る" }).click();
-      const sheet = page.getByRole("dialog", { name: "棚を作る" });
+      await shelves.getByRole("button", { name: "本棚をつくる" }).click();
+      const sheet = page.getByRole("dialog", { name: "本棚をつくる" });
       await sheet.getByLabel("棚の名前").fill("雨の日に読みたい");
       await page.goBack();
       await expect(sheet).toHaveCount(0);
-      await shelves.getByRole("button", { name: "棚を作る" }).click();
+      await shelves.getByRole("button", { name: "本棚をつくる" }).click();
       await expect(sheet.getByLabel("棚の名前")).toHaveValue(
         "雨の日に読みたい",
       );
@@ -370,7 +370,7 @@ try {
       await expect(page).toHaveURL(shelfAddress);
       await expect(shelf).toHaveAttribute("aria-pressed", "true");
       // The next shelf starts from a clear form.
-      await shelves.getByRole("button", { name: "棚を作る" }).click();
+      await shelves.getByRole("button", { name: "本棚をつくる" }).click();
       await expect(sheet.getByLabel("棚の名前")).toHaveValue("");
       await expect(sheet).not.toContainText("書きかけ");
       await page.goBack();
@@ -426,14 +426,14 @@ try {
       // Changed, then put away: the books stay in the library, and undo
       // brings the shelf back with them.
       await shelf.click();
-      await page.getByRole("button", { name: "棚を編集" }).click();
-      const edit = page.getByRole("dialog", { name: "棚を編集" });
+      await page.getByRole("button", { name: "本棚を編集" }).click();
+      const edit = page.getByRole("dialog", { name: "本棚を編集" });
       await edit.getByLabel(/どんな棚か/).fill("しとしと降る日に。");
       await edit.getByRole("button", { name: "保存する" }).click();
       await expect(page.locator(".library-shelf-head")).toContainText(
         "しとしと降る日に。",
       );
-      await page.getByRole("button", { name: "棚を編集" }).click();
+      await page.getByRole("button", { name: "本棚を編集" }).click();
       await edit.getByRole("button", { name: "この棚を消す" }).click();
       await expect(toast).toContainText("「雨の日に読みたい」を消しました");
       await expect(page).toHaveURL(`${baseURL}/library/`);
@@ -475,8 +475,8 @@ try {
       for (const [key, name] of names) {
         await go("/library/");
         await page.setViewportSize({ width: 320, height: 844 });
-        await shelves.getByRole("button", { name: "棚を作る" }).click();
-        const sheet = page.getByRole("dialog", { name: "棚を作る" });
+        await shelves.getByRole("button", { name: "本棚をつくる" }).click();
+        const sheet = page.getByRole("dialog", { name: "本棚をつくる" });
         await sheet.getByLabel("棚の名前").fill(name);
         await sheet.getByRole("button", { name: "作る", exact: true }).click();
         await expect(page).toHaveURL(/\/library\/\?shelf=[\w-]+$/);
@@ -598,9 +598,9 @@ try {
       await page.reload();
       await expect(audience).toContainText("見せる範囲：公開");
 
-      // Made in 棚を作る with 条件で集める: no condition, no shelf.
-      await shelves.getByRole("button", { name: "棚を作る" }).click();
-      const sheet = page.getByRole("dialog", { name: "棚を作る" });
+      // Made in 本棚をつくる with 条件で集める: no condition, no shelf.
+      await shelves.getByRole("button", { name: "本棚をつくる" }).click();
+      const sheet = page.getByRole("dialog", { name: "本棚をつくる" });
       await sheet.getByRole("radio", { name: /条件で集める/ }).check();
       await sheet.getByLabel("棚の名前").fill("読み終えた本");
       const make = sheet.getByRole("button", { name: "作る", exact: true });
@@ -637,10 +637,10 @@ try {
       await page.goBack();
       await expect(bar).toHaveCount(0);
 
-      // Its conditions change in 棚を編集, and it is made public there.
+      // Its conditions change in 本棚を編集, and it is made public there.
       await smart.click();
-      await page.getByRole("button", { name: "棚を編集" }).click();
-      const edit = page.getByRole("dialog", { name: "棚を編集" });
+      await page.getByRole("button", { name: "本棚を編集" }).click();
+      const edit = page.getByRole("dialog", { name: "本棚を編集" });
       await expect(
         edit.getByRole("radio", { name: /条件で集める/ }),
       ).toHaveCount(0);
