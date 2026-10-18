@@ -9,7 +9,8 @@
 //   node scripts/watch.mjs usage     how much of the plan's database and file
 //                                    space is used
 //   node scripts/watch.mjs errors    how many errors readers' screens sent in
-//                                    the last day (private.screen_errors)
+//                                    the last day (private.screen_errors), and
+//                                    whether the table stopped taking them
 //   node scripts/watch.mjs report <kind> ok|failed
 //                                    tells about a check run elsewhere (the
 //                                    production journey)
@@ -125,26 +126,57 @@ export function usageVerdict(row, included, warnPercent) {
 /**
  * How many errors readers' screens sent in the last day: kinds (rows) and
  * times, numbers only. The words are read with a select, never printed here.
+ * Also whether the table stopped taking new errors: it takes at most so many
+ * new rows an hour and so many in all (the migration's limits), and past them
+ * it drops new errors without a word, so a quiet day can mean a full table.
  *
  * @returns {{ ok: boolean, lines: string[] }}
  */
-export function errorsVerdict(row, perDay) {
+export function errorsVerdict(row, { perDay, rowsWarn, perHour }) {
   const kinds = Number(row?.kinds ?? NaN);
   const times = Number(row?.times ?? NaN);
-  if (!Number.isFinite(kinds) || !Number.isFinite(times))
+  const rows = Number(row?.rows ?? NaN);
+  const busiestHour = Number(row?.busiest_hour ?? NaN);
+  if (![kinds, times, rows, busiestHour].every(Number.isFinite))
     return { ok: false, lines: ["Screen errors: not reported."] };
-  if (kinds === 0)
-    return { ok: true, lines: ["Screen errors: none in the last day."] };
   const lines = [
-    `Screen errors: ${kinds} kind(s), ${times} time(s) in the last day.`,
+    kinds === 0
+      ? "Screen errors: none in the last day."
+      : `Screen errors: ${kinds} kind(s), ${times} time(s) in the last day.`,
   ];
-  const ok = kinds < perDay;
+  let ok = kinds < perDay;
+  if (rows >= rowsWarn) {
+    ok = false;
+    lines.push(
+      "The screen error table is nearly full, so new errors may be dropped until old rows are deleted.",
+    );
+  }
+  if (busiestHour >= perHour) {
+    ok = false;
+    lines.push(
+      "The screen error table reached its hourly limit in the last day, so some errors were dropped.",
+    );
+  }
   if (!ok)
     lines.push(
       "Read them with the select in docs/09「画面のエラーの記録」 (the words stay out of this log).",
     );
   return { ok, lines };
 }
+
+/**
+ * What errorsVerdict reads: the last day's kinds and times, every row in the
+ * table, and the most new rows in any one hour of the last day, counted as the
+ * report counts them (by first_at, an hour back from each).
+ */
+export const SCREEN_ERRORS_QUERY =
+  "select count(*) filter (where e.last_at > now() - interval '1 day')::int as kinds, " +
+  "coalesce(sum(e.times) filter (where e.last_at > now() - interval '1 day'), 0)::int as times, " +
+  "count(*)::int as rows, " +
+  "coalesce((select max(h.n) from (select count(*) over (order by f.first_at " +
+  "range between interval '1 hour' preceding and current row) as n " +
+  "from private.screen_errors f where f.first_at > now() - interval '1 day') h), 0)::int as busiest_hour " +
+  "from private.screen_errors e";
 
 /** Whether a page of the site looks like the site: a page with its scripts. */
 export function pageVerdict(route, status, html) {
@@ -374,9 +406,7 @@ async function main(action, kind, outcome) {
         let rows;
         try {
           rows = await call("POST", "/database/query/read-only", {
-            query:
-              "select count(*)::int as kinds, coalesce(sum(e.times), 0)::int as times " +
-              "from private.screen_errors e where e.last_at > now() - interval '1 day'",
+            query: SCREEN_ERRORS_QUERY,
           });
         } catch (error) {
           // Before the table's migration is on main there is nothing to count.
@@ -384,12 +414,16 @@ async function main(action, kind, outcome) {
           else throw error;
         }
         result = rows
-          ? errorsVerdict(rows[0], config.screenErrorsPerDay)
+          ? errorsVerdict(rows[0], {
+              perDay: config.screenErrorsPerDay,
+              rowsWarn: config.screenErrorsRowsWarn,
+              perHour: config.screenErrorsPerHour,
+            })
           : { ok: true, lines: ["Screen errors: not recorded yet."] };
         if (process.env.GITHUB_STEP_SUMMARY)
           await appendFile(
             process.env.GITHUB_STEP_SUMMARY,
-            `### Screen errors (${iso(Date.now())})\n\n- ${result.lines[0]}\n`,
+            `### Screen errors (${iso(Date.now())})\n\n- ${result.lines.join("\n- ")}\n`,
           );
       } else if (action === "backups")
         result = backupVerdict(
