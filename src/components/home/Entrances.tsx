@@ -57,7 +57,7 @@ function useFabAside() {
 
 /**
  * What one can do here, as four doors (決定 H:98-102): look into the shops,
- * start reading, the board, and 本を登録. A first-timer gets 本屋を開く in
+ * start reading, the board, and 本を登録. A first-timer gets 書店を開く in
  * its place. 選んでもらう waits for 選書カルテ. Until the town is read
  * (`newcomer` null), the two that depend on it wait as shapes: who the
  * reader is decides the fourth, and the board is not on the page yet.
@@ -82,7 +82,7 @@ export function Entrances({
         <span className="home-entrance-icon">
           <Icon name="store" size={26} />
         </span>
-        本屋をのぞく
+        書店をのぞく
       </button>
       <button type="button" className="home-entrance is-read" onClick={onRead}>
         <span className="home-entrance-icon">
@@ -111,7 +111,7 @@ export function Entrances({
           <span className="home-entrance-icon">
             <Icon name="plus" size={26} />
           </span>
-          本屋を開く
+          書店を開く
         </Link>
       ) : (
         <button

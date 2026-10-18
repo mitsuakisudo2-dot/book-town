@@ -71,6 +71,7 @@ import {
   failure,
   offlineFor,
   WHILE_OFFLINE,
+  NAMES,
 } from "../lib/words";
 import { townOffline } from "../lib/store";
 import { booksOfWork } from "../lib/works";
@@ -224,7 +225,7 @@ function ReadingFeed({
     .slice(0, 30);
   return (
     <section className="reading-memos" aria-labelledby="reading-feed-title">
-      <h2 id="reading-feed-title">みんなの読書中のつぶやき</h2>
+      <h2 id="reading-feed-title">みんなの読書中の{NAMES.letter}</h2>
       <div className="post-feed">
         {posts.map((post) => (
           <LetterCard
@@ -238,7 +239,7 @@ function ReadingFeed({
         ))}
         {!posts.length && (
           <p className="reading-muted">
-            最初のつぶやきは、あなたのものかもしれません。
+            最初の{NAMES.letter}は、あなたのものかもしれません。
           </p>
         )}
       </div>
@@ -599,7 +600,8 @@ function StartReading({
             <Icon name="users" size={20} />
             <b>みんなで読む</b>
             <small>
-              同じ時間に読んでいる人に、あなたが読書中だと見えます。つぶやきはタイムラインにも流れます。
+              同じ時間に読んでいる人に、あなたが読書中だと見えます。
+              {NAMES.letter}はタイムラインにも流れます。
             </small>
           </button>
         </div>
@@ -760,7 +762,7 @@ function ReadingRoom({
         offline
           ? failure(together ? offlineFor("投稿") : WHILE_OFFLINE)
           : together
-            ? "つぶやきました"
+            ? "投稿しました"
             : "メモしました（自分だけ）",
       );
   }
@@ -844,7 +846,7 @@ function ReadingRoom({
 
       <form className="memo-composer" onSubmit={submit}>
         <label htmlFor={id}>
-          {together ? "読書中のつぶやき" : "読書メモ（自分だけ）"}
+          {together ? `読書中の${NAMES.letter}` : "読書メモ（自分だけ）"}
         </label>
         <textarea
           ref={field}
@@ -919,7 +921,7 @@ function ReadingRoom({
         <summary>
           <Icon name="chevron" size={14} />
           ひと休みに、
-          {together ? "みんなのつぶやき" : "街の読書"}
+          {together ? `みんなの${NAMES.letter}` : "街の読書"}
           をのぞく
         </summary>
         <label className="reading-peek-keep">

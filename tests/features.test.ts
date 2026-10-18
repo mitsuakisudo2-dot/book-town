@@ -191,7 +191,7 @@ check("a 企画展 band repeats no poster already shown, and needs two", () => {
 });
 
 check(
-  "本棚をのぞく: others' shops, by their public shelves only, three or more",
+  "棚をのぞく: others' shops, by their public shelves only, three or more",
   () => {
     const feature = shelvesFeature(town(), NOW)!;
     assert.ok(feature.shops.length >= FEATURE_MIN.shelves);
@@ -386,7 +386,7 @@ check(
         .filter((shelf) => !secretShelf(shelf))[0]
         .items.map((item) => item.bookId),
     );
-    // 本棚をのぞく: its covers are the public shelf's.
+    // 棚をのぞく: its covers are the public shelf's.
     assert.ok(ids(shelvesFeature(state, NOW, 0, 10)!.shops).includes(mixed.id));
     const covers = shopCovers(state, mixed, 10).map((book) => book.id);
     assert.ok(covers.length > 0);

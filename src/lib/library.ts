@@ -19,6 +19,7 @@ import { isAudience, type Audience, type ShelfAudiences } from "./visibility";
 import { bookAuthor } from "./book-name";
 import { searchFold } from "./search/fold";
 import { workOf } from "./works";
+import { NAMES } from "./words";
 
 // The reader's library (ライブラリ): every edition they have met in the town,
 // by scanning or typing it in, wanting it, liking it, keeping it as a
@@ -1241,7 +1242,7 @@ export const MET_PLACES: readonly {
   },
   { key: "search", label: "検索", sources: ["search"] },
   { key: "walk", label: "書店めぐり", sources: ["pop"] },
-  { key: "letters", label: "便り", sources: ["like", "post"] },
+  { key: "letters", label: NAMES.letter, sources: ["like", "post"] },
   { key: "want", label: "読みたい", sources: ["want"] },
   { key: "shop", label: "自分の書店", sources: ["shop"] },
   {

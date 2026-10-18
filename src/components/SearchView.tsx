@@ -39,7 +39,7 @@ import "./records.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { useTownBackend } from "../lib/store";
 import { bookAuthor, bookTitle } from "../lib/book-name";
-import { counted, REGISTER, whenSome } from "../lib/words";
+import { counted, REGISTER, whenSome, NAMES } from "../lib/words";
 import { RegisterBook } from "./RegisterBook";
 import { BarcodeRegister } from "./BarcodeRegister";
 import dynamic from "next/dynamic";
@@ -244,7 +244,9 @@ export function SearchView({ state, actions, notify }: Shared) {
       {tagTerm !== null ? (
         <div className="search-results" role="status">
           <section aria-labelledby="search-tag-title">
-            <h2 id="search-tag-title">#{tagTerm} の投稿</h2>
+            <h2 id="search-tag-title">
+              #{tagTerm} の{NAMES.letter}
+            </h2>
             {tagResults.length ? (
               <div className="post-feed">
                 {tagResults.map((post) => (
@@ -261,13 +263,14 @@ export function SearchView({ state, actions, notify }: Shared) {
             ) : (
               !tagHasLeftOut && (
                 <p className="search-empty">
-                  このタグの投稿は、まだありません。
+                  このタグの{NAMES.letter}は、まだありません。
                 </p>
               )
             )}
             {tagHasLeftOut && (
               <p className="search-empty">
-                ネタバレを含むかもしれない投稿は、設定により出していません
+                ネタバレを含むかもしれない{NAMES.letter}
+                は、設定により出していません
               </p>
             )}
           </section>
@@ -433,10 +436,13 @@ export function SearchView({ state, actions, notify }: Shared) {
           {talked.length >= 3 && (
             <section aria-labelledby="search-talked-title">
               <h2 id="search-talked-title">話題の本</h2>
-              <p>いま投稿やレビューで語られている本。</p>
+              <p>いま{NAMES.letter}やレビューで語られている本。</p>
               <ul className="search-list">
                 {talked.map((book) =>
-                  bookRow(book, `投稿 ${counted(signal(book.id).talk, "件")}`),
+                  bookRow(
+                    book,
+                    `${NAMES.letter} ${counted(signal(book.id).talk, "件")}`,
+                  ),
                 )}
               </ul>
             </section>
@@ -444,7 +450,7 @@ export function SearchView({ state, actions, notify }: Shared) {
           {popular.length >= 3 && (
             <section aria-labelledby="search-popular-title">
               <h2 id="search-popular-title">多くの棚に並ぶ本</h2>
-              <p>いくつもの本屋が棚に置き、読みたくなった人がいる本。</p>
+              <p>いくつもの書店が棚に置き、読みたくなった人がいる本。</p>
               <ul className="search-list">
                 {popular.map((book) => bookRow(book, presenceWords(book.id)))}
               </ul>
@@ -452,7 +458,8 @@ export function SearchView({ state, actions, notify }: Shared) {
           )}
           <p className="search-note">
             {savedIn === "local" ? "デモの街" : "この街"}
-            の本と書店から探します。並び順は、この街の棚と投稿から数えています。
+            の本と書店から探します。並び順は、この街の棚と{NAMES.letter}
+            から数えています。
           </p>
         </div>
       )}

@@ -732,7 +732,7 @@ export function LibraryView({
       )}
       {filter.unsorted && (
         <p className="library-note">
-          積読・読書中・読了・読みたい・お気に入り・自分の本屋の棚の、どれにも入れていない本です。
+          積読・読書中・読了・読みたい・お気に入り・自分の書店の棚の、どれにも入れていない本です。
         </p>
       )}
 

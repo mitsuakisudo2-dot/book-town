@@ -7,7 +7,7 @@ import { libraryBookByIsbn, useTownBackend } from "../lib/store";
 import type { TownActions, TownState } from "../lib/types";
 import { Icon, Modal } from "./ui";
 import { bookAuthor, bookByIsbn, quotedTitle } from "../lib/book-name";
-import { failure, AGAIN, REGISTER } from "../lib/words";
+import { failure, AGAIN, REGISTER, NAMES } from "../lib/words";
 
 type Detector = {
   detect(source: CanvasImageSource): Promise<Array<{ rawValue: string }>>;
@@ -266,7 +266,7 @@ export function BarcodeRegister({
       <p className="modal-lead">{lead}</p>
       <p className="muted">
         {camera
-          ? "裏表紙のISBNバーコード（978・979で始まる段）を読み取ります。登録した本は、読書の開始や投稿で選べます。"
+          ? `裏表紙のISBNバーコード（978・979で始まる段）を読み取ります。登録した本は、読書の開始や${NAMES.letter}で選べます。`
           : "ISBNがあれば探せます。書名だけでも登録できます。"}
       </p>
       {!camera ? null : scanning ? (

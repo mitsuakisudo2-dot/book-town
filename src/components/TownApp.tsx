@@ -118,7 +118,7 @@ import { booksOfWork } from "../lib/works";
 import { mine } from "../lib/own-books";
 import { useBibliography, useBookHolds } from "../lib/bibliography-session";
 import { HeldBook } from "./HeldBook";
-import { counted, PLACE, TABS, whenSome } from "../lib/words";
+import { counted, NAMES, PLACE, TABS, whenSome } from "../lib/words";
 
 // Every screen but Home comes in its own file, read when it is first shown
 // (and after Home is drawn, below), so a phone opening the town reads and
@@ -440,7 +440,8 @@ export default function TownApp({
             <Icon name="store" size={31} />
           </span>
           <span>
-            Book Town<small>本を読みたくなるSNS</small>
+            {NAMES.service}
+            <small>{NAMES.catchphrase}</small>
           </span>
         </Link>
         <div className="side-caption">本の向こうに、誰かがいる。</div>
@@ -501,7 +502,7 @@ export default function TownApp({
         <header className="town-topbar">
           <Link href={homeHref} className="mobile-brand" onClick={homeClick}>
             <Icon name="store" size={24} />
-            <span>Book Town</span>
+            <span>{NAMES.service}</span>
           </Link>
           <form
             className="top-search"
@@ -646,7 +647,10 @@ export default function TownApp({
       </nav>
       {toast && <Toast toast={toast} onHold={holdToast} />}
       {about && (
-        <Modal title="Book Townへようこそ" onClose={() => setAbout(false)}>
+        <Modal
+          title={`${NAMES.service}へようこそ`}
+          onClose={() => setAbout(false)}
+        >
           <p className="modal-lead">読書家の小さな書店が集まる、本の街。</p>
           {savedIn === "visitor" ? (
             <>
@@ -654,7 +658,7 @@ export default function TownApp({
                 「見本」と書かれた書店と読書家は、街の雰囲気を伝えるための架空のデータです。本の表紙・背表紙はオリジナルの仮デザインを使っています。
               </p>
               <div className="note-box">
-                見るだけなら、ログインはいりません。本屋を開いたり、投稿したり、好きを届けたりするときに、ログインをお願いします。
+                見るだけなら、ログインはいりません。書店を開いたり、投稿したり、好きを届けたりするときに、ログインをお願いします。
               </div>
             </>
           ) : savedIn === "local" ? (
@@ -672,7 +676,8 @@ export default function TownApp({
                 本の表紙・背表紙はオリジナルの仮デザインを使っています。
               </p>
               <div className="note-box">
-                あなたの書店や投稿は、ログインしたアカウントに保存されます。非公開の棚と読みたいリストは、あなたにしか見えません。
+                あなたの書店や{NAMES.letter}
+                は、ログインしたアカウントに保存されます。非公開の棚と読みたいリストは、あなたにしか見えません。
               </div>
             </>
           )}

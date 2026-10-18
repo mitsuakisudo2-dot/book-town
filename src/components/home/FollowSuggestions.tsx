@@ -8,6 +8,7 @@ import { useTownBackend } from "../../lib/store";
 import { quotedTitle } from "../../lib/book-name";
 import { ReaderAvatar } from "../ui";
 import type { Shared } from "./Letters";
+import { NAMES } from "../../lib/words";
 
 /** Following nobody yet: a few owners, each with words of their own to read. */
 export function FollowSuggestions({ state, actions, notify }: Shared) {
@@ -19,7 +20,9 @@ export function FollowSuggestions({ state, actions, notify }: Shared) {
   if (!owners.length) return null;
   return (
     <section className="follow-suggestions" aria-labelledby="follow-first">
-      <h2 id="follow-first">フォローすると、その店主の投稿がここに届きます</h2>
+      <h2 id="follow-first">
+        フォローすると、その店主の{NAMES.letter}がここに届きます
+      </h2>
       <ul>
         {owners.map(({ shop, owner, pop, book }) => (
           <li key={shop.id}>

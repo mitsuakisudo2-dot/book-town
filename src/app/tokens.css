@@ -141,7 +141,7 @@
   --t-clock: calc(44px * var(--t-scale));
   /* The town's frame keeps its size when 字の大きさ grows, as a phone's own
      tab bar does: six tab names must fit across a 320px phone, and
-     "Book Town" at the top is a mark more than words to read. */
+     "BookTown" at the top is a mark more than words to read. */
   --frame-tab: 12px;
   --frame-mark: 22px;
   --frame-mark-narrow: 18px;

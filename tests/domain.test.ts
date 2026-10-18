@@ -1378,7 +1378,7 @@ check("an owner hears once a week how many stopped by", () => {
   const [notice] = notificationsFor(visitors(3, "2026-10-11T15:00:00Z")).filter(
     (entry) => entry.id.startsWith("visitors:"),
   );
-  assert.equal(notice.text, "先週、3人があなたの本屋に立ち寄りました");
+  assert.equal(notice.text, "先週、3人があなたの書店に立ち寄りました");
   // One notice for each week (Monday to Sunday, Japan time).
   assert.equal(notice.id, "visitors:2026-10-12");
   assert.equal(weekOf("2026-10-11T15:30:00Z"), "2026-10-12");
@@ -1898,7 +1898,7 @@ check("the writer learns who liked their post and how many times", () => {
   assert.deepEqual(
     notices.map((notice) => notice.text),
     [
-      `${nagi.name}さんとほか1人があなたの投稿にいいねしました 「再読して、また泣いた。」`,
+      `${nagi.name}さんとほか1人があなたの便りにいいねしました 「再読して、また泣いた。」`,
     ],
   );
   assert.equal(notices[0].id, `likes:${own}@2026-10-13T02:00:00Z`);
@@ -1929,21 +1929,21 @@ check("the writer learns who liked their post and how many times", () => {
     );
   // One reader, however many taps: named, with no count.
   assert.deepEqual(text([{ ...haruOnce, taps: 7 }]), [
-    `${haru.name}さんがあなたの投稿にいいねしました`,
+    `${haru.name}さんがあなたの便りにいいねしました`,
   ]);
   // Anonymous readers are counted, never named, never shown a face.
-  assert.deepEqual(text([], 1), ["匿名の読書家があなたの投稿にいいねしました"]);
+  assert.deepEqual(text([], 1), ["匿名の読書家があなたの便りにいいねしました"]);
   assert.deepEqual(text([], 2), [
-    "匿名の読書家2人があなたの投稿にいいねしました",
+    "匿名の読書家2人があなたの便りにいいねしました",
   ]);
   assert.equal(likes([], 1)[0].readerId, "");
   assert.deepEqual(text([haruOnce], 1), [
-    `${haru.name}さんと匿名の読書家1人があなたの投稿にいいねしました`,
+    `${haru.name}さんと匿名の読書家1人があなたの便りにいいねしました`,
   ]);
   assert.deepEqual(
     text(withLikers.posts.find((p) => p.id === own)!.likers!, 1),
     [
-      `${nagi.name}さん、ほか1人、匿名の読書家1人があなたの投稿にいいねしました`,
+      `${nagi.name}さん、ほか1人、匿名の読書家1人があなたの便りにいいねしました`,
     ],
   );
   // Known by its newest like: another tap by the same reader is the same
@@ -2379,7 +2379,7 @@ check(
       notificationsFor(state).find((notice) => notice.id === id)?.text;
     assert.equal(
       text("review-folded:post:" + mine),
-      "通報があったため、運営が確かめるまで、あなたの投稿「静かな夜の本」をみんなの画面ではたたんでいます。投稿は消えていません",
+      "通報があったため、運営が確かめるまで、あなたの便り「静かな夜の本」をみんなの画面ではたたんでいます。便りは消えていません",
     );
     assert.equal(
       text("review-folded:profile:me"),
@@ -2387,7 +2387,7 @@ check(
     );
     assert.equal(
       text("review-folded:shop:mine"),
-      "通報があったため、運営が確かめるまで、あなたの本屋の紹介文をたたんでいます",
+      "通報があったため、運営が確かめるまで、あなたの書店の紹介文をたたんでいます",
     );
     assert.equal(text("review-folded:post:p-3"), undefined);
     const held = notificationsFor({
@@ -2398,7 +2398,7 @@ check(
     }).find((notice) => notice.id === "review-held:post:" + mine);
     assert.equal(
       held?.text,
-      "運営が確かめるまで、あなたの投稿「静かな夜の本」をほかの人から見えないようにしています。問題がなければ、元に戻ります",
+      "運営が確かめるまで、あなたの便り「静かな夜の本」をほかの人から見えないようにしています。問題がなければ、元に戻ります",
     );
 
     const reports = (
@@ -2419,7 +2419,7 @@ check(
       [
         [
           "report:report-1:checking",
-          "投稿について10月13日にいただいた通報を、運営が確認しています",
+          "便りについて10月13日にいただいた通報を、運営が確認しています",
           "/notifications/#reports",
         ],
       ],
@@ -2430,7 +2430,7 @@ check(
       [
         [
           "report:report-1:done",
-          "投稿について10月13日にいただいた通報を、運営が確認しました。知らせてくださって、ありがとうございます",
+          "便りについて10月13日にいただいた通報を、運営が確認しました。知らせてくださって、ありがとうございます",
         ],
       ],
     );
@@ -2438,7 +2438,7 @@ check(
     // it never reads as if the reporter were the one being checked.
     assert.equal(
       reports("checking", "shop")[0].text,
-      "本屋について10月13日にいただいた通報を、運営が確認しています",
+      "書店について10月13日にいただいた通報を、運営が確認しています",
     );
     assert.equal(
       reports("checking", "profile")[0].text,
@@ -2454,7 +2454,7 @@ check(
       for (const status of ["checking", "checked"] as const)
         assert.doesNotMatch(
           reports(status, kind)[0].text,
-          /いただいた(ポスター|投稿|本屋|読書家|表紙)|通報してくださった/,
+          /いただいた(ポスター|便り|書店|読書家|表紙)|通報してくださった/,
         );
     assert.equal(
       reports("checked", "book")[0].text,

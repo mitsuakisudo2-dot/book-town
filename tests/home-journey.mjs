@@ -57,7 +57,7 @@ const tabs = () => page.getByRole("tablist", { name: "ホームの表示" });
 const tab = (name) => tabs().getByRole("tab", { name, exact: true });
 const pane = (which) => page.locator(`[role="tabpanel"][data-pane="${which}"]`);
 /** Words that count nothing, which the town never shows (CLAUDE.md). */
-const ZERO = /(^|\D)0(人|件|軒|分|回|冊| 投稿| フォロ)/;
+const ZERO = /(^|\D)0(人|件|軒|分|回|冊| 便り| フォロ)/;
 /** Opens Home on ホーム (a fresh `/` opens the tab shown last), drawn. */
 async function goHome() {
   await go("/");
@@ -1104,7 +1104,7 @@ try {
         ).toBeVisible();
         await remove();
         await expect(page).toHaveURL(/\/notifications\/$/);
-        await expect(page.locator(".toast")).toHaveText("投稿を削除しました");
+        await expect(page.locator(".toast")).toHaveText("便りを削除しました");
         // Opened at its address: to the town.
         await go("/timeline/");
         await compose("もうひとつ消す便り。");
@@ -1117,7 +1117,7 @@ try {
         await go("/post/?id=" + other);
         await remove();
         await expect(page).not.toHaveURL(/\/post\//);
-        await expect(page.locator(".toast")).toHaveText("投稿を削除しました");
+        await expect(page.locator(".toast")).toHaveText("便りを削除しました");
         await expect(
           page.getByText("この便りは、いまは開けません"),
         ).toHaveCount(0);
@@ -1212,7 +1212,7 @@ try {
         ).toBeVisible();
         const note = mine.getByRole("note");
         await expect(note).toContainText(
-          "読んだ人から「ネタバレでは？」という声があったので、みんなの画面ではたたんで表示しています。投稿は消えていません。",
+          "読んだ人から「ネタバレでは？」という声があったので、みんなの画面ではたたんで表示しています。便りは消えていません。",
         );
         await expectReadable(note.locator("p"), "the writer's note");
         const mark = note.getByRole("button", { name: "ネタバレの印を付ける" });
@@ -1253,7 +1253,7 @@ try {
         );
         // 便りだけ is made on its first visit, then kept.
         await expect(pane("letters")).toHaveCount(0);
-        await expect(page).toHaveTitle("Book Town | 本を読みたくなるSNS");
+        await expect(page).toHaveTitle("BookTown | 本を読みたくなるSNS");
         await pane("home").evaluate((element) => {
           element.dataset.kept = "yes";
         });
@@ -1263,7 +1263,7 @@ try {
         await expect(tab("便りだけ")).toBeFocused();
         await expect(tab("便りだけ")).toHaveAttribute("aria-selected", "true");
         await expect(page).toHaveURL(`${baseURL}/timeline/`);
-        await expect(page).toHaveTitle("便りだけ | Book Town");
+        await expect(page).toHaveTitle("便りだけ | BookTown");
         await expect(page.getByRole("tabpanel")).toHaveAttribute(
           "aria-labelledby",
           "home-tab-letters",
@@ -1654,9 +1654,9 @@ try {
         // The first art is asked for first, whatever the slide will be.
         await page.goto(baseURL + "/");
         // The doors that depend on who the reader is wait as shapes: no
-        // 本屋を開く that turns into 本を登録, no 掲示板 with no board yet.
+        // 書店を開く that turns into 本を登録, no 掲示板 with no board yet.
         const doors = page.getByRole("navigation", { name: "できること" });
-        for (const name of ["本屋を開く", "本を登録", "掲示板"])
+        for (const name of ["書店を開く", "本を登録", "掲示板"])
           await expect(doors.getByText(name)).toHaveCount(0);
         await expect(doors.locator(".home-entrance")).toHaveCount(4);
         await expect(doors.locator(".home-entrance.is-waiting")).toHaveCount(2);
@@ -1704,8 +1704,8 @@ try {
               bands.push(part);
             }
           expect(bands).toHaveLength(12);
-          // 企画展 and 本棚をのぞく by turns; once the posters not yet on
-          // the page run out, 本棚をのぞく.
+          // 企画展 and 棚をのぞく by turns; once the posters not yet on
+          // the page run out, 棚をのぞく.
           const out = bands.findIndex(
             (band, index) => index % 2 === 0 && band !== "企画展",
           );
@@ -1713,7 +1713,7 @@ try {
             expect(band, `特集 ${index + 1}`).toBe(
               index % 2 === 0 && (out === -1 || index < out)
                 ? "企画展"
-                : "本棚をのぞく",
+                : "棚をのぞく",
             ),
           );
         }),
@@ -1949,7 +1949,7 @@ try {
           `);
           await goHome();
           const guards = live.getByRole("button", {
-            name: /あなたの本棚の、読み終えていない本のひとことです。/,
+            name: /あなたのライブラリの、読み終えていない本のひとことです。/,
           });
           await expect(guards).toHaveCount(2);
           await expect(live).not.toContainText("海の描写のところで");
@@ -2473,7 +2473,7 @@ try {
           }
           await expect(fab, `${width}x${height}`).toBeHidden();
           // The door it stood on takes the finger.
-          await doors.getByText("本屋を開く").tap({ trial: true });
+          await doors.getByText("書店を開く").tap({ trial: true });
           // The page's clock is held: the frames after each scroll are let
           // run while waiting.
           const settled = async () => {
