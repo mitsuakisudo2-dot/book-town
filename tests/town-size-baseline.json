@@ -1,0 +1,17 @@
+{
+  "readers": [200, 400],
+  "bytesPerReader": {
+    "catalog": 0,
+    "folds": 0,
+    "nine": 0,
+    "post_reactions": 0,
+    "posters": 0,
+    "posts": 0,
+    "profiles": 367,
+    "records": 0,
+    "shops": 1342,
+    "together": 0,
+    "town_books": 2817
+  },
+  "msPerReader": 1.34
+}

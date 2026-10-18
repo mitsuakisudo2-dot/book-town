@@ -9,7 +9,9 @@ import {
   visitorReader,
   referencedBookIds,
   townFromRows,
+  moreFromRows,
   type BookRow,
+  type MoreRows,
   type RelationTable,
   type RemoteIds,
   type RemoteRows,
@@ -27,8 +29,9 @@ import {
 } from "../town-backend";
 import { emptyArrived, type Arrived } from "../arrived";
 import { isDatabaseId } from "../record-kind";
-import { bookKind, withSamples } from "../samples";
-import { ME_ID, type TownState } from "../types";
+import { bookKind, sampleBookRowId, withSamples } from "../samples";
+import { emptyMore } from "../town-more";
+import { FEELINGS, ME_ID, type TownState } from "../types";
 import type {
   Database,
   Json,
@@ -65,6 +68,31 @@ export { TownSyncError, shouldRetry };
 // book the rows point to (booksFor).
 const POSTS = 500;
 const CATALOG = 300;
+/**
+ * How many of others' newest records the town reads (town_view's
+ * record_window): for the books finished lately. The rest of others'
+ * records, and their 人生の9冊, are read on the page that shows them
+ * (more()).
+ */
+const RECORD_WINDOW = 300;
+
+/** What the town asks town_view for (also what tests/db-town-size.test.ts asks). */
+export const TOWN_VIEW_ARGS = {
+  post_limit: POSTS,
+  catalog_limit: CATALOG,
+  // Others' words are read on their profile's page (more below).
+  record_notes: false,
+  record_window: RECORD_WINDOW,
+  others_nine: false,
+};
+/** Of a book's work, the newest records its page reads (work_records). */
+const WORK_RECORDS = 200;
+/** Of a feeling, the newest records the search reads for its books. */
+const FELT_RECORDS = 100;
+// A record without its words, as the town reads others' (body is left out).
+const RECORD_COLUMNS =
+  "id, user_id, book_id, kind, feelings, spoiler, is_public, audience, created_at, updated_at";
+
 /** How many books one town_books request asks for (about 160KB of ids in its body). */
 const BOOKS_AT_ONCE = 4000;
 
@@ -187,20 +215,24 @@ async function townViewOf(
 ): Promise<TownView> {
   let data: Json;
   try {
-    data = (
-      await settled(
-        client.rpc("town_view", {
-          post_limit: POSTS,
-          catalog_limit: CATALOG,
-          // Others' words are read on their profile's page (notes below).
-          record_notes: false,
-        }),
-      )
-    ).data;
+    data = (await settled(client.rpc("town_view", TOWN_VIEW_ARGS))).data;
   } catch (error) {
-    if (error instanceof TownSyncError && error.code === "PGRST202")
-      return townByTables(client, userId);
-    throw error;
+    if (!(error instanceof TownSyncError && error.code === "PGRST202"))
+      throw error;
+    // A database from before the window (20261110000000_town_window) answers
+    // the whole town, and one from before town_view is read table by table.
+    try {
+      const { post_limit, catalog_limit, record_notes } = TOWN_VIEW_ARGS;
+      data = (
+        await settled(
+          client.rpc("town_view", { post_limit, catalog_limit, record_notes }),
+        )
+      ).data;
+    } catch (again) {
+      if (again instanceof TownSyncError && again.code === "PGRST202")
+        return townByTables(client, userId);
+      throw again;
+    }
   }
   const view = (data ?? {}) as Record<string, unknown>;
   return {
@@ -667,7 +699,13 @@ async function arrivedFor(
   const missing = [...new Set(rows.flatMap((row) => row.book_id ?? []))].filter(
     (id) => bookKind(id) === "database" && !books.has(id),
   );
-  const [profiles, bookRows, postReactions, spoilerReports, folds] =
+  // The writers' records of these posts' books, for the feelings a post
+  // shows: the town reads only a window of others' records.
+  const writers = [...new Set(rows.map((row) => row.author_id))].filter(
+    (id) => id !== userId,
+  );
+  const named = [...new Set(rows.flatMap((row) => row.book_id ?? []))];
+  const [profiles, bookRows, postReactions, spoilerReports, folds, records] =
     await Promise.all([
       byIds(authors, (some) =>
         all(client.from("profiles").select("*").in("id", some)),
@@ -709,6 +747,20 @@ async function arrivedFor(
             .in("target_id", some),
         ),
       ),
+      named.length
+        ? byIds(writers, async (some) =>
+            (
+              await all(
+                client
+                  .from("reading_entries")
+                  .select(RECORD_COLUMNS)
+                  .in("user_id", some)
+                  .in("book_id", named)
+                  .eq("kind", "finished"),
+              )
+            ).map((row) => ({ ...row, body: "" })),
+          )
+        : [],
     ]);
   return arrivedFromRows(
     {
@@ -718,6 +770,7 @@ async function arrivedFor(
       postReactions,
       spoilerReports,
       folds,
+      records,
     },
     userId,
     ownBooksKnown,
@@ -735,7 +788,7 @@ function remoteReads(
   userId: string | null,
   town: () => TownState | null,
   ownBooksKnown: () => boolean = () => false,
-): Required<Pick<TownBackend, "newer" | "older" | "post" | "notes">> {
+): Required<Pick<TownBackend, "newer" | "older" | "post" | "more">> {
   const complete = (rows: PostRow[]) =>
     arrivedFor(client, rows, town(), userId, ownBooksKnown());
   const posts = (count?: "exact") =>
@@ -837,19 +890,101 @@ function remoteReads(
       const replies = await repliesTo(found.map((row) => row.id));
       return complete([...found, ...replies]);
     },
-    async notes(readerId) {
-      if (!isDatabaseId(readerId) || readerId === userId) return new Map();
-      const rows = await allRows(
-        (count) =>
+    async more(ask) {
+      const known = new Set(town()?.books.map((book) => book.id));
+      let rows: Omit<MoreRows, "books">;
+      if ("reader" in ask) {
+        if (!isDatabaseId(ask.reader) || ask.reader === userId)
+          return emptyMore();
+        // Every record of the reader's the database lets this reader see,
+        // with its words, and their nine.
+        const [records, nine] = await Promise.all([
+          allRows<Tables<"reading_entries">>(
+            (count) =>
+              client
+                .from("reading_entries")
+                .select("*", { count })
+                .eq("user_id", ask.reader)
+                .eq("kind", "finished"),
+            ["id"],
+          ),
+          all(
+            client
+              .from("profile_nine")
+              .select("*")
+              .eq("profile_id", ask.reader),
+          ),
+        ]);
+        rows = { records, nine };
+      } else if ("work" in ask) {
+        const kind = bookKind(ask.work);
+        if (kind === "local") return emptyMore();
+        const book =
+          kind === "sample" && !isDatabaseId(ask.work)
+            ? sampleBookRowId(ask.work)
+            : ask.work;
+        let records: Tables<"reading_entries">[];
+        try {
+          records = rowsOf(
+            (
+              await settled(
+                client.rpc("work_records", {
+                  book,
+                  record_limit: WORK_RECORDS,
+                }),
+              )
+            ).data,
+          );
+        } catch (error) {
+          // A database from before work_records reads every record with
+          // the town: there is nothing more to read.
+          if (error instanceof TownSyncError && error.code === "PGRST202")
+            return emptyMore();
+          throw error;
+        }
+        rows = { records, nine: [] };
+      } else if ("felt" in ask) {
+        let felt: Json;
+        try {
+          felt = (await settled(client.rpc("felt_in_town"))).data;
+        } catch (error) {
+          // A database from before felt_in_town reads every record with the
+          // town, and the town knows what was felt.
+          if (error instanceof TownSyncError && error.code === "PGRST202")
+            return emptyMore();
+          throw error;
+        }
+        return {
+          ...emptyMore(),
+          felt: FEELINGS.filter((feeling) =>
+            rowsOf<string>(felt).includes(feeling),
+          ),
+        };
+      } else {
+        const records = await all(
           client
             .from("reading_entries")
-            .select("id, body, spoiler", { count })
-            .eq("user_id", readerId)
-            .eq("kind", "finished"),
-        ["id"],
-      );
-      return new Map(
-        rows.map((row) => [row.id, { note: row.body, spoiler: row.spoiler }]),
+            .select(RECORD_COLUMNS)
+            .contains("feelings", [ask.feeling])
+            .eq("kind", "finished")
+            .order("created_at", { ascending: false })
+            .limit(FELT_RECORDS),
+        );
+        rows = {
+          records: records.map((row) => ({ ...row, body: "" })),
+          nine: [],
+        };
+      }
+      const missing = [
+        ...new Set([
+          ...rows.records.map((row) => row.book_id),
+          ...rows.nine.map((row) => row.book_id),
+        ]),
+      ].filter((id) => bookKind(id) === "database" && !known.has(id));
+      return moreFromRows(
+        { ...rows, books: await booksByIds(client, missing) },
+        userId,
+        ownBooksKnown(),
       );
     },
     async post(id) {

@@ -929,8 +929,10 @@ async function main() {
       // read with allRows (sync.ts). A read that stops at a number has to
       // be one of these, each read on past it another way: the newest 便り
       // and books (with newer, older and the books the rows point to), and
-      // the newest 注釈 of a page; or one that reads no row at all (whether
-      // the database counts versions, before the reader has a shop).
+      // the newest 注釈 of a page; the newest records felt with a feeling,
+      // the books a search shows for it, newest first (town-more.ts); or one
+      // that reads no row at all (whether the database counts versions,
+      // before the reader has a shop).
       const root = path.resolve(__dirname, "..");
       const found: Record<string, string[]> = {};
       for (const entry of readdirSync(path.join(root, "src"), {
@@ -952,6 +954,7 @@ async function main() {
           "NEWER_MAX",
           "NEWER_MAX",
           "size",
+          "FELT_RECORDS",
         ],
         "src/lib/supabase/walk-backend.ts": ["0"],
       });
