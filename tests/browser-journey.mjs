@@ -424,7 +424,14 @@ try {
       ]);
       expect(after[2].pop).toContain("理解できないもの");
       reorderedBookId = after[2].bookId;
-      await shelf.locator(".shelf-book-button").last().click();
+      // The drop settles before a press opens the book's sheet: a click
+      // while the dragged book is still landing is the drag's own.
+      await expect(async () => {
+        await shelf.locator(".shelf-book-button").last().click();
+        await expect(shelf.locator(".editor-selected-book")).toBeVisible({
+          timeout: 1000,
+        });
+      }).toPass();
       await shelf
         .locator(".editor-selected-book")
         .getByRole("button", { name: /^背表紙/ })
