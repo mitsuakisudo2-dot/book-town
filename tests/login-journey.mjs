@@ -1671,6 +1671,8 @@ try {
         await expect(warning).toHaveText(
           "ログインが切れました。まだ送れていない変更は、この端末に残しています。もう一度ログインすると送ります。",
         );
+        // It was not posted after all: the message saying so gives way.
+        expect(await page.locator(".toast").count()).toBe(0);
         expect(await outboxKeys()).toEqual(["book-town-outbox-v1:" + user.id]);
         await shotNarrow("9-lapsed");
       } finally {

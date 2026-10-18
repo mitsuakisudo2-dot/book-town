@@ -239,10 +239,11 @@ export default function TownApp({
   // without ログアウト (which lets them go), even before this page opened.
   const waiting = useAnyOutboxWaiting(signedOut);
   const missed = useTownMissed();
+  const lapsed =
+    (signedOut && account.lapsed) || waiting ? lapsedLine(waiting) : null;
   const warning = saveWarning(savedIn, persistence, {
     missed: missed?.line ?? null,
-    lapsed:
-      (signedOut && account.lapsed) || waiting ? lapsedLine(waiting) : null,
+    lapsed,
   });
   const router = useRouter();
   const [toast, setToast] = useState<ShownToast | null>(() => {
@@ -270,13 +271,14 @@ export default function TownApp({
     const timer = setTimeout(() => setToast(null), toast.undo ? 8000 : 3500);
     return () => clearTimeout(timer);
   }, [toast]);
-  // A change the database turned away is told above (missed-changes.ts):
-  // the message that said it was done gives way, in the same frame. One with
-  // an undo stays, the only way back.
+  // A change the database turned away, or one left waiting as the sign-in
+  // ended, is told above (missed-changes.ts): the message that said it was
+  // done gives way, in the same frame. One with an undo stays, the only way
+  // back.
   useLayoutEffect(() => {
-    if (missed?.line)
+    if (missed?.line || lapsed)
       setToast((shown) => (shown && !shown.undo ? null : shown));
-  }, [missed]);
+  }, [missed, lapsed]);
   const holdToast = useCallback(
     (held: boolean) =>
       setToast((shown) =>
