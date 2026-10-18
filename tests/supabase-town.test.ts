@@ -357,7 +357,7 @@ async function main() {
       notificationsFor(akiAgain).some(
         (notice) =>
           // Three taps by one reader: one notice, one reader.
-          notice.id === `likes:${postId}:1` &&
+          notice.id.startsWith(`likes:${postId}@`) &&
           notice.text.includes("さんがあなたの投稿にいいねしました"),
       ),
     );

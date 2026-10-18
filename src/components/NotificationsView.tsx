@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Notify, TownActions, TownState } from "../lib/types";
-import { monthDay, notificationsFor } from "../lib/notifications";
+import { monthDay, notificationsFor, seenNotice } from "../lib/notifications";
 import { useBookHolds } from "../lib/bibliography-session";
 import {
   REPORT_KIND_WORDS,
@@ -32,7 +32,7 @@ export function NotificationsView({ state, actions }: Shared) {
   const [fresh, setFresh] = useState<string[]>([]);
   const unread = notices
     .map((notice) => notice.id)
-    .filter((id) => !state.seenNotifications.includes(id));
+    .filter((id) => !seenNotice(state.seenNotifications, id));
   const unreadKey = unread.join(" ");
   useEffect(() => {
     if (!unreadKey) return;
