@@ -1060,7 +1060,11 @@ function BookHeadingLines({
         <Parts className="book-page-author" parts={author} mark="／" />
       )}
       {publication.length > 0 && (
-        <Parts className="book-page-publication" parts={publication} mark="・" />
+        <Parts
+          className="book-page-publication"
+          parts={publication}
+          mark="・"
+        />
       )}
     </>
   );
@@ -1161,6 +1165,7 @@ function BookView({
             state={state}
             actions={actions}
             notify={notify}
+            register
           />
           <span className="jacket-disclaimer">{bookNote(book)}</span>
         </div>

@@ -84,7 +84,8 @@ async function send() {
     // A failed call leaves the books unknown, to be asked again.
     if (!masters) continue;
     const at = Date.now();
-    for (const id of batch) known.set(id, { master: masters.get(id) ?? null, at });
+    for (const id of batch)
+      known.set(id, { master: masters.get(id) ?? null, at });
     tell();
   }
 }
@@ -92,7 +93,8 @@ async function send() {
 function ask(bookId: string, asker: string) {
   if (owner !== asker) startOver(asker);
   const answer = known.get(bookId);
-  if (answer && (answer.master || Date.now() - answer.at < ASK_AGAIN_MS)) return;
+  if (answer && (answer.master || Date.now() - answer.at < ASK_AGAIN_MS))
+    return;
   if (asking.has(bookId) || waiting.has(bookId)) return;
   waiting.add(bookId);
   if (sending) return;
@@ -116,7 +118,8 @@ export function useBibliography(bookId: string): Bibliography | null {
   const wanted = asker !== null && bookKind(bookId) === "database";
   const master = useSyncExternalStore(
     subscribe,
-    () => (wanted && owner === asker ? (known.get(bookId)?.master ?? null) : null),
+    () =>
+      wanted && owner === asker ? (known.get(bookId)?.master ?? null) : null,
     () => null,
   );
   useEffect(() => {
@@ -131,7 +134,8 @@ export function useBibliography(bookId: string): Bibliography | null {
 // fails keeps what was known.
 
 const NO_HOLDS: BookHold[] = [];
-let holds: { reader: string; list: BookHold[] | null; at: number } | null = null;
+let holds: { reader: string; list: BookHold[] | null; at: number } | null =
+  null;
 let holdsAsked: { reader: string } | null = null;
 /** Books whose fix the account took, and when: the database judges them again. */
 const answered = new Map<string, number>();

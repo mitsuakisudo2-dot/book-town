@@ -44,3 +44,10 @@ export function posterNewPath(
     return "/posters/new/?book=" + encodeURIComponent(options.bookId);
   return "/posters/new/";
 }
+
+/** The library (本棚); `makeShelf` opens 「棚を作る」 on it at once. */
+export const libraryPath = (options: { makeShelf?: boolean } = {}): string =>
+  options.makeShelf ? "/library/?make=shelf" : "/library/";
+
+/** The reader's own shop, or the door to open one. */
+export const myShopPath = (): string => "/my-shop/";

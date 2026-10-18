@@ -22,11 +22,7 @@ import { focusField } from "../lib/coarse-pointer";
 import { useKeptDraft } from "../lib/kept-draft";
 import { SCAN_COPY } from "../lib/scan";
 import { getTownSnapshot, townSettled } from "../lib/store";
-import {
-  overSaved,
-  SAVE_REFUSED,
-  useKeptUntilSaved,
-} from "../lib/shop-draft";
+import { overSaved, SAVE_REFUSED, useKeptUntilSaved } from "../lib/shop-draft";
 import { confirmIsbn } from "../lib/supabase/bibliography";
 import { getSupabase } from "../lib/supabase/client";
 import type { Book, BookFixResult, Notify, TownActions } from "../lib/types";
@@ -136,7 +132,8 @@ function HeldBookNote({
       <h2 id={id}>この本のISBNを確かめてください</h2>
       <p>
         登録したISBN（{book.isbn}）は、{quote(masterTitle(hold.master))}
-        {names && `（${names}）`}のものです。このお知らせは、あなたにだけ出ています。
+        {names && `（${names}）`}
+        のものです。このお知らせは、あなたにだけ出ています。
       </p>
       <div className="btns">
         <button type="button" className="btn fill" onClick={onFix}>

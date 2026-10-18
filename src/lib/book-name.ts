@@ -60,13 +60,19 @@ export function authorWords(author: string): string {
 // theirs on their own shelf.
 
 /** The master's title with its volume: "進撃の巨人 2", "ノルウェイの森 下". */
-export function masterTitle(bib: Pick<Bibliography, "title" | "volume">): string {
+export function masterTitle(
+  bib: Pick<Bibliography, "title" | "volume">,
+): string {
   const volume = bib.volume;
   if (!volume) return bib.title;
   // openBD's title may carry the volume already ("進撃の巨人(2)", "… 2"),
   // set apart from the title's own last word ("2001" is not volume 1).
-  const escaped = volume.normalize("NFKC").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[\\s(])${escaped}\\)?$`).test(bib.title.normalize("NFKC"))
+  const escaped = volume
+    .normalize("NFKC")
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[\\s(])${escaped}\\)?$`).test(
+    bib.title.normalize("NFKC"),
+  )
     ? bib.title
     : `${bib.title} ${volume}`;
 }
@@ -90,7 +96,12 @@ const ONIX_ROLES: Record<string, string> = {
 function roleWord(role: string | undefined): string {
   if (!role) return "";
   if (/^[A-Z][0-9]{2}(,[A-Z][0-9]{2})*$/.test(role))
-    return role.split(",").map((code) => ONIX_ROLES[code]).find(Boolean) ?? "";
+    return (
+      role
+        .split(",")
+        .map((code) => ONIX_ROLES[code])
+        .find(Boolean) ?? ""
+    );
   return role.replace(/[[\]［］]/g, "").trim();
 }
 
@@ -100,7 +111,9 @@ function roleWord(role: string | undefined): string {
  * it is not all 著: ["ジェーン・ドウ 著", "山田一郎 訳"], one role after the
  * names that share it. None when the master names no one.
  */
-export function masterAuthorParts(bib: Pick<Bibliography, "creators">): string[] {
+export function masterAuthorParts(
+  bib: Pick<Bibliography, "creators">,
+): string[] {
   const people = bib.creators.map((person) => ({
     name: person.name,
     role: roleWord(person.role),
@@ -180,7 +193,11 @@ export function bookHeading(
 ): BookHeading {
   const typed = bookAuthor(book);
   if (!master)
-    return { title: bookTitle(book), author: typed ? [typed] : [], publication: [] };
+    return {
+      title: bookTitle(book),
+      author: typed ? [typed] : [],
+      publication: [],
+    };
   const people = masterAuthorParts(master);
   return {
     title: masterTitle(master),

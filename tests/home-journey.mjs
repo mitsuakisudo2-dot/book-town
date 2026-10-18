@@ -2494,6 +2494,40 @@ try {
   );
 
   await check(
+    "A first-timer's Home has はじめの3つ, each one tap away: 本を登録 opens the scanner, 棚を作る the library's form, 書店を開く the door",
+    () =>
+      withPage({ viewport: { width: 320, height: 640 } }, async () => {
+        await goHome();
+        const steps = page.getByRole("region", { name: "はじめの3つ" });
+        await expect(steps.getByRole("listitem")).toHaveCount(3);
+        await expect(steps).not.toContainText(/0/);
+        // Nothing in it is wider than the phone.
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await steps.getByRole("button", { name: /本を登録/ }).tap();
+        const scanner = page.getByRole("dialog", { name: /スキャン|登録/ });
+        await expect(scanner).toBeVisible();
+        await scanner.getByRole("button", { name: "閉じる" }).tap();
+        await expect(scanner).toHaveCount(0);
+        await steps.getByRole("link", { name: /棚を作る/ }).tap();
+        await expect(page).toHaveURL(`${baseURL}/library/`);
+        await expect(
+          page.getByRole("dialog", { name: "棚を作る" }),
+        ).toBeVisible();
+        await page.goBack();
+        await goHome();
+        await expect(
+          page
+            .getByRole("region", { name: "はじめの3つ" })
+            .getByRole("link", { name: /書店を開く/ }),
+        ).toHaveAttribute("href", "/my-shop/");
+      }),
+  );
+
+  await check(
     "Into and out of 書店めぐり, whose page holds the screen still while drawn, the round mark still slides rather than jumps",
     () =>
       withPage({}, async () => {

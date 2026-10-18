@@ -67,6 +67,35 @@ export function whenSome<T>(
   return counted === null ? null : say(counted);
 }
 
+// ── Registering a book ──────────────────────────────────────────────────
+
+/**
+ * How a book is put in the reader's library (本棚), said the same on every
+ * screen that offers it: a found book's one tap, the ways in when a search
+ * finds nothing, and what is said once it is in (管理表 12).
+ */
+export const REGISTER = {
+  /** The one tap beside a found book, short. */
+  tap: "登録",
+  /** The same, where there is room: a book's page. */
+  button: "本棚に登録",
+  /** A book already in, short and where there is room. */
+  doneTap: "登録済み",
+  done: "本棚に登録済み",
+  /** The doors when a search finds nothing. */
+  byBarcode: "バーコードで登録",
+  byTitle: "この書名で登録",
+  byIsbn: "このISBNで登録",
+  /** First of はじめの3つ, and the scanner's own name. */
+  start: "本を登録",
+  /** What is said once a book, named in 『』, is in or was in already. */
+  added: (quoted: string) => `${quoted}を登録しました`,
+  already: (quoted: string) => `${quoted}はもうライブラリにあります`,
+  undone: (quoted: string) => `${quoted}の登録を取り消しました`,
+  /** The notice's button that takes a registering back. */
+  undo: "元に戻す",
+} as const;
+
 // ── Failure notices ─────────────────────────────────────────────────────
 
 /**

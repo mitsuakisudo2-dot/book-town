@@ -29,10 +29,13 @@ import {
   type PopPick,
 } from "../../lib/features";
 import {
+  firstSteps,
+  firstStepsBegun,
   homeLetters,
   isNewcomer,
   letterOf,
   ownLettersSince,
+  showsFirstSteps,
   sinceMark,
   weave,
   type LetterEntry,
@@ -48,6 +51,7 @@ import { heldBookOf } from "../../lib/held-book";
 import { Alley } from "./Alley";
 import { CorkBoard } from "./CorkBoard";
 import { Entrances } from "./Entrances";
+import { FirstSteps } from "./FirstSteps";
 import { FeatureView } from "./FeatureBand";
 import { LiveBox, type LiveSlot } from "./LiveBox";
 import { useHeld, useNow, useTownReading } from "./hooks";
@@ -84,6 +88,8 @@ type HeldSlot =
 type Drawn = {
   at: number;
   newcomer: boolean;
+  /** はじめの3つ is shown: held, so the last one ticked stays to be seen. */
+  firstSteps: boolean;
   followed: string[];
   town: string[];
   tonight: string | null;
@@ -226,6 +232,15 @@ export function HomePane({
   onTakeLine: (id: string) => boolean;
 }) {
   const { state } = shared;
+  // Whose Home this is, for the 便り kept from the last time (home-snapshot):
+  // null while the account is being checked or cannot be.
+  const account = useAccountState();
+  const owner =
+    account.status === "signed-in"
+      ? account.user.id
+      : account.status === "signed-out"
+        ? "visitor"
+        : null;
   const reading = useTownReading();
   const drawn = useHeld<Drawn>(reading, refresh, (now) => {
     // Live's memos (PR 2b) leave the 便り, so none appears twice.
@@ -239,6 +254,10 @@ export function HomePane({
     return {
       at: now,
       newcomer: isNewcomer(state),
+      firstSteps: showsFirstSteps(
+        state,
+        owner !== null && firstStepsBegun.has(owner),
+      ),
       followed: followed.map((entry) => entry.id),
       town: town.map((entry) => entry.id),
       tonight: tonightsShop(state, now)?.id ?? null,
@@ -269,6 +288,12 @@ export function HomePane({
   // out and paints the first screen before the rest, which took it as long
   // again as everything before (docs/09 「速さ」). Back on Home later, it is
   // all there at once, where the reader left it.
+  // はじめの3つ once shown stay until done, whatever the reader does on the
+  // way (showsFirstSteps).
+  const stepsShown = !!drawn?.firstSteps;
+  useEffect(() => {
+    if (stepsShown && owner !== null) firstStepsBegun.mark(owner);
+  }, [stepsShown, owner]);
   const [stage, setStage] = useState(homeDrawn);
   useEffect(() => {
     if (drawn && stage >= 2) readBookInHandAhead();
@@ -287,15 +312,6 @@ export function HomePane({
       clearTimeout(timer);
     };
   }, [drawn, stage]);
-  // Whose Home this is, for the 便り kept from the last time (home-snapshot):
-  // null while the account is being checked or cannot be.
-  const account = useAccountState();
-  const owner =
-    account.status === "signed-in"
-      ? account.user.id
-      : account.status === "signed-out"
-        ? "visitor"
-        : null;
   const kept = useSyncExternalStore(still, readKeptSnapshot, () => null);
   const now = useNow();
   const snapshot =
@@ -399,6 +415,9 @@ export function HomePane({
         onRead={() => setSheet("read")}
         onScan={() => setSheet("scan")}
       />
+      {drawn?.firstSteps && (
+        <FirstSteps steps={firstSteps(state)} onScan={() => setSheet("scan")} />
+      )}
       {drawn && <ReadingLine state={state} />}
       {drawn ? (
         <WovenLetters
