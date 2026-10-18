@@ -1,18 +1,21 @@
 "use client";
 
+import { useState } from "react";
 import type { Book, Notify, TownActions, TownState } from "../lib/types";
 import { getTownSnapshot } from "../lib/store";
+import { bookTraces } from "../lib/library-town";
 import { quotedTitle } from "../lib/book-name";
 import { REGISTER } from "../lib/words";
-import { Icon } from "./ui";
+import { Icon, Modal } from "./ui";
+import "./reading.css";
 
 /**
  * One tap puts a book the town knows in the reader's library (管理表 12):
- * no reading status is asked, it is chosen later in the library. Once in,
- * it says so and does nothing more: a tap there never takes it out (けにー
- * 10-18). A tap by mistake is taken back from the notice's 元に戻す, and a
- * book is taken out in the library. Said only when it was done: a visitor
- * is asked to sign in instead, and nothing changes.
+ * no reading status is asked, it is chosen later in the library. Tapped
+ * again it comes back out, as 読みたい does (けにー 10-18「普通にもう一度
+ * 押して戻す方がいい」), after asking: once, and once more when the book
+ * has records, memos or a reading status. Said only when it was done: a
+ * visitor is asked to sign in instead, and nothing changes.
  */
 export function RegisterBook({
   book,
@@ -30,38 +33,86 @@ export function RegisterBook({
   short?: boolean;
   className?: string;
 }) {
-  const classes = (...more: string[]) =>
-    [...more, "register-book", className].filter(Boolean).join(" ");
-  if (state.library.includes(book.id))
-    return (
-      <span className={classes("btn", "quiet", "is-done")}>
-        <Icon name="check" size={18} />
-        {short ? REGISTER.doneTap : REGISTER.done}
-      </span>
+  const [asking, setAsking] = useState<"remove" | "again" | null>(null);
+  const registered = state.library.includes(book.id);
+  const traces = bookTraces(state, book.id);
+  const toggle = () => {
+    actions.toggleLibrary(book.id);
+    const now = getTownSnapshot().library.includes(book.id);
+    if (now === registered) return;
+    notify(
+      now
+        ? REGISTER.added(quotedTitle(book))
+        : REGISTER.undone(quotedTitle(book)),
     );
-  const registered = () => getTownSnapshot().library.includes(book.id);
+  };
+  const close = () => setAsking(null);
+  const choices = (remove: () => void) => (
+    <div className="btns">
+      <button type="button" className="btn danger fill" onClick={remove}>
+        {REGISTER.remove}
+      </button>
+      <button type="button" className="btn" onClick={close}>
+        {REGISTER.keep}
+      </button>
+    </div>
+  );
   return (
-    <button
-      type="button"
-      className={classes("btn", "soft")}
-      aria-label={
-        short ? `${quotedTitle(book)}を${REGISTER.button}` : undefined
-      }
-      onClick={() => {
-        actions.toggleLibrary(book.id);
-        if (!registered()) return;
-        notify(REGISTER.added(quotedTitle(book)), {
-          label: REGISTER.undo,
-          run: () => {
-            if (!registered()) return;
-            actions.toggleLibrary(book.id);
-            if (!registered()) notify(REGISTER.undone(quotedTitle(book)));
-          },
-        });
-      }}
-    >
-      <Icon name="plus" size={18} />
-      {short ? REGISTER.tap : REGISTER.button}
-    </button>
+    <>
+      <button
+        type="button"
+        className={[
+          "btn",
+          registered ? "quiet" : "soft",
+          "register-book",
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        // A toggle: its name stays what it does, pressed while registered.
+        aria-pressed={registered}
+        aria-label={
+          short ? `${quotedTitle(book)}を${REGISTER.button}` : REGISTER.button
+        }
+        onClick={() => (registered ? setAsking("remove") : toggle())}
+      >
+        <Icon name={registered ? "check" : "plus"} size={18} />
+        {registered
+          ? short
+            ? REGISTER.doneTap
+            : REGISTER.done
+          : short
+            ? REGISTER.tap
+            : REGISTER.button}
+      </button>
+      {asking === "remove" && (
+        <Modal title={REGISTER.removeAsk} onClose={close}>
+          <p className="modal-lead">{quotedTitle(book)}</p>
+          {choices(() => {
+            if (traces.written || traces.finished || traces.reading)
+              setAsking("again");
+            else {
+              close();
+              toggle();
+            }
+          })}
+        </Modal>
+      )}
+      {asking === "again" && (
+        <Modal title={REGISTER.removeAskAgain} onClose={close}>
+          <p className="modal-lead">{quotedTitle(book)}</p>
+          <ul className="register-traces">
+            {traces.written && <li>{REGISTER.traces}</li>}
+            {traces.finished && <li>{REGISTER.finished}</li>}
+            {traces.reading && !traces.finished && <li>{REGISTER.reading}</li>}
+          </ul>
+          {traces.written && <p className="muted">{REGISTER.traceStays}</p>}
+          {choices(() => {
+            close();
+            toggle();
+          })}
+        </Modal>
+      )}
+    </>
   );
 }

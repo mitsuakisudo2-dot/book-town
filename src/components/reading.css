@@ -935,3 +935,11 @@
   display: block;
   border-radius: var(--r-tag);
 }
+/* What a book has besides its registering, asked about before it goes. */
+.register-traces {
+  margin: 0 0 12px;
+  padding-left: 1.2em;
+  color: var(--ink);
+  font-size: var(--t-ui);
+  line-height: 1.8;
+}
