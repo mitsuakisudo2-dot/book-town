@@ -17,7 +17,7 @@
     "test:posters": "tsx tests/posters.test.ts",
     "test:customization-domain": "tsx tests/customization-domain.test.ts",
     "test:shop-layout": "tsx tests/shop-layout-domain.test.ts",
-    "test:db": "tsx tests/database-policies.test.ts && tsx tests/account-tables.test.ts && tsx tests/db-copies.test.ts && tsx tests/db-works.test.ts && tsx tests/db-visibility.test.ts && tsx tests/db-editions.test.ts && tsx tests/db-bibliography.test.ts && tsx tests/db-shelf-audience.test.ts && tsx tests/db-holds.test.ts",
+    "test:db": "tsx tests/database-policies.test.ts && tsx tests/account-tables.test.ts && tsx tests/db-copies.test.ts && tsx tests/db-works.test.ts && tsx tests/db-visibility.test.ts && tsx tests/db-editions.test.ts && tsx tests/db-bibliography.test.ts && tsx tests/db-shelf-audience.test.ts && tsx tests/db-holds.test.ts && tsx tests/db-own-books.test.ts",
     "test:account": "tsx tests/account-domain.test.ts",
     "test:site-notes": "tsx tests/site-notes.test.ts",
     "test:town-sync": "tsx tests/town-remote.test.ts && tsx tests/walk-remote.test.ts && tsx tests/save-guards.test.ts",
