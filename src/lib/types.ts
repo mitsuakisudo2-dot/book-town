@@ -144,6 +144,8 @@ export const POP_MAX_LENGTH = 1000;
 export const LIBRARY_SHELF_NAME_MAX_LENGTH = 40;
 export const LIBRARY_SHELF_NOTE_MAX_LENGTH = 500;
 export const READER_NAME_MAX_LENGTH = 80;
+/** 不具合と要望 (site_reports), after the database takes out what should not be kept. */
+export const SITE_REPORT_MAX_LENGTH = 2000;
 export const BIO_MAX_LENGTH = 2000;
 export const NINE_NOTE_MAX_LENGTH = 500;
 export const SHOP_MESSAGE_MAX_LENGTH = 2000;

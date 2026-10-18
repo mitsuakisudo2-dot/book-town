@@ -1531,11 +1531,34 @@ export type Database = {
         Args: { base: number; shop: string; value: Json };
         Returns: number;
       };
+      send_site_report: {
+        Args: {
+          p_body: string;
+          p_build?: string;
+          p_device?: string;
+          p_kind: string;
+          p_page?: string;
+        };
+        Returns: undefined;
+      };
       shop_visitors: {
         Args: Record<PropertyKey, never>;
         Returns: {
           visitors: number;
           week_end: string;
+        }[];
+      };
+      site_reports: {
+        Args: { p_before?: string };
+        Returns: {
+          body: string;
+          build: string;
+          created_at: string;
+          device: string;
+          handle: string;
+          id: string;
+          kind: string;
+          page: string;
         }[];
       };
       town_books: { Args: { ids: string[] }; Returns: Json };

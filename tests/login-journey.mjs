@@ -203,6 +203,10 @@ const notesTakenBack = [];
 const siteNoteRequests = [];
 // Set to refuse every note as the hourly limit does.
 let refuseNotes = false;
+// 不具合と要望: what was sent, and whether the database refuses as its
+// limits do. Staff read back what was sent, the newest first.
+const siteReportsSent = [];
+let refuseSiteReports = false;
 // 退会: each call to delete the account, and whether the database refuses it.
 const leaveRequests = [];
 let refuseLeave = false;
@@ -543,6 +547,33 @@ const standIn = async (route) => {
   if (url.pathname === "/rest/v1/rpc/can_annotate") {
     annotateAsks.push(staff);
     return json(200, staff);
+  }
+  if (url.pathname === "/rest/v1/rpc/send_site_report") {
+    if (refuseSiteReports)
+      return json(400, { code: "23514", message: "too many site reports" });
+    siteReportsSent.push(body);
+    return route.fulfill({ status: 204, body: "" });
+  }
+  if (url.pathname === "/rest/v1/rpc/site_reports") {
+    return json(
+      200,
+      staff
+        ? siteReportsSent
+            .map((sent, i) => ({
+              id:
+                "00000000-0000-4000-8000-0000000005" +
+                String(i).padStart(2, "0"),
+              kind: sent.p_kind,
+              body: sent.p_body,
+              page: sent.p_page,
+              device: sent.p_device,
+              build: sent.p_build,
+              created_at: new Date(Date.UTC(2026, 9, 18, 9, i)).toISOString(),
+              handle: "reader",
+            }))
+            .reverse()
+        : [],
+    );
   }
   if (url.pathname === "/rest/v1/rpc/delete_my_account") {
     leaveRequests.push(request.method());
@@ -6706,6 +6737,149 @@ try {
         profile = signedIn;
         staff = false;
         await desk.close();
+      }
+    },
+  );
+
+  await check(
+    "不具合・要望 from 設定: written, kept when closed, sent; staff read what came in",
+    async () => {
+      const link = session();
+      // What is on the screen, not the whole page under the dialog.
+      const view = (name) =>
+        page.screenshot({ path: path.join(output, name + ".png") });
+      try {
+        await page.goto("about:blank");
+        await page.goto(
+          base +
+            "/login/#" +
+            new URLSearchParams({
+              access_token: link.access_token,
+              expires_at: String(link.expires_at),
+              expires_in: "3600",
+              refresh_token: link.refresh_token,
+              token_type: "bearer",
+              type: "magiclink",
+            }),
+        );
+        await expect(
+          page.getByRole("heading", { name: "ログインしています" }),
+        ).toBeVisible();
+        await page.goto(base + "/profiles/me/");
+        const openSettings = async () => {
+          await page.getByRole("button", { name: "設定" }).click();
+          return page.getByRole("dialog", { name: "設定" });
+        };
+        let settings = await openSettings();
+        const entry = settings.getByRole("button", {
+          name: "不具合・要望を送る",
+        });
+        await entry.scrollIntoViewIfNeeded();
+        // Not staff: no list of what came in.
+        await expect(
+          settings.getByRole("button", { name: "届いた不具合・要望" }),
+        ).toHaveCount(0);
+        await view("site-report-0-settings-390");
+        await page.setViewportSize({ width: 320, height: 700 });
+        await entry.scrollIntoViewIfNeeded();
+        await view("site-report-0-settings-320");
+        await page.setViewportSize({ width: 390, height: 844 });
+        await entry.click();
+        let form = page.getByRole("dialog", { name: "不具合・要望を送る" });
+        await expect(form).toBeVisible();
+        // Nothing to send until something is written; a kind is not needed.
+        const sendButton = form.getByRole("button", {
+          name: "送る",
+          exact: true,
+        });
+        await expect(sendButton).toBeDisabled();
+        await form.getByRole("button", { name: "うまく動かない" }).click();
+        await expect(
+          form.getByRole("button", { name: "うまく動かない" }),
+        ).toHaveAttribute("aria-pressed", "true");
+        await form
+          .getByLabel("伝えたいこと")
+          .fill("本を3冊まとめて登録すると、2冊目から表紙が出ません。");
+        await noOverflow("site report form");
+        await view("site-report-1-form-390");
+        await page.setViewportSize({ width: 320, height: 700 });
+        await noOverflow("site report form 320");
+        await view("site-report-1-form-320");
+        await page.setViewportSize({ width: 390, height: 844 });
+        // Closed by hand, it is kept for next time.
+        await page.keyboard.press("Escape");
+        await expect(form).toHaveCount(0);
+        settings = await openSettings();
+        await settings
+          .getByRole("button", { name: "不具合・要望を送る" })
+          .click();
+        form = page.getByRole("dialog", { name: "不具合・要望を送る" });
+        await expect(form.getByLabel("伝えたいこと")).toHaveValue(
+          "本を3冊まとめて登録すると、2冊目から表紙が出ません。",
+        );
+        await expect(
+          form.getByRole("button", { name: "うまく動かない" }),
+        ).toHaveAttribute("aria-pressed", "true");
+        // Refused as the limits do: said so, and nothing is lost.
+        refuseSiteReports = true;
+        await form.getByRole("button", { name: "送る", exact: true }).click();
+        await expect(form.getByRole("alert")).toHaveText(
+          "今は送れません。書きかけは残しています。少し時間をおいて、もう一度お試しください。",
+        );
+        await view("site-report-2-limit-390");
+        expect(siteReportsSent).toEqual([]);
+        refuseSiteReports = false;
+        await form.getByRole("button", { name: "送る", exact: true }).click();
+        await expect(
+          form.getByText(
+            "受け付けました。知らせてくださって、ありがとうございます。",
+          ),
+        ).toBeVisible();
+        await view("site-report-3-sent-390");
+        expect(siteReportsSent).toHaveLength(1);
+        expect(siteReportsSent[0]).toMatchObject({
+          p_kind: "bug",
+          p_body: "本を3冊まとめて登録すると、2冊目から表紙が出ません。",
+          p_page: "/profiles/me/",
+        });
+        await form.locator("button.btn", { hasText: "閉じる" }).click();
+        // Received: nothing is kept any more.
+        expect(
+          await page.evaluate(
+            () =>
+              JSON.parse(
+                localStorage.getItem("book-town-site-report-drafts-v1") ??
+                  "null",
+              )?.drafts ?? {},
+          ),
+        ).toEqual({});
+
+        // Staff find what came in, the newest first.
+        staff = true;
+        await page.reload();
+        settings = await openSettings();
+        const list = settings.getByRole("button", {
+          name: "届いた不具合・要望",
+        });
+        await list.scrollIntoViewIfNeeded();
+        await list.click();
+        const came = page.getByRole("dialog", { name: "届いた不具合・要望" });
+        await expect(
+          came.getByText(
+            "本を3冊まとめて登録すると、2冊目から表紙が出ません。",
+          ),
+        ).toBeVisible();
+        await expect(came.getByText("不具合", { exact: true })).toBeVisible();
+        await noOverflow("site report list");
+        await view("site-report-4-staff-list-390");
+        await page.setViewportSize({ width: 320, height: 700 });
+        await view("site-report-4-staff-list-320");
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.keyboard.press("Escape");
+      } finally {
+        staff = false;
+        refuseSiteReports = false;
+        await page.setViewportSize({ width: 390, height: 844 });
       }
     },
   );
