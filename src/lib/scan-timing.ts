@@ -3,8 +3,10 @@
 // other apps before it is built again (けにーさん 10-18「測ってから」). It
 // shows only for an address with ?scan-timing, and this tab remembers it
 // until ?scan-timing=off. Nothing is sent anywhere: the record is copied by
-// hand. Two settings can be tried from it: the pause between camera frames,
-// and the size of the picture asked of the camera.
+// hand. Three settings can be tried from it: the pause between camera frames,
+// the size of the picture asked of the camera, and how much of the picture
+// ZXing reads (the guide's band, or all that the screen shows: 積読家 reads
+// a code anywhere in view, けにーさん 10-18).
 
 import { counted, nth } from "./words";
 
@@ -16,15 +18,22 @@ export interface TimingSettings {
   gap: number;
   /** The width of the picture asked of the camera, for ZXing. */
   size: number;
+  /** What ZXing reads: the guide's band, or all of the picture shown. */
+  area: ReadArea;
 }
 
+export type ReadArea = "band" | "view";
+
 /** What the scanner does without the timing mode. */
-export const USUAL: TimingSettings = { gap: 200, size: 1920 };
+export const USUAL: TimingSettings = { gap: 200, size: 1920, area: "band" };
 export const GAPS = [200, 100, 0] as const;
 export const SIZES = [1920, 1280] as const;
+export const AREAS: readonly ReadArea[] = ["band", "view"];
 
 const isGap = (value: number) => (GAPS as readonly number[]).includes(value);
 const isSize = (value: number) => (SIZES as readonly number[]).includes(value);
+const isArea = (value: unknown): value is ReadArea =>
+  AREAS.includes(value as ReadArea);
 
 /**
  * The tab's timing settings: null when the mode is off. The address turns it
@@ -49,6 +58,7 @@ export function readTiming(
   return {
     gap: isGap(gap) ? gap : USUAL.gap,
     size: isSize(size) ? size : USUAL.size,
+    area: isArea(saved?.area) ? saved.area : USUAL.area,
   };
 }
 
@@ -216,7 +226,7 @@ export function timingReport(timing: Timing, place: TimingPlace): string {
     value === null ? "-" : String(Math.round(value));
   const lines = [
     `BookTown スキャン計測 ${place.when}`,
-    `読み取り ${place.reader}・映像 ${place.picture}・頼んだ幅 ${place.settings.size}・コマの間 ${place.settings.gap}ms`,
+    `読み取り ${place.reader}・映像 ${place.picture}・頼んだ幅 ${place.settings.size}・コマの間 ${place.settings.gap}ms・${TIMING_COPY.area(place.settings.area)}`,
     `1コマ 中央 ${ms(sum.frameMs)}ms・最も遅い ${ms(sum.slowestMs)}ms・毎秒 ${sum.perSecond === null ? "-" : sum.perSecond.toFixed(1)}コマ`,
     sum.firstToLast === null
       ? `${counted(sum.books, "冊")}`
@@ -252,6 +262,7 @@ export const TIMING_COPY = {
   again: "もう入っている本",
   gap: (ms: number) => (ms === 0 ? "コマの間 なし" : `コマの間 ${ms}ms`),
   size: (width: number) => `映像の幅 ${width}`,
+  area: (area: ReadArea) => `読む範囲 ${area === "view" ? "画面" : "枠"}`,
   copy: "記録を写す",
   copied: "記録を写しました",
   copyHere: "下の記録を長押しして写してください",
