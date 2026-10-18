@@ -16,7 +16,7 @@ import { leaveLayers } from "../../lib/back-layer";
 import { BookPicker } from "../BookPicker";
 import { BookJacket, Icon, Modal } from "../ui";
 import type { Shared } from "./Letters";
-import { readingPath } from "../../lib/paths";
+import { readingListPath, readingPath } from "../../lib/paths";
 
 /** How many of the 読みたい本 the sheet offers before 「ぜんぶ見る」. */
 const WISHES = 6;
@@ -136,7 +136,7 @@ export function StartReadingSheet({
             </button>
           )}
           {state.wishlist.length > 0 && (
-            <Link href="/reading-list/" className="text-btn home-sheet-all">
+            <Link href={readingListPath()} className="text-btn home-sheet-all">
               読みたい本をぜんぶ見る
               <Icon name="chevron" size={16} />
             </Link>

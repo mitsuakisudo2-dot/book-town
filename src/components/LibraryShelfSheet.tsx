@@ -24,6 +24,7 @@ import {
   LIBRARY_SHELF_NAME_MAX_LENGTH,
   LIBRARY_SHELF_NOTE_MAX_LENGTH,
 } from "../lib/types";
+import { LIBRARY_SHELF } from "../lib/words";
 import { CHOICE_NAMES, choicesFor, type Audience } from "../lib/visibility";
 import {
   KeptDraftNote,
@@ -142,7 +143,7 @@ export function LibraryShelfSheet({
   ] as const;
 
   return (
-    <Modal title={shelf ? "棚を編集" : "棚を作る"} onClose={onClose}>
+    <Modal title={shelf ? LIBRARY_SHELF.edit : LIBRARY_SHELF.make} onClose={onClose}>
       <form
         className="library-shelf-form"
         onSubmit={(event) => {
