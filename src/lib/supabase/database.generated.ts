@@ -1491,6 +1491,17 @@ export type Database = {
         Args: { book_ids: string[]; notes: string[] };
         Returns: undefined;
       };
+      report_screen_error: {
+        Args: {
+          p_build?: string;
+          p_device?: string;
+          p_kind: string;
+          p_message: string;
+          p_place: string;
+          p_stack?: string;
+        };
+        Returns: undefined;
+      };
       shop_visitors: {
         Args: Record<PropertyKey, never>;
         Returns: {
