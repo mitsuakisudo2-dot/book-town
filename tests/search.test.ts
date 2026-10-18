@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 import { demoBooks } from "../src/lib/data";
 import {
   dropLongVowels,
@@ -283,8 +284,44 @@ async function main() {
     assert.equal(searchFold("夜〜霧～📚!?"), "夜霧");
     assert.equal(searchFold("人々"), "人々");
     assert.equal(searchFold("〆切"), "〆切");
-    assert.equal(searchFold("ØЖ"), "");
+    assert.equal(searchFold("ØЖ"), "ж");
   });
+
+  await check(
+    "F3: Greek, Cyrillic, Arabic, Thai and Hangul stay, as in the database",
+    () => {
+      assert.equal(searchFold("채식주의자"), "채식주의자");
+      assert.equal(searchFold("한강 지음"), "한강지음");
+      assert.equal(searchFold("ВОЙНА И МИР"), searchFold("Война и мир"));
+      assert.equal(searchFold("Война и мир"), "воинаимир");
+      assert.equal(searchFold("Ёлка"), "елка");
+      assert.equal(searchFold("Ґрунт"), "ґрунт");
+      assert.equal(searchFold("ΟΔΎΣΣΕΙΑ"), searchFold("Οδύσσεια"));
+      assert.equal(searchFold("Οδύσσεια"), "οδυσσεια");
+      assert.equal(searchFold("ألف ليلة وليلة"), "ألفليلةوليلة");
+      assert.equal(searchFold("كِتَاب"), "كتاب");
+      assert.equal(searchFold("ภาษาไทย"), "ภาษาไทย");
+      // The private use area goes (AUD-084: the database had kept it).
+      assert.equal(searchFold(String.fromCodePoint(0xe000) + "本"), "本");
+      // Written by code point, so a file normalized to NFC keeps its meaning.
+      for (const file of [
+        "src/lib/search/fold.ts",
+        ...readdirSync("supabase/migrations")
+          .filter((name) => name.endsWith("_fold_scripts.sql"))
+          .map((name) => `supabase/migrations/${name}`),
+      ]) {
+        const text = readFileSync(file, "utf8");
+        assert.equal(text.normalize("NFC"), text, file);
+      }
+      const books = [
+        book({ id: "han", title: "채식주의자", author: "한강" }),
+        book({ id: "tolstoy", title: "Война и мир", author: "Лев Толстой" }),
+      ];
+      assert.deepEqual(titles(books, "채식"), ["채식주의자"]);
+      assert.deepEqual(titles(books, "한강"), ["채식주의자"]);
+      assert.deepEqual(titles(books, "война"), ["Война и мир"]);
+    },
+  );
 
   await check("ゝゞヽヾ repeat the kana before them", () => {
     assert.equal(searchFold("こゝろ"), searchFold("こころ"));

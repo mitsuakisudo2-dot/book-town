@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { searchFold } from "../src/lib/search/fold";
+import { foldTable, searchFold } from "../src/lib/search/fold";
 import {
   SUPABASE_STANDIN,
   deleteAccounts,
   migrationFiles,
+  migratedDatabase,
   migrationText,
 } from "./fixtures/pglite-supabase";
 
@@ -719,6 +720,10 @@ async function main() {
   await check(
     "titles and authors are folded as the search folds them, people are found in author lines, and numbers tell volumes apart",
     async () => {
+      // On a database with every file, so a later file's folding is the one compared.
+      const latest = await migratedDatabase();
+      const pure = async <T>(sql: string, params: unknown[]) =>
+        (await latest.query<T>(sql, params)).rows;
       for (const text of [
         "森鷗外",
         "ノルウエイの森",
@@ -734,10 +739,32 @@ async function main() {
         "ゝあ",
         "",
         "1Q84 BOOK1",
+        // AUD-084: the scripts the database once kept and the app dropped, and
+        // the other way round, fold alike now.
+        "채식주의자 한강",
+        "ВОЙНА И МИР Ёлка Ґрунт",
+        "ΟΔΎΣΣΕΙΑ Ελληνικός",
+        "ألف ليلة وليلة كِتَاب",
+        "ภาษาไทย",
+        String.fromCodePoint(0xe000, 0xf8ff) + "本",
+        String.fromCodePoint(0xf900, 0xfa0e, 0x8c48),
+        String.fromCodePoint(0xa000, 0x3131, 0x1100, 0xd7a3, 0xd7a4),
+        // Every character the map turns, and the ends of what is kept.
+        foldTable().from,
+        String.fromCodePoint(
+          ...[
+            0x3040, 0x3041, 0x3096, 0x3097, 0x33ff, 0x3400, 0x4dbf, 0x4dc0,
+            0x4dff, 0x4e00, 0x9fff, 0xa000, 0xf8ff, 0xfaff, 0xfb00, 0x1ffff,
+            0x20000, 0x2ffff, 0x30000, 0x385, 0x386, 0x3ff, 0x500, 0x61f, 0x620,
+            0x64a, 0x64b, 0x65f, 0x660, 0x669, 0x66a, 0x66e, 0x6d3, 0x6d4,
+            0xe00, 0xe01, 0xe4e, 0xe4f, 0xe50, 0xe59, 0xe5a, 0x10ff, 0x1100,
+            0x11ff, 0x1200, 0xabff, 0xac00, 0xd7a3,
+          ],
+        ),
       ])
         assert.equal(
           (
-            await rows<{ f: string }>(
+            await pure<{ f: string }>(
               "select private.fold_book_text($1) as f",
               [text],
             )
@@ -747,7 +774,7 @@ async function main() {
         );
       const agree = async (a: string, b: string) =>
         (
-          await rows<{ x: boolean }>(
+          await pure<{ x: boolean }>(
             `select private.authors_agree(private.author_keys($1), private.fold_book_text($1),
                private.author_keys($2), private.fold_book_text($2)) as x`,
             [a, b],
@@ -760,9 +787,12 @@ async function main() {
       assert.ok(!(await agree("村上, 春樹", "村上, 龍")));
       assert.ok(!(await agree("スティーヴン・キング", "ホーキング")));
       assert.ok(!(await agree("", "")));
+      assert.ok(await agree("Толстой, Лев", "Лев Толстой"));
+      assert.ok(await agree("한강", "한강 지음"));
+      assert.ok(!(await agree("한강", "김영하")));
       const titles = async (a: string, b: string) =>
         (
-          await rows<{ x: boolean }>(
+          await pure<{ x: boolean }>(
             "select private.titles_agree(private.fold_book_text($1), private.fold_book_text($2)) as x",
             [a, b],
           )
