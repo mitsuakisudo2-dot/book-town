@@ -585,7 +585,7 @@ async function main() {
     // Held in view for 10 seconds, frame after frame: still the same book.
     let inView: InView = { [A]: 0 };
     for (let at = 200; at <= 10_000; at += 200) {
-      const frame = nextFrame(inView, [A]);
+      const frame = nextFrame(inView, [A], at);
       assert.deepEqual(frame.fresh, []);
       inView = frame.inView;
       reads = stillInView(reads, frame.staying, at);
@@ -635,11 +635,12 @@ async function main() {
   await check("frames, and the hints for other barcodes (U5)", () => {
     const A = isbnOf(20);
     const PRICE = "1920193006001";
-    // A held in view, missing a frame now and then: one read.
+    // A held in view, missing a frame now and then: one read. Frames
+    // 200ms apart, as before 10-18.
     let inView: InView = {};
     const fresh: string[] = [];
-    for (const frame of [[A], [], [A], [], [], [A], [A]]) {
-      const next = nextFrame(inView, frame);
+    for (const [at, frame] of [[A], [], [A], [], [], [A], [A]].entries()) {
+      const next = nextFrame(inView, frame, at * 200);
       inView = next.inView;
       fresh.push(
         ...next.fresh.map((code) =>
@@ -648,12 +649,27 @@ async function main() {
       );
     }
     assert.deepEqual(fresh, [A]);
-    // Gone for three frames in a row: it comes back as a read, and within
+    // Each new camera frame read, 30 a second: missed for half a second,
+    // it is still in view.
+    inView = {};
+    const quick: string[] = [];
+    for (let frame = 0; frame <= 30; frame++) {
+      const missed = frame > 5 && frame < 20;
+      const next = nextFrame(inView, missed ? [] : [A], (frame * 1000) / 30);
+      inView = next.inView;
+      quick.push(
+        ...next.fresh.map((code) =>
+          code.kind === "isbn" ? code.isbn : code.code,
+        ),
+      );
+    }
+    assert.deepEqual(quick, [A]);
+    // Gone for more than 0.6 seconds: it comes back as a read, and within
     // 3 seconds that read is the same book.
     inView = {};
     const seen: string[] = [];
-    for (const frame of [[A], [], [], [], [A]]) {
-      const next = nextFrame(inView, frame);
+    for (const [at, frame] of [[A], [], [], [], [A]].entries()) {
+      const next = nextFrame(inView, frame, at * 200);
       inView = next.inView;
       seen.push(
         ...next.fresh.map((code) =>
@@ -673,7 +689,7 @@ async function main() {
       "same",
     );
     // An ISBN with the price code under it: only the ISBN.
-    const both = nextFrame({}, [PRICE, A]);
+    const both = nextFrame({}, [PRICE, A], 0);
     assert.deepEqual(both.fresh, [{ kind: "isbn", isbn: A }]);
     assert.equal(PRICE in both.inView, false);
     // The price code alone, twice: one hint; a third time, none.

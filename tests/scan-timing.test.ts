@@ -33,14 +33,14 @@ check("the mode is off unless the address or the tab asks for it", () => {
   assert.deepEqual(readTiming("?scan-timing=1&tab=read", null), USUAL);
   // The tab keeps it, with the settings tried.
   assert.deepEqual(
-    readTiming("", JSON.stringify({ gap: 0, size: 1280, area: "view" })),
-    { gap: 0, size: 1280, area: "view" },
+    readTiming("", JSON.stringify({ gap: 0, size: 1280, area: "band" })),
+    { gap: 0, size: 1280, area: "band" },
   );
-  // A tab kept before the reading area was a choice reads the band.
-  assert.deepEqual(readTiming("", JSON.stringify({ gap: 0, size: 1280 })), {
-    gap: 0,
+  // A tab kept from before: what it lacks, or no longer a choice, is usual.
+  assert.deepEqual(readTiming("", JSON.stringify({ gap: 100, size: 1280 })), {
+    gap: "frame",
     size: 1280,
-    area: "band",
+    area: "view",
   });
   assert.equal(readTiming("?scan-timing=off", JSON.stringify(USUAL)), null);
 });
@@ -52,19 +52,19 @@ check("a setting that is not one of the choices reads as usual", () => {
   );
   assert.deepEqual(readTiming("?scan-timing", "not json"), USUAL);
   assert.equal(readTiming("", "not json"), null);
-  assert.ok((GAPS as readonly number[]).includes(USUAL.gap));
+  assert.ok(GAPS.includes(USUAL.gap));
   assert.ok((SIZES as readonly number[]).includes(USUAL.size));
   assert.ok(AREAS.includes(USUAL.area));
 });
 
 check("the choices go round", () => {
-  assert.equal(nextOf(GAPS, 200), 100);
-  assert.equal(nextOf(GAPS, 100), 0);
+  assert.equal(nextOf(GAPS, "frame"), 0);
   assert.equal(nextOf(GAPS, 0), 200);
+  assert.equal(nextOf(GAPS, 200), "frame");
   assert.equal(nextOf(SIZES, 1920), 1280);
   assert.equal(nextOf(SIZES, 1280), 1920);
-  assert.equal(nextOf(AREAS, "band"), "view");
   assert.equal(nextOf(AREAS, "view"), "band");
+  assert.equal(nextOf(AREAS, "band"), "view");
 });
 
 check("frames give the middle read and frames a second", () => {
@@ -118,7 +118,7 @@ check("the record has a line a book, and nothing to send", () => {
   assert.equal(report[0], "BookTown スキャン計測 10/18 21:30");
   assert.match(
     report[1],
-    /wasm・映像 1920×1080・頼んだ幅 1920・コマの間 200ms・読む範囲 枠/,
+    /wasm・映像 1920×1080・頼んだ幅 1920・コマの間 カメラに合わせる・読む範囲 画面/,
   );
   assert.match(report[2], /^1コマ 中央 35ms/);
   assert.equal(report[3], "1冊目から2冊目まで 2.0秒");

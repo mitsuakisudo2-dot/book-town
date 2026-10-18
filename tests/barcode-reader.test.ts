@@ -183,6 +183,7 @@ async function main() {
       const frame = nextFrame(
         {},
         read.map((code) => code.text),
+        0,
       );
       assert.deepEqual(frame.fresh, [{ kind: "isbn", isbn: ISBN }]);
       assert.deepEqual(Object.keys(frame.inView), [ISBN]);

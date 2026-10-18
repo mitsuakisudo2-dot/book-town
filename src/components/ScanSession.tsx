@@ -103,6 +103,8 @@ const canRead = () =>
 const startsTyping = () => readerKind() === "wasm" && !coarsePointer();
 /** This many reads failing in a row: the reader is not working. */
 const FAILS_TO_STOP = 5;
+/** A browser that cannot say when the camera has a new frame reads this often. */
+const FRAME_MS = 100;
 
 /**
  * Why ISBNs are typed: the browser, the reader not loaded this time, the
@@ -593,7 +595,8 @@ export function ScanSession({
   /** One camera frame's codes. */
   function onFrame(codes: string[]) {
     const at = Date.now();
-    const frame = nextFrame(inView.current, codes);
+    // In view is timed on the steady clock: the date can jump.
+    const frame = nextFrame(inView.current, codes, performance.now());
     inView.current = frame.inView;
     reads.current = stillInView(reads.current, frame.staying, at);
     for (const code of frame.fresh) {
@@ -627,6 +630,7 @@ export function ScanSession({
     let stopped = false;
     let stream: MediaStream | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let frameAsked: number | undefined;
     const typeInstead = (why: TypingWhy) => {
       if (!stopped) setInput({ kind: "typing", why });
     };
@@ -739,10 +743,11 @@ export function ScanSession({
       );
       readerUsed.current = reader.wasm ? "wasm" : "native";
       const detector = new reader.Detector({ formats: ["ean_13"] });
-      // ZXing reads the guide's band only, drawn into the one canvas: the
-      // whole frame would be a new canvas of its size at every read. The
-      // browser's own reader takes the video as it is. The timing mode can
-      // have ZXing read all of the picture shown instead (読む範囲 画面).
+      // ZXing reads all of the picture shown, a code anywhere in view as 積読家
+      // does (けにーさん 10-18), drawn into the one canvas: the whole frame
+      // would be a new canvas of its size at every read. The timing mode can
+      // have it read the guide's band only (読む範囲 枠). The browser's own
+      // reader takes the video as it is.
       const band = reader.wasm
         ? document
             .createElement("canvas")
@@ -812,13 +817,21 @@ export function ScanSession({
           if (stopped) return;
           handlers.current.onFrame(codes);
         }
-        timer = setTimeout(look, gapRef.current);
+        // The next frame: as the camera gives a new one, each read once (a
+        // picture read twice only warms the phone), or after the timing
+        // mode's pause.
+        const gap = gapRef.current;
+        if (gap === "frame" && "requestVideoFrameCallback" in element)
+          frameAsked = element.requestVideoFrameCallback(() => void look());
+        else timer = setTimeout(look, gap === "frame" ? FRAME_MS : gap);
       };
       void look();
     })();
     return () => {
       stopped = true;
       if (timer) clearTimeout(timer);
+      if (frameAsked !== undefined)
+        element.cancelVideoFrameCallback(frameAsked);
       stream?.getTracks().forEach((track) => track.stop());
       element.srcObject = null;
       inView.current = {};
