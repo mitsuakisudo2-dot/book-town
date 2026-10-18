@@ -193,6 +193,10 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     notPeople: ["a_book"],
     readers: "nobody",
   },
+  // How many came to each shop last week, a number only, which the owner
+  // reads through shop_visitors() (shop_visitors_weekly); it goes with the
+  // shop.
+  "private.shop_visitor_weeks": { people: {}, readers: "nobody" },
   // A copy's own rows are cleared by forget_in_copies (moving_copies).
   "keep.copies": { people: {}, readers: "nobody" },
 };

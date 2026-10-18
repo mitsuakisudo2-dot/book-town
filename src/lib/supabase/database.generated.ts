@@ -1480,7 +1480,13 @@ export type Database = {
         Args: { book_ids: string[]; notes: string[] };
         Returns: undefined;
       };
-      shop_visitors: { Args: { days: number }; Returns: number };
+      shop_visitors: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          visitors: number;
+          week_end: string;
+        }[];
+      };
       valid_links: { Args: { links: string[] }; Returns: boolean };
     };
     Enums: {

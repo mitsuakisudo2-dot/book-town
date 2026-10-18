@@ -531,20 +531,20 @@ async function main() {
         akiTown.shopMessages.map((message) => [message.readerId, message.text]),
         [[ben.id, "また来ます"]],
       );
-      // Aki hears that one reader stopped by this week, not who.
-      assert.equal(akiTown.ownShop?.weekVisitors?.count, 1);
+      // Aki hears how many stopped by only once the database has counted
+      // the week (Monday 00:00 in Japan), and never who: not yet.
+      const asked = await aki.client.rpc("shop_visitors");
+      assert.ifError(asked.error);
+      assert.deepEqual(asked.data, []);
+      assert.equal(akiTown.ownShop?.weekVisitors, undefined);
       assert.ok(
-        notificationsFor(akiTown).some(
-          (notice) =>
-            notice.text === "この1週間で、1人があなたの本屋に立ち寄りました",
+        !notificationsFor(akiTown).some((notice) =>
+          notice.id.startsWith("visitors:"),
         ),
       );
-      assert.equal(
-        (await townOf(ben))
-          .getSnapshot()
-          .shops.find((shop) => shop.id === akiShopId)?.weekVisitors,
-        undefined,
-      );
+      const benAsked = await ben.client.rpc("shop_visitors");
+      assert.ifError(benAsked.error);
+      assert.deepEqual(benAsked.data, []);
       assert.ok(
         notificationsFor(akiTown).some((notice) =>
           notice.text.includes("ひとことを残しました"),
@@ -566,10 +566,6 @@ async function main() {
       assert.deepEqual(cleared.visits, {});
       assert.deepEqual(cleared.placementReactions, {});
       assert.deepEqual((await townOf(aki)).getSnapshot().shopMessages, []);
-      assert.equal(
-        (await townOf(aki)).getSnapshot().ownShop?.weekVisitors,
-        undefined,
-      );
     },
   );
 
