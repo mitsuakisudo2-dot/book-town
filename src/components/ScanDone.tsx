@@ -18,6 +18,7 @@ export function ScanDone({
   attention,
   sortEnded,
   onLibrary,
+  onTime,
   onClose,
   onBack,
 }: {
@@ -27,6 +28,8 @@ export function ScanDone({
   /** A 連続設定 was on: it ends with this time. */
   sortEnded: boolean;
   onLibrary: () => void;
+  /** この回の本を見る: the library, narrowed to this time's books. */
+  onTime: () => void;
   onClose: () => void;
   onBack: () => void;
 }) {
@@ -90,6 +93,11 @@ export function ScanDone({
         >
           {COPY.library}
         </button>
+        {saved > 0 && (
+          <button type="button" className="btn" onClick={() => leave(onTime)}>
+            {COPY.time}
+          </button>
+        )}
         <button
           type="button"
           className="text-btn"

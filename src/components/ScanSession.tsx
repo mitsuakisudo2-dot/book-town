@@ -12,8 +12,9 @@ import {
   type FormEvent,
 } from "react";
 import { flushSync } from "react-dom";
+import { useRouter } from "next/navigation";
 import { useAccountState } from "../lib/account-session";
-import { useBackLayer } from "../lib/back-layer";
+import { leaveLayers, useBackLayer } from "../lib/back-layer";
 import {
   forgetReader,
   guideRect,
@@ -29,6 +30,7 @@ import {
   markField,
 } from "../lib/coarse-pointer";
 import { normalizeIsbn } from "../lib/books";
+import { libraryPath } from "../lib/paths";
 import {
   heldItem,
   journalOwner,
@@ -417,14 +419,21 @@ export function ScanSession({
   actions,
   notify,
   onClose,
+  onTime,
 }: {
   state: TownState;
   actions: TownActions;
   notify: Notify;
   /** `kept`: whether any book was registered or kept in this session. */
   onClose: (kept: boolean) => void;
+  /**
+   * この回の本を見る, on the library itself: its books there. Elsewhere the
+   * library is opened on them.
+   */
+  onTime?: (session: string) => void;
 }) {
   const id = useId();
+  const router = useRouter();
   const savedIn = useTownBackend();
   const owner = journalOwner(useAccountState(), savedIn);
   const persistence = usePersistenceStatus();
@@ -2165,6 +2174,16 @@ export function ScanSession({
           attention={counts.attention}
           sortEnded={sort !== null}
           onLibrary={() => finish({ quiet: true, ended: true })}
+          onTime={() => {
+            // The scanner's step comes off first: 戻る from there returns
+            // to the page beneath.
+            leaveLayers(() =>
+              onTime
+                ? onTime(session)
+                : router.push(libraryPath({ batch: session })),
+            );
+            finish({ land: false, quiet: true, ended: true });
+          }}
           onClose={() => finish({ land: false, quiet: true, ended: true })}
           onBack={backFromDone}
         />

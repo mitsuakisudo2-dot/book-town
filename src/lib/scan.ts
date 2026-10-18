@@ -333,6 +333,7 @@ export const SCAN_COPY = {
     attention: (n: number) => `${counted(n, "冊")}は要確認です`,
     sortEnded: "連続設定も終了しました",
     library: "ライブラリを見る",
+    time: "この回の本を見る",
     close: "閉じる",
   },
   compact: "コンパクト表示",

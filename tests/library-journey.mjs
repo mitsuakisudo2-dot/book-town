@@ -1851,7 +1851,7 @@ try {
   );
 
   await check(
-    "スキャンした回 narrows the library to one time's books, and 戻る leaves it",
+    "スキャンした回 and この回の本を見る narrow the library to one time's books, and 戻る leaves it",
     async () => {
       const times = await scanningPage();
       await go("/profiles/me/?books=library", times);
@@ -1863,8 +1863,17 @@ try {
         await cameraRunning(times);
         await show(times, ...books.map(isbnOf));
         await expect(count(times)).toHaveText(`${books.length}冊 登録済み`);
-        await finishScanning(times);
+        if (books.length === 2) await finishScanning(times);
       }
+      // この回の本を見る on 完了's summary: the library, on this time's books.
+      await scanner(times).getByRole("button", { name: "完了" }).click();
+      await summary(times)
+        .getByRole("button", { name: "この回の本を見る" })
+        .click();
+      await expect(times).toHaveURL(/\/library\/\?batch=[0-9a-f-]{36}$/);
+      await expect(times.locator(".library-grid li")).toHaveCount(3);
+      await times.goBack();
+      await expect(times).toHaveURL(/\/profiles\/me\//);
       await go("/library/", times);
       const chip = times.getByRole("button", { name: "スキャンした回" });
       await chip.click();

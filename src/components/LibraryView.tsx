@@ -542,6 +542,14 @@ export function LibraryView({
           state={state}
           actions={actions}
           notify={notify}
+          onTime={(session) =>
+            setFilter({
+              shelf: null,
+              unsorted: null,
+              owned: null,
+              batch: session,
+            })
+          }
           onClose={(kept) => {
             setSheet(null);
             // What was just read in comes first: the whole library, newest first.

@@ -872,7 +872,7 @@ body:has(.scan-session) .toast {
 .scan-done-foot {
   flex: none;
   display: grid;
-  gap: 4px;
+  gap: 8px;
 }
 .scan-done-foot .btn {
   min-height: 52px;
