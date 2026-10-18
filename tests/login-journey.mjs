@@ -4035,6 +4035,15 @@ try {
         const items = nine.locator(".profile-nine-editor-item strong");
         await expect(items).toHaveText(["ソラリス"]);
         await shot("nine-elsewhere-waits");
+        // キャンセル leaves the work it never showed, still waiting.
+        await nine
+          .getByRole("button", { name: "キャンセル", exact: true })
+          .click();
+        await expect(nine).toHaveCount(0);
+        await section.getByRole("button", { name: "編集" }).click();
+        await expect(note).toContainText(
+          "書きかけより新しい人生の9冊が保存されています",
+        );
         await note
           .getByRole("button", { name: "書きかけを開く", exact: true })
           .click();
@@ -4191,6 +4200,96 @@ try {
         await page.unroute(supabase + "/rest/v1/rpc/save_shelves", answer);
         await page.unroute(supabase + "/rest/v1/library_entries*", library);
         delete profile.nine_version;
+        town = was;
+      }
+    },
+  );
+
+  await check(
+    "a new poster turned away waits on its page, and opens again as a new one",
+    async () => {
+      const was = town;
+      town = { posters: [] };
+      const HEADING = "断られたポスターの見出し";
+      let refuse = true;
+      const answer = (route) => {
+        const request = route.request();
+        if (request.method() === "GET") return route.fallback();
+        const rows = [].concat(JSON.parse(request.postData()));
+        if (refuse)
+          return route.fulfill({
+            status: 403,
+            contentType: "application/json",
+            body: JSON.stringify({
+              code: "42501",
+              message:
+                'new row violates row-level security policy for table "posters"',
+            }),
+          });
+        const at = new Date().toISOString();
+        for (const row of rows)
+          town.posters.push({
+            allow_display: true,
+            ...row,
+            created_at: at,
+            updated_at: at,
+          });
+        return route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify(rows.map((row) => ({ id: row.id }))),
+        });
+      };
+      await page.route(supabase + "/rest/v1/posters*", answer);
+      try {
+        await page.goto(base + "/posters/new/?book=solaris");
+        const heading = page.getByRole("textbox", { name: "見出し" });
+        await heading.fill(HEADING);
+        await page
+          .getByRole("textbox", { name: "この本のこと" })
+          .fill("断られても、言葉はここに残る。");
+        await page
+          .getByRole("button", { name: "貼り出す", exact: true })
+          .click();
+        await expect(page).toHaveURL(/\/posters\/\?id=/);
+        const id = new URL(page.url()).searchParams.get("id");
+        // Turned away: the poster is not there, and its work waits under
+        // the poster it went as, not in the place of a new one.
+        await expect(
+          page.getByRole("heading", {
+            name: "このポスターは、いまは貼られていません。",
+          }),
+        ).toBeVisible();
+        await expect(
+          page.getByText(
+            "このポスターの書きかけを、このブラウザに残しています",
+          ),
+        ).toBeVisible();
+        expect(await keptDraftKeys(POSTER_DRAFTS)).toEqual([
+          user.id + ":poster:" + id,
+        ]);
+        await shot("poster-refused-kept");
+        await page.getByRole("link", { name: "書きかけを開く" }).click();
+        await expect(heading).toHaveValue(HEADING);
+        await expect(
+          page.getByText(
+            "もとのポスターが見つからないため、書きかけを新しいポスターとして開いています",
+          ),
+        ).toBeVisible();
+        await shot("poster-refused-opened");
+        // Put up as a new poster: its work is let go once the account has it.
+        refuse = false;
+        await page
+          .getByRole("button", { name: "貼り出す", exact: true })
+          .click();
+        await expect(page).toHaveURL(/\/posters\/\?id=/);
+        expect(new URL(page.url()).searchParams.get("id")).not.toBe(id);
+        await expect(
+          page.getByRole("heading", { name: HEADING, level: 1 }),
+        ).toBeVisible();
+        await expect.poll(() => keptDraftKeys(POSTER_DRAFTS)).toEqual([]);
+      } finally {
+        await page.unroute(supabase + "/rest/v1/posters*", answer);
         town = was;
       }
     },

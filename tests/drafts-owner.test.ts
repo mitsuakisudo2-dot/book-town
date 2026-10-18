@@ -23,6 +23,7 @@ import {
 } from "../src/lib/poster-draft";
 import type { Poster } from "../src/lib/posters";
 import type { PersistenceStatus } from "../src/lib/types";
+import type { Write } from "../src/lib/town-remote";
 
 // Post and poster drafts are kept by owner, like every other kept draft, and
 // what a browser kept before they were is given to the first owner to come.
@@ -459,6 +460,8 @@ check(
 function accountTown(posters: Poster[]) {
   const listeners = new Set<() => void>();
   let status: PersistenceStatus = "saving";
+  let generation = 1;
+  let elsewhere: Write[] = [];
   const town = { posters };
   const saves: PosterSaves = {
     subscribe(listener) {
@@ -467,13 +470,24 @@ function accountTown(posters: Poster[]) {
     },
     getSnapshot: () => town,
     getPersistenceSnapshot: () => status,
+    getGeneration: () => generation,
+    getMissedSnapshot: () => ({ elsewhere }),
   };
   return {
     saves,
-    report(next: PersistenceStatus, held = town.posters) {
+    report(
+      next: PersistenceStatus,
+      held = town.posters,
+      changed: Write[] = [],
+    ) {
       status = next;
       town.posters = held;
+      elsewhere = changed;
       listeners.forEach((listener) => listener());
+    },
+    /** Another town shown: signed out, or another account. */
+    switchTown() {
+      generation += 1;
     },
   };
 }
@@ -530,5 +544,63 @@ check("a poster's work is kept until the account has the very poster", () => {
   more.report("saved");
   assert.deepEqual(store.get(key), next);
 });
+
+check("a poster saved in a round that missed something else is let go", () => {
+  const key = posterWorkKey({ owner: "u-1", posterId: "p-1" });
+  const sent = { ...posterWork("書きかけの見出し") };
+  const store = posterDrafts(memory());
+  store.set(key, sent);
+  const town = accountTown([asPoster(sent)]);
+  keepPosterUntilSaved(store, key, "p-1", town.saves);
+  // Read again: the account has the very poster sent.
+  town.report("recovered", [asPoster(sent)]);
+  assert.equal(store.get(key), null);
+});
+
+check("signed out before the save settled, the work stays kept", () => {
+  const key = posterWorkKey({ owner: "u-1", posterId: "p-1" });
+  const sent = { ...posterWork("書きかけの見出し") };
+  const store = posterDrafts(memory());
+  store.set(key, sent);
+  const town = accountTown([asPoster(sent)]);
+  keepPosterUntilSaved(store, key, "p-1", town.saves);
+  // The visitor's town is saved; the account's outbox may still send it.
+  town.switchTown();
+  town.report("saved", []);
+  assert.deepEqual(store.get(key), sent);
+});
+
+check(
+  "work begun over a save turned away goes on from the poster the account has",
+  () => {
+    const key = posterWorkKey({ owner: "u-1", posterId: "p-1" });
+    const before = posterWork("海を前にした夜に");
+    const sent = { ...posterWork("送った見出し"), from: posterMark(before) };
+    const store = posterDrafts(memory());
+    store.set(key, sent);
+    const town = accountTown([asPoster(sent)]);
+    keepPosterUntilSaved(store, key, "p-1", town.saves);
+    // 直す again while it is on its way: begun over the version sent.
+    const next = { ...posterWork("続きの見出し"), from: posterMark(sent) };
+    store.set(key, next);
+    town.report("recovered", [asPoster(before)]);
+    assert.equal(posterWorkState(store.get(key)!, posterMark(before)), "fresh");
+    // Changed on another device first instead: the work is older than it.
+    store.set(key, sent);
+    const raced = accountTown([asPoster(sent)]);
+    keepPosterUntilSaved(store, key, "p-1", raced.saves);
+    store.set(key, next);
+    const elsewhere = asPoster(posterWork("別の端末の見出し"));
+    raced.report(
+      "recovered",
+      [elsewhere],
+      [{ kind: "update-poster", id: "p-1", patch: {} as never }],
+    );
+    assert.equal(
+      posterWorkState(store.get(key)!, posterMark(elsewhere)),
+      "stale",
+    );
+  },
+);
 
 console.log(`${passed} owned draft checks passed.`);
