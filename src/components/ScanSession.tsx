@@ -38,6 +38,7 @@ import {
   undoScan,
   useJournal,
   useJournalKept,
+  type ScanSort,
   type Sent,
 } from "../lib/library-journal";
 import {
@@ -85,6 +86,7 @@ import {
   type TimingSettings,
 } from "../lib/scan-timing";
 import { BarcodeRegister } from "./BarcodeRegister";
+import { ScanSortSheet } from "./ScanSortSheet";
 import { ScanTiming } from "./ScanTiming";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
@@ -408,6 +410,9 @@ export function ScanSession({
   const [menuFor, setMenuFor] = useState<string | null>(null);
   /** The card whose ＋本棚 is open: the reader's shelves to put it on. */
   const [shelvesFor, setShelvesFor] = useState<string | null>(null);
+  /** 連続設定: what the next books read are given, until 解除 or 完了. */
+  const [sort, setSort] = useState<ScanSort | null>(null);
+  const [sortOpen, setSortOpen] = useState(false);
   /** The camera made larger (カメラ集中表示), for a code it does not catch. */
   const [large, setLarge] = useState(false);
   /** Books entered by hand whose save is not confirmed yet. */
@@ -438,9 +443,10 @@ export function ScanSession({
   const reads = useRef<SessionReads>(NO_READS);
   const inView = useRef<InView>({});
   const paused = useRef(false);
+  // Nothing new is read while a menu or the 連続設定 is open (資料 仕様メモ06).
   useEffect(() => {
-    paused.current = menuFor !== null || shelvesFor !== null;
-  }, [menuFor, shelvesFor]);
+    paused.current = menuFor !== null || shelvesFor !== null || sortOpen;
+  }, [menuFor, shelvesFor, sortOpen]);
   const manualCount = useRef(0);
   const closed = useRef(false);
   const layer = useRef<HTMLDivElement>(null);
@@ -456,9 +462,17 @@ export function ScanSession({
   }, []);
 
   // What the async camera loop and the sends read: the latest render's.
-  const latest = useRef({ owner, ready, online, savedIn, manual, cards });
+  const latest = useRef({
+    owner,
+    ready,
+    online,
+    savedIn,
+    manual,
+    sortOpen,
+    cards,
+  });
   useEffect(() => {
-    latest.current = { owner, ready, online, savedIn, manual, cards };
+    latest.current = { owner, ready, online, savedIn, manual, sortOpen, cards };
   });
 
   /** Notes a moment in the timing mode's record; nothing without the mode. */
@@ -543,7 +557,7 @@ export function ScanSession({
   );
 
   // The sends this session started that have not answered yet (openBD is
-  // being asked): ［終わる］ waits for them to say where those books went.
+  // being asked): ［完了］ waits for them to say where those books went.
   const inFlight = useRef(new Set<Promise<Sent[]>>());
   const send = useCallback(
     (reader: string, ids: string[]) => {
@@ -642,6 +656,7 @@ export function ScanSession({
       session,
       isbn,
       via,
+      ...(sort ? { sort } : {}),
       ...(known
         ? {
             known: {
@@ -1075,7 +1090,7 @@ export function ScanSession({
   }
 
   /** 読了・積読・読書中 on a card: set, or pressed again, taken off. */
-  function sort(bookId: string, status: ReadingStatus) {
+  function shelveAs(bookId: string, status: ReadingStatus) {
     const lit = state.libraryEntries[bookId]?.status === status;
     change(bookId, { status: lit ? null : status });
   }
@@ -1144,7 +1159,7 @@ export function ScanSession({
   };
 
   /**
-   * ［終わる］, ✕, 戻る, Escape: closes at once, and says what was read in.
+   * ［完了］, ✕, 戻る, Escape: closes at once, and says what was read in.
    * While a title is still being asked of openBD (OPENBD_TIMEOUT_MS at
    * most), the notice waits for the answer, to say where that book went.
    */
@@ -1198,8 +1213,8 @@ export function ScanSession({
     if (!field.current)
       layer.current?.querySelector<HTMLElement>("button")?.focus();
     const key = (event: KeyboardEvent) => {
-      // The one-book form on top handles its own keys.
-      if (latest.current.manual) return;
+      // The one-book form and the 連続設定 on top handle their own keys.
+      if (latest.current.manual || latest.current.sortOpen) return;
       if (event.key === "Escape") {
         event.preventDefault();
         // The Escape that cancels a kana conversion in the ISBN field is the
@@ -1266,6 +1281,16 @@ export function ScanSession({
     }
     return on;
   }, [state.libraryShelfBooks]);
+  /** What the 連続設定 gives, in a few words: 持っている, the usual, unsaid. */
+  const sortWords = (now: ScanSort) => [
+    ...STATUS_BUTTONS.filter((button) => button.status === now.status).map(
+      (button) => button.label,
+    ),
+    ...(now.owned === "no" ? [SCAN_COPY.notOwned] : []),
+    ...handShelves
+      .filter((shelf) => now.shelves.includes(shelf.id))
+      .map((shelf) => shelf.name),
+  ];
   /**
    * The library's book a card is now: its own, or, for one found in the
    * library while it was sent, that one.
@@ -1526,6 +1551,59 @@ export function ScanSession({
             <span>{SAYS[notice.say]}</span>
           </p>
         )}
+        {owner && (
+          <div className={"scan-sort" + (sort ? " is-on" : "")}>
+            {sort ? (
+              <>
+                <div className="scan-sort-head">
+                  <p className="scan-sort-title">{SCAN_COPY.sort.on}</p>
+                  <button
+                    type="button"
+                    className="text-btn"
+                    onClick={() => setSortOpen(true)}
+                  >
+                    {SCAN_COPY.sort.change}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-btn"
+                    onPointerDown={typing ? keepFocus : undefined}
+                    onClick={() => {
+                      refocus();
+                      setSort(null);
+                    }}
+                  >
+                    {SCAN_COPY.sort.off}
+                  </button>
+                </div>
+                <p className="scan-sort-now">
+                  {sortWords(sort).map((word) => (
+                    <span key={word} className="scan-sort-tag">
+                      <Icon name="check" size={14} />
+                      {word}
+                    </span>
+                  ))}
+                  <span className="scan-sort-next">{SCAN_COPY.sort.next}</span>
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="scan-sort-text">
+                  <p className="scan-sort-title">{SCAN_COPY.sort.name}</p>
+                  <p className="scan-sort-note">{SCAN_COPY.sort.note}</p>
+                </div>
+                <button
+                  type="button"
+                  className="btn scan-sort-open"
+                  onClick={() => setSortOpen(true)}
+                >
+                  {SCAN_COPY.sort.set}
+                  <Icon name="chevron" size={16} />
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <ol
           className="scan-list"
           ref={list}
@@ -1635,7 +1713,7 @@ export function ScanSession({
                         className="chip"
                         aria-pressed={status === button.status}
                         onPointerDown={typing ? keepFocus : undefined}
-                        onClick={() => sort(libraryId, button.status)}
+                        onClick={() => shelveAs(libraryId, button.status)}
                       >
                         {button.label}
                       </button>
@@ -1735,6 +1813,18 @@ export function ScanSession({
           </button>
         </div>
       </div>
+      {sortOpen && (
+        <ScanSortSheet
+          sort={sort}
+          statuses={STATUS_BUTTONS}
+          shelves={handShelves}
+          onSet={(next) => {
+            setSort(next);
+            setSortOpen(false);
+          }}
+          onClose={() => setSortOpen(false)}
+        />
+      )}
       {manual && (
         <BarcodeRegister
           state={state}

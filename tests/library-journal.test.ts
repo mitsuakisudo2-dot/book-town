@@ -10,6 +10,7 @@ import {
   journalOwner,
   keepRead,
   readJournal,
+  readSort,
   refusedItems,
   retryRefused,
   sendJournal,
@@ -1131,6 +1132,104 @@ async function main() {
     assert.deepEqual(both(tabA), [b.id]);
     assert.deepEqual(both(staleB), [b.id]);
   });
+
+  await check(
+    "a 連続設定 read with a book is put on it as a new book, never on one the library had",
+    async () => {
+      const storage = fakeStorage();
+      const demo = createTownStore(createMemoryRepository());
+      demo.initialize();
+      const shelf = demo.actions.makeLibraryShelf("お気に入りの漫画", "");
+      assert.ok(shelf);
+      const journal = createLibraryJournal(() => storage);
+      const town = journalTownOf(demo, () => "demo");
+      const sort = {
+        status: "finished" as const,
+        owned: "no" as const,
+        shelves: [shelf],
+      };
+      const session = journal.newSession();
+      keepRead(journal, "demo", {
+        session,
+        isbn: X,
+        via: "scan",
+        known: { title: "華氏451度", author: "" },
+        sort,
+      });
+      await sendJournal(journal, "demo", town);
+      const id = "isbn-" + X;
+      const entry = demo.getSnapshot().libraryEntries[id];
+      assert.equal(entry.status, "finished");
+      assert.equal(entry.owned, "no");
+      assert.ok(
+        demo
+          .getSnapshot()
+          .libraryShelfBooks.some(
+            (row) => row.bookId === id && row.shelfId === shelf,
+          ),
+      );
+      // 未指定 writes no status; 持っている is written.
+      keepRead(journal, "demo", {
+        session,
+        isbn: Y,
+        via: "scan",
+        known: { title: "道草", author: "" },
+        sort: { status: null, owned: "yes", shelves: [] },
+      });
+      await sendJournal(journal, "demo", town);
+      const other = demo.getSnapshot().libraryEntries["isbn-" + Y];
+      assert.equal(other.status, null);
+      assert.equal(other.owned, "yes");
+      // Read again under another setting: in the library, it stays as it was.
+      keepRead(journal, "demo", {
+        session,
+        isbn: X,
+        via: "scan",
+        sort: { status: "reading", owned: "yes", shelves: [] },
+      });
+      const again = await sendJournal(journal, "demo", town);
+      assert.deepEqual(
+        again.map((entry) => entry.result),
+        ["already"],
+      );
+      assert.equal(demo.getSnapshot().libraryEntries[id].status, "finished");
+      assert.equal(demo.getSnapshot().libraryEntries[id].owned, "no");
+      // Kept on the device as it was set, and a broken one is let go with
+      // the read kept.
+      assert.deepEqual(readSort(sort), sort);
+      assert.equal(
+        readSort({ status: "tsundoku", owned: "maybe", shelves: [] }),
+        undefined,
+      );
+      assert.equal(
+        readSort({ status: "done", owned: "yes", shelves: [] }),
+        undefined,
+      );
+      const kept = readJournal(
+        JSON.stringify({
+          version: 1,
+          items: [
+            {
+              kind: "scan",
+              id: "s-1",
+              page: "p",
+              session: "s",
+              isbn: X,
+              via: "scan",
+              bookId: "isbn-" + X,
+              title: "華氏451度",
+              state: "ready",
+              at: new Date().toISOString(),
+              sort: { status: "finished", owned: "yes", shelves: [7] },
+            },
+          ],
+        }),
+        Date.now(),
+      );
+      assert.equal(kept.length, 1);
+      assert.equal(kept[0].sort, undefined);
+    },
+  );
 
   await check("［取り消す］ is decided when it is pressed", async () => {
     const db = database();

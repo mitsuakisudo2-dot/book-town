@@ -1546,6 +1546,81 @@ try {
   );
 
   await check(
+    "連続設定 gives the next books read their status and 所有, until 解除",
+    async () => {
+      const sorting = await scanningPage();
+      await go("/profiles/me/?books=library", sorting);
+      await openScanner(sorting);
+      await cameraRunning(sorting);
+      const first = isbnOf(38);
+      await show(sorting, first);
+      await expect(count(sorting)).toHaveText("1冊 登録済み");
+      await scanner(sorting).getByRole("button", { name: "設定する" }).click();
+      const sheet = sorting.getByRole("dialog", { name: "連続設定" });
+      // 持っている starts on, with nothing else chosen.
+      const owned = sheet.getByRole("switch", { name: /持っている/ });
+      await expect(owned).toBeChecked();
+      await expect(sheet.getByRole("radio", { name: "未指定" })).toBeChecked();
+      // 積読 and 持っている off never stand together.
+      await sheet.getByRole("radio", { name: "積読" }).click();
+      await owned.click();
+      await expect(owned).not.toBeChecked();
+      await expect(sheet.getByRole("radio", { name: "未指定" })).toBeChecked();
+      await sheet.getByRole("radio", { name: "積読" }).click();
+      await expect(owned).toBeChecked();
+      await owned.click();
+      await sheet.getByRole("radio", { name: "読了" }).click();
+      await expect(sheet).toContainText("本棚はライブラリでつくれます");
+      // While it is open, nothing is read.
+      await sorting.evaluate(
+        (code) => window.__barcodes.push(code),
+        isbnOf(39),
+      );
+      await sorting.waitForTimeout(1200);
+      expect(await sorting.evaluate(() => window.__barcodes.length)).toBe(1);
+      await sheet.getByRole("button", { name: "この設定でスキャン" }).click();
+      await expect(sheet).toHaveCount(0);
+      await expect(scanner(sorting).locator(".scan-sort")).toContainText(
+        "連続設定中",
+      );
+      await expect(scanner(sorting).locator(".scan-sort")).toContainText(
+        "読了未所持次から",
+      );
+      // The book held meanwhile is read now, under the setting; the one
+      // read before keeps what it had.
+      await expect(count(sorting)).toHaveText("2冊 登録済み");
+      const entries = async () => (await stored(sorting)).libraryEntries;
+      await expect
+        .poll(async () => {
+          const now = (await entries())["isbn-" + isbnOf(39)];
+          return [now.status, now.owned];
+        })
+        .toEqual(["finished", "no"]);
+      expect((await entries())["isbn-" + first].status).toBeNull();
+      await expect(
+        latest(sorting).getByRole("button", { name: "読了" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        latest(sorting).getByRole("button", { name: "未所持" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      // A book the library had stays as it was.
+      await show(sorting, first);
+      await expect(remark(sorting)).toContainText("この回でもう入れました");
+      expect((await entries())["isbn-" + first].status).toBeNull();
+      // 解除: the next book is given nothing.
+      await scanner(sorting).getByRole("button", { name: "解除" }).click();
+      await expect(scanner(sorting).locator(".scan-sort")).toContainText(
+        "設定する",
+      );
+      await show(sorting, isbnOf(40));
+      await expect(count(sorting)).toHaveText("3冊 登録済み");
+      const last = (await entries())["isbn-" + isbnOf(40)];
+      expect([last.status, last.owned]).toEqual([null, null]);
+      await sorting.context().close();
+    },
+  );
+
+  await check(
     "with no WebAssembly either, the browser cannot read barcodes",
     async () => {
       const bare = await browser.newContext(phone);

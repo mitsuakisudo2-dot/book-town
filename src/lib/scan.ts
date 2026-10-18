@@ -290,6 +290,25 @@ export const SCAN_COPY = {
   shelf: "本棚",
   shelvesOf: (name: string) => `${name}を入れる本棚`,
   noShelves: "本棚はライブラリでつくれます",
+  /** 連続設定 (資料 3章): the bar under the camera, and its sheet. */
+  sort: {
+    name: "連続設定",
+    note: "設定すると次の本から自動分類",
+    set: "設定する",
+    on: "連続設定中",
+    change: "変更",
+    off: "解除",
+    next: "次から",
+    lead: "これから読み取る本に、自動で設定します",
+    status: "読書状況",
+    none: "未指定",
+    owned: "持っている",
+    ownedOff: "OFFで「未所持」に登録します",
+    shelves: "追加する本棚",
+    several: "複数選択できます",
+    go: "この設定でスキャン",
+    anytime: "設定はいつでも変更・解除できます",
+  },
   paused: "一時停止しています",
   banner: {
     offline:

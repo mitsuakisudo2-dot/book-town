@@ -1710,6 +1710,9 @@ export function journalTownOf(
     register: (book, via, bookId) =>
       store.actions.registerBook(book, via, bookId),
     toggleLibrary: (bookId) => store.actions.toggleLibrary(bookId),
+    changeLibrary: (bookId, set) => {
+      store.actions.changeLibrary([bookId], set);
+    },
   };
 }
 

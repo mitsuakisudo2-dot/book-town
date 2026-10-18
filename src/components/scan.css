@@ -257,6 +257,186 @@
   color: var(--ink);
 }
 
+/* 連続設定 (資料 3章): what the next books are given, under the camera. */
+.scan-sort {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.scan-sort.is-on {
+  display: grid;
+  justify-content: stretch;
+  gap: 2px;
+  margin: 0 -16px;
+  padding: 4px 16px 8px;
+  background: color-mix(in srgb, var(--green) 8%, var(--paper));
+}
+.scan-sort-text {
+  min-width: 0;
+}
+.scan-sort-title {
+  font-size: var(--t-meta);
+  font-weight: 700;
+  line-height: 1.5;
+}
+.scan-sort-note {
+  font-size: var(--t-cap);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.scan-sort-open {
+  flex: none;
+  gap: 2px;
+  padding-right: 10px;
+}
+.scan-sort-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.scan-sort-head .scan-sort-title {
+  flex: 1;
+  color: var(--green);
+}
+.scan-sort-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-cap);
+  line-height: 1.5;
+}
+.scan-sort-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px 10px;
+  border: 1px solid var(--green);
+  border-radius: var(--r-pill);
+  color: var(--green);
+  font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.scan-sort-next {
+  margin-left: auto;
+  color: var(--ink-2);
+}
+/* The sheet (Figma v4's 02). */
+.scan-sort-sheet {
+  display: grid;
+  gap: 16px;
+}
+.scan-sort-sheet h3,
+.scan-sort-shelves legend {
+  margin-bottom: 8px;
+  font-size: var(--t-meta);
+  font-weight: 700;
+}
+.scan-sort-lead,
+.scan-sort-foot {
+  font-size: var(--t-cap);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.scan-sort-foot {
+  text-align: center;
+}
+.scan-sort-statuses {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.scan-sort-statuses .chip {
+  justify-content: center;
+  min-width: 0;
+  padding: 0 6px;
+  border-radius: var(--r-box);
+}
+.scan-sort-owned {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+.scan-sort-owned span {
+  display: grid;
+}
+.scan-sort-owned strong {
+  font-size: var(--t-meta);
+}
+.scan-sort-owned small,
+.scan-sort-shelves legend small {
+  font-size: var(--t-cap);
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.scan-sort-shelves legend {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+/* 持っている: a switch, on the right; the knob is drawn, so no pseudo
+   element is needed on the input. */
+.scan-switch {
+  flex: none;
+  appearance: none;
+  width: 52px;
+  height: 32px;
+  margin: 0;
+  border-radius: var(--r-pill);
+  background:
+    radial-gradient(circle at 16px 50%, var(--sheet) 12px, transparent 13px),
+    var(--line-2);
+  cursor: pointer;
+}
+.scan-switch:checked {
+  background:
+    radial-gradient(
+      circle at calc(100% - 16px) 50%,
+      var(--sheet) 12px,
+      transparent 13px
+    ),
+    var(--green);
+}
+.scan-sort-shelves {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.scan-sort-shelf {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+}
+.scan-sort-shelf input {
+  width: 20px;
+  height: 20px;
+}
+.scan-sort-shelf span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.scan-sort-go {
+  min-height: 52px;
+}
+
 /* This time's books, newest first: what was read, what it came to, and
    読了・積読・読書中 to press there and then, or never. The list keeps its
    place by hand (ScanSession.tsx), so it does not let the browser move it. */
@@ -368,7 +548,8 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
-.scan-item :is(.scan-item-statuses, .scan-item-marks, .scan-item-shelves)
+.scan-item
+  :is(.scan-item-statuses, .scan-item-marks, .scan-item-shelves)
   .chip {
   justify-content: center;
   min-width: 0;
