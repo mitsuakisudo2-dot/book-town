@@ -22,7 +22,7 @@ import { letterPageOf, postPageOf } from "./letter";
 import { posterTitle, type Poster } from "./posters";
 import { coverHidden } from "./hidden-words";
 import { shownToOthers } from "./visibility";
-import { counted, someCount } from "./words";
+import { someCount } from "./words";
 
 export interface Notice {
   id: string;
@@ -82,6 +82,25 @@ const ownPosterWords = (
   if (title === "ポスター") return "あなたのポスター";
   return "あなたのポスター" + (title.startsWith("『") ? title : quote(title));
 };
+
+/**
+ * Who liked: 凪さん, 凪さんとほか2人, 匿名の読書家, 凪さん、ほか1人、匿名の読書家1人.
+ * Only the lead is named; an anonymous liker is never named nor told apart.
+ */
+export function likersWords(
+  lead: string | undefined,
+  others: number,
+  anonymous: number,
+): string {
+  const parts = [
+    lead && lead + "さん",
+    lead && someCount(others, "人") && "ほか" + someCount(others, "人"),
+    anonymous &&
+      "匿名の読書家" +
+        (lead || anonymous > 1 ? someCount(anonymous, "人") : ""),
+  ].filter(Boolean);
+  return parts.length === 2 ? parts.join("と") : parts.join("、");
+}
 
 /**
  * Notices are derived from what is actually in this browser's town: replies and reactions
@@ -173,24 +192,30 @@ export function notificationsFor(
         href: post.bookId ? bookPath(post.bookId) : "/profiles/me/",
       });
   }
-  // いいね: one notice per reader and post, with how many times they pressed.
+  // いいね: one notice per post, by how many readers, never how many taps.
+  // The newest named liker leads; the rest are counted, and anonymous ones
+  // only ever as 匿名の読書家. A new liker makes it new; another tap does not.
   for (const post of state.posts) {
     if (post.authorId !== ME_ID || old(post)) continue;
-    for (const liker of post.likers ?? []) {
-      const who = name(liker.readerId);
-      if (!who) continue;
-      notices.push({
-        id: `like:${post.id}:${liker.readerId}`,
-        readerId: liker.readerId,
-        createdAt: liker.at,
-        text: `${who}さんが、あなたの投稿に${liker.taps > 1 ? counted(liker.taps, "回") : ""}いいねしました ${quote(post.body)}`,
-        href: pageOr(
-          state,
-          post,
-          post.bookId ? bookPath(post.bookId) : "/profiles/me/",
-        ),
-      });
-    }
+    const named = (post.likers ?? [])
+      .filter((liker) => findReader(state, liker.readerId))
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    const anonymous = post.anonymousLikers ?? 0;
+    const people = named.length + anonymous;
+    if (!people) continue;
+    const lead = named[0];
+    notices.push({
+      id: `likes:${post.id}:${people}`,
+      // No face for 匿名の読書家, not even the viewer's own.
+      readerId: lead?.readerId ?? "",
+      createdAt: lead?.at ?? post.createdAt,
+      text: `${likersWords(lead && name(lead.readerId), named.length - 1, anonymous)}があなたの投稿にいいねしました ${quote(post.body)}`,
+      href: pageOr(
+        state,
+        post,
+        post.bookId ? bookPath(post.bookId) : "/profiles/me/",
+      ),
+    });
   }
   const followed = new Set(
     state.shops
