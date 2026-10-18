@@ -1851,6 +1851,60 @@ try {
   );
 
   await check(
+    "コンパクト表示 puts each book on one line with its statuses, and the device keeps it",
+    async () => {
+      const tight = await scanningPage();
+      await go("/profiles/me/?books=library", tight);
+      await openScanner(tight);
+      await cameraRunning(tight);
+      const [one, two] = [71, 72].map(isbnOf);
+      await show(tight, one, two);
+      await expect(count(tight)).toHaveText("2冊 登録済み");
+      const toggle = scanner(tight).getByRole("button", {
+        name: "コンパクト表示",
+      });
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      const tall = (await latest(tight).boundingBox()).height;
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      await expect(scanner(tight).locator(".scan-item.is-compact")).toHaveCount(
+        2,
+      );
+      expect((await latest(tight).boundingBox()).height).toBeLessThan(tall / 2);
+      // The title and 読了・積読・読書中 stay; the rest waits for the toggle.
+      await expect(cardTitle(tight)).toHaveText("試験の本 72");
+      await expect(
+        latest(tight).getByRole("button", { name: "未所持" }),
+      ).toBeHidden();
+      await latest(tight).getByRole("button", { name: "積読" }).click();
+      await expect
+        .poll(
+          async () =>
+            (await stored(tight)).libraryEntries["isbn-" + two].status,
+        )
+        .toBe("tsundoku");
+      // Back as it was, with what was pressed meanwhile.
+      await toggle.click();
+      await expect(scanner(tight).locator(".scan-item.is-compact")).toHaveCount(
+        0,
+      );
+      await expect(
+        latest(tight).getByRole("button", { name: "未所持" }),
+      ).toBeVisible();
+      await expect(
+        latest(tight).getByRole("button", { name: "積読" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      // This device keeps the choice for the next time.
+      await toggle.click();
+      expect(await finishScanning(tight)).toContain("2冊の登録が完了しました");
+      await openScanner(tight);
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      await scanner(tight).getByRole("button", { name: "閉じる" }).click();
+      await tight.context().close();
+    },
+  );
+
+  await check(
     "スキャンした回 and この回の本を見る narrow the library to one time's books, and 戻る leaves it",
     async () => {
       const times = await scanningPage();
