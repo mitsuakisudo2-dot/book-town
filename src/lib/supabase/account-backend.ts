@@ -103,7 +103,12 @@ export function passkeyFailure(error: unknown): AccountFailure {
   // supabase-js says so itself when the browser has no WebAuthn.
   if (!isAuthApiError(error) && /WebAuthn/i.test(auth.message ?? ""))
     return "passkey-unavailable";
-  return authFailure(auth);
+  // Of the sign-in's own answers, only a wait or a lost connection are
+  // the same here; the rest are about codes this screen does not have.
+  const failure = authFailure(auth);
+  return failure === "rate-limited" || failure === "network"
+    ? failure
+    : "passkey-failed";
 }
 
 const isBrowserPasskeyError = (
@@ -194,7 +199,10 @@ export function supabaseAccountBackend(
     },
     async removePasskey(id) {
       const { error } = await client.auth.passkey.delete({ passkeyId: id });
-      return error ? passkeyFailure(error) : null;
+      // Already gone (removed in another tab, 404): what was asked is so.
+      if (!error || error.status === 404) return null;
+      const failure = passkeyFailure(error);
+      return failure === "passkey-unknown" ? "passkey-failed" : failure;
     },
     async signOut() {
       await client.auth.signOut();

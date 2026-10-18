@@ -6253,8 +6253,13 @@ try {
         await at.getByRole("button", { name: "戻る" }).click();
         await at.getByRole("button", { name: "ログアウト" }).click();
         await passkeyIn.click();
-        await expect(at.locator("#account-error")).toContainText(
+        await expect(at.locator("#account-passkey-error")).toContainText(
           "このパスキーでは入れませんでした",
+        );
+        // Its line is the passkey's, not the address field's.
+        await expect(at.getByLabel("メールアドレス")).not.toHaveAttribute(
+          "aria-describedby",
+          "account-passkey-error",
         );
         await expect(
           at.getByRole("heading", { name: "本の街に入る" }),

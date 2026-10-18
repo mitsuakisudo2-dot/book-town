@@ -252,6 +252,13 @@ async function main() {
           `client.auth.passkey.delete({ passkeyId: "${id}" })`,
         );
         assert.equal(removed.error, null);
+        // Removed again (a list left open in another tab), it is not there:
+        // the account page takes that as done.
+        const again = await call(
+          page,
+          `client.auth.passkey.delete({ passkeyId: "${id}" })`,
+        );
+        assert.equal(again.error?.status, 404);
         await call(page, "client.auth.signOut()");
         // The device still offers it; the auth server no longer knows it.
         const refused = await call(page, "client.auth.signInWithPasskey()");

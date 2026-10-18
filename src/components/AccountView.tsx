@@ -162,12 +162,17 @@ function SignIn() {
   }
 
   // A passkey says whose it is: no address to type, no code to wait for.
+  // Its own line: a passkey's failure is not about the address field.
+  const [passkeyError, setPasskeyError] = useState("");
   async function signInWithPasskey() {
     setBusy(true);
     setError("");
+    setPasskeyError("");
     const result = await accountActions.signInWithPasskey();
+    // Signed in, the page waits for the profile with nothing to press.
+    if (result.ok) return;
     setBusy(false);
-    if (!result.ok) setError(result.message);
+    setPasskeyError(result.message);
   }
 
   async function verify(event: FormEvent) {
@@ -226,6 +231,7 @@ function SignIn() {
             パスキーでログイン
           </button>
         )}
+        <ErrorLine id="account-passkey-error" message={passkeyError} />
       </>
     );
 
@@ -780,7 +786,7 @@ function Passkeys({ onClose }: { onClose: () => void }) {
     const result = await accountActions.removePasskey(id);
     setBusy(false);
     setAsking(null);
-    if (!result.ok) return setError(result.message);
+    if (!result.ok) setError(result.message);
     await load();
   }
 
@@ -916,10 +922,16 @@ function SignOut({ leave = false }: { leave?: boolean }) {
   );
 }
 
-function ErrorLine({ message }: { message: string }) {
+function ErrorLine({
+  message,
+  id = "account-error",
+}: {
+  message: string;
+  id?: string;
+}) {
   if (!message) return null;
   return (
-    <p id="account-error" className="profile-link-error" role="alert">
+    <p id={id} className="profile-link-error" role="alert">
       {message}
     </p>
   );

@@ -972,6 +972,12 @@ async function main() {
       passkeyFailure(server("over_request_rate_limit", 429)),
       "rate-limited",
     );
+    // A session ended elsewhere is not about a code this screen lacks.
+    assert.equal(
+      passkeyFailure(server("session_not_found", 403)),
+      "passkey-failed",
+    );
+    assert.equal(passkeyFailure({ message: "Failed to fetch" }), "network");
     assert.equal(failureMessages["passkey-cancelled"], "");
     assert.match(failureMessages["passkey-too-many"], /10個まで/);
   });
