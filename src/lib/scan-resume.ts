@@ -1,7 +1,12 @@
 "use client";
 
 import { bookById } from "./book-name";
-import { JOURNAL_DAYS, type ScanItem } from "./library-journal";
+import {
+  JOURNAL_DAYS,
+  readSort,
+  type ScanItem,
+  type ScanSort,
+} from "./library-journal";
 import type { TownState } from "./types";
 
 // 続きから再開 (Figma v4's 09): the scan session the reader left without
@@ -17,6 +22,11 @@ export interface LastScan {
   session: string;
   /** When a book was last read in it. */
   at: number;
+  /**
+   * Its 連続設定 when it was left, shown with the offer and given back only
+   * when the reader presses for it (資料 3章: no misclassing on a resume).
+   */
+  sort?: ScanSort;
 }
 
 const storage = () =>
@@ -37,18 +47,32 @@ export function lastScan(owner: string, now = Date.now()): LastScan | null {
       now - (data as LastScan).at > JOURNAL_DAYS * DAY_MS
     )
       return null;
-    return { session: (data as LastScan).session, at: (data as LastScan).at };
+    const sort = readSort((data as LastScan).sort);
+    return {
+      session: (data as LastScan).session,
+      at: (data as LastScan).at,
+      ...(sort ? { sort } : {}),
+    };
   } catch {
     return null;
   }
 }
 
 /** A book read in `session`: it is the one to offer, until ［完了］. */
-export function keepLastScan(owner: string, session: string, now = Date.now()) {
+export function keepLastScan(
+  owner: string,
+  session: string,
+  sort: ScanSort | null = null,
+  now = Date.now(),
+) {
   try {
     storage()?.setItem(
       LAST_SCAN_KEY + owner,
-      JSON.stringify({ session, at: now } satisfies LastScan),
+      JSON.stringify({
+        session,
+        at: now,
+        ...(sort ? { sort } : {}),
+      } satisfies LastScan),
     );
   } catch {
     // Not kept: the next time is simply a new session.

@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useBackLayer } from "../lib/back-layer";
-import type { LibrarySet, LibraryShelf, ReadingStatus } from "../lib/library";
+import type {
+  LibrarySet,
+  LibraryShelf,
+  Owned,
+  ReadingStatus,
+} from "../lib/library";
 import { SCAN_COPY } from "../lib/scan";
 import type { Book } from "../lib/types";
 import { BookJacket, Icon } from "./ui";
@@ -12,6 +17,10 @@ import { BookJacket, Icon } from "./ui";
 // Escape and 整理を終える go back to the scanner.
 
 const COPY = SCAN_COPY.tidy;
+const OWNED: { owned: Owned; label: string }[] = [
+  { owned: "yes", label: SCAN_COPY.sort.owned },
+  { owned: "no", label: SCAN_COPY.notOwned },
+];
 
 export interface TidyBook {
   id: string;
@@ -19,6 +28,7 @@ export interface TidyBook {
   byline: string;
   book?: Book;
   status: ReadingStatus | null;
+  owned: Owned | null;
   shelves: ReadonlySet<string>;
 }
 
@@ -163,7 +173,11 @@ export function ScanTidy({
         <p className="scan-tidy-to">
           {chosen.length ? COPY.to(chosen.length) : COPY.toNone}
         </p>
-        <div className="scan-tidy-actions">
+        <div
+          className="scan-tidy-actions"
+          role="group"
+          aria-label={SCAN_COPY.sort.status}
+        >
           {statuses.map((choice) => {
             const lit = every((book) => book.status === choice.status);
             return (
@@ -191,6 +205,26 @@ export function ScanTidy({
             <Icon name="plus" size={16} />
             {SCAN_COPY.shelf}
           </button>
+        </div>
+        {/* 所有, apart from the reading status (けにーさん 10-18 06:10Z). */}
+        <div className="scan-tidy-actions" role="group" aria-label={COPY.owned}>
+          {OWNED.map((choice) => {
+            const lit = every((book) => book.owned === choice.owned);
+            return (
+              <button
+                key={choice.owned}
+                type="button"
+                className="chip"
+                aria-pressed={lit}
+                disabled={!chosen.length}
+                onClick={() =>
+                  onChange(ids, { owned: lit ? null : choice.owned })
+                }
+              >
+                {choice.label}
+              </button>
+            );
+          })}
         </div>
         {shelvesOpen && chosen.length > 0 && (
           <div

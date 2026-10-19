@@ -10,6 +10,7 @@ import {
   useState,
   useSyncExternalStore,
   type FormEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
@@ -62,6 +63,7 @@ import {
   forgetRead,
   nextFrame,
   noteOther,
+  noteBack,
   noteRead,
   noteTaken,
   NOTICE_MS,
@@ -97,6 +99,8 @@ import { BarcodeRegister } from "./BarcodeRegister";
 import { ScanDone } from "./ScanDone";
 import { ScanResume } from "./ScanResume";
 import { ScanSortSheet } from "./ScanSortSheet";
+import { ScanSlots, slotName, useSlots } from "./ScanSlots";
+import { liveSlots, shelfOfSlot } from "../lib/scan-slots";
 import { ScanTidy, type TidyBook } from "./ScanTidy";
 import { ScanTiming } from "./ScanTiming";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
@@ -162,6 +166,8 @@ interface Card {
   title?: string;
   author?: string;
   shows: Shows;
+  /** The 連続設定 as it was when it was read, for its 元に戻す. */
+  sort?: ScanSort;
 }
 /**
  * What a card shows now: as it came to, but "saving" for a book in the
@@ -188,6 +194,19 @@ const KEPT: Shows[] = [
   "unavailable",
 ];
 const UNDOABLE: Shows[] = ["added", ...KEPT];
+/** How far a swiped card moves aside for its ［削除］. */
+const SWIPE_OPEN = 88;
+
+/** 元に戻す for a card taken back, unless the book was read again since. */
+const restorable = (card: Card, cards: readonly Card[]) =>
+  card.shows === "undone" &&
+  Boolean(card.isbn) &&
+  !cards.some(
+    (other) =>
+      other.id !== card.id &&
+      other.isbn === card.isbn &&
+      other.shows !== "undone",
+  );
 
 /** 読了・積読・読書中 on every card, in the library's order (資料 4章). */
 const STATUS_BUTTONS = DEFAULT_SHELVES.flatMap((shelf) =>
@@ -443,6 +462,9 @@ export function ScanSession({
   const journalKept = useJournalKept();
   const sound = useScanSound();
   const [compact, toggleCompact] = useCompact();
+  /** 自由3枠: the second row of a card, as the reader set it. */
+  const [slots, setSlots] = useSlots();
+  const [slotsOpen, setSlotsOpen] = useState(false);
   const [session, setSession] = useState(() => libraryJournal.newSession());
   const [input, setInput] = useState<Input>(() =>
     !canRead()
@@ -470,6 +492,8 @@ export function ScanSession({
   const [offer, setOffer] = useState<{
     session: string;
     cards: Card[];
+    /** Its 連続設定 when it was left. */
+    sort?: ScanSort;
   } | null>(null);
   const offered = useRef(false);
   /** 一括整理 open over the scanner, the camera off. */
@@ -517,8 +541,12 @@ export function ScanSession({
   // Nothing new is read while a menu or the 連続設定 is open (資料 仕様メモ06).
   useEffect(() => {
     paused.current =
-      menuFor !== null || shelvesFor !== null || sortOpen || offer !== null;
-  }, [menuFor, shelvesFor, sortOpen, offer]);
+      menuFor !== null ||
+      shelvesFor !== null ||
+      sortOpen ||
+      slotsOpen ||
+      offer !== null;
+  }, [menuFor, shelvesFor, sortOpen, slotsOpen, offer]);
   const manualCount = useRef(0);
   const closed = useRef(false);
   const layer = useRef<HTMLDivElement>(null);
@@ -541,6 +569,7 @@ export function ScanSession({
     savedIn,
     manual,
     sortOpen,
+    slotsOpen,
     tidying,
     done,
     offer,
@@ -554,6 +583,7 @@ export function ScanSession({
       savedIn,
       manual,
       sortOpen,
+      slotsOpen,
       tidying,
       done,
       offer,
@@ -588,15 +618,20 @@ export function ScanSession({
       return;
     const books = leftBooks(left.session, libraryJournal.items(owner), state);
     if (!books.length) return endLastScan(owner, left.session);
-    setOffer({ session: left.session, cards: books });
+    setOffer({
+      session: left.session,
+      cards: books,
+      ...(left.sort ? { sort: left.sort } : {}),
+    });
     // Only on opening: what the town or the journal does next is not asked.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner, ready]);
   // A book read: this is the time to offer, until ［完了］.
   const anyRead = cards.length;
+  // Its 連続設定 is kept with it, to show if it is offered again.
   useEffect(() => {
-    if (owner && anyRead) keepLastScan(owner, session);
-  }, [owner, anyRead, session]);
+    if (owner && anyRead) keepLastScan(owner, session, sort);
+  }, [owner, anyRead, session, sort]);
 
   // An open session handles its own items; the page's sender leaves them.
   useEffect(() => {
@@ -776,15 +811,7 @@ export function ScanSession({
       isbn,
       via,
       ...(sort ? { sort } : {}),
-      ...(known
-        ? {
-            known: {
-              title: known.title,
-              author: known.author,
-              ...(known.price ? { price: known.price } : {}),
-            },
-          }
-        : {}),
+      ...(known ? { known } : {}),
     });
     reads.current = noteRead(reads.current, isbn, at, "held");
     time((now) => noteReadAt(now, item.id, timedAt, true));
@@ -797,6 +824,7 @@ export function ScanSession({
         title: item.title,
         author: item.author,
         shows: "looking",
+        ...(sort ? { sort } : {}),
       },
     ]);
     setNotice(null);
@@ -1189,6 +1217,7 @@ export function ScanSession({
   function undo(card: Card) {
     refocus();
     setMenuFor(null);
+    setSwiped(null);
     if (!owner) return;
     if (undoScan(libraryJournal, owner, journalTown, card.id) === "not-yet") {
       setNotice({ name: nameOf(card), say: "not-yet" });
@@ -1207,6 +1236,125 @@ export function ScanSession({
       return next;
     });
   }
+
+  /**
+   * 元に戻す on a card taken back (資料 4章): the book comes back as it was,
+   * its status and shelves with it; one that never reached the library is
+   * kept again, with the 連続設定 it was read with. Not while a later card
+   * has the same book.
+   */
+  function restore(card: Card) {
+    refocus();
+    const { owner: reader, cards: now } = latest.current;
+    if (!reader || !card.isbn || !restorable(card, now)) return;
+    const town = journalTown.state();
+    const bookId = card.bookId;
+    if (bookId && bookById(town.books, bookId)) {
+      if (!town.library.includes(bookId)) actions.toggleLibrary(bookId);
+      if (!journalTown.state().library.includes(bookId)) return;
+      reads.current = noteBack(reads.current, card.isbn, "in");
+      setCards((list) =>
+        list.map((entry) =>
+          entry.id === card.id ? { ...entry, shows: "added" } : entry,
+        ),
+      );
+      // Saved at once in the demo; an account's save is waited for.
+      if (journalTown.status() !== "saved")
+        setSavingByHand((was) => new Set(was).add(card.id));
+      return;
+    }
+    const known = bookByIsbn(town.books, card.isbn);
+    const item = keepRead(libraryJournal, reader, {
+      session,
+      isbn: card.isbn,
+      via: "scan",
+      ...(card.sort ? { sort: card.sort } : {}),
+      ...(known ? { known } : {}),
+    });
+    reads.current = noteBack(reads.current, card.isbn, "held");
+    setCards((list) =>
+      list.map((entry) =>
+        entry.id === card.id
+          ? {
+              ...entry,
+              // Its name stays as the card had it until the send answers.
+              id: item.id,
+              bookId: item.bookId,
+              shows: "looking",
+            }
+          : entry,
+      ),
+    );
+    send(reader, [item.id]);
+  }
+
+  // Swiped from right to left, a card shows ［削除］ on its right (資料 4章):
+  // the same as ⋮ ［登録を取り消す］. The card follows the finger without a
+  // render; only where it comes to rest is kept.
+  const [swiped, setSwiped] = useState<string | null>(null);
+  const swipe = useRef<{
+    id: string;
+    pointer: number;
+    x: number;
+    y: number;
+    from: number;
+    axis: "x" | "y" | null;
+    item: HTMLElement;
+  } | null>(null);
+  const swallowClick = useRef(false);
+  const swipeStart = (event: ReactPointerEvent<HTMLElement>, id: string) => {
+    swallowClick.current = false;
+    if (event.pointerType === "mouse") return;
+    swipe.current = {
+      id,
+      pointer: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      from: swiped === id ? -SWIPE_OPEN : 0,
+      axis: null,
+      item: event.currentTarget,
+    };
+    if (swiped !== null && swiped !== id) setSwiped(null);
+  };
+  const swipeMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const now = swipe.current;
+    if (!now || now.pointer !== event.pointerId || now.axis === "y") return;
+    const dx = event.clientX - now.x;
+    const dy = event.clientY - now.y;
+    if (now.axis === null) {
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        now.axis = "x";
+        try {
+          now.item.setPointerCapture(event.pointerId);
+        } catch {
+          // A pointer the browser does not know: the card follows it anyway.
+        }
+        now.item.classList.add("is-swiping");
+      } else if (Math.abs(dy) > 10) {
+        now.axis = "y";
+        return;
+      } else return;
+    }
+    const at = Math.min(0, Math.max(-SWIPE_OPEN * 1.4, now.from + dx));
+    now.item.style.setProperty("--swipe", `${at}px`);
+  };
+  const swipeEnd = (event: ReactPointerEvent<HTMLElement>) => {
+    const now = swipe.current;
+    swipe.current = null;
+    if (!now || now.pointer !== event.pointerId || now.axis !== "x") return;
+    now.item.classList.remove("is-swiping");
+    now.item.style.removeProperty("--swipe");
+    swallowClick.current = true;
+    const at = now.from + (event.clientX - now.x);
+    setSwiped(at < -SWIPE_OPEN / 2 ? now.id : null);
+  };
+  const swipeCancel = () => {
+    const now = swipe.current;
+    swipe.current = null;
+    if (!now) return;
+    now.item.classList.remove("is-swiping");
+    now.item.style.removeProperty("--swipe");
+  };
 
   /** 読了・積読・読書中 on a card: set, or pressed again, taken off. */
   function shelveAs(bookId: string, status: ReadingStatus) {
@@ -1291,10 +1439,23 @@ export function ScanSession({
       now.kind === "camera" ? { kind: "camera", phase: "manual" } : now,
     );
   };
-  /** 続きから再開: that time's books back, and its count goes on. */
-  const resume = () => {
+  /**
+   * 続きから再開: that time's books back, and its count goes on. Its
+   * 連続設定 comes back only when the reader pressed for it, without a shelf
+   * they no longer have.
+   */
+  const resume = (withSort: boolean) => {
     if (!offer || !owner) return;
     setSession(offer.session);
+    if (withSort && offer.sort) {
+      const live = new Set(
+        liveShelves(state.libraryShelves).map((shelf) => shelf.id),
+      );
+      setSort({
+        ...offer.sort,
+        shelves: offer.sort.shelves.filter((id) => live.has(id)),
+      });
+    }
     setCards(offer.cards);
     for (const card of offer.cards) {
       if (card.isbn)
@@ -1303,7 +1464,6 @@ export function ScanSession({
       if (card.shows === "added" && card.bookId && !states.has(card.id))
         libraryJournal.added.set(card.id, card.bookId);
     }
-    keepLastScan(owner, offer.session);
     setOffer(null);
     const held = offer.cards
       .filter((card) => states.has(card.id))
@@ -1454,7 +1614,14 @@ export function ScanSession({
       // What is on top (the one-book form, 連続設定, 一括整理, 完了)
       // handles its own keys.
       const now = latest.current;
-      if (now.manual || now.sortOpen || now.tidying || now.done || now.offer)
+      if (
+        now.manual ||
+        now.sortOpen ||
+        now.slotsOpen ||
+        now.tidying ||
+        now.done ||
+        now.offer
+      )
         return;
       if (event.key === "Escape") {
         event.preventDefault();
@@ -1522,6 +1689,11 @@ export function ScanSession({
     }
     return on;
   }, [state.libraryShelfBooks]);
+  /** 自由3枠 as shown: without a shelf the reader no longer has. */
+  const rowSlots = liveSlots(
+    slots,
+    new Set(handShelves.map((shelf) => shelf.id)),
+  );
   /** What the 連続設定 gives, in a few words: 持っている, the usual, unsaid. */
   const sortWords = (now: ScanSort) => [
     ...STATUS_BUTTONS.filter((button) => button.status === now.status).map(
@@ -1590,6 +1762,7 @@ export function ScanSession({
       byline: face.byline ?? "",
       book: face.book,
       status: state.libraryEntries[face.libraryId]?.status ?? null,
+      owned: state.libraryEntries[face.libraryId]?.owned ?? null,
       shelves: onShelves.get(face.libraryId) ?? NONE,
     });
   }
@@ -1940,9 +2113,40 @@ export function ScanSession({
                     : "") +
                   (kept ? " is-kept" : "") +
                   (now === "undone" ? " is-undone" : "") +
-                  (flash?.id === card.id ? " is-flash" : "")
+                  (flash?.id === card.id ? " is-flash" : "") +
+                  (canUndo && swiped === card.id ? " is-swiped" : "")
                 }
+                onPointerDown={
+                  canUndo ? (event) => swipeStart(event, card.id) : undefined
+                }
+                onPointerMove={canUndo ? swipeMove : undefined}
+                onPointerUp={canUndo ? swipeEnd : undefined}
+                onPointerCancel={canUndo ? swipeCancel : undefined}
+                onClickCapture={(event) => {
+                  // The tap that ends a swipe, or one on a card swiped
+                  // open, only puts it back.
+                  const open =
+                    swiped === card.id &&
+                    !(event.target as Element).closest(".scan-item-delete");
+                  if (!swallowClick.current && !open) return;
+                  swallowClick.current = false;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (open) setSwiped(null);
+                }}
               >
+                {canUndo && (
+                  <button
+                    type="button"
+                    className="btn danger fill scan-item-delete"
+                    aria-label={SCAN_COPY.undoName(name)}
+                    tabIndex={swiped === card.id ? 0 : -1}
+                    aria-hidden={swiped === card.id ? undefined : true}
+                    onClick={() => undo(card)}
+                  >
+                    {SCAN_COPY.remove}
+                  </button>
+                )}
                 <div className="scan-item-head">
                   <div className="scan-item-cover" aria-hidden="true">
                     {book ? (
@@ -1975,6 +2179,17 @@ export function ScanSession({
                     )}
                     <p className="scan-item-state">{stateLine(card, now)}</p>
                   </div>
+                  {now === "undone" && restorable(card, cards) && (
+                    <button
+                      type="button"
+                      className="text-btn scan-item-restore"
+                      aria-label={SCAN_COPY.restoreName(name)}
+                      onPointerDown={typing ? keepFocus : undefined}
+                      onClick={() => restore(card)}
+                    >
+                      {SCAN_COPY.restore}
+                    </button>
+                  )}
                   {canUndo && (
                     <button
                       type="button"
@@ -2050,51 +2265,69 @@ export function ScanSession({
                     ))}
                   </div>
                 )}
-                {libraryId && (
+                {libraryId && rowSlots.length > 0 && (
                   <div
                     className="scan-item-marks"
                     role="group"
                     aria-label={SCAN_COPY.marks(name)}
                   >
-                    <button
-                      type="button"
-                      className="chip"
-                      aria-pressed={notOwned}
-                      onPointerDown={typing ? keepFocus : undefined}
-                      onClick={() =>
-                        change(libraryId, { owned: notOwned ? null : "no" })
-                      }
-                    >
-                      {SCAN_COPY.notOwned}
-                    </button>
-                    <button
-                      type="button"
-                      className="chip"
-                      aria-pressed={favorite}
-                      onPointerDown={typing ? keepFocus : undefined}
-                      onClick={() => change(libraryId, { favorite: !favorite })}
-                    >
-                      {FAVORITE}
-                    </button>
-                    <button
-                      type="button"
-                      className="chip scan-item-add"
-                      aria-expanded={shelvesFor === card.id}
-                      aria-controls={
-                        shelvesFor === card.id ? shelvesId : undefined
-                      }
-                      onPointerDown={typing ? keepFocus : undefined}
-                      onClick={() => {
-                        refocus();
-                        setMenuFor(null);
-                        setShelvesFor((was) =>
-                          was === card.id ? null : card.id,
+                    {rowSlots.map((slot) => {
+                      const shelf = shelfOfSlot(slot);
+                      if (slot === "shelves")
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            className="chip scan-item-add"
+                            aria-expanded={shelvesFor === card.id}
+                            aria-controls={
+                              shelvesFor === card.id ? shelvesId : undefined
+                            }
+                            onPointerDown={typing ? keepFocus : undefined}
+                            onClick={() => {
+                              refocus();
+                              setMenuFor(null);
+                              setShelvesFor((was) =>
+                                was === card.id ? null : card.id,
+                              );
+                            }}
+                          >
+                            <Icon name="plus" size={16} />
+                            {SCAN_COPY.shelf}
+                          </button>
                         );
-                      }}
-                    >
-                      <Icon name="plus" size={16} />
-                      {SCAN_COPY.shelf}
-                    </button>
+                      const on =
+                        slot === "not-owned"
+                          ? notOwned
+                          : slot === "favorite"
+                            ? favorite
+                            : shelvesOn.has(shelf ?? "");
+                      return (
+                        <button
+                          key={slot}
+                          type="button"
+                          className="chip"
+                          aria-pressed={on}
+                          onPointerDown={typing ? keepFocus : undefined}
+                          onClick={() =>
+                            change(
+                              libraryId,
+                              slot === "not-owned"
+                                ? { owned: on ? null : "no" }
+                                : slot === "favorite"
+                                  ? { favorite: !on }
+                                  : on
+                                    ? { removeShelf: shelf ?? "" }
+                                    : { addShelf: shelf ?? "" },
+                            )
+                          }
+                        >
+                          <span className="scan-chip-name">
+                            {slotName(slot, handShelves, FAVORITE)}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
                 {libraryId && shelvesFor === card.id && (
@@ -2146,6 +2379,19 @@ export function ScanSession({
             onClick={toggleCompact}
           >
             <Icon name="rows" />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={SCAN_COPY.slots.open}
+            onClick={() => {
+              refocus();
+              setMenuFor(null);
+              setShelvesFor(null);
+              setSlotsOpen(true);
+            }}
+          >
+            <Icon name="settings" />
           </button>
           {tidyBooks.length > 0 && (
             <button
@@ -2203,8 +2449,24 @@ export function ScanSession({
       {offer && (
         <ScanResume
           count={scanCount(tally(offer.cards, shown))}
+          sort={
+            offer.sort
+              ? sortWords(offer.sort).length
+                ? sortWords(offer.sort)
+                : [SCAN_COPY.sort.owned]
+              : null
+          }
           onResume={resume}
           onNotNow={notNow}
+        />
+      )}
+      {slotsOpen && (
+        <ScanSlots
+          slots={slots}
+          shelves={handShelves}
+          favorite={FAVORITE}
+          onChange={setSlots}
+          onClose={() => setSlotsOpen(false)}
         />
       )}
       {sortOpen && (

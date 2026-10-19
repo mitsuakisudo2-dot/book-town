@@ -1959,6 +1959,269 @@ try {
     },
   );
 
+  /** A shelf of the reader's own, put in the saved town before the page reads it. */
+  async function withShelf(on, name) {
+    const id = "00000000-0000-4000-8000-0000000000c1";
+    await on.evaluate(
+      ({ id, name }) => {
+        const saved = JSON.parse(localStorage.getItem("book-town-v1"));
+        saved.data.libraryShelves = [
+          {
+            id,
+            name,
+            note: "",
+            position: "a0",
+            showWanted: false,
+            audience: "private",
+            rule: null,
+            createdAt: new Date().toISOString(),
+            deletedAt: null,
+          },
+        ];
+        localStorage.setItem("book-town-v1", JSON.stringify(saved));
+      },
+      { id, name },
+    );
+    await go("/profiles/me/?books=library", on);
+    return id;
+  }
+  /** A touch drawn from right to left across a card (資料 4章). */
+  const swipeCard = (card, distance = 140) =>
+    card.locator(".scan-item-head").evaluate(async (head, distance) => {
+      const box = head.getBoundingClientRect();
+      const y = box.top + box.height / 2;
+      const from = box.right - 40;
+      const fire = (type, x) =>
+        head.dispatchEvent(
+          new PointerEvent(type, {
+            pointerId: 7,
+            pointerType: "touch",
+            isPrimary: true,
+            clientX: x,
+            clientY: y,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      fire("pointerdown", from);
+      for (let step = 1; step <= 8; step++) {
+        fire("pointermove", from - (distance * step) / 8);
+        await new Promise((done) => setTimeout(done, 16));
+      }
+      fire("pointerup", from - distance);
+    }, distance);
+
+  await check(
+    "自由3枠: the second row's buttons are picked and put in order, and the device keeps them",
+    async () => {
+      const own = await scanningPage();
+      await go("/profiles/me/?books=library", own);
+      const shelf = await withShelf(own, "お気に入りの漫画");
+      await openScanner(own);
+      await cameraRunning(own);
+      const book = isbnOf(81);
+      await show(own, book);
+      await expect(count(own)).toHaveText("1冊 登録済み");
+      const marks = scanner(own).getByRole("group", {
+        name: "試験の本 81の所有とお気に入りと本棚",
+      });
+      // The 資料's first row.
+      await expect(marks.getByRole("button")).toHaveText([
+        "未所持",
+        "お気に入り",
+        "本棚",
+      ]);
+      await scanner(own)
+        .getByRole("button", { name: "下の段のボタンを選ぶ" })
+        .click();
+      const sheet = own.getByRole("dialog", { name: "下の段のボタン" });
+      await expect(sheet).toBeVisible();
+      // Three at most: one comes off before another goes in.
+      await expect(
+        sheet.getByRole("button", { name: "お気に入りの漫画", exact: true }),
+      ).toBeDisabled();
+      await sheet.getByRole("button", { name: "お気に入りを外す" }).click();
+      await sheet
+        .getByRole("button", { name: "お気に入りの漫画", exact: true })
+        .click();
+      await sheet
+        .getByRole("button", { name: "お気に入りの漫画を左へ" })
+        .click();
+      await sheet
+        .getByRole("button", { name: "お気に入りの漫画を左へ" })
+        .click();
+      await expect(
+        sheet.getByRole("button", { name: "お気に入りの漫画を左へ" }),
+      ).toBeDisabled();
+      // Nothing is read while it is open.
+      await own.evaluate((code) => window.__barcodes.push(code), isbnOf(82));
+      await own.waitForTimeout(800);
+      expect(await own.evaluate(() => window.__barcodes.length)).toBe(1);
+      await own.evaluate(() => window.__barcodes.splice(0));
+      // 戻る puts it away in one step; the scanner stays.
+      await own.goBack();
+      await expect(sheet).toHaveCount(0);
+      await expect(scanner(own)).toBeVisible();
+      await expect(marks.getByRole("button")).toHaveText([
+        "お気に入りの漫画",
+        "未所持",
+        "本棚",
+      ]);
+      // A shelf's own button puts the book on it, and takes it off again.
+      const onShelf = marks.getByRole("button", { name: "お気に入りの漫画" });
+      await onShelf.click();
+      await expect(onShelf).toHaveAttribute("aria-pressed", "true");
+      await expect
+        .poll(async () =>
+          (await stored(own)).libraryShelfBooks.some(
+            (row) => row.bookId === "isbn-" + book && row.shelfId === shelf,
+          ),
+        )
+        .toBe(true);
+      expect(
+        JSON.parse(
+          await own.evaluate(() =>
+            localStorage.getItem("book-town-scan-slots"),
+          ),
+        ),
+      ).toEqual(["shelf:" + shelf, "not-owned", "shelves"]);
+      // The next time on this device, the row is as the reader left it.
+      await finishScanning(own);
+      await openScanner(own);
+      await cameraRunning(own);
+      await show(own, isbnOf(83));
+      await expect(
+        scanner(own)
+          .getByRole("group", { name: "試験の本 83の所有とお気に入りと本棚" })
+          .getByRole("button"),
+      ).toHaveText(["お気に入りの漫画", "未所持", "本棚"]);
+      await expect(scanner(own)).not.toContainText(/(^|\D)0(冊|件)/);
+      await own.context().close();
+    },
+  );
+
+  await check(
+    "a card swiped from right to left shows 削除, and 元に戻す brings the book back as it was",
+    async () => {
+      const swiping = await scanningPage();
+      await go("/profiles/me/?books=library", swiping);
+      await openScanner(swiping);
+      await cameraRunning(swiping);
+      const [one, two] = [84, 85].map(isbnOf);
+      await show(swiping, one, two);
+      await expect(count(swiping)).toHaveText("2冊 登録済み");
+      const card = latest(swiping);
+      await card.getByRole("button", { name: "読了" }).click();
+      // Swiped: ［削除］ on its right. A tap on the card only puts it back.
+      await swipeCard(card);
+      await expect(card).toHaveClass(/is-swiped/);
+      const remove = card.getByRole("button", {
+        name: "試験の本 85の登録を取り消す",
+      });
+      await expect(remove).toBeVisible();
+      await card.locator(".scan-item-title").click();
+      await expect(card).not.toHaveClass(/is-swiped/);
+      // A short swipe springs back.
+      await swipeCard(card, 30);
+      await expect(card).not.toHaveClass(/is-swiped/);
+      await swipeCard(card);
+      await remove.click();
+      await expect(cardStatus(swiping)).toHaveText("取り消しました");
+      await expect(count(swiping)).toHaveText("1冊 登録済み");
+      await expect
+        .poll(async () => (await stored(swiping)).library)
+        .not.toContain("isbn-" + two);
+      // 元に戻す: in again, its 読了 with it, the count back.
+      await card.getByRole("button", { name: "試験の本 85を元に戻す" }).click();
+      await expect(count(swiping)).toHaveText("2冊 登録済み");
+      await expect(card.getByRole("button", { name: "読了" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      const data = await stored(swiping);
+      expect(data.library).toContain("isbn-" + two);
+      expect(data.libraryEntries["isbn-" + two].status).toBe("finished");
+      // Read again after, it is the one already put in this time.
+      await show(swiping, two);
+      await expect(remark(swiping)).toContainText("この回でもう入れました");
+      // 一括整理: 持っている・未所持 for the books picked, apart from the status.
+      await scanner(swiping).getByRole("button", { name: "一括整理" }).click();
+      const tidy = scanner(swiping).getByRole("region", { name: "一括整理" });
+      await tidy.getByRole("checkbox", { name: "すべて選択" }).check();
+      const owned = tidy.getByRole("group", { name: "所有状況" });
+      await owned.getByRole("button", { name: "未所持" }).click();
+      await expect(
+        owned.getByRole("button", { name: "未所持" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await expect
+        .poll(async () => {
+          const rows = (await stored(swiping)).libraryEntries;
+          return [one, two].map((isbn) => rows["isbn-" + isbn].owned);
+        })
+        .toEqual(["no", "no"]);
+      await tidy.getByRole("button", { name: "整理を終える" }).click();
+      await swiping.context().close();
+    },
+  );
+
+  await check(
+    "a time left with a 連続設定 is offered with it, and the 連続設定 comes back only when pressed",
+    async () => {
+      const left = await scanningPage();
+      await go("/profiles/me/?books=library", left);
+      await openScanner(left);
+      await cameraRunning(left);
+      await scanner(left).getByRole("button", { name: "設定する" }).click();
+      const sheet = left.getByRole("dialog", { name: "連続設定" });
+      await sheet.getByRole("radio", { name: "読了" }).click();
+      await sheet.getByRole("button", { name: "この設定でスキャン" }).click();
+      await show(left, isbnOf(86));
+      await expect(count(left)).toHaveText("1冊 登録済み");
+      await scanner(left).getByRole("button", { name: "閉じる" }).click();
+      // Offered with it, not given back unasked.
+      await openScanner(left, { keepOffer: true });
+      await expect(offer(left).locator(".scan-resume-sort")).toContainText(
+        "前回の連続設定読了",
+      );
+      const back = offer(left).getByRole("button", { name: "連続設定も戻す" });
+      await expect(back).toHaveAttribute("aria-pressed", "false");
+      await offer(left).getByRole("button", { name: "続きから再開" }).click();
+      await expect(scanner(left)).not.toContainText("連続設定中");
+      await show(left, isbnOf(87));
+      await expect
+        .poll(
+          async () =>
+            (await stored(left)).libraryEntries["isbn-" + isbnOf(87)]?.status,
+        )
+        .toBeNull();
+      // Left again, and given back this time.
+      await scanner(left).getByRole("button", { name: "閉じる" }).click();
+      await openScanner(left, { keepOffer: true });
+      await expect(offer(left)).toContainText("2冊 登録済み");
+      await expect(offer(left).locator(".scan-resume-sort")).toHaveCount(0);
+      await offer(left).getByRole("button", { name: "今はしない" }).click();
+      await scanner(left).getByRole("button", { name: "設定する" }).click();
+      await sheet.getByRole("radio", { name: "積読" }).click();
+      await sheet.getByRole("button", { name: "この設定でスキャン" }).click();
+      await show(left, isbnOf(88));
+      await scanner(left).getByRole("button", { name: "閉じる" }).click();
+      await openScanner(left, { keepOffer: true });
+      await back.click();
+      await expect(back).toHaveAttribute("aria-pressed", "true");
+      await offer(left).getByRole("button", { name: "続きから再開" }).click();
+      await expect(scanner(left)).toContainText("連続設定中");
+      await show(left, isbnOf(89));
+      await expect
+        .poll(
+          async () =>
+            (await stored(left)).libraryEntries["isbn-" + isbnOf(89)]?.status,
+        )
+        .toBe("tsundoku");
+      await finishScanning(left);
+      await left.context().close();
+    },
+  );
+
   await check(
     "with no WebAssembly either, the browser cannot read barcodes",
     async () => {
@@ -2290,7 +2553,10 @@ try {
       await expect(on.locator(".bh-mine [aria-pressed=true]")).toHaveText([
         "持っている",
       ]);
-      await on.locator(".toast").getByRole("button", { name: "元に戻す" }).click();
+      await on
+        .locator(".toast")
+        .getByRole("button", { name: "元に戻す" })
+        .click();
       await expect(
         status.getByRole("button", { name: "読了", pressed: true }),
       ).toBeVisible();

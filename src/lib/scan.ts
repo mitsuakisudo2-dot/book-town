@@ -8,6 +8,7 @@ import { normalizeIsbn } from "./books";
 import type { ScanItem } from "./library-journal";
 import type { Book } from "./types";
 import { counted, failure, AGAIN } from "./words";
+import { SLOT_COUNT } from "./scan-slots";
 
 /** The same book read again within this long of last being in view is one read. */
 export const SAME_BOOK_MS = 3000;
@@ -183,6 +184,15 @@ export function noteTaken(
     : reads;
 }
 
+/** 元に戻す of a card taken back: the ISBN is this session's again, unread now. */
+export function noteBack(
+  reads: SessionReads,
+  isbn: string,
+  taken: Taken,
+): SessionReads {
+  return { ...reads, taken: { ...reads.taken, [isbn]: taken } };
+}
+
 /** ［取り消す］: the ISBN reads as new again. */
 export function forgetRead(reads: SessionReads, isbn: string): SessionReads {
   const taken = { ...reads.taken };
@@ -283,6 +293,10 @@ export const SCAN_COPY = {
   more: (name: string) => `${name}のほかの操作`,
   undo: "登録を取り消す",
   undoName: (name: string) => `${name}の登録を取り消す`,
+  /** A card swiped from right to left (資料 4章): the same as 登録を取り消す. */
+  remove: "削除",
+  restore: "元に戻す",
+  restoreName: (name: string) => `${name}を元に戻す`,
   statuses: (name: string) => `${name}の読書状況`,
   /** The card's second row (資料 4章の自由3枠): 未所持・お気に入り・＋本棚. */
   marks: (name: string) => `${name}の所有とお気に入りと本棚`,
@@ -322,6 +336,7 @@ export const SCAN_COPY = {
     to: (n: number) => `選択中の${counted(n, "冊")}に適用`,
     toNone: "選んだ本に適用",
     shelvesTo: "選んだ本を入れる本棚",
+    owned: "所有状況",
     done: "整理を終える",
   },
   /** 完了 (Figma v4's 08). */
@@ -337,12 +352,29 @@ export const SCAN_COPY = {
     close: "閉じる",
   },
   compact: "コンパクト表示",
+  /** 自由3枠 (資料 4章): the buttons of a card's second row, picked. */
+  slots: {
+    open: "下の段のボタンを選ぶ",
+    name: "下の段のボタン",
+    lead: "本ごとの下の段に、左から並びます",
+    row: "並び",
+    can: "並べられるもの",
+    full: `${SLOT_COUNT}つまで並びます`,
+    empty: "何も並べないと、下の段は出ません",
+    left: (name: string) => `${name}を左へ`,
+    right: (name: string) => `${name}を右へ`,
+    remove: (name: string) => `${name}を外す`,
+    done: "閉じる",
+  },
   /** 続きから再開 (Figma v4's 09). */
   resume: {
     name: "前回の登録を続けますか？",
     kept: "保存済みの本は、そのまま残っています",
     go: "続きから再開",
     notNow: "今はしない",
+    /** The 連続設定 of that time, given back only when pressed. */
+    sort: "前回の連続設定",
+    sortBack: "連続設定も戻す",
   },
   /** スキャンした回 (資料 §2 J), in the library. */
   history: {
