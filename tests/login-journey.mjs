@@ -2055,7 +2055,7 @@ try {
           "/rest/v1/library_entries",
           "/rest/v1/book_marks",
         ]);
-      await scanner.getByRole("button", { name: "終わる" }).click();
+      await scanner.getByRole("button", { name: "完了" }).click();
       await expect(scanner).toHaveCount(0);
       await page.unroute(supabase + "/rest/v1/**", hold);
     },
@@ -2122,7 +2122,7 @@ try {
       );
       // No camera here: the ISBN is typed.
       await scanner.getByLabel("ISBN", { exact: true }).fill(READ_ISBN);
-      await expect(scanner.locator(".scan-card-status")).toHaveText(
+      await expect(scanner.locator(".scan-item-state")).toHaveText(
         "読み込みが終わったら登録します",
       );
       // Kept on this device, and nothing sent yet.
@@ -2141,10 +2141,10 @@ try {
       // Once the town is read, it is registered with the id it was given.
       holding = false;
       for (const route of held.splice(0)) await route.fallback();
-      await expect(scanner.locator(".scan-card-status")).toHaveText(
+      await expect(scanner.locator(".scan-item-state")).toHaveText(
         "登録しました",
       );
-      await expect(scanner.locator(".scan-count")).toHaveText("この回 1冊");
+      await expect(scanner.locator(".scan-count")).toHaveText("1冊 登録済み");
       await expect
         .poll(() => sent.map((write) => write.path))
         .toEqual([
@@ -2169,7 +2169,7 @@ try {
       ]);
       // Saved: the device lets it go.
       await expect.poll(journal).toBeNull();
-      await scanner.getByRole("button", { name: "終わる" }).click();
+      await scanner.getByRole("button", { name: "完了" }).click();
       await expect(page.locator(".toast")).toContainText("1冊を登録しました");
       await page.unroute(supabase + "/rest/v1/**", hold);
       await page.unroute("https://api.openbd.jp/**", titles);

@@ -17,8 +17,9 @@ import {
 // book was found, and one only the town knows. Then the continuous scanner,
 // with a stand-in for the browser's barcode reader on the fake camera:
 // twenty books in a row, the same book twice, price codes, a book openBD
-// does not know, ［取り消す］, offline, ［終わる］, 書名を入れる, a tab closed
-// before its books were saved, 390px, 戻る, the sound and the vibration;
+// does not know, 読了・積読・読書中, ⋮ and 登録を取り消す, offline, ［完了］,
+// 書名を入れる, a tab closed before its books were saved, 390px, 戻る, the
+// sound and the vibration;
 // ISBNs typed where no barcode can be read; and ZXing in WebAssembly
 // (served from out/zxing/) reading a book's barcode drawn on the camera, on
 // an iPhone, where the browser's own reader is not for EAN-13, and on a
@@ -307,8 +308,21 @@ const toasts = (on = page) => on.evaluate(() => window.__toasts.splice(0));
 const scanner = (on = page) =>
   on.getByRole("dialog", { name: "本を続けて登録" });
 const count = (on) => scanner(on).locator(".scan-count");
-const cardTitle = (on) => scanner(on).locator(".scan-card-title span");
-const cardStatus = (on) => scanner(on).locator(".scan-card-status");
+/** The newest book of this time's list: it is on top. */
+const latest = (on) => scanner(on).locator(".scan-item").first();
+const cardTitle = (on) => latest(on).locator(".scan-item-title");
+const cardStatus = (on) => latest(on).locator(".scan-item-state");
+/** What a read that put nothing new in says, over the camera. */
+const remark = (on) => scanner(on).locator(".scan-notice");
+/** ⋮ on a book of this time's list, then 登録を取り消す. */
+async function undoBook(on, name) {
+  await scanner(on)
+    .getByRole("button", { name: `${name}のほかの操作` })
+    .click();
+  await scanner(on)
+    .getByRole("menuitem", { name: `${name}の登録を取り消す` })
+    .click();
+}
 const field = (on) => scanner(on).getByLabel("ISBN", { exact: true });
 /**
  * Typing begun on a phone: the field waits for a tap, with no keyboard over
@@ -326,7 +340,7 @@ async function openScanner(on = page) {
   await expect(scanner(on)).toBeVisible();
 }
 async function finishScanning(on = page) {
-  await scanner(on).getByRole("button", { name: "終わる" }).click();
+  await scanner(on).getByRole("button", { name: "完了" }).click();
   await expect(scanner(on)).toHaveCount(0);
 }
 /**
@@ -354,15 +368,15 @@ const cameraRunning = (on) =>
     () => document.querySelector(".scan-session video")?.readyState >= 2,
   );
 /**
- * Watches the scanner's card light up from now on. The answer: whether it
- * did since the last time asked.
+ * Watches a book of the scanner's list light up from now on. The answer:
+ * whether one did since the last time asked.
  */
 async function watchFlash(on) {
   await on.evaluate(() => {
     window.__flashed = false;
     new MutationObserver((changes) => {
       for (const change of changes)
-        if (change.target.matches(".scan-card.is-flash"))
+        if (change.target.matches(".scan-item.is-flash"))
           window.__flashed = true;
     }).observe(document.body, {
       subtree: true,
@@ -377,9 +391,9 @@ async function watchFlash(on) {
       return was;
     });
 }
-/** Until the card's last flash is over: a new one changes nothing before. */
+/** Until the list's last flash is over: a new one changes nothing before. */
 const flashOver = (on) =>
-  expect(scanner(on).locator(".scan-card")).not.toHaveClass(/is-flash/);
+  expect(scanner(on).locator(".scan-item.is-flash")).toHaveCount(0);
 const dialog = () =>
   page.getByRole("dialog", { name: "本を登録", exact: true });
 const message = () => dialog().locator(".register-message");
@@ -448,7 +462,7 @@ try {
         }),
       );
       // The book entered by hand joins the scanner's count.
-      await expect(count(page)).toHaveText("この回 1冊");
+      await expect(count(page)).toHaveText("1冊 登録済み");
       openBd = "answer";
     },
   );
@@ -553,7 +567,7 @@ try {
   await check(
     "a book the town knows, but not the library, is registered as usual",
     async () => {
-      // ［終わる］ says what this time registered, and the library is there.
+      // ［完了］ says what this time registered, and the library is there.
       await finishScanning();
       await expect(page.locator(".toast")).toContainText("3冊を登録しました");
       await page
@@ -661,11 +675,11 @@ try {
       const failed =
         "読み取りの準備ができませんでした。電波のよい所で［カメラで読む］をもう一度";
       await expect(scanner().locator(".scan-notes")).toContainText(failed);
-      // Said once: the field's line, and why, with nothing more on the card.
+      // Said once: the field's line, and why, with nothing more in the list.
       await expect(scanner().locator(".scan-notes")).toHaveText(
         "13桁そろうと登録します" + failed,
       );
-      await expect(cardStatus()).toHaveText("");
+      await expect(scanner().locator(".scan-list li")).toHaveCount(0);
       await expect(scanner()).not.toContainText("ISBNを続けて打");
       // The settings would not help here, so they are not mentioned.
       await expect(scanner()).not.toContainText("端末の設定");
@@ -695,7 +709,7 @@ try {
       await field().fill(isbn10Of(ten));
       await field().press("Enter");
       await expect(cardTitle()).toHaveText("試験の本 42");
-      await expect(count()).toHaveText("この回 2冊");
+      await expect(count()).toHaveText("2冊 登録済み");
       // A code that does not check out stays, to be corrected.
       const wrong = typed.slice(0, 12) + ((Number(typed[12]) + 1) % 10);
       await field().fill(wrong);
@@ -703,7 +717,7 @@ try {
         "ISBNとして読めませんでした",
       );
       await expect(field()).toHaveValue(wrong);
-      await expect(count()).toHaveText("この回 2冊");
+      await expect(count()).toHaveText("2冊 登録済み");
       const data = await stored();
       expect(data.library).toEqual(
         expect.arrayContaining(["isbn-" + typed, "isbn-" + ten]),
@@ -782,10 +796,12 @@ try {
       await openScanner(scan);
       await cameraRunning(scan);
       await expect(scanner(scan).locator(".scan-guide")).toHaveText(
-        "上の段（978…）を枠に",
+        "ISBNバーコードをかざす",
       );
-      // Said once: the card says what a read does.
-      await expect(cardStatus(scan)).toHaveText("読むと、その場で登録します");
+      // Said once: the list says what a read does.
+      await expect(scanner(scan).locator(".scan-list-empty")).toHaveText(
+        "読むと、その場で登録します",
+      );
       // Nothing is counted before the first book.
       await expect(count(scan)).toHaveText("");
       await expect(scanner(scan)).not.toContainText(/(^|\D)0(冊|件)/);
@@ -796,8 +812,8 @@ try {
   const twenty = Array.from({ length: 20 }, (_, at) => isbnOf(at + 1));
   await check("twenty books in a row, with no tap between", async () => {
     await show(scan, ...twenty);
-    await expect(count(scan)).toHaveText("この回 20冊", { timeout: 15000 });
-    await expect(scanner(scan).locator(".scan-spine.is-added")).toHaveCount(20);
+    await expect(count(scan)).toHaveText("20冊 登録済み", { timeout: 15000 });
+    await expect(scanner(scan).locator(".scan-item")).toHaveCount(20);
     for (const isbn of twenty) inLibrary.add("isbn-" + isbn);
     await expectLibrary();
     const data = await stored(scan);
@@ -806,7 +822,7 @@ try {
       expect(data.addedBooks.filter((book) => book.isbn === isbn)).toHaveLength(
         1,
       );
-    // The last read is on the card, with its title.
+    // The last read is on top of the list, with its title.
     await expect(cardTitle(scan)).toHaveText("試験の本 20");
     await expect(cardStatus(scan)).toHaveText("登録しました");
   });
@@ -817,23 +833,23 @@ try {
       // In one frame with an ISBN, only the ISBN counts.
       const isbn = isbnOf(21);
       await show(scan, [isbn, PRICE]);
-      await expect(count(scan)).toHaveText("この回 21冊");
+      await expect(count(scan)).toHaveText("21冊 登録済み");
       inLibrary.add("isbn-" + isbn);
       await expectLibrary();
       const guide = scanner(scan).locator(".scan-guide");
-      await expect(guide).toHaveText("上の段（978…）を枠に");
+      await expect(guide).toHaveText("ISBNバーコードをかざす");
       const kept = await journal(scan);
       // Alone: the first read is let go, the second says what to read, in
       // a mark of its own rather than the guide's words.
       await show(scan, PRICE);
-      await expect(guide).toHaveText("上の段（978…）を枠に");
+      await expect(guide).toHaveText("ISBNバーコードをかざす");
       await expect(guide).not.toHaveClass(/is-hint/);
       await show(scan, PRICE);
       await expect(guide).toHaveText(
         "上の段のバーコード（978…）を読んでください",
       );
       await expect(guide).toHaveClass(/is-hint/);
-      await expect(count(scan)).toHaveText("この回 21冊");
+      await expect(count(scan)).toHaveText("21冊 登録済み");
       await expectLibrary();
       expect(await journal(scan)).toEqual(kept);
     },
@@ -849,11 +865,11 @@ try {
       await expect(cardStatus(scan)).toHaveText(
         `${untitled}・控えに置きました`,
       );
-      await expect(count(scan)).toHaveText("この回 21冊・書名待ち 1冊");
-      await expect(scanner(scan).locator(".scan-spine.is-kept")).toHaveCount(1);
+      await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
+      await expect(scanner(scan).locator(".scan-item.is-kept")).toHaveCount(1);
       await show(scan, known);
       await expect(cardTitle(scan)).toHaveText("試験の本 22");
-      await expect(count(scan)).toHaveText("この回 22冊・書名待ち 1冊");
+      await expect(count(scan)).toHaveText("22冊 登録済み・1冊要確認");
       inLibrary.add("isbn-" + known);
       await expectLibrary();
       // On this device only: in the journal, and in no stored book.
@@ -866,19 +882,16 @@ try {
     },
   );
 
-  const undoKnown = () =>
-    scanner(scan).getByRole("button", {
-      name: "試験の本 22の登録を取り消す",
-    });
+  const undoKnown = () => undoBook(scan, "試験の本 22");
   await check(
-    "［取り消す］ takes the last book back out, and it can be read again",
+    "⋮ and 登録を取り消す take the last book back out, and it can be read again",
     async () => {
-      await undoKnown().click();
+      await undoKnown();
       await expect(cardStatus(scan)).toHaveText("取り消しました");
-      await expect(count(scan)).toHaveText("この回 21冊・書名待ち 1冊");
-      await expect(scanner(scan).locator(".scan-spine.is-added")).toHaveCount(
-        21,
-      );
+      await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
+      await expect(
+        scanner(scan).locator(".scan-item:not(.is-kept, .is-undone)"),
+      ).toHaveCount(21);
       inLibrary.delete("isbn-" + known);
       await expectLibrary();
       expect((await journal(scan)).some((item) => item.isbn === known)).toBe(
@@ -887,12 +900,12 @@ try {
       // Read again, it is a new book again.
       await show(scan, known);
       await expect(cardStatus(scan)).toHaveText("登録しました");
-      await expect(count(scan)).toHaveText("この回 22冊・書名待ち 1冊");
+      await expect(count(scan)).toHaveText("22冊 登録済み・1冊要確認");
       inLibrary.add("isbn-" + known);
       await expectLibrary();
       // Taken out once more: the town knows it, the library does not.
-      await undoKnown().click();
-      await expect(count(scan)).toHaveText("この回 21冊・書名待ち 1冊");
+      await undoKnown();
+      await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
       inLibrary.delete("isbn-" + known);
       await expectLibrary();
     },
@@ -909,19 +922,21 @@ try {
       await show(scan, known);
       await expect(cardTitle(scan)).toHaveText("試験の本 22");
       await expect(cardStatus(scan)).toHaveText("登録しました");
-      await expect(count(scan)).toHaveText("この回 22冊・書名待ち 1冊");
+      await expect(count(scan)).toHaveText("22冊 登録済み・1冊要確認");
       inLibrary.add("isbn-" + known);
       await expectLibrary();
       await show(scan, offline);
       await expect(cardStatus(scan)).toHaveText(
         `${offline}・つながったら書名を調べます`,
       );
-      await expect(count(scan)).toHaveText("この回 22冊・書名待ち 2冊");
+      await expect(count(scan)).toHaveText(
+        "22冊 登録済み・1冊確認中・1冊要確認",
+      );
       // Back online, it is looked up and registered.
       await scan.context().setOffline(false);
       await expect(cardTitle(scan)).toHaveText("試験の本 23");
       await expect(cardStatus(scan)).toHaveText("登録しました");
-      await expect(count(scan)).toHaveText("この回 23冊・書名待ち 1冊");
+      await expect(count(scan)).toHaveText("23冊 登録済み・1冊要確認");
       await expect(scanner(scan).locator(".scan-banner")).toHaveCount(0);
       inLibrary.add("isbn-" + offline);
       await expectLibrary();
@@ -944,17 +959,18 @@ try {
       return box;
     };
     await inside(count(scan));
-    await inside(scanner(scan).locator(".scan-card"));
+    await inside(latest(scan));
     // Each place to press is at least 44px tall (plan 7-0).
     const buttons = [
-      scanner(scan).getByRole("button", {
-        name: "試験の本 23の登録を取り消す",
-      }),
-      scanner(scan).getByRole("button", { name: "終わる" }),
+      scanner(scan).getByRole("button", { name: "試験の本 23のほかの操作" }),
+      ...["読了", "積読", "読書中"].map((name) =>
+        latest(scan).getByRole("button", { name }),
+      ),
+      scanner(scan).getByRole("button", { name: "完了" }),
       scanner(scan).getByRole("button", { name: "ISBNを打つ" }),
-      scanner(scan).getByRole("button", { name: "手で入力" }),
       scanner(scan).getByRole("button", { name: "閉じる" }),
       scanner(scan).getByRole("button", { name: "音" }),
+      scanner(scan).getByRole("button", { name: "カメラを大きくする" }),
     ];
     for (const button of buttons)
       expect((await inside(button)).height).toBeGreaterThanOrEqual(44);
@@ -965,8 +981,12 @@ try {
     await scanner(scan).getByRole("button", { name: "ISBNを打つ" }).tap();
     await expectKeyboardUp(scan, field(scan), "ISBNを打つ");
     await expect(scanner(scan)).toContainText("13桁そろうと登録します");
-    // Typing, with the keyboard taking half the screen: the field, the card
-    // and ［終わる］ stay in what is left.
+    for (const name of ["手で入力", "音", "カメラで読む"])
+      expect(
+        (await inside(scanner(scan).getByRole("button", { name }))).height,
+      ).toBeGreaterThanOrEqual(44);
+    // Typing, with the keyboard taking half the screen: the field, the
+    // newest book and ［完了］ stay in what is left.
     // On a phone nothing of the page shows past the sheet: it is the page's
     // own paper, with nothing see-through.
     const [sheet, paper] = await scanner(scan).evaluate((layer) => [
@@ -979,10 +999,10 @@ try {
     for (const target of [
       field(scan),
       scanner(scan).getByRole("button", { name: "登録", exact: true }),
-      scanner(scan).getByRole("button", { name: "終わる" }),
+      scanner(scan).getByRole("button", { name: "完了" }),
     ])
       expect((await inside(target, 420)).height).toBeGreaterThanOrEqual(44);
-    await inside(scanner(scan).locator(".scan-card"), 420);
+    await inside(latest(scan).locator(".scan-item-head"), 420);
     await scan.screenshot({ path: path.join(output, "scan-typing-420.png") });
     await scan.setViewportSize({ width: 390, height: 844 });
     await scanner(scan).getByRole("button", { name: "カメラで読む" }).click();
@@ -990,14 +1010,14 @@ try {
   });
 
   await check(
-    "［終わる］ closes at once, says what was read in, and lands on the library",
+    "［完了］ closes at once, says what was read in, and lands on the library",
     async () => {
       await toasts(scan);
-      const counted = /^この回 (\d+)冊・書名待ち 1冊$/.exec(
+      const counted = /^(\d+)冊 登録済み・1冊要確認$/.exec(
         await count(scan).innerText(),
       );
       expect(counted).not.toBeNull();
-      await scanner(scan).getByRole("button", { name: "終わる" }).click();
+      await scanner(scan).getByRole("button", { name: "完了" }).click();
       // No question first.
       await expect(scan.getByRole("dialog")).toHaveCount(0);
       await expect(scan.locator(".toast")).toContainText(
@@ -1062,19 +1082,21 @@ try {
       await toasts(scan);
       await openScanner(scan);
       await cameraRunning(scan);
-      // A book in the library already: said, with the other sound, and
-      // nothing written or counted.
+      // A book in the library already: said over the camera, with the
+      // other sound, and nothing written, listed or counted.
       const kept = await stored(scan);
       await show(scan, twenty[0]);
-      await expect(cardTitle(scan)).toHaveText("試験の本 1");
-      await expect(cardStatus(scan)).toHaveText("もうライブラリにあります");
+      await expect(remark(scan)).toHaveText(
+        "試験の本 1もうライブラリにあります",
+      );
+      await expect(scanner(scan).locator(".scan-item")).toHaveCount(0);
       await expect(count(scan)).toHaveText("");
       expect(await stored(scan)).toEqual(kept);
       expect(await journal(scan)).toBeNull();
       expect((await feedback(scan)).buzz).toEqual([[20, 60, 20]]);
       const isbn = isbnOf(24);
       await show(scan, isbn);
-      await expect(count(scan)).toHaveText("この回 1冊");
+      await expect(count(scan)).toHaveText("1冊 登録済み");
       await scan.goBack();
       await expect(scanner(scan)).toHaveCount(0);
       await expect(scan).toHaveURL(/\/profiles\/me\//);
@@ -1100,13 +1122,13 @@ try {
       await expect(scanner(scan)).toHaveCount(0);
       await expect(wishTab).toHaveAttribute("aria-pressed", "true");
       await expect(scan).toHaveURL(base + "/profiles/me/");
-      // A book read: ［終わる］ lands on the 登録 tab, the book first, and
+      // A book read: ［完了］ lands on the 登録 tab, the book first, and
       // one 戻る leaves the profile.
       await openScanner(scan);
       await cameraRunning(scan);
       const isbn = isbnOf(29);
       await show(scan, isbn);
-      await expect(count(scan)).toHaveText("この回 1冊");
+      await expect(count(scan)).toHaveText("1冊 登録済み");
       await finishScanning(scan);
       await expect(scan.locator(".toast")).toContainText("1冊を登録しました");
       await expect(scan).toHaveURL(/[?&]books=library/);
@@ -1133,7 +1155,6 @@ try {
     await expect(sound).toHaveAttribute("aria-pressed", "true");
     await sound.click();
     await expect(sound).toHaveAttribute("aria-pressed", "false");
-    await expect(sound).toContainText("オフ");
     await scan.reload();
     await hydrated(scan);
     await openScanner(scan);
@@ -1157,7 +1178,11 @@ try {
       const read = [25, 26, 27].map(isbnOf);
       const before = await feedback(scan);
       await show(scan, ...read);
-      await expect(count(scan)).toHaveText("この回 3冊");
+      // Not called 登録済み: the books wait on this device, and say so.
+      await expect(count(scan)).toHaveText("3冊要確認");
+      await expect(cardStatus(scan)).toHaveText(
+        "端末に控えました。ページを読み込み直すと登録します",
+      );
       // ♪ is off: a vibration for each book, and no sound.
       const after = await feedback(scan);
       expect(after.buzz).toEqual([...before.buzz, 30, 30, 30]);
@@ -1171,7 +1196,7 @@ try {
         timeout: 8000,
       });
       await expect(cardStatus(scan)).toHaveText(`${asking}・控えに置きました`);
-      await expect(count(scan)).toHaveText("この回 3冊・書名待ち 1冊");
+      await expect(count(scan)).toHaveText("4冊要確認");
       await expect
         .poll(async () =>
           ((await journal(scan)) ?? []).map((item) => item.state).sort(),
@@ -1229,9 +1254,9 @@ try {
         scanner(refused).getByRole("button", { name: "カメラで読む" }),
       ).toHaveCount(0);
       await waitsForTap(refused);
-      // ［終わる］ is wide, and in the bottom third of the screen (plan 7-0).
+      // ［完了］ is wide, and in the bottom third of the screen (plan 7-0).
       const end = await restingBox(
-        scanner(refused).getByRole("button", { name: "終わる" }),
+        scanner(refused).getByRole("button", { name: "完了" }),
       );
       expect(end.y).toBeGreaterThanOrEqual((844 * 2) / 3);
       expect(end.width).toBeGreaterThan(390 / 2);
@@ -1239,7 +1264,7 @@ try {
       await field(refused).fill(isbnOf(30));
       await expect(cardTitle(refused)).toHaveText("試験の本 30");
       await expect(cardStatus(refused)).toHaveText("登録しました");
-      await expect(count(refused)).toHaveText("この回 1冊");
+      await expect(count(refused)).toHaveText("1冊 登録済み");
       // The Escape that cancels a kana conversion in the field is the
       // keyboard's, as in every dialog: the scanner and the digits stay.
       await field(refused).fill("９７８");
@@ -1309,13 +1334,13 @@ try {
       await cameraRunning(failing);
       await show(failing, isbnOf(35));
       await expect(cardTitle(failing)).toHaveText("試験の本 35");
-      await expect(count(failing)).toHaveText("この回 2冊");
+      await expect(count(failing)).toHaveText("2冊 登録済み");
       await failing.context().close();
     },
   );
 
   await check(
-    "a 書名待ち book entered by hand is in, and ［終わる］ waits for openBD",
+    "a 書名待ち book entered by hand is in, and ［完了］ waits for openBD",
     async () => {
       const typing = await scanningPage();
       await typing.addInitScript(() => {
@@ -1327,7 +1352,7 @@ try {
       const unknown = isbnOf(902);
       await field(typing).fill(unknown);
       await expect(cardTitle(typing)).toHaveText("書名がわからない本");
-      await expect(count(typing)).toHaveText("書名待ち 1冊");
+      await expect(count(typing)).toHaveText("1冊要確認");
       // ［手で入力］ over the scanner offers no second camera.
       await scanner(typing).getByRole("button", { name: "手で入力" }).click();
       const form = typing.getByRole("dialog", {
@@ -1346,7 +1371,7 @@ try {
       await form.getByRole("button", { name: "登録する", exact: true }).click();
       await expect(form).toHaveCount(0);
       // The book read before is that book: no 書名待ち left anywhere.
-      await expect(count(typing)).toHaveText("この回 1冊");
+      await expect(count(typing)).toHaveText("1冊 登録済み");
       await expect.poll(() => journal(typing)).toBeNull();
       await expect(typing.locator(".journal-note")).toHaveCount(0);
       // A title still on its way from openBD as the scanner closes: the
@@ -1391,11 +1416,11 @@ try {
       await openScanner(timed);
       await cameraRunning(timed);
       const [first, second] = [isbnOf(31), isbnOf(32)];
-      // Every read flashes the card: an iPhone neither vibrates nor, on
-      // silent, sounds.
+      // Every read flashes its book in the list: an iPhone neither vibrates
+      // nor, on silent, sounds.
       const flashed = await watchFlash(timed);
       await show(timed, first);
-      await expect(count(timed)).toHaveText("この回 1冊");
+      await expect(count(timed)).toHaveText("1冊 登録済み");
       await expect(cardStatus(timed)).toHaveText("登録しました");
       await expect.poll(flashed).toBe(true);
       // In: one short vibration, and a tone (♪ is on).
@@ -1407,9 +1432,11 @@ try {
       await timed.clock.setFixedTime(start + 900);
       await flashOver(timed);
       await show(timed, first);
-      await expect(cardStatus(timed)).toHaveText("同じ本です");
       await expect.poll(flashed).toBe(true);
-      await expect(count(timed)).toHaveText("この回 1冊");
+      // Its book lit up is all: nothing said.
+      await expect(cardStatus(timed)).toHaveText("登録しました");
+      await expect(remark(timed)).toHaveText("");
+      await expect(count(timed)).toHaveText("1冊 登録済み");
       expect(await stored(timed)).toEqual(kept);
       // Within 3 seconds: no sound, no vibration.
       expect(await feedback(timed)).toEqual(sounded);
@@ -1417,7 +1444,9 @@ try {
       await flashOver(timed);
       await flashed();
       await show(timed, first);
-      await expect(cardStatus(timed)).toHaveText("この回でもう入れました");
+      await expect(remark(timed)).toHaveText(
+        "試験の本 31この回でもう入れました",
+      );
       await expect.poll(flashed).toBe(true);
       // Later: the other vibration, and the two lower tones.
       const again = await feedback(timed);
@@ -1425,10 +1454,12 @@ try {
       expect(again.tones).toBe(sounded.tones + 2);
       // Another book between does not make it new either.
       await show(timed, second);
-      await expect(count(timed)).toHaveText("この回 2冊");
+      await expect(count(timed)).toHaveText("2冊 登録済み");
       await show(timed, first);
-      await expect(cardStatus(timed)).toHaveText("この回でもう入れました");
-      await expect(count(timed)).toHaveText("この回 2冊");
+      await expect(remark(timed)).toHaveText(
+        "試験の本 31この回でもう入れました",
+      );
+      await expect(count(timed)).toHaveText("2冊 登録済み");
       expect((await stored(timed)).library).toEqual([
         "isbn-" + first,
         "isbn-" + second,
@@ -1502,9 +1533,9 @@ try {
       // A phone (pointer: coarse): the camera opens at once.
       await openScanner(on);
       await expect(scanner(on).locator(".scan-guide")).toHaveText(
-        "上の段（978…）を枠に",
+        "ISBNバーコードをかざす",
       );
-      await expect(count(on)).toHaveText("この回 1冊", { timeout: 15000 });
+      await expect(count(on)).toHaveText("1冊 登録済み", { timeout: 15000 });
       await expect(cardTitle(on)).toHaveText("試験の本 61");
       await expect(cardStatus(on)).toHaveText("登録しました");
       // The price code under it is passed over, and nothing is said of it.
@@ -1515,7 +1546,7 @@ try {
       expect((await stored(on)).library).toEqual(["isbn-" + book]);
       // Held in view, it is one book.
       await on.waitForTimeout(1500);
-      await expect(count(on)).toHaveText("この回 1冊");
+      await expect(count(on)).toHaveText("1冊 登録済み");
       // From this site, once; and a larger picture was asked for.
       expect(fetched).toEqual([
         [expect.stringMatching(/^\/zxing\/zxing_reader-[\d.]+\.wasm$/), 200],
@@ -1528,14 +1559,13 @@ try {
         }),
       );
       // Reopened, the reader is the one already loaded, and the book read
-      // again lights the card up too.
+      // again is said over the camera.
       await finishScanning(on);
-      const flashed = await watchFlash(on);
       await openScanner(on);
-      await expect(cardStatus(on)).toHaveText("もうライブラリにあります", {
-        timeout: 15000,
-      });
-      await expect.poll(flashed).toBe(true);
+      await expect(remark(on)).toHaveText(
+        "試験の本 61もうライブラリにあります",
+        { timeout: 15000 },
+      );
       expect(fetched).toHaveLength(1);
       expect((await stored(on)).library).toEqual(["isbn-" + book]);
       await finishScanning(on);
@@ -1571,7 +1601,7 @@ try {
       on.on("pageerror", (e) => errors.push(e.message));
       await go("/profiles/me/?books=library", on);
       await openScanner(on);
-      await expect(count(on)).toHaveText("この回 1冊", { timeout: 15000 });
+      await expect(count(on)).toHaveText("1冊 登録済み", { timeout: 15000 });
       await expect(cardTitle(on)).toHaveText("試験の本 62");
       // Asked for at the size kept for the browser's own reader, the camera
       // is given ZXing's larger picture once ZXing is the one reading.
@@ -1639,7 +1669,7 @@ try {
           ),
         );
       await go("/profiles/me/?books=library", on);
-      // ［終わる］ while the reader loads: the camera goes with the scanner.
+      // ［完了］ while the reader loads: the camera goes with the scanner.
       await openScanner(on);
       await expect.poll(cameras).toEqual(["live"]);
       await expect(scanner(on).locator(".scan-camera-note")).toHaveText(
@@ -1666,7 +1696,7 @@ try {
       letThrough();
       await scanner(on).getByRole("button", { name: "カメラで読む" }).click();
       await expect(scanner(on).locator(".scan-guide")).toHaveText(
-        "上の段（978…）を枠に",
+        "ISBNバーコードをかざす",
         { timeout: 15000 },
       );
       await finishScanning(on);
@@ -1707,7 +1737,7 @@ try {
       expect(await on.evaluate(() => window.__asked)).toBe(0);
       await scanner(on).getByRole("button", { name: "カメラで読む" }).click();
       await expect(scanner(on).locator(".scan-guide")).toHaveText(
-        "上の段（978…）を枠に",
+        "ISBNバーコードをかざす",
         { timeout: 15000 },
       );
       expect(await on.evaluate(() => window.__asked)).toBe(1);
