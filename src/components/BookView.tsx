@@ -32,6 +32,7 @@ import { mine } from "../lib/own-books";
 import { useBibliography } from "../lib/bibliography-session";
 import { HeldBook } from "./HeldBook";
 import { PLACE } from "../lib/words";
+import "./book-in-hand.css";
 
 type Shared = {
   state: TownState;

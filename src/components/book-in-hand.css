@@ -1,7 +1,7 @@
 .bh-dialog.is-store-scene .bh-pop-text {
   font-family: "Yohaku Hand", var(--serif);
   font-size: var(--t-page);
-  line-height: 1.9;
+  line-height: 1.85;
 }
 .bh-pop-stamp {
   display: block;

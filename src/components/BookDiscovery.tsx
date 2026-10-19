@@ -15,6 +15,7 @@ import { BookPrice } from "./BookActions";
 import { shopPath } from "../lib/paths";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import { counted } from "../lib/words";
+import "./book-in-hand.css";
 
 function BookRail({
   title,

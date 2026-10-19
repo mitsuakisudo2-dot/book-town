@@ -16,6 +16,7 @@ import { CoverRemovalLink } from "./Report";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { BookDiscovery } from "./BookDiscovery";
 import { bookPath } from "../lib/books";
+import "./walk.css";
 import "./book-in-hand.css";
 import type { ReadEntry } from "../lib/store-scene-adapter";
 import { StoreStamp } from "./StoreCanvas";

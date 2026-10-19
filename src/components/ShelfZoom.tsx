@@ -9,6 +9,8 @@ import {
 } from "../lib/store-scene";
 import type { Book } from "../lib/types";
 import { bookById, bookTitle } from "../lib/book-name";
+import "./walk.css";
+
 export function ShelfZoom({
   scene,
   rowId,
