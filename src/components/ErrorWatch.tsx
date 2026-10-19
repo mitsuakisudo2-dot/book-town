@@ -93,7 +93,10 @@ export function ErrorWatch() {
     };
   }, []);
   // A screen's file gone since a new build went up: the page is read again
-  // from the new build (new-build.ts), after the error above is sent.
+  // from the new build (new-build.ts), after the error above is sent. A
+  // screen's stylesheet that did not load comes as the rejection, once the
+  // screen is in and the address is the new one; the <link>'s own error
+  // event comes before that, while the address is still the screen left.
   useEffect(() => {
     const onError = (event: ErrorEvent) => {
       if (isMissingFile(event.error)) readNewBuild();

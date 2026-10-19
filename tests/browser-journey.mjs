@@ -1618,6 +1618,48 @@ try {
       }
     },
   );
+  await check(
+    "a page opened before a new build reads itself again when a screen's CSS is gone",
+    async () => {
+      const stale = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        locale: "ja-JP",
+      });
+      const reader = await stale.newPage();
+      // Not watched: the missing file's error is the point (new-build.ts).
+      try {
+        await reader.goto(`${baseURL}/library/`);
+        await reader.waitForLoadState("networkidle");
+        // Only the CSS changed in the new build: the home screen's JS is
+        // found, its stylesheet is not, until the page is read again.
+        let pages = 0;
+        reader.on("request", (request) => {
+          if (request.resourceType() === "document") pages += 1;
+        });
+        await stale.route(/\/_next\/static\/.*\.css$/, (route) =>
+          pages === 0
+            ? route.fulfill({ status: 404, body: "gone" })
+            : route.continue(),
+        );
+        await reader
+          .locator("nav a:visible", { hasText: "ホーム" })
+          .first()
+          .click();
+        await expect.poll(() => pages).toBe(1);
+        await expect(reader).toHaveURL(`${baseURL}/`);
+        await expect(reader.locator(".post-card").first()).toBeVisible();
+        await reader.waitForLoadState("networkidle");
+        const unread = await reader.evaluate(() =>
+          [...document.querySelectorAll('link[rel="stylesheet"]')]
+            .filter((link) => !link.sheet)
+            .map((link) => link.getAttribute("href")),
+        );
+        expect(unread).toEqual([]);
+      } finally {
+        await stale.close();
+      }
+    },
+  );
   await check("a link to a shop that is gone says it is closed", async () => {
     await page.goto(`${baseURL}/shop/?id=gone-shop`);
     await expect(

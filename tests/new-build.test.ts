@@ -41,6 +41,38 @@ check("webpack's errors for a file that could not be read are known", () => {
   assert.equal(isMissingFile(undefined), false);
 });
 
+check("a stylesheet of the site that did not load is known", () => {
+  const link = (href: string, rel = "stylesheet") => ({
+    type: "error",
+    target: { tagName: "LINK", rel, href },
+  });
+  assert.equal(
+    isMissingFile(link("https://booktown.page/_next/static/css/d37d.css")),
+    true,
+  );
+  assert.equal(isMissingFile(link("/_next/static/css/d37d.css")), true);
+  assert.equal(
+    isMissingFile(link("https://fonts.googleapis.com/css2?family=Noto")),
+    false,
+  );
+  assert.equal(isMissingFile(link("/themes/room.css")), false);
+  assert.equal(
+    isMissingFile(link("/_next/static/css/d37d.css", "preload")),
+    false,
+  );
+  assert.equal(
+    isMissingFile({
+      type: "error",
+      target: { tagName: "IMG", href: "/_next/static/media/a.png" },
+    }),
+    false,
+  );
+  assert.equal(
+    isMissingFile({ type: "load", target: link("/_next/static/a.css").target }),
+    false,
+  );
+});
+
 function page(online = true) {
   const kept = new Map<string, string>();
   let reloads = 0;
