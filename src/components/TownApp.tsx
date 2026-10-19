@@ -509,6 +509,15 @@ export default function TownApp({
               {savedIn === "local" ? "デモの街" : "本の街"}
               <Icon name="leaf" size={12} />
             </button>
+            {!visitor && (
+              <Link
+                href={libraryPath({ addBook: true })}
+                className="top-bell top-add"
+                aria-label="本を登録"
+              >
+                <Icon name="barcode" size={20} />
+              </Link>
+            )}
             {account.status === "signed-out" && (
               <Link className="demo-pill top-login" href={loginPath()}>
                 ログイン
