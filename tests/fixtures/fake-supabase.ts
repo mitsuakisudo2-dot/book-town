@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../../src/lib/supabase/database.generated";
-import { FEELINGS } from "../../src/lib/types";
+import { FEELINGS, type Book } from "../../src/lib/types";
+import { keysOf } from "../../src/lib/search/keys";
+import { bookGrams } from "../../src/lib/search/postings";
 
 // A stand-in for Supabase's REST API over tables in memory, enough for the
 // town and the walk to read and write through the real backends
@@ -683,6 +685,56 @@ export function fakeSupabase(
           status: 200,
           count: null,
         };
+      if (townWindow && name === "feeling_records")
+        return {
+          data: newest(
+            table("reading_entries").filter(
+              (row) =>
+                row.kind === "finished" &&
+                (row.feelings as string[]).includes(args.feeling as string),
+            ),
+          )
+            .slice(0, Number(args.record_limit ?? 100))
+            .map((row) => ({ ...row, body: "" })),
+          error: null,
+          status: 200,
+          count: null,
+        };
+      // As the database's found_book_ids: the books holding every pair of a
+      // form, or enough of them, or with the ISBN.
+      if (townWindow && name === "find_books") {
+        const forms = args.forms as { grams: string[]; need: number }[];
+        const finds = (row: Row) => {
+          if (args.isbn) return row.isbn === args.isbn;
+          if (
+            args.isbn_start &&
+            String(row.isbn ?? "").startsWith(String(args.isbn_start))
+          )
+            return true;
+          const keys = keysOf({
+            title: row.title,
+            author: row.author,
+          } as Book);
+          const listed = bookGrams([
+            ...keys.title,
+            ...keys.subtitle,
+            ...keys.author,
+          ]);
+          return forms.some(
+            (form) =>
+              form.grams.filter((gram) => listed.has(gram)).length >= form.need,
+          );
+        };
+        return {
+          data: table("books")
+            .filter(finds)
+            .slice(0, Number(args.book_limit ?? 100))
+            .map(untyped),
+          error: null,
+          status: 200,
+          count: null,
+        };
+      }
       if (townWindow && name === "work_records") {
         const work = table("books").find(
           (row) => row.id === args.book,

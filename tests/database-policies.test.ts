@@ -3176,7 +3176,8 @@ async function main() {
       // books came to share a work (private.work_changes), when a book was
       // placed in its edition (private.book_checks) and which book a reader's
       // copy was made from (private.book_copies) are no reader's use of a
-      // book, and nobody reads them through the API.
+      // book, and nobody reads them through the API; nor is what a book's
+      // title is searched by (private.book_grams).
       const keys = await db.query<{ ref: string }>(
         `select c.conrelid::regclass::text || '.' || a.attname as ref
          from pg_constraint c
@@ -3195,6 +3196,7 @@ async function main() {
           "private.book_checks.book_id",
           "private.book_copies.book_id",
           "private.book_copies.copied_from",
+          "private.book_grams.book_id",
           "private.work_changes.book_id",
           "profile_nine.book_id",
           "reading_entries.book_id",

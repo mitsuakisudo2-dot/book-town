@@ -10,7 +10,7 @@ import {
 // What the town reads when a page shows it, not with the town (AUD-006):
 // another reader's records and 人生の9冊 on their profile's page, a book's
 // records on its page, which feelings anyone kept and the books felt with
-// one in the search. The
+// one in the search, and the books a search finds. The
 // town reads only a window of others' records and none of their nines
 // (supabase/town-backend.ts, TOWN_VIEW_ARGS). What a page read is kept apart
 // from the town, never saved, and laid over it for the page (withMore), so
@@ -18,13 +18,19 @@ import {
 
 /** What a page asks to be read for it. */
 export type MoreAsk =
-  { reader: string } | { work: string } | { felt: true } | { feeling: Feeling };
+  | { reader: string }
+  | { work: string }
+  | { felt: true }
+  | { feeling: Feeling }
+  /** The books a search finds among all the reader may read (find_books). */
+  | { search: string };
 
 /** One key per ask, to keep and share what was read. */
 export function moreKey(ask: MoreAsk): string {
   if ("reader" in ask) return "reader:" + ask.reader;
   if ("work" in ask) return "work:" + ask.work;
   if ("felt" in ask) return "felt:";
+  if ("search" in ask) return "search:" + ask.search;
   return "feeling:" + ask.feeling;
 }
 
@@ -35,6 +41,7 @@ export function askOfKey(key: string): MoreAsk | null {
   if (kind === "reader") return { reader: value };
   if (kind === "work") return { work: value };
   if (kind === "felt") return { felt: true };
+  if (kind === "search" && value.trim()) return { search: value };
   if (kind === "feeling" && FEELINGS.includes(value as Feeling))
     return { feeling: value as Feeling };
   return null;
