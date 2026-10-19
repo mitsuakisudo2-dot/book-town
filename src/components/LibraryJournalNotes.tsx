@@ -17,6 +17,7 @@ import {
 import { journalTown, useTownBackend } from "../lib/store";
 import type { Notify } from "../lib/types";
 import { Modal } from "./ui";
+import { japanMonthDay } from "../lib/japan-time";
 import { quote } from "../lib/book-name";
 import { counted, failure, AGAIN } from "../lib/words";
 
@@ -152,7 +153,6 @@ function TitleForm({
   const id = useId();
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
-  const read = new Date(item.at);
 
   async function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -187,9 +187,7 @@ function TitleForm({
     <form className="journal-title-form" onSubmit={register}>
       <p className="journal-title-about">
         <b>ISBN {item.isbn}</b>
-        <small>
-          {read.getMonth() + 1}月{read.getDate()}日に読んだ本
-        </small>
+        <small>{japanMonthDay(item.at)}に読んだ本</small>
       </p>
       <label className="form-label" htmlFor={id + "-title"}>
         タイトル

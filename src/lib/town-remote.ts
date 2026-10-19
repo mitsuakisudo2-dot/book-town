@@ -51,6 +51,8 @@ import {
   type ReviewKind,
   type TownState,
   reviewKey,
+  STORED_NAME_MAX_LENGTH,
+  STORED_POP_MAX_LENGTH,
 } from "./types";
 import type { Tables, TablesInsert } from "./supabase/database.types";
 import { demoBooks } from "./data";
@@ -311,7 +313,7 @@ export function cleanShelves(value: unknown, bookIds: Set<string>): Shelf[] {
       !text(candidate.id, 200) ||
       !candidate.id ||
       shelfIds.has(candidate.id) ||
-      !text(candidate.name, 120) ||
+      !text(candidate.name, STORED_NAME_MAX_LENGTH) ||
       !candidate.name.trim() ||
       typeof candidate.isPublic !== "boolean" ||
       typeof candidate.capacity !== "number" ||
@@ -348,7 +350,7 @@ export function cleanShelves(value: unknown, bookIds: Set<string>): Shelf[] {
         !bookIds.has(item.bookId) ||
         onShelf.has(item.bookId) ||
         (item.display !== "spine" && item.display !== "face") ||
-        !text(item.pop, 10000)
+        !text(item.pop, STORED_POP_MAX_LENGTH)
       )
         continue;
       const next = {

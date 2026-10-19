@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { normalizeIsbn } from "../lib/books";
+import {
+  BOOK_PRICE_MAX_LENGTH,
+  BOOK_TEXT_MAX,
+  normalizeIsbn,
+} from "../lib/books";
 import { lookUpBook } from "../lib/openbd";
 import { libraryBookByIsbn, useTownBackend } from "../lib/store";
 import type { TownActions, TownState } from "../lib/types";
@@ -337,7 +341,7 @@ export function BarcodeRegister({
             id={id + "-title"}
             className="field"
             value={title}
-            maxLength={200}
+            maxLength={BOOK_TEXT_MAX}
             onChange={(event) => setTitle(event.target.value)}
           />
         </label>
@@ -347,7 +351,7 @@ export function BarcodeRegister({
             id={id + "-author"}
             className="field"
             value={author}
-            maxLength={200}
+            maxLength={BOOK_TEXT_MAX}
             onChange={(event) => setAuthor(event.target.value)}
           />
         </label>
@@ -359,7 +363,7 @@ export function BarcodeRegister({
             inputMode="numeric"
             placeholder="1540"
             value={price}
-            maxLength={9}
+            maxLength={BOOK_PRICE_MAX_LENGTH}
             onChange={(event) => setPrice(event.target.value)}
           />
         </label>

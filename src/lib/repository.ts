@@ -37,6 +37,8 @@ import {
   type ReadingSession,
   type Shop,
   type TownState,
+  STORED_NAME_MAX_LENGTH,
+  STORED_POP_MAX_LENGTH,
 } from "./types";
 
 export const STORAGE_KEY = "book-town-v1";
@@ -130,7 +132,7 @@ export function validShop(
     value.id !== OWN_SHOP_ID ||
     value.ownerId !== ME_ID ||
     value.demo !== false ||
-    !text(value.name, 120) ||
+    !text(value.name, STORED_NAME_MAX_LENGTH) ||
     !value.name.trim() ||
     !text(value.description) ||
     !text(value.tagline, 500) ||
@@ -150,7 +152,7 @@ export function validShop(
       !text(candidate.id, 200) ||
       !candidate.id ||
       shelfIds.has(candidate.id) ||
-      !text(candidate.name, 120) ||
+      !text(candidate.name, STORED_NAME_MAX_LENGTH) ||
       !candidate.name.trim() ||
       typeof candidate.isPublic !== "boolean" ||
       typeof candidate.capacity !== "number" ||
@@ -172,7 +174,7 @@ export function validShop(
         !bookIds.has(candidateItem.bookId) ||
         shelfBooks.has(candidateItem.bookId) ||
         !["spine", "face"].includes(String(candidateItem.display)) ||
-        !text(candidateItem.pop)
+        !text(candidateItem.pop, STORED_POP_MAX_LENGTH)
       )
         return false;
       itemIds.add(candidateItem.id);
