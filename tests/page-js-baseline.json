@@ -1,0 +1,23 @@
+{
+  "/": 305,
+  "/books/[id]/": 298,
+  "/books/registered/": 275,
+  "/credits/": 276,
+  "/leave/": 228,
+  "/library/": 303,
+  "/login/": 260,
+  "/my-shop/": 317,
+  "/notifications/": 276,
+  "/post/": 275,
+  "/posters/": 275,
+  "/posters/new/": 275,
+  "/profile/": 275,
+  "/profiles/[id]/": 331,
+  "/reading-list/": 275,
+  "/reading/": 291,
+  "/search/": 289,
+  "/shop/": 275,
+  "/shops/[id]/": 287,
+  "/timeline/": 305,
+  "/walk/": 300
+}

@@ -25,59 +25,28 @@ import { lapsedLine, saveWarning } from "../lib/persistence";
 import { useAnyOutboxWaiting } from "../lib/outbox";
 import { playTabMove, tabMove } from "../lib/tab-motion";
 import { useAccountState } from "../lib/account-session";
-import {
-  ME_ID,
-  ownTagline,
-  type TownState,
-  type TownActions,
-  type ShelfItem,
-  type Shelf,
-  type Book,
-  type Notify,
-  type ToastUndo,
-} from "../lib/types";
-import {
-  BookJacket,
-  CoverCredit,
-  GoogleCoversCredit,
-  Icon,
-  Modal,
-  ReaderAvatar,
-} from "./ui";
-import { WoodenShelf } from "./WoodenShelf";
-import { BookInHand, readBookInHandAhead } from "./book-in-hand-later";
-import { heldBookOf } from "../lib/held-book";
-import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
-import { BookReviews, FoldedWords } from "./Social";
-import { HomeView } from "./HomeView";
+import { ME_ID, type Notify, type ToastUndo } from "../lib/types";
+import { GoogleCoversCredit, Icon, Modal, ReaderAvatar } from "./ui";
 import { requestHomeTop } from "../lib/home-tab";
 import { activeSession } from "../lib/reading";
 import { unreadCount } from "../lib/notifications";
-import { bookPath } from "../lib/books";
 import "./usability.css";
-import { useHorizontalSwipe } from "./useHorizontalSwipe";
 import "./shop-journey.css";
 import {
   libraryPath,
   loginPath,
   myShopPath,
   notificationsPath,
-  posterNewPath,
-  creditsPath,
-  posterPath,
   profilePath,
   readingPath,
   searchPath,
-  shopPath,
   walkPath,
 } from "../lib/paths";
-import { isSampleId } from "../lib/record-kind";
 import { requestSearch } from "../lib/tags";
 import { enterPressed } from "../lib/search/use-book-search";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
-import { CoverRemovalLink, ReportButton, ReportDialog } from "./Report";
+import { ReportDialog } from "./Report";
 import { SiteNotesGate } from "./SiteNotesGate";
-import { BookFeelings } from "./ReadingRecords";
 import { accountRequested, closeAccountRequest } from "../lib/visitor";
 import { closeReport } from "../lib/report";
 import { carriedToast, noteToast } from "../lib/carried-toast";
@@ -87,16 +56,16 @@ import {
   onSampleRefusal,
   refusedForSample,
 } from "../lib/sample-notice";
-import { BackLink } from "./BackLink";
 import { notePageShown } from "../lib/in-town";
 import { replaceAddress } from "../lib/url-state";
 import { useLastHomeAddress } from "../lib/last-address";
-import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
-import { findReader, reviewCoverOf, reviewNoteOf } from "../lib/social";
-import { PosterThumb } from "./PosterView";
 import "./poster-screen.css";
 import { useLayerReturn } from "../lib/back-layer";
-import { PostLayer, PostPageView } from "./letter/PostPage";
+import {
+  PostLayer,
+  PostPageView,
+  readPostPageAhead,
+} from "./letter/post-page-later";
 import {
   closePost,
   isPostOpen,
@@ -105,26 +74,17 @@ import {
   usePostLayer,
 } from "./letter/post-layer";
 import { useAnnouncement } from "../lib/live-region";
-import { reducedMotion } from "../lib/motion";
-import {
-  bookAuthor,
-  bookById,
-  bookHeading,
-  bookNamedBy,
-  bookTitle,
-  quotedTitle,
-} from "../lib/book-name";
-import type { Bibliography } from "../lib/bibliography";
-import { booksOfWork } from "../lib/works";
-import { mine } from "../lib/own-books";
-import { useBibliography, useBookHolds } from "../lib/bibliography-session";
-import { HeldBook } from "./HeldBook";
-import { counted, NAMES, PLACE, TABS, whenSome } from "../lib/words";
+import { useBookHolds } from "../lib/bibliography-session";
+import { NAMES, TABS } from "../lib/words";
 
-// Every screen but Home comes in its own file, read when it is first shown
-// (and after Home is drawn, below), so a phone opening the town reads and
-// runs only Home's code before the first 便り. Each is still drawn into the
-// page's HTML at build time.
+// Every screen comes in its own file, so a page reads only the screen it
+// shows: Home's code is not read on a book's page, nor a book's page's on
+// Home. Each is still drawn into the page's HTML at build time, and the page
+// asks for its screen's file with the rest of its code. Another screen's file
+// is read when the reader goes there.
+const HomeView = dynamic(() =>
+  import("./HomeView").then((file) => file.HomeView),
+);
 const ShopEditor = dynamic(() =>
   import("./ShopEditor").then((file) => file.ShopEditor),
 );
@@ -155,6 +115,15 @@ const PosterEditor = dynamic(() =>
 const PosterScreen = dynamic(() =>
   import("./PosterScreen").then((file) => file.PosterScreen),
 );
+const ShopView = dynamic(() =>
+  import("./ShopView").then((file) => file.ShopView),
+);
+const BookView = dynamic(() =>
+  import("./BookView").then((file) => file.BookView),
+);
+const Wishlist = dynamic(() =>
+  import("./Wishlist").then((file) => file.Wishlist),
+);
 
 type View =
   | "town"
@@ -173,11 +142,6 @@ type View =
   | "poster-new"
   | "post"
   | "credits";
-type Shared = {
-  state: TownState;
-  actions: TownActions;
-  notify: Notify;
-};
 type Section = "home" | "search" | "walk" | "shelf" | "reading" | "profile";
 // The row for the β (管理表 48), its names in TABS. ライブラリ opens the
 // library; 記録 opens 読書を開始 as it is.
@@ -342,6 +306,12 @@ export default function TownApp({
     openPost(id);
     return true;
   }, persistence !== "loading");
+  // Once the town is read, a 便り's page is read ahead, so a tap opens it
+  // at once.
+  const townRead = persistence !== "loading";
+  useEffect(() => {
+    if (townRead) readPostPageAhead();
+  }, [townRead]);
   // A page of the town does not carry another page's layer.
   useEffect(() => () => closePost(), []);
   const said = useAnnouncement();
@@ -691,7 +661,9 @@ export default function TownApp({
           </button>
         </Modal>
       )}
-      {view !== "post" && <PostLayer {...shared} />}
+      {/* Only while a 便り is open over the screen, so its file is not read
+          before (post-page-later.ts). */}
+      {layered && <PostLayer {...shared} />}
       {/* Said to a screen reader without moving the focus (いいね's count). */}
       <div className="sr-only town-said" aria-live="polite">
         <span key={said.at}>{said.text}</span>
@@ -699,315 +671,6 @@ export default function TownApp({
       <AccountInvite />
       <ReportDialog />
       <SiteNotesGate notify={notify} />
-    </div>
-  );
-}
-function ShopView({
-  state,
-  actions,
-  notify,
-  shopId,
-}: Shared & { shopId: string }) {
-  const router = useRouter();
-  const shop =
-    shopId === "mine"
-      ? state.ownShop
-      : state.shops.find((s) => s.id === shopId);
-  const [selected, setSelected] = useState<{
-    item: ShelfItem;
-    shelf: Shelf;
-  } | null>(null);
-  // Back from a book's own page, the same book is in hand again.
-  useLayerReturn((name) => {
-    const held = heldBookOf(name);
-    if (!shop || held?.shopId !== shop.id) return false;
-    const shelf = shop.shelves.find((entry) => entry.id === held.shelfId);
-    const item = shelf?.items.find((entry) => entry.id === held.itemId);
-    if (!shelf || !item || selected?.item.id === item.id) return false;
-    setSelected({ item, shelf });
-    return true;
-  }, Boolean(shop));
-  useEffect(() => readBookInHandAhead(), []);
-  const publicShops = [
-    ...state.shops,
-    ...(state.ownShop ? [state.ownShop] : []),
-  ].filter((entry) => entry.shelves.some((shelf) => shelf.isPublic));
-  const shopIndex = publicShops.findIndex((entry) => entry.id === shop?.id);
-  const canBrowse = shopIndex >= 0 && publicShops.length > 1;
-  const previousShop = canBrowse
-    ? publicShops[(shopIndex - 1 + publicShops.length) % publicShops.length]
-    : null;
-  const nextShop = canBrowse
-    ? publicShops[(shopIndex + 1) % publicShops.length]
-    : null;
-  const shopSwipe = useHorizontalSwipe({
-    enabled: canBrowse && !selected,
-    exclude:
-      'button,a,input,textarea,select,summary,dialog,[role="dialog"],.shelf-scroll,.shop-shelf-index,[data-book-rail]',
-    // Each shop along the row is a step of its own: 戻る returns to the
-    // shop before it.
-    onSwipe(direction) {
-      const destination = direction < 0 ? previousShop : nextShop;
-      if (!destination) return;
-      router.push(shopPath(destination.id));
-    },
-  });
-  if (!shop)
-    return shopId === "mine" ? (
-      <div className="empty-state">
-        <Icon name="store" size={34} />
-        <h1>あなたの小さな書店を、ここに。</h1>
-        <p>店名と紹介を書いて、好きな本を並べてみましょう。</p>
-        <Link href={myShopPath()} className="btn fill">
-          書店をひらく
-          <Icon name="plus" size={17} />
-        </Link>
-      </div>
-    ) : (
-      // A link to a shop that has closed, or was never there.
-      <div className="empty-state">
-        <Icon name="store" size={34} />
-        <h1>この書店は、いまは閉まっています。</h1>
-        <p>ほかの書店の灯りは、今日もついています。</p>
-        <Link href={walkPath()} className="btn fill">
-          ほかの書店をめぐる
-          <Icon name="arrow" size={17} />
-        </Link>
-      </div>
-    );
-  const owner =
-    shop.ownerId === "me"
-      ? state.me
-      : state.readers.find((r) => r.id === shop.ownerId);
-  const shelves = shop.shelves.filter((s) => s.isPublic);
-  const hasBooks = shelves.some((s) => s.items.length > 0);
-  const followed = state.following.includes(shop.id);
-  return (
-    <div className="shop-journey" {...shopSwipe}>
-      <nav className="shop-journey-nav" aria-label="書店をめぐる">
-        {previousShop && (
-          <Link
-            href={shopPath(previousShop.id)}
-            aria-label={`前の書店：${previousShop.name}`}
-          >
-            <Icon name="back" size={17} />
-            前の書店
-          </Link>
-        )}
-        <BackLink className="shop-journey-home" icon={false}>
-          {canBrowse && (
-            <small>
-              {shopIndex + 1} / {publicShops.length} · 左右にスワイプ
-            </small>
-          )}
-        </BackLink>
-        {nextShop && (
-          <Link
-            href={shopPath(nextShop.id)}
-            aria-label={`次の書店：${nextShop.name}`}
-          >
-            次の書店
-            <Icon name="arrow" size={17} />
-          </Link>
-        )}
-      </nav>
-      <section className={"shop-hero theme-" + shop.theme}>
-        <div className="shop-hero-rule" />
-        <h1>{shop.name}</h1>
-        {ownTagline(shop) && <p className="shop-tagline">{ownTagline(shop)}</p>}
-        <div className="shop-hero-bottom">
-          {owner && (
-            <Link href={profilePath(owner.id)} className="owner-profile-link">
-              <ReaderAvatar reader={owner} size={35} />
-              <span>
-                店主 <b>{owner.name}</b>
-                <small>
-                  プロフィールをのぞく
-                  <Icon name="arrow" size={12} />
-                </small>
-              </span>
-            </Link>
-          )}
-          {hasBooks && (
-            <Link href={walkPath(shop.id)} className="btn">
-              <Icon name="store" size={16} />
-              店内に入る
-            </Link>
-          )}
-          {shop.ownerId === "me" ? (
-            <Link href={myShopPath()} className="btn">
-              <Icon name="edit" size={15} />
-              書店を整える
-            </Link>
-          ) : (
-            <button
-              className={"btn" + (followed ? "" : " fill")}
-              aria-pressed={followed}
-              onClick={() => {
-                actions.toggleFollow(shop.id);
-                notify(
-                  followed
-                    ? "フォローを解除しました"
-                    : "書店をフォローしました",
-                );
-              }}
-            >
-              <Icon name={followed ? "check" : "plus"} size={16} />
-              {followed ? "フォロー中" : "書店をフォロー"}
-            </button>
-          )}
-        </div>
-      </section>
-      <p className="shop-shelf-hint">
-        <Icon name="book" size={15} />
-        本を選ぶと、店主のPOPが読めます
-      </p>
-      <div className="shop-shelf-index">
-        {shelves.map((s) => (
-          <a
-            key={s.id}
-            href={"#shelf-" + s.id}
-            // Jumping to a shelf on the same page is no step of its own.
-            onClick={(event) => {
-              const shelf = document.getElementById("shelf-" + s.id);
-              if (!shelf) return;
-              event.preventDefault();
-              shelf.scrollIntoView({
-                behavior: reducedMotion() ? "auto" : "smooth",
-              });
-              replaceAddress({ hash: "shelf-" + s.id });
-            }}
-          >
-            {s.name}
-            <Icon name="chevron" size={12} />
-          </a>
-        ))}
-      </div>
-      {shelves.map((s, i) => {
-        const pops = shelfPops(s, state.books);
-        return (
-          <section
-            className="store-shelf-section"
-            id={"shelf-" + s.id}
-            key={s.id}
-          >
-            <div className="store-shelf-label">
-              <span>{String(i + 1).padStart(2, "0")}</span>
-              <h3>{s.name}</h3>
-              {/* An empty shelf has no count: the owner gets a way to fill it. */}
-              {s.items.length > 0 ? (
-                <small>{counted(s.items.length, "冊")}の選書</small>
-              ) : (
-                shop.ownerId === ME_ID && (
-                  <Link href={myShopPath()} className="store-shelf-fill">
-                    本を並べる
-                    <Icon name="arrow" size={12} />
-                  </Link>
-                )
-              )}
-            </div>
-            {/* The shelf keeps its own width; the owner's words fill the rest of the row. */}
-            <div className="store-shelf-body">
-              <WoodenShelf
-                shelf={s}
-                books={state.books}
-                onSelect={(item) => setSelected({ item, shelf: s })}
-              />
-              {pops.length > 0 && (
-                <ul
-                  className="store-shelf-pops"
-                  aria-label={`「${s.name}」の店主のPOP`}
-                >
-                  {pops.map(({ item, book }) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelected({ item, shelf: s })}
-                      >
-                        <span className="store-shelf-pop-words">
-                          {item.pop}
-                        </span>
-                        <small>{quotedTitle(book)}</small>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-        );
-      })}
-      {!shelves.length && (
-        <div className="empty-state">
-          <Icon name="book" size={30} />
-          <h3>この店の棚は、これから育ちます。</h3>
-          {shop.ownerId === "me" && (
-            <Link href={myShopPath()} className="btn">
-              最初の棚をつくる
-            </Link>
-          )}
-        </div>
-      )}
-      <section className="shop-about" aria-label="書店の紹介">
-        <h2>この書店について</h2>
-        <FoldedWords state={state} kind="shop" id={shop.id}>
-          <p className="shop-introduction">{shop.description}</p>
-        </FoldedWords>
-        {/* Only owners see how many follow them, in the demo as well. */}
-        {shop.demo ? (
-          <p className="shop-social-note">見本の書店</p>
-        ) : shop.ownerId === ME_ID &&
-          (shop.followers > 0 || shop.weekVisitors) ? (
-          <p className="shop-social-note">
-            {[
-              whenSome(shop.followers, "人", (c) => `${c}がフォロー`),
-              shop.weekVisitors &&
-                whenSome(
-                  shop.weekVisitors.count,
-                  "人",
-                  (c) => `先週${c}が立ち寄り`,
-                ),
-              "この数はあなたにだけ見えています",
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-        ) : null}
-        {shop.ownerId !== ME_ID && (
-          <ReportButton
-            className="report-link"
-            target={{ kind: "shop", id: shop.id, name: shop.name }}
-          >
-            <Icon name="flag" size={13} />
-            この書店を通報
-          </ReportButton>
-        )}
-      </section>
-      {owner && (
-        <div className="shop-owner-footer">
-          <ReaderAvatar reader={owner} size={45} />
-          <div>
-            <b>{owner.name}の、好きの輪郭。</b>
-            <p>人生の9冊から、店主をもう少し知ってみる。</p>
-          </div>
-          <Link href={profilePath(owner.id)} className="text-btn">
-            プロフィールへ
-            <Icon name="arrow" size={16} />
-          </Link>
-        </div>
-      )}
-      {selected && (
-        <BookInHand
-          key={`${shop.id}:${selected.shelf.id}:${selected.item.id}`}
-          shop={shop}
-          shelf={selected.shelf}
-          itemId={selected.item.id}
-          state={state}
-          actions={actions}
-          notify={notify}
-          onClose={() => setSelected(null)}
-        />
-      )}
     </div>
   );
 }
@@ -1063,364 +726,4 @@ function Toast({
   );
   const openDialog = document.querySelector("dialog[open]");
   return openDialog ? createPortal(toast, openDialog) : toast;
-}
-/** Up to three of a shelf's POPs, in shelf order: the owner's words beside the shelf. */
-function shelfPops(shelf: Shelf, books: Book[]) {
-  return shelf.items
-    .filter((item) => item.pop.trim())
-    .map((item) => ({
-      item,
-      book: bookById(books, item.bookId),
-    }))
-    .filter((entry): entry is { item: ShelfItem; book: Book } => !!entry.book)
-    .slice(0, 3);
-}
-/**
- * The title and the people of a book's page, and under them who published
- * it and when: the master's once there is one (docs/09「書誌マスタ」).
- */
-function BookHeadingLines({
-  book,
-  master,
-}: {
-  book: Book;
-  master: Bibliography | null;
-}) {
-  const { title, subtitle, author, publication } = bookHeading(book, master);
-  return (
-    <>
-      <h1>{title}</h1>
-      {subtitle && <p className="book-page-subtitle">{subtitle}</p>}
-      {author.length > 0 && (
-        <Parts className="book-page-author" parts={author} mark="／" />
-      )}
-      {publication.length > 0 && (
-        <Parts
-          className="book-page-publication"
-          parts={publication}
-          mark="・"
-        />
-      )}
-    </>
-  );
-}
-
-/**
- * A line of parts with a mark between them ("見本書房・見本文庫・2003年9月").
- * It breaks between parts, and a mark that would end or start a line is out
- * of sight (usability.css), so none is left on its own.
- */
-function Parts({
-  className,
-  parts,
-  mark,
-}: {
-  className: string;
-  parts: string[];
-  mark: string;
-}) {
-  return (
-    <p className={className + " parts-line"}>
-      <span>
-        {parts.map((part, at) => (
-          <span key={at}>
-            {at > 0 && <span className="parts-mark">{mark}</span>}
-            {part}
-          </span>
-        ))}
-      </span>
-    </p>
-  );
-}
-
-/** Where the heading came from, beside the cover's credit: the credits page. */
-function BibliographyCredit({ master }: { master: Bibliography | null }) {
-  if (!master?.from.length) return null;
-  return (
-    <span className="cover-credit">
-      <Link href={creditsPath()}>書誌の出典</Link>
-    </span>
-  );
-}
-
-function BookView({
-  state,
-  actions,
-  notify,
-  bookId,
-}: Shared & { bookId: string }) {
-  const persistence = usePersistenceStatus();
-  const book = bookById(state.books, bookId);
-  const master = useBibliography(bookId);
-  if (!book)
-    return persistence === "loading" ? (
-      <p role="status">本を開いています…</p>
-    ) : (
-      <div className="empty-state">
-        <h1>この本のページは、いまは見られません。</h1>
-        <Link href="/" className="btn">
-          街にもどる
-        </Link>
-      </div>
-    );
-  // The cover, its lookup and the shop links go by the heading's name.
-  const named = bookNamedBy(book, master);
-  // Shops show the book as their owner's own registration of it: the same
-  // work is the same book here.
-  const work = booksOfWork(state.books, book.id);
-  const matches = [
-    ...state.shops,
-    ...(state.ownShop ? [state.ownShop] : []),
-  ].flatMap((shop) =>
-    shop.shelves
-      .filter((s) => s.isPublic)
-      .flatMap((shelf) =>
-        shelf.items
-          .filter((i) => work.has(i.bookId))
-          .map((item) => ({ shop, shelf, item })),
-      ),
-  );
-  return (
-    <>
-      <BackLink className="back-link" />
-      <section className="book-page-hero">
-        <BookJacket book={named} />
-        <div className="book-hero-head">
-          <span className="eyebrow">ONE BOOK, MANY WORLDS</span>
-          <span className="genre-tag">{book.genre}</span>
-          <BookHeadingLines book={book} master={master} />
-          <BookPrice book={book} />
-          <BookPurchase book={named} />
-          <CoverCredit book={named} />
-          <BibliographyCredit master={master} />
-          <CoverRemovalLink book={named} />
-        </div>
-        <div className="book-hero-body">
-          <HeldBook book={book} actions={actions} notify={notify} />
-          <p className="book-summary">{book.summary}</p>
-          <BookActions
-            book={book}
-            state={state}
-            actions={actions}
-            notify={notify}
-            register
-            toShop
-          />
-          <span className="jacket-disclaimer">{bookNote(book)}</span>
-        </div>
-      </section>
-      <BookFeelings
-        book={book}
-        state={state}
-        actions={actions}
-        notify={notify}
-      />
-      <BookPosters state={state} book={book} />
-      <BookReviews
-        book={book}
-        state={state}
-        actions={actions}
-        notify={notify}
-      />
-      <div className="book-path-heading">
-        <span className="eyebrow">FOLLOW THE BOOK, MEET THE READER</span>
-        <h2>この本を並べている書店</h2>
-        <p>同じ一冊でも、棚が変われば、出会う言葉も変わる。</p>
-      </div>
-      <div className="stockist-list">
-        {matches.map(({ shop, shelf, item }) => (
-          <article
-            className={"stockist theme-" + shop.theme}
-            key={shop.id + shelf.id + item.id}
-          >
-            <div className="stockist-title">
-              <Link href={shopPath(shop.id, shelf.id)}>
-                <Icon name="store" size={21} />
-                <h3>{shop.name}</h3>
-                <Icon name="arrow" size={16} />
-              </Link>
-              {shop.demo && <small className="demo-tag">見本</small>}
-            </div>
-            <Link href={shopPath(shop.id, shelf.id)} className="stockist-shelf">
-              <Icon name="book" size={14} />「{shelf.name}」の棚
-              <Icon name="chevron" size={13} />
-            </Link>
-            <blockquote>
-              {item.pop || "この棚では、本そのものが語りかけます。"}
-            </blockquote>
-            <div className="stockist-bottom">
-              <Link href={walkPath(shop.id)} className="text-btn">
-                <Icon name="store" size={15} />
-                店内に入る
-              </Link>
-              <Link href={shopPath(shop.id, shelf.id)} className="text-btn">
-                この棚を見に行く
-                <Icon name="arrow" size={16} />
-              </Link>
-            </div>
-          </article>
-        ))}
-        {!matches.length && (
-          <div className="empty-state">
-            <h3>この本の、最初の居場所を。</h3>
-            <p>あなたの書店に並べて、POPを書いてみませんか。</p>
-            <Link
-              href={myShopPath({ place: mine(state, book.id) })}
-              className="btn"
-            >
-              {PLACE.toShop}
-            </Link>
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-/**
- * The posters a book appears in, those that open with it first. With none
- * yet, only the way to make the first. Spoilers the reader chose not to see
- * are left out, said once without a count.
- */
-function BookPosters({ state, book }: { state: TownState; book: Book }) {
-  const posters = postersOfBook(state, book.id);
-  const leftOut = postersLeftOutOfBook(state, book.id) && (
-    <p className="book-posters-left-out">
-      ネタバレを含むポスターは、設定により出していません
-    </p>
-  );
-  const make = (
-    <Link href={posterNewPath({ bookId: book.id })} className="text-btn">
-      <Icon name="plus" size={14} />
-      この本でポスターを作る
-    </Link>
-  );
-  if (!posters.length)
-    return (
-      <>
-        <p className="book-posters-invite">{make}</p>
-        {leftOut}
-      </>
-    );
-  return (
-    <section className="book-posters" aria-labelledby="book-posters-title">
-      <div className="book-path-heading">
-        <span className="eyebrow">POSTERS WITH THIS BOOK</span>
-        <h2 id="book-posters-title">この本が出てくるポスター</h2>
-        <p>読書家が、この本を貼り出したポスター。表紙から、その人の言葉へ。</p>
-      </div>
-      <ul className="book-posters-row">
-        {posters.map((poster) => {
-          // Who made it, and a 見本 says it is one, as on the timeline.
-          const maker = findReader(state, poster.authorId);
-          const sample = isSampleId(poster.authorId);
-          return (
-            <li key={poster.id}>
-              <PosterThumb
-                poster={poster}
-                books={state.books}
-                href={posterPath(poster.id)}
-                caption={
-                  [maker?.name, sample && "見本"].filter(Boolean).join(" · ") ||
-                  undefined
-                }
-                folded={reviewCoverOf(
-                  state,
-                  "poster",
-                  poster.id,
-                  poster.authorId,
-                )}
-                note={reviewNoteOf(state, "poster", poster.id, poster.authorId)}
-              />
-            </li>
-          );
-        })}
-      </ul>
-      {make}
-      {leftOut}
-    </section>
-  );
-}
-function Wishlist({ state, actions, notify }: Shared) {
-  const books = state.books.filter((b) => state.wishlist.includes(b.id));
-  // An empty list still has somewhere to start: one POP from each of a few shops.
-  const invitations = state.shops
-    .flatMap((shop) => {
-      const owner = state.readers.find((r) => r.id === shop.ownerId);
-      const item = shop.shelves
-        .filter((shelf) => shelf.isPublic)
-        .flatMap((shelf) => shelf.items)
-        .find(
-          (entry) =>
-            entry.pop.trim() &&
-            state.books.some((book) => book.id === entry.bookId),
-        );
-      const book = item && bookById(state.books, item.bookId);
-      return owner && item && book ? [{ shop, owner, item, book }] : [];
-    })
-    .slice(0, 3);
-  return (
-    <>
-      <span className="eyebrow">BOOKS TO COME BACK TO</span>
-      <h1 className="page-title">いつか、読みたい一冊。</h1>
-      <p className="page-subtitle">街を歩いて見つけた、次の楽しみ。</p>
-      {books.length ? (
-        <div className="catalog-grid wishlist-grid">
-          {books.map((b) => (
-            <article className="catalog-book" key={b.id}>
-              <Link href={bookPath(b.id)}>
-                <BookJacket book={b} />
-                <h3>{bookTitle(b)}</h3>
-                <p>{bookAuthor(b)}</p>
-              </Link>
-              <span>{b.genre}</span>
-              <button
-                className="text-btn"
-                onClick={() => {
-                  actions.toggleWish(b.id);
-                  notify("読みたいリストから外しました");
-                }}
-              >
-                <Icon name="check" size={14} />
-                リストから外す
-              </button>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <Icon name="bookmark" size={34} />
-          <h2>次の一冊は、どの棚にいるでしょう。</h2>
-          <p>気になる本を「読みたい」に加えると、ここに並びます。</p>
-          <Link href="/" className="btn">
-            街を歩いてみる
-            <Icon name="arrow" size={16} />
-          </Link>
-        </div>
-      )}
-      {!books.length && invitations.length > 0 && (
-        <section
-          className="wishlist-invitations"
-          aria-labelledby="wishlist-invitations-title"
-        >
-          <h2 id="wishlist-invitations-title">店主のPOPから、気になる一冊を</h2>
-          <ul>
-            {invitations.map(({ shop, owner, item, book }) => (
-              <li key={shop.id}>
-                <Link href={bookPath(book.id)}>
-                  <BookJacket book={book} />
-                  <span>
-                    <b>{bookTitle(book)}</b>
-                    <q>{item.pop.trim()}</q>
-                    <small>
-                      {shop.name}・店主 {owner.name}のPOP
-                    </small>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </>
-  );
 }

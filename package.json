@@ -34,7 +34,9 @@
     "test:app": "node tests/app-journey.mjs",
     "test:home": "node tests/home-journey.mjs",
     "test:poster-journey": "node tests/poster-journey.mjs",
-    "test:settings": "tsx tests/hosted-settings.test.ts"
+    "test:settings": "tsx tests/hosted-settings.test.ts",
+    "test:page-js": "tsx tests/page-js.test.ts",
+    "test:speed": "node scripts/perf/measure.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

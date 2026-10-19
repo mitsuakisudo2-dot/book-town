@@ -70,6 +70,36 @@ jobs:
         env:
           BOOK_TOWN_QA_OUTPUT: ${{ runner.temp }}/login-qa
 
+  # How much JS each page reads, and how fast Home opens on a slow phone
+  # (390px, Slow 4G, CPU four times slower), for a reader signed in against a
+  # stand-in for Supabase: the build as production's, served with brotli
+  # (scripts/perf). Each fails over its line: tests/page-js-baseline.json for
+  # the JS, SPEED_LIMITS for the median of five openings (AUD-044, AUD-048).
+  speed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://test-project.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_test
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm test:page-js
+      - name: Serve the built site as Vercel does
+        run: node scripts/perf/serve.mjs out 5181 &
+      - name: Home's first 便り and first moment to take a tap
+        run: pnpm test:speed 5
+        env:
+          SPEED_LIMITS: first=8000,interactive=10000
+
   # The demo build (no Supabase) in a real browser: the walk, the store
   # editor, registering a book, reacting to a shop's books (feedback) and
   # making a poster, without an account. The pages that keep what a reader
