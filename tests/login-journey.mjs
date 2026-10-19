@@ -5242,6 +5242,32 @@ try {
         .click();
       await expect(page).toHaveURL(/\/notifications\/$/);
       await expect(heldNotices).toHaveCount(1);
+      // Held a day or more after it was placed (the sources answered late,
+      // or the books were judged again): told as a book registered before.
+      holds = [{ ...heldRow, placed_at: ago(48), held_at: ago(0.4) }];
+      await page.reload();
+      await expect(heldNotices).toContainText(
+        "前に登録した『こころの本』のISBNは、『別の本』のものです。本のページで確かめてください",
+      );
+      for (const width of [390, 320]) {
+        await page.setViewportSize({ width, height: 844 });
+        await noOverflow(`held earlier notice ${width}`);
+        await page.screenshot({
+          path: path.join(output, `19-held-earlier-notice-${width}.png`),
+        });
+      }
+      await heldNotices.getByRole("link").click();
+      await expect(note).toContainText(
+        `前に登録したISBN（${OPENBD_ISBN}）は、『別の本』（山田一郎）のものです。`,
+      );
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await noOverflow(`held earlier book page ${width}`);
+        await note.scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: path.join(output, `19-held-earlier-book-${width}.png`),
+        });
+      }
       holds = [];
       booksFixed.length = 0;
     },

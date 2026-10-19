@@ -49,6 +49,12 @@ export type Ndl = {
   plainTitle?: string;
   reading?: string;
   volume?: string;
+  /** The volume's reading: 1 for 巻1, ジョウ for 上 (見本). */
+  volumeReading?: string;
+  /** Other titles (dcndl:alternative), with their readings. */
+  alternatives?: { value: string; reading?: string }[];
+  /** dcterms:description, as 原タイトル: FAHRENHEIT 451 (見本). */
+  descriptions?: string[];
   edition?: string;
   series?: { value: string; reading?: string }[];
   agents?: Agent[];
@@ -109,10 +115,11 @@ export function ndlRecord(r: Ndl): string {
     <dcterms:identifier rdf:datatype="http://ndl.go.jp/dcndl/terms/TOHANMARCNO">88888888</dcterms:identifier>
     ${r.isbns.map((i) => `<dcterms:identifier rdf:datatype="http://ndl.go.jp/dcndl/terms/ISBN">${i}</dcterms:identifier>`).join("")}
     <dcndl:partInformation><rdf:Description><dcterms:title>収めた一編</dcterms:title><dcndl:transcription>オサメタ イッペン</dcndl:transcription></rdf:Description></dcndl:partInformation>
-    ${described("dcndl:alternative", "ANOTHER TITLE")}
+    ${(r.alternatives ?? [{ value: "ANOTHER TITLE" }]).map((a) => described("dcndl:alternative", a.value, a.reading)).join("")}
     ${text("dcterms:title", r.plainTitle ?? r.title)}
     ${described("dc:title", r.title, r.reading)}
-    ${r.volume ? described("dcndl:volume", r.volume, "カン") : ""}
+    ${r.volume ? described("dcndl:volume", r.volume, r.volumeReading ?? "カン") : ""}
+    ${(r.descriptions ?? []).map((d) => text("dcterms:description", d)).join("")}
     ${(r.series ?? []).map((s) => described("dcndl:seriesTitle", s.value, s.reading)).join("")}
     ${text("dcndl:edition", r.edition)}
     ${(r.agents ?? [])

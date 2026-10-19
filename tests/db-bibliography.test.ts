@@ -795,6 +795,14 @@ async function main() {
           plainTitle: "架空の図書館. 上 : 夜の章",
           reading: "カクウ ノ トショカン : ヨル ノ ショウ",
           volume: "上",
+          volumeReading: "ジョウ",
+          alternatives: [
+            {
+              value: "Imaginary library",
+              reading: "イマジナリー ライブラリー",
+            },
+          ],
+          descriptions: ["原タイトル: THE IMAGINARY LIBRARY", "索引あり"],
           edition: "新装版",
           series: [
             { value: "空想文庫 ; 12", reading: "クウソウ ブンコ ; 12" },
@@ -856,6 +864,13 @@ async function main() {
         publisher: "架空書房 & 夜社",
         issued: "2014-06",
         ndc: "933.7",
+        // For comparing what readers type, not shown (AUD-013, AUD-088).
+        volume_reading: "ジョウ",
+        alternatives: [
+          "Imaginary library",
+          "イマジナリー ライブラリー",
+          "THE IMAGINARY LIBRARY",
+        ],
       });
       // The record is kept as it came, but for the libraries that hold it.
       assert.match(answer.record ?? "", /^<dcndl:BibResource /);
@@ -912,7 +927,11 @@ async function main() {
         }),
         X1,
       );
-      assert.deepEqual(dated.fields, { title: "題だけの本", issued: "1997" });
+      assert.deepEqual(dated.fields, {
+        title: "題だけの本",
+        issued: "1997",
+        alternatives: ["ANOTHER TITLE"],
+      });
       assert.equal(
         (
           await ndl(

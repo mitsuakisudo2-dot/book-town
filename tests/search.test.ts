@@ -22,11 +22,8 @@ import {
   type SearchOptions,
 } from "../src/lib/search/rank";
 import { kanaToRomaji, romajiToKana } from "../src/lib/search/romaji";
-import {
-  splitAuthors,
-  splitTitle,
-  volumeNumber,
-} from "../src/lib/search/title";
+import { splitAuthors, splitTitle } from "../src/lib/search/title";
+import { volumeMark, volumeOrder } from "../src/lib/search/volume";
 import { seedState } from "../src/lib/data";
 import { booksBeforeSearch } from "../src/lib/book-lists";
 import { REGISTERED_GENRE } from "../src/lib/books";
@@ -421,6 +418,7 @@ async function main() {
   await check("titles split into base, edition, volume and subtitle", () => {
     assert.deepEqual(splitTitle("あなたの人生の物語（ハヤカワ文庫SF）"), {
       base: "あなたの人生の物語",
+      mark: "",
       volume: 0,
       edition: "ハヤカワ文庫SF",
       subtitle: "",
@@ -429,18 +427,21 @@ async function main() {
     assert.equal(splitTitle("最新版").base, "最新版");
     assert.deepEqual(splitTitle("罪と罰（下）"), {
       base: "罪と罰",
+      mark: "下",
       volume: 3,
       edition: "",
       subtitle: "",
     });
     assert.deepEqual(splitTitle("罪と罰 上 (新潮文庫)"), {
       base: "罪と罰",
+      mark: "上",
       volume: 1,
       edition: "新潮文庫",
       subtitle: "",
     });
     assert.deepEqual(splitTitle("1Q84 BOOK1"), {
       base: "1Q84",
+      mark: "1",
       volume: 1,
       edition: "",
       subtitle: "",
@@ -450,22 +451,27 @@ async function main() {
     assert.equal(splitTitle("華氏451度").base, "華氏451度");
     assert.deepEqual(splitTitle("あなたの人生の意味――先人に学ぶ"), {
       base: "あなたの人生の意味",
+      mark: "",
       volume: 0,
       edition: "",
       subtitle: "先人に学ぶ",
     });
     assert.equal(splitTitle("夜の果て：ある旅").subtitle, "ある旅");
+    // Every way of writing a volume reads as the database reads it
+    // (tests/fixtures/volumes.ts, tests/db-judging.test.ts).
     for (const [marker, number] of [
       ["上", 1],
       ["下", 3],
-      ["後編", 2],
+      ["後編", 3],
       ["第二巻", 2],
       ["十二巻", 12],
       ["IV", 4],
       ["BOOK 3", 3],
       ["vol.5", 5],
+      ["巻1", 1],
+      ["第2部", 2],
     ] as const)
-      assert.equal(volumeNumber(marker), number, marker);
+      assert.equal(volumeOrder(volumeMark(marker) ?? ""), number, marker);
   });
 
   await check("author lines split into names without their roles", () => {

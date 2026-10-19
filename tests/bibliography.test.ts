@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { bibliographyFrom, type BibliographyRow } from "../src/lib/bibliography";
+import { bibliographyFrom, holdFrom, type BibliographyRow } from "../src/lib/bibliography";
 import {
   bookHeading,
   bookNamedBy,
@@ -233,6 +233,26 @@ check("the cover and the shop links go by the heading's name, people by name onl
     { id: "x", title: "見本の物語 上", author: "Jane Doe、山田一郎" },
   );
   assert.equal(bookNamedBy(typed, master({ creators: [] })).author, "Doe,Jane,1950-");
+});
+
+check("a hold a day or more after the book was placed is told as a book registered before", () => {
+  const row = {
+    book_id: "x",
+    held_at: "2026-10-19T08:00:00+00:00",
+    placed_at: "2026-10-19T07:49:00+00:00",
+    title: "見本の物語",
+    creators: [{ name: "山田一郎", role: "著" }],
+  };
+  assert.deepEqual(holdFrom(row), {
+    bookId: "x",
+    heldAt: row.held_at,
+    earlier: false,
+    master: { title: "見本の物語", creators: [{ name: "山田一郎", role: "著" }] },
+  });
+  assert.equal(holdFrom({ ...row, placed_at: "2026-10-18T08:00:00+00:00" })?.earlier, true);
+  // From a database that does not send it yet: as before.
+  assert.equal(holdFrom({ ...row, placed_at: undefined })?.earlier, false);
+  assert.equal(holdFrom({ ...row, title: null }), null);
 });
 
 console.log(`${passed} bibliography checks passed`);

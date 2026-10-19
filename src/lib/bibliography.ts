@@ -128,6 +128,11 @@ export interface BookHold {
   bookId: string;
   /** When it was held: the notice's time, and its mark of being seen. */
   heldAt: string;
+  /**
+   * Held a day or more after it was placed (the sources answered late, or it
+   * was judged again): told as a book registered before.
+   */
+  earlier: boolean;
   /** The book the ISBN is, as the master names it. */
   master: Pick<Bibliography, "title" | "creators">;
 }
@@ -136,9 +141,14 @@ export interface BookHold {
 export interface BookHoldRow {
   book_id: string;
   held_at: string;
+  /** When the book was placed (registered, or its ISBN last changed). */
+  placed_at?: string | null;
   title: string | null;
   creators: unknown;
 }
+
+/** A day: a book held this long after it was placed was registered before. */
+const EARLIER = 24 * 60 * 60 * 1000;
 
 /** A hold from its row; null for one without the master's title. */
 export function holdFrom(row: BookHoldRow): BookHold | null {
@@ -158,6 +168,8 @@ export function holdFrom(row: BookHoldRow): BookHold | null {
     ? {
         bookId: row.book_id,
         heldAt: row.held_at,
+        earlier:
+          Date.parse(row.held_at) - Date.parse(row.placed_at ?? "") >= EARLIER,
         master: { title: master.title, creators: master.creators },
       }
     : null;
