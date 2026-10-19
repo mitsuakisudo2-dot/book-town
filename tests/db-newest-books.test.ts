@@ -243,6 +243,7 @@ async function selected(db: PGlite, visitor: string | null, limit: number) {
       db,
       visitor,
       `select to_jsonb(c) as row from (select ${BOOK} from books
+         where source = 'manual'
          order by created_at desc, id desc limit ${Math.min(Math.max(limit, 0), 1000)}) c`,
     )
   ).map((row) => row.row);
@@ -339,6 +340,9 @@ async function main() {
       // A sample book used where anyone may see it, to a visitor too.
       assert.ok(seen.has("旅をする木"));
       assert.ok(!seen.has("見本の本 1"));
+      // The library's catalog is not the town's (library_catalog).
+      for (const visitor of VISITORS)
+        assert.ok(!(await titles(visitor)).has("目録の本"), String(visitor));
     },
   );
 
@@ -518,7 +522,7 @@ async function main() {
           await as<{ id: string }>(
             db,
             visitor,
-            "select id from books order by created_at desc, id desc",
+            "select id from books where source = 'manual' order by created_at desc, id desc",
           )
         ).map((row) => row.id);
         assert.deepEqual(ids, readable.slice(0, 1000), String(visitor));
@@ -533,11 +537,16 @@ async function main() {
       const timed = async (between: number) => {
         const many = await migratedDatabase();
         await many.exec(`
-          insert into auth.users (id) values ('${BEN}');
-          insert into profiles (id, handle, name) values ('${BEN}', 'ben', 'ベン');
+          insert into auth.users (id) values ('${BEN}'), ('${DAN}');
+          insert into profiles (id, handle, name) values
+            ('${BEN}', 'ben', 'ベン'), ('${DAN}', 'dan', 'ダン');
+          -- Shown to everyone: Dan's books, each in a post of his (the
+          -- library's catalog is not in the newest books, library_catalog).
           insert into books (title, author, source, created_by, created_at)
-            select '目録の本 ' || k, '著者', 'ndl', null, now() - k * interval '1 minute'
+            select '公開の本 ' || k, '著者', 'manual', '${DAN}', now() - k * interval '1 minute'
             from generate_series(1, 320) k;
+          insert into posts (author_id, body, book_id)
+            select '${DAN}', '読んだ', b.id from books b where b.created_by = '${DAN}';
           insert into books (title, author, source, created_by, created_at)
             select '控えの本 ' || k, 'ベン', 'manual', '${BEN}',
               now() - (k / ${between}.0 + 0.5) * interval '1 minute'
@@ -576,13 +585,18 @@ async function main() {
       const timed = async (between: number) => {
         const many = await migratedDatabase();
         await many.exec(`
-          insert into auth.users (id) values ('${AKI}'), ('${BEN}'), ('${CHI}');
+          insert into auth.users (id) values ('${AKI}'), ('${BEN}'), ('${CHI}'), ('${DAN}');
           insert into profiles (id, handle, name) values
-            ('${AKI}', 'aki', 'アキ'), ('${BEN}', 'ben', 'ベン'), ('${CHI}', 'chi', 'チー');
+            ('${AKI}', 'aki', 'アキ'), ('${BEN}', 'ben', 'ベン'), ('${CHI}', 'chi', 'チー'),
+            ('${DAN}', 'dan', 'ダン');
           insert into profile_follows (follower_id, followee_id) values ('${AKI}', '${CHI}');
+          -- Shown to everyone: Dan's books, each in a post of his (the
+          -- library's catalog is not in the newest books, library_catalog).
           insert into books (title, author, source, created_by, created_at)
-            select '目録の本 ' || k, '著者', 'ndl', null, now() - k * interval '1 minute'
+            select '公開の本 ' || k, '著者', 'manual', '${DAN}', now() - k * interval '1 minute'
             from generate_series(1, 320) k;
+          insert into posts (author_id, body, book_id)
+            select '${DAN}', '読んだ', b.id from books b where b.created_by = '${DAN}';
           insert into books (title, author, source, created_by, created_at)
             select '灯の本 ' || k, 'チー', 'manual', '${CHI}',
               now() - (k / ${between}.0 + 0.5) * interval '1 minute'
@@ -646,6 +660,14 @@ async function main() {
   await check(
     "undone, the seen file leaves lists and searches as they were",
     async () => {
+      // Before library_catalog the catalog's rows were in the newest books
+      // too; with none, this file's rollback is seen alone. Its search weighs
+      // at most 2,000 near titles (more than that hold a pair here), and its
+      // rollback puts this file's back first.
+      await db.exec("delete from books where source = 'ndl'");
+      await db.exec(
+        functionOf(SEEN!, "create or replace function private.found_book_ids("),
+      );
       const queries = ["灯台の本", "フォロワーだけの本", "旅をする木"];
       const answers = async () => {
         const all: unknown[] = [];
@@ -692,6 +714,9 @@ async function main() {
   await check(
     "the rollback, as the header writes it, leaves town_view as before",
     async () => {
+      // Before library_catalog the catalog's rows were in the newest books
+      // too; with none, this file's rollback is seen alone.
+      await db.exec("delete from books where source = 'ndl'");
       const before: Record<string, unknown[]> = {};
       for (const visitor of VISITORS)
         before[String(visitor)] = await catalog(db, visitor, 300);

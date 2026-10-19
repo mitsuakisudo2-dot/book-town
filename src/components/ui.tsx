@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { bookArt } from "../lib/book-art";
-import { REGISTERED_GENRE } from "../lib/books";
+import { isDrawnBook } from "../lib/books";
 import {
   countGoogleCover,
   countGoogleMark,
@@ -400,7 +400,7 @@ export function BookJacket({
   className += illustrated ? " is-illustrated" : "";
   const tate =
     !illustrated &&
-    book.genre === REGISTERED_GENRE &&
+    isDrawnBook(book) &&
     tateTitle(bookTitle(book));
   className += tate ? " is-tate" : "";
   const flat = illustrated || tate ? null : flatSize(bookTitle(book));

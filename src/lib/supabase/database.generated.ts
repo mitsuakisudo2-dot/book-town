@@ -1513,6 +1513,7 @@ export type Database = {
           id: string;
         }[];
       };
+      note_missing_isbn: { Args: { isbn: string }; Returns: undefined };
       public_scene_of: { Args: { scene: Json; shop: string }; Returns: Json };
       replace_profile_nine: {
         Args: { book_ids: string[]; notes: string[] };
