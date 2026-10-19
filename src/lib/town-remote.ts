@@ -61,7 +61,12 @@ import { withoutReaders } from "./blocks";
 import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
 import { filedReportFrom } from "./supabase/reports";
 import type { Arrived } from "./arrived";
-import type { TownMore } from "./town-more";
+import {
+  emptyMore,
+  type CountedWork,
+  type TownCount,
+  type TownMore,
+} from "./town-more";
 import {
   cleanVisibilities,
   isAudience,
@@ -1095,6 +1100,60 @@ export function moreFromRows(
           ? { ...bookFromRow(row, false), theirs: true as const }
           : bookFromRow(row, false),
       ),
+  };
+}
+
+/**
+ * What town_counts answered, in the town's shapes: each book's counts by
+ * its id (a 見本's by its own), and the works most shelved and talked of,
+ * each by the book the database stood it for. Their books are not taken:
+ * the page shows the town's book of each work, as only the town's books
+ * open. Nothing of what is not of the answer's shape. `asked` are the
+ * books it was asked of, by the town's ids.
+ */
+export function countsFromAnswer(answer: unknown, asked: string[]): TownMore {
+  const id = (bookId: string) => sampleBookOfRow(bookId) ?? bookId;
+  const counted = (value: unknown): TownCount | null => {
+    const count = value as Partial<Record<keyof TownCount, unknown>> | null;
+    const of = (n: unknown) =>
+      typeof n === "number" && Number.isInteger(n) && n >= 0 ? n : null;
+    const shelves = of(count?.shelves);
+    const talk = of(count?.talk);
+    const reviews = of(count?.reviews);
+    return shelves === null || talk === null || reviews === null
+      ? null
+      : { shelves, talk, reviews };
+  };
+  const list = (value: unknown): unknown[] =>
+    Array.isArray(value) ? value : [];
+  const given = (answer ?? {}) as Record<string, unknown>;
+  const books: Record<string, TownCount> = {};
+  for (const entry of list(given.counts)) {
+    const book = (entry as { book?: unknown }).book;
+    const count = counted(entry);
+    if (typeof book === "string" && count) books[id(book)] = count;
+  }
+  const top = (value: unknown): CountedWork[] =>
+    list(value).flatMap((entry) => {
+      const row = (entry as { book?: Partial<BookRow> }).book;
+      const count = counted(entry);
+      if (typeof row?.id !== "string" || !count) return [];
+      books[id(row.id)] = count;
+      return [
+        {
+          book: id(row.id),
+          work: typeof row.work_id === "string" ? row.work_id : null,
+        },
+      ];
+    });
+  return {
+    ...emptyMore(),
+    counts: {
+      books,
+      asked,
+      shelved: top(given.shelved),
+      talked: top(given.talked),
+    },
   };
 }
 

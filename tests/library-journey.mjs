@@ -1659,16 +1659,23 @@ try {
   );
 
   await check(
-    "連続設定 gives the next books read their status and 所有, until 解除",
+    "持っている on the 連続設定's row, and 連続設定 gives the next books read their status and 所有, until 解除",
     async () => {
       const sorting = await scanningPage();
       await go("/profiles/me/?books=library", sorting);
       await openScanner(sorting);
       await cameraRunning(sorting);
       const first = isbnOf(38);
+      // 持っている is on from the start, on the 連続設定's row.
+      const quick = scanner(sorting)
+        .locator(".scan-sort")
+        .getByRole("switch", { name: "持っている" });
+      await expect(quick).toBeChecked();
       await show(sorting, first);
       await expect(count(sorting)).toHaveText("1冊 登録済み");
-      await scanner(sorting).getByRole("button", { name: "設定する" }).click();
+      await scanner(sorting)
+        .getByRole("button", { name: "連続設定", exact: true })
+        .click();
       const sheet = sorting.getByRole("dialog", { name: "連続設定" });
       // 持っている starts on, with nothing else chosen.
       const owned = sheet.getByRole("switch", { name: /持っている/ });
@@ -1695,9 +1702,11 @@ try {
       await expect(scanner(sorting).locator(".scan-sort")).toContainText(
         "連続設定中",
       );
-      await expect(scanner(sorting).locator(".scan-sort")).toContainText(
-        "読了未所持次から",
+      await expect(scanner(sorting).locator(".scan-sort-now")).toHaveText(
+        "連続設定中読了次から",
       );
+      // 持っている turned off in the 連続設定 is the row's switch too.
+      await expect(quick).not.toBeChecked();
       // The book held meanwhile is read now, under the setting; the one
       // read before keeps what it had.
       await expect(count(sorting)).toHaveText("2冊 登録済み");
@@ -1709,6 +1718,7 @@ try {
         })
         .toEqual(["finished", "no"]);
       expect((await entries())["isbn-" + first].status).toBeNull();
+      expect((await entries())["isbn-" + first].owned).toBe("yes");
       await expect(
         latest(sorting).getByRole("button", { name: "読了" }),
       ).toHaveAttribute("aria-pressed", "true");
@@ -1719,15 +1729,29 @@ try {
       await show(sorting, first);
       await expect(remark(sorting)).toContainText("この回でもう入れました");
       expect((await entries())["isbn-" + first].status).toBeNull();
-      // 解除: the next book is given nothing.
+      // 解除: the next book is given no status; 持っている stays as the
+      // switch says.
       await scanner(sorting).getByRole("button", { name: "解除" }).click();
-      await expect(scanner(sorting).locator(".scan-sort")).toContainText(
-        "設定する",
-      );
+      await expect(
+        scanner(sorting).getByRole("button", { name: "連続設定", exact: true }),
+      ).toBeVisible();
+      await expect(quick).not.toBeChecked();
       await show(sorting, isbnOf(40));
       await expect(count(sorting)).toHaveText("3冊 登録済み");
-      const last = (await entries())["isbn-" + isbnOf(40)];
-      expect([last.status, last.owned]).toEqual([null, null]);
+      await expect
+        .poll(async () => {
+          const now = (await entries())["isbn-" + isbnOf(40)];
+          return [now.status, now.owned];
+        })
+        .toEqual([null, "no"]);
+      // Turned on again on the row, the next book is 持っている.
+      await quick.click();
+      await expect(quick).toBeChecked();
+      await show(sorting, isbnOf(45));
+      await expect(count(sorting)).toHaveText("4冊 登録済み");
+      await expect
+        .poll(async () => (await entries())["isbn-" + isbnOf(45)].owned)
+        .toBe("yes");
       await sorting.context().close();
     },
   );
@@ -2011,6 +2035,46 @@ try {
       fire("pointerup", from - distance);
     }, distance);
 
+  /** A finger dragging one button of the 並び onto another's place. */
+  const dragOnto = async (button, onto) => {
+    const to = await onto.boundingBox();
+    await button.evaluate(
+      async (chip, to) => {
+        const box = chip.getBoundingClientRect();
+        const from = {
+          x: box.left + box.width / 2,
+          y: box.top + box.height / 2,
+        };
+        const at = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
+        const fire = (type, x, y) =>
+          chip.dispatchEvent(
+            new PointerEvent(type, {
+              pointerId: 9,
+              pointerType: "touch",
+              isPrimary: true,
+              button: 0,
+              buttons: type === "pointerup" ? 0 : 1,
+              clientX: x,
+              clientY: y,
+              bubbles: true,
+              cancelable: true,
+            }),
+          );
+        fire("pointerdown", from.x, from.y);
+        for (let step = 1; step <= 12; step++) {
+          fire(
+            "pointermove",
+            from.x + ((at.x - from.x) * step) / 12,
+            from.y + ((at.y - from.y) * step) / 12,
+          );
+          await new Promise((done) => setTimeout(done, 20));
+        }
+        fire("pointerup", at.x, at.y);
+      },
+      { x: to.x, y: to.y, width: to.width, height: to.height },
+    );
+  };
+
   await check(
     "自由3枠: the second row's buttons are picked and put in order, and the device keeps them",
     async () => {
@@ -2040,19 +2104,57 @@ try {
       await expect(
         sheet.getByRole("button", { name: "お気に入りの漫画", exact: true }),
       ).toBeDisabled();
-      await sheet.getByRole("button", { name: "お気に入りを外す" }).click();
-      await sheet
+      // The row reads as a card's second row; what can go there is put in
+      // and taken off below it.
+      const row = sheet.getByRole("group", { name: "並び" });
+      const can = sheet.getByRole("group", { name: "並べられるもの" });
+      await expect(row.getByRole("button")).toHaveText([
+        "未所持",
+        "お気に入り",
+        "本棚",
+      ]);
+      await can
+        .getByRole("button", { name: "お気に入り", exact: true })
+        .click();
+      await expect(row.getByRole("button")).toHaveText(["未所持", "本棚"]);
+      await can
         .getByRole("button", { name: "お気に入りの漫画", exact: true })
         .click();
-      await sheet
-        .getByRole("button", { name: "お気に入りの漫画を左へ" })
-        .click();
-      await sheet
-        .getByRole("button", { name: "お気に入りの漫画を左へ" })
-        .click();
-      await expect(
-        sheet.getByRole("button", { name: "お気に入りの漫画を左へ" }),
-      ).toBeDisabled();
+      await expect(row.getByRole("button")).toHaveText([
+        "未所持",
+        "本棚",
+        "お気に入りの漫画",
+      ]);
+      // A finger drags a button to its place, the others making room.
+      const comic = row.getByRole("button", { name: "お気に入りの漫画" });
+      await dragOnto(comic, row.getByRole("button", { name: "未所持" }));
+      await expect(row.getByRole("button")).toHaveText([
+        "お気に入りの漫画",
+        "未所持",
+        "本棚",
+      ]);
+      // The keyboard too: space picks it up, an arrow moves it, space puts
+      // it down; and it is said where.
+      await row.getByRole("button", { name: "本棚" }).focus();
+      for (const key of ["Space", "ArrowLeft", "Space"]) {
+        await own.keyboard.press(key);
+        await own.waitForTimeout(250);
+      }
+      await expect(row.getByRole("button")).toHaveText([
+        "お気に入りの漫画",
+        "本棚",
+        "未所持",
+      ]);
+      await expect(sheet).toContainText("本棚を2番目に置きました");
+      await dragOnto(
+        row.getByRole("button", { name: "未所持" }),
+        row.getByRole("button", { name: "本棚" }),
+      );
+      await expect(row.getByRole("button")).toHaveText([
+        "お気に入りの漫画",
+        "未所持",
+        "本棚",
+      ]);
       // Nothing is read while it is open.
       await own.evaluate((code) => window.__barcodes.push(code), isbnOf(82));
       await own.waitForTimeout(800);
@@ -2171,7 +2273,9 @@ try {
       await go("/profiles/me/?books=library", left);
       await openScanner(left);
       await cameraRunning(left);
-      await scanner(left).getByRole("button", { name: "設定する" }).click();
+      await scanner(left)
+        .getByRole("button", { name: "連続設定", exact: true })
+        .click();
       const sheet = left.getByRole("dialog", { name: "連続設定" });
       await sheet.getByRole("radio", { name: "読了" }).click();
       await sheet.getByRole("button", { name: "この設定でスキャン" }).click();
@@ -2200,7 +2304,9 @@ try {
       await expect(offer(left)).toContainText("2冊 登録済み");
       await expect(offer(left).locator(".scan-resume-sort")).toHaveCount(0);
       await offer(left).getByRole("button", { name: "今はしない" }).click();
-      await scanner(left).getByRole("button", { name: "設定する" }).click();
+      await scanner(left)
+        .getByRole("button", { name: "連続設定", exact: true })
+        .click();
       await sheet.getByRole("radio", { name: "積読" }).click();
       await sheet.getByRole("button", { name: "この設定でスキャン" }).click();
       await show(left, isbnOf(88));

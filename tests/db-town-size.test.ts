@@ -20,7 +20,8 @@ import { migratedDatabase } from "./fixtures/pglite-supabase";
 // run's summary.
 //
 // What pages read when they open, beside the town (the search's feelings
-// and a feeling's books, a book's records, the books a search finds), is
+// and a feeling's books, also where the visitor may see few of them, a
+// book's records, the books a search finds, the town's counts), is
 // timed the same way: none of them may take longer for each reader added
 // than the baseline says (pagesMsPerReader).
 //
@@ -34,6 +35,14 @@ const AT = 10_000;
 const BOOKS = 9;
 const RECORDS = 5;
 const POSTS = 3;
+// Books a reader typed in and keeps to themselves (their library): nobody
+// else may read them, and a search must pass them by quickly.
+const KEPT = 50;
+// And books a reader typed in and wrote a record of for themselves alone.
+const NOTED = 25;
+// Records of one feeling that only their reader sees, newer than the one of
+// it shown to everyone: a feeling's records the visitor mostly may not see.
+const HIDDEN = 10;
 // Bytes may move a little with the made-up town; time moves with the machine.
 const BYTES_SLACK = 1.1;
 const MS_SLACK = 3;
@@ -48,17 +57,38 @@ interface Baseline {
 // A book of the first reader's, as town() names it.
 const FIRST_BOOK = "b0000001-0001-4000-8000-000000000000";
 const SEARCH = databaseSearch("本の題名 12-3")!;
+// A search whose books are nearly all ones the visitor may not read.
+const KEPT_SEARCH = databaseSearch("控えの本")!;
+const NOTED_SEARCH = databaseSearch("手帳の本")!;
 
 /** What each page asks, as a visitor, with its arguments. */
 const PAGES: Record<string, [string, unknown[]]> = {
   felt_in_town: ["select public.felt_in_town()::text", []],
   feeling_records: ["select public.feeling_records('quiet', 100)::text", []],
+  feeling_records_mostly_hidden: [
+    "select public.feeling_records('scared', 100)::text",
+    [],
+  ],
   work_records: [`select public.work_records('${FIRST_BOOK}', 200)::text`, []],
   find_books: [
     "select public.find_books($1::jsonb, null, null, 100)::text",
     [JSON.stringify(SEARCH.forms)],
   ],
+  find_books_kept: [
+    "select public.find_books($1::jsonb, null, null, 100)::text",
+    [JSON.stringify(KEPT_SEARCH.forms)],
+  ],
+  find_books_noted: [
+    "select public.find_books($1::jsonb, null, null, 100)::text",
+    [JSON.stringify(NOTED_SEARCH.forms)],
+  ],
+  town_counts: [
+    `select public.town_counts(array['${FIRST_BOOK}']::uuid[], 12)::text`,
+    [],
+  ],
 };
+/** Pages that may find nothing: what they look through is not the visitor's. */
+const MAY_BE_EMPTY = new Set(["find_books_kept", "find_books_noted"]);
 
 interface Answer {
   bytes: number;
@@ -86,6 +116,21 @@ async function town(readers: number): Promise<PGlite> {
       select ${bookOf("g", "k")}, '本の題名 ' || g || '-' || k, '著者' || (g % 500),
         'manual', id::uuid, ${when("g", "k")}
       from ${ids} r, generate_series(1, ${BOOKS}) k;
+    insert into books (title, author, source, created_by, created_at)
+      select '控えの本 ' || g || '-' || k, '著者' || (g % 500), 'manual', id::uuid,
+        ${when("g", "k")}
+      from ${ids} r, generate_series(1, ${KEPT}) k;
+    insert into books (title, author, source, created_by, created_at)
+      select '手帳の本 ' || g || '-' || k, '著者' || (g % 500), 'manual', id::uuid,
+        ${when("g", "k")}
+      from ${ids} r, generate_series(1, ${NOTED}) k;
+    insert into library_entries (user_id, book_id, source)
+      select b.created_by, b.id, 'manual' from books b
+      where b.title like '控えの本 %' or b.title like '手帳の本 %';
+    insert into reading_entries (user_id, book_id, kind, body, audience, created_at)
+      select b.created_by, b.id, 'note', '自分だけのメモ。', 'private',
+        b.created_at - interval '1 year'
+      from books b where b.title like '手帳の本 %';
     insert into profile_nine (profile_id, position, book_id, note)
       select id::uuid, k, ${bookOf("g", "k")}, 'この本で世界の見え方が変わりました'
       from ${ids} r, generate_series(1, ${BOOKS}) k;
@@ -94,6 +139,13 @@ async function town(readers: number): Promise<PGlite> {
         '静かな余韻が残る一冊だった。また読み返したい。', array['quiet', 'talk'], 'everyone',
         ${when("g", "k")}
       from ${ids} r, generate_series(1, ${RECORDS}) k;
+    insert into reading_entries (user_id, book_id, kind, body, feelings, audience, created_at)
+      select id::uuid, ${bookOf("g", `k % ${BOOKS} + 1`)}, 'finished', '', array['scared'], 'private',
+        now() - k * interval '1 second'
+      from ${ids} r, generate_series(1, ${HIDDEN}) k;
+    insert into reading_entries (user_id, book_id, kind, body, feelings, audience, created_at)
+      values ('a0000000-0000-4000-8000-000000000001', ${bookOf("1", "1")}, 'finished', '',
+        array['scared'], 'everyone', now() - interval '1 year');
     insert into posts (author_id, body, book_id, created_at)
       select id::uuid, '今日はこの本を少しだけ読みました。', ${bookOf("g", "k")},
         ${when("g", "k")}
@@ -105,7 +157,8 @@ async function town(readers: number): Promise<PGlite> {
       'id', 'shelf-1', 'name', 'はじめの棚', 'isPublic', true,
       'items', (select jsonb_agg(jsonb_build_object(
         'bookId', b.id, 'pop', 'おすすめの一冊です', 'display', 'spine'))
-        from books b where b.created_by = s.owner_id)));
+        from books b where b.created_by = s.owner_id
+          and b.title not like '控えの本 %' and b.title not like '手帳の本 %')));
     analyze;
   `);
   return db;
@@ -139,7 +192,10 @@ async function pages(db: PGlite): Promise<Record<string, number>> {
           params,
         );
         best = Math.min(best, performance.now() - started);
-        assert.ok(rows[0].text !== "[]", `${page} found something`);
+        assert.ok(
+          MAY_BE_EMPTY.has(page) || rows[0].text !== "[]",
+          `${page} found something`,
+        );
       }
       took[page] = best;
     }

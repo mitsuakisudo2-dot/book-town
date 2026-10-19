@@ -1583,6 +1583,41 @@ try {
       await expect(page).toHaveURL(/\/timeline\/$/);
     },
   );
+  await check(
+    "a page opened before a new build reads itself again when a screen's file is gone",
+    async () => {
+      const stale = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        locale: "ja-JP",
+      });
+      const reader = await stale.newPage();
+      // Not watched: the missing file's error is the point (new-build.ts).
+      try {
+        await reader.goto(`${baseURL}/library/`);
+        await reader.waitForLoadState("networkidle");
+        // Until the page is read again, the files it has not read yet are
+        // gone, as after a new build; the new page finds its own.
+        let pages = 0;
+        reader.on("request", (request) => {
+          if (request.resourceType() === "document") pages += 1;
+        });
+        await stale.route(/\/_next\/static\/chunks\/.*\.js$/, (route) =>
+          pages === 0
+            ? route.fulfill({ status: 404, body: "gone" })
+            : route.continue(),
+        );
+        await reader
+          .locator("nav a:visible", { hasText: "ホーム" })
+          .first()
+          .click();
+        await expect(reader.locator(".post-card").first()).toBeVisible();
+        expect(pages).toBe(1);
+        await expect(reader).toHaveURL(`${baseURL}/`);
+      } finally {
+        await stale.close();
+      }
+    },
+  );
   await check("a link to a shop that is gone says it is closed", async () => {
     await page.goto(`${baseURL}/shop/?id=gone-shop`);
     await expect(

@@ -17,6 +17,7 @@ import {
   talkersOf,
 } from "../src/lib/records";
 import { emptyMore, withMore } from "../src/lib/town-more";
+import { bookSignals } from "../src/lib/search";
 import { fakeSupabase } from "./fixtures/fake-supabase";
 
 // The town in one answer (AUD-006 6a; supabase/migrations/*_town_view.sql):
@@ -434,6 +435,83 @@ async function main() {
       // Others' words stay on their profile's page.
       assert.ok(felt.records.length && felt.records.every((r) => !r.note));
       backend.close?.();
+    },
+  );
+
+  await check(
+    "the search counts 便り and shelves of all time, not the town's window",
+    async () => {
+      const seed = madeUpTown(100, 600);
+      // An old 便り, outside the newest 500 the town reads, about a book on
+      // no shelf: the town alone would count it untalked of.
+      const old = seed.posts.find(
+        (row) => row.book_id !== null && Number(String(row.id).slice(-12)) < 50,
+      )!;
+      const quiet = old.book_id as string;
+      for (const row of seed.posts)
+        if (row !== old && row.book_id === quiet) row.book_id = null;
+      for (const shop of seed.shops)
+        for (const held of shop.public_shelves as { items: Row[] }[])
+          held.items = held.items.filter((item) => item.bookId !== quiet);
+      const backend = accountTownBackend(
+        fakeSupabase(AKI, seed, { versions: true, townView: true }).client,
+        AKI,
+        { delay: 0, storage: false },
+      );
+      const { state } = await backend.load();
+      assert.ok(!state.posts.some((post) => post.id === old.id));
+      assert.ok(bookById(state.books, quiet), "the town knows the book");
+      assert.equal(bookSignals(state).get(quiet)?.talk, 0, "by the town");
+      const read = await backend.more!({ counts: true });
+      assert.ok(read.counts);
+      const signal = bookSignals(state, read.counts).get(quiet);
+      assert.equal(signal?.talk, 1, "of all time");
+      assert.equal(signal?.reviews, 1);
+      // The shelves too: what every open shop holds, as the database counts
+      // (a book not in Aki's own shop, whose shelves the seed keeps apart).
+      const items = (shop: Row) =>
+        (shop.public_shelves as { items: Row[] }[]).flatMap((held) =>
+          held.items.map((item) => item.bookId as string),
+        );
+      const shelf = items(seed.shops[5]).find(
+        (bookId) => !items(seed.shops[0]).includes(bookId),
+      )!;
+      assert.ok(read.counts.books[shelf]?.shelves);
+      assert.equal(
+        read.counts.books[shelf].shelves,
+        bookSignals(state).get(shelf)?.shelves,
+      );
+      // The works most shelved and talked of, the most first.
+      const most = read.counts.shelved.map(
+        ({ book }) => read.counts!.books[book].shelves,
+      );
+      assert.ok(most.length > 0);
+      assert.deepEqual(
+        most,
+        [...most].sort((a, b) => b - a),
+      );
+      // A book the database was not asked of (come since) is counted by
+      // the town, never taken for one on no shelf.
+      const unasked = { ...read.counts, asked: [], books: {} };
+      assert.equal(
+        bookSignals(state, unasked).get(shelf)?.shelves,
+        bookSignals(state).get(shelf)?.shelves,
+      );
+      assert.ok(read.counts.asked.includes(quiet));
+      backend.close?.();
+      // A database from before town_counts: the page counts the town.
+      const before = accountTownBackend(
+        fakeSupabase(AKI, seed, {
+          versions: true,
+          townView: true,
+          townWindow: false,
+        }).client,
+        AKI,
+        { delay: 0, storage: false },
+      );
+      await before.load();
+      assert.equal((await before.more!({ counts: true })).counts, undefined);
+      before.close?.();
     },
   );
 
