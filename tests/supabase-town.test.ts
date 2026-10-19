@@ -905,11 +905,15 @@ async function main() {
       );
       const cried = await townWith(benStore, { feeling: "cried" });
       assert.ok(cried.readingRecords.some((record) => record.id === secret));
+      // Ben wanted it earlier, so the database gives his own copy of the
+      // edition (one book an edition, his own first).
       await benStore.more({ search: "華氏" });
+      const benCopy = mine(benStore.getSnapshot(), bookId);
+      assert.ok(benCopy && benCopy !== bookId);
       assert.ok(
         benStore
           .getMore(moreKey({ search: "華氏" }))
-          ?.books.some((book) => book.id === bookId),
+          ?.books.some((book) => book.id === benCopy),
         "華氏451度 found by the database",
       );
     },
