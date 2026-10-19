@@ -893,6 +893,29 @@ async function main() {
       akiStore.actions.deleteRecord(shared);
       await settled(akiStore);
       assert.deepEqual(await fromBen(), [secret]);
+
+      // The search's feelings and a feeling's books, asked of the database
+      // (felt_in_town, feeling_records), and a book found by its title
+      // (find_books).
+      const benStore = await townOf(ben);
+      assert.ok(
+        (await townWith(benStore, { felt: true })).feltInTown?.includes(
+          "cried",
+        ),
+      );
+      const cried = await townWith(benStore, { feeling: "cried" });
+      assert.ok(cried.readingRecords.some((record) => record.id === secret));
+      // Ben wanted it earlier, so the database gives his own copy of the
+      // edition (one book an edition, his own first).
+      await benStore.more({ search: "華氏" });
+      const benCopy = mine(benStore.getSnapshot(), bookId);
+      assert.ok(benCopy && benCopy !== bookId);
+      assert.ok(
+        benStore
+          .getMore(moreKey({ search: "華氏" }))
+          ?.books.some((book) => book.id === benCopy),
+        "華氏451度 found by the database",
+      );
     },
   );
 
