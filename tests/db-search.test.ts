@@ -26,6 +26,10 @@ const FILES = migrationFiles();
 const FILE = FILES.find((file) => file.endsWith("_search_in_database.sql"));
 assert.ok(FILE, "the search migration");
 const TEXT = migrationText(FILE);
+const CANDIDATES = FILES.find((file) =>
+  file.endsWith("_search_candidates.sql"),
+);
+assert.ok(CANDIDATES, "the candidates migration");
 const BEFORE_FOLD = FILES.find((file) => file.endsWith("_fold_scripts.sql"));
 const BEFORE_FELT = FILES.find((file) => file.endsWith("_town_window.sql"));
 assert.ok(BEFORE_FOLD && BEFORE_FELT);
@@ -33,6 +37,7 @@ assert.ok(BEFORE_FOLD && BEFORE_FELT);
 const AKI = "00000000-0000-4000-8000-00000000000a";
 const BEN = "00000000-0000-4000-8000-00000000000b";
 const CHI = "00000000-0000-4000-8000-00000000000c";
+const DAN = "00000000-0000-4000-8000-00000000000d";
 
 const id = (group: number, n: number) =>
   `${group}0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -44,6 +49,7 @@ const AKI_OWN = id(2, 4); // Aki's, used nowhere: Aki alone
 const BEN_COPY = id(2, 5); // Ben's and Chi's of one ISBN, both posted
 const CHI_COPY = id(2, 6);
 const ISBN = "9784000000017";
+const BEN_SHELF = id(2, 7); // Ben's, only on his open shop's public shelf
 
 const SEED = `
   insert into auth.users (id) values ('${AKI}'), ('${BEN}'), ('${CHI}');
@@ -54,6 +60,12 @@ const SEED = `
     ('${BEN_LISTED}', '雨の日の本 続', '雨野 晴', 'manual', '${BEN}'),
     ('${BEN_HIDDEN}', '雨の日の暗号', 'ベン', 'manual', '${BEN}'),
     ('${AKI_OWN}', '雨の日の暗号', 'アキ', 'manual', '${AKI}');
+  insert into books (id, title, author, source, created_by) values
+    ('${BEN_SHELF}', '雨の日の棚', '雨野 晴', 'manual', '${BEN}');
+  insert into shops (owner_id, name, is_open, public_shelves) values
+    ('${BEN}', 'ベンの本屋', true, jsonb_build_array(jsonb_build_object(
+      'id', 'shelf-1', 'name', 'はじめの棚', 'isPublic', true,
+      'items', jsonb_build_array(jsonb_build_object('bookId', '${BEN_SHELF}')))));
   insert into books (id, title, author, source, created_by, isbn) values
     ('${BEN_COPY}', '雨の日の手紙', '雨野 晴', 'manual', '${BEN}', '${ISBN}'),
     ('${CHI_COPY}', '雨の日の手紙', '雨野 晴', 'manual', '${CHI}', '${ISBN}');
@@ -231,6 +243,8 @@ async function main() {
   );
   await db.exec(SEED);
   await db.exec(migrationText(FILE!));
+  for (const file of FILES.filter((file) => file > FILE!))
+    await db.exec(migrationText(file));
 
   await check("fold_book_text folds as before, in its two steps", async () => {
     const { rows } = await db.query<{ key: string }>(
@@ -480,6 +494,72 @@ async function main() {
     },
   );
 
+  await check("a book on an open shop's public shelf is found", async () => {
+    for (const visitor of [null, AKI, BEN])
+      assert.ok(
+        (await find(db, visitor, asked("雨の日の棚"))).includes(BEN_SHELF),
+      );
+  });
+
+  await check(
+    "what a search gives is the same with or without books the reader may not read",
+    async () => {
+      const queries = [
+        "雨の日の暗号",
+        "雨の日",
+        "暗号",
+        "本",
+        "雨の日の手紙",
+        "978-4-00-000001-7",
+        "97840000",
+        "400000001",
+        "まったく別の題名",
+      ];
+      const answers = async () => {
+        const all: string[][] = [];
+        for (const visitor of [null, AKI, BEN, CHI])
+          for (const query of queries)
+            for (const limit of [1, 2, 100]) {
+              const ask = asked(query);
+              all.push(await find(db, visitor, ask, limit));
+              all.push(
+                await find(
+                  db,
+                  visitor,
+                  { ...ask, isbn: null, isbnStart: "97840000" },
+                  limit,
+                ),
+              );
+            }
+        return all;
+      };
+      const before = await answers();
+      // Dan types in many books nobody else may read: the titles asked,
+      // books of the same ISBN and of ISBNs begun the same, and more than
+      // the search scores of one pair.
+      await db.exec(`
+        insert into auth.users (id) values ('${DAN}');
+        insert into profiles (id, handle, name) values ('${DAN}', 'dan', 'ダン');
+        insert into books (title, author, source, created_by, isbn)
+          select t, '誰か', 'manual', '${DAN}', null
+          from unnest(array['雨の日の暗号', '暗号', 'まったく別の題名', '雨の日の手紙',
+            '雨の日の本', '雨の日の棚']) t;
+        insert into books (title, author, source, created_by, isbn) values
+          ('雨の日の手紙', '雨野 晴', 'manual', '${DAN}', '${ISBN}'),
+          ('別の本', '誰か', 'manual', '${DAN}', '9784000000024');
+        insert into books (title, author, source, created_by)
+          select '本の雨の日 ' || g, '誰か', 'manual', '${DAN}'
+          from generate_series(1, 2100) g;
+      `);
+      assert.deepEqual(await answers(), before);
+      await db.exec(`
+        delete from books where created_by = '${DAN}';
+        delete from profiles where id = '${DAN}';
+        delete from auth.users where id = '${DAN}';
+      `);
+    },
+  );
+
   await check("nobody reads the grams but the functions", async () => {
     for (const visitor of [null, AKI]) {
       let refused = false;
@@ -497,10 +577,18 @@ async function main() {
          exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0) as everyone
        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where p.proname in ('find_books', 'feeling_records', 'found_book_ids',
-         'felt_page', 'keep_book_grams', 'search_grams', 'fold_book_loose')
+         'felt_page', 'keep_book_grams', 'search_grams', 'fold_book_loose',
+         'search_candidates', 'book_is_seen')
        order by 1`,
     );
     assert.deepEqual(rows, [
+      {
+        name: "book_is_seen",
+        definer: true,
+        anon: false,
+        authenticated: false,
+        everyone: false,
+      },
       {
         name: "feeling_records",
         definer: false,
@@ -544,6 +632,13 @@ async function main() {
         everyone: false,
       },
       {
+        name: "search_candidates",
+        definer: true,
+        anon: false,
+        authenticated: false,
+        everyone: false,
+      },
+      {
         name: "search_grams",
         definer: false,
         anon: false,
@@ -556,6 +651,13 @@ async function main() {
   await check(
     "undone, the folding and the feelings are as before",
     async () => {
+      // The candidates' file first (its Rollback), then this file's.
+      await db.exec(
+        functionOf(FILE!, "create function private.found_book_ids("),
+      );
+      await db.exec(
+        "drop function private.search_candidates(uuid[]); drop function private.book_is_seen(uuid);",
+      );
       await db.exec(rollbackSql());
       await db.exec(
         functionOf(
