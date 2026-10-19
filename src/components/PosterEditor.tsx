@@ -1150,7 +1150,7 @@ function BookChoice({
           id={id}
           type="search"
           value={query}
-          placeholder="題名・著者・ISBNで探す"
+          placeholder="題名・著者・ISBN"
           autoComplete="off"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {

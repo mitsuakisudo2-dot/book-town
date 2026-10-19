@@ -32,6 +32,12 @@ export const japanFormat = (
 ): Intl.DateTimeFormat =>
   new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", ...options });
 
+/** The month and day (Japan time) a moment falls on, as 10月19日. */
+export function japanMonthDay(at: string | number): string {
+  const japan = inJapan(at);
+  return `${japan.getUTCMonth() + 1}月${japan.getUTCDate()}日`;
+}
+
 /** The year (Japan time) it is now. */
 export const japanYear = (now: number = Date.now()): number =>
   inJapan(now).getUTCFullYear();
