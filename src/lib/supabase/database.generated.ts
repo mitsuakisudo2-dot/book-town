@@ -1477,6 +1477,7 @@ export type Database = {
           book_id: string;
           creators: Json;
           held_at: string;
+          placed_at: string;
           title: string;
         }[];
       };
