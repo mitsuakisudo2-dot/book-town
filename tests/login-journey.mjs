@@ -155,6 +155,8 @@ const randomBase64url = () =>
   Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 const townReads = [];
 const townWrites = [];
+// The books each town_counts was asked for.
+const countsAsked = [];
 // The posts the town's own read leaves out, as older than the newest 500
 // it reads; and the query of each read of posts.
 const outsideLoad = new Set();
@@ -794,6 +796,37 @@ const standIn = async (route) => {
         "not_now",
       ].filter((feeling) => kept.has(feeling)),
     );
+  }
+  // The search's counts of all time (town_counts), as the database keeps
+  // them: by work, 便り not read alone and public shelves of open shops.
+  if (url.pathname === "/rest/v1/rpc/town_counts") {
+    townReads.push(url.pathname);
+    countsAsked.push(body.books ?? []);
+    const books = town?.books ?? [];
+    const workOf = (id) => books.find((row) => row.id === id)?.work_id ?? id;
+    const tally = (work) => {
+      const said = (town?.posts ?? []).filter(
+        (row) =>
+          row.book_id &&
+          row.reading_mode !== "solo" &&
+          workOf(row.book_id) === work,
+      );
+      return {
+        shelves: (town?.shops ?? [])
+          .filter((row) => row.is_open)
+          .flatMap((row) => row.public_shelves ?? [])
+          .filter((shelf) =>
+            (shelf.items ?? []).some((item) => workOf(item.bookId) === work),
+          ).length,
+        talk: said.length,
+        reviews: said.filter((row) => !row.parent_id).length,
+      };
+    };
+    const counts = books
+      .filter((row) => (body.books ?? []).includes(row.id))
+      .map((row) => ({ book: row.id, ...tally(workOf(row.id)) }))
+      .filter((count) => count.shelves || count.talk);
+    return json(200, { counts, shelved: [], talked: [] });
   }
   if (url.pathname === "/rest/v1/rpc/work_records") {
     townReads.push(url.pathname);
@@ -4052,6 +4085,11 @@ try {
         page.getByRole("heading", { name: "棚の隅の本" }),
       ).toBeVisible();
       await expect(page.locator("main")).not.toContainText("星の本");
+      // The search asks the database how often the books it may list are
+      // shelved and talked of (town_counts): never of 星の本.
+      await expect.poll(() => countsAsked.length).toBeGreaterThan(0);
+      expect(countsAsked.at(-1)).toContain(COVER_BOOK);
+      expect(countsAsked.at(-1)).not.toContain(REFUSED_BOOK);
       // Nor does a genre find it: the 登録した本 chip, or part of it typed.
       const box = page.getByRole("searchbox", { name: "本と書店を検索" });
       const listed = (title) =>
