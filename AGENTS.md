@@ -8,14 +8,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-## Product design reference (読書SNS・仮称「余白」)
+## Product design reference (BookTown)
 
-Before implementing product features or changing UX, read `docs/README.md` and its linked design notes.
-- `docs/01_ビジョンと設計原則.md`: shared values and firm design principles.
-- `docs/02_三者会議_2026-10-10.md`: user/ChatGPT/Claude design discussion and rationale.
-- `docs/03_Codex実装仕様_v0.1.md`: implementation prototype and acceptance criteria.
-- `docs/04_未決定事項と次回議題.md`: proposals and unresolved choices.
-- `docs/05_SNS機能_投稿とレビュー_2026-10-10.md`: SNS direction (timeline, posts, book reviews and conversations).
-- `docs/06_UI構成_2026-10-10.md`: app structure (bottom bar, home tabs, search, reading sessions, profile, notifications).
+BookTown (formerly the working name 「余白」) is a reading SNS where each reader opens their own bookshop and the shops line up into a town.
 
-These docs are **not an instruction to implement everything**. Distinguish agreed principles from experiments and undecided items, and only implement what the user requests. Preserve existing behavior and tests; verify platform docs in `node_modules/next/dist/docs/` before editing Next.js code.
+Before implementing product features or changing UX, read `CLAUDE.md` first, then `docs/README.md`. The index separates the current rules (`CLAUDE.md`, `docs/開発の引き継ぎ.md`, `docs/09_段階2_ログインと保存.md`, `docs/色と部品の決まり.md`, `docs/監査/`) from the early design records of 2026-10-10 to 10-12 (`docs/01`〜`07`), which are kept for history and are not current rules.
+
+These docs are **not an instruction to implement everything**. Distinguish agreed decisions from provisional values, proposals and undecided items, and only implement what the user requests. When something the docs point to lives outside the repository (the project's working rules, the feature list, who is working on what), do not guess; ask the user. Preserve existing behavior and tests; verify platform docs in `node_modules/next/dist/docs/` before editing Next.js code.
