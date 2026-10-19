@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 import {
   answerAll,
   catalog,
+  diagnostic,
   helpers,
   migrated,
   numbered,
@@ -44,33 +45,39 @@ const id = (group: number, n: number) =>
   `${group}0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const Z = (n: number) => numbered(500 + n);
 
-/** The rollback as the header writes it, then what it makes again as the files before made it. */
-function rollbackSql(): string {
-  const head = TEXT.slice(0, TEXT.indexOf("\n\n"));
-  const statements = head
+/** The statements of a migration's rollback, as its header writes them. */
+function rollbackStatements(text: string): string {
+  const head = text.slice(0, text.indexOf("\n\n", text.indexOf("-- Rollback:")));
+  return head
     .slice(head.indexOf("-- Rollback:"), head.indexOf("-- and then makes"))
     .split("\n")
     .filter((line) => line.startsWith("--   "))
     .map((line) => line.slice(3))
     .join("\n");
-  const made = (file: string, name: string) => {
-    const text = migrationText(FILES.find((f) => f.endsWith(file))!);
-    const start = [
-      `create function ${name}(`,
-      `create or replace function ${name}(`,
-      `create or replace view ${name} as`,
-    ]
-      .map((head) => text.indexOf(head))
-      .find((at) => at >= 0);
-    assert.ok(start !== undefined, name);
-    const end = text.indexOf(`revoke all on `, start);
-    assert.ok(end > start && text.slice(end).includes(name), name);
-    return text
-      .slice(start, text.indexOf(";\n", end) + 2)
-      .replace(/^create function/, "create or replace function");
-  };
+}
+
+/** A function or view as the file ending so made it, to make it again. */
+function made(file: string, name: string): string {
+  const text = migrationText(FILES.find((f) => f.endsWith(file))!);
+  const start = [
+    `create function ${name}(`,
+    `create or replace function ${name}(`,
+    `create or replace view ${name} as`,
+  ]
+    .map((head) => text.indexOf(head))
+    .find((at) => at >= 0);
+  assert.ok(start !== undefined, name);
+  const end = text.indexOf(`revoke all on `, start);
+  assert.ok(end > start && text.slice(end).includes(name), name);
+  return text
+    .slice(start, text.indexOf(";\n", end) + 2)
+    .replace(/^create function/, "create or replace function");
+}
+
+/** The rollback as the header writes it, then what it makes again as the files before made it. */
+function rollbackSql(): string {
   return [
-    statements,
+    rollbackStatements(TEXT),
     ...[
       "private.bib_ask",
       "private.bib_receive",
@@ -87,6 +94,21 @@ function rollbackSql(): string {
     ].map((name) => made("_bibliography_holds.sql", name)),
   ].join("\n");
 }
+
+// The library's answer kept goes with a question (AUD-159;
+// supabase/migrations/*_bibliography_answer_kept.sql), and its rollback.
+const KEPT = FILES.find((file) =>
+  file.endsWith("_bibliography_answer_kept.sql"),
+);
+assert.ok(KEPT && KEPT > FILE!, "the answer kept migration, after this one");
+const KEPT_TEXT = migrationText(KEPT);
+const keptRollbackSql = () =>
+  [
+    rollbackStatements(KEPT_TEXT),
+    ...["private.bib_reused", "private.bib_receive", "private.bib_send"].map(
+      (name) => made("_bibliography_fetching.sql", name),
+    ),
+  ].join("\n");
 
 /** ISBNs of the town's catalog in the speed check, from first to last, made in SQL. */
 const MANY_ISBNS = `
@@ -196,6 +218,19 @@ async function main() {
     },
   );
 
+  await check(
+    "the rollback in the header of the answer kept going with a question leaves the database as it was before",
+    async () => {
+      const db = await migrated(KEPT);
+      const before = await catalog(db);
+      await db.exec(KEPT_TEXT);
+      assert.notDeepEqual(await catalog(db), before);
+      await db.exec(keptRollbackSql());
+      assert.deepEqual(await catalog(db), before);
+      await db.close();
+    },
+  );
+
   const db = await migrated();
   const {
     rows,
@@ -224,12 +259,12 @@ async function main() {
     (await questions())
       .filter((q) => q.url.startsWith("https://api.openbd.jp/"))
       .map((q) => new URL(q.url).searchParams.get("isbn"));
-  /** The library's answers kept used again at the last tick, by ISBN. */
+  /** The library's answers kept used again, waiting for the question they go with, by ISBN. */
   const reused = async () =>
     (
       await rows<{ isbn: string }>(
         `select e.isbn from private.edition_sources s join editions e on e.id = s.edition_id
-         where s.source = 'ndl' and s.request_id = -1 order by 1`,
+         where s.source = 'ndl' and s.request_id < 0 order by 1`,
       )
     ).map((row) => row.isbn);
   const placed = async (book: string) =>
@@ -318,7 +353,7 @@ async function main() {
   );
 
   await check(
-    "a book owed a question is answered by the library's answer kept when it is a week old at most: no question goes, it comes at the next tick, and the book waits its ten minutes as any",
+    "a book owed a question is answered by the library's answer kept when it is a week old at most, with the question sent at the same tick: no question about it goes, it comes with that question's answer, and the book waits its ten minutes as any",
     async () => {
       const akis = id(3, 1);
       const bens = id(3, 2);
@@ -328,11 +363,16 @@ async function main() {
       await tick();
       await settle();
       // Ben's book of Z50: Aki's is in private, so nothing answers it yet.
+      // Chi's of Z55, after it, is asked about at the same tick.
       await register(BEN, bens, Z(50), "五十の本");
+      await register(CHI, id(3, 4), Z(55), "五十五の本");
       await tick();
-      assert.deepEqual(await libraryAsked(), []);
+      assert.deepEqual(await libraryAsked(), [Z(55)]);
       assert.deepEqual(await reused(), [Z(50)]);
-      assert.deepEqual(await openbdAsked(), [Z(50)]);
+      assert.deepEqual(await openbdAsked(), [`${Z(50)},${Z(55)}`]);
+      // No answer yet to the question about Z55: Z50's waits with it.
+      await tick();
+      assert.deepEqual(await reused(), [Z(50)]);
       await answerAll(db, {}, open(Z(50), "五十の本"));
       await tick();
       assert.deepEqual(await reused(), []);
@@ -375,7 +415,139 @@ async function main() {
       await tick();
       assert.deepEqual(await reused(), [Z(51), Z(52), Z(53)]);
       assert.deepEqual(await libraryAsked(), [Z(54)]);
+      await answerAll(db, ndl(Z(54), "54の本"), {});
+      await tick();
+      assert.deepEqual(await reused(), []);
       await settle();
+      // With nothing else to ask about at its turn, the last that could be
+      // answered from what is kept is asked.
+      for (const n of [51, 52])
+        await register(CHI, id(3, n + 20), Z(n), `${n}の本`);
+      await tick();
+      assert.deepEqual(await reused(), [Z(51)]);
+      assert.deepEqual(await libraryAsked(), [Z(52)]);
+      await settle();
+    },
+  );
+
+  await check(
+    "while the library refuses and while it answers, a book's master comes as long after its turn whether its edition's answer is kept or not, whichever of two books comes first",
+    async () => {
+      let n = 100;
+      /**
+       * Rounds of twenty seconds from each of Ben's two books' registration
+       * (at the rounds `at`; in one round, the second first when
+       * `secondFirst`) to its master's title, the library refusing every
+       * question (429) for the first `failing` rounds. Aki registered the
+       * first one's ISBN before when `before`. openBD has neither.
+       */
+      const run = async (
+        before: boolean,
+        at: [number, number],
+        secondFirst: boolean,
+        failing: number,
+      ) => {
+        const isbns = [Z(n), Z(n + 1)];
+        const books = [id(6, n), id(6, n + 1)];
+        n += 2;
+        const records = Object.fromEntries(
+          isbns.map((i) => [i, sru({ isbns: [i], title: `${i}の本` })]),
+        );
+        if (before) {
+          await register(AKI, id(7, n), isbns[0], `${isbns[0]}の本`);
+          await tick();
+          await answerAll(db, { [isbns[0]]: records[isbns[0]] }, {});
+          await tick();
+          await settle();
+        }
+        const order = secondFirst ? [1, 0] : [0, 1];
+        const shownAt: (number | null)[] = [null, null];
+        for (let round = 0; round < 400; round++) {
+          for (const k of order)
+            if (at[k] === round)
+              await register(BEN, books[k], isbns[k], `${isbns[k]}の本`);
+          await later(1 / 3);
+          await tick();
+          for (const q of await questions()) {
+            if (!q.url.startsWith("https://ndlsearch.ndl.go.jp/")) {
+              const list = new URL(q.url).searchParams.get("isbn")!.split(",");
+              await answer(q.id, JSON.stringify(list.map(() => null)));
+            } else if (round < failing) {
+              await answer(q.id, "Too Many Requests", 429);
+            } else {
+              const asked = decodeURIComponent(q.url).match(
+                /isbn="(\d{13})"/,
+              )![1];
+              await answer(
+                q.id,
+                records[asked] ?? diagnostic("Record does not exist"),
+              );
+            }
+          }
+          for (const k of [0, 1])
+            if (shownAt[k] === null && round >= at[k]) {
+              const master = (await shown(BEN, [books[k]]))[0] as
+                | { title: string | null }
+                | undefined;
+              if (master?.title) shownAt[k] = round - at[k];
+            }
+          if (shownAt.every((rounds) => rounds !== null)) break;
+          // Nothing out (or answered and not yet read) and nothing due for a
+          // while: on to just before it (not past the library's coming back).
+          if (
+            round < Math.max(...at) ||
+            (await count(
+              "select count(*) from private.edition_sources where request_id is not null",
+            ))
+          )
+            continue;
+          const wait = (
+            await rows<{ wait: number }>(
+              `select coalesce(extract(epoch from least(
+                 (select min(s.next_at) from private.edition_sources s
+                  where s.owed and s.request_id is null),
+                 (select min(c.placed_at) + interval '10 minutes' from private.book_checks c
+                  where c.book_id = any ($1::uuid[]) and c.judged_at is null)) - now()), 0)::float
+                 as wait`,
+              [books],
+            )
+          )[0].wait;
+          let skip = Math.floor((wait - 1) / 20);
+          if (round < failing) skip = Math.min(skip, failing - round - 1);
+          if (skip >= 2) {
+            await later(skip / 3);
+            round += skip;
+          }
+        }
+        await settle();
+        return shownAt;
+      };
+      const ways: [[number, number], boolean][] = [
+        [[0, 0], false],
+        [[0, 0], true],
+        [[0, 1], false],
+        [[1, 0], false],
+      ];
+      for (const [at, secondFirst] of ways) {
+        const way = `${at} ${secondFirst}`;
+        const failed = await run(true, at, secondFirst, 40);
+        assert.deepEqual(failed, await run(false, at, secondFirst, 40), way);
+        // They wait for the library to answer again, after the first
+        // question failed and the one ten minutes on.
+        for (const rounds of failed)
+          assert.ok(rounds !== null && rounds > 40, `${way}: ${rounds}`);
+      }
+      for (const [at, secondFirst] of ways.slice(0, 3)) {
+        const way = `${at} ${secondFirst}`;
+        const answered = await run(true, at, secondFirst, 0);
+        assert.deepEqual(answered, await run(false, at, secondFirst, 0), way);
+        // Ten minutes on, as any answer.
+        for (const rounds of answered)
+          assert.ok(
+            rounds !== null && rounds >= 29 && rounds <= 31,
+            `${way}: ${rounds}`,
+          );
+      }
     },
   );
 
@@ -531,6 +703,7 @@ async function main() {
         "private.bib_ask(uuid, boolean, timestamp with time zone)",
         "private.bib_reusable(uuid)",
         "private.bib_reused(uuid, text)",
+        "private.bib_with(bigint, boolean)",
         "private.bib_queue(text, integer)",
         "private.bib_send()",
         "private.bib_take(uuid, text, bigint, text, text, text, text, jsonb)",

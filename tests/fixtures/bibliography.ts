@@ -365,10 +365,10 @@ export function helpers(db: PGlite) {
        where book_id = $1`,
       [book, minutes],
     );
-  /** As if this many minutes had gone by since everything written so far. */
+  /** As if this many minutes (or part of one) had gone by since everything written so far. */
   const later = (minutes: number) =>
     rows(
-      `with i as (select make_interval(mins => $1) as i),
+      `with i as (select make_interval(secs => $1::float8 * 60) as i),
          b as (update private.book_checks set placed_at = placed_at - (select i from i))
        update private.edition_sources set
          answered_at = answered_at - (select i from i), found_at = found_at - (select i from i),
@@ -388,9 +388,9 @@ export function helpers(db: PGlite) {
       db.exec(
         `do $$ begin
            if to_regclass('private.bib_pace') is not null then
-             update private.bib_pace set next_at = next_at - make_interval(mins => ${Number(minutes)});
+             update private.bib_pace set next_at = next_at - make_interval(secs => ${Number(minutes) * 60});
              update private.edition_sources
-             set lost_at = lost_at - make_interval(mins => ${Number(minutes)});
+             set lost_at = lost_at - make_interval(secs => ${Number(minutes) * 60});
            end if;
          end $$`,
       ),
