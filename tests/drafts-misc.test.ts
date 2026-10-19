@@ -12,10 +12,9 @@ import {
   sentCodeStore,
 } from "../src/lib/account-draft";
 import { NAME_MAX_LENGTH } from "../src/lib/account";
-import { imeKey } from "../src/lib/keys";
+import { enterPressed, imeKey } from "../src/lib/keys";
 import { homeAddressOf } from "../src/lib/last-address";
 import { HOME_TAB_KEY, loadHomeTab, saveHomeTab } from "../src/lib/home-tab";
-import { enterPressed } from "../src/lib/search/use-book-search";
 
 const memory = () => {
   const data = new Map<string, string>();

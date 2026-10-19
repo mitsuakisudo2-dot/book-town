@@ -57,6 +57,7 @@ import {
   type SyncOptions,
   type Versions,
 } from "./sync";
+import { takeTownAhead } from "./town-ahead";
 
 type Client = SupabaseClient<Database>;
 
@@ -222,6 +223,9 @@ async function townViewOf(
   client: Client,
   userId: string | null,
 ): Promise<TownView> {
+  // Someone not signed in may have it asked already, by the page's head.
+  const ahead = userId === null ? await takeTownAhead() : undefined;
+  if (ahead && typeof ahead === "object") return viewFrom(ahead as Json);
   let data: Json;
   try {
     data = (await settled(client.rpc("town_view", TOWN_VIEW_ARGS))).data;
@@ -243,6 +247,11 @@ async function townViewOf(
       throw again;
     }
   }
+  return viewFrom(data);
+}
+
+/** The town in town_view's answer. */
+function viewFrom(data: Json): TownView {
   const view = (data ?? {}) as Record<string, unknown>;
   return {
     oneMoment: true,

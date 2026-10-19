@@ -2618,9 +2618,9 @@ try {
       const owned = on.getByRole("group", { name: "持っている本" });
       // Two kinds, apart and named; nothing lit for a book not in the library.
       await expect(status.getByRole("button")).toHaveText([
-        "積読",
-        "読書中",
         "読了",
+        "読書中",
+        "積読",
       ]);
       await expect(owned.getByRole("button")).toHaveText([
         "持っている",
@@ -2685,9 +2685,9 @@ try {
       const handStatus = hand.getByRole("group", { name: "読書の状態" });
       const handOwned = hand.getByRole("group", { name: "持っている本" });
       await expect(handStatus.getByRole("button")).toHaveText([
-        "積読",
-        "読書中",
         "読了",
+        "読書中",
+        "積読",
       ]);
       await expect(handOwned).toBeVisible();
       await expect(
