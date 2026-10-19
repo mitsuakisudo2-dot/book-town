@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { jstDay, shortDate, weekOf } from "../src/lib/japan-time";
+import {
+  japanMonthDay,
+  jstDay,
+  shortDate,
+  weekOf,
+} from "../src/lib/japan-time";
 import { myShopPath, walkPath } from "../src/lib/paths";
 
 // Page addresses, dates and text limits are written once, in paths.ts,
@@ -73,11 +78,12 @@ check(
 
 check("a date is read in Japan time, from japan-time.ts", () => {
   hits(
-    /toLocale(Date|Time)String|getTimezoneOffset|9 \* 3_?600_?000|9 \* 60 \* 60/g,
+    /toLocale(Date|Time)String|\.(getMonth|getDate|getFullYear|getDay|getHours|getMinutes)\(|getTimezoneOffset|9 \* 3_?600_?000|9 \* 60 \* 60/g,
     ["src/lib/japan-time.ts"],
     {},
   );
   assert.equal(shortDate("2026-10-18T16:00:00Z"), "2026/10/19");
+  assert.equal(japanMonthDay("2026-10-18T16:00:00Z"), "10月19日");
   assert.equal(weekOf("2026-10-11T15:30:00Z"), "2026-10-12");
   assert.equal(
     jstDay(Date.parse("2026-10-15T00:00:00+09:00")),
@@ -86,12 +92,7 @@ check("a date is read in Japan time, from japan-time.ts", () => {
 });
 
 check("a text limit is a name from types.ts, not a number", () => {
-  hits(
-    /maxLength=\{\d+\}/g,
-    [],
-    // スキャンの画面 (102 のとき)
-    { "src/components/BarcodeRegister.tsx": 3 },
-  );
+  hits(/maxLength=\{\d+\}/g, [], {});
 });
 
 console.log(`${passed} hardcoded checks passed`);

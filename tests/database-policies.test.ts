@@ -5788,6 +5788,8 @@ async function main() {
       insert into private.staff (user_id) values ('${BEN}') on conflict do nothing;
       insert into site_notes (user_id, page, x, y, viewport_w, viewport_h, scroll_y, body)
         values ('${BEN}', '/', 1, 1, 390, 844, 0, 'ベンの注釈');
+      insert into private.site_reports (user_id, kind, body)
+        values ('${BEN}', 'wish', 'ベンの要望');
       insert into private.shop_visitor_weeks (shop_id, week, visitors)
         select id, private.last_visit_week(), 1 from shops where owner_id = '${BEN}';
     `);

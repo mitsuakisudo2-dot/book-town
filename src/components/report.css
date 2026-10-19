@@ -83,3 +83,40 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* 不具合と要望 (SiteReport.tsx): the kinds to pick from, and staff's list. */
+.site-report-kinds {
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 0;
+  overflow: visible;
+}
+.site-report-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.site-report-list li {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+}
+.site-report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0 0 6px;
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+}
+.site-report-meta b {
+  color: var(--ink);
+}
+.site-report-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}

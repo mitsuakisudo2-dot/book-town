@@ -20,6 +20,7 @@ import "./report-draft";
 import "./scene-draft";
 import "./shelves-draft";
 import "./shop-draft";
+import "./site-report-draft";
 import { JOURNAL_KEY, libraryJournal } from "./library-journal";
 import { LAST_SCAN_KEY } from "./scan-resume";
 import { POSITION_KEY } from "./walk-repository";

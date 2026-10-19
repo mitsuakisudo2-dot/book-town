@@ -44,6 +44,8 @@ export function normalizeIsbn(raw: string): string | null {
 
 /** The longest title or author a book keeps, as the database allows. */
 export const BOOK_TEXT_MAX = 200;
+/** The longest price a reader types for a book (定価, digits only). */
+export const BOOK_PRICE_MAX_LENGTH = 9;
 /** A title or author as kept: a longer one is cut, ending in …. */
 export function bookText(value: string): string {
   const text = value.trim();

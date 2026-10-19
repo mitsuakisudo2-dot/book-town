@@ -144,6 +144,8 @@ export const POP_MAX_LENGTH = 1000;
 export const LIBRARY_SHELF_NAME_MAX_LENGTH = 40;
 export const LIBRARY_SHELF_NOTE_MAX_LENGTH = 500;
 export const READER_NAME_MAX_LENGTH = 80;
+/** 不具合と要望 (site_reports), after the database takes out what should not be kept. */
+export const SITE_REPORT_MAX_LENGTH = 2000;
 export const BIO_MAX_LENGTH = 2000;
 export const NINE_NOTE_MAX_LENGTH = 500;
 export const SHOP_MESSAGE_MAX_LENGTH = 2000;
@@ -152,6 +154,14 @@ export const SCENE_ROW_TEXT_MAX_LENGTH = 80;
 export const SCENE_TEXT_MAX_LENGTH = 500;
 export const SCENE_BOARD_TITLE_MAX_LENGTH = 12;
 export const SCENE_POP_MAX_LENGTH = 10000;
+/**
+ * What a saved shop's names and POP may be when they are read back (this
+ * browser's copy, the town a reader's account holds). Wider than what the
+ * form and the database take (SHOP_NAME_MAX_LENGTH, SHELF_NAME_MAX_LENGTH,
+ * POP_MAX_LENGTH), so a shelf kept before a limit was set is still read.
+ */
+export const STORED_NAME_MAX_LENGTH = 120;
+export const STORED_POP_MAX_LENGTH = 10000;
 
 /** A like can be pressed again, up to this many times per person and post. */
 export const LIKE_TAPS_MAX = 10;

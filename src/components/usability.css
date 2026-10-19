@@ -48,6 +48,11 @@
 .town-shell .picker-search input {
   font-size: var(--t-page);
 }
+/* The example in the search box is a hint, so it stays one size smaller than
+   what is typed and the whole line fits at もっと大きい on a narrow phone. */
+:root[data-text] .town-shell .picker-search input::placeholder {
+  font-size: var(--t-meta);
+}
 .town-shell .compose-fab {
   align-content: center;
   gap: 3px;
