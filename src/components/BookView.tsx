@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { usePersistenceStatus } from "../lib/store";
+import { usePersistenceStatus, useTownMore } from "../lib/store";
+import { bookKind } from "../lib/samples";
 import {
   type TownState,
   type TownActions,
@@ -108,16 +109,24 @@ function BibliographyCredit({ master }: { master: Bibliography | null }) {
 }
 
 export function BookView({
-  state,
+  state: town,
   actions,
   notify,
   bookId,
 }: Shared & { bookId: string }) {
   const persistence = usePersistenceStatus();
-  const book = bookById(state.books, bookId);
+  // A book the town does not hold (one a search found, the library's
+  // catalog's among them) comes with its work's records (work_records).
+  const known = bookById(town.books, bookId);
+  const { state: read, ready } = useTownMore(
+    town,
+    known || bookKind(bookId) !== "database" ? null : { work: bookId },
+  );
+  const state = known ? town : read;
+  const book = known ?? bookById(read.books, bookId);
   const master = useBibliography(bookId);
   if (!book)
-    return persistence === "loading" ? (
+    return persistence === "loading" || !ready ? (
       <p role="status">本を開いています…</p>
     ) : (
       <div className="empty-state">

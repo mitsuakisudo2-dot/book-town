@@ -90,6 +90,12 @@ function hash(text: string): number {
 }
 
 export const REGISTERED_GENRE = "登録した本";
+/** The library's catalog rows (books.source 'ndl'): nobody registered them. */
+export const CATALOG_GENRE = "図書館の目録";
+
+/** Books drawn as a BookTown jacket card when no cover is found: registered and catalog books. */
+export const isDrawnBook = (book: { genre: string }): boolean =>
+  book.genre === REGISTERED_GENRE || book.genre === CATALOG_GENRE;
 
 /**
  * Books registered at runtime and books from the database share one exported

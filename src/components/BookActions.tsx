@@ -1,7 +1,7 @@
 "use client";
 
 import type { Book, Notify, TownActions, TownState } from "../lib/types";
-import { formatPrice, REGISTERED_GENRE } from "../lib/books";
+import { formatPrice, isDrawnBook } from "../lib/books";
 import { bookLookup, lookupQuery } from "../lib/book-lookup";
 import Link from "next/link";
 import { myShopPath } from "../lib/paths";
@@ -86,10 +86,10 @@ export function BookPurchase({ book }: { book: Book }) {
 /** The fine print for the jacket, the price and the shop links. */
 export function bookNote(book: Book): string {
   return [
-    book.genre === REGISTERED_GENRE
+    isDrawnBook(book)
       ? "表紙が見つからない本は、題名から作ったBookTownの装丁カードで表しています。"
       : "表紙はデモ用のオリジナルデザインです。",
-    book.price && book.genre !== REGISTERED_GENRE
+    book.price && !isDrawnBook(book)
       ? "定価はデモ用の仮の値です。"
       : "",
     "購入ボタンはタイトルで外部書店を検索します。版や在庫は購入先でご確認ください。",

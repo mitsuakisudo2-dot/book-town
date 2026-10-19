@@ -1080,6 +1080,9 @@ function remoteReads(
       }
       const missing = [
         ...new Set([
+          // A book's page asks its work by the book, which the town may not
+          // hold (one a search found).
+          ...("work" in ask ? [ask.work] : []),
           ...rows.records.map((row) => row.book_id),
           ...rows.nine.map((row) => row.book_id),
         ]),

@@ -1,4 +1,4 @@
-import { createRegisteredBook, REGISTERED_GENRE } from "./books";
+import { CATALOG_GENRE, createRegisteredBook, REGISTERED_GENRE } from "./books";
 import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
 import {
@@ -282,10 +282,14 @@ export function bookFromRow(row: BookRow, registered: boolean): Book {
     ? book
     : {
         ...book,
-        summary:
-          row.source === "ndl"
-            ? "図書館の目録にある本です。あらすじはありません。"
-            : "読書家が登録した本です。あらすじは登録されていません。",
+        ...(row.source === "ndl"
+          ? {
+              genre: CATALOG_GENRE,
+              summary: "図書館の目録にある本です。あらすじはありません。",
+            }
+          : {
+              summary: "読書家が登録した本です。あらすじは登録されていません。",
+            }),
       };
 }
 
