@@ -2119,6 +2119,14 @@ dialog .toast {
   bottom: 112px;
   left: 50%;
 }
+/* Bigger words fold the message onto two lines; over a sheet it hugs the top
+   edge so it stays above the sheet's heading instead of covering it. */
+:root[data-text] body:has(.modal-backdrop) .toast {
+  top: 6px;
+  padding: 8px 14px;
+  line-height: 1.3;
+  max-width: calc(100vw - 12px);
+}
 /* The one way back from what a toast just said (公開しました → 自分だけに戻す).
    44px to tap, reaching into the toast's padding so the toast keeps its height. */
 .toast-undo {
