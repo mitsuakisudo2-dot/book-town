@@ -2727,6 +2727,7 @@ check("a book held back is told once in お知らせ, leading to its page", () =
   const hold = {
     bookId: id,
     heldAt: "2026-10-17T05:00:00.000Z",
+    earlier: false,
     master: { title: "見本の物語", creators: [{ name: "山田一郎" }] },
   };
   const notice = notificationsFor(state, 0, [hold]).find((entry) =>
@@ -2738,6 +2739,13 @@ check("a book held back is told once in お知らせ, leading to its page", () =
     "登録した『よるのとしょかん』のISBNは、『見本の物語』のものです。本のページで確かめてください",
   );
   assert.equal(notice.href, bookPath(id));
+  // Held a day or more after it was placed: a book registered before.
+  assert.equal(
+    notificationsFor(state, 0, [{ ...hold, earlier: true }]).find((entry) =>
+      entry.id.startsWith("held:"),
+    )?.text,
+    "前に登録した『よるのとしょかん』のISBNは、『見本の物語』のものです。本のページで確かめてください",
+  );
   assert.equal(unreadCount(state, [hold]), unreadCount(state) + 1);
   town.actions.markNotificationsSeen([notice.id]);
   assert.equal(unreadCount(town.getSnapshot(), [hold]), unreadCount(state));
