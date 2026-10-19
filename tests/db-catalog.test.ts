@@ -68,10 +68,9 @@ function made(file: string, name: string): string {
     .map((head) => text.indexOf(head))
     .find((at) => at >= 0);
   assert.ok(start !== undefined, name);
-  const end = text.indexOf(`revoke all on `, start);
-  assert.ok(end > start && text.slice(end).includes(name), name);
-  let stop = text.indexOf(";\n", end) + 2;
-  while (text.startsWith("grant ", stop)) {
+  let stop = text.indexOf("\n$$;\n", start) + 5;
+  // Its revoke and grants, when they follow it.
+  while (/^(revoke|grant) /.test(text.slice(stop))) {
     const next = text.indexOf(";\n", stop) + 2;
     if (!text.slice(stop, next).includes(name)) break;
     stop = next;
@@ -79,23 +78,15 @@ function made(file: string, name: string): string {
   return text.slice(start, stop).replace(/^create function/, "create or replace function");
 }
 
-/** The search as 20261114000000_search_candidates.sql made it (no revoke follows it there). */
-function madeSearch(): string {
-  const text = migrationText(FILES.find((f) => f.endsWith("_search_candidates.sql"))!);
-  const start = text.indexOf("create or replace function private.found_book_ids(");
-  assert.ok(start >= 0);
-  return text.slice(start, text.indexOf("\n$$;\n", start) + 5);
-}
-
 const rollbackSql = () =>
   [
     rollbackStatements(TEXT),
-    madeSearch(),
     made("_bibliography_fetching.sql", "private.book_checked"),
     made("_bibliography.sql", "private.edition_asked"),
     made("_bibliography_holds.sql", "public.book_bibliography"),
     made("_bibliography_holds.sql", "private.work_candidates"),
-    made("_newest_books_shown.sql", "private.newest_book_ids"),
+    made("_seen_in_one_question.sql", "private.newest_book_ids"),
+    made("_seen_in_one_question.sql", "private.found_book_ids"),
   ].join("\n");
 
 /** A record as OAI-PMH gives it: its header, then the rdf:RDF the SRU answer has. */

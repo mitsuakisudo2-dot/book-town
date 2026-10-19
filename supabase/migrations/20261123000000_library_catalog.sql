@@ -71,10 +71,9 @@
 -- 20261119000000_bibliography_fetching.sql and 20261101000000_bibliography.sql
 -- have them, public.book_bibliography(uuid[]) and private.work_candidates()
 -- as 20261102000000_bibliography_holds.sql has them, and
--- private.newest_book_ids(integer) as 20261120000000_newest_books_shown.sql
--- has it, and private.found_book_ids(jsonb, text, text, integer) as
--- 20261114000000_search_candidates.sql has it, each with its revoke and
--- grants. The catalog rows a reader uses
+-- private.newest_book_ids(integer) and private.found_book_ids(jsonb, text,
+-- text, integer) as 20261122000000_seen_in_one_question.sql has them, each
+-- with its revoke and grants. The catalog rows a reader uses
 -- stay (catalog_drop keeps them). pnpm test:db runs exactly that.
 
 select set_config('lock_timeout', '10s', true);
@@ -553,8 +552,8 @@ $$;
 revoke all on function public.book_bibliography(uuid[]) from public, anon, authenticated;
 grant execute on function public.book_bibliography(uuid[]) to anon, authenticated;
 
--- As before (newest_books_shown), over the books readers registered (and the
--- 見本's): the catalog is found in the search, not shown as the town's.
+-- As in 20261122000000_seen_in_one_question.sql, over the books readers
+-- registered: the library's catalog is not the town's.
 create or replace function private.newest_book_ids(wanted integer)
 returns uuid[]
 language plpgsql stable security definer set search_path = '' as $$
@@ -564,8 +563,8 @@ declare
   last_at timestamptz := 'infinity';
   last_id uuid := 'ffffffff-ffff-ffff-ffff-ffffffffffff';
   slice uuid[];
+  ordered uuid[];
   kept uuid[] := '{}';
-  candidate record;
 begin
   while cardinality(kept) < most loop
     -- The next books, newest first, after the last slice's oldest.
@@ -580,16 +579,13 @@ begin
     exit when cardinality(slice) = 0;
     select b.created_at, b.id into last_at, last_id
     from public.books b where b.id = slice[cardinality(slice)];
-    for candidate in
-      select c.id, c.sure
-      from private.search_candidates(slice) c
+    ordered := array(
+      select c.id from private.search_candidates(slice) c
       join public.books b on b.id = c.id
       order by b.created_at desc, b.id desc
-    loop
-      continue when not candidate.sure and not private.book_is_seen(candidate.id);
-      kept := kept || candidate.id;
-      exit when cardinality(kept) >= most;
-    end loop;
+    );
+    select k.kept into kept
+    from private.keep_seen_books(ordered, most, kept, null) k;
     exit when cardinality(slice) < size;
     size := least(size * 2, 8000);
   end loop;
@@ -717,7 +713,8 @@ revoke all on function private.work_candidates() from public, anon, authenticate
 -- (the database's collation does not order digits for LIKE).
 create index books_isbn_bytes on public.books ((isbn collate "C")) where isbn is not null;
 
--- As before (search_candidates), with what millions of catalog rows need:
+-- As in 20261122000000_seen_in_one_question.sql, with what millions of
+-- catalog rows need:
 -- * An ISBN or its first digits: the reader's own books, then at most 1,000
 --   books in ISBN order (an ISBN's whole number: its books best first).
 -- * The books holding every pair of a form: the reader's own, then at most
@@ -725,11 +722,12 @@ create index books_isbn_bytes on public.books ((isbn collate "C")) where isbn is
 --   nearest to what was typed).
 -- * Near titles: a book holding `need` of a form's pairs holds at least one
 --   of any (pairs - need + 1) of them, so only the rarest of those are looked
---   up (by the planner's statistics); at most 2,000 books are weighed and the
---   300 nearest go on.
+--   up (by the planner's statistics); the reader's own and at most 2,000
+--   more are weighed and go on, nearest first.
 -- * Sequential scans are off: each question's pairs come as parameters, and
 --   a plan made for any pairs would read the whole table to stop early.
--- * Every slice is read by its ids, in the order found.
+-- * Every slice is read by its ids, in the order found, and what the reader
+--   may see of it is asked a chunk at a time (keep_seen_books).
 create or replace function private.found_book_ids(
   forms jsonb,
   whole_isbn text,
@@ -761,7 +759,7 @@ declare
   size integer;
   kept uuid[] := '{}';
   editions uuid[] := '{}';
-  candidate record;
+  ordered uuid[];
 begin
   if most = 0 then
     return kept;
@@ -848,20 +846,16 @@ begin
     slice := 1;
     size := 500;
     while slice <= cardinality(found) and cardinality(kept) < most loop
-      for candidate in
-        select b.id, b.edition_id, c.sure
+      ordered := array(
+        select b.id
         from private.search_candidates(found[slice:slice + size - 1]) c
-        join lateral (select x.id, x.edition_id, x.created_by, x.source, x.created_at
+        join lateral (select x.id, x.created_by, x.source, x.created_at
                       from public.books x where x.id = c.id) b on true
         order by (b.created_by = me) desc nulls last, (b.source <> 'manual') desc,
           b.created_at, b.id
-      loop
-        continue when candidate.edition_id = any(editions);
-        continue when not candidate.sure and not private.book_is_seen(candidate.id);
-        kept := kept || candidate.id;
-        editions := editions || candidate.edition_id;
-        exit when cardinality(kept) >= most;
-      end loop;
+      );
+      select k.kept, k.editions into kept, editions
+      from private.keep_seen_books(ordered, most, kept, editions) k;
       slice := slice + size;
       size := size * 2;
     end loop;
@@ -869,8 +863,8 @@ begin
 
   -- Found by ISBN too: all of them, best first.
   if by_isbn then
-    for candidate in
-      select b.id, b.edition_id, c.sure
+    ordered := array(
+      select b.id
       from private.search_candidates(found) c
       join lateral (select x.id, x.edition_id, x.created_by, x.source, x.created_at
                     from public.books x where x.id = c.id) b on true
@@ -895,25 +889,27 @@ begin
         (b.source <> 'manual') desc,
         b.created_at,
         b.id
-    loop
-      continue when candidate.edition_id = any(editions);
-      continue when not candidate.sure and not private.book_is_seen(candidate.id);
-      kept := kept || candidate.id;
-      editions := editions || candidate.edition_id;
-      exit when cardinality(kept) >= most;
-    end loop;
+    );
+    select k.kept, k.editions into kept, editions
+    from private.keep_seen_books(ordered, most, kept, editions) k;
   end if;
 
   -- Then, if fewer than asked were kept, the books sharing enough pairs with
-  -- a form (near titles): at most 2,000 holding a probe pair are weighed,
-  -- and the 300 holding most of a form's pairs go on, in that order.
+  -- a form (near titles): the reader's own and at most 2,000 more holding a
+  -- probe pair are weighed, and go on in order of the share of a form's
+  -- pairs they hold.
   if cardinality(kept) < most and forms_seen > 0 then
     near := array(
       select w.book_id
       from (
-        select n.book_id, n.grams from private.book_grams n
-        where n.grams && probe and not (n.book_id = any(found))
-        limit 2000
+        (select n.book_id, n.grams from private.book_grams n
+         join public.books o on o.id = n.book_id
+         where me is not null and o.created_by = me
+           and n.grams && probe and not (n.book_id = any(found)))
+        union all
+        (select n.book_id, n.grams from private.book_grams n
+         where n.grams && probe and not (n.book_id = any(found))
+         limit 2000)
       ) w
       cross join lateral (
         select max(h.held::numeric / form_size[h.n]) as share
@@ -930,21 +926,15 @@ begin
       -- The reader's own, then a book from a catalog, then the oldest, among
       -- equals.
       order by s.share desc, (b.created_by = me) desc nulls last,
-        (b.source <> 'manual') desc, b.created_at, b.id
-      limit 300);
-    for candidate in
-      select b.id, b.edition_id, c.sure
+        (b.source <> 'manual') desc, b.created_at, b.id);
+    ordered := array(
+      select u.id
       from private.search_candidates(near) c
       join unnest(near) with ordinality u (id, place) on u.id = c.id
-      join lateral (select x.id, x.edition_id from public.books x where x.id = c.id) b on true
       order by u.place
-    loop
-      continue when candidate.edition_id = any(editions);
-      continue when not candidate.sure and not private.book_is_seen(candidate.id);
-      kept := kept || candidate.id;
-      editions := editions || candidate.edition_id;
-      exit when cardinality(kept) >= most;
-    end loop;
+    );
+    select k.kept, k.editions into kept, editions
+    from private.keep_seen_books(ordered, most, kept, editions) k;
   end if;
   return kept;
 end;
