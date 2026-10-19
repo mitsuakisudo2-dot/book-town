@@ -1736,7 +1736,6 @@ export function journalTownOf(
     owner,
     register: (book, via, bookId, batchId) =>
       store.actions.registerBook(book, via, bookId, batchId),
-    toggleLibrary: (bookId) => store.actions.toggleLibrary(bookId),
     changeLibrary: (bookId, set) => {
       store.actions.changeLibrary([bookId], set);
     },

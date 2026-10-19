@@ -210,6 +210,10 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   // search (search_in_database); it goes with its book, and only the search
   // functions read it.
   "private.book_grams": { people: {}, readers: "nobody" },
+  // How many public shelves hold each work and how many 便り talk of it
+  // (counts_in_database): no person's column; triggers keep it as rows go,
+  // and only the counting functions read it.
+  "private.work_counts": { people: {}, readers: "nobody" },
   // A copy's own rows are cleared by forget_in_copies (moving_copies).
   "keep.copies": { people: {}, readers: "nobody" },
 };
