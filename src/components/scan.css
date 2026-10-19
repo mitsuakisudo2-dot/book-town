@@ -561,6 +561,13 @@
   gap: 2px;
   font-size: var(--t-meta);
 }
+/* A shelf's name on its own button: cut short, not over the edge. */
+.scan-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .scan-item-add[aria-expanded="true"] {
   border-color: var(--green);
 }
@@ -912,6 +919,29 @@ body:has(.scan-session) .toast {
   min-height: 44px;
   color: var(--ink-2);
 }
+/* That time's 連続設定, and the one press that gives it back. */
+.scan-resume-sort {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: var(--r-box);
+  background: var(--paper);
+}
+.scan-resume-sort p {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-cap);
+}
+.scan-resume-sort-name {
+  color: var(--ink-2);
+  font-weight: 700;
+}
 
 /* コンパクト表示: a book of the library on one line, its title and the
    three statuses; what else it has comes back with the toggle. */
@@ -962,4 +992,99 @@ body:has(.scan-session) .toast {
 .scan-item.is-compact .scan-item-statuses .chip {
   padding: 0 8px;
   font-size: var(--t-meta);
+}
+/* 自由3枠 (資料 4章): the second row's buttons, in order, and what can go
+   there. */
+.scan-slots {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.scan-slots h3 {
+  margin-bottom: 8px;
+  font-size: var(--t-meta);
+  font-weight: 700;
+}
+.scan-slots-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.scan-slot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 2px 4px 2px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+}
+.scan-slot-at {
+  flex: none;
+  width: 20px;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  font-weight: 700;
+}
+.scan-slot-name {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--t-ui);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scan-slot .icon-btn:disabled {
+  opacity: 0.3;
+}
+.scan-slots-choices .chip:disabled {
+  opacity: 0.45;
+}
+.scan-slots-choices + .scan-sort-foot {
+  margin-top: 8px;
+}
+/* Swiped from right to left (資料 4章): the card moves aside for ［削除］ on
+   its right. Up and down stays the list's scroll. */
+.scan-item {
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.scan-item > :not(.scan-item-delete) {
+  transition: transform var(--dur-move) ease;
+}
+.scan-item.is-swiped > :not(.scan-item-delete) {
+  transform: translateX(-88px);
+}
+.scan-item.is-swiping > :not(.scan-item-delete) {
+  transform: translateX(var(--swipe, 0px));
+  transition: none;
+}
+.scan-item-delete {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 88px;
+  min-height: 0;
+  border-radius: 0;
+  visibility: hidden;
+}
+.scan-item:is(.is-swiped, .is-swiping) .scan-item-delete {
+  visibility: visible;
+}
+.scan-item-restore {
+  flex: none;
+  align-self: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-item > :not(.scan-item-delete) {
+    transition: none;
+  }
 }

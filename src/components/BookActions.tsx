@@ -5,10 +5,18 @@ import { formatPrice, REGISTERED_GENRE } from "../lib/books";
 import { bookLookup, lookupQuery } from "../lib/book-lookup";
 import Link from "next/link";
 import { myShopPath } from "../lib/paths";
-import { PLACE } from "../lib/words";
+import { MY_BOOK, PLACE } from "../lib/words";
 import { Icon } from "./ui";
 import { RegisterBook } from "./RegisterBook";
 import { holds, mine } from "../lib/own-books";
+import { quotedTitle } from "../lib/book-name";
+import { entriesOf, townShopBooks } from "../lib/library-town";
+import {
+  OWNED_MARKS,
+  STATUS_MARKS,
+  UNDONE,
+  type LibraryMark,
+} from "../lib/library-changes";
 
 /** 定価, tax included. Books without a known price show nothing. */
 export function BookPrice({
@@ -87,6 +95,79 @@ export function bookNote(book: Book): string {
   ].join("");
 }
 
+const NO_SHELVES: ReadonlySet<string> = new Set();
+
+/**
+ * The reader's own place for the book, on its page (AUD-052): its reading
+ * status and whether they own it, set here as in the library's ［選ぶ］, and
+ * whether it is on their shop's shelves. Set on a book not in the library,
+ * or taken out of it, it brings the book in, as 登録 does.
+ */
+function MyBook({
+  book,
+  state,
+  actions,
+  notify,
+}: {
+  book: Book;
+  state: TownState;
+  actions: TownActions;
+  notify: Notify;
+}) {
+  // Asked of another reader's book, the reader's own of it answers.
+  const id = mine(state, book.id, state.library);
+  const registered = holds(state, state.library, book.id);
+  const row = registered ? entriesOf(state)[id] : undefined;
+  const inShop = townShopBooks(state).has(id);
+  const press = (mark: LibraryMark) => {
+    const lit = mark.lit(row, false, NO_SHELVES);
+    const set = mark.change(lit);
+    const undo = actions.changeLibrary(
+      [book.id],
+      registered ? set : { ...set, removed: false },
+    );
+    if (!undo) return;
+    const name = quotedTitle(book);
+    notify(`${name}を${mark.done(lit)}`, {
+      label: UNDONE.label,
+      run: () =>
+        notify(actions.undoLibrary(undo) ? UNDONE.back(name) : UNDONE.kept),
+    });
+  };
+  const group = (label: string, marks: LibraryMark[]) => (
+    <div className="bh-mine-row" role="group" aria-label={label}>
+      <span className="bh-mine-label" aria-hidden="true">
+        {label}
+      </span>
+      <div className="btns">
+        {marks.map((mark) => (
+          <button
+            key={mark.key}
+            type="button"
+            className="chip"
+            aria-pressed={mark.lit(row, false, NO_SHELVES)}
+            onClick={() => press(mark)}
+          >
+            {mark.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div className="bh-mine">
+      {group(MY_BOOK.status, STATUS_MARKS)}
+      {group(MY_BOOK.owned, OWNED_MARKS)}
+      {inShop && (
+        <p className="bh-in-shop">
+          <Icon name="store" size={16} />
+          {MY_BOOK.inShop}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function BookActions({
   book,
   state,
@@ -155,6 +236,9 @@ export function BookActions({
           {favorite ? "お気に入りに登録済み" : "お気に入り"}
         </button>
       </div>
+      {register && (
+        <MyBook book={book} state={state} actions={actions} notify={notify} />
+      )}
       {toShop && (
         <Link
           className="text-btn bh-to-shop"

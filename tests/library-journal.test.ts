@@ -24,6 +24,13 @@ import {
 import { blankEntry } from "../src/lib/library";
 import type { OpenBdAnswer } from "../src/lib/openbd";
 import { scanTimes, scanTimeWords } from "../src/lib/scan-history";
+import {
+  DEFAULT_SLOTS,
+  liveSlots,
+  moveSlot,
+  readSlots,
+  toggleSlot,
+} from "../src/lib/scan-slots";
 import { createMemoryRepository } from "../src/lib/repository";
 import {
   closingNotice,
@@ -1413,6 +1420,54 @@ async function main() {
       assert.equal(
         scanTimeWords(Date.parse("2026-10-18T16:43:00Z")),
         "10月19日(月) 1:43",
+      );
+    },
+  );
+
+  await check(
+    "自由3枠: three at most, in the reader's order, kept on the device",
+    () => {
+      // Nothing kept, or nothing readable: the 資料's first row.
+      assert.deepEqual(readSlots(null), DEFAULT_SLOTS);
+      assert.deepEqual(readSlots("{"), DEFAULT_SLOTS);
+      assert.deepEqual(readSlots('"favorite"'), DEFAULT_SLOTS);
+      // What was kept, without what is not a slot, twice, or past three.
+      assert.deepEqual(
+        readSlots(
+          JSON.stringify([
+            "shelf:s1",
+            "favorite",
+            "favorite",
+            "wish",
+            "shelf:",
+            "not-owned",
+            "shelves",
+          ]),
+        ),
+        ["shelf:s1", "favorite", "not-owned"],
+      );
+      // None at all is a choice too.
+      assert.deepEqual(readSlots("[]"), []);
+      // In at the end while there is room; out from anywhere.
+      const row = toggleSlot(["favorite"], "shelf:s1");
+      assert.deepEqual(row, ["favorite", "shelf:s1"]);
+      assert.deepEqual(toggleSlot(DEFAULT_SLOTS, "shelf:s1"), DEFAULT_SLOTS);
+      assert.deepEqual(toggleSlot(DEFAULT_SLOTS, "favorite"), [
+        "not-owned",
+        "shelves",
+      ]);
+      // One place left or right, never past the ends.
+      assert.deepEqual(moveSlot(DEFAULT_SLOTS, "shelves", -1), [
+        "not-owned",
+        "shelves",
+        "favorite",
+      ]);
+      assert.deepEqual(moveSlot(DEFAULT_SLOTS, "not-owned", -1), DEFAULT_SLOTS);
+      assert.deepEqual(moveSlot(DEFAULT_SLOTS, "shelves", 1), DEFAULT_SLOTS);
+      // A shelf the reader no longer has is left out of the row.
+      assert.deepEqual(
+        liveSlots(["shelf:gone", "favorite", "shelf:s1"], new Set(["s1"])),
+        ["favorite", "shelf:s1"],
       );
     },
   );
