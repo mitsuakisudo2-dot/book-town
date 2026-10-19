@@ -282,7 +282,10 @@ export function bookFromRow(row: BookRow, registered: boolean): Book {
     ? book
     : {
         ...book,
-        summary: "読書家が登録した本です。あらすじは登録されていません。",
+        summary:
+          row.source === "ndl"
+            ? "図書館の目録にある本です。あらすじはありません。"
+            : "読書家が登録した本です。あらすじは登録されていません。",
       };
 }
 

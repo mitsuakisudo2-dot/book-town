@@ -157,6 +157,7 @@ async function selected(db: PGlite, visitor: string | null, limit: number) {
       db,
       visitor,
       `select to_jsonb(c) as row from (select ${BOOK} from books
+         where source = 'manual'
          order by created_at desc, id desc limit ${Math.min(Math.max(limit, 0), 1000)}) c`,
     )
   ).map((row) => row.row);
@@ -227,6 +228,9 @@ async function main() {
       // A sample book used where anyone may see it, to a visitor too.
       assert.ok(seen.has("旅をする木"));
       assert.ok(!seen.has("見本の本 1"));
+      // The library's catalog is not the town's (library_catalog).
+      for (const visitor of VISITORS)
+        assert.ok(!(await titles(visitor)).has("目録の本"), String(visitor));
     },
   );
 
@@ -293,7 +297,7 @@ async function main() {
           await as<{ id: string }>(
             db,
             visitor,
-            "select id from books order by created_at desc, id desc",
+            "select id from books where source = 'manual' order by created_at desc, id desc",
           )
         ).map((row) => row.id);
         assert.deepEqual(ids, readable.slice(0, 1000), String(visitor));
@@ -308,10 +312,11 @@ async function main() {
       const timed = async (between: number) => {
         const many = await migratedDatabase();
         await many.exec(`
-          insert into auth.users (id) values ('${BEN}');
-          insert into profiles (id, handle, name) values ('${BEN}', 'ben', 'ベン');
+          insert into auth.users (id) values ('${AKI}'), ('${BEN}');
+          insert into profiles (id, handle, name) values
+            ('${AKI}', 'aki', 'アキ'), ('${BEN}', 'ben', 'ベン');
           insert into books (title, author, source, created_by, created_at)
-            select '目録の本 ' || k, '著者', 'ndl', null, now() - k * interval '1 minute'
+            select 'アキの本 ' || k, 'アキ', 'manual', '${AKI}', now() - k * interval '1 minute'
             from generate_series(1, 320) k;
           insert into books (title, author, source, created_by, created_at)
             select '控えの本 ' || k, 'ベン', 'manual', '${BEN}',
@@ -322,7 +327,7 @@ async function main() {
         let best = Infinity;
         for (let round = 0; round < 3; round += 1) {
           const started = performance.now();
-          const books = await catalog(many, null, 300);
+          const books = await catalog(many, AKI, 300);
           best = Math.min(best, performance.now() - started);
           assert.equal(books.length, 300);
         }
@@ -346,6 +351,9 @@ async function main() {
   await check(
     "the rollback, as the header writes it, leaves town_view as before",
     async () => {
+      // Before library_catalog the catalog's rows were in the newest books
+      // too; with none, this file's rollback is seen alone.
+      await db.exec("delete from books where source = 'ndl'");
       const before: Record<string, unknown[]> = {};
       for (const visitor of VISITORS)
         before[String(visitor)] = await catalog(db, visitor, 300);

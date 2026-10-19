@@ -1,0 +1,85 @@
+name: Library catalog
+
+# Takes the National Diet Library's records of books with an ISBN into the
+# catalog (item 5 of the plan; scripts/catalog-import.ts, docs/09「図書館の
+# 目録」). Every night, the day's changes (daily). By hand: the newest books up
+# to a number (trial), or the month's all-records files for a few hours at a
+# time, each run going on from where the last stopped (files). How many rows
+# may come in is the database's to say (private.catalog_settings): 10,000
+# while the project is on the free plan.
+#
+# The logs are public: the script prints counts, days and file numbers only,
+# never an ISBN or a title. Needs SUPABASE_DB_PASSWORD and SUPABASE_PROJECT_ID,
+# as the migrations do; without them the run is skipped with a warning.
+
+on:
+  schedule:
+    # 03:40 in Tokyo, after the library's night.
+    - cron: "40 18 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: daily (the changes since the last run), trial (the newest books), files (the all-records files)
+        type: choice
+        options: [daily, trial, files]
+        default: daily
+      most:
+        description: trial only, how many ISBNs to send at most
+        default: "10000"
+      hours:
+        description: files only, how long to read files for
+        default: "5"
+
+permissions:
+  contents: read
+
+# One at a time: the library asks for no parallel access, and each run goes on
+# from the last one's mark.
+concurrency:
+  group: library-catalog
+  cancel-in-progress: false
+
+jobs:
+  take:
+    if: github.repository == 'mitsuakisudo2-dot/book-town'
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      SUPABASE_REGION: ap-northeast-1
+    steps:
+      - name: Check the Supabase secrets
+        id: secrets
+        run: |
+          if [ -n "$SUPABASE_DB_PASSWORD" ] && [ -n "$SUPABASE_PROJECT_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The Supabase secrets are not set yet, so nothing was taken."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
+      - uses: pnpm/action-setup@v4
+        if: steps.secrets.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.secrets.outputs.ready == 'true'
+      - name: Take the library's records
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          MODE: ${{ inputs.mode || 'daily' }}
+          MOST: ${{ inputs.most || '10000' }}
+          HOURS: ${{ inputs.hours || '5' }}
+        run: |
+          password=$(jq -rn --arg value "$SUPABASE_DB_PASSWORD" '$value | @uri')
+          echo "::add-mask::$password"
+          case "$MODE" in
+            trial) pnpm exec tsx scripts/catalog-import.ts trial --most "$MOST" ;;
+            files) pnpm exec tsx scripts/catalog-import.ts files --hours "$HOURS" ;;
+            *) pnpm exec tsx scripts/catalog-import.ts daily ;;
+          esac

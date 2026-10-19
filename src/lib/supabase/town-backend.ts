@@ -1003,6 +1003,13 @@ function remoteReads(
             return emptyMore();
           throw error;
         }
+        // An ISBN nothing answers is counted, the ISBN alone, for choosing
+        // what the catalog takes first (note_missing_isbn). Nothing waits
+        // on it, and a failure changes nothing.
+        if (asked.isbn && books.length === 0)
+          void client
+            .rpc("note_missing_isbn", { isbn: asked.isbn })
+            .then(() => undefined, () => undefined);
         return moreFromRows(
           { records: [], nine: [], books },
           userId,

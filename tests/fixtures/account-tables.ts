@@ -218,6 +218,13 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   // (counts_in_database): no person's column; triggers keep it as rows go,
   // and only the counting functions read it.
   "private.work_counts": { people: {}, readers: "nobody" },
+  // The library's catalog (library_catalog): which catalog rows each taking
+  // brought, how far each way of taking has come, how many may come in, and
+  // the ISBNs searched for and not found, by day. None names a person.
+  "private.catalog_imports": { people: {}, readers: "nobody" },
+  "private.catalog_progress": { people: {}, readers: "nobody" },
+  "private.catalog_settings": { people: {}, readers: "nobody" },
+  "private.missing_isbns": { people: {}, readers: "nobody" },
   // A copy's own rows are cleared by forget_in_copies (moving_copies).
   "keep.copies": { people: {}, readers: "nobody" },
 };

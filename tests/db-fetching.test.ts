@@ -332,11 +332,12 @@ async function main() {
         asked.push(...((await libraryAsked()) as string[]));
         await answerAll(db, {}, {});
       }
-      // (The catalog's Z40 was placed after Ben's book.)
+      // (Aki's book of the catalog's Z40 is placed ten minutes back, as the
+      // cache answers it, so its edition is asked first.)
       assert.deepEqual(asked, [
+        Z(40),
         ...Array.from({ length: 10 }, (_, i) => Z(i + 1)),
         Z(31),
-        Z(40),
         Z(11),
       ]);
       await settle();

@@ -15,7 +15,7 @@ export function CreditsView() {
       <span className="eyebrow">CREDITS</span>
       <h1 className="page-title">本のデータの出典</h1>
       <p>
-        本のページの題名・著者・出版社・出版年月は、国立国会図書館と openBD
+        本のページと検索に出る題名・著者・出版社・出版年月は、国立国会図書館と openBD
         の書誌データから、BookTown
         が項目ごとに選んでまとめたものです（2026年10月から随時取得）。読書家が自分のライブラリに登録した題名と著者は、その人が書いたままです。
       </p>
@@ -28,7 +28,10 @@ export function CreditsView() {
           </a>
           ）をもとに BookTown が編集・加工して作成
         </p>
-        <p>国立国会図書館サーチ（NDLサーチ）の API を利用しています。</p>
+        <p>
+          国立国会図書館サーチ（NDLサーチ）の API
+          を利用しています（検索に出る本の目録は、OAI-PMH と全件のファイルから取っています）。
+        </p>
       </section>
       <section aria-labelledby="credits-openbd">
         <h2 id="credits-openbd">openBD</h2>
