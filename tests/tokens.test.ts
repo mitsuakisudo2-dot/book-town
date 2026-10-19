@@ -348,6 +348,13 @@ check("a screen's own CSS is there wherever its classes are drawn", () => {
   );
   assert.ok(own.includes("src/components/walk.css"), "walk.css is a screen's");
   for (const css of own) {
+    // Registering a property or a font when the file comes restyles the
+    // whole page (about 0.2s on a slow phone): those go in a file every
+    // page reads (walk-shared.css).
+    assert.ok(
+      !/@(property|font-face)\b/.test(read(css)),
+      `${css} registers a property or a font: move it to a file every page reads`,
+    );
     const scopes = new Set(
       selectorsOf(read(css))
         .map((selector) => classesOf(selector).find((c) => !everyPage.has(c)))

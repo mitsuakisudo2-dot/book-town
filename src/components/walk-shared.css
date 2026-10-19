@@ -7,6 +7,18 @@
  * itself comes with the screens that draw a shop (WalkView, StoreCanvas,
  * ShelfZoom).
  */
+/*
+ * One store unit (1% of the store width), resolved once at the store and
+ * inherited as a length, so it stays the same inside each book's own
+ * size container where a bare cqw would measure the book. Registered here:
+ * registering a property when walk.css comes later restyles the whole page
+ * (about 0.2s on a slow phone, after Home is drawn).
+ */
+@property --walk-u {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
 @font-face {
   font-family: "Yohaku Hand";
   src: url("/fonts/yomogi.woff2") format("woff2");
