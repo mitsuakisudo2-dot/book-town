@@ -206,6 +206,10 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   // What readers tell the operator (site_reports); only staff read them,
   // through site_reports(), which is the operator's own reading.
   "private.site_reports": { people: { user_id: "delete" }, readers: "nobody" },
+  // The pairs of characters each book's title and author fold to, for the
+  // search (search_in_database); it goes with its book, and only the search
+  // functions read it.
+  "private.book_grams": { people: {}, readers: "nobody" },
   // A copy's own rows are cleared by forget_in_copies (moving_copies).
   "keep.copies": { people: {}, readers: "nobody" },
 };

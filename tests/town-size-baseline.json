@@ -13,5 +13,11 @@
     "together": 0,
     "town_books": 2871
   },
-  "msPerReader": 1.28
+  "msPerReader": 1.28,
+  "pagesMsPerReader": {
+    "felt_in_town": 0.013,
+    "feeling_records": 0.002,
+    "work_records": 0.004,
+    "find_books": 0.043
+  }
 }

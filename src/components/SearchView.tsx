@@ -37,7 +37,7 @@ import { BookJacket, Icon, ReaderAvatar } from "./ui";
 import "./reading.css";
 import "./records.css";
 import { profilePath, shopPath } from "../lib/paths";
-import { useTownBackend, useTownMore } from "../lib/store";
+import { useMoreRead, useTownBackend, useTownMore } from "../lib/store";
 import { bookAuthor, bookTitle } from "../lib/book-name";
 import { counted, REGISTER, whenSome, NAMES } from "../lib/words";
 import { RegisterBook } from "./RegisterBook";
@@ -103,6 +103,9 @@ export function SearchView({ state, actions, notify }: Shared) {
   // A genre (a chip) finds only these too; a title or an author finds any.
   const shown = useMemo(() => booksBeforeSearch(state), [state]);
   const genres = [...new Set(shown.map((book) => book.genre))];
+  const chosenGenre = genres.some(
+    (genre) => genre.toLocaleLowerCase() === term,
+  );
 
   // Lists of what is talked about or shelved show only once there is enough
   // of it to be worth a list: a town of three readers has no "popular" books.
@@ -172,9 +175,19 @@ export function SearchView({ state, actions, notify }: Shared) {
     (bookId: string) => searchPresence(signals.get(bookId)),
     [signals],
   );
-  const books = useBookSearch(state.books, term && !tagTerm ? query : "", {
+  // What is typed is asked of the database too, once typing rests: every
+  // book the reader may read, not only the town's (find_books, AUD-006).
+  const searched = term && !tagTerm ? query.trim() : "";
+  const [asked, setAsked] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setAsked(searched), searched ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [searched]);
+  const { read: fromDatabase } = useMoreRead(asked ? { search: asked } : null);
+  const books = useBookSearch(state.books, searched ? query : "", {
     presence,
     genreFinds: shown,
+    extra: fromDatabase?.books,
   });
   const { found, near } = books;
   const tagResults = tagTerm ? postsWithTag(state, tagTerm) : [];
@@ -242,20 +255,24 @@ export function SearchView({ state, actions, notify }: Shared) {
           autoComplete="off"
         />
       </label>
-      <div className="search-genres" role="group" aria-label="ジャンルで探す">
-        {genres.map((genre) => (
-          <button
-            type="button"
-            key={genre}
-            aria-pressed={term === genre.toLocaleLowerCase()}
-            onClick={() =>
-              search(term === genre.toLocaleLowerCase() ? "" : genre)
-            }
-          >
-            {genre}
-          </button>
-        ))}
-      </div>
+      {/* While words are typed, the books come straight under the box,
+          above the phone's keyboard; the genres wait until it is cleared. */}
+      {(!term || chosenGenre) && (
+        <div className="search-genres" role="group" aria-label="ジャンルで探す">
+          {genres.map((genre) => (
+            <button
+              type="button"
+              key={genre}
+              aria-pressed={term === genre.toLocaleLowerCase()}
+              onClick={() =>
+                search(term === genre.toLocaleLowerCase() ? "" : genre)
+              }
+            >
+              {genre}
+            </button>
+          ))}
+        </div>
+      )}
 
       {tagTerm !== null ? (
         <div className="search-results" role="status">
@@ -293,25 +310,6 @@ export function SearchView({ state, actions, notify }: Shared) {
         </div>
       ) : term ? (
         <div className="search-results" role="status">
-          {people.length > 0 && (
-            <section aria-labelledby="search-people-title">
-              <h2 id="search-people-title">読書家</h2>
-              <ul className="search-list">
-                {people.map((reader) => (
-                  <li key={reader.id}>
-                    <Link href={profilePath(reader.id)} className="search-shop">
-                      <ReaderAvatar reader={reader} size={32} />
-                      <span>
-                        <b>{reader.name}</b>
-                        <small>@{reader.handle}</small>
-                      </span>
-                      <Icon name="chevron" size={15} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
           <section aria-labelledby="search-books-title">
             <h2 id="search-books-title">本</h2>
             {found.length ? (
@@ -359,6 +357,25 @@ export function SearchView({ state, actions, notify }: Shared) {
               </>
             )}
           </section>
+          {people.length > 0 && (
+            <section aria-labelledby="search-people-title">
+              <h2 id="search-people-title">読書家</h2>
+              <ul className="search-list">
+                {people.map((reader) => (
+                  <li key={reader.id}>
+                    <Link href={profilePath(reader.id)} className="search-shop">
+                      <ReaderAvatar reader={reader} size={32} />
+                      <span>
+                        <b>{reader.name}</b>
+                        <small>@{reader.handle}</small>
+                      </span>
+                      <Icon name="chevron" size={15} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <section aria-labelledby="search-shops-title">
             <h2 id="search-shops-title">書店</h2>
             {shopResults.length ? (

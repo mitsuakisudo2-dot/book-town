@@ -1490,7 +1490,20 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
+      feeling_records: {
+        Args: { feeling: string; record_limit?: number };
+        Returns: Json;
+      };
       felt_in_town: { Args: Record<PropertyKey, never>; Returns: Json };
+      find_books: {
+        Args: {
+          book_limit?: number;
+          forms: Json;
+          isbn?: string;
+          isbn_start?: string;
+        };
+        Returns: Json;
+      };
       isbn13_valid: { Args: { isbn: string }; Returns: boolean };
       my_books: {
         Args: Record<PropertyKey, never>;

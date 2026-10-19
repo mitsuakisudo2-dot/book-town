@@ -310,20 +310,31 @@ export function WalkView({
     : undefined;
   const following = shop ? state.following.includes(shop.id) : false;
   const ownShop = shop?.ownerId === state.me.id;
+  // The shop the address names, until the walk stands in it: the shops can
+  // arrive after the walk is ready, and the shop in view is written into the
+  // address, so a shop asked for that is not there yet would be forgotten.
+  const asked = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!ready) return;
-    const begin = () => {
-      let requested = initialStoreId;
+    const fromAddress = () => {
       try {
-        requested = requested ?? decodeURIComponent(location.hash.slice(1));
-      } catch {}
+        return initialStoreId ?? decodeURIComponent(location.hash.slice(1));
+      } catch {
+        return initialStoreId;
+      }
+    };
+    const begin = (named: boolean) => {
+      if (named || asked.current === undefined) asked.current = fromAddress();
+      const requested = asked.current;
       // Asked for one's own shop before it stands in the walk: say why.
       setOwnMissing(requested === OWN_SHOP_ID && !ids.includes(OWN_SHOP_ID));
       update((previous) => startWalk(previous, ids, requested));
+      if (requested && ids.includes(requested)) asked.current = undefined;
     };
-    begin();
-    window.addEventListener("hashchange", begin);
-    return () => window.removeEventListener("hashchange", begin);
+    begin(false);
+    const named = () => begin(true);
+    window.addEventListener("hashchange", named);
+    return () => window.removeEventListener("hashchange", named);
   }, [ready, ids, initialStoreId, update]);
   // The shop in view is written into the address, so coming back to the walk
   // returns to it rather than to the shop the walk was entered from.

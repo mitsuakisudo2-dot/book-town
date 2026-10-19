@@ -1870,10 +1870,10 @@
 }
 @media (max-width: 760px) {
   .walk-view {
-    height: calc(100dvh - 74px - env(safe-area-inset-bottom));
+    height: calc(100dvh - 82px - env(safe-area-inset-bottom));
   }
   .is-walk .town-workspace {
-    height: calc(100dvh - 74px - env(safe-area-inset-bottom));
+    height: calc(100dvh - 82px - env(safe-area-inset-bottom));
   }
   .town-bottom-nav .nav-walk {
     color: var(--lamp);
@@ -2060,8 +2060,8 @@
 }
 @media (max-width: 760px) {
   .is-walk .town-bottom-nav {
-    height: calc(74px + env(safe-area-inset-bottom));
-    padding-bottom: calc(7px + env(safe-area-inset-bottom));
+    height: calc(82px + env(safe-area-inset-bottom));
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
   }
 }
 .walk-furniture.is-table .walk-row-label {

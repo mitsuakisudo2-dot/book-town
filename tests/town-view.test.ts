@@ -438,6 +438,42 @@ async function main() {
   );
 
   await check(
+    "a search reads the books it finds that the town did not read",
+    async () => {
+      const seed = madeUpTown(100, 600);
+      const far: Row = { ...book(uuid(2, 5000), 0), title: "遠い海の図書館" };
+      seed.books.push(far);
+      const backend = accountTownBackend(
+        fakeSupabase(AKI, seed, { versions: true, townView: true }).client,
+        AKI,
+        { delay: 0, storage: false },
+      );
+      const { state } = await backend.load();
+      assert.equal(bookById(state.books, far.id as string), undefined);
+      const found = await backend.more!({ search: "海の図書" });
+      assert.deepEqual(
+        found.books.map((b) => b.id),
+        [far.id],
+      );
+      assert.equal((await backend.more!({ search: "  " })).books.length, 0);
+      backend.close?.();
+      // A database from before find_books: the town's books are searched.
+      const before = accountTownBackend(
+        fakeSupabase(AKI, seed, {
+          versions: true,
+          townView: true,
+          townWindow: false,
+        }).client,
+        AKI,
+        { delay: 0, storage: false },
+      );
+      await before.load();
+      assert.deepEqual(await before.more!({ search: "海の図書" }), emptyMore());
+      before.close?.();
+    },
+  );
+
+  await check(
     "older 便り bring their writers' records of their books, for the feelings they show",
     async () => {
       const seed = madeUpTown(100, 600);
