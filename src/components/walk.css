@@ -1895,6 +1895,31 @@
     font-size: var(--frame-tab);
   }
 }
+/* Bigger words on a phone: the header sits over the scene, so the owner's
+   name, the three labelled circles and the page number grow only as far as
+   大きい (--walk-t-scale), and the owner's words take the whole width under
+   the avatar, where the lamp and the circles leave room. */
+@media not all and (min-width: 1160px) and (min-aspect-ratio: 5/4) {
+  :root[data-text] .walk-top {
+    --walk-t-scale: min(var(--t-scale), 1.15);
+    --walk-t-cap: calc(12px * var(--walk-t-scale));
+    --walk-t-meta: calc(14px * var(--walk-t-scale));
+  }
+  :root[data-text] .walk-owner {
+    --walk-owner-name: clamp(var(--walk-t-cap), 3.1vw, var(--walk-t-meta));
+    --walk-owner-handle: var(--walk-t-cap);
+  }
+  :root[data-text] .walk-owner-bio {
+    left: 0;
+    top: calc(var(--walk-avatar) + 12px);
+    width: calc(100vw - 22px);
+  }
+  :root[data-text] .walk-header-tools button small,
+  :root[data-text] .walk-progress,
+  :root[data-text] .walk-progress-end {
+    font-size: var(--walk-t-cap);
+  }
+}
 /* Wide screens: the owner and the page turner sit beside the store. */
 @media (min-width: 1160px) and (min-aspect-ratio: 5/4) {
   .walk-top {
