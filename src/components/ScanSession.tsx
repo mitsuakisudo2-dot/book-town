@@ -13,6 +13,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { flushSync } from "react-dom";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useAccountState } from "../lib/account-session";
 import { leaveLayers, useBackLayer } from "../lib/back-layer";
@@ -99,13 +100,19 @@ import { BarcodeRegister } from "./BarcodeRegister";
 import { ScanDone } from "./ScanDone";
 import { ScanResume } from "./ScanResume";
 import { ScanSortSheet } from "./ScanSortSheet";
-import { ScanSlots, slotName, useSlots } from "./ScanSlots";
+import { slotName, useSlots } from "./ScanSlots";
 import { liveSlots, shelfOfSlot } from "../lib/scan-slots";
 import { ScanTidy, type TidyBook } from "./ScanTidy";
 import { ScanTiming } from "./ScanTiming";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
 import { bookAuthor, bookById, bookByIsbn, bookTitle } from "../lib/book-name";
+
+// 自由3枠's sheet, with what drags its buttons: read when it is opened.
+const ScanSlots = dynamic(
+  () => import("./ScanSlotsSheet").then((file) => file.ScanSlots),
+  { ssr: false },
+);
 
 // The continuous scanner (plan 7-1, flow A; けにーさんの引き継ぎ資料 v1.1 and
 // Figma v4's 01, 2026-10-18): the camera stays open, small, over the list of
