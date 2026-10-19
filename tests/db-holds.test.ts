@@ -1071,8 +1071,10 @@ async function main() {
       assert.deepEqual(await asking("openbd"), [`${X(41)},${X(40)}`]);
       await answerAll(db, forty, fortyOpen);
       await tick();
-      assert.deepEqual(await asking("ndl"), [X(40)]);
-      await answerAll(db, forty, fortyOpen);
+      // Chi's X40 is then answered by the library's answer to Ben, used
+      // again (20261119000000_bibliography_fetching.sql): no question goes,
+      // and it comes at the next tick, as an answer would.
+      assert.deepEqual(await asking("ndl"), []);
       await tick();
       assert.equal(await sees(chis40), "四十の本");
       await later(11);
@@ -1084,7 +1086,7 @@ async function main() {
   );
 
   await check(
-    "a book on an ISBN answered before, in private, waits for its own answers: no verdict ten minutes on until they come; a source answering that it has nothing ends the wait",
+    "a book on an ISBN answered before, in private, waits for its own answers (the library's answer kept, used again at its turn, is one): no verdict ten minutes on until they come; a source answering that it has nothing ends the wait",
     async () => {
       const bens42 = id(4, 4);
       const akis42 = id(4, 5);
@@ -1100,12 +1102,14 @@ async function main() {
       await tick();
       await later(11);
       await tick();
-      for (const book of [akis42, akis43]) {
-        const waiting = await check_(book);
-        assert.equal(waiting.verdict, null, book);
-        assert.equal(waiting.checked, true, book);
-        assert.equal(waiting.counts, false, book);
-      }
+      // The library's answer to Ben is a day old at most: it answers Aki's
+      // X42 at its turn (20261119000000_bibliography_fetching.sql), ten
+      // minutes on as any answer.
+      assert.equal((await check_(akis42)).verdict, "same");
+      const waiting = await check_(akis43);
+      assert.equal(waiting.verdict, null);
+      assert.equal(waiting.checked, true);
+      assert.equal(waiting.counts, false);
       // The answers come after the ten minutes: X42 found, X43 nowhere.
       const nowhere = async () => {
         for (const q of await questions())

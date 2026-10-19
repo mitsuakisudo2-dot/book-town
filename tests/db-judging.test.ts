@@ -333,10 +333,13 @@ async function main() {
   const book = (n: number) => id(1, n);
   for (const [n, [isbn, title, author]] of EXAMPLES.entries())
     await register(n % 2 ? BEN : AKI, book(n + 1), isbn, title, author);
-  // The library is asked about one edition a turn.
+  // The library is asked about one edition a turn; a reader's books after
+  // the first ten are placed twenty seconds apart
+  // (20261119000000_bibliography_fetching.sql), a minute a turn here.
   for (let turn = 0; turn < 8; turn++) {
     await tick();
     await answerAll(db, LIBRARY, OPENBD);
+    await later(1);
   }
   await tick();
   await later(11);

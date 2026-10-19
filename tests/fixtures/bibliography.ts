@@ -382,13 +382,37 @@ export function helpers(db: PGlite) {
          settled_for = settled_for - (select i from i),
          found_for = found_for - (select i from i), title_for = title_for - (select i from i)`,
       [minutes],
+    ).then(() =>
+      // And, from 20261119000000_bibliography_fetching.sql, the readers'
+      // turns and when the library last said it no longer had a record.
+      db.exec(
+        `do $$ begin
+           if to_regclass('private.bib_pace') is not null then
+             update private.bib_pace set next_at = next_at - make_interval(mins => ${Number(minutes)});
+             update private.edition_sources
+             set lost_at = lost_at - make_interval(mins => ${Number(minutes)});
+           end if;
+         end $$`,
+      ),
     );
-  /** Nothing owed or due: no source is asked anything until a book moves. */
+  /**
+   * Nothing owed or due: no source is asked anything until a book moves, and
+   * no reader's books wait their turn.
+   */
   const quiet = () =>
     rows(
       `update private.edition_sources set settled_at = now(), refetch_at = null,
          settled_for = now(), tried_for = now(), next_at = now() + interval '1 day'
        where request_id is null`,
+    ).then(() =>
+      db.exec(
+        `do $$ begin
+           if to_regclass('private.bib_pace') is not null then
+             update private.edition_sources set owed = false where request_id is null;
+             delete from private.bib_pace;
+           end if;
+         end $$`,
+      ),
     );
   /** Every question out goes unanswered past its fifteen minutes; then quiet. */
   const settle = async () => {
