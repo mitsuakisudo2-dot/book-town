@@ -205,26 +205,22 @@ async function edgeChecks(check: Check) {
           there,
         ]);
         // Y12's answer from the library is new enough to be used again
-        // (20261119000000_bibliography_fetching.sql): at its turn, after the
-        // other two, and no question goes.
+        // (20261119000000_bibliography_fetching.sql), but nothing else is
+        // asked at its turn, after the other two: it is asked, as Y11 is
+        // (20261121000000_bibliography_answer_kept.sql).
         const reused: number[] = [];
         for (let turn = 0; turn < 3; turn++) {
           await tick();
           reused.push(
             await count(
               `select count(*) from private.edition_sources s join editions e on e.id = s.edition_id
-               where e.isbn = $1 and s.source = 'ndl' and s.request_id = -1`,
+               where e.isbn = $1 and s.source = 'ndl' and s.request_id < 0`,
               [there],
             ),
           );
         }
-        const anew = there === Y(11);
-        assert.deepEqual(
-          await libraryAsked(),
-          anew ? [...others, there] : others,
-          there,
-        );
-        assert.deepEqual(reused, anew ? [0, 0, 0] : [0, 0, 1], there);
+        assert.deepEqual(await libraryAsked(), [...others, there], there);
+        assert.deepEqual(reused, [0, 0, 0], there);
         await settle();
       }
     },
@@ -318,14 +314,14 @@ async function edgeChecks(check: Check) {
       assert.equal((await kept(EIGHT, "ndl")).asked, true);
       await answerEight();
       await tick();
-      // The answer settles Aki's ask, not Ben's: Ben's is answered in the
-      // same turn, by the library's answer used again (no question goes,
-      // 20261119000000_bibliography_fetching.sql), and openBD is asked; only
-      // those answers show on Ben's book, at the next tick.
+      // The answer settles Aki's ask, not Ben's: Ben's is asked in the same
+      // turn (the library's answer kept would do, but nothing else is asked
+      // then: 20261121000000_bibliography_answer_kept.sql), and so is
+      // openBD; only those answers show on Ben's book.
       const library = await kept(EIGHT, "ndl");
       assert.equal(library.state, "found");
       assert.equal(library.asked, true);
-      assert.deepEqual(await libraryAsked(), []);
+      assert.deepEqual(await libraryAsked(), [EIGHT]);
       assert.deepEqual(await openbdAsked(), [[EIGHT]]);
       await later(11);
       await judge();

@@ -1071,10 +1071,13 @@ async function main() {
       assert.deepEqual(await asking("openbd"), [`${X(41)},${X(40)}`]);
       await answerAll(db, forty, fortyOpen);
       await tick();
-      // Chi's X40 is then answered by the library's answer to Ben, used
-      // again (20261119000000_bibliography_fetching.sql): no question goes,
-      // and it comes at the next tick, as an answer would.
-      assert.deepEqual(await asking("ndl"), []);
+      // Chi's X40 could be answered by the library's answer to Ben, used
+      // again (20261119000000_bibliography_fetching.sql), but nothing else
+      // is asked then: it is asked
+      // (20261121000000_bibliography_answer_kept.sql), and its answer comes
+      // at the next tick.
+      assert.deepEqual(await asking("ndl"), [X(40)]);
+      await answerAll(db, forty, fortyOpen);
       await tick();
       assert.equal(await sees(chis40), "四十の本");
       await later(11);
@@ -1103,13 +1106,15 @@ async function main() {
       await later(11);
       await tick();
       // The library's answer to Ben is a day old at most: it answers Aki's
-      // X42 at its turn (20261119000000_bibliography_fetching.sql), ten
-      // minutes on as any answer.
-      assert.equal((await check_(akis42)).verdict, "same");
-      const waiting = await check_(akis43);
-      assert.equal(waiting.verdict, null);
-      assert.equal(waiting.checked, true);
-      assert.equal(waiting.counts, false);
+      // X42 at its turn (20261119000000_bibliography_fetching.sql), with the
+      // question about X43 that goes then; until that question is answered,
+      // X42 waits as X43 does (20261121000000_bibliography_answer_kept.sql).
+      for (const book of [akis42, akis43]) {
+        const waiting = await check_(book);
+        assert.equal(waiting.verdict, null, book);
+        assert.equal(waiting.checked, true, book);
+        assert.equal(waiting.counts, false, book);
+      }
       // The answers come after the ten minutes: X42 found, X43 nowhere.
       const nowhere = async () => {
         for (const q of await questions())
