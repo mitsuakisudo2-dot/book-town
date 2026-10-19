@@ -43,6 +43,9 @@ import {
   LibraryShelfSheet,
 } from "./LibraryShelfSheet";
 import { ScanSession } from "./ScanSession";
+import { ScanTimes } from "./ScanTimes";
+import { SCAN_COPY } from "../lib/scan";
+import { scanTimes, scanTimeWords } from "../lib/scan-history";
 import { BookJacket, Icon } from "./ui";
 import { counted, LIBRARY_SHELF, TABS, whenSome } from "../lib/words";
 import { CHOICE_NAMES, type Audience } from "../lib/visibility";
@@ -181,6 +184,7 @@ export function LibraryView({
   const [shelfParam] = useUrlParam("shelf");
   const [unsortedParam] = useUrlParam("unsorted");
   const [ownedParam] = useUrlParam("owned");
+  const [batchParam] = useUrlParam("batch");
   const library = useMemo(() => libraryStateOf(state), [state]);
   const shop = useMemo(() => townShopBooks(state), [state]);
   const counts = useMemo(() => countsOf(library, shop), [library, shop]);
@@ -199,6 +203,7 @@ export function LibraryView({
     if (shelfParam) params.set("shelf", shelfParam);
     if (unsortedParam) params.set("unsorted", unsortedParam);
     if (ownedParam) params.set("owned", ownedParam);
+    if (batchParam) params.set("batch", batchParam);
     // A shelf of the reader's own shows the books only wanted as they chose.
     const f = filterFromParams(
       (key) => params.get(key) ?? null,
@@ -213,7 +218,7 @@ export function LibraryView({
       delete f.shelf;
     if (f.shelf === "all") delete f.shelf;
     return f;
-  }, [shelfParam, unsortedParam, ownedParam, theme]);
+  }, [shelfParam, unsortedParam, ownedParam, batchParam, theme]);
   const shown = useMemo(
     () => filterLibrary(library, filter, shop),
     [library, filter, shop],
@@ -232,7 +237,7 @@ export function LibraryView({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   // Picking books to put on this shelf of the reader's own.
   const [pickInto, setPickInto] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<"scan" | "titles" | null>(null);
+  const [sheet, setSheet] = useState<"scan" | "titles" | "times" | null>(null);
   // The shelf being made (NEW_SHELF_KEY) or changed (its id).
   const [shelfSheet, setShelfSheet] = useState<string | null>(null);
   // 「棚を作る」 asked for from elsewhere (ホームのはじめの3つ): opened once,
@@ -262,7 +267,20 @@ export function LibraryView({
     [state.books],
   );
   const listed = (picking ?? shown).filter((id) => books.has(id));
-  const filters = filter.unsorted !== undefined || filter.owned !== undefined;
+  // スキャンした回 (資料 §2 J): the times whose books are in the library.
+  const times = useMemo(
+    () =>
+      scanTimes({
+        library: state.library,
+        libraryEntries: state.libraryEntries,
+      }),
+    [state.library, state.libraryEntries],
+  );
+  const time = times.find((one) => one.session === filter.batchId);
+  const filters =
+    filter.unsorted !== undefined ||
+    filter.owned !== undefined ||
+    filter.batchId !== undefined;
   const filtered = filters || filter.shelf !== undefined;
 
   // Picking ended: the finger goes back to ［選ぶ］.
@@ -524,15 +542,40 @@ export function LibraryView({
           state={state}
           actions={actions}
           notify={notify}
+          onTime={(session) =>
+            setFilter({
+              shelf: null,
+              unsorted: null,
+              owned: null,
+              batch: session,
+            })
+          }
           onClose={(kept) => {
             setSheet(null);
             // What was just read in comes first: the whole library, newest first.
-            if (kept) setFilter({ shelf: null, unsorted: null, owned: null });
+            if (kept)
+              setFilter({
+                shelf: null,
+                unsorted: null,
+                owned: null,
+                batch: null,
+              });
           }}
         />
       )}
       {sheet === "titles" && (
         <TitlesToType notify={notify} onClose={() => setSheet(null)} />
+      )}
+      {sheet === "times" && (
+        <ScanTimes
+          times={times}
+          books={books}
+          onClose={() => setSheet(null)}
+          onPick={(session) => {
+            leaveLayers(() => setFilter({ batch: session }));
+            setSheet(null);
+          }}
+        />
       )}
       {shelfSheet !== null && (
         <LibraryShelfSheet
@@ -705,7 +748,7 @@ export function LibraryView({
           </button>
         </p>
       )}
-      {filterChips.length > 0 && (
+      {(filterChips.length > 0 || times.length > 0) && (
         <div
           className="chips"
           role="group"
@@ -728,7 +771,36 @@ export function LibraryView({
               ) : null}
             </button>
           ))}
+          {filter.batchId !== undefined ? (
+            <button
+              type="button"
+              className="chip"
+              aria-pressed={true}
+              onClick={() => setFilter({ batch: null })}
+            >
+              <Icon name="check" size={16} />
+              {time
+                ? SCAN_COPY.history.of(scanTimeWords(time.at))
+                : SCAN_COPY.history.name}
+            </button>
+          ) : (
+            times.length > 0 && (
+              <button
+                type="button"
+                className="chip"
+                aria-haspopup="dialog"
+                onClick={() => setSheet("times")}
+              >
+                {SCAN_COPY.history.name}
+              </button>
+            )
+          )}
         </div>
+      )}
+      {time && (
+        <p className="library-note">
+          {SCAN_COPY.history.note(scanTimeWords(time.at))}
+        </p>
       )}
       {filter.unsorted && (
         <p className="library-note">
@@ -853,7 +925,9 @@ export function LibraryView({
             <button
               type="button"
               className="btn"
-              onClick={() => setFilter({ unsorted: null, owned: null })}
+              onClick={() =>
+                setFilter({ unsorted: null, owned: null, batch: null })
+              }
             >
               絞り込みを外す
             </button>

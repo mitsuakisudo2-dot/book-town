@@ -2544,6 +2544,24 @@
       }
     },
     {
+      "name": "持ってない leaves 積読 as it is: both stay (2026-10-18)",
+      "entry": {
+        "status": "tsundoku",
+        "statusAt": "2026-09-01T09:00:00.000Z",
+        "owned": "yes"
+      },
+      "set": {
+        "owned": "no"
+      },
+      "via": "search",
+      "at": "2026-10-01T09:00:00.000Z",
+      "expect": {
+        "owned": "no",
+        "status": "tsundoku",
+        "statusAt": "2026-09-01T09:00:00.000Z"
+      }
+    },
+    {
       "name": "所有 chosen by the reader is written",
       "entry": {},
       "set": {

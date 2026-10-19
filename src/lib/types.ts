@@ -541,6 +541,8 @@ export interface TownActions {
     book: NewBook,
     via: RegisterVia,
     bookId?: string,
+    /** The scan session it came in by: a new library row keeps it. */
+    batchId?: string,
   ): Registration | null;
   /** registerBook, answering with the book's id (null when not registered). */
   addBook(book: NewBook): string | null;

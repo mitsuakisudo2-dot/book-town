@@ -19,6 +19,11 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { AccountState } from "./account";
 import { bookPrice, bookText, normalizeIsbn } from "./books";
 import { authorWords, bookByIsbn } from "./book-name";
+import {
+  READING_STATUSES,
+  type LibrarySet,
+  type ReadingStatus,
+} from "./library";
 import { lookUpBooks, type OpenBdAnswer } from "./openbd";
 import type { TownBackend } from "./town-backend";
 import type {
@@ -56,6 +61,20 @@ const STATES: readonly ScanItemState[] = [
   "refused",
 ];
 
+/**
+ * The 連続設定 a book was read under (資料 3章): put on it once the store
+ * takes it as a new book, never on one in the library already. Kept with the
+ * read, so a book registered after the tab was closed gets it too.
+ */
+export interface ScanSort {
+  /** null: 未指定, no reading status. */
+  status: ReadingStatus | null;
+  /** 持っている on, or off (未所持). */
+  owned: "yes" | "no";
+  /** Shelves of the reader's own, by id. */
+  shelves: string[];
+}
+
 export interface ScanItem {
   kind: "scan";
   /** The session's id, a dash and a count. */
@@ -73,6 +92,8 @@ export interface ScanItem {
   title?: string;
   author?: string;
   price?: number;
+  /** The 連続設定 it was read under, if any. */
+  sort?: ScanSort;
   state: ScanItemState;
   /** When it was read (ISO). */
   at: string;
@@ -105,6 +126,37 @@ export const bookWords = (book: {
     ...(price ? { price } : {}),
   };
 };
+
+/** A kept 連続設定, or nothing when it is not one: the read is kept anyway. */
+export function readSort(value: unknown): ScanSort | undefined {
+  if (!record(value)) return undefined;
+  const { status, owned, shelves } = value;
+  if (
+    (status !== null && !READING_STATUSES.includes(status as ReadingStatus)) ||
+    (owned !== "yes" && owned !== "no") ||
+    !Array.isArray(shelves) ||
+    shelves.length > 50 ||
+    !shelves.every((shelf) => name(shelf))
+  )
+    return undefined;
+  return {
+    status: status as ReadingStatus | null,
+    owned,
+    shelves: [...new Set(shelves as string[])],
+  };
+}
+
+/** What a 連続設定 writes on a book: its status and 所有, then each shelf. */
+export function sortChanges(sort: ScanSort): LibrarySet[] {
+  // The status first: 積読 says 持っている, and a 持っている turned off in
+  // the setting is the reader's own, after it (both stay, けにーさん
+  // 2026-10-18).
+  return [
+    ...(sort.status ? [{ status: sort.status }] : []),
+    { owned: sort.owned },
+    ...sort.shelves.map((shelf) => ({ addShelf: shelf })),
+  ];
+}
 
 /**
  * The items kept under one key, less anything malformed, of another
@@ -145,6 +197,7 @@ export function readJournal(raw: string | null, now: number): ScanItem[] {
     const title = words(value.title);
     const author = words(value.author);
     const price = bookPrice(value.price);
+    const sort = readSort(value.sort);
     const state = value.state as ScanItemState;
     items.push({
       kind: "scan",
@@ -157,6 +210,7 @@ export function readJournal(raw: string | null, now: number): ScanItem[] {
       ...(title ? { title } : {}),
       ...(author ? { author } : {}),
       ...(price ? { price } : {}),
+      ...(sort ? { sort } : {}),
       // One that lost its title asks for it again.
       state: title || state === "untitled" ? state : "lookup",
       at: value.at as string,
@@ -226,7 +280,6 @@ export function createLibraryJournal(
   const listeners = new Set<() => void>();
   let keptLast = true;
   let sending: ReadonlySet<string> = new Set();
-  let sessions = 0;
   let counted = 0;
   let listening = false;
   const emit = () => listeners.forEach((listener) => listener());
@@ -351,7 +404,8 @@ export function createLibraryJournal(
       handedTo.set(id, generation);
     },
     handed: (id, generation) => handedTo.get(id) === generation,
-    newSession: () => `${page}-s${++sessions}`,
+    // A UUID, as the library row keeps it (batch_id).
+    newSession: newUuid,
     newItemId: (session) => `${session}-${++counted}`,
     kept: () => keptLast,
     now: clock,
@@ -395,6 +449,20 @@ export function journalOwner(
   return null;
 }
 
+/** A random UUID, also outside a secure context (a dev server's address). */
+function newUuid(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
+    "",
+  );
+  return [8, 12, 16, 20, 32]
+    .map((end, at, ends) => hex.slice(at ? ends[at - 1] : 0, end))
+    .join("-");
+}
+
 /**
  * The id a book read now takes if it is new: what the town would give it
  * (counterId in the demo, a UUID for an account), decided at the read so
@@ -415,6 +483,7 @@ export function keepRead(
     isbn: string;
     via: ScanItem["via"];
     known?: { title: string; author: string; price?: number };
+    sort?: ScanSort;
   },
 ): ScanItem {
   const known = read.known ? bookWords(read.known) : undefined;
@@ -427,6 +496,7 @@ export function keepRead(
     via: read.via,
     bookId: decideBookId(owner, read.isbn),
     ...(known?.title ? known : {}),
+    ...(read.sort ? { sort: read.sort } : {}),
     state: known?.title ? "ready" : "lookup",
     at: new Date(journal.now()).toISOString(),
   };
@@ -489,8 +559,11 @@ export interface JournalTown {
     book: NewBook,
     via: RegisterVia,
     bookId?: string,
+    batchId?: string,
   ): Registration | null;
   toggleLibrary(bookId: string): void;
+  /** A change of the reader's library (a 連続設定 put on a book). */
+  changeLibrary(bookId: string, set: LibrarySet): void;
 }
 
 export type SendResult =
@@ -654,12 +727,20 @@ export async function sendJournal(
         },
         item.via,
         item.bookId,
+        // The session it was read in: the library knows which time it was.
+        item.session,
       );
       if (!done) sent.push({ item, result: "unavailable" });
       else if (done.result === "not-saved")
         sent.push({ item, result: "waiting" });
       else {
-        if (done.result !== "already") journal.added.set(id, done.bookId);
+        if (done.result !== "already") {
+          journal.added.set(id, done.bookId);
+          // A new book only: one in the library already keeps what it has.
+          if (item.sort)
+            for (const set of sortChanges(item.sort))
+              town.changeLibrary(done.bookId, set);
+        }
         handed(item, done.bookId, done.title);
         sent.push({
           item: { ...item, bookId: done.bookId, title: done.title },

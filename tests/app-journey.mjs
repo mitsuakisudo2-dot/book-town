@@ -1182,6 +1182,10 @@ try {
       await dialog.getByRole("button", { name: "登録する" }).click();
       await expect(dialog).toHaveCount(0);
       await scanner.getByRole("button", { name: "完了" }).click();
+      await scanner
+        .getByRole("region", { name: "登録完了" })
+        .getByRole("button", { name: "ライブラリを見る" })
+        .click();
       await expect(scanner).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: /^登録\s*\d*$/ }),
@@ -1250,6 +1254,10 @@ try {
       await dialog.getByRole("button", { name: "登録する" }).click();
       await expect(dialog).toHaveCount(0);
       await scanner.getByRole("button", { name: "完了" }).click();
+      await scanner
+        .getByRole("region", { name: "登録完了" })
+        .getByRole("button", { name: "ライブラリを見る" })
+        .click();
       await expect(scanner).toHaveCount(0);
 
       const openBd = page

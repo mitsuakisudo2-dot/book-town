@@ -45,9 +45,18 @@ export function posterNewPath(
   return "/posters/new/";
 }
 
-/** The library (本棚); `makeShelf` opens 「棚を作る」 on it at once. */
-export const libraryPath = (options: { makeShelf?: boolean } = {}): string =>
-  options.makeShelf ? "/library/?make=shelf" : "/library/";
+/**
+ * The library (本棚); `makeShelf` opens 「棚を作る」 on it at once, and `batch`
+ * shows the books of one time of scanning (スキャンした回).
+ */
+export const libraryPath = (
+  options: { makeShelf?: boolean; batch?: string } = {},
+): string =>
+  options.makeShelf
+    ? "/library/?make=shelf"
+    : options.batch
+      ? `/library/?batch=${encodeURIComponent(options.batch)}`
+      : "/library/";
 
 /**
  * The reader's own shop, or the door to open one; `place` opens it with that

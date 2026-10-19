@@ -10,6 +10,7 @@ import {
   journalOwner,
   keepRead,
   readJournal,
+  readSort,
   refusedItems,
   retryRefused,
   sendJournal,
@@ -20,7 +21,9 @@ import {
   type LibraryJournal,
   type ScanItem,
 } from "../src/lib/library-journal";
+import { blankEntry } from "../src/lib/library";
 import type { OpenBdAnswer } from "../src/lib/openbd";
+import { scanTimes, scanTimeWords } from "../src/lib/scan-history";
 import { createMemoryRepository } from "../src/lib/repository";
 import {
   closingNotice,
@@ -1132,6 +1135,137 @@ async function main() {
     assert.deepEqual(both(staleB), [b.id]);
   });
 
+  await check(
+    "a 連続設定 read with a book is put on it as a new book, never on one the library had",
+    async () => {
+      const storage = fakeStorage();
+      const demo = createTownStore(createMemoryRepository());
+      demo.initialize();
+      const shelf = demo.actions.makeLibraryShelf("お気に入りの漫画", "");
+      assert.ok(shelf);
+      const journal = createLibraryJournal(() => storage);
+      const town = journalTownOf(demo, () => "demo");
+      const sort = {
+        status: "finished" as const,
+        owned: "no" as const,
+        shelves: [shelf],
+      };
+      const session = journal.newSession();
+      keepRead(journal, "demo", {
+        session,
+        isbn: X,
+        via: "scan",
+        known: { title: "華氏451度", author: "" },
+        sort,
+      });
+      await sendJournal(journal, "demo", town);
+      const id = "isbn-" + X;
+      const entry = demo.getSnapshot().libraryEntries[id];
+      assert.equal(entry.status, "finished");
+      assert.equal(entry.owned, "no");
+      // The row knows the time it came in by: the session, a UUID as the
+      // database keeps it.
+      assert.match(
+        session,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      assert.equal(entry.batchId, session);
+      assert.ok(
+        demo
+          .getSnapshot()
+          .libraryShelfBooks.some(
+            (row) => row.bookId === id && row.shelfId === shelf,
+          ),
+      );
+      // 未指定 writes no status; 持っている is written.
+      keepRead(journal, "demo", {
+        session,
+        isbn: Y,
+        via: "scan",
+        known: { title: "道草", author: "" },
+        sort: { status: null, owned: "yes", shelves: [] },
+      });
+      await sendJournal(journal, "demo", town);
+      const other = demo.getSnapshot().libraryEntries["isbn-" + Y];
+      assert.equal(other.status, null);
+      assert.equal(other.owned, "yes");
+      // 積読 with 持っている turned off: both stay (けにーさん 2026-10-18).
+      const third = "9784101010144";
+      keepRead(journal, "demo", {
+        session,
+        isbn: third,
+        via: "scan",
+        known: { title: "明暗", author: "" },
+        sort: { status: "tsundoku", owned: "no", shelves: [] },
+      });
+      await sendJournal(journal, "demo", town);
+      const both = demo.getSnapshot().libraryEntries["isbn-" + third];
+      assert.equal(both.status, "tsundoku");
+      assert.equal(both.owned, "no");
+      // Read again under another setting: in the library, it stays as it was.
+      keepRead(journal, "demo", {
+        session,
+        isbn: X,
+        via: "scan",
+        sort: { status: "reading", owned: "yes", shelves: [] },
+      });
+      const again = await sendJournal(journal, "demo", town);
+      assert.deepEqual(
+        again.map((entry) => entry.result),
+        ["already"],
+      );
+      assert.equal(demo.getSnapshot().libraryEntries[id].status, "finished");
+      assert.equal(demo.getSnapshot().libraryEntries[id].owned, "no");
+      // A read kept before sessions were UUIDs comes in with no time.
+      const older = "9784101010151";
+      keepRead(journal, "demo", {
+        session: "lq3x8k2ab-s1",
+        isbn: older,
+        via: "scan",
+        known: { title: "行人", author: "" },
+      });
+      await sendJournal(journal, "demo", town);
+      assert.equal(
+        demo.getSnapshot().libraryEntries["isbn-" + older].batchId,
+        null,
+      );
+      // Kept on the device as it was set, and a broken one is let go with
+      // the read kept.
+      assert.deepEqual(readSort(sort), sort);
+      assert.equal(
+        readSort({ status: "tsundoku", owned: "maybe", shelves: [] }),
+        undefined,
+      );
+      assert.equal(
+        readSort({ status: "done", owned: "yes", shelves: [] }),
+        undefined,
+      );
+      const kept = readJournal(
+        JSON.stringify({
+          version: 1,
+          items: [
+            {
+              kind: "scan",
+              id: "s-1",
+              page: "p",
+              session: "s",
+              isbn: X,
+              via: "scan",
+              bookId: "isbn-" + X,
+              title: "華氏451度",
+              state: "ready",
+              at: new Date().toISOString(),
+              sort: { status: "finished", owned: "yes", shelves: [7] },
+            },
+          ],
+        }),
+        Date.now(),
+      );
+      assert.equal(kept.length, 1);
+      assert.equal(kept[0].sort, undefined);
+    },
+  );
+
   await check("［取り消す］ is decided when it is pressed", async () => {
     const db = database();
     const page = await pageLoad(db, fakeStorage());
@@ -1246,6 +1380,40 @@ async function main() {
         "my-book-9",
       );
       assert.ok(odd?.result === "added" && odd.bookId === "isbn-" + Z);
+    },
+  );
+
+  await check(
+    "スキャンした回 are the library's books by the time they came in, the latest first",
+    () => {
+      const A = "00000000-0000-4000-8000-0000000000a1";
+      const B = "00000000-0000-4000-8000-0000000000b1";
+      const rows = [
+        blankEntry("b1", "scan", "2026-10-18T10:00:05Z", A),
+        blankEntry("b2", "scan", "2026-10-18T10:00:01Z", A),
+        blankEntry("b3", "scan", "2026-10-18T12:00:00Z", B),
+        // Taken out of the library: not in its time any more.
+        blankEntry("b4", "scan", "2026-10-18T12:00:09Z", B),
+        // Not brought in by a scan.
+        blankEntry("b5", "manual", "2026-10-18T13:00:00Z"),
+      ];
+      const times = scanTimes({
+        library: ["b1", "b2", "b3", "b5"],
+        libraryEntries: Object.fromEntries(rows.map((e) => [e.bookId, e])),
+      });
+      assert.deepEqual(times, [
+        { session: B, at: Date.parse("2026-10-18T12:00:00Z"), books: ["b3"] },
+        {
+          session: A,
+          at: Date.parse("2026-10-18T10:00:01Z"),
+          books: ["b2", "b1"],
+        },
+      ]);
+      // Written in Japan's time, whatever the browser's.
+      assert.equal(
+        scanTimeWords(Date.parse("2026-10-18T16:43:00Z")),
+        "10月19日(月) 1:43",
+      );
     },
   );
 

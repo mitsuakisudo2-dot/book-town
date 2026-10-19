@@ -257,6 +257,186 @@
   color: var(--ink);
 }
 
+/* 連続設定 (資料 3章): what the next books are given, under the camera. */
+.scan-sort {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.scan-sort.is-on {
+  display: grid;
+  justify-content: stretch;
+  gap: 2px;
+  margin: 0 -16px;
+  padding: 4px 16px 8px;
+  background: color-mix(in srgb, var(--green) 8%, var(--paper));
+}
+.scan-sort-text {
+  min-width: 0;
+}
+.scan-sort-title {
+  font-size: var(--t-meta);
+  font-weight: 700;
+  line-height: 1.5;
+}
+.scan-sort-note {
+  font-size: var(--t-cap);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.scan-sort-open {
+  flex: none;
+  gap: 2px;
+  padding-right: 10px;
+}
+.scan-sort-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.scan-sort-head .scan-sort-title {
+  flex: 1;
+  color: var(--green);
+}
+.scan-sort-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-cap);
+  line-height: 1.5;
+}
+.scan-sort-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px 10px;
+  border: 1px solid var(--green);
+  border-radius: var(--r-pill);
+  color: var(--green);
+  font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.scan-sort-next {
+  margin-left: auto;
+  color: var(--ink-2);
+}
+/* The sheet (Figma v4's 02). */
+.scan-sort-sheet {
+  display: grid;
+  gap: 16px;
+}
+.scan-sort-sheet h3,
+.scan-sort-shelves legend {
+  margin-bottom: 8px;
+  font-size: var(--t-meta);
+  font-weight: 700;
+}
+.scan-sort-lead,
+.scan-sort-foot {
+  font-size: var(--t-cap);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.scan-sort-foot {
+  text-align: center;
+}
+.scan-sort-statuses {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.scan-sort-statuses .chip {
+  justify-content: center;
+  min-width: 0;
+  padding: 0 6px;
+  border-radius: var(--r-box);
+}
+.scan-sort-owned {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+.scan-sort-owned span {
+  display: grid;
+}
+.scan-sort-owned strong {
+  font-size: var(--t-meta);
+}
+.scan-sort-owned small,
+.scan-sort-shelves legend small {
+  font-size: var(--t-cap);
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.scan-sort-shelves legend {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+/* 持っている: a switch, on the right; the knob is drawn, so no pseudo
+   element is needed on the input. */
+.scan-switch {
+  flex: none;
+  appearance: none;
+  width: 52px;
+  height: 32px;
+  margin: 0;
+  border-radius: var(--r-pill);
+  background:
+    radial-gradient(circle at 16px 50%, var(--sheet) 12px, transparent 13px),
+    var(--line-2);
+  cursor: pointer;
+}
+.scan-switch:checked {
+  background:
+    radial-gradient(
+      circle at calc(100% - 16px) 50%,
+      var(--sheet) 12px,
+      transparent 13px
+    ),
+    var(--green);
+}
+.scan-sort-shelves {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.scan-sort-shelf {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+}
+.scan-sort-shelf input {
+  width: 20px;
+  height: 20px;
+}
+.scan-sort-shelf span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.scan-sort-go {
+  min-height: 52px;
+}
+
 /* This time's books, newest first: what was read, what it came to, and
    読了・積読・読書中 to press there and then, or never. The list keeps its
    place by hand (ScanSession.tsx), so it does not let the browser move it. */
@@ -362,25 +542,173 @@
   padding-top: 4px;
   border-top: 1px solid var(--line);
 }
-.scan-item-statuses {
+.scan-item-statuses,
+.scan-item-marks {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
-.scan-item-statuses .chip {
+.scan-item
+  :is(.scan-item-statuses, .scan-item-marks, .scan-item-shelves)
+  .chip {
   justify-content: center;
   min-width: 0;
   padding: 0 8px;
   border-radius: var(--r-box);
+}
+/* 未所持・お気に入り・＋本棚: marks, lighter than the reading status above. */
+.scan-item-marks .chip {
+  gap: 2px;
+  font-size: var(--t-meta);
+}
+.scan-item-add[aria-expanded="true"] {
+  border-color: var(--green);
+}
+/* The reader's own shelves, under ＋本棚: each on or off. */
+.scan-item-shelves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.scan-item-shelves .chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scan-item-none {
+  font-size: var(--t-cap);
+  line-height: 1.6;
+  color: var(--ink-2);
 }
 .scan-bottom {
   flex: none;
   display: flex;
   gap: 8px;
 }
-/* ［完了］: the whole width, the screen's one filled button. */
+/* ［完了］: the rest of the width, the screen's one filled button; 一括整理
+   beside it once there is a book to sort. */
+.scan-bottom .btn {
+  min-height: 52px;
+}
 .scan-bottom .btn.fill {
   flex: 1;
+}
+
+/* 一括整理 (Figma v4's 05): over the whole scanner, the camera off. */
+.scan-tidy {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: env(safe-area-inset-top) 16px
+    calc(12px + env(safe-area-inset-bottom));
+  background: var(--paper);
+}
+.scan-tidy-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 52px;
+  margin-left: -8px;
+}
+.scan-tidy-top h2 {
+  font-size: var(--t-title);
+  font-weight: 700;
+}
+.scan-tidy-count {
+  flex: none;
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+}
+.scan-tidy-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.scan-tidy-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: var(--t-meta);
+  font-weight: 700;
+}
+.scan-tidy-all input,
+.scan-tidy-book input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+.scan-tidy-list {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 0 16px 8px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.scan-tidy-book {
+  display: grid;
+  grid-template-columns: 20px 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+}
+.scan-tidy-book.is-picked {
+  border-color: var(--green);
+}
+.scan-tidy-cover .book-jacket {
+  width: 36px;
+}
+.scan-tidy-text {
+  display: grid;
+  min-width: 0;
+}
+.scan-tidy-foot {
+  flex: none;
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.scan-tidy-to {
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+}
+.scan-tidy-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.scan-tidy-actions .chip {
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 6px;
+  border-radius: var(--r-box);
+}
+.scan-tidy-foot .btn.fill {
   min-height: 52px;
 }
 .scan-sheet .google-covers-credit {
@@ -429,4 +757,209 @@ body:has(.scan-session) .toast {
   width: 100%;
   min-height: 96px;
   font-size: var(--t-cap);
+}
+
+/* 登録済みの本を表示する ›: the book the library had, into the list. */
+.scan-notice-show {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 32px;
+  font-size: var(--t-cap);
+}
+/* A book openBD did not know (Figma v4's 07): asked again, or by its title. */
+.scan-item-tile.is-alert {
+  border: 0;
+  background: var(--notice);
+  color: var(--alert);
+  font-weight: 700;
+}
+/* What happened, rather than a title: on two lines rather than cut. */
+.scan-item-title.is-said {
+  white-space: normal;
+}
+.scan-item-fix {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 6px;
+}
+.scan-item-fix .btn {
+  min-width: 0;
+  padding: 0 8px;
+  font-size: var(--t-meta);
+}
+
+/* 完了 (Figma v4's 08): over the whole scanner, the camera off. */
+.scan-done {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: env(safe-area-inset-top) 16px
+    calc(16px + env(safe-area-inset-bottom));
+  background: var(--paper);
+}
+.scan-done-name {
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+.scan-done-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  text-align: center;
+}
+.scan-done-mark {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: var(--green-soft);
+  color: var(--green);
+}
+.scan-done-count {
+  display: grid;
+  gap: 4px;
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+.scan-done-count strong {
+  font-size: var(--t-clock);
+  line-height: 1.1;
+}
+.scan-done-line {
+  font-size: var(--t-meta);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.scan-done-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: stretch;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+  font-size: var(--t-meta);
+  text-align: left;
+}
+.scan-done-note::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.scan-done-foot {
+  flex: none;
+  display: grid;
+  gap: 8px;
+}
+.scan-done-foot .btn {
+  min-height: 52px;
+}
+.scan-done-foot .text-btn {
+  justify-self: center;
+  min-height: 44px;
+  color: var(--ink-2);
+}
+
+/* 続きから再開 (Figma v4's 09): the time left, asked about as the scanner
+   opens. */
+.scan-resume {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.scan-resume .scan-done-mark {
+  margin-bottom: 4px;
+}
+.scan-resume-count {
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+.scan-resume-note {
+  font-size: var(--t-cap);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.scan-resume .btn {
+  justify-self: stretch;
+  min-height: 48px;
+  margin-top: 8px;
+}
+.scan-resume .text-btn {
+  min-height: 44px;
+  color: var(--ink-2);
+}
+
+/* コンパクト表示: a book of the library on one line, its title and the
+   three statuses; what else it has comes back with the toggle. */
+.scan-compact[aria-pressed="true"] {
+  color: var(--green);
+  background: var(--green-soft);
+}
+.scan-item.is-compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+}
+.scan-item.is-compact .scan-item-head {
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 44px;
+}
+.scan-item.is-compact .scan-item-cover .book-jacket,
+.scan-item.is-compact .scan-item-tile {
+  width: 24px;
+}
+.scan-item.is-compact .scan-item-tile {
+  height: 32px;
+}
+.scan-item.is-compact .scan-item-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  line-height: 1.35;
+}
+.scan-item.is-compact
+  :is(
+    .scan-item-author,
+    .scan-item-state,
+    .scan-item-more,
+    .scan-item-menu,
+    .scan-item-marks,
+    .scan-item-shelves
+  ) {
+  display: none;
+}
+.scan-item.is-compact .scan-item-statuses {
+  grid-template-columns: repeat(3, auto);
+  gap: 4px;
+}
+.scan-item.is-compact .scan-item-statuses .chip {
+  padding: 0 8px;
+  font-size: var(--t-meta);
 }
