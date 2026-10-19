@@ -99,6 +99,7 @@ import { PosterThumb } from "./PosterView";
 import "./poster-screen.css";
 import "./leave.css";
 import { ReportButton } from "./Report";
+import { SiteReportEntry, SiteReportForm, SiteReportList } from "./SiteReport";
 import { BlockButton, BlockedList, BlockedNote } from "./BlockReader";
 import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
@@ -175,7 +176,14 @@ export function ProfileView({
   const brightness = useBrightness();
   const textSize = useTextSize();
   const [sheet, setSheet] = useState<
-    "following" | "followers" | "settings" | "scan" | "titles" | null
+    | "following"
+    | "followers"
+    | "settings"
+    | "scan"
+    | "titles"
+    | "site-report"
+    | "site-reports"
+    | null
   >(null);
   // After a scan that read books in, the reader lands on them: the 登録
   // tab, newest first. The tab changes once the scanner's step is off the
@@ -1185,6 +1193,7 @@ export function ProfileView({
             ))}
           </fieldset>
           <BlockedList state={state} actions={actions} notify={notify} />
+          <SiteReportEntry open={setSheet} />
           {account.status === "signed-in" && (
             <fieldset className="leave-entry">
               <legend>アカウント</legend>
@@ -1233,6 +1242,12 @@ export function ProfileView({
             setLanding(kept);
           }}
         />
+      )}
+      {sheet === "site-report" && (
+        <SiteReportForm onClose={() => setSheet(null)} />
+      )}
+      {sheet === "site-reports" && (
+        <SiteReportList onClose={() => setSheet(null)} />
       )}
       {sheet === "titles" && (
         <TitlesToType notify={notify} onClose={() => setSheet(null)} />
