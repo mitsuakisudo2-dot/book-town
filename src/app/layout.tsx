@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import { HOME_TITLE, pageTitle } from "../lib/words";
-import { supabaseConfigured, supabaseUrl } from "../lib/supabase/config";
+import {
+  supabaseConfigured,
+  supabasePublishableKey,
+  supabaseUrl,
+} from "../lib/supabase/config";
+import { townAheadScript } from "../lib/supabase/town-ahead";
+import { TOWN_VIEW_ARGS } from "../lib/supabase/town-backend";
 import { APPEARANCE_BOOT } from "../lib/appearance";
 import { HOME_TAB_BOOT } from "../lib/home-tab";
 import { ERROR_BOOT } from "../lib/screen-errors";
@@ -66,6 +72,19 @@ export default function RootLayout({
         {/* A hosted town reads its first shops and posts from Supabase. */}
         {supabaseConfigured && (
           <link rel="preconnect" href={supabaseUrl} crossOrigin="anonymous" />
+        )}
+        {/* Asks the town for someone not signed in beside the page's code,
+            not after it (town-ahead.ts). */}
+        {supabaseConfigured && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: townAheadScript(
+                supabaseUrl,
+                supabasePublishableKey,
+                TOWN_VIEW_ARGS,
+              ),
+            }}
+          />
         )}
         {/* Adds the font CSS itself (#web-fonts), outside what React
             draws, so that React finds the head as it drew it. */}

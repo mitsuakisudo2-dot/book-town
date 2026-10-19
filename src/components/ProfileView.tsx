@@ -117,7 +117,8 @@ import {
 import { useUrlParam } from "../lib/url-state";
 import { afterLayerCloses, leaveLayers } from "../lib/back-layer";
 import { focusField } from "../lib/coarse-pointer";
-import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
+import { enterPressed } from "../lib/keys";
+import { useBookSearch } from "../lib/search/use-book-search";
 import { VisibilitySettings } from "./VisibilitySettings";
 import { bookAuthor, bookById, bookTitle, titleById } from "../lib/book-name";
 import {

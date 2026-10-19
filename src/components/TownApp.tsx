@@ -43,7 +43,7 @@ import {
   walkPath,
 } from "../lib/paths";
 import { requestSearch } from "../lib/tags";
-import { enterPressed } from "../lib/search/use-book-search";
+import { enterPressed } from "../lib/keys";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { ReportDialog } from "./Report";
 import { SiteNotesGate } from "./SiteNotesGate";

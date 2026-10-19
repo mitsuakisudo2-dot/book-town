@@ -8,3 +8,18 @@ export const imeKey = (event: {
   isComposing?: boolean;
   keyCode: number;
 }): boolean => Boolean(event.isComposing) || event.keyCode === 229;
+
+/**
+ * Enter as the reader meant it: not the Enter that confirms a kana
+ * conversion, which belongs to the keyboard.
+ */
+export const enterPressed = (event: {
+  key: string;
+  keyCode: number;
+  nativeEvent: { isComposing?: boolean };
+}): boolean =>
+  event.key === "Enter" &&
+  !imeKey({
+    isComposing: event.nativeEvent.isComposing,
+    keyCode: event.keyCode,
+  });

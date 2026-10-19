@@ -2,7 +2,6 @@
 
 import { useDeferredValue, useEffect, useMemo } from "react";
 import { booksOfIsbn } from "../book-name";
-import { imeKey } from "../keys";
 import { withoutTwins } from "../own-books";
 import type { Book } from "../types";
 import { prepareSearch } from "./postings";
@@ -111,18 +110,3 @@ export function useBookSearch(
       }),
   };
 }
-
-/**
- * Enter as the reader meant it: not the Enter that confirms a kana
- * conversion, which belongs to the keyboard.
- */
-export const enterPressed = (event: {
-  key: string;
-  keyCode: number;
-  nativeEvent: { isComposing?: boolean };
-}): boolean =>
-  event.key === "Enter" &&
-  !imeKey({
-    isComposing: event.nativeEvent.isComposing,
-    keyCode: event.keyCode,
-  });

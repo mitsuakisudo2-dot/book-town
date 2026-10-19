@@ -3,7 +3,8 @@
 import { useId, useRef, useState } from "react";
 import type { Book } from "../lib/types";
 import { useCoarsePointer, useFocusFieldOnShow } from "../lib/coarse-pointer";
-import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
+import { enterPressed } from "../lib/keys";
+import { useBookSearch } from "../lib/search/use-book-search";
 import { BookJacket, Icon, useInWritingSheet } from "./ui";
 import { bookAuthor, bookById, booksById, bookTitle } from "../lib/book-name";
 
