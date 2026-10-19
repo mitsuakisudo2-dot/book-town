@@ -106,6 +106,9 @@ import {
 export const FIRST_SHELF_ID = "mine-shelf-1";
 export { displayCost, shelfUsed } from "./types";
 
+/** How many searches what more() read is kept for (the last ones typed). */
+const SEARCHES_KEPT = 20;
+
 const themes: ShopTheme[] = ["sage", "ink", "ochre", "rose"];
 const validDisplay = (display: BookDisplay): boolean =>
   display === "spine" || display === "face";
@@ -1492,7 +1495,16 @@ export function createTownStore(
       const from = generation;
       const reading = read(ask).then((found) => {
         if (from !== generation) return;
-        kept = new Map(kept).set(key, found);
+        const next = new Map(kept);
+        // Only the last few searches are kept: one is asked as each is typed.
+        if ("search" in ask) {
+          const searches = [...next.keys()].filter((at) =>
+            at.startsWith("search:"),
+          );
+          for (const old of searches.slice(0, -SEARCHES_KEPT + 1))
+            next.delete(old);
+        }
+        kept = next.set(key, found);
         notify();
       });
       const done = () => {
@@ -1647,6 +1659,23 @@ export function useTownMore(
   state: TownState,
   ask: MoreAsk | null,
 ): { state: TownState; ready: boolean } {
+  const { read, ready } = useMoreRead(ask);
+  const shown = useMemo(
+    () => (read ? withMore(state, [read]) : state),
+    [state, read],
+  );
+  return { state: shown, ready };
+}
+
+/**
+ * What one ask brought (useTownMore), as it came, for a page that lays it
+ * over the town itself (the books a search finds). Undefined while it is
+ * on its way, and in the demo.
+ */
+export function useMoreRead(ask: MoreAsk | null): {
+  read: TownMore | undefined;
+  ready: boolean;
+} {
   const reads = useTownReads();
   const key =
     ask && !("reader" in ask && ask.reader === ME_ID) ? moreKey(ask) : null;
@@ -1671,11 +1700,7 @@ export function useTownMore(
       if (retry) clearTimeout(retry);
     };
   }, [reads, key]);
-  const shown = useMemo(
-    () => (read ? withMore(state, [read]) : state),
-    [state, read],
-  );
-  return { state: shown, ready: !reads || !key || read !== undefined };
+  return { read, ready: !reads || !key || read !== undefined };
 }
 
 /** Counts the town's readings (store.getReadCount). */

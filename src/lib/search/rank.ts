@@ -459,6 +459,34 @@ const isbnTyped = (query: string) =>
     .replace(ISBN_DASHES, "")
     .toUpperCase();
 
+/**
+ * What the database is asked for a query (find_books): the pairs each form
+ * looks for and how many are enough, as the books here are pruned with, or
+ * the ISBN typed whole or begun. Null when nothing searchable was typed.
+ */
+export interface DatabaseSearch {
+  forms: Array<{ grams: string[]; need: number }>;
+  isbn: string | null;
+  isbnStart: string | null;
+}
+
+export function databaseSearch(query: string): DatabaseSearch | null {
+  const digits = isbnTyped(query);
+  if (/^(97[89])?\d{9}[\dX]$/.test(digits))
+    return {
+      forms: [],
+      isbn: normalizeIsbn(digits) ?? digits,
+      isbnStart: null,
+    };
+  const read = readQuery(query);
+  if (!read) return null;
+  return {
+    forms: read.pruning.map(({ grams, need }) => ({ grams: [...grams], need })),
+    isbn: null,
+    isbnStart: /^\d{5,12}$/.test(digits) ? digits : null,
+  };
+}
+
 /** Whether a book's ISBN begins with digits still being typed (as ISBN-13, or as ISBN-10). */
 function isbnBegins(book: Book, digits: string): boolean {
   const isbn = book.isbn ? normalizeIsbn(book.isbn) : null;

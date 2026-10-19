@@ -31,6 +31,7 @@ import { emptyArrived, type Arrived } from "../arrived";
 import { isDatabaseId } from "../record-kind";
 import { bookKind, sampleBookRowId, withSamples } from "../samples";
 import { emptyMore } from "../town-more";
+import { databaseSearch } from "../search/rank";
 import { FEELINGS, ME_ID, type TownState } from "../types";
 import type {
   Database,
@@ -89,6 +90,8 @@ export const TOWN_VIEW_ARGS = {
 const WORK_RECORDS = 200;
 /** Of a feeling, the newest records the search reads for its books. */
 const FELT_RECORDS = 100;
+/** How many books the search asks the database for (find_books). */
+export const FOUND_BOOKS = 100;
 // A record without its words, as the town reads others' (body is left out).
 const RECORD_COLUMNS =
   "id, user_id, book_id, kind, feelings, spoiler, is_public, audience, created_at, updated_at";
@@ -960,20 +963,67 @@ function remoteReads(
             rowsOf<string>(felt).includes(feeling),
           ),
         };
-      } else {
-        const records = await all(
-          client
-            .from("reading_entries")
-            .select(RECORD_COLUMNS)
-            .contains("feelings", [ask.feeling])
-            .eq("kind", "finished")
-            .order("created_at", { ascending: false })
-            .limit(FELT_RECORDS),
+      } else if ("search" in ask) {
+        // Every book the reader may read that the query finds, not only
+        // the town's (find_books); ranked with the town's by the page.
+        const asked = databaseSearch(ask.search);
+        if (!asked) return emptyMore();
+        let books: BookRow[];
+        try {
+          books = rowsOf<BookRow>(
+            (
+              await settled(
+                client.rpc("find_books", {
+                  forms: asked.forms,
+                  ...(asked.isbn ? { isbn: asked.isbn } : {}),
+                  ...(asked.isbnStart ? { isbn_start: asked.isbnStart } : {}),
+                  book_limit: FOUND_BOOKS,
+                }),
+              )
+            ).data,
+          );
+        } catch (error) {
+          // A database from before find_books: the town's books are searched.
+          if (error instanceof TownSyncError && error.code === "PGRST202")
+            return emptyMore();
+          throw error;
+        }
+        return moreFromRows(
+          { records: [], nine: [], books },
+          userId,
+          ownBooksKnown(),
         );
-        rows = {
-          records: records.map((row) => ({ ...row, body: "" })),
-          nine: [],
-        };
+      } else {
+        let records: Tables<"reading_entries">[];
+        try {
+          // A feeling's records found by their index (feeling_records).
+          records = rowsOf(
+            (
+              await settled(
+                client.rpc("feeling_records", {
+                  feeling: ask.feeling,
+                  record_limit: FELT_RECORDS,
+                }),
+              )
+            ).data,
+          );
+        } catch (error) {
+          if (!(error instanceof TownSyncError && error.code === "PGRST202"))
+            throw error;
+          // A database from before feeling_records.
+          records = (
+            await all(
+              client
+                .from("reading_entries")
+                .select(RECORD_COLUMNS)
+                .contains("feelings", [ask.feeling])
+                .eq("kind", "finished")
+                .order("created_at", { ascending: false })
+                .limit(FELT_RECORDS),
+            )
+          ).map((row) => ({ ...row, body: "" }));
+        }
+        rows = { records, nine: [] };
       }
       const missing = [
         ...new Set([

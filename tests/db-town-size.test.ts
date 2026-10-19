@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { TOWN_VIEW_ARGS } from "../src/lib/supabase/town-backend";
 import { referencedBookIds } from "../src/lib/town-remote";
+import { databaseSearch } from "../src/lib/search/rank";
 import { migratedDatabase } from "./fixtures/pglite-supabase";
 
 // How big the town's answer is, and how long the database takes to make it
@@ -17,6 +18,11 @@ import { migratedDatabase } from "./fixtures/pglite-supabase";
 // production's: PGlite is slower than production's Postgres, and the towns
 // are made up. The numbers, and where they lead at 10,000 readers, go to the
 // run's summary.
+//
+// What pages read when they open, beside the town (the search's feelings
+// and a feeling's books, a book's records, the books a search finds), is
+// timed the same way: none of them may take longer for each reader added
+// than the baseline says (pagesMsPerReader).
 //
 // BOOK_TOWN_SIZE_BASELINE=write writes the baseline from this run.
 
@@ -36,7 +42,23 @@ interface Baseline {
   readers: [number, number];
   bytesPerReader: Record<string, number>;
   msPerReader: number;
+  pagesMsPerReader: Record<string, number>;
 }
+
+// A book of the first reader's, as town() names it.
+const FIRST_BOOK = "b0000001-0001-4000-8000-000000000000";
+const SEARCH = databaseSearch("本の題名 12-3")!;
+
+/** What each page asks, as a visitor, with its arguments. */
+const PAGES: Record<string, [string, unknown[]]> = {
+  felt_in_town: ["select public.felt_in_town()::text", []],
+  feeling_records: ["select public.feeling_records('quiet', 100)::text", []],
+  work_records: [`select public.work_records('${FIRST_BOOK}', 200)::text`, []],
+  find_books: [
+    "select public.find_books($1::jsonb, null, null, 100)::text",
+    [JSON.stringify(SEARCH.forms)],
+  ],
+};
 
 interface Answer {
   bytes: number;
@@ -100,6 +122,32 @@ const steady = (text: string) =>
     /(T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(?=[+-]\d{2}:\d{2}"|Z")/g,
     (_, clock: string, fraction = "") => `${clock}.${fraction.padEnd(6, "0")}`,
   );
+
+/** How long each page's reading takes a visitor, the quickest of three. */
+async function pages(db: PGlite): Promise<Record<string, number>> {
+  await db.exec(
+    "set role anon; select set_config('request.jwt.claim.sub', '', false);",
+  );
+  try {
+    const took: Record<string, number> = {};
+    for (const [page, [sql, params]] of Object.entries(PAGES)) {
+      let best = Infinity;
+      for (let round = 0; round < 3; round += 1) {
+        const started = performance.now();
+        const { rows } = await db.query<{ text: string }>(
+          sql.replace("::text", "::text as text"),
+          params,
+        );
+        best = Math.min(best, performance.now() - started);
+        assert.ok(rows[0].text !== "[]", `${page} found something`);
+      }
+      took[page] = best;
+    }
+    return took;
+  } finally {
+    await db.exec("reset role");
+  }
+}
 
 /**
  * A visitor's town (the quickest of three askings), and the books it points
@@ -167,9 +215,19 @@ async function answer(db: PGlite): Promise<Answer> {
 const mb = (bytes: number) => `${(bytes / 1e6).toFixed(1)}MB`;
 
 async function main() {
-  const small = await answer(await town(SMALL));
-  const large = await answer(await town(LARGE));
+  const smallTown = await town(SMALL);
+  const small = await answer(smallTown);
+  const smallPages = await pages(smallTown);
+  const largeTown = await town(LARGE);
+  const large = await answer(largeTown);
+  const largePages = await pages(largeTown);
   const added = LARGE - SMALL;
+  const pagesMsPerReader = Object.fromEntries(
+    Object.keys(PAGES).map((page) => [
+      page,
+      Math.max(0, (largePages[page] - smallPages[page]) / added),
+    ]),
+  );
   const bytesPerReader = Object.fromEntries(
     Object.keys(large.parts)
       .sort()
@@ -192,6 +250,12 @@ async function main() {
         .filter(([, bytes]) => bytes > 0)
         .map(([part, bytes]) => `${part} ${bytes}`)
         .join(", ")}) and ${msPerReader.toFixed(2)}ms`,
+    `pages, at ${LARGE} readers: ${Object.entries(largePages)
+      .map(
+        ([page, ms]) =>
+          `${page} ${Math.round(ms)}ms (+${pagesMsPerReader[page].toFixed(3)}ms a reader)`,
+      )
+      .join(", ")}`,
     `${AT.toLocaleString("en")} readers, about ${mb(
       at(
         large.bytes,
@@ -213,6 +277,12 @@ async function main() {
       readers: [SMALL, LARGE],
       bytesPerReader,
       msPerReader: Number(msPerReader.toFixed(2)),
+      pagesMsPerReader: Object.fromEntries(
+        Object.entries(pagesMsPerReader).map(([page, ms]) => [
+          page,
+          Number(ms.toFixed(3)),
+        ]),
+      ),
     };
     await writeFile(BASELINE, JSON.stringify(baseline, null, 2) + "\n");
     console.log("wrote tests/town-size-baseline.json");
@@ -251,6 +321,16 @@ async function main() {
         `more than ${MS_SLACK} times the ${baseline.msPerReader}ms in ` +
         "tests/town-size-baseline.json.",
     );
+  });
+  check("no page's reading takes longer for each reader than before", () => {
+    for (const [page, ms] of Object.entries(pagesMsPerReader))
+      assert.ok(
+        ms <= Math.max((baseline.pagesMsPerReader[page] ?? 0) * MS_SLACK, 0.05),
+        `each reader adds ${ms.toFixed(3)}ms to ${page}, more than ` +
+          `${MS_SLACK} times the ${baseline.pagesMsPerReader[page] ?? 0}ms in ` +
+          "tests/town-size-baseline.json. Find its rows by an index before " +
+          "the policy is asked of each (AUD-006).",
+      );
   });
   console.log(`${passed} town size checks passed`);
 }
