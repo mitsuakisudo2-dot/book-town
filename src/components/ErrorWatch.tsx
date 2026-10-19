@@ -8,6 +8,7 @@ import {
   type ErrorKind,
   type ScreenError,
 } from "../lib/screen-errors";
+import { isMissingFile, readNewBuild } from "../lib/new-build";
 import { BUILD_COMMIT } from "../lib/site-notes";
 import {
   supabaseConfigured,
@@ -52,7 +53,8 @@ function send(error: ScreenError) {
 /**
  * Hears the errors on this screen (src/lib/screen-errors.ts) and sends each
  * one once, with what could name a reader taken out. Draws nothing. A build
- * without Supabase (the demo) keeps them to itself.
+ * without Supabase (the demo) keeps them to itself. A file of the site gone
+ * since a new build reads the page again (new-build.ts), in any build.
  */
 export function ErrorWatch() {
   useEffect(() => {
@@ -83,6 +85,22 @@ export function ErrorWatch() {
     for (const [kind, value, filename] of window.__screenErrors ?? [])
       hear(kind, value, filename);
     window.__screenErrors = null;
+    addEventListener("error", onError);
+    addEventListener("unhandledrejection", onRejection);
+    return () => {
+      removeEventListener("error", onError);
+      removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
+  // A screen's file gone since a new build went up: the page is read again
+  // from the new build (new-build.ts), after the error above is sent.
+  useEffect(() => {
+    const onError = (event: ErrorEvent) => {
+      if (isMissingFile(event.error)) readNewBuild();
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      if (isMissingFile(event.reason)) readNewBuild();
+    };
     addEventListener("error", onError);
     addEventListener("unhandledrejection", onRejection);
     return () => {
