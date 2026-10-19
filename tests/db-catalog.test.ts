@@ -30,7 +30,7 @@ import { migrationFiles, migrationText } from "./fixtures/pglite-supabase";
 // at once; two records of one ISBN are chosen between the same way in any
 // order; taking the same again changes nothing; the cap; a batch and a
 // deleted record take out only rows no reader uses; a registered book's
-// bibliography becomes a catalog row the next day, without the words its
+// bibliography becomes a catalog row once judged, without the words its
 // reader typed; the ISBNs searched for and not found; who may call what;
 // and undoing the file.
 
@@ -386,6 +386,13 @@ async function main() {
         AKI,
         used.id,
       ]);
+      // One the operator moved to another work: the record of it stays.
+      const moved = await catalogRow(C(20));
+      await rows(
+        `insert into private.work_changes (book_id, from_work, to_work, kind)
+         select id, work_id, work_id, 'edited' from books where id = $1`,
+        [moved.id],
+      );
       const gone = await rowsFor(db, [
         ["R100000002-I50", { bibId: "50", isbns: [C(50)], title: "消える本" }],
       ]);
@@ -394,9 +401,11 @@ async function main() {
       assert.equal(await catalogRow(C(50)), undefined);
       assert.ok(await catalogRow(C(11)));
       const left = await count("select count(*) from private.catalog_imports where batch = 'trial'");
-      assert.equal(await count("select private.catalog_drop('trial')"), left - 1);
-      // The row Aki's post names stays, and so does every reader's book.
+      assert.equal(await count("select private.catalog_drop('trial')"), left - 2);
+      // The rows Aki's post and the operator's move name stay, and so does
+      // every reader's book.
       assert.ok(await catalogRow(C(11)));
+      assert.ok(await catalogRow(C(20)));
       assert.equal(await catalogRow(C(10)), undefined);
       assert.ok((await rows("select 1 from books where id = $1", [id(1)])).length);
       assert.equal(
@@ -407,18 +416,22 @@ async function main() {
   );
 
   await check(
-    "a registered book's bibliography becomes a catalog row the day after, found by the bibliography's words, not its reader's",
+    "a registered book's bibliography becomes a catalog row once it is judged, found by the bibliography's words, not its reader's",
     async () => {
+      const minute = "select private.catalog_promote(200, interval '10 minutes')";
       await register(BEN, id(2), C(60), "ベンの打った題名", "ベンの打った著者");
       await tick();
       await answerAll(db, { [C(60)]: sru({ isbns: [C(60)], title: "図書館の題名", agents: [{ name: "図書, 館" }] }) }, {});
       await tick();
+      // Answered, but not yet judged (ten minutes after it was placed): the
+      // night's run takes only Aki's, of the trial's row taken out above.
+      assert.equal(await count("select private.catalog_promote()"), 1);
+      assert.equal(await catalogRow(C(60)), undefined);
       await later(11);
       await tick();
-      assert.equal(await count("select private.catalog_promote()"), 0);
-      await later(24 * 60);
-      // Ben's, and Aki's of the trial's row taken out above.
-      assert.equal(await count("select private.catalog_promote()"), 2);
+      // Judged: the minute's run takes Ben's.
+      assert.equal(await count(minute), 1);
+      assert.equal(await count(minute), 0);
       assert.equal(await count("select private.catalog_promote()"), 0);
       assert.equal((await catalogRow(C(10))).title, "灯台守の目録 上");
       const row = await catalogRow(C(60));
@@ -496,8 +509,15 @@ async function main() {
             `${visitor} ${table}`,
           );
       assert.deepEqual(
-        await rows("select schedule from cron.job where jobname = 'catalog-nightly'"),
-        [{ schedule: "13 19 * * *" }],
+        await rows("select jobname, schedule, command from cron.job where jobname like 'catalog-%' order by 1"),
+        [
+          { jobname: "catalog-nightly", schedule: "13 19 * * *", command: "select private.catalog_nightly()" },
+          {
+            jobname: "catalog-promote",
+            schedule: "* * * * *",
+            command: "select private.catalog_promote(200, interval '10 minutes')",
+          },
+        ],
       );
     },
   );

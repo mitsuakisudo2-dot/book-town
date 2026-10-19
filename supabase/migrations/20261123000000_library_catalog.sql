@@ -40,10 +40,11 @@
 --     order they come in: finished before in the making, fewer ISBNs (a
 --     volume before its set), the later issued, the larger record id.
 --   * A book registered by ISBN whose bibliography came from openBD (or from
---     the library before its records were taken) becomes a catalog row the
---     next day (private.catalog_promote, every night): the owner's card of
---     10-19 11:55Z, "出す": registered books, private ones too, are found by
---     their bibliography. Only the bibliography's words come out: not who
+--     the library before its records were taken) becomes a catalog row once
+--     its books are judged (private.catalog_promote, every minute, and the
+--     whole catalog every night): the owner's cards of 10-19 11:55Z, "出す":
+--     registered books, private ones too, are found by their bibliography,
+--     and of 15:25Z, "すぐ". Only the bibliography's words come out: not who
 --     registered it, what they typed, or how many did.
 --   * ISBNs searched for and not found are counted by day, the ISBN alone
 --     (public.note_missing_isbn; no person, no other words), for choosing
@@ -58,15 +59,17 @@
 --
 -- Rollback: a new migration with
 --   select cron.unschedule('catalog-nightly');
+--   select cron.unschedule('catalog-promote');
 --   select private.catalog_drop(batch) from (select distinct batch from private.catalog_imports) b;
 --   drop function public.note_missing_isbn(text);
 --   drop function private.catalog_take(jsonb, text), private.catalog_gone(text[]),
---     private.catalog_drop(text), private.catalog_promote(integer),
+--     private.catalog_drop(text), private.catalog_promote(integer, interval),
 --     private.catalog_nightly(), private.catalog_used(uuid), private.catalog_words(jsonb),
 --     private.catalog_better(text, smallint, text, text, text, smallint, text, text);
 --   drop table private.catalog_imports, private.catalog_progress,
 --     private.catalog_settings, private.missing_isbns;
---   drop index public.books_registered_newest, public.books_isbn_bytes;
+--   drop index public.books_registered_newest, public.books_isbn_bytes,
+--     private.book_checks_judged;
 -- and then makes private.book_checked() and private.edition_asked() again as
 -- 20261119000000_bibliography_fetching.sql and 20261101000000_bibliography.sql
 -- have them, public.book_bibliography(uuid[]) and private.work_candidates()
@@ -169,7 +172,10 @@ revoke all on function private.catalog_better(text, smallint, text, text, text, 
   from public, anon, authenticated;
 
 -- Whether any reader's row names the book: a row of a public table with a
--- foreign key to it, or a shop's shelves or scene.
+-- foreign key to it, a shop's shelves or scene, or the operator's moving it
+-- to another work (a reader's copy is made of a registered book only, never
+-- of a catalog row). Taking a row out never takes what a reader or the
+-- operator saved with it.
 create function private.catalog_used(b uuid) returns boolean
 language plpgsql stable security definer set search_path = '' as $$
 declare
@@ -200,7 +206,8 @@ begin
       select 1 from public.shop_private p
       where p.scene_books @> jsonb_build_array(b::text)
         or p.shelves @> jsonb_build_array(jsonb_build_object(
-          'items', jsonb_build_array(jsonb_build_object('bookId', b::text)))));
+          'items', jsonb_build_array(jsonb_build_object('bookId', b::text)))))
+    or exists (select 1 from private.work_changes w where w.book_id = b);
 end;
 $$;
 revoke all on function private.catalog_used(uuid) from public, anon, authenticated;
@@ -362,10 +369,14 @@ revoke all on function private.catalog_gone(text[]) from public, anon, authentic
 
 -- A registered book's ISBN whose bibliography has a title, with no catalog
 -- row yet, gets one made from the bibliography (all answers the edition has),
--- once its books have been there a day: up to `most` a night.
-create function private.catalog_promote(most integer default 2000) returns integer
+-- once each of its books is judged (bib_judge): up to `most` at a time. With
+-- `lately`, only the editions with a book judged that recently are looked at
+-- (every minute); without, all of them (every night).
+create function private.catalog_promote(most integer default 2000, lately interval default null)
+returns integer
 language plpgsql security definer set search_path = '' as $$
 declare
+  recent uuid[];
   e record;
   m record;
   w record;
@@ -375,9 +386,16 @@ declare
 begin
   select s.most - s.taken into room from private.catalog_settings s for update;
   perform set_config('private.importing', 'on', true);
+  if lately is not null then
+    recent := array(
+      select distinct b.edition_id from private.book_checks c
+      join public.books b on b.id = c.book_id
+      where c.judged_at > now() - lately);
+  end if;
   for e in
     select d.id, d.isbn from public.editions d
-    where d.isbn is not null
+    where (recent is null or d.id = any(recent))
+      and d.isbn is not null
       and not exists (select 1 from public.books c where c.isbn = d.isbn and c.source = 'ndl')
       and exists (
         select 1 from private.edition_sources s
@@ -385,8 +403,8 @@ begin
       and exists (select 1 from public.books b where b.edition_id = d.id)
       and not exists (
         select 1 from public.books b
-        join private.book_checks c on c.book_id = b.id
-        where b.edition_id = d.id and c.placed_at > now() - interval '1 day')
+        left join private.book_checks c on c.book_id = b.id
+        where b.edition_id = d.id and c.verdict is null)
     order by d.id
     limit least(greatest(coalesce(catalog_promote.most, 0), 0), 20000)
   loop
@@ -412,7 +430,9 @@ begin
   return made;
 end;
 $$;
-revoke all on function private.catalog_promote(integer) from public, anon, authenticated;
+revoke all on function private.catalog_promote(integer, interval)
+  from public, anon, authenticated;
+create index book_checks_judged on private.book_checks (judged_at);
 
 create function private.catalog_nightly() returns void
 language plpgsql security definer set search_path = '' as $$
@@ -423,6 +443,8 @@ end;
 $$;
 revoke all on function private.catalog_nightly() from public, anon, authenticated;
 select cron.schedule('catalog-nightly', '13 19 * * *', 'select private.catalog_nightly()');
+select cron.schedule('catalog-promote', '* * * * *',
+  $$select private.catalog_promote(200, interval '10 minutes')$$);
 
 -- An ISBN searched for and not found. Counted by day; at most 5,000 ISBNs a
 -- day are written down, so a flood of made-up ISBNs fills nothing.
