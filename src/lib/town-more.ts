@@ -10,7 +10,8 @@ import {
 // What the town reads when a page shows it, not with the town (AUD-006):
 // another reader's records and 人生の9冊 on their profile's page, a book's
 // records on its page, which feelings anyone kept and the books felt with
-// one in the search, and the books a search finds. The
+// one in the search, the books a search finds, and how often each book is
+// shelved and talked of, of all time (counts). The
 // town reads only a window of others' records and none of their nines
 // (supabase/town-backend.ts, TOWN_VIEW_ARGS). What a page read is kept apart
 // from the town, never saved, and laid over it for the page (withMore), so
@@ -23,7 +24,9 @@ export type MoreAsk =
   | { felt: true }
   | { feeling: Feeling }
   /** The books a search finds among all the reader may read (find_books). */
-  | { search: string };
+  | { search: string }
+  /** The town's counts of all time, and the books most shelved and talked of (town_counts). */
+  | { counts: true };
 
 /** One key per ask, to keep and share what was read. */
 export function moreKey(ask: MoreAsk): string {
@@ -31,6 +34,7 @@ export function moreKey(ask: MoreAsk): string {
   if ("work" in ask) return "work:" + ask.work;
   if ("felt" in ask) return "felt:";
   if ("search" in ask) return "search:" + ask.search;
+  if ("counts" in ask) return "counts:";
   return "feeling:" + ask.feeling;
 }
 
@@ -42,6 +46,7 @@ export function askOfKey(key: string): MoreAsk | null {
   if (kind === "work") return { work: value };
   if (kind === "felt") return { felt: true };
   if (kind === "search" && value.trim()) return { search: value };
+  if (kind === "counts") return { counts: true };
   if (kind === "feeling" && FEELINGS.includes(value as Feeling))
     return { feeling: value as Feeling };
   return null;
@@ -54,6 +59,36 @@ export interface ReaderNine {
   nineNotes: Record<string, string>;
 }
 
+/**
+ * How many public shelves hold a book's work and how many 便り and replies
+ * talk of it (reviews: those not replies), by everyone the reader may see,
+ * of all time (town_counts). Never shown as a rank.
+ */
+export interface TownCount {
+  shelves: number;
+  talk: number;
+  reviews: number;
+}
+
+/** What the database counted for the town, when the search opened. */
+export interface TownCounts {
+  /** By book id: the town's books when it was asked, and the books below. */
+  books: Record<string, TownCount>;
+  /** The works most shelved, the most first, each by a book of it. */
+  shelved: CountedWork[];
+  /** The works most talked of, the most first, each by a book of it. */
+  talked: CountedWork[];
+}
+
+/**
+ * A work the database counted, by the book it stood it for (the reader's own
+ * first), and its work: the page shows it by the town's book of the work.
+ */
+export interface CountedWork {
+  book: string;
+  work: string | null;
+}
+
 /** What one ask brought, in the town's own shapes. */
 export interface TownMore {
   /** Others' records; never the reader's own, which the town has whole. */
@@ -63,6 +98,7 @@ export interface TownMore {
   books: Book[];
   /** Which feelings anyone in the town kept, of all time (felt_in_town). */
   felt?: Feeling[];
+  counts?: TownCounts;
 }
 
 export const emptyMore = (): TownMore => ({

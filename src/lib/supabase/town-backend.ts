@@ -10,6 +10,7 @@ import {
   referencedBookIds,
   townFromRows,
   moreFromRows,
+  countsFromAnswer,
   type BookRow,
   type MoreRows,
   type RelationTable,
@@ -31,6 +32,7 @@ import { emptyArrived, type Arrived } from "../arrived";
 import { isDatabaseId } from "../record-kind";
 import { bookKind, sampleBookRowId, withSamples } from "../samples";
 import { emptyMore } from "../town-more";
+import { booksBeforeSearch } from "../book-lists";
 import { databaseSearch } from "../search/rank";
 import { FEELINGS, ME_ID, type TownState } from "../types";
 import type {
@@ -92,6 +94,10 @@ const WORK_RECORDS = 200;
 const FELT_RECORDS = 100;
 /** How many books the search asks the database for (find_books). */
 export const FOUND_BOOKS = 100;
+/** Of the town's books, how many the search asks the counts of (town_counts). */
+const COUNTED_BOOKS = 1000;
+/** How many works most shelved and most talked of the search asks for. */
+const COUNTED_TOP = 12;
 // A record without its words, as the town reads others' (body is left out).
 const RECORD_COLUMNS =
   "id, user_id, book_id, kind, feelings, spoiler, is_public, audience, created_at, updated_at";
@@ -993,6 +999,34 @@ function remoteReads(
           userId,
           ownBooksKnown(),
         );
+      } else if ("counts" in ask) {
+        // How often the town's books are shelved and talked of, of all
+        // time, and the works most shelved and talked of (town_counts): the
+        // town holds only the newest 便り. The 見本's books by their rows.
+        const asked = booksBeforeSearch(town() ?? emptyTown())
+          .filter((book) => bookKind(book.id) !== "local")
+          .slice(0, COUNTED_BOOKS);
+        const rowOf = (bookId: string) =>
+          bookKind(bookId) === "sample" && !isDatabaseId(bookId)
+            ? sampleBookRowId(bookId)
+            : bookId;
+        let answer: Json;
+        try {
+          answer = (
+            await settled(
+              client.rpc("town_counts", {
+                books: asked.map((book) => rowOf(book.id)),
+                top: COUNTED_TOP,
+              }),
+            )
+          ).data;
+        } catch (error) {
+          // A database from before town_counts: the page counts the town.
+          if (error instanceof TownSyncError && error.code === "PGRST202")
+            return emptyMore();
+          throw error;
+        }
+        return countsFromAnswer(answer);
       } else {
         let records: Tables<"reading_entries">[];
         try {
