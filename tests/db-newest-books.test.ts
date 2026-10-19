@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { PGlite } from "@electric-sql/pglite";
+import { databaseSearch } from "../src/lib/search/rank";
 import {
   migratedDatabase,
   migrationFiles,
@@ -26,6 +27,8 @@ const BEN = "00000000-0000-4000-8000-00000000000b";
 const CHI = "00000000-0000-4000-8000-00000000000c";
 const DAN = "00000000-0000-4000-8000-00000000000d";
 const VISITORS = [null, AKI, BEN, CHI, DAN];
+// A sample book (private.is_sample_book), which has no owner.
+const SAMPLE = "4a72eed4-7258-4c4b-88ea-90dbc0c0e244";
 
 const id = (group: number, n: number) =>
   `${group}0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -88,6 +91,9 @@ async function town(kept: number): Promise<PGlite> {
       from generate_series(1, 3) k;
     insert into library_entries (user_id, book_id, source)
       select '${BEN}', b.id, 'manual' from books b where b.created_by = '${BEN}';
+    -- A sample book (the migrations' own) anyone may read: used in a post.
+    insert into posts (author_id, body, book_id) values
+      ('${CHI}', '見本を読んだ', '${SAMPLE}');
     insert into library_entries (user_id, book_id, source) values
       ('${CHI}', '${way(14)}', 'manual');
     insert into reading_entries (user_id, book_id, kind, is_public, audience) values
@@ -218,6 +224,25 @@ async function main() {
       assert.ok((await titles(AKI)).has("フォロワーの記録"));
       assert.ok((await titles(CHI)).has("なにもない"));
       assert.ok((await titles(BEN)).has("控えの本 1"));
+      // A sample book used where anyone may see it, to a visitor too.
+      assert.ok(seen.has("旅をする木"));
+      assert.ok(!seen.has("見本の本 1"));
+    },
+  );
+
+  await check(
+    "a visitor's search finds a sample book used where anyone may see it",
+    async () => {
+      const ask = databaseSearch("旅をする木")!;
+      for (const visitor of VISITORS) {
+        const [{ ids }] = await as<{ ids: string[] }>(
+          db,
+          visitor,
+          "select coalesce(jsonb_agg(b -> 'id'), '[]') as ids from jsonb_array_elements(find_books($1::jsonb, null, null, 100)) b",
+          [JSON.stringify(ask.forms)],
+        );
+        assert.ok(ids.includes(SAMPLE), String(visitor));
+      }
     },
   );
 
