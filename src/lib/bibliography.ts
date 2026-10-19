@@ -128,6 +128,11 @@ export interface BookHold {
   bookId: string;
   /** When it was held: the notice's time, and its mark of being seen. */
   heldAt: string;
+  /**
+   * Held a day or more after it was placed (the sources answered late, or it
+   * was judged again): told as a book registered before.
+   */
+  earlier: boolean;
   /** The book the ISBN is, as the master names it. */
   master: Pick<Bibliography, "title" | "creators">;
 }
@@ -136,9 +141,14 @@ export interface BookHold {
 export interface BookHoldRow {
   book_id: string;
   held_at: string;
+  /** When the book was placed (registered, or its ISBN last changed). */
+  placed_at?: string | null;
   title: string | null;
   creators: unknown;
 }
+
+/** A day: a book held this long after it was placed was registered before. */
+const EARLIER = 24 * 60 * 60 * 1000;
 
 /** A hold from its row; null for one without the master's title. */
 export function holdFrom(row: BookHoldRow): BookHold | null {
@@ -158,7 +168,29 @@ export function holdFrom(row: BookHoldRow): BookHold | null {
     ? {
         bookId: row.book_id,
         heldAt: row.held_at,
+        earlier:
+          Date.parse(row.held_at) - Date.parse(row.placed_at ?? "") >= EARLIER,
         master: { title: master.title, creators: master.creators },
       }
     : null;
+}
+
+/**
+ * Whether a book shows the cover of its ISBN (AUD-017). A held book's ISBN is
+ * likely another book's, so it shows its 装丁カード, to anyone. Its reader
+ * sees their own book's cover once their holds are known to leave it out.
+ * Another reader's book shows it only once its master is shown: a held book
+ * has none, so it looks like any book whose sources have not answered yet,
+ * and nobody else can tell it is held. A book not of the database (the
+ * demo's, a 見本, this browser's) as before.
+ */
+export function showsIsbnCover(book: {
+  database: boolean;
+  own: boolean;
+  /** Whether the reader's holds hold it; null while they are not known. */
+  held: boolean | null;
+  hasMaster: boolean;
+}): boolean {
+  if (!book.database) return true;
+  return book.own ? book.held === false : book.hasMaster;
 }

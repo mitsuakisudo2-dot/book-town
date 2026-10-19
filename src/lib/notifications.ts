@@ -151,7 +151,7 @@ export function notificationsFor(
         id: `held:${hold.bookId}:${hold.heldAt}`,
         readerId: ME_ID,
         createdAt: hold.heldAt,
-        text: `登録した${quotedTitle(book)}のISBNは、${quoteTitle(masterTitle(hold.master))}のものです。本のページで確かめてください`,
+        text: `${hold.earlier ? "前に登録した" : "登録した"}${quotedTitle(book)}のISBNは、${quoteTitle(masterTitle(hold.master))}のものです。本のページで確かめてください`,
         href: bookPath(hold.bookId),
       });
   }

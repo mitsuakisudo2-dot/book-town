@@ -131,7 +131,8 @@ function HeldBookNote({
     <section className="note-box book-held" aria-labelledby={id}>
       <h2 id={id}>この本のISBNを確かめてください</h2>
       <p>
-        登録したISBN（{book.isbn}）は、{quote(masterTitle(hold.master))}
+        {hold.earlier ? "前に登録した" : "登録した"}ISBN（{book.isbn}）は、
+        {quote(masterTitle(hold.master))}
         {names && `（${names}）`}
         のものです。このお知らせは、あなたにだけ出ています。
       </p>

@@ -126,11 +126,13 @@ async function main() {
       volume?: string;
       reading?: string;
       creators?: { name: string; reading?: string; heading?: string }[];
+      alternatives?: string[];
+      volumeReading?: string;
     };
     const verdict = async (title: string, author: string, m: Master) =>
       (
         await rows<{ v: string }>(
-          "select private.bib_verdict($1, $2, $3, $4, $5, $6, $7::jsonb) as v",
+          "select private.bib_verdict($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9) as v",
           [
             title,
             author,
@@ -139,6 +141,8 @@ async function main() {
             m.volume ?? null,
             m.reading ?? null,
             m.creators ? JSON.stringify(m.creators) : null,
+            m.alternatives ? JSON.stringify(m.alternatives) : null,
+            m.volumeReading ?? null,
           ],
         )
       )[0].v;
@@ -197,15 +201,11 @@ async function main() {
         };
         assert.equal(await verdict("소년이 온다 1", "한강", korean), "same");
         assert.equal(await verdict("소년이 온다 2", "한강", korean), "apart");
-        assert.equal(await verdict("작별하지 않는다", "한강", korean), "close");
-        assert.equal(
-          await verdict("작별하지 않는다", "한강 지음", korean),
-          "close",
-        );
+        assert.equal(await verdict("소년이 온다", "한강 지음", korean), "same");
         assert.equal(await verdict("빛의 제국", "김영하", korean), "apart");
         // An author line in Cyrillic has people in it, either way round.
         assert.equal(
-          await verdict("Анна Каренина", "Толстой, Лев", {
+          await verdict("Война и мир, том 1", "Толстой, Лев", {
             title: "Война и мир",
             creators: [{ name: "Лев Толстой" }],
           }),
@@ -234,7 +234,7 @@ async function main() {
     );
 
     await check(
-      "close: one title inside the other, the title's reading, or an author of the master's",
+      "close: one title inside the other, the title's reading, or an author of the master's with titles that share letters or cannot be compared",
       async () => {
         assert.equal(
           await verdict("架空の図書館（新装版）", "", LIBRARY),
@@ -298,16 +298,17 @@ async function main() {
           await verdict("Война и мир 1", "", { title: "Война и мир" }),
           "close",
         );
-        // Titles apart, an author agreeing: by name, by reading, by the
-        // authority's form without its years.
+        // Titles sharing letters, an author agreeing: by name, by reading,
+        // by the authority's form without its years.
         assert.equal(
-          await verdict("ちがう題", "山田 一郎 著", LIBRARY),
+          await verdict("架空の書庫", "山田 一郎 著", LIBRARY),
           "close",
         );
         assert.equal(
-          await verdict("ちがう題", "ヤマダ イチロウ", LIBRARY),
+          await verdict("架空の書庫", "ヤマダ イチロウ", LIBRARY),
           "close",
         );
+        // Titles that cannot be compared (another script), an author agreeing.
         assert.equal(
           await verdict("Fahrenheit 451", "Ray Bradbury", {
             title: "華氏451度",
@@ -330,13 +331,6 @@ async function main() {
                 heading: "Bradbury, Ray, 1920-2012",
               },
             ],
-          }),
-          "close",
-        );
-        assert.equal(
-          await verdict("다른 책", "한강", {
-            title: "채식주의자",
-            creators: [{ name: "한강" }],
           }),
           "close",
         );
@@ -407,6 +401,38 @@ async function main() {
         );
         assert.equal(
           await verdict("菜食主義者", "", { title: "채식주의자" }),
+          "apart",
+        );
+        // Another book by the same writer: the titles share no letters
+        // (けにーさん, 2026-10-19 06:33Z: held, and asked once).
+        assert.equal(
+          await verdict("ちがう題", "山田 一郎 著", LIBRARY),
+          "apart",
+        );
+        assert.equal(
+          await verdict("ちがう題", "ヤマダ イチロウ", LIBRARY),
+          "apart",
+        );
+        assert.equal(
+          await verdict("작별하지 않는다", "한강", {
+            title: "소년이 온다",
+            volume: "1",
+            creators: [{ name: "한강" }],
+          }),
+          "apart",
+        );
+        assert.equal(
+          await verdict("다른 책", "한강", {
+            title: "채식주의자",
+            creators: [{ name: "한강" }],
+          }),
+          "apart",
+        );
+        assert.equal(
+          await verdict("Анна Каренина", "Толстой, Лев", {
+            title: "Война и мир",
+            creators: [{ name: "Лев Толстой" }],
+          }),
           "apart",
         );
         // An author line that names someone else entirely.
@@ -560,7 +586,7 @@ async function main() {
   );
 
   await check(
-    "a book clearly another is held: in a work of its own, shown nowhere with the master, its reader told; nobody else learns of it",
+    "a book clearly another is held: still in its edition's work, shown nowhere with the master, its reader told; nobody else learns of it",
     async () => {
       await register(CHI, chis, X(1), "まったく別の本");
       await post(CHI, chis);
@@ -570,9 +596,19 @@ async function main() {
       const held = await check_(chis);
       assert.equal(held.verdict, "apart");
       assert.equal(held.held, true);
-      assert.equal(held.in_edition_work, false);
+      // The book stays in its edition's work, with the other books of its
+      // ISBN.
+      assert.equal(held.in_edition_work, true);
+      assert.deepEqual(await moves(chis), []);
+      assert.deepEqual(
+        await as(null, "select work_id from books where id = $1", [chis]),
+        await rows(
+          "select e.work_id from editions e join books b on b.edition_id = e.id where b.id = $1",
+          [chis],
+        ),
+      );
+      // Its work's page and candidates leave it out, as before.
       assert.equal(held.counts, false);
-      assert.deepEqual(await moves(chis), [{ kind: "hold", to_held: true }]);
       // Nobody is shown the master for it: not Chi, not a visitor of her post.
       for (const visitor of [CHI, AKI, null])
         assert.deepEqual(await shown(visitor, [chis]), [], String(visitor));
@@ -597,12 +633,12 @@ async function main() {
       );
       await judge();
       assert.deepEqual(await check_(chis), held);
-      assert.equal((await moves(chis)).length, 1);
+      assert.deepEqual(await moves(chis), []);
     },
   );
 
   await check(
-    "the reader says it is the ISBN's: back in its edition's work, the master shows, and it is not judged again until it is placed again; nobody else can say it",
+    "the reader says it is the ISBN's: the master shows, it counts in its work, and it is not judged again until it is placed again; nobody else can say it",
     async () => {
       await refused(
         () => as(AKI, "select confirm_book_isbn($1)", [chis]),
@@ -630,10 +666,7 @@ async function main() {
       assert.equal(back.held, false);
       assert.equal(back.in_edition_work, true);
       assert.equal(back.counts, true);
-      assert.deepEqual(
-        (await moves(chis)).map((m) => m.kind),
-        ["hold", "unhold"],
-      );
+      assert.deepEqual(await moves(chis), []);
       assert.equal((await shown(null, [chis]))[0].title, "架空の図書館");
       assert.deepEqual(await holds(CHI), []);
       await refused(
@@ -674,7 +707,7 @@ async function main() {
   );
 
   await check(
-    "the reader's edits judge a book again: a held one fixed goes back, one edited into another book is held anew and told again",
+    "the reader's edits judge a book again: a held one fixed is held no more, one edited into another book is held anew and told again",
     async () => {
       const book = id(1, 4);
       await register(CHI, book, X(1), "ちがう本");
@@ -700,25 +733,20 @@ async function main() {
       await tick();
       const again = await check_(book);
       assert.equal(again.held, true);
-      assert.equal(again.in_edition_work, false);
-      assert.deepEqual(
-        (await moves(book)).map((m) => m.kind),
-        ["hold", "unhold", "hold"],
-      );
-      // Held again, in the work it was held in before, empty since.
-      assert.equal(
-        await count(
-          "select count(distinct to_work) from private.work_changes where book_id = $1 and kind = 'hold'",
-          [book],
-        ),
-        1,
-      );
+      assert.equal(again.in_edition_work, true);
+      assert.deepEqual(await moves(book), []);
       assert.deepEqual(
         (await holds(CHI)).map((h) => h.book_id),
         [book],
       );
-      // An author agreeing is enough.
+      // An author agreeing is not enough with titles that share no letters
+      // (another book of theirs); with titles that do, it is.
       await as(CHI, "update books set author = '山田一郎' where id = $1", [
+        book,
+      ]);
+      await tick();
+      assert.equal((await check_(book)).verdict, "apart");
+      await as(CHI, "update books set title = '架空の書庫' where id = $1", [
         book,
       ]);
       await tick();
@@ -817,10 +845,7 @@ async function main() {
         assert.equal(back.held, false, book);
         assert.equal(back.in_edition_work, true, book);
       }
-      assert.deepEqual(
-        (await moves(akis)).map((m) => m.kind),
-        ["hold", "unhold"],
-      );
+      assert.deepEqual(await moves(akis), []);
       // A source withdrawn marks the edition's books to be judged again from
       // what is left (openBD's title), and allowed back, again.
       await rows("select private.withdraw_bibliography($1, 'ndl')", [akis]);
@@ -939,10 +964,7 @@ async function main() {
       assert.equal(back.confirmed, true);
       assert.equal(back.in_edition_work, true);
       assert.equal(back.counts, true);
-      assert.deepEqual(
-        (await moves(gone)).map((m) => m.kind),
-        ["hold", "unhold"],
-      );
+      assert.deepEqual(await moves(gone), []);
       for (const book of [gone, akis, id(9, 9)])
         await refused(
           () => rows("select private.release_hold($1)", [book]),
@@ -1049,8 +1071,10 @@ async function main() {
       assert.deepEqual(await asking("openbd"), [`${X(41)},${X(40)}`]);
       await answerAll(db, forty, fortyOpen);
       await tick();
-      assert.deepEqual(await asking("ndl"), [X(40)]);
-      await answerAll(db, forty, fortyOpen);
+      // Chi's X40 is then answered by the library's answer to Ben, used
+      // again (20261119000000_bibliography_fetching.sql): no question goes,
+      // and it comes at the next tick, as an answer would.
+      assert.deepEqual(await asking("ndl"), []);
       await tick();
       assert.equal(await sees(chis40), "四十の本");
       await later(11);
@@ -1062,7 +1086,7 @@ async function main() {
   );
 
   await check(
-    "a book on an ISBN answered before, in private, waits for its own answers: no verdict ten minutes on until they come; a source answering that it has nothing ends the wait",
+    "a book on an ISBN answered before, in private, waits for its own answers (the library's answer kept, used again at its turn, is one): no verdict ten minutes on until they come; a source answering that it has nothing ends the wait",
     async () => {
       const bens42 = id(4, 4);
       const akis42 = id(4, 5);
@@ -1078,12 +1102,14 @@ async function main() {
       await tick();
       await later(11);
       await tick();
-      for (const book of [akis42, akis43]) {
-        const waiting = await check_(book);
-        assert.equal(waiting.verdict, null, book);
-        assert.equal(waiting.checked, true, book);
-        assert.equal(waiting.counts, false, book);
-      }
+      // The library's answer to Ben is a day old at most: it answers Aki's
+      // X42 at its turn (20261119000000_bibliography_fetching.sql), ten
+      // minutes on as any answer.
+      assert.equal((await check_(akis42)).verdict, "same");
+      const waiting = await check_(akis43);
+      assert.equal(waiting.verdict, null);
+      assert.equal(waiting.checked, true);
+      assert.equal(waiting.counts, false);
       // The answers come after the ten minutes: X42 found, X43 nowhere.
       const nowhere = async () => {
         for (const q of await questions())

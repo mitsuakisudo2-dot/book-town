@@ -87,6 +87,7 @@ async function edgeChecks(check: Check) {
     rows,
     as,
     refused,
+    count,
     register,
     tick,
     judge,
@@ -135,7 +136,8 @@ async function edgeChecks(check: Check) {
            settled_at = case when v.state <> 'waiting' then now() end,
            settled_for = case when v.state <> 'waiting' then now() end,
            tried_for = case when v.state <> 'waiting' then now() end,
-           status = case when s.source = 'ndl' then v.status end, next_at = now() - v.ago
+           status = case when s.source = 'ndl' then v.status end, next_at = now() - v.ago,
+           owed = v.state = 'waiting'
          from editions e, (values ($1, 'found', null, interval '3 days'),
            ($2, 'missing', null, interval '2 days'), ($3, 'found', 'C3', interval '1 day'),
            ($4, 'waiting', null, interval '1 hour'), ($5, 'found', null, interval '4 days'))
@@ -202,8 +204,27 @@ async function edgeChecks(check: Check) {
           bens,
           there,
         ]);
-        for (let turn = 0; turn < 3; turn++) await tick();
-        assert.deepEqual(await libraryAsked(), [...others, there], there);
+        // Y12's answer from the library is new enough to be used again
+        // (20261119000000_bibliography_fetching.sql): at its turn, after the
+        // other two, and no question goes.
+        const reused: number[] = [];
+        for (let turn = 0; turn < 3; turn++) {
+          await tick();
+          reused.push(
+            await count(
+              `select count(*) from private.edition_sources s join editions e on e.id = s.edition_id
+               where e.isbn = $1 and s.source = 'ndl' and s.request_id = -1`,
+              [there],
+            ),
+          );
+        }
+        const anew = there === Y(11);
+        assert.deepEqual(
+          await libraryAsked(),
+          anew ? [...others, there] : others,
+          there,
+        );
+        assert.deepEqual(reused, anew ? [0, 0, 0] : [0, 0, 1], there);
         await settle();
       }
     },
@@ -257,7 +278,8 @@ async function edgeChecks(check: Check) {
       await tick();
       const two = await kept(Y(2), "ndl");
       assert.equal(two.misses, 1);
-      assert.equal(two.wait, "1 day");
+      // Twice the day: none of Y2's books is in a public place.
+      assert.equal(two.wait, "2 days");
       const three = await kept(Y(3), "ndl");
       assert.equal(three.failures, 1);
       assert.equal(three.wait, "00:10:00");
@@ -287,7 +309,7 @@ async function edgeChecks(check: Check) {
     );
 
   await check(
-    "a book placed while a question is out, and the operator asking again then, get another question once it is answered",
+    "a book placed while a question is out is answered again once it is answered, and the operator asking again then gets another question",
     async () => {
       await register(AKI, id(3, 8), EIGHT, "八冊目");
       await tick();
@@ -296,12 +318,14 @@ async function edgeChecks(check: Check) {
       assert.equal((await kept(EIGHT, "ndl")).asked, true);
       await answerEight();
       await tick();
-      // The answer settles Aki's ask, not Ben's: the next question goes in
-      // the same turn, and only its answer shows on Ben's book.
+      // The answer settles Aki's ask, not Ben's: Ben's is answered in the
+      // same turn, by the library's answer used again (no question goes,
+      // 20261119000000_bibliography_fetching.sql), and openBD is asked; only
+      // those answers show on Ben's book, at the next tick.
       const library = await kept(EIGHT, "ndl");
       assert.equal(library.state, "found");
       assert.equal(library.asked, true);
-      assert.deepEqual(await libraryAsked(), [EIGHT]);
+      assert.deepEqual(await libraryAsked(), []);
       assert.deepEqual(await openbdAsked(), [[EIGHT]]);
       await later(11);
       await judge();
@@ -795,6 +819,14 @@ async function main() {
           plainTitle: "架空の図書館. 上 : 夜の章",
           reading: "カクウ ノ トショカン : ヨル ノ ショウ",
           volume: "上",
+          volumeReading: "ジョウ",
+          alternatives: [
+            {
+              value: "Imaginary library",
+              reading: "イマジナリー ライブラリー",
+            },
+          ],
+          descriptions: ["原タイトル: THE IMAGINARY LIBRARY", "索引あり"],
           edition: "新装版",
           series: [
             { value: "空想文庫 ; 12", reading: "クウソウ ブンコ ; 12" },
@@ -856,6 +888,13 @@ async function main() {
         publisher: "架空書房 & 夜社",
         issued: "2014-06",
         ndc: "933.7",
+        // For comparing what readers type, not shown (AUD-013, AUD-088).
+        volume_reading: "ジョウ",
+        alternatives: [
+          "Imaginary library",
+          "イマジナリー ライブラリー",
+          "THE IMAGINARY LIBRARY",
+        ],
       });
       // The record is kept as it came, but for the libraries that hold it.
       assert.match(answer.record ?? "", /^<dcndl:BibResource /);
@@ -912,7 +951,11 @@ async function main() {
         }),
         X1,
       );
-      assert.deepEqual(dated.fields, { title: "題だけの本", issued: "1997" });
+      assert.deepEqual(dated.fields, {
+        title: "題だけの本",
+        issued: "1997",
+        alternatives: ["ANOTHER TITLE"],
+      });
       assert.equal(
         (
           await ndl(
@@ -1139,11 +1182,13 @@ async function main() {
       assert.equal(library.record_id, "000000011");
       assert.equal(library.out, false);
       assert.equal((library.fields as { title: string }).title, "架空の図書館");
-      // A finished record of a book out more than a year ago: twice a year.
-      assert.equal(library.wait, "180 days");
+      // A finished record of a book out more than a year ago: twice a year,
+      // and half as often for an edition only registered privately, as X1's
+      // (20261119000000_bibliography_fetching.sql).
+      assert.equal(library.wait, "360 days");
       const open1 = await kept(X1, "openbd");
       assert.equal(open1.state, "found");
-      assert.equal(open1.wait, "30 days");
+      assert.equal(open1.wait, "60 days");
       assert.equal(
         (open1.fields as { title: string }).title,
         "架空の図書館（新装版）",
@@ -1227,7 +1272,7 @@ async function main() {
       assert.equal(after.state, "missing");
       assert.equal((after.fields as { title: string }).title, "架空の図書館");
       assert.equal(after.misses, 1);
-      assert.equal(after.wait, "1 day");
+      assert.equal(after.wait, "2 days");
       const gone = await kept(X1, "openbd");
       assert.deepEqual(gone.fields, {});
       assert.equal(gone.record, null);
@@ -1235,7 +1280,8 @@ async function main() {
       await take("ndl", "failed");
       assert.equal((await kept(X1, "ndl")).misses, 1);
       assert.equal((await master()).title, "架空の図書館");
-      // How long until it is asked again.
+      // How long until it is asked again (twice as long after an answer for
+      // X1's edition, only registered privately; failures as they are).
       const waits: [
         string,
         string,
@@ -1243,10 +1289,10 @@ async function main() {
         string | null,
         string,
       ][] = [
-        ["ndl", "missing", null, null, "7 days"],
-        ["ndl", "missing", null, null, "30 days"],
-        ["ndl", "missing", null, null, "90 days"],
-        ["ndl", "missing", null, null, "90 days"],
+        ["ndl", "missing", null, null, "14 days"],
+        ["ndl", "missing", null, null, "60 days"],
+        ["ndl", "missing", null, null, "180 days"],
+        ["ndl", "missing", null, null, "180 days"],
         ["ndl", "failed", null, null, "00:10:00"],
         ["ndl", "failed", null, null, "01:00:00"],
         ["ndl", "failed", null, null, "06:00:00"],
@@ -1261,7 +1307,7 @@ async function main() {
             issued: "2001",
           },
           "C3",
-          "7 days",
+          "14 days",
         ],
         [
           "ndl",
@@ -1273,14 +1319,14 @@ async function main() {
             issued: "2001",
           },
           "C7",
-          "180 days",
+          "360 days",
         ],
         [
           "ndl",
           "found",
           { title: "t", publisher: "p", issued: "2001" },
           "C7",
-          "30 days",
+          "60 days",
         ],
         [
           "ndl",
@@ -1292,9 +1338,9 @@ async function main() {
             issued: new Date().toISOString().slice(0, 7),
           },
           "C7",
-          "30 days",
+          "60 days",
         ],
-        ["openbd", "found", { title: "t" }, null, "30 days"],
+        ["openbd", "found", { title: "t" }, null, "60 days"],
       ];
       for (const [source, state, fields, status, wait] of waits) {
         await take(source, state, fields, status);
@@ -1532,8 +1578,13 @@ async function main() {
           String(visitor),
         );
       await tick();
+      // The library is asked about X3 only: what it said about X1 is less
+      // than a week old, and answers Chi's copy at the next tick, as an
+      // answer to a question would (20261119000000_bibliography_fetching.sql).
+      // openBD is asked about both.
       const asked = await questions();
-      assert.match(asked[0].url, new RegExp(`isbn%3D%22${X1}%22`));
+      assert.equal(asked.length, 2);
+      assert.match(asked[0].url, new RegExp(`isbn%3D%22${X3}%22`));
       assert.equal(
         new URL(asked[1].url).searchParams.get("isbn"),
         `${X1},${X3}`,

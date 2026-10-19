@@ -49,6 +49,12 @@ export type Ndl = {
   plainTitle?: string;
   reading?: string;
   volume?: string;
+  /** The volume's reading: 1 for 巻1, ジョウ for 上 (見本). */
+  volumeReading?: string;
+  /** Other titles (dcndl:alternative), with their readings. */
+  alternatives?: { value: string; reading?: string }[];
+  /** dcterms:description, as 原タイトル: FAHRENHEIT 451 (見本). */
+  descriptions?: string[];
   edition?: string;
   series?: { value: string; reading?: string }[];
   agents?: Agent[];
@@ -109,10 +115,11 @@ export function ndlRecord(r: Ndl): string {
     <dcterms:identifier rdf:datatype="http://ndl.go.jp/dcndl/terms/TOHANMARCNO">88888888</dcterms:identifier>
     ${r.isbns.map((i) => `<dcterms:identifier rdf:datatype="http://ndl.go.jp/dcndl/terms/ISBN">${i}</dcterms:identifier>`).join("")}
     <dcndl:partInformation><rdf:Description><dcterms:title>収めた一編</dcterms:title><dcndl:transcription>オサメタ イッペン</dcndl:transcription></rdf:Description></dcndl:partInformation>
-    ${described("dcndl:alternative", "ANOTHER TITLE")}
+    ${(r.alternatives ?? [{ value: "ANOTHER TITLE" }]).map((a) => described("dcndl:alternative", a.value, a.reading)).join("")}
     ${text("dcterms:title", r.plainTitle ?? r.title)}
     ${described("dc:title", r.title, r.reading)}
-    ${r.volume ? described("dcndl:volume", r.volume, "カン") : ""}
+    ${r.volume ? described("dcndl:volume", r.volume, r.volumeReading ?? "カン") : ""}
+    ${(r.descriptions ?? []).map((d) => text("dcterms:description", d)).join("")}
     ${(r.series ?? []).map((s) => described("dcndl:seriesTitle", s.value, s.reading)).join("")}
     ${text("dcndl:edition", r.edition)}
     ${(r.agents ?? [])
@@ -375,13 +382,37 @@ export function helpers(db: PGlite) {
          settled_for = settled_for - (select i from i),
          found_for = found_for - (select i from i), title_for = title_for - (select i from i)`,
       [minutes],
+    ).then(() =>
+      // And, from 20261119000000_bibliography_fetching.sql, the readers'
+      // turns and when the library last said it no longer had a record.
+      db.exec(
+        `do $$ begin
+           if to_regclass('private.bib_pace') is not null then
+             update private.bib_pace set next_at = next_at - make_interval(mins => ${Number(minutes)});
+             update private.edition_sources
+             set lost_at = lost_at - make_interval(mins => ${Number(minutes)});
+           end if;
+         end $$`,
+      ),
     );
-  /** Nothing owed or due: no source is asked anything until a book moves. */
+  /**
+   * Nothing owed or due: no source is asked anything until a book moves, and
+   * no reader's books wait their turn.
+   */
   const quiet = () =>
     rows(
       `update private.edition_sources set settled_at = now(), refetch_at = null,
          settled_for = now(), tried_for = now(), next_at = now() + interval '1 day'
        where request_id is null`,
+    ).then(() =>
+      db.exec(
+        `do $$ begin
+           if to_regclass('private.bib_pace') is not null then
+             update private.edition_sources set owed = false where request_id is null;
+             delete from private.bib_pace;
+           end if;
+         end $$`,
+      ),
     );
   /** Every question out goes unanswered past its fifteen minutes; then quiet. */
   const settle = async () => {

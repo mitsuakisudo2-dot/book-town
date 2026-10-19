@@ -5116,6 +5116,23 @@ try {
       await expect(
         page.locator(".book-page-hero").getByRole("heading", { level: 1 }),
       ).toHaveText("こころの本");
+      // Its ISBN is likely another book's: the page shows its 装丁カード, not
+      // that book's cover, nor a request about a cover it does not show.
+      const hero = page.locator(".book-page-hero");
+      await expect(hero.locator(".jacket-title")).toBeVisible();
+      await expect(hero.locator("img")).toHaveCount(0);
+      await expect(page.locator(".cover-credit")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "表紙の削除依頼はこちら" }),
+      ).toHaveCount(0);
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await noOverflow(`held book cover ${width}`);
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.screenshot({
+          path: path.join(output, `19-held-cover-${width}.png`),
+        });
+      }
       await noOverflow("held book page");
       await note.scrollIntoViewIfNeeded();
       await page.screenshot({
@@ -5218,6 +5235,16 @@ try {
       );
       expect(confirmAsks).toEqual([COVER_BOOK]);
       await expect(note).toHaveCount(0);
+      // The ISBN's cover is its own after all.
+      await expect(page.locator(".cover-credit")).toContainText("openBD");
+      await expect(hero.locator("img")).toBeVisible();
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.screenshot({
+          path: path.join(output, `19-held-confirmed-cover-${width}.png`),
+        });
+      }
       await expect
         .poll(() => bibliographyAsks.slice(asked))
         .toContain(COVER_BOOK);
@@ -5242,6 +5269,32 @@ try {
         .click();
       await expect(page).toHaveURL(/\/notifications\/$/);
       await expect(heldNotices).toHaveCount(1);
+      // Held a day or more after it was placed (the sources answered late,
+      // or the books were judged again): told as a book registered before.
+      holds = [{ ...heldRow, placed_at: ago(48), held_at: ago(0.4) }];
+      await page.reload();
+      await expect(heldNotices).toContainText(
+        "前に登録した『こころの本』のISBNは、『別の本』のものです。本のページで確かめてください",
+      );
+      for (const width of [390, 320]) {
+        await page.setViewportSize({ width, height: 844 });
+        await noOverflow(`held earlier notice ${width}`);
+        await page.screenshot({
+          path: path.join(output, `19-held-earlier-notice-${width}.png`),
+        });
+      }
+      await heldNotices.getByRole("link").click();
+      await expect(note).toContainText(
+        `前に登録したISBN（${OPENBD_ISBN}）は、『別の本』（山田一郎）のものです。`,
+      );
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await noOverflow(`held earlier book page ${width}`);
+        await note.scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: path.join(output, `19-held-earlier-book-${width}.png`),
+        });
+      }
       holds = [];
       booksFixed.length = 0;
     },
@@ -6652,20 +6705,78 @@ try {
     },
   );
 
+  // The master of こころの本 as the database gives it once its sources answer.
+  const coverMaster = {
+    book_id: COVER_BOOK,
+    title: "こころ",
+    subtitle: null,
+    volume: null,
+    edition: null,
+    series: [],
+    creators: [{ name: "山田一郎", role: "著" }],
+    publisher: null,
+    issued: null,
+    sources: { title: "ndl", creators: "ndl" },
+  };
+
+  await check(
+    "another reader's book shows its ISBN's cover once its master is shown, so a held one looks like any other",
+    async () => {
+      // A visitor: every book is another reader's. A held book has no master
+      // for anyone else, like one whose sources have not answered yet.
+      town = filled();
+      const hero = page.locator(".book-page-hero");
+      const asked = bibliographyAsks.length;
+      await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
+      await expect(hero.getByRole("heading", { level: 1 })).toHaveText(
+        "こころの本",
+      );
+      await expect
+        .poll(() => bibliographyAsks.slice(asked))
+        .toContain(COVER_BOOK);
+      await expect(hero.locator(".jacket-title")).toBeVisible();
+      await expect(hero.locator("img")).toHaveCount(0);
+      await expect(page.locator(".cover-credit")).toHaveCount(0);
+      await page.screenshot({
+        path: path.join(output, "19-theirs-no-master-390.png"),
+      });
+      masters = [coverMaster];
+      await page.reload();
+      await expect(hero.getByRole("heading", { level: 1 })).toHaveText(
+        "こころ",
+      );
+      // Beside 書誌の出典, which the master brings.
+      await expect(
+        page.locator(".cover-credit").filter({ hasText: "表紙" }),
+      ).toContainText("openBD");
+      await expect(hero.locator("img")).toBeVisible();
+      await page.screenshot({
+        path: path.join(output, "19-theirs-master-390.png"),
+      });
+      masters = [];
+      town = null;
+    },
+  );
+
   await check(
     "a visitor is not offered a cover removal request they could not send",
     async () => {
       // Signing in is by invitation, so the link would only lead to a sign-in
-      // a rights holder without an account cannot finish.
+      // a rights holder without an account cannot finish. The cover is shown
+      // to a visitor once the book's master is.
       town = filled();
+      masters = [coverMaster];
       const asks = annotateAsks.length;
       await page.goto(base + "/books/registered/?id=" + COVER_BOOK);
-      await expect(page.locator(".cover-credit")).toContainText("openBD");
+      await expect(
+        page.locator(".cover-credit").filter({ hasText: "表紙" }),
+      ).toContainText("openBD");
       await expect(
         page.getByRole("button", { name: "表紙の削除依頼はこちら" }),
       ).toHaveCount(0);
       // Nor asked whether they are staff.
       expect(annotateAsks.length).toBe(asks);
+      masters = [];
       town = null;
     },
   );

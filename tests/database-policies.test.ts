@@ -5774,8 +5774,8 @@ async function main() {
       { post: true, shop: false, other_reader_id: BEN, memo: "ベンの言葉" },
     ]);
     // And the rest of what a reader can leave: blocks both ways, follows
-    // both ways, a fold on his profile, reading, a shop followed, and the
-    // notes and staff row of an annotator.
+    // both ways, a fold on his profile, reading, a shop followed, the notes
+    // and staff row of an annotator, and his books' turns.
     await operator(`
       insert into blocks (blocker_id, blocked_id)
         values ('${BEN}', '${CHI}'), ('${CHI}', '${BEN}') on conflict do nothing;
@@ -5792,6 +5792,8 @@ async function main() {
         values ('${BEN}', '/', 1, 1, 390, 844, 0, 'ベンの注釈');
       insert into private.site_reports (user_id, kind, body)
         values ('${BEN}', 'wish', 'ベンの要望');
+      insert into private.bib_pace (reader, next_at)
+        values ('${BEN}', now()) on conflict do nothing;
       insert into private.shop_visitor_weeks (shop_id, week, visitors)
         select id, private.last_visit_week(), 1 from shops where owner_id = '${BEN}';
     `);

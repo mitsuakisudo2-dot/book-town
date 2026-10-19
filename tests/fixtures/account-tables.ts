@@ -180,6 +180,10 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   "private.edition_sources": { people: {}, readers: "nobody" },
   "private.edition_fixes": { people: {}, readers: "nobody" },
   "private.book_checks": { people: {}, readers: "nobody" },
+  // When each reader's next book would be placed, so that one reader's many
+  // books take turns (bibliography_fetching); it goes with the account, and
+  // an hour after the reader's last book.
+  "private.bib_pace": { people: { reader: "delete" }, readers: "nobody" },
   // Books to compare again that an answer could not mark (bibliography_holds).
   "private.book_rechecks": {
     people: {},

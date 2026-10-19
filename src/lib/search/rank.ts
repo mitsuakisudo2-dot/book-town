@@ -22,7 +22,8 @@ import {
   type QueryGrams,
 } from "./postings";
 import { romajiToKana } from "./romaji";
-import { SOFT_TERM, VOLUME_TERM, volumeNumber } from "./title";
+import { isSoftTerm } from "./title";
+import { sameVolume, volumeMark } from "./volume";
 
 // Finding books for a query and putting them in order (docs: search design
 // §5–6). Every match has a class; a higher class always comes first. Within a
@@ -425,8 +426,8 @@ interface Query {
 function readQuery(raw: string): Query | null {
   const typed = raw.normalize("NFKC").trim().slice(0, 100);
   const all = typed.split(/\s+/).filter(Boolean);
-  const soft = all.filter((word, i) => i > 0 && SOFT_TERM.test(word));
-  const words = all.filter((word, i) => !(i > 0 && SOFT_TERM.test(word)));
+  const soft = all.filter((word, i) => i > 0 && isSoftTerm(word));
+  const words = all.filter((word, i) => !(i > 0 && isSoftTerm(word)));
   const forms = formsOf(words.join(" "));
   if (!forms.length) return null;
   const byWord = words.length > 1 ? words.map(formsOf) : [];
@@ -533,11 +534,12 @@ function scoreBook(query: Query, keys: BookKeys, byGenre = true): Hit | null {
 
 /** Whether the book is the edition or volume a soft word asks for (文庫, 下). */
 function softMatch(soft: string[], keys: BookKeys): boolean {
-  return soft.some((word) =>
-    VOLUME_TERM.test(word)
-      ? keys.parts.volume > 0 && volumeNumber(word) === keys.parts.volume
-      : keys.parts.edition.includes(word),
-  );
+  return soft.some((word) => {
+    const mark = volumeMark(word);
+    return mark !== null
+      ? keys.parts.mark !== "" && sameVolume(mark, keys.parts.mark)
+      : keys.parts.edition.includes(word);
+  });
 }
 
 /** A small step for presence: 0–3, so one shelf counts and many do not count much more. */
