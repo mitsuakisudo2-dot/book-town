@@ -3,7 +3,11 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { AccountState } from "./account";
 import { useAccountState } from "./account-session";
-import type { Bibliography, BookHold } from "./bibliography";
+import {
+  showsIsbnCover,
+  type Bibliography,
+  type BookHold,
+} from "./bibliography";
 import { bookKind } from "./samples";
 import { getSupabase } from "./supabase/client";
 import {
@@ -11,6 +15,7 @@ import {
   askHolds,
   BIBLIOGRAPHY_BATCH,
 } from "./supabase/bibliography";
+import type { Book } from "./types";
 
 // The bibliographic master of the books on screen, asked of the database
 // once per account and page load and kept here. A book of the demo, a 見本 or
@@ -111,11 +116,15 @@ export function forgetBibliography(bookId: string) {
 
 /**
  * The master of this book, or null while it is asked and when it has none
- * (the screen then shows what its reader typed).
+ * (the screen then shows what its reader typed). Not asked when `asked` is
+ * false.
  */
-export function useBibliography(bookId: string): Bibliography | null {
+export function useBibliography(
+  bookId: string,
+  asked = true,
+): Bibliography | null {
   const asker = ownerOf(useAccountState());
-  const wanted = asker !== null && bookKind(bookId) === "database";
+  const wanted = asked && asker !== null && bookKind(bookId) === "database";
   const master = useSyncExternalStore(
     subscribe,
     () =>
@@ -198,6 +207,33 @@ export function useBookHolds(fresh = false): BookHold[] {
 /** The hold on this book of the reader's, if it is held. */
 export function useBookHold(bookId: string): BookHold | null {
   return useBookHolds().find((hold) => hold.bookId === bookId) ?? null;
+}
+
+/**
+ * The ISBN whose cover this book shows, or undefined for its 装丁カード
+ * (showsIsbnCover): the reader's own book's once their holds leave it out,
+ * another reader's once its master is shown.
+ */
+export function useCoverIsbn(
+  book: Pick<Book, "id" | "isbn" | "coverUrl" | "theirs">,
+): string | undefined {
+  const asker = ownerOf(useAccountState());
+  const reader = asker === "visitor" ? null : asker;
+  const database = bookKind(book.id) === "database";
+  const own = database && reader !== null && !book.theirs;
+  const isbn = book.coverUrl ? undefined : book.isbn;
+  const master = useBibliography(book.id, Boolean(isbn) && database && !own);
+  const list = useBookHolds();
+  const known = useSyncExternalStore(
+    subscribe,
+    () => Boolean(reader && holds?.reader === reader && holds.list),
+    () => false,
+  );
+  if (!isbn) return undefined;
+  const held = known ? list.some((hold) => hold.bookId === book.id) : null;
+  return showsIsbnCover({ database, own, held, hasMaster: master !== null })
+    ? isbn
+    : undefined;
 }
 
 /** Takes the book off the list: its reader answered the hold. */
