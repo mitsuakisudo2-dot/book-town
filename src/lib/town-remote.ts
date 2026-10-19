@@ -1108,9 +1108,10 @@ export function moreFromRows(
  * its id (a 見本's by its own), and the works most shelved and talked of,
  * each by the book the database stood it for. Their books are not taken:
  * the page shows the town's book of each work, as only the town's books
- * open. Nothing of what is not of the answer's shape.
+ * open. Nothing of what is not of the answer's shape. `asked` are the
+ * books it was asked of, by the town's ids.
  */
-export function countsFromAnswer(answer: unknown): TownMore {
+export function countsFromAnswer(answer: unknown, asked: string[]): TownMore {
   const id = (bookId: string) => sampleBookOfRow(bookId) ?? bookId;
   const counted = (value: unknown): TownCount | null => {
     const count = value as Partial<Record<keyof TownCount, unknown>> | null;
@@ -1147,7 +1148,12 @@ export function countsFromAnswer(answer: unknown): TownMore {
     });
   return {
     ...emptyMore(),
-    counts: { books, shelved: top(given.shelved), talked: top(given.talked) },
+    counts: {
+      books,
+      asked,
+      shelved: top(given.shelved),
+      talked: top(given.talked),
+    },
   };
 }
 

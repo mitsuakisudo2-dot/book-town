@@ -74,6 +74,8 @@ export interface TownCount {
 export interface TownCounts {
   /** By book id: the town's books when it was asked, and the books below. */
   books: Record<string, TownCount>;
+  /** The books asked of; one without counts above is counted by none. */
+  asked: string[];
   /** The works most shelved, the most first, each by a book of it. */
   shelved: CountedWork[];
   /** The works most talked of, the most first, each by a book of it. */

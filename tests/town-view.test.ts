@@ -490,6 +490,14 @@ async function main() {
         most,
         [...most].sort((a, b) => b - a),
       );
+      // A book the database was not asked of (come since) is counted by
+      // the town, never taken for one on no shelf.
+      const unasked = { ...read.counts, asked: [], books: {} };
+      assert.equal(
+        bookSignals(state, unasked).get(shelf)?.shelves,
+        bookSignals(state).get(shelf)?.shelves,
+      );
+      assert.ok(read.counts.asked.includes(quiet));
       backend.close?.();
       // A database from before town_counts: the page counts the town.
       const before = accountTownBackend(

@@ -104,10 +104,35 @@ async function as<T = Record<string, unknown>>(
 
 type Count = { shelves: number; talk: number; reviews: number };
 
+/** The functions of the counts, for their rights and for what undoing leaves. */
+const NAMES = [
+  "town_counts",
+  "counts_of",
+  "top_works",
+  "work_faces",
+  "shelf_works",
+  "post_counted",
+  "shop_shown",
+  "add_counts",
+  "add_posts",
+  "add_shops",
+  "book_part",
+  "target_part",
+  "count_posts",
+  "count_shops",
+  "count_book",
+  "count_moderation",
+  "tally_all",
+  "recount_all",
+]
+  .map((name) => `'${name}'`)
+  .join(", ");
+
 /** What the table keeps, by work. */
 async function kept(db: PGlite): Promise<Map<string, Count>> {
   const { rows } = await db.query<Count & { work_id: string }>(
-    "select work_id, shelves, talk, reviews from private.work_counts",
+    `select work_id, shelves, talk, reviews from private.work_counts
+     where shelves <> 0 or talk <> 0 or reviews <> 0`,
   );
   return new Map(
     rows.map(({ work_id, ...count }) => [work_id, count] as const),
@@ -117,8 +142,7 @@ async function kept(db: PGlite): Promise<Map<string, Count>> {
 /** Every work counted again from every row, as the database counts it. */
 async function counted(db: PGlite): Promise<Map<string, Count>> {
   const { rows } = await db.query<Count & { work_id: string }>(
-    `select w.id as work_id, t.shelves, t.talk, t.reviews
-     from works w cross join lateral private.work_tally(w.id) t
+    `select t.work_id, t.shelves, t.talk, t.reviews from private.tally_all() t
      where t.shelves > 0 or t.talk > 0`,
   );
   return new Map(
@@ -512,6 +536,33 @@ async function main() {
     assert.deepEqual(sorted(await kept(db)), sorted(await counted(db)));
   });
 
+  await check(
+    "the night's recount sets what drifted, and runs every night",
+    async () => {
+      const work = await workOf(db, RAIN);
+      await db.exec(`
+        update private.work_counts set talk = talk + 5, shelves = -2
+        where work_id = '${work}';
+        insert into private.work_counts (work_id, talk)
+        select id, 3 from works
+        where id not in (select work_id from private.work_counts) limit 1;`);
+      assert.notDeepEqual(sorted(await kept(db)), sorted(await counted(db)));
+      // Read, a count below 0 is 0.
+      const [{ answer }] = await as<{
+        answer: { counts: { shelves: number }[] };
+      }>(db, AKI, "select town_counts(array[$1]::uuid[], 0) as answer", [RAIN]);
+      assert.ok(answer.counts.every((count) => count.shelves >= 0));
+      await db.exec("select private.recount_all()");
+      assert.deepEqual(sorted(await kept(db)), sorted(await counted(db)));
+      const { rows } = await db.query(
+        "select schedule, command from cron.job where jobname = 'work-counts'",
+      );
+      assert.deepEqual(rows, [
+        { schedule: "30 18 * * *", command: "select private.recount_all()" },
+      ]);
+    },
+  );
+
   await check("nobody reads the table but the functions", async () => {
     for (const visitor of [null, AKI]) {
       let refused = false;
@@ -522,8 +573,9 @@ async function main() {
       }
       assert.ok(refused, String(visitor));
       for (const sql of [
-        `select private.recount_work('${await workOf(db, RAIN)}')`,
-        `select private.work_tally('${await workOf(db, RAIN)}')`,
+        "select private.recount_all()",
+        "select private.tally_all()",
+        `select private.add_counts(array['${await workOf(db, RAIN)}']::uuid[], '{1}', '{1}', '{1}')`,
       ]) {
         let stopped = false;
         try {
@@ -540,10 +592,7 @@ async function main() {
          has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
          exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0) as everyone
        from pg_proc p
-       where p.proname in ('town_counts', 'counts_for', 'top_works',
-         'work_faces', 'work_tally', 'recount_work', 'recount_books',
-         'recount_book_texts', 'recount_target', 'shelf_books', 'count_posts',
-         'count_shops', 'count_books', 'count_moderation')
+       where p.proname in (${NAMES})
        order by 1`,
     );
     const shut = (name: string, definer = true) => ({
@@ -561,20 +610,24 @@ async function main() {
       everyone: false,
     });
     assert.deepEqual(rows, [
-      shut("count_books"),
+      shut("add_counts"),
+      shut("add_posts"),
+      shut("add_shops"),
+      shut("book_part"),
+      shut("count_book"),
       shut("count_moderation"),
       shut("count_posts"),
       shut("count_shops"),
-      open("counts_for"),
-      shut("recount_book_texts"),
-      shut("recount_books"),
-      shut("recount_target"),
-      shut("recount_work"),
-      shut("shelf_books", false),
+      open("counts_of"),
+      shut("post_counted"),
+      shut("recount_all"),
+      shut("shelf_works"),
+      shut("shop_shown"),
+      shut("tally_all"),
+      shut("target_part"),
       open("top_works"),
       open("town_counts", false),
       open("work_faces"),
-      shut("work_tally"),
     ]);
   });
 
@@ -584,17 +637,16 @@ async function main() {
       await db.exec(rollbackSql());
       const { rows: left } = await db.query(
         `select proname as name from pg_proc
-       where proname in ('town_counts', 'counts_for', 'top_works',
-         'work_faces', 'work_tally', 'recount_work', 'recount_books',
-         'recount_book_texts', 'recount_target', 'shelf_books', 'count_posts',
-         'count_shops', 'count_books', 'count_moderation')
+       where proname in (${NAMES})
        union all
        select relname from pg_class where relname like 'work_counts%'
        union all
        select tgname from pg_trigger where tgname in ('posts_count_came',
          'posts_count_changed', 'posts_count_gone', 'shops_count_came',
-         'shops_count_changed', 'shops_count_gone', 'books_count_changed',
-         'books_count_gone', 'moderation_hides_count', 'moderation_folds_count')`,
+         'shops_count_changed', 'shops_count_gone', 'books_count_moved',
+         'books_count_gone', 'moderation_hides_count', 'moderation_folds_count')
+       union all
+       select jobname from cron.job where jobname = 'work-counts'`,
       );
       assert.deepEqual(left, []);
       await db.query(

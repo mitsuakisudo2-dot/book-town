@@ -1026,7 +1026,10 @@ function remoteReads(
             return emptyMore();
           throw error;
         }
-        return countsFromAnswer(answer);
+        return countsFromAnswer(
+          answer,
+          asked.map((book) => book.id),
+        );
       } else {
         let records: Tables<"reading_entries">[];
         try {
