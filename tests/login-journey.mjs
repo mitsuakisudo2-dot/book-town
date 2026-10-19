@@ -5858,11 +5858,21 @@ try {
         });
       };
       const scrolled = () => pages.evaluate((element) => element.scrollTop);
+      // In sight, and not under the mode's banner where it is tapped: a
+      // longer book can stop with the link just behind it.
       const linkInSight = () =>
         link.evaluate((element) => {
           const box = element.getBoundingClientRect();
           const seen = element.closest(".bh-content").getBoundingClientRect();
-          return box.top >= seen.top && box.bottom <= seen.bottom;
+          const tapped = document.elementFromPoint(
+            box.left + 20,
+            box.top + box.height / 2,
+          );
+          return (
+            box.top >= seen.top &&
+            box.bottom <= seen.bottom &&
+            !tapped?.closest(".site-notes-banner")
+          );
         });
       await inside.click();
       await expect(inHand.locator(".site-notes-banner")).toBeVisible();
