@@ -879,3 +879,29 @@
 .bh-to-shop {
   margin-top: 12px;
 }
+/* The reader's own place for the book, on its page (AUD-052): 読書の状態
+   and 持っている本 each on a row of its own, named. */
+.bh-mine {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  text-align: left;
+}
+.bh-mine-row {
+  display: grid;
+  gap: 6px;
+}
+.bh-mine-label {
+  color: var(--muted);
+  font-size: var(--t-cap);
+  font-weight: 700;
+}
+.bh-in-shop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--green);
+  font-size: var(--t-ui);
+  font-weight: 700;
+}

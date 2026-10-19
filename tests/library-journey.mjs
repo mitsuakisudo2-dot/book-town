@@ -2237,6 +2237,77 @@ try {
     },
   );
 
+  await check(
+    "a book's page shows and sets the reader's 読書の状態 and 持っている本, as the library does (AUD-052)",
+    async () => {
+      const fresh = await browser.newContext(phone);
+      await answerOutside(fresh);
+      const on = settleBeforeNavigating(await fresh.newPage());
+      on.on("pageerror", (e) => errors.push(e.message));
+      await go("/books/solaris/", on);
+      const status = on.getByRole("group", { name: "読書の状態" });
+      const owned = on.getByRole("group", { name: "持っている本" });
+      // Two kinds, apart and named; nothing lit for a book not in the library.
+      await expect(status.getByRole("button")).toHaveText([
+        "積読",
+        "読書中",
+        "読了",
+      ]);
+      await expect(owned.getByRole("button")).toHaveText([
+        "持っている",
+        "持ってない",
+      ]);
+      await expect(on.locator(".bh-mine [aria-pressed=true]")).toHaveCount(0);
+      await expect(on.locator(".bh-in-shop")).toHaveCount(0);
+      // Set here, the book comes into the library with it; 積読 is a book
+      // the reader has (けにーさん 10-18).
+      await status.getByRole("button", { name: "読了" }).click();
+      await expect(on.locator(".toast")).toContainText(
+        "『ソラリス』を読了にしました",
+      );
+      await expect(
+        status.getByRole("button", { name: "読了", pressed: true }),
+      ).toBeVisible();
+      await expect(
+        on.getByRole("button", { name: "ライブラリに登録", pressed: true }),
+      ).toBeVisible();
+      let data = await stored(on);
+      expect(data.library).toContain("solaris");
+      expect(data.libraryEntries.solaris.status).toBe("finished");
+      await owned.getByRole("button", { name: "持ってない" }).click();
+      await expect(
+        owned.getByRole("button", { name: "持ってない", pressed: true }),
+      ).toBeVisible();
+      await owned.getByRole("button", { name: "持っている" }).click();
+      await expect(
+        owned.getByRole("button", { name: "持っている", pressed: true }),
+      ).toBeVisible();
+      await expect(
+        owned.getByRole("button", { name: "持ってない", pressed: true }),
+      ).toHaveCount(0);
+      // Pressed again, the one lit comes off; 元に戻す puts it back.
+      await status.getByRole("button", { name: "読了" }).click();
+      await expect(on.locator(".bh-mine [aria-pressed=true]")).toHaveText([
+        "持っている",
+      ]);
+      await on.locator(".toast").getByRole("button", { name: "元に戻す" }).click();
+      await expect(
+        status.getByRole("button", { name: "読了", pressed: true }),
+      ).toBeVisible();
+      data = await stored(on);
+      expect(data.libraryEntries.solaris).toMatchObject({
+        status: "finished",
+        owned: "yes",
+      });
+      await expect
+        .poll(() =>
+          on.evaluate(() => document.documentElement.scrollWidth - innerWidth),
+        )
+        .toBe(0);
+      await fresh.close();
+    },
+  );
+
   expect(errors).toEqual([]);
   console.log(passed.length + " library browser checks passed");
 } finally {

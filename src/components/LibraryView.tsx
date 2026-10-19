@@ -12,13 +12,10 @@ import {
   filterFromParams,
   filterLibrary,
   liveShelves,
-  READING_STATUSES,
   ruleWords,
   worksIn,
-  type LibraryEntry,
   type LibraryFilter,
   type LibraryShelf,
-  type ReadingStatus,
 } from "../lib/library";
 import {
   libraryShelfDraftStore,
@@ -31,7 +28,6 @@ import { getTownSnapshot } from "../lib/store";
 import {
   libraryStateOf,
   townShopBooks,
-  type LibraryChange,
   type LibraryUndo,
 } from "../lib/library-town";
 import type { Notify, TownActions, TownState } from "../lib/types";
@@ -48,6 +44,14 @@ import { SCAN_COPY } from "../lib/scan";
 import { scanTimes, scanTimeWords } from "../lib/scan-history";
 import { BookJacket, Icon } from "./ui";
 import { counted, LIBRARY_SHELF, TABS, whenSome } from "../lib/words";
+import {
+  OWNED_MARKS,
+  shelfName,
+  STATUS_MARKS,
+  statusName,
+  UNDONE,
+  type LibraryMark,
+} from "../lib/library-changes";
 import { CHOICE_NAMES, type Audience } from "../lib/visibility";
 import { walkPath } from "../lib/paths";
 
@@ -62,41 +66,16 @@ import { walkPath } from "../lib/paths";
 // change again. A book is on as many of the reader's shelves as they like,
 // and stays on them whatever its status.
 
-const label = (key: string) =>
-  DEFAULT_SHELVES.find((shelf) => shelf.key === key)?.label ?? key;
-
-/** The shelf a status is, for its name. */
-const statusLabel = (status: ReadingStatus) => label(status);
+const label = shelfName;
+const statusLabel = statusName;
 
 /** The chip of the whole library: its number is at the top of the page. */
 const ALL_CHIP = "すべて";
 
 /** What the reader can do to the books picked, and how it is said after. */
-interface Change {
-  key: string;
-  label: string;
-  /** Lit: every book picked already has it (`on`: the reader's shelves the book is on). */
-  lit: (
-    e: LibraryEntry | undefined,
-    favorite: boolean,
-    on: ReadonlySet<string>,
-  ) => boolean;
-  /** The change, as it is lit or not. */
-  change: (lit: boolean) => LibraryChange;
-  /** What was done, after 「n冊を」. */
-  done: (lit: boolean) => string;
-}
+type Change = LibraryMark;
 
-const STATUS_CHANGES: Change[] = READING_STATUSES.map((status) => ({
-  key: status,
-  label: statusLabel(status),
-  lit: (e) => e?.status === status,
-  change: (lit) => ({ status: lit ? null : status }),
-  done: (lit) =>
-    lit
-      ? `${statusLabel(status)}から外しました`
-      : `${statusLabel(status)}にしました`,
-}));
+const STATUS_CHANGES = STATUS_MARKS;
 
 const WANT: Change = {
   key: "want",
@@ -108,22 +87,7 @@ const WANT: Change = {
 };
 
 const OTHER_CHANGES: Change[] = [
-  {
-    key: "owned",
-    label: "持っている",
-    lit: (e) => e?.owned === "yes",
-    change: (lit) => ({ owned: lit ? null : "yes" }),
-    done: (lit) =>
-      lit ? "持っている本から外しました" : "持っている本にしました",
-  },
-  {
-    key: "not-owned",
-    label: "持ってない",
-    lit: (e) => e?.owned === "no",
-    change: (lit) => ({ owned: lit ? null : "no" }),
-    done: (lit) =>
-      lit ? "持ってない本から外しました" : "持ってない本にしました",
-  },
+  ...OWNED_MARKS,
   {
     key: "favorite",
     label: label("favorite"),
@@ -359,13 +323,17 @@ export function LibraryView({
           ? "（ライブラリからも外れました）"
           : `（${counted(left, "冊")}はライブラリからも外れました）`;
     notify(subject + change.done(lit) + after, {
-      label: "元に戻す",
+      label: UNDONE.label,
       run: () => {
         const restored = actions.undoLibrary(undo);
         notify(
           restored
-            ? `${restored === 1 && book ? quotedTitle(book) : counted(restored, "冊")}を元に戻しました`
-            : "そのあと変えた本なので、そのままにしました",
+            ? UNDONE.back(
+                restored === 1 && book
+                  ? quotedTitle(book)
+                  : counted(restored, "冊"),
+              )
+            : UNDONE.kept,
         );
       },
     });

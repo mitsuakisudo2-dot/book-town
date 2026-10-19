@@ -170,6 +170,17 @@ export const REGISTER = {
 // ── Placing a book in the reader's shop ─────────────────────────────────
 
 /**
+ * The reader's own place for a book, on its page (AUD-052): the two kinds
+ * the reader sets, apart (けにーさん 10-18 06:10Z「読書の状態」と「持って
+ * いる本」は異なる概念), and their shop.
+ */
+export const MY_BOOK = {
+  status: "読書の状態",
+  owned: "持っている本",
+  inShop: "自分の書店に並べています",
+};
+
+/**
  * How a book of the library is put on a shelf of the reader's own shop,
  * said the same on the book's page, the shop's book picker and the opening
  * of a shop (管理表 103).

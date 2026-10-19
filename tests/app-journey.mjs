@@ -1895,6 +1895,12 @@ try {
       await expect(picker).toHaveCount(0);
       const items = (await stored()).ownShop.shelves[0].items;
       expect(items.map((item) => item.bookId)).toContain("walking");
+      // Its page says so now (AUD-052).
+      await go("/books/walking/");
+      await expect(page.locator(".bh-in-shop")).toHaveText(
+        "自分の書店に並べています",
+      );
+      await go("/my-shop/");
       // A book pressed on the shelf: its POP rises in a sheet from the
       // bottom, in sight, and 戻る puts it away.
       await page.locator(".shelf-book-button").first().click();
