@@ -1575,6 +1575,7 @@ export type Database = {
         }[];
       };
       town_books: { Args: { ids: string[] }; Returns: Json };
+      town_counts: { Args: { books: string[]; top?: number }; Returns: Json };
       town_view: {
         Args: {
           catalog_limit?: number;

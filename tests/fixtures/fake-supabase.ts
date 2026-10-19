@@ -759,6 +759,62 @@ export function fakeSupabase(
           count: null,
         };
       }
+      // As the database's town_counts: by work, 便り not read alone and
+      // public shelves of open shops, of every row; the most of each.
+      if (townWindow && name === "town_counts") {
+        const workOf = (bookId: unknown) =>
+          table("books").find((row) => row.id === bookId)?.work_id ?? bookId;
+        const tally = (work: unknown) => {
+          const said = table("posts").filter(
+            (row) =>
+              row.book_id !== null &&
+              row.reading_mode !== "solo" &&
+              workOf(row.book_id) === work,
+          );
+          const shelves = table("shops")
+            .filter((row) => row.is_open)
+            .flatMap(
+              (row) =>
+                (row.public_shelves ?? []) as {
+                  items?: { bookId: string }[];
+                }[],
+            )
+            .filter((shelf) =>
+              (shelf.items ?? []).some((item) => workOf(item.bookId) === work),
+            ).length;
+          return {
+            shelves,
+            talk: said.length,
+            reviews: said.filter((row) => row.parent_id === null).length,
+          };
+        };
+        const asked = new Set(args.books as string[]);
+        const counts = table("books")
+          .filter((row) => asked.has(row.id as string))
+          .map((row) => ({ book: row.id, ...tally(row.work_id ?? row.id) }))
+          .filter((count) => count.shelves || count.talk);
+        const works = [
+          ...new Set(table("books").map((row) => row.work_id ?? row.id)),
+        ];
+        const most = (by: "shelves" | "talk") =>
+          works
+            .map((work) => ({ work, ...tally(work) }))
+            .filter((count) => count[by] > 0)
+            .sort((a, b) => b[by] - a[by])
+            .slice(0, Number(args.top ?? 6))
+            .map(({ work, ...count }) => ({
+              book: untyped(
+                table("books").find((row) => (row.work_id ?? row.id) === work)!,
+              ),
+              ...count,
+            }));
+        return {
+          data: { counts, shelved: most("shelves"), talked: most("talk") },
+          error: null,
+          status: 200,
+          count: null,
+        };
+      }
       if (townView && name === "town_books") {
         const ids = new Set(args.ids as string[]);
         return {

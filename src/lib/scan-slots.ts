@@ -54,16 +54,16 @@ export function toggleSlot(slots: readonly Slot[], slot: Slot): Slot[] {
   return slots.length < SLOT_COUNT ? [...slots, slot] : [...slots];
 }
 
-/** One place to the left (-1) or the right (1). */
-export function moveSlot(
+/** Put at a place in the row (dragged there), the others closing up around it. */
+export function placeSlot(
   slots: readonly Slot[],
   slot: Slot,
-  by: -1 | 1,
+  at: number,
 ): Slot[] {
   const from = slots.indexOf(slot);
-  const to = from + by;
-  if (from < 0 || to < 0 || to >= slots.length) return [...slots];
-  const next = [...slots];
-  [next[from], next[to]] = [next[to], next[from]];
+  if (from < 0 || at < 0 || at >= slots.length || at === from)
+    return [...slots];
+  const next = slots.filter((one) => one !== slot);
+  next.splice(at, 0, slot);
   return next;
 }

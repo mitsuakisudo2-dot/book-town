@@ -561,8 +561,7 @@ export interface JournalTown {
     bookId?: string,
     batchId?: string,
   ): Registration | null;
-  toggleLibrary(bookId: string): void;
-  /** A change of the reader's library (a 連続設定 put on a book). */
+  /** A change of the reader's library (a 連続設定 put on a book, ［取り消す］). */
   changeLibrary(bookId: string, set: LibrarySet): void;
 }
 
@@ -826,7 +825,9 @@ export function undoScan(
   journal.cancelled.add(id);
   const bookId = journal.added.get(id);
   if (bookId && town.state().library.includes(bookId)) {
-    town.toggleLibrary(bookId);
+    // Out, whatever it was given as it came in (a 連続設定, 持っている) or
+    // since: kept with the row, it comes back with ［元に戻す］.
+    town.changeLibrary(bookId, { removed: true });
     if (town.state().library.includes(bookId)) {
       journal.cancelled.delete(id);
       return "not-yet";

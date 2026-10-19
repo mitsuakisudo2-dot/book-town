@@ -260,46 +260,43 @@
 /* 連続設定 (資料 3章): what the next books are given, under the camera. */
 .scan-sort {
   flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 0;
+  display: grid;
+  gap: 2px;
+  padding: 2px 0;
   border-bottom: 1px solid var(--line);
 }
 .scan-sort.is-on {
-  display: grid;
-  justify-content: stretch;
-  gap: 2px;
   margin: 0 -16px;
-  padding: 4px 16px 8px;
+  padding: 2px 16px 8px;
   background: color-mix(in srgb, var(--green) 8%, var(--paper));
-}
-.scan-sort-text {
-  min-width: 0;
 }
 .scan-sort-title {
   font-size: var(--t-meta);
   font-weight: 700;
   line-height: 1.5;
 }
-.scan-sort-note {
-  font-size: var(--t-cap);
-  line-height: 1.5;
-  color: var(--ink-2);
-}
 .scan-sort-open {
   flex: none;
   gap: 2px;
   padding-right: 10px;
 }
+/* 持っている on the left (けにーさん 2026-10-19), what opens the 連続設定 on
+   the right. */
 .scan-sort-head {
   display: flex;
   align-items: center;
   gap: 4px;
 }
-.scan-sort-head .scan-sort-title {
+.scan-sort-quick {
+  display: flex;
   flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  font-size: var(--t-meta);
+}
+.scan-sort-now .scan-sort-title {
   color: var(--green);
 }
 .scan-sort-now {
@@ -1007,43 +1004,43 @@ body:has(.scan-session) .toast {
 }
 .scan-slots-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
-.scan-slot {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 48px;
-  padding: 2px 4px 2px 12px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-box);
-  background: var(--sheet);
-}
-.scan-slot-at {
-  flex: none;
-  width: 20px;
-  color: var(--ink-2);
-  font-size: var(--t-cap);
-  font-weight: 700;
-}
-.scan-slot-name {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 4px;
+/* The row as a card's second row shows it. A button is dragged to its
+   place: the finger moves it, not the sheet (touch-action), and the one
+   held is lifted green over the others. */
+.scan-slots-row .chip {
+  justify-content: center;
+  gap: 0;
   min-width: 0;
-  overflow: hidden;
-  font-size: var(--t-ui);
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0 4px;
+  border-radius: var(--r-box);
+  font-size: var(--t-meta);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
-.scan-slot .icon-btn:disabled {
-  opacity: 0.3;
+/* The grip's dots, without the room around them: お気に入り fits at 320px. */
+.scan-slots-row .chip svg:first-child {
+  flex: none;
+  margin: 0 -3px 0 -4px;
+  color: var(--ink-2);
+}
+.scan-slots-row .chip.is-dragging {
+  position: relative;
+  z-index: 1;
+  cursor: grabbing;
+}
+.scan-slots-row .chip.is-dragging svg:first-child {
+  color: inherit;
+}
+.scan-slot-free {
+  min-height: 44px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-box);
 }
 .scan-slots-choices .chip:disabled {
   opacity: 0.45;

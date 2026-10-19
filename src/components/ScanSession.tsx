@@ -13,6 +13,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { flushSync } from "react-dom";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useAccountState } from "../lib/account-session";
 import { leaveLayers, useBackLayer } from "../lib/back-layer";
@@ -99,13 +100,19 @@ import { BarcodeRegister } from "./BarcodeRegister";
 import { ScanDone } from "./ScanDone";
 import { ScanResume } from "./ScanResume";
 import { ScanSortSheet } from "./ScanSortSheet";
-import { ScanSlots, slotName, useSlots } from "./ScanSlots";
+import { slotName, useSlots } from "./ScanSlots";
 import { liveSlots, shelfOfSlot } from "../lib/scan-slots";
 import { ScanTidy, type TidyBook } from "./ScanTidy";
 import { ScanTiming } from "./ScanTiming";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
 import { bookAuthor, bookById, bookByIsbn, bookTitle } from "../lib/book-name";
+
+// 自由3枠's sheet, with what drags its buttons: read when it is opened.
+const ScanSlots = dynamic(
+  () => import("./ScanSlotsSheet").then((file) => file.ScanSlots),
+  { ssr: false },
+);
 
 // The continuous scanner (plan 7-1, flow A; けにーさんの引き継ぎ資料 v1.1 and
 // Figma v4's 01, 2026-10-18): the camera stays open, small, over the list of
@@ -487,6 +494,14 @@ export function ScanSession({
   const [shelvesFor, setShelvesFor] = useState<string | null>(null);
   /** 連続設定: what the next books read are given, until 解除 or 完了. */
   const [sort, setSort] = useState<ScanSort | null>(null);
+  /**
+   * 持っている on the 連続設定's row (けにーさん 2026-10-19), on from the
+   * start as in the 連続設定 (資料 3章); off, the next books are 未所持. The
+   * 連続設定 keeps the same.
+   */
+  const [owned, setOwned] = useState<ScanSort["owned"]>("yes");
+  /** What the next book read is given: the 連続設定, else 持っている alone. */
+  const applied: ScanSort = sort ?? { status: null, owned, shelves: [] };
   const [sortOpen, setSortOpen] = useState(false);
   /** 続きから再開: the time left without ［完了］, offered as this one opens. */
   const [offer, setOffer] = useState<{
@@ -810,7 +825,7 @@ export function ScanSession({
       session,
       isbn,
       via,
-      ...(sort ? { sort } : {}),
+      sort: applied,
       ...(known ? { known } : {}),
     });
     reads.current = noteRead(reads.current, isbn, at, "held");
@@ -824,7 +839,7 @@ export function ScanSession({
         title: item.title,
         author: item.author,
         shows: "looking",
-        ...(sort ? { sort } : {}),
+        sort: applied,
       },
     ]);
     setNotice(null);
@@ -1455,6 +1470,7 @@ export function ScanSession({
         ...offer.sort,
         shelves: offer.sort.shelves.filter((id) => live.has(id)),
       });
+      setOwned(offer.sort.owned);
     }
     setCards(offer.cards);
     for (const card of offer.cards) {
@@ -2018,10 +2034,25 @@ export function ScanSession({
         )}
         {owner && (
           <div className={"scan-sort" + (sort ? " is-on" : "")}>
-            {sort ? (
-              <>
-                <div className="scan-sort-head">
-                  <p className="scan-sort-title">{SCAN_COPY.sort.on}</p>
+            <div className="scan-sort-head">
+              <label className="scan-sort-quick">
+                <strong>{SCAN_COPY.sort.owned}</strong>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  className="scan-switch"
+                  checked={owned === "yes"}
+                  onPointerDown={typing ? keepFocus : undefined}
+                  onChange={(event) => {
+                    refocus();
+                    const next = event.target.checked ? "yes" : "no";
+                    setOwned(next);
+                    if (sort) setSort({ ...sort, owned: next });
+                  }}
+                />
+              </label>
+              {sort ? (
+                <>
                   <button
                     type="button"
                     className="text-btn"
@@ -2040,32 +2071,30 @@ export function ScanSession({
                   >
                     {SCAN_COPY.sort.off}
                   </button>
-                </div>
-                <p className="scan-sort-now">
-                  {sortWords(sort).map((word) => (
-                    <span key={word} className="scan-sort-tag">
-                      <Icon name="check" size={14} />
-                      {word}
-                    </span>
-                  ))}
-                  <span className="scan-sort-next">{SCAN_COPY.sort.next}</span>
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="scan-sort-text">
-                  <p className="scan-sort-title">{SCAN_COPY.sort.name}</p>
-                  <p className="scan-sort-note">{SCAN_COPY.sort.note}</p>
-                </div>
+                </>
+              ) : (
                 <button
                   type="button"
                   className="btn scan-sort-open"
                   onClick={() => setSortOpen(true)}
                 >
-                  {SCAN_COPY.sort.set}
+                  {SCAN_COPY.sort.name}
                   <Icon name="chevron" size={16} />
                 </button>
-              </>
+              )}
+            </div>
+            {sort && (
+              <p className="scan-sort-now">
+                <span className="scan-sort-title">{SCAN_COPY.sort.on}</span>
+                {/* 持っている is the switch above. */}
+                {sortWords({ ...sort, owned: "yes" }).map((word) => (
+                  <span key={word} className="scan-sort-tag">
+                    <Icon name="check" size={14} />
+                    {word}
+                  </span>
+                ))}
+                <span className="scan-sort-next">{SCAN_COPY.sort.next}</span>
+              </p>
             )}
           </div>
         )}
@@ -2471,11 +2500,12 @@ export function ScanSession({
       )}
       {sortOpen && (
         <ScanSortSheet
-          sort={sort}
+          sort={applied}
           statuses={STATUS_BUTTONS}
           shelves={handShelves}
           onSet={(next) => {
             setSort(next);
+            setOwned(next.owned);
             setSortOpen(false);
           }}
           onClose={() => setSortOpen(false)}

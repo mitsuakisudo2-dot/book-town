@@ -575,9 +575,12 @@ export function LibraryView({
     </>
   );
 
+  // The sheets come first in both forms of the page: the scanner stays
+  // open, its list too, as its first book fills the library.
   if (counts.works === 0 && !counts.shelves.liked)
     return (
       <div className="library-page">
+        {sheets}
         <header className="library-head">
           <h1>{TABS.library}</h1>
         </header>
@@ -601,12 +604,12 @@ export function LibraryView({
             </Link>
           </div>
         </section>
-        {sheets}
       </div>
     );
 
   return (
     <div className={"library-page" + (picking ? " is-picking" : "")}>
+      {sheets}
       <header className="library-head" inert={Boolean(picking)}>
         <div>
           <h1>{TABS.library}</h1>
@@ -987,7 +990,6 @@ export function LibraryView({
           )}
         </PickBar>
       )}
-      {sheets}
     </div>
   );
 }

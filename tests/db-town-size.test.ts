@@ -20,7 +20,8 @@ import { migratedDatabase } from "./fixtures/pglite-supabase";
 // run's summary.
 //
 // What pages read when they open, beside the town (the search's feelings
-// and a feeling's books, a book's records, the books a search finds), is
+// and a feeling's books, also where the visitor may see few of them, a
+// book's records, the books a search finds, the town's counts), is
 // timed the same way: none of them may take longer for each reader added
 // than the baseline says (pagesMsPerReader).
 //
@@ -39,6 +40,9 @@ const POSTS = 3;
 const KEPT = 50;
 // And books a reader typed in and wrote a record of for themselves alone.
 const NOTED = 25;
+// Records of one feeling that only their reader sees, newer than the one of
+// it shown to everyone: a feeling's records the visitor mostly may not see.
+const HIDDEN = 10;
 // Bytes may move a little with the made-up town; time moves with the machine.
 const BYTES_SLACK = 1.1;
 const MS_SLACK = 3;
@@ -61,6 +65,10 @@ const NOTED_SEARCH = databaseSearch("手帳の本")!;
 const PAGES: Record<string, [string, unknown[]]> = {
   felt_in_town: ["select public.felt_in_town()::text", []],
   feeling_records: ["select public.feeling_records('quiet', 100)::text", []],
+  feeling_records_mostly_hidden: [
+    "select public.feeling_records('scared', 100)::text",
+    [],
+  ],
   work_records: [`select public.work_records('${FIRST_BOOK}', 200)::text`, []],
   find_books: [
     "select public.find_books($1::jsonb, null, null, 100)::text",
@@ -73,6 +81,10 @@ const PAGES: Record<string, [string, unknown[]]> = {
   find_books_noted: [
     "select public.find_books($1::jsonb, null, null, 100)::text",
     [JSON.stringify(NOTED_SEARCH.forms)],
+  ],
+  town_counts: [
+    `select public.town_counts(array['${FIRST_BOOK}']::uuid[], 12)::text`,
+    [],
   ],
 };
 /** Pages that may find nothing: what they look through is not the visitor's. */
@@ -127,6 +139,13 @@ async function town(readers: number): Promise<PGlite> {
         '静かな余韻が残る一冊だった。また読み返したい。', array['quiet', 'talk'], 'everyone',
         ${when("g", "k")}
       from ${ids} r, generate_series(1, ${RECORDS}) k;
+    insert into reading_entries (user_id, book_id, kind, body, feelings, audience, created_at)
+      select id::uuid, ${bookOf("g", `k % ${BOOKS} + 1`)}, 'finished', '', array['scared'], 'private',
+        now() - k * interval '1 second'
+      from ${ids} r, generate_series(1, ${HIDDEN}) k;
+    insert into reading_entries (user_id, book_id, kind, body, feelings, audience, created_at)
+      values ('a0000000-0000-4000-8000-000000000001', ${bookOf("1", "1")}, 'finished', '',
+        array['scared'], 'everyone', now() - interval '1 year');
     insert into posts (author_id, body, book_id, created_at)
       select id::uuid, '今日はこの本を少しだけ読みました。', ${bookOf("g", "k")},
         ${when("g", "k")}

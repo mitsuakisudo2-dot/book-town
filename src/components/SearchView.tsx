@@ -13,6 +13,7 @@ import {
 } from "../lib/types";
 import { booksFelt, feelingsInTown } from "../lib/records";
 import { booksBeforeSearch } from "../lib/book-lists";
+import { booksOfWork } from "../lib/works";
 import { findReader } from "../lib/social";
 import { bookPath, normalizeIsbn } from "../lib/books";
 import {
@@ -38,7 +39,7 @@ import "./reading.css";
 import "./records.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { useMoreRead, useTownBackend, useTownMore } from "../lib/store";
-import { bookAuthor, bookTitle } from "../lib/book-name";
+import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import { counted, REGISTER, whenSome, NAMES } from "../lib/words";
 import { RegisterBook } from "./RegisterBook";
 import { BarcodeRegister } from "./BarcodeRegister";
@@ -49,6 +50,16 @@ const ScanSession = dynamic(
   () => import("./ScanSession").then((file) => file.ScanSession),
   { ssr: false },
 );
+
+/** The first book of each work, in order: one work is one book in a list. */
+function oneAWork(state: TownState, books: readonly Book[]): Book[] {
+  const seen = new Set<string>();
+  return books.filter((book) => {
+    if (seen.has(book.id)) return false;
+    for (const id of booksOfWork(state.books, book.id)) seen.add(id);
+    return true;
+  });
+}
 
 type Shared = {
   state: TownState;
@@ -94,14 +105,38 @@ export function SearchView({ state, actions, notify }: Shared) {
   };
   const term = query.trim().toLocaleLowerCase();
   const tagTerm = /^[#＃]/.test(term) ? term.slice(1) : null;
-  const signals = useMemo(() => bookSignals(state), [state]);
-  const signal = (bookId: string) =>
-    signals.get(bookId) ?? { shelves: 0, talk: 0, reviews: 0, wants: 0 };
-  const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
+  // How often each book is shelved and talked of, of all time, and the
+  // works most shelved and talked of, asked of the database as the search
+  // opens (town_counts, AUD-006): the town holds only the newest 便り. Each
+  // of those works is shown by the town's book of it, as only those open.
   // Before anything is typed, only books used where everyone can see them,
   // the 見本's and the reader's own: never one another reader only typed in.
   // A genre (a chip) finds only these too; a title or an author finds any.
   const shown = useMemo(() => booksBeforeSearch(state), [state]);
+  const { read: countsRead } = useMoreRead({ counts: true });
+  const { townCounts, mostOf } = useMemo(() => {
+    const asked = countsRead?.counts;
+    if (!asked) return { townCounts: undefined, mostOf: [] as Book[] };
+    const books = { ...asked.books };
+    const mostOf = [...asked.shelved, ...asked.talked].flatMap(
+      ({ book: face, work }) => {
+        const book =
+          bookById(state.books, face) ??
+          shown.find((entry) => work !== null && entry.workId === work);
+        if (!book) return [];
+        books[book.id] ??= asked.books[face];
+        return [book];
+      },
+    );
+    return { townCounts: { ...asked, books }, mostOf };
+  }, [countsRead, state.books, shown]);
+  const signals = useMemo(
+    () => bookSignals(state, townCounts),
+    [state, townCounts],
+  );
+  const signal = (bookId: string) =>
+    signals.get(bookId) ?? { shelves: 0, talk: 0, reviews: 0, wants: 0 };
+  const shops = [...state.shops, ...(state.ownShop ? [state.ownShop] : [])];
   const genres = [...new Set(shown.map((book) => book.genre))];
   const chosenGenre = genres.some(
     (genre) => genre.toLocaleLowerCase() === term,
@@ -109,13 +144,25 @@ export function SearchView({ state, actions, notify }: Shared) {
 
   // Lists of what is talked about or shelved show only once there is enough
   // of it to be worth a list: a town of three readers has no "popular" books.
-  const talked = [...shown]
+  // With the database's counts, the books most shelved and talked of of
+  // all the town's too, not only those it read; a work once.
+  const ranked = useMemo(
+    () =>
+      oneAWork(state, [
+        ...shown,
+        ...mostOf.filter(
+          (book) => !shown.some((known) => known.id === book.id),
+        ),
+      ]),
+    [state, shown, mostOf],
+  );
+  const talked = [...ranked]
     .filter((book) => signal(book.id).talk > 0)
     .sort((a, b) => signal(b.id).talk - signal(a.id).talk)
     .slice(0, 6);
   const shelvedAndWanted = (bookId: string) =>
     signal(bookId).shelves * 3 + signal(bookId).wants;
-  const popular = [...shown]
+  const popular = [...ranked]
     .filter((book) => shelvedAndWanted(book.id) > 0)
     .sort((a, b) => shelvedAndWanted(b.id) - shelvedAndWanted(a.id))
     .slice(0, 6);
