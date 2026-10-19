@@ -20,6 +20,7 @@
     "work_records": 0.004,
     "find_books": 0.043,
     "find_books_kept": 0.329,
+    "find_books_noted": 0.473,
     "feeling_records_mostly_hidden": 0.0,
     "town_counts": 0.014
   }
