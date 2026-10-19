@@ -58,7 +58,8 @@ import {
 import { posterNewPath, posterPath, profilePath } from "../lib/paths";
 import { accountRequested } from "../lib/visitor";
 import { refusedForSample } from "../lib/sample-notice";
-import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
+import { enterPressed } from "../lib/keys";
+import { useBookSearch } from "../lib/search/use-book-search";
 import { BackLink } from "./BackLink";
 import { PosterSheet } from "./PosterView";
 import { BookJacket, Icon } from "./ui";

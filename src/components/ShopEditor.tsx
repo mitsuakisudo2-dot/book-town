@@ -40,7 +40,8 @@ import {
 import { publicWalkShops } from "../lib/store-scene-adapter";
 import { OpenShop, ThemePicker } from "./OpenShop";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
-import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
+import { enterPressed } from "../lib/keys";
+import { useBookSearch } from "../lib/search/use-book-search";
 import { useKeptDraft } from "../lib/kept-draft";
 import { openShopDraftStore } from "../lib/open-shop-draft";
 import { sceneDraftStore, sceneMark, sceneWorkKey } from "../lib/scene-draft";
