@@ -32,17 +32,21 @@ export interface LibraryMark {
   done: (lit: boolean) => string;
 }
 
-/** 積読・読書中・読了: pressed again, the one lit is taken off. */
-export const STATUS_MARKS: LibraryMark[] = READING_STATUSES.map((status) => ({
-  key: status,
-  label: statusName(status),
-  lit: (e) => e?.status === status,
-  change: (lit) => ({ status: lit ? null : status }),
-  done: (lit) =>
-    lit
-      ? `${statusName(status)}から外しました`
-      : `${statusName(status)}にしました`,
-}));
+/**
+ * 読了・読書中・積読, 読了 first: pressed again, the one lit is taken off.
+ */
+export const STATUS_MARKS: LibraryMark[] = [...READING_STATUSES]
+  .reverse()
+  .map((status) => ({
+    key: status,
+    label: statusName(status),
+    lit: (e) => e?.status === status,
+    change: (lit) => ({ status: lit ? null : status }),
+    done: (lit) =>
+      lit
+        ? `${statusName(status)}から外しました`
+        : `${statusName(status)}にしました`,
+  }));
 
 /** 持っている・持ってない: one of the two, or neither. */
 export const OWNED_MARKS: LibraryMark[] = [
