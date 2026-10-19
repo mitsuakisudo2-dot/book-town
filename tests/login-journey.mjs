@@ -90,6 +90,18 @@ const holdTown = () => {
     release();
   };
 };
+// Holds only the town's own answer (town_view), so the walk's reads, which
+// the walk is ready on, come first.
+let townViewHold = null;
+const holdTownView = () => {
+  let release;
+  const held = new Promise((done) => (release = done));
+  townViewHold = held;
+  return () => {
+    if (townViewHold === held) townViewHold = null;
+    release();
+  };
+};
 const reportsSent = [];
 // Blocks made ([blocker, blocked]) and lifted (the query of each delete).
 const blocksSent = [];
@@ -728,6 +740,7 @@ const standIn = async (route) => {
   if (url.pathname === "/rest/v1/rpc/town_view") {
     townReads.push(url.pathname);
     if (townHold) await townHold;
+    if (townViewHold) await townViewHold;
     const rows = (table) => town?.[table] ?? [];
     return json(200, {
       profiles: [...(profile ? [profile] : []), ...rows("profiles")],
@@ -6238,7 +6251,20 @@ try {
       };
       page.on("request", watch);
       try {
-        await page.goto(base + "/walk/#" + OTHER_SHOP);
+        // The town comes after the walk: the shop the address names is not
+        // among the shops yet, so the walk is under way in another, which
+        // writes its own into the address. It still ends in the shop asked for.
+        const release = holdTownView();
+        try {
+          await page.goto(base + "/walk/#" + OTHER_SHOP);
+          await expect
+            .poll(() =>
+              page.evaluate(() => decodeURIComponent(location.hash.slice(1))),
+            )
+            .not.toBe(OTHER_SHOP);
+        } finally {
+          release();
+        }
         // Its own sign, not one made up from its shelves.
         await expect(page.locator(".walk-sign-name")).toHaveText("レンの看板");
         // The walk asked which shops have a scene, then this one's by its id.
