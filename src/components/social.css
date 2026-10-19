@@ -483,7 +483,7 @@ mark.hidden-words.is-open {
 @media (max-width: 760px) {
   .compose-fab {
     right: 18px;
-    bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(98px + env(safe-area-inset-bottom, 0px));
     width: 56px;
     height: 56px;
   }

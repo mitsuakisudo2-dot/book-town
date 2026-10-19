@@ -732,7 +732,7 @@
 }
 @media (max-width: 760px) {
   .post-page.is-route .post-page-bar {
-    bottom: 74px;
+    bottom: 82px;
   }
 }
 @media (max-width: 450px) {

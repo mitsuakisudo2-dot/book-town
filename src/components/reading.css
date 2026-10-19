@@ -53,6 +53,10 @@
   display: grid;
   gap: 30px;
 }
+/* Typed words leave the genres out: the books begin just under the box. */
+.search-box + .search-results {
+  margin-top: 18px;
+}
 .search-discover h2,
 .search-results h2,
 .reading-page h2,
