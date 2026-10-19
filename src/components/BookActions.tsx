@@ -17,6 +17,7 @@ import {
   UNDONE,
   type LibraryMark,
 } from "../lib/library-changes";
+import "./book-in-hand.css";
 
 /** 定価, tax included. Books without a known price show nothing. */
 export function BookPrice({

@@ -22,6 +22,7 @@ import { BookPicker } from "./BookPicker";
 import { booksBeforeSearch } from "../lib/book-lists";
 import { BookJacket, Icon } from "./ui";
 import "./open-shop.css";
+import "./editor.css";
 import { noteShopOpened } from "../lib/just-opened";
 import { leaveLayers, useBackLayer, useLayerReturn } from "../lib/back-layer";
 import { useKeptDraft } from "../lib/kept-draft";

@@ -1,0 +1,20 @@
+/*
+ * Home's part of the town's frame, read on every page (screen-styles.ts)
+ * where home.css stood in their order: the shell is marked .is-home with the
+ * screen, before Home's code and home.css have come. On a phone the top bar
+ * slides away while reading down (HomeView sets data-bar), with the tabs.
+ */
+@media (max-width: 760px) {
+  .town-shell.is-home .town-topbar {
+    transition: transform var(--dur-enter) var(--ease-standard);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  .town-shell.is-home[data-bar="hidden"] .town-topbar {
+    transform: translateY(-100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .town-shell.is-home .town-topbar {
+    transition: none;
+  }
+}

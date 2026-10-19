@@ -1,16 +1,17 @@
 // How much JS each page of the built site reads before it can run: every
 // script its HTML names, compressed as the server sends it. Prints one line
-// per page, largest first.
+// per page, largest first. With --css, the same for its stylesheets: those
+// the page reads first and those of the screens it draws (next/dynamic).
 //
-//   node scripts/perf/page-js.mjs [out] [--json | --baseline]
+//   node scripts/perf/page-js.mjs [out] [--css] [--json | --baseline]
 //
-// tests/page-js.test.ts compares these with tests/page-js-baseline.json
-// (--baseline prints that file anew).
+// tests/page-js.test.ts compares these with tests/page-js-baseline.json and
+// tests/page-css-baseline.json (--baseline prints that file anew).
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 
-export function pageScripts(out) {
+export function pageScripts(out, kind = "js") {
   const pages = {};
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -23,17 +24,19 @@ export function pageScripts(out) {
         // The scripts it runs, and those it asks for ahead (a screen read
         // with next/dynamic that the page draws). A nomodule script (the
         // polyfills) is skipped by today's browsers.
-        const tags = [
-          ...[...html.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]),
-          ...[...html.matchAll(/<link\b[^>]*>/g)]
-            .map((m) => m[0])
-            .filter(
-              (tag) => /rel="preload"/.test(tag) && /as="script"/.test(tag),
-            ),
-        ];
+        const links = [...html.matchAll(/<link\b[^>]*>/g)].map((m) => m[0]);
+        const tags =
+          kind === "css"
+            ? links.filter((tag) => /rel="stylesheet"/.test(tag))
+            : [
+                ...[...html.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]),
+                ...links.filter(
+                  (tag) => /rel="preload"/.test(tag) && /as="script"/.test(tag),
+                ),
+              ];
         const srcs = tags
           .filter((tag) => !/nomodule/i.test(tag))
-          .map((tag) => tag.match(/\s(?:src|href)="([^"]+\.js)"/)?.[1])
+          .map((tag) => tag.match(/\s(?:src|href)="([^"]+\.(?:js|css))"/)?.[1])
           .filter(Boolean)
           .map((src) => decodeURIComponent(src))
           .filter((src) => src.startsWith("/_next/"));
@@ -67,9 +70,9 @@ const same = (page) =>
     .replace(/^\/shops\/[^/]+\//, "/shops/[id]/")
     .replace(/^\/profiles\/[^/]+\//, "/profiles/[id]/");
 
-export function pageSizes(out) {
+export function pageSizes(out, kind = "js") {
   const result = {};
-  for (const [page, srcs] of Object.entries(pageScripts(out))) {
+  for (const [page, srcs] of Object.entries(pageScripts(out, kind))) {
     const key = same(page);
     if (key === "/404/" || key === "/_not-found/") continue;
     let gz = 0;
@@ -91,7 +94,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const out = path.resolve(
     process.argv.slice(2).find((a) => !a.startsWith("--")) ?? "out",
   );
-  const result = pageSizes(out);
+  const result = pageSizes(out, process.argv.includes("--css") ? "css" : "js");
   if (process.argv.includes("--json")) {
     console.log(JSON.stringify(result, null, 2));
   } else if (process.argv.includes("--baseline")) {
