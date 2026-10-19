@@ -20,7 +20,9 @@ import { FEELINGS, type Book } from "../src/lib/types";
 // book the reader may not read, gives one book an edition, and finds by ISBN.
 // Which feelings anyone kept, and a feeling's records, are what the reader
 // may read of the table. The grams follow a book's title, go with it, and
-// nobody reads them. Who may call what, and undoing the file.
+// nobody reads them. Who may call what, and undoing the file. Books in
+// records for followers are found by their owner and followers alone, and
+// do not change what anyone else's search gives (AUD-160).
 
 const FILES = migrationFiles();
 const FILE = FILES.find((file) => file.endsWith("_search_in_database.sql"));
@@ -557,6 +559,11 @@ async function main() {
         insert into posts (author_id, body, book_id, reading_mode)
           select '${DAN}', 'ひとり', b.id, 'solo'
           from books b where b.created_by = '${DAN}' and b.title like '本の雨の日 2%';
+        -- And some by his records for followers, whom he has none of.
+        insert into reading_entries (user_id, book_id, kind, is_public, audience)
+          select '${DAN}', b.id, 'finished', false, 'followers'
+          from books b where b.created_by = '${DAN}'
+            and (b.title like '本の雨の日 3%' or b.title in ('雨の日の暗号', '暗号'));
       `);
       assert.deepEqual(await answers(), before);
       await db.exec(`
@@ -633,6 +640,63 @@ async function main() {
     },
   );
 
+  await check(
+    "books in records for followers are found by the owner and followers alone",
+    async () => {
+      const queries = ["灯台の夜", "灯台", "雨の日", "本"];
+      const others = async () => {
+        const all: string[][] = [];
+        for (const visitor of [null, BEN])
+          for (const query of queries)
+            for (const limit of [1, 2, 100, 200])
+              all.push(await find(db, visitor, asked(query), limit));
+        return all;
+      };
+      const before = await others();
+      // Chi's, each in a record for followers; Aki follows Chi.
+      await db.exec(`
+        insert into books (title, author, source, created_by)
+          select '灯台の夜 ' || g, '灯野', 'manual', '${CHI}'
+          from generate_series(1, 250) g;
+        insert into reading_entries (user_id, book_id, kind, is_public, audience)
+          select '${CHI}', b.id, 'finished', false, 'followers'
+          from books b where b.title like '灯台の夜 %';
+      `);
+      assert.deepEqual(await others(), before);
+      const followed = new Set(
+        (
+          await db.query<{ id: string }>(
+            "select id from books where title like '灯台の夜 %'",
+          )
+        ).rows.map((row) => row.id),
+      );
+      for (const visitor of [null, AKI, BEN, CHI]) {
+        const readable = new Set(
+          (await as<{ id: string }>(db, visitor, "select id from books")).map(
+            (row) => row.id,
+          ),
+        );
+        for (const limit of [1, 2, 100, 200]) {
+          const found = await find(db, visitor, asked("灯台の夜"), limit);
+          assert.ok(
+            found.every((book) => readable.has(book)),
+            `${visitor} ${limit}`,
+          );
+          assert.equal(
+            found.filter((book) => followed.has(book)).length,
+            visitor === AKI || visitor === CHI ? limit : 0,
+            `${visitor} ${limit}`,
+          );
+        }
+      }
+      await db.exec(`
+        delete from reading_entries where book_id in (
+          select id from books where title like '灯台の夜 %');
+        delete from books where title like '灯台の夜 %';
+      `);
+    },
+  );
+
   await check("nobody reads the grams but the functions", async () => {
     for (const visitor of [null, AKI]) {
       let refused = false;
@@ -651,7 +715,7 @@ async function main() {
        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where p.proname in ('find_books', 'feeling_records', 'found_book_ids',
          'felt_page', 'keep_book_grams', 'search_grams', 'fold_book_loose',
-         'search_candidates', 'book_is_seen')
+         'search_candidates', 'book_is_seen', 'seen_book_ids', 'keep_seen_books')
        order by 1`,
     );
     assert.deepEqual(rows, [
@@ -705,6 +769,13 @@ async function main() {
         everyone: false,
       },
       {
+        name: "keep_seen_books",
+        definer: true,
+        anon: false,
+        authenticated: false,
+        everyone: false,
+      },
+      {
         name: "search_candidates",
         definer: true,
         anon: false,
@@ -714,6 +785,13 @@ async function main() {
       {
         name: "search_grams",
         definer: false,
+        anon: false,
+        authenticated: false,
+        everyone: false,
+      },
+      {
+        name: "seen_book_ids",
+        definer: true,
         anon: false,
         authenticated: false,
         everyone: false,
