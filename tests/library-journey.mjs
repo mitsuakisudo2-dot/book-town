@@ -2501,7 +2501,7 @@ try {
   );
 
   await check(
-    "a book's page shows and sets the reader's 読書の状態 and 持っている本, as the library does (AUD-052)",
+    "a book's page and a book in hand show and set the reader's 読書の状態 and 持っている本, as the library does (AUD-052)",
     async () => {
       const fresh = await browser.newContext(phone);
       await answerOutside(fresh);
@@ -2570,6 +2570,38 @@ try {
           on.evaluate(() => document.documentElement.scrollWidth - innerWidth),
         )
         .toBe(0);
+      // A book held in hand in the walk has the same rows (102), without
+      // its page's 登録.
+      await go("/walk/#shop-rain", on);
+      await on.locator("[data-placement]").first().click();
+      const hand = on.locator(".bh-dialog");
+      await expect(hand).toBeVisible();
+      const handStatus = hand.getByRole("group", { name: "読書の状態" });
+      const handOwned = hand.getByRole("group", { name: "持っている本" });
+      await expect(handStatus.getByRole("button")).toHaveText([
+        "積読",
+        "読書中",
+        "読了",
+      ]);
+      await expect(handOwned).toBeVisible();
+      await expect(
+        hand.getByRole("button", { name: "ライブラリに登録" }),
+      ).toHaveCount(0);
+      await handStatus.getByRole("button", { name: "積読" }).click();
+      await expect(on.locator(".toast")).toContainText("を積読にしました");
+      await expect(
+        handStatus.getByRole("button", { name: "積読", pressed: true }),
+      ).toBeVisible();
+      await expect(
+        handOwned.getByRole("button", { name: "持っている", pressed: true }),
+      ).toBeVisible();
+      await expect
+        .poll(async () =>
+          Object.values((await stored(on)).libraryEntries).some(
+            (entry) => entry.status === "tsundoku" && entry.owned === "yes",
+          ),
+        )
+        .toBe(true);
       await fresh.close();
     },
   );
