@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { bibliographyFrom, holdFrom, type BibliographyRow } from "../src/lib/bibliography";
+import {
+  bibliographyFrom,
+  holdFrom,
+  showsIsbnCover,
+  type BibliographyRow,
+} from "../src/lib/bibliography";
 import {
   bookHeading,
   bookNamedBy,
@@ -253,6 +258,22 @@ check("a hold a day or more after the book was placed is told as a book register
   // From a database that does not send it yet: as before.
   assert.equal(holdFrom({ ...row, placed_at: undefined })?.earlier, false);
   assert.equal(holdFrom({ ...row, title: null }), null);
+});
+
+check("a held book shows no cover of its ISBN, and nobody else can tell it is held", () => {
+  const cover = (book: Partial<Parameters<typeof showsIsbnCover>[0]>) =>
+    showsIsbnCover({ database: true, own: true, held: false, hasMaster: false, ...book });
+  // Its reader: once their holds are known to leave it out, and only then.
+  assert.equal(cover({}), true);
+  assert.equal(cover({ held: null }), false);
+  assert.equal(cover({ held: true }), false);
+  assert.equal(cover({ held: true, hasMaster: true }), false);
+  // Another reader's: as its master is shown, which a held book's is not, so
+  // it looks like a book whose sources have not answered yet.
+  assert.equal(cover({ own: false, held: null, hasMaster: true }), true);
+  assert.equal(cover({ own: false, held: null, hasMaster: false }), false);
+  // The demo's, a 見本, this browser's: as before.
+  assert.equal(cover({ database: false, held: null }), true);
 });
 
 console.log(`${passed} bibliography checks passed`);

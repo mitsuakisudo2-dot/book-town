@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useAccountState } from "../lib/account-session";
+import { useCoverIsbn } from "../lib/bibliography-session";
 import { useCover } from "../lib/covers";
 import { isDatabaseId } from "../lib/record-kind";
 import type { Book } from "../lib/types";
@@ -85,7 +86,7 @@ export function ReportButton({
  */
 export function CoverRemovalLink({ book }: { book: Book }) {
   const savedIn = useTownBackend();
-  const cover = useCover(book.coverUrl ? undefined : book.isbn, book);
+  const cover = useCover(useCoverIsbn(book), book);
   if (!cover || !book.isbn || savedIn !== "account") return null;
   return (
     <ReportButton

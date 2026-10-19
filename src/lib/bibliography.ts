@@ -174,3 +174,23 @@ export function holdFrom(row: BookHoldRow): BookHold | null {
       }
     : null;
 }
+
+/**
+ * Whether a book shows the cover of its ISBN (AUD-017). A held book's ISBN is
+ * likely another book's, so it shows its 装丁カード, to anyone. Its reader
+ * sees their own book's cover once their holds are known to leave it out.
+ * Another reader's book shows it only once its master is shown: a held book
+ * has none, so it looks like any book whose sources have not answered yet,
+ * and nobody else can tell it is held. A book not of the database (the
+ * demo's, a 見本, this browser's) as before.
+ */
+export function showsIsbnCover(book: {
+  database: boolean;
+  own: boolean;
+  /** Whether the reader's holds hold it; null while they are not known. */
+  held: boolean | null;
+  hasMaster: boolean;
+}): boolean {
+  if (!book.database) return true;
+  return book.own ? book.held === false : book.hasMaster;
+}
