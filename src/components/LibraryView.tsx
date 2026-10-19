@@ -54,6 +54,7 @@ import {
 } from "../lib/library-changes";
 import { CHOICE_NAMES, type Audience } from "../lib/visibility";
 import { walkPath } from "../lib/paths";
+import "./library.css";
 
 // The reader's library (管理表14): every book they have met in the town,
 // sorted onto the default shelves (library.ts DEFAULT_SHELVES) and the

@@ -49,6 +49,7 @@
     "src/components/social.css": 2,
     "src/components/street.css": 6,
     "src/components/usability.css": 1,
-    "src/components/walk.css": 21
+    "src/components/walk-shared.css": 1,
+    "src/components/walk.css": 20
   }
 }

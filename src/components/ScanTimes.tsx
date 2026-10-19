@@ -6,6 +6,7 @@ import { scanTimeWords, type ScanTime } from "../lib/scan-history";
 import type { Book } from "../lib/types";
 import { counted } from "../lib/words";
 import { Modal } from "./ui";
+import "./library.css";
 
 // スキャンした回 (資料 §2 J): the times of scanning whose books are in the
 // library, the latest first; one picked narrows the library to its books.

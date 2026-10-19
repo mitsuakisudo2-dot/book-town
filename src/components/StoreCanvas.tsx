@@ -14,6 +14,7 @@ import { popExcerpt, tierCardOwners } from "../lib/store-scene-adapter";
 import { ART_PANELS, artPanel } from "../lib/book-art";
 import type { Book } from "../lib/types";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
+import "./walk.css";
 
 const THEME = "/themes/woodshop/";
 const pct = (n: number) => n * 100 + "%";
