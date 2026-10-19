@@ -1482,6 +1482,9 @@ try {
       // Deep in the alley: how far it was walked stays in the address, so
       // 戻る from a shop comes back to the same front, the alley as long.
       await goHome(page);
+      // The alley is drawn a few frames after the 便り above it (HomePane's
+      // stages): the bottom is the alley's own once its first shop is there.
+      await expect(page.locator(".street-shop").first()).toBeAttached();
       for (const rounds of [2, 3]) {
         await page.evaluate(() =>
           window.scrollTo(0, document.body.scrollHeight),

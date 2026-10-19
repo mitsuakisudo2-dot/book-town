@@ -662,7 +662,7 @@ export default function TownApp({
         </Modal>
       )}
       {/* Only while a 便り is open over the screen, so its file is not read
-          before (post-page-later.ts). */}
+          before (post-page-later.tsx). */}
       {layered && <PostLayer {...shared} />}
       {/* Said to a screen reader without moving the focus (いいね's count). */}
       <div className="sr-only town-said" aria-live="polite">
