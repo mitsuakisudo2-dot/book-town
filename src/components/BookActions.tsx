@@ -98,9 +98,9 @@ export function bookNote(book: Book): string {
 const NO_SHELVES: ReadonlySet<string> = new Set();
 
 /**
- * The reader's own place for the book, on its page (AUD-052): its reading
- * status and whether they own it, set here as in the library's ［選ぶ］, and
- * whether it is on their shop's shelves. Set on a book not in the library,
+ * The reader's own place for the book, on its page and in a book held in
+ * hand (AUD-052): its reading status and whether they own it, set here as
+ * in the library's ［選ぶ］, and whether it is on their shop's shelves. Set on a book not in the library,
  * or taken out of it, it brings the book in, as 登録 does.
  */
 function MyBook({
@@ -174,6 +174,7 @@ export function BookActions({
   actions,
   notify,
   register = false,
+  myPlace = register,
   toShop = false,
 }: {
   book: Book;
@@ -182,6 +183,11 @@ export function BookActions({
   notify: Notify;
   /** On the book's own page: 本棚に登録 in one tap, first (管理表 12). */
   register?: boolean;
+  /**
+   * The reader's own 読書の状態 and 持っている本 for it (AUD-052): on the
+   * book's own page with 登録, and in a book held in hand without it.
+   */
+  myPlace?: boolean;
   /**
    * On the book's own page: 自分の書店へ, which opens the reader's shop with
    * this book chosen (管理表 103).
@@ -236,7 +242,7 @@ export function BookActions({
           {favorite ? "お気に入りに登録済み" : "お気に入り"}
         </button>
       </div>
-      {register && (
+      {myPlace && (
         <MyBook book={book} state={state} actions={actions} notify={notify} />
       )}
       {toShop && (

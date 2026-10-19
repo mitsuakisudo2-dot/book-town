@@ -692,6 +692,7 @@ export function BookInHand({
             state={state}
             actions={actions}
             notify={notify}
+            myPlace
           />
           <BookDiscovery
             shop={shop}
