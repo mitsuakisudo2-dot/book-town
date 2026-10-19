@@ -307,8 +307,6 @@ export const SCAN_COPY = {
   /** 連続設定 (資料 3章): the bar under the camera, and its sheet. */
   sort: {
     name: "連続設定",
-    note: "設定すると次の本から自動分類",
-    set: "設定する",
     on: "連続設定中",
     change: "変更",
     off: "解除",
@@ -361,9 +359,14 @@ export const SCAN_COPY = {
     can: "並べられるもの",
     full: `${SLOT_COUNT}つまで並びます`,
     empty: "何も並べないと、下の段は出ません",
-    left: (name: string) => `${name}を左へ`,
-    right: (name: string) => `${name}を右へ`,
-    remove: (name: string) => `${name}を外す`,
+    /** Read out: the row's buttons are moved by dragging, or with the keyboard. */
+    movable: "並べ替えられるボタン",
+    howToMove:
+      "スペースキーでボタンをつかみ、左右の矢印キーで動かします。もう一度スペースキーで置き、Escapeでやめます。",
+    picked: (name: string) => `${name}をつかみました`,
+    moving: (name: string, at: number) => `${name}を${at}番目へ`,
+    put: (name: string, at: number) => `${name}を${at}番目に置きました`,
+    back: (name: string) => `${name}を元の場所に戻しました`,
     done: "閉じる",
   },
   /** 続きから再開 (Figma v4's 09). */

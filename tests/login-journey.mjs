@@ -2025,6 +2025,88 @@ try {
   );
 
   await check(
+    "the first book read into an empty library stays in the scanner's list",
+    async () => {
+      // What the page writes is answered here, and kept nowhere.
+      const sent = [];
+      const writes = (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (
+          request.method() === "GET" ||
+          url.pathname.startsWith("/rest/v1/rpc/")
+        )
+          return route.fallback();
+        sent.push(url.pathname);
+        return route.fulfill({ status: 201, body: "" });
+      };
+      const FIRST_ISBN = "9784003101018";
+      const titles = (route) => {
+        const isbns = new URL(route.request().url()).searchParams
+          .get("isbn")
+          .split(",");
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify(
+            isbns.map((isbn) =>
+              isbn === FIRST_ISBN
+                ? {
+                    summary: {
+                      isbn,
+                      title: "吾輩は猫である",
+                      author: "夏目,漱石,1867-1916／著",
+                    },
+                  }
+                : null,
+            ),
+          ),
+        });
+      };
+      await page.route("https://api.openbd.jp/**", titles);
+      await page.route(supabase + "/rest/v1/**", writes);
+      await page.goto(base + "/library/");
+      // The library is empty: the scanner opens from its first page.
+      const start = page.locator(".library-start");
+      await start.getByRole("button", { name: "本を登録" }).click();
+      const scanner = page.getByRole("dialog", { name: "本を続けて登録" });
+      await scanner.getByLabel("ISBN", { exact: true }).fill(FIRST_ISBN);
+      await expect(scanner.locator(".scan-item-state")).toHaveText(
+        "登録しました",
+      );
+      await expect.poll(() => sent).toContain("/rest/v1/library_entries");
+      // The library is not empty now, and the scanner over it is the same
+      // one: its list keeps the book, and it does not ask to go on from
+      // last time.
+      await expect(start).toHaveCount(0);
+      await expect(scanner.locator(".scan-item")).toHaveCount(1);
+      await expect(scanner.locator(".scan-count")).toHaveText("1冊 登録済み");
+      await expect(
+        page.getByRole("dialog", { name: "前回の登録を続けますか？" }),
+      ).toHaveCount(0);
+      // Taken back out, the library is empty again, the list still there.
+      const before = sent.length;
+      await scanner
+        .getByRole("button", { name: "吾輩は猫であるのほかの操作" })
+        .click();
+      await scanner
+        .getByRole("menuitem", { name: "吾輩は猫であるの登録を取り消す" })
+        .click();
+      await expect(scanner.locator(".scan-item-state")).toHaveText(
+        "取り消しました",
+      );
+      await expect(start).toBeVisible();
+      await expect(scanner.locator(".scan-item")).toHaveCount(1);
+      await expect
+        .poll(() => sent.slice(before))
+        .toEqual(["/rest/v1/library_entries", "/rest/v1/book_marks"]);
+      await scanner.getByRole("button", { name: "閉じる" }).click();
+      await expect(scanner).toHaveCount(0);
+      await page.unroute(supabase + "/rest/v1/**", writes);
+      await page.unroute("https://api.openbd.jp/**", titles);
+    },
+  );
+
+  await check(
     "a book registered while the town loads is not said to be registered",
     async () => {
       // The town's reads wait; the reader's own profile comes, so they are
@@ -2195,14 +2277,21 @@ try {
         "登録しました",
       );
       await expect(scanner.locator(".scan-count")).toHaveText("1冊 登録済み");
+      // The row comes in 持っている (the switch on the 連続設定's row is on
+      // from the start). The stand-in answers with no row made, so that
+      // is sent again as a change of a row already there.
       await expect
         .poll(() => sent.map((write) => write.path))
         .toEqual([
           "/rest/v1/books",
           "/rest/v1/library_entries",
+          "/rest/v1/library_entries",
           "/rest/v1/book_marks",
         ]);
-      const [books, entries, marks] = sent.map((write) => [write.rows].flat());
+      const [books, entries, owned, marks] = sent.map((write) =>
+        [write.rows].flat(),
+      );
+      expect(owned).toEqual([{ owned: "yes" }]);
       expect(books).toHaveLength(1);
       expect(books[0]).toEqual(
         expect.objectContaining({ isbn: READ_ISBN, title: "車輪の下" }),
@@ -2215,7 +2304,11 @@ try {
       expect(marks.map((mark) => mark.book_id)).toEqual([books[0].id]);
       // Its library row says it came in by an ISBN typed, written before the mark.
       expect(entries).toEqual([
-        expect.objectContaining({ book_id: books[0].id, source: "isbn" }),
+        expect.objectContaining({
+          book_id: books[0].id,
+          source: "isbn",
+          owned: "yes",
+        }),
       ]);
       // Saved: the device lets it go.
       await expect.poll(journal).toBeNull();
