@@ -535,8 +535,8 @@ async function main() {
       };
       const before = await answers();
       // Dan types in many books nobody else may read: the titles asked,
-      // books of the same ISBN and of ISBNs begun the same, and more than
-      // the search scores of one pair.
+      // books of the same ISBN and of ISBNs begun the same, and many more,
+      // some named by his own records and posts read alone.
       await db.exec(`
         insert into auth.users (id) values ('${DAN}');
         insert into profiles (id, handle, name) values ('${DAN}', 'dan', 'ダン');
@@ -550,13 +550,86 @@ async function main() {
         insert into books (title, author, source, created_by)
           select '本の雨の日 ' || g, '誰か', 'manual', '${DAN}'
           from generate_series(1, 2100) g;
+        -- Some named by Dan's rows only he reads.
+        insert into reading_entries (user_id, book_id, kind, is_public, audience)
+          select '${DAN}', b.id, 'finished', false, 'private'
+          from books b where b.created_by = '${DAN}' and b.title like '本の雨の日 1%';
+        insert into posts (author_id, body, book_id, reading_mode)
+          select '${DAN}', 'ひとり', b.id, 'solo'
+          from books b where b.created_by = '${DAN}' and b.title like '本の雨の日 2%';
       `);
       assert.deepEqual(await answers(), before);
       await db.exec(`
+        delete from reading_entries where user_id = '${DAN}';
+        delete from posts where author_id = '${DAN}';
         delete from books where created_by = '${DAN}';
         delete from profiles where id = '${DAN}';
         delete from auth.users where id = '${DAN}';
       `);
+    },
+  );
+
+  await check(
+    "a search finds the books the reader may read, by every way a book is seen",
+    async () => {
+      // Chi's books, each seen (or not) one way; Aki follows Chi.
+      const ways: [number, string][] = [
+        [1, "なにもない"],
+        [2, "自分だけの記録"],
+        [3, "公開の記録"],
+        [4, "フォロワーの記録"],
+        [5, "ひとり読みの投稿"],
+        [6, "ふつうの投稿"],
+        [7, "下書きのポスター"],
+        [8, "公開のポスター"],
+        [9, "ひとりの読書"],
+        [10, "一緒の読書"],
+      ];
+      const way = (n: number) => id(4, n);
+      const posterPages = (book: string) =>
+        JSON.stringify([{ blocks: [{ type: "books", book_ids: [book] }] }]);
+      await db.exec(`
+        insert into books (id, title, author, source, created_by) values
+          ${ways
+            .map(
+              ([n, t]) =>
+                `('${way(n)}', '灯台の本 ${t}', '灯野', 'manual', '${CHI}')`,
+            )
+            .join(",\n")};
+        insert into reading_entries (user_id, book_id, kind, is_public, audience) values
+          ('${CHI}', '${way(2)}', 'finished', false, 'private'),
+          ('${CHI}', '${way(3)}', 'finished', true, 'everyone'),
+          ('${CHI}', '${way(4)}', 'finished', false, 'followers');
+        insert into posts (author_id, body, book_id, reading_mode) values
+          ('${CHI}', 'ひとり', '${way(5)}', 'solo'),
+          ('${CHI}', 'みんな', '${way(6)}', null);
+        insert into posters (author_id, template, pages, status) values
+          ('${CHI}', 'one_book', '${posterPages(way(7))}', 'draft'),
+          ('${CHI}', 'one_book', '${posterPages(way(8))}', 'published');
+        insert into reading_sessions (user_id, book_id, mode, started_at, ended_at) values
+          ('${CHI}', '${way(9)}', 'solo', now() - interval '2 days', now() - interval '1 day'),
+          ('${CHI}', '${way(10)}', 'together', now() - interval '2 days', now() - interval '1 day');
+      `);
+      for (const visitor of [null, AKI, BEN, CHI]) {
+        // Near titles of other books aside.
+        const found = (await find(db, visitor, asked("灯台の本"))).filter(
+          (book) => book.startsWith("4"),
+        );
+        const readable = (
+          await as<{ id: string }>(
+            db,
+            visitor,
+            "select id from books where title like '灯台の本%'",
+          )
+        ).map((row) => row.id);
+        assert.deepEqual(
+          [...found].sort(),
+          [...readable].sort(),
+          String(visitor),
+        );
+        assert.ok(readable.includes(way(3)));
+        assert.equal(readable.includes(way(1)), visitor === CHI);
+      }
     },
   );
 
@@ -651,7 +724,14 @@ async function main() {
   await check(
     "undone, the folding and the feelings are as before",
     async () => {
-      // The candidates' file first (its Rollback), then this file's.
+      // The later files first (their Rollbacks), then this file's.
+      const shown = FILES.find((file) =>
+        file.endsWith("_search_candidates_shown.sql"),
+      );
+      assert.ok(shown);
+      await db.exec(
+        functionOf(CANDIDATES!, "create function private.search_candidates("),
+      );
       await db.exec(
         functionOf(FILE!, "create function private.found_book_ids("),
       );

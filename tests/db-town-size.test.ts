@@ -37,6 +37,8 @@ const POSTS = 3;
 // Books a reader typed in and keeps to themselves (their library): nobody
 // else may read them, and a search must pass them by quickly.
 const KEPT = 50;
+// And books a reader typed in and wrote a record of for themselves alone.
+const NOTED = 25;
 // Bytes may move a little with the made-up town; time moves with the machine.
 const BYTES_SLACK = 1.1;
 const MS_SLACK = 3;
@@ -53,6 +55,7 @@ const FIRST_BOOK = "b0000001-0001-4000-8000-000000000000";
 const SEARCH = databaseSearch("本の題名 12-3")!;
 // A search whose books are nearly all ones the visitor may not read.
 const KEPT_SEARCH = databaseSearch("控えの本")!;
+const NOTED_SEARCH = databaseSearch("手帳の本")!;
 
 /** What each page asks, as a visitor, with its arguments. */
 const PAGES: Record<string, [string, unknown[]]> = {
@@ -67,9 +70,13 @@ const PAGES: Record<string, [string, unknown[]]> = {
     "select public.find_books($1::jsonb, null, null, 100)::text",
     [JSON.stringify(KEPT_SEARCH.forms)],
   ],
+  find_books_noted: [
+    "select public.find_books($1::jsonb, null, null, 100)::text",
+    [JSON.stringify(NOTED_SEARCH.forms)],
+  ],
 };
 /** Pages that may find nothing: what they look through is not the visitor's. */
-const MAY_BE_EMPTY = new Set(["find_books_kept"]);
+const MAY_BE_EMPTY = new Set(["find_books_kept", "find_books_noted"]);
 
 interface Answer {
   bytes: number;
@@ -101,8 +108,17 @@ async function town(readers: number): Promise<PGlite> {
       select '控えの本 ' || g || '-' || k, '著者' || (g % 500), 'manual', id::uuid,
         ${when("g", "k")}
       from ${ids} r, generate_series(1, ${KEPT}) k;
+    insert into books (title, author, source, created_by, created_at)
+      select '手帳の本 ' || g || '-' || k, '著者' || (g % 500), 'manual', id::uuid,
+        ${when("g", "k")}
+      from ${ids} r, generate_series(1, ${NOTED}) k;
     insert into library_entries (user_id, book_id, source)
-      select b.created_by, b.id, 'manual' from books b where b.title like '控えの本 %';
+      select b.created_by, b.id, 'manual' from books b
+      where b.title like '控えの本 %' or b.title like '手帳の本 %';
+    insert into reading_entries (user_id, book_id, kind, body, audience, created_at)
+      select b.created_by, b.id, 'note', '自分だけのメモ。', 'private',
+        b.created_at - interval '1 year'
+      from books b where b.title like '手帳の本 %';
     insert into profile_nine (profile_id, position, book_id, note)
       select id::uuid, k, ${bookOf("g", "k")}, 'この本で世界の見え方が変わりました'
       from ${ids} r, generate_series(1, ${BOOKS}) k;
@@ -123,7 +139,7 @@ async function town(readers: number): Promise<PGlite> {
       'items', (select jsonb_agg(jsonb_build_object(
         'bookId', b.id, 'pop', 'おすすめの一冊です', 'display', 'spine'))
         from books b where b.created_by = s.owner_id
-          and b.title not like '控えの本 %')));
+          and b.title not like '控えの本 %' and b.title not like '手帳の本 %')));
     analyze;
   `);
   return db;
