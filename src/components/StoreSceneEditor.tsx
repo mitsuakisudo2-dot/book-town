@@ -43,7 +43,8 @@ import {
   type Book,
   type TownState,
 } from "../lib/types";
-import { enterPressed, useBookSearch } from "../lib/search/use-book-search";
+import { enterPressed } from "../lib/keys";
+import { useBookSearch } from "../lib/search/use-book-search";
 import { booksBeforeSearch } from "../lib/book-lists";
 import { focusField } from "../lib/coarse-pointer";
 import { StoreCanvas, StoreStamp } from "./StoreCanvas";

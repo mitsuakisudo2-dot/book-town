@@ -358,34 +358,52 @@ check("no `text-wrap: pretty` in the town's CSS or components", () => {
   }
 });
 
-check("the town's own words take the device-first stack from --sans", () => {
-  // Only tokens.css names the stacks; a reader's poster pins its two
-  // typefaces there too (--poster-mincho, --poster-gothic).
-  for (const file of filesIn("src", [".css"])) {
-    if (file === path.join("src", "app", "tokens.css")) continue;
-    for (const [rule] of read(file).matchAll(/font-family\s*:[^;}]*/g))
-      assert.ok(
-        !/^font-family\s*:\s*"Noto Sans JP"/.test(rule),
-        `${file}: ${rule}`,
-      );
-  }
-  // The body's letters are the device's: the web font named there is read
-  // from Google on every phone without Hiragino (AUD-046).
-  const sans = tokens.match(/--sans:([^;]*);/)?.[1] ?? "";
-  assert.ok(sans.trim().endsWith("sans-serif"), sans);
-  assert.ok(!/"Noto Sans JP"/.test(sans), `--sans names the web font: ${sans}`);
-  assert.match(tokens, /--poster-mincho:\s*"Noto Serif JP"/);
-  assert.match(tokens, /--poster-gothic:\s*"Noto Sans JP"/);
-  const poster = read("src/components/poster.css");
-  assert.match(
-    poster,
-    /\.poster-sheet\.is-mincho\s*\{\s*font-family:\s*var\(--poster-mincho\);/,
-  );
-  assert.match(
-    poster,
-    /\.poster-sheet\.is-gothic\s*\{\s*font-family:\s*var\(--poster-gothic\);/,
-  );
-});
+check(
+  "the town's own words take the device-first stacks from --sans and --serif",
+  () => {
+    // Only tokens.css names the stacks; a reader's poster pins its two
+    // typefaces there too (--poster-mincho, --poster-gothic).
+    for (const file of filesIn("src", [".css"])) {
+      if (file === path.join("src", "app", "tokens.css")) continue;
+      for (const [rule] of read(file).matchAll(/font-family\s*:[^;}]*/g))
+        assert.ok(
+          !/^font-family\s*:\s*"Noto Sans JP"/.test(rule),
+          `${file}: ${rule}`,
+        );
+    }
+    // The body's letters are the device's: the web font named there is read
+    // from Google on every phone without Hiragino (AUD-046).
+    const sans = tokens.match(/--sans:([^;]*);/)?.[1] ?? "";
+    assert.ok(sans.trim().endsWith("sans-serif"), sans);
+    assert.ok(
+      !/"Noto Sans JP"/.test(sans),
+      `--sans names the web font: ${sans}`,
+    );
+    // The mincho is the device's too where Android has it (local() only),
+    // before the web font (about 1.27MB on Home).
+    const serif = tokens.match(/--serif:([^;]*);/)?.[1] ?? "";
+    assert.ok(
+      serif.indexOf('"Device Mincho"') >= 0 &&
+        serif.indexOf('"Device Mincho"') < serif.indexOf('"Noto Serif JP"'),
+      serif,
+    );
+    assert.match(
+      tokens,
+      /font-family: "Device Mincho";\s*src:\s*local\("Noto Serif CJK JP"\)/,
+    );
+    assert.match(tokens, /--poster-mincho:\s*"Noto Serif JP"/);
+    assert.match(tokens, /--poster-gothic:\s*"Noto Sans JP"/);
+    const poster = read("src/components/poster.css");
+    assert.match(
+      poster,
+      /\.poster-sheet\.is-mincho\s*\{\s*font-family:\s*var\(--poster-mincho\);/,
+    );
+    assert.match(
+      poster,
+      /\.poster-sheet\.is-gothic\s*\{\s*font-family:\s*var\(--poster-gothic\);/,
+    );
+  },
+);
 
 check("letter.css and home.css take every colour from the tokens", () => {
   for (const file of [

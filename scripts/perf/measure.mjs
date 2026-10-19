@@ -7,7 +7,8 @@
 //
 //   node scripts/perf/measure.mjs [runs] [first|second]
 //
-// ran:         the page's code has run: its first question to Supabase.
+// ran:         the page's code has run: its first question to Supabase
+//              (with VISITOR, the head's town_view, town-ahead.ts).
 // first:       the first 便り (.post-card) drawn, the frame after it shows.
 // interactive: the first 便り, or the end of the last long task within 15
 //              seconds of it if later: when a tap is answered at once.
@@ -15,7 +16,8 @@
 // (ms) it fails when a median is over its limit (the CI check, AUD-048).
 // BASE (https://127.0.0.1:5181) names the server; PAGE another page to open
 // (/library/, …: ran and interactive only, or READY's selector for first); REQS=1 lists what was asked
-// of Supabase, TIMING=1 when each file came, FONTS=1 lets Google's fonts come.
+// of Supabase, TIMING=1 when each file came, FONTS=1 lets Google's fonts come,
+// VISITOR=1 opens it as someone who has not signed in (the first visit).
 import fs from "node:fs";
 import { chromium } from "@playwright/test";
 
@@ -215,7 +217,7 @@ for (let r = 0; r < runs; r++) {
   await context.addInitScript(
     ([signedIn, ready]) => {
       try {
-        if (!localStorage.getItem("sb-test-project-auth-token"))
+        if (signedIn && !localStorage.getItem("sb-test-project-auth-token"))
           localStorage.setItem("sb-test-project-auth-token", signedIn);
       } catch {}
       window.__long = [];
@@ -237,7 +239,7 @@ for (let r = 0; r < runs; r++) {
         subtree: true,
       });
     },
-    [JSON.stringify(session), READY],
+    [process.env.VISITOR ? "" : JSON.stringify(session), READY],
   );
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);

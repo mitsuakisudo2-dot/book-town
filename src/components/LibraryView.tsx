@@ -212,6 +212,13 @@ export function LibraryView({
     setMakeParam(null);
     setShelfSheet(NEW_SHELF_KEY);
   }, [makeParam, setMakeParam]);
+  // 「本を登録」 asked for from the top bar: the same, for 本を続けて登録.
+  const [addParam, setAddParam] = useUrlParam("add");
+  useEffect(() => {
+    if (addParam !== "book") return;
+    setAddParam(null);
+    setSheet("scan");
+  }, [addParam, setAddParam]);
   // One of the shelves every library has, its 見せる範囲 being chosen.
   const [audienceSheet, setAudienceSheet] = useState<string | null>(null);
   const owner = useDraftOwner();
