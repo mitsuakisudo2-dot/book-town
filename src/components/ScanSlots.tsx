@@ -79,52 +79,81 @@ export function ScanSlots({
   const label = (slot: Slot) => (
     <>
       {slot === "shelves" && <Icon name="plus" size={16} />}
-      {name(slot)}
+      <span className="scan-chip-name">{name(slot)}</span>
     </>
   );
+  // The button in the row that 左へ・外す・右へ move: the one last tapped
+  // or put in, else the first.
+  const [picked, setPicked] = useState<Slot | null>(null);
+  const now = picked && slots.includes(picked) ? picked : (slots[0] ?? null);
+  const at = now ? slots.indexOf(now) : -1;
+  const change = (next: Slot[], pick: Slot | null) => {
+    onChange(next);
+    setPicked(pick);
+  };
   return (
     <Modal title={COPY.name} onClose={onClose} fromBottom>
       <div className="scan-slots">
         <p className="scan-sort-lead">{COPY.lead}</p>
         <section>
           <h3 id="scan-slots-row">{COPY.row}</h3>
-          {slots.length ? (
-            <ol className="scan-slots-row" aria-labelledby="scan-slots-row">
-              {slots.map((slot, at) => (
-                <li key={slot} className="scan-slot">
-                  <span className="scan-slot-at" aria-hidden="true">
-                    {at + 1}
-                  </span>
-                  <span className="scan-slot-name">{label(slot)}</span>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label={COPY.left(name(slot))}
-                    disabled={at === 0}
-                    onClick={() => onChange(moveSlot(slots, slot, -1))}
-                  >
-                    <Icon name="back" size={18} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label={COPY.right(name(slot))}
-                    disabled={at === slots.length - 1}
-                    onClick={() => onChange(moveSlot(slots, slot, 1))}
-                  >
-                    <Icon name="arrow" size={18} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label={COPY.remove(name(slot))}
-                    onClick={() => onChange(toggleSlot(slots, slot))}
-                  >
-                    <Icon name="close" size={18} />
-                  </button>
-                </li>
-              ))}
-            </ol>
+          {/* As the second row of a card shows them, left to right. */}
+          <div
+            className="scan-slots-row"
+            role="group"
+            aria-labelledby="scan-slots-row"
+          >
+            {Array.from({ length: SLOT_COUNT }, (_, place) => {
+              const slot = slots[place];
+              return slot ? (
+                <button
+                  key={slot}
+                  type="button"
+                  className="chip"
+                  aria-pressed={slot === now}
+                  onClick={() => setPicked(slot)}
+                >
+                  {label(slot)}
+                </button>
+              ) : (
+                <span key={place} className="scan-slot-free" aria-hidden />
+              );
+            })}
+          </div>
+          {now ? (
+            <div className="scan-slots-move">
+              <button
+                type="button"
+                className="btn"
+                aria-label={COPY.left(name(now))}
+                disabled={at === 0}
+                onClick={() => change(moveSlot(slots, now, -1), now)}
+              >
+                <Icon name="back" size={18} />
+                {COPY.toLeft}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                aria-label={COPY.remove(name(now))}
+                onClick={() => {
+                  const next = toggleSlot(slots, now);
+                  change(next, next[Math.min(at, next.length - 1)] ?? null);
+                }}
+              >
+                {COPY.off}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                aria-label={COPY.right(name(now))}
+                disabled={at === slots.length - 1}
+                onClick={() => change(moveSlot(slots, now, 1), now)}
+              >
+                {COPY.toRight}
+                <Icon name="arrow" size={18} />
+              </button>
+            </div>
           ) : (
             <p className="scan-item-none">{COPY.empty}</p>
           )}
@@ -145,7 +174,12 @@ export function ScanSlots({
                   className="chip"
                   aria-pressed={on}
                   disabled={!on && full}
-                  onClick={() => onChange(toggleSlot(slots, slot))}
+                  onClick={() =>
+                    change(
+                      toggleSlot(slots, slot),
+                      on ? (picked === slot ? null : picked) : slot,
+                    )
+                  }
                 >
                   {label(slot)}
                 </button>

@@ -307,8 +307,6 @@ export const SCAN_COPY = {
   /** 連続設定 (資料 3章): the bar under the camera, and its sheet. */
   sort: {
     name: "連続設定",
-    note: "設定すると次の本から自動分類",
-    set: "設定する",
     on: "連続設定中",
     change: "変更",
     off: "解除",
@@ -364,6 +362,9 @@ export const SCAN_COPY = {
     left: (name: string) => `${name}を左へ`,
     right: (name: string) => `${name}を右へ`,
     remove: (name: string) => `${name}を外す`,
+    toLeft: "左へ",
+    toRight: "右へ",
+    off: "外す",
     done: "閉じる",
   },
   /** 続きから再開 (Figma v4's 09). */

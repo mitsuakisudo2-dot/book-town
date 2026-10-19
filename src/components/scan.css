@@ -260,46 +260,43 @@
 /* 連続設定 (資料 3章): what the next books are given, under the camera. */
 .scan-sort {
   flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 0;
+  display: grid;
+  gap: 2px;
+  padding: 2px 0;
   border-bottom: 1px solid var(--line);
 }
 .scan-sort.is-on {
-  display: grid;
-  justify-content: stretch;
-  gap: 2px;
   margin: 0 -16px;
-  padding: 4px 16px 8px;
+  padding: 2px 16px 8px;
   background: color-mix(in srgb, var(--green) 8%, var(--paper));
-}
-.scan-sort-text {
-  min-width: 0;
 }
 .scan-sort-title {
   font-size: var(--t-meta);
   font-weight: 700;
   line-height: 1.5;
 }
-.scan-sort-note {
-  font-size: var(--t-cap);
-  line-height: 1.5;
-  color: var(--ink-2);
-}
 .scan-sort-open {
   flex: none;
   gap: 2px;
   padding-right: 10px;
 }
+/* 持っている on the left (けにーさん 2026-10-19), what opens the 連続設定 on
+   the right. */
 .scan-sort-head {
   display: flex;
   align-items: center;
   gap: 4px;
 }
-.scan-sort-head .scan-sort-title {
+.scan-sort-quick {
+  display: flex;
   flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  font-size: var(--t-meta);
+}
+.scan-sort-now .scan-sort-title {
   color: var(--green);
 }
 .scan-sort-now {
@@ -1005,45 +1002,43 @@ body:has(.scan-session) .toast {
   font-size: var(--t-meta);
   font-weight: 700;
 }
-.scan-slots-row {
+.scan-slots-row,
+.scan-slots-move {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
-.scan-slot {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 48px;
-  padding: 2px 4px 2px 12px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-box);
-  background: var(--sheet);
-}
-.scan-slot-at {
-  flex: none;
-  width: 20px;
-  color: var(--ink-2);
-  font-size: var(--t-cap);
-  font-weight: 700;
-}
-.scan-slot-name {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 4px;
+/* The row as a card's second row shows it; the button 左へ・外す・右へ
+   move has the green edge. */
+.scan-slots-row .chip {
+  justify-content: center;
+  gap: 2px;
   min-width: 0;
-  overflow: hidden;
-  font-size: var(--t-ui);
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0 8px;
+  border-radius: var(--r-box);
+  font-size: var(--t-meta);
 }
-.scan-slot .icon-btn:disabled {
-  opacity: 0.3;
+.scan-slots-row .chip[aria-pressed="true"] {
+  background: var(--green-soft);
+  color: var(--green);
+  outline: 1px solid var(--green);
+  outline-offset: -2px;
+}
+.scan-slot-free {
+  min-height: 44px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-box);
+}
+.scan-slots-move {
+  margin-top: 8px;
+}
+.scan-slots-move .btn {
+  gap: 2px;
+  min-width: 0;
+  padding: 0 8px;
+}
+.scan-slots-move .btn:disabled {
+  opacity: 0.35;
 }
 .scan-slots-choices .chip:disabled {
   opacity: 0.45;

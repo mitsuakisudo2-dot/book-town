@@ -1284,6 +1284,29 @@ async function main() {
     assert.equal(undoScan(page.journal, OWNER, page.town, item.id), "undone");
     assert.equal(page.store.getSnapshot().library.includes(item.bookId), false);
     assert.deepEqual(page.journal.items(OWNER), []);
+    // Read in 持っている and 読了 (the switch, a 連続設定): taken back, it is
+    // out of ライブラリ all the same, and ［元に戻す］ brings it back as it was.
+    const sorted = keepRead(page.journal, OWNER, {
+      session: page.journal.newSession(),
+      isbn: isbnOf(5),
+      via: "scan",
+      known: { title: "門", author: "" },
+      sort: { status: "finished", owned: "yes", shelves: [] },
+    });
+    await sendJournal(page.journal, OWNER, page.town);
+    const row = () => page.store.getSnapshot().libraryEntries[sorted.bookId];
+    assert.equal(row().owned, "yes");
+    assert.equal(undoScan(page.journal, OWNER, page.town, sorted.id), "undone");
+    assert.notEqual(row().removedAt, null);
+    assert.equal(
+      page.store.getSnapshot().library.includes(sorted.bookId),
+      false,
+    );
+    page.store.actions.toggleLibrary(sorted.bookId);
+    assert.equal(row().removedAt, null);
+    assert.equal(row().status, "finished");
+    assert.equal(row().owned, "yes");
+    page.town.changeLibrary(sorted.bookId, { removed: true });
     // Taken back while openBD is asked: never registered.
     const late = read(page.journal, Y);
     const sending = sendJournal(page.journal, OWNER, page.town, {
