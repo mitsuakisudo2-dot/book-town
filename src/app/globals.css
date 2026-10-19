@@ -1608,7 +1608,7 @@ div.book-jacket:hover {
   }
   .town-footer {
     margin: 14px 19px 0;
-    padding: 22px 0 105px;
+    padding: 22px 0 113px;
     text-align: center;
   }
   .town-bottom-nav {
@@ -1620,12 +1620,13 @@ div.book-jacket:hover {
     display: flex;
     justify-content: space-around;
     align-items: center;
-    height: 74px;
+    height: 82px;
     background: color-mix(in srgb, var(--sheet) 96%, transparent);
     backdrop-filter: blur(15px);
     border-top: 1px solid var(--line);
     box-shadow: 0 -3px 15px color-mix(in srgb, var(--shade) 3%, transparent);
-    padding-bottom: max(7px, env(safe-area-inset-bottom));
+    /* The tabs sit high in the bar, clear of the screen's lower edge. */
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
     padding-top: 8px;
   }
   .town-bottom-nav a {
@@ -1651,7 +1652,7 @@ div.book-jacket:hover {
   }
   .toast {
     left: 50%;
-    bottom: 91px;
+    bottom: 99px;
     font-size: var(--t-cap);
     padding: 12px 17px;
     max-width: 91vw;

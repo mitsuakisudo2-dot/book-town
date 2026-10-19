@@ -32,7 +32,7 @@
   .site-notes-button {
     right: auto;
     left: max(14px, env(safe-area-inset-left, 0px));
-    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(104px + env(safe-area-inset-bottom, 0px));
   }
 }
 /* On the walk, which never scrolls and keeps a desk of books at its
@@ -44,7 +44,7 @@
     .site-notes-banner[data-at="bottom"] {
     left: auto;
     right: max(4px, env(safe-area-inset-right, 0px));
-    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px));
   }
 }
 /* Over a Modal, the top-left corner: a Modal is centred and keeps its own
@@ -203,7 +203,7 @@ body:has(.modal-backdrop) .site-notes-button {
   .site-notes-banner {
     right: auto;
     left: max(14px, env(safe-area-inset-left, 0px));
-    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(104px + env(safe-area-inset-bottom, 0px));
   }
 }
 
