@@ -1,10 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState, type ReactNode } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { LibraryShelf } from "../lib/library";
 import { SCAN_COPY } from "../lib/scan";
 import {
-  moveSlot,
+  placeSlot,
   readSlots,
   shelfOfSlot,
   SLOT_COUNT,
@@ -82,14 +98,24 @@ export function ScanSlots({
       <span className="scan-chip-name">{name(slot)}</span>
     </>
   );
-  // The button in the row that 左へ・外す・右へ move: the one last tapped
-  // or put in, else the first.
-  const [picked, setPicked] = useState<Slot | null>(null);
-  const now = picked && slots.includes(picked) ? picked : (slots[0] ?? null);
-  const at = now ? slots.indexOf(now) : -1;
-  const change = (next: Slot[], pick: Slot | null) => {
-    onChange(next);
-    setPicked(pick);
+  // Dragged by a finger or the mouse, or picked up with the keyboard's
+  // space and moved with its arrows.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+  const dndId = useId();
+  // What is read out while moving lives inside the sheet: the page behind
+  // it is not read while it is open.
+  const [voice, setVoice] = useState<HTMLDivElement | null>(null);
+  const placed = (id: string | number) => slots.indexOf(id as Slot) + 1;
+  const drop = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    onChange(
+      placeSlot(slots, active.id as Slot, slots.indexOf(over.id as Slot)),
+    );
   };
   return (
     <Modal title={COPY.name} onClose={onClose} fromBottom>
@@ -97,66 +123,61 @@ export function ScanSlots({
         <p className="scan-sort-lead">{COPY.lead}</p>
         <section>
           <h3 id="scan-slots-row">{COPY.row}</h3>
-          {/* As the second row of a card shows them, left to right. */}
-          <div
-            className="scan-slots-row"
-            role="group"
-            aria-labelledby="scan-slots-row"
-          >
-            {Array.from({ length: SLOT_COUNT }, (_, place) => {
-              const slot = slots[place];
-              return slot ? (
-                <button
-                  key={slot}
-                  type="button"
-                  className="chip"
-                  aria-pressed={slot === now}
-                  onClick={() => setPicked(slot)}
+          {slots.length ? (
+            <DndContext
+              id={dndId}
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={drop}
+              accessibility={{
+                container: voice ?? undefined,
+                screenReaderInstructions: { draggable: COPY.howToMove },
+                announcements: {
+                  onDragStart: ({ active }) =>
+                    COPY.picked(name(active.id as Slot)),
+                  // Not over its own place: it was just picked up.
+                  onDragOver: ({ active, over }) =>
+                    over && over.id !== active.id
+                      ? COPY.moving(name(active.id as Slot), placed(over.id))
+                      : undefined,
+                  onDragEnd: ({ active, over }) =>
+                    COPY.put(
+                      name(active.id as Slot),
+                      placed((over ?? active).id),
+                    ),
+                  onDragCancel: ({ active }) =>
+                    COPY.back(name(active.id as Slot)),
+                },
+              }}
+            >
+              <SortableContext
+                items={[...slots]}
+                strategy={horizontalListSortingStrategy}
+              >
+                {/* As the second row of a card shows them, left to right. */}
+                <div
+                  className="scan-slots-row"
+                  role="group"
+                  aria-labelledby="scan-slots-row"
                 >
-                  {label(slot)}
-                </button>
-              ) : (
-                <span key={place} className="scan-slot-free" aria-hidden />
-              );
-            })}
-          </div>
-          {now ? (
-            <div className="scan-slots-move">
-              <button
-                type="button"
-                className="btn"
-                aria-label={COPY.left(name(now))}
-                disabled={at === 0}
-                onClick={() => change(moveSlot(slots, now, -1), now)}
-              >
-                <Icon name="back" size={18} />
-                {COPY.toLeft}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                aria-label={COPY.remove(name(now))}
-                onClick={() => {
-                  const next = toggleSlot(slots, now);
-                  change(next, next[Math.min(at, next.length - 1)] ?? null);
-                }}
-              >
-                {COPY.off}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                aria-label={COPY.right(name(now))}
-                disabled={at === slots.length - 1}
-                onClick={() => change(moveSlot(slots, now, 1), now)}
-              >
-                {COPY.toRight}
-                <Icon name="arrow" size={18} />
-              </button>
-            </div>
+                  {slots.map((slot) => (
+                    <SlotInRow key={slot} slot={slot}>
+                      {label(slot)}
+                    </SlotInRow>
+                  ))}
+                  {Array.from(
+                    { length: SLOT_COUNT - slots.length },
+                    (_, free) => (
+                      <span key={free} className="scan-slot-free" aria-hidden />
+                    ),
+                  )}
+                </div>
+              </SortableContext>
+            </DndContext>
           ) : (
             <p className="scan-item-none">{COPY.empty}</p>
           )}
+          <div ref={setVoice} />
         </section>
         <section>
           <h3 id="scan-slots-can">{COPY.can}</h3>
@@ -174,12 +195,7 @@ export function ScanSlots({
                   className="chip"
                   aria-pressed={on}
                   disabled={!on && full}
-                  onClick={() =>
-                    change(
-                      toggleSlot(slots, slot),
-                      on ? (picked === slot ? null : picked) : slot,
-                    )
-                  }
+                  onClick={() => onChange(toggleSlot(slots, slot))}
                 >
                   {label(slot)}
                 </button>
@@ -193,5 +209,32 @@ export function ScanSlots({
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** A button of the row, moved by dragging it or with the keyboard. */
+function SlotInRow({ slot, children }: { slot: Slot; children: ReactNode }) {
+  const {
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    attributes,
+    listeners,
+  } = useSortable({
+    id: slot,
+    attributes: { roleDescription: COPY.movable },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={"chip scan-slot" + (isDragging ? " is-dragging" : "")}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      {...attributes}
+      {...listeners}
+    >
+      <Icon name="grip" size={14} />
+      {children}
+    </div>
   );
 }

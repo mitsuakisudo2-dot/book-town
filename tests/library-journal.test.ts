@@ -27,7 +27,7 @@ import { scanTimes, scanTimeWords } from "../src/lib/scan-history";
 import {
   DEFAULT_SLOTS,
   liveSlots,
-  moveSlot,
+  placeSlot,
   readSlots,
   toggleSlot,
 } from "../src/lib/scan-slots";
@@ -1479,14 +1479,21 @@ async function main() {
         "not-owned",
         "shelves",
       ]);
-      // One place left or right, never past the ends.
-      assert.deepEqual(moveSlot(DEFAULT_SLOTS, "shelves", -1), [
-        "not-owned",
+      // Dragged to a place, the others close up around it; never past the
+      // ends, and a button not in the row moves nothing.
+      assert.deepEqual(placeSlot(DEFAULT_SLOTS, "shelves", 0), [
         "shelves",
+        "not-owned",
         "favorite",
       ]);
-      assert.deepEqual(moveSlot(DEFAULT_SLOTS, "not-owned", -1), DEFAULT_SLOTS);
-      assert.deepEqual(moveSlot(DEFAULT_SLOTS, "shelves", 1), DEFAULT_SLOTS);
+      assert.deepEqual(placeSlot(DEFAULT_SLOTS, "not-owned", 1), [
+        "favorite",
+        "not-owned",
+        "shelves",
+      ]);
+      assert.deepEqual(placeSlot(DEFAULT_SLOTS, "not-owned", 3), DEFAULT_SLOTS);
+      assert.deepEqual(placeSlot(DEFAULT_SLOTS, "shelves", -1), DEFAULT_SLOTS);
+      assert.deepEqual(placeSlot(["favorite"], "shelves", 0), ["favorite"]);
       // A shelf the reader no longer has is left out of the row.
       assert.deepEqual(
         liveSlots(["shelf:gone", "favorite", "shelf:s1"], new Set(["s1"])),

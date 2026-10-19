@@ -2035,6 +2035,46 @@ try {
       fire("pointerup", from - distance);
     }, distance);
 
+  /** A finger dragging one button of the 並び onto another's place. */
+  const dragOnto = async (button, onto) => {
+    const to = await onto.boundingBox();
+    await button.evaluate(
+      async (chip, to) => {
+        const box = chip.getBoundingClientRect();
+        const from = {
+          x: box.left + box.width / 2,
+          y: box.top + box.height / 2,
+        };
+        const at = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
+        const fire = (type, x, y) =>
+          chip.dispatchEvent(
+            new PointerEvent(type, {
+              pointerId: 9,
+              pointerType: "touch",
+              isPrimary: true,
+              button: 0,
+              buttons: type === "pointerup" ? 0 : 1,
+              clientX: x,
+              clientY: y,
+              bubbles: true,
+              cancelable: true,
+            }),
+          );
+        fire("pointerdown", from.x, from.y);
+        for (let step = 1; step <= 12; step++) {
+          fire(
+            "pointermove",
+            from.x + ((at.x - from.x) * step) / 12,
+            from.y + ((at.y - from.y) * step) / 12,
+          );
+          await new Promise((done) => setTimeout(done, 20));
+        }
+        fire("pointerup", at.x, at.y);
+      },
+      { x: to.x, y: to.y, width: to.width, height: to.height },
+    );
+  };
+
   await check(
     "自由3枠: the second row's buttons are picked and put in order, and the device keeps them",
     async () => {
@@ -2064,31 +2104,52 @@ try {
       await expect(
         sheet.getByRole("button", { name: "お気に入りの漫画", exact: true }),
       ).toBeDisabled();
-      // The row reads as a card's second row: the button tapped is the one
-      // that moves or comes off.
+      // The row reads as a card's second row; what can go there is put in
+      // and taken off below it.
       const row = sheet.getByRole("group", { name: "並び" });
+      const can = sheet.getByRole("group", { name: "並べられるもの" });
       await expect(row.getByRole("button")).toHaveText([
         "未所持",
         "お気に入り",
         "本棚",
       ]);
-      await row
+      await can
         .getByRole("button", { name: "お気に入り", exact: true })
         .click();
-      await sheet.getByRole("button", { name: "お気に入りを外す" }).click();
       await expect(row.getByRole("button")).toHaveText(["未所持", "本棚"]);
-      await sheet
+      await can
         .getByRole("button", { name: "お気に入りの漫画", exact: true })
         .click();
-      await sheet
-        .getByRole("button", { name: "お気に入りの漫画を左へ" })
-        .click();
-      await sheet
-        .getByRole("button", { name: "お気に入りの漫画を左へ" })
-        .click();
-      await expect(
-        sheet.getByRole("button", { name: "お気に入りの漫画を左へ" }),
-      ).toBeDisabled();
+      await expect(row.getByRole("button")).toHaveText([
+        "未所持",
+        "本棚",
+        "お気に入りの漫画",
+      ]);
+      // A finger drags a button to its place, the others making room.
+      const comic = row.getByRole("button", { name: "お気に入りの漫画" });
+      await dragOnto(comic, row.getByRole("button", { name: "未所持" }));
+      await expect(row.getByRole("button")).toHaveText([
+        "お気に入りの漫画",
+        "未所持",
+        "本棚",
+      ]);
+      // The keyboard too: space picks it up, an arrow moves it, space puts
+      // it down; and it is said where.
+      await row.getByRole("button", { name: "本棚" }).focus();
+      for (const key of ["Space", "ArrowLeft", "Space"]) {
+        await own.keyboard.press(key);
+        await own.waitForTimeout(250);
+      }
+      await expect(row.getByRole("button")).toHaveText([
+        "お気に入りの漫画",
+        "本棚",
+        "未所持",
+      ]);
+      await expect(sheet).toContainText("本棚を2番目に置きました");
+      await dragOnto(
+        row.getByRole("button", { name: "未所持" }),
+        row.getByRole("button", { name: "本棚" }),
+      );
       await expect(row.getByRole("button")).toHaveText([
         "お気に入りの漫画",
         "未所持",

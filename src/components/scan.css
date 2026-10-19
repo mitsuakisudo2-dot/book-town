@@ -1002,43 +1002,45 @@ body:has(.scan-session) .toast {
   font-size: var(--t-meta);
   font-weight: 700;
 }
-.scan-slots-row,
-.scan-slots-move {
+.scan-slots-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
-/* The row as a card's second row shows it; the button 左へ・外す・右へ
-   move has the green edge. */
+/* The row as a card's second row shows it. A button is dragged to its
+   place: the finger moves it, not the sheet (touch-action), and the one
+   held is lifted green over the others. */
 .scan-slots-row .chip {
   justify-content: center;
-  gap: 2px;
+  gap: 0;
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 4px;
   border-radius: var(--r-box);
   font-size: var(--t-meta);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
-.scan-slots-row .chip[aria-pressed="true"] {
-  background: var(--green-soft);
-  color: var(--green);
-  outline: 1px solid var(--green);
-  outline-offset: -2px;
+/* The grip's dots, without the room around them: お気に入り fits at 320px. */
+.scan-slots-row .chip svg:first-child {
+  flex: none;
+  margin: 0 -3px 0 -4px;
+  color: var(--ink-2);
+}
+.scan-slots-row .chip.is-dragging {
+  position: relative;
+  z-index: 1;
+  cursor: grabbing;
+}
+.scan-slots-row .chip.is-dragging svg:first-child {
+  color: inherit;
 }
 .scan-slot-free {
   min-height: 44px;
   border: 1px dashed var(--line-2);
   border-radius: var(--r-box);
-}
-.scan-slots-move {
-  margin-top: 8px;
-}
-.scan-slots-move .btn {
-  gap: 2px;
-  min-width: 0;
-  padding: 0 8px;
-}
-.scan-slots-move .btn:disabled {
-  opacity: 0.35;
 }
 .scan-slots-choices .chip:disabled {
   opacity: 0.45;
