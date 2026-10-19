@@ -369,6 +369,11 @@ check("the town's own words take the device-first stack from --sans", () => {
         `${file}: ${rule}`,
       );
   }
+  // The body's letters are the device's: the web font named there is read
+  // from Google on every phone without Hiragino (AUD-046).
+  const sans = tokens.match(/--sans:([^;]*);/)?.[1] ?? "";
+  assert.ok(sans.trim().endsWith("sans-serif"), sans);
+  assert.ok(!/"Noto Sans JP"/.test(sans), `--sans names the web font: ${sans}`);
   assert.match(tokens, /--poster-mincho:\s*"Noto Serif JP"/);
   assert.match(tokens, /--poster-gothic:\s*"Noto Sans JP"/);
   const poster = read("src/components/poster.css");
