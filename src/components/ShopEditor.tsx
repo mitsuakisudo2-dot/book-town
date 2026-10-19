@@ -65,6 +65,7 @@ import {
 } from "../lib/shop-draft";
 import { booksBeforeSearch } from "../lib/book-lists";
 import { focusField } from "../lib/coarse-pointer";
+import "./scene-editor.css";
 import "./editor.css";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import { counted, whenSome, failure, AGAIN, PLACE } from "../lib/words";

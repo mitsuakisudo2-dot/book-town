@@ -34,6 +34,7 @@ import {
 import { Modal } from "./ui";
 import "./records.css";
 import "./visibility.css";
+import "./library.css";
 
 // Making a shelf of the reader's own in the library, or changing one: its
 // name, a note on what it gathers, and, for one already made, whether it
@@ -143,7 +144,10 @@ export function LibraryShelfSheet({
   ] as const;
 
   return (
-    <Modal title={shelf ? LIBRARY_SHELF.edit : LIBRARY_SHELF.make} onClose={onClose}>
+    <Modal
+      title={shelf ? LIBRARY_SHELF.edit : LIBRARY_SHELF.make}
+      onClose={onClose}
+    >
       <form
         className="library-shelf-form"
         onSubmit={(event) => {

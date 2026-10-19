@@ -269,34 +269,15 @@ check("the six palettes are the decided ones, each in tokens.css", () => {
   }
 });
 
-check("every screen's CSS is read on every page, in one order", () => {
-  // The screens come in files of their own (TownApp's next/dynamic); their
-  // CSS must not, or a page opened first would miss rules another screen's
-  // file gives it (the bottom bar, a cover), and the order would change.
+check("the shell's CSS is read on every page, in one order", () => {
+  // The CSS every page reads (screen-styles.ts) keeps the town's order: a
+  // later file wins a tie, and rules of one file style parts of another.
   const listed = [
     ...read("src/components/screen-styles.ts").matchAll(
       /^import "\.\/(.+\.css)";$/gm,
     ),
   ].map(([, file]) => path.join("src/components", file));
   assert.equal(new Set(listed).size, listed.length, "each file once");
-  // Their own: the annotations' notes (read only by those who annotate) and
-  // the account's pages (signing in, 退会), outside the town.
-  const own = [
-    "src/components/SiteNotes.tsx",
-    "src/components/AccountView.tsx",
-    "src/components/LeaveView.tsx",
-  ];
-  for (const file of filesIn("src/components", [".tsx", ".ts"]))
-    if (!own.includes(file))
-      for (const [, css] of read(file).matchAll(
-        /^import "(\.[^"]+\.css)";$/gm,
-      )) {
-        const imported = path.join(path.dirname(file), css);
-        assert.ok(
-          listed.includes(imported),
-          `${file} imports ${css}: add it to screen-styles.ts`,
-        );
-      }
   const town = read("src/components/TownApp.tsx").split("\n");
   assert.equal(town[0], '"use client";');
   assert.ok(
@@ -306,6 +287,96 @@ check("every screen's CSS is read on every page, in one order", () => {
       ?.includes("./screen-styles"),
     "TownApp reads screen-styles before anything else",
   );
+});
+
+check("a screen's own CSS is there wherever its classes are drawn", () => {
+  // Any other CSS comes with the screen that imports it (next/dynamic), so
+  // a component drawing its classes must import it, or be imported only by
+  // components that have it: else a page reached another way draws them
+  // bare. A file's classes are, for each rule, the first class no file of
+  // every page styles, outside :has() and :not(), which only ask about
+  // others (`.town-bottom-nav .nav-walk` is the walk's, `body:has(.walk-view)
+  // .site-notes-button` the notes').
+  const listed = [
+    ...read("src/components/screen-styles.ts").matchAll(
+      /^import "\.\/(.+\.css)";$/gm,
+    ),
+  ].map(([, file]) => path.join("src/components", file));
+  const asked = /:(?:has|not|is|where)\([^()]*\)/g;
+  const selectorsOf = (css: string) =>
+    [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{};]+)\{/g)]
+      .map(([, selector]) => selector.trim())
+      .filter((selector) => !/^(@|from\b|to\b|[\d.]+%)/.test(selector))
+      .map((selector) => {
+        for (let was = ""; was !== selector;)
+          [was, selector] = [selector, selector.replace(asked, "")];
+        return selector;
+      })
+      .flatMap((selector) => selector.split(","));
+  const classesOf = (selector: string) =>
+    [...selector.matchAll(/\.([a-zA-Z][\w-]*)/g)].map(([, name]) => name);
+  const everyPage = new Set(
+    [
+      ...listed,
+      "src/app/globals.css",
+      "src/app/tokens.css",
+      "src/app/parts.css",
+    ].flatMap((file) => selectorsOf(read(file)).flatMap(classesOf)),
+  );
+
+  const components = filesIn("src/components", [".tsx", ".ts"]);
+  const text = Object.fromEntries(components.map((file) => [file, read(file)]));
+  const resolve = (from: string, spec: string) =>
+    [".tsx", ".ts", "/index.tsx", "/index.ts"]
+      .map((end) => path.join(path.dirname(from), spec) + end)
+      .find((file) => file in text);
+  const importers: Record<string, string[]> = {};
+  for (const file of components)
+    for (const [, spec] of text[file].matchAll(
+      /(?:from |import\()"(\.[^"]+)"/g,
+    )) {
+      const target = resolve(file, spec);
+      if (target) (importers[target] ??= []).push(file);
+    }
+  const cssOf = (file: string) =>
+    [...text[file].matchAll(/^import "(\.[^"]+\.css)";$/gm)].map(([, css]) =>
+      path.join(path.dirname(file), css),
+    );
+
+  const own = filesIn("src/components", [".css"]).filter(
+    (css) => !listed.includes(css),
+  );
+  assert.ok(own.includes("src/components/walk.css"), "walk.css is a screen's");
+  for (const css of own) {
+    // Registering a property or a font when the file comes restyles the
+    // whole page (about 0.2s on a slow phone): those go in a file every
+    // page reads (walk-shared.css).
+    assert.ok(
+      !/@(property|font-face)\b/.test(read(css)),
+      `${css} registers a property or a font: move it to a file every page reads`,
+    );
+    const scopes = new Set(
+      selectorsOf(read(css))
+        .map((selector) => classesOf(selector).find((c) => !everyPage.has(c)))
+        .filter((name): name is string => !!name),
+    );
+    // Through an import cycle, the way round says nothing.
+    const has = (file: string, seen: string[] = []): boolean =>
+      cssOf(file).includes(css) ||
+      seen.includes(file) ||
+      ((importers[file] ?? []).length > 0 &&
+        importers[file].every((by) => has(by, [...seen, file])));
+    for (const file of components) {
+      const drawn = [...scopes].filter((name) =>
+        new RegExp(`(["'\`\\s{]|^)${name}(["'\`\\s}]|$)`, "m").test(text[file]),
+      );
+      if (drawn.length)
+        assert.ok(
+          has(file),
+          `${file} draws ${drawn.slice(0, 3).join(", ")} of ${css}: import it`,
+        );
+    }
+  }
 });
 
 check("the type steps grow together from --t-scale, none under 12px", () => {

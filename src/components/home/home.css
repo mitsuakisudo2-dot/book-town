@@ -107,17 +107,11 @@ html[data-home-tab="letters"]
   display: none;
 }
 
-/* On a phone the top bar and the tabs slide away while reading down. */
+/* On a phone the top bar (home-shared.css) and the tabs slide away while
+   reading down. */
 @media (max-width: 760px) {
-  .town-shell.is-home .town-topbar,
   .home-tabs {
     transition: transform var(--dur-enter) var(--ease-standard);
-  }
-  .town-shell.is-home .town-topbar {
-    -webkit-backdrop-filter: blur(14px);
-  }
-  .town-shell.is-home[data-bar="hidden"] .town-topbar {
-    transform: translateY(-100%);
   }
   .town-shell.is-home[data-bar="hidden"] .home-tabs {
     transform: translateY(calc(-100% - var(--home-bar)));
@@ -1459,7 +1453,6 @@ html[data-home-tab] {
   .home-skel {
     animation: none;
   }
-  .town-shell.is-home .town-topbar,
   .home-tabs,
   .home-carousel-dots > span {
     transition: none;
