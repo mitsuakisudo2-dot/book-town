@@ -14,3 +14,4 @@ public/zxing/
 # Local secrets: keys live only in GitHub repository secrets and Vercel
 .env
 .env.*
+!.env.example
