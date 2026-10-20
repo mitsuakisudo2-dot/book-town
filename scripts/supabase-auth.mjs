@@ -247,7 +247,7 @@ async function main(mode) {
   } catch (error) {
     if (error.status === 401 || error.status === 403) {
       const message =
-        "The access token cannot read the auth settings. It needs Auth Config and Project Settings (Read-write) on this project.";
+        "The access token cannot read the auth settings. Looking needs Auth Config read on this project (the environment production-read).";
       // A pull request only looks, so a token that is not replaced yet
       // should not turn it red.
       if (mode === "check") {
@@ -312,7 +312,7 @@ async function main(mode) {
   } catch (error) {
     if (error.status === 401 || error.status === 403)
       console.log(
-        "::error::The access token cannot change the auth settings. It needs Auth Config and Project Settings (Read-write) on this project.",
+        "::error::The access token cannot change the auth settings. It needs Auth Config Read-write on this project (the environment production-auth), and Project Settings if Supabase names it.",
       );
     throw error;
   }
