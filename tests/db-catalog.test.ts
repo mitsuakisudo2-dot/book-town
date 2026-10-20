@@ -39,6 +39,8 @@ const FILES = migrationFiles();
 const FILE = FILES.find((file) => file.endsWith("_library_catalog.sql"));
 assert.ok(FILE, "the catalog migration");
 const TEXT = migrationText(FILE);
+const UNCAPPED = FILES.find((file) => file.endsWith("_catalog_registered_uncapped.sql")) ?? "";
+assert.ok(UNCAPPED, "the migration that leaves registered books out of the cap");
 
 const AKI = "00000000-0000-4000-8000-00000000000a";
 const BEN = "00000000-0000-4000-8000-00000000000b";
@@ -410,7 +412,7 @@ async function main() {
       assert.ok((await rows("select 1 from books where id = $1", [id(1)])).length);
       assert.equal(
         await count("select taken from private.catalog_settings"),
-        await count("select count(*) from private.catalog_imports"),
+        await count("select count(*) from private.catalog_imports where batch <> 'registered'"),
       );
     },
   );
@@ -450,6 +452,30 @@ async function main() {
         assert.equal(bib?.title, "図書館の題名");
       }
       assert.ok(!JSON.stringify(await find(null, C(60))).includes("ベン"));
+    },
+  );
+
+  await check(
+    "a registered book comes into the catalog with the cap full, and is not counted against it; the library's records still stop at the cap (AUD-162)",
+    async () => {
+      const taken = await count("select taken from private.catalog_settings");
+      await rows("update private.catalog_settings set most = taken");
+      await register(BEN, id(3), C(61), "ベンの二冊目", "ベン");
+      await tick();
+      await answerAll(db, { [C(61)]: sru({ isbns: [C(61)], title: "満ちた目録の本" }) }, {});
+      await tick();
+      await later(11);
+      await tick();
+      assert.equal(await count("select private.catalog_promote(200, interval '10 minutes')"), 1);
+      assert.equal((await catalogRow(C(61))).title, "満ちた目録の本");
+      assert.equal(await count("select taken from private.catalog_settings"), taken);
+      const more = await rowsFor(db, [["R100000002-I62", { bibId: "62", isbns: [C(62)], title: "入らない本" }]]);
+      assert.equal((await target.take(more, "daily")).refused, 1);
+      assert.equal(await catalogRow(C(62)), undefined);
+      // Taking a batch out counts the library's rows alone.
+      assert.equal(await count("select private.catalog_drop('none')"), 0);
+      assert.equal(await count("select taken from private.catalog_settings"), taken);
+      await rows("update private.catalog_settings set most = 10000");
     },
   );
 
@@ -569,6 +595,26 @@ async function main() {
       await db.exec(TEXT);
       assert.notDeepEqual(await catalog(db), before);
       await db.exec(rollbackSql());
+      assert.deepEqual(await catalog(db), before);
+      await db.close();
+    },
+  );
+
+  await check(
+    "the rollback in the header of the uncapped promotion leaves the database as it was before",
+    async () => {
+      const db = await migrated(UNCAPPED);
+      const before = await catalog(db);
+      await db.exec(migrationText(UNCAPPED));
+      assert.notDeepEqual(await catalog(db), before);
+      await db.exec(
+        [
+          made("_library_catalog.sql", "private.catalog_promote"),
+          made("_library_catalog.sql", "private.catalog_drop"),
+          made("_library_catalog.sql", "private.catalog_gone"),
+          rollbackStatements(migrationText(UNCAPPED)),
+        ].join("\n"),
+      );
       assert.deepEqual(await catalog(db), before);
       await db.close();
     },
