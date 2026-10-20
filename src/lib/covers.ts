@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { openBdQuestions } from "./openbd";
 
 // A book with an ISBN shows its real cover when one of the sources below has
@@ -404,20 +404,55 @@ function subscribe(listener: () => void) {
 }
 
 /**
+ * Whether an element is on the screen or near it, and once it was, it stays
+ * so. A jacket asks for its cover only then (AUD-164): a search of fifty
+ * catalog rows asks the sources, Google's shared daily quota among them, for
+ * the few a reader can see, and for the rest as they are scrolled to. With
+ * no IntersectionObserver, always.
+ */
+export function useNearScreen(): [
+  (element: Element | null) => () => void,
+  boolean,
+] {
+  const [near, setNear] = useState(false);
+  const watch = useCallback((element: Element | null) => {
+    if (!element) return () => {};
+    if (typeof IntersectionObserver === "undefined") {
+      setNear(true);
+      return () => {};
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setNear(true);
+        observer.disconnect();
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return [watch, near];
+}
+
+/**
  * The real cover of the book with this ISBN, once found; null otherwise. Its
- * title lets Google find it (see googleQuestions).
+ * title lets Google find it (see googleQuestions). It is asked for when
+ * `ask` (a jacket: once near the screen, useNearScreen); a cover found
+ * before shows either way.
  */
 export function useCover(
   isbn: string | undefined,
   name?: { title: string },
+  ask = true,
 ): Cover | null {
   const title = name?.title;
   useEffect(() => {
-    if (!isbn) return;
+    if (!isbn || !ask) return;
     request(isbn, title);
     // Remembered covers wait for the refusals too, even when nothing is asked.
     void readRefusals();
-  }, [isbn, title]);
+  }, [isbn, title, ask]);
   return useSyncExternalStore(
     subscribe,
     () => {
