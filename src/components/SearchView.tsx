@@ -39,7 +39,7 @@ import "./reading.css";
 import "./records.css";
 import { profilePath, shopPath } from "../lib/paths";
 import { useMoreRead, useTownBackend, useTownMore } from "../lib/store";
-import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
+import { authorAndKind, bookById, bookTitle } from "../lib/book-name";
 import { counted, REGISTER, whenSome, NAMES } from "../lib/words";
 import { RegisterBook } from "./RegisterBook";
 import { BarcodeRegister } from "./BarcodeRegister";
@@ -266,9 +266,7 @@ export function SearchView({ state, actions, notify }: Shared) {
         <BookJacket book={book} className="search-jacket" />
         <span>
           <b>{bookTitle(book)}</b>
-          <small>
-            {bookAuthor(book)}・{book.genre}
-          </small>
+          <small>{authorAndKind(book)}</small>
           {meta && <em>{meta}</em>}
         </span>
       </Link>

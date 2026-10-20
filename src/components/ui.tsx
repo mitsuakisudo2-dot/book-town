@@ -20,6 +20,7 @@ import {
   countGoogleMark,
   useCover,
   useGoogleCoversShown,
+  useNearScreen,
 } from "../lib/covers";
 import { useBackLayer } from "../lib/back-layer";
 import { useCoverIsbn } from "../lib/bibliography-session";
@@ -389,7 +390,8 @@ export function BookJacket({
   /** How wide the cover is drawn, for the image's `sizes`. */
   sizes?: string;
 }) {
-  const found = useCover(useCoverIsbn(book), book);
+  const [watch, near] = useNearScreen();
+  const found = useCover(useCoverIsbn(book), book, near);
   const coverUrl = book.coverUrl ?? found?.url;
   const [loaded, setLoaded] = useState<string | null>(null);
   const covered = Boolean(coverUrl) && loaded === coverUrl;
@@ -463,6 +465,7 @@ export function BookJacket({
   );
   return onClick ? (
     <button
+      ref={watch}
       className={"book-jacket " + className}
       style={style}
       onClick={onClick}
@@ -472,6 +475,7 @@ export function BookJacket({
     </button>
   ) : (
     <div
+      ref={watch}
       className={"book-jacket " + className}
       style={style}
       role="img"
