@@ -11,6 +11,9 @@ on:
       daily:
         type: boolean
         required: true
+      write:
+        type: boolean
+        required: true
       environment:
         type: string
         required: true
@@ -79,3 +82,31 @@ jobs:
         run: node scripts/watch.mjs report journey "$OUTCOME"
         env:
           OUTCOME: ${{ steps.journey.outcome == 'success' && 'ok' || 'failed' }}
+
+  write:
+    if: inputs.write && inputs.environment != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: ${{ inputs.environment }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      REPORT_ISSUES: "on"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The same code a real failure goes through: an issue is opened, then
+      # closed by the passing report right after.
+      - name: Open the issue
+        run: |
+          out=$(node scripts/watch.mjs report write failed) || true
+          echo "$out"
+          echo "$out" | grep -Eq "Opened issue #|already says so"
+      - name: Close it
+        run: |
+          out=$(node scripts/watch.mjs report write ok)
+          echo "$out"
+          echo "$out" | grep -q "Closed issue #"
