@@ -1645,6 +1645,41 @@ async function main() {
     },
   );
 
+  await check(
+    "only the watch on main may write issues, and the steps keep what it grants",
+    () => {
+      const read = (name: string) =>
+        readFileSync(`.github/workflows/${name}`, "utf8");
+      // A job's block: its line and the lines indented under it.
+      const job = (text: string, name: string) => {
+        const lines = text.split("\n");
+        const start = lines.indexOf(`  ${name}:`);
+        assert.ok(start >= 0, `no job ${name}`);
+        const end = lines.findIndex(
+          (line, i) => i > start && /^ {0,2}\S/.test(line),
+        );
+        return lines.slice(start, end < 0 ? undefined : end).join("\n");
+      };
+      // A reusable workflow's own permissions would cut the caller's down.
+      assert.doesNotMatch(read("watch-run.yml"), /^\s*permissions:/m);
+      const watch = read("watch.yml");
+      const main = job(watch, "watch");
+      assert.match(main, /if: github\.event_name != 'pull_request'/);
+      assert.match(
+        main,
+        /permissions:\n {6}contents: read\n {6}issues: write\n/,
+      );
+      assert.match(main, /environment: watch/);
+      const tried = job(watch, "try");
+      assert.match(tried, /if: github\.event_name == 'pull_request'/);
+      assert.match(tried, /permissions:\n {6}contents: read\n {4}uses:/);
+      assert.match(tried, /environment: ""/);
+      assert.doesNotMatch(tried, /secrets:/);
+      // The workflow's own default for anything else is read only.
+      assert.match(watch, /^permissions:\n {2}contents: read\n/m);
+    },
+  );
+
   console.log(passed + " hosted settings checks passed");
 }
 

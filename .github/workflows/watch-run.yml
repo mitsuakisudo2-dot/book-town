@@ -15,8 +15,9 @@ on:
         type: string
         required: true
 
-permissions:
-  contents: read
+# No permissions here: a reusable workflow's own list would cut the caller's
+# down (what it leaves out becomes none), and the watch on main needs
+# issues: write. Each calling job in watch.yml grants what its run needs.
 
 jobs:
   site:
