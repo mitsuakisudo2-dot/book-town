@@ -184,15 +184,24 @@ class ApiError extends Error {
 }
 
 async function main(mode) {
-  if (mode !== "check" && mode !== "apply") {
-    console.error("Usage: node scripts/supabase-auth.mjs check|apply");
+  if (mode !== "check" && mode !== "look" && mode !== "apply") {
+    console.error("Usage: node scripts/supabase-auth.mjs check|look|apply");
     process.exit(2);
   }
+  // check (a pull request, no key) only warns; look (main, before the
+  // approval) and apply must read the project, or nothing goes on.
+  const strict = mode !== "check";
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   const project = process.env.SUPABASE_PROJECT_ID;
   const resendKey = process.env.RESEND_API_KEY || "";
   const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || "";
   if (!token || !project) {
+    if (strict) {
+      console.log(
+        `::error::SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_ID is not set, so ${mode} cannot read the settings.`,
+      );
+      process.exit(1);
+    }
     console.log(
       "::warning::SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_ID is not set, so the settings were not checked.",
     );
@@ -250,7 +259,7 @@ async function main(mode) {
         "The access token cannot read the auth settings. Looking needs Auth Config read on this project (the environment production-read).";
       // A pull request only looks, so a token that is not replaced yet
       // should not turn it red.
-      if (mode === "check") {
+      if (!strict) {
         console.log("::warning::" + message);
         return;
       }
@@ -290,7 +299,7 @@ async function main(mode) {
     console.log("Nothing to change.");
     return;
   }
-  if (mode === "check") {
+  if (mode !== "apply") {
     console.log(
       `${changed.length} setting(s) would change once this is on main.`,
     );

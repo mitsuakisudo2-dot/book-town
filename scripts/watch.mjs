@@ -232,6 +232,11 @@ async function settings() {
   return { ...config, site: process.env.WATCH_SITE ?? config.site };
 }
 
+// On main the watch must ask Supabase: a missing token is a failure there,
+// not a quiet warning, so a lost key is noticed (watch-run.yml).
+const NO_TOKEN =
+  "SUPABASE_WATCH_TOKEN (the environment watch) or SUPABASE_PROJECT_ID is not set, so Supabase was not asked.";
+
 function supabase() {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   const project = process.env.SUPABASE_PROJECT_ID;
@@ -315,7 +320,8 @@ async function checkSite(config, call) {
         lines.push(`::warning::${error.message}`);
       else problems.push(error.message);
     }
-  } else lines.push("::warning::No Supabase token, so Supabase was not asked.");
+  } else if (process.env.REPORT_ISSUES === "on") problems.push(NO_TOKEN);
+  else lines.push("::warning::No Supabase token, so Supabase was not asked.");
   return { ok: problems.length === 0, lines: [...problems, ...lines] };
 }
 
@@ -395,6 +401,11 @@ async function main(action, kind, outcome) {
     action === "usage" ||
     action === "errors"
   ) {
+    if (!call && process.env.REPORT_ISSUES === "on") {
+      await report(action, { ok: false, lines: [NO_TOKEN] });
+      process.exitCode = 1;
+      return;
+    }
     if (!call) {
       console.log(
         `::warning::SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_ID is not set, so the ${action} were not checked.`,
@@ -453,7 +464,7 @@ async function main(action, kind, outcome) {
       const lines = [error.message];
       if (refused)
         lines.push(
-          `The token may not read the ${action}. Give SUPABASE_ACCESS_TOKEN Backups and Database read access (docs/09「毎日の控えと見張り」).`,
+          `The token may not read the ${action}. Give the watch's token (SUPABASE_WATCH_TOKEN, the environment watch) Backups and Database read access (docs/09「毎日の控えと見張り」).`,
         );
       // A pull request only tries the watch, and a free plan has no backups
       // to miss: a refused token there is a warning, not a red check.

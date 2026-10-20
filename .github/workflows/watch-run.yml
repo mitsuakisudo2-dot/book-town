@@ -1,0 +1,80 @@
+name: Watch production (steps)
+
+# The steps of Watch production (watch.yml), which says when they run and
+# with what. Given an environment, they read its SUPABASE_WATCH_TOKEN, open
+# issues, and fail (with an issue) without the token; given none (a pull
+# request), they ask Supabase nothing and open no issue.
+
+on:
+  workflow_call:
+    inputs:
+      daily:
+        type: boolean
+        required: true
+      environment:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: ${{ inputs.environment }}
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ inputs.environment != '' && secrets.SUPABASE_WATCH_TOKEN || '' }}
+      SUPABASE_PROJECT_ID: ${{ inputs.environment != '' && secrets.SUPABASE_PROJECT_ID || '' }}
+      GITHUB_TOKEN: ${{ inputs.environment != '' && github.token || '' }}
+      REPORT_ISSUES: ${{ inputs.environment != '' && 'on' || 'off' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/watch.mjs site
+
+  daily:
+    if: inputs.daily
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ inputs.environment != '' && secrets.SUPABASE_WATCH_TOKEN || '' }}
+      SUPABASE_PROJECT_ID: ${{ inputs.environment != '' && secrets.SUPABASE_PROJECT_ID || '' }}
+      GITHUB_TOKEN: ${{ inputs.environment != '' && github.token || '' }}
+      REPORT_ISSUES: ${{ inputs.environment != '' && 'on' || 'off' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: The daily backup is recent
+        if: always()
+        run: node scripts/watch.mjs backups
+      - name: How much of the plan is used
+        if: always()
+        run: node scripts/watch.mjs usage
+      - name: Errors on readers' screens
+        if: always()
+        run: node scripts/watch.mjs errors
+      - run: pnpm install --frozen-lockfile
+        if: always()
+      - run: pnpm exec playwright install --with-deps chromium
+        if: always()
+      - name: A visitor's walk through the production site
+        id: journey
+        if: always()
+        run: node tests/production-journey.mjs
+      - name: Tell about the walk
+        if: always() && (steps.journey.outcome == 'success' || steps.journey.outcome == 'failure')
+        run: node scripts/watch.mjs report journey "$OUTCOME"
+        env:
+          OUTCOME: ${{ steps.journey.outcome == 'success' && 'ok' || 'failed' }}

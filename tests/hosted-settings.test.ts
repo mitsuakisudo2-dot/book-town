@@ -483,6 +483,14 @@ async function main() {
         api.seen.map((s) => s.method),
         ["GET"],
       );
+      // look, main's check before the approval, reads the same way.
+      const lookedOnMain = await run("scripts/supabase-auth.mjs", ["look"], {
+        ...env,
+        TURNSTILE_SECRET_KEY: CAPTCHA,
+      });
+      assert.equal(lookedOnMain.code, 0, lookedOnMain.output);
+      assert.match(lookedOnMain.output, /would change once this is on main/);
+      assert.ok(!api.seen.some((s) => s.method === "PATCH"));
 
       const applied = await run("scripts/supabase-auth.mjs", ["apply"], {
         ...env,
@@ -584,6 +592,11 @@ async function main() {
       const looked = await run("scripts/supabase-auth.mjs", ["check"], env);
       assert.equal(looked.code, 0, looked.output);
       assert.match(looked.output, /::warning::The access token cannot read/);
+      // On main the look before the approval may not pass without reading.
+      const strict = await run("scripts/supabase-auth.mjs", ["look"], env);
+      assert.equal(strict.code, 1, strict.output);
+      assert.match(strict.output, /::error::The access token cannot read/);
+      assert.ok(!strict.output.includes(KEY));
       const applied = await run("scripts/supabase-auth.mjs", ["apply"], env);
       assert.equal(applied.code, 1, applied.output);
       assert.match(applied.output, /::error::/);
@@ -593,9 +606,15 @@ async function main() {
   );
 
   await check("without the secrets nothing is asked", async () => {
-    const settingsRun = await run("scripts/supabase-auth.mjs", ["apply"], {});
+    const settingsRun = await run("scripts/supabase-auth.mjs", ["check"], {});
     assert.equal(settingsRun.code, 0);
     assert.match(settingsRun.output, /::warning::SUPABASE_ACCESS_TOKEN/);
+    // look and apply are main's: a missing key stops them.
+    for (const mode of ["look", "apply"]) {
+      const strict = await run("scripts/supabase-auth.mjs", [mode], {});
+      assert.equal(strict.code, 1, strict.output);
+      assert.match(strict.output, /::error::SUPABASE_ACCESS_TOKEN/);
+    }
     const vercelRun = await run("scripts/vercel.mjs", ["status", "main"], {});
     assert.equal(vercelRun.code, 0);
     assert.match(vercelRun.output, /::warning::VERCEL_TOKEN/);
@@ -1589,6 +1608,14 @@ async function main() {
       const none = await run("scripts/watch.mjs", ["backups"], {});
       assert.equal(none.code, 0);
       assert.match(none.output, /::warning::SUPABASE_ACCESS_TOKEN/);
+      // On main a missing token fails, so a lost key is noticed.
+      for (const kind of ["backups", "usage", "errors"]) {
+        const lost = await run("scripts/watch.mjs", [kind], {
+          REPORT_ISSUES: "on",
+        });
+        assert.equal(lost.code, 1, lost.output);
+        assert.match(lost.output, /SUPABASE_WATCH_TOKEN .* is not set/);
+      }
       const refusing = await standIn(() => ({
         status: 403,
         body: { message: "Missing required permission(s): database_read" },

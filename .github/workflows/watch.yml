@@ -7,10 +7,13 @@ name: Watch production
 # readers' screens sent in the last day, and a visitor's
 # walk through the production site (tests/production-journey.mjs). A failure
 # opens an issue that mentions the owner, so GitHub emails them; the next
-# passing run closes it. Needs SUPABASE_ACCESS_TOKEN (the environment watch's:
-# Backups and Database, read only) and SUPABASE_PROJECT_ID; without them only
-# the site is checked. Pull requests that change the watch run it once without
-# opening issues and without the token (the environment is main's only).
+# passing run closes it. The steps are in watch-run.yml.
+#   watch  the schedule and a run by hand, on main: the environment watch's
+#          SUPABASE_WATCH_TOKEN (Backups and Database, read only; its own
+#          name, so a missing one is never filled by an older, wider key)
+#          and SUPABASE_PROJECT_ID. Without the token the run fails.
+#   try    a pull request that changes the watch: the same steps once, with no
+#          key, no issues and a GITHUB_TOKEN that may only read.
 
 on:
   schedule:
@@ -29,67 +32,32 @@ on:
       - scripts/watch.json
       - tests/production-journey.mjs
       - .github/workflows/watch.yml
+      - .github/workflows/watch-run.yml
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: watch-${{ github.event_name == 'pull_request' && github.head_ref || github.event.schedule || inputs.check }}
   cancel-in-progress: false
 
-env:
-  SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  REPORT_ISSUES: ${{ github.event_name == 'pull_request' && 'off' || 'on' }}
-
 jobs:
-  site:
-    runs-on: ubuntu-latest
-    environment: ${{ github.event_name != 'pull_request' && 'watch' || '' }}
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ github.event_name != 'pull_request' && secrets.SUPABASE_ACCESS_TOKEN || '' }}
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: node scripts/watch.mjs site
+  watch:
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/watch-run.yml
+    with:
+      daily: ${{ github.event.schedule == '17 21 * * *' || inputs.check == 'daily' }}
+      environment: watch
+    secrets: inherit
 
-  daily:
-    if: github.event.schedule == '17 21 * * *' || inputs.check == 'daily' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    environment: ${{ github.event_name != 'pull_request' && 'watch' || '' }}
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ github.event_name != 'pull_request' && secrets.SUPABASE_ACCESS_TOKEN || '' }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - name: The daily backup is recent
-        if: always()
-        run: node scripts/watch.mjs backups
-      - name: How much of the plan is used
-        if: always()
-        run: node scripts/watch.mjs usage
-      - name: Errors on readers' screens
-        if: always()
-        run: node scripts/watch.mjs errors
-      - run: pnpm install --frozen-lockfile
-        if: always()
-      - run: pnpm exec playwright install --with-deps chromium
-        if: always()
-      - name: A visitor's walk through the production site
-        id: journey
-        if: always()
-        run: node tests/production-journey.mjs
-      - name: Tell about the walk
-        if: always() && (steps.journey.outcome == 'success' || steps.journey.outcome == 'failure')
-        run: node scripts/watch.mjs report journey "$OUTCOME"
-        env:
-          OUTCOME: ${{ steps.journey.outcome == 'success' && 'ok' || 'failed' }}
+  try:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/watch-run.yml
+    with:
+      daily: true
+      environment: ""
