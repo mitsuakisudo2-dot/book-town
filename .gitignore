@@ -10,3 +10,8 @@ playwright-report/
 
 # The barcode reader's WebAssembly, copied by scripts/copy-zxing.mjs
 public/zxing/
+
+# Local secrets: keys live only in GitHub repository secrets and Vercel
+.env
+.env.*
+!.env.example
