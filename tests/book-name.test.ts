@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import {
+  authorAndKind,
   bookAuthor,
   bookById,
   bookByIsbn,
@@ -102,6 +103,15 @@ check("an author headed the catalogue's way reads as on the book", () => {
     "",
   ])
     assert.equal(author(written), written);
+});
+
+check("a list's line says the kind alone when no one is named (AUD-165)", () => {
+  assert.equal(authorAndKind({ author: "宮沢賢治", genre: "小説" }), "宮沢賢治・小説");
+  assert.equal(authorAndKind({ author: "", genre: "図書館の目録" }), "図書館の目録");
+  assert.equal(
+    authorAndKind({ author: "海野,波子,-2026", genre: "図書館の目録" }),
+    "海野波子・図書館の目録",
+  );
 });
 
 check("a book by its ID or ISBN, and none for none", () => {

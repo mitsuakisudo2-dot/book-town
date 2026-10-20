@@ -6,7 +6,13 @@ import { useCoarsePointer, useFocusFieldOnShow } from "../lib/coarse-pointer";
 import { enterPressed } from "../lib/keys";
 import { useBookSearch } from "../lib/search/use-book-search";
 import { BookJacket, Icon, useInWritingSheet } from "./ui";
-import { bookAuthor, bookById, booksById, bookTitle } from "../lib/book-name";
+import {
+  authorAndKind,
+  bookAuthor,
+  bookById,
+  booksById,
+  bookTitle,
+} from "../lib/book-name";
 
 /** Search the catalog by title, author, genre or ISBN, and pick one book. */
 export function BookPicker({
@@ -91,9 +97,7 @@ export function BookPicker({
         <BookJacket book={book} className="picker-jacket" />
         <span>
           <b>{bookTitle(book)}</b>
-          <small>
-            {bookAuthor(book)}・{book.genre}
-          </small>
+          <small>{authorAndKind(book)}</small>
         </span>
       </button>
     </li>

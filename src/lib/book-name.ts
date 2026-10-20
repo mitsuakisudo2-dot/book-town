@@ -28,6 +28,10 @@ export const quote = (title: string): string => `『${title}』`;
 export const bookAuthor = (book: Pick<Book, "author">): string =>
   authorWords(book.author);
 
+/** The author and the kind of book, in a line of a list: "宮沢賢治・小説", or the kind alone when no one is named. */
+export const authorAndKind = (book: Pick<Book, "author" | "genre">): string =>
+  [bookAuthor(book), book.genre].filter(Boolean).join("・");
+
 /** A life's years at the end of a catalogue heading: ",1947-", ",1894-1961". */
 const YEARS = /\s*,?\s*[0-9]{3,4}\??\s*-\s*([0-9]{3,4}\??)?\s*$/;
 /** A second part that is years, not a given name: "-2026", "pub. 2021", "1962-L". */
