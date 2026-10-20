@@ -18,7 +18,7 @@ import { migrationFiles, migrationText } from "./fixtures/pglite-supabase";
 
 // The library catalog's own role (supabase/migrations/*_catalog_role.sql,
 // docs/09「本番の設定」): catalog_import reaches the four functions of
-// catalog_api and nothing more than an anonymous visitor does; nobody else
+// catalog_api and nothing more than a role given nothing does; nobody else
 // may use catalog_api; through it the import takes rows up to the cap, takes
 // out deleted records' rows no reader uses, and keeps its marks; what it may
 // send at once is bounded; the tables and private stay closed to it; a
@@ -29,6 +29,9 @@ const FILES = migrationFiles();
 const FILE = FILES.find((file) => file.endsWith("_catalog_role.sql"));
 assert.ok(FILE, "the catalog role migration");
 const TEXT = migrationText(FILE);
+const LIMITS =
+  FILES.find((file) => file.endsWith("_catalog_role_limits.sql")) ?? "";
+assert.ok(LIMITS, "the migration that narrows the catalog role");
 
 const ENTRIES = [
   "catalog_api.gone(text[])",
@@ -112,8 +115,12 @@ function roleTarget(db: PGlite): Target {
   };
 }
 
-/** What role may do, in every schema but Postgres's own, that anon may not. */
-async function beyondAnon(db: PGlite, role: string) {
+/**
+ * What role may do, in every schema but Postgres's own, that a role given
+ * nothing may not: beyond PUBLIC's grants. Not anon, which has the use of
+ * schemas a role that logs in by itself must not lean on (AUD-166).
+ */
+async function beyondNobody(db: PGlite, role: string) {
   const { rows } = helpers(db);
   const schemas =
     "n.nspname not in ('pg_catalog', 'information_schema') and n.nspname !~ '^pg_'";
@@ -124,7 +131,7 @@ async function beyondAnon(db: PGlite, role: string) {
          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where ${schemas}
            and has_function_privilege($1, p.oid, 'execute')
-           and not has_function_privilege('anon', p.oid, 'execute')
+           and not has_function_privilege('nobody', p.oid, 'execute')
          order by 1`,
         [role],
       )
@@ -135,7 +142,7 @@ async function beyondAnon(db: PGlite, role: string) {
          from pg_namespace n cross join (values ('usage'), ('create')) x (privilege)
          where ${schemas}
            and has_schema_privilege($1, n.oid, x.privilege)
-           and not has_schema_privilege('anon', n.oid, x.privilege)
+           and not has_schema_privilege('nobody', n.oid, x.privilege)
          order by 1`,
         [role],
       )
@@ -150,16 +157,16 @@ async function beyondAnon(db: PGlite, role: string) {
            and (has_table_privilege($1, c.oid, x.privilege)
              or (x.privilege in ('select', 'insert', 'update', 'references')
                and has_any_column_privilege($1, c.oid, x.privilege)))
-           and not (has_table_privilege('anon', c.oid, x.privilege)
+           and not (has_table_privilege('nobody', c.oid, x.privilege)
              or (x.privilege in ('select', 'insert', 'update', 'references')
-               and has_any_column_privilege('anon', c.oid, x.privilege)))
+               and has_any_column_privilege('nobody', c.oid, x.privilege)))
          union all
          select c.oid::regclass::text || ' ' || x.privilege
          from pg_class c join pg_namespace n on n.oid = c.relnamespace
          cross join (values ('usage'), ('select'), ('update')) x (privilege)
          where ${schemas} and c.relkind = 'S'
            and has_sequence_privilege($1, c.oid, x.privilege)
-           and not has_sequence_privilege('anon', c.oid, x.privilege)
+           and not has_sequence_privilege('nobody', c.oid, x.privilege)
          order by 1`,
         [role],
       )
@@ -169,7 +176,7 @@ async function beyondAnon(db: PGlite, role: string) {
         `select x.privilege as name
          from (values ('create'), ('temporary'), ('connect')) x (privilege)
          where has_database_privilege($1, current_database(), x.privilege)
-           and not has_database_privilege('anon', current_database(), x.privilege)`,
+           and not has_database_privilege('nobody', current_database(), x.privilege)`,
         [role],
       )
     ).map((r) => r.name),
@@ -186,6 +193,7 @@ async function main() {
 
   const db = await migrated();
   const { rows, count, refused } = helpers(db);
+  await db.exec("create role nobody nologin");
 
   await check(
     "catalog_import cannot log in, is no superuser, and belongs to no other role",
@@ -209,6 +217,21 @@ async function main() {
           },
         ],
       );
+      // Two connections, five minutes a statement, a minute left in a transaction (AUD-166).
+      assert.deepEqual(
+        await rows(
+          `select rolconnlimit, rolconfig from pg_roles where rolname = 'catalog_import'`,
+        ),
+        [
+          {
+            rolconnlimit: 2,
+            rolconfig: [
+              "statement_timeout=5min",
+              "idle_in_transaction_session_timeout=1min",
+            ],
+          },
+        ],
+      );
       assert.equal(
         await count(
           `select count(*) from pg_auth_members m
@@ -220,9 +243,9 @@ async function main() {
   );
 
   await check(
-    "catalog_import may do no more than anon, but use catalog_api and run its four functions",
+    "catalog_import may do nothing a role given nothing may not, but use catalog_api and run its four functions",
     async () => {
-      assert.deepEqual(await beyondAnon(db, "catalog_import"), {
+      assert.deepEqual(await beyondNobody(db, "catalog_import"), {
         functions: ENTRIES,
         schemas: ["catalog_api usage"],
         relations: [],
@@ -429,6 +452,40 @@ async function main() {
     },
   );
 
+  await check(
+    "take takes the import's batches only: not 'registered', whose rows are out of the cap (AUD-166)",
+    async () => {
+      const before = await count(
+        "select count(*) from private.catalog_imports",
+      );
+      for (const batch of [
+        "registered",
+        "files-2026103",
+        "files-x",
+        "Trial",
+        "trial2",
+        "",
+      ])
+        await refused(
+          () =>
+            asImport(db, "select catalog_api.take('[]'::jsonb, $1)", [batch]),
+          /a batch is trial, oai or files- and a date/,
+          batch,
+        );
+      await refused(
+        () => asImport(db, "select catalog_api.take('[]'::jsonb, null)"),
+        /a batch is/,
+        "no batch",
+      );
+      for (const batch of ["trial", "oai", "files-20261003"])
+        await asImport(db, "select catalog_api.take('[]'::jsonb, $1)", [batch]);
+      assert.equal(
+        await count("select count(*) from private.catalog_imports"),
+        before,
+      );
+    },
+  );
+
   await check("what one call may send is bounded", async () => {
     const many = (n: number) =>
       Array.from({ length: n }, (_, i) => `R100000002-I${i}`);
@@ -558,6 +615,38 @@ async function main() {
          union all select 1 from pg_authid where rolname = 'catalog_import'`,
       );
       assert.equal(left.rows.length, 0);
+      await db.close();
+    },
+  );
+
+  await check(
+    "the rollback in the header of the narrowing leaves the database as it was before",
+    async () => {
+      const db = await migrated(LIMITS);
+      const state = async () =>
+        (
+          await db.query(
+            `select (select md5(prosrc) || coalesce(proacl::text, '') from pg_proc
+                     where oid = 'catalog_api.take(jsonb,text)'::regprocedure) as take,
+                    (select row(rolconnlimit, rolconfig)::text from pg_roles
+                     where rolname = 'catalog_import') as role`,
+          )
+        ).rows;
+      const before = await state();
+      const catalogBefore = await catalog(db);
+      const text = migrationText(LIMITS);
+      await db.exec(text);
+      assert.notDeepEqual(await state(), before);
+      const first = TEXT.slice(
+        TEXT.indexOf("create function catalog_api.take("),
+        TEXT.indexOf(
+          "\n",
+          TEXT.indexOf("grant execute on function catalog_api.take("),
+        ) + 1,
+      ).replace("create function", "create or replace function");
+      await db.exec(rollbackSql(text) + "\n" + first);
+      assert.deepEqual(await state(), before);
+      assert.deepEqual(await catalog(db), catalogBefore);
       await db.close();
     },
   );
