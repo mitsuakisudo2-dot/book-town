@@ -6,9 +6,10 @@
 --     'registered' is the batch of the rows made from readers' books
 --     (private.catalog_promote); those are not counted against the cap, so
 --     the import's role is not to make them.
---   * catalog_import may hold two connections at most (the import uses one),
---     and a statement of its runs five minutes at most; a transaction left
---     open stops after a minute.
+--   * catalog_import may hold two connections at most (the import uses one;
+--     the role cannot change this). A statement of its runs five minutes at
+--     most and a transaction left open stops after a minute by default: the
+--     role can set these itself, so they stop accidents, not the role.
 --
 -- What the role can reach beyond what every role reaches (PUBLIC's grants,
 -- some of them Supabase's own, which a migration cannot take back) is
