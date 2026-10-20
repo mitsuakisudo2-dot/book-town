@@ -1207,6 +1207,8 @@ try {
       await go("/profiles/me/?books=library");
       // QAの本 has no cover at openBD, so it is Google's, credited on the page.
       const saved = page.locator(".profile-saved-book", { hasText: "QAの本" });
+      // A jacket asks for its cover once it is near the screen (AUD-164).
+      await saved.scrollIntoViewIfNeeded();
       const google = saved.locator(".book-jacket.has-cover img");
       await expect(google).toHaveAttribute(
         "src",
