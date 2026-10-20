@@ -36,6 +36,26 @@ export const authorAndKind = (book: Pick<Book, "author" | "genre">): string =>
 const YEARS = /\s*,?\s*[0-9]{3,4}\??\s*-\s*([0-9]{3,4}\??)?\s*$/;
 /** A second part that is years, not a given name: "-2026", "pub. 2021", "1962-L". */
 const DATED = /^(pub\.\s*)?-?[0-9]{2,4}[0-9.?]*(\s*-\s*[0-9]{0,4}\??)?[A-Z]?$/;
+/**
+ * A trade or a field the authority writes after a single name ("こもれび,
+ * 漫画家", "kei, イラストレーター"): the words of private.bib_trade.
+ */
+export const TRADES: ReadonlySet<string> = new Set(
+  (
+    "漫画家 漫画原作者 作家 小説家 絵本作家 童話作家 放送作家 画家 写真家 歌手 " +
+    "声優 俳優 女優 タレント 翻訳家 翻訳者 詩人 歌人 俳人 評論家 料理研究家 " +
+    "料理家 作曲家 作詞家 脚本家 医師 弁護士 漫画 小説 童話 絵本 写真 イラスト " +
+    "記者 教師 僧侶 棋士 モデル YouTuber ユーチューバー 実業家 経営者 研究者 " +
+    "編集者 落語家 音楽家 建築家 占い師 美容家 ブロガー 著述家 文筆家 随筆家 " +
+    "研究家 教育者 アナウンサー コラムニスト 映画監督"
+  ).split(" "),
+);
+const TRADE_END =
+  /(ライター|デザイナー|クリエイター|クリエーター|コンサルタント|アーティスト|ミュージシャン|イラストレーター|エッセイスト|カメラマン)$/;
+const isTrade = (part: string): boolean => {
+  const word = part.normalize("NFKC").replace(/\s/g, "");
+  return TRADES.has(word) || TRADE_END.test(word);
+};
 /** What stays after a romaji name: "John Doe Jr.". */
 const SUFFIX = /^(Jr\.?|Sr\.?|II|III|IV)$/;
 
@@ -44,7 +64,8 @@ const SUFFIX = /^(Jr\.?|Sr\.?|II|III|IV)$/;
  * private.bib_person does (the same examples, tests/fixtures/authority-names.ts):
  * no years, a romaji name given name first, a Japanese one joined, and
  * nothing of what the authority writes after the given name ("弁護士",
- * "-2026", "pub. 2021"). None when it is not a heading.
+ * "-2026", "pub. 2021"), nor a trade after a single name. None when it
+ * is not a heading.
  */
 function headed(person: string): string | undefined {
   if (!person.includes(",")) return undefined;
@@ -55,7 +76,7 @@ function headed(person: string): string | undefined {
   const [family, given = "", ...rest] = parts;
   if (!family) return undefined;
   if (parts.length < 2) return family;
-  if (DATED.test(given)) return family;
+  if (DATED.test(given) || isTrade(given)) return family;
   if (!given) return undefined;
   if (!/[A-Za-z]/.test(family + given)) return family + given;
   // The catalogue runs a given name and its initial together
