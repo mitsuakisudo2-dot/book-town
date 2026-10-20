@@ -10,6 +10,7 @@ import {
   quote,
   quotedTitle,
 } from "../src/lib/book-name";
+import { AUTHORITY_NAMES } from "./fixtures/authority-names";
 
 // A book's name reads the same everywhere because every screen asks
 // src/lib/book-name.ts for it. These checks keep it that way: no title put in
@@ -82,6 +83,15 @@ check("an author headed the catalogue's way reads as on the book", () => {
   assert.equal(
     author("Clarke,ArthurCharles 福島,正実"),
     "ArthurCharles Clarke、福島正実",
+  );
+  // What the authority writes after a name is left out, as the database
+  // does (the same rows, AUD-163).
+  for (const [heading, name, app] of AUTHORITY_NAMES)
+    if (app !== false)
+      assert.equal(author(heading.replace(/,\s+/g, ",")), name, heading);
+  assert.equal(
+    author("海野,波子,-2026 藤野,霞,弁護士"),
+    "海野波子、藤野霞",
   );
   // Written any other way, the author is left as written.
   for (const written of [

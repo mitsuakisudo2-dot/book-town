@@ -30,29 +30,60 @@ export const bookAuthor = (book: Pick<Book, "author">): string =>
 
 /** A life's years at the end of a catalogue heading: ",1947-", ",1894-1961". */
 const YEARS = /\s*,?\s*[0-9]{3,4}\??\s*-\s*([0-9]{3,4}\??)?\s*$/;
-/** A catalogue heading: family name, given name, and maybe the years. */
-const HEADING = /^([^,\s]+),([^,\s]+)(,[0-9]{3,4}\??-([0-9]{3,4}\??)?)?$/;
+/** A second part that is years, not a given name: "-2026", "pub. 2021", "1962-L". */
+const DATED = /^(pub\.\s*)?-?[0-9]{2,4}[0-9.?]*(\s*-\s*[0-9]{0,4}\??)?[A-Z]?$/;
+/** What stays after a romaji name: "John Doe Jr.". */
+const SUFFIX = /^(Jr\.?|Sr\.?|II|III|IV)$/;
+
+/**
+ * One person of a catalogue heading as the master names them, the way
+ * private.bib_person does (the same examples, tests/fixtures/authority-names.ts):
+ * no years, a romaji name given name first, a Japanese one joined, and
+ * nothing of what the authority writes after the given name ("弁護士",
+ * "-2026", "pub. 2021"). None when it is not a heading.
+ */
+function headed(person: string): string | undefined {
+  if (!person.includes(",")) return undefined;
+  const parts = person
+    .replace(YEARS, "")
+    .split(",")
+    .map((part) => part.trim());
+  const [family, given = "", ...rest] = parts;
+  if (!family) return undefined;
+  if (parts.length < 2) return family;
+  if (DATED.test(given)) return family;
+  if (!given) return undefined;
+  if (!/[A-Za-z]/.test(family + given)) return family + given;
+  // The catalogue runs a given name and its initial together
+  // ("JamesP."); the initial gets its space back.
+  return [
+    given.replace(/([a-z])([A-Z]\.?)$/, "$1 $2"),
+    family,
+    rest.find((part) => SUFFIX.test(part)),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 /**
  * An author written the way a library catalogue heads it ("King,Stephen,1947-
  * 小尾,芙佐,1932-"), in the shape the bibliographic master names people
- * (docs/09「著者の形」, private.bib_person): no years, a romaji name given
- * name first ("Stephen King", "James P. Hogan"), a Japanese one joined ("小尾芙佐"), people
- * one after another with "、". Anything else is the author as written.
+ * (docs/09「著者の形」, private.bib_person): people one after another with
+ * "、". A word without a comma belongs to the person before it when that
+ * one already has what comes after the name ("海野,波子,1950- 東洋史",
+ * "こもれび,pub. 2026"). Anything else is the author as written.
  */
 export function authorWords(author: string): string {
-  const people = author.trim().split(/\s+/);
-  if (!people.every((person) => HEADING.test(person))) return author;
-  return people
-    .map((person) => {
-      const [family, given] = person.replace(YEARS, "").split(",");
-      // The catalogue runs a given name and its initial together
-      // ("JamesP."); the initial gets its space back.
-      return /[A-Za-z]/.test(family + given)
-        ? `${given.replace(/([a-z])([A-Z]\.?)$/, "$1 $2")} ${family}`
-        : family + given;
-    })
-    .join("、");
+  const people: string[] = [];
+  for (const word of author.trim().split(/\s+/)) {
+    const last = people.at(-1);
+    if (last !== undefined && !word.includes(",") && /,.*,|,pub\.$/.test(last))
+      people[people.length - 1] = `${last} ${word}`;
+    else people.push(word);
+  }
+  const names = people.map(headed);
+  if (!names.every(Boolean)) return author;
+  return names.join("、");
 }
 
 // The bibliographic master's name for a book (src/lib/bibliography.ts),

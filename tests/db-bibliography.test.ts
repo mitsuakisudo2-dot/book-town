@@ -7,6 +7,7 @@ import {
   migrationFiles,
   migrationText,
 } from "./fixtures/pglite-supabase";
+import { AUTHORITY_NAMES } from "./fixtures/authority-names";
 import {
   answerAll,
   catalog,
@@ -1136,8 +1137,11 @@ async function main() {
       assert.equal(await person("海野, 波子, 1901-1999"), "海野波子");
       assert.equal(await person("ウミノ, ナミコ", " "), "ウミノ ナミコ");
       assert.equal(await person("海野 波子"), "海野 波子");
-      assert.equal(await person("Doe, John, Jr."), "Doe, John, Jr.");
       assert.equal(await person("架空書房編集部"), "架空書房編集部");
+      // The same rows as the app's authorWords (AUD-163).
+      for (const [heading, name] of AUTHORITY_NAMES)
+        assert.equal(await person(heading), name, heading);
+      assert.equal(await person("ウミノ, ナミコ, -2026", " "), "ウミノ ナミコ");
     },
   );
 
