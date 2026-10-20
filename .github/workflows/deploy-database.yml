@@ -41,7 +41,7 @@ jobs:
         id: plan
         run: node scripts/migration-plan.mjs plan
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_READ_TOKEN }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
 
   apply:
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production-db
     env:
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
       SUPABASE_REGION: ap-northeast-1
       PLAN: ${{ needs.plan.outputs.plan }}
@@ -105,6 +105,6 @@ jobs:
       - name: Production's history holds them all
         run: node scripts/migration-plan.mjs applied
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_READ_TOKEN }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           PLAN: ${{ needs.plan.outputs.plan }}
