@@ -43,6 +43,8 @@ const UNCAPPED = FILES.find((file) => file.endsWith("_catalog_registered_uncappe
 assert.ok(UNCAPPED, "the migration that leaves registered books out of the cap");
 const QUALIFIERS = FILES.find((file) => file.endsWith("_authority_qualifiers.sql")) ?? "";
 assert.ok(QUALIFIERS, "the migration that leaves out what the authority writes after a name");
+const TRADES = FILES.find((file) => file.endsWith("_authority_trades.sql")) ?? "";
+assert.ok(TRADES, "the migration that leaves out a trade after a single name");
 
 const AKI = "00000000-0000-4000-8000-00000000000a";
 const BEN = "00000000-0000-4000-8000-00000000000b";
@@ -678,6 +680,94 @@ async function main() {
       // Copied first, and compared after (check_copy stops the file on a loss).
       assert.deepEqual(await rows("select source from keep.copies where label = $1 order by 1", [
         QUALIFIERS.replace(/^.*\//, "").replace(/\.sql$/, ""),
+      ]), [
+        { source: "private.book_checks" },
+        { source: "private.book_grams" },
+        { source: "private.edition_sources" },
+        { source: "public.books" },
+      ]);
+      await db.close();
+    },
+  );
+
+  await check(
+    "the names kept before AUD-167 are made again: years in front of a single name, a trade after one, and their readings",
+    async () => {
+      // The names as the first rule made them, then 20261125000000.
+      const db = await migrated(QUALIFIERS);
+      const { rows, register } = helpers(db);
+      await db.exec(PEOPLE);
+      const taken = await rowsFor(db, [
+        [
+          "R100000002-I82",
+          {
+            bibId: "82",
+            isbns: [C(82)],
+            title: "陽だまりの目録",
+            agents: [
+              { name: "こもれび, pub. 2026", reading: "コモレビ, pub. 2026" },
+              { name: "ひだまり, 漫画家", reading: "ヒダマリ, マンガカ" },
+              { name: "KEI, 漫画家", reading: "KEI, マンガカ" },
+              { name: "海野, 波子", reading: "ウミノ, ナミコ" },
+            ],
+          },
+        ],
+        ["R100000002-I83", { bibId: "83", isbns: [C(83)], title: "波の目録", agents: [{ name: "海野, 波子" }] }],
+      ]);
+      await pgliteTarget(db).take(taken, "trial");
+      await register(BEN, id(82), C(82), "陽だまりの目録", "ひだまり");
+      await db.exec(migrationText(QUALIFIERS));
+      const author = async (isbnOf: string) =>
+        (await rows<{ author: string }>("select author from books where isbn = $1 and source = 'ndl'", [isbnOf]))[0]
+          .author;
+      const people = () =>
+        rows(
+          `select c ->> 'name' as name, c ->> 'reading' as reading
+           from private.edition_sources s join books b on b.edition_id = s.edition_id,
+             jsonb_array_elements(s.fields -> 'creators') with ordinality x (c, n)
+           where b.id = $1 and s.source = 'ndl' order by n`,
+          [id(82)],
+        );
+      const otherSources = () =>
+        rows(
+          `select s::text from private.edition_sources s
+           where edition_id <> (select edition_id from books where id = $1) order by 1`,
+          [id(82)],
+        );
+      assert.equal(await author(C(82)), "pub. 2026 こもれび、ひだまり漫画家、漫画家 KEI、海野波子");
+      assert.deepEqual(await people(), [
+        { name: "pub. 2026 こもれび", reading: "pub. 2026 コモレビ" },
+        { name: "ひだまり漫画家", reading: "ヒダマリ マンガカ" },
+        { name: "漫画家 KEI", reading: "マンガカ KEI" },
+        { name: "海野波子", reading: "ウミノ ナミコ" },
+      ]);
+      await rows("delete from private.book_rechecks");
+      const others = await rows("select * from books where isbn <> $1 order by id", [C(82)]);
+      const sources = await otherSources();
+      await db.exec(migrationText(TRADES));
+      assert.equal(await author(C(82)), "こもれび、ひだまり、KEI、海野波子");
+      assert.deepEqual(await people(), [
+        { name: "こもれび", reading: "コモレビ" },
+        { name: "ひだまり", reading: "ヒダマリ" },
+        { name: "KEI", reading: "KEI" },
+        { name: "海野波子", reading: "ウミノ ナミコ" },
+      ]);
+      // Ben's book is judged again; the catalog row stays judged.
+      assert.deepEqual(await rows("select book_id from private.book_rechecks"), [{ book_id: id(82) }]);
+      assert.deepEqual(
+        await rows(
+          `select c.verdict, c.checked_at is not null as checked from private.book_checks c
+           join books b on b.id = c.book_id where b.isbn = $1 and b.source = 'ndl'`,
+          [C(82)],
+        ),
+        [{ verdict: "same", checked: true }],
+      );
+      // Nothing else changed.
+      assert.deepEqual(await rows("select * from books where isbn <> $1 order by id", [C(82)]), others);
+      assert.deepEqual(await otherSources(), sources);
+      // Copied first, and compared after (check_copy stops the file on a loss).
+      assert.deepEqual(await rows("select source from keep.copies where label = $1 order by 1", [
+        TRADES.replace(/^.*\//, "").replace(/\.sql$/, ""),
       ]), [
         { source: "private.book_checks" },
         { source: "private.book_grams" },

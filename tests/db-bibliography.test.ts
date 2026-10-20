@@ -7,6 +7,7 @@ import {
   migrationFiles,
   migrationText,
 } from "./fixtures/pglite-supabase";
+import { TRADES } from "../src/lib/book-name";
 import { AUTHORITY_NAMES } from "./fixtures/authority-names";
 import {
   answerAll,
@@ -1142,6 +1143,16 @@ async function main() {
       for (const [heading, name] of AUTHORITY_NAMES)
         assert.equal(await person(heading), name, heading);
       assert.equal(await person("ウミノ, ナミコ, -2026", " "), "ウミノ ナミコ");
+      // Every trade the app knows, and their readings (AUD-167).
+      for (const trade of TRADES)
+        assert.equal(await person(`こもれび, ${trade}`), "こもれび", trade);
+      assert.equal(await person("コモレビ, マンガカ", " "), "コモレビ");
+      assert.equal(await person("KEI, イラストレーター", " "), "KEI");
+      assert.equal(await person("コモレビ, エホン サッカ", " "), "コモレビ");
+      assert.equal(
+        await person("ウミノ, タロウカジャ", " "),
+        "ウミノ タロウカジャ",
+      );
     },
   );
 

@@ -30,6 +30,14 @@ export const AUTHORITY_NAMES: Array<
   ["Doe, John, 1962-L", "John Doe"],
   ["架空, 賢人, 551?-479B. C", "架空賢人"],
   ["海野, 波子, 漫画家, 1970-", "海野波子"],
+  // A trade or a field after a single name (AUD-167), and a given name
+  // that only looks like one.
+  ["こもれび, 漫画家", "こもれび"],
+  ["Kei, イラストレーター", "Kei"],
+  ["こもれび, ブックデザイナー", "こもれび"],
+  ["こもれび, 漫画家, pub. 2026", "こもれび"],
+  ["海野, 太郎冠者", "海野太郎冠者"],
+  ["Pan, Peter", "Peter Pan"],
   // What stays after a romaji name.
   ["Doe, John, Jr.", "John Doe Jr."],
   ["Doe, John, III", "John Doe III"],
