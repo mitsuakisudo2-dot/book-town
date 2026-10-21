@@ -14,3 +14,5 @@
 /next.config.ts                   @mitsuakisudo2-dot
 /tests/production-journey.mjs     @mitsuakisudo2-dot
 /tests/fixtures/pglite-supabase.ts @mitsuakisudo2-dot
+/tests/code-owners.test.ts         @mitsuakisudo2-dot
+/tsconfig.json                     @mitsuakisudo2-dot

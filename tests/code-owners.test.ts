@@ -25,6 +25,8 @@ const covered = (path: string) =>
 
 for (const path of [
   ".github/CODEOWNERS",
+  "tests/code-owners.test.ts",
+  "tsconfig.json",
   "package.json",
   "pnpm-lock.yaml",
   "vercel.json",
@@ -38,35 +40,77 @@ for (const dir of [".github/workflows", "scripts", "supabase/migrations"]) {
   }
 }
 
+const code = /\.(?:mjs|cjs|js|mts|cts|ts|tsx|json|sh|py)$/;
+const isFile = (path: string) => existsSync(path) && statSync(path).isFile();
+
+// Every way a followed file can pull in another: relative and "@/" imports
+// (tsx reads tsconfig.json's paths), bare and dynamic imports, require, and a
+// path written out for a child process to run.
 const resolve = (from: string, spec: string) => {
-  const base = normalize(join(dirname(from), spec));
-  for (const path of [base, `${base}.ts`, `${base}.mjs`, `${base}.js`]) {
-    if (existsSync(path) && statSync(path).isFile()) return path;
+  const base = spec.startsWith("@/")
+    ? join("src", spec.slice(2))
+    : normalize(join(dirname(from), spec));
+  for (const path of [
+    base,
+    ...[".ts", ".tsx", ".mts", ".mjs", ".js", ".cjs", ".json"].flatMap((ext) => [
+      `${base}${ext}`,
+      join(base, `index${ext}`),
+    ]),
+  ]) {
+    if (isFile(path)) return path;
   }
   assert.fail(`${from} imports ${spec}, which was not found`);
 };
+const written = (text: string) =>
+  [...text.matchAll(/[\w@.-][\w@./-]*\.(?:mjs|cjs|js|mts|cts|ts|tsx|sh|py)\b/g)]
+    .map(([path]) => normalize(path.replace(/^\.\//, "")))
+    .filter((path) => !path.startsWith("..") && isFile(path));
 
+// A workflow that holds a key or may write with GITHUB_TOKEN is followed whole:
+// the files it names, and the package.json scripts it runs with pnpm.
+const scripts: Record<string, string> = JSON.parse(readFileSync("package.json", "utf8")).scripts;
 const run = new Set<string>();
+const followed: string[] = [];
 for (const name of readdirSync(".github/workflows")) {
-  const text = readFileSync(`.github/workflows/${name}`, "utf8");
-  for (const [path] of text.matchAll(/\b(?:scripts|tests)\/[\w./-]+\.(?:mjs|ts|js|sh)\b/g)) {
-    assert.ok(existsSync(path), `${name} runs ${path}, which exists`);
-    run.add(path);
+  // Comment lines name files the workflow does not run.
+  const text = readFileSync(`.github/workflows/${name}`, "utf8")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .join("\n");
+  if (!/secrets\.|:\s*write\b/.test(text)) continue;
+  followed.push(name);
+  const named = [...written(text)];
+  for (const [, script] of text.matchAll(/\bpnpm\s+(?:run\s+)?([\w:-]+)/g)) {
+    if (scripts[script]) named.push(...written(scripts[script]));
   }
+  for (const path of named) run.add(path);
 }
+assert.ok(followed.includes("vercel.yml"), "workflows with keys are followed");
+assert.ok(!followed.includes("ci.yml"), "ci.yml holds no key and only reads");
+
 const queue = [...run];
 for (let path = queue.shift(); path; path = queue.shift()) {
+  if (!code.test(path) || path.endsWith(".json")) continue;
   const text = readFileSync(path, "utf8");
-  for (const [, spec] of text.matchAll(/(?:from|import\()\s*["'](\.{1,2}\/[^"']+)["']/g)) {
-    const next = resolve(path, spec);
+  // A path for a child process is a string; a path in a comment is not run.
+  const strings = [...text.matchAll(/(["'`])([^"'`\n]*)\1/g)].map(([, , inner]) => inner);
+  const specs = [
+    ...text.matchAll(/(?:\bfrom|\bimport|\bimport\s*\(|\brequire\s*\()\s*["']((?:\.{1,2}|@)\/[^"']+)["']/g),
+  ].map(([, spec]) => resolve(path, spec));
+  for (const next of [...specs, ...strings.flatMap(written)]) {
     if (!run.has(next)) {
       run.add(next);
       queue.push(next);
     }
   }
 }
-assert.ok(run.has("scripts/catalog-import.ts"), "the catalog import is followed");
-assert.ok(run.has("tests/production-journey.mjs"), "the production journey is followed");
+for (const path of [
+  "scripts/catalog-import.ts",
+  "tests/fixtures/pglite-supabase.ts",
+  "tests/production-journey.mjs",
+]) {
+  assert.ok(run.has(path), `${path} is followed`);
+}
 for (const path of run) {
   assert.ok(covered(path), `${path} runs on main with keys and is in CODEOWNERS`);
 }
