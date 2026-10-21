@@ -74,6 +74,22 @@ export function validBranch(name) {
 }
 
 /** One deployment on one line. */
+/**
+ * Which Vercel key a run used, by its name in Vercel's list of tokens, and
+ * when it runs out: the value itself is never printed. Matching the name here
+ * against the list is how the key in a GitHub secret is told apart from the
+ * others, and the date is Vercel's own, not one typed into watch.json.
+ */
+export function tokenLine(token) {
+  const expires = token?.expiresAt
+    ? new Date(token.expiresAt).toISOString().replace(/:\d\d\.\d+Z$/, "Z")
+    : "never";
+  const scopes = (token?.scopes ?? [])
+    .map((scope) => (scope.projectId ? `${scope.type}:project` : scope.type))
+    .filter(Boolean);
+  return `Key in use: ${token?.name ?? "(no name)"}, expires ${expires}${scopes.length ? `, scope ${scopes.join(" ")}` : ""}`;
+}
+
 export function deploymentLine(deployment) {
   // Listed deployments carry `created`; a single one carries `createdAt`.
   const time = deployment.created ?? deployment.createdAt;
@@ -262,7 +278,12 @@ async function main(action, branch) {
 
   const call = async (method, route, query = {}, body) => {
     const url = new URL(route, API);
-    for (const [key, value] of Object.entries({ ...query, slug: team }))
+    // A key's own details belong to its user, not the team: Vercel answers
+    // 400 when they are asked for with the team's slug.
+    const own = route.startsWith("/v5/user/");
+    for (const [key, value] of Object.entries(
+      own ? query : { ...query, slug: team },
+    ))
       url.searchParams.set(key, String(value));
     const response = await fetch(url, {
       method,
@@ -530,6 +551,12 @@ async function main(action, branch) {
   }
 
   if (action === "status") {
+    try {
+      const { token: used } = await call("GET", "/v5/user/tokens/current");
+      console.log(tokenLine(used));
+    } catch (error) {
+      console.log(`Could not tell which key this is: ${error.message}`);
+    }
     const { projects } = await call("GET", "/v10/projects", { limit: 20 });
     console.log("Projects: " + projects.map((p) => p.name).join(", "));
     const { deployments } = await call("GET", "/v7/deployments", {
