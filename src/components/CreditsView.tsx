@@ -7,6 +7,9 @@ import "./credits.css";
 // registered the same ISBN later, and tell of it.
 
 const NDL_SEARCH = "https://ndlsearch.ndl.go.jp/";
+// The licence the library's example of a credit links to (NDLサーチ「API
+// のご利用について」(2)); its own data is offered on terms that fit it.
+const CC_BY = "https://creativecommons.org/licenses/by/4.0/legalcode.ja";
 
 export function CreditsView() {
   return (
@@ -15,8 +18,8 @@ export function CreditsView() {
       <span className="eyebrow">CREDITS</span>
       <h1 className="page-title">本のデータの出典</h1>
       <p>
-        本のページと検索に出る題名・著者・出版社・出版年月は、国立国会図書館と openBD
-        の書誌データから、BookTown
+        本のページと検索に出る題名・著者・出版社・出版年月は、国立国会図書館と
+        openBD の書誌データから、BookTown
         が項目ごとに選んでまとめたものです（2026年10月から随時取得）。読書家が自分のライブラリに登録した題名と著者は、その人が書いたままです。
       </p>
       <section aria-labelledby="credits-ndl">
@@ -30,7 +33,15 @@ export function CreditsView() {
         </p>
         <p>
           国立国会図書館サーチ（NDLサーチ）の API
-          を利用しています（検索に出る本の目録は、OAI-PMH と全件のファイルから取っています）。
+          を利用しています（検索に出る本の目録は、OAI-PMH
+          と全件のファイルから取っています）。
+        </p>
+        <p>
+          国立国会図書館の書誌データの利用条件は、
+          <a href={CC_BY} target="_blank" rel="noopener noreferrer">
+            クリエイティブ・コモンズ 表示 4.0 国際 パブリック・ライセンス
+          </a>
+          （CC BY 4.0）と互換性のある条件です。
         </p>
       </section>
       <section aria-labelledby="credits-openbd">

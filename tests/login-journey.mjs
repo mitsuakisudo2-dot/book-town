@@ -5082,6 +5082,15 @@ try {
       await expect(page.locator("main")).toContainText(
         "2026年10月から随時取得",
       );
+      // The licence the library's example of a credit links to.
+      await expect(
+        page.getByRole("link", {
+          name: "クリエイティブ・コモンズ 表示 4.0 国際 パブリック・ライセンス",
+        }),
+      ).toHaveAttribute(
+        "href",
+        "https://creativecommons.org/licenses/by/4.0/legalcode.ja",
+      );
       await noOverflow("credits page");
       await page.goBack();
       await expect(title).toHaveText("こころ 上");
