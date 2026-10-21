@@ -95,7 +95,7 @@ export function desiredAuth(
   // Turned on only with its secret, or every login would be refused.
   if (settings.captcha.on && !captchaSecret)
     throw new Error(
-      "captcha.on needs TURNSTILE_SECRET_KEY, Cloudflare Turnstile's secret key, among the repository secrets.",
+      "captcha.on needs TURNSTILE_SECRET_KEY, Cloudflare Turnstile's secret key, among the environment's secrets.",
     );
   const wanted = {
     site_url: settings.site.url,
@@ -280,16 +280,20 @@ async function main(mode) {
         ? `  ${key}: ${shown(key, current[key])} -> ${shown(key, wanted[key])}`
         : `  ${key}: ${shown(key, current[key])} (as wanted)`,
     );
+  // The project hides these two, so they are sent every time: this line
+  // does not tell whether the key differs from the one in use.
   if (changed.includes("smtp_pass"))
-    console.log("  smtp_pass: set from RESEND_API_KEY (not shown)");
+    console.log(
+      "  smtp_pass: sent from RESEND_API_KEY each time (hidden, not compared)",
+    );
   if (changed.includes("security_captcha_secret"))
     console.log(
-      "  security_captcha_secret: set from TURNSTILE_SECRET_KEY (not shown)",
+      "  security_captcha_secret: sent from TURNSTILE_SECRET_KEY each time (hidden, not compared)",
     );
-  // Whether the secret is among the repository secrets, never its value, so
-  // the check can be turned on knowing it is there.
+  // Whether the secret is among the environment's secrets, never its value,
+  // so the check can be turned on knowing it is there.
   console.log(
-    `TURNSTILE_SECRET_KEY: ${turnstileSecret ? "set" : "not set"} among the repository secrets`,
+    `TURNSTILE_SECRET_KEY: ${turnstileSecret ? "set" : "not set"} among the environment's secrets`,
   );
   console.log("Left as they are:");
   for (const key of UNMANAGED)
