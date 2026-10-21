@@ -12,7 +12,8 @@ name: Library catalog
 # never an ISBN or a title. It logs in as the role catalog_import, which can
 # take catalog rows and nothing else, with the environment catalog's
 # CATALOG_DB_PASSWORD (given to the role by catalog-role-password.yml) and
-# SUPABASE_PROJECT_ID; without them the run is skipped with a warning.
+# SUPABASE_PROJECT_ID; without them the run fails, having taken nothing. So
+# does a night whose changes are too many for it (docs/09「図書館の目録」).
 
 on:
   schedule:
@@ -58,8 +59,9 @@ jobs:
           if [ -n "$CATALOG_DB_PASSWORD" ] && [ -n "$SUPABASE_PROJECT_ID" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::The Supabase secrets are not set yet, so nothing was taken."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
+            # Nothing taken is not a night with no changes: the run fails.
+            echo "::error::The Supabase secrets are not set, so nothing was taken."
+            exit 1
           fi
       - uses: actions/checkout@v4
         if: steps.secrets.outputs.ready == 'true'
