@@ -11,6 +11,9 @@
 //   node scripts/watch.mjs errors    how many errors readers' screens sent in
 //                                    the last day (private.screen_errors), and
 //                                    whether the table stopped taking them
+//   node scripts/watch.mjs keys      which keys in watch.json run out within
+//                                    30 days, and within 7 (asks no one; the
+//                                    dates are written by hand)
 //   node scripts/watch.mjs report <kind> ok|failed
 //                                    tells about a check run elsewhere (the
 //                                    production journey)
@@ -40,6 +43,8 @@ export const TITLES = {
   usage: "Supabase の使用量が上限に近づいています",
   journey: "本番の通しが失敗しました",
   errors: "読書家の画面でエラーが起きています",
+  keys: "鍵の期限が30日以内に切れます",
+  "keys-soon": "鍵の期限が7日以内に切れます",
   // Opened and closed at once by a run by hand (check: write), to show the
   // watch on main may still write issues. Nothing is wrong.
   write: "見張りが issue を書けるかの確かめ（すぐ閉じます。対応は要りません）",
@@ -180,6 +185,54 @@ export const SCREEN_ERRORS_QUERY =
   "range between interval '1 hour' preceding and current row) as n " +
   "from private.screen_errors f where f.first_at > now() - interval '1 day') h), 0)::int as busiest_hour " +
   "from private.screen_errors e";
+
+/**
+ * Which keys run out soon. Supabase's API does not tell a token's expiry, so
+ * scripts/watch.json keeps each key's date as written when it was made
+ * ("never" for one without). A date is the start of that day in Tokyo, so the
+ * warning comes a little early rather than late. A key missing its date or
+ * with one that cannot be read fails, so the list is kept right.
+ *
+ * @returns {{ ok: boolean, lines: string[] }}
+ */
+export function keysVerdict(keys, now, withinDays) {
+  const lines = [];
+  let ok = true;
+  if (!Array.isArray(keys) || keys.length === 0)
+    return { ok: false, lines: ["No keys are listed in scripts/watch.json."] };
+  for (const key of keys) {
+    const label = `${key?.name} (${key?.secret}, ${key?.environment})`;
+    if (key?.expires === "never") {
+      lines.push(`${label}: does not expire.`);
+      continue;
+    }
+    const at = /^\d{4}-\d{2}-\d{2}$/.test(String(key?.expires))
+      ? Date.parse(`${key.expires}T00:00:00+09:00`)
+      : NaN;
+    // A day that is not in the calendar (02-30) would roll into the next month.
+    const real =
+      Number.isFinite(at) &&
+      new Date(at + 9 * 3_600_000).toISOString().slice(0, 10) === key.expires;
+    if (!real) {
+      lines.push(`${label}: no date it expires is written.`);
+      ok = false;
+      continue;
+    }
+    const days = Math.floor((at - now) / 86_400_000);
+    if (days < 0) {
+      lines.push(`${label}: expires on ${key.expires}, which has come.`);
+      ok = false;
+    } else if (days <= withinDays) {
+      lines.push(`${label}: expires on ${key.expires}, in ${days} day(s).`);
+      ok = false;
+    } else lines.push(`${label}: expires on ${key.expires}.`);
+  }
+  if (!ok)
+    lines.push(
+      "Make a new one with the same access, put it in the secret, then write its date in scripts/watch.json (docs/09「鍵の期限」).",
+    );
+  return { ok, lines };
+}
 
 /** Whether a page of the site looks like the site: a page with its scripts. */
 export function pageVerdict(route, status, html) {
@@ -479,6 +532,19 @@ async function main(action, kind, outcome) {
         ? { ok: true, lines: lines.map((line) => `::warning::${line}`) }
         : { ok: false, lines };
     }
+  } else if (action === "keys") {
+    // Two issues, at 30 days and at 7, so a second mail comes near the end.
+    let failed = false;
+    for (const [name, days] of [
+      ["keys", 30],
+      ["keys-soon", 7],
+    ]) {
+      const verdict = keysVerdict(config.keys, Date.now(), days);
+      await report(name, verdict);
+      failed ||= !verdict.ok;
+    }
+    if (failed) process.exitCode = 1;
+    return;
   } else if (
     action === "report" &&
     kind in TITLES &&
@@ -495,7 +561,7 @@ async function main(action, kind, outcome) {
     action = kind;
   } else {
     console.error(
-      "Usage: node scripts/watch.mjs site|backups|usage|errors | report <site|backups|usage|journey|write> ok|failed",
+      "Usage: node scripts/watch.mjs site|backups|usage|errors|keys | report <site|backups|usage|journey|write> ok|failed",
     );
     process.exit(2);
   }

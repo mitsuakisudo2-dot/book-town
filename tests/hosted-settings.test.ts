@@ -30,6 +30,7 @@ import {
   pageVerdict,
   usageVerdict,
   errorsVerdict,
+  keysVerdict,
 } from "../scripts/watch.mjs";
 
 // The scripts that change the hosted Supabase and Vercel settings, without
@@ -1338,6 +1339,67 @@ async function main() {
       for (const output of [same.output, unknown.output, latest.output])
         assert.ok(!output.includes("vcp_token_for_tests"));
       await api.close();
+    },
+  );
+
+  await check(
+    "the key watch warns 30 and 7 days before a key runs out, and lists every key",
+    () => {
+      const now = Date.parse("2026-12-20T03:00:00Z");
+      const key = (expires: string) => [
+        {
+          name: "booktown-auth",
+          secret: "SUPABASE_AUTH_TOKEN",
+          environment: "production-auth",
+          expires,
+        },
+      ];
+      // A date is the start of that day in Tokyo: 2027-01-20 begins 30.5
+      // days after `now`, 2027-01-21 31.5 days.
+      assert.equal(keysVerdict(key("2027-01-21"), now, 30).ok, true);
+      assert.equal(keysVerdict(key("2027-01-20"), now, 30).ok, false);
+      assert.match(
+        keysVerdict(key("2027-01-20"), now, 30).lines.join("\n"),
+        /expires on 2027-01-20, in 30 day\(s\)[\s\S]*docs\/09「鍵の期限」/,
+      );
+      assert.equal(keysVerdict(key("2027-01-20"), now, 7).ok, true);
+      assert.equal(keysVerdict(key("2026-12-29"), now, 7).ok, true);
+      assert.equal(keysVerdict(key("2026-12-28"), now, 7).ok, false);
+      assert.match(
+        keysVerdict(key("2026-12-19"), now, 7).lines[0],
+        /expires on 2026-12-19, which has come/,
+      );
+      assert.equal(keysVerdict(key("never"), now, 7).ok, true);
+      for (const unknown of ["", "TODO", "2027-1-19", "2027-02-30"])
+        assert.equal(keysVerdict(key(unknown), now, 30).ok, false, unknown);
+      assert.equal(keysVerdict([], now, 30).ok, false);
+
+      // Every token or key a workflow reads by name is in the list, with a
+      // date (or "never"), so a new key cannot run out unwatched.
+      const watch = JSON.parse(readFileSync("scripts/watch.json", "utf8"));
+      const listed = new Set(
+        watch.keys.map((entry: { secret: string }) => entry.secret),
+      );
+      const workflows = execSync("cat .github/workflows/*.yml", {
+        encoding: "utf8",
+      });
+      const tokens = new Set(
+        [...workflows.matchAll(/secrets\.([A-Z_]*TOKEN)\b/g)].map(
+          (found) => found[1],
+        ),
+      );
+      assert.ok(tokens.size >= 4, [...tokens].join(", "));
+      for (const token of tokens) assert.ok(listed.has(token), token);
+      for (const entry of watch.keys)
+        assert.match(
+          entry.expires,
+          /^(\d{4}-\d{2}-\d{2}|never)$/,
+          `${entry.name} needs the date it expires`,
+        );
+      assert.match(
+        readFileSync(".github/workflows/watch-run.yml", "utf8"),
+        /run: node scripts\/watch\.mjs keys/,
+      );
     },
   );
 

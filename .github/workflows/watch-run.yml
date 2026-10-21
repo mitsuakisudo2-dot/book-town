@@ -77,6 +77,10 @@ jobs:
       - name: Errors on readers' screens
         if: always()
         run: node scripts/watch.mjs errors
+      # Asks no one: the dates are the ones written in scripts/watch.json.
+      - name: Keys that run out soon
+        if: always()
+        run: node scripts/watch.mjs keys
       - run: pnpm install --frozen-lockfile
         if: always()
       - run: pnpm exec playwright install --with-deps chromium

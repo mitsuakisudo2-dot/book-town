@@ -7,6 +7,36 @@
   "screenErrorsPerDay": 1,
   "screenErrorsRowsWarn": 2800,
   "screenErrorsPerHour": 200,
+  "keys": [
+    {
+      "name": "booktown-read",
+      "where": "Supabase",
+      "secret": "SUPABASE_READ_TOKEN",
+      "environment": "production-read",
+      "expires": "2027-10-19"
+    },
+    {
+      "name": "booktown-watch",
+      "where": "Supabase",
+      "secret": "SUPABASE_WATCH_TOKEN",
+      "environment": "watch",
+      "expires": "2027-10-19"
+    },
+    {
+      "name": "booktown-auth",
+      "where": "Supabase",
+      "secret": "SUPABASE_AUTH_TOKEN",
+      "environment": "production-auth",
+      "expires": "2027-01-19"
+    },
+    {
+      "name": "github",
+      "where": "Vercel",
+      "secret": "VERCEL_TOKEN",
+      "environment": "repository",
+      "expires": "never"
+    }
+  ],
   "included": {
     "free": { "databaseMB": 500, "storageMB": 1024 },
     "pro": { "databaseMB": 8192, "storageMB": 102400 }
