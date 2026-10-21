@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile, execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
@@ -1909,6 +1909,38 @@ async function main() {
       for (const output of outputs) assert.ok(!output.includes(TOKEN));
       await site.close();
       await api.close();
+    },
+  );
+
+  await check(
+    "a pull request's run gets no key: every secret is held back from it",
+    () => {
+      // A pull request runs its branch's own code, so a secret given to it
+      // could be sent anywhere. Each secret is left out for pull requests on
+      // its line, or sits in a job a pull request never runs.
+      for (const name of readdirSync(".github/workflows")) {
+        const text = readFileSync(`.github/workflows/${name}`, "utf8");
+        const on = text.slice(0, text.indexOf("\njobs:"));
+        if (!/^  pull_request(_target)?:/m.test(on)) continue;
+        const jobs = text
+          .slice(text.indexOf("\njobs:"))
+          .split(/\n(?=  [\w-]+:\n)/);
+        for (const job of jobs.slice(1)) {
+          const head = job.split("\n")[0].trim();
+          const notForPulls =
+            /^    if: github\.event_name (!= 'pull_request'|== 'push')/m.test(
+              job,
+            ) ||
+            /^    if: github\.event_name == 'push' \|\| inputs\./m.test(job);
+          for (const line of job.split("\n"))
+            if (/secrets\./.test(line) && !notForPulls)
+              assert.match(
+                line,
+                /github\.event_name != 'pull_request' && secrets\.|inputs\.environment != '' && secrets\./,
+                `${name} ${head} ${line.trim()}`,
+              );
+        }
+      }
     },
   );
 

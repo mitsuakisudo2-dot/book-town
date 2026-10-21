@@ -3,7 +3,8 @@ name: Vercel
 # Looks after the Vercel project with the VERCEL_TOKEN repository secret:
 # recent deployments of a branch with the end of a failed build's log, or a new
 # build of a branch when Vercel stopped before building. scripts/vercel.mjs
-# does the work. Pull requests that change it run a status check. A push to
+# does the work. Pull requests that change it only try the script, with no key
+# at all (the branch's own code runs there), so Vercel is not asked. A push to
 # main makes sure production gets built, since Vercel sometimes misses one.
 # domains shows the project's addresses and domains-apply adds SITE_DOMAIN (www
 # sent on to it); mail and mail-apply set up sending the
@@ -57,10 +58,10 @@ jobs:
           BRANCH: ${{ inputs.branch || github.head_ref || github.ref_name }}
           DEPLOY_SHA: ${{ github.sha }}
           ALLOW_MIGRATIONS: ${{ inputs.allow_migrations && 'yes' || 'no' }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TOKEN: ${{ github.event_name != 'pull_request' && secrets.VERCEL_TOKEN || '' }}
           VERCEL_TEAM: booktown1
           VERCEL_PROJECT: book-town-851k
           SITE_DOMAIN: booktown.page
           MAIL_DOMAIN: booktown.page
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          RESEND_ADMIN_KEY: ${{ secrets.RESEND_ADMIN_KEY }}
+          RESEND_API_KEY: ${{ github.event_name != 'pull_request' && secrets.RESEND_API_KEY || '' }}
+          RESEND_ADMIN_KEY: ${{ github.event_name != 'pull_request' && secrets.RESEND_ADMIN_KEY || '' }}
