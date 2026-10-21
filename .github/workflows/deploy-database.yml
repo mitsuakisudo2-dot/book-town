@@ -78,12 +78,19 @@ jobs:
           echo "::add-mask::$password"
           for cluster in aws-0 aws-1; do
             url="postgresql://postgres.$SUPABASE_PROJECT_ID:$password@$cluster-$SUPABASE_REGION.pooler.supabase.com:5432/postgres"
-            if supabase db push --db-url "$url" --dry-run > dry-run.txt 2>&1; then
+            if supabase db push --db-url "$url" --dry-run > "dry-run-$cluster.txt" 2>&1; then
+              mv "dry-run-$cluster.txt" dry-run.txt
               echo "cluster=$cluster" >> "$GITHUB_OUTPUT"
               exit 0
             fi
           done
-          cat dry-run.txt
+          # Both answers: the project's own cluster says why it refused the
+          # login (a password, say), the other one only that it has no such
+          # project.
+          for cluster in aws-0 aws-1; do
+            echo "--- $cluster"
+            cat "dry-run-$cluster.txt"
+          done
           exit 1
       - name: What is about to run is what was shown
         run: |
