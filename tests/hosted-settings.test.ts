@@ -1686,16 +1686,17 @@ async function main() {
       const tried = await run("scripts/watch.mjs", ["usage"], refusedEnv);
       assert.equal(tried.code, 0, tried.output);
       assert.match(tried.output, /::warning::.*Backups and Database read/);
-      const watched = await run("scripts/watch.mjs", ["usage"], {
-        ...refusedEnv,
-        REPORT_ISSUES: "on",
-      });
-      assert.equal(watched.code, 1, watched.output);
-      const freeBackups = await run("scripts/watch.mjs", ["backups"], {
-        ...refusedEnv,
-        REPORT_ISSUES: "on",
-      });
-      assert.equal(freeBackups.code, 0, freeBackups.output);
+      // On main a refused token is red under its own name, even for the
+      // backups of a free plan: what it was to read was not read.
+      for (const kind of ["backups", "usage", "errors"]) {
+        const watched = await run("scripts/watch.mjs", [kind], {
+          ...refusedEnv,
+          REPORT_ISSUES: "on",
+        });
+        assert.equal(watched.code, 1, watched.output);
+        assert.match(watched.output, /refused: FAILED/);
+        assert.doesNotMatch(watched.output, new RegExp(`${kind}: (ok|FAILED)`));
+      }
       await refusing.close();
       const odd = await run(
         "scripts/watch.mjs",
@@ -1703,6 +1704,92 @@ async function main() {
         {},
       );
       assert.equal(odd.code, 2);
+      await api.close();
+    },
+  );
+
+  await check(
+    "a refused watch token turns the watch red with its own issue, and an answer closes it",
+    async () => {
+      let refuse = true;
+      let issues: { number: number; title: string; body: string }[] = [];
+      const site = await standIn(({ url }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (pathname === "/_next/static/chunks/main.js")
+          return { html: true, body: "1" };
+        return {
+          html: true,
+          body: '<main></main><script src="/_next/static/chunks/main.js"></script>',
+        };
+      });
+      const api = await standIn(({ method, url, body }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (pathname.startsWith("/projects/ref_test/")) {
+          if (refuse) return { status: 401, body: { message: "Unauthorized" } };
+          if (pathname === "/projects/ref_test/health")
+            return { body: [{ name: "db", healthy: true }] };
+          return { body: [{ database_bytes: 16777216, storage_bytes: 0 }] };
+        }
+        const issuesPath = "/repos/mitsuakisudo2-dot/book-town/issues";
+        if (pathname === issuesPath && method === "GET")
+          return { body: issues };
+        if (pathname === issuesPath && method === "POST") {
+          const number = issues.length + 20;
+          issues.push({
+            number,
+            title: String(body?.title),
+            body: String(body?.body),
+          });
+          return { body: { number } };
+        }
+        if (pathname.startsWith(`${issuesPath}/`) && method === "PATCH") {
+          const number = Number(pathname.split("/").pop());
+          issues = issues.filter((issue) => issue.number !== number);
+          return { body: {} };
+        }
+        if (method === "POST") return { body: {} };
+        return { status: 404, body: {} };
+      });
+      const env = {
+        WATCH_SITE: site.url,
+        WATCH_RETRY_SECONDS: "0",
+        SUPABASE_API_URL: api.url,
+        SUPABASE_ACCESS_TOKEN: TOKEN,
+        SUPABASE_PROJECT_ID: "ref_test",
+        GITHUB_API_URL: api.url,
+        GITHUB_TOKEN: "ghs_token_for_tests",
+        GITHUB_REPOSITORY: "mitsuakisudo2-dot/book-town",
+        GITHUB_REPOSITORY_OWNER: "mitsuakisudo2-dot",
+        REPORT_ISSUES: "on",
+      };
+      const refused = await run("scripts/watch.mjs", ["site"], env);
+      assert.equal(refused.code, 1, refused.output);
+      assert.deepEqual(
+        issues.map((issue) => issue.title),
+        ["[見張り] 見張りの鍵が Supabase に断られています"],
+      );
+      assert.match(issues[0].body, /SUPABASE_WATCH_TOKEN/);
+      // The daily checks add to the same issue rather than open their own.
+      const usage = await run("scripts/watch.mjs", ["usage"], env);
+      assert.equal(usage.code, 1, usage.output);
+      assert.match(usage.output, /already says so/);
+      assert.equal(issues.length, 1);
+      refuse = false;
+      const answered = await run("scripts/watch.mjs", ["site"], env);
+      assert.equal(answered.code, 0, answered.output);
+      assert.match(answered.output, /Closed issue #20/);
+      assert.deepEqual(issues, []);
+      // Outside main a refusal only warns.
+      refuse = true;
+      const tried = await run("scripts/watch.mjs", ["site"], {
+        ...env,
+        REPORT_ISSUES: "off",
+      });
+      assert.equal(tried.code, 0, tried.output);
+      assert.match(tried.output, /::warning::Supabase answered 401/);
+      for (const output of [refused.output, usage.output, answered.output])
+        assert.ok(!output.includes(TOKEN));
+      await site.close();
       await api.close();
     },
   );

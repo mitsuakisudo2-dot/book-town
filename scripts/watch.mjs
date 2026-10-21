@@ -45,6 +45,9 @@ export const TITLES = {
   errors: "読書家の画面でエラーが起きています",
   keys: "鍵の期限が30日以内に切れます",
   "keys-soon": "鍵の期限が7日以内に切れます",
+  // One issue for every check, so a lost key reads as a lost key, not as the
+  // usage or the errors it kept the watch from reading.
+  refused: "見張りの鍵が Supabase に断られています",
   // Opened and closed at once by a run by hand (check: write), to show the
   // watch on main may still write issues. Nothing is wrong.
   write: "見張りが issue を書けるかの確かめ（すぐ閉じます。対応は要りません）",
@@ -293,6 +296,12 @@ async function settings() {
 const NO_TOKEN =
   "SUPABASE_WATCH_TOKEN (the environment watch) or SUPABASE_PROJECT_ID is not set, so Supabase was not asked.";
 
+// A token Supabase turns away is a failure on main too: what it was to read
+// was not read, and that is not the same as all being well.
+const isRefusal = (error) => error?.status === 401 || error?.status === 403;
+const REFUSED_FIX =
+  "Make the watch's token again with Backups and Database read access, or give it what it lacks, and put it in SUPABASE_WATCH_TOKEN (the environment watch). docs/09「毎日の控えと見張り」「鍵の期限」.";
+
 function supabase() {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   const project = process.env.SUPABASE_PROJECT_ID;
@@ -325,6 +334,7 @@ function supabase() {
 async function checkSite(config, call) {
   const problems = [];
   const lines = [];
+  let supabase;
   let home = "";
   for (const route of config.pages) {
     try {
@@ -369,16 +379,41 @@ async function checkSite(config, call) {
             `Supabase ${service.name} is ${service.status ?? "not healthy"}.`,
           );
       }
+      supabase = "answered";
     } catch (error) {
-      // A token that may not read the health is the owner's to widen, not an
-      // outage, so it does not open an issue every fifteen minutes.
-      if (error.status === 401 || error.status === 403)
-        lines.push(`::warning::${error.message}`);
+      // A refused token goes to its own issue (main), not to the site's.
+      if (isRefusal(error) && process.env.REPORT_ISSUES === "on")
+        supabase = error.message;
+      else if (isRefusal(error)) lines.push(`::warning::${error.message}`);
       else problems.push(error.message);
     }
   } else if (process.env.REPORT_ISSUES === "on") problems.push(NO_TOKEN);
   else lines.push("::warning::No Supabase token, so Supabase was not asked.");
-  return { ok: problems.length === 0, lines: [...problems, ...lines] };
+  return {
+    ok: problems.length === 0,
+    lines: [...problems, ...lines],
+    supabase,
+  };
+}
+
+/**
+ * Opens the refused-token issue when Supabase turned the token away, and
+ * closes it once Supabase answers again. Outside main it only prints.
+ *
+ * @param {string | undefined} supabase "answered", the refusal, or undefined
+ *   when Supabase was not asked
+ */
+async function reportRefusal(supabase) {
+  if (supabase === undefined || process.env.REPORT_ISSUES !== "on") return;
+  if (supabase === "answered")
+    await report("refused", {
+      ok: true,
+      lines: ["Supabase answered the watch's token."],
+    });
+  else {
+    await report("refused", { ok: false, lines: [supabase, REFUSED_FIX] });
+    process.exitCode = 1;
+  }
 }
 
 async function report(kind, result) {
@@ -452,6 +487,10 @@ async function main(action, kind, outcome) {
       await new Promise((resolve) => setTimeout(resolve, retry));
       result = await checkSite(config, call);
     }
+    await report(action, result);
+    await reportRefusal(result.supabase);
+    if (!result.ok) process.exitCode = 1;
+    return;
   } else if (
     action === "backups" ||
     action === "usage" ||
@@ -468,6 +507,7 @@ async function main(action, kind, outcome) {
       );
       return;
     }
+    let supabase = "answered";
     try {
       if (action === "errors") {
         let rows;
@@ -516,22 +556,28 @@ async function main(action, kind, outcome) {
         }
       }
     } catch (error) {
-      const refused = error.status === 401 || error.status === 403;
-      const lines = [error.message];
-      if (refused)
-        lines.push(
-          `The token may not read the ${action}. Give the watch's token (SUPABASE_WATCH_TOKEN, the environment watch) Backups and Database read access (docs/09「毎日の控えと見張り」).`,
-        );
-      // A pull request only tries the watch, and a free plan has no backups
-      // to miss: a refused token there is a warning, not a red check.
-      const quiet =
-        refused &&
-        (process.env.REPORT_ISSUES !== "on" ||
-          (action === "backups" && config.plan === "free"));
-      result = quiet
-        ? { ok: true, lines: lines.map((line) => `::warning::${line}`) }
-        : { ok: false, lines };
+      if (isRefusal(error) && process.env.REPORT_ISSUES === "on") {
+        // The check itself was not made, so its own issue stays as it was.
+        console.log(`The ${action} were not read: Supabase refused the token.`);
+        await reportRefusal(`${error.message} (reading the ${action})`);
+        return;
+      }
+      supabase = undefined;
+      // A pull request only tries the watch: a refused token there is a
+      // warning, not a red check.
+      result = isRefusal(error)
+        ? {
+            ok: true,
+            lines: [error.message, REFUSED_FIX].map(
+              (line) => `::warning::${line}`,
+            ),
+          }
+        : { ok: false, lines: [error.message] };
     }
+    await report(action, result);
+    await reportRefusal(supabase);
+    if (!result.ok) process.exitCode = 1;
+    return;
   } else if (action === "keys") {
     // Two issues, at 30 days and at 7, so a second mail comes near the end.
     let failed = false;
@@ -561,7 +607,7 @@ async function main(action, kind, outcome) {
     action = kind;
   } else {
     console.error(
-      "Usage: node scripts/watch.mjs site|backups|usage|errors|keys | report <site|backups|usage|journey|write> ok|failed",
+      "Usage: node scripts/watch.mjs site|backups|usage|errors|keys | report <site|backups|usage|journey|refused|write> ok|failed",
     );
     process.exit(2);
   }
