@@ -105,8 +105,15 @@ jobs:
           out=$(node scripts/watch.mjs report write failed) || true
           echo "$out"
           echo "$out" | grep -Eq "Opened issue #|already says so"
+      # GitHub's list of open issues can take a few seconds to show one just
+      # opened, so the close is tried again until it finds it.
       - name: Close it
         run: |
-          out=$(node scripts/watch.mjs report write ok)
-          echo "$out"
-          echo "$out" | grep -q "Closed issue #"
+          for attempt in 1 2 3 4 5 6; do
+            sleep 10
+            out=$(node scripts/watch.mjs report write ok)
+            echo "$out"
+            if echo "$out" | grep -q "Closed issue #"; then exit 0; fi
+          done
+          echo "::error::The issue was opened but not found to close."
+          exit 1
