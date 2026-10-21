@@ -623,7 +623,11 @@ async function main(action, kind, outcome) {
     const unconfirmed = unconfirmedVerdict(config.keys);
     await report("keys-unconfirmed", unconfirmed);
     failed ||= !unconfirmed.ok;
-    if (failed) process.exitCode = 1;
+    // The dates move on their own, so a pull request only warns: a key near
+    // its end must not turn every pull request red.
+    if (failed && process.env.REPORT_ISSUES === "on") process.exitCode = 1;
+    else if (failed)
+      console.log("::warning::A key needs looking after; on main this is red.");
     return;
   } else if (
     action === "report" &&

@@ -1345,7 +1345,7 @@ async function main() {
 
   await check(
     "the key watch warns 30 and 7 days before a key runs out, and lists every key",
-    () => {
+    async () => {
       const now = Date.parse("2026-12-20T03:00:00Z");
       const key = (expires: string) => [
         {
@@ -1412,6 +1412,20 @@ async function main() {
         readFileSync(".github/workflows/watch-run.yml", "utf8"),
         /run: node scripts\/watch\.mjs keys/,
       );
+      // A pull request only warns; main is red while a key needs care.
+      const tried = await run("scripts/watch.mjs", ["keys"], {});
+      assert.equal(tried.code, 0, tried.output);
+      if (
+        watch.keys.some(
+          (entry: { expires: string }) => entry.expires === "unknown",
+        )
+      ) {
+        assert.match(tried.output, /::warning::A key needs looking after/);
+        const watched = await run("scripts/watch.mjs", ["keys"], {
+          REPORT_ISSUES: "on",
+        });
+        assert.equal(watched.code, 1, watched.output);
+      }
     },
   );
 
