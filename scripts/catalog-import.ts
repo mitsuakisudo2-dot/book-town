@@ -366,6 +366,17 @@ export async function files(db: PGlite, target: Target, hours: number) {
     if (tally.files % 100 === 0) said(`files ${next}/${list.length}`, tally);
   }
   said(`files ${next}/${list.length}`, tally);
+  // The files are the records as they were on the cut: a change or a
+  // deletion the day's changes brought after it was just taken back. The
+  // changes are taken again from the day before the cut.
+  if (tally.files > 0 && next >= list.length) {
+    const back = dayBefore(`${cut.slice(0, 4)}-${cut.slice(4, 6)}-${cut.slice(6, 8)}`, 1);
+    for (const set of LIBRARY_SETS) {
+      const mark = await target.mark(`oai-${set}`);
+      if (mark === null || mark > back) await target.setMark(`oai-${set}`, back);
+    }
+    console.log(`the day's changes are taken again from ${back}`);
+  }
 }
 
 /**
