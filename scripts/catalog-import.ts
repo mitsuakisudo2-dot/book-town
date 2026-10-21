@@ -319,15 +319,19 @@ export async function trial(db: PGlite, target: Target, most: number, from: stri
 /** Each day's changes since the last run, for the library's two sets. */
 export async function daily(db: PGlite, target: Target) {
   const started = today();
-  for (const set of LIBRARY_SETS) {
+  // A set with too many changes is left, its mark where it was, and the run
+  // fails at the end: the changes not taken are not a quiet night.
+  const left: string[] = [];
+  sets: for (const set of LIBRARY_SETS) {
     const name = `oai-${set}`;
     const from = (await target.mark(name)) ?? dayBefore(started, 2);
     const tally: Tally = { sent: 0, deleted: 0, gone: 0 };
     let checked = false;
     for await (const page of changes(set, from)) {
       if (!checked && (page.size ?? 0) > BULK) {
-        console.log(`${set}: ${page.size} changes since ${from}, a bulk update; take the files instead`);
-        return;
+        console.log(`${set}: ${page.size} changes since ${from}, more than a day's changes can take`);
+        left.push(set);
+        continue sets;
       }
       checked = true;
       const rows = await rowsOf(db, page.records);
@@ -342,6 +346,9 @@ export async function daily(db: PGlite, target: Target) {
     // The next run starts a day back: a change stamped late is not missed.
     await target.setMark(name, dayBefore(started, 1));
     said(`${set} since ${from}`, tally);
+  }
+  if (left.length > 0) {
+    throw new Error(`not taken: ${left.join(", ")}; take the next month's files (docs/09「図書館の目録」)`);
   }
 }
 
@@ -366,6 +373,20 @@ export async function files(db: PGlite, target: Target, hours: number) {
     if (tally.files % 100 === 0) said(`files ${next}/${list.length}`, tally);
   }
   said(`files ${next}/${list.length}`, tally);
+  // The files are the records as they were on the cut: a change or a
+  // deletion the day's changes brought after it was just taken back. The
+  // changes are taken again from the day before the cut. A file's name has
+  // the day it was made, the first Saturday (dcndl_all_20261003_…, the
+  // newest change in it stamped 2026-10-01T15:59Z); the cut is the Friday,
+  // in Tokyo, so the changes are taken from two days before the name's day.
+  if (tally.files > 0 && next >= list.length) {
+    const back = dayBefore(`${cut.slice(0, 4)}-${cut.slice(4, 6)}-${cut.slice(6, 8)}`, 2);
+    for (const set of LIBRARY_SETS) {
+      const mark = await target.mark(`oai-${set}`);
+      if (mark === null || mark > back) await target.setMark(`oai-${set}`, back);
+    }
+    console.log(`the day's changes are taken again from ${back}`);
+  }
 }
 
 /**
