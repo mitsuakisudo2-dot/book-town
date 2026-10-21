@@ -377,16 +377,19 @@ async function poolerTarget(): Promise<Target> {
   const password = process.env.CATALOG_DB_PASSWORD;
   if (!project || !password) throw new Error("SUPABASE_PROJECT_ID and CATALOG_DB_PASSWORD are needed");
   const region = process.env.SUPABASE_REGION ?? "ap-northeast-1";
+  // The project's own cluster says why it refused (a password, say); the
+  // other only that it has no such project. Both are told.
+  const refused: string[] = [];
   for (const cluster of ["aws-0", "aws-1"]) {
     const url = `postgresql://catalog_import.${project}:${encodeURIComponent(password)}@${cluster}-${region}.pooler.supabase.com:5432/postgres`;
     try {
       await psql(url, "select 1;");
       return psqlTarget(url);
-    } catch {
-      // the other cluster
+    } catch (error) {
+      refused.push(`${cluster}: ${(error as Error).message}`);
     }
   }
-  throw new Error("the database's pooler refused the login");
+  throw new Error(`the database's pooler refused the login\n${refused.join("\n")}`);
 }
 
 function option(args: string[], name: string, otherwise: string): string {
