@@ -951,7 +951,17 @@ async function main() {
           credit,
         );
       }
-      // When they do not match, each person's name comes from the heading.
+      // When they do not match, each person's name comes from the heading:
+      // too few or too many, or in another order (AUD-170). One the
+      // authority does not have is still paired by its place.
+      assert.deepEqual(await named(["人1 著", "人0 訳"], 2), [
+        { name: "人0", heading: "人, 0" },
+        { name: "人1", heading: "人, 1" },
+      ]);
+      assert.deepEqual(await named(["人0 著", "谷花子 [ほか] 訳"], 2), [
+        { name: "人0", role: "著", heading: "人, 0" },
+        { name: "谷花子", role: "訳", heading: "人, 1" },
+      ]);
       assert.deepEqual(await named(["甲, 乙 著"], 3), [
         { name: "人0", heading: "人, 0" },
         { name: "人1", heading: "人, 1" },
