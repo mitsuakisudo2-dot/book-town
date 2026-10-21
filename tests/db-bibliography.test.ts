@@ -7,8 +7,9 @@ import {
   migrationFiles,
   migrationText,
 } from "./fixtures/pglite-supabase";
-import { TRADES } from "../src/lib/book-name";
-import { AUTHORITY_NAMES } from "./fixtures/authority-names";
+import { TRADE_END, TRADES } from "../src/lib/book-name";
+import { AUTHORITY_NAMES, TRADE_READINGS } from "./fixtures/authority-names";
+import { CREDIT_NAMES } from "./fixtures/credit-names";
 import {
   answerAll,
   catalog,
@@ -931,6 +932,25 @@ async function main() {
         { name: "John Smith", heading: "人, 0" },
         { name: "甲", role: "著", heading: "人, 1" },
       ]);
+      // What a statement writes after the name (AUD-168).
+      for (const [heading, credit, name, role] of CREDIT_NAMES) {
+        const [person] = (
+          await ndl(
+            sru({
+              isbns: [X1],
+              title: "本",
+              credits: [credit],
+              agents: [{ name: heading }],
+            }),
+            X1,
+          )
+        ).fields?.creators as { name: string; role?: string }[];
+        assert.deepEqual(
+          [person.name, person.role ?? null],
+          [name, role],
+          credit,
+        );
+      }
       // When they do not match, each person's name comes from the heading.
       assert.deepEqual(await named(["甲, 乙 著"], 3), [
         { name: "人0", heading: "人, 0" },
@@ -1143,6 +1163,22 @@ async function main() {
       for (const [heading, name] of AUTHORITY_NAMES)
         assert.equal(await person(heading), name, heading);
       assert.equal(await person("ウミノ, ナミコ, -2026", " "), "ウミノ ナミコ");
+      // The database knows the app's trades and endings, and their readings
+      // besides, no more (AUD-169).
+      const [{ def }] = await rows<{ def: string }>(
+        "select pg_get_functiondef('private.bib_trade(text)'::regprocedure) as def",
+      );
+      const words =
+        def.slice(def.indexOf("array["), def.indexOf("])")).match(/'[^']+'/g) ??
+        [];
+      assert.deepEqual(
+        words.map((word) => word.slice(1, -1)).sort(),
+        [...TRADES, ...TRADE_READINGS].sort(),
+      );
+      assert.ok(
+        def.includes(`'${TRADE_END.source}'`),
+        "the same endings as the app",
+      );
       // Every trade the app knows, and their readings (AUD-167).
       for (const trade of TRADES)
         assert.equal(await person(`こもれび, ${trade}`), "こもれび", trade);
