@@ -45,6 +45,8 @@ const QUALIFIERS = FILES.find((file) => file.endsWith("_authority_qualifiers.sql
 assert.ok(QUALIFIERS, "the migration that leaves out what the authority writes after a name");
 const TRADES = FILES.find((file) => file.endsWith("_authority_trades.sql")) ?? "";
 assert.ok(TRADES, "the migration that leaves out a trade after a single name");
+const CREDITS = FILES.find((file) => file.endsWith("_credit_names.sql")) ?? "";
+assert.ok(CREDITS, "the migration that leaves out what a statement writes after a name");
 
 const AKI = "00000000-0000-4000-8000-00000000000a";
 const BEN = "00000000-0000-4000-8000-00000000000b";
@@ -768,6 +770,86 @@ async function main() {
       // Copied first, and compared after (check_copy stops the file on a loss).
       assert.deepEqual(await rows("select source from keep.copies where label = $1 order by 1", [
         TRADES.replace(/^.*\//, "").replace(/\.sql$/, ""),
+      ]), [
+        { source: "private.book_checks" },
+        { source: "private.book_grams" },
+        { source: "private.edition_sources" },
+        { source: "public.books" },
+      ]);
+      await db.close();
+    },
+  );
+
+  await check(
+    "the names kept before AUD-168 are made again: a statement's [ほか] and a long role after the heading's name",
+    async () => {
+      const db = await migrated(CREDITS);
+      const { rows, register } = helpers(db);
+      await db.exec(PEOPLE);
+      const taken = await rowsFor(db, [
+        [
+          "R100000002-I84",
+          {
+            bibId: "84",
+            isbns: [C(84)],
+            title: "木陰の目録",
+            agents: [{ name: "海野, 波子" }, { name: "藤野, 霞" }, { name: "こもれび" }],
+            credits: ["海野波子 [ほか] 著", "藤野霞 キャラクターデザイン", "こもれび Books 監修"],
+          },
+        ],
+        ["R100000002-I85", { bibId: "85", isbns: [C(85)], title: "波の目録", agents: [{ name: "海野, 波子" }] }],
+      ]);
+      await pgliteTarget(db).take(taken, "trial");
+      await register(BEN, id(84), C(84), "木陰の目録", "海野波子");
+      const author = async (isbnOf: string) =>
+        (await rows<{ author: string }>("select author from books where isbn = $1 and source = 'ndl'", [isbnOf]))[0]
+          .author;
+      const people = () =>
+        rows(
+          `select c ->> 'name' as name, c ->> 'role' as role
+           from private.edition_sources s join books b on b.edition_id = s.edition_id,
+             jsonb_array_elements(s.fields -> 'creators') with ordinality x (c, n)
+           where b.id = $1 and s.source = 'ndl' order by n`,
+          [id(84)],
+        );
+      const otherSources = () =>
+        rows(
+          `select s::text from private.edition_sources s
+           where edition_id <> (select edition_id from books where id = $1) order by 1`,
+          [id(84)],
+        );
+      assert.equal(await author(C(84)), "海野波子 [ほか]、藤野霞 キャラクターデザイン、こもれび Books");
+      assert.deepEqual(await people(), [
+        { name: "海野波子 [ほか]", role: "著" },
+        { name: "藤野霞 キャラクターデザイン", role: null },
+        { name: "こもれび Books", role: "監修" },
+      ]);
+      await rows("delete from private.book_rechecks");
+      const others = await rows("select * from books where isbn <> $1 order by id", [C(84)]);
+      const sources = await otherSources();
+      await db.exec(migrationText(CREDITS));
+      assert.equal(await author(C(84)), "海野波子、藤野霞、こもれび Books");
+      assert.deepEqual(await people(), [
+        { name: "海野波子", role: "著" },
+        { name: "藤野霞", role: "キャラクターデザイン" },
+        { name: "こもれび Books", role: "監修" },
+      ]);
+      // Ben's book is judged again; the catalog row stays judged.
+      assert.deepEqual(await rows("select book_id from private.book_rechecks"), [{ book_id: id(84) }]);
+      assert.deepEqual(
+        await rows(
+          `select c.verdict, c.checked_at is not null as checked from private.book_checks c
+           join books b on b.id = c.book_id where b.isbn = $1 and b.source = 'ndl'`,
+          [C(84)],
+        ),
+        [{ verdict: "same", checked: true }],
+      );
+      // Nothing else changed.
+      assert.deepEqual(await rows("select * from books where isbn <> $1 order by id", [C(84)]), others);
+      assert.deepEqual(await otherSources(), sources);
+      // Copied first, and compared after (check_copy stops the file on a loss).
+      assert.deepEqual(await rows("select source from keep.copies where label = $1 order by 1", [
+        CREDITS.replace(/^.*\//, "").replace(/\.sql$/, ""),
       ]), [
         { source: "private.book_checks" },
         { source: "private.book_grams" },

@@ -47,3 +47,18 @@ export const AUTHORITY_NAMES: Array<
   // A space inside a part is the authority's, not a second person.
   ["松本, 波四郎 10代目", "松本波四郎 10代目", false],
 ];
+
+/**
+ * The readings of the trades private.bib_trade knows besides the app's
+ * TRADES (src/lib/book-name.ts), which reads no readings: the database
+ * knows these and TRADES, no more (AUD-169).
+ */
+export const TRADE_READINGS = (
+  "マンガカ マンガゲンサクシャ サッカ ショウセツカ エホンサッカ ドウワサッカ " +
+  "ホウソウサッカ シャシンカ セイユウ ハイユウ ジョユウ ホンヤクカ ホンヤクシャ " +
+  "シジン ヒョウロンカ リョウリケンキュウカ リョウリカ サッキョクカ サクシカ " +
+  "キャクホンカ ベンゴシ マンガ ショウセツ ドウワ エホン シャシン キョウシ " +
+  "ソウリョ ジツギョウカ ケイエイシャ ケンキュウシャ ヘンシュウシャ ラクゴカ " +
+  "オンガクカ ケンチクカ ウラナイシ ビヨウカ チョジュツカ ブンピツカ ズイヒツカ " +
+  "ケンキュウカ キョウイクシャ エイガカントク"
+).split(" ");

@@ -50,7 +50,8 @@ export const TRADES: ReadonlySet<string> = new Set(
     "研究家 教育者 アナウンサー コラムニスト 映画監督"
   ).split(" "),
 );
-const TRADE_END =
+/** The endings of a trade the same way: "ブックデザイナー". */
+export const TRADE_END =
   /(ライター|デザイナー|クリエイター|クリエーター|コンサルタント|アーティスト|ミュージシャン|イラストレーター|エッセイスト|カメラマン)$/;
 const isTrade = (part: string): boolean => {
   const word = part.normalize("NFKC").replace(/\s/g, "");
