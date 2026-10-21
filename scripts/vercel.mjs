@@ -74,6 +74,22 @@ export function validBranch(name) {
 }
 
 /** One deployment on one line. */
+/**
+ * Which Vercel key a run used, by its name in Vercel's list of tokens, and
+ * when it runs out: the value itself is never printed. Matching the name here
+ * against the list is how the key in a GitHub secret is told apart from the
+ * others, and the date is Vercel's own, not one typed into watch.json.
+ */
+export function tokenLine(token) {
+  const expires = token?.expiresAt
+    ? new Date(token.expiresAt).toISOString().replace(/:\d\d\.\d+Z$/, "Z")
+    : "never";
+  const scopes = (token?.scopes ?? [])
+    .map((scope) => (scope.projectId ? `${scope.type}:project` : scope.type))
+    .filter(Boolean);
+  return `Key in use: ${token?.name ?? "(no name)"}, expires ${expires}${scopes.length ? `, scope ${scopes.join(" ")}` : ""}`;
+}
+
 export function deploymentLine(deployment) {
   // Listed deployments carry `created`; a single one carries `createdAt`.
   const time = deployment.created ?? deployment.createdAt;
@@ -530,6 +546,12 @@ async function main(action, branch) {
   }
 
   if (action === "status") {
+    try {
+      const { token: used } = await call("GET", "/v5/user/tokens/current");
+      console.log(tokenLine(used));
+    } catch (error) {
+      console.log(`Could not tell which key this is: ${error.message}`);
+    }
     const { projects } = await call("GET", "/v10/projects", { limit: 20 });
     console.log("Projects: " + projects.map((p) => p.name).join(", "));
     const { deployments } = await call("GET", "/v7/deployments", {

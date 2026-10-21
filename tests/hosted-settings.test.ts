@@ -20,6 +20,7 @@ import {
   recordLine,
   relativeName,
   rollbackTarget,
+  tokenLine,
   validBranch,
 } from "../scripts/vercel.mjs";
 import {
@@ -412,6 +413,26 @@ async function main() {
       assert.ok(!validBranch(name as string), String(name));
   });
 
+  await check("the key a run used is named, never shown", () => {
+    assert.equal(
+      tokenLine({
+        name: "github",
+        expiresAt: null,
+        scopes: [{ type: "team" }],
+      }),
+      "Key in use: github, expires never, scope team",
+    );
+    assert.equal(
+      tokenLine({
+        name: "booktown-vercel-production",
+        expiresAt: Date.UTC(2027, 0, 19, 0, 0, 59),
+        scopes: [{ type: "team", projectId: "prj_x" }],
+      }),
+      "Key in use: booktown-vercel-production, expires 2027-01-19T00:00Z, scope team:project",
+    );
+    assert.equal(tokenLine(undefined), "Key in use: (no name), expires never");
+  });
+
   await check("deployments and build logs read on one line each", () => {
     assert.equal(
       deploymentLine({
@@ -630,6 +651,16 @@ async function main() {
       const api = await standIn(({ method, url }) => {
         const { pathname } = new URL(url, "http://x");
         assert.match(url, /slug=booktown1/);
+        if (pathname === "/v5/user/tokens/current")
+          return {
+            body: {
+              token: {
+                name: "booktown-vercel-site",
+                expiresAt: Date.UTC(2027, 9, 21, 5, 30),
+                scopes: [{ type: "team" }],
+              },
+            },
+          };
         if (pathname === "/v10/projects")
           return { body: { projects: [{ name: "book-town-851k" }] } };
         if (pathname === "/v7/deployments")
@@ -667,6 +698,11 @@ async function main() {
         env,
       );
       assert.equal(status.code, 0, status.output);
+      assert.match(
+        status.output,
+        /Key in use: booktown-vercel-site, expires 2027-10-21T05:30Z, scope team/,
+      );
+      assert.doesNotMatch(status.output, /vcp_token_for_tests/);
       assert.match(status.output, /Projects: book-town-851k/);
       assert.match(status.output, /ERROR/);
       assert.match(status.output, /Error: out of memory/);
