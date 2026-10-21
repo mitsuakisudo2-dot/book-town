@@ -1408,6 +1408,11 @@ async function main() {
         keysVerdict(key("2026-12-19"), now, 7).lines[0],
         /expires on 2026-12-19, which has come/,
       );
+      // A key that has run out fails at both distances, not only says so.
+      for (const days of [30, 7]) {
+        assert.equal(keysVerdict(key("2026-12-19"), now, days).ok, false);
+        assert.equal(keysVerdict(key("2025-01-01"), now, days).ok, false);
+      }
       assert.equal(keysVerdict(key("never"), now, 7).ok, true);
       for (const unknown of ["", "TODO", "2027-1-19", "2027-02-30"])
         assert.equal(keysVerdict(key(unknown), now, 30).ok, false, unknown);
@@ -1749,7 +1754,10 @@ async function main() {
       const refusedEnv = { ...env, SUPABASE_API_URL: refusing.url };
       const tried = await run("scripts/watch.mjs", ["usage"], refusedEnv);
       assert.equal(tried.code, 0, tried.output);
-      assert.match(tried.output, /::warning::.*Backups and Database read/);
+      assert.match(
+        tried.output,
+        /::warning::.*read access to the database's size/,
+      );
       // On main a refused token is red under its own name, even for the
       // backups of a free plan: what it was to read was not read.
       for (const kind of ["backups", "usage", "errors"]) {
@@ -1758,8 +1766,11 @@ async function main() {
           REPORT_ISSUES: "on",
         });
         assert.equal(watched.code, 1, watched.output);
-        assert.match(watched.output, /refused: FAILED/);
-        assert.doesNotMatch(watched.output, new RegExp(`${kind}: (ok|FAILED)`));
+        assert.match(watched.output, new RegExp(`refused-${kind}: FAILED`));
+        assert.doesNotMatch(
+          watched.output,
+          new RegExp(`^${kind}: (ok|FAILED)`, "m"),
+        );
       }
       await refusing.close();
       const odd = await run(
@@ -1773,10 +1784,12 @@ async function main() {
   );
 
   await check(
-    "a refused watch token turns the watch red with its own issue, and an answer closes it",
+    "a refused watch token turns the watch red with an issue for each step, and only that step's answer closes it",
     async () => {
-      let refuse = true;
+      // The routes Supabase turns the token away from.
+      let refused = new Set<string>();
       let issues: { number: number; title: string; body: string }[] = [];
+      let next = 20;
       const site = await standIn(({ url }) => {
         const { pathname } = new URL(url, "http://x");
         if (pathname === "/_next/static/chunks/main.js")
@@ -1789,16 +1802,20 @@ async function main() {
       const api = await standIn(({ method, url, body }) => {
         const { pathname } = new URL(url, "http://x");
         if (pathname.startsWith("/projects/ref_test/")) {
-          if (refuse) return { status: 401, body: { message: "Unauthorized" } };
-          if (pathname === "/projects/ref_test/health")
+          const route = pathname.slice("/projects/ref_test".length);
+          if (refused.has(route))
+            return { status: 401, body: { message: "Unauthorized" } };
+          if (route === "/health")
             return { body: [{ name: "db", healthy: true }] };
+          if (route === "/database/backups")
+            return { body: { pitr_enabled: false, backups: [] } };
           return { body: [{ database_bytes: 16777216, storage_bytes: 0 }] };
         }
         const issuesPath = "/repos/mitsuakisudo2-dot/book-town/issues";
         if (pathname === issuesPath && method === "GET")
           return { body: issues };
         if (pathname === issuesPath && method === "POST") {
-          const number = issues.length + 20;
+          const number = next++;
           issues.push({
             number,
             title: String(body?.title),
@@ -1826,33 +1843,70 @@ async function main() {
         GITHUB_REPOSITORY_OWNER: "mitsuakisudo2-dot",
         REPORT_ISSUES: "on",
       };
-      const refused = await run("scripts/watch.mjs", ["site"], env);
-      assert.equal(refused.code, 1, refused.output);
-      assert.deepEqual(
-        issues.map((issue) => issue.title),
-        ["[見張り] 見張りの鍵が Supabase に断られています"],
-      );
+      const titles = () => issues.map((issue) => issue.title).sort();
+      const outputs: string[] = [];
+      const watch = async (step: string) => {
+        const result = await run("scripts/watch.mjs", [step], env);
+        outputs.push(result.output);
+        return result;
+      };
+
+      // A token turned away everywhere: each step says so under its name.
+      refused = new Set(["/health", "/database/query/read-only"]);
+      const site1 = await watch("site");
+      assert.equal(site1.code, 1, site1.output);
+      assert.deepEqual(titles(), [
+        "[見張り] 見張りの鍵が Supabase に断られています（具合）",
+      ]);
       assert.match(issues[0].body, /SUPABASE_WATCH_TOKEN/);
-      // The daily checks add to the same issue rather than open their own.
-      const usage = await run("scripts/watch.mjs", ["usage"], env);
-      assert.equal(usage.code, 1, usage.output);
-      assert.match(usage.output, /already says so/);
-      assert.equal(issues.length, 1);
-      refuse = false;
-      const answered = await run("scripts/watch.mjs", ["site"], env);
-      assert.equal(answered.code, 0, answered.output);
-      assert.match(answered.output, /Closed issue #20/);
+      assert.match(issues[0].body, /the project's health/);
+      const usage1 = await watch("usage");
+      assert.equal(usage1.code, 1, usage1.output);
+      assert.match(usage1.output, /refused-usage: FAILED/);
+      assert.equal(issues.length, 2);
+      const again = await watch("usage");
+      assert.match(again.output, /already says so/);
+      assert.equal(issues.length, 2);
+      // The health answering again closes the health's issue only.
+      refused = new Set(["/database/query/read-only"]);
+      const site2 = await watch("site");
+      assert.equal(site2.code, 0, site2.output);
+      assert.deepEqual(titles(), [
+        "[見張り] 見張りの鍵が Supabase に断られています（使用量）",
+      ]);
+      refused = new Set();
+      const usage2 = await watch("usage");
+      assert.equal(usage2.code, 0, usage2.output);
       assert.deepEqual(issues, []);
+
+      // Only the backups refused (a token without Backups read): the health
+      // every 15 minutes still answers, and must not close the morning's
+      // issue, or it would open and close every day.
+      refused = new Set(["/database/backups"]);
+      const backups1 = await watch("backups");
+      assert.equal(backups1.code, 1, backups1.output);
+      assert.match(backups1.output, /refused-backups: FAILED/);
+      assert.doesNotMatch(backups1.output, /^backups: (ok|FAILED)/m);
+      const between = await watch("site");
+      assert.equal(between.code, 0, between.output);
+      assert.deepEqual(titles(), [
+        "[見張り] 見張りの鍵が Supabase に断られています（控えの一覧）",
+      ]);
+      refused = new Set();
+      const backups2 = await watch("backups");
+      assert.equal(backups2.code, 0, backups2.output);
+      assert.deepEqual(issues, []);
+
       // Outside main a refusal only warns.
-      refuse = true;
+      refused = new Set(["/health"]);
       const tried = await run("scripts/watch.mjs", ["site"], {
         ...env,
         REPORT_ISSUES: "off",
       });
       assert.equal(tried.code, 0, tried.output);
       assert.match(tried.output, /::warning::Supabase answered 401/);
-      for (const output of [refused.output, usage.output, answered.output])
-        assert.ok(!output.includes(TOKEN));
+      assert.deepEqual(issues, []);
+      for (const output of outputs) assert.ok(!output.includes(TOKEN));
       await site.close();
       await api.close();
     },

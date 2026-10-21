@@ -46,9 +46,14 @@ export const TITLES = {
   keys: "鍵の期限が30日以内に切れます",
   "keys-soon": "鍵の期限が7日以内に切れます",
   "keys-unconfirmed": "期限を確かめていない鍵があります",
-  // One issue for every check, so a lost key reads as a lost key, not as the
-  // usage or the errors it kept the watch from reading.
-  refused: "見張りの鍵が Supabase に断られています",
+  // One issue for each step the key was turned away at, so a lost key reads
+  // as a lost key, not as the usage or the errors it kept the watch from
+  // reading, and a step that still answers (the health, every 15 minutes)
+  // does not close the issue of one that does not (the backups, each morning).
+  "refused-site": "見張りの鍵が Supabase に断られています（具合）",
+  "refused-backups": "見張りの鍵が Supabase に断られています（控えの一覧）",
+  "refused-usage": "見張りの鍵が Supabase に断られています（使用量）",
+  "refused-errors": "見張りの鍵が Supabase に断られています（画面のエラー）",
   // Opened and closed at once by a run by hand (check: write), to show the
   // watch on main may still write issues. Nothing is wrong.
   write: "見張りが issue を書けるかの確かめ（すぐ閉じます。対応は要りません）",
@@ -330,8 +335,15 @@ const NO_TOKEN =
 // A token Supabase turns away is a failure on main too: what it was to read
 // was not read, and that is not the same as all being well.
 const isRefusal = (error) => error?.status === 401 || error?.status === 403;
-const REFUSED_FIX =
-  "Make the watch's token again with Backups and Database read access, or give it what it lacks, and put it in SUPABASE_WATCH_TOKEN (the environment watch). docs/09「毎日の控えと見張り」「鍵の期限」.";
+// What each step reads, so the fix names the access it was refused.
+const READS = {
+  site: "the project's health",
+  backups: "the list of backups",
+  usage: "the database's size (a read-only query)",
+  errors: "the screen errors (a read-only query)",
+};
+const refusedFix = (step) =>
+  `Give the watch's token read access to ${READS[step]}, or make it again with that access, and put it in SUPABASE_WATCH_TOKEN (the environment watch). docs/09「毎日の控えと見張り」「鍵の期限」.`;
 
 function supabase() {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
@@ -428,21 +440,27 @@ async function checkSite(config, call) {
 }
 
 /**
- * Opens the refused-token issue when Supabase turned the token away, and
- * closes it once Supabase answers again. Outside main it only prints.
+ * Opens the step's refused-token issue when Supabase turned the token away
+ * there, and closes it once Supabase answers that same step again: another
+ * step answering says nothing about what this one may read. Outside main it
+ * only prints.
  *
+ * @param {"site" | "backups" | "usage" | "errors"} step
  * @param {string | undefined} supabase "answered", the refusal, or undefined
  *   when Supabase was not asked
  */
-async function reportRefusal(supabase) {
+async function reportRefusal(step, supabase) {
   if (supabase === undefined || process.env.REPORT_ISSUES !== "on") return;
   if (supabase === "answered")
-    await report("refused", {
+    await report(`refused-${step}`, {
       ok: true,
-      lines: ["Supabase answered the watch's token."],
+      lines: [`Supabase answered the watch's token for ${READS[step]}.`],
     });
   else {
-    await report("refused", { ok: false, lines: [supabase, REFUSED_FIX] });
+    await report(`refused-${step}`, {
+      ok: false,
+      lines: [supabase, refusedFix(step)],
+    });
     process.exitCode = 1;
   }
 }
@@ -519,7 +537,7 @@ async function main(action, kind, outcome) {
       result = await checkSite(config, call);
     }
     await report(action, result);
-    await reportRefusal(result.supabase);
+    await reportRefusal("site", result.supabase);
     if (!result.ok) process.exitCode = 1;
     return;
   } else if (
@@ -590,7 +608,7 @@ async function main(action, kind, outcome) {
       if (isRefusal(error) && process.env.REPORT_ISSUES === "on") {
         // The check itself was not made, so its own issue stays as it was.
         console.log(`The ${action} were not read: Supabase refused the token.`);
-        await reportRefusal(`${error.message} (reading the ${action})`);
+        await reportRefusal(action, error.message);
         return;
       }
       supabase = undefined;
@@ -599,14 +617,14 @@ async function main(action, kind, outcome) {
       result = isRefusal(error)
         ? {
             ok: true,
-            lines: [error.message, REFUSED_FIX].map(
+            lines: [error.message, refusedFix(action)].map(
               (line) => `::warning::${line}`,
             ),
           }
         : { ok: false, lines: [error.message] };
     }
     await report(action, result);
-    await reportRefusal(supabase);
+    await reportRefusal(action, supabase);
     if (!result.ok) process.exitCode = 1;
     return;
   } else if (action === "keys") {
@@ -645,7 +663,7 @@ async function main(action, kind, outcome) {
     action = kind;
   } else {
     console.error(
-      "Usage: node scripts/watch.mjs site|backups|usage|errors|keys | report <site|backups|usage|journey|refused|write> ok|failed",
+      "Usage: node scripts/watch.mjs site|backups|usage|errors|keys | report <site|backups|usage|journey|write> ok|failed",
     );
     process.exit(2);
   }
