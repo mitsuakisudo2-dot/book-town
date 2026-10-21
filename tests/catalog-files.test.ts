@@ -18,8 +18,10 @@ async function check(name: string, run: () => Promise<void>) {
 }
 
 const LIST = [
-  "https://ndlsearch.ndl.go.jp/files/oaipmhAllData/dcndl_all_20261002_0001.xml.gz",
-  "https://ndlsearch.ndl.go.jp/files/oaipmhAllData/dcndl_all_20261002_0002.xml.gz",
+  // The names as the library's list has them: the day the files were made
+  // (the first Saturday, 2026-10-03; the cut is the Friday before) and an id.
+  "https://ndlsearch.ndl.go.jp/files/oaipmhAllData/dcndl_all_20261003_0df733fe-0000-4000-8000-000000000001.gz",
+  "https://ndlsearch.ndl.go.jp/files/oaipmhAllData/dcndl_all_20261003_09fe3c90-0000-4000-8000-000000000002.gz",
 ];
 const EMPTY = gzipSync(
   Buffer.from("<OAI-PMH><ListRecords></ListRecords></OAI-PMH>"),
@@ -59,7 +61,7 @@ async function main() {
       console.log = () => {};
       await files(db, target, 1);
       console.log = quiet;
-      assert.equal(kept.get("files-20261002"), "2");
+      assert.equal(kept.get("files-20261003"), "2");
       assert.equal(kept.get("oai-iss-ndl-opac"), "2026-10-01");
       assert.equal(kept.get("oai-iss-ndl-opac-inprocess"), "2026-10-01");
     },

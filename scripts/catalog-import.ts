@@ -375,9 +375,12 @@ export async function files(db: PGlite, target: Target, hours: number) {
   said(`files ${next}/${list.length}`, tally);
   // The files are the records as they were on the cut: a change or a
   // deletion the day's changes brought after it was just taken back. The
-  // changes are taken again from the day before the cut.
+  // changes are taken again from the day before the cut. A file's name has
+  // the day it was made, the first Saturday (dcndl_all_20261003_…, the
+  // newest change in it stamped 2026-10-01T15:59Z); the cut is the Friday,
+  // in Tokyo, so the changes are taken from two days before the name's day.
   if (tally.files > 0 && next >= list.length) {
-    const back = dayBefore(`${cut.slice(0, 4)}-${cut.slice(4, 6)}-${cut.slice(6, 8)}`, 1);
+    const back = dayBefore(`${cut.slice(0, 4)}-${cut.slice(4, 6)}-${cut.slice(6, 8)}`, 2);
     for (const set of LIBRARY_SETS) {
       const mark = await target.mark(`oai-${set}`);
       if (mark === null || mark > back) await target.setMark(`oai-${set}`, back);
