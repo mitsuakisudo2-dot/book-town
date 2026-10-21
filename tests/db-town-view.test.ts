@@ -54,6 +54,10 @@ const SEED = `
   insert into profile_nine (profile_id, position, book_id, note) values
     ('${AKI}', 1, '${LISTED}', '最初の一冊');
   insert into shop_follows (follower_id, shop_id) values ('${BEN}', '${AKI_SHOP}');
+  -- The database dates a post when it is saved (posts_stamp_time), and
+  -- PGlite's clock moves by the millisecond, so two posts saved together
+  -- could share a time: the times written here are kept instead.
+  alter table posts disable trigger posts_stamp_time;
   insert into posts (id, author_id, body, book_id, created_at) values
     ('${AKI_POST}', '${AKI}', '雨の日に', '${LISTED}', now() - interval '3 hours'),
     ('${BEN_POST}', '${BEN}', 'こんにちは', null, now() - interval '2 hours'),
@@ -62,6 +66,7 @@ const SEED = `
     ('${CHI_NOTE}', '${CHI}', 'ひとりのメモ', '${CHIS}', 'solo', now() - interval '1 hour');
   insert into posts (id, author_id, body, parent_id, created_at) values
     ('${REPLY}', '${BEN}', 'いいですね', '${AKI_POST}', now() - interval '30 minutes');
+  alter table posts enable trigger posts_stamp_time;
   insert into post_reactions (user_id, post_id, kind) values
     ('${BEN}', '${AKI_POST}', 'like'), ('${BEN}', '${AKI_POST}', 'want'),
     ('${CHI}', '${BEN_POST}', 'like'), ('${AKI}', '${BEN_POST}', 'like'),
