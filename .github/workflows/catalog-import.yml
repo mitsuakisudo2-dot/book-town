@@ -9,8 +9,10 @@ name: Library catalog
 # while the project is on the free plan.
 #
 # The logs are public: the script prints counts, days and file numbers only,
-# never an ISBN or a title. Needs SUPABASE_DB_PASSWORD and SUPABASE_PROJECT_ID,
-# as the migrations do; without them the run is skipped with a warning.
+# never an ISBN or a title. It logs in as the role catalog_import, which can
+# take catalog rows and nothing else, with the environment catalog's
+# CATALOG_DB_PASSWORD (given to the role by catalog-role-password.yml) and
+# SUPABASE_PROJECT_ID; without them the run is skipped with a warning.
 
 on:
   schedule:
@@ -44,15 +46,16 @@ jobs:
     if: github.repository == 'mitsuakisudo2-dot/book-town'
     runs-on: ubuntu-latest
     timeout-minutes: 345
+    environment: catalog
     env:
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      CATALOG_DB_PASSWORD: ${{ secrets.CATALOG_DB_PASSWORD }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
       SUPABASE_REGION: ap-northeast-1
     steps:
       - name: Check the Supabase secrets
         id: secrets
         run: |
-          if [ -n "$SUPABASE_DB_PASSWORD" ] && [ -n "$SUPABASE_PROJECT_ID" ]; then
+          if [ -n "$CATALOG_DB_PASSWORD" ] && [ -n "$SUPABASE_PROJECT_ID" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::The Supabase secrets are not set yet, so nothing was taken."
@@ -60,6 +63,8 @@ jobs:
           fi
       - uses: actions/checkout@v4
         if: steps.secrets.outputs.ready == 'true'
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         if: steps.secrets.outputs.ready == 'true'
       - uses: actions/setup-node@v4
@@ -76,8 +81,7 @@ jobs:
           MOST: ${{ inputs.most || '10000' }}
           HOURS: ${{ inputs.hours || '5' }}
         run: |
-          password=$(jq -rn --arg value "$SUPABASE_DB_PASSWORD" '$value | @uri')
-          echo "::add-mask::$password"
+          echo "::add-mask::$CATALOG_DB_PASSWORD"
           case "$MODE" in
             trial) pnpm exec tsx scripts/catalog-import.ts trial --most "$MOST" ;;
             files) pnpm exec tsx scripts/catalog-import.ts files --hours "$HOURS" ;;

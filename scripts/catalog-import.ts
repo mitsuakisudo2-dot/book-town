@@ -15,8 +15,9 @@
 // Each record is read with the database's own private.ndl_answer, in a
 // PGlite with every migration applied, so what the catalog holds is read
 // exactly as the library's answers to the registrations are. Only the
-// fields it reads are sent (private.catalog_take), a thousand ISBNs at a
-// time, through psql to the database's session pooler, as the migrations go.
+// fields it reads are sent (catalog_api.take), a thousand ISBNs at a time,
+// through psql to the database's session pooler, logged in as the role
+// catalog_import, which can do this and nothing else.
 //
 // The library: one request at a time, none at once (its rules ask for no
 // parallel access), named as BookTown, waiting a second between them and
@@ -213,34 +214,34 @@ function quoted(text: string): string {
   return `$${tag}$${text}$${tag}$`;
 }
 
-export function psqlTarget(url: string): Target {
+/**
+ * The rows through catalog_api, as the role catalog_import (docs/09
+ * 「本番の設定」): run sends one statement and answers what psql -t -A
+ * prints for it.
+ */
+export function sqlTarget(run: (sql: string) => Promise<string>): Target {
   return {
     async take(rows, batch) {
-      return counted(
-        await psql(url, `select private.catalog_take(${quoted(JSON.stringify(rows))}::jsonb, '${batch}');`),
-      );
+      return counted(await run(`select catalog_api.take(${quoted(JSON.stringify(rows))}::jsonb, ${quoted(batch)});`));
     },
     async gone(records) {
       return Number(
-        await psql(
-          url,
-          `select private.catalog_gone(array(select jsonb_array_elements_text(${quoted(JSON.stringify(records))}::jsonb)));`,
+        await run(
+          `select catalog_api.gone(array(select jsonb_array_elements_text(${quoted(JSON.stringify(records))}::jsonb)));`,
         ),
       );
     },
     async mark(name) {
-      const out = await psql(url, `select mark from private.catalog_progress where name = '${name}';`);
+      const out = await run(`select catalog_api.mark(${quoted(name)});`);
       return out === "" ? null : out;
     },
     async setMark(name, mark) {
-      await psql(
-        url,
-        `insert into private.catalog_progress (name, mark) values ('${name}', ${quoted(mark)})
-         on conflict (name) do update set mark = excluded.mark, updated_at = now();`,
-      );
+      await run(`select catalog_api.set_mark(${quoted(name)}, ${quoted(mark)});`);
     },
   };
 }
+
+export const psqlTarget = (url: string): Target => sqlTarget((sql) => psql(url, sql));
 
 const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
@@ -367,14 +368,17 @@ export async function files(db: PGlite, target: Target, hours: number) {
   said(`files ${next}/${list.length}`, tally);
 }
 
-/** The database's session pooler, as .github/workflows/deploy-database.yml finds it. */
+/**
+ * The database's session pooler, as .github/workflows/deploy-database.yml
+ * finds it, logged in as catalog_import (the environment catalog's password).
+ */
 async function poolerTarget(): Promise<Target> {
   const project = process.env.SUPABASE_PROJECT_ID;
-  const password = process.env.SUPABASE_DB_PASSWORD;
-  if (!project || !password) throw new Error("SUPABASE_PROJECT_ID and SUPABASE_DB_PASSWORD are needed");
+  const password = process.env.CATALOG_DB_PASSWORD;
+  if (!project || !password) throw new Error("SUPABASE_PROJECT_ID and CATALOG_DB_PASSWORD are needed");
   const region = process.env.SUPABASE_REGION ?? "ap-northeast-1";
   for (const cluster of ["aws-0", "aws-1"]) {
-    const url = `postgresql://postgres.${project}:${encodeURIComponent(password)}@${cluster}-${region}.pooler.supabase.com:5432/postgres`;
+    const url = `postgresql://catalog_import.${project}:${encodeURIComponent(password)}@${cluster}-${region}.pooler.supabase.com:5432/postgres`;
     try {
       await psql(url, "select 1;");
       return psqlTarget(url);

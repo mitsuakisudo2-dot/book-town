@@ -3,6 +3,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import {
   recordsOf,
   rowsOf,
+  sqlTarget,
   type CatalogRow,
   type Target,
 } from "../scripts/catalog-import";
@@ -82,37 +83,17 @@ async function asImport<T = Record<string, unknown>>(
   }
 }
 
-/** The importer's target, through catalog_api as catalog_import. */
+/**
+ * The importer's own statements (sqlTarget, what psqlTarget sends), run as
+ * catalog_import and printed as psql -t -A prints them.
+ */
 function roleTarget(db: PGlite): Target {
-  return {
-    async take(rows, batch) {
-      const [{ r }] = await asImport<{ r: Record<string, number> }>(
-        db,
-        "select catalog_api.take($1::jsonb, $2) r",
-        [JSON.stringify(rows), batch],
-      );
-      return r;
-    },
-    async gone(records) {
-      const [{ n }] = await asImport<{ n: number }>(
-        db,
-        "select catalog_api.gone($1::text[]) n",
-        [records],
-      );
-      return n;
-    },
-    async mark(name) {
-      const [{ mark }] = await asImport<{ mark: string | null }>(
-        db,
-        "select catalog_api.mark($1) mark",
-        [name],
-      );
-      return mark;
-    },
-    async setMark(name, mark) {
-      await asImport(db, "select catalog_api.set_mark($1, $2)", [name, mark]);
-    },
-  };
+  return sqlTarget(async (sql) => {
+    const [row] = await asImport<Record<string, unknown>>(db, sql);
+    const value = row ? Object.values(row)[0] : null;
+    if (value === null || value === undefined) return "";
+    return typeof value === "object" ? JSON.stringify(value) : String(value);
+  });
 }
 
 /**
