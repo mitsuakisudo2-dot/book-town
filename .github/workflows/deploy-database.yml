@@ -1,10 +1,16 @@
 name: Deploy database
 
 # Applies new files in supabase/migrations to the Supabase project once they reach
-# main. Needs three repository secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD
-# and SUPABASE_PROJECT_ID. Until they are set, the run is skipped with a warning.
-# The access token is kept for later Supabase deploys; migrations only need the
-# database password.
+# main, in two jobs (docs/09「データベースへの反映」):
+#   plan   reads production's history with the environment production-read's
+#          token (read only), stops when it does not fit the files, and lists
+#          every file production has not applied in the run's summary.
+#   apply  waits for the owner's approval in GitHub (the environment
+#          production-db holds the database password), checks that what is
+#          about to run is what plan listed, applies it and reads the history
+#          again. It does not run when there is nothing to apply.
+# A run that has started is never cancelled; one that stopped part way is
+# checked against the database itself before applying again.
 
 on:
   push:
@@ -20,26 +26,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  migrate:
+  plan:
     runs-on: ubuntu-latest
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    environment: production-read
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+      plan: ${{ steps.plan.outputs.plan }}
     steps:
-      - name: Check the Supabase secrets
-        id: secrets
-        run: |
-          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ] && [ -n "$SUPABASE_PROJECT_ID" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::The Supabase secrets are not set yet, so no migration was applied."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          fi
       - uses: actions/checkout@v4
-        if: steps.secrets.outputs.ready == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: What production has not applied
+        id: plan
+        run: node scripts/migration-plan.mjs plan
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_READ_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+
+  apply:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    environment: production-db
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      SUPABASE_REGION: ap-northeast-1
+      PLAN: ${{ needs.plan.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: supabase/setup-cli@v1
-        if: steps.secrets.outputs.ready == 'true'
         with:
           version: 2.120.0
       # GitHub's runners have no IPv6, and the database's direct address is
@@ -47,17 +71,46 @@ jobs:
       # in the project's region (Tokyo). Its host name starts with aws-0 or
       # aws-1 depending on when the project was made; the wrong one refuses
       # the login before anything is applied.
-      - name: Apply new migrations
-        if: steps.secrets.outputs.ready == 'true'
-        env:
-          SUPABASE_REGION: ap-northeast-1
+      - name: Find the pooler
+        id: pooler
         run: |
           password=$(jq -rn --arg value "$SUPABASE_DB_PASSWORD" '$value | @uri')
           echo "::add-mask::$password"
           for cluster in aws-0 aws-1; do
             url="postgresql://postgres.$SUPABASE_PROJECT_ID:$password@$cluster-$SUPABASE_REGION.pooler.supabase.com:5432/postgres"
-            if supabase db push --db-url "$url" --yes; then
+            if supabase db push --db-url "$url" --dry-run > dry-run.txt 2>&1; then
+              echo "cluster=$cluster" >> "$GITHUB_OUTPUT"
               exit 0
             fi
           done
+          cat dry-run.txt
           exit 1
+      - name: What is about to run is what was shown
+        run: |
+          cat dry-run.txt
+          node scripts/migration-plan.mjs same < dry-run.txt
+      - name: Apply the migrations
+        env:
+          CLUSTER: ${{ steps.pooler.outputs.cluster }}
+        run: |
+          password=$(jq -rn --arg value "$SUPABASE_DB_PASSWORD" '$value | @uri')
+          echo "::add-mask::$password"
+          supabase db push --db-url "postgresql://postgres.$SUPABASE_PROJECT_ID:$password@$CLUSTER-$SUPABASE_REGION.pooler.supabase.com:5432/postgres" --yes
+
+  applied:
+    needs: [plan, apply]
+    runs-on: ubuntu-latest
+    environment: production-read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Production's history holds them all
+        run: node scripts/migration-plan.mjs applied
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_READ_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          PLAN: ${{ needs.plan.outputs.plan }}

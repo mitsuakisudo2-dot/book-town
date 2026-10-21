@@ -22,9 +22,9 @@ on:
   workflow_dispatch:
     inputs:
       check:
-        description: site checks the pages and Supabase; daily also checks the backups and usage and walks through the site
+        description: site checks the pages and Supabase; daily also checks the backups and usage and walks through the site; write opens an issue and closes it at once, to show the watch may still write issues
         type: choice
-        options: [site, daily]
+        options: [site, daily, write]
         default: daily
   pull_request:
     paths:
@@ -50,6 +50,7 @@ jobs:
     uses: ./.github/workflows/watch-run.yml
     with:
       daily: ${{ github.event.schedule == '17 21 * * *' || inputs.check == 'daily' }}
+      write: ${{ inputs.check == 'write' }}
       environment: watch
     secrets: inherit
 
@@ -60,4 +61,5 @@ jobs:
     uses: ./.github/workflows/watch-run.yml
     with:
       daily: true
+      write: false
       environment: ""

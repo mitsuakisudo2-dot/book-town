@@ -40,6 +40,9 @@ export const TITLES = {
   usage: "Supabase の使用量が上限に近づいています",
   journey: "本番の通しが失敗しました",
   errors: "読書家の画面でエラーが起きています",
+  // Opened and closed at once by a run by hand (check: write), to show the
+  // watch on main may still write issues. Nothing is wrong.
+  write: "見張りが issue を書けるかの確かめ（すぐ閉じます。対応は要りません）",
 };
 
 const marker = (kind) => `<!-- watch:${kind} -->`;
@@ -492,7 +495,7 @@ async function main(action, kind, outcome) {
     action = kind;
   } else {
     console.error(
-      "Usage: node scripts/watch.mjs site|backups|usage|errors | report <site|backups|usage|journey> ok|failed",
+      "Usage: node scripts/watch.mjs site|backups|usage|errors | report <site|backups|usage|journey|write> ok|failed",
     );
     process.exit(2);
   }
