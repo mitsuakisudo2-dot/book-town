@@ -34,14 +34,14 @@
       "where": "Vercel",
       "secret": "VERCEL_SITE_TOKEN",
       "environment": "vercel",
-      "expires": "TODO"
+      "expires": "2027-01-19"
     },
     {
       "name": "booktown-vercel-production",
       "where": "Vercel",
       "secret": "VERCEL_PRODUCTION_TOKEN",
       "environment": "production-vercel",
-      "expires": "TODO"
+      "expires": "2027-01-19"
     }
   ],
   "included": {
