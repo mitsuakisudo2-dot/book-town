@@ -278,7 +278,12 @@ async function main(action, branch) {
 
   const call = async (method, route, query = {}, body) => {
     const url = new URL(route, API);
-    for (const [key, value] of Object.entries({ ...query, slug: team }))
+    // A key's own details belong to its user, not the team: Vercel answers
+    // 400 when they are asked for with the team's slug.
+    const own = route.startsWith("/v5/user/");
+    for (const [key, value] of Object.entries(
+      own ? query : { ...query, slug: team },
+    ))
       url.searchParams.set(key, String(value));
     const response = await fetch(url, {
       method,

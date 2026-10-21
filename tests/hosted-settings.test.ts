@@ -650,8 +650,10 @@ async function main() {
     async () => {
       const api = await standIn(({ method, url }) => {
         const { pathname } = new URL(url, "http://x");
-        assert.match(url, /slug=booktown1/);
-        if (pathname === "/v5/user/tokens/current")
+        // Vercel refuses the team's slug on a key's own details.
+        if (pathname !== "/v5/user/tokens/current")
+          assert.match(url, /slug=booktown1/);
+        else if (!/slug=/.test(url))
           return {
             body: {
               token: {
