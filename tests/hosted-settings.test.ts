@@ -31,6 +31,7 @@ import {
   usageVerdict,
   errorsVerdict,
   keysVerdict,
+  unconfirmedVerdict,
 } from "../scripts/watch.mjs";
 
 // The scripts that change the hosted Supabase and Vercel settings, without
@@ -1373,6 +1374,17 @@ async function main() {
       for (const unknown of ["", "TODO", "2027-1-19", "2027-02-30"])
         assert.equal(keysVerdict(key(unknown), now, 30).ok, false, unknown);
       assert.equal(keysVerdict([], now, 30).ok, false);
+      // A date nobody confirmed is not "never": it has an issue of its own,
+      // and does not hold the 30- and 7-day issues open.
+      const guessed = [...key("2027-01-21"), { ...key("unknown")[0] }];
+      assert.equal(keysVerdict(guessed, now, 30).ok, true);
+      assert.match(
+        keysVerdict(guessed, now, 30).lines.join("\n"),
+        /not confirmed/,
+      );
+      assert.equal(unconfirmedVerdict(guessed).ok, false);
+      assert.match(unconfirmedVerdict(guessed).lines[0], /not confirmed/);
+      assert.equal(unconfirmedVerdict(key("never")).ok, true);
 
       // Every token or key a workflow reads by name is in the list, with a
       // date (or "never"), so a new key cannot run out unwatched.
@@ -1393,7 +1405,7 @@ async function main() {
       for (const entry of watch.keys)
         assert.match(
           entry.expires,
-          /^(\d{4}-\d{2}-\d{2}|never)$/,
+          /^(\d{4}-\d{2}-\d{2}|never|unknown)$/,
           `${entry.name} needs the date it expires`,
         );
       assert.match(

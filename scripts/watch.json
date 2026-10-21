@@ -34,7 +34,7 @@
       "where": "Vercel",
       "secret": "VERCEL_TOKEN",
       "environment": "repository",
-      "expires": "never"
+      "expires": "unknown"
     }
   ],
   "included": {

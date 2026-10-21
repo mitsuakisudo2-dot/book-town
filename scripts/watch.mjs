@@ -45,6 +45,7 @@ export const TITLES = {
   errors: "読書家の画面でエラーが起きています",
   keys: "鍵の期限が30日以内に切れます",
   "keys-soon": "鍵の期限が7日以内に切れます",
+  "keys-unconfirmed": "期限を確かめていない鍵があります",
   // One issue for every check, so a lost key reads as a lost key, not as the
   // usage or the errors it kept the watch from reading.
   refused: "見張りの鍵が Supabase に断られています",
@@ -209,6 +210,12 @@ export function keysVerdict(keys, now, withinDays) {
       lines.push(`${label}: does not expire.`);
       continue;
     }
+    // Its own issue says so (unconfirmedVerdict), so a date that comes near
+    // for another key still opens the issues above.
+    if (key?.expires === "unknown") {
+      lines.push(`${label}: the date it expires is not confirmed.`);
+      continue;
+    }
     const at = /^\d{4}-\d{2}-\d{2}$/.test(String(key?.expires))
       ? Date.parse(`${key.expires}T00:00:00+09:00`)
       : NaN;
@@ -238,6 +245,30 @@ export function keysVerdict(keys, now, withinDays) {
 }
 
 /** Whether a page of the site looks like the site: a page with its scripts. */
+/**
+ * Which keys in scripts/watch.json have a date that nobody has confirmed
+ * ("unknown"): a guess must not pass for "never".
+ *
+ * @returns {{ ok: boolean, lines: string[] }}
+ */
+export function unconfirmedVerdict(keys) {
+  const unknown = (Array.isArray(keys) ? keys : []).filter(
+    (key) => key?.expires === "unknown",
+  );
+  if (unknown.length === 0)
+    return { ok: true, lines: ["Every key's date is confirmed."] };
+  return {
+    ok: false,
+    lines: [
+      ...unknown.map(
+        (key) =>
+          `${key.name} (${key.secret}, ${key.environment}): the date it expires is not confirmed.`,
+      ),
+      'Find the key in the service\'s own list (docs/09「鍵の期限」), then write its date or "never" in scripts/watch.json.',
+    ],
+  };
+}
+
 export function pageVerdict(route, status, html) {
   if (status !== 200) return `${route} answered ${status}.`;
   if (!/<main[\s>]|\/_next\/static\//.test(html))
@@ -589,6 +620,9 @@ async function main(action, kind, outcome) {
       await report(name, verdict);
       failed ||= !verdict.ok;
     }
+    const unconfirmed = unconfirmedVerdict(config.keys);
+    await report("keys-unconfirmed", unconfirmed);
+    failed ||= !unconfirmed.ok;
     if (failed) process.exitCode = 1;
     return;
   } else if (
