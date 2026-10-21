@@ -1,26 +1,45 @@
 name: Vercel
 
-# Looks after the Vercel project with the VERCEL_TOKEN repository secret:
-# recent deployments of a branch with the end of a failed build's log, or a new
-# build of a branch when Vercel stopped before building. scripts/vercel.mjs
-# does the work. Pull requests that change it only try the script, with no key
-# at all (the branch's own code runs there), so Vercel is not asked. A push to
-# main makes sure production gets built, since Vercel sometimes misses one.
-# domains shows the project's addresses and domains-apply adds SITE_DOMAIN (www
-# sent on to it); mail and mail-apply set up sending the
-# login email from MAIL_DOMAIN through Resend (RESEND_ADMIN_KEY, a Full access
-# key, adds the domain; the sending key in RESEND_API_KEY cannot). rollback
-# points the site back at the production build before the current one (it
-# refuses when the migrations differ, unless allow_migrations is ticked), and
-# promote-latest publishes the newest build again (docs/09「本番を直前の版に戻す」).
+# Looks after the Vercel project: recent deployments of a branch with the end
+# of a failed build's log, or a new build of a branch when Vercel stopped
+# before building. scripts/vercel.mjs does the work. A push to main makes sure
+# production gets built, since Vercel sometimes misses one. domains shows the
+# project's addresses and domains-apply adds SITE_DOMAIN (www sent on to it);
+# mail and mail-apply set up sending the login email from MAIL_DOMAIN through
+# Resend. rollback points the site back at the production build before the
+# current one (it refuses when the migrations differ, unless allow_migrations
+# is ticked), and promote-latest publishes the newest build again (docs/09
+# 「本番を直前の版に戻す」).
+#
+# The keys live in two environments that only main may use, one per use
+# (docs/09「Vercel の鍵」):
+#   vercel             ensure after a push to main, status, domains and a
+#                      branch's preview build; VERCEL_SITE_TOKEN, no approval
+#   production-vercel  what changes production by hand: deploy of main,
+#                      rollback, promote-latest, domains-apply, mail and
+#                      mail-apply;
+#                      VERCEL_PRODUCTION_TOKEN, and RESEND_ADMIN_KEY (Full
+#                      access) for mail only while a domain is added; waits for
+#                      the owner's approval
+# A pull request only tries the script, with no key at all.
 
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: status lists recent deployments; deploy builds the branch again; domains shows the addresses, domains-apply adds SITE_DOMAIN; mail shows what sending from MAIL_DOMAIN needs, mail-apply does it; rollback goes back one production build, promote-latest undoes it
+        description: status lists recent deployments; deploy builds the branch again (main waits for approval); domains shows the addresses; rollback (back one production build), promote-latest (undoes it), domains-apply, mail and mail-apply wait for approval
         type: choice
-        options: [status, deploy, domains, domains-apply, mail, mail-apply, rollback, promote-latest]
+        options:
+          [
+            status,
+            deploy,
+            domains,
+            domains-apply,
+            mail,
+            mail-apply,
+            rollback,
+            promote-latest,
+          ]
         default: status
       branch:
         description: Branch to look at or build (main goes to production)
@@ -41,8 +60,57 @@ permissions:
   contents: read
 
 jobs:
-  vercel:
+  # The branch's own script runs here, so it gets no key: without one it
+  # only says Vercel was not asked.
+  try:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Try the script without a key
+        run: node scripts/vercel.mjs status "$BRANCH"
+        env:
+          BRANCH: ${{ github.head_ref }}
+
+  # ensure after a push to main, and what only reads or builds a preview.
+  site:
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+      (inputs.action == 'status' || inputs.action == 'domains' ||
+      (inputs.action == 'deploy' && inputs.branch != 'main')))
+    runs-on: ubuntu-latest
+    environment: vercel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ask Vercel
+        run: node scripts/vercel.mjs "$ACTION" "$BRANCH"
+        env:
+          ACTION: ${{ github.event_name == 'push' && 'ensure' || inputs.action }}
+          BRANCH: ${{ github.event_name == 'push' && 'main' || inputs.branch }}
+          DEPLOY_SHA: ${{ github.sha }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_SITE_TOKEN }}
+          VERCEL_TEAM: booktown1
+          VERCEL_PROJECT: book-town-851k
+          SITE_DOMAIN: booktown.page
+          MAIL_DOMAIN: booktown.page
+
+  # What changes production by hand waits for the owner's approval.
+  production:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.action == 'rollback' || inputs.action == 'promote-latest' ||
+      inputs.action == 'domains-apply' || inputs.action == 'mail' ||
+      inputs.action == 'mail-apply' ||
+      (inputs.action == 'deploy' && inputs.branch == 'main'))
+    runs-on: ubuntu-latest
+    environment: production-vercel
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,14 +122,14 @@ jobs:
       - name: Ask Vercel
         run: node scripts/vercel.mjs "$ACTION" "$BRANCH"
         env:
-          ACTION: ${{ inputs.action || (github.event_name == 'push' && 'ensure') || 'status' }}
-          BRANCH: ${{ inputs.branch || github.head_ref || github.ref_name }}
+          ACTION: ${{ inputs.action }}
+          BRANCH: ${{ inputs.branch }}
           DEPLOY_SHA: ${{ github.sha }}
           ALLOW_MIGRATIONS: ${{ inputs.allow_migrations && 'yes' || 'no' }}
-          VERCEL_TOKEN: ${{ github.event_name != 'pull_request' && secrets.VERCEL_TOKEN || '' }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_PRODUCTION_TOKEN }}
           VERCEL_TEAM: booktown1
           VERCEL_PROJECT: book-town-851k
           SITE_DOMAIN: booktown.page
           MAIL_DOMAIN: booktown.page
-          RESEND_API_KEY: ${{ github.event_name != 'pull_request' && secrets.RESEND_API_KEY || '' }}
-          RESEND_ADMIN_KEY: ${{ github.event_name != 'pull_request' && secrets.RESEND_ADMIN_KEY || '' }}
+          # Only mail may add a domain, and only with a Full access key.
+          RESEND_ADMIN_KEY: ${{ startsWith(inputs.action, 'mail') && secrets.RESEND_ADMIN_KEY || '' }}

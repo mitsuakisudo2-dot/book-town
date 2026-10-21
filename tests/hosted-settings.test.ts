@@ -1912,12 +1912,86 @@ async function main() {
     },
   );
 
+  // A job's if:, on its line or folded onto the lines under it.
+  const jobIf = (job: string) => {
+    const lines = job.split("\n");
+    const at = lines.findIndex((line) => /^    if:/.test(line));
+    if (at < 0) return "";
+    const first = lines[at].replace(/^    if:\s*/, "");
+    if (first !== ">-" && first !== ">") return first;
+    const rest: string[] = [];
+    for (const line of lines.slice(at + 1)) {
+      if (!/^      /.test(line)) break;
+      rest.push(line.trim());
+    }
+    return rest.join(" ");
+  };
+  // Whether an if: is false for every pull request: each of its top-level
+  // || choices needs, among its && parts, an event that is not a pull
+  // request, or an input set to a value (a pull request has no inputs).
+  const skipsPulls = (condition: string): boolean => {
+    const split = (text: string, by: string) => {
+      const parts: string[] = [];
+      let depth = 0;
+      let start = 0;
+      for (let i = 0; i < text.length; i++) {
+        if (text[i] === "(") depth++;
+        else if (text[i] === ")") depth--;
+        else if (depth === 0 && text.startsWith(by, i)) {
+          parts.push(text.slice(start, i));
+          start = i + by.length;
+        }
+      }
+      parts.push(text.slice(start));
+      return parts.map((part) => part.trim());
+    };
+    // Drops brackets around the whole text, not around its first part only.
+    const bare = (text: string): string => {
+      if (!text.startsWith("(")) return text;
+      let depth = 0;
+      for (let i = 0; i < text.length; i++) {
+        if (text[i] === "(") depth++;
+        else if (text[i] === ")") depth--;
+        if (depth === 0)
+          return i === text.length - 1 ? bare(text.slice(1, -1).trim()) : text;
+      }
+      return text;
+    };
+    return (
+      condition !== "" &&
+      split(bare(condition), "||").every((choice) =>
+        split(bare(choice), "&&").some((part) =>
+          /^github\.event_name (== '(push|workflow_dispatch|schedule)'|!= 'pull_request')$|^inputs\.[\w-]+ == '[^']+'$/.test(
+            bare(part),
+          ),
+        ),
+      )
+    );
+  };
+
   await check(
     "a pull request's run gets no key: every secret is held back from it",
     () => {
       // A pull request runs its branch's own code, so a secret given to it
       // could be sent anywhere. Each secret is left out for pull requests on
       // its line, or sits in a job a pull request never runs.
+      assert.ok(skipsPulls("github.event_name != 'pull_request'"));
+      assert.ok(
+        skipsPulls("github.event_name == 'push' || inputs.mode == 'apply'"),
+      );
+      assert.ok(
+        skipsPulls(
+          "github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.action == 'status' || inputs.action == 'domains'))",
+        ),
+      );
+      assert.ok(!skipsPulls(""));
+      assert.ok(
+        !skipsPulls("github.event_name == 'push' || inputs.mode != 'apply'"),
+      );
+      assert.ok(
+        !skipsPulls("(github.event_name == 'push') || (inputs.action != 'x')"),
+      );
+      assert.ok(!skipsPulls("always() || github.event_name == 'push'"));
       for (const name of readdirSync(".github/workflows")) {
         const text = readFileSync(`.github/workflows/${name}`, "utf8");
         const on = text.slice(0, text.indexOf("\njobs:"));
@@ -1927,11 +2001,7 @@ async function main() {
           .split(/\n(?=  [\w-]+:\n)/);
         for (const job of jobs.slice(1)) {
           const head = job.split("\n")[0].trim();
-          const notForPulls =
-            /^    if: github\.event_name (!= 'pull_request'|== 'push')/m.test(
-              job,
-            ) ||
-            /^    if: github\.event_name == 'push' \|\| inputs\./m.test(job);
+          const notForPulls = skipsPulls(jobIf(job));
           for (const line of job.split("\n"))
             if (/secrets\./.test(line) && !notForPulls)
               assert.match(
@@ -1976,6 +2046,74 @@ async function main() {
       assert.doesNotMatch(tried, /secrets:/);
       // The workflow's own default for anything else is read only.
       assert.match(watch, /^permissions:\n {2}contents: read\n/m);
+    },
+  );
+
+  await check(
+    "the Vercel steps pass each key only where it is needed, and production waits for approval",
+    () => {
+      const text = readFileSync(".github/workflows/vercel.yml", "utf8");
+      const job = (name: string) => {
+        const lines = text.split("\n");
+        const start = lines.indexOf(`  ${name}:`);
+        assert.ok(start >= 0, `no job ${name}`);
+        const end = lines.findIndex(
+          (line, i) => i > start && /^ {0,2}\S/.test(line),
+        );
+        return lines.slice(start, end < 0 ? undefined : end).join("\n");
+      };
+      const jobs = [
+        ...text.split(/^jobs:$/m)[1].matchAll(/^ {2}([a-z-]+):$/gm),
+      ].map((m) => m[1]);
+      assert.deepEqual(jobs, ["try", "site", "production"]);
+      // A pull request runs the branch's own script, so it gets no key.
+      const tried = job("try");
+      assert.match(tried, /if: github\.event_name == 'pull_request'/);
+      assert.doesNotMatch(tried, /secrets\.|environment:/);
+      // Every key comes from an environment that only main may use.
+      const site = job("site");
+      assert.match(site, /environment: vercel\n/);
+      assert.deepEqual(
+        [...site.matchAll(/secrets\.(\w+)/g)].map((m) => m[1]),
+        ["VERCEL_SITE_TOKEN"],
+      );
+      const production = job("production");
+      assert.match(production, /environment: production-vercel\n/);
+      assert.deepEqual(
+        [...production.matchAll(/secrets\.(\w+)/g)].map((m) => m[1]),
+        ["VERCEL_PRODUCTION_TOKEN", "RESEND_ADMIN_KEY"],
+      );
+      assert.match(
+        production,
+        /RESEND_ADMIN_KEY: \$\{\{ startsWith\(inputs\.action, 'mail'\) && secrets\.RESEND_ADMIN_KEY \|\| '' \}\}/,
+      );
+      assert.doesNotMatch(text, /secrets\.(VERCEL_TOKEN|RESEND_API_KEY)\b/);
+      // What changes production by hand runs only in the approved job, and
+      // deploy only when it is main (けにーさん 10-21).
+      const ifOf = (block: string) =>
+        block.split(/\n {4}runs-on:/)[0].replace(/\s+/g, " ");
+      for (const action of [
+        "rollback",
+        "promote-latest",
+        "domains-apply",
+        "mail",
+        "mail-apply",
+      ]) {
+        assert.ok(ifOf(production).includes(`'${action}'`), action);
+        assert.ok(!ifOf(site).includes(`'${action}'`), action);
+      }
+      assert.ok(
+        ifOf(site).includes(
+          "(inputs.action == 'deploy' && inputs.branch != 'main')",
+        ),
+      );
+      assert.ok(
+        ifOf(production).includes(
+          "(inputs.action == 'deploy' && inputs.branch == 'main')",
+        ),
+      );
+      assert.ok(ifOf(site).includes("github.event_name == 'push'"));
+      assert.match(text, /^permissions:\n {2}contents: read\n/m);
     },
   );
 
