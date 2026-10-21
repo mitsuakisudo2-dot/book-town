@@ -499,7 +499,7 @@ async function main() {
       assert.match(looked.output, /RESEND_API_KEY is not set/);
       assert.match(
         looked.output,
-        /TURNSTILE_SECRET_KEY: set among the repository secrets/,
+        /TURNSTILE_SECRET_KEY: set among the environment's secrets/,
       );
       assert.match(looked.output, /security_captcha_enabled: .*-> true/);
       assert.deepEqual(
