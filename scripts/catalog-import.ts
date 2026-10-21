@@ -319,15 +319,19 @@ export async function trial(db: PGlite, target: Target, most: number, from: stri
 /** Each day's changes since the last run, for the library's two sets. */
 export async function daily(db: PGlite, target: Target) {
   const started = today();
-  for (const set of LIBRARY_SETS) {
+  // A set with too many changes is left, its mark where it was, and the run
+  // fails at the end: the changes not taken are not a quiet night.
+  const left: string[] = [];
+  sets: for (const set of LIBRARY_SETS) {
     const name = `oai-${set}`;
     const from = (await target.mark(name)) ?? dayBefore(started, 2);
     const tally: Tally = { sent: 0, deleted: 0, gone: 0 };
     let checked = false;
     for await (const page of changes(set, from)) {
       if (!checked && (page.size ?? 0) > BULK) {
-        console.log(`${set}: ${page.size} changes since ${from}, a bulk update; take the files instead`);
-        return;
+        console.log(`${set}: ${page.size} changes since ${from}, more than a day's changes can take`);
+        left.push(set);
+        continue sets;
       }
       checked = true;
       const rows = await rowsOf(db, page.records);
@@ -342,6 +346,9 @@ export async function daily(db: PGlite, target: Target) {
     // The next run starts a day back: a change stamped late is not missed.
     await target.setMark(name, dayBefore(started, 1));
     said(`${set} since ${from}`, tally);
+  }
+  if (left.length > 0) {
+    throw new Error(`not taken: ${left.join(", ")}; take the next month's files (docs/09「図書館の目録」)`);
   }
 }
 
