@@ -962,6 +962,24 @@ async function main() {
         { name: "人0", role: "著", heading: "人, 0" },
         { name: "谷花子", role: "訳", heading: "人, 1" },
       ]);
+      // The same person twice (著 and 絵) is in the order of the statements.
+      assert.deepEqual(
+        (
+          await ndl(
+            sru({
+              isbns: [X1],
+              title: "本",
+              credits: ["海野波子 著", "海野波子 絵"],
+              agents: [{ name: "海野, 波子" }, { name: "海野, 波子" }],
+            }),
+            X1,
+          )
+        ).fields?.creators,
+        [
+          { name: "海野波子", role: "著", heading: "海野, 波子" },
+          { name: "海野波子", role: "絵", heading: "海野, 波子" },
+        ],
+      );
       assert.deepEqual(await named(["甲, 乙 著"], 3), [
         { name: "人0", heading: "人, 0" },
         { name: "人1", heading: "人, 1" },

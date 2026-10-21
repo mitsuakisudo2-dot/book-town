@@ -882,6 +882,17 @@ async function main() {
           },
         ],
         ["R100000002-I89", { bibId: "89", isbns: [C(89)], title: "波の訳", agents: [{ name: "海野, 波子" }], credits: ["海野波子 訳"] }],
+        // The same person twice is not in another order.
+        [
+          "R100000002-I90",
+          {
+            bibId: "90",
+            isbns: [C(90)],
+            title: "波の絵",
+            agents: [{ name: "海野, 波子" }, { name: "海野, 波子" }],
+            credits: ["海野波子 著", "海野波子 絵"],
+          },
+        ],
       ]);
       await pgliteTarget(db).take(taken, "trial");
       await register(BEN, id(88), C(88), "木陰の順", "海野波子");
@@ -907,6 +918,11 @@ async function main() {
       await rows("delete from private.book_rechecks");
       const others = await rows("select * from books where isbn not in ($1, $2) order by id", [C(86), C(88)]);
       const kept = await people(C(89));
+      const twice = await people(C(90));
+      assert.deepEqual(twice, [
+        { name: "海野波子", role: "著" },
+        { name: "海野波子", role: "絵" },
+      ]);
       await db.exec(migrationText(ROLES));
       assert.deepEqual(await people(C(86)), [{ name: "海野波子", role: "訳" }]);
       assert.deepEqual(await people(C(87)), [{ name: "海野波子", role: "述" }]);
@@ -919,6 +935,7 @@ async function main() {
       assert.deepEqual(await rows("select book_id from private.book_rechecks"), [{ book_id: id(88) }]);
       assert.deepEqual(await rows("select * from books where isbn not in ($1, $2) order by id", [C(86), C(88)]), others);
       assert.deepEqual(await people(C(89)), kept);
+      assert.deepEqual(await people(C(90)), twice);
       assert.deepEqual(await rows("select source from keep.copies where label = $1 order by 1", [
         ROLES.replace(/^.*\//, "").replace(/\.sql$/, ""),
       ]), [
