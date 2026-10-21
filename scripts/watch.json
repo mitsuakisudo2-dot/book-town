@@ -30,11 +30,18 @@
       "expires": "2027-01-19"
     },
     {
-      "name": "github",
+      "name": "booktown-vercel-site",
       "where": "Vercel",
-      "secret": "VERCEL_TOKEN",
-      "environment": "repository",
-      "expires": "never"
+      "secret": "VERCEL_SITE_TOKEN",
+      "environment": "vercel",
+      "expires": "2027-01-19"
+    },
+    {
+      "name": "booktown-vercel-production",
+      "where": "Vercel",
+      "secret": "VERCEL_PRODUCTION_TOKEN",
+      "environment": "production-vercel",
+      "expires": "2027-01-19"
     }
   ],
   "included": {
