@@ -11,6 +11,9 @@
 //   node scripts/watch.mjs errors    how many errors readers' screens sent in
 //                                    the last day (private.screen_errors), and
 //                                    whether the table stopped taking them
+//   node scripts/watch.mjs keys      which keys in watch.json run out within
+//                                    30 days, and within 7 (asks no one; the
+//                                    dates are written by hand)
 //   node scripts/watch.mjs report <kind> ok|failed
 //                                    tells about a check run elsewhere (the
 //                                    production journey)
@@ -40,6 +43,12 @@ export const TITLES = {
   usage: "Supabase の使用量が上限に近づいています",
   journey: "本番の通しが失敗しました",
   errors: "読書家の画面でエラーが起きています",
+  keys: "鍵の期限が30日以内に切れます",
+  "keys-soon": "鍵の期限が7日以内に切れます",
+  "keys-unconfirmed": "期限を確かめていない鍵があります",
+  // One issue for every check, so a lost key reads as a lost key, not as the
+  // usage or the errors it kept the watch from reading.
+  refused: "見張りの鍵が Supabase に断られています",
   // Opened and closed at once by a run by hand (check: write), to show the
   // watch on main may still write issues. Nothing is wrong.
   write: "見張りが issue を書けるかの確かめ（すぐ閉じます。対応は要りません）",
@@ -181,7 +190,85 @@ export const SCREEN_ERRORS_QUERY =
   "from private.screen_errors f where f.first_at > now() - interval '1 day') h), 0)::int as busiest_hour " +
   "from private.screen_errors e";
 
+/**
+ * Which keys run out soon. Supabase's API does not tell a token's expiry, so
+ * scripts/watch.json keeps each key's date as written when it was made
+ * ("never" for one without). A date is the start of that day in Tokyo, so the
+ * warning comes a little early rather than late. A key missing its date or
+ * with one that cannot be read fails, so the list is kept right.
+ *
+ * @returns {{ ok: boolean, lines: string[] }}
+ */
+export function keysVerdict(keys, now, withinDays) {
+  const lines = [];
+  let ok = true;
+  if (!Array.isArray(keys) || keys.length === 0)
+    return { ok: false, lines: ["No keys are listed in scripts/watch.json."] };
+  for (const key of keys) {
+    const label = `${key?.name} (${key?.secret}, ${key?.environment})`;
+    if (key?.expires === "never") {
+      lines.push(`${label}: does not expire.`);
+      continue;
+    }
+    // Its own issue says so (unconfirmedVerdict), so a date that comes near
+    // for another key still opens the issues above.
+    if (key?.expires === "unknown") {
+      lines.push(`${label}: the date it expires is not confirmed.`);
+      continue;
+    }
+    const at = /^\d{4}-\d{2}-\d{2}$/.test(String(key?.expires))
+      ? Date.parse(`${key.expires}T00:00:00+09:00`)
+      : NaN;
+    // A day that is not in the calendar (02-30) would roll into the next month.
+    const real =
+      Number.isFinite(at) &&
+      new Date(at + 9 * 3_600_000).toISOString().slice(0, 10) === key.expires;
+    if (!real) {
+      lines.push(`${label}: no date it expires is written.`);
+      ok = false;
+      continue;
+    }
+    const days = Math.floor((at - now) / 86_400_000);
+    if (days < 0) {
+      lines.push(`${label}: expires on ${key.expires}, which has come.`);
+      ok = false;
+    } else if (days <= withinDays) {
+      lines.push(`${label}: expires on ${key.expires}, in ${days} day(s).`);
+      ok = false;
+    } else lines.push(`${label}: expires on ${key.expires}.`);
+  }
+  if (!ok)
+    lines.push(
+      "Make a new one with the same access, put it in the secret, then write its date in scripts/watch.json (docs/09「鍵の期限」).",
+    );
+  return { ok, lines };
+}
+
 /** Whether a page of the site looks like the site: a page with its scripts. */
+/**
+ * Which keys in scripts/watch.json have a date that nobody has confirmed
+ * ("unknown"): a guess must not pass for "never".
+ *
+ * @returns {{ ok: boolean, lines: string[] }}
+ */
+export function unconfirmedVerdict(keys) {
+  const unknown = (Array.isArray(keys) ? keys : []).filter(
+    (key) => key?.expires === "unknown",
+  );
+  if (unknown.length === 0)
+    return { ok: true, lines: ["Every key's date is confirmed."] };
+  return {
+    ok: false,
+    lines: [
+      ...unknown.map(
+        (key) =>
+          `${key.name} (${key.secret}, ${key.environment}): the date it expires is not confirmed.`,
+      ),
+      'Find the key in the service\'s own list (docs/09「鍵の期限」), then write its date or "never" in scripts/watch.json.',
+    ],
+  };
+}
+
 export function pageVerdict(route, status, html) {
   if (status !== 200) return `${route} answered ${status}.`;
   if (!/<main[\s>]|\/_next\/static\//.test(html))
@@ -240,6 +327,12 @@ async function settings() {
 const NO_TOKEN =
   "SUPABASE_WATCH_TOKEN (the environment watch) or SUPABASE_PROJECT_ID is not set, so Supabase was not asked.";
 
+// A token Supabase turns away is a failure on main too: what it was to read
+// was not read, and that is not the same as all being well.
+const isRefusal = (error) => error?.status === 401 || error?.status === 403;
+const REFUSED_FIX =
+  "Make the watch's token again with Backups and Database read access, or give it what it lacks, and put it in SUPABASE_WATCH_TOKEN (the environment watch). docs/09「毎日の控えと見張り」「鍵の期限」.";
+
 function supabase() {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   const project = process.env.SUPABASE_PROJECT_ID;
@@ -272,6 +365,7 @@ function supabase() {
 async function checkSite(config, call) {
   const problems = [];
   const lines = [];
+  let supabase;
   let home = "";
   for (const route of config.pages) {
     try {
@@ -316,16 +410,41 @@ async function checkSite(config, call) {
             `Supabase ${service.name} is ${service.status ?? "not healthy"}.`,
           );
       }
+      supabase = "answered";
     } catch (error) {
-      // A token that may not read the health is the owner's to widen, not an
-      // outage, so it does not open an issue every fifteen minutes.
-      if (error.status === 401 || error.status === 403)
-        lines.push(`::warning::${error.message}`);
+      // A refused token goes to its own issue (main), not to the site's.
+      if (isRefusal(error) && process.env.REPORT_ISSUES === "on")
+        supabase = error.message;
+      else if (isRefusal(error)) lines.push(`::warning::${error.message}`);
       else problems.push(error.message);
     }
   } else if (process.env.REPORT_ISSUES === "on") problems.push(NO_TOKEN);
   else lines.push("::warning::No Supabase token, so Supabase was not asked.");
-  return { ok: problems.length === 0, lines: [...problems, ...lines] };
+  return {
+    ok: problems.length === 0,
+    lines: [...problems, ...lines],
+    supabase,
+  };
+}
+
+/**
+ * Opens the refused-token issue when Supabase turned the token away, and
+ * closes it once Supabase answers again. Outside main it only prints.
+ *
+ * @param {string | undefined} supabase "answered", the refusal, or undefined
+ *   when Supabase was not asked
+ */
+async function reportRefusal(supabase) {
+  if (supabase === undefined || process.env.REPORT_ISSUES !== "on") return;
+  if (supabase === "answered")
+    await report("refused", {
+      ok: true,
+      lines: ["Supabase answered the watch's token."],
+    });
+  else {
+    await report("refused", { ok: false, lines: [supabase, REFUSED_FIX] });
+    process.exitCode = 1;
+  }
 }
 
 async function report(kind, result) {
@@ -399,6 +518,10 @@ async function main(action, kind, outcome) {
       await new Promise((resolve) => setTimeout(resolve, retry));
       result = await checkSite(config, call);
     }
+    await report(action, result);
+    await reportRefusal(result.supabase);
+    if (!result.ok) process.exitCode = 1;
+    return;
   } else if (
     action === "backups" ||
     action === "usage" ||
@@ -415,6 +538,7 @@ async function main(action, kind, outcome) {
       );
       return;
     }
+    let supabase = "answered";
     try {
       if (action === "errors") {
         let rows;
@@ -463,22 +587,48 @@ async function main(action, kind, outcome) {
         }
       }
     } catch (error) {
-      const refused = error.status === 401 || error.status === 403;
-      const lines = [error.message];
-      if (refused)
-        lines.push(
-          `The token may not read the ${action}. Give the watch's token (SUPABASE_WATCH_TOKEN, the environment watch) Backups and Database read access (docs/09「毎日の控えと見張り」).`,
-        );
-      // A pull request only tries the watch, and a free plan has no backups
-      // to miss: a refused token there is a warning, not a red check.
-      const quiet =
-        refused &&
-        (process.env.REPORT_ISSUES !== "on" ||
-          (action === "backups" && config.plan === "free"));
-      result = quiet
-        ? { ok: true, lines: lines.map((line) => `::warning::${line}`) }
-        : { ok: false, lines };
+      if (isRefusal(error) && process.env.REPORT_ISSUES === "on") {
+        // The check itself was not made, so its own issue stays as it was.
+        console.log(`The ${action} were not read: Supabase refused the token.`);
+        await reportRefusal(`${error.message} (reading the ${action})`);
+        return;
+      }
+      supabase = undefined;
+      // A pull request only tries the watch: a refused token there is a
+      // warning, not a red check.
+      result = isRefusal(error)
+        ? {
+            ok: true,
+            lines: [error.message, REFUSED_FIX].map(
+              (line) => `::warning::${line}`,
+            ),
+          }
+        : { ok: false, lines: [error.message] };
     }
+    await report(action, result);
+    await reportRefusal(supabase);
+    if (!result.ok) process.exitCode = 1;
+    return;
+  } else if (action === "keys") {
+    // Two issues, at 30 days and at 7, so a second mail comes near the end.
+    let failed = false;
+    for (const [name, days] of [
+      ["keys", 30],
+      ["keys-soon", 7],
+    ]) {
+      const verdict = keysVerdict(config.keys, Date.now(), days);
+      await report(name, verdict);
+      failed ||= !verdict.ok;
+    }
+    const unconfirmed = unconfirmedVerdict(config.keys);
+    await report("keys-unconfirmed", unconfirmed);
+    failed ||= !unconfirmed.ok;
+    // The dates move on their own, so a pull request only warns: a key near
+    // its end must not turn every pull request red.
+    if (failed && process.env.REPORT_ISSUES === "on") process.exitCode = 1;
+    else if (failed)
+      console.log("::warning::A key needs looking after; on main this is red.");
+    return;
   } else if (
     action === "report" &&
     kind in TITLES &&
@@ -495,7 +645,7 @@ async function main(action, kind, outcome) {
     action = kind;
   } else {
     console.error(
-      "Usage: node scripts/watch.mjs site|backups|usage|errors | report <site|backups|usage|journey|write> ok|failed",
+      "Usage: node scripts/watch.mjs site|backups|usage|errors|keys | report <site|backups|usage|journey|refused|write> ok|failed",
     );
     process.exit(2);
   }
