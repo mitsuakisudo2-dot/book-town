@@ -1200,6 +1200,62 @@ async function main() {
   });
 
   await check(
+    "a key kept to the project shows the addresses, not the team's DNS",
+    async () => {
+      const vercel = await standIn(({ url }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (pathname === "/v9/projects/book-town-851k/domains")
+          return {
+            body: { domains: [{ name: "booktown.page", verified: true }] },
+          };
+        if (pathname.startsWith("/v6/domains/"))
+          return { body: { misconfigured: false } };
+        if (pathname === "/v4/domains/booktown.page/records")
+          return {
+            status: 403,
+            body: { error: { code: "forbidden", resource: "domainRecord" } },
+          };
+        if (pathname === "/v5/user/tokens/current")
+          return { status: 404, body: { error: { code: "not_found" } } };
+        if (pathname === "/v10/projects")
+          return { body: { projects: [{ name: "book-town-851k" }] } };
+        if (pathname === "/v7/deployments")
+          return { body: { deployments: [] } };
+        return { status: 500, body: {} };
+      });
+      const env = {
+        VERCEL_API_URL: vercel.url,
+        VERCEL_TOKEN: "vcp_token_for_tests",
+        VERCEL_TEAM: "booktown1",
+        VERCEL_PROJECT: "book-town-851k",
+        SITE_DOMAIN: "booktown.page",
+        MAIL_DOMAIN: "booktown.page",
+      };
+      const domains = await run("scripts/vercel.mjs", ["domains", "main"], env);
+      assert.equal(domains.code, 0, domains.output);
+      assert.match(domains.output, /booktown\.page verified DNS ok/);
+      assert.match(domains.output, /may not read the team's DNS records/);
+      const status = await run("scripts/vercel.mjs", ["status", "main"], env);
+      assert.equal(status.code, 0, status.output);
+      assert.match(status.output, /Key in use: one Vercel does not name/);
+      // Any other refusal still fails.
+      const other = await standIn(({ url }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (pathname === "/v9/projects/book-town-851k/domains")
+          return { body: { domains: [] } };
+        return { status: 500, body: {} };
+      });
+      const broken = await run("scripts/vercel.mjs", ["domains", "main"], {
+        ...env,
+        VERCEL_API_URL: other.url,
+      });
+      assert.equal(broken.code, 1, broken.output);
+      await other.close();
+      await vercel.close();
+    },
+  );
+
+  await check(
     "a sending-only Resend key is reported, and nothing changes",
     async () => {
       const resend = await standIn(() => ({

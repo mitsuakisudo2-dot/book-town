@@ -368,8 +368,19 @@ async function main(action, branch) {
     }
     if (mailDomain) {
       console.log(`DNS records of ${mailDomain}:`);
-      for (const record of await dnsRecords())
-        console.log("  " + recordLine(record));
+      let records;
+      try {
+        records = await dnsRecords();
+      } catch (error) {
+        // A key kept to the project may not read the team's DNS (docs/09
+        // 「Vercel の鍵」), so the addresses above are all it can show.
+        if (!/^Vercel answered 403 /.test(error.message)) throw error;
+        console.log(
+          "  This key may not read the team's DNS records (it is kept to the project); adding DNS records needs a key for the team.",
+        );
+        return;
+      }
+      for (const record of records) console.log("  " + recordLine(record));
     }
     return;
   }
@@ -555,7 +566,13 @@ async function main(action, branch) {
       const { token: used } = await call("GET", "/v5/user/tokens/current");
       console.log(tokenLine(used));
     } catch (error) {
-      console.log(`Could not tell which key this is: ${error.message}`);
+      // Vercel names only a key of the whole team or account: one kept to
+      // a project is answered with 404.
+      console.log(
+        /^Vercel answered 404 /.test(error.message)
+          ? "Key in use: one Vercel does not name (a key kept to the project)"
+          : `Could not tell which key this is: ${error.message}`,
+      );
     }
     const { projects } = await call("GET", "/v10/projects", { limit: 20 });
     console.log("Projects: " + projects.map((p) => p.name).join(", "));
