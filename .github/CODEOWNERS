@@ -1,0 +1,16 @@
+# These paths run with production keys on main (workflows, the scripts they
+# call, dependencies installed before them) or decide what reaches production
+# (migrations, hosted settings, build and hosting config). A change to any of
+# them needs the owner's review once main's ruleset requires Code Owners.
+# docs/09「本番の設定」.
+
+/.github/                         @mitsuakisudo2-dot
+/scripts/                         @mitsuakisudo2-dot
+/supabase/                        @mitsuakisudo2-dot
+/package.json                     @mitsuakisudo2-dot
+/pnpm-lock.yaml                   @mitsuakisudo2-dot
+/pnpm-workspace.yaml              @mitsuakisudo2-dot
+/vercel.json                      @mitsuakisudo2-dot
+/next.config.ts                   @mitsuakisudo2-dot
+/tests/production-journey.mjs     @mitsuakisudo2-dot
+/tests/fixtures/pglite-supabase.ts @mitsuakisudo2-dot
