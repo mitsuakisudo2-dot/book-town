@@ -17,6 +17,14 @@ on:
       environment:
         type: string
         required: true
+    # Only these two, by name (watch.yml), not every secret of the repository.
+    # The token lives only in the environment watch; a caller can still pass
+    # it by name, and the job that sets the environment gets its value.
+    secrets:
+      SUPABASE_WATCH_TOKEN:
+        required: false
+      SUPABASE_PROJECT_ID:
+        required: false
 
 # No permissions here: a reusable workflow's own list would cut the caller's
 # down (what it leaves out becomes none), and the watch on main needs
