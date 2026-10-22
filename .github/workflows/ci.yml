@@ -15,8 +15,10 @@ jobs:
       - uses: actions/checkout@v4
       # A migration the pull request adds needs a version of its own, after
       # every one on the base branch: production applies them in that order
-      # and refuses an older one (scripts/check-migration-versions.sh).
-      - name: New migrations come after the base branch's
+      # and refuses an older one. The base branch's own migrations stay as
+      # they are: production never runs a changed one again
+      # (scripts/check-migration-versions.sh).
+      - name: New migrations come after the base branch's, which stay as they are
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}

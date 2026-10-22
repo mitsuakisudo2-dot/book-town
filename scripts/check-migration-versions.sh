@@ -6,6 +6,12 @@
 # `supabase db push` refuses one older than the newest it has applied, so the
 # number is given just before merging and checked here.
 #
+# It also fails when a migration on the base branch is changed, removed or
+# renamed. Once on main a migration is applied to production by its version
+# alone, so a changed file never reaches production while the tests build
+# their database from it, and a removed one stops the next deploy
+# (docs/開発と運用/DBの変え方.md: a fix is a new migration).
+#
 # Usage: scripts/check-migration-versions.sh <base commit>
 set -euo pipefail
 
@@ -32,6 +38,16 @@ for name in "${before[@]}"; do
 done
 
 failed=0
+for name in "${before[@]}"; do
+  was=$(git rev-parse "$base:$dir/$name")
+  if ! now=$(git rev-parse --verify --quiet "HEAD:$dir/$name"); then
+    echo "::error file=$dir/$name::$name is on the base branch and was removed or renamed; add a new migration instead."
+    failed=1
+  elif [[ "$now" != "$was" ]]; then
+    echo "::error file=$dir/$name::$name is on the base branch and was changed; production will not run it again, so add a new migration instead."
+    failed=1
+  fi
+done
 for name in "${after[@]}"; do
   printf '%s\n' "${before[@]}" | grep -qxF -- "$name" && continue
   added=$(version "$name")
