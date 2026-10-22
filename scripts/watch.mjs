@@ -346,11 +346,11 @@ export function issuePlan(openIssues, kind, ok) {
 }
 
 /**
- * Whether every job of the watch ran each of its steps to an end. The last
- * step of each job (watch-run.yml) says "complete" only when none of its
- * steps was cancelled or skipped; a job cut off by a timeout, or one whose
- * setup broke before its checks, leaves no "complete": the watch itself broke
- * there, whatever issues are open from before.
+ * Whether every job of the watch told each of its checks. The last step of
+ * each job (watch-run.yml) says "complete" only when its setup succeeded and
+ * each check said "told" (red or not); a job cut off by a timeout, one whose
+ * setup broke, or a check that could not reach GitHub leaves no "complete":
+ * the watch itself broke there, whatever issues are open from before.
  *
  * @param {Record<string, { result?: string, outputs?: { complete?: string } }>} needs
  * @returns {{ ok: boolean, lines: string[] }}
@@ -362,11 +362,11 @@ export function toldVerdict(needs) {
     const result = needs?.[job]?.result;
     if (!result || result === "skipped") continue;
     if (needs[job].outputs?.complete === "yes")
-      lines.push(`The ${job} step ran to its end (${result}).`);
+      lines.push(`The ${job} step told each of its checks (${result}).`);
     else {
       ok = false;
       lines.push(
-        `The ${job} step ended ${result} before its checks ran to their end (a timeout, or a step before the checks broke). The run's log says where.`,
+        `The ${job} step ended ${result} without telling each of its checks (a timeout, a setup that broke, or a check that could not reach GitHub). The run's log says where.`,
       );
     }
   }
@@ -953,8 +953,16 @@ async function main(action, kind, outcome) {
   if (!result.ok) process.exitCode = 1;
 }
 
+// "told" only once the step's check ran and its issue was opened, closed or
+// already said so (red or not): a step that threw, or never ran, says
+// nothing, and its job's last step does not say "complete" (watch-run.yml).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
-  main(process.argv[2], process.argv[3], process.argv[4]).catch((error) => {
-    console.error(error.message);
-    process.exit(1);
-  });
+  main(process.argv[2], process.argv[3], process.argv[4])
+    .then(async () => {
+      if (process.env.GITHUB_OUTPUT)
+        await appendFile(process.env.GITHUB_OUTPUT, "told=yes\n");
+    })
+    .catch((error) => {
+      console.error(error.message);
+      process.exit(1);
+    });

@@ -86,20 +86,23 @@ jobs:
         if: always()
         run: node scripts/watch.mjs heartbeat
       - name: Whether publishing went through
+        id: publish
         if: inputs.published == 'ok' || inputs.published == 'failed'
         run: node scripts/watch.mjs report publish "$WATCH_PUBLISHED"
       - name: The pages open
         id: pages
         if: always()
         run: node scripts/watch.mjs site
-      # Last, whatever came before: "complete" only when no step with an id
-      # was cancelled (a timeout) or skipped (setup broke before it), for told.
+      # Last, whatever came before, for told: "complete" only when the setup
+      # succeeded and each check said "told" (scripts/watch.mjs writes it once
+      # its issue was dealt with, red or not). A failed or skipped setup, or a
+      # check that threw, leaves "no"; a timeout leaves nothing.
       - name: Every step ran to its end
         id: done
         if: always()
         run: echo "complete=$COMPLETE" >> "$GITHUB_OUTPUT"
         env:
-          COMPLETE: ${{ !contains(steps.*.outcome, 'cancelled') && !contains(steps.*.outcome, 'skipped') && 'yes' || 'no' }}
+          COMPLETE: ${{ steps.checkout.outcome == 'success' && steps.node.outcome == 'success' && steps.heartbeat.outputs.told == 'yes' && (inputs.published == '' || steps.publish.outputs.told == 'yes') && steps.pages.outputs.told == 'yes' && 'yes' || 'no' }}
 
   daily:
     if: inputs.daily
@@ -144,7 +147,7 @@ jobs:
         if: always()
         run: echo "complete=$COMPLETE" >> "$GITHUB_OUTPUT"
         env:
-          COMPLETE: ${{ !contains(steps.*.outcome, 'cancelled') && !contains(steps.*.outcome, 'skipped') && 'yes' || 'no' }}
+          COMPLETE: ${{ steps.checkout.outcome == 'success' && steps.node.outcome == 'success' && steps.backups.outputs.told == 'yes' && steps.usage.outputs.told == 'yes' && steps.errors.outputs.told == 'yes' && steps.keys.outputs.told == 'yes' && 'yes' || 'no' }}
 
   # After the pages, so that right after publishing it walks the new site.
   walk:
@@ -174,9 +177,11 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - id: install
+        run: pnpm install --frozen-lockfile
         if: always()
-      - run: pnpm exec playwright install --with-deps chromium
+      - id: browser
+        run: pnpm exec playwright install --with-deps chromium
         if: always()
       - name: A visitor's walk through the production site
         id: journey
@@ -193,10 +198,10 @@ jobs:
         if: always()
         run: echo "complete=$COMPLETE" >> "$GITHUB_OUTPUT"
         env:
-          COMPLETE: ${{ !contains(steps.*.outcome, 'cancelled') && !contains(steps.*.outcome, 'skipped') && 'yes' || 'no' }}
+          COMPLETE: ${{ steps.checkout.outcome == 'success' && steps.pnpm.outcome == 'success' && steps.node.outcome == 'success' && steps.install.outcome == 'success' && steps.browser.outcome == 'success' && steps.tell.outputs.told == 'yes' && 'yes' || 'no' }}
 
-  # A job that did not run its steps to their end in this run (a timeout, a
-  # setup that broke) is told here, so the watch never goes quiet by failing;
+  # A job that did not tell each of its checks in this run (a timeout, a
+  # setup that broke, a check that could not reach GitHub) is told here, so the watch never goes quiet by failing;
   # an issue left open from before does not count. A run whose jobs all ran
   # to their end closes it again.
   told:

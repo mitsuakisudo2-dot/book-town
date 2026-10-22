@@ -1769,7 +1769,7 @@ async function main() {
       assert.equal(lost.ok, false);
       assert.match(
         lost.lines.join("\n"),
-        /walk step ended cancelled before its checks ran to their end/,
+        /walk step ended cancelled without telling each of its checks/,
       );
       assert.equal(
         toldVerdict({
@@ -1814,7 +1814,8 @@ async function main() {
       const steps = readFileSync(".github/workflows/watch-run.yml", "utf8");
       for (const name of ["site", "daily", "walk"]) {
         const at = steps.indexOf(`\n  ${name}:\n`);
-        const block = steps.slice(at, steps.indexOf("\n  # ", at + 1));
+        const next = steps.slice(at + 1).search(/\n  [#\w]/);
+        const block = steps.slice(at, at + 1 + next);
         assert.match(
           block,
           /complete: \$\{\{ steps\.done\.outputs\.complete \}\}/,
@@ -1822,16 +1823,84 @@ async function main() {
         );
         assert.match(block, /- id: checkout\n/, name);
         assert.match(block, /- id: node\n/, name);
-        assert.match(
-          block,
-          /id: done\n {8}if: always\(\)\n[^]*COMPLETE: \$\{\{ !contains\(steps\.\*\.outcome, 'cancelled'\) && !contains\(steps\.\*\.outcome, 'skipped'\) && 'yes' \|\| 'no' \}\}/,
-          name,
+        assert.match(block, /id: done\n {8}if: always\(\)\n/, name);
+        // Not only "nothing was cancelled or skipped": a setup that failed, and
+        // a check that ran but could not tell GitHub, leave "no" as well.
+        const complete = block.match(
+          /COMPLETE: \$\{\{ (.*) && 'yes' \|\| 'no' \}\}/,
         );
+        assert.ok(complete, name);
+        assert.doesNotMatch(complete[1], /contains/, name);
+        const setup = [...block.matchAll(/- id: (\w+)\n/g)].map((m) => m[1]);
+        const checks = [
+          ...block.matchAll(
+            /id: (\w+)\n(?:(?! *- ).*\n)*? *run: node scripts\/watch\.mjs/g,
+          ),
+        ].map((m) => m[1]);
+        assert.ok(setup.includes("checkout") && checks.length > 0, name);
+        for (const id of setup)
+          assert.ok(
+            complete[1].includes(`steps.${id}.outcome == 'success'`),
+            `${name}: ${id}`,
+          );
+        for (const id of checks.filter((id) => !setup.includes(id)))
+          assert.ok(
+            complete[1].includes(`steps.${id}.outputs.told == 'yes'`),
+            `${name}: ${id}`,
+          );
       }
       assert.match(
         steps,
         /needs: \[site, daily, walk\]\n {4}if: always\(\) && inputs\.environment != ''/,
       );
+    },
+  );
+
+  await check(
+    "a check says told once its issue is dealt with, red or not, and not when GitHub could not be told",
+    async () => {
+      let broken = false;
+      const api = await standIn(({ method }) => {
+        if (broken) return { status: 500, body: {} };
+        if (method === "GET") return { body: [] };
+        return { body: { number: 5 } };
+      });
+      const dir = mkdtempSync(path.join(tmpdir(), "told-"));
+      const env = (name: string) => ({
+        GITHUB_API_URL: api.url,
+        GITHUB_TOKEN: "ghs_token_for_tests",
+        GITHUB_REPOSITORY: "mitsuakisudo2-dot/book-town",
+        REPORT_ISSUES: "on",
+        GITHUB_OUTPUT: path.join(dir, name),
+      });
+      const output = (name: string) => {
+        try {
+          return readFileSync(path.join(dir, name), "utf8");
+        } catch {
+          return "";
+        }
+      };
+      // The walk failed and its issue was opened: red, but told.
+      const red = await run(
+        "scripts/watch.mjs",
+        ["report", "journey", "failed"],
+        env("red"),
+      );
+      assert.equal(red.code, 1, red.output);
+      assert.match(red.output, /Opened issue #5/);
+      assert.equal(output("red"), "told=yes\n");
+
+      // GitHub did not take it: nothing reached anyone, so no "told".
+      broken = true;
+      const lost = await run(
+        "scripts/watch.mjs",
+        ["report", "journey", "failed"],
+        env("lost"),
+      );
+      assert.equal(lost.code, 1, lost.output);
+      assert.match(lost.output, /GitHub answered 500/);
+      assert.equal(output("lost"), "");
+      await api.close();
     },
   );
 
