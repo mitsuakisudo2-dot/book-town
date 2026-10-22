@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile, execSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
@@ -24,8 +26,15 @@ import {
   validBranch,
 } from "../scripts/vercel.mjs";
 import {
+  afterLines,
   backupVerdict,
+  commitVerdict,
+  details,
   firstScript,
+  heartbeatVerdict,
+  recentlyClosed,
+  servedCommit,
+  toldVerdict,
   issueBody,
   issuePlan,
   pageVerdict,
@@ -67,6 +76,7 @@ interface Seen {
   method: string;
   url: string;
   body: Record<string, unknown> | null;
+  headers?: IncomingMessage["headers"];
 }
 
 /** A stand-in API: answers each request with `answer`, and remembers it. */
@@ -84,6 +94,7 @@ async function standIn(
       method: request.method ?? "",
       url: request.url ?? "",
       body: await read(request),
+      headers: request.headers,
     };
     seen.push(entry);
     const { status = 200, body, html } = answer(entry);
@@ -799,6 +810,17 @@ async function main() {
       assert.equal(posts(), 2);
       const body = api.seen.filter((s) => s.method === "POST")[1].body ?? {};
       assert.equal(body.target, "production");
+
+      // A build Vercel started is waited for to its end, and one that does
+      // not end in time turns the run red instead of passing unseen.
+      listed = [{ meta: { githubCommitSha: SHA }, readyState: "BUILDING" }];
+      const slow = await run("scripts/vercel.mjs", ["ensure", "main"], {
+        ...env,
+        ENSURE_BUILD_SECONDS: "0",
+      });
+      assert.equal(slow.code, 1, slow.output);
+      assert.match(slow.output, /still building it when the wait ran out/);
+      assert.equal(posts(), 2);
 
       const odd = await run("scripts/vercel.mjs", ["ensure", "main"], {
         ...env,
@@ -1670,6 +1692,172 @@ async function main() {
   );
 
   await check(
+    "right after publishing, the site must show that commit or a later one",
+    () => {
+      const SHA = "a14ec045482bf8293d0565575e5fded52a9a8ae0";
+      // As Next writes it from layout.tsx.
+      const html = `<head><meta name="booktown-build" content="${SHA}"/></head>`;
+      assert.equal(servedCommit(html), SHA);
+      assert.equal(servedCommit("<head></head>"), null);
+      assert.equal(commitVerdict(SHA, SHA, null), null);
+      assert.equal(commitVerdict(SHA, "b".repeat(40), "ahead"), null);
+      assert.match(
+        commitVerdict(SHA, "b".repeat(40), "behind") ?? "",
+        /shows bbbbbbb, not a14ec04/,
+      );
+      // GitHub not answering is no proof the site is newer.
+      assert.match(
+        commitVerdict(SHA, "b".repeat(40), null) ?? "",
+        /not a14ec04/,
+      );
+      assert.match(commitVerdict(SHA, null, null) ?? "", /names no build/);
+    },
+  );
+
+  await check(
+    "an issue names the run it follows, and only in safe words",
+    async () => {
+      const url =
+        "https://github.com/mitsuakisudo2-dot/book-town/actions/runs/39791794109";
+      assert.deepEqual(afterLines("Vercel a14ec04", url), [
+        "Checked right after Vercel a14ec04.",
+        `That run: ${url}`,
+      ]);
+      assert.deepEqual(afterLines("Deploy database a14ec04", "javascript:x"), [
+        "Checked right after Deploy database a14ec04.",
+      ]);
+      assert.deepEqual(afterLines("", url), []);
+      assert.deepEqual(afterLines("x\n@someone", url), []);
+      assert.deepEqual(await details(undefined), []);
+      assert.deepEqual(await details("/nonexistent/walk.txt"), []);
+      const file = path.join(
+        mkdtempSync(path.join(tmpdir(), "watch-")),
+        "d.txt",
+      );
+      writeFileSync(
+        file,
+        Array.from(
+          { length: 20 },
+          (_, i) => `line ${i} ` + "x".repeat(300),
+        ).join("\n"),
+      );
+      const lines = await details(file);
+      assert.equal(lines.length, 12);
+      assert.ok(lines.every((line) => line.length <= 240));
+    },
+  );
+
+  await check(
+    "the watch tells when it broke itself, and when it stopped coming",
+    () => {
+      const issue = (kind: string) => ({ body: `x\n<!-- watch:${kind} -->` });
+      // Every step through, or skipped: nothing to tell.
+      assert.equal(
+        toldVerdict(
+          {
+            site: { result: "success" },
+            daily: { result: "skipped" },
+            walk: { result: "success" },
+          },
+          [],
+        ).ok,
+        true,
+      );
+      // Red with its own issue open: the issue already tells.
+      assert.equal(
+        toldVerdict({ walk: { result: "failure" } }, [issue("journey")]).ok,
+        true,
+      );
+      // Red, or cut off by a timeout, with no issue of its own: the watch broke.
+      const lost = toldVerdict({ walk: { result: "cancelled" } }, [
+        issue("site"),
+      ]);
+      assert.equal(lost.ok, false);
+      assert.match(
+        lost.lines.join("\n"),
+        /walk step ended cancelled without an issue/,
+      );
+      assert.equal(
+        toldVerdict({ daily: { result: "failure" } }, [issue("keys")]).ok,
+        true,
+      );
+
+      const now = Date.parse("2026-10-22T14:00:00Z");
+      const at = (minutes: number) =>
+        new Date(now - minutes * 60_000).toISOString();
+      const run = (
+        id: number,
+        event: string,
+        minutes: number,
+        status = "completed",
+      ) => ({
+        id,
+        event,
+        status,
+        created_at: at(minutes),
+        html_url: `https://github.com/r/actions/runs/${id}`,
+      });
+      assert.equal(
+        heartbeatVerdict(
+          [run(1, "schedule", 0), run(2, "schedule", 50)],
+          now,
+          1,
+        ).ok,
+        true,
+      );
+      // Its own run does not count as the schedule still coming.
+      const quiet = heartbeatVerdict(
+        [
+          run(1, "schedule", 0),
+          run(2, "workflow_run", 10),
+          run(3, "schedule", 180),
+        ],
+        now,
+        1,
+      );
+      assert.equal(quiet.ok, false);
+      assert.match(quiet.lines.join("\n"), /Longer than 2 hours/);
+      assert.equal(heartbeatVerdict([], now, 1).ok, false);
+      const stuck = heartbeatVerdict(
+        [run(2, "schedule", 30), run(3, "schedule", 60, "in_progress")],
+        now,
+        1,
+      );
+      assert.equal(stuck.ok, false);
+      assert.match(stuck.lines.join("\n"), /in_progress for 60 minutes/);
+    },
+  );
+
+  await check(
+    "the same failure back within a day opens its issue again, not a new one",
+    () => {
+      const now = Date.parse("2026-10-22T14:00:00Z");
+      const closed = [
+        {
+          number: 3,
+          body: "<!-- watch:site -->",
+          closed_at: "2026-10-22T02:00:00Z",
+        },
+        {
+          number: 4,
+          body: "<!-- watch:journey -->",
+          closed_at: "2026-10-20T02:00:00Z",
+        },
+        {
+          number: 5,
+          body: "<!-- watch:site -->",
+          closed_at: "2026-10-22T01:00:00Z",
+          pull_request: {},
+        },
+      ];
+      assert.equal(recentlyClosed(closed, "site", now), 3);
+      assert.equal(recentlyClosed(closed, "journey", now), null);
+      assert.equal(recentlyClosed(closed, "usage", now), null);
+      assert.equal(recentlyClosed(undefined, "site", now), null);
+    },
+  );
+
+  await check(
     "the site watch opens an issue for a broken page and closes it once fixed",
     async () => {
       let broken = true;
@@ -1699,6 +1887,8 @@ async function main() {
           pathname === "/repos/mitsuakisudo2-dot/book-town/issues" &&
           method === "GET"
         ) {
+          // Closed ones are asked for only to open one again (none here).
+          if (/state=closed/.test(url)) return { body: [] };
           assert.match(url, /state=open/);
           return { body: issues };
         }
@@ -1760,6 +1950,99 @@ async function main() {
         assert.ok(!output.includes(TOKEN));
         assert.ok(!output.includes("ghs_token_for_tests"));
       }
+      await site.close();
+      await api.close();
+    },
+  );
+
+  await check(
+    "after publishing, an old build fails the site watch, which opens its closed issue again",
+    async () => {
+      const SHA = "a14ec045482bf8293d0565575e5fded52a9a8ae0";
+      const OLD = "6b2ff31e1ee72fc70477ee75ceec347221e07c75";
+      let shown = OLD;
+      const asked: string[] = [];
+      const site = await standIn(({ url, headers }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (pathname === "/_next/static/chunks/main.js")
+          return { html: true, body: "1" };
+        if (/[?&]watch=\d+/.test(url))
+          asked.push(String(headers?.["cache-control"]));
+        return {
+          html: true,
+          body: `<head><meta name="booktown-build" content="${shown}"/></head><main></main><script src="/_next/static/chunks/main.js"></script>`,
+        };
+      });
+      const api = await standIn(({ method, url }) => {
+        const { pathname } = new URL(url, "http://x");
+        if (
+          pathname ===
+          `/repos/mitsuakisudo2-dot/book-town/compare/${SHA}...${OLD}`
+        )
+          return { body: { status: "behind" } };
+        if (
+          pathname === "/repos/mitsuakisudo2-dot/book-town/issues" &&
+          method === "GET"
+        )
+          return {
+            body: /state=closed/.test(url)
+              ? [
+                  {
+                    number: 12,
+                    body: "x\n<!-- watch:site -->",
+                    closed_at: new Date(Date.now() - 3_600_000).toISOString(),
+                  },
+                ]
+              : [],
+          };
+        if (method === "POST" || method === "PATCH") return { body: {} };
+        return { status: 404, body: {} };
+      });
+      const env = {
+        WATCH_SITE: site.url,
+        WATCH_RETRY_SECONDS: "0",
+        WATCH_EXPECT_COMMIT: SHA,
+        WATCH_AFTER: `Vercel ${SHA.slice(0, 7)}`,
+        GITHUB_API_URL: api.url,
+        GITHUB_TOKEN: "ghs_token_for_tests",
+        GITHUB_REPOSITORY: "mitsuakisudo2-dot/book-town",
+        GITHUB_REPOSITORY_OWNER: "mitsuakisudo2-dot",
+        REPORT_ISSUES: "off",
+      };
+      const old = await run("scripts/watch.mjs", ["site"], env);
+      assert.equal(old.code, 1, old.output);
+      assert.match(
+        old.output,
+        /shows 6b2ff31, not a14ec04 that was just published \(behind\)/,
+      );
+      assert.match(old.output, /Checked right after Vercel a14ec04/);
+      // Asked past any cache.
+      assert.ok(
+        asked.length > 0 && asked.every((value) => value === "no-cache"),
+      );
+
+      const told = await run("scripts/watch.mjs", ["site"], {
+        ...env,
+        REPORT_ISSUES: "on",
+        SUPABASE_ACCESS_TOKEN: "",
+      });
+      assert.match(told.output, /Reopened issue #12/);
+      assert.ok(
+        !api.seen.some((s) => s.method === "POST" && s.url.endsWith("/issues")),
+      );
+      assert.ok(
+        api.seen.some(
+          (s) =>
+            s.method === "PATCH" &&
+            s.url.endsWith("/issues/12") &&
+            s.body?.state === "open",
+        ),
+      );
+
+      shown = SHA;
+      const now = await run("scripts/watch.mjs", ["site"], env);
+      assert.equal(now.code, 0, now.output);
+      assert.match(now.output, /The site shows a14ec04 \(published a14ec04\)/);
       await site.close();
       await api.close();
     },
@@ -2017,7 +2300,7 @@ async function main() {
       condition !== "" &&
       split(bare(condition), "||").every((choice) =>
         split(bare(choice), "&&").some((part) =>
-          /^github\.event_name (== '(push|workflow_dispatch|schedule)'|!= 'pull_request')$|^inputs\.[\w-]+ == '[^']+'$/.test(
+          /^github\.event_name (== '(push|workflow_dispatch|schedule|workflow_run)'|!= 'pull_request')$|^inputs\.[\w-]+ == '[^']+'$/.test(
             bare(part),
           ),
         ),
@@ -2089,12 +2372,37 @@ async function main() {
       assert.doesNotMatch(read("watch-run.yml"), /^\s*permissions:/m);
       const watch = read("watch.yml");
       const main = job(watch, "watch");
-      assert.match(main, /if: github\.event_name != 'pull_request'/);
       assert.match(
         main,
-        /permissions:\n {6}contents: read\n {6}issues: write\n/,
+        /if: github\.event_name == 'schedule' \|\| github\.event_name == 'workflow_dispatch'\n/,
       );
+      // Issues, and the watch's own runs to see that it keeps coming.
+      const grants =
+        /permissions:\n {6}contents: read\n {6}issues: write\n(?: {6}#.*\n)* {6}actions: read\n {4}uses:/;
+      assert.match(main, grants);
       assert.match(main, /environment: watch/);
+      // Right after publishing: only a push to main of this repository, so a
+      // pull request's run (even a fork's branch called main) gets no key.
+      const after = job(watch, "published");
+      for (const part of [
+        "github.event_name == 'workflow_run'",
+        "github.event.workflow_run.event == 'push'",
+        "github.event.workflow_run.head_branch == 'main'",
+        "github.event.workflow_run.head_repository.full_name == github.repository",
+      ])
+        assert.ok(jobIf(after).split(" && ").includes(part), part);
+      assert.match(after, grants);
+      assert.match(after, /environment: watch/);
+      assert.match(
+        watch,
+        /workflow_run:\n {4}workflows: \[Vercel, Deploy database\]\n {4}types: \[completed\]\n {4}branches: \[main\]\n/,
+      );
+      // The names it follows are those workflows' own.
+      for (const [file, name] of [
+        ["vercel.yml", "Vercel"],
+        ["deploy-database.yml", "Deploy database"],
+      ])
+        assert.match(read(file), new RegExp(`^name: ${name}\n`));
       const tried = job(watch, "try");
       assert.match(tried, /if: github\.event_name == 'pull_request'/);
       assert.match(tried, /permissions:\n {6}contents: read\n {4}uses:/);

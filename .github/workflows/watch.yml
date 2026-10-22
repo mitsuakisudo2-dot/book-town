@@ -7,11 +7,19 @@ name: Watch production
 # readers' screens sent in the last day, and a visitor's
 # walk through the production site (tests/production-journey.mjs). A failure
 # opens an issue that mentions the owner, so GitHub emails them; the next
-# passing run closes it. The steps are in watch-run.yml.
+# passing run closes it. Right after main is published (the Vercel run of a
+# push to main) or its migrations are applied (Deploy database), the pages
+# and the walk are checked once more, and a Vercel run that failed opens an
+# issue of its own. Only told, never rolled back. The steps are in
+# watch-run.yml.
 #   watch  the schedule and a run by hand, on main: the environment watch's
 #          SUPABASE_WATCH_TOKEN (Backups and Database, read only; its own
 #          name, so a missing one is never filled by an older, wider key)
 #          and SUPABASE_PROJECT_ID. Without the token the run fails.
+#   published  a Vercel or Deploy database run of a push to main, in this
+#          repository, has ended: the same environment and token as watch;
+#          the run's own code is main's (workflow_run runs the default
+#          branch), never the branch's.
 #   try    a pull request that changes the watch: the same steps once, with no
 #          key, no issues and a GITHUB_TOKEN that may only read.
 
@@ -26,6 +34,10 @@ on:
         type: choice
         options: [site, daily, write]
         default: daily
+  workflow_run:
+    workflows: [Vercel, Deploy database]
+    types: [completed]
+    branches: [main]
   pull_request:
     paths:
       - scripts/watch.mjs
@@ -37,21 +49,56 @@ on:
 permissions:
   contents: read
 
+# A newer run of the same kind waits for the one going; GitHub keeps only the
+# newest waiting one, which looks at the newer state anyway.
 concurrency:
-  group: watch-${{ github.event_name == 'pull_request' && github.head_ref || github.event.schedule || inputs.check }}
+  group: watch-${{ github.event_name == 'pull_request' && github.head_ref || github.event_name == 'workflow_run' && format('after-{0}', github.event.workflow_run.name) || github.event.schedule || inputs.check }}
   cancel-in-progress: false
 
 jobs:
   watch:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       issues: write
+      # Reads the watch's own runs (heartbeat). Public anyway.
+      actions: read
     uses: ./.github/workflows/watch-run.yml
     with:
       daily: ${{ github.event.schedule == '17 21 * * *' || inputs.check == 'daily' }}
+      walk: ${{ github.event.schedule == '17 21 * * *' || inputs.check == 'daily' }}
       write: ${{ inputs.check == 'write' }}
       environment: watch
+    secrets:
+      SUPABASE_WATCH_TOKEN: ${{ secrets.SUPABASE_WATCH_TOKEN }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+
+  # A pull request's run of Vercel (or one from a fork whose branch is called
+  # main) also ends a workflow_run, so the run must be a push to main here.
+  published:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    permissions:
+      contents: read
+      issues: write
+      # Reads the watch's own runs (heartbeat). Public anyway.
+      actions: read
+    uses: ./.github/workflows/watch-run.yml
+    with:
+      daily: false
+      walk: true
+      write: false
+      environment: watch
+      # Only Vercel's run says whether publishing went through. A database
+      # run's own end opens no issue here (the owner approved that run); the
+      # pages are checked after it either way.
+      published: ${{ github.event.workflow_run.name == 'Vercel' && (github.event.workflow_run.conclusion == 'success' && 'ok' || 'failed') || '' }}
+      after: ${{ github.event.workflow_run.name }} ${{ github.event.workflow_run.head_sha }}
+      after_run: ${{ github.event.workflow_run.html_url }}
+      expect_commit: ${{ github.event.workflow_run.name == 'Vercel' && github.event.workflow_run.head_sha || '' }}
     secrets:
       SUPABASE_WATCH_TOKEN: ${{ secrets.SUPABASE_WATCH_TOKEN }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
@@ -63,5 +110,6 @@ jobs:
     uses: ./.github/workflows/watch-run.yml
     with:
       daily: true
+      walk: true
       write: false
       environment: ""

@@ -14,9 +14,18 @@
 //   node scripts/watch.mjs keys      which keys in watch.json run out within
 //                                    30 days, and within 7 (asks no one; the
 //                                    dates are written by hand)
+//   node scripts/watch.mjs heartbeat a scheduled watch ran within 2 hours, and
+//                                    no watch run is stuck (GitHub's list)
+//   node scripts/watch.mjs told      every step of this run went through or
+//                                    has an open issue saying why (NEEDS)
 //   node scripts/watch.mjs report <kind> ok|failed
 //                                    tells about a check run elsewhere (the
-//                                    production journey)
+//                                    production journey, or whether the
+//                                    publishing run on main went through)
+//
+// Right after main is published (the Vercel run on a push to main) or its
+// migrations are applied (Deploy database), watch.yml runs the site check and
+// the walk once; WATCH_AFTER names that run and its commit in the issue.
 //
 // When REPORT_ISSUES is "on", a failure opens one issue that mentions the
 // repository's owner, so GitHub sends them an email; while it stays open the
@@ -42,6 +51,7 @@ export const TITLES = {
   backups: "毎日の控えが止まっています",
   usage: "Supabase の使用量が上限に近づいています",
   journey: "本番の通しが失敗しました",
+  publish: "本番の公開が終わりませんでした",
   errors: "読書家の画面でエラーが起きています",
   keys: "鍵の期限が30日以内に切れます",
   "keys-soon": "鍵の期限が7日以内に切れます",
@@ -54,6 +64,10 @@ export const TITLES = {
   "refused-backups": "見張りの鍵が Supabase に断られています（控えの一覧）",
   "refused-usage": "見張りの鍵が Supabase に断られています（使用量）",
   "refused-errors": "見張りの鍵が Supabase に断られています（画面のエラー）",
+  // The watch watching itself: a step that ended red without an issue that
+  // says why (a timeout, a setup that broke), and runs that stopped coming.
+  watch: "見張りそのものが途中で止まりました",
+  "watch-stopped": "見張りが動いていません",
   // Opened and closed at once by a run by hand (check: write), to show the
   // watch on main may still write issues. Nothing is wrong.
   write: "見張りが issue を書けるかの確かめ（すぐ閉じます。対応は要りません）",
@@ -274,6 +288,34 @@ export function unconfirmedVerdict(keys) {
   };
 }
 
+/** The commit the page says it was built from (layout.tsx), or null. */
+export function servedCommit(html) {
+  const found =
+    /<meta\s+name="booktown-build"\s+content="([0-9a-f]{7,40})"/.exec(
+      html ?? "",
+    );
+  return found ? found[1] : null;
+}
+
+/**
+ * Whether the site shows the commit just published: that one, or one after
+ * it (GitHub's compare says "ahead" when main moved on since). A build from
+ * before, or none named, is a failure: the checks would have looked at the
+ * old site.
+ *
+ * @param {string} expected the published commit
+ * @param {string | null} served what the home page names
+ * @param {string | null} compare GitHub's status of expected...served
+ * @returns {string | null} the problem, or null
+ */
+export function commitVerdict(expected, served, compare) {
+  if (!served)
+    return "The home page names no build, so which version is shown is unknown.";
+  if (expected.startsWith(served) || served.startsWith(expected)) return null;
+  if (compare === "ahead") return null;
+  return `The site shows ${served.slice(0, 7)}, not ${expected.slice(0, 7)} that was just published${compare ? ` (${compare})` : ""}. If production was rolled back on purpose, this is expected until promote-latest.`;
+}
+
 export function pageVerdict(route, status, html) {
   if (status !== 200) return `${route} answered ${status}.`;
   if (!/<main[\s>]|\/_next\/static\//.test(html))
@@ -301,6 +343,123 @@ export function issuePlan(openIssues, kind, ok) {
   );
   if (ok) return found ? { close: found.number } : {};
   return found ? { already: found.number } : { open: true };
+}
+
+/** The issues each job of watch-run.yml may open to say why it is red. */
+export const JOB_KINDS = {
+  site: ["site", "publish", "refused-site", "watch-stopped"],
+  daily: [
+    "backups",
+    "usage",
+    "errors",
+    "keys",
+    "keys-soon",
+    "keys-unconfirmed",
+    "refused-backups",
+    "refused-usage",
+    "refused-errors",
+  ],
+  walk: ["journey"],
+};
+
+/**
+ * Whether every job of the watch either went through or said why not in an
+ * open issue. A job that is red (or cancelled, as a timeout leaves it) with
+ * no such issue stopped before it could tell: the watch itself broke.
+ *
+ * @param {Record<string, { result?: string }>} needs GitHub's needs context
+ * @returns {{ ok: boolean, lines: string[] }}
+ */
+export function toldVerdict(needs, openIssues) {
+  const lines = [];
+  let ok = true;
+  for (const [job, kinds] of Object.entries(JOB_KINDS)) {
+    const result = needs?.[job]?.result;
+    if (!result || result === "success" || result === "skipped") continue;
+    const told = kinds.some((kind) =>
+      (openIssues ?? []).some((issue) =>
+        String(issue.body ?? "").includes(marker(kind)),
+      ),
+    );
+    if (told) lines.push(`The ${job} step is ${result}; its issue says why.`);
+    else {
+      ok = false;
+      lines.push(
+        `The ${job} step ended ${result} without an issue saying why (a timeout, or a step before the checks broke). The run's log says where.`,
+      );
+    }
+  }
+  if (ok && !lines.length) lines.push("Every step of the watch finished.");
+  return { ok, lines };
+}
+
+/** How long the scheduled watch may stay away, and a run may keep going. */
+export const HEARTBEAT = { scheduleHours: 2, stuckMinutes: 45 };
+
+/**
+ * Whether the watch keeps coming: a scheduled run started within
+ * scheduleHours (other than this one; GitHub's every 15 minutes comes every
+ * 35 to 50 in practice), and no run has been waiting or going for longer than
+ * stuckMinutes.
+ *
+ * @returns {{ ok: boolean, lines: string[] }}
+ */
+export function heartbeatVerdict(runs, now, selfId) {
+  const others = (runs ?? []).filter(
+    (run) => String(run.id) !== String(selfId),
+  );
+  const lines = [];
+  let ok = true;
+  const scheduled = others
+    .filter((run) => run.event === "schedule")
+    .map((run) => Date.parse(run.created_at))
+    .filter(Number.isFinite)
+    .sort((a, b) => b - a)[0];
+  if (scheduled === undefined) {
+    ok = false;
+    lines.push("No scheduled watch run is listed.");
+  } else {
+    const hours = (now - scheduled) / 3_600_000;
+    lines.push(
+      `Last scheduled watch: ${iso(scheduled)} (${hours.toFixed(1)} hours ago).`,
+    );
+    if (hours > HEARTBEAT.scheduleHours) {
+      ok = false;
+      lines.push(
+        `Longer than ${HEARTBEAT.scheduleHours} hours: GitHub may have stopped the schedule (it does after 60 days with no change to the repository), or Actions is down.`,
+      );
+    }
+  }
+  for (const run of others) {
+    if (
+      !["queued", "in_progress", "waiting", "pending", "requested"].includes(
+        run.status,
+      )
+    )
+      continue;
+    const minutes = (now - Date.parse(run.created_at)) / 60_000;
+    if (minutes > HEARTBEAT.stuckMinutes) {
+      ok = false;
+      lines.push(
+        `A watch run has been ${run.status} for ${Math.round(minutes)} minutes: ${run.html_url}`,
+      );
+    }
+  }
+  return { ok, lines };
+}
+
+/** How long a closed issue is opened again rather than written anew. */
+export const REOPEN_HOURS = 24;
+
+/** A closed issue of this kind, closed within REOPEN_HOURS, or null. */
+export function recentlyClosed(closedIssues, kind, now) {
+  const found = (closedIssues ?? []).find(
+    (issue) =>
+      !issue.pull_request &&
+      String(issue.body ?? "").includes(marker(kind)) &&
+      now - Date.parse(issue.closed_at ?? "") <= REOPEN_HOURS * 3_600_000,
+  );
+  return found ? found.number : null;
 }
 
 /** The issue a failure opens. */
@@ -393,6 +552,29 @@ async function checkSite(config, call) {
       problems.push(`${route} could not be reached: ${error.message}`);
     }
   }
+  const expected = process.env.WATCH_EXPECT_COMMIT ?? "";
+  if (/^[0-9a-f]{40}$/.test(expected)) {
+    // Asked past any cache, so an old copy is not taken for the new site.
+    let served = null;
+    try {
+      const response = await fetch(
+        new URL(`/?watch=${Date.now()}`, config.site),
+        { headers: { "Cache-Control": "no-cache", Pragma: "no-cache" } },
+      );
+      served = servedCommit(await response.text());
+    } catch (error) {
+      problems.push(`The home page could not be read again: ${error.message}`);
+    }
+    let compare = null;
+    if (served && !expected.startsWith(served))
+      compare = await compareCommits(expected, served);
+    const problem = commitVerdict(expected, served, compare);
+    if (problem) problems.push(problem);
+    else
+      lines.push(
+        `The site shows ${served.slice(0, 7)} (published ${expected.slice(0, 7)}).`,
+      );
+  }
   const script = firstScript(home);
   if (home && !script)
     problems.push("The home page names none of its scripts.");
@@ -465,7 +647,69 @@ async function reportRefusal(step, supabase) {
   }
 }
 
-async function report(kind, result) {
+/**
+ * The run a check follows, as watch.yml writes it ("Vercel a14ec04" and that
+ * run's address), in lines for the issue; none when it follows no run.
+ */
+export function afterLines(after, runUrl) {
+  if (!after || !/^[\w .-]{1,80}$/.test(after)) return [];
+  const url =
+    runUrl &&
+    /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+$/.test(runUrl)
+      ? runUrl
+      : null;
+  return [
+    `Checked right after ${after}.`,
+    ...(url ? [`That run: ${url}`] : []),
+  ];
+}
+
+/**
+ * What the check that ran elsewhere wrote of its failures (the walk writes
+ * them to WATCH_DETAILS), for the issue: a few short lines, never the page's
+ * words beyond what the check itself printed in the public log.
+ */
+export async function details(file) {
+  if (!file) return [];
+  try {
+    return (await readFile(file, "utf8"))
+      .split("\n")
+      .filter(Boolean)
+      .slice(0, 12)
+      .map((line) => line.slice(0, 240));
+  } catch {
+    return [];
+  }
+}
+
+/** GitHub's word for how served stands to expected ("ahead"...), or null. */
+async function compareCommits(expected, served) {
+  const token = process.env.GITHUB_TOKEN;
+  const repository = process.env.GITHUB_REPOSITORY ?? "";
+  if (!token || !repository.includes("/")) return null;
+  try {
+    const response = await fetch(
+      `${GITHUB_API}/repos/${repository}/compare/${expected}...${served}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+        },
+      },
+    );
+    if (!response.ok) return null;
+    return (await response.json())?.status ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function report(kind, inResult) {
+  const after = afterLines(
+    process.env.WATCH_AFTER,
+    process.env.WATCH_AFTER_RUN,
+  );
+  const result = { ...inResult, lines: [...after, ...inResult.lines] };
   for (const line of result.lines) console.log(line);
   console.log(result.ok ? `${kind}: ok` : `${kind}: FAILED`);
   const token = process.env.GITHUB_TOKEN;
@@ -499,7 +743,34 @@ async function report(kind, result) {
   const runUrl = process.env.GITHUB_RUN_ID
     ? `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}`
     : "";
-  if (plan.open) {
+  // The same failure back within a day opens the issue it had again, so a
+  // check that goes up and down writes one issue, not one each time.
+  const reopen = plan.open
+    ? recentlyClosed(
+        await github(
+          "GET",
+          "/issues?state=closed&creator=" +
+            encodeURIComponent("github-actions[bot]") +
+            `&since=${new Date(Date.now() - REOPEN_HOURS * 3_600_000).toISOString()}&per_page=100`,
+        ),
+        kind,
+        Date.now(),
+      )
+    : null;
+  if (reopen) {
+    await github("POST", `/issues/${reopen}/comments`, {
+      body: [
+        `@${process.env.GITHUB_REPOSITORY_OWNER ?? repository.split("/")[0]} ${iso(Date.now())} にまた起きました。`,
+        "",
+        "```",
+        ...result.lines,
+        "```",
+        runUrl ? `\n記録: ${runUrl}` : "",
+      ].join("\n"),
+    });
+    await github("PATCH", `/issues/${reopen}`, { state: "open" });
+    console.log(`Reopened issue #${reopen}.`);
+  } else if (plan.open) {
     const issue = await github("POST", "/issues", {
       title: `[見張り] ${TITLES[kind]}`,
       body: issueBody(kind, result.lines, {
@@ -627,6 +898,55 @@ async function main(action, kind, outcome) {
     await reportRefusal(action, supabase);
     if (!result.ok) process.exitCode = 1;
     return;
+  } else if (action === "heartbeat" || action === "told") {
+    const token = process.env.GITHUB_TOKEN;
+    const repository = process.env.GITHUB_REPOSITORY ?? "";
+    if (!token || !repository.includes("/")) {
+      console.log(
+        `::warning::No GitHub token, so the ${action} was not checked.`,
+      );
+      return;
+    }
+    const read = async (route) => {
+      const response = await fetch(
+        `${GITHUB_API}/repos/${repository}${route}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github+json",
+          },
+        },
+      );
+      if (!response.ok)
+        throw new Error(
+          `GitHub answered ${response.status} to GET ${route.split("?")[0]}`,
+        );
+      return response.json();
+    };
+    try {
+      if (action === "heartbeat") {
+        const answer = await read(
+          "/actions/workflows/watch.yml/runs?per_page=100",
+        );
+        result = heartbeatVerdict(
+          answer.workflow_runs,
+          Date.now(),
+          process.env.GITHUB_RUN_ID,
+        );
+        action = "watch-stopped";
+      } else {
+        const open = await read(
+          "/issues?state=open&creator=" +
+            encodeURIComponent("github-actions[bot]") +
+            "&per_page=100",
+        );
+        result = toldVerdict(JSON.parse(process.env.NEEDS ?? "{}"), open);
+        action = "watch";
+      }
+    } catch (error) {
+      result = { ok: false, lines: [error.message] };
+      action = action === "heartbeat" ? "watch-stopped" : "watch";
+    }
   } else if (action === "keys") {
     // Two issues, at 30 days and at 7, so a second mail comes near the end.
     let failed = false;
@@ -658,12 +978,13 @@ async function main(action, kind, outcome) {
         outcome === "ok"
           ? `The ${kind} passed.`
           : `The ${kind} failed; the run's log says where.`,
+        ...(outcome === "ok" ? [] : await details(process.env.WATCH_DETAILS)),
       ],
     };
     action = kind;
   } else {
     console.error(
-      "Usage: node scripts/watch.mjs site|backups|usage|errors|keys | report <site|backups|usage|journey|write> ok|failed",
+      "Usage: node scripts/watch.mjs site|backups|usage|errors|keys|heartbeat|told | report <journey|publish|write> ok|failed",
     );
     process.exit(2);
   }

@@ -11,6 +11,7 @@ import { APPEARANCE_BOOT } from "../lib/appearance";
 import { HOME_TAB_BOOT } from "../lib/home-tab";
 import { ERROR_BOOT } from "../lib/screen-errors";
 import { ErrorWatch } from "../components/ErrorWatch";
+import { BUILD_COMMIT } from "../lib/site-notes";
 import "./globals.css";
 export const metadata: Metadata = {
   title: {
@@ -20,6 +21,10 @@ export const metadata: Metadata = {
   description:
     "読書の終わりを、交流の始まりに。あなたの愛した一冊が、誰かの愛する一冊になる。読書家の小さな書店が集まる、本の街。",
   icons: { icon: "/favicon.svg" },
+  // The commit this build was made from, so the watch can tell that the site
+  // shows what was just published (scripts/watch.mjs). The repository is
+  // public, so the commit tells nothing new.
+  ...(BUILD_COMMIT ? { other: { "booktown-build": BUILD_COMMIT } } : {}),
 };
 // Google's CSS for the web fonts. Noto Sans JP and Noto Serif JP are variable
 // fonts: one weight range names the same font files as listing 400 to 700
