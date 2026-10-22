@@ -35,6 +35,9 @@ import {
   recentlyClosed,
   servedCommit,
   toldVerdict,
+  untold,
+  expectedKinds,
+  stillDue,
   issueBody,
   issuePlan,
   pageVerdict,
@@ -1750,36 +1753,55 @@ async function main() {
   await check(
     "the watch tells when it broke itself, and when it stopped coming",
     () => {
-      const issue = (kind: string) => ({ body: `x\n<!-- watch:${kind} -->` });
-      // Every step through, or skipped: nothing to tell.
+      const done = { outputs: { complete: "yes" } };
+      // Every job told each of its checks in this run, red or not.
       assert.equal(
-        toldVerdict(
-          {
-            site: { result: "success" },
-            daily: { result: "skipped" },
-            walk: { result: "success" },
-          },
-          [],
-        ).ok,
+        toldVerdict({
+          site: { result: "success", ...done },
+          daily: { result: "skipped" },
+          walk: { result: "failure", ...done },
+        }).ok,
         true,
       );
-      // Red with its own issue open: the issue already tells.
-      assert.equal(
-        toldVerdict({ walk: { result: "failure" } }, [issue("journey")]).ok,
-        true,
-      );
-      // Red, or cut off by a timeout, with no issue of its own: the watch broke.
-      const lost = toldVerdict({ walk: { result: "cancelled" } }, [
-        issue("site"),
-      ]);
+      // Cut off by a timeout, or broken before its checks: no "complete",
+      // whatever issues are open from before.
+      const lost = toldVerdict({
+        site: { result: "success", ...done },
+        walk: { result: "cancelled", outputs: {} },
+      });
       assert.equal(lost.ok, false);
       assert.match(
         lost.lines.join("\n"),
-        /walk step ended cancelled without an issue/,
+        /walk step ended cancelled before every check was told/,
       );
       assert.equal(
-        toldVerdict({ daily: { result: "failure" } }, [issue("keys")]).ok,
-        true,
+        toldVerdict({
+          daily: { result: "failure", outputs: { complete: "no" } },
+        }).ok,
+        false,
+      );
+      // What each job must tell, and what this run's notes say it told.
+      assert.deepEqual(expectedKinds("walk"), ["journey"]);
+      assert.deepEqual(expectedKinds("site"), ["site", "watch-stopped"]);
+      assert.deepEqual(expectedKinds("site", { published: true }), [
+        "site",
+        "watch-stopped",
+        "publish",
+      ]);
+      assert.deepEqual(untold(["journey"], ""), ["journey"]);
+      assert.deepEqual(untold(["journey"], "journey failed opened\n"), []);
+      assert.deepEqual(
+        untold(
+          expectedKinds("daily"),
+          [
+            "refused-backups failed opened",
+            "usage ok quiet",
+            "errors ok closed",
+            "keys ok quiet",
+            "keys-soon ok quiet",
+          ].join("\n"),
+        ),
+        ["keys-unconfirmed"],
       );
 
       const now = Date.parse("2026-10-22T14:00:00Z");
@@ -1854,6 +1876,13 @@ async function main() {
       assert.equal(recentlyClosed(closed, "journey", now), null);
       assert.equal(recentlyClosed(closed, "usage", now), null);
       assert.equal(recentlyClosed(undefined, "site", now), null);
+      // An issue still open hears again once a day, not every run.
+      assert.equal(stillDue({ updated_at: "2026-10-21T13:00:00Z" }, now), true);
+      assert.equal(
+        stillDue({ updated_at: "2026-10-22T02:00:00Z" }, now),
+        false,
+      );
+      assert.equal(stillDue(undefined, now), false);
     },
   );
 
@@ -2021,12 +2050,33 @@ async function main() {
         asked.length > 0 && asked.every((value) => value === "no-cache"),
       );
 
+      const notes = mkdtempSync(path.join(tmpdir(), "watch-told-"));
+      const toldFile = path.join(notes, "told.txt");
       const told = await run("scripts/watch.mjs", ["site"], {
         ...env,
         REPORT_ISSUES: "on",
         SUPABASE_ACCESS_TOKEN: "",
+        WATCH_TOLD: toldFile,
       });
       assert.match(told.output, /Reopened issue #12/);
+      // This run noted that it told GitHub, and the job's last step reads it:
+      // the heartbeat has not told yet, so the job is not complete.
+      assert.equal(readFileSync(toldFile, "utf8"), "site failed reopened\n");
+      const outputFile = path.join(notes, "output.txt");
+      const expect = await run("scripts/watch.mjs", ["expect", "site"], {
+        WATCH_TOLD: toldFile,
+        GITHUB_OUTPUT: outputFile,
+      });
+      assert.equal(expect.code, 0, expect.output);
+      assert.match(expect.output, /Not told in this run: watch-stopped/);
+      assert.equal(readFileSync(outputFile, "utf8"), "complete=no\n");
+      writeFileSync(toldFile, "site failed reopened\nwatch-stopped ok quiet\n");
+      writeFileSync(outputFile, "");
+      await run("scripts/watch.mjs", ["expect", "site"], {
+        WATCH_TOLD: toldFile,
+        GITHUB_OUTPUT: outputFile,
+      });
+      assert.equal(readFileSync(outputFile, "utf8"), "complete=yes\n");
       assert.ok(
         !api.seen.some((s) => s.method === "POST" && s.url.endsWith("/issues")),
       );

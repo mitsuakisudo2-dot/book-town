@@ -60,6 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: ${{ inputs.environment }}
+    outputs:
+      complete: ${{ steps.told.outputs.complete }}
     env:
       SUPABASE_ACCESS_TOKEN: ${{ inputs.environment != '' && secrets.SUPABASE_WATCH_TOKEN || '' }}
       SUPABASE_PROJECT_ID: ${{ inputs.environment != '' && secrets.SUPABASE_PROJECT_ID || '' }}
@@ -68,6 +70,9 @@ jobs:
       WATCH_AFTER: ${{ inputs.after }}
       WATCH_AFTER_RUN: ${{ inputs.after_run }}
       WATCH_EXPECT_COMMIT: ${{ inputs.expect_commit }}
+      WATCH_PUBLISHED: ${{ inputs.published }}
+      # Each check notes here that it told GitHub (scripts/watch.mjs).
+      WATCH_TOLD: watch-told.txt
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,19 +86,25 @@ jobs:
         run: node scripts/watch.mjs heartbeat
       - name: Whether publishing went through
         if: inputs.published == 'ok' || inputs.published == 'failed'
-        run: node scripts/watch.mjs report publish "$PUBLISHED"
-        env:
-          PUBLISHED: ${{ inputs.published }}
+        run: node scripts/watch.mjs report publish "$WATCH_PUBLISHED"
       - name: The pages open
         if: always()
         run: node scripts/watch.mjs site
+      # Last, whatever came before: a check that never told leaves "no".
+      - name: Every check told
+        id: told
+        if: always()
+        run: node scripts/watch.mjs expect site
 
   daily:
     if: inputs.daily
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: ${{ inputs.environment }}
+    outputs:
+      complete: ${{ steps.told.outputs.complete }}
     env:
+      WATCH_TOLD: watch-told.txt
       SUPABASE_ACCESS_TOKEN: ${{ inputs.environment != '' && secrets.SUPABASE_WATCH_TOKEN || '' }}
       SUPABASE_PROJECT_ID: ${{ inputs.environment != '' && secrets.SUPABASE_PROJECT_ID || '' }}
       GITHUB_TOKEN: ${{ inputs.environment != '' && github.token || '' }}
@@ -118,6 +129,10 @@ jobs:
       - name: Keys that run out soon
         if: always()
         run: node scripts/watch.mjs keys
+      - name: Every check told
+        id: told
+        if: always()
+        run: node scripts/watch.mjs expect daily
 
   # After the pages, so that right after publishing it walks the new site.
   walk:
@@ -126,6 +141,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: ${{ inputs.environment }}
+    outputs:
+      complete: ${{ steps.told.outputs.complete }}
     env:
       GITHUB_TOKEN: ${{ inputs.environment != '' && github.token || '' }}
       REPORT_ISSUES: ${{ inputs.environment != '' && 'on' || 'off' }}
@@ -133,6 +150,7 @@ jobs:
       WATCH_AFTER_RUN: ${{ inputs.after_run }}
       # What the walk writes of its failures, for the issue.
       WATCH_DETAILS: walk-details.txt
+      WATCH_TOLD: watch-told.txt
     steps:
       - uses: actions/checkout@v4
         with:
@@ -155,10 +173,15 @@ jobs:
         run: node scripts/watch.mjs report journey "$OUTCOME"
         env:
           OUTCOME: ${{ steps.journey.outcome == 'success' && 'ok' || 'failed' }}
+      - name: Every check told
+        id: told
+        if: always()
+        run: node scripts/watch.mjs expect walk
 
-  # A red step that opened no issue stopped before it could tell (a timeout,
-  # an install that broke): that is told here, so the watch never goes quiet
-  # by failing. Every step that went through closes it again.
+  # A job whose checks did not all tell GitHub in this run (a timeout, an
+  # install that broke) is told here, so the watch never goes quiet by
+  # failing; an issue left open from before does not count. Every job that
+  # told all its checks closes it again.
   told:
     needs: [site, daily, walk]
     if: always() && inputs.environment != ''
