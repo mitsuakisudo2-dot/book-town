@@ -10,11 +10,11 @@ import {
 import { TRADE_END, TRADES } from "../src/lib/book-name";
 import { AUTHORITY_NAMES, TRADE_READINGS } from "./fixtures/authority-names";
 import { CREDIT_NAMES } from "./fixtures/credit-names";
-import { EXTENTS } from "./fixtures/extents";
 import {
   answerAll,
   catalog,
   diagnostic,
+  EXTENTS,
   helpers,
   hyphened,
   isbn10,
