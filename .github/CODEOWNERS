@@ -3,6 +3,7 @@
 # (migrations, hosted settings, build and hosting config). A change to any of
 # them needs the owner's review once main's ruleset requires Code Owners.
 # docs/09「本番の設定」.
+# (試し: 持ち主の承認で止まるかを見る PR。取り込まない)
 
 /.github/                         @mitsuakisudo2-dot
 /scripts/                         @mitsuakisudo2-dot
