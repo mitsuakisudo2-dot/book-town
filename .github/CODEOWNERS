@@ -17,15 +17,17 @@
 /tests/code-owners.test.ts         @mitsuakisudo2-dot
 /tsconfig.json                     @mitsuakisudo2-dot
 
-# The rules Claude and other AI agents keep (AGENTS.md: 10-22 05:48Z), the
-# documents that say who may approve what and how production changes
-# (けにーさん 10-22 03:12Z), and the rules for what the database keeps safe
+# What BookTown is for (docs/理念.md: 10-22 06:22Z), the rules Claude and
+# other AI agents keep (AGENTS.md: 10-22 05:48Z), the documents that say who
+# may approve what and how production changes (けにーさん 10-22 03:12Z),
+# and the rules for what the database keeps safe
 # and who may see what (10-22 03:49Z): the book records and what other
 # readers can learn from them, the terms of the outside services the books
 # come from, what a report hides and tells whom, and what a reader's
 # library, shelves and shop keep private and never lose.
 /CLAUDE.md                         @mitsuakisudo2-dot
 /AGENTS.md                         @mitsuakisudo2-dot
+/docs/理念.md                      @mitsuakisudo2-dot
 /docs/開発と運用/権限と鍵.md        @mitsuakisudo2-dot
 /docs/開発と運用/本番への反映.md    @mitsuakisudo2-dot
 /docs/開発と運用/DBの変え方.md      @mitsuakisudo2-dot

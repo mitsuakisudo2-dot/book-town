@@ -33,6 +33,7 @@ for (const path of [
   "next.config.ts",
   "CLAUDE.md",
   "AGENTS.md",
+  "docs/理念.md",
   "docs/開発と運用/権限と鍵.md",
   "docs/開発と運用/本番への反映.md",
   "docs/開発と運用/DBの変え方.md",
