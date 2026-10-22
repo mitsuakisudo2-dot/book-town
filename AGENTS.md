@@ -12,6 +12,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 BookTown (formerly the working name 「余白」) is a reading SNS where each reader opens their own bookshop and the shops line up into a town.
 
-Before implementing product features or changing UX, read `CLAUDE.md` first, then `docs/README.md`. The index separates the current rules (`CLAUDE.md`, `docs/開発の引き継ぎ.md`, `docs/09_段階2_ログインと保存.md`, `docs/色と部品の決まり.md`, `docs/監査/`) from the early design records of 2026-10-10 to 10-12 (`docs/01`〜`07`), which are kept for history and are not current rules.
+Before implementing product features or changing UX, read `CLAUDE.md` first, then `docs/README.md`. The index lists the current rules, one document per subject (`docs/機能/`, `docs/開発と運用/`, and what is still in `docs/09_段階2_ログインと保存.md`), and separates them from the early design records of 2026-10-10 (`docs/01`〜`06`), which are kept for history and are not current rules.
 
 These docs are **not an instruction to implement everything**. Distinguish agreed decisions from provisional values, proposals and undecided items, and only implement what the user requests. When something the docs point to lives outside the repository (the project's working rules, the feature list, who is working on what), do not guess; ask the user. Preserve existing behavior and tests; verify platform docs in `node_modules/next/dist/docs/` before editing Next.js code.

@@ -38,6 +38,9 @@ for (const path of [
   "docs/機能/公開範囲.md",
   "docs/機能/本と書誌.md",
   "docs/開発と運用/外部サービス.md",
+  "docs/機能/通報と安全.md",
+  "docs/機能/本棚とライブラリ.md",
+  "docs/機能/書店と書店めぐり.md",
 ]) {
   assert.ok(covered(path), `${path} is in CODEOWNERS`);
 }
