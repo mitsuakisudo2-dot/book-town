@@ -35,9 +35,6 @@ import {
   recentlyClosed,
   servedCommit,
   toldVerdict,
-  untold,
-  expectedKinds,
-  stillDue,
   issueBody,
   issuePlan,
   pageVerdict,
@@ -1772,7 +1769,7 @@ async function main() {
       assert.equal(lost.ok, false);
       assert.match(
         lost.lines.join("\n"),
-        /walk step ended cancelled before every check was told/,
+        /walk step ended cancelled before its checks ran to their end/,
       );
       assert.equal(
         toldVerdict({
@@ -1780,42 +1777,13 @@ async function main() {
         }).ok,
         false,
       );
-      // What each job must tell, and what this run's notes say it told.
-      assert.deepEqual(expectedKinds("walk"), ["journey"]);
-      assert.deepEqual(expectedKinds("site"), ["site", "watch-stopped"]);
-      assert.deepEqual(expectedKinds("site", { published: true }), [
-        "site",
-        "watch-stopped",
-        "publish",
-      ]);
-      assert.deepEqual(untold(["journey"], ""), ["journey"]);
-      assert.deepEqual(untold(["journey"], "journey failed opened\n"), []);
-      assert.deepEqual(
-        untold(
-          expectedKinds("daily"),
-          [
-            "refused-backups failed opened",
-            "usage ok quiet",
-            "errors ok closed",
-            "keys ok quiet",
-            "keys-soon ok quiet",
-          ].join("\n"),
-        ),
-        ["keys-unconfirmed"],
-      );
 
       const now = Date.parse("2026-10-22T14:00:00Z");
       const at = (minutes: number) =>
         new Date(now - minutes * 60_000).toISOString();
-      const run = (
-        id: number,
-        event: string,
-        minutes: number,
-        status = "completed",
-      ) => ({
+      const run = (id: number, event: string, minutes: number) => ({
         id,
         event,
-        status,
         created_at: at(minutes),
         html_url: `https://github.com/r/actions/runs/${id}`,
       });
@@ -1840,13 +1808,30 @@ async function main() {
       assert.equal(quiet.ok, false);
       assert.match(quiet.lines.join("\n"), /Longer than 2 hours/);
       assert.equal(heartbeatVerdict([], now, 1).ok, false);
-      const stuck = heartbeatVerdict(
-        [run(2, "schedule", 30), run(3, "schedule", 60, "in_progress")],
-        now,
-        1,
+
+      // Each job of the steps ends by saying whether it ran to its end, and
+      // gives that to told; the setup it cannot run without has an id.
+      const steps = readFileSync(".github/workflows/watch-run.yml", "utf8");
+      for (const name of ["site", "daily", "walk"]) {
+        const at = steps.indexOf(`\n  ${name}:\n`);
+        const block = steps.slice(at, steps.indexOf("\n  # ", at + 1));
+        assert.match(
+          block,
+          /complete: \$\{\{ steps\.done\.outputs\.complete \}\}/,
+          name,
+        );
+        assert.match(block, /- id: checkout\n/, name);
+        assert.match(block, /- id: node\n/, name);
+        assert.match(
+          block,
+          /id: done\n {8}if: always\(\)\n[^]*COMPLETE: \$\{\{ !contains\(steps\.\*\.outcome, 'cancelled'\) && !contains\(steps\.\*\.outcome, 'skipped'\) && 'yes' \|\| 'no' \}\}/,
+          name,
+        );
+      }
+      assert.match(
+        steps,
+        /needs: \[site, daily, walk\]\n {4}if: always\(\) && inputs\.environment != ''/,
       );
-      assert.equal(stuck.ok, false);
-      assert.match(stuck.lines.join("\n"), /in_progress for 60 minutes/);
     },
   );
 
@@ -1876,13 +1861,6 @@ async function main() {
       assert.equal(recentlyClosed(closed, "journey", now), null);
       assert.equal(recentlyClosed(closed, "usage", now), null);
       assert.equal(recentlyClosed(undefined, "site", now), null);
-      // An issue still open hears again once a day, not every run.
-      assert.equal(stillDue({ updated_at: "2026-10-21T13:00:00Z" }, now), true);
-      assert.equal(
-        stillDue({ updated_at: "2026-10-22T02:00:00Z" }, now),
-        false,
-      );
-      assert.equal(stillDue(undefined, now), false);
     },
   );
 
@@ -2050,33 +2028,13 @@ async function main() {
         asked.length > 0 && asked.every((value) => value === "no-cache"),
       );
 
-      const notes = mkdtempSync(path.join(tmpdir(), "watch-told-"));
-      const toldFile = path.join(notes, "told.txt");
       const told = await run("scripts/watch.mjs", ["site"], {
         ...env,
         REPORT_ISSUES: "on",
         SUPABASE_ACCESS_TOKEN: "",
-        WATCH_TOLD: toldFile,
       });
       assert.match(told.output, /Reopened issue #12/);
-      // This run noted that it told GitHub, and the job's last step reads it:
-      // the heartbeat has not told yet, so the job is not complete.
-      assert.equal(readFileSync(toldFile, "utf8"), "site failed reopened\n");
-      const outputFile = path.join(notes, "output.txt");
-      const expect = await run("scripts/watch.mjs", ["expect", "site"], {
-        WATCH_TOLD: toldFile,
-        GITHUB_OUTPUT: outputFile,
-      });
-      assert.equal(expect.code, 0, expect.output);
-      assert.match(expect.output, /Not told in this run: watch-stopped/);
-      assert.equal(readFileSync(outputFile, "utf8"), "complete=no\n");
-      writeFileSync(toldFile, "site failed reopened\nwatch-stopped ok quiet\n");
-      writeFileSync(outputFile, "");
-      await run("scripts/watch.mjs", ["expect", "site"], {
-        WATCH_TOLD: toldFile,
-        GITHUB_OUTPUT: outputFile,
-      });
-      assert.equal(readFileSync(outputFile, "utf8"), "complete=yes\n");
+
       assert.ok(
         !api.seen.some((s) => s.method === "POST" && s.url.endsWith("/issues")),
       );

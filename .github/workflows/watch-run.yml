@@ -61,7 +61,7 @@ jobs:
     timeout-minutes: 5
     environment: ${{ inputs.environment }}
     outputs:
-      complete: ${{ steps.told.outputs.complete }}
+      complete: ${{ steps.done.outputs.complete }}
     env:
       SUPABASE_ACCESS_TOKEN: ${{ inputs.environment != '' && secrets.SUPABASE_WATCH_TOKEN || '' }}
       SUPABASE_PROJECT_ID: ${{ inputs.environment != '' && secrets.SUPABASE_PROJECT_ID || '' }}
@@ -71,30 +71,35 @@ jobs:
       WATCH_AFTER_RUN: ${{ inputs.after_run }}
       WATCH_EXPECT_COMMIT: ${{ inputs.expect_commit }}
       WATCH_PUBLISHED: ${{ inputs.published }}
-      # Each check notes here that it told GitHub (scripts/watch.mjs).
-      WATCH_TOLD: watch-told.txt
     steps:
-      - uses: actions/checkout@v4
+      - id: checkout
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - id: node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      # The watch watching itself: the schedule still comes, and no run hangs.
+      # The watch watching itself: the schedule still comes.
       - name: The watch keeps coming
+        id: heartbeat
         if: always()
         run: node scripts/watch.mjs heartbeat
       - name: Whether publishing went through
         if: inputs.published == 'ok' || inputs.published == 'failed'
         run: node scripts/watch.mjs report publish "$WATCH_PUBLISHED"
       - name: The pages open
+        id: pages
         if: always()
         run: node scripts/watch.mjs site
-      # Last, whatever came before: a check that never told leaves "no".
-      - name: Every check told
-        id: told
+      # Last, whatever came before: "complete" only when no step with an id
+      # was cancelled (a timeout) or skipped (setup broke before it), for told.
+      - name: Every step ran to its end
+        id: done
         if: always()
-        run: node scripts/watch.mjs expect site
+        run: echo "complete=$COMPLETE" >> "$GITHUB_OUTPUT"
+        env:
+          COMPLETE: ${{ !contains(steps.*.outcome, 'cancelled') && !contains(steps.*.outcome, 'skipped') && 'yes' || 'no' }}
 
   daily:
     if: inputs.daily
@@ -102,37 +107,44 @@ jobs:
     timeout-minutes: 15
     environment: ${{ inputs.environment }}
     outputs:
-      complete: ${{ steps.told.outputs.complete }}
+      complete: ${{ steps.done.outputs.complete }}
     env:
-      WATCH_TOLD: watch-told.txt
       SUPABASE_ACCESS_TOKEN: ${{ inputs.environment != '' && secrets.SUPABASE_WATCH_TOKEN || '' }}
       SUPABASE_PROJECT_ID: ${{ inputs.environment != '' && secrets.SUPABASE_PROJECT_ID || '' }}
       GITHUB_TOKEN: ${{ inputs.environment != '' && github.token || '' }}
       REPORT_ISSUES: ${{ inputs.environment != '' && 'on' || 'off' }}
     steps:
-      - uses: actions/checkout@v4
+      - id: checkout
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - id: node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: The daily backup is recent
+        id: backups
         if: always()
         run: node scripts/watch.mjs backups
       - name: How much of the plan is used
+        id: usage
         if: always()
         run: node scripts/watch.mjs usage
       - name: Errors on readers' screens
+        id: errors
         if: always()
         run: node scripts/watch.mjs errors
       # Asks no one: the dates are the ones written in scripts/watch.json.
       - name: Keys that run out soon
+        id: keys
         if: always()
         run: node scripts/watch.mjs keys
-      - name: Every check told
-        id: told
+      - name: Every step ran to its end
+        id: done
         if: always()
-        run: node scripts/watch.mjs expect daily
+        run: echo "complete=$COMPLETE" >> "$GITHUB_OUTPUT"
+        env:
+          COMPLETE: ${{ !contains(steps.*.outcome, 'cancelled') && !contains(steps.*.outcome, 'skipped') && 'yes' || 'no' }}
 
   # After the pages, so that right after publishing it walks the new site.
   walk:
@@ -142,7 +154,7 @@ jobs:
     timeout-minutes: 15
     environment: ${{ inputs.environment }}
     outputs:
-      complete: ${{ steps.told.outputs.complete }}
+      complete: ${{ steps.done.outputs.complete }}
     env:
       GITHUB_TOKEN: ${{ inputs.environment != '' && github.token || '' }}
       REPORT_ISSUES: ${{ inputs.environment != '' && 'on' || 'off' }}
@@ -150,13 +162,15 @@ jobs:
       WATCH_AFTER_RUN: ${{ inputs.after_run }}
       # What the walk writes of its failures, for the issue.
       WATCH_DETAILS: walk-details.txt
-      WATCH_TOLD: watch-told.txt
     steps:
-      - uses: actions/checkout@v4
+      - id: checkout
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - id: pnpm
+        uses: pnpm/action-setup@v4
+      - id: node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
@@ -169,19 +183,22 @@ jobs:
         if: always()
         run: node tests/production-journey.mjs
       - name: Tell about the walk
+        id: tell
         if: always() && (steps.journey.outcome == 'success' || steps.journey.outcome == 'failure')
         run: node scripts/watch.mjs report journey "$OUTCOME"
         env:
           OUTCOME: ${{ steps.journey.outcome == 'success' && 'ok' || 'failed' }}
-      - name: Every check told
-        id: told
+      - name: Every step ran to its end
+        id: done
         if: always()
-        run: node scripts/watch.mjs expect walk
+        run: echo "complete=$COMPLETE" >> "$GITHUB_OUTPUT"
+        env:
+          COMPLETE: ${{ !contains(steps.*.outcome, 'cancelled') && !contains(steps.*.outcome, 'skipped') && 'yes' || 'no' }}
 
-  # A job whose checks did not all tell GitHub in this run (a timeout, an
-  # install that broke) is told here, so the watch never goes quiet by
-  # failing; an issue left open from before does not count. Every job that
-  # told all its checks closes it again.
+  # A job that did not run its steps to their end in this run (a timeout, a
+  # setup that broke) is told here, so the watch never goes quiet by failing;
+  # an issue left open from before does not count. A run whose jobs all ran
+  # to their end closes it again.
   told:
     needs: [site, daily, walk]
     if: always() && inputs.environment != ''

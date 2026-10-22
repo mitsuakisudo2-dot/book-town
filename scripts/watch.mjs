@@ -14,11 +14,8 @@
 //   node scripts/watch.mjs keys      which keys in watch.json run out within
 //                                    30 days, and within 7 (asks no one; the
 //                                    dates are written by hand)
-//   node scripts/watch.mjs heartbeat a scheduled watch ran within 2 hours, and
-//                                    no watch run is stuck (GitHub's list)
-//   node scripts/watch.mjs expect <job>  whether each check of this job told
-//                                    GitHub in this run (WATCH_TOLD), as the
-//                                    job's output "complete"
+//   node scripts/watch.mjs heartbeat a scheduled watch ran within 2 hours
+//                                    (GitHub's list of the watch's runs)
 //   node scripts/watch.mjs told      every job of this run said "complete"
 //                                    (NEEDS)
 //   node scripts/watch.mjs report <kind> ok|failed
@@ -349,52 +346,11 @@ export function issuePlan(openIssues, kind, ok) {
 }
 
 /**
- * What each job of watch-run.yml must have told before it ends, one check a
- * group (either name of a group will do: a refused token is told instead of
- * the check it kept from being read). Whether publishing went through is
- * told only by a run that follows publishing.
- */
-export function expectedKinds(job, { published = false } = {}) {
-  if (job === "site")
-    return ["site", "watch-stopped", ...(published ? ["publish"] : [])];
-  if (job === "daily")
-    return [
-      "backups|refused-backups",
-      "usage|refused-usage",
-      "errors|refused-errors",
-      "keys",
-      "keys-soon",
-      "keys-unconfirmed",
-    ];
-  if (job === "walk") return ["journey"];
-  return [];
-}
-
-/**
- * Which of the expected checks this job did not tell, from the lines report()
- * wrote to WATCH_TOLD in this same run ("<kind> ok|failed <how>"). A line is
- * written only once GitHub took the issue (opened, opened again, still open,
- * closed, or nothing to do), so an old issue left open never stands for a
- * failure of this run.
- *
- * @returns {string[]} the groups not told
- */
-export function untold(expected, toldText) {
-  const told = new Set(
-    String(toldText ?? "")
-      .split("\n")
-      .map((line) => line.split(" ")[0])
-      .filter(Boolean),
-  );
-  return expected.filter(
-    (group) => !group.split("|").some((kind) => told.has(kind)),
-  );
-}
-
-/**
- * Whether every job of the watch told what it found in this run. A job that
- * ended (red, or cut off by a timeout) before each of its checks had told
- * GitHub leaves no "complete" behind: the watch itself broke there.
+ * Whether every job of the watch ran each of its steps to an end. The last
+ * step of each job (watch-run.yml) says "complete" only when none of its
+ * steps was cancelled or skipped; a job cut off by a timeout, or one whose
+ * setup broke before its checks, leaves no "complete": the watch itself broke
+ * there, whatever issues are open from before.
  *
  * @param {Record<string, { result?: string, outputs?: { complete?: string } }>} needs
  * @returns {{ ok: boolean, lines: string[] }}
@@ -406,11 +362,11 @@ export function toldVerdict(needs) {
     const result = needs?.[job]?.result;
     if (!result || result === "skipped") continue;
     if (needs[job].outputs?.complete === "yes")
-      lines.push(`The ${job} step told every check (${result}).`);
+      lines.push(`The ${job} step ran to its end (${result}).`);
     else {
       ok = false;
       lines.push(
-        `The ${job} step ended ${result} before every check was told (a timeout, or a step before the checks broke). The run's log says where.`,
+        `The ${job} step ended ${result} before its checks ran to their end (a timeout, or a step before the checks broke). The run's log says where.`,
       );
     }
   }
@@ -418,14 +374,14 @@ export function toldVerdict(needs) {
   return { ok, lines };
 }
 
-/** How long the scheduled watch may stay away, and a run may keep going. */
-export const HEARTBEAT = { scheduleHours: 2, stuckMinutes: 45 };
+/** How long the scheduled watch may stay away. */
+export const HEARTBEAT = { scheduleHours: 2 };
 
 /**
  * Whether the watch keeps coming: a scheduled run started within
  * scheduleHours (other than this one; GitHub's every 15 minutes comes every
- * 35 to 50 in practice), and no run has been waiting or going for longer than
- * stuckMinutes.
+ * 35 to 50 in practice). A run that hangs is cut off by its job's timeout and
+ * told by told.
  *
  * @returns {{ ok: boolean, lines: string[] }}
  */
@@ -455,32 +411,11 @@ export function heartbeatVerdict(runs, now, selfId) {
       );
     }
   }
-  for (const run of others) {
-    if (
-      !["queued", "in_progress", "waiting", "pending", "requested"].includes(
-        run.status,
-      )
-    )
-      continue;
-    const minutes = (now - Date.parse(run.created_at)) / 60_000;
-    if (minutes > HEARTBEAT.stuckMinutes) {
-      ok = false;
-      lines.push(
-        `A watch run has been ${run.status} for ${Math.round(minutes)} minutes: ${run.html_url}`,
-      );
-    }
-  }
   return { ok, lines };
 }
 
 /** How long a closed issue is opened again rather than written anew. */
 export const REOPEN_HOURS = 24;
-
-/** Whether an issue still open was last written to a day or more ago. */
-export function stillDue(issue, now) {
-  const at = Date.parse(issue?.updated_at ?? "");
-  return Number.isFinite(at) && now - at >= REOPEN_HOURS * 3_600_000;
-}
 
 /** A closed issue of this kind, closed within REOPEN_HOURS, or null. */
 export function recentlyClosed(closedIssues, kind, now) {
@@ -745,14 +680,8 @@ async function report(kind, inResult) {
   console.log(result.ok ? `${kind}: ok` : `${kind}: FAILED`);
   const token = process.env.GITHUB_TOKEN;
   const repository = process.env.GITHUB_REPOSITORY ?? "";
-  if (
-    process.env.REPORT_ISSUES !== "on" ||
-    !token ||
-    !repository.includes("/")
-  ) {
-    await toldLine(kind, result.ok, "unreported");
+  if (process.env.REPORT_ISSUES !== "on" || !token || !repository.includes("/"))
     return;
-  }
   const github = async (method, route, body) => {
     const response = await fetch(`${GITHUB_API}/repos/${repository}${route}`, {
       method,
@@ -816,26 +745,9 @@ async function report(kind, inResult) {
       }),
     });
     console.log(`Opened issue #${issue.number}.`);
-  } else if (plan.already) {
-    // Still failing: once a day the issue says so again, with what this run
-    // found, so a long outage stays in view without a comment every run.
-    const issue = open.find((entry) => entry.number === plan.already);
-    if (stillDue(issue, Date.now())) {
-      await github("POST", `/issues/${plan.already}/comments`, {
-        body: [
-          `${iso(Date.now())} もまだ続いています。`,
-          "",
-          "```",
-          ...result.lines,
-          "```",
-          runUrl ? `\n記録: ${runUrl}` : "",
-        ].join("\n"),
-      });
-      console.log(
-        `Issue #${plan.already} already says so; told it is still so.`,
-      );
-    } else console.log(`Issue #${plan.already} already says so.`);
-  } else if (plan.close) {
+  } else if (plan.already)
+    console.log(`Issue #${plan.already} already says so.`);
+  else if (plan.close) {
     await github("POST", `/issues/${plan.close}/comments`, {
       body: `${iso(Date.now())} の見張りで戻っていました。${runUrl ? `\n\n記録: ${runUrl}` : ""}`,
     });
@@ -845,28 +757,6 @@ async function report(kind, inResult) {
     });
     console.log(`Closed issue #${plan.close}.`);
   }
-  await toldLine(
-    kind,
-    result.ok,
-    reopen
-      ? "reopened"
-      : plan.open
-        ? "opened"
-        : plan.already
-          ? "already"
-          : plan.close
-            ? "closed"
-            : "quiet",
-  );
-}
-
-/** Notes in WATCH_TOLD that this run told GitHub about this check. */
-async function toldLine(kind, ok, how) {
-  if (process.env.WATCH_TOLD)
-    await appendFile(
-      process.env.WATCH_TOLD,
-      `${kind} ${ok ? "ok" : "failed"} ${how}\n`,
-    );
 }
 
 async function main(action, kind, outcome) {
@@ -974,29 +864,6 @@ async function main(action, kind, outcome) {
     await reportRefusal(action, supabase);
     if (!result.ok) process.exitCode = 1;
     return;
-  } else if (action === "expect") {
-    // The last step of each job (always): says whether every check told.
-    let text = "";
-    try {
-      text = await readFile(process.env.WATCH_TOLD ?? "", "utf8");
-    } catch {
-      // Nothing was told.
-    }
-    const missing = untold(
-      expectedKinds(kind, { published: Boolean(process.env.WATCH_PUBLISHED) }),
-      text,
-    );
-    console.log(
-      missing.length
-        ? `Not told in this run: ${missing.join(", ")}.`
-        : "Every check of this step told GitHub.",
-    );
-    if (process.env.GITHUB_OUTPUT)
-      await appendFile(
-        process.env.GITHUB_OUTPUT,
-        `complete=${missing.length ? "no" : "yes"}\n`,
-      );
-    return;
   } else if (action === "heartbeat" || action === "told") {
     const token = process.env.GITHUB_TOKEN;
     const repository = process.env.GITHUB_REPOSITORY ?? "";
@@ -1078,7 +945,7 @@ async function main(action, kind, outcome) {
     action = kind;
   } else {
     console.error(
-      "Usage: node scripts/watch.mjs site|backups|usage|errors|keys|heartbeat|told|expect <job> | report <journey|publish|write> ok|failed",
+      "Usage: node scripts/watch.mjs site|backups|usage|errors|keys|heartbeat|told | report <journey|publish|write> ok|failed",
     );
     process.exit(2);
   }
