@@ -127,6 +127,53 @@ for (const path of run) {
   assert.ok(covered(path), `${path} runs on main with keys and is in CODEOWNERS`);
 }
 
+// The tests that keep the database's rules (who may see which rows, row level
+// security, what leaving removes) need the owner's review as well, so a change
+// that weakens one is not merged on CI alone (AUD-181). They are what test:db
+// runs, every tests/db-*.test.ts among them, and the files under tests/ those
+// read. Claude's own session settings (.claude/) are owned the same way.
+const guards = written(scripts["test:db"]);
+for (const name of readdirSync("tests")) {
+  if (/^db-.*\.test\.ts$/.test(name)) {
+    assert.ok(guards.includes(`tests/${name}`), `tests/${name} runs in test:db`);
+  }
+}
+const guarded = new Set(guards);
+const guardQueue = [...guards];
+for (let path = guardQueue.shift(); path; path = guardQueue.shift()) {
+  if (path.endsWith(".json")) continue;
+  const text = readFileSync(path, "utf8");
+  // Imports, and the json files a fixture reads beside itself.
+  const specs = [
+    ...text.matchAll(/(?:\bfrom|\bimport|\bimport\s*\(|\brequire\s*\()\s*["']((?:\.{1,2}|@)\/[^"']+)["']/g),
+  ].map(([, spec]) => resolve(path, spec));
+  const read = [...text.matchAll(/["']([\w./-]+\.json)["']/g)]
+    .flatMap(([, name]) => [normalize(join(dirname(path), name)), normalize(name)])
+    .filter(isFile);
+  for (const next of [...specs, ...read]) {
+    if (next.startsWith("tests/") && !guarded.has(next)) {
+      guarded.add(next);
+      guardQueue.push(next);
+    }
+  }
+}
+for (const path of [
+  "tests/database-policies.test.ts",
+  "tests/db-who-sees-books.test.ts",
+  "tests/fixtures/account-tables.ts",
+  "tests/fixtures/library-cases.json",
+]) {
+  assert.ok(guarded.has(path), `${path} keeps the database's rules`);
+}
+const files = (dir: string): string[] =>
+  readdirSync(dir).flatMap((name) => {
+    const path = `${dir}/${name}`;
+    return statSync(path).isDirectory() ? files(path) : [path];
+  });
+for (const path of [...guarded, ...files(".claude")]) {
+  assert.ok(covered(path), `${path} keeps BookTown safe and is in CODEOWNERS`);
+}
+
 // CLAUDE.md says when to read which document and what never to do; the facts
 // live in one document each (docs/README.md). It grew to 21,000 bytes by
 // copying them, and the copies drifted apart, so its size is held here.
@@ -136,4 +183,6 @@ assert.ok(
   `CLAUDE.md is ${claudeBytes} bytes; put the facts in their document and point there`,
 );
 
-console.log(`code owners: ${run.size} files run by workflows are owned`);
+console.log(
+  `code owners: ${run.size} files run by workflows and ${guarded.size} database tests are owned`,
+);
