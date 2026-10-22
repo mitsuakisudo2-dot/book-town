@@ -10,6 +10,7 @@ import {
 import { TRADE_END, TRADES } from "../src/lib/book-name";
 import { AUTHORITY_NAMES, TRADE_READINGS } from "./fixtures/authority-names";
 import { CREDIT_NAMES } from "./fixtures/credit-names";
+import { EXTENTS } from "./fixtures/extents";
 import {
   answerAll,
   catalog,
@@ -1047,6 +1048,47 @@ async function main() {
         (await ndl(sru({ isbns: [X2], title: "別の本" }), X1)).state,
         "missing",
       );
+    },
+  );
+
+  await check(
+    "the size and pages are kept as the library writes them, with the pages and the height read from them",
+    async () => {
+      for (const [extent, pages, heightMm] of EXTENTS) {
+        const [read] = await rows<{ read: Record<string, unknown> }>(
+          "select private.ndl_extent($1) as read",
+          [extent],
+        );
+        assert.deepEqual(
+          [read.read.pages ?? null, read.read.height_mm ?? null],
+          [pages, heightMm],
+          extent,
+        );
+      }
+      assert.deepEqual(
+        (await rows("select private.ndl_extent(null) as read"))[0],
+        { read: {} },
+      );
+      const fields = (
+        await ndl(
+          sru({ isbns: [X1], title: "一巻", extent: "２０７ｐ ; １８ｃｍ" }),
+          X1,
+        )
+      ).fields;
+      assert.equal(fields?.extent, "207p ; 18cm");
+      assert.equal(fields?.pages, 207);
+      assert.equal(fields?.height_mm, 180);
+      // A record without them has none.
+      const none = (await ndl(sru({ isbns: [X1], title: "一巻" }), X1)).fields;
+      assert.ok(none && !("extent" in none) && !("pages" in none));
+      for (const role of ["anon", "authenticated"])
+        assert.deepEqual(
+          await rows(
+            "select has_function_privilege($1, 'private.ndl_extent(text)', 'execute') as can",
+            [role],
+          ),
+          [{ can: false }],
+        );
     },
   );
 

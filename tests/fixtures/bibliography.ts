@@ -62,6 +62,8 @@ export type Ndl = {
   publisher?: string;
   date?: string;
   issued?: string;
+  /** The size and pages (dcterms:extent): 302p ; 15cm. */
+  extent?: string;
   subjects?: string[];
   holders?: number;
 };
@@ -135,6 +137,7 @@ export function ndlRecord(r: Ndl): string {
     ${(r.credits ?? []).map((c) => text("dc:creator", c)).join("")}
     ${r.publisher ? `<dcterms:publisher><foaf:Agent><foaf:name>${escape(r.publisher)}</foaf:name><dcndl:transcription>カクウ ショボウ</dcndl:transcription><dcndl:location>東京</dcndl:location></foaf:Agent></dcterms:publisher>` : ""}
     ${text("dcterms:date", r.date)}
+    ${text("dcterms:extent", r.extent)}
     ${r.issued ? `<dcterms:issued rdf:datatype="http://purl.org/dc/terms/W3CDTF">${r.issued}</dcterms:issued>` : ""}
     <dcterms:subject><rdf:Description><rdf:value>架空の主題</rdf:value><dcndl:transcription>カクウ ノ シュダイ</dcndl:transcription></rdf:Description></dcterms:subject>
     ${(r.subjects ?? []).map((s) => `<dcterms:subject rdf:resource="${s}"/>`).join("")}
