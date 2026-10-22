@@ -32,6 +32,8 @@ for (const path of [
   "vercel.json",
   "next.config.ts",
   "CLAUDE.md",
+  "AGENTS.md",
+  "docs/理念.md",
   "docs/開発と運用/権限と鍵.md",
   "docs/開発と運用/本番への反映.md",
   "docs/開発と運用/DBの変え方.md",
@@ -124,5 +126,14 @@ for (const path of [
 for (const path of run) {
   assert.ok(covered(path), `${path} runs on main with keys and is in CODEOWNERS`);
 }
+
+// CLAUDE.md says when to read which document and what never to do; the facts
+// live in one document each (docs/README.md). It grew to 21,000 bytes by
+// copying them, and the copies drifted apart, so its size is held here.
+const claudeBytes = readFileSync("CLAUDE.md").length;
+assert.ok(
+  claudeBytes <= 8000,
+  `CLAUDE.md is ${claudeBytes} bytes; put the facts in their document and point there`,
+);
 
 console.log(`code owners: ${run.size} files run by workflows are owned`);

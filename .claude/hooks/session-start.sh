@@ -14,7 +14,7 @@ cd "$CLAUDE_PROJECT_DIR"
 pnpm install --frozen-lockfile
 
 # The cloud cannot download Playwright's own browser, so the journeys drive
-# the Chromium already installed here (older than CI's; docs/開発の引き継ぎ.md).
+# the Chromium already installed here (older than CI's; docs/開発と運用/開発の手順.md).
 if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -x /opt/pw-browsers/chromium ] &&
   [ -z "${BOOK_TOWN_CHROME:-}" ]; then
   echo 'export BOOK_TOWN_CHROME=/opt/pw-browsers/chromium' >> "$CLAUDE_ENV_FILE"
