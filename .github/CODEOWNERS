@@ -16,3 +16,9 @@
 /tests/fixtures/pglite-supabase.ts @mitsuakisudo2-dot
 /tests/code-owners.test.ts         @mitsuakisudo2-dot
 /tsconfig.json                     @mitsuakisudo2-dot
+
+# The rules Claude keeps and the documents that say who may approve what and how
+# production changes (けにーさん 10-22 03:12Z).
+/CLAUDE.md                         @mitsuakisudo2-dot
+/docs/開発と運用/権限と鍵.md        @mitsuakisudo2-dot
+/docs/開発と運用/本番への反映.md    @mitsuakisudo2-dot

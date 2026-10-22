@@ -31,6 +31,9 @@ for (const path of [
   "pnpm-lock.yaml",
   "vercel.json",
   "next.config.ts",
+  "CLAUDE.md",
+  "docs/開発と運用/権限と鍵.md",
+  "docs/開発と運用/本番への反映.md",
 ]) {
   assert.ok(covered(path), `${path} is in CODEOWNERS`);
 }
