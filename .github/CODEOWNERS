@@ -19,9 +19,13 @@
 
 # The rules Claude keeps and the documents that say who may approve what and how
 # production changes (けにーさん 10-22 03:12Z), and the rules for what the
-# database keeps safe and who may see what (10-22 03:49Z).
+# database keeps safe and who may see what (10-22 03:49Z): the book records
+# and what other readers can learn from them, and the terms of the outside
+# services the books come from.
 /CLAUDE.md                         @mitsuakisudo2-dot
 /docs/開発と運用/権限と鍵.md        @mitsuakisudo2-dot
 /docs/開発と運用/本番への反映.md    @mitsuakisudo2-dot
 /docs/開発と運用/DBの変え方.md      @mitsuakisudo2-dot
 /docs/機能/公開範囲.md              @mitsuakisudo2-dot
+/docs/機能/本と書誌.md              @mitsuakisudo2-dot
+/docs/開発と運用/外部サービス.md    @mitsuakisudo2-dot
