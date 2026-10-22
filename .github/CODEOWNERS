@@ -4,6 +4,7 @@
 # them needs the owner's review once main's ruleset requires Code Owners.
 # docs/09「本番の設定」.
 # (試し: 持ち主の承認で止まるかを見る PR。取り込まない)
+# (試し: 承認のあとに足した行。承認が取り消されるかを見る)
 
 /.github/                         @mitsuakisudo2-dot
 /scripts/                         @mitsuakisudo2-dot
