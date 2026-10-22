@@ -1,8 +1,8 @@
 # These paths run with production keys on main (workflows, the scripts they
 # call, dependencies installed before them) or decide what reaches production
 # (migrations, hosted settings, build and hosting config). A change to any of
-# them needs the owner's review once main's ruleset requires Code Owners.
-# docs/09「本番の設定」.
+# them needs the owner's review: main's ruleset requires Code Owners
+# (docs/開発と運用/権限と鍵.md「main を守る決まり」).
 
 /.github/                         @mitsuakisudo2-dot
 /scripts/                         @mitsuakisudo2-dot

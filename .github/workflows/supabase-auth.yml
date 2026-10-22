@@ -10,7 +10,8 @@ name: Supabase auth settings
 #   SUPABASE_AUTH_TOKEN (Auth Config, Read-write). Each environment's key has
 #   its own name, so a missing one is never filled by an older, wider key.
 #   RESEND_API_KEY turns on the email settings and TURNSTILE_SECRET_KEY is
-#   what captcha.on needs (repository secrets, given only on main).
+#   what captcha.on needs (both in production-read and production-auth;
+#   docs/開発と運用/権限と鍵.md).
 
 on:
   push:
