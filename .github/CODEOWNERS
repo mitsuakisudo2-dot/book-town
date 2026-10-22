@@ -1,8 +1,8 @@
 # These paths run with production keys on main (workflows, the scripts they
 # call, dependencies installed before them) or decide what reaches production
 # (migrations, hosted settings, build and hosting config). A change to any of
-# them needs the owner's review once main's ruleset requires Code Owners.
-# docs/09「本番の設定」.
+# them needs the owner's review: main's ruleset requires Code Owners
+# (docs/開発と運用/権限と鍵.md「main を守る決まり」).
 
 /.github/                         @mitsuakisudo2-dot
 /scripts/                         @mitsuakisudo2-dot
@@ -16,3 +16,9 @@
 /tests/fixtures/pglite-supabase.ts @mitsuakisudo2-dot
 /tests/code-owners.test.ts         @mitsuakisudo2-dot
 /tsconfig.json                     @mitsuakisudo2-dot
+
+# The rules Claude keeps and the documents that say who may approve what and how
+# production changes (けにーさん 10-22 03:12Z).
+/CLAUDE.md                         @mitsuakisudo2-dot
+/docs/開発と運用/権限と鍵.md        @mitsuakisudo2-dot
+/docs/開発と運用/本番への反映.md    @mitsuakisudo2-dot
