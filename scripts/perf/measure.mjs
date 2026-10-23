@@ -274,10 +274,15 @@ for (let r = 0; r < runs; r++) {
       };
       const whole = () => {
         if (window.__screen) return;
+        // Drawn on the screen: the page may hold what it does not show yet.
+        const seen = (selector) =>
+          [...document.querySelectorAll(selector)].some(
+            (e) => e.getClientRects().length > 0,
+          );
         if (
-          document.querySelector(".home-slide-text") &&
-          document.querySelector(".home-entrances") &&
-          !document.querySelector(".home-entrance.is-waiting")
+          seen(".home-slide-text") &&
+          seen(".home-entrance") &&
+          !seen(".home-entrance.is-waiting")
         ) {
           window.__screen = -1;
           requestAnimationFrame(() => (window.__screen = performance.now()));

@@ -90,24 +90,29 @@ export function Entrances({
         </span>
         読書をはじめる
       </button>
-      {newcomer === null ? (
-        <Waiting />
-      ) : (
-        <button
-          type="button"
-          className="home-entrance is-board"
-          onClick={() => scrollToPart("home-board")}
+      {newcomer === null && <Waiting />}
+      {/* Someone not signed in is a newcomer whatever the town holds: their
+          doors are drawn with the page (home-early, home.css). */}
+      <button
+        type="button"
+        className={
+          "home-entrance is-board" + (newcomer === null ? " home-early" : "")
+        }
+        onClick={() => scrollToPart("home-board")}
+      >
+        <span className="home-entrance-icon">
+          <Icon name="pin" size={26} />
+        </span>
+        掲示板
+      </button>
+      {newcomer === null && <Waiting />}
+      {newcomer !== false ? (
+        <Link
+          href={myShopPath()}
+          className={
+            "home-entrance is-open" + (newcomer === null ? " home-early" : "")
+          }
         >
-          <span className="home-entrance-icon">
-            <Icon name="pin" size={26} />
-          </span>
-          掲示板
-        </button>
-      )}
-      {newcomer === null ? (
-        <Waiting />
-      ) : newcomer ? (
-        <Link href={myShopPath()} className="home-entrance is-open">
           <span className="home-entrance-icon">
             <Icon name="plus" size={26} />
           </span>
