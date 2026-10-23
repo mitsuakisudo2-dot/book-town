@@ -114,6 +114,12 @@ async function main() {
   );
   for (const gone of ["20261027000000_works", "20261029000000_visibility"])
     assert.ok(!kept.some(({ label }) => label === gone), gone);
+  // Only the newest move's copy is open (DBの変え方.md「開いている控え」):
+  // the four of the authors' names went in 20261203000000_drop_author_copies.
+  assert.deepEqual(
+    kept.map(({ label }) => label),
+    ["20261202000000_book_extent"],
+  );
   for (const { label } of kept)
     await db.query("select private.drop_copy($1)", [label]);
 
