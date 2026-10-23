@@ -107,16 +107,20 @@ jobs:
       # The same in a town whose shops have shelved books (TOWN=grown): the
       # books outside the catalog are read after the town, and a reader with
       # a shop of their own reads its rows before them, so Home waits for
-      # three answers in a row (2026-10-23).
+      # three answers in a row. A runner here gives about 5.7s and 7.8s to
+      # the first 便り and 6.7s and 8.7s to the first tap (2026-10-23, five
+      # openings within 0.5s); the lines leave a tenth, as above.
       - name: Home in a town with shelved books, for someone new
         run: pnpm test:speed 5
         env:
           TOWN: grown
           VISITOR: 1
+          SPEED_LIMITS: first=6300,screen=6300,interactive=7400
       - name: Home in a town with shelved books, for a reader with a shop
         run: pnpm test:speed 5
         env:
           TOWN: grown
+          SPEED_LIMITS: first=8700,screen=8700,interactive=9600
 
   # The demo build (no Supabase) in a real browser: the walk, the store
   # editor, registering a book, reacting to a shop's books (feedback) and
