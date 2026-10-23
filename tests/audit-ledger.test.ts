@@ -6,6 +6,7 @@ import {
   HISTORY,
   LEDGER,
   NOTE_MAX,
+  OPEN_NOTE,
   SECTIONS,
   STATES,
   historyLink,
@@ -18,7 +19,7 @@ import {
 // to 216KB when each row's 記録 kept its whole history; that history now
 // lives in 経緯.md under the row's number. This holds the shape that keeps the
 // ledger short as the rows grow: every number once, each row in its state's
-// table, open rows by grade, short notes, counts that match, and history that
+// table, open rows by grade and saying what is next, short notes, counts that match, and history that
 // is linked both ways.
 
 const ledger = readFileSync(LEDGER, "utf8");
@@ -44,7 +45,11 @@ for (const row of rows) {
     `${row.id}'s 記録 is ${length} characters; keep ${NOTE_MAX} and move the rest to ${HISTORY}`,
   );
   if (row.state === "未解決") {
-    assert.ok(row.note, `${row.id} is open and says what is next or what is left`);
+    assert.match(
+      row.note,
+      OPEN_NOTE,
+      `${row.id} is open, so its 記録 starts with 次： or 残り： (or says the baseline's proposal is untouched)`,
+    );
   }
 }
 

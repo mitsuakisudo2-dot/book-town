@@ -7,6 +7,12 @@ import assert from "node:assert/strict";
 export const LEDGER = "docs/監査/台帳.md";
 export const HISTORY = "docs/監査/経緯.md";
 
+/**
+ * How an open row's 記録 starts: what to do next (次), what is left (残り),
+ * or that nobody has touched the baseline's proposal yet.
+ */
+export const OPEN_NOTE = /^(次：|残り：|基準点の案のまま（手つかず）)/;
+
 /** Longest 記録 a row may keep; the rest goes under its number in 経緯.md. */
 export const NOTE_MAX = 300;
 
