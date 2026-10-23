@@ -49,6 +49,8 @@ const CREDITS = FILES.find((file) => file.endsWith("_credit_names.sql")) ?? "";
 assert.ok(CREDITS, "the migration that leaves out what a statement writes after a name");
 const ROLES = FILES.find((file) => file.endsWith("_credit_roles.sql")) ?? "";
 assert.ok(ROLES, "the migration that leaves out ほか in front of a role, and statements in another order");
+const EXTENT = FILES.find((file) => file.endsWith("_book_extent.sql")) ?? "";
+assert.ok(EXTENT, "the migration that keeps the size and pages");
 
 const AKI = "00000000-0000-4000-8000-00000000000a";
 const BEN = "00000000-0000-4000-8000-00000000000b";
@@ -944,6 +946,55 @@ async function main() {
         { source: "private.edition_sources" },
         { source: "public.books" },
       ]);
+      await db.close();
+    },
+  );
+
+  await check(
+    "the answers kept with their record get the size and pages; a catalog row gets them when its record comes again",
+    async () => {
+      const db = await migrated(EXTENT);
+      const { rows, register } = helpers(db);
+      await db.exec(PEOPLE);
+      const withSize: Ndl = { bibId: "91", isbns: [C(91)], title: "灯の本", extent: "２０７ｐ ; １８ｃｍ" };
+      // A catalog row: no record kept.
+      await pgliteTarget(db).take(await rowsFor(db, [["R100000002-I92", { bibId: "92", isbns: [C(92)], title: "影の本", extent: "302p ; 15cm" }]]), "trial");
+      // A reader's book, the library's answer kept with its record as bib_take keeps it.
+      await register(BEN, id(91), C(91), "灯の本", "");
+      const [answer] = await rows<{ record: string; fields: Record<string, unknown> }>(
+        "select record, fields from private.ndl_answer($1, $2)",
+        [sru(withSize), C(91)],
+      );
+      assert.ok(!("extent" in answer.fields));
+      await rows(
+        `update private.edition_sources s set state = 'found', record = $2, fields = $3
+         from books b where b.id = $1 and s.edition_id = b.edition_id and s.source = 'ndl'`,
+        [id(91), answer.record, answer.fields],
+      );
+      const fieldsOf = async (isbnOf: string, source: string) =>
+        (
+          await rows<{ fields: Record<string, unknown> }>(
+            `select s.fields from private.edition_sources s join books b on b.edition_id = s.edition_id
+             where b.isbn = $1 and b.source = $2 and s.source = 'ndl'`,
+            [isbnOf, source],
+          )
+        )[0].fields;
+      const catalogBefore = await fieldsOf(C(92), "ndl");
+      await db.exec(migrationText(EXTENT));
+      assert.deepEqual(await fieldsOf(C(91), "manual"), {
+        ...answer.fields,
+        extent: "207p ; 18cm",
+        pages: 207,
+        height_mm: 180,
+      });
+      assert.deepEqual(await fieldsOf(C(92), "ndl"), catalogBefore);
+      // The catalog row's record again: taken with them.
+      await pgliteTarget(db).take(await rowsFor(db, [["R100000002-I92", { bibId: "92", isbns: [C(92)], title: "影の本", extent: "302p ; 15cm" }]]), "oai");
+      const again = await fieldsOf(C(92), "ndl");
+      assert.deepEqual([again.extent, again.pages, again.height_mm], ["302p ; 15cm", 302, 150]);
+      assert.deepEqual(await rows("select source from keep.copies where label = $1 order by 1", [
+        EXTENT.replace(/^.*\//, "").replace(/\.sql$/, ""),
+      ]), [{ source: "private.book_checks" }, { source: "private.edition_sources" }]);
       await db.close();
     },
   );
