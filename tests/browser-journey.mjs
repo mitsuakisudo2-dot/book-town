@@ -287,6 +287,21 @@ try {
         page.getByRole("heading", { name: "すみれ", exact: true }),
       ).toBeVisible();
       await expect(page.locator(".profile-nine-grid > div")).toHaveCount(9);
+      // Each book's number stands over its cover, not under it (AUD-188).
+      const numbered = await page
+        .locator(".profile-nine-book")
+        .evaluateAll((links) =>
+          links.map((link) => {
+            const number = link.querySelector(".profile-nine-number");
+            const jacket = link.querySelector(".book-jacket");
+            return (
+              number.getBoundingClientRect().bottom <=
+              jacket.getBoundingClientRect().top
+            );
+          }),
+        );
+      expect(numbered.length).toBeGreaterThan(0);
+      expect(numbered.every(Boolean)).toBe(true);
       // One link per public shelf; demo shops have three.
       await expect(page.locator(".profile-shelf-link")).toHaveCount(3);
       await page.locator(".profile-shelf-link").first().click();

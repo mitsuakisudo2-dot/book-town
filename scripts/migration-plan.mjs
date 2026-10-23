@@ -41,6 +41,8 @@ const RISKY = [
   ["update without where", null],
   ["on delete cascade", /\bon\s+delete\s+cascade\b/i],
   ["drop schema", /\bdrop\s+schema\b/i],
+  // A kept copy dropped cannot write a move back (DBの変え方.md).
+  ["drop_copy", /\bdrop_copy\s*\(/i],
 ];
 
 const withoutComments = (sql) =>

@@ -94,6 +94,10 @@ async function main() {
       ["on delete cascade"],
     );
     assert.deepEqual(risky("drop schema s cascade;"), ["drop schema"]);
+    assert.deepEqual(
+      risky("select private.drop_copy('20261101000000_works');"),
+      ["drop_copy"],
+    );
   });
 
   await check(
