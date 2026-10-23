@@ -104,6 +104,19 @@ jobs:
         run: pnpm test:speed 5
         env:
           SPEED_LIMITS: first=6500,interactive=7300
+      # The same in a town whose shops have shelved books (TOWN=grown): the
+      # books outside the catalog are read after the town, and a reader with
+      # a shop of their own reads its rows before them, so Home waits for
+      # three answers in a row (2026-10-23).
+      - name: Home in a town with shelved books, for someone new
+        run: pnpm test:speed 5
+        env:
+          TOWN: grown
+          VISITOR: 1
+      - name: Home in a town with shelved books, for a reader with a shop
+        run: pnpm test:speed 5
+        env:
+          TOWN: grown
 
   # The demo build (no Supabase) in a real browser: the walk, the store
   # editor, registering a book, reacting to a shop's books (feedback) and

@@ -12,12 +12,19 @@
 // first:       the first 便り (.post-card) drawn, the frame after it shows.
 // interactive: the first 便り, or the end of the last long task within 15
 //              seconds of it if later: when a tap is answered at once.
+// screen:      Home's first screen whole: the top slide's words and every
+//              entrance drawn (no longer the waiting boxes), the frame after.
 // Prints each run and the medians. With SPEED_LIMITS="first=…,interactive=…"
 // (ms) it fails when a median is over its limit (the CI check, AUD-048).
 // BASE (https://127.0.0.1:5181) names the server; PAGE another page to open
 // (/library/, …: ran and interactive only, or READY's selector for first); REQS=1 lists what was asked
 // of Supabase, TIMING=1 when each file came, FONTS=1 lets Google's fonts come,
 // VISITOR=1 opens it as someone who has not signed in (the first visit).
+// TOWN=grown opens a town as it will be once shops have shelved books: each
+// shop's shelf holds books outside the newest catalog (read by town_books),
+// and the reader signed in keeps a shop of their own (its private rows read
+// after the town). The town by default has empty shelves and no shop of the
+// reader's, so it never waits for those reads.
 import fs from "node:fs";
 import { chromium } from "@playwright/test";
 
@@ -27,6 +34,7 @@ const base = process.env.BASE || "https://127.0.0.1:5181";
 const DELAY = 562;
 const PAGE = process.env.PAGE || "/";
 const READY = process.env.READY ?? (PAGE === "/" ? ".post-card" : "");
+const GROWN = process.env.TOWN === "grown";
 
 // A reader signed in on this browser, and a small town of others.
 const USER = "8f6a2c1e-5b7d-4e1a-9c3f-2d4b6a8e0c11";
@@ -125,11 +133,41 @@ const shops = profiles.slice(1, 11).map((p, i) => ({
   public_shelves: [],
   created_at: made,
 }));
-const tables = { profiles, books, posts, shops };
+// TOWN=grown: twelve books on each shop's shelf, none among the catalog's,
+// and a shop of the reader's own with a shelf of them too.
+const shelved = [];
+const shelfOf = (n) => {
+  const items = [];
+  for (let k = 0; k < 12; k++) {
+    const book = { ...books[0], id: uid(5000 + n * 12 + k), title: "棚の本" };
+    book.work_id = book.id;
+    shelved.push(book);
+    items.push({ bookId: book.id });
+  }
+  return [{ id: "shelf-" + n, name: "はじめの棚", items }];
+};
+const shopPrivate = [];
+if (GROWN) {
+  shops.forEach((shop, i) => (shop.public_shelves = shelfOf(i)));
+  const own = {
+    ...shops[0],
+    id: uid(4999),
+    owner_id: USER,
+    name: "あきの本屋",
+    public_shelves: shelfOf(10),
+  };
+  shops.push(own);
+  shopPrivate.push({
+    shop_id: own.id,
+    shelves: own.public_shelves,
+    scene_books: [],
+  });
+}
+const tables = { profiles, books, posts, shops, shop_private: shopPrivate };
 // The town's shared rows come in one answer (town_view, town-backend.ts).
 const rpcs = {
   town_view: { profiles, shops, posts, catalog: books },
-  town_books: [],
+  town_books: shelved,
   my_books: [],
 };
 
@@ -234,6 +272,21 @@ for (let r = 0; r < runs; r++) {
           requestAnimationFrame(() => (window.__first = performance.now()));
         }
       };
+      const whole = () => {
+        if (window.__screen) return;
+        if (
+          document.querySelector(".home-slide-text") &&
+          document.querySelector(".home-entrances") &&
+          !document.querySelector(".home-entrance.is-waiting")
+        ) {
+          window.__screen = -1;
+          requestAnimationFrame(() => (window.__screen = performance.now()));
+        }
+      };
+      new MutationObserver(whole).observe(document, {
+        childList: true,
+        subtree: true,
+      });
       new MutationObserver(seen).observe(document, {
         childList: true,
         subtree: true,
@@ -319,6 +372,7 @@ for (let r = 0; r < runs; r++) {
     return {
       ran: Math.round(ran),
       ...(window.__first ? { first: Math.round(first) } : {}),
+      ...(window.__screen > 0 ? { screen: Math.round(window.__screen) } : {}),
       interactive: Math.round(Math.max(first, quiet)),
     };
   });
@@ -344,7 +398,7 @@ const median = (key) => {
   return values[Math.floor(values.length / 2)];
 };
 const medians = Object.fromEntries(
-  ["ran", "first", "interactive", "kb"]
+  ["ran", "first", "screen", "interactive", "kb"]
     .filter((key) => results[0][key] !== undefined)
     .map((key) => [key, median(key)]),
 );
