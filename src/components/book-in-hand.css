@@ -875,6 +875,24 @@
   display: inline;
   margin: 0;
 }
+/* 前の本 and 次の本 stay on one line (AUD-189), also with 字の大きさ at
+   もっと大きい: below 390px the buttons give up some of their room, and the
+   hint goes under the count. */
+@media (max-width: 389px) {
+  .bh-navigation {
+    gap: 4px;
+  }
+  .bh-adjacent {
+    padding-inline: 4px;
+    gap: 4px;
+  }
+  .bh-nav-center .bh-position small {
+    display: block;
+  }
+  .bh-nav-center .bh-position small i {
+    display: none;
+  }
+}
 /* 自分の書店へ, under the book's own buttons on its page (管理表 103). */
 .bh-to-shop {
   margin-top: 12px;

@@ -759,7 +759,9 @@ export function BookInHand({
               {index + 1}
               <i>/</i>
               {availableItems.length}
-              <small> · 左右にスワイプ</small>
+              <small>
+                <i>·</i>左右にスワイプ
+              </small>
             </span>
             <span className="bh-sr-only">
               {counted(availableItems.length, "冊")}中{nth(index + 1, "冊")}、

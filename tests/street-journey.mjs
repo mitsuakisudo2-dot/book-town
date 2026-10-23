@@ -1568,6 +1568,38 @@ try {
       },
     );
     await check(
+      "From 320px to 430px 前の本 and 次の本 stay on one line, at every 字の大きさ",
+      async () => {
+        await phone.setViewportSize({ width: 393, height: 793 });
+        await shop(phone, "軌道書房")
+          .getByRole("button", {
+            name: "ソラリス · 面陳 · POPあり",
+            exact: true,
+          })
+          .tap();
+        await expectBook(phone, "ソラリス");
+        const labels = phone.locator(".bh-dialog .bh-adjacent span");
+        for (const text of [null, "large", "larger"]) {
+          await phone.evaluate((size) => {
+            if (size) document.documentElement.dataset.text = size;
+            else delete document.documentElement.dataset.text;
+          }, text);
+          for (const width of [430, 393, 390, 389, 375, 360, 344, 320]) {
+            await phone.setViewportSize({ width, height: 793 });
+            const lines = await labels.evaluateAll((spans) =>
+              spans.map((span) => span.getClientRects().length),
+            );
+            expect(lines, `${text ?? "ふつう"} ${width}px`).toEqual([1, 1]);
+          }
+        }
+        await phone.evaluate(
+          () => delete document.documentElement.dataset.text,
+        );
+        await phone.setViewportSize({ width: 430, height: 793 });
+        await phone.keyboard.press("Escape");
+      },
+    );
+    await check(
       "393px POP card keeps still for ordinary POPs and fits a long one only when it is shown",
       async () => {
         await phone.setViewportSize({ width: 393, height: 793 });
