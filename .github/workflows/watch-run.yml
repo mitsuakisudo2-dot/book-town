@@ -3,7 +3,8 @@ name: Watch production (steps)
 # The steps of Watch production (watch.yml), which says when they run and
 # with what. Given an environment, they read its SUPABASE_WATCH_TOKEN, open
 # issues, and fail (with an issue) without the token; given none (a pull
-# request), they ask Supabase nothing and open no issue.
+# request), they ask Supabase nothing and open no issue. The walk needs no
+# key at all: it is a visitor who has not signed in.
 
 on:
   workflow_call:
@@ -11,6 +12,30 @@ on:
       daily:
         type: boolean
         required: true
+      # The visitor's walk through the production site, in a browser: each
+      # morning, and right after publishing.
+      walk:
+        type: boolean
+        required: true
+      # "ok" or "failed" when this follows Vercel's run of a push to main,
+      # which closes or opens the issue that publishing did not go through.
+      published:
+        type: string
+        default: ""
+      # The run this follows, named in an issue ("Vercel <commit>"), and its
+      # address.
+      after:
+        type: string
+        default: ""
+      after_run:
+        type: string
+        default: ""
+      # The commit just published: the site must show it (or a later one)
+      # before the checks count. Empty after a database run, whose commit
+      # Vercel may still be building.
+      expect_commit:
+        type: string
+        default: ""
       write:
         type: boolean
         required: true
@@ -35,65 +60,170 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: ${{ inputs.environment }}
+    outputs:
+      complete: ${{ steps.done.outputs.complete }}
     env:
       SUPABASE_ACCESS_TOKEN: ${{ inputs.environment != '' && secrets.SUPABASE_WATCH_TOKEN || '' }}
       SUPABASE_PROJECT_ID: ${{ inputs.environment != '' && secrets.SUPABASE_PROJECT_ID || '' }}
       GITHUB_TOKEN: ${{ inputs.environment != '' && github.token || '' }}
       REPORT_ISSUES: ${{ inputs.environment != '' && 'on' || 'off' }}
+      WATCH_AFTER: ${{ inputs.after }}
+      WATCH_AFTER_RUN: ${{ inputs.after_run }}
+      WATCH_EXPECT_COMMIT: ${{ inputs.expect_commit }}
+      WATCH_PUBLISHED: ${{ inputs.published }}
     steps:
-      - uses: actions/checkout@v4
+      - id: checkout
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - id: node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node scripts/watch.mjs site
+      # The watch watching itself: the schedule still comes.
+      - name: The watch keeps coming
+        id: heartbeat
+        if: always()
+        run: node scripts/watch.mjs heartbeat
+      - name: Whether publishing went through
+        id: publish
+        if: inputs.published == 'ok' || inputs.published == 'failed'
+        run: node scripts/watch.mjs report publish "$WATCH_PUBLISHED"
+      - name: The pages open
+        id: pages
+        if: always()
+        run: node scripts/watch.mjs site
+      # Last, whatever came before, for told: "complete" only when the setup
+      # succeeded and each check said "told" (scripts/watch.mjs writes it once
+      # its issue was dealt with, red or not). A failed or skipped setup, or a
+      # check that threw, leaves "no"; a timeout leaves nothing.
+      - name: Every step ran to its end
+        id: done
+        if: always()
+        run: echo "complete=$COMPLETE" >> "$GITHUB_OUTPUT"
+        env:
+          COMPLETE: ${{ steps.checkout.outcome == 'success' && steps.node.outcome == 'success' && steps.heartbeat.outputs.told == 'yes' && (inputs.published == '' || steps.publish.outputs.told == 'yes') && steps.pages.outputs.told == 'yes' && 'yes' || 'no' }}
 
   daily:
     if: inputs.daily
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: ${{ inputs.environment }}
+    outputs:
+      complete: ${{ steps.done.outputs.complete }}
     env:
       SUPABASE_ACCESS_TOKEN: ${{ inputs.environment != '' && secrets.SUPABASE_WATCH_TOKEN || '' }}
       SUPABASE_PROJECT_ID: ${{ inputs.environment != '' && secrets.SUPABASE_PROJECT_ID || '' }}
       GITHUB_TOKEN: ${{ inputs.environment != '' && github.token || '' }}
       REPORT_ISSUES: ${{ inputs.environment != '' && 'on' || 'off' }}
     steps:
-      - uses: actions/checkout@v4
+      - id: checkout
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - id: node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
       - name: The daily backup is recent
+        id: backups
         if: always()
         run: node scripts/watch.mjs backups
       - name: How much of the plan is used
+        id: usage
         if: always()
         run: node scripts/watch.mjs usage
       - name: Errors on readers' screens
+        id: errors
         if: always()
         run: node scripts/watch.mjs errors
       # Asks no one: the dates are the ones written in scripts/watch.json.
       - name: Keys that run out soon
+        id: keys
         if: always()
         run: node scripts/watch.mjs keys
-      - run: pnpm install --frozen-lockfile
+      - name: Every step ran to its end
+        id: done
         if: always()
-      - run: pnpm exec playwright install --with-deps chromium
+        run: echo "complete=$COMPLETE" >> "$GITHUB_OUTPUT"
+        env:
+          COMPLETE: ${{ steps.checkout.outcome == 'success' && steps.node.outcome == 'success' && steps.backups.outputs.told == 'yes' && steps.usage.outputs.told == 'yes' && steps.errors.outputs.told == 'yes' && steps.keys.outputs.told == 'yes' && 'yes' || 'no' }}
+
+  # After the pages, so that right after publishing it walks the new site.
+  walk:
+    needs: site
+    if: always() && inputs.walk
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    outputs:
+      complete: ${{ steps.done.outputs.complete }}
+    env:
+      GITHUB_TOKEN: ${{ inputs.environment != '' && github.token || '' }}
+      REPORT_ISSUES: ${{ inputs.environment != '' && 'on' || 'off' }}
+      WATCH_AFTER: ${{ inputs.after }}
+      WATCH_AFTER_RUN: ${{ inputs.after_run }}
+      # What the walk writes of its failures, for the issue.
+      WATCH_DETAILS: walk-details.txt
+    steps:
+      - id: checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: pnpm
+        uses: pnpm/action-setup@v4
+      - id: node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - id: install
+        run: pnpm install --frozen-lockfile
+        if: always()
+      - id: browser
+        run: pnpm exec playwright install --with-deps chromium
         if: always()
       - name: A visitor's walk through the production site
         id: journey
         if: always()
         run: node tests/production-journey.mjs
       - name: Tell about the walk
+        id: tell
         if: always() && (steps.journey.outcome == 'success' || steps.journey.outcome == 'failure')
         run: node scripts/watch.mjs report journey "$OUTCOME"
         env:
           OUTCOME: ${{ steps.journey.outcome == 'success' && 'ok' || 'failed' }}
+      - name: Every step ran to its end
+        id: done
+        if: always()
+        run: echo "complete=$COMPLETE" >> "$GITHUB_OUTPUT"
+        env:
+          COMPLETE: ${{ steps.checkout.outcome == 'success' && steps.pnpm.outcome == 'success' && steps.node.outcome == 'success' && steps.install.outcome == 'success' && steps.browser.outcome == 'success' && steps.tell.outputs.told == 'yes' && 'yes' || 'no' }}
+
+  # A job that did not tell each of its checks in this run (a timeout, a
+  # setup that broke, a check that could not reach GitHub) is told here, so the watch never goes quiet by failing;
+  # an issue left open from before does not count. A run whose jobs all ran
+  # to their end closes it again.
+  told:
+    needs: [site, daily, walk]
+    if: always() && inputs.environment != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: ${{ inputs.environment }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      REPORT_ISSUES: "on"
+      WATCH_AFTER: ${{ inputs.after }}
+      WATCH_AFTER_RUN: ${{ inputs.after_run }}
+      NEEDS: ${{ toJSON(needs) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/watch.mjs told
 
   write:
     if: inputs.write && inputs.environment != ''

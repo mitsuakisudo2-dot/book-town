@@ -599,6 +599,12 @@ async function main(action, branch) {
     const wait = Number(process.env.ENSURE_WAIT_SECONDS ?? 150) * 1000;
     const poll = Number(process.env.ENSURE_POLL_SECONDS ?? 15) * 1000;
     const until = Date.now() + wait;
+    // Once Vercel has started it, wait for the end of the build: a run that
+    // ends while it is still building would say nothing of how it ended, and
+    // the check after publishing (watch.yml) would look at the build before.
+    const built =
+      Date.now() +
+      Number(process.env.ENSURE_BUILD_SECONDS ?? WAIT_MINUTES * 60) * 1000;
     for (;;) {
       const { deployments } = await call("GET", "/v7/deployments", {
         projectId: project,
@@ -617,11 +623,12 @@ async function main(action, branch) {
         console.log("Vercel stopped; building it here: " + deploymentLine(own));
         break;
       }
-      if (Date.now() >= until) {
-        if (own) {
-          console.log("Vercel is still building it: " + deploymentLine(own));
-          return;
-        }
+      if (own && Date.now() >= built)
+        throw new Error(
+          "Vercel was still building it when the wait ran out: " +
+            deploymentLine(own),
+        );
+      if (Date.now() >= until && !own) {
         console.log(
           `Vercel did not start ${sha.slice(0, 7)}; building it here.`,
         );
