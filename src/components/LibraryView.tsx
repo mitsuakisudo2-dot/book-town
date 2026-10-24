@@ -38,7 +38,6 @@ import {
   DefaultShelfAudienceSheet,
   LibraryShelfSheet,
 } from "./LibraryShelfSheet";
-import { ScanSession } from "./ScanSession";
 import { ScanTimes } from "./ScanTimes";
 import { SCAN_COPY } from "../lib/scan";
 import { scanTimes, scanTimeWords } from "../lib/scan-history";
@@ -55,6 +54,14 @@ import {
 import { CHOICE_NAMES, type Audience } from "../lib/visibility";
 import { walkPath } from "../lib/paths";
 import "./library.css";
+import dynamic from "next/dynamic";
+
+// The scanner is only fetched when the reader opens it (as from Home and
+// 検索): the page reads less before it runs.
+const ScanSession = dynamic(
+  () => import("./ScanSession").then((file) => file.ScanSession),
+  { ssr: false },
+);
 
 // The reader's library (管理表14): every book they have met in the town,
 // sorted onto the default shelves (library.ts DEFAULT_SHELVES) and the

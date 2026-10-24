@@ -17,7 +17,6 @@ import { getTownSnapshot, useTownBackend, useTownMore } from "../lib/store";
 import { readerPosts, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
-import { ScanSession } from "./ScanSession";
 import { JournalNotes, TitlesToType } from "./LibraryJournalNotes";
 import { booksBeforeSearch } from "../lib/book-lists";
 import { linkLabel, normalizeLink, PROFILE_LINK_LIMIT } from "../lib/links";
@@ -136,6 +135,14 @@ import {
   KEPT,
   NAMES,
 } from "../lib/words";
+import dynamic from "next/dynamic";
+
+// The scanner is only fetched when the reader opens it (as from Home and
+// 検索): the page reads less before it runs.
+const ScanSession = dynamic(
+  () => import("./ScanSession").then((file) => file.ScanSession),
+  { ssr: false },
+);
 
 /** The search for books to add to the nine, by its name. */
 const NINE_SEARCH = "人生の9冊に追加する本を検索";
