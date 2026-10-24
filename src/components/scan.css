@@ -1136,6 +1136,33 @@ body:has(.scan-session) .toast {
 .scan-spine.is-faint {
   opacity: 0.35;
 }
+/* The 段 in sight on top, the folded ones under it as bands. They hang
+   below the board without taking room, so the camera never moves down. */
+.scan-shelf-case {
+  position: relative;
+}
+.scan-shelf-bands {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 1px;
+}
+.scan-shelf-band {
+  display: flex;
+  gap: 1px;
+  width: 98px;
+  height: 2px;
+  padding: 0 4px;
+  animation: scan-spine-in var(--dur-grow) var(--ease-arrive);
+}
+.scan-shelf-band > span {
+  flex: 1;
+  border-radius: var(--r-edge);
+  background: var(--spine);
+}
 .scan-shelf-folded {
   font-size: var(--t-cap);
   line-height: 1;
@@ -1175,7 +1202,8 @@ body:has(.scan-session) .toast {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .scan-spine {
+  .scan-spine,
+  .scan-shelf-band {
     animation: none;
   }
 }

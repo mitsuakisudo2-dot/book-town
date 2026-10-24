@@ -850,6 +850,11 @@ try {
     // The shelf agrees with the count: ten a 段, the one before folded.
     await expect(shelf(scan).locator(".scan-shelf-folded")).toHaveText("1段");
     await expect(spines(scan)).toHaveCount(10);
+    // The folded 段 stays in sight under the board, as a band of its books.
+    await expect(shelf(scan).locator(".scan-shelf-band")).toHaveCount(1);
+    await expect(shelf(scan).locator(".scan-shelf-band > span")).toHaveCount(
+      10,
+    );
     for (const isbn of twenty) inLibrary.add("isbn-" + isbn);
     await expectLibrary();
     const data = await stored(scan);
@@ -872,6 +877,7 @@ try {
       await expect(count(scan)).toHaveText("21冊 登録済み");
       await expect(shelf(scan).locator(".scan-shelf-folded")).toHaveText("2段");
       await expect(spines(scan)).toHaveCount(1);
+      await expect(shelf(scan).locator(".scan-shelf-band")).toHaveCount(2);
       inLibrary.add("isbn-" + isbn);
       await expectLibrary();
       const guide = scanner(scan).locator(".scan-guide");
