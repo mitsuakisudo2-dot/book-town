@@ -171,13 +171,22 @@
   padding: 0;
   overflow: visible;
 }
-/* The one button: always in reach under a long list. */
+/* The one button: always in reach under a long list. It reaches down over
+   the sheet's own bottom padding (--foot-gap, as .modal and .modal.is-sheet
+   set it in globals.css), so what scrolls under it never shows beneath it. */
 .series-foot {
+  --foot-gap: 26px;
   position: sticky;
-  bottom: 0;
-  padding: 12px 0 4px;
+  bottom: calc(-1 * var(--foot-gap));
+  margin-bottom: calc(-1 * var(--foot-gap));
+  padding: 12px 0 var(--foot-gap);
   border-top: 1px solid var(--line);
-  background: var(--sheet);
+  background: var(--paper);
+}
+@media (max-width: 720px) {
+  .series-foot {
+    --foot-gap: calc(22px + env(safe-area-inset-bottom));
+  }
 }
 .series-go {
   width: 100%;
