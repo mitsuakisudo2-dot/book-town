@@ -10,6 +10,7 @@ import {
 } from "../lib/types";
 import { BookJacket, CoverCredit, Icon } from "./ui";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
+import { InLibraryMark } from "./RegisterBook";
 import { BookReviews } from "./Social";
 import {
   myShopPath,
@@ -157,7 +158,10 @@ export function BookView({
     <>
       <BackLink className="back-link" />
       <section className="book-page-hero">
-        <BookJacket book={named} />
+        <BookJacket
+          book={named}
+          mark={<InLibraryMark book={book} state={state} />}
+        />
         <div className="book-hero-head">
           <span className="eyebrow">ONE BOOK, MANY WORLDS</span>
           <span className="genre-tag">{book.genre}</span>
