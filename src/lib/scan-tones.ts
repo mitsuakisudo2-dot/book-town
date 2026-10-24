@@ -268,17 +268,11 @@ export function playTone(tone: Tone, moment: Moment, nth = 1) {
   const audio = wakeAudio();
   if (!audio) return;
   if (moment === "nothing-new") {
-    // Two lower sounds, going down: heard as "no new book", whatever the tone.
-    if (tone === "pip") {
-      sine(audio, audio.destination, 587, 0, 0.07, 0.14);
-      sine(audio, audio.destination, 440, 0.1, 0.09, 0.14);
-    } else if (tone === "kotto") {
-      tap(audio, 240, 0, 0.7);
-      tap(audio, 200, 0.1, 0.7);
-    } else {
-      bar(audio, 220, 0, 0.5, WOOD);
-      bar(audio, 196, 0.1, 0.5, WOOD);
-    }
+    // One sound for it whatever the tone, and nothing like wood (けにーさん
+    // 10-24「重複時は違う音の方がいい」: コトッ played lower was heard as the
+    // same): two soft round notes going down, "already in", not a buzzer.
+    sine(audio, audio.destination, 587.33, 0, 0.11, 0.22);
+    sine(audio, audio.destination, 440, 0.13, 0.16, 0.22);
     return;
   }
   const pitch = sway(0.06);
