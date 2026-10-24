@@ -8,14 +8,19 @@ import { counted } from "../lib/words";
 // under the scanner's 「N冊 登録済み」, one more with each book read. A book
 // on its way is faint until its saving is confirmed; one that waits for the
 // reader is not on it. Ten fill a 段: the 段 before it fold into 「1段」,
-// 「2段」. 完了 shows the same books larger, every 段 stacked. A picture
-// only: the words beside it say the count.
+// 「2段」, and lie under it as thin bands of their books' colours, so the
+// shelf keeps growing past ten (通し確認 2026-10-24). 完了 shows the same
+// books larger, every 段 stacked. A picture only: the words beside it say
+// the count.
 
 /** Books on one 段 of the shelf. */
 export const SHELF_ROW = 10;
 
 /** 完了 shows at most these 段, the newest. */
 const LARGE_ROWS = 5;
+
+/** The scanner draws at most these folded 段 as bands, the newest. */
+const BANDS = 3;
 
 export type Spine = {
   id: string;
@@ -62,6 +67,20 @@ function Row({ books }: { books: readonly Spine[] }) {
   );
 }
 
+/** A folded 段 as a thin band: its books' colours, side by side. */
+function Band({ books }: { books: readonly Spine[] }) {
+  return (
+    <span className="scan-shelf-band">
+      {books.map((book) => (
+        <span
+          key={book.id}
+          style={{ "--spine": book.color } as CSSProperties}
+        />
+      ))}
+    </span>
+  );
+}
+
 /** Oldest first. Nothing at all while the shelf is empty. */
 export function ScanShelf({
   books,
@@ -88,12 +107,25 @@ export function ScanShelf({
     );
   }
   const folded = foldedRows(books.length);
+  // The newest folded 段 right under the one in sight.
+  const bands: Spine[][] = [];
+  for (let row = folded - 1; row >= Math.max(0, folded - BANDS); row--)
+    bands.push(books.slice(row * SHELF_ROW, (row + 1) * SHELF_ROW));
   return (
     <div className="scan-shelf" aria-hidden="true">
       {folded > 0 && (
         <span className="scan-shelf-folded">{counted(folded, "段")}</span>
       )}
-      <Row books={books.slice(folded * SHELF_ROW)} />
+      <span className="scan-shelf-case">
+        <Row books={books.slice(folded * SHELF_ROW)} />
+        {bands.length > 0 && (
+          <span className="scan-shelf-bands">
+            {bands.map((band) => (
+              <Band key={band[0].id} books={band} />
+            ))}
+          </span>
+        )}
+      </span>
     </div>
   );
 }
