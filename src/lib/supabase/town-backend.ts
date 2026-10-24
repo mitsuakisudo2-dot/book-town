@@ -666,7 +666,11 @@ export async function loadTown(
 ): Promise<{
   state: TownState;
   ids: RemoteIds;
-  ownBooksKnown: boolean;
+  /**
+   * The person's own books typed in, each with the book it copies (my_books);
+   * undefined from a database without it, which tells none apart.
+   */
+  myBooks: ReadonlyMap<string, string | null> | undefined;
   /** Of what the person saves whole; none from a database without them. */
   versions: Versions;
 }> {
@@ -675,8 +679,9 @@ export async function loadTown(
   return {
     state: townFromRows({ ...read.rows, seenNotifications }, ids),
     ids,
-    // Whether the town tells the person's own books from others' (my_books).
-    ownBooksKnown: read.rows.myBooks !== undefined,
+    myBooks:
+      read.rows.myBooks &&
+      new Map(read.rows.myBooks.map((row) => [row.id, row.copied_from])),
     versions: read.versions,
   };
 }
@@ -805,8 +810,11 @@ function remoteReads(
   client: Client,
   userId: string | null,
   town: () => TownState | null,
-  ownBooksKnown: () => boolean = () => false,
+  myBooks: () => ReadonlyMap<string, string | null> | undefined = () =>
+    undefined,
 ): Required<Pick<TownBackend, "newer" | "older" | "post" | "more">> {
+  // Whether the town tells the person's own books from others' (my_books).
+  const ownBooksKnown = () => myBooks() !== undefined;
   const complete = (rows: PostRow[]) =>
     arrivedFor(client, rows, town(), userId, ownBooksKnown());
   const posts = (count?: "exact") =>
@@ -1007,13 +1015,14 @@ function remoteReads(
         // what the catalog takes first (note_missing_isbn). Nothing waits
         // on it, and a failure changes nothing.
         if (asked.isbn && books.length === 0)
-          void client
-            .rpc("note_missing_isbn", { isbn: asked.isbn })
-            .then(() => undefined, () => undefined);
+          void client.rpc("note_missing_isbn", { isbn: asked.isbn }).then(
+            () => undefined,
+            () => undefined,
+          );
         return moreFromRows(
           { records: [], nine: [], books },
           userId,
-          ownBooksKnown(),
+          myBooks(),
         );
       } else if ("counts" in ask) {
         // How often the town's books are shelved and talked of, of all
@@ -1090,7 +1099,7 @@ function remoteReads(
       return moreFromRows(
         { ...rows, books: await booksByIds(client, missing) },
         userId,
-        ownBooksKnown(),
+        myBooks(),
       );
     },
     async post(id) {
@@ -1543,7 +1552,7 @@ export function accountTownBackend(
   const storage = options.storage ?? typeof window !== "undefined";
   const device = options.device ?? (storage ? undefined : null);
   let ids: RemoteIds | null = null;
-  let ownBooksKnown = false;
+  let myBooks: ReadonlyMap<string, string | null> | undefined;
   // Whether the database counts versions (write_versions), as last read.
   let versioned = false;
   const sync = backgroundSync<TownState, Write>(
@@ -1556,7 +1565,7 @@ export function accountTownBackend(
           () => ids?.shopId ?? crypto.randomUUID(),
         );
         ids = loaded.ids;
-        ownBooksKnown = loaded.ownBooksKnown;
+        myBooks = loaded.myBooks;
         versioned = "nine" in loaded.versions;
         // The 見本 keep the town from feeling empty while few have opened a
         // shop; they are left out of what is written (planWrites).
@@ -1602,7 +1611,7 @@ export function accountTownBackend(
     save: sync.save,
     watch: sync.watch,
     absorb: sync.absorb,
-    ...remoteReads(client, userId, sync.current, () => ownBooksKnown),
+    ...remoteReads(client, userId, sync.current, () => myBooks),
     close: sync.close,
   };
 }

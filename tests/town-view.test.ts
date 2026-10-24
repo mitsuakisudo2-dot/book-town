@@ -223,7 +223,7 @@ async function main() {
       assert.deepEqual(viewed.state, withoutOthersWords(tabled.state));
       assert.deepEqual(viewed.ids, tabled.ids);
       assert.deepEqual(viewed.versions, tabled.versions);
-      assert.equal(viewed.ownBooksKnown, tabled.ownBooksKnown);
+      assert.deepEqual(viewed.myBooks, tabled.myBooks);
     },
   );
 
