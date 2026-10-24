@@ -1135,6 +1135,7 @@ body:has(.scan-session) .toast {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  margin-bottom: 12px;
 }
 .scan-shelf.is-large .scan-shelf-row {
   width: auto;
