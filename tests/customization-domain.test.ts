@@ -71,6 +71,8 @@ const shop: Shop = {
 };
 const before = JSON.stringify(shop);
 const scene = migrateShopScene(shop, books);
+/** The tier the shop's few books stand on (the middle one, 管理表 113). */
+const bookRow = objectById(scene, "placement:mine:a")!.parentId!;
 check(
   "migration preserves legacy data and private items without publishing them",
   () => {
@@ -111,7 +113,10 @@ check(
 );
 check("switching furniture cannot publish a previously private row", () => {
   const hidden = structuredClone(scene);
-  objectById(hidden, "row-0")!.isPublic = false;
+  objectById(
+    hidden,
+    objectById(scene, "placement:mine:a")!.parentId!,
+  )!.isPublic = false;
   const changed = applyStoreTemplate(hidden, "window", books);
   assert.equal(objectById(changed, "placement:mine:a")!.isPublic, false);
   assert.ok(
@@ -125,7 +130,7 @@ check(
     objectById(hidden, "main-shelf")!.placed = false;
     assert.equal(publicScenePops([hidden]).length, 0);
     const implicit = structuredClone(scene);
-    delete objectById(implicit, "row-0")!.isPublic;
+    delete objectById(implicit, bookRow)!.isPublic;
     assert.ok(
       !publicStoreScene(implicit).objects.some(
         (o) => o.id === "placement:mine:a",
@@ -216,15 +221,16 @@ check("explicit reordering inserts at the intended left-to-right index", () => {
     { display: "spine" },
     books,
   );
-  next = addBookPlacement(next, books[2], "row-0", "extra-1", "spine", 1);
-  next = addBookPlacement(next, books[3], "row-0", "extra-2", "spine", 2);
-  next = insertPlacement(next, "extra-2", "row-0", 0);
+  next = addBookPlacement(next, books[2], bookRow, "extra-1", "spine", 1);
+  next = addBookPlacement(next, books[3], bookRow, "extra-2", "spine", 2);
+  next = insertPlacement(next, "extra-2", bookRow, 0);
   assert.deepEqual(
     next.objects
-      .filter((o) => o.kind === "book" && o.parentId === "row-0")
+      .filter((o) => o.kind === "book" && o.parentId === bookRow)
       .sort((a, b) => a.order! - b.order!)
       .map((o) => o.id),
-    ["extra-2", "placement:mine:a", "placement:mine:b", "extra-1"],
+    // Both books stand as covers; the one with a POP stands last among them.
+    ["extra-2", "placement:mine:b", "placement:mine:a", "extra-1"],
   );
   assert.deepEqual(validateScene(next), []);
 });
@@ -352,10 +358,18 @@ check(
     });
     const reopened = migrateShopScene(later, books, managed);
     // What the scene had is untouched: template, rows, POPs, privacy, order.
-    assert.deepEqual(
-      reopened.objects.slice(0, managed.objects.length),
-      managed.objects,
-    );
+    // Only a centred row's books step aside to make room for the new one.
+    const kept = (s: typeof managed) =>
+      s.objects
+        .slice(0, managed.objects.length)
+        .map((o) =>
+          o.kind === "book" &&
+          o.parentId &&
+          objectById(s, o.parentId)!.align === "center"
+            ? { ...o, rect: { ...o.rect, x: 0 } }
+            : o,
+        );
+    assert.deepEqual(kept(reopened), kept(managed));
     assert.equal(reopened.templateId, "study");
     const c = objectById(reopened, "placement:mine:c")!;
     assert.notEqual(c.parentId, null);

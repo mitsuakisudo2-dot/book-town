@@ -1839,7 +1839,7 @@ try {
   );
 
   await check(
-    "a new shop's few books stand together under one chalkboard",
+    "a new shop's few books stand together at eye level under one chalkboard",
     async () => {
       await go("/walk/#mine");
       await expect(page.locator(".walk-sign")).toContainText("雨音書店");
@@ -1850,7 +1850,8 @@ try {
       await expect(
         page.getByRole("button", { name: "この店が好き" }),
       ).toHaveCount(0);
-      await expect(page.locator('[data-row="row-0"] .walk-book')).toHaveCount(
+      // They stand on the middle tier while it holds them (管理表 113).
+      await expect(page.locator('[data-row="row-1"] .walk-book')).toHaveCount(
         5,
       );
       await expect(page.locator(".walk-row-board")).toHaveCount(1);

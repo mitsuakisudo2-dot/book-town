@@ -323,6 +323,7 @@ export function applyStoreTemplate(
     if (oldRows[i]?.boardTitle !== undefined)
       row.boardTitle = oldRows[i].boardTitle;
     if (oldRows[i]?.doodle !== undefined) row.doodle = oldRows[i].doodle;
+    if (oldRows[i]?.align !== undefined) row.align = oldRows[i].align;
   });
   for (const kind of ["sign", "ownerPop", "stamp"] as const) {
     const original = scene.objects.find((o) => o.kind === kind),

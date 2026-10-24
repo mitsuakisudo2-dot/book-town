@@ -13,11 +13,11 @@
   "/posters/new/": 254,
   "/profile/": 254,
   "/profiles/[id]/": 291,
-  "/reading-list/": 252,
+  "/reading-list/": 255,
   "/reading/": 268,
   "/search/": 266,
   "/shop/": 254,
   "/shops/[id]/": 264,
   "/timeline/": 282,
-  "/walk/": 277
+  "/walk/": 280
 }
