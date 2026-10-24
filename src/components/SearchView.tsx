@@ -41,7 +41,7 @@ import { profilePath, shopPath } from "../lib/paths";
 import { useMoreRead, useTownBackend, useTownMore } from "../lib/store";
 import { authorAndKind, bookById, bookTitle } from "../lib/book-name";
 import { counted, REGISTER, whenSome, NAMES } from "../lib/words";
-import { RegisterBook } from "./RegisterBook";
+import { InLibraryMark, RegisterBook } from "./RegisterBook";
 import { BarcodeRegister } from "./BarcodeRegister";
 import dynamic from "next/dynamic";
 
@@ -263,7 +263,11 @@ export function SearchView({ state, actions, notify }: Shared) {
   const bookRow = (book: Book, meta: string) => (
     <li key={book.id} className="search-book-row">
       <Link href={bookPath(book.id)} className="search-book">
-        <BookJacket book={book} className="search-jacket" />
+        <BookJacket
+          book={book}
+          className="search-jacket"
+          mark={<InLibraryMark book={book} state={state} />}
+        />
         <span>
           <b>{bookTitle(book)}</b>
           <small>{authorAndKind(book)}</small>

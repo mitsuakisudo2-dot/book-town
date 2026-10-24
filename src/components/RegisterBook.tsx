@@ -49,6 +49,8 @@ export function RegisterBook({
         : REGISTER.undone(quotedTitle(book)),
     );
   };
+  const done = short ? REGISTER.doneTap : REGISTER.done;
+  const undone = short ? REGISTER.tap : REGISTER.button;
   const close = () => setAsking(null);
   const choices = (remove: () => void) => (
     <div className="btns">
@@ -64,9 +66,10 @@ export function RegisterBook({
     <>
       <button
         type="button"
+        // Still a button once in (114): pressed again it asks to take it out.
         className={[
           "btn",
-          registered ? "quiet" : "soft",
+          registered ? "is-in" : "soft",
           "register-book",
           className,
         ]
@@ -80,13 +83,12 @@ export function RegisterBook({
         onClick={() => (registered ? setAsking("remove") : toggle())}
       >
         <Icon name={registered ? "check" : "plus"} size={18} />
-        {registered
-          ? short
-            ? REGISTER.doneTap
-            : REGISTER.done
-          : short
-            ? REGISTER.tap
-            : REGISTER.button}
+        {/* As wide as the longer of its two names, so pressing it moves
+            nothing beside it (検索's row keeps its height, 114). */}
+        <span className="register-label">
+          <span>{registered ? done : undone}</span>
+          <span aria-hidden="true">{registered ? undone : done}</span>
+        </span>
       </button>
       {asking === "remove" && (
         <Modal title={REGISTER.removeAsk} onClose={close}>
@@ -117,5 +119,32 @@ export function RegisterBook({
         </Modal>
       )}
     </>
+  );
+}
+
+/**
+ * The ✓ on the cover of a book in the reader's library, beside 登録 (114
+ * 本を登録する瞬間): where the eye already is, the book itself says it is
+ * in. It comes in with a small bounce only when it was put in on this
+ * screen. A picture only: 登録's button says it.
+ */
+export function InLibraryMark({
+  book,
+  state,
+}: {
+  book: Book;
+  state: TownState;
+}) {
+  const registered = holds(state, state.library, book.id);
+  const [seenOut, setSeenOut] = useState(!registered);
+  if (!registered && !seenOut) setSeenOut(true);
+  if (!registered) return null;
+  return (
+    <span
+      className={"in-library-mark" + (seenOut ? " is-new" : "")}
+      aria-hidden="true"
+    >
+      <Icon name="check" />
+    </span>
   );
 }

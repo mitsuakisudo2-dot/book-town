@@ -818,7 +818,13 @@ try {
       const notice = page.locator(".toast");
       await expect(notice).toContainText("『銀河鉄道の夜』を登録しました");
       await expect(tap).toHaveAttribute("aria-pressed", "true");
-      await expect(tap).toContainText("登録済み");
+      // The name shown (the other is laid under it, unseen, for its width),
+      // and the ✓ on the cover beside it (114).
+      const shown = (button) =>
+        button.locator(".register-label > span:not([aria-hidden])");
+      const foundRow = page.locator(".search-book-row").filter({ has: tap });
+      await expect(shown(tap)).toHaveText("登録済み");
+      await expect(foundRow.locator(".in-library-mark")).toHaveCount(1);
       // Taking it out is asked first; 外さない leaves it in.
       await tap.click();
       const ask = page.getByRole("dialog", {
@@ -833,21 +839,27 @@ try {
         "『銀河鉄道の夜』の登録を取り消しました",
       );
       await expect(tap).toHaveAttribute("aria-pressed", "false");
+      await expect(shown(tap)).toHaveText("登録");
+      await expect(foundRow.locator(".in-library-mark")).toHaveCount(0);
       // On its page the same: ライブラリに登録, then ライブラリに登録済み, and back.
       await found.first().click();
       const onPage = page.getByRole("button", {
         name: "ライブラリに登録",
         exact: true,
       });
+      const coverMark = page.locator(".book-page-hero .in-library-mark");
+      await expect(coverMark).toHaveCount(0);
       await onPage.click();
       await expect(onPage).toHaveAttribute("aria-pressed", "true");
-      await expect(onPage).toContainText("ライブラリに登録済み");
+      await expect(shown(onPage)).toHaveText("ライブラリに登録済み");
+      await expect(coverMark).toHaveCount(1);
       await onPage.click();
       await page
         .getByRole("dialog", { name: "本当にライブラリから外しますか？" })
         .getByRole("button", { name: "ライブラリから外す" })
         .click();
       await expect(onPage).toHaveAttribute("aria-pressed", "false");
+      await expect(coverMark).toHaveCount(0);
       // A book read is asked about once more, saying so.
       await onPage.click();
       await expect(onPage).toHaveAttribute("aria-pressed", "true");
@@ -1887,7 +1899,11 @@ try {
       );
       await expect(
         picker.locator(".editor-picker-group").allTextContents(),
-      ).resolves.toEqual(["本のページから選んだ本", "あなたのライブラリ", "街の本"]);
+      ).resolves.toEqual([
+        "本のページから選んだ本",
+        "あなたのライブラリ",
+        "街の本",
+      ]);
       await chosen.locator(".editor-book-choice").click();
       await expect(chosen.locator(".editor-book-choice")).toHaveAttribute(
         "aria-pressed",

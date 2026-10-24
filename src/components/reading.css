@@ -109,6 +109,54 @@
   padding: 4px 8px;
   font-size: var(--t-cap);
 }
+/* 登録 and 登録済み take the same room (114): the longer name is laid
+   under the shown one, unseen, so the row beside it never moves. */
+.register-label {
+  display: inline-grid;
+  justify-items: center;
+}
+.register-label > span {
+  grid-area: 1 / 1;
+}
+.register-label > [aria-hidden] {
+  visibility: hidden;
+}
+/* The ✓ on a book's cover once it is in the library (114, InLibraryMark):
+   a small round seal on the corner, as large as the cover allows. */
+.in-library-mark {
+  position: absolute;
+  z-index: 4;
+  right: 6%;
+  bottom: 4%;
+  display: grid;
+  place-items: center;
+  width: max(16px, 22%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--green);
+  color: var(--on-green);
+  border: 2px solid var(--sheet);
+  box-shadow: var(--lift-1);
+}
+.in-library-mark svg {
+  width: 72%;
+  height: 72%;
+  stroke-width: 3;
+}
+.in-library-mark.is-new {
+  animation: in-library-in var(--dur-grow) var(--ease-arrive);
+}
+@keyframes in-library-in {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .in-library-mark.is-new {
+    animation: none;
+  }
+}
 /* Nothing found: the ways to register it anyway (AUD-051). */
 .search-add {
   display: grid;
@@ -153,7 +201,8 @@
   width: 38px;
   flex-shrink: 0;
 }
-.book-jacket.search-jacket > span:not(.jacket-edge):not(.jacket-art) {
+.book-jacket.search-jacket
+  > span:not(.jacket-edge):not(.jacket-art):not(.in-library-mark) {
   display: none;
 }
 .search-shop > svg:first-child {
