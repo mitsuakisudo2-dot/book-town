@@ -635,6 +635,131 @@ async function main() {
   );
 
   await check(
+    "the reader's own shop is read beside the town, not after it",
+    async () => {
+      const seed = small();
+      const own = seed.shops.find((shop) => shop.owner_id === AKI) as Row;
+      const ben = seed.profiles[1].id as string;
+      seed.shop_private.push({
+        shop_id: own.id,
+        shelves: [
+          {
+            id: "secret",
+            name: "ひみつの棚",
+            capacity: 20,
+            isPublic: false,
+            items: [],
+          },
+        ],
+        scene: null,
+        scene_books: [],
+        shelves_version: 5,
+      });
+      seed.shop_follows = [
+        { follower_id: ben, shop_id: own.id, created_at: at(1) },
+      ];
+      seed.shop_reactions = [
+        {
+          user_id: ben,
+          shop_id: own.id,
+          liked: true,
+          message: "また来ます",
+          updated_at: at(2),
+        },
+        // Ben's word to another shop is not Aki's to read.
+        {
+          user_id: ben,
+          shop_id: (seed.shops.find((shop) => shop.owner_id !== AKI) as Row).id,
+          liked: true,
+          message: "よその店へ",
+          updated_at: at(3),
+        },
+      ];
+      const fake = fakeSupabase(AKI, seed, { versions: true, townView: true });
+      const asked: string[] = [];
+      const client = new Proxy(fake.client, {
+        get(target, key, receiver) {
+          const value = Reflect.get(target, key, receiver);
+          if (key !== "from" && key !== "rpc") return value;
+          return (name: string, ...rest: unknown[]) => {
+            asked.push(String(key) + ":" + name);
+            const request = (value as (...args: unknown[]) => unknown).call(
+              target,
+              name,
+              ...rest,
+            );
+            if (name === "town_view")
+              (request as PromiseLike<unknown>).then(() =>
+                asked.push("answered:town_view"),
+              );
+            return request;
+          };
+        },
+      });
+      const { state, versions } = await loadTown(client, AKI, [], () => "shop");
+      for (const name of [
+        "from:shop_private",
+        "from:shop_follows",
+        "from:shop_reactions",
+        "rpc:shop_visitors",
+      ])
+        assert.ok(
+          asked.lastIndexOf(name) < asked.indexOf("answered:town_view"),
+          name + " asked before the town came",
+        );
+      assert.equal(
+        asked.filter((name) => name === "from:shop_private").length,
+        1,
+      );
+      assert.deepEqual(
+        state.ownShop?.shelves.map((shelf) => shelf.name),
+        ["ひみつの棚"],
+      );
+      assert.equal(state.ownShop?.followers, 1);
+      assert.deepEqual(
+        state.shopMessages.map((message) => message.text),
+        ["また来ます"],
+      );
+      assert.equal(versions.shelves, 5);
+
+      // A shop with no private row yet: empty, as before, and not read again.
+      seed.shop_private = [];
+      const none = counted(
+        fakeSupabase(AKI, seed, { versions: true, townView: true }),
+      );
+      const empty = await loadTown(none.client, AKI, [], () => "shop");
+      assert.deepEqual(empty.state.ownShop?.shelves, []);
+      assert.equal(empty.versions.shelves, 0);
+      assert.equal(
+        none.asked.filter((name) => name === "from:shop_private").length,
+        1,
+      );
+
+      // An answer of another shop than the town names (one replaced
+      // between the two) is read again by the town's.
+      seed.shops.push({ ...own, id: uuid(3, 999), created_at: at(9_999) });
+      seed.shop_private = [
+        {
+          shop_id: uuid(3, 999),
+          shelves: [{ id: "x", name: "別の棚", items: [] }],
+          scene: null,
+          scene_books: [],
+        },
+      ];
+      const other = counted(
+        fakeSupabase(AKI, seed, { versions: true, townView: true }),
+      );
+      const again = await loadTown(other.client, AKI, [], () => "shop");
+      assert.equal(again.ids.shopId, own.id);
+      assert.deepEqual(again.state.ownShop?.shelves, []);
+      assert.equal(
+        other.asked.filter((name) => name === "from:shop_private").length,
+        2,
+      );
+    },
+  );
+
+  await check(
     "a town of 10,000 readers is a handful of requests, and put together in time (AUD-048)",
     async () => {
       const seed = madeUpTown(10_000, 80_000);

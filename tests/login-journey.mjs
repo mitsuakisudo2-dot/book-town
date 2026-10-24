@@ -2124,11 +2124,15 @@ try {
           url.pathname === "/rest/v1/rpc/book_holds"
         )
           return route.fallback();
-        // Which books the reader typed in (my_books), and the town itself
-        // (town_view, town_books), are asked for with POST, and wait too.
+        // Which books the reader typed in (my_books), the town itself
+        // (town_view, town_books) and last week's visitors to their shop
+        // (shop_visitors) are asked for with POST, and wait too, as does
+        // the count of the shop's followers (HEAD).
         const read =
           request.method() === "GET" ||
+          request.method() === "HEAD" ||
           url.pathname === "/rest/v1/rpc/my_books" ||
+          url.pathname === "/rest/v1/rpc/shop_visitors" ||
           url.pathname === "/rest/v1/rpc/town_view" ||
           url.pathname === "/rest/v1/rpc/town_books";
         if (!read) {
@@ -2209,11 +2213,15 @@ try {
           url.pathname === "/rest/v1/rpc/book_holds"
         )
           return route.fallback();
-        // Which books the reader typed in (my_books), and the town itself
-        // (town_view, town_books), are asked for with POST, and wait too.
+        // Which books the reader typed in (my_books), the town itself
+        // (town_view, town_books) and last week's visitors to their shop
+        // (shop_visitors) are asked for with POST, and wait too, as does
+        // the count of the shop's followers (HEAD).
         const read =
           request.method() === "GET" ||
+          request.method() === "HEAD" ||
           url.pathname === "/rest/v1/rpc/my_books" ||
+          url.pathname === "/rest/v1/rpc/shop_visitors" ||
           url.pathname === "/rest/v1/rpc/town_view" ||
           url.pathname === "/rest/v1/rpc/town_books";
         if (!read) {

@@ -347,6 +347,17 @@ export function fakeSupabase(
       return this;
     }
     eq(column: string, value: unknown) {
+      // A column of the row another points to: "shops.owner_id" is the
+      // owner of the shop shop_id names (an inner embed, shops!inner).
+      const [to, of] = column.split(".");
+      if (of !== undefined) {
+        const key = to.replace(/s$/, "") + "_id";
+        return this.where((row) =>
+          table(to).some(
+            (other) => other.id === row[key] && other[of] === value,
+          ),
+        );
+      }
       return this.where((row) => row[column] === value);
     }
     neq(column: string, value: unknown) {
