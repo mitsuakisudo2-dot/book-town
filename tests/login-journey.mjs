@@ -2235,6 +2235,19 @@ try {
       await page.setViewportSize({ width: 320, height: 640 });
       await noOverflow("series sheet at 320");
       await view("13-series-picked-320");
+      // Nothing that scrolls under the button shows beneath it (通し確認 10-24).
+      await sheet
+        .getByRole("radio", { name: "読了" })
+        .evaluate((chip) => chip.scrollIntoView({ block: "end" }));
+      await view("13-series-picked-320-middle");
+      const gap = await page
+        .locator(".series-foot")
+        .evaluate(
+          (foot) =>
+            foot.closest(".modal").getBoundingClientRect().bottom -
+            foot.getBoundingClientRect().bottom,
+        );
+      expect(gap).toBeLessThanOrEqual(1);
       await sheet
         .getByRole("radio", { name: "持ってない" })
         .scrollIntoViewIfNeeded();
