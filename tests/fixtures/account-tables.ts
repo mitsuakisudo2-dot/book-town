@@ -198,6 +198,25 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   "private.series_keys": { people: {}, readers: "nobody" },
   "private.series_stale": { people: {}, readers: "nobody" },
   "private.bib_providers": { people: {}, readers: "nobody" },
+  // People and genres (people): who made an edition, the people BookTown
+  // knows, their other names, what the operator decided, and the genres.
+  // Their people are authors, not accounts: they name no one. What a reader
+  // typed as the author of a book without an ISBN goes with the book.
+  "public.people": { people: {}, readers: "nobody" },
+  "public.edition_people": { people: {}, readers: "nobody" },
+  "public.person_links": { people: {}, readers: "nobody" },
+  "private.people_placed": { people: {}, readers: "nobody" },
+  "private.people_decisions": {
+    people: {},
+    // The author, edition and work a person decided about.
+    notPeople: ["person_id", "edition_id", "work_id"],
+    readers: "nobody",
+  },
+  "private.people_stale": { people: {}, readers: "nobody" },
+  "private.genres": { people: {}, readers: "nobody" },
+  "private.genre_ndc": { people: {}, readers: "nobody" },
+  "public.edition_facts": { people: {}, readers: "nobody" },
+  "private.work_genre_fixed": { people: {}, readers: "nobody" },
   // The bibliographic master (bibliography): what each source said about an
   // edition, the operator's corrections, when each book was placed in its
   // edition, and the operator's list of what to look at. They name no one.

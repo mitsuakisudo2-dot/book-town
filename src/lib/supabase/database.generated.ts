@@ -283,6 +283,85 @@ export type Database = {
         };
         Relationships: [];
       };
+      edition_facts: {
+        Row: {
+          edition_id: string;
+          issued: string | null;
+          ndc: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          edition_id: string;
+          issued?: string | null;
+          ndc?: string | null;
+        };
+        Update: {
+          edition_id?: string;
+          issued?: string | null;
+          ndc?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "edition_facts_edition_id_fkey";
+            columns: ["edition_id"];
+            isOneToOne: true;
+            referencedRelation: "editions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      edition_people: {
+        Row: {
+          edition_id: string;
+          name: string;
+          name_key: string;
+          person_id: string | null;
+          reading: string | null;
+          role: string | null;
+          roles: string[];
+          seq: number;
+          source: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          edition_id: string;
+          name: string;
+          name_key: string;
+          person_id?: string | null;
+          reading?: string | null;
+          role?: string | null;
+          roles?: string[];
+          seq: number;
+          source: string;
+        };
+        Update: {
+          edition_id?: string;
+          name?: string;
+          name_key?: string;
+          person_id?: string | null;
+          reading?: string | null;
+          role?: string | null;
+          roles?: string[];
+          seq?: number;
+          source?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "edition_people_edition_id_fkey";
+            columns: ["edition_id"];
+            isOneToOne: false;
+            referencedRelation: "editions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "edition_people_person_id_fkey";
+            columns: ["person_id"];
+            isOneToOne: false;
+            referencedRelation: "people";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       editions: {
         Row: {
           created_at: string;
@@ -525,6 +604,85 @@ export type Database = {
           target_kind?: string;
         };
         Relationships: [];
+      };
+      people: {
+        Row: {
+          authority: string | null;
+          created_at: string;
+          id: string;
+          made_by: string;
+          merged_into: string | null;
+          name: string;
+          name_key: string;
+          name_reading: string | null;
+          named_by: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          authority?: string | null;
+          created_at?: string;
+          id?: string;
+          made_by: string;
+          merged_into?: string | null;
+          name: string;
+          name_key: string;
+          name_reading?: string | null;
+          named_by?: string;
+        };
+        Update: {
+          authority?: string | null;
+          created_at?: string;
+          id?: string;
+          made_by?: string;
+          merged_into?: string | null;
+          name?: string;
+          name_key?: string;
+          name_reading?: string | null;
+          named_by?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "people_merged_into_fkey";
+            columns: ["merged_into"];
+            isOneToOne: false;
+            referencedRelation: "people";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      person_links: {
+        Row: {
+          decided_at: string;
+          other_id: string;
+          person_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          decided_at?: string;
+          other_id: string;
+          person_id: string;
+        };
+        Update: {
+          decided_at?: string;
+          other_id?: string;
+          person_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "person_links_other_id_fkey";
+            columns: ["other_id"];
+            isOneToOne: false;
+            referencedRelation: "people";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "person_links_person_id_fkey";
+            columns: ["person_id"];
+            isOneToOne: false;
+            referencedRelation: "people";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       pop_reactions: {
         Row: {
@@ -1612,6 +1770,17 @@ export type Database = {
           title: string;
         }[];
       };
+      books_of_person: {
+        Args: { person: string };
+        Returns: {
+          book_id: string;
+          isbn: string;
+          issued: string;
+          printed_name: string;
+          roles: string[];
+          title: string;
+        }[];
+      };
       can_annotate: { Args: Record<PropertyKey, never>; Returns: boolean };
       confirm_book_isbn: { Args: { book: string }; Returns: undefined };
       copy_book: {
@@ -1645,6 +1814,19 @@ export type Database = {
         }[];
       };
       note_missing_isbn: { Args: { isbn: string }; Returns: undefined };
+      people_for_isbn: {
+        Args: { isbn: string };
+        Returns: {
+          name: string;
+          other_people: Json;
+          person_id: string;
+          person_name: string;
+          person_reading: string;
+          role: string;
+          roles: string[];
+          seq: number;
+        }[];
+      };
       public_scene_of: { Args: { scene: Json; shop: string }; Returns: Json };
       replace_profile_nine: {
         Args: { book_ids: string[]; notes: string[] };
