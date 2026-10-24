@@ -198,9 +198,18 @@ export function TopCarousel({
         ) : (
           <div className="home-slide">
             <Art index={0} />
+            {/* Someone not signed in is welcomed whatever the town holds:
+                their first slide is drawn with the page, not after the
+                town is read (home-early, home.css). */}
+            <div className="home-early">
+              <WelcomeBody />
+            </div>
           </div>
         )}
       </div>
+      {!slides && (
+        <div className="home-carousel-nav home-early-nav" aria-hidden="true" />
+      )}
       {count > 1 && (
         <div className="home-carousel-nav">
           <span className="home-carousel-dots" aria-hidden="true">
@@ -226,27 +235,30 @@ export function TopCarousel({
   );
 }
 
+/** The welcome: the first slide of someone new, and of someone not signed in. */
+const WelcomeBody = () => (
+  <>
+    <div className="home-slide-text">
+      <p className="home-slide-title">
+        棚をのぞくと、
+        <br />
+        人に出会う。
+      </p>
+      <p className="home-slide-meta">
+        本好きが一人ずつ小さな書店を開いている街です。登録しなくても見られます。
+      </p>
+    </div>
+    <Link href={walkPath()} className="home-slide-go">
+      歩いてみる
+      <Icon name="chevron" size={18} />
+    </Link>
+  </>
+);
+
 function SlideBody({ slide, state }: { slide: Slide; state: TownState }) {
   switch (slide.kind) {
     case "welcome":
-      return (
-        <>
-          <div className="home-slide-text">
-            <p className="home-slide-title">
-              棚をのぞくと、
-              <br />
-              人に出会う。
-            </p>
-            <p className="home-slide-meta">
-              本好きが一人ずつ小さな書店を開いている街です。登録しなくても見られます。
-            </p>
-          </div>
-          <Link href={walkPath()} className="home-slide-go">
-            歩いてみる
-            <Icon name="chevron" size={18} />
-          </Link>
-        </>
-      );
+      return <WelcomeBody />;
     case "tonight":
       return (
         <>

@@ -222,13 +222,36 @@ html[data-home-tab="letters"]
   font-weight: 700;
   white-space: nowrap;
 }
-.home-slide.is-welcome .home-slide-text {
+.home-slide.is-welcome .home-slide-text,
+.home-early .home-slide-text {
   right: 16px;
   bottom: 66px;
 }
-.home-slide.is-welcome .home-slide-go {
+.home-slide.is-welcome .home-slide-go,
+.home-early .home-slide-go {
   left: 16px;
   right: auto;
+}
+/* While the town is read, what someone not signed in sees whatever it
+   holds (the welcome, their doors, はじめの3つ) is drawn with the page;
+   the head marks them before the first paint (data-visitor, VISITOR_BOOT).
+   Anyone else sees the shapes that wait, as before. */
+.home-early,
+.home-entrance.home-early,
+.home-early-nav {
+  display: none;
+}
+:root[data-visitor] .home-early {
+  display: contents;
+}
+:root[data-visitor] .home-entrance.home-early {
+  display: grid;
+}
+:root[data-visitor] .home-early-nav {
+  display: flex;
+}
+:root[data-visitor] .home-entrance.is-waiting {
+  display: none;
 }
 .home-slide-show {
   top: 14px;

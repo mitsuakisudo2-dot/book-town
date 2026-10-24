@@ -5,7 +5,7 @@ import {
   supabasePublishableKey,
   supabaseUrl,
 } from "../lib/supabase/config";
-import { townAheadScript } from "../lib/supabase/town-ahead";
+import { townAheadScript, VISITOR_BOOT } from "../lib/supabase/town-ahead";
 import { TOWN_VIEW_ARGS } from "../lib/supabase/town-backend";
 import { APPEARANCE_BOOT } from "../lib/appearance";
 import { HOME_TAB_BOOT } from "../lib/home-tab";
@@ -97,6 +97,11 @@ export default function RootLayout({
         {/* Before the first paint: which Home tab opens, so the other tab's
             blocks stay hidden while the town loads (home-tab.ts). */}
         <script dangerouslySetInnerHTML={{ __html: HOME_TAB_BOOT }} />
+        {/* Before the first paint too: someone not signed in sees Home's
+            welcome and doors at once (town-ahead.ts). */}
+        {supabaseConfigured && (
+          <script dangerouslySetInnerHTML={{ __html: VISITOR_BOOT }} />
+        )}
         {/* Before the first paint too: the palette chosen in 設定
             (appearance.ts), so 深緑 never flashes first. */}
         <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT }} />
