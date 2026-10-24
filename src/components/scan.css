@@ -1085,3 +1085,78 @@ body:has(.scan-session) .toast {
     transition: none;
   }
 }
+
+/* この回の棚 (ScanShelf.tsx, 114): this time's books as spines on a small
+   shelf under the count, ten to a 段; 完了 shows it larger. Each spine has
+   the book's own colour (--spine) and a share of the shelf's height and of
+   the widest spine (--spine-tall, --spine-wide). With the larger words, or
+   little height, the count is said alone (けにーさん 2026-10-23). */
+.scan-shelf {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+.scan-shelf-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  width: 82px;
+  height: 18px;
+  padding: 0 3px;
+  border-bottom: 3px solid var(--cork);
+}
+.scan-spine {
+  flex: none;
+  width: calc(7px * var(--spine-wide));
+  height: calc(100% * var(--spine-tall));
+  border-radius: var(--r-edge) var(--r-edge) 0 0;
+  background: var(--spine);
+  transform-origin: bottom;
+  animation: scan-spine-in var(--dur-grow) var(--ease-arrive);
+}
+.scan-spine.is-faint {
+  opacity: 0.35;
+}
+.scan-shelf-folded {
+  font-size: var(--t-cap);
+  line-height: 1;
+  color: var(--ink-2);
+  padding-bottom: 3px;
+}
+@keyframes scan-spine-in {
+  from {
+    transform: translateY(-12px);
+    opacity: 0;
+  }
+}
+.scan-shelf.is-large {
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.scan-shelf.is-large .scan-shelf-row {
+  width: auto;
+  height: 52px;
+  gap: 2px;
+  padding: 0 6px;
+  border-bottom-width: 6px;
+}
+.scan-shelf.is-large .scan-spine {
+  width: calc(18px * var(--spine-wide));
+  animation: none;
+}
+:root[data-text] .scan-shelf:not(.is-large) {
+  display: none;
+}
+@media (max-height: 560px) {
+  .scan-shelf:not(.is-large) {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-spine {
+    animation: none;
+  }
+}

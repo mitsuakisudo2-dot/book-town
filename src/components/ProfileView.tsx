@@ -107,6 +107,12 @@ import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import { BRIGHTNESSES, PALETTES, TEXT_SIZES } from "../lib/appearance";
 import {
+  TONE_CHOICES,
+  chooseTone,
+  playTone,
+  useToneChoice,
+} from "../lib/scan-tones";
+import {
   setBrightness,
   setPalette,
   setTextSize,
@@ -176,6 +182,7 @@ export function ProfileView({
   const palette = usePalette();
   const brightness = useBrightness();
   const textSize = useTextSize();
+  const tone = useToneChoice();
   const [sheet, setSheet] = useState<
     | "following"
     | "followers"
@@ -1133,6 +1140,31 @@ export function ProfileView({
                 {choice.name}
               </label>
             ))}
+          </fieldset>
+          <fieldset className="record-visibility palette-choices">
+            <legend>読み取りの音</legend>
+            {TONE_CHOICES.map((choice) => (
+              <label key={choice.id}>
+                <input
+                  type="radio"
+                  name="scan-tone"
+                  value={choice.id}
+                  checked={tone === choice.id}
+                  onChange={() => {
+                    chooseTone(choice.id);
+                    notify(`読み取りの音を${choice.name}にしました`);
+                  }}
+                  // Heard each time it is pressed, the one chosen too.
+                  onClick={() => {
+                    if (choice.id !== "off") playTone(choice.id, "in");
+                  }}
+                />
+                {choice.name}
+              </label>
+            ))}
+            <p className="palette-note">
+              スキャナーで本のバーコードを読んだときの音です。
+            </p>
           </fieldset>
           <VisibilitySettings state={state} actions={actions} notify={notify} />
           <fieldset className="record-visibility spoiler-display">
