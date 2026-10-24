@@ -74,6 +74,7 @@ const profile = (id: string, handle: string): Tables<"profiles"> => ({
   compose_icon: "pen",
   reading_visibility: "private",
   nine_version: 0,
+  published: true,
   created_at: at,
   updated_at: at,
 });
