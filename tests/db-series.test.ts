@@ -704,7 +704,8 @@ async function main() {
 
   await check("the rollback in the file's head undoes it", async () => {
     const was = await migrated(FILE);
-    const undone = await migrated();
+    // Up to this file, not the later ones (people), which the head does not undo.
+    const undone = await migrated(FILES[FILES.indexOf(FILE!) + 1]);
     const head = TEXT.slice(TEXT.indexOf("-- Rollback:"), TEXT.indexOf("\n\n", TEXT.indexOf("-- Rollback:")));
     const statements = head
       .split("\n")
