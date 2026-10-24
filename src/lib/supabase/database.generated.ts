@@ -395,52 +395,73 @@ export type Database = {
       library_entries: {
         Row: {
           added_at: string;
+          added_mode: string;
+          audience: string;
           batch_id: string | null;
           book_id: string;
+          detail: string;
           ever_used: boolean;
           like_restored: boolean;
           liked_at: string | null;
           owned: string | null;
           removed_at: string | null;
+          shown_status: string | null;
+          shown_wanted_at: string | null;
           source: string;
           status: string | null;
           status_at: string | null;
+          status_held: boolean;
           updated_at: string;
           user_id: string;
           wanted_at: string | null;
+          wanted_held: boolean;
         };
         ComputedFields: never;
         Insert: {
           added_at?: string;
+          added_mode?: string;
+          audience?: string;
           batch_id?: string | null;
           book_id: string;
+          detail?: string;
           ever_used?: boolean;
           like_restored?: boolean;
           liked_at?: string | null;
           owned?: string | null;
           removed_at?: string | null;
+          shown_status?: string | null;
+          shown_wanted_at?: string | null;
           source: string;
           status?: string | null;
           status_at?: string | null;
+          status_held?: boolean;
           updated_at?: string;
           user_id: string;
           wanted_at?: string | null;
+          wanted_held?: boolean;
         };
         Update: {
           added_at?: string;
+          added_mode?: string;
+          audience?: string;
           batch_id?: string | null;
           book_id?: string;
+          detail?: string;
           ever_used?: boolean;
           like_restored?: boolean;
           liked_at?: string | null;
           owned?: string | null;
           removed_at?: string | null;
+          shown_status?: string | null;
+          shown_wanted_at?: string | null;
           source?: string;
           status?: string | null;
           status_at?: string | null;
+          status_held?: boolean;
           updated_at?: string;
           user_id?: string;
           wanted_at?: string | null;
+          wanted_held?: boolean;
         };
         Relationships: [
           {
@@ -505,6 +526,7 @@ export type Database = {
           created_at: string;
           deleted_at: string | null;
           id: string;
+          made_mode: string;
           name: string;
           note: string;
           position: string;
@@ -519,6 +541,7 @@ export type Database = {
           created_at?: string;
           deleted_at?: string | null;
           id: string;
+          made_mode?: string;
           name: string;
           note?: string;
           position: string;
@@ -532,6 +555,7 @@ export type Database = {
           created_at?: string;
           deleted_at?: string | null;
           id?: string;
+          made_mode?: string;
           name?: string;
           note?: string;
           position?: string;
@@ -991,11 +1015,12 @@ export type Database = {
           color: string;
           compose_icon: string;
           created_at: string;
-          handle: string;
+          handle: string | null;
           id: string;
           links: string[];
           name: string;
           nine_version: number;
+          published: boolean;
           reading_visibility: string;
           updated_at: string;
         };
@@ -1005,11 +1030,12 @@ export type Database = {
           color?: string;
           compose_icon?: string;
           created_at?: string;
-          handle: string;
+          handle?: string | null;
           id: string;
           links?: string[];
           name: string;
           nine_version?: number;
+          published?: boolean;
           reading_visibility?: string;
           updated_at?: string;
         };
@@ -1018,11 +1044,12 @@ export type Database = {
           color?: string;
           compose_icon?: string;
           created_at?: string;
-          handle?: string;
+          handle?: string | null;
           id?: string;
           links?: string[];
           name?: string;
           nine_version?: number;
+          published?: boolean;
           reading_visibility?: string;
           updated_at?: string;
         };
@@ -1035,6 +1062,7 @@ export type Database = {
           likes_audience: string;
           likes_in_library: boolean;
           memo_hint: boolean;
+          mode: string;
           records_audience: string;
           saves_audience: string;
           shelf_audiences: NonNullable<Json>;
@@ -1054,6 +1082,7 @@ export type Database = {
           likes_audience?: string;
           likes_in_library?: boolean;
           memo_hint?: boolean;
+          mode?: string;
           records_audience?: string;
           saves_audience?: string;
           shelf_audiences?: NonNullable<Json>;
@@ -1072,6 +1101,7 @@ export type Database = {
           likes_audience?: string;
           likes_in_library?: boolean;
           memo_hint?: boolean;
+          mode?: string;
           records_audience?: string;
           saves_audience?: string;
           shelf_audiences?: NonNullable<Json>;
@@ -1104,6 +1134,7 @@ export type Database = {
           id: string;
           is_public: boolean;
           kind: string;
+          made_mode: string;
           spoiler: boolean;
           updated_at: string;
           user_id: string;
@@ -1118,6 +1149,7 @@ export type Database = {
           id?: string;
           is_public?: boolean;
           kind?: string;
+          made_mode?: string;
           spoiler?: boolean;
           updated_at?: string;
           user_id: string;
@@ -1131,6 +1163,7 @@ export type Database = {
           id?: string;
           is_public?: boolean;
           kind?: string;
+          made_mode?: string;
           spoiler?: boolean;
           updated_at?: string;
           user_id?: string;
@@ -1157,6 +1190,7 @@ export type Database = {
           book_id: string | null;
           ended_at: string | null;
           id: string;
+          made_mode: string;
           mode: string;
           started_at: string;
           user_id: string;
@@ -1166,6 +1200,7 @@ export type Database = {
           book_id?: string | null;
           ended_at?: string | null;
           id?: string;
+          made_mode?: string;
           mode: string;
           started_at?: string;
           user_id: string;
@@ -1174,6 +1209,7 @@ export type Database = {
           book_id?: string | null;
           ended_at?: string | null;
           id?: string;
+          made_mode?: string;
           mode?: string;
           started_at?: string;
           user_id?: string;
@@ -1710,6 +1746,36 @@ export type Database = {
           },
         ];
       };
+      terms_consents: {
+        Row: {
+          agreed_at: string;
+          thirteen_or_older: boolean;
+          user_id: string;
+          version: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          agreed_at?: string;
+          thirteen_or_older: boolean;
+          user_id: string;
+          version: string;
+        };
+        Update: {
+          agreed_at?: string;
+          thirteen_or_older?: boolean;
+          user_id?: string;
+          version?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "terms_consents_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       works: {
         Row: {
           created_at: string;
@@ -1907,6 +1973,7 @@ export type Database = {
           page: string;
         }[];
       };
+      terms_to_agree: { Args: Record<PropertyKey, never>; Returns: string };
       town_books: { Args: { ids: string[] }; Returns: Json };
       town_counts: { Args: { books: string[]; top?: number }; Returns: Json };
       town_view: {

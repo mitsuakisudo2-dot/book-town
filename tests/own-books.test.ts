@@ -489,6 +489,7 @@ async function main() {
                   compose_icon: "pen",
                   reading_visibility: "private",
                   nine_version: 0,
+                  published: true,
                   created_at: at,
                   updated_at: at,
                 },
@@ -650,6 +651,7 @@ async function main() {
         compose_icon: "pen",
         reading_visibility: "private",
         nine_version: 0,
+        published: true,
         created_at: at,
         updated_at: at,
       });

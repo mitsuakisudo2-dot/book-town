@@ -162,6 +162,8 @@ export type ShopRow = Pick<
  * edition (plan item 4), and the app never writes either.
  */
 export type BookRow = Omit<Tables<"books">, "created_by" | "edition_id">;
+/** A record as the town reads it: the mode it was made in is the database's. */
+export type RecordRow = Omit<Tables<"reading_entries">, "made_mode">;
 
 export interface RemoteRows {
   profiles: Tables<"profiles">[];
@@ -211,7 +213,7 @@ export interface RemoteRows {
    * The person's own reading records, and others' they may read: every one,
    * or, from town_view's window, the ones the town shows (TOWN_VIEW_ARGS).
    */
-  records: Tables<"reading_entries">[];
+  records: RecordRow[];
   /** The person's own posters, drafts too, and others' put up. */
   posters: Tables<"posters">[];
   seenNotifications: string[];
@@ -595,7 +597,8 @@ export function townFromRows(
   };
   const readerFrom = (row: Tables<"profiles">): Reader => ({
     id: readerId(row.id),
-    handle: row.handle,
+    // Others are never given a profile without one (reading_mode).
+    handle: row.handle ?? "",
     name: row.name,
     bio: row.bio,
     color: row.color,
@@ -919,7 +922,7 @@ export interface ArrivedRows {
     "target_kind" | "target_id" | "state" | "since"
   >[];
   /** The writers' records of those posts' books, without their words. */
-  records?: Tables<"reading_entries">[];
+  records?: RecordRow[];
 }
 
 /**
@@ -965,7 +968,7 @@ export function arrivedFromRows(
       .filter((row) => row.id !== userId && authors.has(row.id))
       .map((row) => ({
         id: row.id,
-        handle: row.handle,
+        handle: row.handle ?? "",
         name: row.name,
         bio: row.bio,
         color: row.color,
@@ -1028,7 +1031,7 @@ export function arrivedFromRows(
  * cleanRecord keeps them. Null for one cleanRecord turns away.
  */
 function recordFromRow(
-  row: Tables<"reading_entries">,
+  row: RecordRow,
   userId: string | null,
 ): ReadingRecord | null {
   const fields = cleanRecord({
@@ -1050,7 +1053,7 @@ function recordFromRow(
 
 /** What a page read after the town (town-more.ts), as the database sent it. */
 export interface MoreRows {
-  records: Tables<"reading_entries">[];
+  records: RecordRow[];
   nine: Tables<"profile_nine">[];
   /** The books they name that the town may not know. */
   books: BookRow[];

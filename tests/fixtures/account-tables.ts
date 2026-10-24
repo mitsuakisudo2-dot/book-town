@@ -126,6 +126,8 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     },
   },
   "public.reader_settings": { people: { user_id: "delete" }, readers: "own" },
+  // Each reader's consent to a version of the terms (reading_mode).
+  "public.terms_consents": { people: { user_id: "delete" }, readers: "own" },
   "public.reading_entries": {
     people: { user_id: "delete" },
     readers: "blocks",
@@ -253,6 +255,8 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   // What readers tell the operator (site_reports); only staff read them,
   // through site_reports(), which is the operator's own reading.
   "private.site_reports": { people: { user_id: "delete" }, readers: "nobody" },
+  // The terms' versions as the operator publishes them (reading_mode).
+  "private.terms_versions": { people: {}, readers: "nobody" },
   // The pairs of characters each book's title and author fold to, for the
   // search (search_in_database); it goes with its book, and only the search
   // functions read it.

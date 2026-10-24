@@ -4381,7 +4381,8 @@ async function main() {
       [
         "library_entries",
         "UPDATE",
-        "status, status_at, wanted_at, liked_at, owned, removed_at, like_restored, ever_used",
+        // Who sees the book's status, each book its own: reading_mode.
+        "status, status_at, wanted_at, liked_at, owned, removed_at, like_restored, ever_used, audience, detail",
       ],
       // Who may see a shelf and a smart shelf's rule: shelf_audience.
       ["library_shelves", "INSERT", SHELF_COLUMNS + ", audience, rule"],
@@ -5797,6 +5798,10 @@ async function main() {
         values ('${BEN}', 'wish', 'ベンの要望');
       insert into private.bib_pace (reader, next_at)
         values ('${BEN}', now()) on conflict do nothing;
+      insert into private.terms_versions (version) values ('ベンの同意の版')
+        on conflict do nothing;
+      insert into terms_consents (user_id, version, thirteen_or_older)
+        values ('${BEN}', 'ベンの同意の版', true);
       insert into private.shop_visitor_weeks (shop_id, week, visitors)
         select id, private.last_visit_week(), 1 from shops where owner_id = '${BEN}';
     `);

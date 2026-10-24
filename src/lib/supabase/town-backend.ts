@@ -12,6 +12,7 @@ import {
   moreFromRows,
   countsFromAnswer,
   type BookRow,
+  type RecordRow,
   type MoreRows,
   type RelationTable,
   type RemoteIds,
@@ -205,7 +206,7 @@ interface TownView {
   posts: Tables<"posts">[];
   postReactions: Tables<"post_reactions">[];
   together: Tables<"reading_sessions">[];
-  records: Tables<"reading_entries">[];
+  records: RecordRow[];
   folds: RemoteRows["folds"];
   posters: Tables<"posters">[];
   catalog: BookRow[];
@@ -1023,7 +1024,7 @@ function remoteReads(
           kind === "sample" && !isDatabaseId(ask.work)
             ? sampleBookRowId(ask.work)
             : ask.work;
-        let records: Tables<"reading_entries">[];
+        let records: RecordRow[];
         try {
           records = rowsOf(
             (
@@ -1166,7 +1167,7 @@ function remoteReads(
           asked.map((book) => book.id),
         );
       } else {
-        let records: Tables<"reading_entries">[];
+        let records: RecordRow[];
         try {
           // A feeling's records found by their index (feeling_records).
           records = rowsOf(

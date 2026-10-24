@@ -74,6 +74,7 @@ const profile = (id: string, handle: string): Tables<"profiles"> => ({
   compose_icon: "pen",
   reading_visibility: "private",
   nine_version: 0,
+  published: true,
   created_at: at,
   updated_at: at,
 });
@@ -1011,6 +1012,7 @@ async function main() {
     spoiler: false,
     is_public: extra.is_public ?? true,
     audience: (extra.is_public ?? true) ? "everyone" : "private",
+    made_mode: "normal",
     created_at: at,
     updated_at: at,
     ...extra,
