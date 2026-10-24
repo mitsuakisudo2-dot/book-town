@@ -8,7 +8,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -77,6 +76,22 @@ import {
   type InView,
   type SessionReads,
 } from "../lib/scan";
+import {
+  KEPT,
+  restorable,
+  showsOf,
+  tally,
+  UNDOABLE,
+  type Card,
+  type Shows,
+  type ShownNow,
+} from "../lib/scan-cards";
+import {
+  useCompact,
+  useOnline,
+  useScanSound,
+  useScreenKeptOn,
+} from "../lib/scan-device";
 import {
   journalTown,
   libraryBookByIsbn,
@@ -154,34 +169,6 @@ type Input =
     }
   | { kind: "typing"; why: TypingWhy };
 
-/** What a book read in this session came to, as its card shows it. */
-type Shows =
-  | "looking"
-  | "added"
-  | "already"
-  | "untitled"
-  | "offline"
-  | "waiting"
-  | "unavailable"
-  | "refused"
-  | "undone";
-interface Card {
-  /** The journal item's id (or a book entered by hand). */
-  id: string;
-  isbn?: string;
-  bookId?: string;
-  title?: string;
-  author?: string;
-  shows: Shows;
-  /** The 連続設定 as it was when it was read, for its 元に戻す. */
-  sort?: ScanSort;
-}
-/**
- * What a card shows now: as it came to, but "saving" for a book in the
- * library whose save is not confirmed yet, and "refused" once the database
- * turned it away after all.
- */
-type ShownNow = Shows | "saving";
 /** A remark over the camera about a read that changed nothing new. */
 type Say =
   "again-in" | "again-already" | "again-held" | "already" | "held" | "not-yet";
@@ -193,27 +180,8 @@ interface Notice {
   shows?: { bookId: string; isbn: string };
 }
 
-const KEPT: Shows[] = [
-  "looking",
-  "untitled",
-  "offline",
-  "waiting",
-  "unavailable",
-];
-const UNDOABLE: Shows[] = ["added", ...KEPT];
 /** How far a swiped card moves aside for its ［削除］. */
 const SWIPE_OPEN = 88;
-
-/** 元に戻す for a card taken back, unless the book was read again since. */
-const restorable = (card: Card, cards: readonly Card[]) =>
-  card.shows === "undone" &&
-  Boolean(card.isbn) &&
-  !cards.some(
-    (other) =>
-      other.id !== card.id &&
-      other.isbn === card.isbn &&
-      other.shows !== "undone",
-  );
 
 /** 読了・積読・読書中 on every card, in the library's order (資料 4章). */
 const STATUS_BUTTONS = DEFAULT_SHELVES.flatMap((shelf) =>
@@ -226,48 +194,6 @@ const FAVORITE =
   DEFAULT_SHELVES.find((shelf) => shelf.key === "favorite")?.label ??
   "お気に入り";
 
-/** What a card shows once its read was sent. */
-function showsOf(
-  result: Sent["result"],
-  savedIn: ReturnType<typeof useTownBackend>,
-): Shows {
-  switch (result) {
-    case "added":
-    case "already":
-    case "untitled":
-      return result;
-    case "lookup":
-      // openBD did not answer in time: as untitled until it does (10-9).
-      return navigator.onLine === false ? "offline" : "untitled";
-    case "waiting":
-      return savedIn === "unavailable" ? "unavailable" : "waiting";
-    default:
-      return "unavailable";
-  }
-}
-
-/**
- * The session's books by what they came to. For the count at the top:
- * saved, on their way (a title asked for, saving, the town loading, no
- * network), and waiting for the reader (書名待ち, the account unreadable, a
- * save refused). For the notice on closing: registered (saved or saving),
- * waiting for a title, and kept on the device for another reason.
- */
-function tally(cards: Card[], shown: (card: Card) => ShownNow) {
-  const count = (...kinds: ShownNow[]) =>
-    cards.filter((card) => kinds.includes(shown(card))).length;
-  return {
-    saved: count("added"),
-    checking: count("looking", "saving", "waiting", "offline"),
-    attention: count("untitled", "unavailable", "refused"),
-    closing: {
-      added: count("added", "saving"),
-      waiting: count("untitled", "offline"),
-      later: count("looking", "waiting", "unavailable"),
-    },
-  };
-}
-
 const SAYS: Record<Say, string> = {
   "again-in": SCAN_COPY.card.againIn,
   "again-already": SCAN_COPY.card.already,
@@ -276,169 +202,6 @@ const SAYS: Record<Say, string> = {
   held: SCAN_COPY.card.held,
   "not-yet": SCAN_COPY.card.notYet,
 };
-
-const subscribeOnline = (changed: () => void) => {
-  window.addEventListener("online", changed);
-  window.addEventListener("offline", changed);
-  return () => {
-    window.removeEventListener("online", changed);
-    window.removeEventListener("offline", changed);
-  };
-};
-const useOnline = () =>
-  useSyncExternalStore(
-    subscribeOnline,
-    () => navigator.onLine !== false,
-    () => true,
-  );
-
-const SOUND_KEY = "book-town-scan-sound";
-const COMPACT_KEY = "book-town-scan-compact";
-
-/**
- * コンパクト表示 (資料 4章, by the reader's choice only): each book of the
- * library on one line, its title and 読了・積読・読書中, so that more of
- * them are in sight. This device remembers it. A book that waits for the
- * reader stays as it was.
- */
-function useCompact() {
-  const [on, setOn] = useState(() => {
-    try {
-      return localStorage.getItem(COMPACT_KEY) === "on";
-    } catch {
-      return false;
-    }
-  });
-  const toggle = () =>
-    setOn((was) => {
-      try {
-        if (was) localStorage.removeItem(COMPACT_KEY);
-        else localStorage.setItem(COMPACT_KEY, "on");
-      } catch {
-        // Not remembered: this time only.
-      }
-      return !was;
-    });
-  return [on, toggle] as const;
-}
-type Sound = "in" | "nothing-new";
-
-/**
- * A short tone when a book is taken in, two lower ones when nothing is new;
- * the same as a short vibration where the device has one. ♪ turns the sound
- * off (vibration is silent and stays), and this device remembers it.
- */
-function useScanSound() {
-  const [on, setOn] = useState(() => {
-    try {
-      return localStorage.getItem(SOUND_KEY) !== "off";
-    } catch {
-      return true;
-    }
-  });
-  const onRef = useRef(on);
-  useEffect(() => {
-    onRef.current = on;
-  }, [on]);
-  const context = useRef<AudioContext | null>(null);
-  useEffect(
-    () => () => {
-      void context.current?.close().catch(() => {});
-      context.current = null;
-    },
-    [],
-  );
-  // Phones start sound only from a tap: every tap in the scanner wakes it.
-  const wake = useCallback(() => {
-    try {
-      const Context =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext;
-      if (!Context) return;
-      context.current ??= new Context();
-      if (context.current.state === "suspended")
-        void context.current.resume().catch(() => {});
-    } catch {
-      // No sound on this device.
-    }
-  }, []);
-  const play = useCallback(
-    (sound: Sound) => {
-      try {
-        if (typeof navigator.vibrate === "function")
-          navigator.vibrate(sound === "in" ? 30 : [20, 60, 20]);
-      } catch {
-        // Vibration refused: the sound and the card still tell.
-      }
-      if (!onRef.current) return;
-      wake();
-      const audio = context.current;
-      if (!audio) return;
-      const tone = (
-        hz: number,
-        after: number,
-        length: number,
-        peak: number,
-      ) => {
-        const oscillator = audio.createOscillator();
-        const gain = audio.createGain();
-        const start = audio.currentTime + after;
-        oscillator.type = "sine";
-        oscillator.frequency.value = hz;
-        // From near silence and back, so it never clicks.
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(peak, start + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
-        oscillator.connect(gain).connect(audio.destination);
-        oscillator.start(start);
-        oscillator.stop(start + length + 0.02);
-      };
-      if (sound === "in") tone(1046.5, 0, 0.08, 0.18);
-      else {
-        tone(587, 0, 0.07, 0.14);
-        tone(440, 0.1, 0.09, 0.14);
-      }
-    },
-    [wake],
-  );
-  const toggle = () => {
-    const next = !on;
-    setOn(next);
-    try {
-      if (next) localStorage.removeItem(SOUND_KEY);
-      else localStorage.setItem(SOUND_KEY, "off");
-    } catch {
-      // Remembered for this time only.
-    }
-    if (next) wake();
-  };
-  return { on, toggle, play, wake };
-}
-
-/**
- * The screen stays on while the camera reads (資料 10章 ⑩): a phone that
- * dims halfway through fifty books stops the reading. Where the browser
- * cannot keep it on, it dims as it would.
- */
-function useScreenKeptOn(on: boolean) {
-  useEffect(() => {
-    if (!on || !("wakeLock" in navigator)) return;
-    let lock: WakeLockSentinel | null = null;
-    let stopped = false;
-    void navigator.wakeLock.request("screen").then(
-      (got) => {
-        if (stopped) void got.release().catch(() => {});
-        else lock = got;
-      },
-      () => {},
-    );
-    return () => {
-      stopped = true;
-      void lock?.release().catch(() => {});
-    };
-  }, [on]);
-}
 
 export function ScanSession({
   state,
