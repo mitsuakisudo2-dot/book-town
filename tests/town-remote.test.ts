@@ -1012,7 +1012,6 @@ async function main() {
     spoiler: false,
     is_public: extra.is_public ?? true,
     audience: (extra.is_public ?? true) ? "everyone" : "private",
-    made_mode: "normal",
     created_at: at,
     updated_at: at,
     ...extra,

@@ -1134,7 +1134,6 @@ export type Database = {
           id: string;
           is_public: boolean;
           kind: string;
-          made_mode: string;
           spoiler: boolean;
           updated_at: string;
           user_id: string;
@@ -1149,7 +1148,6 @@ export type Database = {
           id?: string;
           is_public?: boolean;
           kind?: string;
-          made_mode?: string;
           spoiler?: boolean;
           updated_at?: string;
           user_id: string;
@@ -1163,7 +1161,6 @@ export type Database = {
           id?: string;
           is_public?: boolean;
           kind?: string;
-          made_mode?: string;
           spoiler?: boolean;
           updated_at?: string;
           user_id?: string;
@@ -1190,7 +1187,6 @@ export type Database = {
           book_id: string | null;
           ended_at: string | null;
           id: string;
-          made_mode: string;
           mode: string;
           started_at: string;
           user_id: string;
@@ -1200,7 +1196,6 @@ export type Database = {
           book_id?: string | null;
           ended_at?: string | null;
           id?: string;
-          made_mode?: string;
           mode: string;
           started_at?: string;
           user_id: string;
@@ -1209,7 +1204,6 @@ export type Database = {
           book_id?: string | null;
           ended_at?: string | null;
           id?: string;
-          made_mode?: string;
           mode?: string;
           started_at?: string;
           user_id?: string;

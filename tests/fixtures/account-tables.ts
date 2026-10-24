@@ -257,6 +257,10 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   "private.site_reports": { people: { user_id: "delete" }, readers: "nobody" },
   // The terms' versions as the operator publishes them (reading_mode).
   "private.terms_versions": { people: {}, readers: "nobody" },
+  // Which records and readings were made in manage mode (reading_mode); they
+  // go with their record or reading.
+  "private.records_made_in_manage": { people: {}, readers: "nobody" },
+  "private.readings_made_in_manage": { people: {}, readers: "nobody" },
   // The pairs of characters each book's title and author fold to, for the
   // search (search_in_database); it goes with its book, and only the search
   // functions read it.

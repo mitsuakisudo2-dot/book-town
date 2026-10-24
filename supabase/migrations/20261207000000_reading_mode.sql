@@ -28,16 +28,20 @@
 --                           to a shop, opening a shop or changing what an
 --                           open one shows, putting up or changing a put-up
 --                           poster, reading together, and widening who sees
---                           a record, a book's status or a shelf. Taking
+--                           a record, a book's status or a library shelf. Taking
 --                           things back is never refused: deleting,
 --                           narrowing, closing, unfollowing, blocking,
 --                           reporting, leaving. A refusal is 42501 with the
 --                           hint 'booktown:reading_mode' (or
 --                           'booktown:no_public_profile'), so an app can say
 --                           why; it changes no row.
---   made in which mode      library_entries.added_mode, reading_entries,
---                           reading_sessions and library_shelves.made_mode:
---                           the mode the row was made in, written by the
+--   made in which mode      library_entries.added_mode and
+--                           library_shelves.made_mode (rows only their reader
+--                           reads), and for records and reading, which others
+--                           may read, private.records_made_in_manage and
+--                           private.readings_made_in_manage, which nobody
+--                           reads through the API: so nobody learns that
+--                           someone used manage mode. Written by the
 --                           database, never by the app. A row made in manage
 --                           mode, or by someone without a public profile,
 --                           starts private whatever the app sent.
@@ -67,13 +71,23 @@
 --                           人数だけ or wider; never a person without a public
 --                           profile or hidden by the operator. A block does
 --                           not change it. private.reading_counts(works)
---                           counts each person once a work.
+--                           counts each person once a work, of the books that
+--                           count in their work (private.book_counts_in_work).
 --   terms                   private.terms_versions (written by the operator
 --                           when the terms are published, item 44; none yet)
 --                           and public.terms_consents, each reader's consent
 --                           to a version with being 13 or older, kept by
 --                           version so a large change asks again
 --                           (public.terms_to_agree()).
+--
+--   shop visitors           private.count_shop_visitors leaves out readers
+--                           without a public profile, as every count does.
+--
+-- An app writing with upsert (insert ... on conflict) is judged by what the
+-- write does: a row already there is judged as the update it becomes, and
+-- sending again a row already saved (on conflict do nothing) is never
+-- refused, so a save sent again after switching changes nothing and is lost
+-- by no one.
 --
 -- Nothing moves: the new columns are added with constant defaults (normal,
 -- published, made in normal mode, 人数だけ, nothing held), no row is
@@ -95,7 +109,11 @@
 --   drop trigger shop_follows_reaching on public.shop_follows;
 --   drop trigger shops_reaching on public.shops;
 --   drop trigger posters_reaching on public.posters;
---   drop table public.terms_consents, private.terms_versions;
+--   drop trigger reading_entries_made_in on public.reading_entries;
+--   drop trigger reading_sessions_made_in on public.reading_sessions;
+--   drop table public.terms_consents, private.terms_versions,
+--     private.records_made_in_manage, private.readings_made_in_manage;
+--   drop function private.made_in_manage();
 --   drop function private.library_entry_mode(), private.reading_entry_mode(),
 --     private.reading_session_mode(), private.library_shelf_mode(),
 --     private.narrow_status(), private.profile_publishing(),
@@ -118,8 +136,18 @@
 --   alter table public.library_entries drop column added_mode, drop column audience,
 --     drop column detail, drop column status_held, drop column shown_status,
 --     drop column wanted_held, drop column shown_wanted_at;
---   alter table public.reading_entries drop column made_mode;
---   alter table public.reading_sessions drop column made_mode;
+--   create or replace function private.count_shop_visitors() returns void
+--     language sql security definer set search_path = '' as $$
+--     delete from private.shop_visitor_weeks where week < private.last_visit_week();
+--     insert into private.shop_visitor_weeks (shop_id, week, visitors)
+--     select s.id, private.last_visit_week(), count(*)::integer
+--     from public.shop_visits v
+--     join public.shops s on s.id = v.shop_id
+--     where v.user_id <> s.owner_id
+--       and v.visited_at >= private.last_visit_week()::timestamp at time zone 'Asia/Tokyo'
+--       and v.visited_at < (private.last_visit_week() + 7)::timestamp at time zone 'Asia/Tokyo'
+--     group by s.id
+--     on conflict (shop_id, week) do nothing; $$;
 --   alter table public.library_shelves drop column made_mode;
 --   alter table public.reader_settings drop column mode;
 --   alter table public.profiles drop constraint profiles_published_named,
@@ -127,6 +155,7 @@
 --     add constraint profiles_name_check
 --       check (char_length(btrim(name)) between 1 and 80),
 --     alter column handle set not null, drop column published;
+--   select private.drop_copy('20261207000000_reading_mode');
 -- Only while no profile is unpublished (otherwise its handle is empty and the
 -- constraints refuse it): until then nobody can have one, as no screen makes
 -- one. An app that writes mode, published or a book's audience has to go
@@ -154,12 +183,12 @@ alter table public.profiles drop constraint profiles_name_check,
     and (not published or char_length(btrim(name)) >= 1)),
   -- Others find a published profile by its handle. An unpublished one has
   -- none, so no handle taken tells anyone it is there.
-  add constraint profiles_published_named check (not published or handle is not null);
+  add constraint profiles_published_named check (published = (handle is not null));
 
 -- Asked by a reader through the API (not by the database's own work, a
 -- migration or a nightly job, nor while give_own_copy moves a reader's rows
--- to their own copy of a book). Only such writes are refused or stamped
--- from the reader's state.
+-- to their own copy of a book, which carries what the row had). Only such
+-- writes are refused or stamped from the reader's state.
 create function private.asked_by_reader() returns boolean
 language sql stable set search_path = '' as $$
   select (select auth.uid()) is not null
@@ -239,7 +268,9 @@ $$;
 create function private.post_reaching() returns trigger
 language plpgsql set search_path = '' as $$
 begin
-  if new.reading_mode is distinct from 'solo' then
+  -- Sent again (on conflict do nothing): nothing new.
+  if new.reading_mode is distinct from 'solo'
+      and not exists (select 1 from public.posts p where p.id = new.id) then
     perform private.refuse_unless_reaching(new.author_id);
   end if;
   return new;
@@ -249,11 +280,30 @@ revoke all on function private.post_reaching() from public, anon, authenticated;
 create trigger posts_reaching before insert on public.posts
   for each row execute function private.post_reaching();
 
--- A like, 読みたくなった (pressed again too) or a reaction to a POP.
+-- A like, 読みたくなった (pressed again too) or a reaction to a POP. One sent
+-- again that is there already adds nothing.
 create function private.reaction_reaching() returns trigger
 language plpgsql set search_path = '' as $$
+declare
+  there boolean := false;
 begin
-  perform private.refuse_unless_reaching(new.user_id);
+  -- Each table's columns are named in its own branch: a record's field is
+  -- looked up when the line runs.
+  if tg_op = 'INSERT' then
+    if tg_table_name = 'post_reactions' then
+      there := exists (
+        select 1 from public.post_reactions r
+        where r.user_id = new.user_id and r.post_id = new.post_id and r.kind = new.kind);
+    else
+      there := exists (
+        select 1 from public.pop_reactions r
+        where r.user_id = new.user_id and r.shop_id = new.shop_id
+          and r.placement_key = new.placement_key and r.reaction = new.reaction);
+    end if;
+  end if;
+  if not there then
+    perform private.refuse_unless_reaching(new.user_id);
+  end if;
   return new;
 end;
 $$;
@@ -263,15 +313,22 @@ create trigger post_reactions_reaching before insert or update on public.post_re
 create trigger pop_reactions_reaching before insert or update on public.pop_reactions
   for each row execute function private.reaction_reaching();
 
--- A shop's like and ひとこと: taking either back is not refused.
+-- A shop's like and ひとこと: taking either back is not refused. A row there
+-- already (the app sends the whole row with on conflict do update) is judged
+-- as the update it becomes; moving one to another shop reaches that shop.
 create function private.shop_reaction_reaching() returns trigger
 language plpgsql set search_path = '' as $$
 begin
   if tg_op = 'INSERT' then
-    if new.liked or new.message <> '' then
+    if (new.liked or new.message <> '') and not exists (
+      select 1 from public.shop_reactions r
+      where r.user_id = new.user_id and r.shop_id = new.shop_id
+    ) then
       perform private.refuse_unless_reaching(new.user_id);
     end if;
-  elsif (new.liked and not old.liked)
+  elsif new.shop_id is distinct from old.shop_id
+      or new.user_id is distinct from old.user_id
+      or (new.liked and not old.liked)
       or (new.message <> '' and new.message is distinct from old.message) then
     perform private.refuse_unless_reaching(new.user_id);
   end if;
@@ -282,10 +339,27 @@ revoke all on function private.shop_reaction_reaching() from public, anon, authe
 create trigger shop_reactions_reaching before insert or update on public.shop_reactions
   for each row execute function private.shop_reaction_reaching();
 
+-- A follow sent again that is there already adds nothing.
 create function private.follow_reaching() returns trigger
 language plpgsql set search_path = '' as $$
 begin
-  perform private.refuse_unless_reaching(new.follower_id);
+  if tg_op = 'UPDATE' then
+    if to_jsonb(new) is distinct from to_jsonb(old) then
+      perform private.refuse_unless_reaching(new.follower_id);
+    end if;
+  elsif tg_table_name = 'profile_follows' then
+    if not exists (
+      select 1 from public.profile_follows f
+      where f.follower_id = new.follower_id and f.followee_id = new.followee_id
+    ) then
+      perform private.refuse_unless_reaching(new.follower_id);
+    end if;
+  elsif not exists (
+    select 1 from public.shop_follows f
+    where f.follower_id = new.follower_id and f.shop_id = new.shop_id
+  ) then
+    perform private.refuse_unless_reaching(new.follower_id);
+  end if;
   return new;
 end;
 $$;
@@ -302,6 +376,13 @@ create trigger shop_follows_reaching before insert or update on public.shop_foll
 create function private.shop_reaching() returns trigger
 language plpgsql set search_path = '' as $$
 begin
+  -- A shop sent again that is there already is judged by the update it
+  -- becomes, if any.
+  if tg_op = 'INSERT' and exists (
+    select 1 from public.shops s where s.id = new.id
+  ) then
+    return new;
+  end if;
   if new.is_open and (
     tg_op = 'INSERT' or not old.is_open
     or new.name is distinct from old.name
@@ -324,10 +405,22 @@ create trigger shops_reaching before insert or update on public.shops
 create function private.poster_reaching() returns trigger
 language plpgsql set search_path = '' as $$
 begin
+  if tg_op = 'INSERT' and exists (select 1 from public.posters p where p.id = new.id) then
+    return new;
+  end if;
+  -- Narrowing one that is up (off the timeline, not to be displayed, a
+  -- spoiler) is taking back, not refused.
   if new.status = 'published' and (
     tg_op = 'INSERT'
-    or (to_jsonb(new) - 'updated_at' - 'version') is distinct from
-       (to_jsonb(old) - 'updated_at' - 'version')
+    or old.status is distinct from 'published'
+    or new.author_id is distinct from old.author_id
+    or new.template is distinct from old.template
+    or new.theme is distinct from old.theme
+    or new.font is distinct from old.font
+    or new.pages is distinct from old.pages
+    or (new.show_in_timeline and not old.show_in_timeline)
+    or (new.allow_display and not old.allow_display)
+    or (old.spoiler and not new.spoiler)
   ) then
     perform private.refuse_unless_reaching(new.author_id);
   end if;
@@ -353,9 +446,39 @@ grant execute on function private.status_rank(text, text) to authenticated;
 
 -- Records ----------------------------------------------------------------------------
 
-alter table public.reading_entries
-  add column made_mode text not null default 'normal'
-    check (made_mode in ('normal', 'manage'));
+-- Which records and readings were made in manage mode, kept where nobody
+-- reads them through the API: records and reading together are read by
+-- others, and a column of theirs would tell that someone used manage mode.
+-- Only rows made in manage mode are here; the rest were made in normal mode.
+create table private.records_made_in_manage (
+  entry_id uuid primary key references public.reading_entries (id) on delete cascade
+);
+create table private.readings_made_in_manage (
+  session_id uuid primary key references public.reading_sessions (id) on delete cascade
+);
+revoke all on private.records_made_in_manage, private.readings_made_in_manage
+  from public, anon, authenticated;
+
+create function private.made_in_manage() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if private.asked_by_reader() and private.reader_mode(new.user_id) = 'manage' then
+    if tg_table_name = 'reading_entries' then
+      insert into private.records_made_in_manage (entry_id) values (new.id)
+      on conflict do nothing;
+    else
+      insert into private.readings_made_in_manage (session_id) values (new.id)
+      on conflict do nothing;
+    end if;
+  end if;
+  return null;
+end;
+$$;
+revoke all on function private.made_in_manage() from public, anon, authenticated;
+create trigger reading_entries_made_in after insert on public.reading_entries
+  for each row execute function private.made_in_manage();
+create trigger reading_sessions_made_in after insert on public.reading_sessions
+  for each row execute function private.made_in_manage();
 
 -- Runs after reading_entries_audience (triggers run by name), which has
 -- settled audience from what the app sent.
@@ -363,14 +486,10 @@ create function private.reading_entry_mode() returns trigger
 language plpgsql set search_path = '' as $$
 begin
   if tg_op = 'INSERT' then
-    if private.asked_by_reader() then
-      new.made_mode := private.reader_mode(new.user_id);
-      if not private.reaches_people(new.user_id) then
-        new.audience := 'private';
-      end if;
+    if private.asked_by_reader() and not private.reaches_people(new.user_id) then
+      new.audience := 'private';
     end if;
   else
-    new.made_mode := old.made_mode;
     if private.audience_rank(new.audience) > private.audience_rank(old.audience) then
       perform private.refuse_unless_reaching(new.user_id);
     end if;
@@ -385,26 +504,28 @@ create trigger reading_entries_reading_mode before insert or update on public.re
 
 -- Reading ------------------------------------------------------------------------------
 
-alter table public.reading_sessions
-  add column made_mode text not null default 'normal'
-    check (made_mode in ('normal', 'manage'));
-
 -- Reading together is seen by everyone; reading alone by nobody else.
+-- Starting it, or changing one so it shows another book, time or reader, or
+-- goes on again, reaches people; ending it or making it reading alone does
+-- not. One sent again that is there already is judged as its update.
 create function private.reading_session_mode() returns trigger
 language plpgsql set search_path = '' as $$
 begin
   if tg_op = 'INSERT' then
-    if private.asked_by_reader() then
-      new.made_mode := private.reader_mode(new.user_id);
-    end if;
-    if new.mode = 'together' then
+    if new.mode = 'together' and not exists (
+      select 1 from public.reading_sessions r where r.id = new.id
+    ) then
       perform private.refuse_unless_reaching(new.user_id);
     end if;
-  else
-    new.made_mode := old.made_mode;
-    if new.mode = 'together' and old.mode is distinct from 'together' then
-      perform private.refuse_unless_reaching(new.user_id);
-    end if;
+  elsif new.mode = 'together' and (
+    old.mode is distinct from 'together'
+    or new.user_id is distinct from old.user_id
+    or new.book_id is distinct from old.book_id
+    or new.started_at is distinct from old.started_at
+    or (new.ended_at is distinct from old.ended_at
+      and (new.ended_at is null or old.ended_at is not null))
+  ) then
+    perform private.refuse_unless_reaching(new.user_id);
   end if;
   return new;
 end;
@@ -462,11 +583,29 @@ alter table public.library_entries
 grant update (audience, detail) on public.library_entries to authenticated;
 
 create function private.library_entry_mode() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 declare
   mode text;
   start record;
+  was public.library_entries%rowtype;
 begin
+  -- A row give_own_copy moves to the reader's own copy of a book keeps
+  -- what the row it copies had.
+  if tg_op = 'INSERT' and current_setting('private.copying', true) = 'on' then
+    select l.* into was from public.library_entries l
+    join private.book_copies c on c.copied_from = l.book_id
+    where c.book_id = new.book_id and l.user_id = new.user_id;
+    if found then
+      new.added_mode := was.added_mode;
+      new.audience := was.audience;
+      new.detail := was.detail;
+      new.status_held := was.status_held;
+      new.shown_status := was.shown_status;
+      new.wanted_held := was.wanted_held;
+      new.shown_wanted_at := was.shown_wanted_at;
+    end if;
+    return new;
+  end if;
   if not private.asked_by_reader() then
     return new;
   end if;
@@ -518,9 +657,11 @@ begin
     end if;
   elsif new.status is distinct from old.status
       or new.status_at is distinct from old.status_at
-      or new.wanted_at is distinct from old.wanted_at then
-    -- Normal mode changing the book's status or 読みたい shows the book as it
-    -- is now, both of them: what the reader sees is what others see.
+      or new.wanted_at is distinct from old.wanted_at
+      or (old.removed_at is not null and new.removed_at is null) then
+    -- Normal mode changing the book's status or 読みたい, or bringing it
+    -- back, shows the book as it is now, both of them: what the reader sees
+    -- is what others see.
     new.status_held := false;
     new.shown_status := null;
     new.wanted_held := false;
@@ -535,12 +676,18 @@ create trigger library_entries_reading_mode before insert or update on public.li
 
 -- A narrower starting choice narrows the books kept before, at once, as
 -- records do (private.narrow_past). Widening changes nothing; the app asks.
+-- A reader's first settings row narrows too: the start without one is
+-- 人数だけ, not the narrowest.
 create function private.narrow_status() returns trigger
 language plpgsql set search_path = '' as $$
 declare
   rank integer := private.status_rank(new.status_audience, new.status_detail);
+  was integer := private.status_rank('everyone', 'count');
 begin
-  if rank < private.status_rank(old.status_audience, old.status_detail) then
+  if tg_op = 'UPDATE' then
+    was := private.status_rank(old.status_audience, old.status_detail);
+  end if;
+  if rank < was then
     update public.library_entries e
     set audience = new.status_audience, detail = new.status_detail
     where e.user_id = new.user_id
@@ -551,7 +698,7 @@ end;
 $$;
 revoke all on function private.narrow_status() from public, anon, authenticated;
 create trigger reader_settings_narrow_status
-  after update of status_audience, status_detail on public.reader_settings
+  after insert or update of status_audience, status_detail on public.reader_settings
   for each row execute function private.narrow_status();
 
 -- The one rule for numbers others see: as what the book counts (status, and
@@ -585,6 +732,7 @@ language sql stable security definer set search_path = '' as $$
     join public.books b on b.id = e.book_id
     cross join lateral private.status_counted(e) c
     where b.work_id = any (works)
+      and private.book_counts_in_work(b.id)
   ), per_person as (
     select k.work_id, k.user_id,
       bool_or(k.wanted) as wanted,
@@ -598,8 +746,28 @@ language sql stable security definer set search_path = '' as $$
     (count(*) filter (where p.furthest = 2))::integer
   from per_person p
   group by p.work_id
+  -- A work nobody counts in has no row (no 0 is shown).
+  having bool_or(p.wanted or p.furthest > 0)
 $$;
 revoke all on function private.reading_counts(uuid[]) from public, anon, authenticated;
+
+-- Shop visitors --------------------------------------------------------------------------
+
+-- As before, without readers who have no public profile or are hidden.
+create or replace function private.count_shop_visitors() returns void
+language sql security definer set search_path = '' as $$
+  delete from private.shop_visitor_weeks where week < private.last_visit_week();
+  insert into private.shop_visitor_weeks (shop_id, week, visitors)
+  select s.id, private.last_visit_week(), count(*)::integer
+  from public.shop_visits v
+  join public.shops s on s.id = v.shop_id
+  where v.user_id <> s.owner_id
+    and not private.is_hidden('profile', v.user_id)
+    and v.visited_at >= private.last_visit_week()::timestamp at time zone 'Asia/Tokyo'
+    and v.visited_at < (private.last_visit_week() + 7)::timestamp at time zone 'Asia/Tokyo'
+  group by s.id
+  on conflict (shop_id, week) do nothing;
+$$;
 
 -- Terms ----------------------------------------------------------------------------------
 

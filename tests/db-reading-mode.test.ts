@@ -681,14 +681,38 @@ async function main() {
       );
       assert.deepEqual(
         await rows(
-          "select audience, is_public, made_mode from reading_entries where id <> $1 order by created_at",
-          [record.id],
+          `select audience, is_public,
+                  exists (select from private.records_made_in_manage m
+                          where m.entry_id = e.id) as in_manage
+           from reading_entries e order by created_at`,
         ),
         [
-          { audience: "private", is_public: false, made_mode: "manage" },
-          { audience: "private", is_public: false, made_mode: "manage" },
+          { audience: "private", is_public: false, in_manage: false },
+          { audience: "private", is_public: false, in_manage: true },
+          { audience: "private", is_public: false, in_manage: true },
         ],
       );
+      // Nobody reads which mode a record or a reading was made in.
+      for (const table of [
+        "private.records_made_in_manage",
+        "private.readings_made_in_manage",
+      ]) {
+        const error = await refused(BEN, `select * from ${table}`);
+        assert.equal(error.code, "42501", table);
+      }
+      for (const table of ["reading_entries", "reading_sessions"])
+        assert.equal(
+          (
+            await rows(
+              `select from information_schema.columns
+               where table_schema = 'public' and table_name = $1
+                 and column_name like '%mode%' and column_name <> 'mode'`,
+              [table],
+            )
+          ).length,
+          0,
+          table,
+        );
       assert.deepEqual(
         await rows(
           "select audience, made_mode from library_shelves where id = $1",
@@ -794,6 +818,10 @@ async function main() {
         [
           "update reading_sessions set ended_at = now() where id = $1",
           [together.id],
+        ],
+        [
+          "update posters set show_in_timeline = false, allow_display = false, spoiler = true where id = $1",
+          [poster.id],
         ],
         ["update posters set status = 'draft' where id = $1", [poster.id]],
         ["delete from posters where id = $1", [poster.id]],
@@ -958,6 +986,17 @@ async function main() {
         assert.equal(error.code, "42501", sql);
         assert.equal(error.hint, "booktown:no_public_profile", sql);
       }
+      // Not published, never with a handle: none taken tells anyone.
+      assert.equal(
+        (
+          await refused(
+            CHI,
+            "update profiles set handle = 'chi' where id = $1",
+            [CHI],
+          )
+        ).code,
+        "23514",
+      );
       // Published only with a handle and a name.
       for (const sql of [
         "update profiles set published = true where id = $1",
@@ -1004,6 +1043,286 @@ async function main() {
         [CHI],
       );
       assert.equal(error.hint, "booktown:published");
+      await db.close();
+    },
+  );
+
+  // What the app sends again, or as a whole row --------------------------------------------
+
+  await check(
+    "a write sent again, or as a whole row, is judged by what it changes",
+    async () => {
+      const db = await migrated();
+      const { rows, as, refused, mode, typed } = helpers(db);
+      await typed(BEN, book(1));
+      await typed(BEN, book(2));
+      const [shop] = await as<{ id: string }>(
+        AKI,
+        "insert into shops (owner_id, name, is_open) values ($1, 'アキの本屋', true) returning id",
+        [AKI],
+      );
+      const [daiShop] = await as<{ id: string }>(
+        DAI,
+        "insert into shops (owner_id, name, is_open) values ($1, 'ダイの本屋', true) returning id",
+        [DAI],
+      );
+      const [post] = await as<{ id: string }>(
+        BEN,
+        "insert into posts (author_id, body) values ($1, 'ベンの便り') returning id",
+        [BEN],
+      );
+      const [together] = await as<{ id: string }>(
+        BEN,
+        "insert into reading_sessions (user_id, book_id, mode) values ($1, $2, 'together') returning id",
+        [BEN, book(1)],
+      );
+      const reaction = `insert into shop_reactions (user_id, shop_id, liked, message)
+        values ($1, $2, $3, $4) on conflict (user_id, shop_id)
+        do update set liked = excluded.liked, message = excluded.message`;
+      await as(BEN, reaction, [BEN, shop.id, true, "すてき"]);
+      await as(
+        BEN,
+        "insert into post_reactions (user_id, post_id, kind) values ($1, $2, 'like')",
+        [BEN, post.id],
+      );
+      await as(
+        BEN,
+        "insert into profile_follows (follower_id, followee_id) values ($1, $2)",
+        [BEN, AKI],
+      );
+      await mode(BEN, "manage");
+
+      // Sent again: there already, nothing new.
+      for (const [sql, params] of [
+        [
+          "insert into posts (id, author_id, body) values ($1, $2, 'ベンの便り') on conflict (id) do nothing",
+          [post.id, BEN],
+        ],
+        [
+          "insert into reading_sessions (id, user_id, book_id, mode) values ($1, $2, $3, 'together') on conflict (id) do nothing",
+          [together.id, BEN, book(1)],
+        ],
+        [
+          "insert into post_reactions (user_id, post_id, kind) values ($1, $2, 'like') on conflict do nothing",
+          [BEN, post.id],
+        ],
+        [
+          "insert into profile_follows (follower_id, followee_id) values ($1, $2) on conflict do nothing",
+          [BEN, AKI],
+        ],
+        // The like taken back, the ひとこと kept, as the app sends it.
+        [reaction, [BEN, shop.id, false, "すてき"]],
+      ] as [string, unknown[]][])
+        await as(BEN, sql, params);
+      assert.deepEqual(
+        await rows("select liked, message from shop_reactions"),
+        [{ liked: false, message: "すてき" }],
+      );
+
+      // What it would change reaches people.
+      for (const [what, sql, params] of [
+        ["liked again", reaction, [BEN, shop.id, true, "すてき"]],
+        ["another ひとこと", reaction, [BEN, shop.id, false, "いいね"]],
+        [
+          "the ひとこと moved to another shop",
+          "update shop_reactions set shop_id = $2 where user_id = $1",
+          [BEN, daiShop.id],
+        ],
+        [
+          "reading together, another book",
+          "update reading_sessions set book_id = $2 where id = $1",
+          [together.id, book(2)],
+        ],
+        [
+          "reading together, started again",
+          "update reading_sessions set started_at = now() + interval '1 hour' where id = $1",
+          [together.id],
+        ],
+        [
+          "a like tapped again",
+          "update post_reactions set taps = taps + 1 where user_id = $1",
+          [BEN],
+        ],
+      ] as [string, string, unknown[]][]) {
+        const error = await refused(BEN, sql, params, what);
+        assert.equal(error.hint, "booktown:reading_mode", what);
+      }
+      // Ending it is not refused; going on again after is.
+      await as(
+        BEN,
+        "update reading_sessions set ended_at = now() where id = $1",
+        [together.id],
+      );
+      assert.equal(
+        (
+          await refused(
+            BEN,
+            "update reading_sessions set ended_at = null where id = $1",
+            [together.id],
+          )
+        ).hint,
+        "booktown:reading_mode",
+      );
+      await db.close();
+    },
+  );
+
+  await check(
+    "a book row moved to the reader's own copy keeps the mode it came in and what it showed",
+    async () => {
+      const db = await migrated();
+      const { rows, mode, typed, keep, setStatus, counted } = helpers(db);
+      await typed(BEN, book(1));
+      await typed(BEN, book(2));
+      await keep(BEN, book(1), "reading");
+      await mode(BEN, "manage");
+      await setStatus(BEN, book(1), "finished");
+      await keep(BEN, book(2), "reading");
+      const before = await rows(
+        `select book_id, added_mode, audience, detail, status_held, shown_status
+         from library_entries order by book_id`,
+      );
+      for (const original of [book(1), book(2)])
+        await rows("select private.give_own_copy($1, $2, 'moved')", [
+          original,
+          BEN,
+        ]);
+      const after = await rows<Record<string, unknown>>(
+        `select c.copied_from as book_id, e.added_mode, e.audience, e.detail,
+                e.status_held, e.shown_status
+         from library_entries e join private.book_copies c on c.book_id = e.book_id
+         order by c.copied_from`,
+      );
+      assert.deepEqual(after, before);
+      const [copy] = await rows<{ book_id: string }>(
+        "select book_id from private.book_copies where copied_from = $1",
+        [book(1)],
+      );
+      assert.deepEqual(await counted(BEN, copy.book_id), {
+        status: "reading",
+        wanted: false,
+      });
+      await db.close();
+    },
+  );
+
+  await check(
+    "a first starting choice narrower than 人数だけ narrows the books kept before",
+    async () => {
+      const db = await migrated();
+      const { rows, as, typed, keep } = helpers(db);
+      await typed(AKI, book(1));
+      await keep(AKI, book(1), "reading");
+      await as(
+        AKI,
+        "insert into reader_settings (user_id, status_audience) values ($1, 'private')",
+        [AKI],
+      );
+      assert.deepEqual(await rows("select audience from library_entries"), [
+        { audience: "private" },
+      ]);
+      await db.close();
+    },
+  );
+
+  await check(
+    "a book brought back in normal mode shows as it is now",
+    async () => {
+      const db = await migrated();
+      const { as, mode, typed, keep, setStatus, counted } = helpers(db);
+      await typed(BEN, book(1));
+      await keep(BEN, book(1), "reading");
+      await mode(BEN, "manage");
+      await setStatus(BEN, book(1), "finished");
+      await as(
+        BEN,
+        "update library_entries set removed_at = now() where book_id = $1",
+        [book(1)],
+      );
+      await mode(BEN, "normal");
+      await as(
+        BEN,
+        "update library_entries set removed_at = null where book_id = $1",
+        [book(1)],
+      );
+      assert.deepEqual(await counted(BEN, book(1)), {
+        status: "finished",
+        wanted: false,
+      });
+      await db.close();
+    },
+  );
+
+  await check(
+    "a work nobody counts in has no row, and a book held from its work is not counted",
+    async () => {
+      const db = await migrated();
+      const { rows, mode, typed, keep } = helpers(db);
+      await typed(BEN, book(1));
+      await typed(AKI, book(2));
+      await mode(BEN, "manage");
+      await keep(BEN, book(1), "finished");
+      await keep(AKI, book(2), "finished");
+      const works = (
+        await rows<{ work_id: string }>(
+          "select work_id from books where id = any($1::uuid[]) order by id",
+          [[book(1), book(2)]],
+        )
+      ).map((row) => row.work_id);
+      assert.deepEqual(
+        await rows("select * from private.reading_counts($1::uuid[])", [
+          [works[0]],
+        ]),
+        [],
+      );
+      assert.equal(
+        (
+          await rows("select * from private.reading_counts($1::uuid[])", [
+            [works[1]],
+          ])
+        ).length,
+        1,
+      );
+      await rows("delete from private.book_checks where book_id = $1", [
+        book(2),
+      ]);
+      assert.deepEqual(
+        await rows("select * from private.reading_counts($1::uuid[])", [
+          [works[1]],
+        ]),
+        [],
+      );
+      await db.close();
+    },
+  );
+
+  await check(
+    "a shop's visitors last week leave out readers without a public profile",
+    async () => {
+      const db = await migrated();
+      const { rows, as } = helpers(db);
+      await as(
+        CHI,
+        "insert into profiles (id, name, handle, published) values ($1, '', null, false)",
+        [CHI],
+      );
+      const [shop] = await as<{ id: string }>(
+        AKI,
+        "insert into shops (owner_id, name, is_open) values ($1, 'アキの本屋', true) returning id",
+        [AKI],
+      );
+      await rows(
+        `insert into shop_visits (user_id, shop_id, visited_at)
+         select u, $1, private.last_visit_week()::timestamp at time zone 'Asia/Tokyo'
+           + interval '1 day'
+         from unnest($2::uuid[]) u`,
+        [shop.id, [CHI, DAI]],
+      );
+      await rows("select private.count_shop_visitors()");
+      assert.deepEqual(
+        await rows("select visitors from private.shop_visitor_weeks"),
+        [{ visitors: 1 }],
+      );
       await db.close();
     },
   );
@@ -1108,6 +1427,22 @@ async function main() {
         "insert into reading_entries (user_id, book_id, is_public) values ($1, $2, true)",
         [AKI, book(1)],
       );
+      // A row in each table the move copies.
+      await as(
+        AKI,
+        "insert into reader_settings (user_id, status_audience) values ($1, 'everyone')",
+        [AKI],
+      );
+      await as(
+        AKI,
+        "insert into reading_sessions (user_id, book_id, mode) values ($1, $2, 'together')",
+        [AKI, book(1)],
+      );
+      await as(
+        AKI,
+        "insert into library_shelves (id, user_id, name, position, audience) values ($1, $2, '旅', 'a', 'everyone')",
+        [id(3, 1), AKI],
+      );
       const was = await everyRow(db);
       await db.exec(TEXT);
       const now = await everyRow(db);
@@ -1127,7 +1462,8 @@ async function main() {
           "wanted_held",
           "shown_wanted_at",
         ],
-        "public.reading_entries": ["made_mode"],
+        "public.library_shelves": ["made_mode"],
+        "public.reader_settings": ["mode"],
       };
       for (const name of Object.keys(was)) {
         assert.deepEqual(
@@ -1145,11 +1481,20 @@ async function main() {
         status: "finished",
         wanted: false,
       });
-      const [checked] = await helped.rows<{ checked: Record<string, unknown> }>(
-        "select checked from keep.copies where label = $1 limit 1",
-        [LABEL],
-      );
-      assert.ok(checked, "the copy was checked");
+      // Every copy was checked, and found nothing lost.
+      const copies = await helped.rows<{
+        source: string;
+        checked: Record<string, number> | null;
+      }>("select source, checked from keep.copies where label = $1", [LABEL]);
+      assert.equal(copies.length, 6);
+      for (const copy of copies) {
+        assert.ok(copy.checked, copy.source);
+        assert.equal(copy.checked.lost_rows, 0, copy.source);
+        assert.equal(copy.checked.lost_links, 0, copy.source);
+      }
+      assert.deepEqual(await helped.rows("select mode from reader_settings"), [
+        { mode: "normal" },
+      ]);
       await db.close();
     },
   );
@@ -1170,8 +1515,8 @@ async function main() {
       const sql = rollback.join("\n");
       assert.match(sql, /drop column published/);
       await db.exec(sql);
+      assert.match(sql, /drop_copy/);
       assert.deepEqual(await catalog(db), was);
-      await db.query("select private.drop_copy($1)", [LABEL]);
       await db.exec(TEXT);
       await db.close();
     },
