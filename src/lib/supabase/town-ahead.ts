@@ -40,6 +40,14 @@ export function townAheadScript(
 }
 
 /**
+ * Run in the head before the first paint: marks `<html>` with data-visitor
+ * when no session is kept on this browser and no sign-in is coming back in
+ * the address, so Home draws what someone not signed in sees whatever the
+ * town holds (home.css, home-early) without waiting for the town.
+ */
+export const VISITOR_BOOT = `(function(){try{if(/[#&?](access_token|code)=/.test(location.href))return;for(var i=0;i<localStorage.length;i++)if(/^sb-.+-auth-token$/.test(localStorage.key(i)||""))return;document.documentElement.dataset.visitor=""}catch(e){}})()`;
+
+/**
  * The answer the head asked for, once: none when it asked nothing, it came
  * with trouble, or it is too old.
  */

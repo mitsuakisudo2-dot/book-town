@@ -2935,12 +2935,20 @@ try {
       try {
         await openHome();
         await expect(bones).toHaveAttribute("aria-busy", "true");
+        // Someone not signed in has theirs drawn with the page: not here.
         for (const name of ["書店を開く", "本を登録", "掲示板"])
-          await expect(homeDoors.getByText(name)).toHaveCount(0);
-        // Their places kept, as shapes.
-        await expect(homeDoors.locator(".home-entrance")).toHaveCount(4);
+          await expect(
+            homeDoors.getByText(name).filter({ visible: true }),
+          ).toHaveCount(0);
         await expect(
-          homeDoors.locator(".home-entrance.is-waiting"),
+          page.getByText("人に出会う。").filter({ visible: true }),
+        ).toHaveCount(0);
+        // Their places kept, as shapes.
+        await expect(homeDoors.locator(".home-entrance:visible")).toHaveCount(
+          4,
+        );
+        await expect(
+          homeDoors.locator(".home-entrance.is-waiting:visible"),
         ).toHaveCount(2);
         release();
         await expect(bones).toHaveCount(0, { timeout: 10000 });
@@ -2956,6 +2964,67 @@ try {
       await homeDoors.getByRole("button", { name: "掲示板" }).click();
       await expect(page.locator("#home-board")).toBeInViewport();
       town = null;
+    },
+  );
+
+  await check(
+    "someone not signed in sees the welcome, their doors and はじめの3つ before the town comes, as they stay after",
+    async () => {
+      const visiting = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
+        reducedMotion: "reduce",
+      });
+      const release = holdTown();
+      try {
+        await visiting.route(supabase + "/**", standIn);
+        await visiting.route(
+          (url) => !url.href.startsWith(base) && !url.href.startsWith(supabase),
+          (route) => route.abort(),
+        );
+        const at = settleBeforeNavigating(await visiting.newPage());
+        at.on("pageerror", (e) => errors.push(e.message));
+        await at.goto(base + "/");
+        const doors = at.getByRole("navigation", { name: "できること" });
+        const look = async () => {
+          await expect(
+            at.getByRole("link", { name: "歩いてみる" }).first(),
+          ).toBeVisible();
+          await expect(at.getByText("人に出会う。").first()).toBeVisible();
+          await expect(doors.locator(".home-entrance:visible")).toHaveCount(4);
+          for (const name of ["書店をのぞく", "読書をはじめる", "掲示板"])
+            await expect(
+              doors.getByRole("button", { name }).filter({ visible: true }),
+            ).toHaveCount(1);
+          await expect(
+            doors.getByRole("link", { name: "書店を開く" }),
+          ).toBeVisible();
+          await expect(
+            at
+              .getByRole("heading", { name: "はじめの3つ" })
+              .filter({ visible: true }),
+          ).toHaveCount(1);
+        };
+        // The town is still being read: the 便り wait as bones.
+        await expect(at.locator("main .home-skeletons")).toHaveAttribute(
+          "aria-busy",
+          "true",
+        );
+        await look();
+        await expect(at.locator(".home-carousel.is-loading")).toHaveCount(1);
+        const before = await doors.boundingBox();
+        release();
+        await expect(at.locator("main .home-skeletons")).toHaveCount(0, {
+          timeout: 10000,
+        });
+        await expect(at.locator(".home-carousel.is-loading")).toHaveCount(0);
+        // The same, where it was: nothing moves when the town comes.
+        await look();
+        expect(await doors.boundingBox()).toEqual(before);
+      } finally {
+        release();
+        await visiting.close();
+      }
     },
   );
 

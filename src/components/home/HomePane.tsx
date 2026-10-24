@@ -191,6 +191,9 @@ const ScanSession = dynamic(
 
 const still = () => () => {};
 
+/** はじめの3つ of someone not signed in: none done. */
+const NONE_DONE = { book: false, shelf: false, shop: false };
+
 /**
  * How much of Home has been drawn on this page before: 0 nothing yet, 1 all
  * the 便り, 2 the 路地 as well.
@@ -419,6 +422,13 @@ export function HomePane({
       />
       {drawn?.firstSteps && (
         <FirstSteps steps={firstSteps(state)} onScan={() => setSheet("scan")} />
+      )}
+      {/* Someone not signed in has done none of them, whatever the town
+          holds: drawn with the page (home-early, home.css). */}
+      {!drawn && (
+        <div className="home-early">
+          <FirstSteps steps={NONE_DONE} onScan={() => setSheet("scan")} />
+        </div>
       )}
       {drawn && <ReadingLine state={state} />}
       {drawn ? (
