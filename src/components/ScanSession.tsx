@@ -78,6 +78,7 @@ import {
 } from "../lib/scan";
 import {
   KEPT,
+  ON_SHELF,
   restorable,
   showsOf,
   tally,
@@ -113,6 +114,7 @@ import {
 } from "../lib/scan-timing";
 import { BarcodeRegister } from "./BarcodeRegister";
 import { ScanDone } from "./ScanDone";
+import { ScanShelf, fillsRow, type Spine } from "./ScanShelf";
 import { ScanResume } from "./ScanResume";
 import { ScanSortSheet } from "./ScanSortSheet";
 import { slotName, useSlots } from "./ScanSlots";
@@ -434,6 +436,11 @@ export function ScanSession({
             ? "saving"
             : "added";
   const counts = tally(cards, shown);
+  // この回の棚's books, for the sound of the next one read.
+  const shelvedNow = useRef(0);
+  useEffect(() => {
+    shelvedNow.current = counts.saved + counts.checking;
+  });
 
   // A book entered by hand is saved once the town says all it had is: the
   // same as the journal lets its items go (settleJournal).
@@ -528,6 +535,7 @@ export function ScanSession({
       ready: townReady,
       cards: shownCards,
     } = latest.current;
+    const shelved = shelvedNow.current;
     if (!reader) return;
     const at = Date.now();
     const town = journalTown.state();
@@ -582,7 +590,8 @@ export function ScanSession({
       }
       return;
     }
-    sound.play("in");
+    // Ten fill a 段 of この回の棚: that book has a sound of its own.
+    sound.play(fillsRow(shelved + 1) ? "row" : "in", shelved + 1);
     const { known } = reaction;
     const item = keepRead(libraryJournal, reader, {
       session,
@@ -1527,6 +1536,22 @@ export function ScanSession({
             : saveWarning(savedIn, persistence);
 
   const countText = scanCount(counts);
+  // この回の棚, oldest first. A book not yet in the library has no colour
+  // of its own: a plain spine until it has.
+  const spines: Spine[] = cards.flatMap((card) => {
+    const now = shown(card);
+    if (!ON_SHELF.includes(now)) return [];
+    const { book } = faceOf(card, now);
+    return [
+      {
+        id: card.id,
+        color: book?.color ?? "var(--line-2)",
+        height: book?.height ?? 190,
+        thickness: book?.thickness ?? 34,
+        faint: now !== "added",
+      },
+    ];
+  });
   // 一括整理's books: this time's, in the library, newest first.
   const tidyBooks: TidyBook[] = [];
   for (const card of [...cards].reverse()) {
@@ -1599,9 +1624,12 @@ export function ScanSession({
           >
             <Icon name="close" />
           </button>
-          <p className="scan-count" aria-live="polite">
-            {countText}
-          </p>
+          <div className="scan-count-shelf">
+            <p className="scan-count" aria-live="polite">
+              {countText}
+            </p>
+            <ScanShelf books={spines} />
+          </div>
           {input.kind === "camera" ? (
             <button
               type="button"
@@ -2207,6 +2235,7 @@ export function ScanSession({
       </div>
       {done && (
         <ScanDone
+          books={spines}
           saved={counts.saved}
           checking={counts.checking}
           attention={counts.attention}

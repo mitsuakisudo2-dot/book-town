@@ -3,16 +3,19 @@
 import { useEffect, useRef } from "react";
 import { afterLayerCloses, useBackLayer } from "../lib/back-layer";
 import { SCAN_COPY } from "../lib/scan";
+import { ScanShelf, type Spine } from "./ScanShelf";
 import { Icon } from "./ui";
 
 // 完了 (Figma v4's 08): what this time came to, over the scanner with the
 // camera off. The books whose saving is confirmed, those still on their
 // way (the count goes on as they land), and those that wait for the
-// reader; never a 0. 戻る and Escape go back to scanning.
+// reader; never a 0. 戻る and Escape go back to scanning. This time's books
+// stand on a shelf over the count (114); with none, a check mark.
 
 const COPY = SCAN_COPY.done;
 
 export function ScanDone({
+  books = [],
   saved,
   checking,
   attention,
@@ -22,6 +25,8 @@ export function ScanDone({
   onClose,
   onBack,
 }: {
+  /** この回の棚: this time's books, oldest first (ScanShelf). */
+  books?: readonly Spine[];
   saved: number;
   checking: number;
   attention: number;
@@ -68,9 +73,13 @@ export function ScanDone({
     <div className="scan-done" role="region" aria-label={COPY.name}>
       <h2 className="scan-done-name">{COPY.name}</h2>
       <div className="scan-done-body" aria-live="polite">
-        <span className="scan-done-mark" aria-hidden="true">
-          <Icon name="check" size={32} />
-        </span>
+        {books.length > 0 ? (
+          <ScanShelf books={books} large />
+        ) : (
+          <span className="scan-done-mark" aria-hidden="true">
+            <Icon name="check" size={32} />
+          </span>
+        )}
         {saved > 0 && (
           <p className="scan-done-count">
             <strong>{saved}</strong>

@@ -7,6 +7,13 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import {
+  playTone,
+  setSoundOn,
+  useToneChoice,
+  wakeAudio,
+  type Moment,
+} from "./scan-tones";
 
 // What the continuous scanner (ScanSession.tsx) asks of this device: the
 // network, the sound and vibration of a read, the screen kept on while the
@@ -28,7 +35,6 @@ export const useOnline = () =>
     () => true,
   );
 
-const SOUND_KEY = "book-town-scan-sound";
 const COMPACT_KEY = "book-town-scan-compact";
 
 /**
@@ -57,97 +63,39 @@ export function useCompact() {
     });
   return [on, toggle] as const;
 }
-type Sound = "in" | "nothing-new";
-
 /**
- * A short tone when a book is taken in, two lower ones when nothing is new;
- * the same as a short vibration where the device has one. ♪ turns the sound
- * off (vibration is silent and stays), and this device remembers it.
+ * The tone chosen in 設定 (scan-tones.ts) when a book is taken in, two lower
+ * sounds when nothing is new, and three soft notes as a 段 of この回の棚
+ * fills; a short vibration too where the device has one. ♪ turns the sound
+ * off (vibration is silent and stays): the same as 音なし in 設定, kept on
+ * this device.
  */
 export function useScanSound() {
-  const [on, setOn] = useState(() => {
-    try {
-      return localStorage.getItem(SOUND_KEY) !== "off";
-    } catch {
-      return true;
-    }
-  });
-  const onRef = useRef(on);
+  const choice = useToneChoice();
+  const on = choice !== "off";
+  const choiceRef = useRef(choice);
   useEffect(() => {
-    onRef.current = on;
-  }, [on]);
-  const context = useRef<AudioContext | null>(null);
-  useEffect(
-    () => () => {
-      void context.current?.close().catch(() => {});
-      context.current = null;
-    },
-    [],
-  );
+    choiceRef.current = choice;
+  }, [choice]);
   // Phones start sound only from a tap: every tap in the scanner wakes it.
   const wake = useCallback(() => {
-    try {
-      const Context =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext;
-      if (!Context) return;
-      context.current ??= new Context();
-      if (context.current.state === "suspended")
-        void context.current.resume().catch(() => {});
-    } catch {
-      // No sound on this device.
-    }
+    wakeAudio();
   }, []);
-  const play = useCallback(
-    (sound: Sound) => {
-      try {
-        if (typeof navigator.vibrate === "function")
-          navigator.vibrate(sound === "in" ? 30 : [20, 60, 20]);
-      } catch {
-        // Vibration refused: the sound and the card still tell.
-      }
-      if (!onRef.current) return;
-      wake();
-      const audio = context.current;
-      if (!audio) return;
-      const tone = (
-        hz: number,
-        after: number,
-        length: number,
-        peak: number,
-      ) => {
-        const oscillator = audio.createOscillator();
-        const gain = audio.createGain();
-        const start = audio.currentTime + after;
-        oscillator.type = "sine";
-        oscillator.frequency.value = hz;
-        // From near silence and back, so it never clicks.
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(peak, start + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
-        oscillator.connect(gain).connect(audio.destination);
-        oscillator.start(start);
-        oscillator.stop(start + length + 0.02);
-      };
-      if (sound === "in") tone(1046.5, 0, 0.08, 0.18);
-      else {
-        tone(587, 0, 0.07, 0.14);
-        tone(440, 0.1, 0.09, 0.14);
-      }
-    },
-    [wake],
-  );
-  const toggle = () => {
-    const next = !on;
-    setOn(next);
+  /** `nth`: this time's count of books, for the tones that move with it. */
+  const play = useCallback((sound: Moment, nth?: number) => {
     try {
-      if (next) localStorage.removeItem(SOUND_KEY);
-      else localStorage.setItem(SOUND_KEY, "off");
+      if (typeof navigator.vibrate === "function")
+        navigator.vibrate(sound === "nothing-new" ? [20, 60, 20] : 30);
     } catch {
-      // Remembered for this time only.
+      // Vibration refused: the sound and the card still tell.
     }
-    if (next) wake();
+    const tone = choiceRef.current;
+    if (tone === "off") return;
+    playTone(tone, sound, nth);
+  }, []);
+  const toggle = () => {
+    setSoundOn(!on);
+    if (!on) wake();
   };
   return { on, toggle, play, wake };
 }
