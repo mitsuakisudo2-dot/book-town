@@ -35,7 +35,7 @@ import { emptyMore } from "../town-more";
 import { booksBeforeSearch } from "../book-lists";
 import { databaseSearch } from "../search/rank";
 import { normalizeIsbn } from "../books";
-import { seriesFromRows, type SeriesRow } from "../series";
+import type { SeriesRow } from "../series";
 import { FEELINGS, ME_ID, type TownState } from "../types";
 import type {
   Database,
@@ -1034,6 +1034,8 @@ function remoteReads(
             return emptyMore();
           throw error;
         }
+        // Read only where a series is shown: not with every page.
+        const { seriesFromRows } = await import("../series");
         const series = seriesFromRows(found);
         const missing = [
           ...new Set(

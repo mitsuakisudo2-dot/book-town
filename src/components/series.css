@@ -238,16 +238,6 @@
 .series-open {
   padding: 0 12px;
 }
-.scan-item-head:has(> .series-open) {
-  grid-template-columns: 36px minmax(0, 1fr) auto auto;
-}
-/* コンパクト表示 keeps a card to its name and status, as without its ⋮. */
-.scan-item.is-compact .series-open {
-  display: none;
-}
-.scan-item.is-compact .scan-item-head:has(> .series-open) {
-  grid-template-columns: 24px minmax(0, 1fr);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .series-spine {

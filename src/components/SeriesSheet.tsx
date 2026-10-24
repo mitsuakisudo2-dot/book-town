@@ -11,10 +11,11 @@ import {
   libraryByIsbn,
   lineOf,
   registerVolumes,
+  SERIES,
   type SeriesLine,
   type SeriesVolume,
 } from "../lib/series";
-import { MY_BOOK, SERIES } from "../lib/words";
+import { MY_BOOK } from "../lib/words";
 import { Icon, Modal } from "./ui";
 import "./series.css";
 

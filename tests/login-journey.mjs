@@ -2312,11 +2312,13 @@ try {
       });
       await expect(strip).toContainText("『夜の図書館』のシリーズ");
       await expect(strip).toContainText("/ 3 冊 登録済み");
-      await strip.scrollIntoViewIfNeeded();
+      // In sight above the tab bar, as a reader scrolls to it.
+      await strip.evaluate((el) => el.scrollIntoView({ block: "center" }));
       await noOverflow("book page with its series");
       await view("13-series-book-page-390");
       await page.setViewportSize({ width: 320, height: 640 });
-      await strip.scrollIntoViewIfNeeded();
+      // In sight above the tab bar, as a reader scrolls to it.
+      await strip.evaluate((el) => el.scrollIntoView({ block: "center" }));
       await noOverflow("book page with its series at 320");
       await view("13-series-book-page-320");
       await strip.click();
