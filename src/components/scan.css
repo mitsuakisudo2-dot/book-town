@@ -1091,6 +1091,12 @@ body:has(.scan-session) .toast {
    the book's own colour (--spine) and a share of the shelf's height and of
    the widest spine (--spine-tall, --spine-wide). With the larger words, or
    little height, the count is said alone (けにーさん 2026-10-23). */
+.scan-count-shelf {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+}
 .scan-shelf {
   display: flex;
   justify-content: center;

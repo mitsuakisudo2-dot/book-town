@@ -268,12 +268,17 @@ export function playTone(tone: Tone, moment: Moment, nth = 1) {
   const audio = wakeAudio();
   if (!audio) return;
   if (moment === "nothing-new") {
-    // Lower and plainer than a book taken in: heard as "no new book".
+    // Two lower sounds, going down: heard as "no new book", whatever the tone.
     if (tone === "pip") {
       sine(audio, audio.destination, 587, 0, 0.07, 0.14);
       sine(audio, audio.destination, 440, 0.1, 0.09, 0.14);
-    } else if (tone === "kotto") tap(audio, 240, 0, 0.7);
-    else bar(audio, 196, 0, 0.5, WOOD);
+    } else if (tone === "kotto") {
+      tap(audio, 240, 0, 0.7);
+      tap(audio, 200, 0.1, 0.7);
+    } else {
+      bar(audio, 220, 0, 0.5, WOOD);
+      bar(audio, 196, 0.1, 0.5, WOOD);
+    }
     return;
   }
   const pitch = sway(0.06);

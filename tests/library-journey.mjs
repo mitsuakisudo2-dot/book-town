@@ -311,6 +311,12 @@ const toasts = (on = page) => on.evaluate(() => window.__toasts.splice(0));
 const scanner = (on = page) =>
   on.getByRole("dialog", { name: "本を続けて登録" });
 const count = (on) => scanner(on).locator(".scan-count");
+/** この回の棚 under the count (114): its folded 段 and its spines in sight. */
+const shelf = (on) => scanner(on).locator(".scan-count-shelf .scan-shelf");
+const spines = (on, faint = false) =>
+  shelf(on).locator(
+    faint ? ".scan-spine.is-faint" : ".scan-spine:not(.is-faint)",
+  );
 /** The newest book of this time's list: it is on top. */
 const latest = (on) => scanner(on).locator(".scan-item").first();
 const cardTitle = (on) => latest(on).locator(".scan-item-title");
@@ -841,6 +847,9 @@ try {
     await show(scan, ...twenty);
     await expect(count(scan)).toHaveText("20冊 登録済み", { timeout: 15000 });
     await expect(scanner(scan).locator(".scan-item")).toHaveCount(20);
+    // The shelf agrees with the count: ten a 段, the one before folded.
+    await expect(shelf(scan).locator(".scan-shelf-folded")).toHaveText("1段");
+    await expect(spines(scan)).toHaveCount(10);
     for (const isbn of twenty) inLibrary.add("isbn-" + isbn);
     await expectLibrary();
     const data = await stored(scan);
@@ -861,6 +870,8 @@ try {
       const isbn = isbnOf(21);
       await show(scan, [isbn, PRICE]);
       await expect(count(scan)).toHaveText("21冊 登録済み");
+      await expect(shelf(scan).locator(".scan-shelf-folded")).toHaveText("2段");
+      await expect(spines(scan)).toHaveCount(1);
       inLibrary.add("isbn-" + isbn);
       await expectLibrary();
       const guide = scanner(scan).locator(".scan-guide");
@@ -896,6 +907,9 @@ try {
       );
       await expect(cardStatus(scan)).toHaveText("読み取り済み・再入力不要");
       await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
+      // A book that waits for the reader is not on the shelf.
+      await expect(spines(scan)).toHaveCount(1);
+      await expect(spines(scan, true)).toHaveCount(0);
       // 再試行 asks openBD again (Figma v4's 07); still unknown, the book
       // stays as it was.
       const fix = latest(scan).getByRole("group", {
@@ -935,6 +949,8 @@ try {
       await undoKnown();
       await expect(cardStatus(scan)).toHaveText("取り消しました");
       await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
+      // Taken back, it leaves the shelf.
+      await expect(spines(scan)).toHaveCount(1);
       await expect(
         scanner(scan).locator(".scan-item:not(.is-kept, .is-undone)"),
       ).toHaveCount(21);
@@ -978,6 +994,9 @@ try {
       await expect(count(scan)).toHaveText(
         "22冊 登録済み・1冊確認中・1冊要確認",
       );
+      // On its way: faint, until its saving is confirmed.
+      await expect(spines(scan)).toHaveCount(2);
+      await expect(spines(scan, true)).toHaveCount(1);
       // Back online, it is looked up and registered.
       await scan.context().setOffline(false);
       await expect(cardTitle(scan)).toHaveText("試験の本 23");

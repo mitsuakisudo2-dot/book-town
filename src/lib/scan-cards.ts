@@ -45,6 +45,18 @@ export const KEPT: Shows[] = [
   "waiting",
   "unavailable",
 ];
+/**
+ * この回の棚 (114): the books on it are those of the count's 登録済み and
+ * 確認中, so the shelf and the words agree. 確認中 ones are drawn faint.
+ */
+export const ON_SHELF: ShownNow[] = [
+  "added",
+  "saving",
+  "looking",
+  "waiting",
+  "offline",
+];
+
 /** A card that can be taken back (登録を取り消す), as can one still saving. */
 export const UNDOABLE: Shows[] = ["added", ...KEPT];
 
