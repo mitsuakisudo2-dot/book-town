@@ -2729,6 +2729,102 @@ try {
     },
   );
 
+  await check(
+    "a library catalog book a search finds beyond the town goes in the library and 読みたい, named as it is (AUD-190)",
+    async () => {
+      // The town reads only its newest books; the library's catalog has
+      // thousands more, which the search asks the database for (find_books).
+      // Tapped, one is taken in as the database's row: the reader's rows name
+      // it, nothing is copied and no book row is written (#354).
+      const FAR = "d1e2f3a4-b5c6-4d7e-8f9a-0b1c2d3e4f01";
+      const at = "2026-10-12T00:00:00Z";
+      town = { books: [], my_books: [] };
+      const found = [];
+      // What the page writes is answered here and noted: the reader's rows,
+      // and a copy or a book row, which it must not write.
+      const sent = [];
+      const writes = [
+        "/rest/v1/book_marks",
+        "/rest/v1/library_entries",
+        "/rest/v1/books",
+        "/rest/v1/rpc/copy_book",
+      ];
+      const answer = (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (url.pathname === "/rest/v1/rpc/find_books") {
+          found.push(request.postData() ?? "");
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify([
+              {
+                id: FAR,
+                isbn: "9784000000019",
+                title: "遠い海の図書館",
+                author: "試験 作家",
+                publisher: "試験書房",
+                price: null,
+                source: "ndl",
+                created_by: null,
+                work_id: FAR,
+                created_at: at,
+                updated_at: at,
+              },
+            ]),
+          });
+        }
+        if (request.method() === "GET" || !writes.includes(url.pathname))
+          return route.fallback();
+        sent.push({
+          path: url.pathname,
+          asked: url.search + " " + (request.postData() ?? ""),
+        });
+        return route.fulfill({ status: 201, body: "" });
+      };
+      await page.route(supabase + "/rest/v1/**", answer);
+      await page.goto(base + "/search/");
+      await page
+        .getByRole("searchbox", { name: "本と書店を検索" })
+        .fill("遠い海の図書館");
+      const row = page
+        .locator(".search-results .search-book-row")
+        .filter({ hasText: "遠い海の図書館" });
+      await expect(row).toHaveCount(1);
+      expect(found.length).toBeGreaterThan(0);
+      const register = row.getByRole("button", {
+        name: "『遠い海の図書館』をライブラリに登録",
+      });
+      await expect(register).toHaveAttribute("aria-pressed", "false");
+      await register.click();
+      await expect(register).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        page.getByText("『遠い海の図書館』を登録しました"),
+      ).toBeVisible();
+      await expect
+        .poll(() => sent.map((write) => write.path))
+        .toContain("/rest/v1/book_marks");
+      // Its page, from the search: 読みたい takes the same book.
+      await row.locator(".search-book").click();
+      await expect(page).toHaveURL(new RegExp(FAR));
+      await page.getByRole("button", { name: "読みたいに加える" }).click();
+      await expect(
+        page.getByRole("button", { name: "読みたいに登録済み" }),
+      ).toBeVisible();
+      await expect
+        .poll(() => sent.filter((write) => write.asked.includes('"wish"')))
+        .not.toEqual([]);
+      for (const write of sent) {
+        expect(write.path).not.toBe("/rest/v1/rpc/copy_book");
+        expect(write.path).not.toBe("/rest/v1/books");
+        expect(write.asked).toContain(FAR);
+      }
+      await expect.poll(outboxKeys).toEqual([]);
+      await page.unroute(supabase + "/rest/v1/**", answer);
+      town = null;
+    },
+  );
+
   // Another reader, their shop and posts; what reports did; the reader's own
   // reports; and two books with outside covers.
   const OTHER = "3c1d2b4a-7e6f-4a5b-8c9d-0e1f2a3b4c5d";
