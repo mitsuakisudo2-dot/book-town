@@ -1327,6 +1327,62 @@ async function main() {
     },
   );
 
+  await check(
+    "the operator's service role, which has no use of schema private, writes every table the triggers watch",
+    async () => {
+      const db = await migrated();
+      const { typed } = helpers(db);
+      await typed(AKI, book(1));
+      await db.exec(`
+        grant usage on schema public to service_role;
+        grant all on all tables in schema public to service_role;
+        grant all on all sequences in schema public to service_role;
+        grant execute on all functions in schema public to service_role;
+        set role service_role;
+      `);
+      // reader_settings is left out: its check already asked schema private
+      // before this move (is_shelf_audiences).
+      try {
+        for (const [sql, params] of [
+          ["update profiles set name = 'アキ' where id = $1", [AKI]],
+          [
+            "insert into library_entries (user_id, book_id, status, source) values ($1, $2, 'reading', 'manual')",
+            [AKI, book(1)],
+          ],
+          [
+            "update library_entries set status = 'finished' where user_id = $1",
+            [AKI],
+          ],
+          [
+            "insert into reading_entries (user_id, book_id, audience) values ($1, $2, 'everyone')",
+            [AKI, book(1)],
+          ],
+          [
+            "insert into reading_sessions (user_id, book_id, mode) values ($1, $2, 'together')",
+            [AKI, book(1)],
+          ],
+          [
+            "insert into library_shelves (id, user_id, name, position) values ($1, $2, '旅', 'a')",
+            [id(3, 1), AKI],
+          ],
+          ["insert into posts (author_id, body) values ($1, '便り')", [AKI]],
+          [
+            "insert into shops (owner_id, name, is_open) values ($1, '本屋', true)",
+            [AKI],
+          ],
+          [
+            "insert into posters (author_id, template, pages) values ($1, 'text', $2)",
+            [AKI, PAGES],
+          ],
+        ] as [string, unknown[]][])
+          await db.query(sql, params);
+      } finally {
+        await db.exec("reset role");
+      }
+      await db.close();
+    },
+  );
+
   // Terms ---------------------------------------------------------------------------------
 
   await check(

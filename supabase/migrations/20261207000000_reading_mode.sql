@@ -232,7 +232,7 @@ grant execute on function private.refuse_unless_reaching(uuid) to authenticated;
 -- A profile is published once, by its reader; never unpublished by a
 -- request (the screens decide in item 99 whether anything should).
 create function private.profile_publishing() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   if old.published and not new.published and private.asked_by_reader() then
     raise exception 'a public profile is not taken back here'
@@ -264,9 +264,12 @@ $$;
 
 -- Writes that reach people -----------------------------------------------------------
 
+-- The triggers below run as their owner (security definer): the operator's
+-- service role writes these tables too, and has no use of schema private.
+
 -- A 便り, a reply or a 一緒に読む memo reaches people; a private note does not.
 create function private.post_reaching() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   -- Sent again (on conflict do nothing): nothing new.
   if new.reading_mode is distinct from 'solo'
@@ -283,7 +286,7 @@ create trigger posts_reaching before insert on public.posts
 -- A like, 読みたくなった (pressed again too) or a reaction to a POP. One sent
 -- again that is there already adds nothing.
 create function private.reaction_reaching() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 declare
   there boolean := false;
 begin
@@ -317,7 +320,7 @@ create trigger pop_reactions_reaching before insert or update on public.pop_reac
 -- already (the app sends the whole row with on conflict do update) is judged
 -- as the update it becomes; moving one to another shop reaches that shop.
 create function private.shop_reaction_reaching() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   if tg_op = 'INSERT' then
     if (new.liked or new.message <> '') and not exists (
@@ -341,7 +344,7 @@ create trigger shop_reactions_reaching before insert or update on public.shop_re
 
 -- A follow sent again that is there already adds nothing.
 create function private.follow_reaching() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   if tg_op = 'UPDATE' then
     if to_jsonb(new) is distinct from to_jsonb(old) then
@@ -374,7 +377,7 @@ create trigger shop_follows_reaching before insert or update on public.shop_foll
 -- the shelves and scene a save makes), reaches people; closing does not,
 -- nor what a closed shop keeps.
 create function private.shop_reaching() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   -- A shop sent again that is there already is judged by the update it
   -- becomes, if any.
@@ -403,7 +406,7 @@ create trigger shops_reaching before insert or update on public.shops
 
 -- A poster put up, or changed while up. Taking it down is not refused.
 create function private.poster_reaching() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   if tg_op = 'INSERT' and exists (select 1 from public.posters p where p.id = new.id) then
     return new;
@@ -483,7 +486,7 @@ create trigger reading_sessions_made_in after insert on public.reading_sessions
 -- Runs after reading_entries_audience (triggers run by name), which has
 -- settled audience from what the app sent.
 create function private.reading_entry_mode() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   if tg_op = 'INSERT' then
     if private.asked_by_reader() and not private.reaches_people(new.user_id) then
@@ -509,7 +512,7 @@ create trigger reading_entries_reading_mode before insert or update on public.re
 -- goes on again, reaches people; ending it or making it reading alone does
 -- not. One sent again that is there already is judged as its update.
 create function private.reading_session_mode() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   if tg_op = 'INSERT' then
     if new.mode = 'together' and not exists (
@@ -541,7 +544,7 @@ alter table public.library_shelves
     check (made_mode in ('normal', 'manage'));
 
 create function private.library_shelf_mode() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 begin
   if tg_op = 'INSERT' then
     if private.asked_by_reader() then
@@ -679,7 +682,7 @@ create trigger library_entries_reading_mode before insert or update on public.li
 -- A reader's first settings row narrows too: the start without one is
 -- 人数だけ, not the narrowest.
 create function private.narrow_status() returns trigger
-language plpgsql set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 declare
   rank integer := private.status_rank(new.status_audience, new.status_detail);
   was integer := private.status_rank('everyone', 'count');
