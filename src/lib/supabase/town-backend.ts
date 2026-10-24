@@ -366,6 +366,113 @@ async function townByTables(
   };
 }
 
+/** What only the owner reads of their shop. */
+interface OwnShopRows {
+  /** The shop they are of; null when it keeps no private row yet. */
+  shopId: string | null;
+  shelves: Json;
+  sceneBooks: Json;
+  shelvesVersion: number;
+  followers: number;
+  visitors: RemoteRows["ownShopVisitors"];
+  messages: RemoteRows["shopMessages"];
+}
+
+/**
+ * The owner's rows of their shop: of the shop `shopId`, or of the one
+ * `userId` owns (a person keeps one shop, shops.owner_id), when it is asked
+ * for before the town names it. A database from before versions has no
+ * shelves_version, so it is asked for only when `versioned`.
+ */
+async function ownShopRows(
+  client: Client,
+  userId: string,
+  shopId: string | null,
+  versioned: boolean,
+): Promise<OwnShopRows | undefined> {
+  // Through the shop the person owns, read in the same answer.
+  const shop = shopId === null ? ", shops!inner(owner_id)" : "";
+  const ofShop = <T extends { eq(column: string, value: string): T }>(
+    query: T,
+  ) =>
+    shopId === null
+      ? query.eq("shops.owner_id", userId)
+      : query.eq("shop_id", shopId);
+  const [privateRows, followers, messages, visitors] = await Promise.all([
+    all(
+      ofShop(
+        client
+          .from("shop_private")
+          .select(
+            ((versioned
+              ? "shop_id, shelves, scene_books, shelves_version"
+              : "shop_id, shelves, scene_books") +
+              shop) as "shop_id, shelves, scene_books, shelves_version",
+          ),
+      ),
+    ),
+    settled(
+      ofShop(
+        client.from("shop_follows").select(("shop_id" + shop) as "shop_id", {
+          count: "exact",
+          head: true,
+        }),
+      ),
+    ),
+    allRows(
+      (count) =>
+        ofShop(
+          client
+            .from("shop_reactions")
+            .select(
+              ("user_id, message, updated_at" +
+                shop) as "user_id, message, updated_at",
+              { count },
+            )
+            .neq("user_id", userId)
+            .neq("message", ""),
+        ),
+      ["user_id"],
+    ),
+    // A nice-to-know: the town still opens if this cannot be read. The
+    // number is last week's, settled by the database when the week ended.
+    client.rpc("shop_visitors").then(
+      (outcome) => (outcome.error ? undefined : outcome.data?.[0]),
+      () => undefined,
+    ),
+  ]);
+  const row = privateRows[0];
+  return {
+    shopId: row?.shop_id ?? shopId,
+    shelves: row?.shelves ?? [],
+    sceneBooks: row?.scene_books ?? [],
+    shelvesVersion: row?.shelves_version ?? 0,
+    followers: followers.count ?? 0,
+    visitors: visitors
+      ? { count: visitors.visitors, at: visitors.week_end }
+      : null,
+    // Without the shop each came through.
+    messages: messages.map(({ user_id, message, updated_at }) => ({
+      user_id,
+      message,
+      updated_at,
+    })),
+  };
+}
+
+/**
+ * The owner's rows of the shop `userId` owns, asked for beside the town
+ * (empty when they have none: the town then names no shop of theirs).
+ * Undefined when they cannot be read so: the town then reads them by the id
+ * it names, after it, as it did before.
+ */
+function ownShopAhead(
+  client: Client,
+  userId: string,
+): Promise<OwnShopRows | undefined> {
+  return ownShopRows(client, userId, null, true).catch(() => undefined);
+}
+
 /**
  * Reads the rows of the town `userId` sees, or a visitor (null) sees: the
  * same reads for both, the database deciding what each may read
@@ -385,6 +492,9 @@ async function readTown(
   /** What only the signed-in person reads: nothing for a visitor. */
   const own = async <T>(read: (id: string) => Promise<T[]>): Promise<T[]> =>
     userId === null ? [] : read(userId);
+  // The person's own shop, if they have one, in the same moment as the town
+  // rather than after it: one wait fewer before Home shows.
+  const ownAhead = userId === null ? undefined : ownShopAhead(client, userId);
   const [
     view,
     follows,
@@ -535,57 +645,19 @@ async function readTown(
       : null;
   // Waited on below; the town fails as one if it cannot be read.
   ownNine?.catch(() => {});
-  let shelvesVersion = 0;
-  let ownShelves: Json = [];
-  let ownSceneBooks: Json = [];
-  let ownShopFollowers = 0;
-  let ownShopVisitors: RemoteRows["ownShopVisitors"] = null;
-  let shopMessages: RemoteRows["shopMessages"] = [];
-  if (ownShop && userId !== null) {
-    const [privateRows, followers, messages, visitors] = await Promise.all([
-      all(
-        client
-          .from("shop_private")
-          // A database from before versions has no such column.
-          .select(
-            (versioned
-              ? "shelves, scene_books, shelves_version"
-              : "shelves, scene_books") as "shelves, scene_books, shelves_version",
-          )
-          .eq("shop_id", ownShop.id),
-      ),
-      settled(
-        client
-          .from("shop_follows")
-          .select("shop_id", { count: "exact", head: true })
-          .eq("shop_id", ownShop.id),
-      ),
-      allRows(
-        (count) =>
-          client
-            .from("shop_reactions")
-            .select("user_id, message, updated_at", { count })
-            .eq("shop_id", ownShop.id)
-            .neq("user_id", userId)
-            .neq("message", ""),
-        ["user_id"],
-      ),
-      // A nice-to-know: the town still opens if this cannot be read. The
-      // number is last week's, settled by the database when the week ended.
-      client.rpc("shop_visitors").then(
-        (outcome) => (outcome.error ? undefined : outcome.data?.[0]),
-        () => undefined,
-      ),
-    ]);
-    ownShelves = privateRows[0]?.shelves ?? [];
-    ownSceneBooks = privateRows[0]?.scene_books ?? [];
-    shelvesVersion = privateRows[0]?.shelves_version ?? 0;
-    ownShopFollowers = followers.count ?? 0;
-    ownShopVisitors = visitors
-      ? { count: visitors.visitors, at: visitors.week_end }
-      : null;
-    shopMessages = messages;
-  }
+  // Asked for beside the town (ownShopAhead), they are read again by the
+  // shop's id only if that answer is of another shop (one made or replaced
+  // between the two) or could not be had (a database that does not count
+  // versions). A shop with no private row yet reads as empty either way;
+  // one written meanwhile is held at version 0, so its first save is
+  // refused and the town read again rather than written over.
+  const ahead = ownShop ? await ownAhead : undefined;
+  const ownRows = ownShop
+    ? ahead && (ahead.shopId === ownShop.id || ahead.shopId === null)
+      ? ahead
+      : await ownShopRows(client, userId!, ownShop.id, versioned)
+    : undefined;
+  const shelvesVersion = ownRows?.shelvesVersion ?? 0;
 
   const rows: Omit<RemoteRows, "books" | "seenNotifications"> = {
     profiles,
@@ -598,11 +670,11 @@ async function readTown(
         : nine.filter((row) => row.profile_id === userId)),
     ],
     shops,
-    ownShelves,
-    ownSceneBooks,
-    ownShopFollowers,
-    ownShopVisitors,
-    shopMessages,
+    ownShelves: ownRows?.shelves ?? [],
+    ownSceneBooks: ownRows?.sceneBooks ?? [],
+    ownShopFollowers: ownRows?.followers ?? 0,
+    ownShopVisitors: ownRows?.visitors ?? null,
+    shopMessages: ownRows?.messages ?? [],
     follows,
     blocks,
     marks,
@@ -668,7 +740,11 @@ export async function loadTown(
 ): Promise<{
   state: TownState;
   ids: RemoteIds;
-  ownBooksKnown: boolean;
+  /**
+   * The person's own books typed in, each with the book it copies (my_books);
+   * undefined from a database without it, which tells none apart.
+   */
+  myBooks: ReadonlyMap<string, string | null> | undefined;
   /** Of what the person saves whole; none from a database without them. */
   versions: Versions;
 }> {
@@ -677,8 +753,9 @@ export async function loadTown(
   return {
     state: townFromRows({ ...read.rows, seenNotifications }, ids),
     ids,
-    // Whether the town tells the person's own books from others' (my_books).
-    ownBooksKnown: read.rows.myBooks !== undefined,
+    myBooks:
+      read.rows.myBooks &&
+      new Map(read.rows.myBooks.map((row) => [row.id, row.copied_from])),
     versions: read.versions,
   };
 }
@@ -807,8 +884,11 @@ function remoteReads(
   client: Client,
   userId: string | null,
   town: () => TownState | null,
-  ownBooksKnown: () => boolean = () => false,
+  myBooks: () => ReadonlyMap<string, string | null> | undefined = () =>
+    undefined,
 ): Required<Pick<TownBackend, "newer" | "older" | "post" | "more">> {
+  // Whether the town tells the person's own books from others' (my_books).
+  const ownBooksKnown = () => myBooks() !== undefined;
   const complete = (rows: PostRow[]) =>
     arrivedFor(client, rows, town(), userId, ownBooksKnown());
   const posts = (count?: "exact") =>
@@ -1016,7 +1096,7 @@ function remoteReads(
         return moreFromRows(
           { records: [], nine: [], books },
           userId,
-          ownBooksKnown(),
+          myBooks(),
         );
       } else if ("series" in ask) {
         // The series a book of the ISBN is in, with the books of their
@@ -1050,7 +1130,7 @@ function remoteReads(
           ...moreFromRows(
             { records: [], nine: [], books: await booksByIds(client, missing) },
             userId,
-            ownBooksKnown(),
+            myBooks(),
           ),
           series,
         };
@@ -1129,7 +1209,7 @@ function remoteReads(
       return moreFromRows(
         { ...rows, books: await booksByIds(client, missing) },
         userId,
-        ownBooksKnown(),
+        myBooks(),
       );
     },
     async post(id) {
@@ -1582,7 +1662,7 @@ export function accountTownBackend(
   const storage = options.storage ?? typeof window !== "undefined";
   const device = options.device ?? (storage ? undefined : null);
   let ids: RemoteIds | null = null;
-  let ownBooksKnown = false;
+  let myBooks: ReadonlyMap<string, string | null> | undefined;
   // Whether the database counts versions (write_versions), as last read.
   let versioned = false;
   const sync = backgroundSync<TownState, Write>(
@@ -1595,7 +1675,7 @@ export function accountTownBackend(
           () => ids?.shopId ?? crypto.randomUUID(),
         );
         ids = loaded.ids;
-        ownBooksKnown = loaded.ownBooksKnown;
+        myBooks = loaded.myBooks;
         versioned = "nine" in loaded.versions;
         // The 見本 keep the town from feeling empty while few have opened a
         // shop; they are left out of what is written (planWrites).
@@ -1641,7 +1721,7 @@ export function accountTownBackend(
     save: sync.save,
     watch: sync.watch,
     absorb: sync.absorb,
-    ...remoteReads(client, userId, sync.current, () => ownBooksKnown),
+    ...remoteReads(client, userId, sync.current, () => myBooks),
     close: sync.close,
   };
 }
