@@ -595,7 +595,8 @@ export function townFromRows(
   };
   const readerFrom = (row: Tables<"profiles">): Reader => ({
     id: readerId(row.id),
-    handle: row.handle,
+    // Others are never given a profile without one (reading_mode).
+    handle: row.handle ?? "",
     name: row.name,
     bio: row.bio,
     color: row.color,
@@ -965,7 +966,7 @@ export function arrivedFromRows(
       .filter((row) => row.id !== userId && authors.has(row.id))
       .map((row) => ({
         id: row.id,
-        handle: row.handle,
+        handle: row.handle ?? "",
         name: row.name,
         bio: row.bio,
         color: row.color,

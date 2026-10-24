@@ -44,6 +44,7 @@ const profileOf = (id: string, handle: string, name: string): ProfileRow => ({
   compose_icon: "pen",
   reading_visibility: "private",
   nine_version: 0,
+  published: true,
   created_at: "2026-10-12T00:00:00Z",
   updated_at: "2026-10-12T00:00:00Z",
 });
@@ -182,7 +183,7 @@ function fakeBackend() {
       if ([...profiles.values()].some((p) => p.handle === row.handle))
         return { failure: "handle-taken" as AccountFailure };
       const profile = {
-        ...profileOf(row.id, row.handle, row.name),
+        ...profileOf(row.id, row.handle ?? "", row.name),
         reading_visibility: row.reading_visibility ?? "private",
       };
       profiles.set(row.id, profile);

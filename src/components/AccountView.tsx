@@ -95,7 +95,7 @@ export default function AccountView() {
           <SignedIn
             userId={account.user.id}
             email={account.user.email}
-            handle={account.profile.handle}
+            handle={account.profile.handle ?? ""}
             name={account.profile.name}
           />
         )}
