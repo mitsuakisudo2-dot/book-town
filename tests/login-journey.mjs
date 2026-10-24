@@ -2316,6 +2316,7 @@ try {
       await noOverflow("book page with its series");
       await view("13-series-book-page-390");
       await page.setViewportSize({ width: 320, height: 640 });
+      await strip.scrollIntoViewIfNeeded();
       await noOverflow("book page with its series at 320");
       await view("13-series-book-page-320");
       await strip.click();
