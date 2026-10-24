@@ -34,6 +34,8 @@ import { bookKind, sampleBookRowId, withSamples } from "../samples";
 import { emptyMore } from "../town-more";
 import { booksBeforeSearch } from "../book-lists";
 import { databaseSearch } from "../search/rank";
+import { normalizeIsbn } from "../books";
+import { seriesFromRows, type SeriesRow } from "../series";
 import { FEELINGS, ME_ID, type TownState } from "../types";
 import type {
   Database,
@@ -1007,14 +1009,49 @@ function remoteReads(
         // what the catalog takes first (note_missing_isbn). Nothing waits
         // on it, and a failure changes nothing.
         if (asked.isbn && books.length === 0)
-          void client
-            .rpc("note_missing_isbn", { isbn: asked.isbn })
-            .then(() => undefined, () => undefined);
+          void client.rpc("note_missing_isbn", { isbn: asked.isbn }).then(
+            () => undefined,
+            () => undefined,
+          );
         return moreFromRows(
           { records: [], nine: [], books },
           userId,
           ownBooksKnown(),
         );
+      } else if ("series" in ask) {
+        // The series a book of the ISBN is in, with the books of their
+        // volumes the town does not hold (series_for_isbn, 管理表 13).
+        const isbn = normalizeIsbn(ask.series);
+        if (!isbn) return emptyMore();
+        let found: SeriesRow[];
+        try {
+          found = rowsOf<SeriesRow>(
+            (await settled(client.rpc("series_for_isbn", { isbn }))).data,
+          );
+        } catch (error) {
+          // A database from before series_for_isbn: no series yet.
+          if (error instanceof TownSyncError && error.code === "PGRST202")
+            return emptyMore();
+          throw error;
+        }
+        const series = seriesFromRows(found);
+        const missing = [
+          ...new Set(
+            series.flatMap((entry) =>
+              entry.lines.flatMap((line) =>
+                line.volumes.map((volume) => volume.bookId),
+              ),
+            ),
+          ),
+        ].filter((id) => isDatabaseId(id) && !known.has(id));
+        return {
+          ...moreFromRows(
+            { records: [], nine: [], books: await booksByIds(client, missing) },
+            userId,
+            ownBooksKnown(),
+          ),
+          series,
+        };
       } else if ("counts" in ask) {
         // How often the town's books are shelved and talked of, of all
         // time, and the works most shelved and talked of (town_counts): the

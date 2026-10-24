@@ -121,6 +121,8 @@ import { slotName, useSlots } from "./ScanSlots";
 import { liveSlots, shelfOfSlot } from "../lib/scan-slots";
 import { ScanTidy, type TidyBook } from "./ScanTidy";
 import { ScanTiming } from "./ScanTiming";
+import { SeriesOpen } from "./SeriesDoor";
+import { SeriesSheet } from "./series-later";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
 import { bookAuthor, bookById, bookByIsbn, bookTitle } from "../lib/book-name";
@@ -268,6 +270,8 @@ export function ScanSession({
   /** What the next book read is given: the 連続設定, else 持っている alone. */
   const applied: ScanSort = sort ?? { status: null, owned, shelves: [] };
   const [sortOpen, setSortOpen] = useState(false);
+  /** シリーズ＋ (管理表 13): the ISBN whose series' sheet is open. */
+  const [seriesFor, setSeriesFor] = useState<string | null>(null);
   /** 続きから再開: the time left without ［完了］, offered as this one opens. */
   const [offer, setOffer] = useState<{
     session: string;
@@ -325,8 +329,9 @@ export function ScanSession({
       shelvesFor !== null ||
       sortOpen ||
       slotsOpen ||
+      seriesFor !== null ||
       offer !== null;
-  }, [menuFor, shelvesFor, sortOpen, slotsOpen, offer]);
+  }, [menuFor, shelvesFor, sortOpen, slotsOpen, seriesFor, offer]);
   const manualCount = useRef(0);
   const closed = useRef(false);
   const layer = useRef<HTMLDivElement>(null);
@@ -350,6 +355,7 @@ export function ScanSession({
     manual,
     sortOpen,
     slotsOpen,
+    seriesFor,
     tidying,
     done,
     offer,
@@ -364,6 +370,7 @@ export function ScanSession({
       manual,
       sortOpen,
       slotsOpen,
+      seriesFor,
       tidying,
       done,
       offer,
@@ -1406,6 +1413,7 @@ export function ScanSession({
         now.manual ||
         now.sortOpen ||
         now.slotsOpen ||
+        now.seriesFor ||
         now.tidying ||
         now.done ||
         now.offer
@@ -2010,6 +2018,18 @@ export function ScanSession({
                       {SCAN_COPY.restore}
                     </button>
                   )}
+                  {now !== "undone" && (
+                    <SeriesOpen
+                      isbn={card.isbn}
+                      onPointerDown={typing ? keepFocus : undefined}
+                      onOpen={(isbn) => {
+                        refocus();
+                        setMenuFor(null);
+                        setShelvesFor(null);
+                        setSeriesFor(isbn);
+                      }}
+                    />
+                  )}
                   {canUndo && (
                     <button
                       type="button"
@@ -2301,6 +2321,18 @@ export function ScanSession({
             setSortOpen(false);
           }}
           onClose={() => setSortOpen(false)}
+        />
+      )}
+      {seriesFor && (
+        <SeriesSheet
+          isbn={seriesFor}
+          state={state}
+          actions={manualActions}
+          notify={notify}
+          onClose={() => setSeriesFor(null)}
+          onRegistered={(count) => {
+            if (count) sound.play("in", shelvedNow.current + count);
+          }}
         />
       )}
       {manual && (

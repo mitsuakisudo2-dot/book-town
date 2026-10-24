@@ -26,6 +26,13 @@ import {
 } from "../src/lib/town-remote";
 import { ME_ID, type TownState } from "../src/lib/types";
 import { libraryBookIds, ownFirst, pickSources } from "../src/lib/shop-picks";
+import {
+  libraryByIsbn,
+  lineOf,
+  registerVolumes,
+  seriesFromRows,
+  type SeriesRow,
+} from "../src/lib/series";
 
 // The library in the town (library-town.ts): the books worked out from the
 // rest of the town, the store's ops and their undoing, the demo's storage,
@@ -1070,5 +1077,127 @@ check(
     assert.deepEqual(reading, { ...none, reading: true });
   },
 );
+
+// シリーズのまとめ登録 (管理表 13, series.ts): series_for_isbn's rows made
+// into lines of volumes, and the volumes picked registered by their ISBNs.
+{
+  const ISBNS = [
+    "9784000000017",
+    "9784000000024",
+    "9784000000031",
+    "9784000000048",
+    "9784000000055",
+  ];
+  const row = (
+    line: string,
+    number: number,
+    isbn: string,
+    more: Partial<SeriesRow> = {},
+  ): SeriesRow => ({
+    series_id: "s1",
+    series_name: "夜の図書館",
+    kind: "volumes",
+    finished: false,
+    line_id: line,
+    line_name: null,
+    line_label: null,
+    number,
+    shown: String(number),
+    volume_isbn: isbn,
+    book_id: `catalog-${isbn}`,
+    title: `夜の図書館 ${number}`,
+    ...more,
+  });
+
+  check("a series' rows become lines of volumes, each in order", () => {
+    const [series] = seriesFromRows([
+      row("main", 3, ISBNS[2]),
+      row("main", 1, ISBNS[0], { shown: "上" }),
+      row("main", 2, ISBNS[1]),
+      row("deluxe", 1, ISBNS[3], { line_name: "愛蔵版" }),
+      row("deluxe", 2, ISBNS[4], { line_name: "愛蔵版" }),
+      // The same ISBN twice is one volume.
+      row("main", 3, ISBNS[2]),
+    ]);
+    assert.equal(series.lines.length, 2);
+    assert.deepEqual(
+      series.lines[0].volumes.map((volume) => [volume.number, volume.shown]),
+      [
+        [1, "上"],
+        [2, "2"],
+        [3, "3"],
+      ],
+    );
+    assert.equal(series.lines[1].name, "愛蔵版");
+    // The line of the book it was opened from comes first.
+    assert.equal(lineOf(series, ISBNS[4]).id, "deluxe");
+    assert.equal(lineOf(series, "9784000000079").id, "main");
+  });
+
+  check(
+    "a yearly series, one of a single volume or a row without an ISBN is not offered",
+    () => {
+      assert.deepEqual(
+        seriesFromRows([
+          row("y", 2025, ISBNS[0], { kind: "yearly" }),
+          row("y", 2026, ISBNS[1], { kind: "yearly" }),
+        ]),
+        [],
+      );
+      assert.deepEqual(seriesFromRows([row("main", 1, ISBNS[0])]), []);
+      assert.deepEqual(
+        seriesFromRows([
+          row("main", 1, ISBNS[0]),
+          row("main", 2, ISBNS[1], { volume_isbn: null }),
+        ]),
+        [],
+      );
+    },
+  );
+
+  check(
+    "the volumes picked go in by their ISBNs, with the status and 所有 set; one in already keeps its own",
+    () => {
+      const store = fresh();
+      const [series] = seriesFromRows([
+        row("main", 1, ISBNS[0]),
+        row("main", 2, ISBNS[1]),
+        row("main", 3, ISBNS[2]),
+      ]);
+      const [one, two, three] = series.lines[0].volumes;
+      // The reader has the first already, read.
+      const first = store.actions.registerBook(
+        { title: one.catalogTitle, author: "夜野", isbn: one.isbn },
+        "scan",
+      );
+      assert.equal(first?.result, "added");
+      if (first?.result !== "added") return;
+      store.actions.changeLibrary([first.bookId], { status: "finished" });
+      const before = libraryByIsbn(store.getSnapshot());
+      assert.deepEqual([...before.keys()], [one.isbn]);
+
+      const done = registerVolumes(
+        store.actions,
+        [one, two, three].map((volume) => ({ volume, author: "夜野" })),
+        [{ status: "tsundoku" }, { owned: "yes" }],
+      );
+      assert.equal(done.already, 1);
+      assert.equal(done.notSaved, 0);
+      assert.equal(done.added.length, 2);
+      const town = store.getSnapshot();
+      const mine = libraryByIsbn(town);
+      assert.deepEqual(
+        [...mine.keys()].sort(),
+        [one.isbn, two.isbn, three.isbn].sort(),
+      );
+      for (const id of done.added) {
+        assert.equal(town.libraryEntries[id].status, "tsundoku");
+        assert.equal(town.libraryEntries[id].owned, "yes");
+      }
+      // The one in already was not changed.
+      assert.equal(town.libraryEntries[first.bookId].status, "finished");
+    },
+  );
+}
 
 console.log(`${passed} library town checks passed`);

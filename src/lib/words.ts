@@ -268,3 +268,45 @@ export function failure(
 ): string {
   return [what, kept, next].filter(Boolean).join("。") + end;
 }
+
+// ── A series' volumes (管理表 13) ────────────────────────────────────────
+
+/**
+ * シリーズのまとめ登録: the volumes of a book's series, the reader's apart from
+ * those not yet in, picked and registered together. Titles come in 『』
+ * (quote in book-name.ts).
+ */
+export const SERIES = {
+  /** On a scanned book's card, beside its ⋮ (資料 6章). */
+  open: "シリーズ＋",
+  openName: (quoted: string) => `${quoted}のシリーズの巻を見る`,
+  /** On a book's page. */
+  strip: (quoted: string) => `${quoted}のシリーズ`,
+  /** How many volumes are known: all, once the operator says it is done. */
+  known: (n: number, finished: boolean) =>
+    finished ? `全${counted(n, "冊")}` : `わかっている巻 ${counted(n, "冊")}`,
+  /** The reader's own of them: their record, so 0 is said too. */
+  mine: (own: number, n: number) => `${outOf(own, n, "冊")} 登録済み`,
+  lead: "まだの巻を選んで、まとめて登録できます",
+  pickAll: "まだの巻をすべて選ぶ",
+  pickNone: "選ぶのをやめる",
+  registered: "登録済み",
+  volume: (shown: string) => `${shown}巻`,
+  /** The line of a series with no name of its own. */
+  mainLine: "通常版",
+  line: (n: number) => `並び${n}`,
+  lines: "版の並び",
+  /** Over what the picked volumes are given. */
+  given: "選んだ巻は、こう登録します",
+  later: "あとで決める",
+  picked: (n: number) => `${counted(n, "冊")}を選んでいます`,
+  go: (n: number) => `選んだ${counted(n, "冊")}を登録する`,
+  goNone: "まだの巻を選ぶと、まとめて登録できます",
+  allIn: "わかっている巻は、どれも登録済みです",
+  done: (n: number) => `${counted(n, "冊")}を登録しました`,
+  notSaved: failure({
+    what: "登録できなかった巻があります",
+    kept: KEPT.nothing,
+    next: AGAIN.pressWhenLoaded,
+  }),
+} as const;

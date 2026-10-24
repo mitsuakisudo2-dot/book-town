@@ -11,6 +11,7 @@ import {
 import { BookJacket, CoverCredit, Icon } from "./ui";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { InLibraryMark } from "./RegisterBook";
+import { SeriesStrip } from "./SeriesDoor";
 import { BookReviews } from "./Social";
 import {
   myShopPath,
@@ -175,6 +176,12 @@ export function BookView({
         <div className="book-hero-body">
           <HeldBook book={book} actions={actions} notify={notify} />
           <p className="book-summary">{book.summary}</p>
+          <SeriesStrip
+            book={book}
+            state={state}
+            actions={actions}
+            notify={notify}
+          />
           <BookActions
             book={book}
             state={state}
