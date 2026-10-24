@@ -136,12 +136,21 @@ export function StoreSceneEditor({
     if (waiting) openButton.current?.focus();
   }, [waiting]);
   const signInput = useRef<HTMLInputElement>(null);
-  const [rowId, setRowId] = useState("row-0");
+  const rows = draft.objects.filter((o) => o.kind === "row");
+  // The editor opens on the first row with books (a new shop's stand on the
+  // middle tier), and again after a template change.
+  const [rowId, setRowId] = useState<string | null>(null);
   const [placementId, setPlacementId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
-  const rows = draft.objects.filter((o) => o.kind === "row");
-  const row = objectById(draft, rowId) ?? rows[0];
+  const row =
+    (rowId && objectById(draft, rowId)) ||
+    rows.find((r) =>
+      draft.objects.some((o) => o.kind === "book" && o.parentId === r.id),
+    ) ||
+    rows[0];
+  // Taken, it stays open while its books are moved off it.
+  if (rowId === null) setRowId(row.id);
   const placements = draft.objects
     .filter((o) => o.kind === "book" && o.parentId === row.id)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -237,7 +246,7 @@ export function StoreSceneEditor({
   }
   function chooseTemplate(id: TemplateId) {
     edit((scene) => applyStoreTemplate(scene, id, state.books));
-    setRowId("row-0");
+    setRowId(null);
     setPlacementId(null);
   }
   function selectBook(id: string) {

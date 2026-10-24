@@ -518,8 +518,18 @@ export function StoreCanvas({
         o.rect.w *
         (furniture?.rect.w ?? 1)
       : o.rect.w * (furniture?.rect.w ?? 1);
+    // A centred row has room at both ends, so no globe sits at its right.
+    const globe = o.align !== "center" && spare >= 0.085;
     const title = o.boardTitle ?? o.text ?? "";
     const still = woodshop && gutter && !o.text && items.length === 0;
+    // Bare tiers count on from the first one, so two of them apart (around a
+    // new shop's centred tier) do not repeat each other's things.
+    const isStill = (r: SceneObject) =>
+      !r.text &&
+      !scene.objects.some((b) => b.kind === "book" && b.parentId === r.id);
+    const firstStill = siblings.findIndex(isStill);
+    const stillSeed =
+      firstStill + siblings.slice(firstStill, index).filter(isStill).length;
     return (
       <div
         key={o.id}
@@ -562,7 +572,7 @@ export function StoreCanvas({
           </button>
         ) : still ? (
           <StillLife
-            seed={index + scene.storeId.length}
+            seed={stillSeed + scene.storeId.length}
             left={pct(-(o.rect.x - 0.03) / o.rect.w)}
           />
         ) : gutter ? (
@@ -623,7 +633,7 @@ export function StoreCanvas({
               }}
             />
           ))}
-        {woodshop && shelf && !still && spare >= 0.085 && (
+        {woodshop && shelf && !still && globe && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             className="walk-decor walk-globe"

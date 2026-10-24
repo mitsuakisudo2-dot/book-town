@@ -90,6 +90,16 @@ const FACES_PER_TIER: Record<number, number[]> = {
   2: [99, 99, 99],
 };
 const DEFAULT_DOODLES = ["travel", "daily", "forest"];
+/** The eye-level tier a new shop's books stand on while one tier holds them. */
+const FEATURED_TIER = 1;
+const FEATURED_ROW = "row-" + FEATURED_TIER;
+/** More than a tier ever holds, so a large shelf is not tried book by book. */
+const FEATURED_MAX = 30;
+/** Covers stand a little larger when every book shows its cover. */
+const FEATURED_LARGE = 0.16;
+/** Up to this many books all show their covers, a little smaller if need be. */
+const FEATURED_COVERS = 4;
+const FEATURED_SMALL = [0.14, 0.132, 0.125];
 export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
   const lights = [
     "#ffd293",
@@ -235,13 +245,78 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
     shelf.items.map((item) => ({ item, shelf })),
   );
   const known = shelfEntries.filter(bookOf);
+  // A new owner's books, while one shelf's worth fits on a single tier,
+  // stand centred on the middle tier at eye level, with as many covers as
+  // fit; the tiers above and below stay a dressed display shelf. A stopgap
+  // until the shop is rebuilt (管理表 113): only this generated scene
+  // changes, never the shelves' own face/spine choices.
+  const tierFits = (coverIds: Set<string>, h: number) => {
+    let trial = structuredClone(scene);
+    objectById(trial, FEATURED_ROW)!.bookHeight = h;
+    return [
+      ...known.filter((e) => coverIds.has(e.item.id)),
+      ...known.filter((e) => !coverIds.has(e.item.id)),
+    ].every((entry, n) => {
+      const id = "trial:" + n;
+      const display = coverIds.has(entry.item.id) ? "face" : "spine";
+      trial = addBookPlacement(
+        trial,
+        bookOf(entry)!,
+        FEATURED_ROW,
+        id,
+        display,
+        n,
+      );
+      return objectById(trial, id)!.parentId !== null;
+    });
+  };
+  let featured: { covers: Set<string>; height: number } | undefined;
+  if (
+    packed &&
+    known.length > 0 &&
+    known.length <= FEATURED_MAX &&
+    known.every((e) => e.shelf === known[0].shelf)
+  ) {
+    // The owner's face-outs come first; more covers only widen the tier.
+    const order = [
+      ...known.filter((e) => e.item.display === "face"),
+      ...known.filter((e) => e.item.display !== "face"),
+    ];
+    // A face-out-only store (variant 2) shows them all as covers or not here.
+    const least =
+      variant === 2
+        ? order.length
+        : Math.max(1, known.filter((e) => e.item.display === "face").length);
+    for (let k = least; k <= order.length; k++) {
+      const covers = new Set(order.slice(0, k).map((e) => e.item.id));
+      const all = k === order.length;
+      const height = [
+        ...(all ? [FEATURED_LARGE] : []),
+        L.tiers[FEATURED_TIER].bookHeight,
+        ...(all && k <= FEATURED_COVERS ? FEATURED_SMALL : []),
+      ].find((h) => tierFits(covers, h));
+      if (height !== undefined) featured = { covers, height };
+      // More covers than fit now never fit; only all covers, a little
+      // smaller, are still worth a try.
+      else if (k < FEATURED_COVERS && order.length <= FEATURED_COVERS)
+        k = order.length - 1;
+      else break;
+    }
+  }
+  if (featured)
+    Object.assign(objectById(scene, FEATURED_ROW)!, {
+      bookHeight: featured.height,
+      align: "center",
+    });
   // An owner's shop with no face-out at all shows its first books by their
   // covers, so it does not open as a row of thin spines. Nothing is saved.
-  const covers = new Set(
-    shop.demo || known.some((e) => e.item.display === "face")
-      ? []
-      : known.slice(0, known.length >= 3 ? 2 : 1).map((e) => e.item.id),
-  );
+  const covers =
+    featured?.covers ??
+    new Set(
+      shop.demo || known.some((e) => e.item.display === "face")
+        ? []
+        : known.slice(0, known.length >= 3 ? 2 : 1).map((e) => e.item.id),
+    );
   const faceOf = (e: Entry) =>
     e.item.display === "face" || covers.has(e.item.id);
   // A tier's lead face-out stands last among the face-outs so its POP card
@@ -249,7 +324,10 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
   // an owner's own face/spine choice is kept as it is.
   const arrange = (entries: Entry[], i: number) => {
     const own = entries.filter(bookOf);
-    const lead = own.find(faceOf) ?? own[0];
+    // Among covers only, the lead is the one whose POP card stands beside it.
+    const lead =
+      (featured && own.find((e) => faceOf(e) && e.item.pop.trim())) ||
+      (own.find(faceOf) ?? own[0]);
     const rest = own.filter((e) => e !== lead);
     const faceCount = shop.demo
       ? Math.min(own.length, faces[i])
@@ -302,7 +380,8 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
               ) === i,
           ),
   );
-  if (packed) {
+  if (featured) tierItems[FEATURED_TIER] = known;
+  else if (packed) {
     // Each tier takes what fits; with no more shelves than tiers, each shelf
     // also starts on a tier of its own. What the last tier cannot hold stays
     // unplaced, as before.
@@ -319,6 +398,8 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       while (t < last && !fits([...tierItems[t], entry], t)) t++;
       tierItems[t].push(entry);
     });
+  }
+  if (packed)
     // Only tiers with books carry a shelf name; a tier that continues the
     // shelf above shares its chalkboard (StoreCanvas).
     tierItems.forEach((entries, i) => {
@@ -327,7 +408,6 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       row.text = entries[0].shelf.name;
       row.doodle = DEFAULT_DOODLES[i];
     });
-  }
   const used = new Set<string>();
   if (variant === 2 && !packed)
     // Face-out-only store: each tier shrinks just enough to show its whole shelf.

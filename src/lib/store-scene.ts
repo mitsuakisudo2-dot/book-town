@@ -36,6 +36,8 @@ export interface SceneObject {
   bookHeight?: number;
   gap?: number;
   mode?: "face" | "spine" | "mixed";
+  /** A row's books stand from its left end (the default) or centred in it. */
+  align?: "start" | "center";
   /** Optional chalkboard heading and line drawing for a row (shelf sign). */
   boardTitle?: string;
   doodle?: string;
@@ -376,6 +378,8 @@ export function validateScene(
         !(SHELF_DOODLES as readonly string[]).includes(o.doodle))
     )
       errors.push(o.id + ": invalid board");
+    if (o.align !== undefined && o.align !== "start" && o.align !== "center")
+      errors.push(o.id + ": invalid alignment");
     if (!kinds.includes(o.kind)) {
       errors.push(o.id + ": invalid kind");
       continue;
@@ -492,6 +496,12 @@ export function relayoutRow(scene: StoreScene, rowId: string): StoreScene {
     x = left + size.w + gap;
     previous = book;
   }
+  // A centred row shares what its books leave open between both ends.
+  const shift = row.align === "center" ? (bounds.w - x) / 2 : 0;
+  if (shift > 0)
+    for (const book of next.objects)
+      if (book.kind === "book" && book.parentId === rowId)
+        book.rect = { ...book.rect, x: book.rect.x + shift / bounds.w };
   return next;
 }
 export function addBookPlacement(

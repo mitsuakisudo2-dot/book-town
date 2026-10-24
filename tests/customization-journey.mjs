@@ -428,12 +428,10 @@ try {
       const row = (await walkData()).sceneOverrides[0].objects
         .filter((o) => o.kind === "book" && o.parentId === "row-0")
         .sort((a, b) => a.order - b.order);
-      // モモ went one place left of where it was added, before ソラリス.
-      expect(row.map((o) => o.bookId)).toEqual([
-        "left-hand",
-        "momo",
-        "solaris",
-      ]);
+      // モモ went one place left of where it was added, before ソラリス. The
+      // editor opened on the row ソラリス was put on; 闇の左手 stayed on the
+      // middle tier the shop's few books first stood on (管理表 113).
+      expect(row.map((o) => o.bookId)).toEqual(["momo", "solaris"]);
     },
   );
   await check(
