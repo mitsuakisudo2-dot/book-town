@@ -130,6 +130,11 @@ const coverAsks = [];
 // The bibliographic master the stand-in has, by book (book_bibliography's
 // rows), and the IDs each call asked about.
 let masters = [];
+// The series the catalog has (series_for_isbn's rows, 管理表 13), answered
+// for an ISBN among them, and the catalog's books of their volumes, which
+// town_books reads.
+let seriesRows = [];
+let seriesBooks = [];
 const bibliographyAsks = [];
 // The reader's books held back (book_holds' rows), the books they said are
 // right after all, the fixes of books written, and whether the database
@@ -847,12 +852,17 @@ const standIn = async (route) => {
         ),
     );
   }
+  if (url.pathname === "/rest/v1/rpc/series_for_isbn")
+    return json(
+      200,
+      seriesRows.some((row) => row.volume_isbn === body.isbn) ? seriesRows : [],
+    );
   if (url.pathname === "/rest/v1/rpc/town_books") {
     townReads.push(url.pathname);
     const ids = new Set(body.ids);
     return json(
       200,
-      (town?.books ?? []).filter((row) => ids.has(row.id)),
+      [...(town?.books ?? []), ...seriesBooks].filter((row) => ids.has(row.id)),
     );
   }
   // The books the reader typed in (my_books): a town may name some.
@@ -2107,6 +2117,223 @@ try {
   );
 
   await check(
+    "a series' volumes not yet in are picked and registered together, from the scanner and a book's page",
+    async () => {
+      // 管理表 13: three volumes the catalog has; the reader reads the first.
+      const VOLUMES = [
+        ["9784000000017", "c1a00000-0000-4000-8000-000000000001", "1"],
+        ["9784000000024", "c1a00000-0000-4000-8000-000000000002", "2"],
+        ["9784000000031", "c1a00000-0000-4000-8000-000000000003", "3"],
+      ];
+      seriesRows = VOLUMES.map(([isbn, book_id, shown]) => ({
+        series_id: "5e000000-0000-4000-8000-000000000001",
+        series_name: "夜の図書館",
+        series_reading: "ヨルノトショカン",
+        kind: "volumes",
+        finished: false,
+        line_id: "5e000000-0000-4000-8000-0000000000a1",
+        line_name: null,
+        line_label: "試験文庫",
+        number: Number(shown),
+        shown,
+        volume_isbn: isbn,
+        book_id,
+        title: "夜の図書館 " + shown,
+      }));
+      seriesBooks = VOLUMES.map(([isbn, id, shown]) => ({
+        id,
+        isbn,
+        title: "夜の図書館 " + shown,
+        author: "夜野,灯,1980-",
+        publisher: "",
+        price: null,
+        source: "ndl",
+        work_id: null,
+        created_at: "2026-10-01T00:00:00Z",
+        updated_at: "2026-10-01T00:00:00Z",
+      }));
+      // What the reader sees, as on the phone: not the whole page.
+      const view = (name) =>
+        page.screenshot({ path: path.join(output, name + ".png") });
+      const sent = [];
+      const writes = (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (
+          request.method() === "GET" ||
+          url.pathname.startsWith("/rest/v1/rpc/")
+        )
+          return route.fallback();
+        sent.push([url.pathname, request.postDataJSON()]);
+        return route.fulfill({ status: 201, body: "" });
+      };
+      const titles = (route) => {
+        const isbns = new URL(route.request().url()).searchParams
+          .get("isbn")
+          .split(",");
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify(
+            isbns.map((isbn) =>
+              isbn === VOLUMES[0][0]
+                ? {
+                    summary: {
+                      isbn,
+                      title: "夜の図書館 1",
+                      author: "夜野,灯,1980-／著",
+                    },
+                  }
+                : null,
+            ),
+          ),
+        });
+      };
+      await page.route("https://api.openbd.jp/**", titles);
+      await page.route(supabase + "/rest/v1/**", writes);
+      await page.goto(base + "/library/");
+      await page
+        .locator(".library-start")
+        .getByRole("button", { name: "本を登録" })
+        .click();
+      const scanner = page.getByRole("dialog", { name: "本を続けて登録" });
+      await scanner.getByLabel("ISBN", { exact: true }).fill(VOLUMES[0][0]);
+      await expect(scanner.locator(".scan-item-state")).toHaveText(
+        "登録しました",
+      );
+      // シリーズ＋ beside the card's ⋮.
+      const open = scanner.getByRole("button", {
+        name: "『夜の図書館』のシリーズの巻を見る",
+      });
+      await expect(open).toHaveText("シリーズ＋");
+      await view("13-series-card-390");
+      await open.click();
+      const sheet = page.getByRole("dialog", { name: "『夜の図書館』" });
+      await expect(sheet.locator(".series-count")).toContainText(
+        "1 / 3 冊 登録済み",
+      );
+      // The one in already has no box to tick: it is not counted to register.
+      const rows = sheet.locator(".series-list li");
+      await expect(rows).toHaveCount(3);
+      await expect(rows.nth(0)).toContainText("登録済み");
+      await expect(rows.nth(0).getByRole("checkbox")).toHaveCount(0);
+      const go = sheet.locator(".series-go");
+      await expect(go).toBeDisabled();
+      await expect(go).toHaveText("まだの巻を選ぶと、まとめて登録できます");
+      await view("13-series-sheet-390");
+      await sheet.getByRole("button", { name: "まだの巻をすべて選ぶ" }).click();
+      await expect(go).toHaveText("選んだ2冊を登録する");
+      await sheet.getByRole("radio", { name: "積読" }).click();
+      await expect(
+        sheet.getByRole("radio", { name: "持っている" }),
+      ).toHaveAttribute("aria-checked", "true");
+      await expect(
+        sheet.getByRole("radio", { name: "あとで決める" }),
+      ).toHaveAttribute("aria-checked", "false");
+      // The chips' colours settle before the picture.
+      await page.waitForTimeout(400);
+      await view("13-series-picked-390");
+      await page.setViewportSize({ width: 320, height: 640 });
+      await noOverflow("series sheet at 320");
+      await view("13-series-picked-320");
+      await sheet
+        .getByRole("radio", { name: "持ってない" })
+        .scrollIntoViewIfNeeded();
+      await view("13-series-picked-320-below");
+      await page.setViewportSize({ width: 390, height: 844 });
+      const before = sent.length;
+      await go.click();
+      await expect(page.locator(".toast").last()).toContainText(
+        "2冊を登録しました",
+      );
+      await expect(sheet.locator(".series-all-in")).toHaveText(
+        "わかっている巻は、どれも登録済みです",
+      );
+      await expect(sheet.locator(".series-count")).toContainText(
+        "3 / 3 冊 登録済み",
+      );
+      // Each volume by its ISBN, as a scan, 積読 and 持っている.
+      await expect
+        .poll(() =>
+          sent
+            .slice(before)
+            .filter(([table]) => table === "/rest/v1/books")
+            .flatMap(([, rows]) => rows.map((row) => row.isbn))
+            .sort(),
+        )
+        .toEqual([VOLUMES[1][0], VOLUMES[2][0]]);
+      // Only those two came into the library, 積読 and 持っている: the
+      // first, in already, was not written again.
+      const written = (table) =>
+        sent
+          .slice(before)
+          .filter(([path]) => path === table)
+          .flatMap(([, rows]) => (Array.isArray(rows) ? rows : [rows]));
+      const added = written("/rest/v1/books")
+        .map((row) => row.id)
+        .sort();
+      await expect
+        .poll(() =>
+          [
+            ...new Set(
+              written("/rest/v1/library_entries")
+                .map((row) => row.book_id)
+                .filter(Boolean),
+            ),
+          ].sort(),
+        )
+        .toEqual(added);
+      expect(
+        written("/rest/v1/library_entries").some(
+          (row) => row.status === "tsundoku" && row.owned === "yes",
+        ),
+      ).toBe(true);
+      await view("13-series-done-390");
+      await sheet.getByRole("button", { name: "閉じる" }).click();
+      // They joined this time's list, each a card of its own.
+      await expect(scanner.locator(".scan-item")).toHaveCount(3);
+      await expect(scanner.locator(".scan-count")).toHaveText("3冊 登録済み");
+      // Each its own card, with what the sheet gave it.
+      await expect(
+        scanner
+          .locator(".scan-item")
+          .filter({ hasText: "夜の図書館 2" })
+          .getByRole("button", { name: "積読" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await view("13-series-cards-390");
+      await scanner.getByRole("button", { name: "閉じる" }).click();
+      await expect(scanner).toHaveCount(0);
+      await page.unroute(supabase + "/rest/v1/**", writes);
+      await page.unroute("https://api.openbd.jp/**", titles);
+
+      // A volume's own page: the series as a small shelf, the door to it.
+      await page.goto(base + "/books/registered/?id=" + VOLUMES[1][1]);
+      const strip = page.getByRole("button", {
+        name: "『夜の図書館』のシリーズの巻を見る",
+      });
+      await expect(strip).toContainText("『夜の図書館』のシリーズ");
+      await expect(strip).toContainText("/ 3 冊 登録済み");
+      // In sight above the tab bar, as a reader scrolls to it.
+      await strip.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await noOverflow("book page with its series");
+      await view("13-series-book-page-390");
+      await page.setViewportSize({ width: 320, height: 640 });
+      // In sight above the tab bar, as a reader scrolls to it.
+      await strip.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await noOverflow("book page with its series at 320");
+      await view("13-series-book-page-320");
+      await strip.click();
+      await expect(
+        page.getByRole("dialog", { name: "『夜の図書館』" }),
+      ).toBeVisible();
+      await view("13-series-sheet-320");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.keyboard.press("Escape");
+      seriesRows = [];
+      seriesBooks = [];
+    },
+  );
+
+  await check(
     "a book registered while the town loads is not said to be registered",
     async () => {
       // The town's reads wait; the reader's own profile comes, so they are
@@ -2117,11 +2344,12 @@ try {
       const hold = (route) => {
         const request = route.request();
         const url = new URL(request.url());
-        // Asking whether the reader is staff (注釈モード), or which of
-        // their books are held back, writes nothing.
+        // Asking whether the reader is staff (注釈モード), which of their
+        // books are held back, or a book's series, writes nothing.
         if (
           url.pathname === "/rest/v1/rpc/can_annotate" ||
-          url.pathname === "/rest/v1/rpc/book_holds"
+          url.pathname === "/rest/v1/rpc/book_holds" ||
+          url.pathname === "/rest/v1/rpc/series_for_isbn"
         )
           return route.fallback();
         // Which books the reader typed in (my_books), the town itself
@@ -2206,11 +2434,12 @@ try {
       const hold = (route) => {
         const request = route.request();
         const url = new URL(request.url());
-        // Asking whether the reader is staff (注釈モード), or which of
-        // their books are held back, writes nothing.
+        // Asking whether the reader is staff (注釈モード), which of their
+        // books are held back, or a book's series, writes nothing.
         if (
           url.pathname === "/rest/v1/rpc/can_annotate" ||
-          url.pathname === "/rest/v1/rpc/book_holds"
+          url.pathname === "/rest/v1/rpc/book_holds" ||
+          url.pathname === "/rest/v1/rpc/series_for_isbn"
         )
           return route.fallback();
         // Which books the reader typed in (my_books), the town itself
@@ -2494,6 +2723,102 @@ try {
       expect(
         scene.find((write) => write.path === "/rest/v1/shop_private").asked,
       ).toContain(later);
+      await expect.poll(outboxKeys).toEqual([]);
+      await page.unroute(supabase + "/rest/v1/**", answer);
+      town = null;
+    },
+  );
+
+  await check(
+    "a library catalog book a search finds beyond the town goes in the library and 読みたい, named as it is (AUD-190)",
+    async () => {
+      // The town reads only its newest books; the library's catalog has
+      // thousands more, which the search asks the database for (find_books).
+      // Tapped, one is taken in as the database's row: the reader's rows name
+      // it, nothing is copied and no book row is written (#354).
+      const FAR = "d1e2f3a4-b5c6-4d7e-8f9a-0b1c2d3e4f01";
+      const at = "2026-10-12T00:00:00Z";
+      town = { books: [], my_books: [] };
+      const found = [];
+      // What the page writes is answered here and noted: the reader's rows,
+      // and a copy or a book row, which it must not write.
+      const sent = [];
+      const writes = [
+        "/rest/v1/book_marks",
+        "/rest/v1/library_entries",
+        "/rest/v1/books",
+        "/rest/v1/rpc/copy_book",
+      ];
+      const answer = (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (url.pathname === "/rest/v1/rpc/find_books") {
+          found.push(request.postData() ?? "");
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify([
+              {
+                id: FAR,
+                isbn: "9784000000019",
+                title: "遠い海の図書館",
+                author: "試験 作家",
+                publisher: "試験書房",
+                price: null,
+                source: "ndl",
+                created_by: null,
+                work_id: FAR,
+                created_at: at,
+                updated_at: at,
+              },
+            ]),
+          });
+        }
+        if (request.method() === "GET" || !writes.includes(url.pathname))
+          return route.fallback();
+        sent.push({
+          path: url.pathname,
+          asked: url.search + " " + (request.postData() ?? ""),
+        });
+        return route.fulfill({ status: 201, body: "" });
+      };
+      await page.route(supabase + "/rest/v1/**", answer);
+      await page.goto(base + "/search/");
+      await page
+        .getByRole("searchbox", { name: "本と書店を検索" })
+        .fill("遠い海の図書館");
+      const row = page
+        .locator(".search-results .search-book-row")
+        .filter({ hasText: "遠い海の図書館" });
+      await expect(row).toHaveCount(1);
+      expect(found.length).toBeGreaterThan(0);
+      const register = row.getByRole("button", {
+        name: "『遠い海の図書館』をライブラリに登録",
+      });
+      await expect(register).toHaveAttribute("aria-pressed", "false");
+      await register.click();
+      await expect(register).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        page.getByText("『遠い海の図書館』を登録しました"),
+      ).toBeVisible();
+      await expect
+        .poll(() => sent.map((write) => write.path))
+        .toContain("/rest/v1/book_marks");
+      // Its page, from the search: 読みたい takes the same book.
+      await row.locator(".search-book").click();
+      await expect(page).toHaveURL(new RegExp(FAR));
+      await page.getByRole("button", { name: "読みたいに加える" }).click();
+      await expect(
+        page.getByRole("button", { name: "読みたいに登録済み" }),
+      ).toBeVisible();
+      await expect
+        .poll(() => sent.filter((write) => write.asked.includes('"wish"')))
+        .not.toEqual([]);
+      for (const write of sent) {
+        expect(write.path).not.toBe("/rest/v1/rpc/copy_book");
+        expect(write.path).not.toBe("/rest/v1/books");
+        expect(write.asked).toContain(FAR);
+      }
       await expect.poll(outboxKeys).toEqual([]);
       await page.unroute(supabase + "/rest/v1/**", answer);
       town = null;
