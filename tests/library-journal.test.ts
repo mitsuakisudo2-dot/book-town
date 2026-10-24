@@ -42,6 +42,7 @@ import {
   NO_READS,
   readBarcode,
   SAME_BOOK_MS,
+  scanCount,
   scanReaction,
   SCAN_COPY,
   stillInView,
@@ -49,6 +50,7 @@ import {
   type ScanTown,
   type SessionReads,
 } from "../src/lib/scan";
+import { restorable, showsOf, tally, type Card } from "../src/lib/scan-cards";
 import { createTownStore, journalTownOf } from "../src/lib/store";
 import {
   counterId,
@@ -1370,6 +1372,74 @@ async function main() {
     const journal = createLibraryJournal(() => null);
     assert.equal(sentNotice(journal, []), null);
   });
+
+  await check(
+    "the scanner's cards: what they show and how they are counted",
+    () => {
+      // A read sent comes to what its card shows: a title asked for and not
+      // answered is 書名待ち, or no network while offline; a read waiting for
+      // the town is the account unreadable where the town could not be read.
+      assert.equal(showsOf("added", "account"), "added");
+      assert.equal(showsOf("already", "account"), "already");
+      assert.equal(showsOf("untitled", "account"), "untitled");
+      assert.equal(showsOf("lookup", "account"), "untitled");
+      assert.equal(showsOf("waiting", "account"), "waiting");
+      assert.equal(showsOf("waiting", "unavailable"), "unavailable");
+      // The count at the top and the notice on closing come from the same
+      // cards: a save not confirmed is 確認中 at the top but registered on
+      // closing, and a refused save waits for the reader.
+      const card = (id: string, shows: Card["shows"], isbn?: string): Card => ({
+        id,
+        isbn,
+        shows,
+      });
+      const cards = [
+        card("a", "added"),
+        card("b", "added"),
+        card("c", "looking"),
+        card("d", "untitled"),
+        card("e", "offline"),
+        card("f", "waiting"),
+        card("g", "unavailable"),
+        card("h", "already"),
+        card("i", "undone"),
+      ];
+      const shown = (one: Card) =>
+        one.id === "b" ? "saving" : one.id === "g" ? "refused" : one.shows;
+      const counts = tally(cards, shown);
+      assert.deepEqual(counts, {
+        saved: 1,
+        checking: 4,
+        attention: 2,
+        closing: { added: 2, waiting: 2, later: 2 },
+      });
+      assert.equal(scanCount(counts), "1冊 登録済み・4冊確認中・2冊要確認");
+      assert.equal(
+        closingNotice(counts.closing),
+        "2冊を登録しました・書名待ち 2冊・2冊は控えに置きました",
+      );
+      assert.deepEqual(tally([], shown), {
+        saved: 0,
+        checking: 0,
+        attention: 0,
+        closing: { added: 0, waiting: 0, later: 0 },
+      });
+      // 元に戻す: a card taken back, unless the same book was read again.
+      const isbn = isbnOf(1);
+      const undone = card("x", "undone", isbn);
+      assert.equal(restorable(undone, [undone]), true);
+      assert.equal(
+        restorable(undone, [undone, card("y", "added", isbn)]),
+        false,
+      );
+      assert.equal(
+        restorable(undone, [undone, card("y", "undone", isbn)]),
+        true,
+      );
+      assert.equal(restorable(card("z", "undone"), []), false);
+      assert.equal(restorable(card("w", "added", isbn), []), false);
+    },
+  );
 
   await check(
     "a decided id is used only when the town could have given it",
