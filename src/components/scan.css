@@ -1108,14 +1108,14 @@ body:has(.scan-session) .toast {
   display: flex;
   align-items: flex-end;
   gap: 1px;
-  width: 82px;
-  height: 18px;
-  padding: 0 3px;
+  width: 98px;
+  height: 22px;
+  padding: 0 4px;
   border-bottom: 3px solid var(--cork);
 }
 .scan-spine {
   flex: none;
-  width: calc(7px * var(--spine-wide));
+  width: calc(8px * var(--spine-wide));
   height: calc(100% * var(--spine-tall));
   border-radius: var(--r-edge) var(--r-edge) 0 0;
   background: var(--spine);
@@ -1143,8 +1143,9 @@ body:has(.scan-session) .toast {
   gap: 10px;
   margin-bottom: 12px;
 }
+/* Every 段 as wide as a full one, its books from the left, as in a bookcase. */
 .scan-shelf.is-large .scan-shelf-row {
-  width: auto;
+  width: 220px;
   height: 52px;
   gap: 2px;
   padding: 0 6px;
