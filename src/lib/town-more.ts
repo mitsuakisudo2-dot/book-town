@@ -6,6 +6,7 @@ import {
   type ReadingRecord,
   type TownState,
 } from "./types";
+import type { Series } from "./series";
 
 // What the town reads when a page shows it, not with the town (AUD-006):
 // another reader's records and 人生の9冊 on their profile's page, a book's
@@ -26,7 +27,9 @@ export type MoreAsk =
   /** The books a search finds among all the reader may read (find_books). */
   | { search: string }
   /** The town's counts of all time, and the books most shelved and talked of (town_counts). */
-  | { counts: true };
+  | { counts: true }
+  /** The series a book of the ISBN is in, and their volumes' books (series_for_isbn, 管理表 13). */
+  | { series: string };
 
 /** One key per ask, to keep and share what was read. */
 export function moreKey(ask: MoreAsk): string {
@@ -35,6 +38,7 @@ export function moreKey(ask: MoreAsk): string {
   if ("felt" in ask) return "felt:";
   if ("search" in ask) return "search:" + ask.search;
   if ("counts" in ask) return "counts:";
+  if ("series" in ask) return "series:" + ask.series;
   return "feeling:" + ask.feeling;
 }
 
@@ -47,6 +51,7 @@ export function askOfKey(key: string): MoreAsk | null {
   if (kind === "felt") return { felt: true };
   if (kind === "search" && value.trim()) return { search: value };
   if (kind === "counts") return { counts: true };
+  if (kind === "series" && value) return { series: value };
   if (kind === "feeling" && FEELINGS.includes(value as Feeling))
     return { feeling: value as Feeling };
   return null;
@@ -101,6 +106,8 @@ export interface TownMore {
   /** Which feelings anyone in the town kept, of all time (felt_in_town). */
   felt?: Feeling[];
   counts?: TownCounts;
+  /** The series a book is in (series.ts), their volumes' books among `books`. */
+  series?: Series[];
 }
 
 export const emptyMore = (): TownMore => ({
