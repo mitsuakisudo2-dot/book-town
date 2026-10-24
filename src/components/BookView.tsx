@@ -11,7 +11,7 @@ import {
 import { BookJacket, CoverCredit, Icon } from "./ui";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
 import { InLibraryMark } from "./RegisterBook";
-import { SeriesStrip } from "./SeriesDoor";
+import { SeriesStrip } from "./series-later";
 import { BookReviews } from "./Social";
 import {
   myShopPath,
