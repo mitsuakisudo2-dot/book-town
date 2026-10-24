@@ -174,6 +174,30 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     readers: "nobody",
   },
   "private.works_apart": { people: {}, readers: "nobody" },
+  // Series, their lines and volumes, what the rules did run by run, what a
+  // person took out and did by hand (series); the bibliography's sources.
+  // They name no one.
+  "public.series": { people: {}, readers: "nobody" },
+  "public.series_lines": { people: {}, readers: "nobody" },
+  "public.series_volumes": { people: {}, readers: "nobody" },
+  "private.series_runs": { people: {}, readers: "nobody" },
+  "private.series_steps": {
+    people: {},
+    // Series, lines and editions a step names, some before they are made.
+    notPeople: ["edition_id", "series_id", "line_id", "from_series", "from_line"],
+    readers: "nobody",
+  },
+  "private.series_kept_out": { people: {}, readers: "nobody" },
+  "private.series_last_out": { people: {}, notPeople: ["edition_id", "from_series"], readers: "nobody" },
+  "private.series_decisions": {
+    people: {},
+    // The series and edition a person decided about.
+    notPeople: ["series_id", "edition_id"],
+    readers: "nobody",
+  },
+  "private.series_keys": { people: {}, readers: "nobody" },
+  "private.series_stale": { people: {}, readers: "nobody" },
+  "private.bib_providers": { people: {}, readers: "nobody" },
   // The bibliographic master (bibliography): what each source said about an
   // edition, the operator's corrections, when each book was placed in its
   // edition, and the operator's list of what to look at. They name no one.

@@ -39,6 +39,7 @@
 /tests/db-own-books.test.ts        @mitsuakisudo2-dot
 /tests/db-screen-errors.test.ts    @mitsuakisudo2-dot
 /tests/db-search.test.ts           @mitsuakisudo2-dot
+/tests/db-series.test.ts           @mitsuakisudo2-dot
 /tests/db-shelf-audience.test.ts   @mitsuakisudo2-dot
 /tests/db-site-reports.test.ts     @mitsuakisudo2-dot
 /tests/db-town-size.test.ts        @mitsuakisudo2-dot

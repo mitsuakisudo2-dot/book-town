@@ -1122,6 +1122,137 @@ export type Database = {
           },
         ];
       };
+      series: {
+        Row: {
+          created_at: string;
+          finished_at: string | null;
+          id: string;
+          kind: string;
+          made_by: string;
+          merged_into: string | null;
+          name: string;
+          name_reading: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          finished_at?: string | null;
+          id?: string;
+          kind?: string;
+          made_by: string;
+          merged_into?: string | null;
+          name: string;
+          name_reading?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          finished_at?: string | null;
+          id?: string;
+          kind?: string;
+          made_by?: string;
+          merged_into?: string | null;
+          name?: string;
+          name_reading?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "series_merged_into_fkey";
+            columns: ["merged_into"];
+            isOneToOne: false;
+            referencedRelation: "series";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      series_lines: {
+        Row: {
+          created_at: string;
+          id: string;
+          label: string | null;
+          name: string | null;
+          series_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          id?: string;
+          label?: string | null;
+          name?: string | null;
+          series_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          label?: string | null;
+          name?: string | null;
+          series_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "series_lines_series_id_fkey";
+            columns: ["series_id"];
+            isOneToOne: false;
+            referencedRelation: "series";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      series_volumes: {
+        Row: {
+          decided: string;
+          decided_at: string;
+          edition_id: string;
+          line_id: string;
+          number: number;
+          run_id: string | null;
+          series_id: string;
+          shown: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          decided: string;
+          decided_at?: string;
+          edition_id: string;
+          line_id: string;
+          number: number;
+          run_id?: string | null;
+          series_id: string;
+          shown: string;
+        };
+        Update: {
+          decided?: string;
+          decided_at?: string;
+          edition_id?: string;
+          line_id?: string;
+          number?: number;
+          run_id?: string | null;
+          series_id?: string;
+          shown?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "series_volumes_edition_id_fkey";
+            columns: ["edition_id"];
+            isOneToOne: false;
+            referencedRelation: "editions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "series_volumes_line_fkey";
+            columns: ["line_id", "series_id"];
+            isOneToOne: false;
+            referencedRelation: "series_lines";
+            referencedColumns: ["id", "series_id"];
+          },
+          {
+            foreignKeyName: "series_volumes_series_id_fkey";
+            columns: ["series_id"];
+            isOneToOne: false;
+            referencedRelation: "series";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       shop_follows: {
         Row: {
           created_at: string;
@@ -1555,6 +1686,24 @@ export type Database = {
           p_page?: string;
         };
         Returns: undefined;
+      };
+      series_for_isbn: {
+        Args: { isbn: string };
+        Returns: {
+          book_id: string;
+          finished: boolean;
+          kind: string;
+          line_id: string;
+          line_label: string;
+          line_name: string;
+          number: number;
+          series_id: string;
+          series_name: string;
+          series_reading: string;
+          shown: string;
+          title: string;
+          volume_isbn: string;
+        }[];
       };
       shop_visitors: {
         Args: Record<PropertyKey, never>;
