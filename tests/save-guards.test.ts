@@ -513,7 +513,8 @@ async function main() {
     "what waits on the device is told per reader, kept a week, let go on ログアウト",
     async () => {
       const device = memoryStorage();
-      const now = Date.parse("2026-10-18T09:00:00Z");
+      // outboxWaiting reads the clock, so the week counts from now.
+      const now = Date.now();
       const outbox = (at = now) =>
         deviceOutbox<Write>(OUTBOX_KEY + AKI, isWrite, device, () => at);
       const like: Write = {
