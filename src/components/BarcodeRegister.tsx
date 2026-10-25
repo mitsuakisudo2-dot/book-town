@@ -7,11 +7,8 @@ import {
   normalizeIsbn,
 } from "../lib/books";
 import { lookUpBook } from "../lib/openbd";
-import {
-  libraryBookByIsbn,
-  libraryBookByName,
-  useTownBackend,
-} from "../lib/store";
+import { libraryBookByIsbn, useTownBackend } from "../lib/store";
+import { libraryBookByName, SAME_BOOK } from "../lib/same-book";
 import type { TownActions, TownState } from "../lib/types";
 import { BookJacket, Icon, Modal } from "./ui";
 import {
@@ -388,13 +385,13 @@ export function BarcodeRegister({
         </label>
         {alike && (
           <div className="register-same" role="status">
-            <b>{REGISTER.sameAsk}</b>
+            <b>{SAME_BOOK.ask}</b>
             <div className="register-same-book">
               <BookJacket book={alike} className="search-jacket" />
               <span>
                 <b>{bookTitle(alike)}</b>
                 <small>{bookAuthor(alike)}</small>
-                <small>{REGISTER.sameIn}</small>
+                <small>{SAME_BOOK.inLibrary}</small>
               </span>
             </div>
             <button
@@ -405,7 +402,7 @@ export function BarcodeRegister({
                 onClose();
               }}
             >
-              {REGISTER.same}
+              {SAME_BOOK.same}
             </button>
           </div>
         )}
@@ -414,7 +411,7 @@ export function BarcodeRegister({
           className={alike ? "btn" : "btn fill"}
           disabled={!title.trim() || looking}
         >
-          {alike ? REGISTER.another : "登録する"}
+          {alike ? SAME_BOOK.another : "登録する"}
         </button>
       </form>
     </Modal>

@@ -156,11 +156,6 @@ export const REGISTER = {
   added: (quoted: string) => `${quoted}を登録しました`,
   already: (quoted: string) => `${quoted}はもうライブラリにあります`,
   undone: (quoted: string) => `${quoted}の登録を取り消しました`,
-  /** A book typed in by hand named as one already in (101): asked, not refused. */
-  sameAsk: "この本ですか？",
-  sameIn: "ライブラリにあります",
-  same: "この本です",
-  another: "別の本として登録",
   /** Asked before a book is taken out (けにー 10-18), and again when it has a trace. */
   removeAsk: "本当にライブラリから外しますか？",
   remove: "ライブラリから外す",

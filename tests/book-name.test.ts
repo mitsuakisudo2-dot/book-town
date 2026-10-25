@@ -6,13 +6,13 @@ import {
   bookAuthor,
   bookById,
   bookByIsbn,
-  bookByName,
   booksById,
   bookTitle,
   quote,
   quotedTitle,
 } from "../src/lib/book-name";
 import { AUTHORITY_NAMES } from "./fixtures/authority-names";
+import { bookByName } from "../src/lib/same-book";
 
 // A book's name reads the same everywhere because every screen asks
 // src/lib/book-name.ts for it. These checks keep it that way: no title put in
