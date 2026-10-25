@@ -1924,6 +1924,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      forget_books: {
+        Args: { batch: string; ids: string[]; removed: string[] };
+        Returns: string[];
+      };
       isbn13_valid: { Args: { isbn: string }; Returns: boolean };
       my_books: {
         Args: Record<PropertyKey, never>;
