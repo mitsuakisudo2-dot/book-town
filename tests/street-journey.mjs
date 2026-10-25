@@ -710,9 +710,18 @@ try {
       await save.click();
       await expect(save).toHaveAttribute("aria-pressed", "true");
       // The book sits above the page, so its toast is shown inside it.
-      await expect(page.locator(".bh-dialog .toast")).toHaveText(
-        "読みたい本に入れました",
-      );
+      const toast = page.locator(".bh-dialog .toast");
+      await expect(toast).toContainText("読みたい本に入れました");
+      // Its メモ opens the memo sheet over the book, in the same layer.
+      await toast.getByRole("button", { name: "メモ" }).click();
+      const memo = page
+        .locator(".bh-dialog")
+        .getByRole("dialog", { name: "出会いのメモ" });
+      await expect(memo).toBeVisible();
+      await expect(memo).toContainText("「軌道書房」で読みたいにした");
+      await memo.getByRole("button", { name: "やめる" }).click();
+      await expect(memo).toHaveCount(0);
+      await expect(page.locator(".bh-dialog")).toBeVisible();
       // The bottom band's "読みたい" is the same list, always in reach.
       await expect(
         page

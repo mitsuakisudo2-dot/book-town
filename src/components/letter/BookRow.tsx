@@ -17,6 +17,7 @@ import type {
 import { BookJacket } from "../ui";
 import { LetterIcon } from "./icons";
 import { NAMES } from "../../lib/words";
+import { memoOffer } from "../../lib/encounter-memo";
 
 /**
  * The book a 便り is about, in a thin frame: its cover whole, its title and
@@ -103,6 +104,7 @@ export function WantButton({
                 (keepsMeeting
                   ? `${author.name}さんの${NAMES.letter}で出会った本として残します。`
                   : ""),
+          wanted ? undefined : memoOffer(state, actions),
         );
       }}
     >

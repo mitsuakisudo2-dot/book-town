@@ -624,6 +624,7 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
           )
             ? (settings.spoilerDisplay as SpoilerDisplay)
             : initial.settings.spoilerDisplay,
+          memoHint: settings.memoHint !== false,
         },
         seenNotifications: Array.isArray(data.seenNotifications)
           ? [...new Set(data.seenNotifications)]

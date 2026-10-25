@@ -711,7 +711,7 @@ try {
         expect(edge.y + edge.height - (pill.y + pill.height)).toBeLessThan(12);
         await want.tap();
         await expect(want).toHaveAttribute("aria-pressed", "true");
-        await expect(page.locator(".toast")).toHaveText(
+        await expect(page.locator(".toast")).toContainText(
           "『見えない都市』を読みたいに入れました。すみれさんの便りで出会った本として残します。",
         );
         await expectReadable(want.locator(".letter-want-pill"), "読みたい, on");

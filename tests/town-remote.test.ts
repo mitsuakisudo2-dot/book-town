@@ -2408,6 +2408,21 @@ async function main() {
       planWrites(before, { ...next, settings: before.settings }, ids),
       [],
     );
+    // 「メモの案内を出す」: on unless the reader turned it off.
+    assert.equal(before.settings.memoHint, true);
+    assert.equal(
+      townFromRows(rows({ readerSettings: { memo_hint: false } }), ids).settings
+        .memoHint,
+      false,
+    );
+    assert.deepEqual(
+      planWrites(
+        before,
+        { ...before, settings: { ...before.settings, memoHint: false } },
+        ids,
+      ),
+      [{ kind: "reader-settings", row: { user_id: AKI, memo_hint: false } }],
+    );
     // A starting choice is sent alone, as is 読書の状態's detail.
     const status: TownState = {
       ...before,

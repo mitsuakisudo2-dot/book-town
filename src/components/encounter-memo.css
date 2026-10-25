@@ -1,0 +1,27 @@
+/* The memo of one encounter (押したときのメモ): which book, where, and why. */
+.encounter-memo-where {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 14px;
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.encounter-memo-where strong {
+  font-size: var(--t-meta);
+  color: var(--ink);
+}
+.encounter-memo .kept-note {
+  margin-bottom: 8px;
+}
+.encounter-memo-note {
+  font-size: var(--t-cap);
+  line-height: 1.9;
+  margin-bottom: 14px;
+}
+.encounter-memo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

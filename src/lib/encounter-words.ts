@@ -1,5 +1,7 @@
 import type { Encounter } from "./library";
-import { NAMES } from "./words";
+import { findReader } from "./social";
+import type { TownState } from "./types";
+import { counted, NAMES } from "./words";
 
 /**
  * The words of the book page's 「この本との出会い」 (管理表9). Only that
@@ -15,6 +17,17 @@ export const ENCOUNTER_WORDS = {
   restored: "出会いの記録を戻しました",
   /** Under a POP or for a shop met: the way into the shop. */
   visit: (shop: string) => `「${shop}」をたずねる`,
+  /** The memo of one encounter (押したときのメモ). */
+  memoWrite: "メモを書く",
+  memoEdit: "メモを直す",
+  memoTitle: "出会いのメモ",
+  memoLabel: "なぜ気になったか、ひとこと",
+  memoNote: "あなただけに見えます。この本のページの「この本との出会い」で読み返せます。",
+  memoSave: "残す",
+  memoErase: "メモを消す",
+  memoSaved: "メモを残しました",
+  memoErased: "メモを消しました",
+  memoTooLong: (max: number) => `${counted(max, "字")}までです`,
 } as const;
 
 const DID: Record<Encounter["kind"], string> = {
@@ -46,4 +59,16 @@ export function encounterLine(
     case "book":
       return "本のページで読みたいにした";
   }
+}
+
+/** An encounter's line with the names the town knows now. */
+export function encounterLineIn(state: TownState, c: Encounter): string {
+  const post = c.postId ? state.posts.find((p) => p.id === c.postId) : undefined;
+  const whoId = post?.authorId ?? c.otherReaderId;
+  return encounterLine(c, {
+    who: whoId ? findReader(state, whoId)?.name : undefined,
+    shop: c.shopId
+      ? state.shops.find((s) => s.id === c.shopId)?.name
+      : undefined,
+  });
 }

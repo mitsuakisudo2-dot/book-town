@@ -875,6 +875,7 @@ export function townFromRows(
       )
         ? (rows.readerSettings?.spoiler_display as SpoilerDisplay)
         : "fold_possible",
+      memoHint: rows.readerSettings?.memo_hint !== false,
     },
     seenNotifications: rows.seenNotifications.slice(-500),
     shopMessages: rows.shopMessages
@@ -1311,7 +1312,10 @@ export type Write =
         Partial<
           Pick<
             TablesInsert<"reader_settings">,
-            "spoiler_display" | "shelf_audiences" | SettingsVisibilityColumn
+            | "spoiler_display"
+            | "shelf_audiences"
+            | "memo_hint"
+            | SettingsVisibilityColumn
           >
         >;
     }
@@ -1688,6 +1692,8 @@ export function planWrites(
   };
   if (next.settings.spoilerDisplay !== base.settings.spoilerDisplay)
     settingsRow.spoiler_display = next.settings.spoilerDisplay;
+  if (next.settings.memoHint !== base.settings.memoHint)
+    settingsRow.memo_hint = next.settings.memoHint;
   Object.assign(
     settingsRow,
     visibilityChanges(base.settings.visibility, next.settings.visibility),
@@ -2364,6 +2370,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
       visibility: cleanVisibilities(null),
       shelfAudiences: {},
       spoilerDisplay: "fold_possible",
+      memoHint: true,
     },
     seenNotifications: [],
     shopMessages: [],

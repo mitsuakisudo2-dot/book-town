@@ -50,6 +50,7 @@ import { SiteNotesGate } from "./SiteNotesGate";
 import { accountRequested, closeAccountRequest } from "../lib/visitor";
 import { closeReport } from "../lib/report";
 import { carriedToast, noteToast } from "../lib/carried-toast";
+import { useAskedMemo, useMemoEverAsked } from "../lib/encounter-memo";
 import { isKeptNotice } from "../lib/kept-draft";
 import {
   SAMPLE_NOTICE,
@@ -123,6 +124,10 @@ const BookView = dynamic(() =>
 );
 const Wishlist = dynamic(() =>
   import("./Wishlist").then((file) => file.Wishlist),
+);
+// The memo sheet (押したときのメモ) is read once a memo is first asked for.
+const EncounterMemoHost = dynamic(() =>
+  import("./EncounterMemo").then((file) => file.EncounterMemoHost),
 );
 
 type View =
@@ -289,6 +294,12 @@ export default function TownApp({
   // them, here on every page (library-journal.ts).
   useJournalSender(journalTown, notify);
   const shared = { state, actions, notify };
+  const memoAsked = useMemoEverAsked();
+  // The toast whose メモ opened the sheet has said its part.
+  const memoOpen = useAskedMemo();
+  useEffect(() => {
+    if (memoOpen) setToast(null);
+  }, [memoOpen]);
   // A 便り's page is open over this screen: what is beneath it waits.
   const postLayer = usePostLayer();
   const layered = postLayer !== null && view !== "post";
@@ -625,6 +636,7 @@ export default function TownApp({
           </Link>
         ))}
       </nav>
+      {memoAsked && <EncounterMemoHost {...shared} />}
       {toast && <Toast toast={toast} onHold={holdToast} />}
       {about && (
         <Modal

@@ -1278,4 +1278,67 @@ check(
   },
 );
 
+check(
+  "a press offers its toast the encounter it made, once, and a memo is written on it",
+  () => {
+    const store = fresh();
+    const post = store
+      .getSnapshot()
+      .posts.find(
+        (entry) => entry.bookId && entry.authorId !== ME_ID && !entry.parentId,
+      )!;
+    store.actions.toggleLike(post.id);
+    const [met] = store.getSnapshot().encounters;
+    assert.equal(store.actions.takeMet(), met.id);
+    // Asked again, or after a press that met nothing new: nothing.
+    assert.equal(store.actions.takeMet(), null);
+    store.actions.toggleLike(post.id);
+    store.actions.toggleLike(post.id);
+    assert.ok(store.actions.takeMet());
+    store.actions.toggleSpoilerReport(post.id);
+    assert.equal(store.actions.takeMet(), null);
+
+    const [c] = store.getSnapshot().encounters;
+    assert.ok(store.actions.writeEncounterMemo(c.id, "  雨の日に読みたい  "));
+    let now = store.getSnapshot().encounters[0];
+    assert.equal(now.memo, "雨の日に読みたい");
+    assert.ok(now.memoAt);
+    // The same words, or too many, change nothing.
+    assert.equal(
+      store.actions.writeEncounterMemo(c.id, "雨の日に読みたい"),
+      false,
+    );
+    assert.equal(
+      store.actions.writeEncounterMemo(c.id, "あ".repeat(256)),
+      false,
+    );
+    // Taken back, the memo keeps it; erased then, it goes.
+    store.actions.toggleLike(post.id);
+    now = store.getSnapshot().encounters[0];
+    assert.ok(now.undoneAt);
+    assert.ok(store.actions.writeEncounterMemo(c.id, ""));
+    assert.deepEqual(store.getSnapshot().encounters, []);
+
+    store.actions.setMemoHint(false);
+    assert.equal(store.getSnapshot().settings.memoHint, false);
+  },
+);
+
+{
+  // Not taken within the press's turn, the encounter is not offered later.
+  const store = fresh();
+  const post = store
+    .getSnapshot()
+    .posts.find(
+      (entry) => entry.bookId && entry.authorId !== ME_ID && !entry.parentId,
+    )!;
+  store.actions.toggleLike(post.id);
+  setTimeout(() => {
+    assert.equal(store.actions.takeMet(), null);
+    console.log(
+      "PASS an encounter not taken in its press's turn is not offered",
+    );
+  });
+}
+
 console.log(`${passed} library town checks passed`);

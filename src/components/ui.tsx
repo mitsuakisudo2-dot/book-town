@@ -559,10 +559,14 @@ export const useInWritingSheet = () => useContext(WritingSheet);
  * is then over the screen that opened it (a walk keeps its own layers, under
  * the bottom bar), and still under the shell's rules that size words and
  * fields for a phone (usability.css; a phone zooms in on a text box under
- * 16px, and the sheet would no longer fit what the keyboard leaves).
+ * 16px, and the sheet would no longer fit what the keyboard leaves). Over
+ * a book in hand (a native <dialog>, in the browser's top layer), the end of
+ * that dialog, which the shell holds: anywhere else it would be beneath it.
  */
 const writingHost = () =>
-  document.querySelector<HTMLElement>(".town-shell") ?? document.body;
+  document.querySelector<HTMLElement>(".town-shell dialog[open]") ??
+  document.querySelector<HTMLElement>(".town-shell") ??
+  document.body;
 
 export function Modal({
   title,
