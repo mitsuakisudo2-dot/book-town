@@ -51,15 +51,23 @@ export function posterNewPath(
  * scanning (スキャンした回).
  */
 export const libraryPath = (
-  options: { makeShelf?: boolean; addBook?: boolean; batch?: string } = {},
+  options: {
+    makeShelf?: boolean;
+    addBook?: boolean;
+    batch?: string;
+    /** One shelf of the library: one every library has, by its key, or the reader's own. */
+    shelf?: string;
+  } = {},
 ): string =>
-  options.makeShelf
-    ? "/library/?make=shelf"
-    : options.addBook
-      ? "/library/?add=book"
-      : options.batch
-        ? `/library/?batch=${encodeURIComponent(options.batch)}`
-        : "/library/";
+  options.shelf
+    ? `/library/?shelf=${encodeURIComponent(options.shelf)}`
+    : options.makeShelf
+      ? "/library/?make=shelf"
+      : options.addBook
+        ? "/library/?add=book"
+        : options.batch
+          ? `/library/?batch=${encodeURIComponent(options.batch)}`
+          : "/library/";
 
 /**
  * The reader's own shop, or the door to open one; `place` opens it with that

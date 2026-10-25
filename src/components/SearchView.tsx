@@ -41,6 +41,7 @@ import { profilePath, shopPath } from "../lib/paths";
 import { useMoreRead, useTownBackend, useTownMore } from "../lib/store";
 import { authorAndKind, bookById, bookTitle } from "../lib/book-name";
 import { counted, REGISTER, whenSome, NAMES } from "../lib/words";
+import { inManageMode } from "../lib/town-mode";
 import { InLibraryMark, RegisterBook } from "./RegisterBook";
 import dynamic from "next/dynamic";
 
@@ -74,6 +75,8 @@ type Shared = {
 export function SearchView({ state, actions, notify }: Shared) {
   const id = useId();
   const savedIn = useTownBackend();
+  // 読書管理モード: books only; no readers, shops, 便り, nor the town's lists.
+  const manage = inManageMode(state);
   // A tapped #tag hands its search over; a shared ?q= link works on a fresh load.
   const [query, setQuery] = useState(() => takeRequestedSearch() ?? "");
   useEffect(() => {
@@ -117,7 +120,7 @@ export function SearchView({ state, actions, notify }: Shared) {
   // the 見本's and the reader's own: never one another reader only typed in.
   // A genre (a chip) finds only these too; a title or an author finds any.
   const shown = useMemo(() => booksBeforeSearch(state), [state]);
-  const { read: countsRead } = useMoreRead({ counts: true });
+  const { read: countsRead } = useMoreRead(manage ? null : { counts: true });
   const { townCounts, mostOf } = useMemo(() => {
     const asked = countsRead?.counts;
     if (!asked) return { townCounts: undefined, mostOf: [] as Book[] };
@@ -177,7 +180,10 @@ export function SearchView({ state, actions, notify }: Shared) {
   // Which feelings anyone kept, read when the search opens, and the records
   // felt with the chosen one, read when it is chosen (AUD-006): the town
   // holds only a window of others'.
-  const { state: feltKnown } = useTownMore(state, { felt: true });
+  const { state: feltKnown } = useTownMore(
+    state,
+    manage ? null : { felt: true },
+  );
   const feelings = feelingsInTown(feltKnown);
   const { state: feltTown } = useTownMore(
     feltKnown,
@@ -245,8 +251,8 @@ export function SearchView({ state, actions, notify }: Shared) {
   // Readers by name or @ID, shops by name, words, owner or a book on a public
   // shelf: closest first, and never with a count.
   const people = useMemo(
-    () => (books.query ? findReaders(state, books.query) : []),
-    [state, books.query],
+    () => (books.query && !manage ? findReaders(state, books.query) : []),
+    [state, books.query, manage],
   );
   const shopResults = useMemo(
     () => (books.query ? findShops(state, books.query) : []),
@@ -294,17 +300,25 @@ export function SearchView({ state, actions, notify }: Shared) {
 
   return (
     <div className="search-page">
-      <span className="eyebrow">FIND A BOOK, FIND A SHOP</span>
+      <span className="eyebrow">
+        {manage ? "FIND A BOOK" : "FIND A BOOK, FIND A SHOP"}
+      </span>
       <h1 className="page-title">検索</h1>
       <label className="search-box" htmlFor={id}>
         <Icon name="search" size={19} />
-        <span className="sr-only">本と書店を検索</span>
+        <span className="sr-only">
+          {manage ? "本を検索" : "本と書店を検索"}
+        </span>
         <input
           id={id}
           type="search"
           value={query}
           onChange={(event) => search(event.target.value)}
-          placeholder="タイトル・著者・書店名・#タグ・@ID"
+          placeholder={
+            manage
+              ? "タイトル・著者・ISBN"
+              : "タイトル・著者・書店名・#タグ・@ID"
+          }
           autoComplete="off"
         />
       </label>
@@ -327,7 +341,7 @@ export function SearchView({ state, actions, notify }: Shared) {
         </div>
       )}
 
-      {tagTerm !== null ? (
+      {tagTerm !== null && !manage ? (
         <div className="search-results" role="status">
           <section aria-labelledby="search-tag-title">
             <h2 id="search-tag-title">
@@ -429,33 +443,39 @@ export function SearchView({ state, actions, notify }: Shared) {
               </ul>
             </section>
           )}
-          <section aria-labelledby="search-shops-title">
-            <h2 id="search-shops-title">書店</h2>
-            {shopResults.length ? (
-              <ul className="search-list">
-                {shopResults.map((shop) => (
-                  <li key={shop.id}>
-                    <Link
-                      href={shopPath(shop.id)}
-                      className={"search-shop theme-" + shop.theme}
-                    >
-                      <Icon name="store" size={20} />
-                      <span>
-                        <b>{shop.name}</b>
-                        <small>{findReader(state, shop.ownerId)?.name}</small>
-                      </span>
-                      <Icon name="chevron" size={15} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              books.settled && (
-                <p className="search-empty">合う書店は見つかりませんでした。</p>
-              )
-            )}
-          </section>
+          {!manage && (
+            <section aria-labelledby="search-shops-title">
+              <h2 id="search-shops-title">書店</h2>
+              {shopResults.length ? (
+                <ul className="search-list">
+                  {shopResults.map((shop) => (
+                    <li key={shop.id}>
+                      <Link
+                        href={shopPath(shop.id)}
+                        className={"search-shop theme-" + shop.theme}
+                      >
+                        <Icon name="store" size={20} />
+                        <span>
+                          <b>{shop.name}</b>
+                          <small>{findReader(state, shop.ownerId)?.name}</small>
+                        </span>
+                        <Icon name="chevron" size={15} />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                books.settled && (
+                  <p className="search-empty">
+                    合う書店は見つかりませんでした。
+                  </p>
+                )
+              )}
+            </section>
+          )}
         </div>
+      ) : manage ? (
+        <p className="search-note">題名・著者・ISBNで、本を探せます。</p>
       ) : (
         <div className="search-discover">
           {feelings.length > 0 && (

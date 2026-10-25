@@ -255,6 +255,12 @@ export const SPOILER_DISPLAYS = [
   "leave_out",
 ] as const;
 export type SpoilerDisplay = (typeof SPOILER_DISPLAYS)[number];
+/**
+ * 読書管理モード (docs/機能/読書管理モード.md): `manage` keeps the town out of
+ * sight, the reader alone with their books. The reader's own setting.
+ */
+export const TOWN_MODES = ["normal", "manage"] as const;
+export type TownMode = (typeof TOWN_MODES)[number];
 
 export interface Settings {
   composeIcon: ComposeIcon;
@@ -270,6 +276,8 @@ export interface Settings {
   shelfAudiences: ShelfAudiences;
   /** 「ネタバレの表示」: the reader's own. */
   spoilerDisplay: SpoilerDisplay;
+  /** 読書管理モード or not; switching changes nothing else. */
+  mode: TownMode;
 }
 
 /** What can be folded by reports. */
@@ -646,6 +654,8 @@ export interface TownActions {
    */
   setVisibility(kind: VisibilityKind, choice: Choice, past?: boolean): void;
   setSpoilerDisplay(value: SpoilerDisplay): void;
+  /** 読書管理モード on or off: only the setting, nothing else changes. */
+  setTownMode(mode: TownMode): void;
   /** Remembers a report just filed (fileReport writes it; the sync does not). */
   noteReport(report: FiledReport): void;
   markNotificationsSeen(ids: string[]): void;

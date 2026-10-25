@@ -4,6 +4,7 @@ import { type TownState, type TownActions, type Notify } from "../lib/types";
 import { BookJacket, Icon } from "./ui";
 import { bookPath } from "../lib/books";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
+import { inManageMode } from "../lib/town-mode";
 
 type Shared = {
   state: TownState;
@@ -12,6 +13,8 @@ type Shared = {
 };
 export function Wishlist({ state, actions, notify }: Shared) {
   const books = state.books.filter((b) => state.wishlist.includes(b.id));
+  // 読書管理モード: no shop's POP, no way out to the town.
+  const manage = inManageMode(state);
   // An empty list still has somewhere to start: one POP from each of a few shops.
   const invitations = state.shops
     .flatMap((shop) => {
@@ -61,13 +64,15 @@ export function Wishlist({ state, actions, notify }: Shared) {
           <Icon name="bookmark" size={34} />
           <h2>次の一冊は、どの棚にいるでしょう。</h2>
           <p>気になる本を「読みたい」に加えると、ここに並びます。</p>
-          <Link href="/" className="btn">
-            街を歩いてみる
-            <Icon name="arrow" size={16} />
-          </Link>
+          {!manage && (
+            <Link href="/" className="btn">
+              街を歩いてみる
+              <Icon name="arrow" size={16} />
+            </Link>
+          )}
         </div>
       )}
-      {!books.length && invitations.length > 0 && (
+      {!books.length && !manage && invitations.length > 0 && (
         <section
           className="wishlist-invitations"
           aria-labelledby="wishlist-invitations-title"
