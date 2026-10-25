@@ -46,11 +46,6 @@ const ShopTidy = dynamic(
   () => import("./ShopTidy").then((file) => file.ShopTidy),
   { ssr: false },
 );
-// So is the old 店内を飾りつける, until it goes.
-const StoreSceneEditor = dynamic(
-  () => import("./StoreSceneEditor").then((file) => file.StoreSceneEditor),
-  { ssr: false },
-);
 import { OpenShop, ThemePicker } from "./OpenShop";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import { enterPressed } from "../lib/keys";
@@ -1005,7 +1000,6 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   const walk = useWalkStore();
   const owner = useDraftOwner();
   const [takenOff, setTakenOff] = useState<TakenOffShelves>({});
-  const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
   const [tidyOpen, setTidyOpen] = useState(false);
   const persistenceStatus = usePersistenceStatus();
   const savedIn = useTownBackend();
@@ -1381,8 +1375,8 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           {/* Two places to arrange books; say in one line where each one shows. */}
           <p>
             {ownScene
-              ? "店内は、飾りつけた形で書店めぐりに出ています。下の棚に並べた本は店内にも並び、棚から外した本は店内からも下がります。"
-              : "下の棚に並べた本が、そのまま書店めぐりの店内に並びます。飾りつけると、棚の形や看板、本の置き場所を自由に変えられます。"}
+              ? "店内は、整えた形で書店めぐりに出ています。下の棚に並べた本は店内にも並び、棚から外した本は店内からも下がります。"
+              : "下の棚に並べた本が、そのまま書店めぐりの店内に並びます。「店を整える」で、本の置き場所や看板、店の大きさを店の中で変えられます。"}
           </p>
           {!inWalk && (
             <p>公開する棚に本を並べると、書店めぐりに灯りがともります。</p>
@@ -1398,16 +1392,6 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           >
             <Icon name="shelf" size={17} />
             店を整える
-          </button>
-          {/* The sign, words and boards are still set here, until they move
-              into 整える too. */}
-          <button
-            type="button"
-            className="btn"
-            disabled={!walk.ready}
-            onClick={() => setSceneEditorOpen(true)}
-          >
-            店内を飾りつける
           </button>
           {inWalk && (
             <Link className="btn" href={walkPath("mine")}>
@@ -1425,13 +1409,6 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           saved={ownScene}
           ready={walkWritable && townKnown}
           onClose={() => setTidyOpen(false)}
-          notify={notify}
-        />
-      )}
-      {sceneEditorOpen && (
-        <StoreSceneEditor
-          state={state}
-          onClose={() => setSceneEditorOpen(false)}
           notify={notify}
         />
       )}
