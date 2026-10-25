@@ -533,6 +533,44 @@ input[type="checkbox"] {
     line-height: 1.5;
   }
 }
+/* A small note to write (Modal's `compact`): a card only as tall as what it
+   holds. With a finger it sits just above the keyboard, the page above still
+   in sight, not the whole screen a post's sheet takes. */
+.modal.is-compact {
+  max-width: 420px;
+  padding: 18px 20px 20px;
+}
+.modal.is-compact > .modal-top {
+  margin-bottom: 8px;
+}
+.modal.is-compact > .modal-top h2 {
+  font-size: var(--t-page);
+  line-height: 1.5;
+}
+@media (pointer: coarse) and (max-width: 760px),
+  (pointer: coarse) and (max-height: 500px) {
+  .modal-backdrop.is-writing.is-compact {
+    align-items: flex-end;
+    padding: 8px;
+    background: color-mix(in srgb, var(--shade) 33%, transparent);
+  }
+  .modal.is-writing.is-compact {
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    border-radius: var(--r-box);
+    box-shadow: var(--lift-3);
+    padding: 0 9px;
+  }
+  /* Room for the text box's focus ring (2px, 4px off), which the scrolling
+     body would cut. */
+  .modal.is-writing.is-compact > .modal-body {
+    padding: 7px 7px 0;
+  }
+  .modal.is-writing.is-compact > .modal-top {
+    padding-inline: 7px;
+  }
+}
 .modal-top {
   display: flex;
   align-items: center;

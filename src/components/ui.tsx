@@ -575,6 +575,7 @@ export function Modal({
   wide = false,
   writing = false,
   fromBottom = false,
+  compact = false,
 }: {
   title: string;
   onClose: () => void;
@@ -593,6 +594,12 @@ export function Modal({
    * buttons (a .writing-toolbar, last) just above the keyboard.
    */
   writing?: boolean;
+  /**
+   * A small note to write (a word or two, not a post): a card only as tall
+   * as what it holds. With a finger it sits just above the keyboard, the
+   * page above it still in sight, instead of taking the whole screen.
+   */
+  compact?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const writingRef = useRef(writing);
@@ -698,7 +705,8 @@ export function Modal({
       className={
         "modal-backdrop" +
         (fitted ? " is-writing" : "") +
-        (fromBottom ? " is-sheet" : "")
+        (fromBottom ? " is-sheet" : "") +
+        (compact ? " is-compact" : "")
       }
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -709,7 +717,8 @@ export function Modal({
           "modal " +
           (wide ? "wide" : "") +
           (fitted ? " is-writing" : "") +
-          (fromBottom ? " is-sheet" : "")
+          (fromBottom ? " is-sheet" : "") +
+          (compact ? " is-compact" : "")
         }
         ref={ref}
         role="dialog"

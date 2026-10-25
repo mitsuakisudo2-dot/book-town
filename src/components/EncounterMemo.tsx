@@ -101,7 +101,12 @@ function MemoSheet({
     }
   };
   return (
-    <Modal title={ENCOUNTER_WORDS.memoTitle} onClose={onClose} writing>
+    <Modal
+      title={ENCOUNTER_WORDS.memoTitle}
+      onClose={onClose}
+      writing
+      compact
+    >
       <form
         className="encounter-memo"
         onSubmit={(event) => {
@@ -110,21 +115,18 @@ function MemoSheet({
         }}
       >
         <p className="encounter-memo-where">
-          {book && <strong>{quotedTitle(book)}</strong>}
-          <span>
-            {japanMonthDay(c.createdAt)}・{encounterLineIn(state, c)}
-          </span>
+          {book && <strong>{quotedTitle(book)}</strong>}{" "}
+          {japanMonthDay(c.createdAt)}・{encounterLineIn(state, c)}
         </p>
-        <label className="form-label">
-          {ENCOUNTER_WORDS.memoLabel}
-          <textarea
-            className="field"
-            rows={4}
-            value={work.memo}
-            onChange={(event) => write(event.target.value)}
-            aria-invalid={tooLong || undefined}
-          />
-        </label>
+        <textarea
+          className="field"
+          rows={2}
+          value={work.memo}
+          aria-label={ENCOUNTER_WORDS.memoLabel}
+          placeholder={ENCOUNTER_WORDS.memoLabel}
+          onChange={(event) => write(event.target.value)}
+          aria-invalid={tooLong || undefined}
+        />
         {tooLong && (
           <p className="profile-link-error" role="alert">
             {ENCOUNTER_WORDS.memoTooLong(ENCOUNTER_MEMO_MAX_LENGTH)}
@@ -136,7 +138,6 @@ function MemoSheet({
           wordsLost={work.memo.trim() !== ""}
           onDiscard={kept.clear}
         />
-        <p className="muted encounter-memo-note">{ENCOUNTER_WORDS.memoNote}</p>
         {stopping ? (
           <StopConfirm
             onDiscard={() => {
@@ -174,6 +175,9 @@ function MemoSheet({
             >
               やめる
             </button>
+            <span className="muted encounter-memo-note">
+              {ENCOUNTER_WORDS.memoNote}
+            </span>
           </div>
         )}
       </form>

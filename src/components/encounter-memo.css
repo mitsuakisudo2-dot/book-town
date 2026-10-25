@@ -1,27 +1,31 @@
-/* The memo of one encounter (押したときのメモ): which book, where, and why. */
+/* The memo of one encounter (押したときのメモ): which book, where, and why.
+   A small card (Modal's `compact`): a word or two, not a post. */
 .encounter-memo-where {
-  display: grid;
-  gap: 2px;
-  margin: 0 0 14px;
+  margin: 0 0 8px;
   font-size: var(--t-cap);
   color: var(--ink-2);
-  line-height: 1.7;
+  line-height: 1.6;
   overflow-wrap: anywhere;
 }
 .encounter-memo-where strong {
-  font-size: var(--t-meta);
   color: var(--ink);
+  font-weight: 500;
 }
 .encounter-memo .kept-note {
-  margin-bottom: 8px;
-}
-.encounter-memo-note {
-  font-size: var(--t-cap);
-  line-height: 1.9;
-  margin-bottom: 14px;
+  margin-top: 8px;
 }
 .encounter-memo-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.encounter-memo-note {
+  margin-left: auto;
+  font-size: var(--t-cap);
+}
+.encounter-memo textarea {
+  display: block;
+  margin-bottom: 8px;
 }

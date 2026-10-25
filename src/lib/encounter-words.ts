@@ -22,7 +22,7 @@ export const ENCOUNTER_WORDS = {
   memoEdit: "メモを直す",
   memoTitle: "出会いのメモ",
   memoLabel: "なぜ気になったか、ひとこと",
-  memoNote: "あなただけに見えます。この本のページの「この本との出会い」で読み返せます。",
+  memoNote: "あなただけに見えます",
   memoSave: "残す",
   memoErase: "メモを消す",
   memoSaved: "メモを残しました",
