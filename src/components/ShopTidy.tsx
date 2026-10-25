@@ -71,6 +71,16 @@ import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import "./walk.css";
 import "./scene-editor.css";
 
+/** Work kept in this browser (整えるの書きかけ), said only here: the words stay
+ * out of the shop's drawing, which every walk reads. */
+const KEPT = {
+  kept: "まだ店に入っていない書きかけを、このブラウザに残しています",
+  over: "書きかけより新しい店が保存されています。戻すと、いまの店と入れ替わります",
+  putBack: "書きかけを戻す",
+  back: "書きかけを戻しました。",
+  first: "書きかけを戻すか消すと、続けて整えられます。",
+} as const;
+
 /** Where a book would go: the tier, and its place among the other books. */
 type Spot = { rowId: string; index: number };
 /** The tiers and their books where they stood when a book was picked up,
@@ -216,7 +226,7 @@ export function ShopTidy({
   /** Saves the shop as `next`; the shop as it was waits for 元に戻す. */
   function save(next: StoreScene, said?: string, field?: string) {
     if (held) {
-      notify(GROW.keptFirst);
+      notify(KEPT.first);
       return false;
     }
     // Work still on its way began from the scene the account had last.
@@ -255,13 +265,13 @@ export function ShopTidy({
     keep(next, mark);
     setUndo((all) => [...all.slice(-19), scene]);
     typing.current = null;
-    notify(GROW.keptBack);
+    notify(KEPT.back);
   }
   function stepBack() {
     const before = undo.at(-1);
     if (!before) return;
     if (held) {
-      notify(GROW.keptFirst);
+      notify(KEPT.first);
       return;
     }
     const from = work ? work.from : mark;
@@ -549,10 +559,10 @@ export function ShopTidy({
         saved={kept.saved}
         wordsLost
         onDiscard={() => kept.clear()}
-        lead={standing === "stale" ? GROW.keptOver : GROW.kept}
+        lead={standing === "stale" ? KEPT.over : KEPT.kept}
         action={
           <button type="button" disabled={!ready} onClick={putBack}>
-            {GROW.putBack}
+            {KEPT.putBack}
           </button>
         }
       />

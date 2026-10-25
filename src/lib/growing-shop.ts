@@ -129,12 +129,6 @@ export const GROW = {
   popStamp: "POPのスタンプ",
   done: "できた",
   faceHint: "看板や棚札、黒板を押すと、ここで直せます。",
-  kept: "まだ店に入っていない書きかけを、このブラウザに残しています",
-  keptOver:
-    "書きかけより新しい店が保存されています。戻すと、いまの店と入れ替わります",
-  putBack: "書きかけを戻す",
-  keptBack: "書きかけを戻しました。",
-  keptFirst: "書きかけを戻すか消すと、続けて整えられます。",
 } as const;
 /** The drawing each tier's chalkboard starts with. */
 export const DEFAULT_DOODLES = ["travel", "daily", "forest", "stars"];
