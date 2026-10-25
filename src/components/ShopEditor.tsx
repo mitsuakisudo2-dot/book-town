@@ -31,7 +31,6 @@ import { profilePath, shopPath, walkPath } from "../lib/paths";
 import { findReader } from "../lib/social";
 import { BookJacket, Icon, Modal, ReaderAvatar } from "./ui";
 import { SortableShelf } from "./SortableShelf";
-import { StoreSceneEditor } from "./StoreSceneEditor";
 import { saveOwnedScene, useWalkStore } from "../lib/walk-store";
 import {
   hasPublicSceneBooks,
@@ -45,6 +44,11 @@ import dynamic from "next/dynamic";
 // 整える is read when it opens, so the shelves page does not carry it.
 const ShopTidy = dynamic(
   () => import("./ShopTidy").then((file) => file.ShopTidy),
+  { ssr: false },
+);
+// So is the old 店内を飾りつける, until it goes.
+const StoreSceneEditor = dynamic(
+  () => import("./StoreSceneEditor").then((file) => file.StoreSceneEditor),
   { ssr: false },
 );
 import { OpenShop, ThemePicker } from "./OpenShop";
