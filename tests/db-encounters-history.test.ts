@@ -545,7 +545,8 @@ test("the history does not count as a use of a book", async () => {
 });
 
 test("the rollback undoes it, and it applies again", async () => {
-  const db = await migrated();
+  // Up to this file: the files after it are undone first, as they came.
+  const db = await migrated(FILES[FILES.indexOf(FILE!) + 1]);
   const before = await migrated(FILE);
   const rollback = TEXT.split("-- Rollback (a new migration):\n")[1]
     .split("\n-- No data moves")[0]

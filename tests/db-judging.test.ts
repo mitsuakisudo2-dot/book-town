@@ -37,7 +37,6 @@ const TEXT = migrationText(FILE);
 const LABEL = FILE.replace(/\.sql$/, "");
 
 const AKI = "00000000-0000-4000-8000-00000000000a";
-const BEN = "00000000-0000-4000-8000-00000000000b";
 
 const id = (group: number, n: number) =>
   `${group}0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -294,11 +293,9 @@ async function main() {
     },
   );
 
-  // The plan's examples, registered and judged as readers' books are.
-  await db.exec(`
-    insert into auth.users (id) values ('${AKI}'), ('${BEN}');
-    insert into profiles (id, handle, name) values ('${AKI}', 'aki', 'アキ'), ('${BEN}', 'ben', 'ベン');
-  `);
+  // The plan's examples, registered and judged as readers' books are: each
+  // by a reader of its own, Aki the first, as a reader keeps one book of an
+  // ISBN (AUD-010).
   const EXAMPLES: Array<
     [isbn: string, title: string, author: string, verdict: string]
   > = [
@@ -331,8 +328,16 @@ async function main() {
     [X(6), "ねじまき鳥クロニクル 第1部", "", "same"],
   ];
   const book = (n: number) => id(1, n);
+  const reader = (n: number) => (n === 0 ? AKI : id(5, n));
+  for (const n of EXAMPLES.keys()) {
+    await db.query("insert into auth.users (id) values ($1)", [reader(n)]);
+    await db.query(
+      "insert into profiles (id, handle, name) values ($1, $2, $3)",
+      n === 0 ? [AKI, "aki", "アキ"] : [reader(n), `reader${n}`, `読者${n}`],
+    );
+  }
   for (const [n, [isbn, title, author]] of EXAMPLES.entries())
-    await register(n % 2 ? BEN : AKI, book(n + 1), isbn, title, author);
+    await register(reader(n), book(n + 1), isbn, title, author);
   // The library is asked about one edition a turn; a reader's books after
   // the first ten are placed twenty seconds apart
   // (20261119000000_bibliography_fetching.sql), a minute a turn here.

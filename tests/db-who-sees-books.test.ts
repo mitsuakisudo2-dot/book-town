@@ -392,12 +392,17 @@ async function atRandom(db: PGlite, sample: string[]) {
     { open: string[]; back: string[]; scene: string[] }
   >();
   const nine = new Map<string, number>();
+  const owned = new Set<string>();
   const audiences = ["private", "followers", "everyone"];
   for (let n = 1; n <= RANDOM; n += 1) {
     const book = id(2, n);
     const owner = pick(owners);
-    // A few share an ISBN, so their edition holds books of others too.
-    const number = next() < 0.3 ? `'${isbn(1000 + (n % 90))}'` : "null";
+    // A few share an ISBN, so their edition holds books of others too; a
+    // reader keeps one book of an ISBN (AUD-010), so a second has none.
+    const shared = next() < 0.3 ? isbn(1000 + (n % 90)) : null;
+    const own = `${owner} ${shared}`;
+    const number = shared && !owned.has(own) ? `'${shared}'` : "null";
+    if (shared) owned.add(own);
     books.push(book);
     sql.push(
       `insert into books (id, title, author, isbn, source, created_by) values
@@ -750,13 +755,27 @@ async function main() {
     "copy_book copies exactly the others' books the reader may read",
     async () => {
       const others = (
-        await db.query<{ id: string; created_by: string | null }>(
-          `select id, created_by from books
+        await db.query<{
+          id: string;
+          created_by: string | null;
+          isbn: string | null;
+        }>(
+          `select id, created_by, isbn from books
          where source = 'manual' and not private.is_sample_book(id)
            and id = any($1::uuid[])`,
           [[...KEYS.map(bookId), ...randomBooks.slice(0, 120)]],
         )
       ).rows;
+      // A reader keeps one book of an ISBN (AUD-010): a copy of one they
+      // may read is refused when they have a book of its ISBN already (the
+      // app names theirs instead, own-books.ts).
+      const owned = new Set(
+        (
+          await db.query<{ own: string }>(
+            "select created_by || ' ' || isbn as own from books where created_by is not null and isbn is not null",
+          )
+        ).rows.map((row) => row.own),
+      );
       for (const name of NAMES) {
         const reader = READERS[name];
         // Only readers in the town keep books.
@@ -766,22 +785,23 @@ async function main() {
           // In a transaction undone after, which takes the role back too.
           await db.exec(`begin; set local role authenticated;
           select set_config('request.jwt.claim.sub', '${reader}', true);`);
+          const reads: boolean = policy[name].includes(book.id);
+          const ownsOne: boolean = reads && owned.has(`${reader} ${book.isbn}`);
           let copied = true;
           try {
             await db.query("select copy_book($1, gen_random_uuid())", [
               book.id,
             ]);
           } catch (error) {
-            assert.match(String(error), /no book has that id/);
+            assert.match(
+              String(error),
+              ownsOne ? /books_own_isbn/ : /no book has that id/,
+            );
             copied = false;
           } finally {
             await db.exec("rollback");
           }
-          assert.equal(
-            copied,
-            policy[name].includes(book.id),
-            `${name} copying ${book.id}`,
-          );
+          assert.equal(copied, reads && !ownsOne, `${name} copying ${book.id}`);
         }
       }
     },
