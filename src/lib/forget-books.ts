@@ -1,6 +1,7 @@
 import { bookById } from "./book-name";
 import { REGISTERED_GENRE } from "./books";
 import { townEncounters, usedBooks } from "./library-town";
+import type { TownBackend } from "./town-backend";
 import { ME_ID, type TownState } from "./types";
 
 // A book taken back in the scanner goes when its scan ends (AUD-055,
@@ -110,4 +111,56 @@ export function withoutBooks(
       (book) => !gone.has(book.bookId),
     ),
   };
+}
+
+/** What forgetIn needs of the town's store (store.ts). */
+export interface ForgetIn {
+  /** The town now, or null once the store has moved on to another. */
+  town(): TownState | null;
+  backend: TownBackend;
+  commit(next: TownState): boolean;
+  /** Whether what is saved is the town (store.ts townSettled). */
+  settled(): Promise<boolean>;
+  /** Shows the town the database answered, without saving it. */
+  take(next: TownState): void;
+}
+
+/**
+ * Forgets the books of scan `batch` taken back and still out, and not one
+ * work kept in this browser names: in the demo at once; in an account once
+ * what is saved has them taken out, as the database answers (each with
+ * when it was taken out, so one taken out again elsewhere since stays),
+ * taken in as its own reading so nothing is written back. The ids that went.
+ */
+export async function forgetIn(
+  at: ForgetIn,
+  ids: readonly string[],
+  batch: string,
+): Promise<string[]> {
+  let town = at.town();
+  if (!town) return [];
+  const asked = notKeptInBrowser(forgettable(town, ids, batch));
+  if (!asked.length) return [];
+  const { backend } = at;
+  if (backend.kind === "local")
+    return at.commit(withoutBooks(town, asked)) ? asked : [];
+  const { forgetBooks, absorb } = backend;
+  if (backend.kind !== "account" || !forgetBooks || !absorb) return [];
+  if (!(await at.settled()) || !(town = at.town())) return [];
+  // Asked again of the town as saved: a book brought back meanwhile stays.
+  const still = forgettable(town, asked, batch);
+  const entries = town.libraryEntries;
+  const gone: string[] = [];
+  for (let from = 0; from < still.length; from += FORGET_MOST) {
+    const part = still.slice(from, from + FORGET_MOST).flatMap((id) => {
+      const removedAt = entries[id]?.removedAt;
+      return removedAt ? [{ id, removedAt }] : [];
+    });
+    gone.push(...(await forgetBooks(part, batch).catch(() => [])));
+    if (!at.town()) return gone;
+  }
+  if (!gone.length) return gone;
+  const next = absorb((now) => withoutBooks(now, gone));
+  if (next && next !== at.town()) at.take(next);
+  return gone;
 }

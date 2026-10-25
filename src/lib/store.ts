@@ -1567,44 +1567,23 @@ export function createTownStore(
      * this browser names. The ids that went.
      */
     async forget(ids: string[], batch: string): Promise<string[]> {
-      if (loading) return [];
-      // Read only when a scan ends, so no page carries it for nothing.
-      const { FORGET_MOST, forgettable, notKeptInBrowser, withoutBooks } =
-        await import("./forget-books");
-      if (loading) return [];
-      const asked = notKeptInBrowser(forgettable(state, ids, batch));
-      if (!asked.length) return [];
-      if (backend.kind === "local")
-        return commit(withoutBooks(state, asked)) ? asked : [];
-      const { forgetBooks, absorb } = backend;
-      if (backend.kind !== "account" || !forgetBooks || !absorb) return [];
       const from = generation;
-      const saved = await townSettled({
-        getPersistenceSnapshot: () => status,
-        subscribe: (listener) => (
-          listeners.add(listener),
-          () => listeners.delete(listener)
-        ),
-      });
-      if (!saved || from !== generation) return [];
-      // Asked again of the town as saved: a book brought back meanwhile stays.
-      const still = forgettable(state, asked, batch);
-      const gone: string[] = [];
-      for (let at = 0; at < still.length; at += FORGET_MOST) {
-        const part = still.slice(at, at + FORGET_MOST).flatMap((id) => {
-          const removedAt = state.libraryEntries[id]?.removedAt;
-          return removedAt ? [{ id, removedAt }] : [];
-        });
-        gone.push(...(await forgetBooks(part, batch).catch(() => [])));
-        if (from !== generation) return gone;
-      }
-      if (!gone.length || from !== generation) return gone;
-      const next = absorb((town) => withoutBooks(town, gone));
-      if (next && next !== state) {
-        state = next;
-        notify();
-      }
-      return gone;
+      // Read only when a scan ends, so no page carries it for nothing.
+      const { forgetIn } = await import("./forget-books");
+      return forgetIn(
+        {
+          town: () => (loading || from !== generation ? null : state),
+          backend,
+          commit,
+          settled: () => townSettled(this),
+          take: (next) => {
+            state = next;
+            notify();
+          },
+        },
+        ids,
+        batch,
+      );
     },
     /**
      * Takes in what was read after the town (arrived.ts) as the backend's
@@ -1682,12 +1661,7 @@ export function usePersistenceStatus(): PersistenceStatus {
  * saved, false when a change is turned away (the town then goes back to
  * what is saved) or the account cannot be reached.
  */
-export function townSettled(
-  store: Pick<
-    typeof townStore,
-    "getPersistenceSnapshot" | "subscribe"
-  > = townStore,
-): Promise<boolean> {
+export function townSettled(store = townStore): Promise<boolean> {
   return new Promise((resolve) => {
     let stop: (() => void) | null = null;
     const look = () => {
@@ -1831,7 +1805,7 @@ export function journalTownOf(
     changeLibrary: (bookId, set) => {
       store.actions.changeLibrary([bookId], set);
     },
-    forget: store.forget,
+    forget: (bookIds, batch) => store.forget(bookIds, batch),
   };
 }
 
