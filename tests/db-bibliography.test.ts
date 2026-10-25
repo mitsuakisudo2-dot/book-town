@@ -1728,8 +1728,12 @@ async function main() {
           ],
           String(visitor),
         );
-      // Moved by an edited ISBN, a book waits again.
-      await as(CHI, "update books set isbn = $2 where id = $1", [old, X3]);
+      // Moved by an edited ISBN, a book waits again. (Not to X3: Chi has a
+      // book of that ISBN already, and keeps one an ISBN, AUD-010.)
+      await as(CHI, "update books set isbn = $2 where id = $1", [
+        old,
+        numbered(4),
+      ]);
       assert.deepEqual(await shown(CHI, [old]), []);
       // Aki's copy of X1, placed long before, is hers, and a post makes it
       // public.
@@ -1761,11 +1765,12 @@ async function main() {
       assert.equal(seen[0].title, "架空の図書館");
       assert.equal(seen[0].publisher, "架空書房");
       // Once anyone may see that X1 is someone's, what the sources said
-      // answers a copy placed after, as the cache: Ben's new copy is asked
-      // nothing, and shows the master ten minutes on.
+      // answers a copy placed after, as the cache: Chi's new copy (her first
+      // one went to another ISBN above) is asked nothing, and shows the
+      // master ten minutes on.
       await settle();
       const cached = id(2, 7);
-      await register(BEN, cached, X1, "架空の図書館");
+      await register(CHI, cached, X1, "架空の図書館");
       await tick();
       assert.deepEqual(
         (await questions()).filter((q) => q.url.includes(X1)),
@@ -1773,7 +1778,7 @@ async function main() {
       );
       await later(11);
       await judge();
-      assert.equal((await shown(BEN, [cached]))[0].title, "架空の図書館");
+      assert.equal((await shown(CHI, [cached]))[0].title, "架空の図書館");
       // A book the master has nothing for is not listed; at most 200 are asked.
       await age(id(2, 3), 60);
       assert.deepEqual(await shown(AKI, [id(2, 3)]), []);
