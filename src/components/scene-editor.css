@@ -573,13 +573,9 @@
   display: grid;
   gap: 8px;
 }
-.tidy-pop textarea {
-  width: 100%;
-  font: inherit;
-}
 .tidy-tools {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   padding: 4px 8px env(safe-area-inset-bottom);
   background: var(--paper);
   color: var(--ink);
@@ -757,4 +753,75 @@
   .tidy .walk-row.is-fresh {
     animation: none;
   }
+}
+/* The words and choices a sheet edits, saved as they change. */
+.tidy-fields {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.tidy-fields label:not(.tidy-switch),
+.tidy-chips-label {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  font-weight: 700;
+}
+.tidy-fields input:not([type="checkbox"]),
+.tidy-fields textarea,
+.tidy-pop textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+}
+.tidy-chips-group {
+  display: grid;
+  gap: 4px;
+}
+.tidy-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.tidy-chips button {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 52px;
+  min-height: 52px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-cap);
+}
+.tidy-chips button svg {
+  width: 26px;
+  height: 22px;
+}
+.tidy-chips button[aria-pressed="true"] {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+}
+.tidy-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: var(--t-cap);
+}
+.tidy-pop {
+  margin-bottom: 8px;
 }
