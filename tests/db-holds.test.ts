@@ -31,6 +31,10 @@ const TEXT = migrationText(HOLDS);
 const AKI = "00000000-0000-4000-8000-00000000000a";
 const BEN = "00000000-0000-4000-8000-00000000000b";
 const CHI = "00000000-0000-4000-8000-00000000000c";
+// Dai and Emi each register an ISBN Aki and Ben have a book of already: a
+// reader keeps one book of an ISBN (AUD-010).
+const DAI = "00000000-0000-4000-8000-00000000000d";
+const EMI = "00000000-0000-4000-8000-00000000000e";
 
 const id = (group: number, n: number) =>
   `${group}0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -467,9 +471,11 @@ async function main() {
     shown,
   } = helpers(db);
   await db.exec(`
-    insert into auth.users (id) values ('${AKI}'), ('${BEN}'), ('${CHI}');
+    insert into auth.users (id) values
+      ('${AKI}'), ('${BEN}'), ('${CHI}'), ('${DAI}'), ('${EMI}');
     insert into profiles (id, handle, name) values
-      ('${AKI}', 'aki', 'アキ'), ('${BEN}', 'ben', 'ベン'), ('${CHI}', 'chi', 'チー');
+      ('${AKI}', 'aki', 'アキ'), ('${BEN}', 'ben', 'ベン'), ('${CHI}', 'chi', 'チー'),
+      ('${DAI}', 'dai', 'ダイ'), ('${EMI}', 'emi', 'エミ');
   `);
 
   const LIBRARY_X1 = sru({
@@ -863,13 +869,13 @@ async function main() {
   await check(
     "held books stay out of the work candidates, and the operator lists them and does not join their works",
     async () => {
-      // Ben's 夜の本 on X1 is held; Chi's 夜の本 on X7 is not: the same title
+      // Dai's 夜の本 on X1 is held; Chi's 夜の本 on X7 is not: the same title
       // and author, in two works, both in public places.
-      const bensHeld = id(1, 7);
+      const daisHeld = id(1, 7);
       const chisNight = id(1, 8);
-      await register(BEN, bensHeld, X(1), "夜の本", "海野波子");
+      await register(DAI, daisHeld, X(1), "夜の本", "海野波子");
       await register(CHI, chisNight, X(7), "夜の本", "海野波子");
-      await post(BEN, bensHeld);
+      await post(DAI, daisHeld);
       await post(CHI, chisNight);
       // The library is asked about one edition a turn: two rounds.
       const library = {
@@ -883,13 +889,13 @@ async function main() {
       await round(library);
       await later(11);
       await tick();
-      assert.equal((await check_(bensHeld)).held, true);
+      assert.equal((await check_(daisHeld)).held, true);
       assert.equal((await check_(chisNight)).verdict, "same");
       const candidates = await rows<{ book_a: string; book_b: string }>(
         "select book_a, book_b from private.work_candidates()",
       );
       assert.ok(
-        !candidates.some((c) => [c.book_a, c.book_b].includes(bensHeld)),
+        !candidates.some((c) => [c.book_a, c.book_b].includes(daisHeld)),
         "a held book is no candidate",
       );
       assert.deepEqual(
@@ -897,13 +903,13 @@ async function main() {
           `select why, listed, a_book, title, author, master_title,
              master_creators -> 0 ->> 'name' as master_author, held_at is not null as held
            from private.bibliography_review where why = 'held' and a_book = $1`,
-          [bensHeld],
+          [daisHeld],
         ),
         [
           {
             why: "held",
             listed: true,
-            a_book: bensHeld,
+            a_book: daisHeld,
             title: "夜の本",
             author: "海野波子",
             master_title: "架空の図書館",
@@ -916,7 +922,7 @@ async function main() {
         () =>
           rows("select * from private.join_works($1, $2)", [
             chisNight,
-            bensHeld,
+            daisHeld,
           ]),
         /a held book/,
         "joining a held book's work",
@@ -924,26 +930,26 @@ async function main() {
       await refused(
         () =>
           rows("select * from private.join_works($1, $2)", [
-            bensHeld,
+            daisHeld,
             chisNight,
           ]),
         /a held book/,
         "joining into a held book's work",
       );
       await refused(
-        () => rows("select private.part_books($1::uuid[])", [[bensHeld]]),
+        () => rows("select private.part_books($1::uuid[])", [[daisHeld]]),
         /nothing to part/,
         "parting a held book",
       );
       // Said to be the ISBN's, it is a candidate again, with its edition's
       // work.
-      await as(BEN, "select confirm_book_isbn($1)", [bensHeld]);
+      await as(DAI, "select confirm_book_isbn($1)", [daisHeld]);
       assert.ok(
         (
           await rows<{ book_a: string; book_b: string }>(
             "select book_a, book_b from private.work_candidates()",
           )
-        ).some((c) => [c.book_a, c.book_b].includes(bensHeld)),
+        ).some((c) => [c.book_a, c.book_b].includes(daisHeld)),
       );
       await settle();
     },
@@ -953,7 +959,7 @@ async function main() {
     "the operator puts a held book back when its reader cannot answer, as the reader's answer would",
     async () => {
       const gone = id(1, 12);
-      await register(AKI, gone, X(1), "まるで違う題");
+      await register(EMI, gone, X(1), "まるで違う題");
       await round();
       await later(11);
       await tick();
