@@ -14,17 +14,10 @@ import {
   migrateShopScene,
   renameSceneObject,
   setRowBoard,
-  setShopSize,
   takePlacementOff,
   type TemplateId,
 } from "../lib/store-customization";
-import {
-  GROW,
-  SHOP_SIZES,
-  pinRow,
-  unpinRow,
-  type ShopSize,
-} from "../lib/growing-shop";
+import { GROW, pinRow, unpinRow } from "../lib/growing-shop";
 import {
   addBookPlacement,
   bookPop,
@@ -248,12 +241,6 @@ export function StoreSceneEditor({
     setRowId("row-0");
     setPlacementId(null);
   }
-  function chooseSize(size: ShopSize) {
-    edit((scene) => setShopSize(scene, size, shop, state.books));
-    setPlacementId(null);
-  }
-  const sizeName = (size: ShopSize) =>
-    size === "auto" ? GROW.auto : counted(size, "段");
   const rowName = (r: typeof row, i: number) =>
     nth(i + 1, "段") +
     " · " +
@@ -398,29 +385,6 @@ export function StoreSceneEditor({
                   <option value="leaf">葉っぱ</option>
                 </select>
               </label>
-            </fieldset>
-            <fieldset className="scene-section scene-size" disabled={waiting}>
-              <legend>{GROW.size}</legend>
-              <div className="chips">
-                {SHOP_SIZES.map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    className="chip"
-                    aria-pressed={draft.growth === size}
-                    onClick={() => chooseSize(size)}
-                  >
-                    {sizeName(size)}
-                  </button>
-                ))}
-              </div>
-              <p className="scene-hint">
-                {draft.growth === undefined
-                  ? GROW.oldCase
-                  : draft.growth === "auto"
-                    ? GROW.autoHint
-                    : GROW.keptHint(sizeName(draft.growth))}
-              </p>
             </fieldset>
             <fieldset className="scene-section" disabled={waiting}>
               <legend>棚と並べ方</legend>

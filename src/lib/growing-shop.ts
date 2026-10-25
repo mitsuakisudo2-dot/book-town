@@ -101,6 +101,7 @@ export const GROW = {
     "この段は、あなたが並べた形のまま残します。新しい本は、ほかの段に並びます。",
   unpin: "本に合わせて並べ直す",
   pinnedMark: "手を加えた段",
+  chosen: (size: string) => `店の大きさを「${size}」にしました。`,
   grew: (tiers: string) => `店が少し広がりました（${tiers}）。`,
   keep: (tiers: string) => `${tiers}のままにする`,
 } as const;

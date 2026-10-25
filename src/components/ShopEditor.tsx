@@ -41,6 +41,7 @@ import {
 } from "../lib/store-customization";
 import { publicWalkShops, woodScene } from "../lib/store-scene-adapter";
 import { GROW, tiersOf, type ShopSize } from "../lib/growing-shop";
+import { ShopSizePicker, sizeName } from "./ShopSize";
 import { OpenShop, ThemePicker } from "./OpenShop";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import { enterPressed } from "../lib/keys";
@@ -1238,6 +1239,43 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
       },
     });
   }, [grownTiers, shop, ownScene, state, notify]);
+  // 店の大きさ, chosen on the drawings beside the shop: saved at once, and the
+  // toast takes it back to the scene before.
+  const sizeScene = useMemo(
+    () =>
+      shop && !shop.demo ? (ownScene ?? woodScene(shop, state.books)) : null,
+    [shop, ownScene, state.books],
+  );
+  const publicBooks = shop
+    ? shop.shelves
+        .filter((s) => s.isPublic)
+        .reduce(
+          (n, s) =>
+            n + s.items.filter((i) => bookById(state.books, i.bookId)).length,
+          0,
+        )
+    : 0;
+  function chooseSize(size: ShopSize) {
+    if (!shop) return;
+    const before = ownScene ?? migrateShopScene(shop, state.books);
+    const sized = setShopSize(before, size, shop, state.books);
+    if (!saveOwnedScene(sized, state).ok) {
+      notify(
+        failure({
+          what: "店の大きさを変えられませんでした",
+          next: AGAIN.later,
+        }),
+      );
+      return;
+    }
+    notify(GROW.chosen(sizeName(size)), {
+      label: "元に戻す",
+      run: () => {
+        if (!saveOwnedScene(before, state).ok)
+          notify(failure({ what: "元に戻せませんでした", next: AGAIN.later }));
+      },
+    });
+  }
   // Shelves removed here, counted by id: a new shelf can be given the id of
   // one removed, and must not get its books from an old 元に戻す.
   const removedShelves = useRef<Record<string, number>>({});
@@ -1401,6 +1439,15 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         actions={actions}
         notify={notify}
       />
+      {sizeScene && (
+        <ShopSizePicker
+          scene={sizeScene}
+          books={state.books}
+          bookCount={publicBooks}
+          disabled={!walk.ready || !walkKnown || !townKnown}
+          onChoose={chooseSize}
+        />
+      )}
       <div className="editor-shelves-heading">
         <div>
           <h2>棚をつくる</h2>

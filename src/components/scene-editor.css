@@ -366,13 +366,6 @@
   }
 }
 
-/* 店の大きさ: the five sizes wrap inside the section on a narrow phone. */
-.scene-size .chips {
-  flex-wrap: wrap;
-  margin: 0;
-  padding: 0;
-  overflow: visible;
-}
 .scene-pinned {
   display: grid;
   justify-items: start;
@@ -386,4 +379,78 @@
 .scene-pinned .scene-hint svg {
   flex: 0 0 auto;
   align-self: center;
+}
+
+/* 店の大きさ on the shelves page: the shop as it stands, and a drawing of
+   the case for each size to press. */
+.shop-size {
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  padding: 18px 20px;
+  margin: 20px 0;
+}
+.shop-size h2 {
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  margin: 0 0 12px;
+}
+.shop-size-stage {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+.shop-size-preview {
+  position: relative;
+  flex: 0 0 42%;
+  max-width: 200px;
+  align-self: start;
+  pointer-events: none;
+}
+.shop-size-options {
+  flex: 1;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+.shop-size-options button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.shop-size-options button[aria-pressed="true"] {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+  font-weight: 700;
+}
+.shop-size-case {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 36px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+}
+.shop-size-case .is-book {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0.45;
+}
+.shop-size-case .is-more {
+  stroke-dasharray: 4 4;
+  opacity: 0.5;
+}
+.shop-size-hint {
+  color: var(--muted);
+  font-size: var(--t-cap);
+  line-height: 1.8;
+  margin: 12px 0 0;
 }

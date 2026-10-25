@@ -936,6 +936,26 @@ try {
       await phone.close();
     },
   );
+  await check(
+    "the size of the shop is chosen on the shelves page by its drawing, and taken back",
+    async () => {
+      await page.goto(base + "/my-shop/");
+      const size = page.locator(".shop-size");
+      await expect(size.locator(".walk-artboard")).toBeVisible();
+      const growth = async () => (await walkData()).sceneOverrides?.[0]?.growth;
+      const before = await growth();
+      await size.getByRole("button", { name: "2段", exact: true }).click();
+      await expect(
+        size.getByRole("button", { name: "2段", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(await growth()).toBe(2);
+      await expect(page.locator(".toast")).toContainText(
+        "店の大きさを「2段」にしました。",
+      );
+      await page.getByRole("button", { name: "元に戻す", exact: true }).click();
+      await expect.poll(growth).toBe(before);
+    },
+  );
   expect(errors).toEqual([]);
   console.log(passed.length + " customization browser checks passed");
 } finally {
