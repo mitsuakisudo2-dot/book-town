@@ -30,9 +30,41 @@
   justify-content: space-between;
   gap: 12px;
 }
-.manage-count {
-  font-size: var(--t-meta);
+
+/* The reader's own numbers, each a door to where they come from. */
+.manage-stat-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.manage-stat-list a {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+  color: var(--ink);
+  transition: transform var(--dur-press) var(--ease-standard);
+}
+.manage-stat-list a:active {
+  transform: scale(0.97);
+}
+.manage-stat-list small {
+  font-size: var(--t-cap);
   color: var(--ink-2);
+}
+.manage-stat-list b {
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  line-height: 1.3;
+  color: var(--green);
+  overflow-wrap: anywhere;
 }
 
 /* The books being read: large covers side by side, each with 記録する. */
@@ -101,27 +133,42 @@
   padding: 0 16px;
 }
 
-/* The two large doors: 読書をはじめる (with no book being read) and 本を登録. */
+/* The two large doors, first on the home: 本を登録 and 読書をはじめる,
+ * each one tap from opening the app (けにーさん 10-25 22:49Z). */
+.manage-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
 .manage-start,
 .manage-register {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 14px;
-  min-height: 64px;
-  padding: 14px 18px;
+  width: 100%;
+  min-height: 116px;
+  padding: 16px;
+  border: 0;
   border-radius: var(--r-card);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--lift-2);
   transition: transform var(--dur-press) var(--ease-standard);
 }
 .manage-start:active,
 .manage-register:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 .manage-start span,
 .manage-register span {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: 1;
+  min-width: 0;
+  max-width: 100%;
 }
 .manage-start b,
 .manage-register b {
@@ -130,6 +177,9 @@
 .manage-start small,
 .manage-register small {
   font-size: var(--t-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .manage-start {
   background: var(--green-soft);
@@ -141,7 +191,6 @@
 .manage-register {
   background: var(--green);
   color: var(--on-green);
-  box-shadow: var(--lift-2);
 }
 
 /* The reader's own shelves: one row each, to that shelf of the library. */
