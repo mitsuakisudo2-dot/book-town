@@ -447,6 +447,22 @@ export function setRowBoard(
   }
   return pinRow(next, rowId);
 }
+/** The stamps a shop and a POP may carry, by name. */
+export const STAMP_CHOICES = [
+  { id: "plane", name: "飛行機" },
+  { id: "coffee", name: "コーヒー" },
+  { id: "leaf", name: "葉っぱ" },
+] as const;
+/** The drawings a tier's chalkboard may carry, by name. */
+export const DOODLE_CHOICES = [
+  { id: "travel", name: "旅" },
+  { id: "daily", name: "日常" },
+  { id: "forest", name: "森" },
+  { id: "stars", name: "星" },
+  { id: "garden", name: "庭" },
+  { id: "city", name: "街" },
+  { id: "lamp", name: "灯り" },
+] as const;
 export function changePlacement(
   scene: StoreScene,
   id: string,

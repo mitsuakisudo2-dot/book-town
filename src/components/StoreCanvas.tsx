@@ -758,7 +758,17 @@ export function StoreCanvas({
       );
     }
     if (o.kind === "ownerPop" && !o.text?.trim())
-      return greetingHref ? (
+      return arranging ? (
+        <button
+          key={o.id}
+          type="button"
+          className="walk-object walk-ownerPop is-invite"
+          style={pose(o)}
+          onClick={() => onLabel(o)}
+        >
+          <span className="walk-floor-pop-text">{GROW.writeGreeting}</span>
+        </button>
+      ) : greetingHref ? (
         <Link
           key={o.id}
           href={greetingHref}

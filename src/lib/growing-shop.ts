@@ -114,6 +114,21 @@ export const GROW = {
   stop: "やめる",
   full: "この段には入りきりません。ほかの本を下ろすと置けます。",
   lift: "本を長く押すと、持ち上げて運べます。",
+  face: "看板",
+  signName: "看板の店名",
+  greeting: "店主からのひとこと",
+  writeGreeting: "ひとことを書く",
+  stamp: "店のスタンプ",
+  mood: "店の雰囲気",
+  rowLabel: "棚の案内札",
+  boardTitle: "黒板の見出し",
+  boardArt: "黒板の絵",
+  none: "なし",
+  rowPublic: "この段を公開する",
+  bookPublic: "この本とPOPを公開する",
+  popStamp: "POPのスタンプ",
+  done: "できた",
+  faceHint: "看板や棚札、黒板を押すと、ここで直せます。",
 } as const;
 /** The drawing each tier's chalkboard starts with. */
 export const DEFAULT_DOODLES = ["travel", "daily", "forest", "stars"];

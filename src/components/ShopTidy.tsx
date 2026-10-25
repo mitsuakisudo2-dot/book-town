@@ -12,6 +12,13 @@ import {
   insertPlacement,
   migrateShopScene,
   moveBook,
+  renameSceneObject,
+  setRowBoard,
+  applyStoreTemplate,
+  DOODLE_CHOICES,
+  STAMP_CHOICES,
+  STORE_TEMPLATES,
+  type TemplateId,
   setShopSize,
   takePlacementOff,
 } from "../lib/store-customization";
@@ -22,7 +29,13 @@ import {
   type SceneObject,
   type StoreScene,
 } from "../lib/store-scene";
-import { CASE_ID, GROW, unpinRow, type ShopSize } from "../lib/growing-shop";
+import {
+  CASE_ID,
+  GROW,
+  pinRow,
+  unpinRow,
+  type ShopSize,
+} from "../lib/growing-shop";
 import { saveOwnedScene } from "../lib/walk-store";
 import { useBackLayer } from "../lib/back-layer";
 import { useBookSearch } from "../lib/search/use-book-search";
@@ -30,7 +43,11 @@ import { booksBeforeSearch } from "../lib/book-lists";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import { walkPath } from "../lib/paths";
 import {
+  SCENE_BOARD_TITLE_MAX_LENGTH,
   SCENE_POP_MAX_LENGTH,
+  SCENE_ROW_TEXT_MAX_LENGTH,
+  SCENE_TEXT_MAX_LENGTH,
+  SHOP_NAME_MAX_LENGTH,
   type Book,
   type Notify,
   type Shop,
@@ -39,7 +56,7 @@ import {
 } from "../lib/types";
 import { keyboardRoom } from "../lib/coarse-pointer";
 import { AGAIN, counted, failure, nth } from "../lib/words";
-import { StoreCanvas } from "./StoreCanvas";
+import { DoodleIcon, StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { ShopSizeChoices, sizeName } from "./ShopSize";
 import { BookJacket, Icon } from "./ui";
 import "./walk.css";
@@ -92,6 +109,7 @@ function spotAt(ground: Ground, x: number, y: number, id: string): Spot | null {
 
 type Sheet =
   | { kind: "add" }
+  | { kind: "face" }
   | { kind: "size" }
   | { kind: "waiting" }
   | { kind: "row"; rowId: string }
@@ -131,7 +149,6 @@ export function ShopTidy({
   );
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [undo, setUndo] = useState<StoreScene[]>([]);
-  const [pop, setPop] = useState("");
   const [query, setQuery] = useState("");
   const top = useRef<HTMLButtonElement>(null);
   const board = useRef<HTMLDivElement>(null);
@@ -170,13 +187,18 @@ export function ShopTidy({
     };
   }, []);
 
+  // Words typed into one field are one step for 元に戻す, saved as they are
+  // typed so nothing written waits unsaved.
+  const typing = useRef<string | null>(null);
   /** Saves the shop as `next`; the shop as it was waits for 元に戻す. */
-  function save(next: StoreScene, said?: string) {
+  function save(next: StoreScene, said?: string, field?: string) {
     if (!ready || !saveOwnedScene(next, state).ok) {
       notify(failure({ what: "店を保存できませんでした", next: AGAIN.later }));
       return false;
     }
-    setUndo((all) => [...all.slice(-19), scene]);
+    if (!field || field !== typing.current)
+      setUndo((all) => [...all.slice(-19), scene]);
+    typing.current = field ?? null;
     if (said) notify(said);
     return true;
   }
@@ -188,6 +210,7 @@ export function ShopTidy({
       return;
     }
     setUndo((all) => all.slice(0, -1));
+    typing.current = null;
     setSheet(null);
   }
 
@@ -273,11 +296,11 @@ export function ShopTidy({
     : liftRow && preview
       ? new Set([liftRow])
       : new Set();
-  // On a phone the search keeps above the keyboard.
-  const adding = sheet?.kind === "add";
+  // On a phone a sheet being typed in keeps above the keyboard.
+  const open = sheet !== null;
   useEffect(() => {
     const viewport = window.visualViewport;
-    if (!adding || !viewport) return;
+    if (!open || !viewport) return;
     const fit = () => {
       const r = keyboardRoom(viewport, window.innerHeight);
       setRoom(r?.up ? { top: r.top, height: r.height } : null);
@@ -289,7 +312,7 @@ export function ShopTidy({
       viewport.removeEventListener("scroll", fit);
       setRoom(null);
     };
-  }, [adding]);
+  }, [open]);
   const onShelves = new Set(
     shop.shelves.flatMap((s) => s.items.map((i) => i.bookId)),
   );
@@ -421,9 +444,9 @@ export function ShopTidy({
     "--walk-light": scene.theme.light,
     "--walk-darkness": scene.background.darkness,
   } as CSSProperties;
-  const open = (next: Sheet | null) => {
+  const show = (next: Sheet | null) => {
+    typing.current = null;
     setSheet(next);
-    if (next?.kind === "book") setPop(bookPop(scene, next.id)?.text ?? "");
   };
   const placement =
     sheet?.kind === "book" ? objectById(scene, sheet.id) : undefined;
@@ -495,12 +518,16 @@ export function ShopTidy({
             scene={preview ?? scene}
             books={state.books}
             arranging={{ lit, lifted: lift?.id ?? placing, fresh }}
-            onBook={(p) => open({ kind: "book", id: p.id })}
-            onPop={(p) => open({ kind: "book", id: p.id })}
-            onZoom={(rowId) => open({ kind: "row", rowId })}
-            onLabel={(o) => {
-              if (o.kind === "row") open({ kind: "row", rowId: o.id });
-            }}
+            onBook={(p) => show({ kind: "book", id: p.id })}
+            onPop={(p) => show({ kind: "book", id: p.id })}
+            onZoom={(rowId) => show({ kind: "row", rowId })}
+            onLabel={(o) =>
+              show(
+                o.kind === "row"
+                  ? { kind: "row", rowId: o.id }
+                  : { kind: "face" },
+              )
+            }
           />
         </div>
       </div>
@@ -532,7 +559,7 @@ export function ShopTidy({
         <button
           type="button"
           className="tidy-waiting"
-          onClick={() => open({ kind: "waiting" })}
+          onClick={() => show({ kind: "waiting" })}
         >
           {GROW.waiting} · {counted(waiting.length, "冊")}
         </button>
@@ -600,6 +627,90 @@ export function ShopTidy({
               )}
             </>
           )}
+          {sheet.kind === "face" && (
+            <>
+              <h3>{GROW.face}</h3>
+              <div className="tidy-fields">
+                {objectById(scene, "sign") && (
+                  <label>
+                    {GROW.signName}
+                    <input
+                      value={objectById(scene, "sign")?.text ?? ""}
+                      maxLength={SHOP_NAME_MAX_LENGTH}
+                      onChange={(e) =>
+                        save(
+                          renameSceneObject(scene, "sign", e.target.value),
+                          undefined,
+                          "sign",
+                        )
+                      }
+                    />
+                  </label>
+                )}
+                {objectById(scene, "greeting") && (
+                  <label>
+                    {GROW.greeting}
+                    <textarea
+                      value={objectById(scene, "greeting")?.text ?? ""}
+                      maxLength={SCENE_TEXT_MAX_LENGTH}
+                      rows={2}
+                      onChange={(e) =>
+                        save(
+                          renameSceneObject(scene, "greeting", e.target.value),
+                          undefined,
+                          "greeting",
+                        )
+                      }
+                    />
+                  </label>
+                )}
+                {objectById(scene, "stamp") && (
+                  <Chips
+                    label={GROW.stamp}
+                    choices={STAMP_CHOICES}
+                    chosen={objectById(scene, "stamp")?.stamp ?? "plane"}
+                    draw={(id) => <StoreStamp name={id} />}
+                    onChoose={(stamp) => {
+                      const next = structuredClone(scene);
+                      objectById(next, "stamp")!.stamp = stamp;
+                      save(next);
+                    }}
+                  />
+                )}
+                <div className="tidy-chips-label">{GROW.mood}</div>
+                <div className="scene-template-options">
+                  {STORE_TEMPLATES.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      aria-pressed={scene.templateId === t.id}
+                      onClick={() =>
+                        scene.templateId !== t.id &&
+                        save(
+                          applyStoreTemplate(
+                            scene,
+                            t.id as TemplateId,
+                            state.books,
+                          ),
+                        )
+                      }
+                      style={{ "--template-wood": t.wood } as CSSProperties}
+                    >
+                      <span
+                        className="scene-template-swatch"
+                        aria-hidden="true"
+                      >
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                      <b>{t.name}</b>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
           {sheet.kind === "waiting" && (
             <>
               <h3>{GROW.waiting}</h3>
@@ -622,6 +733,61 @@ export function ShopTidy({
           {sheet.kind === "row" && sheetRow && (
             <>
               <h3>{nth(rowNumber(sheetRow.id) || 1, "段")}</h3>
+              <div className="tidy-fields">
+                <label>
+                  {GROW.rowLabel}
+                  <input
+                    value={sheetRow.text ?? ""}
+                    maxLength={SCENE_ROW_TEXT_MAX_LENGTH}
+                    onChange={(e) =>
+                      save(
+                        renameSceneObject(scene, sheetRow.id, e.target.value),
+                        undefined,
+                        "row:" + sheetRow.id,
+                      )
+                    }
+                  />
+                </label>
+                <label>
+                  {GROW.boardTitle}
+                  <input
+                    value={sheetRow.boardTitle ?? ""}
+                    maxLength={SCENE_BOARD_TITLE_MAX_LENGTH}
+                    placeholder="旅の本"
+                    onChange={(e) =>
+                      save(
+                        setRowBoard(scene, sheetRow.id, {
+                          boardTitle: e.target.value,
+                        }),
+                        undefined,
+                        "board:" + sheetRow.id,
+                      )
+                    }
+                  />
+                </label>
+                <Chips
+                  label={GROW.boardArt}
+                  choices={[{ id: "", name: GROW.none }, ...DOODLE_CHOICES]}
+                  chosen={sheetRow.doodle ?? ""}
+                  draw={(id) => id && <DoodleIcon name={id} />}
+                  onChoose={(doodle) =>
+                    save(setRowBoard(scene, sheetRow.id, { doodle }))
+                  }
+                />
+                <label className="tidy-switch">
+                  <input
+                    type="checkbox"
+                    checked={sheetRow.isPublic === true}
+                    onChange={(e) => {
+                      const next = structuredClone(scene);
+                      objectById(next, sheetRow.id)!.isPublic =
+                        e.target.checked;
+                      save(pinRow(next, sheetRow.id));
+                    }}
+                  />
+                  {GROW.rowPublic}
+                </label>
+              </div>
               <div className="tidy-list">
                 {scene.objects
                   .filter(
@@ -632,7 +798,7 @@ export function ShopTidy({
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => open({ kind: "book", id: p.id })}
+                      onClick={() => show({ kind: "book", id: p.id })}
                     >
                       <span>
                         {bookTitle(bookById(state.books, p.bookId)!)}
@@ -677,30 +843,47 @@ export function ShopTidy({
               {sheet.writing ? (
                 <div className="tidy-pop">
                   <textarea
-                    value={pop}
+                    value={bookPop(scene, placement.id)?.text ?? ""}
                     maxLength={SCENE_POP_MAX_LENGTH}
                     rows={3}
                     autoFocus
                     aria-label="この本のPOP"
                     placeholder="この一冊を、誰かに手渡すなら。"
-                    onChange={(e) => setPop(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="btn fill"
-                    onClick={() =>
+                    onChange={(e) =>
                       save(
                         changePlacement(
                           scene,
                           placement.id,
-                          { pop },
+                          { pop: e.target.value },
                           state.books,
                         ),
-                        "POPを書きました。",
-                      ) && setSheet({ kind: "book", id: placement.id })
+                        undefined,
+                        "pop:" + placement.id,
+                      )
                     }
+                  />
+                  <Chips
+                    label={GROW.popStamp}
+                    choices={[{ id: "", name: GROW.none }, ...STAMP_CHOICES]}
+                    chosen={bookPop(scene, placement.id)?.stamp ?? ""}
+                    draw={(id) => id && <StoreStamp name={id} />}
+                    onChoose={(stamp) =>
+                      save(
+                        changePlacement(
+                          scene,
+                          placement.id,
+                          { stamp },
+                          state.books,
+                        ),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn fill"
+                    onClick={() => show({ kind: "book", id: placement.id })}
                   >
-                    POPを置く
+                    {GROW.done}
                   </button>
                 </div>
               ) : (
@@ -756,6 +939,25 @@ export function ShopTidy({
                   )}
                 </div>
               )}
+              {!sheet.writing && (
+                <label className="tidy-switch">
+                  <input
+                    type="checkbox"
+                    checked={placement.isPublic !== false}
+                    onChange={(e) =>
+                      save(
+                        changePlacement(
+                          scene,
+                          placement.id,
+                          { isPublic: e.target.checked },
+                          state.books,
+                        ),
+                      )
+                    }
+                  />
+                  {GROW.bookPublic}
+                </label>
+              )}
               {placement.parentId && !sheet.writing && (
                 <p className="shop-size-hint">{GROW.lift}</p>
               )}
@@ -793,15 +995,23 @@ export function ShopTidy({
         <button
           type="button"
           aria-pressed={sheet?.kind === "add"}
-          onClick={() => open(sheet?.kind === "add" ? null : { kind: "add" })}
+          onClick={() => show(sheet?.kind === "add" ? null : { kind: "add" })}
         >
           <Icon name="plus" />
           本を足す
         </button>
         <button
           type="button"
+          aria-pressed={sheet?.kind === "face"}
+          onClick={() => show(sheet?.kind === "face" ? null : { kind: "face" })}
+        >
+          <Icon name="edit" />
+          {GROW.face}
+        </button>
+        <button
+          type="button"
           aria-pressed={sheet?.kind === "size"}
-          onClick={() => open(sheet?.kind === "size" ? null : { kind: "size" })}
+          onClick={() => show(sheet?.kind === "size" ? null : { kind: "size" })}
         >
           <Icon name="rows" />
           {GROW.size}
@@ -811,6 +1021,40 @@ export function ShopTidy({
           元に戻す
         </button>
       </nav>
+    </div>
+  );
+}
+
+/** A row of choices drawn as what they put in the shop. */
+function Chips<T extends string>({
+  label,
+  choices,
+  chosen,
+  draw,
+  onChoose,
+}: {
+  label: string;
+  choices: ReadonlyArray<{ id: T; name: string }>;
+  chosen: string;
+  draw: (id: T) => React.ReactNode;
+  onChoose: (id: T) => void;
+}) {
+  return (
+    <div className="tidy-chips-group">
+      <div className="tidy-chips-label">{label}</div>
+      <div className="tidy-chips" role="group" aria-label={label}>
+        {choices.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            aria-pressed={chosen === c.id}
+            onClick={() => chosen !== c.id && onChoose(c.id)}
+          >
+            {draw(c.id)}
+            <span>{c.name}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

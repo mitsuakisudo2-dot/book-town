@@ -1045,6 +1045,61 @@ try {
       await expect(tidy).toHaveCount(0);
     },
   );
+  await check(
+    "整える: the sign, its stamp and a POP are written in the shop, saved as typed, and taken back in one step",
+    async () => {
+      await page
+        .getByRole("button", { name: "店を整える", exact: true })
+        .click();
+      const tidy = page.locator(".tidy");
+      await expect(tidy.locator(".walk-artboard")).toBeVisible();
+      const scene = async () => (await walkData()).sceneOverrides[0].objects;
+      const sign = async () => (await scene()).find((o) => o.id === "sign");
+      const before = (await sign()).text;
+      await tidy.getByRole("button", { name: "看板", exact: true }).click();
+      const name = tidy.getByLabel("看板の店名");
+      await expect(name).toHaveValue(before);
+      // Each letter is saved as it is typed: nothing waits unsaved.
+      await name.press("End");
+      await name.pressSequentially("と古地図");
+      await expect
+        .poll(async () => (await sign()).text)
+        .toBe(before + "と古地図");
+      await expect(tidy.locator(".walk-sign")).toContainText("古地図");
+      await tidy
+        .getByRole("group", { name: "店のスタンプ" })
+        .getByRole("button", { name: "葉っぱ" })
+        .click();
+      await expect
+        .poll(async () => (await scene()).find((o) => o.id === "stamp").stamp)
+        .toBe("leaf");
+      const undo = tidy.getByRole("button", { name: "元に戻す", exact: true });
+      await undo.click();
+      await undo.click();
+      // The typed words were one step.
+      await expect.poll(async () => (await sign()).text).toBe(before);
+      // A POP is written on the book's sheet, with a stamp.
+      const first = tidy.locator("[data-placement]").first();
+      const id = await first.getAttribute("data-placement");
+      const popOf = async () =>
+        (await scene()).find((o) => o.kind === "bookPop" && o.parentId === id);
+      const popBefore = (await popOf())?.text ?? "";
+      await first.press("Enter");
+      await tidy.getByRole("button", { name: /POPを(書く|直す)/ }).click();
+      const pop = tidy.getByLabel("この本のPOP");
+      await pop.fill("");
+      await pop.pressSequentially("雨の夜に");
+      await expect.poll(async () => (await popOf())?.text).toBe("雨の夜に");
+      await tidy.getByRole("button", { name: "できた", exact: true }).click();
+      await expect(pop).toHaveCount(0);
+      await undo.click();
+      await expect
+        .poll(async () => (await popOf())?.text ?? "")
+        .toBe(popBefore);
+      await tidy.getByRole("button", { name: "閉じる" }).first().click();
+      await expect(tidy).toHaveCount(0);
+    },
+  );
   expect(errors).toEqual([]);
   console.log(passed.length + " customization browser checks passed");
 } finally {
