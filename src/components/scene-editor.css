@@ -463,6 +463,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Work kept in this browser, under the top bar until it is put back or
+   thrown away. */
+.kept-note.tidy-kept {
+  margin: 0;
+  padding: 2px 12px 8px;
+  background: var(--paper);
+}
 .tidy-stage.scene-preview {
   position: relative;
   isolation: isolate;

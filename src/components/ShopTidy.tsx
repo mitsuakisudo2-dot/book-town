@@ -36,7 +36,15 @@ import {
   unpinRow,
   type ShopSize,
 } from "../lib/growing-shop";
-import { saveOwnedScene } from "../lib/walk-store";
+import { saveOwnedScene, useWalkStore, walkStore } from "../lib/walk-store";
+import { useKeptDraft } from "../lib/kept-draft";
+import {
+  keepUntilSaved,
+  sceneDraftStore,
+  sceneMark,
+  sceneWorkKey,
+  sceneWorkState,
+} from "../lib/scene-draft";
 import { useBackLayer } from "../lib/back-layer";
 import { useBookSearch } from "../lib/search/use-book-search";
 import { booksBeforeSearch } from "../lib/book-lists";
@@ -59,6 +67,7 @@ import { AGAIN, counted, failure, nth } from "../lib/words";
 import { DoodleIcon, StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { ShopSizeChoices, sizeName } from "./ShopSize";
 import { BookJacket, Icon } from "./ui";
+import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import "./walk.css";
 import "./scene-editor.css";
 
@@ -147,6 +156,20 @@ export function ShopTidy({
     () => migrateShopScene(shop, state.books, saved),
     [shop, state.books, saved],
   );
+  // Each change is kept in this browser until the account has it: a change
+  // the account refuses comes back here and waits, with the shop as the
+  // account holds it, for the reader to put it back or throw it away.
+  const walk = useWalkStore();
+  const key = sceneWorkKey(useDraftOwner(), shop.id);
+  const kept = useKeptDraft(sceneDraftStore, key);
+  const mark = sceneMark(saved);
+  const work = kept.draft?.scene.storeId === shop.id ? kept.draft : null;
+  const standing = work ? sceneWorkState(work, mark) : null;
+  const held = standing === "fresh" || standing === "stale" ? work : null;
+  const done = standing === "saved" && walk.status === "saved";
+  useEffect(() => {
+    if (done && key) sceneDraftStore.clear(key);
+  }, [done, key]);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [undo, setUndo] = useState<StoreScene[]>([]);
   const [query, setQuery] = useState("");
@@ -192,23 +215,61 @@ export function ShopTidy({
   const typing = useRef<string | null>(null);
   /** Saves the shop as `next`; the shop as it was waits for 元に戻す. */
   function save(next: StoreScene, said?: string, field?: string) {
+    if (held) {
+      notify(GROW.keptFirst);
+      return false;
+    }
+    // Work still on its way began from the scene the account had last.
+    const from = work ? work.from : mark;
     if (!ready || !saveOwnedScene(next, state).ok) {
       notify(failure({ what: "店を保存できませんでした", next: AGAIN.later }));
       return false;
     }
+    keep(next, from);
     if (!field || field !== typing.current)
       setUndo((all) => [...all.slice(-19), scene]);
     typing.current = field ?? null;
     if (said) notify(said);
     return true;
   }
+  /** Keeps a scene sent to the account until the account has it. */
+  function keep(sent: StoreScene, from: string) {
+    if (!key) return;
+    if (walk.kind !== "account") {
+      sceneDraftStore.clear(key);
+      return;
+    }
+    sceneDraftStore.set(key, { scene: sent, from });
+    keepUntilSaved(sceneDraftStore, key, sent, walkStore);
+  }
+  /** Puts kept work back in the shop's place, as the reader asked. */
+  function putBack() {
+    if (!held) return;
+    const next = migrateShopScene(shop, state.books, held.scene);
+    if (!ready || !saveOwnedScene(next, state).ok) {
+      notify(
+        failure({ what: "書きかけを戻せませんでした", next: AGAIN.later }),
+      );
+      return;
+    }
+    keep(next, mark);
+    setUndo((all) => [...all.slice(-19), scene]);
+    typing.current = null;
+    notify(GROW.keptBack);
+  }
   function stepBack() {
     const before = undo.at(-1);
     if (!before) return;
+    if (held) {
+      notify(GROW.keptFirst);
+      return;
+    }
+    const from = work ? work.from : mark;
     if (!ready || !saveOwnedScene(before, state).ok) {
       notify(failure({ what: "元に戻せませんでした", next: AGAIN.later }));
       return;
     }
+    keep(before, from);
     setUndo((all) => all.slice(0, -1));
     typing.current = null;
     setSheet(null);
@@ -481,6 +542,20 @@ export function ShopTidy({
           見る
         </Link>
       </header>
+      <KeptDraftNote
+        className="tidy-kept"
+        work={work !== null}
+        continuing={held !== null}
+        saved={kept.saved}
+        wordsLost
+        onDiscard={() => kept.clear()}
+        lead={standing === "stale" ? GROW.keptOver : GROW.kept}
+        action={
+          <button type="button" disabled={!ready} onClick={putBack}>
+            {GROW.putBack}
+          </button>
+        }
+      />
       <div
         className={
           "walk-stage scene-preview tidy-stage" +

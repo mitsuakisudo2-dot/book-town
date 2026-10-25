@@ -1191,6 +1191,15 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     (walk.kind === "local" || walk.kind === "account") &&
     walk.status !== "unavailable" &&
     walk.status !== "recovered";
+  // 整える writes only on the reader's own changes, so it may also write
+  // over the scene an account read back after refusing one: kept work
+  // waits there to be put back.
+  const walkWritable =
+    walkKnown ||
+    (walk.ready &&
+      walk.kind === savedIn &&
+      walk.kind === "account" &&
+      walk.status === "recovered");
   const townKnown =
     persistenceStatus !== "loading" &&
     persistenceStatus !== "unavailable" &&
@@ -1380,7 +1389,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           <button
             type="button"
             className="btn fill"
-            disabled={!walk.ready || !walkKnown || !townKnown}
+            disabled={!walkWritable || !townKnown}
             onClick={() => setTidyOpen(true)}
           >
             <Icon name="shelf" size={17} />
@@ -1410,7 +1419,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           state={state}
           actions={actions}
           saved={ownScene}
-          ready={walk.ready && walkKnown && townKnown}
+          ready={walkWritable && townKnown}
           onClose={() => setTidyOpen(false)}
           notify={notify}
         />

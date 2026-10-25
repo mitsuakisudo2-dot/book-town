@@ -1100,6 +1100,63 @@ try {
       await expect(tidy).toHaveCount(0);
     },
   );
+  await check(
+    "整える: work kept in this browser waits, and is put back or thrown away as asked",
+    async () => {
+      const greeting = async () =>
+        (await walkData()).sceneOverrides[0].objects.find(
+          (o) => o.id === "greeting",
+        ).text;
+      const before = await greeting();
+      // Work left unsaved in this browser.
+      await open();
+      await dialog().getByLabel("店主からのひとこと").fill("戻ってきた言葉");
+      await page.keyboard.press("Escape");
+      await expect(dialog()).toHaveCount(0);
+      expect(await drafts()).not.toBe(null);
+      await page
+        .getByRole("button", { name: "店を整える", exact: true })
+        .click();
+      const tidy = page.locator(".tidy");
+      const note = tidy.locator(".tidy-kept");
+      await expect(note).toContainText(
+        "まだ店に入っていない書きかけを、このブラウザに残しています",
+      );
+      // Nothing new is written over it until the reader chooses.
+      await tidy.getByRole("button", { name: "看板", exact: true }).click();
+      await tidy.getByLabel("店主からのひとこと").fill("上書きしない");
+      await expect(
+        page.getByText("書きかけを戻すか消すと、続けて整えられます。"),
+      ).toBeVisible();
+      expect(await greeting()).toBe(before);
+      await note
+        .getByRole("button", { name: "書きかけを戻す", exact: true })
+        .click();
+      await expect.poll(greeting).toBe("戻ってきた言葉");
+      await expect(note).toHaveCount(0);
+      expect(await drafts()).toBe(null);
+      // 元に戻す takes it back, as any other change.
+      await tidy.getByRole("button", { name: "元に戻す", exact: true }).click();
+      await expect.poll(greeting).toBe(before);
+      await tidy.getByRole("button", { name: "閉じる" }).first().click();
+      // Work thrown away is gone, and the shop stays as it was.
+      await open();
+      await dialog().getByLabel("店主からのひとこと").fill("消す言葉");
+      await page.keyboard.press("Escape");
+      await page
+        .getByRole("button", { name: "店を整える", exact: true })
+        .click();
+      await note
+        .getByRole("button", { name: "書きかけを消す", exact: true })
+        .click();
+      await note.getByRole("button", { name: "消す", exact: true }).click();
+      await expect(note).toHaveCount(0);
+      expect(await drafts()).toBe(null);
+      expect(await greeting()).toBe(before);
+      await tidy.getByRole("button", { name: "閉じる" }).first().click();
+      await expect(tidy).toHaveCount(0);
+    },
+  );
   expect(errors).toEqual([]);
   console.log(passed.length + " customization browser checks passed");
 } finally {
