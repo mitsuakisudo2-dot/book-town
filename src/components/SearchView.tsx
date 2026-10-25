@@ -42,12 +42,16 @@ import { useMoreRead, useTownBackend, useTownMore } from "../lib/store";
 import { authorAndKind, bookById, bookTitle } from "../lib/book-name";
 import { counted, REGISTER, whenSome, NAMES } from "../lib/words";
 import { InLibraryMark, RegisterBook } from "./RegisterBook";
-import { BarcodeRegister } from "./BarcodeRegister";
 import dynamic from "next/dynamic";
 
 // The scanner is only fetched when a search sends the reader to it.
 const ScanSession = dynamic(
   () => import("./ScanSession").then((file) => file.ScanSession),
+  { ssr: false },
+);
+// So is the one-book form, when a search finds nothing.
+const BarcodeRegister = dynamic(
+  () => import("./BarcodeRegister").then((file) => file.BarcodeRegister),
   { ssr: false },
 );
 

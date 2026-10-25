@@ -8,9 +8,15 @@ import {
 } from "../lib/books";
 import { lookUpBook } from "../lib/openbd";
 import { libraryBookByIsbn, useTownBackend } from "../lib/store";
+import { libraryBookByName, SAME_BOOK } from "../lib/same-book";
 import type { TownActions, TownState } from "../lib/types";
-import { Icon, Modal } from "./ui";
-import { bookAuthor, bookByIsbn, quotedTitle } from "../lib/book-name";
+import { BookJacket, Icon, Modal } from "./ui";
+import {
+  bookAuthor,
+  bookByIsbn,
+  bookTitle,
+  quotedTitle,
+} from "../lib/book-name";
 import { failure, AGAIN, REGISTER, NAMES } from "../lib/words";
 
 type Detector = {
@@ -209,6 +215,16 @@ export function BarcodeRegister({
     }
   }
 
+  // A book typed in by hand named as one already in the library: asked
+  // about before it goes in a second time (101). One with another ISBN is
+  // another edition, and goes in as it is.
+  const typedIsbn = normalizeIsbn(isbnText);
+  const named = looking ? undefined : libraryBookByName(state, title, author);
+  const alike =
+    named && (!typedIsbn || !named.isbn) && named.isbn !== typedIsbn
+      ? named
+      : undefined;
+
   function checkIsbn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const found = normalizeIsbn(isbnText);
@@ -367,12 +383,35 @@ export function BarcodeRegister({
             onChange={(event) => setPrice(event.target.value)}
           />
         </label>
+        {alike && (
+          <div className="register-same" role="status">
+            <b>{SAME_BOOK.ask}</b>
+            <div className="register-same-book">
+              <BookJacket book={alike} className="search-jacket" />
+              <span>
+                <b>{bookTitle(alike)}</b>
+                <small>{bookAuthor(alike)}</small>
+                <small>{SAME_BOOK.inLibrary}</small>
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn fill"
+              onClick={() => {
+                notify(REGISTER.already(quotedTitle(alike)));
+                onClose();
+              }}
+            >
+              {SAME_BOOK.same}
+            </button>
+          </div>
+        )}
         <button
           type="submit"
-          className="btn fill"
+          className={alike ? "btn" : "btn fill"}
           disabled={!title.trim() || looking}
         >
-          登録する
+          {alike ? SAME_BOOK.another : "登録する"}
         </button>
       </form>
     </Modal>

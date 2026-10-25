@@ -602,6 +602,33 @@
 .register-form .form-label {
   margin-bottom: 6px;
 }
+/* 「この本ですか？」(101): the book already in, over the button that
+   registers another all the same. */
+.register-same {
+  display: grid;
+  gap: 10px;
+  background: var(--green-soft);
+  border-radius: var(--r-tag);
+  padding: 14px;
+  margin: 4px 0 6px;
+  font-size: var(--t-ui);
+}
+.register-same-book {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.register-same-book > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.register-same-book small {
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
 .register-camera {
   min-height: 44px;
 }
