@@ -7,7 +7,8 @@
 //   node scripts/watch.mjs backups   the newest daily backup is recent enough
 //                                    (only once the plan in watch.json has them)
 //   node scripts/watch.mjs usage     how much of the plan's database and file
-//                                    space is used
+//                                    space is used, and which copies a move
+//                                    kept (keep.copies) are past their days
 //   node scripts/watch.mjs errors    how many errors readers' screens sent in
 //                                    the last day (private.screen_errors), and
 //                                    whether the table stopped taking them
@@ -50,6 +51,7 @@ export const TITLES = {
   site: "本番のページが開けません",
   backups: "毎日の控えが止まっています",
   usage: "Supabase の使用量が上限に近づいています",
+  copies: "期限を過ぎた控えが本番の DB に残っています",
   journey: "本番の通しが失敗しました",
   publish: "本番の公開が終わりませんでした",
   errors: "読書家の画面でエラーが起きています",
@@ -153,6 +155,63 @@ export function usageVerdict(row, included, warnPercent) {
   }
   return { ok, lines };
 }
+
+/**
+ * The copies moves kept in production (keep.copies, one row a migration's
+ * label), against the days a copy may stay once checked
+ * (docs/開発と運用/DBの変え方.md「片付け」: 14 days, けにーさん 10-23).
+ * Only labels (migration names, public in the repository), dates and sizes
+ * are printed, never a row of a copy.
+ *
+ * @returns {{ ok: boolean, lines: string[] }}
+ */
+export function copiesVerdict(rows, now, days) {
+  if (!Array.isArray(rows))
+    return { ok: false, lines: ["Kept copies: not reported."] };
+  if (!Number.isFinite(days) || days <= 0)
+    return { ok: false, lines: ["Kept copies: keptCopyDays is not set."] };
+  if (rows.length === 0) return { ok: true, lines: ["Kept copies: none."] };
+  const lines = [];
+  let ok = true;
+  for (const row of rows) {
+    const label = String(row?.label ?? "");
+    const size = `${(Number(row?.bytes ?? 0) / MB).toFixed(1)} MB`;
+    const checked = Date.parse(row?.checked_at ?? "");
+    if (!/^[0-9]{14}_[a-z0-9_]+$/.test(label)) {
+      lines.push("Kept copies: a label that is not a migration's name.");
+      ok = false;
+      continue;
+    }
+    if (!row.all_checked || !Number.isFinite(checked)) {
+      lines.push(`${label} (${size}): not checked.`);
+      ok = false;
+      continue;
+    }
+    const due = checked + days * 86_400_000;
+    const day = (time) => new Date(time).toISOString().slice(0, 10);
+    if (now > due) {
+      lines.push(
+        `${label} (${size}): checked ${day(checked)}, past its ${days} days since ${day(due)}.`,
+      );
+      ok = false;
+    } else
+      lines.push(
+        `${label} (${size}): checked ${day(checked)}, to be dropped by ${day(due)}.`,
+      );
+  }
+  if (!ok)
+    lines.push(
+      "Drop it with a migration that calls private.drop_copy, approved in Deploy database (docs/開発と運用/DBの変え方.md「片付け」).",
+    );
+  return { ok, lines };
+}
+
+/** What copiesVerdict reads: each label's check and the copies' size. */
+export const KEPT_COPIES_QUERY =
+  "select c.label, min(c.checked->>'at') as checked_at, " +
+  "bool_and(c.checked is not null) as all_checked, " +
+  "sum(pg_catalog.pg_total_relation_size(pg_catalog.format('keep.%I', c.copy_name)::regclass))::bigint as bytes " +
+  "from keep.copies c group by c.label order by c.label";
 
 /**
  * How many errors readers' screens sent in the last day: kinds (rows) and
@@ -794,6 +853,7 @@ async function main(action, kind, outcome) {
       return;
     }
     let supabase = "answered";
+    let copies;
     try {
       if (action === "errors") {
         let rows;
@@ -832,11 +892,21 @@ async function main(action, kind, outcome) {
         });
         const included = config.included[config.plan] ?? config.included.free;
         result = usageVerdict(rows?.[0], included, config.usageWarnPercent);
+        // The copies are read with the same token, under their own issue.
+        copies = copiesVerdict(
+          await call("POST", "/database/query/read-only", {
+            query: KEPT_COPIES_QUERY,
+          }),
+          Date.now(),
+          config.keptCopyDays,
+        );
         if (process.env.GITHUB_STEP_SUMMARY) {
           await appendFile(
             process.env.GITHUB_STEP_SUMMARY,
             `### Supabase usage (${iso(Date.now())}, ${config.plan})\n\n` +
-              result.lines.map((line) => `- ${line}`).join("\n") +
+              [...result.lines, ...copies.lines]
+                .map((line) => `- ${line}`)
+                .join("\n") +
               "\n",
           );
         }
@@ -861,6 +931,15 @@ async function main(action, kind, outcome) {
         : { ok: false, lines: [error.message] };
     }
     await report(action, result);
+    if (copies) {
+      // The days run out on their own, so a pull request only warns, as the
+      // keys do: a copy past its days must not turn every pull request red.
+      if (process.env.REPORT_ISSUES === "on" || copies.ok)
+        await report("copies", copies);
+      else for (const line of copies.lines) console.log(`::warning::${line}`);
+      if (!copies.ok && process.env.REPORT_ISSUES === "on")
+        process.exitCode = 1;
+    }
     await reportRefusal(action, supabase);
     if (!result.ok) process.exitCode = 1;
     return;

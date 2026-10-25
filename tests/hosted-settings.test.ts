@@ -39,6 +39,7 @@ import {
   issuePlan,
   pageVerdict,
   usageVerdict,
+  copiesVerdict,
   errorsVerdict,
   keysVerdict,
   unconfirmedVerdict,
@@ -1658,6 +1659,51 @@ async function main() {
   );
 
   await check(
+    "the copies watch names a copy past its days, in labels, dates and sizes",
+    () => {
+      const now = Date.parse("2026-11-07T00:00:00Z");
+      const extent = {
+        label: "20261202000000_book_extent",
+        checked_at: "2026-10-23T01:36:36.480661+00:00",
+        all_checked: true,
+        bytes: 11132928,
+      };
+      const reading = {
+        label: "20261207000000_reading_mode",
+        checked_at: "2026-10-25T00:22:53.314395+00:00",
+        all_checked: true,
+        bytes: "196608",
+      };
+      const past = copiesVerdict([extent, reading], now, 14);
+      assert.equal(past.ok, false);
+      assert.deepEqual(past.lines.slice(0, 2), [
+        "20261202000000_book_extent (10.6 MB): checked 2026-10-23, past its 14 days since 2026-11-06.",
+        "20261207000000_reading_mode (0.2 MB): checked 2026-10-25, to be dropped by 2026-11-08.",
+      ]);
+      assert.match(past.lines[2], /private\.drop_copy/);
+      // Within its days, and right up to the moment they end.
+      const due = Date.parse("2026-11-06T01:36:36.480Z");
+      assert.equal(copiesVerdict([extent], due, 14).ok, true);
+      assert.equal(copiesVerdict([extent], due + 1000, 14).ok, false);
+      assert.deepEqual(copiesVerdict([], now, 14), {
+        ok: true,
+        lines: ["Kept copies: none."],
+      });
+      // A copy never checked, or an answer that is not the query's, is red.
+      assert.equal(
+        copiesVerdict([{ ...reading, all_checked: false }], now, 14).ok,
+        false,
+      );
+      assert.equal(copiesVerdict(undefined, now, 14).ok, false);
+      assert.equal(copiesVerdict([extent], now, undefined).ok, false);
+      assert.equal(
+        copiesVerdict([{ label: "x; drop", checked_at: null }], now, 14).ok,
+        false,
+      );
+    },
+  );
+
+  await check(
     "a page is the site's page, and an issue is opened once and closed once",
     () => {
       assert.equal(
@@ -2128,6 +2174,7 @@ async function main() {
   await check(
     "the backup and usage watches read only, and say so without a token",
     async () => {
+      let copiesAnswer: unknown[] = [];
       const api = await standIn(({ method, url, body }) => {
         const { pathname } = new URL(url, "http://x");
         if (pathname === "/projects/ref_test/database/backups")
@@ -2137,6 +2184,8 @@ async function main() {
           pathname === "/projects/ref_test/database/query/read-only"
         ) {
           assert.match(String(body?.query), /^select /);
+          if (/from keep\.copies/.test(String(body?.query)))
+            return { body: copiesAnswer };
           return { body: [{ database_bytes: 16777216, storage_bytes: 0 }] };
         }
         return { status: 404, body: {} };
@@ -2152,6 +2201,24 @@ async function main() {
       const usage = await run("scripts/watch.mjs", ["usage"], env);
       assert.equal(usage.code, 0, usage.output);
       assert.match(usage.output, /Database: 16\.0 MB of 500 MB/);
+      assert.match(usage.output, /^copies: ok$/m);
+      // A copy past its days only warns on a pull request; on main it is red.
+      copiesAnswer = [
+        {
+          label: "20261101000000_works",
+          checked_at: "2026-10-01T00:00:00Z",
+          all_checked: true,
+          bytes: 1048576,
+        },
+      ];
+      const old = await run("scripts/watch.mjs", ["usage"], env);
+      assert.equal(old.code, 0, old.output);
+      assert.match(
+        old.output,
+        /::warning::20261101000000_works .*past its 14 days/,
+      );
+      assert.match(old.output, /^usage: ok$/m);
+      copiesAnswer = [];
       const none = await run("scripts/watch.mjs", ["backups"], {});
       assert.equal(none.code, 0);
       assert.match(none.output, /::warning::SUPABASE_ACCESS_TOKEN/);
@@ -2225,6 +2292,8 @@ async function main() {
             return { body: [{ name: "db", healthy: true }] };
           if (route === "/database/backups")
             return { body: { pitr_enabled: false, backups: [] } };
+          if (/from keep\.copies/.test(String(body?.query)))
+            return { body: [] };
           return { body: [{ database_bytes: 16777216, storage_bytes: 0 }] };
         }
         const issuesPath = "/repos/mitsuakisudo2-dot/book-town/issues";

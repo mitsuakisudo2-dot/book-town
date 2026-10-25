@@ -4,6 +4,7 @@
   "plan": "free",
   "backupMaxHours": 30,
   "usageWarnPercent": 80,
+  "keptCopyDays": 14,
   "screenErrorsPerDay": 1,
   "screenErrorsRowsWarn": 2800,
   "screenErrorsPerHour": 200,
