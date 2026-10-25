@@ -606,8 +606,9 @@ input[type="checkbox"] {
   background: var(--green);
   color: var(--on-green);
   box-shadow: var(--lift-3);
-  padding: 13px 20px;
+  padding: 8px 16px;
   border-radius: var(--r-tag);
+  line-height: 1.5;
   display: flex;
   gap: 9px;
   align-items: center;
@@ -1692,7 +1693,7 @@ div.book-jacket:hover {
     left: 50%;
     bottom: 99px;
     font-size: var(--t-cap);
-    padding: 12px 17px;
+    padding: 7px 14px;
     max-width: 91vw;
   }
   .field {
@@ -2167,10 +2168,11 @@ dialog .toast {
   max-width: calc(100vw - 12px);
 }
 /* The one way back from what a toast just said (公開しました → 自分だけに戻す).
-   44px to tap, reaching into the toast's padding so the toast keeps its height. */
+   44px to tap, reaching past the toast's slim padding so the toast stays one
+   line tall. */
 .toast-undo {
   min-height: 44px;
-  margin: -13px 0 -13px 6px;
+  margin: -12px 0 -12px 6px;
   padding: 4px 2px;
   border: 0;
   background: none;
@@ -2185,11 +2187,6 @@ dialog .toast {
 .toast-undo:focus-visible {
   outline: 2px solid var(--on-green);
   outline-offset: 2px;
-}
-@media (max-width: 760px) {
-  .toast-undo {
-    margin-block: -12px;
-  }
 }
 
 /* Books only close in spelling, under a quiet heading below the matches:
