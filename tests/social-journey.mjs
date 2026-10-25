@@ -311,7 +311,7 @@ try {
         await expect(want).toHaveAttribute("aria-pressed", "true");
         const toast = page.locator(".toast");
         await expect(toast).toContainText(
-          "『見えない都市』を読みたいに入れました。すみれさんの便りで出会った本として残します。",
+          "読みたい本に入れました",
         );
         // How many readers wanted it is the writer's to know, not ours.
         await expect(want).toHaveText("読みたい");
