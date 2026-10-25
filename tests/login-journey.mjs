@@ -2746,6 +2746,119 @@ try {
   );
 
   await check(
+    "整える: a change the account refuses comes back as kept work, put back when asked",
+    async () => {
+      const BOOK = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e11";
+      const SHOP = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e12";
+      const at = "2026-10-12T00:00:00Z";
+      const shelf = {
+        id: "night",
+        name: "夜の棚",
+        capacity: 10,
+        isPublic: true,
+        items: [{ id: "n1", bookId: BOOK, display: "face", pop: "" }],
+      };
+      town = {
+        books: [
+          {
+            id: BOOK,
+            isbn: null,
+            title: "夜の地図",
+            author: "試験 作家",
+            publisher: "",
+            price: null,
+            source: "manual",
+            created_by: user.id,
+            work_id: BOOK,
+            created_at: at,
+            updated_at: at,
+          },
+        ],
+        my_books: [{ id: BOOK, copied_from: null }],
+        shops: [
+          {
+            id: SHOP,
+            owner_id: user.id,
+            name: "アキの夜の本屋",
+            description: "",
+            tagline: "",
+            theme: "sage",
+            is_open: true,
+            public_shelves: [shelf],
+            public_scene_books: [],
+          },
+        ],
+        shop_private: [{ shelves: [shelf], scene_books: [] }],
+      };
+      // The account turns the shop's scene away while refusing is set, as
+      // the database refuses a change that breaks a rule.
+      let refusing = true;
+      const sent = [];
+      const answer = (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (
+          request.method() === "GET" ||
+          url.pathname !== "/rest/v1/shop_private"
+        )
+          return route.fallback();
+        sent.push(request.postData() ?? "");
+        return refusing
+          ? route.fulfill({
+              status: 400,
+              contentType: "application/json",
+              body: JSON.stringify({
+                code: "23514",
+                message:
+                  'new row for relation "shop_private" violates check constraint',
+              }),
+            })
+          : route.fulfill({ status: 201, body: "" });
+      };
+      await page.route(supabase + "/rest/v1/**", answer);
+      await page.goto(base + "/my-shop/");
+      await page
+        .getByRole("button", { name: "店を整える", exact: true })
+        .click();
+      const tidy = page.locator(".tidy");
+      await expect(tidy.locator(".walk-artboard")).toBeVisible();
+      await tidy.getByRole("button", { name: "看板", exact: true }).click();
+      await tidy.getByLabel("店主からのひとこと").fill("断られる言葉");
+      await expect.poll(() => sent.length).toBeGreaterThan(0);
+      // Refused, the shop is the account's again, and the words wait here.
+      const note = tidy.locator(".tidy-kept");
+      await expect(note).toContainText(
+        "まだ店に入っていない書きかけを、このブラウザに残しています",
+      );
+      await expect(tidy.getByLabel("店主からのひとこと")).not.toHaveValue(
+        "断られる言葉",
+      );
+      refusing = false;
+      sent.splice(0);
+      await note
+        .getByRole("button", { name: "書きかけを戻す", exact: true })
+        .click();
+      await expect.poll(() => sent.join(" ")).toContain("断られる言葉");
+      await expect(note).toHaveCount(0);
+      await expect(tidy.getByLabel("店主からのひとこと")).toHaveValue(
+        "断られる言葉",
+      );
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => localStorage.getItem("book-town-scene-drafts-v1") ?? "",
+          ),
+        )
+        .not.toContain("断られる言葉");
+      await tidy.getByRole("button", { name: "閉じる" }).first().click();
+      await expect(tidy).toHaveCount(0);
+      await expect.poll(outboxKeys).toEqual([]);
+      await page.unroute(supabase + "/rest/v1/**", answer);
+      town = null;
+    },
+  );
+
+  await check(
     "a library catalog book a search finds beyond the town goes in the library and 読みたい, named as it is (AUD-190)",
     async () => {
       // The town reads only its newest books; the library's catalog has
