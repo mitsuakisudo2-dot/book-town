@@ -652,6 +652,46 @@
   box-shadow: inset 0 1px rgba(255, 190, 120, 0.3);
 }
 
+/* The reading stand of a shop with one book: a board the cover leans on,
+   a ledge under it, and a post on a foot, all of the case's own wood. */
+.walk-furniture.is-stand {
+  background: none;
+}
+.walk-furniture.is-stand:before {
+  content: "";
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  top: 1%;
+  bottom: 21%;
+  border-radius: calc(var(--walk-u) * 0.8);
+  background: url("/themes/woodshop/wood-v2.webp") center / cover;
+  filter: brightness(0.45) saturate(1.2);
+}
+.walk-furniture.is-stand .walk-wood-edge {
+  display: none;
+}
+.walk-case-post.is-stand-post {
+  left: 47%;
+  width: 6%;
+  top: 79%;
+  bottom: 4%;
+}
+/* The ledge stands in front of the cover's lower edge. */
+.walk-shelf-lip.is-stand-ledge {
+  top: 75%;
+  left: 8%;
+  right: 8%;
+  height: 4.5%;
+  z-index: var(--walk-z-shelf-edge);
+}
+.walk-shelf-lip.is-stand-foot {
+  top: 95.5%;
+  left: 27%;
+  right: 27%;
+  height: 4.5%;
+}
+
 /* Tiers: shadow under the board above, a warm glow on the board below. */
 .walk-row {
   overflow: visible;

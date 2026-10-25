@@ -1839,7 +1839,7 @@ try {
   );
 
   await check(
-    "a new shop's few books stand together under one chalkboard",
+    "a new shop's few books stand on one tier under one chalkboard",
     async () => {
       await go("/walk/#mine");
       await expect(page.locator(".walk-sign")).toContainText("雨音書店");
@@ -1854,8 +1854,9 @@ try {
         5,
       );
       await expect(page.locator(".walk-row-board")).toHaveCount(1);
-      // The empty tiers hold a few things instead of bare boards.
-      await expect(page.locator(".walk-row-still")).toHaveCount(2);
+      // The case has grown only the one tier its books need: no bare tiers.
+      await expect(page.locator(".walk-row")).toHaveCount(1);
+      await expect(page.locator(".walk-row-still")).toHaveCount(0);
       await expect(page.locator(".walk-ownerPop")).toContainText(
         "一頁ぶん、遠回り。",
       );

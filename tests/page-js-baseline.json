@@ -6,18 +6,18 @@
   "/leave/": 206,
   "/library/": 265,
   "/login/": 243,
-  "/my-shop/": 294,
+  "/my-shop/": 298,
   "/notifications/": 254,
   "/post/": 254,
   "/posters/": 254,
   "/posters/new/": 254,
   "/profile/": 254,
-  "/profiles/[id]/": 291,
-  "/reading-list/": 252,
+  "/profiles/[id]/": 294,
+  "/reading-list/": 255,
   "/reading/": 268,
   "/search/": 266,
   "/shop/": 254,
   "/shops/[id]/": 264,
   "/timeline/": 282,
-  "/walk/": 277
+  "/walk/": 281
 }
