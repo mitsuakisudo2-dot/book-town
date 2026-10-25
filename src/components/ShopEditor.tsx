@@ -41,7 +41,12 @@ import {
 } from "../lib/store-customization";
 import { publicWalkShops, woodScene } from "../lib/store-scene-adapter";
 import { GROW, tiersOf, type ShopSize } from "../lib/growing-shop";
-import { ShopTidy } from "./ShopTidy";
+import dynamic from "next/dynamic";
+// 整える is read when it opens, so the shelves page does not carry it.
+const ShopTidy = dynamic(
+  () => import("./ShopTidy").then((file) => file.ShopTidy),
+  { ssr: false },
+);
 import { OpenShop, ThemePicker } from "./OpenShop";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import { enterPressed } from "../lib/keys";
