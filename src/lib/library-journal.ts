@@ -563,6 +563,8 @@ export interface JournalTown {
   ): Registration | null;
   /** A change of the reader's library (a 連続設定 put on a book, ［取り消す］). */
   changeLibrary(bookId: string, set: LibrarySet): void;
+  /** Forgets the books of scan `batch` still taken back (forget-books.ts). */
+  forget?(bookIds: string[], batch: string): Promise<string[]>;
 }
 
 export type SendResult =

@@ -20,6 +20,12 @@ import {
 import { cleanShelves, emptyTown, type Write } from "./town-remote";
 import type { Missed } from "./supabase/sync";
 import { townMissedLine } from "./missed-changes";
+import {
+  FORGET_MOST,
+  forgettable,
+  notKeptInBrowser,
+  withoutBooks,
+} from "./forget-books";
 import { FIRST_SHELF_NAME } from "./words";
 import { draftOwner } from "./draft-owner";
 import { takeIn, type Arrived } from "./arrived";
@@ -1559,6 +1565,50 @@ export function createTownStore(
     getReadsSnapshot: () => !loading && Boolean(backend.newer),
     getServerReadsSnapshot: () => false,
     /**
+     * Forgets the books of scan `batch` taken back and still out (AUD-055,
+     * forget-books.ts): in the demo at once; in an account once what is
+     * saved has them taken out, as the database answers (each with when it
+     * was taken out, so one taken out again elsewhere since stays), taken
+     * in as its own reading so nothing is written back. Not one a draft in
+     * this browser names. The ids that went.
+     */
+    async forget(ids: string[], batch: string): Promise<string[]> {
+      if (loading) return [];
+      const asked = notKeptInBrowser(forgettable(state, ids, batch));
+      if (!asked.length) return [];
+      if (backend.kind === "local")
+        return commit(withoutBooks(state, asked)) ? asked : [];
+      const { forgetBooks, absorb } = backend;
+      if (backend.kind !== "account" || !forgetBooks || !absorb) return [];
+      const from = generation;
+      const saved = await townSettled({
+        getPersistenceSnapshot: () => status,
+        subscribe: (listener) => (
+          listeners.add(listener),
+          () => listeners.delete(listener)
+        ),
+      });
+      if (!saved || from !== generation) return [];
+      // Asked again of the town as saved: a book brought back meanwhile stays.
+      const still = forgettable(state, asked, batch);
+      const gone: string[] = [];
+      for (let at = 0; at < still.length; at += FORGET_MOST) {
+        const part = still.slice(at, at + FORGET_MOST).flatMap((id) => {
+          const removedAt = state.libraryEntries[id]?.removedAt;
+          return removedAt ? [{ id, removedAt }] : [];
+        });
+        gone.push(...(await forgetBooks(part, batch).catch(() => [])));
+        if (from !== generation) return gone;
+      }
+      if (!gone.length || from !== generation) return gone;
+      const next = absorb((town) => withoutBooks(town, gone));
+      if (next && next !== state) {
+        state = next;
+        notify();
+      }
+      return gone;
+    },
+    /**
      * Takes in what was read after the town (arrived.ts) as the backend's
      * own reading, by the path a refused change comes back by: never
      * through `commit`, so nothing of it is saved. `from` is the generation
@@ -1634,7 +1684,12 @@ export function usePersistenceStatus(): PersistenceStatus {
  * saved, false when a change is turned away (the town then goes back to
  * what is saved) or the account cannot be reached.
  */
-export function townSettled(store = townStore): Promise<boolean> {
+export function townSettled(
+  store: Pick<
+    typeof townStore,
+    "getPersistenceSnapshot" | "subscribe"
+  > = townStore,
+): Promise<boolean> {
   return new Promise((resolve) => {
     let stop: (() => void) | null = null;
     const look = () => {
@@ -1778,6 +1833,7 @@ export function journalTownOf(
     changeLibrary: (bookId, set) => {
       store.actions.changeLibrary([bookId], set);
     },
+    forget: store.forget,
   };
 }
 

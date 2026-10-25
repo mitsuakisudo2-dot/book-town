@@ -13,7 +13,7 @@
 
 - 手で入れた本をだれが読めるか（決まりそのもの）は [公開範囲.md](../機能/公開範囲.md)「表と公開範囲」の「手入力の本は、使われている場所で読める」。
 - 決めるのはデータベースの関数 `private.book_is_listed`（公開の場で使われているか）と `private.book_is_mine`（読む本人が使っているか）で、`books` の読み取りの方針がこの2つと下の `private.book_is_shared` を聞く（今の方針は `20261029000000_visibility.sql`）。本のIDを持つ表や列を足すときは、方針は変えずに、この2つを `create or replace` で広げる（関数の `set` の行は残す）。広げ忘れると、その本が画面から消える（本を指す外部キーが増えると、`pnpm test:db` の「every book a reader sees used, they read」が気づかせる）。もう1つ、`private.book_is_shared`（フォロワー限定の記録の本を、その記録を読める人に見せる。`20261029000000_visibility.sql`）も同じ方針が聞く。フォロワー限定で使える物（棚など）を足すときは、こちらも広げる。読み取りの方針と3つの関数、`private.seen_book_ids`、`private.search_candidates`、`copy_book` が、いろいろな作り方・使い方の本と読書家（フォロー、両向きのブロック、運営が隠したもの、退会など）で同じ答えを出すことと、手で作った本をだれが読めるかは `tests/db-who-sees-books.test.ts` が確かめる。本を指す使い方を足したら、そのテストの `CASES` にも1冊足す。
-- 本を指す jsonb を足したときは、目録の行を取り出すときに残す `private.catalog_used` も広げる（[本と書誌](../機能/本と書誌.md)「図書館の目録」）。
+- 本を指す jsonb を足したときは、目録の行を取り出すときに残す `private.catalog_used` と、スキャンで取り消した本を消すときに残す `private.book_used_besides_own`（[連続登録](../機能/連続登録.md)、AUD-055）も広げる（[本と書誌](../機能/本と書誌.md)「図書館の目録」）。public の表の本を指す外部キーは、どちらも DB の一覧から数えるので広げなくてよい。private の表に本を指す列を足したときは広げる。
 - 同じ決まりを1つの問い合わせに書いた `private.seen_book_ids`（街の新しい本と検索が使う）も、広げるときも狭めるときも同じに直す。使う表が足りないと `tests/db-newest-books.test.ts` が、作った街の本と読書家で答えが違うと `tests/db-who-sees-books.test.ts` が止める。本を名指す行の候補 `private.search_candidates` も広げる。
 - 速さ：方針は、読む人に見せない手入力の本ごとに、この2つを聞く。自分の本屋は ID を先に見つけ、その1軒の棚だけを探す。公開の棚と店内は、本屋が何軒でも GIN の索引で探す（本屋が数百軒より少ないと、データベースは棚の中身を開く手間を数えずに1軒ずつ読むほうを選ぶので、`book_is_listed` は順に読む計画を使わない設定にしてある）。街の新しい300冊は `books_created` の索引で新しい順に読み、読める本が300冊になったところで止まる。それより新しい、見えない手入力の本の数だけ時間がかかる。`pnpm test:db` の「a book is asked about without searching every shop」が、この計画を確かめる。
 

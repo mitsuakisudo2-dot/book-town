@@ -1231,7 +1231,24 @@ try {
       const isbn = isbnOf(29);
       await show(scan, isbn);
       await expect(count(scan)).toHaveText("1冊 登録済み");
+      // A book read by mistake and taken back is forgotten as this time
+      // ends (AUD-055): no longer the reader's 登録した本.
+      const mistaken = isbnOf(30);
+      await show(scan, mistaken);
+      await expect(count(scan)).toHaveText("2冊 登録済み");
+      await undoBook(scan, "試験の本 30");
+      await expect(count(scan)).toHaveText("1冊 登録済み");
+      expect(
+        (await stored(scan)).addedBooks.some((book) => book.isbn === mistaken),
+      ).toBe(true);
       expect(await finishScanning(scan)).toContain("1冊の登録が完了しました");
+      await expect
+        .poll(async () =>
+          (await stored(scan)).addedBooks.some(
+            (book) => book.isbn === mistaken,
+          ),
+        )
+        .toBe(false);
       await expect(scan).toHaveURL(/[?&]books=library/);
       await expect(
         scan.getByRole("button", { name: /^登録/, pressed: true }),
