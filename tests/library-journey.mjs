@@ -600,6 +600,39 @@ try {
   );
 
   await check(
+    "a book typed in by hand named as one in the library is asked about (101)",
+    async () => {
+      await toasts();
+      const before = await stored();
+      await openRegister();
+      const same = dialog().locator(".register-same");
+      // Spaced and in full width, it is the 門 in the library all the same.
+      await dialog().getByLabel("タイトル").fill("門");
+      await dialog().getByLabel("著者").fill("夏目漱石");
+      await expect(same).toContainText("この本ですか？");
+      await expect(same).toContainText("夏目 漱石");
+      await expect(registerButton()).toHaveCount(0);
+      await expect(
+        dialog().getByRole("button", { name: "別の本として登録" }),
+      ).toBeEnabled();
+      await page.screenshot({ path: path.join(output, "same-book.png") });
+      // Another author is another book, and nothing is asked.
+      await dialog().getByLabel("著者").fill("ほかの人");
+      await expect(same).toHaveCount(0);
+      await expect(registerButton()).toBeEnabled();
+      await dialog().getByLabel("著者").fill("");
+      await expect(same).toBeVisible();
+      await same.getByRole("button", { name: "この本です" }).click();
+      await registered("『門』はもうライブラリにあります");
+      const seen = await toasts();
+      expect(seen.some((text) => text.includes("登録しました"))).toBe(false);
+      const after = await stored();
+      expect(after.library).toEqual(before.library);
+      expect(after.addedBooks).toEqual(before.addedBooks);
+    },
+  );
+
+  await check(
     "a book the town knows, but not the library, is registered as usual",
     async () => {
       // ［完了］ says what this time registered, and the library is there.

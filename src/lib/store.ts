@@ -47,7 +47,13 @@ import {
 import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId, isSampleId } from "./record-kind";
-import { bookAuthor, bookById, bookByIsbn, booksOfIsbn } from "./book-name";
+import {
+  bookAuthor,
+  bookById,
+  bookByIsbn,
+  bookByName,
+  booksOfIsbn,
+} from "./book-name";
 import { owning } from "./own-books";
 import {
   bookPrice,
@@ -121,6 +127,21 @@ const toggled = (list: string[], id: string): string[] =>
 export const libraryBookByIsbn = (state: TownState, isbn: string) =>
   state.books.find(
     (book) => book.isbn === isbn && state.library.includes(book.id),
+  );
+
+/**
+ * The reader's own registered book named so (bookByName): a book typed in
+ * by hand that may be one they have already (101).
+ */
+export const libraryBookByName = (
+  state: TownState,
+  title: string,
+  author: string,
+) =>
+  bookByName(
+    state.books.filter((book) => state.library.includes(book.id)),
+    title,
+    author,
   );
 
 /** Folds by reports, less those of things that are gone. */

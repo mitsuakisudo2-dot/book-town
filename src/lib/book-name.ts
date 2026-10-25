@@ -295,6 +295,34 @@ export function bookByIsbn<T extends Pick<Book, "isbn" | "theirs">>(
   return books.find((book) => book.isbn === isbn && !book.theirs);
 }
 
+/** A title or an author as it may be typed again: width, case and spaces aside. */
+const typedAgain = (text: string): string =>
+  text
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s・]/gu, "");
+
+/**
+ * The first of `books` with this title, and this author where both name
+ * one: 「この本ですか？」 before a book is typed in a second time (101).
+ * One another reader typed in is never it (bookByIsbn).
+ */
+export function bookByName<T extends Named & Pick<Book, "theirs">>(
+  books: readonly T[],
+  title: string,
+  author: string,
+): T | undefined {
+  const named = typedAgain(title);
+  if (!named) return undefined;
+  const by = typedAgain(author);
+  return books.find(
+    (book) =>
+      !book.theirs &&
+      typedAgain(book.title) === named &&
+      (!by || !book.author || typedAgain(bookAuthor(book)) === by),
+  );
+}
+
 /**
  * Every book with this ISBN, another reader's too: for what the ISBN itself
  * tells (its edition's work), never to take one or fill in its words

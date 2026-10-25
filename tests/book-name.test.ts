@@ -6,6 +6,7 @@ import {
   bookAuthor,
   bookById,
   bookByIsbn,
+  bookByName,
   booksById,
   bookTitle,
   quote,
@@ -90,10 +91,7 @@ check("an author headed the catalogue's way reads as on the book", () => {
   for (const [heading, name, app] of AUTHORITY_NAMES)
     if (app !== false)
       assert.equal(author(heading.replace(/,\s+/g, ",")), name, heading);
-  assert.equal(
-    author("海野,波子,-2026 藤野,霞,弁護士"),
-    "海野波子、藤野霞",
-  );
+  assert.equal(author("海野,波子,-2026 藤野,霞,弁護士"), "海野波子、藤野霞");
   // Written any other way, the author is left as written.
   for (const written of [
     "宮沢賢治",
@@ -105,14 +103,23 @@ check("an author headed the catalogue's way reads as on the book", () => {
     assert.equal(author(written), written);
 });
 
-check("a list's line says the kind alone when no one is named (AUD-165)", () => {
-  assert.equal(authorAndKind({ author: "宮沢賢治", genre: "小説" }), "宮沢賢治・小説");
-  assert.equal(authorAndKind({ author: "", genre: "図書館の目録" }), "図書館の目録");
-  assert.equal(
-    authorAndKind({ author: "海野,波子,-2026", genre: "図書館の目録" }),
-    "海野波子・図書館の目録",
-  );
-});
+check(
+  "a list's line says the kind alone when no one is named (AUD-165)",
+  () => {
+    assert.equal(
+      authorAndKind({ author: "宮沢賢治", genre: "小説" }),
+      "宮沢賢治・小説",
+    );
+    assert.equal(
+      authorAndKind({ author: "", genre: "図書館の目録" }),
+      "図書館の目録",
+    );
+    assert.equal(
+      authorAndKind({ author: "海野,波子,-2026", genre: "図書館の目録" }),
+      "海野波子・図書館の目録",
+    );
+  },
+);
 
 check("a book by its ID or ISBN, and none for none", () => {
   const books = [book, { ...book, id: "b2", isbn: undefined }];
@@ -127,6 +134,31 @@ check("a book by its ID or ISBN, and none for none", () => {
   assert.equal(bookByIsbn(books, "9784101092058"), book);
   assert.equal(bookByIsbn(books, undefined), undefined);
 });
+
+check(
+  "a book by the name typed again: width, case and spaces aside (101)",
+  () => {
+    const typed = { id: "t1", title: "ＮＥＷ ゲーム！", author: "得能 正太郎" };
+    const theirs = {
+      id: "t2",
+      title: "銀河鉄道の夜",
+      author: "",
+      theirs: true,
+    };
+    const books = [typed, theirs];
+    assert.equal(bookByName(books, "new ゲーム！", "得能正太郎"), typed);
+    assert.equal(bookByName(books, "NEWゲーム！", ""), typed);
+    assert.equal(bookByName(books, "NEWゲーム！", "ほかの人"), undefined);
+    assert.equal(bookByName(books, "NEWゲーム", ""), undefined);
+    assert.equal(bookByName(books, "銀河鉄道の夜", ""), undefined);
+    assert.equal(bookByName(books, "  ", ""), undefined);
+    // A book with no author answers to any author typed.
+    assert.equal(
+      bookByName([{ ...typed, author: "" }], "NEW ゲーム！", "誰か")?.id,
+      "t1",
+    );
+  },
+);
 
 check("no title put in 『』 by hand (use quotedTitle or quote)", () => {
   assert.deepEqual(where(/『\$?\{[^}]*\btitle\b/g), []);
