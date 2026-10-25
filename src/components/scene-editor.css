@@ -600,3 +600,161 @@
   color: var(--green);
   font-weight: 700;
 }
+.tidy.is-typing {
+  bottom: auto;
+}
+.tidy.is-typing .tidy-tools {
+  display: none;
+}
+.tidy.is-typing .tidy-sheet {
+  bottom: 0;
+}
+/* A book's cover in the search: the books to add, side by side. */
+.tidy-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-bottom: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--sheet);
+  color: var(--ink-2);
+}
+.tidy-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+.tidy-covers {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 76px;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+}
+.tidy-covers button {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-cap);
+  text-align: left;
+  scroll-snap-align: start;
+}
+.tidy-covers .book-jacket {
+  width: 76px;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--r-edge);
+  box-shadow: var(--lift-1);
+}
+.tidy-covers span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.4;
+}
+.tidy-covers i {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--green);
+  color: var(--on-green);
+}
+/* 持ち上げて運ぶ: the shop takes the finger, not the page. */
+.tidy-stage .walk-artboard {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.tidy .walk-book.is-lifted {
+  opacity: 0.35;
+}
+.tidy-stage.is-carrying .walk-row.is-lit {
+  border-radius: var(--r-tag);
+  outline: 2px solid var(--walk-light);
+  outline-offset: 2px;
+}
+.tidy-carried {
+  position: fixed;
+  z-index: var(--layer-toast);
+  width: 46px;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 18px)) rotate(-3deg);
+  filter: drop-shadow(0 8px 10px var(--shade));
+}
+.tidy-carried > * {
+  width: 100%;
+}
+.tidy-placing {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: calc(56px + env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--t-cap);
+  font-weight: 700;
+}
+.tidy .walk-row-pin {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--ink);
+  z-index: var(--layer-sticky);
+  pointer-events: none;
+}
+/* A tier the shop has just grown: the board slides down into its light. */
+.tidy .walk-row.is-fresh {
+  animation: tidy-grow var(--dur-lamp) var(--ease-arrive);
+  transform-origin: top;
+}
+@keyframes tidy-grow {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+    filter: brightness(1.6);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tidy .walk-row.is-fresh {
+    animation: none;
+  }
+}

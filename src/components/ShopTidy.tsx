@@ -11,6 +11,7 @@ import {
   changePlacement,
   insertPlacement,
   migrateShopScene,
+  moveBook,
   setShopSize,
   takePlacementOff,
 } from "../lib/store-customization";
@@ -36,12 +37,58 @@ import {
   type TownActions,
   type TownState,
 } from "../lib/types";
+import { keyboardRoom } from "../lib/coarse-pointer";
 import { AGAIN, counted, failure, nth } from "../lib/words";
 import { StoreCanvas } from "./StoreCanvas";
 import { ShopSizeChoices, sizeName } from "./ShopSize";
-import { Icon } from "./ui";
+import { BookJacket, Icon } from "./ui";
 import "./walk.css";
 import "./scene-editor.css";
+
+/** Where a book would go: the tier, and its place among the other books. */
+type Spot = { rowId: string; index: number };
+/** The tiers and their books where they stood when a book was picked up,
+ * so the place a finger points at does not move while the gap opens. */
+type Ground = Array<{
+  rowId: string;
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  books: Array<{ id: string; mid: number }>;
+}>;
+type Lift = {
+  id: string;
+  x: number;
+  y: number;
+  at: Spot | null;
+  ground: Ground;
+};
+/** How long a finger rests on a book before it is picked up (試作 0.38 秒). */
+const LIFT_MS = 380;
+/** How far a finger may slide while resting, in px. */
+const LIFT_SLOP = 8;
+
+/** The place a point is over: the nearest tier across it, then the books
+ * before the point on that tier. */
+function spotAt(ground: Ground, x: number, y: number, id: string): Spot | null {
+  let best: Ground[number] | undefined;
+  let gap = Infinity;
+  for (const tier of ground) {
+    if (x < tier.left - 24 || x > tier.right + 24) continue;
+    const d =
+      y < tier.top ? tier.top - y : y > tier.bottom ? y - tier.bottom : 0;
+    if (d < gap) {
+      gap = d;
+      best = tier;
+    }
+  }
+  if (!best || gap > (best.bottom - best.top) * 0.6) return null;
+  return {
+    rowId: best.rowId,
+    index: best.books.filter((b) => b.id !== id && b.mid < x).length,
+  };
+}
 
 type Sheet =
   | { kind: "add" }
@@ -87,16 +134,34 @@ export function ShopTidy({
   const [pop, setPop] = useState("");
   const [query, setQuery] = useState("");
   const top = useRef<HTMLButtonElement>(null);
-  const onCloseRef = useRef(onClose);
+  const board = useRef<HTMLDivElement>(null);
+  // A book picked up and carried (持ち上げて運ぶ), or one whose sheet asked
+  // to be moved (動かす) and waits for the place to be pressed.
+  const [lift, setLift] = useState<Lift | null>(null);
+  const [placing, setPlacing] = useState<string | null>(null);
+  const press = useRef<{ x: number; y: number; timer: number } | null>(null);
+  const carried = useRef(false);
+  // The keyboard's room while a book is searched for, on a phone.
+  const [room, setRoom] = useState<{ top: number; height: number } | null>(
+    null,
+  );
+  // Escape puts a carried book back before it closes the screen.
+  const escape = useRef(onClose);
   useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
+    escape.current =
+      lift || placing
+        ? () => {
+            setLift(null);
+            setPlacing(null);
+          }
+        : onClose;
+  }, [onClose, lift, placing]);
   useEffect(() => {
     const old = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     top.current?.focus();
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current();
+      if (e.key === "Escape") escape.current();
     };
     document.addEventListener("keydown", key);
     return () => {
@@ -132,6 +197,99 @@ export function ShopTidy({
   const rowNumber = (rowId: string | null | undefined) =>
     caseRows.findIndex((r) => r.id === rowId) + 1;
   const waiting = unplacedBooks(scene);
+  // Tiers the shop has just grown open as they appear.
+  const tierIds = caseRows.map((r) => r.id).join(" ");
+  const [seenTiers, setSeenTiers] = useState(tierIds);
+  const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
+  if (tierIds !== seenTiers) {
+    const before = new Set(seenTiers.split(" "));
+    setFresh(
+      new Set(caseRows.map((r) => r.id).filter((id) => !before.has(id))),
+    );
+    setSeenTiers(tierIds);
+  }
+
+  /** The tiers and their books as they stand on the screen now. */
+  function ground(): Ground {
+    const root = board.current;
+    if (!root) return [];
+    const box = (id: string, attr: string) =>
+      root
+        .querySelector(`[${attr}="${CSS.escape(id)}"]`)
+        ?.getBoundingClientRect();
+    return caseRows.flatMap((row) => {
+      const tier = box(row.id, "data-row");
+      if (!tier) return [];
+      const books = scene.objects
+        .filter((o) => o.kind === "book" && o.parentId === row.id)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .flatMap((p) => {
+          const b = box(p.id, "data-placement");
+          return b ? [{ id: p.id, mid: b.left + b.width / 2 }] : [];
+        });
+      return [
+        {
+          rowId: row.id,
+          top: tier.top,
+          bottom: tier.bottom,
+          left: tier.left,
+          right: tier.right,
+          books,
+        },
+      ];
+    });
+  }
+  /** Sets a book down at `spot`; where it already stood, nothing changes. */
+  function carry(id: string, spot: Spot) {
+    const p = objectById(scene, id);
+    if (!p) return;
+    const here =
+      p.parentId === spot.rowId &&
+      spot.index ===
+        scene.objects.filter(
+          (o) =>
+            o.kind === "book" &&
+            o.parentId === p.parentId &&
+            (o.order ?? 0) < (p.order ?? 0),
+        ).length;
+    if (here) return;
+    const next = moveBook(scene, id, spot.rowId, spot.index, state.books);
+    if (!next) notify(GROW.full);
+    else save(next);
+  }
+  // While a book is carried, the shop shows it set down where it would go.
+  const liftId = lift?.id;
+  const liftRow = lift?.at?.rowId;
+  const liftIndex = lift?.at?.index;
+  const preview = useMemo(
+    () =>
+      liftId && liftRow !== undefined && liftIndex !== undefined
+        ? moveBook(scene, liftId, liftRow, liftIndex, state.books)
+        : null,
+    [scene, liftId, liftRow, liftIndex, state.books],
+  );
+  const lit: ReadonlySet<string> = placing
+    ? new Set(caseRows.map((r) => r.id))
+    : liftRow && preview
+      ? new Set([liftRow])
+      : new Set();
+  // On a phone the search keeps above the keyboard.
+  const adding = sheet?.kind === "add";
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!adding || !viewport) return;
+    const fit = () => {
+      const r = keyboardRoom(viewport, window.innerHeight);
+      setRoom(r?.up ? { top: r.top, height: r.height } : null);
+    };
+    viewport.addEventListener("resize", fit);
+    viewport.addEventListener("scroll", fit);
+    return () => {
+      viewport.removeEventListener("resize", fit);
+      viewport.removeEventListener("scroll", fit);
+      setRoom(null);
+    };
+  }, [adding]);
   const onShelves = new Set(
     shop.shelves.flatMap((s) => s.items.map((i) => i.bookId)),
   );
@@ -201,6 +359,62 @@ export function ShopTidy({
     save(next);
   }
 
+  function rest(e: React.PointerEvent<HTMLDivElement>) {
+    if (placing || !ready || e.button > 0) return;
+    const id = (e.target as Element)
+      .closest("[data-placement]")
+      ?.getAttribute("data-placement");
+    const p = id ? objectById(scene, id) : undefined;
+    if (!p || !caseRows.some((r) => r.id === p.parentId)) return;
+    const { pointerId, clientX: x, clientY: y } = e;
+    const target = e.currentTarget;
+    if (press.current) window.clearTimeout(press.current.timer);
+    press.current = {
+      x,
+      y,
+      timer: window.setTimeout(() => {
+        press.current = null;
+        try {
+          target.setPointerCapture(pointerId);
+        } catch {
+          // The finger has already left; nothing is picked up.
+          return;
+        }
+        setSheet(null);
+        setLift({ id: p.id, x, y, at: null, ground: ground() });
+      }, LIFT_MS),
+    };
+  }
+  function slide(e: React.PointerEvent<HTMLDivElement>) {
+    const held = press.current;
+    if (
+      held &&
+      Math.hypot(e.clientX - held.x, e.clientY - held.y) > LIFT_SLOP
+    ) {
+      window.clearTimeout(held.timer);
+      press.current = null;
+    }
+    if (!lift) return;
+    setLift({
+      ...lift,
+      x: e.clientX,
+      y: e.clientY,
+      at: spotAt(lift.ground, e.clientX, e.clientY, lift.id),
+    });
+  }
+  function letGo(e: React.PointerEvent<HTMLDivElement>) {
+    if (press.current) window.clearTimeout(press.current.timer);
+    press.current = null;
+    if (!lift) return;
+    // The click that ends the press, if one comes, is not a press on the
+    // book.
+    carried.current = true;
+    window.setTimeout(() => (carried.current = false));
+    setLift(null);
+    // Let go off the shelves, the book goes back where it was.
+    if (e.type === "pointerup" && lift.at) carry(lift.id, lift.at);
+  }
+
   const style = {
     "--walk-wood": scene.theme.wood,
     "--walk-paper": scene.theme.paper,
@@ -223,11 +437,11 @@ export function ShopTidy({
 
   return (
     <div
-      className="tidy walk-view"
+      className={"tidy walk-view" + (room ? " is-typing" : "")}
       role="dialog"
       aria-modal="true"
       aria-label={`${shop.name}を整える`}
-      style={style}
+      style={room ? { ...style, top: room.top, height: room.height } : style}
     >
       <header className="tidy-top">
         <button
@@ -245,15 +459,42 @@ export function ShopTidy({
         </Link>
       </header>
       <div
-        className="walk-stage scene-preview tidy-stage"
+        className={
+          "walk-stage scene-preview tidy-stage" +
+          (lift || placing ? " is-carrying" : "")
+        }
         onClick={(e) => {
           if (e.target === e.currentTarget) setSheet(null);
         }}
       >
-        <div className="walk-artboard" aria-label="店内">
+        <div
+          ref={board}
+          className="walk-artboard"
+          aria-label="店内"
+          onPointerDown={rest}
+          onPointerMove={slide}
+          onPointerUp={letGo}
+          onPointerCancel={letGo}
+          onContextMenu={(e) => e.preventDefault()}
+          onClickCapture={(e) => {
+            if (carried.current) {
+              carried.current = false;
+              e.preventDefault();
+              e.stopPropagation();
+            } else if (placing) {
+              e.preventDefault();
+              e.stopPropagation();
+              const spot = spotAt(ground(), e.clientX, e.clientY, placing);
+              if (!spot) return;
+              setPlacing(null);
+              carry(placing, spot);
+            }
+          }}
+        >
           <StoreCanvas
-            scene={scene}
+            scene={preview ?? scene}
             books={state.books}
+            arranging={{ lit, lifted: lift?.id ?? placing, fresh }}
             onBook={(p) => open({ kind: "book", id: p.id })}
             onPop={(p) => open({ kind: "book", id: p.id })}
             onZoom={(rowId) => open({ kind: "row", rowId })}
@@ -263,7 +504,31 @@ export function ShopTidy({
           />
         </div>
       </div>
-      {waiting.length > 0 && !sheet && (
+      {lift && bookById(state.books, objectById(scene, lift.id)?.bookId) && (
+        <div
+          className="tidy-carried"
+          style={{ left: lift.x, top: lift.y }}
+          aria-hidden="true"
+        >
+          <BookJacket
+            book={bookById(state.books, objectById(scene, lift.id)!.bookId)!}
+            sizes="46px"
+          />
+        </div>
+      )}
+      {placing && (
+        <div className="tidy-placing" role="status">
+          <span>{GROW.place}</span>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setPlacing(null)}
+          >
+            {GROW.stop}
+          </button>
+        </div>
+      )}
+      {waiting.length > 0 && !sheet && !lift && !placing && (
         <button
           type="button"
           className="tidy-waiting"
@@ -272,7 +537,7 @@ export function ShopTidy({
           {GROW.waiting} · {counted(waiting.length, "冊")}
         </button>
       )}
-      {sheet && (
+      {sheet && !lift && (
         <section className="tidy-sheet" aria-label="選んだもの">
           <button
             type="button"
@@ -296,30 +561,41 @@ export function ShopTidy({
           {sheet.kind === "add" && (
             <>
               <h3>本を足す</h3>
-              <input
-                type="search"
-                className="tidy-search"
-                value={query}
-                placeholder="タイトル・著者"
-                aria-label="足す本を探す"
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <div className="tidy-list">
+              <label className="tidy-search">
+                <Icon name="search" size={16} />
+                <input
+                  type="search"
+                  value={query}
+                  placeholder="題名・著者で探す"
+                  aria-label="足す本を探す"
+                  autoComplete="off"
+                  enterKeyHint="search"
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
+              <div className="tidy-covers">
                 {choices.map((b) => (
-                  <button key={b.id} type="button" onClick={() => addBook(b)}>
-                    <span>
-                      {bookTitle(b)}
-                      <small>{bookAuthor(b)}</small>
-                    </span>
-                    <Icon name="plus" size={16} />
+                  <button
+                    key={b.id}
+                    type="button"
+                    aria-label={`${bookTitle(b)}、${bookAuthor(b)}を並べる`}
+                    onClick={() => addBook(b)}
+                  >
+                    <BookJacket book={b} sizes="72px" />
+                    <span>{bookTitle(b)}</span>
+                    <i aria-hidden="true">
+                      <Icon name="plus" size={14} />
+                    </i>
                   </button>
                 ))}
               </div>
               {!choices.length && (
                 <p className="shop-size-hint">
-                  {query.trim()
-                    ? "見つかりませんでした。"
-                    : "ライブラリの本は、もう全部並んでいます。題名や著者で探すと、街の本も足せます。"}
+                  {!query.trim()
+                    ? "ライブラリの本は、もう全部並んでいます。題名や著者で探すと、街の本も足せます。"
+                    : found.found.length
+                      ? "見つかった本は、もう棚に並んでいます。"
+                      : "見つかりませんでした。"}
                 </p>
               )}
             </>
@@ -444,6 +720,18 @@ export function ShopTidy({
                       ? "POPを直す"
                       : "POPを書く"}
                   </button>
+                  {placement.parentId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSheet(null);
+                        setPlacing(placement.id);
+                      }}
+                    >
+                      <Icon name="move" size={18} />
+                      {GROW.move}
+                    </button>
+                  )}
                   {placement.parentId ? (
                     <button
                       type="button"
@@ -457,7 +745,7 @@ export function ShopTidy({
                           setSheet(null);
                       }}
                     >
-                      <Icon name="move" size={18} />
+                      <Icon name="close" size={18} />
                       棚から下ろす
                     </button>
                   ) : (
@@ -467,6 +755,9 @@ export function ShopTidy({
                     </button>
                   )}
                 </div>
+              )}
+              {placement.parentId && !sheet.writing && (
+                <p className="shop-size-hint">{GROW.lift}</p>
               )}
             </>
           )}

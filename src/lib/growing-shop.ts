@@ -109,6 +109,11 @@ export const GROW = {
   chosen: (size: string) => `店の大きさを「${size}」にしました。`,
   grew: (tiers: string) => `店が少し広がりました（${tiers}）。`,
   keep: (tiers: string) => `${tiers}のままにする`,
+  move: "動かす",
+  place: "置きたい所を押してください",
+  stop: "やめる",
+  full: "この段には入りきりません。ほかの本を下ろすと置けます。",
+  lift: "本を長く押すと、持ち上げて運べます。",
 } as const;
 /** The drawing each tier's chalkboard starts with. */
 export const DEFAULT_DOODLES = ["travel", "daily", "forest", "stars"];

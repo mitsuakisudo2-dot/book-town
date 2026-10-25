@@ -22,6 +22,7 @@ import {
   importedPlacementReactions,
   insertPlacement,
   migrateShopScene,
+  moveBook,
   placementReactionKey,
   publicStoreScene,
   renameSceneObject,
@@ -851,4 +852,46 @@ check("the owner chooses the size of the shop; nothing is lost", () => {
     false,
   );
 });
+check(
+  "a book carried to another place moves there, and never pushes one off",
+  () => {
+    const ofShop = (n: number) =>
+      shelfShop(
+        Array.from(
+          { length: n },
+          (_, i) => ["m" + i, books[i % books.length].id] as [string, string],
+        ),
+      );
+    const ten = ofShop(10);
+    const shop = setShopSize(migrateShopScene(ten, books), 2, ten, books);
+    const [top, low] = shop.objects
+      .filter((o) => o.kind === "row" && o.parentId === "main-shelf")
+      .sort((a, b) => a.rect.y - b.rect.y);
+    const first = rowBooks(shop, top.id)[0];
+    // To the end of its own tier: the tier keeps its books, in the new order.
+    const within = moveBook(shop, first, top.id, Infinity, books)!;
+    assert.deepEqual(rowBooks(within, top.id), [
+      ...rowBooks(shop, top.id).slice(1),
+      first,
+    ]);
+    assert.equal(objectById(within, top.id)!.pinned, true);
+    assert.deepEqual(validateOwnedScene(within, ten, books), []);
+    // To a full tier: room is made there, and no book leaves the shelves.
+    const across = moveBook(shop, first, low.id, 0, books)!;
+    assert.equal(rowBooks(across, low.id)[0], first);
+    assert.equal(objectById(across, low.id)!.pinned, true);
+    assert.equal(objectById(across, top.id)!.pinned, true);
+    assert.equal(unplacedBooks(across).length, 0);
+    const both = (s: StoreScene) =>
+      [...rowBooks(s, top.id), ...rowBooks(s, low.id)].sort();
+    assert.deepEqual(both(across), both(shop));
+    assert.deepEqual(validateOwnedScene(across, ten, books), []);
+    // A full tier takes no more: the book stays where it was.
+    const thirty = ofShop(30);
+    const full = setShopSize(migrateShopScene(thirty, books), 1, thirty, books);
+    const waiting = unplacedBooks(full)[0];
+    assert.ok(waiting);
+    assert.equal(moveBook(full, waiting.id, "row-0", 0, books), null);
+  },
+);
 console.log(passed + " customization domain checks passed");
