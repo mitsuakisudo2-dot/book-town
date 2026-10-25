@@ -7,7 +7,7 @@ import { leaveLayers } from "../lib/back-layer";
 import { inManageMode } from "../lib/town-mode";
 import { NAMES } from "../lib/words";
 import { Icon } from "./ui";
-import "./manage.css";
+import "./mode-switch.css";
 
 /**
  * 読書管理モード on or off, the first thing of 設定 (管理表 99, けにーさん
