@@ -13,6 +13,7 @@ import {
 import { sampleBookRowId } from "../src/lib/samples";
 import { ACCOUNT_SCHEMAS_SQL, ACCOUNT_TABLES } from "./fixtures/account-tables";
 import { EXTENSIONS_STANDIN } from "./fixtures/pglite-supabase";
+import { clearOfJapanMidnight } from "./fixtures/japan-day";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
 import { pagePattern } from "../src/lib/supabase/site-notes";
 import { emptyTown, planWrites } from "../src/lib/town-remote";
@@ -1173,6 +1174,8 @@ async function main() {
   await check(
     "an owner learns how many stopped by last week, never who",
     async () => {
+      // Last week is read again and again: not across Monday's midnight.
+      await clearOfJapanMidnight();
       const count = async (visitor: Visitor) =>
         (
           await as<{ visitors: number }>(

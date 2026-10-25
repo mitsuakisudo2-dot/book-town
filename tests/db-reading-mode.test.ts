@@ -5,6 +5,7 @@ import {
   migrationFiles,
   migrationText,
 } from "./fixtures/pglite-supabase";
+import { clearOfJapanMidnight } from "./fixtures/japan-day";
 
 // 読書管理モードの土台 (item 98, supabase/migrations/*_reading_mode.sql). The
 // design is 読書管理モード_基本設計_2026-10-18, decided by けにーさん: the mode
@@ -1299,6 +1300,8 @@ async function main() {
   await check(
     "a shop's visitors last week leave out readers without a public profile",
     async () => {
+      // The visits and the count must fall in the same week.
+      await clearOfJapanMidnight();
       const db = await migrated();
       const { rows, as } = helpers(db);
       await as(

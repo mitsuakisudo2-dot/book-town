@@ -7,6 +7,7 @@ import {
   migrationText,
 } from "./fixtures/pglite-supabase";
 import { catalog } from "./fixtures/bibliography";
+import { clearOfJapanMidnight } from "./fixtures/japan-day";
 import {
   MESSAGE_LENGTH,
   PLACE_LENGTH,
@@ -47,6 +48,8 @@ async function migrated(): Promise<PGlite> {
 async function main() {
   let passed = 0;
   async function check(name: string, run: () => Promise<void>) {
+    // Most checks report twice and expect the same day in Japan.
+    await clearOfJapanMidnight();
     await run();
     passed += 1;
     console.log("PASS " + name);
