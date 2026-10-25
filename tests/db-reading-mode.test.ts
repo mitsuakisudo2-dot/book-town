@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import {
   SUPABASE_STANDIN,
+  clearOfJapanMidnight,
   migrationFiles,
   migrationText,
 } from "./fixtures/pglite-supabase";
@@ -1299,6 +1300,8 @@ async function main() {
   await check(
     "a shop's visitors last week leave out readers without a public profile",
     async () => {
+      // The visits and the count must fall in the same week.
+      await clearOfJapanMidnight();
       const db = await migrated();
       const { rows, as } = helpers(db);
       await as(
