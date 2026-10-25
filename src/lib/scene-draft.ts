@@ -16,10 +16,10 @@ import {
   type PersistenceStatus,
 } from "./types";
 
-// The scene being decorated in 店内の飾りつけ (order, POPs, the greeting,
-// shelf labels, stamps) is kept in this browser while it is decorated, so
-// Escape, a tap outside, 戻る or a reload does not lose it. It is let go once
-// the scene is saved, or when the reader throws it away.
+// The scene changed in 整える (order, POPs, the greeting, shelf labels,
+// stamps) is kept in this browser until the account has it, so a change the
+// account refuses is not lost. It is let go once the scene is saved, or when
+// the reader throws it away.
 
 export const SCENE_DRAFT_KEY = "book-town-scene-drafts-v1";
 

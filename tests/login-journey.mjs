@@ -2702,25 +2702,23 @@ try {
       await expect(
         page.locator(".stockist-list .empty-state a"),
       ).toHaveAttribute("href", new RegExp("place=" + copy));
-      // Put among the shop's scene, a book the reader has nothing of goes on
-      // as their copy, made first.
+      // Added from 整える's 本を足す, a book the reader has nothing of goes
+      // on the shelf as their copy, made first.
       sent.splice(0);
       await page.goto(base + "/my-shop/");
       await page
-        .getByRole("button", { name: "店内を飾りつける", exact: true })
+        .getByRole("button", { name: "店を整える", exact: true })
         .click();
-      const editor = page.getByRole("dialog", {
-        name: "店内を飾りつける",
-        exact: true,
-      });
-      await editor.getByLabel("棚に加える本を探す").fill("昼の手帖");
-      await editor
-        .locator(".scene-search-results button", { hasText: "昼の手帖" })
+      const tidy = page.locator(".tidy");
+      await tidy.getByRole("button", { name: "本を足す", exact: true }).click();
+      await tidy
+        .getByRole("searchbox", { name: "足す本を探す" })
+        .fill("昼の手帖");
+      await tidy
+        .locator(".tidy-covers button", { hasText: "昼の手帖" })
         .click();
-      await editor
-        .getByRole("button", { name: "店内を保存", exact: true })
-        .click();
-      await expect(editor).toHaveCount(0);
+      await tidy.getByRole("button", { name: "閉じる" }).first().click();
+      await expect(tidy).toHaveCount(0);
       await expect
         .poll(() => sent.map((write) => write.path))
         .toContain("/rest/v1/shop_private");
