@@ -480,6 +480,65 @@ export type Database = {
           },
         ];
       };
+      library_events: {
+        Row: {
+          at: string;
+          became: string | null;
+          book_id: string;
+          id: string;
+          kind: string;
+          manage: boolean;
+          shelf_id: string | null;
+          user_id: string;
+          was: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          at?: string;
+          became?: string | null;
+          book_id: string;
+          id?: string;
+          kind: string;
+          manage?: boolean;
+          shelf_id?: string | null;
+          user_id: string;
+          was?: string | null;
+        };
+        Update: {
+          at?: string;
+          became?: string | null;
+          book_id?: string;
+          id?: string;
+          kind?: string;
+          manage?: boolean;
+          shelf_id?: string | null;
+          user_id?: string;
+          was?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "library_events_shelf_id_user_id_fkey";
+            columns: ["shelf_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "library_shelves";
+            referencedColumns: ["id", "user_id"];
+          },
+          {
+            foreignKeyName: "library_events_user_id_book_id_fkey";
+            columns: ["user_id", "book_id"];
+            isOneToOne: false;
+            referencedRelation: "library_entries";
+            referencedColumns: ["user_id", "book_id"];
+          },
+          {
+            foreignKeyName: "library_events_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       library_shelf_books: {
         Row: {
           added_at: string;

@@ -67,6 +67,12 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     notPeople: ["batch_id"],
     readers: "own",
   },
+  // What the reader did with their library; written by the database only.
+  "public.library_events": {
+    people: { user_id: "delete" },
+    notPeople: ["shelf_id"],
+    readers: "own",
+  },
   "public.library_shelf_books": {
     people: { user_id: "delete" },
     readers: "own",
