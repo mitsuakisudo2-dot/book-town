@@ -494,6 +494,8 @@ export function StoreCanvas({
       .sort((a, b) => a.rect.y - b.rect.y);
     const index = siblings.findIndex((r) => r.id === o.id);
     const shelf = furniture?.furnitureType === "shelf";
+    // A reading stand holds one cover and nothing else.
+    const stand = furniture?.furnitureType === "stand";
     // Rows that leave a gutter get a chalkboard beside them; older saved
     // stores keep the small tag over the books.
     const gutter = shelf && o.rect.x >= 0.15;
@@ -518,6 +520,8 @@ export function StoreCanvas({
         o.rect.w *
         (furniture?.rect.w ?? 1)
       : o.rect.w * (furniture?.rect.w ?? 1);
+    // A centred row has room at both ends, so no globe sits at its right.
+    const globe = o.align !== "center" && spare >= 0.085;
     const title = o.boardTitle ?? o.text ?? "";
     const still = woodshop && gutter && !o.text && items.length === 0;
     return (
@@ -565,7 +569,7 @@ export function StoreCanvas({
             seed={index + scene.storeId.length}
             left={pct(-(o.rect.x - 0.03) / o.rect.w)}
           />
-        ) : gutter ? (
+        ) : stand ? null : gutter ? (
           <span
             className="walk-row-decor"
             style={{
@@ -623,7 +627,7 @@ export function StoreCanvas({
               }}
             />
           ))}
-        {woodshop && shelf && !still && spare >= 0.085 && (
+        {woodshop && shelf && !still && globe && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             className="walk-decor walk-globe"
@@ -656,6 +660,13 @@ export function StoreCanvas({
             <>
               <span className="walk-case-post is-left" />
               <span className="walk-case-post is-right" />
+            </>
+          )}
+          {o.furnitureType === "stand" && (
+            <>
+              <span className="walk-shelf-lip is-stand-ledge" />
+              <span className="walk-case-post is-stand-post" />
+              <span className="walk-shelf-lip is-stand-foot" />
             </>
           )}
           {rows.map((row) => renderRow(row, o))}

@@ -36,6 +36,7 @@ import {
   visitStore,
 } from "../src/lib/walk-state";
 import { decodeWalk, encodeWalk } from "../src/lib/walk-repository";
+import { tiersOf } from "../src/lib/growing-shop";
 import { createInitialState } from "../src/lib/data";
 import { deserializeTown, serializeTown } from "../src/lib/repository";
 let passed = 0;
@@ -222,7 +223,7 @@ check("private shelf content never enters a walk or public POP lookup", () => {
     ),
   );
 });
-check("a new owner's few books stand together on the top tier", () => {
+check("a reader's shop grows with its books, up to four tiers", () => {
   const own = (shelves: Shop["shelves"], tagline = ""): Shop => ({
     id: "mine",
     ownerId: "me",
@@ -237,48 +238,83 @@ check("a new owner's few books stand together on the top tier", () => {
   const shelf = (id: string, name: string, n: number, from = 0) => ({
     id,
     name,
-    capacity: 20,
+    capacity: 60,
     isPublic: true,
-    items: books.slice(from, from + n).map((b, i) => ({
+    items: Array.from({ length: n }, (_, i) => ({
       id: id + "-" + i,
-      bookId: b.id,
+      bookId: books[(from + i) % books.length].id,
       display: "spine" as BookDisplay,
       pop: "",
     })),
   });
+  const known = new Set(books.map((b) => b.id));
+  const rowsOf = (scene: StoreScene) =>
+    scene.objects.filter((o) => o.kind === "row");
+  const onRow = (scene: StoreScene, row: string) =>
+    scene.objects.filter((o) => o.kind === "book" && o.parentId === row);
+
+  // One book stands on a reading stand, by its cover.
+  const one = woodScene(own([shelf("first", "はじめの本棚", 1)]), books);
+  assert.equal(one.growth, "auto");
+  assert.equal(objectById(one, "main-shelf")!.furnitureType, "stand");
+  assert.equal(tiersOf(one), 0);
+  assert.equal(objectById(one, "placement:mine:first-0")!.parentId, "row-0");
+  assert.equal(objectById(one, "placement:mine:first-0")!.display, "face");
+  assert.deepEqual(validateScene(one, known), []);
+
+  // Two to four books stand on one tier, all by their covers, centred.
   const view = woodScene(
     own([shelf("first", "はじめの本棚", 3)], LEGACY_TAGLINE),
     books,
   );
-  const tierOf = (id: string) => objectById(view, id)!.parentId;
-  const ids = ["first-0", "first-1", "first-2"].map(
-    (item) => "placement:mine:" + item,
-  );
-  assert.deepEqual(ids.map(tierOf), ["row-0", "row-0", "row-0"]);
-  // No face-out was chosen, so the first two show their covers.
-  assert.deepEqual(ids.map((id) => objectById(view, id)!.display).sort(), [
-    "face",
-    "face",
-    "spine",
-  ]);
-  // Only the tier with books carries the shelf's name and chalkboard.
+  assert.equal(objectById(view, "main-shelf")!.furnitureType, "shelf");
   assert.deepEqual(
-    view.objects.filter((o) => o.kind === "row").map((o) => o.text ?? null),
-    ["はじめの本棚", null, null],
+    rowsOf(view).map((o) => o.text ?? null),
+    ["はじめの本棚"],
   );
+  assert.deepEqual(
+    onRow(view, "row-0").map((o) => o.display),
+    ["face", "face", "face"],
+  );
+  assert.equal(objectById(view, "row-0")!.align, "center");
   // The old default slogan is not shown as the owner's words.
   assert.equal(objectById(view, "greeting")!.text, "");
-  assert.deepEqual(validateScene(view, new Set(books.map((b) => b.id))), []);
+  assert.deepEqual(validateScene(view, known), []);
 
-  // A full shelf flows on to the next tier, which shares its chalkboard.
-  const full = woodScene(own([shelf("first", "はじめの本棚", 20)]), books);
-  const rows = full.objects.filter((o) => o.kind === "row");
-  const onRow = (row: string) =>
-    full.objects.filter((o) => o.kind === "book" && o.parentId === row).length;
-  assert.ok(onRow("row-0") > 3 && onRow("row-1") > 0);
-  assert.equal(rows[1].text, "はじめの本棚");
-  // Books past what the tiers hold stay in the scene, unplaced; none is lost.
-  assert.equal(full.objects.filter((o) => o.kind === "book").length, 20);
+  // A fuller tier shows about three covers, books with POP words first, and
+  // the rest by their spines.
+  const ten = shelf("first", "はじめの本棚", 10);
+  ten.items[7].pop = "夜にひとりで読みたい一冊。";
+  const fuller = woodScene(own([ten]), books);
+  assert.equal(rowsOf(fuller).length, 1);
+  const faces = onRow(fuller, "row-0").filter((o) => o.display === "face");
+  assert.ok(faces.length >= 1 && faces.length <= 3);
+  assert.ok(faces.some((o) => o.id === "placement:mine:first-7"));
+  assert.equal(onRow(fuller, "row-0").length, 10);
+  assert.deepEqual(validateScene(fuller, known), []);
+
+  // Past about ten books a tier, the case grows down, up to four tiers; the
+  // tiers share the shelf's chalkboard and its books.
+  for (const [n, tiers] of [
+    [11, 2],
+    [25, 3],
+    [40, 4],
+    [60, 4],
+  ]) {
+    const grown = woodScene(own([shelf("first", "はじめの本棚", n)]), books);
+    assert.equal(tiersOf(grown), tiers, n + " books");
+    assert.ok(
+      rowsOf(grown).every((r) => onRow(grown, r.id).length > 0),
+      n + " books: every tier has books",
+    );
+    assert.equal(rowsOf(grown)[1].text, "はじめの本棚");
+    // Books past what the tiers hold stay in the scene, unplaced; none is lost.
+    assert.equal(grown.objects.filter((o) => o.kind === "book").length, n);
+    assert.deepEqual(validateScene(grown, known), [], n + " books");
+    // The case stays under the sign and above the floor POP.
+    const f = objectById(grown, "main-shelf")!.rect;
+    assert.ok(f.y >= 0.18 && f.y + f.h <= 0.83, n + " books");
+  }
 
   // Two shelves each start on a tier of their own.
   const two = woodScene(
@@ -288,19 +324,21 @@ check("a new owner's few books stand together on the top tier", () => {
   assert.equal(objectById(two, "placement:mine:a-1")!.parentId, "row-0");
   assert.equal(objectById(two, "placement:mine:b-0")!.parentId, "row-1");
   assert.deepEqual(
-    two.objects.filter((o) => o.kind === "row").map((o) => o.text ?? null),
-    ["人生の9冊", "今年の5冊", null],
+    rowsOf(two).map((o) => o.text ?? null),
+    ["人生の9冊", "今年の5冊"],
   );
-  // An owner's own face-out choice is kept as it is.
-  const chosen = shelf("first", "はじめの本棚", 3);
-  chosen.items[2].display = "face";
+  // An owner's own face-out choice is kept as it is on a fuller tier.
+  const chosen = shelf("first", "はじめの本棚", 8);
+  chosen.items[6].display = "face";
   const kept = woodScene(own([chosen]), books);
-  assert.deepEqual(
-    chosen.items.map(
-      (item) => objectById(kept, "placement:mine:" + item.id)!.display,
-    ),
-    ["spine", "spine", "face"],
+  assert.equal(objectById(kept, "placement:mine:first-6")!.display, "face");
+  // The 見本 shops keep the full case of three tiers.
+  const demo = woodScene(
+    { ...own([shelf("first", "見本", 3)]), demo: true },
+    books,
   );
+  assert.equal(rowsOf(demo).length, 3);
+  assert.equal(demo.growth, undefined);
 });
 check("explicit link beats resume and visited state", () => {
   let walk = startWalk(emptyWalk(), ["a", "b", "c"]);

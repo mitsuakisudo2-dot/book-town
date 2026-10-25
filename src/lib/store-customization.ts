@@ -21,6 +21,7 @@ import {
   type SceneObject,
 } from "./store-scene";
 import { woodScene } from "./store-scene-adapter";
+import { GROW_MAX_TIERS, growCase, tiersOf } from "./growing-shop";
 import { bookById } from "./book-name";
 import {
   SCENE_BOARD_TITLE_MAX_LENGTH,
@@ -139,21 +140,34 @@ function followShelves(
   for (const rowId of emptied)
     if (objectById(scene, rowId)?.kind === "row")
       scene = relayoutRow(scene, rowId);
-  const rows = scene.objects.filter((o) => o.kind === "row").map((o) => o.id);
   const placedOn = (rowId: string) =>
     scene.objects.filter((o) => o.kind === "book" && o.parentId === rowId);
-  /** Sets a placement out after the books of its shelf, if a row has room. */
+  /** Sets a placement out after the books of its shelf, if a row has room.
+   * A growing case takes another tier when none has, up to four. */
   const setOut = (id: string, shelfId: string) => {
-    const ofShelf = rows.filter((rowId) =>
-      placedOn(rowId).some((o) => o.source?.shelfId === shelfId),
-    );
-    const empty = rows.filter((rowId) => placedOn(rowId).length === 0);
-    for (const rowId of [...ofShelf.reverse(), ...empty]) {
-      const trial = insertPlacement(scene, id, rowId, Infinity);
-      if (objectById(trial, id)!.parentId === rowId) {
-        scene = trial;
-        return;
+    for (;;) {
+      const rows = scene.objects
+        .filter((o) => o.kind === "row")
+        .map((o) => o.id);
+      const ofShelf = rows.filter((rowId) =>
+        placedOn(rowId).some((o) => o.source?.shelfId === shelfId),
+      );
+      const empty = rows.filter((rowId) => placedOn(rowId).length === 0);
+      for (const rowId of [...ofShelf.reverse(), ...empty]) {
+        const trial = insertPlacement(scene, id, rowId, Infinity);
+        if (objectById(trial, id)!.parentId === rowId) {
+          scene = trial;
+          return;
+        }
       }
+      const tiers = tiersOf(scene);
+      if (
+        scene.growth !== "auto" ||
+        objectById(scene, "main-shelf")?.kind !== "furniture" ||
+        tiers >= GROW_MAX_TIERS
+      )
+        return;
+      scene = growCase(scene, tiers + 1, books);
     }
   };
   for (const shelf of shop.shelves)
@@ -305,7 +319,10 @@ export function applyStoreTemplate(
     demo: false,
     shelves: [],
   };
-  const base = woodScene(emptyShop, books, template.variant);
+  // A growing case keeps its tiers; an older one its full case.
+  const base = woodScene(emptyShop, books, template.variant, {
+    tiers: scene.growth === "auto" ? tiersOf(scene) : "fixed",
+  });
   base.ownerManaged = true;
   base.templateId = id;
   base.theme = {
