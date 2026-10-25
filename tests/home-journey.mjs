@@ -732,7 +732,12 @@ try {
       `${label} the book page still offers 読みたい on others' 便り`,
       async () => {
         await go("/books/invisible-cities/");
-        const post = card("すみれ", "どこから開いてもいい本");
+        // The 便り is where the reader met the book (この本との出会い), and
+        // among the book's 便り, last.
+        const met = page.locator(".book-encounters article.letter");
+        await expect(met).toHaveCount(1);
+        await expect(met).toContainText("どこから開いてもいい本");
+        const post = card("すみれ", "どこから開いてもいい本").last();
         await expect(post.locator(".letter-book")).toHaveCount(0);
         const want = post.getByRole("button", { name: "読みたい" });
         await expect(want).toHaveAttribute("aria-pressed", "true");

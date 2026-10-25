@@ -24,6 +24,7 @@ import {
 import { isSampleId } from "../lib/record-kind";
 import { CoverRemovalLink } from "./Report";
 import { BookFeelings } from "./ReadingRecords";
+import { BookEncounters } from "./BookEncounters";
 import { BackLink } from "./BackLink";
 import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
 import { findReader, reviewCoverOf, reviewNoteOf } from "../lib/social";
@@ -194,6 +195,12 @@ export function BookView({
         </div>
       </section>
       <BookFeelings
+        book={book}
+        state={state}
+        actions={actions}
+        notify={notify}
+      />
+      <BookEncounters
         book={book}
         state={state}
         actions={actions}

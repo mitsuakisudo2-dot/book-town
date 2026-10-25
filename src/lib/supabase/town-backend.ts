@@ -508,6 +508,7 @@ async function readTown(
     libraryEntries,
     libraryShelves,
     libraryShelfBooks,
+    encounters,
     myBooks,
   ] = await Promise.all([
     townViewOf(client, userId),
@@ -611,6 +612,17 @@ async function readTown(
         ["shelf_id", "book_id"],
       ),
     ),
+    // Where the person met books (book_encounters): their own diary.
+    own((id) =>
+      allRows(
+        (count) =>
+          client
+            .from("book_encounters")
+            .select("*", { count })
+            .eq("user_id", id),
+        ["id"],
+      ),
+    ),
     // The books the person typed in, to tell others' apart.
     userId === null ? undefined : myBooksOf(client),
   ]);
@@ -682,6 +694,7 @@ async function readTown(
     libraryEntries,
     libraryShelves,
     libraryShelfBooks,
+    encounters,
     posts,
     postReactions,
     spoilerReports,
@@ -1597,6 +1610,34 @@ export async function applyWrite(
             onConflict: "user_id,shelf_id,book_id",
             ...ignore,
           }),
+        );
+      return;
+    case "encounters":
+      for (const id of write.remove)
+        await settled(
+          client
+            .from("book_encounters")
+            .delete()
+            .match({ user_id: ids.userId, id }),
+        );
+      for (const row of write.add) {
+        // Sent again, the same row is passed over (its id is the device's).
+        const outcome = await client
+          .from("book_encounters")
+          .upsert(row, { onConflict: "id", ...ignore });
+        // The same press already kept under another id (another device),
+        // or a post or shop gone before it got there: the diary has nothing
+        // to keep, and turning it away would hold back what comes after.
+        if (outcome.error?.code === "23505" || outcome.error?.code === "23503")
+          continue;
+        await settled(Promise.resolve(outcome));
+      }
+      for (const { id, patch } of write.patches)
+        await settled(
+          client
+            .from("book_encounters")
+            .update(patch)
+            .match({ user_id: ids.userId, id }),
         );
       return;
     case "remove":

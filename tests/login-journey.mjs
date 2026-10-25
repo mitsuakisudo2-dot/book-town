@@ -894,6 +894,9 @@ const standIn = async (route) => {
           : (town?.[table] ?? []),
     );
   }
+  // Where the reader met a book (book_encounters): taken, like the database.
+  if (url.pathname === "/rest/v1/book_encounters")
+    return route.fulfill({ status: 201, body: "" });
   return json(404, { message: "not mocked: " + url.pathname });
 };
 await context.route(supabase + "/**", standIn);

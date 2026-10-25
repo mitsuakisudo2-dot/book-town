@@ -241,7 +241,17 @@ export function BookInHand({
         pop.legacy.itemId,
         reaction,
       );
-    else reading?.toggleReaction(entryKey(pop), reaction);
+    else if (reading) {
+      const key = entryKey(pop);
+      actions.meetScenePop(
+        pop.shopId,
+        pop.bookId,
+        key,
+        reaction,
+        !(reading.reactions[key] ?? []).includes(reaction),
+      );
+      reading.toggleReaction(key, reaction);
+    }
   }
   // A turn is told to a screen reader from a hidden copy of the new POP.
   // While the copy is there the page on show is hidden from it, so the
@@ -743,7 +753,7 @@ export function BookInHand({
             className={"bh-nav-wish" + (wished ? " is-saved" : "")}
             aria-pressed={wished}
             onClick={() => {
-              actions.toggleWish(book.id);
+              actions.toggleWish(book.id, shop.id);
               notify(
                 wished
                   ? "読みたいリストから外しました"

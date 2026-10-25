@@ -6,8 +6,11 @@ import { restorePoster, type Poster } from "./posters";
 import {
   validateEntry,
   cleanShelfAudiences,
+  encounterKey,
+  readEncounter,
   readRule,
   validateShelf,
+  type Encounter,
   type LibraryEntry,
   type LibraryShelf,
   type ShelfBook,
@@ -83,6 +86,8 @@ type PersonalData = Pick<
   /** The shelves the reader made, and their books; none in a save from before them. */
   libraryShelves?: TownState["libraryShelves"];
   libraryShelfBooks?: TownState["libraryShelfBooks"];
+  /** Where the viewer met books; none in a save from before them. */
+  encounters?: TownState["encounters"];
   /** Only books the viewer registered; their jackets are redrawn on load. */
   addedBooks: Pick<Book, "id" | "title" | "author" | "isbn" | "price">[];
 };
@@ -351,6 +356,21 @@ function restoreShelfBooks(
   });
 }
 
+/** The encounters kept here, of books the town knows, each once. */
+function restoreEncounters(value: unknown, bookIds: Set<string>): Encounter[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((item: unknown): Encounter[] => {
+    const c = readEncounter(item);
+    if (!c || !bookIds.has(c.bookId)) return [];
+    const key = encounterKey(c);
+    if (seen.has(c.id) || seen.has(key)) return [];
+    seen.add(c.id);
+    seen.add(key);
+    return [c];
+  });
+}
+
 function restoreRecords(value: unknown, bookIds: Set<string>): ReadingRecord[] {
   if (!Array.isArray(value)) return [];
   const ids = new Set<string>();
@@ -579,6 +599,7 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
           libraryShelves,
           libraryEntries,
         ),
+        encounters: restoreEncounters(data.encounters, bookIds),
         readingRecords: [
           ...initial.readingRecords,
           ...restoreRecords(data.readingRecords, bookIds),
@@ -642,6 +663,7 @@ export function serializeTown(state: TownState): string {
       libraryEntries: state.libraryEntries,
       libraryShelves: state.libraryShelves,
       libraryShelfBooks: state.libraryShelfBooks,
+      encounters: state.encounters,
       readingRecords: state.readingRecords.filter(
         (record) => record.readerId === ME_ID,
       ),

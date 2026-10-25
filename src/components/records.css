@@ -319,3 +319,84 @@
   font-size: var(--t-cap);
   color: var(--ink-2);
 }
+
+/* この本との出会い: the reader's own, on the book page (管理表9) */
+.book-encounters {
+  margin: 42px 0;
+  padding: 24px 26px;
+  border-radius: var(--r-box);
+  background: var(--sheet);
+  border: 1px solid var(--line);
+}
+.book-encounters h2 {
+  font-family: var(--serif);
+  font-size: var(--t-head);
+  font-weight: 500;
+  margin: 6px 0 8px;
+}
+.book-encounters-note {
+  font-size: var(--t-cap);
+  line-height: 1.8;
+  color: var(--ink-2);
+  margin-bottom: 14px;
+}
+.book-encounters ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.book-encounters li {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.book-encounters-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: var(--t-cap);
+}
+.book-encounters time {
+  flex: none;
+  color: var(--ink-2);
+}
+.book-encounters-line {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.book-encounters-line q {
+  display: block;
+  color: var(--ink-2);
+}
+.book-encounters-thing {
+  display: block;
+  margin-top: 10px;
+}
+.book-encounters-pop {
+  padding: 14px 16px;
+  border-radius: var(--r-box);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.book-encounters-pop-words {
+  display: block;
+  font-family: var(--serif);
+  line-height: 1.8;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  margin-bottom: 6px;
+}
+.book-encounters-pop small {
+  font-size: var(--t-cap);
+  color: var(--green);
+}
+.book-encounters .text-btn {
+  flex: none;
+}
+@media (max-width: 600px) {
+  .book-encounters {
+    padding: 20px 18px;
+  }
+}

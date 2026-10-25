@@ -32,6 +32,9 @@ import {
   opBefore,
   PLACEMENT_KEY_MAX_LENGTH,
   popEncounterKind,
+  readEncounter,
+  restoreEncounter,
+  forgetEncounter,
   pressStatus,
   reactionSet,
   READING_STATUSES,
@@ -60,6 +63,8 @@ import {
   type OpBefore,
   type ShelfBook,
 } from "../src/lib/library";
+import { encounterLine } from "../src/lib/encounter-words";
+import { scenePopOf, shelfPopOf } from "../src/lib/encounter-places";
 import type { Poster } from "../src/lib/posters";
 import {
   ME_ID,
@@ -1316,6 +1321,187 @@ for (const c of LIBRARY_CASES.encounter)
     if (made && c.reply) assert.equal(made.bookId, "reply-book");
     if (made && c.via !== "book") assert.equal(made.otherReaderId, OTHER);
   });
+
+check(
+  "管理表9 a 読みたい in another reader's shop is met in the shop alone: never in one's own, never a sample's with an account, never a like",
+  () => {
+    const shop = { id: SHOP_ID, ownerId: OTHER };
+    const met = encounterOf(
+      { via: "shop", kind: "want", shop, bookId: "b" },
+      uuid(0xe1),
+      AT,
+      true,
+    );
+    assert.ok(met);
+    assert.equal(validateEncounter(met, { insert: true }), null);
+    assert.deepEqual(
+      [met.via, met.shopId, met.placementKey, met.postId, met.otherReaderId],
+      ["shop", SHOP_ID, null, null, OTHER],
+    );
+    const none = (input: EncounterInput, account = true) =>
+      encounterOf(input, uuid(0xe2), AT, account);
+    assert.equal(
+      none({
+        via: "shop",
+        kind: "want",
+        shop: { ...shop, ownerId: ME_ID },
+        bookId: "b",
+      }),
+      null,
+    );
+    assert.equal(none({ via: "shop", kind: "like", shop, bookId: "b" }), null);
+    const sample = { id: "sample-shop", ownerId: OTHER };
+    assert.equal(
+      none({ via: "shop", kind: "want", shop: sample, bookId: "b" }),
+      null,
+    );
+    assert.ok(
+      none({ via: "shop", kind: "want", shop: sample, bookId: "b" }, false),
+    );
+    assert.equal(validateEncounter({ ...met, kind: "love" }), "kind");
+    assert.equal(
+      validateEncounter({ ...met, placementKey: "k" }),
+      "placementKey",
+    );
+    assert.equal(
+      validateEncounter({ ...met, shopId: null }, { insert: true }),
+      "shopId",
+    );
+    // The same shop's 読みたい is one, whatever the device named it.
+    const again = encounterOf(
+      { via: "shop", kind: "want", shop, bookId: "b" },
+      uuid(0xe3),
+      plus(1),
+      true,
+    )!;
+    assert.equal(encounterKey(again), encounterKey(met));
+    assert.equal(meetEncounter([met], again).met, false);
+  },
+);
+
+check(
+  "管理表9 an encounter read back is the app's shape or nothing: a pair the table refuses or a broken row is passed over",
+  () => {
+    const met = encounterOf(
+      {
+        via: "shop",
+        kind: "want",
+        shop: { id: SHOP_ID, ownerId: OTHER },
+        bookId: "b",
+      },
+      uuid(0xe1),
+      AT,
+      true,
+    )!;
+    assert.deepEqual(readEncounter(JSON.parse(JSON.stringify(met))), met);
+    assert.equal(readEncounter({ ...met, kind: "like" }), null);
+    assert.equal(readEncounter({ ...met, via: "walk" }), null);
+    assert.equal(readEncounter({ ...met, createdAt: "きのう" }), null);
+    assert.equal(readEncounter({ ...met, memo: "" }), null);
+    assert.equal(readEncounter(null), null);
+    // What belongs to another way of meeting is not carried over.
+    const read = readEncounter({
+      ...met,
+      postId: uuid(0xa1),
+      placementKey: "k",
+    });
+    assert.deepEqual([read?.postId, read?.placementKey], [null, null]);
+  },
+);
+
+check(
+  "管理表9 消す takes the row away whole, and 元に戻す puts the same row back, unless the book was met there again meanwhile",
+  () => {
+    const shop = { id: SHOP_ID, ownerId: OTHER };
+    const met = encounterOf(
+      { via: "shop", kind: "want", shop, bookId: "b" },
+      uuid(0xe1),
+      AT,
+      true,
+    )!;
+    const withMemo = writeMemo([met], met.id, "棚の並びがよかった", plus(1));
+    const gone = forgetEncounter(withMemo, met.id);
+    assert.deepEqual(gone, []);
+    assert.equal(forgetEncounter(gone, met.id), gone);
+    const back = restoreEncounter(gone, withMemo[0]);
+    assert.deepEqual(back, withMemo);
+    assert.equal(restoreEncounter(back, withMemo[0]), back);
+    const anew = encounterOf(
+      { via: "shop", kind: "want", shop, bookId: "b" },
+      uuid(0xe4),
+      plus(2),
+      true,
+    )!;
+    assert.deepEqual(restoreEncounter([anew], withMemo[0]), [anew]);
+  },
+);
+
+check(
+  "管理表9 each encounter says where and from whom in one line, and still says where once the post or the shop is gone",
+  () => {
+    const line = (via: Encounter["via"], kind: EncounterKind, names = {}) =>
+      encounterLine({ via, kind }, names);
+    assert.equal(
+      line("post", "like", { who: "みどり" }),
+      "みどりさんの便りでいいね",
+    );
+    assert.equal(line("post", "want"), "便りで読みたくなった");
+    assert.equal(
+      line("pop", "love", { shop: "夜の書店" }),
+      "「夜の書店」のPOPで私も好き！",
+    );
+    assert.equal(line("pop", "want"), "書店のPOPで読みたくなった");
+    assert.equal(
+      line("shop", "want", { shop: "夜の書店" }),
+      "「夜の書店」で読みたいにした",
+    );
+    assert.equal(line("book", "want"), "本のページで読みたいにした");
+  },
+);
+
+check(
+  "管理表9 a POP met is found again where it stands now: on a shop's public shelf, or in its scene; nothing for a hidden shelf or another shop's key",
+  () => {
+    const pop = (placementKey: string, shopId = SHOP_ID) => ({
+      via: "pop" as const,
+      shopId,
+      placementKey,
+    });
+    const shops = [
+      {
+        id: SHOP_ID,
+        ownerId: OTHER,
+        shelves: [
+          {
+            id: "s1",
+            isPublic: true,
+            items: [{ id: "i1", pop: " 夜に読む本 " }],
+          },
+          { id: "s2", isPublic: false, items: [{ id: "i2", pop: "秘密" }] },
+        ],
+      },
+    ] as unknown as Parameters<typeof shelfPopOf>[1];
+    const key = (...parts: string[]) => JSON.stringify(parts);
+    assert.deepEqual(shelfPopOf(pop(key(SHOP_ID, "s1", "i1")), shops), {
+      words: "夜に読む本",
+      shelfId: "s1",
+    });
+    assert.equal(shelfPopOf(pop(key(SHOP_ID, "s2", "i2")), shops), null);
+    assert.equal(shelfPopOf(pop(key(SHOP_ID, "s1", "gone")), shops), null);
+    assert.equal(shelfPopOf(pop(key(OTHER, "s1", "i1")), shops), null);
+    assert.equal(shelfPopOf(pop("{not json"), shops), null);
+    assert.deepEqual(scenePopOf(pop(key("scene", SHOP_ID, "p9"))), {
+      shopId: SHOP_ID,
+      placementId: "p9",
+    });
+    assert.equal(scenePopOf(pop(key("scene", OTHER, "p9"))), null);
+    assert.equal(shelfPopOf(pop(key("scene", SHOP_ID, "p9")), shops), null);
+    assert.equal(
+      scenePopOf({ via: "shop", shopId: SHOP_ID, placementKey: null }),
+      null,
+    );
+  },
+);
 
 check(
   "decision 1 taking back: without a memo the encounter and the row go; with one both stay; pressing again revives the same row",
