@@ -20,12 +20,6 @@ import {
 import { cleanShelves, emptyTown, type Write } from "./town-remote";
 import type { Missed } from "./supabase/sync";
 import { townMissedLine } from "./missed-changes";
-import {
-  FORGET_MOST,
-  forgettable,
-  notKeptInBrowser,
-  withoutBooks,
-} from "./forget-books";
 import { FIRST_SHELF_NAME } from "./words";
 import { draftOwner } from "./draft-owner";
 import { takeIn, type Arrived } from "./arrived";
@@ -1573,6 +1567,10 @@ export function createTownStore(
      * this browser names. The ids that went.
      */
     async forget(ids: string[], batch: string): Promise<string[]> {
+      if (loading) return [];
+      // Read only when a scan ends, so no page carries it for nothing.
+      const { FORGET_MOST, forgettable, notKeptInBrowser, withoutBooks } =
+        await import("./forget-books");
       if (loading) return [];
       const asked = notKeptInBrowser(forgettable(state, ids, batch));
       if (!asked.length) return [];
