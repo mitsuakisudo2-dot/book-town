@@ -365,3 +365,25 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* 店の大きさ: the five sizes wrap inside the section on a narrow phone. */
+.scene-size .chips {
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+.scene-pinned {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+.scene-pinned .scene-hint {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.scene-pinned .scene-hint svg {
+  flex: 0 0 auto;
+  align-self: center;
+}

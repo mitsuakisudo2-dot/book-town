@@ -20,7 +20,7 @@ import {
   type StoreScene,
 } from "./store-scene";
 import { bookById } from "./book-name";
-import { dealToTiers, growingFrame, setOutTier } from "./growing-shop";
+import { CASE_ID, DEFAULT_DOODLES, growingFrame, regrow } from "./growing-shop";
 
 export interface ReadEntry {
   id: string;
@@ -90,7 +90,6 @@ const FACES_PER_TIER: Record<number, number[]> = {
   1: [2, 2, 2],
   2: [99, 99, 99],
 };
-const DEFAULT_DOODLES = ["travel", "daily", "forest", "stars"];
 /**
  * The scene a shop shows before its owner arranges it. A reader's case grows
  * with its books; `tiers` asks for that many tiers instead (0 is the stand),
@@ -426,43 +425,14 @@ function growingWood(
   variant: number,
   tiers?: number,
 ): StoreScene {
-  const shelves = shop.shelves.filter((s) => s.isPublic);
-  const groups = shelves.map((shelf) =>
-    shelf.items
-      .filter((item) => bookById(books, item.bookId))
-      .map((item) => ({ item, shelf })),
-  );
-  const count = groups.reduce((n, g) => n + g.length, 0);
-  const dealt = dealToTiers(groups);
-  const frame = growingFrame(tiers ?? (count === 1 ? 0 : dealt.length));
   scene.growth = "auto";
   scene.objects.push({
-    id: "main-shelf",
+    id: CASE_ID,
     kind: "furniture",
     parentId: null,
-    rect: frame.furniture,
+    rect: growingFrame(0).furniture,
     z: 1,
-    furnitureType: frame.furnitureType,
-  });
-  const stand = frame.furnitureType === "stand";
-  frame.rows.forEach((shape, i) => {
-    const first = dealt[i]?.[0];
-    scene.objects.push({
-      id: "row-" + i,
-      kind: "row",
-      parentId: "main-shelf",
-      rect: shape.rect,
-      z: 2,
-      // Only tiers with books carry a shelf name; a tier that continues the
-      // shelf above shares its chalkboard (StoreCanvas).
-      ...(first && !stand
-        ? { text: first.shelf.name, doodle: DEFAULT_DOODLES[i] }
-        : {}),
-      bookHeight: shape.bookHeight,
-      gap: 0.012,
-      mode: stand ? "face" : "mixed",
-      isPublic: true,
-    });
+    furnitureType: "stand",
   });
   // The window template's table, as on the full case.
   if (variant === 3)
@@ -488,38 +458,22 @@ function growingWood(
         isPublic: true,
       },
     );
-  // With fewer tiers asked for than the books need, the last tier takes the
-  // rest; what it cannot hold waits unplaced.
-  const rows = frame.rows.length;
-  const dealtTo = dealt
-    .slice(0, rows - 1)
-    .concat([dealt.slice(rows - 1).flat()]);
-  dealtTo.forEach((entries, i) => {
-    const ids = entries.map(
-      ({ item }) => "placement:" + shop.id + ":" + item.id,
-    );
-    scene = setOutTier(
-      scene,
-      "row-" + i,
-      entries.map(({ item }, n) => ({
-        id: ids[n],
-        book: bookById(books, item.bookId)!,
-        face: item.display === "face",
-        pop: Boolean(item.pop.trim()),
-      })),
-    );
-    entries.forEach(({ item, shelf }, n) => {
-      const id = ids[n];
-      // A book that did not fit waits unplaced, with its shelf and POP.
+  // Every book of the public shelves waits with its POP; the case is then
+  // set out around them, as it is again whenever the shelves change.
+  for (const shelf of shop.shelves.filter((s) => s.isPublic))
+    for (const item of shelf.items) {
+      const book = bookById(books, item.bookId);
+      if (!book) continue;
+      const id = "placement:" + shop.id + ":" + item.id;
+      scene = addBookPlacement(scene, book, null, id, item.display);
       objectById(scene, id)!.source = {
         shopId: shop.id,
         shelfId: shelf.id,
         itemId: item.id,
       };
       scene = setBookPop(scene, id, item.pop);
-    });
-  });
-  return scene;
+    }
+  return regrow(scene, shop, books, { tiers });
 }
 export function publicWalkShops(
   state: Pick<TownState, "shops" | "ownShop" | "books">,

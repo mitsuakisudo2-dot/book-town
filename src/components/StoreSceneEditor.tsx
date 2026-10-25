@@ -14,9 +14,17 @@ import {
   migrateShopScene,
   renameSceneObject,
   setRowBoard,
+  setShopSize,
   takePlacementOff,
   type TemplateId,
 } from "../lib/store-customization";
+import {
+  GROW,
+  SHOP_SIZES,
+  pinRow,
+  unpinRow,
+  type ShopSize,
+} from "../lib/growing-shop";
 import {
   addBookPlacement,
   bookPop,
@@ -195,7 +203,7 @@ export function StoreSceneEditor({
         ) + 1,
       );
       objectById(next, id)!.isPublic = row.isPublic === true;
-      return next;
+      return pinRow(next, row.id);
     });
     setPlacementId(id);
   }
@@ -240,6 +248,17 @@ export function StoreSceneEditor({
     setRowId("row-0");
     setPlacementId(null);
   }
+  function chooseSize(size: ShopSize) {
+    edit((scene) => setShopSize(scene, size, shop, state.books));
+    setPlacementId(null);
+  }
+  const sizeName = (size: ShopSize) =>
+    size === "auto" ? GROW.auto : counted(size, "段");
+  const rowName = (r: typeof row, i: number) =>
+    nth(i + 1, "段") +
+    " · " +
+    (r.text || "名前のない棚") +
+    (r.pinned ? " · " + GROW.pinnedMark : "");
   function selectBook(id: string) {
     setPlacementId(id);
     const selected = objectById(draft, id);
@@ -380,6 +399,29 @@ export function StoreSceneEditor({
                 </select>
               </label>
             </fieldset>
+            <fieldset className="scene-section scene-size" disabled={waiting}>
+              <legend>{GROW.size}</legend>
+              <div className="chips">
+                {SHOP_SIZES.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    className="chip"
+                    aria-pressed={draft.growth === size}
+                    onClick={() => chooseSize(size)}
+                  >
+                    {sizeName(size)}
+                  </button>
+                ))}
+              </div>
+              <p className="scene-hint">
+                {draft.growth === undefined
+                  ? GROW.oldCase
+                  : draft.growth === "auto"
+                    ? GROW.autoHint
+                    : GROW.keptHint(sizeName(draft.growth))}
+              </p>
+            </fieldset>
             <fieldset className="scene-section" disabled={waiting}>
               <legend>棚と並べ方</legend>
               <label>
@@ -394,11 +436,26 @@ export function StoreSceneEditor({
                 >
                   {rows.map((r, i) => (
                     <option value={r.id} key={r.id}>
-                      {nth(i + 1, "段")} · {r.text || "名前のない棚"}
+                      {rowName(r, i)}
                     </option>
                   ))}
                 </select>
               </label>
+              {row.pinned && (
+                <div className="scene-pinned">
+                  <p className="scene-hint">
+                    <Icon name="pin" size={14} />
+                    {GROW.pinned}
+                  </p>
+                  <button
+                    type="button"
+                    className="text-btn"
+                    onClick={() => edit((s) => unpinRow(s, row.id))}
+                  >
+                    {GROW.unpin}
+                  </button>
+                </div>
+              )}
               <label>
                 棚の案内札
                 <input
@@ -450,7 +507,7 @@ export function StoreSceneEditor({
                     edit((s) => {
                       const next = structuredClone(s);
                       objectById(next, row.id)!.isPublic = e.target.checked;
-                      return next;
+                      return pinRow(next, row.id);
                     })
                   }
                 />
@@ -569,7 +626,7 @@ export function StoreSceneEditor({
                     <option value="">まだ並べない</option>
                     {rows.map((r, i) => (
                       <option key={r.id} value={r.id}>
-                        {nth(i + 1, "段")} · {r.text || "名前のない棚"}
+                        {rowName(r, i)}
                       </option>
                     ))}
                   </select>
