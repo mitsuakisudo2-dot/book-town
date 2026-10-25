@@ -1,5 +1,4 @@
 "use client";
-import type { CSSProperties } from "react";
 import {
   GROW,
   SHOP_SIZES,
@@ -8,10 +7,7 @@ import {
   type ShopSize,
 } from "../lib/growing-shop";
 import type { StoreScene } from "../lib/store-scene";
-import type { Book } from "../lib/types";
 import { counted } from "../lib/words";
-import { StoreCanvas } from "./StoreCanvas";
-import "./walk.css";
 import "./scene-editor.css";
 
 export const sizeName = (size: ShopSize) =>
@@ -19,7 +15,13 @@ export const sizeName = (size: ShopSize) =>
 
 /** The case drawn from its own frame, so each choice looks like the shop it
  * makes. `more` draws a faint tier below: the case still grows. */
-function CaseDrawing({ tiers, more }: { tiers: number; more?: boolean }) {
+export function CaseDrawing({
+  tiers,
+  more,
+}: {
+  tiers: number;
+  more?: boolean;
+}) {
   const frame = growingFrame(tiers);
   const f = frame.furniture;
   const next = more && tiers < 4 ? growingFrame(tiers + 1).furniture : null;
@@ -75,72 +77,47 @@ function CaseDrawing({ tiers, more }: { tiers: number; more?: boolean }) {
 }
 
 /**
- * 店の大きさ, chosen by pressing a drawing of the case, beside the shop as
- * it stands now. Choosing saves at once; the toast can take it back.
+ * 店の大きさ, chosen by pressing a drawing of the case. The shop itself,
+ * behind, shows what was chosen.
  */
-export function ShopSizePicker({
-  scene,
-  books,
+export function ShopSizeChoices({
+  growth,
   bookCount,
   disabled,
   onChoose,
 }: {
-  scene: StoreScene;
-  books: Book[];
+  growth: StoreScene["growth"];
   /** The books on the public shelves, for the drawing of 本に合わせる. */
   bookCount: number;
-  disabled: boolean;
+  disabled?: boolean;
   onChoose: (size: ShopSize) => void;
 }) {
-  const style = {
-    "--walk-wood": scene.theme.wood,
-    "--walk-paper": scene.theme.paper,
-    "--walk-light": scene.theme.light,
-    "--walk-darkness": scene.background.darkness,
-  } as CSSProperties;
   return (
-    <section className="shop-size" aria-labelledby="shop-size-title">
-      <h2 id="shop-size-title">{GROW.size}</h2>
-      <div className="shop-size-stage">
-        <div className="scene-preview shop-size-preview" style={style} inert>
-          <div className="walk-artboard" aria-label="いまの店内">
-            <StoreCanvas
-              scene={scene}
-              books={books}
-              onBook={() => {}}
-              onPop={() => {}}
-              onZoom={() => {}}
-              onLabel={() => {}}
+    <>
+      <div className="shop-size-options" role="group" aria-label={GROW.size}>
+        {SHOP_SIZES.map((size) => (
+          <button
+            key={size}
+            type="button"
+            aria-pressed={growth === size}
+            disabled={disabled}
+            onClick={() => onChoose(size)}
+          >
+            <CaseDrawing
+              tiers={size === "auto" ? Math.max(1, tiersFor(bookCount)) : size}
+              more={size === "auto"}
             />
-          </div>
-        </div>
-        <div className="shop-size-options" role="group" aria-label={GROW.size}>
-          {SHOP_SIZES.map((size) => (
-            <button
-              key={size}
-              type="button"
-              aria-pressed={scene.growth === size}
-              disabled={disabled}
-              onClick={() => onChoose(size)}
-            >
-              <CaseDrawing
-                tiers={
-                  size === "auto" ? Math.max(1, tiersFor(bookCount)) : size
-                }
-                more={size === "auto"}
-              />
-              <span>{sizeName(size)}</span>
-            </button>
-          ))}
-        </div>
+            <span>{sizeName(size)}</span>
+          </button>
+        ))}
       </div>
       <p className="shop-size-hint">
-        {scene.growth === undefined
+        {growth === undefined
           ? GROW.oldCase
-          : scene.growth === "auto"
+          : growth === "auto"
             ? GROW.autoHint
-            : GROW.keptHint(sizeName(scene.growth))}
+            : GROW.keptHint(sizeName(growth))}
       </p>
-    </section>
+    </>
   );
 }

@@ -101,6 +101,11 @@ export const GROW = {
     "この段は、あなたが並べた形のまま残します。新しい本は、ほかの段に並びます。",
   unpin: "本に合わせて並べ直す",
   pinnedMark: "手を加えた段",
+  waiting: "まだ並べていない本",
+  waitingHint:
+    "棚に入りきらない本と、下ろした本です。POPも残っています。押すと、空いている段に並べます。",
+  noRoom:
+    "空いている段がありません。店の大きさを広げるか、ほかの本を下ろすと並べられます。",
   chosen: (size: string) => `店の大きさを「${size}」にしました。`,
   grew: (tiers: string) => `店が少し広がりました（${tiers}）。`,
   keep: (tiers: string) => `${tiers}のままにする`,

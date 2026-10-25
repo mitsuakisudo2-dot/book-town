@@ -381,31 +381,7 @@
   align-self: center;
 }
 
-/* 店の大きさ on the shelves page: the shop as it stands, and a drawing of
-   the case for each size to press. */
-.shop-size {
-  border: 1px solid var(--line);
-  border-radius: var(--r-box);
-  padding: 18px 20px;
-  margin: 20px 0;
-}
-.shop-size h2 {
-  font-family: var(--serif);
-  font-size: var(--t-title);
-  margin: 0 0 12px;
-}
-.shop-size-stage {
-  display: flex;
-  gap: 14px;
-  align-items: stretch;
-}
-.shop-size-preview {
-  position: relative;
-  flex: 0 0 42%;
-  max-width: 200px;
-  align-self: start;
-  pointer-events: none;
-}
+/* 店の大きさ: a drawing of the case for each size to press. */
 .shop-size-options {
   flex: 1;
   display: grid;
@@ -453,4 +429,174 @@
   font-size: var(--t-cap);
   line-height: 1.8;
   margin: 12px 0 0;
+}
+
+/* 整える: the shop fills the screen, the tools below it, and what a tool or
+   a book opens rises over the tools as a sheet. */
+/* It is a walk-view too, for the walk's own layers and look. */
+.tidy.walk-view {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  z-index: var(--layer-page);
+  display: flex;
+  flex-direction: column;
+  background: var(--shade);
+  color: var(--on-dark);
+}
+.tidy-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: max(6px, env(safe-area-inset-top)) 12px 6px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.tidy-top h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  text-align: center;
+  font-family: var(--serif);
+  font-size: var(--t-page);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tidy-stage.scene-preview {
+  position: relative;
+  isolation: isolate;
+  width: auto;
+  max-width: none;
+  top: auto;
+  border-radius: 0;
+}
+.tidy-stage .walk-artboard {
+  width: min(100cqw, 100cqh * 9 / 16);
+}
+.tidy-waiting {
+  position: absolute;
+  left: 50%;
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-cap);
+  font-weight: 700;
+}
+.tidy-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  max-height: 58%;
+  overflow: auto;
+  padding: 14px 16px 16px;
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+.tidy-sheet h3 {
+  margin: 0 40px 10px 0;
+  font-size: var(--t-page);
+}
+.tidy-sheet .tidy-title {
+  margin-bottom: 2px;
+  font-family: var(--serif);
+}
+.tidy-sub {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: var(--t-cap);
+}
+.tidy-sheet-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+}
+.tidy-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.tidy-seg button,
+.tidy-acts button,
+.tidy-list button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+}
+.tidy-seg button[aria-pressed="true"] {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+  font-weight: 700;
+}
+.tidy-acts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.tidy-list {
+  display: grid;
+  gap: 5px;
+}
+.tidy-list button {
+  justify-content: space-between;
+  text-align: left;
+}
+.tidy-list small {
+  display: block;
+  color: var(--muted);
+  font-size: var(--t-cap);
+}
+.tidy-search {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+}
+.tidy-pop {
+  display: grid;
+  gap: 8px;
+}
+.tidy-pop textarea {
+  width: 100%;
+  font: inherit;
+}
+.tidy-tools {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 4px 8px env(safe-area-inset-bottom);
+  background: var(--paper);
+  color: var(--ink);
+}
+.tidy-tools button {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-height: 60px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--t-cap);
+}
+.tidy-tools button[aria-pressed="true"] {
+  color: var(--green);
+  font-weight: 700;
 }
