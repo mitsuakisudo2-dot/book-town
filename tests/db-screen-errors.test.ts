@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import {
   SUPABASE_STANDIN,
+  clearOfJapanMidnight,
   migrationFiles,
   migrationText,
 } from "./fixtures/pglite-supabase";
 import { catalog } from "./fixtures/bibliography";
-import { clearOfJapanMidnight } from "./fixtures/japan-day";
 import {
   MESSAGE_LENGTH,
   PLACE_LENGTH,

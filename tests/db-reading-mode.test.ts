@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import {
   SUPABASE_STANDIN,
+  clearOfJapanMidnight,
   migrationFiles,
   migrationText,
 } from "./fixtures/pglite-supabase";
-import { clearOfJapanMidnight } from "./fixtures/japan-day";
 
 // 読書管理モードの土台 (item 98, supabase/migrations/*_reading_mode.sql). The
 // design is 読書管理モード_基本設計_2026-10-18, decided by けにーさん: the mode

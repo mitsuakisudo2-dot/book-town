@@ -12,8 +12,10 @@ import {
 } from "../src/lib/library";
 import { sampleBookRowId } from "../src/lib/samples";
 import { ACCOUNT_SCHEMAS_SQL, ACCOUNT_TABLES } from "./fixtures/account-tables";
-import { EXTENSIONS_STANDIN } from "./fixtures/pglite-supabase";
-import { clearOfJapanMidnight } from "./fixtures/japan-day";
+import {
+  EXTENSIONS_STANDIN,
+  clearOfJapanMidnight,
+} from "./fixtures/pglite-supabase";
 import { REPORT_COLUMNS } from "../src/lib/supabase/reports";
 import { pagePattern } from "../src/lib/supabase/site-notes";
 import { emptyTown, planWrites } from "../src/lib/town-remote";
