@@ -25,11 +25,13 @@ import {
   placementReactionKey,
   publicStoreScene,
   renameSceneObject,
+  sceneForShelves,
+  setShopSize,
   takePlacementOff,
   validateOwnedScene,
 } from "../src/lib/store-customization";
 import { WALK_KEY, decodeWalk, encodeWalk } from "../src/lib/walk-repository";
-import { GROW_MAX_TIERS, tiersOf } from "../src/lib/growing-shop";
+import { GROW_MAX_TIERS, tiersOf, unpinRow } from "../src/lib/growing-shop";
 import { emptyWalk, startWalk } from "../src/lib/walk-state";
 import { saveOwnedScene, updateWalk } from "../src/lib/walk-store";
 let passed = 0;
@@ -698,14 +700,15 @@ check("a decorated growing shop grows a tier for books with no room", () => {
   }
   assert.equal(tiersOf(s), GROW_MAX_TIERS);
   assert.ok(unplacedBooks(s).length > 0);
-  // The tiers the owner had keep their books in order: a case only grows.
+  // Tiers the owner did not arrange are the shop's: set out as a new shop
+  // would, and the same again when nothing changed.
   const before = migrateShopScene(ofShop(12), books, decorated);
   const after = migrateShopScene(ofShop(30), books, before);
-  for (const row of ["row-0", "row-1"])
-    assert.deepEqual(
-      rowBooks(after, row).slice(0, rowBooks(before, row).length),
-      rowBooks(before, row),
-    );
+  assert.deepEqual(
+    arrangement(after),
+    arrangement(woodScene(ofShop(30), books)),
+  );
+  assert.deepEqual(migrateShopScene(ofShop(30), books, after), after);
   // A template change keeps the growing case and its tiers.
   const changed = applyStoreTemplate(after, "study", books);
   assert.equal(changed.growth, "auto");
@@ -721,6 +724,131 @@ check("a decorated growing shop grows a tier for books with no room", () => {
       (o) => o.kind === "row",
     ).length,
     3,
+  );
+});
+check("a tier the owner arranged keeps its books as they are", () => {
+  const ofShop = (n: number) =>
+    shelfShop(
+      Array.from(
+        { length: n },
+        (_, i) => ["k" + i, books[i % books.length].id] as [string, string],
+      ),
+    );
+  const start = migrateShopScene(ofShop(14), books);
+  assert.equal(tiersOf(start), 2);
+  // The owner turns a book of the first tier: that tier is theirs now.
+  const first = rowBooks(start, "row-0");
+  const turned = changePlacement(
+    start,
+    first[first.length - 1],
+    { display: "face" },
+    books,
+  );
+  assert.equal(objectById(turned, "row-0")!.pinned, true);
+  assert.equal(objectById(turned, "row-1")!.pinned, undefined);
+  const mine = rowBooks(turned, "row-0");
+  // New books go on the other tiers, and the case grows for them; the
+  // arranged tier keeps its books in their order and their look.
+  const grown = migrateShopScene(ofShop(30), books, turned);
+  assert.deepEqual(rowBooks(grown, "row-0"), mine);
+  for (const id of mine)
+    assert.equal(
+      objectById(grown, id)!.display,
+      objectById(turned, id)!.display,
+    );
+  assert.ok(tiersOf(grown) > 2);
+  assert.equal(grown.objects.filter((o) => o.kind === "book").length, 30);
+  assert.equal(sceneForShelves(grown, ofShop(30), books), null);
+  // With fewer books it does not go back on the arranged tier either.
+  const fewer = migrateShopScene(ofShop(3), books, grown);
+  assert.ok(rowBooks(fewer, "row-0").length > 0);
+  assert.deepEqual(
+    rowBooks(fewer, "row-0"),
+    mine.filter((id) => /:k[0-2]$/.test(id)),
+  );
+  // Given back, the tier is set out by the shop again.
+  const back = migrateShopScene(ofShop(30), books, unpinRow(grown, "row-0"));
+  assert.deepEqual(
+    arrangement(back),
+    arrangement(woodScene(ofShop(30), books)),
+  );
+  // A book the owner took off waits, whatever the shelves do.
+  const off = takePlacementOff(start, first[0]);
+  const followed = migrateShopScene(ofShop(20), books, off);
+  assert.equal(objectById(followed, first[0])!.parentId, null);
+  assert.equal(objectById(followed, first[0])!.held, true);
+  // Set out by hand again, it no longer waits.
+  const put = insertPlacement(followed, first[0], "row-1", 0);
+  assert.equal(objectById(put, first[0])!.held, undefined);
+  assert.equal(objectById(put, "row-1")!.pinned, true);
+});
+check("a case goes back a tier only past two books of slack", () => {
+  const ofShop = (n: number) =>
+    shelfShop(
+      Array.from(
+        { length: n },
+        (_, i) => ["h" + i, books[i % books.length].id] as [string, string],
+      ),
+    );
+  const eleven = migrateShopScene(ofShop(11), books);
+  assert.equal(tiersOf(eleven), 2);
+  const ten = migrateShopScene(ofShop(10), books, eleven);
+  assert.equal(tiersOf(ten), 2);
+  const nine = migrateShopScene(ofShop(9), books, ten);
+  assert.equal(tiersOf(nine), 2);
+  const eight = migrateShopScene(ofShop(8), books, nine);
+  assert.equal(tiersOf(eight), 1);
+  // Back up past ten, it grows at once.
+  assert.equal(tiersOf(migrateShopScene(ofShop(11), books, eight)), 2);
+});
+check("the owner chooses the size of the shop; nothing is lost", () => {
+  const ofShop = (n: number) =>
+    shelfShop(
+      Array.from(
+        { length: n },
+        (_, i) => ["z" + i, books[i % books.length].id] as [string, string],
+      ),
+    );
+  const thirty = ofShop(30);
+  const start = migrateShopScene(thirty, books);
+  for (const size of [1, 2, 3, 4] as const) {
+    const sized = setShopSize(start, size, thirty, books);
+    assert.equal(sized.growth, size);
+    assert.equal(tiersOf(sized), size, size + " tiers");
+    assert.deepEqual(validateOwnedScene(sized, thirty, books), []);
+    assert.equal(sized.objects.filter((o) => o.kind === "book").length, 30);
+    // Kept at that size, more books wait instead of growing the case.
+    const more = migrateShopScene(ofShop(40), books, sized);
+    assert.equal(tiersOf(more), size);
+    assert.equal(more.objects.filter((o) => o.kind === "book").length, 40);
+  }
+  // One tier: covers turn to spines before a book has to wait.
+  const one = setShopSize(start, 1, thirty, books);
+  const onTier = one.objects.filter((o) => o.parentId === "row-0");
+  assert.ok(onTier.filter((o) => o.display === "spine").length > 5);
+  assert.ok(unplacedBooks(one).length > 0);
+  // Back to growing with the books, the shop is set out as a new one.
+  const auto = setShopSize(one, "auto", thirty, books);
+  assert.equal(auto.growth, "auto");
+  assert.deepEqual(arrangement(auto), arrangement(woodScene(thirty, books)));
+  // A shop decorated before the shop grew moves to the growing case with
+  // its books, POPs and its private tier.
+  const old = structuredClone(fixedScene(ofShop(12)));
+  objectById(old, "row-2")!.isPublic = false;
+  const hidden = rowBooks(old, "row-2");
+  const withPop = setBookPop(old, rowBooks(old, "row-0")[0], "店主の言葉");
+  const moved = setShopSize(withPop, "auto", ofShop(12), books);
+  assert.equal(moved.growth, "auto");
+  assert.deepEqual(validateOwnedScene(moved, ofShop(12), books), []);
+  assert.equal(moved.objects.filter((o) => o.kind === "book").length, 12);
+  assert.equal(bookPop(moved, rowBooks(old, "row-0")[0])!.text, "店主の言葉");
+  const privateRow = moved.objects.find(
+    (o) => o.kind === "row" && o.isPublic === false,
+  )!;
+  assert.deepEqual(rowBooks(moved, privateRow.id), hidden);
+  assert.equal(
+    publicStoreScene(moved).objects.some((o) => hidden.includes(o.id)),
+    false,
   );
 });
 console.log(passed + " customization domain checks passed");

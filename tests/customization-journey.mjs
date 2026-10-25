@@ -936,6 +936,46 @@ try {
       await phone.close();
     },
   );
+  await check(
+    "整える: the shop fills the screen; its size, a book's look and 元に戻す work there",
+    async () => {
+      await page.goto(base + "/my-shop/");
+      await page
+        .getByRole("button", { name: "店を整える", exact: true })
+        .click();
+      const tidy = page.locator(".tidy");
+      await expect(tidy.locator(".walk-artboard")).toBeVisible();
+      const growth = async () => (await walkData()).sceneOverrides?.[0]?.growth;
+      const before = await growth();
+      await tidy
+        .getByRole("button", { name: "店の大きさ", exact: true })
+        .click();
+      await tidy.getByRole("button", { name: "2段", exact: true }).click();
+      await expect(
+        tidy.getByRole("button", { name: "2段", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(await growth()).toBe(2);
+      await tidy.getByRole("button", { name: "元に戻す", exact: true }).click();
+      await expect.poll(growth).toBe(before);
+      // A book opens its sheet; turning it is saved and its tier kept.
+      await tidy.locator(".walk-book-target").first().click();
+      const turn = tidy.getByRole("button", {
+        name: "背表紙を見せる",
+        exact: true,
+      });
+      const face = tidy.getByRole("button", {
+        name: "表紙を見せる",
+        exact: true,
+      });
+      const next =
+        (await face.getAttribute("aria-pressed")) === "true" ? turn : face;
+      await next.click();
+      await expect(next).toHaveAttribute("aria-pressed", "true");
+      await expect(tidy.locator(".scene-pinned")).toBeVisible();
+      await tidy.getByRole("button", { name: "閉じる" }).first().click();
+      await expect(tidy).toHaveCount(0);
+    },
+  );
   expect(errors).toEqual([]);
   console.log(passed.length + " customization browser checks passed");
 } finally {

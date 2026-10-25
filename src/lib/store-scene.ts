@@ -38,6 +38,11 @@ export interface SceneObject {
   mode?: "face" | "spine" | "mixed";
   /** A row's books stand from its left end (the default) or centred in it. */
   align?: "start" | "center";
+  /** A tier of a growing case the owner arranged: the shop leaves its books
+   * as they are (growing-shop). */
+  pinned?: boolean;
+  /** A book the owner took off the rows: it waits until they set it out. */
+  held?: boolean;
   /** Optional chalkboard heading and line drawing for a row (shelf sign). */
   boardTitle?: string;
   doodle?: string;
@@ -76,9 +81,9 @@ export interface StoreScene {
   /** A managed scene is the source of truth for the immersive store only. */
   ownerManaged?: boolean;
   templateId?: string;
-  /** "auto": the case grows with the books (growing-shop). A scene without
-   * it keeps the rows it has. */
-  growth?: "auto";
+  /** "auto": the case grows with the books; a number: it keeps that many
+   * tiers (growing-shop). A scene without it keeps the rows it has. */
+  growth?: "auto" | 1 | 2 | 3 | 4;
   theme: StoreTheme;
   background: {
     kind: "preset" | "uploaded";
@@ -335,7 +340,10 @@ export function validateScene(
     errors.push("invalid managed state");
   if (scene.templateId !== undefined && typeof scene.templateId !== "string")
     errors.push("invalid template");
-  if (scene.growth !== undefined && scene.growth !== "auto")
+  if (
+    scene.growth !== undefined &&
+    !(["auto", 1, 2, 3, 4] as unknown[]).includes(scene.growth)
+  )
     errors.push("invalid growth");
   const validRect = (r: Rect) =>
     r &&
@@ -385,6 +393,11 @@ export function validateScene(
       errors.push(o.id + ": invalid board");
     if (o.align !== undefined && o.align !== "start" && o.align !== "center")
       errors.push(o.id + ": invalid alignment");
+    if (
+      (o.pinned !== undefined && typeof o.pinned !== "boolean") ||
+      (o.held !== undefined && typeof o.held !== "boolean")
+    )
+      errors.push(o.id + ": invalid arrangement");
     if (!kinds.includes(o.kind)) {
       errors.push(o.id + ": invalid kind");
       continue;
