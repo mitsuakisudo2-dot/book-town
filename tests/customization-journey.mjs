@@ -976,6 +976,75 @@ try {
       await expect(tidy).toHaveCount(0);
     },
   );
+  await check(
+    "整える: a book is picked up and carried, or moved from its sheet, and 本を足す shows covers",
+    async () => {
+      await page
+        .getByRole("button", { name: "店を整える", exact: true })
+        .click();
+      const tidy = page.locator(".tidy");
+      await expect(tidy.locator(".walk-artboard")).toBeVisible();
+      /** The saved tiers' books, top to bottom, left to right. */
+      const tiers = () =>
+        page.evaluate(() => {
+          const scene = JSON.parse(localStorage.getItem("book-town-walk-v1"))
+            .sceneOverrides[0];
+          return scene.objects
+            .filter((o) => o.kind === "row" && o.parentId === "main-shelf")
+            .sort((a, b) => a.rect.y - b.rect.y)
+            .map((row) =>
+              scene.objects
+                .filter((o) => o.kind === "book" && o.parentId === row.id)
+                .sort((a, b) => a.order - b.order)
+                .map((o) => o.id),
+            );
+        });
+      const before = await tiers();
+      const tier = before.findIndex((books) => books.length > 1);
+      expect(tier).toBeGreaterThan(-1);
+      const [first] = before[tier];
+      const row = tidy.locator(".walk-row[data-row]").nth(tier);
+      const lifted = tidy.locator(`[data-placement="${first}"]`);
+      const from = await lifted.boundingBox();
+      const to = await row.boundingBox();
+      // Rested on, the book is picked up; let go at the tier's end, it
+      // stands there, and 元に戻す takes it back.
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+      await page.mouse.down();
+      await expect(tidy.locator(".tidy-carried")).toBeVisible();
+      await page.mouse.move(to.x + to.width - 4, to.y + to.height / 2, {
+        steps: 6,
+      });
+      await expect(row).toHaveClass(/is-lit/);
+      await page.mouse.up();
+      await expect(tidy.locator(".tidy-carried")).toHaveCount(0);
+      await expect.poll(async () => (await tiers())[tier].at(-1)).toBe(first);
+      await expect(tidy.locator(".walk-row-pin").first()).toBeVisible();
+      await expect(tidy.locator(".tidy-sheet")).toHaveCount(0);
+      await tidy.getByRole("button", { name: "元に戻す", exact: true }).click();
+      await expect.poll(tiers).toEqual(before);
+      // From its sheet: 動かす, then the place is pressed. (Enter opens a
+      // thin spine's own sheet, where a tap opens its tier.)
+      await lifted.press("Enter");
+      await tidy.getByRole("button", { name: "動かす", exact: true }).click();
+      await expect(tidy.locator(".tidy-placing")).toBeVisible();
+      await expect(row).toHaveClass(/is-lit/);
+      await page.mouse.click(to.x + to.width - 4, to.y + to.height / 2);
+      await expect(tidy.locator(".tidy-placing")).toHaveCount(0);
+      await expect.poll(async () => (await tiers())[tier].at(-1)).toBe(first);
+      await tidy.getByRole("button", { name: "元に戻す", exact: true }).click();
+      await expect.poll(tiers).toEqual(before);
+      // 本を足す: the books are shown by their covers, and found by name.
+      await tidy.getByRole("button", { name: "本を足す", exact: true }).click();
+      const search = tidy.getByRole("searchbox", { name: "足す本を探す" });
+      await expect(search).toBeVisible();
+      await expect(
+        tidy.locator(".tidy-covers button .book-jacket").first(),
+      ).toBeVisible();
+      await tidy.getByRole("button", { name: "閉じる" }).first().click();
+      await expect(tidy).toHaveCount(0);
+    },
+  );
   expect(errors).toEqual([]);
   console.log(passed.length + " customization browser checks passed");
 } finally {

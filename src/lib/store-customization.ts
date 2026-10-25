@@ -515,6 +515,54 @@ export function insertPlacement(
   return pinRow(relayoutRow(next, rowId), rowId);
 }
 /**
+ * A book carried to `index` among the other books of `rowId` (持ち上げて運ぶ,
+ * and 動かす from its sheet), or null when there is no room for it. No book
+ * is pushed off the shelves: when the tier is full, the books at its end
+ * move into the place the carried book left, and failing that the carried
+ * book stands as a spine.
+ */
+export function moveBook(
+  scene: StoreScene,
+  id: string,
+  rowId: string,
+  index: number,
+  books: Book[],
+): StoreScene | null {
+  const placed = new Set(
+    scene.objects
+      .filter((o) => o.kind === "book" && (o.parentId || o.id === id))
+      .map((o) => o.id),
+  );
+  const from = objectById(scene, id);
+  if (from?.kind !== "book") throw new Error("Unknown placement");
+  const left = from.parentId;
+  const at = left
+    ? scene.objects.filter(
+        (o) =>
+          o.kind === "book" &&
+          o.parentId === left &&
+          (o.order ?? 0) < (from.order ?? 0),
+      ).length
+    : 0;
+  const lost = (s: StoreScene) =>
+    s.objects
+      .filter((o) => o.kind === "book" && placed.has(o.id) && !o.parentId)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const tries = [scene];
+  if (from.display === "face")
+    tries.push(changePlacement(scene, id, { display: "spine" }, books));
+  for (const start of tries) {
+    let next = insertPlacement(start, id, rowId, index);
+    if (!lost(next).length) return next;
+    if (!left || left === rowId) continue;
+    lost(next).forEach(
+      (o, k) => (next = insertPlacement(next, o.id, left, at + k)),
+    );
+    if (!lost(next).length) return next;
+  }
+  return null;
+}
+/**
  * The shop at the size its owner chose: with the books ("auto") or so many
  * tiers. A shop decorated before the shop grew moves to the growing case,
  * its rows' names, books, POPs and reactions with it, and its tiers are set

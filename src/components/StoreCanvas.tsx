@@ -12,6 +12,7 @@ import {
 } from "../lib/store-scene";
 import { popExcerpt, tierCardOwners } from "../lib/store-scene-adapter";
 import { ART_PANELS, artPanel } from "../lib/book-art";
+import { GROW } from "../lib/growing-shop";
 import type { Book } from "../lib/types";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import "./walk.css";
@@ -306,6 +307,7 @@ export function StoreCanvas({
   tagline,
   focusText = null,
   greetingHref,
+  arranging,
 }: {
   scene: StoreScene;
   books: Book[];
@@ -321,6 +323,16 @@ export function StoreCanvas({
   focusText?: string | null;
   /** The owner's own visit: an empty floor POP invites them to write one. */
   greetingHref?: string;
+  /**
+   * 整える: the tiers a book may go to are lit, the book being carried
+   * waits faintly in its place, tiers just grown open, and tiers the owner
+   * arranged carry a small pin.
+   */
+  arranging?: {
+    lit?: ReadonlySet<string>;
+    lifted?: string | null;
+    fresh?: ReadonlySet<string>;
+  };
 }) {
   const drag = useRef(false);
   const greetingPop = scene.objects.find((o) => o.kind === "ownerPop");
@@ -424,7 +436,11 @@ export function StoreCanvas({
     return (
       <div
         key={o.id}
-        className={"walk-object walk-book is-" + o.display}
+        className={
+          "walk-object walk-book is-" +
+          o.display +
+          (arranging?.lifted === o.id ? " is-lifted" : "")
+        }
         style={{ ...pose(o), zIndex: tier ? 8 : 3 }}
       >
         <button
@@ -529,7 +545,9 @@ export function StoreCanvas({
         key={o.id}
         className={
           "walk-object walk-row" +
-          (focusText !== null && o.text !== focusText ? " is-dimmed" : "")
+          (focusText !== null && o.text !== focusText ? " is-dimmed" : "") +
+          (arranging?.lit?.has(o.id) ? " is-lit" : "") +
+          (arranging?.fresh?.has(o.id) ? " is-fresh" : "")
         }
         style={{ ...pose(o), zIndex: 20 - index }}
         data-row={o.id}
@@ -598,6 +616,11 @@ export function StoreCanvas({
           </>
         )}
         {items.map((book) => renderBook(book, o, index))}
+        {arranging && o.pinned && (
+          <span className="walk-row-pin" title={GROW.pinnedMark}>
+            <Icon name="pin" size={12} />
+          </span>
+        )}
         {shelf && (
           <span
             className={"walk-shelf-lip is-board-" + (index % 3)}
