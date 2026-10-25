@@ -259,7 +259,17 @@ async function main() {
       const before = JSON.stringify(shop);
       const L = layoutFromLegacyShop(shop, books);
       assert.equal(JSON.stringify(shop), before);
-      assert.deepEqual(L, layoutFromScene(migrateShopScene(shop, books)));
+      // From the full case of three tiers that the presets are made of.
+      assert.deepEqual(
+        L,
+        layoutFromScene(
+          migrateShopScene(
+            shop,
+            books,
+            woodScene(shop, books, 0, { tiers: "fixed" }),
+          ),
+        ),
+      );
       const secret = L.unplaced.find((o) => o.id === "placement:mine:secret")!;
       assert.equal(secret.parentId, null);
       assert.equal(secret.isPublic, false);
@@ -1550,7 +1560,10 @@ async function main() {
       publicFingerprint(
         publicShelfScenes(layoutFromLegacyShop(shop, books), "mine"),
       ),
-      publicFingerprint([publicStoreScene(woodScene(shop, books, 0))]),
+      // The full case: shelf presets do not grow yet (管理表 28).
+      publicFingerprint([
+        publicStoreScene(woodScene(shop, books, 0, { tiers: "fixed" })),
+      ]),
     );
   });
 
@@ -1729,10 +1742,11 @@ async function main() {
 
   // 8. The presets' shape ---------------------------------------------------------------------
 
+  // The full case: shelf presets do not grow yet (管理表 28).
   await check("each preset has woodScene's furniture and rows, by slot", () => {
     const empty = { ...legacyOnlyShop().shop, shelves: [] };
     for (const preset of SHELF_PRESETS) {
-      const wood = woodScene(empty, [], preset.variant);
+      const wood = woodScene(empty, [], preset.variant, { tiers: "fixed" });
       const skeleton = presetSkeleton(preset.id as ShelfPresetId, "shelf:x");
       assert.deepEqual(
         skeleton.map((o) => o.slot),
