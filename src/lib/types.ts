@@ -1,4 +1,9 @@
-import type { LibraryEntry, LibraryShelf, ShelfBook } from "./library";
+import type {
+  Encounter,
+  LibraryEntry,
+  LibraryShelf,
+  ShelfBook,
+} from "./library";
 import type { LibraryChange, LibraryUndo } from "./library-town";
 import type { Poster, PosterDraft } from "./posters";
 import type { FiledReport } from "./supabase/reports";
@@ -427,6 +432,13 @@ export interface TownState {
   libraryShelves: LibraryShelf[];
   /** Which books are on them (library_shelf_books). */
   libraryShelfBooks: ShelfBook[];
+  /**
+   * Where and from whom the reader met books (book_encounters), oldest
+   * first: their own, read by nobody else. A diary only: what the reader
+   * pressed, and the library, go by the reactions themselves (likedPosts,
+   * wantedPosts, popReactions, wishlist), so forgetting one changes neither.
+   */
+  encounters: Encounter[];
   settings: Settings;
   seenNotifications: string[];
   /** Words other readers left at the viewer's shop. Only an account receives them. */
@@ -511,8 +523,27 @@ export interface TownActions {
   blockReader(readerId: string): boolean;
   /** Lifts a block. What it kept away comes back with the next reading. */
   unblockReader(readerId: string): void;
-  toggleWish(bookId: string): void;
+  /**
+   * 読みたい on and off. Pressed on a book in another reader's shop
+   * (`inShop`), the encounter keeps that shop and whose it was.
+   */
+  toggleWish(bookId: string, inShop?: string): void;
   toggleFavorite(bookId: string): void;
+  /**
+   * Keeps (on) or takes back the encounter of a reaction to a POP in a
+   * shop's store scene: the walk keeps the reaction itself (walk-store.ts).
+   */
+  meetScenePop(
+    shopId: string,
+    bookId: string,
+    placementKey: string,
+    reaction: PopReaction,
+    on: boolean,
+  ): void;
+  /** Forgets one of the reader's encounters (この本との出会い の 消す). */
+  forgetEncounter(encounterId: string): void;
+  /** Puts a forgotten encounter back as it was (the toast's 元に戻す). */
+  restoreEncounter(encounter: Encounter): void;
   togglePopReaction(
     shopId: string,
     shelfId: string,

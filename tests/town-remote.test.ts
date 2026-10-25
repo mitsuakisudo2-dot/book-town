@@ -1411,6 +1411,94 @@ async function main() {
     assert.deepEqual(planWrites(base(), base(), ids), []);
   });
 
+  await check(
+    "管理表9 encounters are read as the reader's own, oldest first, and written last: new ones whole, a memo or a taking back as itself, a forgotten one deleted",
+    () => {
+      const encounter = (
+        id: string,
+        extra: Partial<Tables<"book_encounters">> = {},
+      ): Tables<"book_encounters"> => ({
+        id,
+        user_id: AKI,
+        book_id: BOOK,
+        kind: "want",
+        via: "shop",
+        post_id: null,
+        shop_id: BEN_SHOP,
+        placement_key: null,
+        other_reader_id: BEN,
+        memo: null,
+        memo_at: null,
+        undone_at: null,
+        created_at: at,
+        ...extra,
+      });
+      const E1 = "00000000-0000-4000-8000-0000000000c1";
+      const E2 = "00000000-0000-4000-8000-0000000000c2";
+      const E3 = "00000000-0000-4000-8000-0000000000c3";
+      const before = townFromRows(
+        rows({
+          shops: [shop(BEN_SHOP, BEN)],
+          encounters: [
+            encounter(E2, { created_at: "2026-10-20T00:00:00.000Z" }),
+            encounter(E1, {
+              via: "book",
+              shop_id: null,
+              other_reader_id: null,
+              created_at: "2026-10-19T00:00:00.000Z",
+            }),
+            // Someone else's, a book the town does not know, a pair the
+            // table refuses: none is the reader's to see.
+            encounter(E3, { user_id: BEN }),
+            encounter("00000000-0000-4000-8000-0000000000c4", {
+              book_id: "00000000-0000-4000-8000-0000000000ff",
+            }),
+            encounter("00000000-0000-4000-8000-0000000000c5", { kind: "like" }),
+          ],
+        }),
+        ids,
+      );
+      assert.deepEqual(
+        before.encounters.map((c) => [c.id, c.via, c.otherReaderId]),
+        [
+          [E1, "book", null],
+          [E2, "shop", BEN],
+        ],
+      );
+      const next: TownState = {
+        ...before,
+        encounters: [
+          { ...before.encounters[1], memo: "棚の並び", memoAt: at },
+          {
+            ...before.encounters[1],
+            id: E3,
+            via: "pop",
+            kind: "love",
+            placementKey: "k",
+            otherReaderId: BEN,
+          },
+        ],
+      };
+      const writes = planWrites(before, next, ids);
+      assert.equal(writes.at(-1)?.kind, "encounters");
+      const met = writes.at(-1) as Extract<Write, { kind: "encounters" }>;
+      assert.deepEqual(met.remove, [E1]);
+      assert.deepEqual(met.patches, [
+        { id: E2, patch: { memo: "棚の並び", memo_at: at } },
+      ]);
+      assert.equal(met.add.length, 1);
+      assert.deepEqual(
+        [
+          met.add[0].id,
+          met.add[0].user_id,
+          met.add[0].via,
+          met.add[0].other_reader_id,
+        ],
+        [E3, AKI, "pop", null],
+      );
+    },
+  );
+
   await check("a new shop is created open, with every shelf", () => {
     const before = base();
     const next: TownState = {

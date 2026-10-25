@@ -1210,4 +1210,72 @@ check(
   );
 }
 
+check(
+  "管理表9 a press keeps where and from whom: a post's いいね, a 読みたい in another's shop or on the book page; 消す leaves the press and the library, 元に戻す brings the same row",
+  () => {
+    const store = fresh();
+    const base = store.getSnapshot();
+    const post = base.posts.find(
+      (entry) => entry.bookId && entry.authorId !== ME_ID && !entry.parentId,
+    )!;
+    store.actions.toggleLike(post.id);
+    let met = store.getSnapshot().encounters;
+    assert.deepEqual(
+      met.map((c) => [c.via, c.kind, c.postId, c.otherReaderId]),
+      [["post", "like", post.id, post.authorId]],
+    );
+    // Taken back without a memo, the diary has nothing to keep.
+    store.actions.toggleLike(post.id);
+    assert.deepEqual(store.getSnapshot().encounters, []);
+
+    const shop = base.shops.find(
+      (entry) =>
+        entry.ownerId !== ME_ID &&
+        entry.shelves.some((shelf) => shelf.items.length),
+    )!;
+    const bookId = shop.shelves.find((shelf) => shelf.items.length)!.items[0]
+      .bookId;
+    const wanted = store.getSnapshot().wishlist.includes(bookId);
+    if (wanted) store.actions.toggleWish(bookId);
+    store.actions.toggleWish(bookId, shop.id);
+    met = store.getSnapshot().encounters;
+    assert.deepEqual(
+      met.map((c) => [c.via, c.kind, c.shopId, c.placementKey]),
+      [["shop", "want", shop.id, null]],
+    );
+    // Pressed again on the book's page, 読みたい goes, and its shop's with it.
+    store.actions.toggleWish(bookId);
+    assert.deepEqual(store.getSnapshot().encounters, []);
+    store.actions.toggleWish(bookId);
+    met = store.getSnapshot().encounters;
+    assert.deepEqual(
+      met.map((c) => [c.via, c.shopId]),
+      [["book", null]],
+    );
+
+    const [kept] = met;
+    store.actions.forgetEncounter(kept.id);
+    const forgot = store.getSnapshot();
+    assert.deepEqual(forgot.encounters, []);
+    assert.ok(forgot.wishlist.includes(bookId));
+    assert.ok(shown(forgot, bookId));
+    store.actions.restoreEncounter(kept);
+    assert.deepEqual(store.getSnapshot().encounters, [kept]);
+
+    // A POP in the walk: 私も好き！ is met at its place, and taken back.
+    store.actions.meetScenePop(shop.id, bookId, "scene:1", "love", true);
+    assert.deepEqual(
+      store
+        .getSnapshot()
+        .encounters.map((c) => [c.via, c.kind, c.placementKey]),
+      [
+        ["book", "want", null],
+        ["pop", "love", "scene:1"],
+      ],
+    );
+    store.actions.meetScenePop(shop.id, bookId, "scene:1", "love", false);
+    assert.deepEqual(store.getSnapshot().encounters, [kept]);
+  },
+);
+
 console.log(`${passed} library town checks passed`);

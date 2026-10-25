@@ -168,8 +168,11 @@ export interface ShelfBook {
 export const ENCOUNTER_KINDS = ["like", "love", "want"] as const;
 /** いいね, 私も好き！ (a POP's love) and 読みたい. */
 export type EncounterKind = (typeof ENCOUNTER_KINDS)[number];
-export const ENCOUNTER_VIAS = ["post", "pop", "book"] as const;
-/** Pressed on a post, on a POP, or on the book's own page (読みたい only). */
+export const ENCOUNTER_VIAS = ["post", "pop", "book", "shop"] as const;
+/**
+ * Pressed on a post, on a POP, on the book's own page (読みたい only), or on
+ * a book without a POP in another reader's shop (読みたい only).
+ */
 export type EncounterVia = (typeof ENCOUNTER_VIAS)[number];
 /** The same limits as book_encounters. */
 export const ENCOUNTER_MEMO_MAX_LENGTH = 255;
@@ -189,7 +192,7 @@ export interface Encounter {
   via: EncounterVia;
   /** The post; null once its writer deletes it, and the memo stays. */
   postId: string | null;
-  /** The POP's shop; null once the shop is gone. */
+  /** The POP's or the book's shop; null once the shop is gone. */
   shopId: string | null;
   /**
    * Where the POP stood, to find it again. Never what makes two the same: a
@@ -905,7 +908,7 @@ export function applyOp<S extends LibraryState>(
 
 // ---------------------------------------------------------------- encounters
 
-/** What makes two encounters the same, as book_encounters' three unique indexes do. */
+/** What makes two encounters the same, as book_encounters' unique indexes do. */
 export function encounterKey(
   c: Pick<Encounter, "id" | "kind" | "via" | "postId" | "shopId" | "bookId">,
 ): string {
@@ -914,9 +917,9 @@ export function encounterKey(
     return JSON.stringify(
       c.postId === null ? ["row", c.id] : ["post", c.kind, c.postId],
     );
-  if (c.via === "pop")
+  if (c.via === "pop" || c.via === "shop")
     return JSON.stringify(
-      c.shopId === null ? ["row", c.id] : ["pop", c.kind, c.shopId, c.bookId],
+      c.shopId === null ? ["row", c.id] : [c.via, c.kind, c.shopId, c.bookId],
     );
   return JSON.stringify(["book", c.kind, c.bookId]);
 }
@@ -935,7 +938,13 @@ export type EncounterInput =
       bookId: string;
       placementKey: string;
     }
-  | { via: "book"; kind: EncounterKind; bookId: string };
+  | { via: "book"; kind: EncounterKind; bookId: string }
+  | {
+      via: "shop";
+      kind: EncounterKind;
+      shop: Pick<Shop, "id" | "ownerId">;
+      bookId: string;
+    };
 
 const codePoints = (text: string) => [...text].length;
 
@@ -999,6 +1008,21 @@ export function encounterOf(
       otherReaderId: shop.ownerId,
     };
   }
+  if (input.via === "shop") {
+    const { shop } = input;
+    if (
+      input.kind !== "want" ||
+      shop.ownerId === ME_ID ||
+      (account && isSampleId(shop.id))
+    )
+      return null;
+    return {
+      ...base,
+      bookId: input.bookId,
+      shopId: shop.id,
+      otherReaderId: shop.ownerId,
+    };
+  }
   return input.kind === "want" ? { ...base, bookId: input.bookId } : null;
 }
 
@@ -1023,6 +1047,76 @@ export function meetEncounter(
     met: true,
   };
 }
+
+/**
+ * An encounter as kept on the device or read from the database, or null
+ * when it is not one this app can show: the pairs the table refuses are
+ * left out, so a row of a later app is passed over, never misread.
+ */
+export function readEncounter(value: unknown): Encounter | null {
+  if (typeof value !== "object" || value === null) return null;
+  const c = value as Record<string, unknown>;
+  if (
+    typeof c.id !== "string" ||
+    !c.id ||
+    typeof c.bookId !== "string" ||
+    !c.bookId ||
+    !ENCOUNTER_KINDS.includes(c.kind as EncounterKind) ||
+    !ENCOUNTER_VIAS.includes(c.via as EncounterVia) ||
+    !isNameOrNull(c.postId) ||
+    !isNameOrNull(c.shopId) ||
+    !isNameOrNull(c.otherReaderId) ||
+    !(c.placementKey === null || typeof c.placementKey === "string") ||
+    !(
+      c.memo === null ||
+      (typeof c.memo === "string" &&
+        c.memo.length > 0 &&
+        codePoints(c.memo) <= ENCOUNTER_MEMO_MAX_LENGTH)
+    ) ||
+    !isTimeOrNull(c.memoAt) ||
+    !isTimeOrNull(c.undoneAt) ||
+    !isTime(c.createdAt) ||
+    typeof c.createdAt !== "string"
+  )
+    return null;
+  const kind = c.kind as EncounterKind;
+  const via = c.via as EncounterVia;
+  if ((via === "book" || via === "shop") && kind !== "want") return null;
+  if (via === "post" && kind === "love") return null;
+  return {
+    id: c.id,
+    bookId: c.bookId,
+    kind,
+    via,
+    postId: via === "post" ? (c.postId as string | null) : null,
+    shopId:
+      via === "pop" || via === "shop" ? (c.shopId as string | null) : null,
+    placementKey: via === "pop" ? (c.placementKey as string | null) : null,
+    otherReaderId: via === "book" ? null : (c.otherReaderId as string | null),
+    memo: c.memo as string | null,
+    memoAt: c.memoAt as string | null,
+    undoneAt: c.undoneAt as string | null,
+    createdAt: c.createdAt,
+  };
+}
+
+/** Forgets an encounter (the reader's 消す): its row goes, memo and all. */
+export const forgetEncounter = (list: Encounter[], id: string): Encounter[] =>
+  list.some((c) => c.id === id) ? list.filter((c) => c.id !== id) : list;
+
+/**
+ * Puts a forgotten encounter back, the same row: nothing changes when it is
+ * there again, or when the book has since been met there anew.
+ */
+export const restoreEncounter = (
+  list: Encounter[],
+  c: Encounter,
+): Encounter[] =>
+  list.some(
+    (other) => other.id === c.id || encounterKey(other) === encounterKey(c),
+  )
+    ? list
+    : [...list, c];
 
 /** Takes an encounter back: one with a memo is kept, marked; one without is deleted (decision 1). */
 export function undoEncounter(
@@ -2102,8 +2196,9 @@ export function validateEncounter(
   if (!isName(c.bookId)) return "bookId";
   if (!ENCOUNTER_KINDS.includes(c.kind)) return "kind";
   if (!ENCOUNTER_VIAS.includes(c.via)) return "via";
-  // A book's page has only 読みたい; a post has no 私も好き！.
-  if (c.via === "book" && c.kind !== "want") return "kind";
+  // A book's page and a shop's book have only 読みたい; a post has no 私も好き！.
+  if ((c.via === "book" || c.via === "shop") && c.kind !== "want")
+    return "kind";
   if (c.via === "post" && c.kind === "love") return "kind";
   if (!isNameOrNull(c.postId)) return "postId";
   if (options.insert && c.via === "post" && c.postId === null) return "postId";
@@ -2111,6 +2206,9 @@ export function validateEncounter(
   if (options.insert && c.via === "pop" && c.shopId === null) return "shopId";
   if (options.insert && c.via === "pop" && c.placementKey === null)
     return "placementKey";
+  if (options.insert && c.via === "shop" && c.shopId === null) return "shopId";
+  // A shop's book is met in the shop alone, not at a place in it.
+  if (c.via === "shop" && c.placementKey !== null) return "placementKey";
   if (
     c.placementKey !== null &&
     (typeof c.placementKey !== "string" ||

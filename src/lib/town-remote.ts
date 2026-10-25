@@ -14,9 +14,11 @@ import { tapsOf } from "./social";
 import {
   blankEntry,
   cleanShelfAudiences,
+  readEncounter,
   readRule,
   validateEntry,
   validateShelf,
+  type Encounter,
   type LibraryEntry,
   type LibraryShelf,
   type ShelfBook,
@@ -200,6 +202,8 @@ export interface RemoteRows {
   /** The shelves the person made in their library, and their books; none in a visitor's town. */
   libraryShelves?: Tables<"library_shelves">[];
   libraryShelfBooks?: Tables<"library_shelf_books">[];
+  /** Where the person met books (book_encounters); none in a visitor's town. */
+  encounters?: Tables<"book_encounters">[];
   posts: Tables<"posts">[];
   /** The person's own reactions, and other people's reactions to their posts. */
   postReactions: Tables<"post_reactions">[];
@@ -422,6 +426,7 @@ function withSampleBookIds(rows: RemoteRows): RemoteRows {
     marks: rows.marks.map(named),
     libraryEntries: rows.libraryEntries?.map(named),
     libraryShelfBooks: rows.libraryShelfBooks?.map(named),
+    encounters: rows.encounters?.map(named),
     posts: rows.posts.map(named),
     sessions: rows.sessions.map(named),
     records: rows.records.map(named),
@@ -502,6 +507,38 @@ function shelfBooksFromRows(
         ]
       : [],
   );
+}
+
+/** The person's own encounters, of books the town knows, oldest first. */
+function encountersFromRows(
+  rows: Tables<"book_encounters">[],
+  userId: string | null,
+  bookIds: Set<string>,
+): Encounter[] {
+  return rows
+    .flatMap((row): Encounter[] => {
+      if (row.user_id !== userId || !bookIds.has(row.book_id)) return [];
+      const c = readEncounter({
+        id: row.id,
+        bookId: row.book_id,
+        kind: row.kind,
+        via: row.via,
+        postId: row.post_id,
+        shopId: row.shop_id,
+        placementKey: row.placement_key,
+        otherReaderId: row.other_reader_id,
+        memo: row.memo,
+        memoAt: row.memo_at,
+        undoneAt: row.undone_at,
+        createdAt: row.created_at,
+      });
+      return c ? [c] : [];
+    })
+    .sort(
+      (a, b) =>
+        Date.parse(a.createdAt) - Date.parse(b.createdAt) ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
 }
 
 /**
@@ -792,6 +829,7 @@ export function townFromRows(
       libraryShelves,
       libraryEntries,
     ),
+    encounters: encountersFromRows(rows.encounters ?? [], userId, bookIds),
     popReactions,
     posts,
     likedPosts: reacted("like"),
@@ -1192,6 +1230,7 @@ export function referencedBookIds(rows: Omit<RemoteRows, "books">): string[] {
   rows.nine.forEach((row) => ids.add(row.book_id));
   rows.marks.forEach((row) => ids.add(row.book_id));
   rows.libraryEntries?.forEach((row) => ids.add(row.book_id));
+  rows.encounters?.forEach((row) => ids.add(row.book_id));
   rows.posts.forEach((row) => row.book_id && ids.add(row.book_id));
   rows.sessions.forEach((row) => row.book_id && ids.add(row.book_id));
   rows.records.forEach((row) => ids.add(row.book_id));
@@ -1294,6 +1333,21 @@ export type Write =
       add: TablesInsert<"library_shelf_books">[];
       /** Books taken off, by their key. */
       remove: { shelf_id: string; book_id: string }[];
+    }
+  | {
+      kind: "encounters";
+      /** Encounters new to the database: inserted, one already there kept as it is. */
+      add: TablesInsert<"book_encounters">[];
+      /** What changed of one already there: only its memo and its taking back. */
+      patches: {
+        id: string;
+        patch: Pick<
+          TablesInsert<"book_encounters">,
+          "memo" | "memo_at" | "undone_at"
+        >;
+      }[];
+      /** Encounters deleted: taken back without a memo, or forgotten. */
+      remove: string[];
     }
   | {
       kind: "library-entries";
@@ -1858,6 +1912,49 @@ export function planWrites(
     });
   if (pressed.length) writes.push({ kind: "like-taps", rows: pressed });
 
+  // Last: an encounter names its book, and the post or the shop met, which
+  // the writes above put there first.
+  const baseMet = new Map(base.encounters.map((c) => [c.id, c]));
+  const nextMet = new Map(next.encounters.map((c) => [c.id, c]));
+  const met = next.encounters.filter((c) => !baseMet.has(c.id));
+  const changed = next.encounters.flatMap((c) => {
+    const was = baseMet.get(c.id);
+    if (!was || was === c) return [];
+    const patch: Extract<
+      Write,
+      { kind: "encounters" }
+    >["patches"][number]["patch"] = {};
+    if (was.memo !== c.memo) patch.memo = c.memo;
+    if (was.memoAt !== c.memoAt) patch.memo_at = c.memoAt;
+    if (was.undoneAt !== c.undoneAt) patch.undone_at = c.undoneAt;
+    return Object.keys(patch).length ? [{ id: c.id, patch }] : [];
+  });
+  const forgotten = base.encounters
+    .filter((c) => !nextMet.has(c.id))
+    .map((c) => c.id);
+  if (met.length || changed.length || forgotten.length)
+    writes.push({
+      kind: "encounters",
+      add: met.map((c) => ({
+        id: c.id,
+        user_id: user,
+        book_id: c.bookId,
+        kind: c.kind,
+        via: c.via,
+        post_id: c.postId,
+        shop_id: c.shopId,
+        placement_key: c.placementKey,
+        // The database puts whose it was in from the post or the shop.
+        other_reader_id: null,
+        memo: c.memo,
+        memo_at: c.memoAt,
+        undone_at: c.undoneAt,
+        created_at: c.createdAt,
+      })),
+      patches: changed,
+      remove: forgotten,
+    });
+
   return withSampleRows(writes);
 }
 /**
@@ -1923,6 +2020,24 @@ function withSampleRows(writes: Write[]): Write[] {
             })),
           },
         ];
+      case "encounters":
+        // One met on a 見本's post or shop (a visitor's, carried over) has
+        // nobody's post or shop to point to, so it stays on the device.
+        return [
+          {
+            ...write,
+            add: write.add
+              .filter(
+                (row) =>
+                  (!row.post_id || isDatabaseId(row.post_id)) &&
+                  (!row.shop_id || isDatabaseId(row.shop_id)),
+              )
+              .map((row) => ({
+                ...row,
+                book_id: keep(row.book_id),
+              })),
+          },
+        ];
       case "shelf-books":
         return [
           {
@@ -1983,6 +2098,7 @@ const WRITE_KINDS: Record<Write["kind"], true> = {
   "library-shelves": true,
   "shelf-books": true,
   "library-entries": true,
+  encounters: true,
 };
 
 /**
@@ -2050,6 +2166,27 @@ export function splitWrite(write: Write): Write[] {
       return [
         ...write.remove.map((row) => ({ ...write, add: [], remove: [row] })),
         ...write.add.map((row) => ({ ...write, add: [row], remove: [] })),
+      ];
+    case "encounters":
+      return [
+        ...write.remove.map((id) => ({
+          ...write,
+          add: [],
+          patches: [],
+          remove: [id],
+        })),
+        ...write.add.map((row) => ({
+          ...write,
+          add: [row],
+          patches: [],
+          remove: [],
+        })),
+        ...write.patches.map((row) => ({
+          ...write,
+          add: [],
+          patches: [row],
+          remove: [],
+        })),
       ];
     default:
       return [];
@@ -2220,6 +2357,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     libraryEntries: {},
     libraryShelves: [],
     libraryShelfBooks: [],
+    encounters: [],
     readingRecords: [],
     settings: {
       composeIcon: "pen",

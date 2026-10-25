@@ -37,7 +37,14 @@ import {
 import {
   defaultShelfAudience,
   DEFAULT_SHELVES,
+  encounterOf,
+  forgetEncounter,
+  meetEncounter,
+  restoreEncounter,
+  popEncounterKind,
   positionAfter,
+  undoEncounter,
+  type EncounterInput,
   READING_STATUSES,
   readRule,
   validateShelf,
@@ -48,7 +55,7 @@ import { requestAccount } from "./visitor";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId, isSampleId } from "./record-kind";
 import { bookAuthor, bookById, bookByIsbn, booksOfIsbn } from "./book-name";
-import { owning } from "./own-books";
+import { mine as ownBookOf, owning } from "./own-books";
 import {
   bookPrice,
   bookText,
@@ -430,6 +437,52 @@ export function createTownStore(
       return first === at || ids[first] === ids[at];
     });
   }
+  /**
+   * The town with the encounter a press makes (on) or takes back (a diary:
+   * the press itself is kept as before, and the library goes by it). Its
+   * book is the reader's own (own()), so the same book met before and
+   * registered later is one book.
+   */
+  function withMet(
+    town: TownState,
+    input: EncounterInput | null,
+    on: boolean,
+  ): TownState {
+    if (!input) return town;
+    const at = now().toISOString();
+    const c = encounterOf(
+      input,
+      crypto.randomUUID(),
+      at,
+      backend.kind === "account",
+    );
+    if (!c) return town;
+    if (on) {
+      const met = meetEncounter(town.encounters, c);
+      return met.met ? { ...town, encounters: met.encounters } : town;
+    }
+    const encounters = undoEncounter(town.encounters, c, at);
+    return encounters === town.encounters ? town : { ...town, encounters };
+  }
+  /**
+   * A post's encounter, its book the reader's own (made now when met), or
+   * null for a post the town lacks. Asked before the town is changed, so a
+   * copy own() makes is in it.
+   */
+  function postMet(
+    postId: string,
+    kind: "like" | "want",
+    on: boolean,
+  ): EncounterInput | null {
+    const post = state.posts.find((entry) => entry.id === postId);
+    if (!post) return null;
+    const [bookId] = on && post.bookId ? own([post.bookId]) : [post.bookId];
+    return { via: "post", kind, post: { ...post, bookId } };
+  }
+  const shopOf = (shopId: string) =>
+    [...state.shops, ...(state.ownShop ? [state.ownShop] : [])].find(
+      (entry) => entry.id === shopId,
+    );
   // Words the reader wrote are not taken where they cannot be kept (an
   // account that could not be read): the screen keeps them as a draft instead.
   const keepsWords = () => backend.kind !== "unavailable";
@@ -672,19 +725,77 @@ export function createTownStore(
         blocked: state.blocked.filter((id) => id !== readerId),
       });
     },
-    toggleWish(given) {
+    toggleWish(given, inShop) {
       initialize();
       const [bookId] = own([given], state.wishlist);
       if (!state.books.some((book) => book.id === bookId)) return;
+      const on = !state.wishlist.includes(bookId);
+      const shop = inShop ? shopOf(inShop) : undefined;
+      const wished = withLibraryOp(
+        state,
+        [bookId],
+        { want: on },
+        now().toISOString(),
+        "want",
+      );
+      if (wished === state) return;
+      if (on) {
+        commit(
+          withMet(
+            wished,
+            shop && shop.ownerId !== ME_ID
+              ? { via: "shop", kind: "want", shop, bookId }
+              : { via: "book", kind: "want", bookId },
+            true,
+          ),
+        );
+        return;
+      }
+      // 読みたい taken back, wherever it is pressed, takes back its book
+      // page's and shops' encounters; a post's or a POP's go with their own.
+      const at = now().toISOString();
+      const encounters = wished.encounters
+        .filter(
+          (c) =>
+            c.bookId === bookId &&
+            c.kind === "want" &&
+            (c.via === "book" || c.via === "shop") &&
+            c.undoneAt === null,
+        )
+        .reduce((list, c) => undoEncounter(list, c, at), wished.encounters);
       commit(
-        withLibraryOp(
+        encounters === wished.encounters ? wished : { ...wished, encounters },
+      );
+    },
+    meetScenePop(shopId, given, placementKey, reaction, on) {
+      initialize();
+      const shop = shopOf(shopId);
+      if (!shop || !POP_REACTIONS.includes(reaction)) return;
+      const [bookId] = on ? own([given]) : [ownBookOf(state, given) ?? given];
+      if (!state.books.some((book) => book.id === bookId)) return;
+      commit(
+        withMet(
           state,
-          [bookId],
-          { want: !state.wishlist.includes(bookId) },
-          now().toISOString(),
-          "want",
+          {
+            via: "pop",
+            kind: popEncounterKind(reaction),
+            shop,
+            bookId,
+            placementKey,
+          },
+          on,
         ),
       );
+    },
+    forgetEncounter(encounterId) {
+      initialize();
+      const encounters = forgetEncounter(state.encounters, encounterId);
+      if (encounters !== state.encounters) commit({ ...state, encounters });
+    },
+    restoreEncounter(encounter) {
+      initialize();
+      const encounters = restoreEncounter(state.encounters, encounter);
+      if (encounters !== state.encounters) commit({ ...state, encounters });
     },
     toggleFavorite(given) {
       initialize();
@@ -716,13 +827,28 @@ export function createTownStore(
         return;
       const key = popReactionKey(shopId, shelfId, itemId);
       const current = state.popReactions[key] ?? [];
-      const next = current.includes(reaction)
-        ? current.filter((entry) => entry !== reaction)
-        : [...current, reaction];
+      const on = !current.includes(reaction);
+      const next = on
+        ? [...current, reaction]
+        : current.filter((entry) => entry !== reaction);
       const popReactions = { ...state.popReactions };
       if (next.length) popReactions[key] = next;
       else delete popReactions[key];
-      commit({ ...state, popReactions });
+      const given = shelf.items.find((entry) => entry.id === itemId)!.bookId;
+      const [bookId] = on ? own([given]) : [ownBookOf(state, given) ?? given];
+      commit(
+        withMet(
+          { ...state, popReactions },
+          {
+            via: "pop",
+            kind: popEncounterKind(reaction),
+            shop: shop!,
+            bookId,
+            placementKey: key,
+          },
+          on,
+        ),
+      );
     },
     updateProfile(name, bio, links, handle) {
       initialize();
@@ -838,11 +964,19 @@ export function createTownStore(
       if (!state.posts.some((entry) => entry.id === postId)) return;
       const likeTaps = { ...state.likeTaps };
       delete likeTaps[postId];
-      commit({
-        ...state,
-        likedPosts: toggled(state.likedPosts, postId),
-        likeTaps,
-      });
+      const on = !state.likedPosts.includes(postId);
+      const met = postMet(postId, "like", on);
+      commit(
+        withMet(
+          {
+            ...state,
+            likedPosts: toggled(state.likedPosts, postId),
+            likeTaps,
+          },
+          met,
+          on,
+        ),
+      );
     },
     tapLike(postId) {
       initialize();
@@ -850,12 +984,15 @@ export function createTownStore(
       if (!state.posts.some((entry) => entry.id === postId)) return now;
       if (now >= LIKE_TAPS_MAX) return now;
       const taps = now + 1;
-      commit({
+      // The first press is the encounter; the presses after it count only.
+      const met = now ? null : postMet(postId, "like", true);
+      const pressed = {
         ...state,
         likedPosts: now ? state.likedPosts : [...state.likedPosts, postId],
         likeTaps:
           taps > 1 ? { ...state.likeTaps, [postId]: taps } : state.likeTaps,
-      });
+      };
+      commit(withMet(pressed, met, true));
       return taps;
     },
     toggleWant(postId) {
@@ -872,15 +1009,19 @@ export function createTownStore(
       // Wanting a book saves it; taking the reaction back keeps the list as
       // the reader left it.
       commit(
-        adding
-          ? withLibraryOp(
-              wanted,
-              [bookId],
-              { want: true },
-              now().toISOString(),
-              "want",
-            )
-          : wanted,
+        withMet(
+          adding
+            ? withLibraryOp(
+                wanted,
+                [bookId],
+                { want: true },
+                now().toISOString(),
+                "want",
+              )
+            : wanted,
+          { via: "post", kind: "want", post: { ...post, bookId } },
+          adding,
+        ),
       );
     },
     startReading(given, mode) {

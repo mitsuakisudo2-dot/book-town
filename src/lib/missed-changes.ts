@@ -89,6 +89,8 @@ export function townWriteLabels(write: Write): string[] {
       return ["棚の本"];
     case "library-entries":
       return ["ライブラリの本"];
+    case "encounters":
+      return ["本との出会い"];
   }
 }
 

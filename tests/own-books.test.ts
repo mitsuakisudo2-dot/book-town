@@ -689,6 +689,11 @@ async function main() {
         db.tables.book_marks?.map((row) => [row.book_id, row.kind]),
         [[copy, "wish"]],
       );
+      // The book page's 読みたい is met on her copy too (管理表9).
+      assert.deepEqual(
+        db.tables.book_encounters?.map((row) => [row.book_id, row.via]),
+        [[copy, "book"]],
+      );
       assert.ok(
         !JSON.stringify(db.tables.library_entries ?? []).includes(SNOW),
       );
