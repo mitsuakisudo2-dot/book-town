@@ -485,7 +485,7 @@ export type Database = {
           at: string;
           became: string | null;
           book_id: string;
-          id: number;
+          id: string;
           kind: string;
           manage: boolean;
           shelf_id: string | null;
@@ -497,7 +497,7 @@ export type Database = {
           at?: string;
           became?: string | null;
           book_id: string;
-          id?: never;
+          id?: string;
           kind: string;
           manage?: boolean;
           shelf_id?: string | null;
@@ -508,7 +508,7 @@ export type Database = {
           at?: string;
           became?: string | null;
           book_id?: string;
-          id?: never;
+          id?: string;
           kind?: string;
           manage?: boolean;
           shelf_id?: string | null;

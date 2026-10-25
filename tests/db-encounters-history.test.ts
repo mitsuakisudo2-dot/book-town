@@ -101,7 +101,7 @@ function helpers(db: PGlite) {
       manage: boolean;
     }>(
       `select kind, was, became, shelf_id, manage from library_events
-       where user_id = $1 and ($2::uuid is null or book_id = $2) order by id`,
+       where user_id = $1 and ($2::uuid is null or book_id = $2) order by at`,
       [reader, bookId ?? null],
     );
   return { rows, as, refused, typed, keep, history };
@@ -325,29 +325,141 @@ test("only the reader's own requests are kept, and manage mode says so", async (
 
 test("a busy script's day is not kept past its limit, and the write goes on", async () => {
   const db = await migrated();
-  const { rows, typed, keep, history } = helpers(db);
+  const { rows, as, typed, keep, history } = helpers(db);
   await typed(AKI, book(1));
   await typed(AKI, book(2));
+  await typed(AKI, book(3));
   await keep(AKI, book(1));
+  // 49999 rows in the last day, the one above among them: one more is kept.
   await db.query(
-    "update private.library_event_days set rows = 50000 where user_id = $1",
-    [AKI],
+    `insert into library_events (user_id, book_id, kind, at)
+     select $1, $2, 'owned', now() - interval '1 hour' from generate_series(1, 49998)`,
+    [AKI, book(1)],
   );
   await keep(AKI, book(2), "status='finished'");
-  assert.equal(
-    (await history(AKI, book(2))).length,
-    0,
-    "nothing more is kept today",
+  assert.deepEqual(
+    (await history(AKI, book(2))).map((e) => e.kind),
+    ["added", "status"],
+    "a write is kept whole once begun under the limit",
   );
-  assert.equal(
-    (
-      await rows(
-        "select count(*)::int n from library_entries where user_id = $1",
-        [AKI],
-      )
-    )[0].n,
-    2,
+  await keep(AKI, book(3));
+  assert.equal((await history(AKI, book(3))).length, 0, "nothing more is kept");
+  await as(
+    AKI,
+    "update library_entries set status = 'reading' where user_id = $1 and book_id = $2",
+    [AKI, book(3)],
+  );
+  assert.deepEqual(
+    await rows(
+      "select status from library_entries where user_id = $1 and book_id = $2",
+      [AKI, book(3)],
+    ),
+    [{ status: "reading" }],
     "but the library row is written",
+  );
+  // A day later the history goes on.
+  await db.query("update library_events set at = at - interval '1 day'");
+  await as(
+    AKI,
+    "update library_entries set status = 'finished' where user_id = $1 and book_id = $2",
+    [AKI, book(3)],
+  );
+  assert.deepEqual(
+    (await history(AKI, book(3))).map((e) => [e.was, e.became]),
+    [["reading", "finished"]],
+  );
+});
+
+test("an undo comes last, whatever times the row is written back with", async () => {
+  const db = await migrated();
+  const { as, typed, history } = helpers(db);
+  await typed(AKI, book(1));
+  await as(
+    AKI,
+    `insert into library_entries (user_id, book_id, source, status, status_at, added_at)
+     values ($1, $2, 'scan', 'tsundoku', now() - interval '30 days', now() - interval '30 days')`,
+    [AKI, book(1)],
+  );
+  const set = (sql: string) =>
+    as(
+      AKI,
+      `update library_entries set ${sql} where user_id = $1 and book_id = $2`,
+      [AKI, book(1)],
+    );
+  await set("status = 'reading', status_at = now()");
+  await set("status = 'tsundoku', status_at = now() - interval '30 days'");
+  await as(
+    AKI,
+    `insert into library_shelves (id, user_id, name, position) values ($1, $2, 'SF', 'a')`,
+    [shelf(1), AKI],
+  );
+  const shelve = () =>
+    as(
+      AKI,
+      `insert into library_shelf_books (shelf_id, user_id, book_id, added_at)
+       values ($1, $2, $3, now() - interval '400 days')`,
+      [shelf(1), AKI, book(1)],
+    );
+  await shelve();
+  await as(AKI, "delete from library_shelf_books where user_id = $1", [AKI]);
+  await shelve();
+  assert.deepEqual(
+    (await history(AKI)).map((e) => [e.kind, e.was, e.became]),
+    [
+      ["added", null, "scan"],
+      ["status", null, "tsundoku"],
+      ["status", "tsundoku", "reading"],
+      ["status", "reading", "tsundoku"],
+      ["shelved", null, null],
+      ["unshelved", null, null],
+      ["shelved", null, null],
+    ],
+  );
+  await db.query("select private.forget_library_events()");
+  assert.equal((await history(AKI)).length, 7, "nothing is a year old");
+});
+
+test("a row sent again, an old app's mark and a move to a copy", async () => {
+  const db = await migrated();
+  const { as, typed, history } = helpers(db);
+  await typed(AKI, book(1));
+  const send = () =>
+    as(
+      AKI,
+      `insert into library_entries (user_id, book_id, source) values ($1, $2, 'scan')
+       on conflict (user_id, book_id) do nothing`,
+      [AKI, book(1)],
+    );
+  await send();
+  await send();
+  assert.deepEqual(
+    (await history(AKI)).map((e) => e.kind),
+    ["added"],
+    "sent again, kept once",
+  );
+  // An app without the library writes a mark; the database copies it to the row.
+  await typed(AKI, book(2));
+  await as(
+    AKI,
+    "insert into book_marks (user_id, book_id, kind) values ($1, $2, 'wish')",
+    [AKI, book(2)],
+  );
+  assert.deepEqual(
+    (await history(AKI, book(2))).map((e) => [e.kind, e.became]),
+    [
+      ["added", "legacy"],
+      ["wanted", null],
+    ],
+  );
+  // The database moving rows to a reader's copy of a book keeps nothing.
+  await db.exec("select set_config('private.copying', 'on', false)");
+  await as(AKI, "update library_entries set owned = 'yes' where user_id = $1", [
+    AKI,
+  ]);
+  await db.exec("select set_config('private.copying', '', false)");
+  assert.equal(
+    (await history(AKI)).filter((e) => e.kind === "owned").length,
+    0,
   );
 });
 
@@ -362,20 +474,12 @@ test("rows go after a year, and with the library row or the account", async () =
     "update library_events set at = now() - interval '1 year 1 day' where book_id = $1",
     [book(1)],
   );
-  await db.query(
-    "update private.library_event_days set day = day - 2 where user_id = $1",
-    [AKI],
-  );
   await db.query("select private.forget_library_events()");
   assert.deepEqual(
     (await rows<{ book_id: string }>("select book_id from library_events")).map(
       (r) => r.book_id,
     ),
     [book(2)],
-  );
-  assert.equal(
-    (await rows("select * from private.library_event_days")).length,
-    0,
   );
   assert.deepEqual(
     await rows(
@@ -395,7 +499,21 @@ test("rows go after a year, and with the library row or the account", async () =
     `insert into library_shelf_books (shelf_id, user_id, book_id) values ($1, $2, $3)`,
     [shelf(1), AKI, book(2)],
   );
-  await db.query("delete from library_entries where book_id = $1", [book(2)]);
+  // As forget_books does, in one transaction: its shelf places first, then
+  // its row (the reader asking).
+  await db.exec("begin");
+  await db.query(
+    "delete from library_shelf_books where user_id = $1 and book_id = $2",
+    [AKI, book(2)],
+  );
+  assert.deepEqual((await history(AKI, book(2))).map((e) => e.kind).slice(-1), [
+    "unshelved",
+  ]);
+  await db.query(
+    "delete from library_entries where user_id = $1 and book_id = $2",
+    [AKI, book(2)],
+  );
+  await db.exec("commit");
   assert.deepEqual(await history(AKI, book(2)), []);
   // An account going takes everything, its shelves' places included.
   await typed(AKI, book(3));
@@ -410,10 +528,6 @@ test("rows go after a year, and with the library row or the account", async () =
   await db.exec("select set_config('request.jwt.claim.sub', '', false)");
   await db.query("delete from auth.users where id = $1", [AKI]);
   assert.equal((await rows("select * from library_events")).length, 0);
-  assert.equal(
-    (await rows("select * from private.library_event_days")).length,
-    0,
-  );
 });
 
 test("the history does not count as a use of a book", async () => {
@@ -439,7 +553,7 @@ test("the rollback undoes it, and it applies again", async () => {
     .filter((line) => line.startsWith("--   "))
     .map((line) => line.slice(5))
     .join("\n")
-    .replace(/and, while no row has via 'shop':\n/, "")
+    .replace(/and, while no row has via 'shop'[^\n]*\n/, "")
     .replace(/and private\.check_book_encounter\(\) again[^\n]*\n?/, "");
   await db.exec(rollback);
   const own = migrationText(

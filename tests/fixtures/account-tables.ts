@@ -258,11 +258,6 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   // Errors heard on readers' screens, with what could name a reader taken out
   // (screen_errors); they name no one.
   "private.screen_errors": { people: {}, readers: "nobody" },
-  // How many history rows each reader wrote a day (library_events' limit).
-  "private.library_event_days": {
-    people: { user_id: "delete" },
-    readers: "nobody",
-  },
   // What readers tell the operator (site_reports); only staff read them,
   // through site_reports(), which is the operator's own reading.
   "private.site_reports": { people: { user_id: "delete" }, readers: "nobody" },

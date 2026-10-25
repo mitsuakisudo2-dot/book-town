@@ -26,19 +26,22 @@
 -- private.catalog_used and private.book_used_besides_own (AUD-055), and keep
 -- a book taken back in the scanner from being forgotten.
 --
--- A write is never refused for its history: when a reader has written more
--- than LIBRARY_EVENTS_PER_DAY rows today (a script, not a person), the rest
--- of the day's changes are simply not kept, and the library write goes on.
+-- The history is written once a write (statement triggers), and a write is
+-- never refused for it: when a reader has kept LIBRARY_EVENTS_PER_DAY rows
+-- in the last day (a script, not a person), further changes are simply not
+-- kept, and the library write goes on. Nothing is locked for it.
 --
 -- Rollback (a new migration):
 --   select cron.unschedule('library-events');
---   drop trigger library_entries_events on public.library_entries;
---   drop trigger library_shelf_books_events on public.library_shelf_books;
---   drop table public.library_events, private.library_event_days;
---   drop function private.forget_library_events(), private.library_entry_events(),
---     private.library_shelf_book_events(), private.note_library_event(uuid, uuid, text,
---     text, text, uuid, timestamptz);
---   and, while no row has via 'shop':
+--   drop trigger library_entries_added on public.library_entries;
+--   drop trigger library_entries_changed on public.library_entries;
+--   drop trigger library_shelf_books_added on public.library_shelf_books;
+--   drop trigger library_shelf_books_taken on public.library_shelf_books;
+--   drop table public.library_events;
+--   drop function private.forget_library_events(), private.library_entries_added(),
+--     private.library_entries_changed(), private.library_shelf_books_added(),
+--     private.library_shelf_books_taken(), private.keeps_library_events(uuid);
+--   and, while no row has via 'shop' (any there are readers' own: ask first):
 --   drop index public.book_encounters_shop;
 --   alter table public.book_encounters drop constraint book_encounters_shop_kind,
 --     drop constraint book_encounters_via_check,
@@ -121,7 +124,9 @@ $$;
 -- The history -------------------------------------------------------------------------
 
 create table public.library_events (
-  id bigint generated always as identity primary key,
+  -- A uuid, not a running number: a number would tell a reader how much
+  -- everyone else did between two of their own changes.
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles (id) on delete cascade,
   book_id uuid not null,
   -- added: came into the library (became: how, library_entries.source);
@@ -139,7 +144,11 @@ create table public.library_events (
   shelf_id uuid,
   -- Done in 読書管理モード (item 98).
   manage boolean not null default false,
-  at timestamptz not null default now(),
+  -- When the database took the change, never a time the row carries: an
+  -- undo writes a row back with its old times, and its history must still
+  -- come last. The changes of one write are a microsecond apart, in order,
+  -- and the clock moves on within a transaction (clock_timestamp).
+  at timestamptz not null default clock_timestamp(),
   constraint library_events_shelf check ((shelf_id is not null) = (kind in ('shelved', 'unshelved'))),
   foreign key (user_id, book_id)
     references public.library_entries (user_id, book_id)
@@ -147,7 +156,8 @@ create table public.library_events (
   foreign key (shelf_id, user_id)
     references public.library_shelves (id, user_id) on delete cascade
 );
--- A reader's history, the newest first; and the rows going after a year.
+-- A reader's history, the newest first (and today's rows, counted below);
+-- a book's; the rows going after a year.
 create index library_events_reader on public.library_events (user_id, at desc);
 create index library_events_book on public.library_events (user_id, book_id);
 create index library_events_at on public.library_events (at);
@@ -160,137 +170,152 @@ grant select on public.library_events to authenticated;
 create policy "a library's history is its reader's own" on public.library_events
   for select to authenticated using (user_id = (select auth.uid()));
 
--- How many rows each reader's history took each day (UTC), so a script
--- writing without end keeps only the day's first rows. Nobody reads it.
-create table private.library_event_days (
-  user_id uuid not null references public.profiles (id) on delete cascade,
-  day date not null,
-  rows integer not null,
-  primary key (user_id, day)
-);
-revoke all on private.library_event_days from public, anon, authenticated;
+-- Whether this write's history is kept: only a reader's own request (not the
+-- database's own work, a migration, a nightly job, moving rows to a reader's
+-- own copy of a book, nor an account being deleted), and only while the
+-- reader has kept fewer than LIBRARY_EVENTS_PER_DAY rows in the last day.
+-- Counted from the table itself, once a write: no row is locked, so no two
+-- writes wait on each other for it. Two at once may each pass the limit by a
+-- write's worth; it bounds a script, not a person.
+create function private.keeps_library_events(reader uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select reader is not null and private.asked_by_reader()
+    -- LIBRARY_EVENTS_PER_DAY: some fifty times a busy day's (a series of 200
+    -- volumes registered, sorted and shelved is about a thousand rows).
+    and (select count(*) from (
+      select 1 from public.library_events e
+      where e.user_id = reader and e.at > now() - interval '1 day'
+      limit 50000) today) < 50000
+$$;
+revoke all on function private.keeps_library_events(uuid) from public, anon, authenticated;
 
--- Keeps one row of `reader`'s history, unless the day's rows are used up.
--- Only a reader's own request is kept: the database's own work (a
--- migration, a nightly job, moving rows to the reader's own copy of a book)
--- and an account being deleted write nothing.
-create function private.note_library_event(reader uuid, book uuid, what text,
-  was text, became text, shelf uuid, happened timestamptz) returns void
+-- After each write of library rows, once for the whole write: what came in.
+create function private.library_entries_added() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
-  today date := (now() at time zone 'utc')::date;
-  used integer;
+  me uuid := (select auth.uid());
+  t0 timestamptz := clock_timestamp();
+  manage boolean;
 begin
-  if not private.asked_by_reader() or reader is distinct from (select auth.uid()) then
-    return;
-  end if;
-  insert into private.library_event_days as d (user_id, day, rows)
-  values (reader, today, 1)
-  on conflict (user_id, day) do update set rows = d.rows + 1
-  returning d.rows into used;
-  -- LIBRARY_EVENTS_PER_DAY: some fifty times a busy day's (a series of 200
-  -- volumes registered, sorted and shelved is about a thousand rows).
-  if used > 50000 then
-    return;
-  end if;
-  insert into public.library_events (user_id, book_id, kind, was, became, shelf_id,
-    manage, at)
-  values (reader, book, what, was, became, shelf,
-    private.reader_mode(reader) = 'manage',
-    least(coalesce(happened, now()), now()));
-end;
-$$;
-revoke all on function private.note_library_event(uuid, uuid, text, text, text, uuid,
-  timestamptz) from public, anon, authenticated;
-
--- After each write of a library row: what changed in it.
-create function private.library_entry_events() returns trigger
-language plpgsql security definer set search_path = '' as $$
-begin
-  if tg_op = 'INSERT' then
-    perform private.note_library_event(new.user_id, new.book_id, 'added', null,
-      new.source, null, new.added_at);
-    if new.removed_at is not null then
-      perform private.note_library_event(new.user_id, new.book_id, 'removed', null,
-        null, null, new.removed_at);
-    end if;
-    if new.status is not null then
-      perform private.note_library_event(new.user_id, new.book_id, 'status', null,
-        new.status, null, new.status_at);
-    end if;
-    if new.wanted_at is not null then
-      perform private.note_library_event(new.user_id, new.book_id, 'wanted', null,
-        null, null, new.wanted_at);
-    end if;
-    if new.owned is not null then
-      perform private.note_library_event(new.user_id, new.book_id, 'owned', null,
-        new.owned, null, null);
-    end if;
+  if not private.keeps_library_events(me) then
     return null;
   end if;
-  if old.removed_at is null and new.removed_at is not null then
-    perform private.note_library_event(new.user_id, new.book_id, 'removed', null,
-      null, null, new.removed_at);
-  elsif old.removed_at is not null and new.removed_at is null then
-    perform private.note_library_event(new.user_id, new.book_id, 'restored', null,
-      null, null, null);
-  end if;
-  if old.status is distinct from new.status then
-    perform private.note_library_event(new.user_id, new.book_id, 'status', old.status,
-      new.status, null, new.status_at);
-  end if;
-  if old.wanted_at is null and new.wanted_at is not null then
-    perform private.note_library_event(new.user_id, new.book_id, 'wanted', null,
-      null, null, new.wanted_at);
-  elsif old.wanted_at is not null and new.wanted_at is null then
-    perform private.note_library_event(new.user_id, new.book_id, 'unwanted', null,
-      null, null, null);
-  end if;
-  if old.owned is distinct from new.owned then
-    perform private.note_library_event(new.user_id, new.book_id, 'owned', old.owned,
-      new.owned, null, null);
-  end if;
+  manage := private.reader_mode(me) = 'manage';
+  insert into public.library_events (user_id, book_id, kind, was, became, manage, at)
+  select me, k.book_id, k.kind, null, k.became, manage,
+    t0 + make_interval(secs => (row_number() over (order by k.nth, k.step)) / 1e6)
+  from (
+    select e.book_id, e.nth, x.step, x.kind, x.became
+    from (select n.*, row_number() over () as nth from added n where n.user_id = me) e
+    cross join lateral (values
+      (1, 'added', e.source, true),
+      (2, 'removed', null, e.removed_at is not null),
+      (3, 'status', e.status, e.status is not null),
+      (4, 'wanted', null, e.wanted_at is not null),
+      (5, 'owned', e.owned, e.owned is not null)
+    ) x (step, kind, became, happened)
+    where x.happened) k;
   return null;
 end;
 $$;
-revoke all on function private.library_entry_events() from public, anon, authenticated;
-create trigger library_entries_events
-  after insert or update of removed_at, status, wanted_at, owned
-  on public.library_entries
-  for each row execute function private.library_entry_events();
+revoke all on function private.library_entries_added() from public, anon, authenticated;
+create trigger library_entries_added after insert on public.library_entries
+  referencing new table as added
+  for each statement execute function private.library_entries_added();
 
--- After a book is put on or taken off one of the reader's shelves. A place
--- taken off along with its library row (forget_books, AUD-055) is kept only
--- while the row is there; the row going takes its history with it.
-create function private.library_shelf_book_events() returns trigger
+-- After each update of library rows: what changed in them.
+create function private.library_entries_changed() returns trigger
 language plpgsql security definer set search_path = '' as $$
+declare
+  me uuid := (select auth.uid());
+  t0 timestamptz := clock_timestamp();
+  manage boolean;
 begin
-  if tg_op = 'INSERT' then
-    perform private.note_library_event(new.user_id, new.book_id, 'shelved', null,
-      null, new.shelf_id, new.added_at);
-  elsif exists (
-      select 1 from public.library_entries e
-      where e.user_id = old.user_id and e.book_id = old.book_id)
-    and exists (
-      select 1 from public.library_shelves s
-      where s.id = old.shelf_id and s.user_id = old.user_id) then
-    perform private.note_library_event(old.user_id, old.book_id, 'unshelved', null,
-      null, old.shelf_id, null);
+  if not private.keeps_library_events(me) then
+    return null;
   end if;
+  manage := private.reader_mode(me) = 'manage';
+  insert into public.library_events (user_id, book_id, kind, was, became, manage, at)
+  select me, k.book_id, k.kind, k.was, k.became, manage,
+    t0 + make_interval(secs => (row_number() over (order by k.nth, k.step)) / 1e6)
+  from (
+  select n.book_id, n.nth, x.step, x.kind, x.was, x.became
+  from (select n.*, row_number() over () as nth from after_rows n where n.user_id = me) n
+  join before_rows o on o.user_id = n.user_id and o.book_id = n.book_id
+  cross join lateral (values
+    (1, case when o.removed_at is null and n.removed_at is not null then 'removed'
+             when o.removed_at is not null and n.removed_at is null then 'restored' end,
+     null, null),
+    (2, case when o.status is distinct from n.status then 'status' end, o.status, n.status),
+    (3, case when o.wanted_at is null and n.wanted_at is not null then 'wanted'
+             when o.wanted_at is not null and n.wanted_at is null then 'unwanted' end,
+     null, null),
+    (4, case when o.owned is distinct from n.owned then 'owned' end, o.owned, n.owned)
+  ) x (step, kind, was, became)
+  where x.kind is not null) k;
   return null;
 end;
 $$;
-revoke all on function private.library_shelf_book_events() from public, anon, authenticated;
-create trigger library_shelf_books_events after insert or delete
-  on public.library_shelf_books
-  for each row execute function private.library_shelf_book_events();
+revoke all on function private.library_entries_changed() from public, anon, authenticated;
+create trigger library_entries_changed after update on public.library_entries
+  referencing old table as before_rows new table as after_rows
+  for each statement execute function private.library_entries_changed();
 
--- Every night: rows go after a year, and the days counted before yesterday.
+-- After books are put on one of the reader's shelves.
+create function private.library_shelf_books_added() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  me uuid := (select auth.uid());
+  t0 timestamptz := clock_timestamp();
+begin
+  if not private.keeps_library_events(me) then
+    return null;
+  end if;
+  insert into public.library_events (user_id, book_id, kind, shelf_id, manage, at)
+  select me, a.book_id, 'shelved', a.shelf_id, private.reader_mode(me) = 'manage',
+    t0 + make_interval(secs => (row_number() over ()) / 1e6)
+  from added a where a.user_id = me;
+  return null;
+end;
+$$;
+revoke all on function private.library_shelf_books_added() from public, anon, authenticated;
+create trigger library_shelf_books_added after insert on public.library_shelf_books
+  referencing new table as added
+  for each statement execute function private.library_shelf_books_added();
+
+-- After books are taken off. A place taken off along with its library row or
+-- its shelf (forget_books, AUD-055; an account going) is kept only while the
+-- row and the shelf are there; the row going takes its history with it.
+create function private.library_shelf_books_taken() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  me uuid := (select auth.uid());
+  t0 timestamptz := clock_timestamp();
+begin
+  if not private.keeps_library_events(me) then
+    return null;
+  end if;
+  insert into public.library_events (user_id, book_id, kind, shelf_id, manage, at)
+  select me, t.book_id, 'unshelved', t.shelf_id, private.reader_mode(me) = 'manage',
+    t0 + make_interval(secs => (row_number() over ()) / 1e6)
+  from taken t
+  where t.user_id = me
+    and exists (select 1 from public.library_entries e
+                where e.user_id = t.user_id and e.book_id = t.book_id)
+    and exists (select 1 from public.library_shelves s
+                where s.id = t.shelf_id and s.user_id = t.user_id);
+  return null;
+end;
+$$;
+revoke all on function private.library_shelf_books_taken() from public, anon, authenticated;
+create trigger library_shelf_books_taken after delete on public.library_shelf_books
+  referencing old table as taken
+  for each statement execute function private.library_shelf_books_taken();
+
+-- Every night: rows go after a year.
 create function private.forget_library_events() returns void
 language sql security definer set search_path = '' as $$
   delete from public.library_events e where e.at < now() - interval '1 year';
-  delete from private.library_event_days d
-  where d.day < (now() at time zone 'utc')::date - 1;
 $$;
 revoke all on function private.forget_library_events() from public, anon, authenticated;
 
