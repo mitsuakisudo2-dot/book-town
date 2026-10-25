@@ -1,5 +1,5 @@
 {
-  "/": 282,
+  "/": 283,
   "/books/[id]/": 278,
   "/books/registered/": 254,
   "/credits/": 255,
@@ -18,6 +18,6 @@
   "/search/": 266,
   "/shop/": 254,
   "/shops/[id]/": 264,
-  "/timeline/": 282,
+  "/timeline/": 283,
   "/walk/": 281
 }
