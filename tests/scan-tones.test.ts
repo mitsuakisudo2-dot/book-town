@@ -7,7 +7,7 @@ import {
   setSoundOn,
   toneOf,
 } from "../src/lib/scan-tones";
-import { SHELF_ROW, fillsRow, foldedRows } from "../src/components/ScanShelf";
+import { SHELF_ROW, fillsRow } from "../src/components/ScanShelf";
 
 // 読み取りの音 (114): コトッ first; ♪ and 音なし are one switch, kept as
 // before ("off"), so a reader who had turned it off stays without sound.
@@ -39,12 +39,8 @@ chooseTone("wood");
 assert.equal(kept(), "wood", "choosing a tone turns the sound on");
 assert.equal(data.get(SOUND_KEY), undefined);
 
-// この回の棚: ten books to a 段; the 段 before the one in sight fold.
+// この回の棚: every tenth book sounds as one more 段 (完了 shows ten to one).
 assert.equal(SHELF_ROW, 10);
-assert.deepEqual(
-  [0, 1, 9, 10, 11, 20, 21].map(foldedRows),
-  [0, 0, 0, 0, 1, 1, 2],
-);
 assert.deepEqual([0, 1, 9, 10, 11, 20].map(fillsRow), [
   false,
   false,

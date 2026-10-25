@@ -39,7 +39,7 @@
 .scan-top {
   flex: none;
   display: grid;
-  grid-template-columns: 44px 1fr 44px;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center;
   gap: 8px;
   min-height: 52px;
@@ -1098,12 +1098,15 @@ body:has(.scan-session) .toast {
 }
 
 /* この回の棚 (ScanShelf.tsx, 114): this time's books as spines on a small
-   shelf under the count, ten to a 段; 完了 shows it larger. Each spine has
+   shelf under the count, one long row that widens with each book and lets
+   the oldest slide off its left end once full; 完了 shows it larger, ten to
+   a 段. Each spine has
    the book's own colour (--spine) and a share of the shelf's height and of
    the widest spine (--spine-tall, --spine-wide). With the larger words, or
    little height, the count is said alone (けにーさん 2026-10-23). */
 .scan-count-shelf {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
   gap: 4px;
   min-width: 0;
@@ -1115,6 +1118,9 @@ body:has(.scan-session) .toast {
   gap: 6px;
   pointer-events: none;
 }
+.scan-shelf {
+  max-width: 100%;
+}
 .scan-shelf-row {
   display: flex;
   align-items: flex-end;
@@ -1123,6 +1129,19 @@ body:has(.scan-session) .toast {
   height: 22px;
   padding: 0 4px;
   border-bottom: 3px solid var(--cork);
+}
+/* The scanner's shelf: as wide as its books, the newest at the right end. */
+.scan-shelf:not(.is-large) .scan-shelf-row {
+  justify-content: flex-end;
+  width: auto;
+  min-width: 98px;
+  max-width: 100%;
+  overflow: hidden;
+}
+/* Wider than the room: the oldest fade off the left end. */
+.scan-shelf.is-long .scan-shelf-row {
+  -webkit-mask-image: linear-gradient(to right, transparent, var(--ink) 24px);
+  mask-image: linear-gradient(to right, transparent, var(--ink) 24px);
 }
 .scan-spine {
   flex: none;

@@ -847,9 +847,9 @@ try {
     await show(scan, ...twenty);
     await expect(count(scan)).toHaveText("20冊 登録済み", { timeout: 15000 });
     await expect(scanner(scan).locator(".scan-item")).toHaveCount(20);
-    // The shelf agrees with the count: ten a 段, the one before folded.
-    await expect(shelf(scan).locator(".scan-shelf-folded")).toHaveText("1段");
-    await expect(spines(scan)).toHaveCount(10);
+    // The shelf agrees with the count: one long shelf, never folded.
+    await expect(spines(scan)).toHaveCount(20);
+    await expect(shelf(scan).locator(".scan-shelf-folded")).toHaveCount(0);
     for (const isbn of twenty) inLibrary.add("isbn-" + isbn);
     await expectLibrary();
     const data = await stored(scan);
@@ -870,8 +870,7 @@ try {
       const isbn = isbnOf(21);
       await show(scan, [isbn, PRICE]);
       await expect(count(scan)).toHaveText("21冊 登録済み");
-      await expect(shelf(scan).locator(".scan-shelf-folded")).toHaveText("2段");
-      await expect(spines(scan)).toHaveCount(1);
+      await expect(spines(scan)).toHaveCount(21);
       inLibrary.add("isbn-" + isbn);
       await expectLibrary();
       const guide = scanner(scan).locator(".scan-guide");
@@ -908,7 +907,7 @@ try {
       await expect(cardStatus(scan)).toHaveText("読み取り済み・再入力不要");
       await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
       // A book that waits for the reader is not on the shelf.
-      await expect(spines(scan)).toHaveCount(1);
+      await expect(spines(scan)).toHaveCount(21);
       await expect(spines(scan, true)).toHaveCount(0);
       // 再試行 asks openBD again (Figma v4's 07); still unknown, the book
       // stays as it was.
@@ -950,7 +949,7 @@ try {
       await expect(cardStatus(scan)).toHaveText("取り消しました");
       await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
       // Taken back, it leaves the shelf.
-      await expect(spines(scan)).toHaveCount(1);
+      await expect(spines(scan)).toHaveCount(21);
       await expect(
         scanner(scan).locator(".scan-item:not(.is-kept, .is-undone)"),
       ).toHaveCount(21);
@@ -995,7 +994,7 @@ try {
         "22冊 登録済み・1冊確認中・1冊要確認",
       );
       // On its way: faint, until its saving is confirmed.
-      await expect(spines(scan)).toHaveCount(2);
+      await expect(spines(scan)).toHaveCount(22);
       await expect(spines(scan, true)).toHaveCount(1);
       // Back online, it is looked up and registered.
       await scan.context().setOffline(false);
