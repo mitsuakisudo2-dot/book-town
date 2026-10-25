@@ -1,5 +1,6 @@
 import { createRegisteredBook } from "../../src/lib/books";
 import { demoBooks, demoShops } from "../../src/lib/data";
+import { woodScene } from "../../src/lib/store-scene-adapter";
 import {
   addBookPlacement,
   objectById,
@@ -140,6 +141,9 @@ export function emptyParentScene(): StoreScene {
 }
 export const EMPTY_PARENT_BOOK = "placement:shop-orbit:o3";
 
+/** The full case of three tiers that shelf presets are made of. */
+const fixedCase = (shop: Shop) => woodScene(shop, BOOKS, 0, { tiers: "fixed" });
+
 /** A signed-in owner's scene with a sample book (named ID) and a registered one (uuid). */
 export function sampleBookScene(): StoreScene {
   const shop = ownerShop([
@@ -154,7 +158,7 @@ export function sampleBookScene(): StoreScene {
       ],
     },
   ]);
-  return migrateShopScene(shop, BOOKS);
+  return migrateShopScene(shop, BOOKS, fixedCase(shop));
 }
 
 const ownerShop = (shelves: Shop["shelves"]): Shop => ({
@@ -393,7 +397,9 @@ export function randomLayout(seed: number): ShopLayout {
   const pick = <T>(list: readonly T[]): T =>
     list[Math.floor(random() * list.length)];
   const presets = SHELF_PRESETS.map((p) => p.id);
-  let L = layoutFromScene(migrateShopScene(ownerShop([]), BOOKS));
+  let L = layoutFromScene(
+    migrateShopScene(ownerShop([]), BOOKS, fixedCase(ownerShop([]))),
+  );
   L = applyShelfPreset(L, MAIN_SHELF_ID, pick(presets), BOOKS);
   const count = 1 + Math.floor(random() * 3);
   for (let i = 1; i < count; i++)

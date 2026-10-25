@@ -12,6 +12,7 @@ import {
 } from "../lib/store-scene";
 import { popExcerpt, tierCardOwners } from "../lib/store-scene-adapter";
 import { ART_PANELS, artPanel } from "../lib/book-art";
+import { GROW } from "../lib/growing-shop";
 import type { Book } from "../lib/types";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import "./walk.css";
@@ -306,6 +307,7 @@ export function StoreCanvas({
   tagline,
   focusText = null,
   greetingHref,
+  arranging,
 }: {
   scene: StoreScene;
   books: Book[];
@@ -321,6 +323,16 @@ export function StoreCanvas({
   focusText?: string | null;
   /** The owner's own visit: an empty floor POP invites them to write one. */
   greetingHref?: string;
+  /**
+   * 整える: the tiers a book may go to are lit, the book being carried
+   * waits faintly in its place, tiers just grown open, and tiers the owner
+   * arranged carry a small pin.
+   */
+  arranging?: {
+    lit?: ReadonlySet<string>;
+    lifted?: string | null;
+    fresh?: ReadonlySet<string>;
+  };
 }) {
   const drag = useRef(false);
   const greetingPop = scene.objects.find((o) => o.kind === "ownerPop");
@@ -424,7 +436,11 @@ export function StoreCanvas({
     return (
       <div
         key={o.id}
-        className={"walk-object walk-book is-" + o.display}
+        className={
+          "walk-object walk-book is-" +
+          o.display +
+          (arranging?.lifted === o.id ? " is-lifted" : "")
+        }
         style={{ ...pose(o), zIndex: tier ? 8 : 3 }}
       >
         <button
@@ -494,6 +510,8 @@ export function StoreCanvas({
       .sort((a, b) => a.rect.y - b.rect.y);
     const index = siblings.findIndex((r) => r.id === o.id);
     const shelf = furniture?.furnitureType === "shelf";
+    // A reading stand holds one cover and nothing else.
+    const stand = furniture?.furnitureType === "stand";
     // Rows that leave a gutter get a chalkboard beside them; older saved
     // stores keep the small tag over the books.
     const gutter = shelf && o.rect.x >= 0.15;
@@ -518,6 +536,8 @@ export function StoreCanvas({
         o.rect.w *
         (furniture?.rect.w ?? 1)
       : o.rect.w * (furniture?.rect.w ?? 1);
+    // A centred row has room at both ends, so no globe sits at its right.
+    const globe = o.align !== "center" && spare >= 0.085;
     const title = o.boardTitle ?? o.text ?? "";
     const still = woodshop && gutter && !o.text && items.length === 0;
     return (
@@ -525,7 +545,9 @@ export function StoreCanvas({
         key={o.id}
         className={
           "walk-object walk-row" +
-          (focusText !== null && o.text !== focusText ? " is-dimmed" : "")
+          (focusText !== null && o.text !== focusText ? " is-dimmed" : "") +
+          (arranging?.lit?.has(o.id) ? " is-lit" : "") +
+          (arranging?.fresh?.has(o.id) ? " is-fresh" : "")
         }
         style={{ ...pose(o), zIndex: 20 - index }}
         data-row={o.id}
@@ -565,7 +587,7 @@ export function StoreCanvas({
             seed={index + scene.storeId.length}
             left={pct(-(o.rect.x - 0.03) / o.rect.w)}
           />
-        ) : gutter ? (
+        ) : stand ? null : gutter ? (
           <span
             className="walk-row-decor"
             style={{
@@ -594,6 +616,11 @@ export function StoreCanvas({
           </>
         )}
         {items.map((book) => renderBook(book, o, index))}
+        {arranging && o.pinned && (
+          <span className="walk-row-pin" title={GROW.pinnedMark}>
+            <Icon name="pin" size={12} />
+          </span>
+        )}
         {shelf && (
           <span
             className={"walk-shelf-lip is-board-" + (index % 3)}
@@ -623,7 +650,7 @@ export function StoreCanvas({
               }}
             />
           ))}
-        {woodshop && shelf && !still && spare >= 0.085 && (
+        {woodshop && shelf && !still && globe && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             className="walk-decor walk-globe"
@@ -656,6 +683,13 @@ export function StoreCanvas({
             <>
               <span className="walk-case-post is-left" />
               <span className="walk-case-post is-right" />
+            </>
+          )}
+          {o.furnitureType === "stand" && (
+            <>
+              <span className="walk-shelf-lip is-stand-ledge" />
+              <span className="walk-case-post is-stand-post" />
+              <span className="walk-shelf-lip is-stand-foot" />
             </>
           )}
           {rows.map((row) => renderRow(row, o))}
@@ -724,7 +758,17 @@ export function StoreCanvas({
       );
     }
     if (o.kind === "ownerPop" && !o.text?.trim())
-      return greetingHref ? (
+      return arranging ? (
+        <button
+          key={o.id}
+          type="button"
+          className="walk-object walk-ownerPop is-invite"
+          style={pose(o)}
+          onClick={() => onLabel(o)}
+        >
+          <span className="walk-floor-pop-text">{GROW.writeGreeting}</span>
+        </button>
+      ) : greetingHref ? (
         <Link
           key={o.id}
           href={greetingHref}

@@ -20,6 +20,7 @@ import {
   type StoreScene,
 } from "./store-scene";
 import { bookById } from "./book-name";
+import { CASE_ID, DEFAULT_DOODLES, growingFrame, regrow } from "./growing-shop";
 
 export interface ReadEntry {
   id: string;
@@ -89,8 +90,18 @@ const FACES_PER_TIER: Record<number, number[]> = {
   1: [2, 2, 2],
   2: [99, 99, 99],
 };
-const DEFAULT_DOODLES = ["travel", "daily", "forest"];
-export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
+/**
+ * The scene a shop shows before its owner arranges it. A reader's case grows
+ * with its books; `tiers` asks for that many tiers instead (0 is the stand),
+ * and `tiers: "fixed"` for the full case of three, as a template change
+ * keeps the case a scene already has.
+ */
+export function woodScene(
+  shop: Shop,
+  books: Book[],
+  variant = 0,
+  { tiers }: { tiers?: number | "fixed" } = {},
+): StoreScene {
   const lights = [
     "#ffd293",
     "#dcd7a7",
@@ -145,15 +156,18 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
       z: 6,
       stamp: variant % 2 ? "coffee" : "plane",
     },
-    {
-      id: "main-shelf",
-      kind: "furniture",
-      parentId: null,
-      rect: { ...L.furniture },
-      z: 1,
-      furnitureType: "shelf",
-    },
   );
+  // A reader's shop grows with its books; the 見本 shops keep the full case.
+  if (!shop.demo && tiers !== "fixed")
+    return growingWood(scene, shop, books, variant, tiers);
+  scene.objects.push({
+    id: "main-shelf",
+    kind: "furniture",
+    parentId: null,
+    rect: { ...L.furniture },
+    z: 1,
+    furnitureType: "shelf",
+  });
   const split = variant === 3;
   const shelves = shop.shelves.filter((s) => s.isPublic);
   // Demo shops map each public shelf to its own tier. An owner's shop does
@@ -402,6 +416,64 @@ export function woodScene(shop: Shop, books: Book[], variant = 0): StoreScene {
     });
   }
   return scene;
+}
+/** A reader's case of as many tiers as its books need, set out tier by tier. */
+function growingWood(
+  scene: StoreScene,
+  shop: Shop,
+  books: Book[],
+  variant: number,
+  tiers?: number,
+): StoreScene {
+  scene.growth = "auto";
+  scene.objects.push({
+    id: CASE_ID,
+    kind: "furniture",
+    parentId: null,
+    rect: growingFrame(0).furniture,
+    z: 1,
+    furnitureType: "stand",
+  });
+  // The window template's table, as on the full case.
+  if (variant === 3)
+    scene.objects.push(
+      {
+        id: "table",
+        kind: "furniture",
+        parentId: null,
+        rect: { ...WALK_LAYOUT.table },
+        z: 3,
+        furnitureType: "table",
+      },
+      {
+        id: "table-row",
+        kind: "row",
+        parentId: "table",
+        rect: rect(0.05, 0, 0.9, 0.8),
+        z: 3,
+        text: "今日、手に取りたい本",
+        bookHeight: 0.105,
+        gap: 0.012,
+        mode: "face",
+        isPublic: true,
+      },
+    );
+  // Every book of the public shelves waits with its POP; the case is then
+  // set out around them, as it is again whenever the shelves change.
+  for (const shelf of shop.shelves.filter((s) => s.isPublic))
+    for (const item of shelf.items) {
+      const book = bookById(books, item.bookId);
+      if (!book) continue;
+      const id = "placement:" + shop.id + ":" + item.id;
+      scene = addBookPlacement(scene, book, null, id, item.display);
+      objectById(scene, id)!.source = {
+        shopId: shop.id,
+        shelfId: shelf.id,
+        itemId: item.id,
+      };
+      scene = setBookPop(scene, id, item.pop);
+    }
+  return regrow(scene, shop, books, { tiers });
 }
 export function publicWalkShops(
   state: Pick<TownState, "shops" | "ownShop" | "books">,

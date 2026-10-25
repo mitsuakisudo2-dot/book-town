@@ -67,6 +67,12 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     notPeople: ["batch_id"],
     readers: "own",
   },
+  // What the reader did with their library; written by the database only.
+  "public.library_events": {
+    people: { user_id: "delete" },
+    notPeople: ["shelf_id"],
+    readers: "own",
+  },
   "public.library_shelf_books": {
     people: { user_id: "delete" },
     readers: "own",
@@ -126,6 +132,8 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     },
   },
   "public.reader_settings": { people: { user_id: "delete" }, readers: "own" },
+  // Each reader's consent to a version of the terms (reading_mode).
+  "public.terms_consents": { people: { user_id: "delete" }, readers: "own" },
   "public.reading_entries": {
     people: { user_id: "delete" },
     readers: "blocks",
@@ -174,6 +182,49 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     readers: "nobody",
   },
   "private.works_apart": { people: {}, readers: "nobody" },
+  // Series, their lines and volumes, what the rules did run by run, what a
+  // person took out and did by hand (series); the bibliography's sources.
+  // They name no one.
+  "public.series": { people: {}, readers: "nobody" },
+  "public.series_lines": { people: {}, readers: "nobody" },
+  "public.series_volumes": { people: {}, readers: "nobody" },
+  "private.series_runs": { people: {}, readers: "nobody" },
+  "private.series_steps": {
+    people: {},
+    // Series, lines and editions a step names, some before they are made.
+    notPeople: ["edition_id", "series_id", "line_id", "from_series", "from_line"],
+    readers: "nobody",
+  },
+  "private.series_kept_out": { people: {}, readers: "nobody" },
+  "private.series_last_out": { people: {}, notPeople: ["edition_id", "from_series"], readers: "nobody" },
+  "private.series_decisions": {
+    people: {},
+    // The series and edition a person decided about.
+    notPeople: ["series_id", "edition_id"],
+    readers: "nobody",
+  },
+  "private.series_keys": { people: {}, readers: "nobody" },
+  "private.series_stale": { people: {}, readers: "nobody" },
+  "private.bib_providers": { people: {}, readers: "nobody" },
+  // People and genres (people): who made an edition, the people BookTown
+  // knows, their other names, what the operator decided, and the genres.
+  // Their people are authors, not accounts: they name no one. What a reader
+  // typed as the author of a book without an ISBN goes with the book.
+  "public.people": { people: {}, readers: "nobody" },
+  "public.edition_people": { people: {}, readers: "nobody" },
+  "public.person_links": { people: {}, readers: "nobody" },
+  "private.people_placed": { people: {}, readers: "nobody" },
+  "private.people_decisions": {
+    people: {},
+    // The author, edition and work a person decided about.
+    notPeople: ["person_id", "edition_id", "work_id"],
+    readers: "nobody",
+  },
+  "private.people_stale": { people: {}, readers: "nobody" },
+  "private.genres": { people: {}, readers: "nobody" },
+  "private.genre_ndc": { people: {}, readers: "nobody" },
+  "public.edition_facts": { people: {}, readers: "nobody" },
+  "private.work_genre_fixed": { people: {}, readers: "nobody" },
   // The bibliographic master (bibliography): what each source said about an
   // edition, the operator's corrections, when each book was placed in its
   // edition, and the operator's list of what to look at. They name no one.
@@ -210,6 +261,12 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   // What readers tell the operator (site_reports); only staff read them,
   // through site_reports(), which is the operator's own reading.
   "private.site_reports": { people: { user_id: "delete" }, readers: "nobody" },
+  // The terms' versions as the operator publishes them (reading_mode).
+  "private.terms_versions": { people: {}, readers: "nobody" },
+  // Which records and readings were made in manage mode (reading_mode); they
+  // go with their record or reading.
+  "private.records_made_in_manage": { people: {}, readers: "nobody" },
+  "private.readings_made_in_manage": { people: {}, readers: "nobody" },
   // The pairs of characters each book's title and author fold to, for the
   // search (search_in_database); it goes with its book, and only the search
   // functions read it.

@@ -1,0 +1,258 @@
+/* シリーズのまとめ登録 (管理表 13): SeriesSheet.tsx and SeriesStrip.tsx. */
+
+.series-sheet {
+  display: grid;
+  gap: 14px;
+}
+.series-count {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--ink-2);
+}
+.series-count strong {
+  color: var(--ink);
+}
+
+/* The shelf: a 段 of ten, each volume a spine standing on the board. */
+.series-shelf {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 2px;
+}
+.series-shelf-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 78px;
+  padding: 0 6px;
+  border-bottom: 6px solid var(--cork);
+}
+.series-spine {
+  flex: 0 1 28px;
+  min-width: 0;
+  height: 64px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 6px 0 0;
+  border: 2px dashed var(--line-2);
+  border-bottom: 0;
+  border-radius: var(--r-tag) var(--r-tag) 0 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform var(--dur-move) var(--ease-standard),
+    background-color var(--dur-move) var(--ease-standard);
+}
+.series-spine span {
+  padding: 2px 3px;
+  border-radius: var(--r-pill);
+}
+/* Picked: it rises into its place, in the reader's colour. */
+.series-spine.is-picked {
+  border-style: solid;
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+  transform: translateY(-6px);
+}
+/* The reader's: their book's own colour, its number on a label. */
+.series-spine.is-mine {
+  border-color: transparent;
+  background: var(--spine);
+  cursor: default;
+}
+.series-spine.is-mine span {
+  background: var(--sheet);
+  color: var(--ink);
+}
+.series-spine.is-landed {
+  animation: series-land var(--dur-arrive) var(--ease-arrive);
+}
+@keyframes series-land {
+  from {
+    transform: translateY(-14px);
+  }
+}
+
+.series-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px 12px;
+}
+.series-list-head p {
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--ink-2);
+}
+.series-all-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--green);
+  font-weight: 700;
+}
+
+.series-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.series-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+  cursor: pointer;
+}
+.series-row input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--green);
+}
+.series-list .is-mine .series-row {
+  background: var(--paper);
+  color: var(--ink-2);
+  cursor: default;
+}
+.series-number {
+  flex: none;
+  min-width: 3em;
+  font-weight: 700;
+}
+.series-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-meta);
+}
+.series-state {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--t-cap);
+}
+
+/* What the picked volumes are given: each choice in sight, wrapped. */
+.series-given {
+  display: grid;
+  gap: 8px;
+}
+.series-given p {
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--ink-2);
+}
+.series-given .chips {
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+/* The one button: always in reach under a long list. It reaches down over
+   the sheet's own bottom padding (--foot-gap, as .modal and .modal.is-sheet
+   set it in globals.css), so what scrolls under it never shows beneath it. */
+.series-foot {
+  --foot-gap: 26px;
+  position: sticky;
+  bottom: calc(-1 * var(--foot-gap));
+  margin-bottom: calc(-1 * var(--foot-gap));
+  padding: 12px 0 var(--foot-gap);
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+@media (max-width: 720px) {
+  .series-foot {
+    --foot-gap: calc(22px + env(safe-area-inset-bottom));
+  }
+}
+.series-go {
+  width: 100%;
+}
+
+/* On a book's page: the series as a small shelf, a door to the sheet. */
+.series-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--sheet);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.series-strip-shelf {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 34px;
+  padding: 0 3px;
+  border-bottom: 3px solid var(--cork);
+}
+.series-strip-shelf span {
+  width: 7px;
+  height: 28px;
+  border: 1px dashed var(--line-2);
+  border-bottom: 0;
+  border-radius: var(--r-edge) var(--r-edge) 0 0;
+}
+.series-strip-shelf .is-mine {
+  border-color: transparent;
+  background: var(--spine);
+}
+.series-strip-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.series-strip-text b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.series-strip-text small {
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+}
+
+/* On a scanned book's card, left of its ⋮, which stays where it was (資料 6章). */
+.series-open {
+  padding: 0 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .series-spine {
+    transition: none;
+  }
+  .series-spine.is-landed {
+    animation: none;
+  }
+}

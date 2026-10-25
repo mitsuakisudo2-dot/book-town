@@ -11,6 +11,7 @@ import {
   type StoreTheme,
 } from "./store-scene";
 import { migrateShopScene, publicStoreScene } from "./store-customization";
+import { woodScene } from "./store-scene-adapter";
 
 // A shop's layout: what the whole shop shares (sign, greeting, stamp, the
 // room), a few shelves of its own, and the books not yet put on any. Visitors
@@ -385,9 +386,17 @@ export function layoutFromScene(scene: StoreScene): ShopLayout {
   };
 }
 
-/** A shop known only by its old shelves; their private books stay private and unplaced. */
+/** A shop known only by its old shelves; their private books stay private and
+ * unplaced. Shelf presets have three tiers, so the shop starts from the full
+ * case, not the growing one (管理表 28 brings the two together). */
 export function layoutFromLegacyShop(shop: Shop, books: Book[]): ShopLayout {
-  return layoutFromScene(migrateShopScene(shop, books));
+  return layoutFromScene(
+    migrateShopScene(
+      shop,
+      books,
+      woodScene(shop, books, 0, { tiers: "fixed" }),
+    ),
+  );
 }
 
 /** Another shop's published scene, read leniently: kinds this app does not

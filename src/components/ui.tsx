@@ -378,6 +378,7 @@ export function BookJacket({
   author = bookAuthor(book),
   artIndex,
   sizes = "160px",
+  mark,
 }: {
   book: Book;
   className?: string;
@@ -389,6 +390,8 @@ export function BookJacket({
   artIndex?: number;
   /** How wide the cover is drawn, for the image's `sizes`. */
   sizes?: string;
+  /** Laid on the cover's corner: 登録's ✓ (114, InLibraryMark). */
+  mark?: ReactNode;
 }) {
   const [watch, near] = useNearScreen();
   const found = useCover(useCoverIsbn(book), book, near);
@@ -400,10 +403,7 @@ export function BookJacket({
 
   const art = illustrated ? bookArt(book, artIndex) : null;
   className += illustrated ? " is-illustrated" : "";
-  const tate =
-    !illustrated &&
-    isDrawnBook(book) &&
-    tateTitle(bookTitle(book));
+  const tate = !illustrated && isDrawnBook(book) && tateTitle(bookTitle(book));
   className += tate ? " is-tate" : "";
   const flat = illustrated || tate ? null : flatSize(bookTitle(book));
   className += flat?.lines ? " is-long" : "";
@@ -461,6 +461,7 @@ export function BookJacket({
         ))}
       </span>
       <span className="jacket-imprint">本の街 文庫</span>
+      {mark}
     </>
   );
   return onClick ? (

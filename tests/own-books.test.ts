@@ -26,6 +26,7 @@ import {
   type TownState,
 } from "../src/lib/types";
 import { fakeSupabase } from "./fixtures/fake-supabase";
+import { foundBookChecks } from "./found-books";
 
 // A reader's rows name only books of their own (監査 AUD-001; けにー 10-18
 // 00:28Z; own-books.ts): a book another reader typed in is shown as theirs,
@@ -488,6 +489,7 @@ async function main() {
                   compose_icon: "pen",
                   reading_visibility: "private",
                   nine_version: 0,
+                  published: true,
                   created_at: at,
                   updated_at: at,
                 },
@@ -649,6 +651,7 @@ async function main() {
         compose_icon: "pen",
         reading_visibility: "private",
         nine_version: 0,
+        published: true,
         created_at: at,
         updated_at: at,
       });
@@ -754,6 +757,9 @@ async function main() {
       assert.deepEqual(asked, []);
     },
   );
+
+  // A book a page read that the town does not hold (found-books.ts).
+  await foundBookChecks(check);
 
   console.log(`${passed} own book checks passed`);
 }

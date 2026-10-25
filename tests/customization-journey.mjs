@@ -936,6 +936,170 @@ try {
       await phone.close();
     },
   );
+  await check(
+    "整える: the shop fills the screen; its size, a book's look and 元に戻す work there",
+    async () => {
+      await page.goto(base + "/my-shop/");
+      await page
+        .getByRole("button", { name: "店を整える", exact: true })
+        .click();
+      const tidy = page.locator(".tidy");
+      await expect(tidy.locator(".walk-artboard")).toBeVisible();
+      const growth = async () => (await walkData()).sceneOverrides?.[0]?.growth;
+      const before = await growth();
+      await tidy
+        .getByRole("button", { name: "店の大きさ", exact: true })
+        .click();
+      await tidy.getByRole("button", { name: "2段", exact: true }).click();
+      await expect(
+        tidy.getByRole("button", { name: "2段", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(await growth()).toBe(2);
+      await tidy.getByRole("button", { name: "元に戻す", exact: true }).click();
+      await expect.poll(growth).toBe(before);
+      // A book opens its sheet; turning it is saved and its tier kept.
+      await tidy.locator(".walk-book-target").first().click();
+      const turn = tidy.getByRole("button", {
+        name: "背表紙を見せる",
+        exact: true,
+      });
+      const face = tidy.getByRole("button", {
+        name: "表紙を見せる",
+        exact: true,
+      });
+      const next =
+        (await face.getAttribute("aria-pressed")) === "true" ? turn : face;
+      await next.click();
+      await expect(next).toHaveAttribute("aria-pressed", "true");
+      await expect(tidy.locator(".scene-pinned")).toBeVisible();
+      await tidy.getByRole("button", { name: "閉じる" }).first().click();
+      await expect(tidy).toHaveCount(0);
+    },
+  );
+  await check(
+    "整える: a book is picked up and carried, or moved from its sheet, and 本を足す shows covers",
+    async () => {
+      await page
+        .getByRole("button", { name: "店を整える", exact: true })
+        .click();
+      const tidy = page.locator(".tidy");
+      await expect(tidy.locator(".walk-artboard")).toBeVisible();
+      /** The saved tiers' books, top to bottom, left to right. */
+      const tiers = () =>
+        page.evaluate(() => {
+          const scene = JSON.parse(localStorage.getItem("book-town-walk-v1"))
+            .sceneOverrides[0];
+          return scene.objects
+            .filter((o) => o.kind === "row" && o.parentId === "main-shelf")
+            .sort((a, b) => a.rect.y - b.rect.y)
+            .map((row) =>
+              scene.objects
+                .filter((o) => o.kind === "book" && o.parentId === row.id)
+                .sort((a, b) => a.order - b.order)
+                .map((o) => o.id),
+            );
+        });
+      const before = await tiers();
+      const tier = before.findIndex((books) => books.length > 1);
+      expect(tier).toBeGreaterThan(-1);
+      const [first] = before[tier];
+      const row = tidy.locator(".walk-row[data-row]").nth(tier);
+      const lifted = tidy.locator(`[data-placement="${first}"]`);
+      const from = await lifted.boundingBox();
+      const to = await row.boundingBox();
+      // Rested on, the book is picked up; let go at the tier's end, it
+      // stands there, and 元に戻す takes it back.
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+      await page.mouse.down();
+      await expect(tidy.locator(".tidy-carried")).toBeVisible();
+      await page.mouse.move(to.x + to.width - 4, to.y + to.height / 2, {
+        steps: 6,
+      });
+      await expect(row).toHaveClass(/is-lit/);
+      await page.mouse.up();
+      await expect(tidy.locator(".tidy-carried")).toHaveCount(0);
+      await expect.poll(async () => (await tiers())[tier].at(-1)).toBe(first);
+      await expect(tidy.locator(".walk-row-pin").first()).toBeVisible();
+      await expect(tidy.locator(".tidy-sheet")).toHaveCount(0);
+      await tidy.getByRole("button", { name: "元に戻す", exact: true }).click();
+      await expect.poll(tiers).toEqual(before);
+      // From its sheet: 動かす, then the place is pressed. (Enter opens a
+      // thin spine's own sheet, where a tap opens its tier.)
+      await lifted.press("Enter");
+      await tidy.getByRole("button", { name: "動かす", exact: true }).click();
+      await expect(tidy.locator(".tidy-placing")).toBeVisible();
+      await expect(row).toHaveClass(/is-lit/);
+      await page.mouse.click(to.x + to.width - 4, to.y + to.height / 2);
+      await expect(tidy.locator(".tidy-placing")).toHaveCount(0);
+      await expect.poll(async () => (await tiers())[tier].at(-1)).toBe(first);
+      await tidy.getByRole("button", { name: "元に戻す", exact: true }).click();
+      await expect.poll(tiers).toEqual(before);
+      // 本を足す: the books are shown by their covers, and found by name.
+      await tidy.getByRole("button", { name: "本を足す", exact: true }).click();
+      const search = tidy.getByRole("searchbox", { name: "足す本を探す" });
+      await expect(search).toBeVisible();
+      await expect(
+        tidy.locator(".tidy-covers button .book-jacket").first(),
+      ).toBeVisible();
+      await tidy.getByRole("button", { name: "閉じる" }).first().click();
+      await expect(tidy).toHaveCount(0);
+    },
+  );
+  await check(
+    "整える: the sign, its stamp and a POP are written in the shop, saved as typed, and taken back in one step",
+    async () => {
+      await page
+        .getByRole("button", { name: "店を整える", exact: true })
+        .click();
+      const tidy = page.locator(".tidy");
+      await expect(tidy.locator(".walk-artboard")).toBeVisible();
+      const scene = async () => (await walkData()).sceneOverrides[0].objects;
+      const sign = async () => (await scene()).find((o) => o.id === "sign");
+      const before = (await sign()).text;
+      await tidy.getByRole("button", { name: "看板", exact: true }).click();
+      const name = tidy.getByLabel("看板の店名");
+      await expect(name).toHaveValue(before);
+      // Each letter is saved as it is typed: nothing waits unsaved.
+      await name.press("End");
+      await name.pressSequentially("と古地図");
+      await expect
+        .poll(async () => (await sign()).text)
+        .toBe(before + "と古地図");
+      await expect(tidy.locator(".walk-sign")).toContainText("古地図");
+      await tidy
+        .getByRole("group", { name: "店のスタンプ" })
+        .getByRole("button", { name: "葉っぱ" })
+        .click();
+      await expect
+        .poll(async () => (await scene()).find((o) => o.id === "stamp").stamp)
+        .toBe("leaf");
+      const undo = tidy.getByRole("button", { name: "元に戻す", exact: true });
+      await undo.click();
+      await undo.click();
+      // The typed words were one step.
+      await expect.poll(async () => (await sign()).text).toBe(before);
+      // A POP is written on the book's sheet, with a stamp.
+      const first = tidy.locator("[data-placement]").first();
+      const id = await first.getAttribute("data-placement");
+      const popOf = async () =>
+        (await scene()).find((o) => o.kind === "bookPop" && o.parentId === id);
+      const popBefore = (await popOf())?.text ?? "";
+      await first.press("Enter");
+      await tidy.getByRole("button", { name: /POPを(書く|直す)/ }).click();
+      const pop = tidy.getByLabel("この本のPOP");
+      await pop.fill("");
+      await pop.pressSequentially("雨の夜に");
+      await expect.poll(async () => (await popOf())?.text).toBe("雨の夜に");
+      await tidy.getByRole("button", { name: "できた", exact: true }).click();
+      await expect(pop).toHaveCount(0);
+      await undo.click();
+      await expect
+        .poll(async () => (await popOf())?.text ?? "")
+        .toBe(popBefore);
+      await tidy.getByRole("button", { name: "閉じる" }).first().click();
+      await expect(tidy).toHaveCount(0);
+    },
+  );
   expect(errors).toEqual([]);
   console.log(passed.length + " customization browser checks passed");
 } finally {

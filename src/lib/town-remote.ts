@@ -301,7 +301,7 @@ export function bookFromRow(row: BookRow, registered: boolean): Book {
 function withTypist(
   book: Book,
   row: BookRow,
-  mine: Map<string, string | null> | undefined,
+  mine: ReadonlyMap<string, string | null> | undefined,
 ): Book {
   if (!mine || row.source !== "manual") return book;
   if (!mine.has(row.id)) return { ...book, theirs: true };
@@ -595,7 +595,8 @@ export function townFromRows(
   };
   const readerFrom = (row: Tables<"profiles">): Reader => ({
     id: readerId(row.id),
-    handle: row.handle,
+    // Others are never given a profile without one (reading_mode).
+    handle: row.handle ?? "",
     name: row.name,
     bio: row.bio,
     color: row.color,
@@ -965,7 +966,7 @@ export function arrivedFromRows(
       .filter((row) => row.id !== userId && authors.has(row.id))
       .map((row) => ({
         id: row.id,
-        handle: row.handle,
+        handle: row.handle ?? "",
         name: row.name,
         bio: row.bio,
         color: row.color,
@@ -1059,14 +1060,15 @@ export interface MoreRows {
 /**
  * What a page read, in the town's shapes, as townFromRows makes them: only
  * others' finished records and nines (the reader's own are in the town
- * whole), a 見本's book by its own name. A book another reader typed in is
- * told as theirs when the town tells the reader's own apart
- * (`ownBooksKnown`), as arrivedFromRows tells them.
+ * whole), a 見本's book by its own name. A book typed in is told by the
+ * reader's own books (`mine`, from my_books), as townFromRows tells them:
+ * one of theirs, or a copy of theirs, may be older than the town's newest
+ * and found only now. Undefined tells none apart.
  */
 export function moreFromRows(
   rows: MoreRows,
   userId: string | null,
-  ownBooksKnown = false,
+  mine?: ReadonlyMap<string, string | null>,
 ): TownMore {
   const id = (bookId: string) => sampleBookOfRow(bookId) ?? bookId;
   const nines = new Map<string, Tables<"profile_nine">[]>();
@@ -1103,9 +1105,11 @@ export function moreFromRows(
     books: rows.books
       .filter((row) => !sampleBookOfRow(row.id))
       .map((row) =>
-        ownBooksKnown && userId !== null && row.source === "manual"
-          ? { ...bookFromRow(row, false), theirs: true as const }
-          : bookFromRow(row, false),
+        withTypist(
+          bookFromRow(row, false),
+          row,
+          userId === null ? undefined : mine,
+        ),
       ),
   };
 }

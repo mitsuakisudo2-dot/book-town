@@ -365,3 +365,463 @@
     scroll-behavior: auto !important;
   }
 }
+
+.scene-pinned {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+.scene-pinned .scene-hint {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.scene-pinned .scene-hint svg {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+/* 店の大きさ: a drawing of the case for each size to press. */
+.shop-size-options {
+  flex: 1;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+.shop-size-options button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.shop-size-options button[aria-pressed="true"] {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+  font-weight: 700;
+}
+.shop-size-case {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 36px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+}
+.shop-size-case .is-book {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0.45;
+}
+.shop-size-case .is-more {
+  stroke-dasharray: 4 4;
+  opacity: 0.5;
+}
+.shop-size-hint {
+  color: var(--muted);
+  font-size: var(--t-cap);
+  line-height: 1.8;
+  margin: 12px 0 0;
+}
+
+/* 整える: the shop fills the screen, the tools below it, and what a tool or
+   a book opens rises over the tools as a sheet. */
+/* It is a walk-view too, for the walk's own layers and look. */
+.tidy.walk-view {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  z-index: var(--layer-page);
+  display: flex;
+  flex-direction: column;
+  background: var(--shade);
+  color: var(--on-dark);
+}
+.tidy-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: max(6px, env(safe-area-inset-top)) 12px 6px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.tidy-top h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  text-align: center;
+  font-family: var(--serif);
+  font-size: var(--t-page);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tidy-stage.scene-preview {
+  position: relative;
+  isolation: isolate;
+  width: auto;
+  max-width: none;
+  top: auto;
+  border-radius: 0;
+}
+.tidy-stage .walk-artboard {
+  width: min(100cqw, 100cqh * 9 / 16);
+}
+.tidy-waiting {
+  position: absolute;
+  left: 50%;
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-cap);
+  font-weight: 700;
+}
+.tidy-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  max-height: 58%;
+  overflow: auto;
+  padding: 14px 16px 16px;
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+.tidy-sheet h3 {
+  margin: 0 40px 10px 0;
+  font-size: var(--t-page);
+}
+.tidy-sheet .tidy-title {
+  margin-bottom: 2px;
+  font-family: var(--serif);
+}
+.tidy-sub {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: var(--t-cap);
+}
+.tidy-sheet-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+}
+.tidy-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.tidy-seg button,
+.tidy-acts button,
+.tidy-list button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+}
+.tidy-seg button[aria-pressed="true"] {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+  font-weight: 700;
+}
+.tidy-acts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.tidy-list {
+  display: grid;
+  gap: 5px;
+}
+.tidy-list button {
+  justify-content: space-between;
+  text-align: left;
+}
+.tidy-list small {
+  display: block;
+  color: var(--muted);
+  font-size: var(--t-cap);
+}
+.tidy-search {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+}
+.tidy-pop {
+  display: grid;
+  gap: 8px;
+}
+.tidy-tools {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 4px 8px env(safe-area-inset-bottom);
+  background: var(--paper);
+  color: var(--ink);
+}
+.tidy-tools button {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-height: 60px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--t-cap);
+}
+.tidy-tools button[aria-pressed="true"] {
+  color: var(--green);
+  font-weight: 700;
+}
+.tidy.is-typing {
+  bottom: auto;
+}
+.tidy.is-typing .tidy-tools {
+  display: none;
+}
+.tidy.is-typing .tidy-sheet {
+  bottom: 0;
+}
+/* A book's cover in the search: the books to add, side by side. */
+.tidy-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-bottom: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--sheet);
+  color: var(--ink-2);
+}
+.tidy-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+.tidy-covers {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 76px;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+}
+.tidy-covers button {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-cap);
+  text-align: left;
+  scroll-snap-align: start;
+}
+.tidy-covers .book-jacket {
+  width: 76px;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--r-edge);
+  box-shadow: var(--lift-1);
+}
+.tidy-covers span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.4;
+}
+.tidy-covers i {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--green);
+  color: var(--on-green);
+}
+/* 持ち上げて運ぶ: the shop takes the finger, not the page. */
+.tidy-stage .walk-artboard {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.tidy .walk-book.is-lifted {
+  opacity: 0.35;
+}
+.tidy-stage.is-carrying .walk-row.is-lit {
+  border-radius: var(--r-tag);
+  outline: 2px solid var(--walk-light);
+  outline-offset: 2px;
+}
+.tidy-carried {
+  position: fixed;
+  z-index: var(--layer-toast);
+  width: 46px;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 18px)) rotate(-3deg);
+  filter: drop-shadow(0 8px 10px var(--shade));
+}
+.tidy-carried > * {
+  width: 100%;
+}
+.tidy-placing {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: calc(56px + env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--t-cap);
+  font-weight: 700;
+}
+.tidy .walk-row-pin {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--ink);
+  z-index: var(--layer-sticky);
+  pointer-events: none;
+}
+/* A tier the shop has just grown: the board slides down into its light. */
+.tidy .walk-row.is-fresh {
+  animation: tidy-grow var(--dur-lamp) var(--ease-arrive);
+  transform-origin: top;
+}
+@keyframes tidy-grow {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+    filter: brightness(1.6);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tidy .walk-row.is-fresh {
+    animation: none;
+  }
+}
+/* The words and choices a sheet edits, saved as they change. */
+.tidy-fields {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.tidy-fields label:not(.tidy-switch),
+.tidy-chips-label {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  font-weight: 700;
+}
+.tidy-fields input:not([type="checkbox"]),
+.tidy-fields textarea,
+.tidy-pop textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+}
+.tidy-chips-group {
+  display: grid;
+  gap: 4px;
+}
+.tidy-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.tidy-chips button {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 52px;
+  min-height: 52px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-cap);
+}
+.tidy-chips button svg {
+  width: 26px;
+  height: 22px;
+}
+.tidy-chips button[aria-pressed="true"] {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+}
+.tidy-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: var(--t-cap);
+}
+.tidy-pop {
+  margin-bottom: 8px;
+}

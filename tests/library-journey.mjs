@@ -311,6 +311,12 @@ const toasts = (on = page) => on.evaluate(() => window.__toasts.splice(0));
 const scanner = (on = page) =>
   on.getByRole("dialog", { name: "本を続けて登録" });
 const count = (on) => scanner(on).locator(".scan-count");
+/** この回の棚 under the count (114): its folded 段 and its spines in sight. */
+const shelf = (on) => scanner(on).locator(".scan-count-shelf .scan-shelf");
+const spines = (on, faint = false) =>
+  shelf(on).locator(
+    faint ? ".scan-spine.is-faint" : ".scan-spine:not(.is-faint)",
+  );
 /** The newest book of this time's list: it is on top. */
 const latest = (on) => scanner(on).locator(".scan-item").first();
 const cardTitle = (on) => latest(on).locator(".scan-item-title");
@@ -594,6 +600,39 @@ try {
   );
 
   await check(
+    "a book typed in by hand named as one in the library is asked about (101)",
+    async () => {
+      await toasts();
+      const before = await stored();
+      await openRegister();
+      const same = dialog().locator(".register-same");
+      // Spaced and in full width, it is the 門 in the library all the same.
+      await dialog().getByLabel("タイトル").fill("門");
+      await dialog().getByLabel("著者").fill("夏目漱石");
+      await expect(same).toContainText("この本ですか？");
+      await expect(same).toContainText("夏目 漱石");
+      await expect(registerButton()).toHaveCount(0);
+      await expect(
+        dialog().getByRole("button", { name: "別の本として登録" }),
+      ).toBeEnabled();
+      await page.screenshot({ path: path.join(output, "same-book.png") });
+      // Another author is another book, and nothing is asked.
+      await dialog().getByLabel("著者").fill("ほかの人");
+      await expect(same).toHaveCount(0);
+      await expect(registerButton()).toBeEnabled();
+      await dialog().getByLabel("著者").fill("");
+      await expect(same).toBeVisible();
+      await same.getByRole("button", { name: "この本です" }).click();
+      await registered("『門』はもうライブラリにあります");
+      const seen = await toasts();
+      expect(seen.some((text) => text.includes("登録しました"))).toBe(false);
+      const after = await stored();
+      expect(after.library).toEqual(before.library);
+      expect(after.addedBooks).toEqual(before.addedBooks);
+    },
+  );
+
+  await check(
     "a book the town knows, but not the library, is registered as usual",
     async () => {
       // ［完了］ says what this time registered, and the library is there.
@@ -841,6 +880,9 @@ try {
     await show(scan, ...twenty);
     await expect(count(scan)).toHaveText("20冊 登録済み", { timeout: 15000 });
     await expect(scanner(scan).locator(".scan-item")).toHaveCount(20);
+    // The shelf agrees with the count: one long shelf, never folded.
+    await expect(spines(scan)).toHaveCount(20);
+    await expect(shelf(scan).locator(".scan-shelf-folded")).toHaveCount(0);
     for (const isbn of twenty) inLibrary.add("isbn-" + isbn);
     await expectLibrary();
     const data = await stored(scan);
@@ -861,6 +903,7 @@ try {
       const isbn = isbnOf(21);
       await show(scan, [isbn, PRICE]);
       await expect(count(scan)).toHaveText("21冊 登録済み");
+      await expect(spines(scan)).toHaveCount(21);
       inLibrary.add("isbn-" + isbn);
       await expectLibrary();
       const guide = scanner(scan).locator(".scan-guide");
@@ -896,6 +939,9 @@ try {
       );
       await expect(cardStatus(scan)).toHaveText("読み取り済み・再入力不要");
       await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
+      // A book that waits for the reader is not on the shelf.
+      await expect(spines(scan)).toHaveCount(21);
+      await expect(spines(scan, true)).toHaveCount(0);
       // 再試行 asks openBD again (Figma v4's 07); still unknown, the book
       // stays as it was.
       const fix = latest(scan).getByRole("group", {
@@ -935,6 +981,8 @@ try {
       await undoKnown();
       await expect(cardStatus(scan)).toHaveText("取り消しました");
       await expect(count(scan)).toHaveText("21冊 登録済み・1冊要確認");
+      // Taken back, it leaves the shelf.
+      await expect(spines(scan)).toHaveCount(21);
       await expect(
         scanner(scan).locator(".scan-item:not(.is-kept, .is-undone)"),
       ).toHaveCount(21);
@@ -978,6 +1026,9 @@ try {
       await expect(count(scan)).toHaveText(
         "22冊 登録済み・1冊確認中・1冊要確認",
       );
+      // On its way: faint, until its saving is confirmed.
+      await expect(spines(scan)).toHaveCount(22);
+      await expect(spines(scan, true)).toHaveCount(1);
       // Back online, it is looked up and registered.
       await scan.context().setOffline(false);
       await expect(cardTitle(scan)).toHaveText("試験の本 23");
@@ -1213,7 +1264,24 @@ try {
       const isbn = isbnOf(29);
       await show(scan, isbn);
       await expect(count(scan)).toHaveText("1冊 登録済み");
+      // A book read by mistake and taken back is forgotten as this time
+      // ends (AUD-055): no longer the reader's 登録した本.
+      const mistaken = isbnOf(30);
+      await show(scan, mistaken);
+      await expect(count(scan)).toHaveText("2冊 登録済み");
+      await undoBook(scan, "試験の本 30");
+      await expect(count(scan)).toHaveText("1冊 登録済み");
+      expect(
+        (await stored(scan)).addedBooks.some((book) => book.isbn === mistaken),
+      ).toBe(true);
       expect(await finishScanning(scan)).toContain("1冊の登録が完了しました");
+      await expect
+        .poll(async () =>
+          (await stored(scan)).addedBooks.some(
+            (book) => book.isbn === mistaken,
+          ),
+        )
+        .toBe(false);
       await expect(scan).toHaveURL(/[?&]books=library/);
       await expect(
         scan.getByRole("button", { name: /^登録/, pressed: true }),

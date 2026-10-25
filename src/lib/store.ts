@@ -364,6 +364,43 @@ export function createTownStore(
   // (own()), and the town with them: an action not taken leaves none.
   let unowned: { before: TownState; staged: TownState } | null = null;
   /**
+   * The books `ids` name that the town lacks and a page read after it
+   * (more: a search's, a book's page's, a reader's 人生の9冊), taken in as
+   * the backend's own reading before an action names them: they are the
+   * database's rows (the library's catalog's, or another reader's, then
+   * copied by own()), never written back as typed in. Without this, a book
+   * a search found beyond the town's newest was turned away without a word.
+   */
+  function takeInRead(ids: readonly (string | null | undefined)[]) {
+    if (loading || !backend.absorb || !kept.size) return;
+    const known = new Set(state.books.map((book) => book.id));
+    const wanted = new Set(
+      ids.filter((id): id is string => Boolean(id) && !known.has(id!)),
+    );
+    if (!wanted.size) return;
+    const found = new Map<string, Book>();
+    // The newest reading of a book first.
+    for (const read of [...kept.values()].reverse())
+      for (const book of read.books)
+        if (wanted.has(book.id) && !found.has(book.id))
+          found.set(book.id, book);
+    if (!found.size) return;
+    const take = (town: TownState): TownState => {
+      const have = new Set(town.books.map((book) => book.id));
+      const more = [...found.values()].filter((book) => !have.has(book.id));
+      return more.length ? { ...town, books: [...town.books, ...more] } : town;
+    };
+    // Into what the backend holds as saved, and into the town as it is now
+    // (with copies an action staged), the same.
+    if (!backend.absorb(take)) return;
+    const next = take(state);
+    if (next === state) return;
+    if (unowned && state === unowned.staged)
+      unowned = { before: take(unowned.before), staged: next };
+    state = next;
+    notify();
+  }
+  /**
    * The books the reader's rows will name for `ids` (own-books.ts): another
    * reader's book is named by the reader's own (one in `list`, the list the
    * action changes, first), a copy of it put in the town now when they have
@@ -373,6 +410,7 @@ export function createTownStore(
     ids: readonly T[],
     list?: readonly string[],
   ): T[] {
+    takeInRead(ids);
     const made = owning(state, ids, newBookId, list);
     if (made.state !== state) {
       unowned = { before: unowned?.before ?? state, staged: made.state };
@@ -1040,6 +1078,7 @@ export function createTownStore(
     },
     ownBook(given) {
       initialize();
+      takeInRead([given]);
       const made = owning(state, [given], newBookId);
       const [bookId] = made.ids;
       if (!made.state.books.some((book) => book.id === bookId)) return null;
@@ -1520,6 +1559,33 @@ export function createTownStore(
     getReadsSnapshot: () => !loading && Boolean(backend.newer),
     getServerReadsSnapshot: () => false,
     /**
+     * Forgets the books of scan `batch` taken back and still out (AUD-055,
+     * forget-books.ts): in the demo at once; in an account once what is
+     * saved has them taken out, as the database answers (each with when it
+     * was taken out, so one taken out again elsewhere since stays), taken
+     * in as its own reading so nothing is written back. Not one a draft in
+     * this browser names. The ids that went.
+     */
+    async forget(ids: string[], batch: string): Promise<string[]> {
+      const from = generation;
+      // Read only when a scan ends, so no page carries it for nothing.
+      const { forgetIn } = await import("./forget-books");
+      return forgetIn(
+        {
+          town: () => (loading || from !== generation ? null : state),
+          backend,
+          commit,
+          settled: () => townSettled(this),
+          take: (next) => {
+            state = next;
+            notify();
+          },
+        },
+        ids,
+        batch,
+      );
+    },
+    /**
      * Takes in what was read after the town (arrived.ts) as the backend's
      * own reading, by the path a refused change comes back by: never
      * through `commit`, so nothing of it is saved. `from` is the generation
@@ -1739,6 +1805,7 @@ export function journalTownOf(
     changeLibrary: (bookId, set) => {
       store.actions.changeLibrary([bookId], set);
     },
+    forget: (bookIds, batch) => store.forget(bookIds, batch),
   };
 }
 

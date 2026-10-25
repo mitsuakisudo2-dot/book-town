@@ -10,6 +10,8 @@ import {
 } from "../lib/types";
 import { BookJacket, CoverCredit, Icon } from "./ui";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
+import { InLibraryMark } from "./RegisterBook";
+import { SeriesStrip } from "./series-later";
 import { BookReviews } from "./Social";
 import {
   myShopPath,
@@ -157,7 +159,10 @@ export function BookView({
     <>
       <BackLink className="back-link" />
       <section className="book-page-hero">
-        <BookJacket book={named} />
+        <BookJacket
+          book={named}
+          mark={<InLibraryMark book={book} state={state} />}
+        />
         <div className="book-hero-head">
           <span className="eyebrow">ONE BOOK, MANY WORLDS</span>
           <span className="genre-tag">{book.genre}</span>
@@ -171,6 +176,12 @@ export function BookView({
         <div className="book-hero-body">
           <HeldBook book={book} actions={actions} notify={notify} />
           <p className="book-summary">{book.summary}</p>
+          <SeriesStrip
+            book={book}
+            state={state}
+            actions={actions}
+            notify={notify}
+          />
           <BookActions
             book={book}
             state={state}

@@ -1657,9 +1657,13 @@ try {
         // 書店を開く that turns into 本を登録, no 掲示板 with no board yet.
         const doors = page.getByRole("navigation", { name: "できること" });
         for (const name of ["書店を開く", "本を登録", "掲示板"])
-          await expect(doors.getByText(name)).toHaveCount(0);
-        await expect(doors.locator(".home-entrance")).toHaveCount(4);
-        await expect(doors.locator(".home-entrance.is-waiting")).toHaveCount(2);
+          await expect(
+            doors.getByText(name).filter({ visible: true }),
+          ).toHaveCount(0);
+        await expect(doors.locator(".home-entrance:visible")).toHaveCount(4);
+        await expect(
+          doors.locator(".home-entrance.is-waiting:visible"),
+        ).toHaveCount(2);
         await expect(
           doors.getByRole("button", { name: "読書をはじめる" }),
         ).toBeVisible();

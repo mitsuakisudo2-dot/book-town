@@ -21,6 +21,13 @@ import {
   type SceneObject,
 } from "./store-scene";
 import { woodScene } from "./store-scene-adapter";
+import {
+  SHOP_SIZES,
+  pinRow,
+  regrow,
+  tiersOf,
+  type ShopSize,
+} from "./growing-shop";
 import { bookById } from "./book-name";
 import {
   SCENE_BOARD_TITLE_MAX_LENGTH,
@@ -110,9 +117,10 @@ const shelfKey = (itemId: string, bookId: string) =>
  * waits unplaced with its POP and reactions, no longer tied to the shelf,
  * so the owner can still set it out by hand. A book put on a public shelf
  * goes after the books of its shelf, or on a row with no books yet, where
- * it fits; otherwise, and from a private shelf, it waits unplaced. Nothing
- * else the owner arranged changes, and a scene that already follows its
- * shelves comes back equal.
+ * it fits; otherwise, and from a private shelf, it waits unplaced. A growing
+ * case instead sets out again the tiers its owner did not arrange (regrow).
+ * Nothing else the owner arranged changes, and a scene that already follows
+ * its shelves comes back equal.
  */
 function followShelves(
   existing: StoreScene,
@@ -139,11 +147,11 @@ function followShelves(
   for (const rowId of emptied)
     if (objectById(scene, rowId)?.kind === "row")
       scene = relayoutRow(scene, rowId);
-  const rows = scene.objects.filter((o) => o.kind === "row").map((o) => o.id);
   const placedOn = (rowId: string) =>
     scene.objects.filter((o) => o.kind === "book" && o.parentId === rowId);
   /** Sets a placement out after the books of its shelf, if a row has room. */
   const setOut = (id: string, shelfId: string) => {
+    const rows = scene.objects.filter((o) => o.kind === "row").map((o) => o.id);
     const ofShelf = rows.filter((rowId) =>
       placedOn(rowId).some((o) => o.source?.shelfId === shelfId),
     );
@@ -182,6 +190,8 @@ function followShelves(
       let id: string;
       if (waiting) {
         id = waiting.id;
+        // Put back on a shelf, it goes back in the shop.
+        delete waiting.held;
         if (item.pop && !bookPop(scene, id)?.text)
           scene = setBookPop(scene, id, item.pop);
       } else {
@@ -200,9 +210,10 @@ function followShelves(
       const p = objectById(scene, id)!;
       p.source = { shopId: shop.id, shelfId: shelf.id, itemId: item.id };
       p.isPublic = shelf.isPublic;
-      if (shelf.isPublic) setOut(id, shelf.id);
+      // A growing case sets its books out again below, all at once.
+      if (shelf.isPublic && scene.growth === undefined) setOut(id, shelf.id);
     }
-  return scene;
+  return regrow(scene, shop, books);
 }
 /**
  * A decorated shop brought up to its shelves, to be saved: null when it
@@ -305,7 +316,11 @@ export function applyStoreTemplate(
     demo: false,
     shelves: [],
   };
-  const base = woodScene(emptyShop, books, template.variant);
+  // A growing case keeps its tiers; an older one its full case.
+  const base = woodScene(emptyShop, books, template.variant, {
+    tiers: scene.growth === undefined ? "fixed" : tiersOf(scene),
+  });
+  if (scene.growth !== undefined) base.growth = scene.growth;
   base.ownerManaged = true;
   base.templateId = id;
   base.theme = {
@@ -323,6 +338,7 @@ export function applyStoreTemplate(
     if (oldRows[i]?.boardTitle !== undefined)
       row.boardTitle = oldRows[i].boardTitle;
     if (oldRows[i]?.doodle !== undefined) row.doodle = oldRows[i].doodle;
+    if (oldRows[i]?.pinned) row.pinned = true;
   });
   for (const kind of ["sign", "ownerPop", "stamp"] as const) {
     const original = scene.objects.find((o) => o.kind === kind),
@@ -406,7 +422,8 @@ export function renameSceneObject(
     0,
     o.kind === "row" ? SCENE_ROW_TEXT_MAX_LENGTH : SCENE_TEXT_MAX_LENGTH,
   );
-  return next;
+  // A tier the owner named is theirs, with its books.
+  return o.kind === "row" ? pinRow(next, id) : next;
 }
 /** Chalkboard heading and drawing for one shelf row; empty title removes it. */
 export function setRowBoard(
@@ -428,8 +445,24 @@ export function setRowBoard(
       throw new Error("Unknown doodle");
     row.doodle = patch.doodle;
   }
-  return next;
+  return pinRow(next, rowId);
 }
+/** The stamps a shop and a POP may carry, by name. */
+export const STAMP_CHOICES = [
+  { id: "plane", name: "飛行機" },
+  { id: "coffee", name: "コーヒー" },
+  { id: "leaf", name: "葉っぱ" },
+] as const;
+/** The drawings a tier's chalkboard may carry, by name. */
+export const DOODLE_CHOICES = [
+  { id: "travel", name: "旅" },
+  { id: "daily", name: "日常" },
+  { id: "forest", name: "森" },
+  { id: "stars", name: "星" },
+  { id: "garden", name: "庭" },
+  { id: "city", name: "街" },
+  { id: "lamp", name: "灯り" },
+] as const;
 export function changePlacement(
   scene: StoreScene,
   id: string,
@@ -453,7 +486,7 @@ export function changePlacement(
       h: p.preferredSize!.h,
       w: placementWidth(book, patch.display, p.preferredSize!.h),
     };
-    if (p.parentId) next = relayoutRow(next, p.parentId);
+    if (p.parentId) next = pinRow(relayoutRow(next, p.parentId), p.parentId);
   }
   if (patch.pop !== undefined)
     next = setBookPop(next, id, patch.pop.slice(0, SCENE_POP_MAX_LENGTH));
@@ -471,7 +504,9 @@ export function takePlacementOff(scene: StoreScene, id: string): StoreScene {
   if (p?.kind !== "book") throw new Error("Unknown placement");
   const old = p.parentId;
   p.parentId = null;
-  return old ? relayoutRow(next, old) : next;
+  // It waits until the owner sets it out again.
+  p.held = true;
+  return old ? pinRow(relayoutRow(next, old), old) : next;
 }
 export function insertPlacement(
   scene: StoreScene,
@@ -490,9 +525,82 @@ export function insertPlacement(
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   siblings.splice(Math.max(0, Math.min(siblings.length, index)), 0, p);
   p.parentId = rowId;
+  delete p.held;
   siblings.forEach((o, i) => (o.order = i));
-  if (old && old !== rowId) next = relayoutRow(next, old);
-  return relayoutRow(next, rowId);
+  if (old && old !== rowId) next = pinRow(relayoutRow(next, old), old);
+  return pinRow(relayoutRow(next, rowId), rowId);
+}
+/**
+ * A book carried to `index` among the other books of `rowId` (持ち上げて運ぶ,
+ * and 動かす from its sheet), or null when there is no room for it. No book
+ * is pushed off the shelves: when the tier is full, the books at its end
+ * move into the place the carried book left, and failing that the carried
+ * book stands as a spine.
+ */
+export function moveBook(
+  scene: StoreScene,
+  id: string,
+  rowId: string,
+  index: number,
+  books: Book[],
+): StoreScene | null {
+  const placed = new Set(
+    scene.objects
+      .filter((o) => o.kind === "book" && (o.parentId || o.id === id))
+      .map((o) => o.id),
+  );
+  const from = objectById(scene, id);
+  if (from?.kind !== "book") throw new Error("Unknown placement");
+  const left = from.parentId;
+  const at = left
+    ? scene.objects.filter(
+        (o) =>
+          o.kind === "book" &&
+          o.parentId === left &&
+          (o.order ?? 0) < (from.order ?? 0),
+      ).length
+    : 0;
+  const lost = (s: StoreScene) =>
+    s.objects
+      .filter((o) => o.kind === "book" && placed.has(o.id) && !o.parentId)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const tries = [scene];
+  if (from.display === "face")
+    tries.push(changePlacement(scene, id, { display: "spine" }, books));
+  for (const start of tries) {
+    let next = insertPlacement(start, id, rowId, index);
+    if (!lost(next).length) return next;
+    if (!left || left === rowId) continue;
+    lost(next).forEach(
+      (o, k) => (next = insertPlacement(next, o.id, left, at + k)),
+    );
+    if (!lost(next).length) return next;
+  }
+  return null;
+}
+/**
+ * The shop at the size its owner chose: with the books ("auto") or so many
+ * tiers. A shop decorated before the shop grew moves to the growing case,
+ * its rows' names, books, POPs and reactions with it, and its tiers are set
+ * out again by the shop (a tier kept from view stays as it is).
+ */
+export function setShopSize(
+  scene: StoreScene,
+  size: ShopSize,
+  shop: Shop,
+  books: Book[],
+): StoreScene {
+  if (!SHOP_SIZES.includes(size)) throw new Error("Unknown size");
+  const sized = { ...structuredClone(scene), growth: size };
+  const next =
+    scene.growth === undefined
+      ? applyStoreTemplate(
+          sized,
+          (scene.templateId ?? "warm") as TemplateId,
+          books,
+        )
+      : sized;
+  return regrow(next, shop, books, { fresh: true });
 }
 export function validateOwnedScene(
   scene: StoreScene,

@@ -36,6 +36,13 @@ export interface SceneObject {
   bookHeight?: number;
   gap?: number;
   mode?: "face" | "spine" | "mixed";
+  /** A row's books stand from its left end (the default) or centred in it. */
+  align?: "start" | "center";
+  /** A tier of a growing case the owner arranged: the shop leaves its books
+   * as they are (growing-shop). */
+  pinned?: boolean;
+  /** A book the owner took off the rows: it waits until they set it out. */
+  held?: boolean;
   /** Optional chalkboard heading and line drawing for a row (shelf sign). */
   boardTitle?: string;
   doodle?: string;
@@ -74,6 +81,9 @@ export interface StoreScene {
   /** A managed scene is the source of truth for the immersive store only. */
   ownerManaged?: boolean;
   templateId?: string;
+  /** "auto": the case grows with the books; a number: it keeps that many
+   * tiers (growing-shop). A scene without it keeps the rows it has. */
+  growth?: "auto" | 1 | 2 | 3 | 4;
   theme: StoreTheme;
   background: {
     kind: "preset" | "uploaded";
@@ -330,6 +340,11 @@ export function validateScene(
     errors.push("invalid managed state");
   if (scene.templateId !== undefined && typeof scene.templateId !== "string")
     errors.push("invalid template");
+  if (
+    scene.growth !== undefined &&
+    !(["auto", 1, 2, 3, 4] as unknown[]).includes(scene.growth)
+  )
+    errors.push("invalid growth");
   const validRect = (r: Rect) =>
     r &&
     [r.x, r.y, r.w, r.h, r.rotation].every(Number.isFinite) &&
@@ -376,6 +391,13 @@ export function validateScene(
         !(SHELF_DOODLES as readonly string[]).includes(o.doodle))
     )
       errors.push(o.id + ": invalid board");
+    if (o.align !== undefined && o.align !== "start" && o.align !== "center")
+      errors.push(o.id + ": invalid alignment");
+    if (
+      (o.pinned !== undefined && typeof o.pinned !== "boolean") ||
+      (o.held !== undefined && typeof o.held !== "boolean")
+    )
+      errors.push(o.id + ": invalid arrangement");
     if (!kinds.includes(o.kind)) {
       errors.push(o.id + ": invalid kind");
       continue;
@@ -492,6 +514,12 @@ export function relayoutRow(scene: StoreScene, rowId: string): StoreScene {
     x = left + size.w + gap;
     previous = book;
   }
+  // A centred row shares what its books leave open between both ends.
+  const shift = row.align === "center" ? (bounds.w - x) / 2 : 0;
+  if (shift > 0)
+    for (const book of next.objects)
+      if (book.kind === "book" && book.parentId === rowId)
+        book.rect = { ...book.rect, x: book.rect.x + shift / bounds.w };
   return next;
 }
 export function addBookPlacement(

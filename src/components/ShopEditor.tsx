@@ -35,9 +35,18 @@ import { StoreSceneEditor } from "./StoreSceneEditor";
 import { saveOwnedScene, useWalkStore } from "../lib/walk-store";
 import {
   hasPublicSceneBooks,
+  migrateShopScene,
   sceneForShelves,
+  setShopSize,
 } from "../lib/store-customization";
-import { publicWalkShops } from "../lib/store-scene-adapter";
+import { publicWalkShops, woodScene } from "../lib/store-scene-adapter";
+import { GROW, tiersOf, type ShopSize } from "../lib/growing-shop";
+import dynamic from "next/dynamic";
+// 整える is read when it opens, so the shelves page does not carry it.
+const ShopTidy = dynamic(
+  () => import("./ShopTidy").then((file) => file.ShopTidy),
+  { ssr: false },
+);
 import { OpenShop, ThemePicker } from "./OpenShop";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
 import { enterPressed } from "../lib/keys";
@@ -993,6 +1002,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
   const owner = useDraftOwner();
   const [takenOff, setTakenOff] = useState<TakenOffShelves>({});
   const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
+  const [tidyOpen, setTidyOpen] = useState(false);
   const persistenceStatus = usePersistenceStatus();
   const savedIn = useTownBackend();
   const [addShelfOpen, setAddShelfOpen] = useState(false);
@@ -1204,6 +1214,37 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           "店内の棚に入りきらないため、飾りつけの「まだ並べていない本」に置きました。",
       );
   }, [shop, ownScene, walkKnown, townKnown, state, notify]);
+  // A shop growing with its books says when it took another tier, and can
+  // stay at the tiers it had. Counted only once the town and the walk are
+  // read, so reading them is never taken for growing.
+  const grownTiers = useMemo(() => {
+    if (!shop || shop.demo || !walkKnown || !townKnown) return null;
+    if (ownScene) return ownScene.growth === "auto" ? tiersOf(ownScene) : null;
+    return tiersOf(woodScene(shop, state.books));
+  }, [shop, ownScene, walkKnown, townKnown, state.books]);
+  const lastTiers = useRef<number | null>(null);
+  useEffect(() => {
+    const was = lastTiers.current;
+    lastTiers.current = grownTiers;
+    if (!shop || was === null || grownTiers === null || grownTiers <= was)
+      return;
+    // From the stand to a first tier there is no smaller size to keep.
+    if (was < 1) return notify(GROW.grew(counted(grownTiers, "段")));
+    notify(GROW.grew(counted(grownTiers, "段")), {
+      label: GROW.keep(counted(was, "段")),
+      run: () => {
+        const base = ownScene ?? migrateShopScene(shop, state.books);
+        const kept = setShopSize(base, was as ShopSize, shop, state.books);
+        if (!saveOwnedScene(kept, state).ok)
+          notify(
+            failure({
+              what: "店の大きさを変えられませんでした",
+              next: AGAIN.later,
+            }),
+          );
+      },
+    });
+  }, [grownTiers, shop, ownScene, state, notify]);
   // Shelves removed here, counted by id: a new shelf can be given the id of
   // one removed, and must not get its books from an old 元に戻す.
   const removedShelves = useRef<Record<string, number>>({});
@@ -1339,10 +1380,20 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           <button
             type="button"
             className="btn fill"
+            disabled={!walk.ready || !walkKnown || !townKnown}
+            onClick={() => setTidyOpen(true)}
+          >
+            <Icon name="shelf" size={17} />
+            店を整える
+          </button>
+          {/* The sign, words and boards are still set here, until they move
+              into 整える too. */}
+          <button
+            type="button"
+            className="btn"
             disabled={!walk.ready}
             onClick={() => setSceneEditorOpen(true)}
           >
-            <Icon name="shelf" size={17} />
             店内を飾りつける
           </button>
           {inWalk && (
@@ -1353,6 +1404,17 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
         </div>
       </section>
       <ShopMessages state={state} />
+      {tidyOpen && (
+        <ShopTidy
+          shop={shop}
+          state={state}
+          actions={actions}
+          saved={ownScene}
+          ready={walk.ready && walkKnown && townKnown}
+          onClose={() => setTidyOpen(false)}
+          notify={notify}
+        />
+      )}
       {sceneEditorOpen && (
         <StoreSceneEditor
           state={state}

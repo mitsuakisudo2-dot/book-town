@@ -78,7 +78,11 @@ export default function LeaveView() {
           </>
         ) : (
           <LeaveForm
-            profile={account.status === "signed-in" ? account.profile : null}
+            profile={
+              account.status === "signed-in" && account.profile.handle !== null
+                ? { handle: account.profile.handle, name: account.profile.name }
+                : null
+            }
             onLeft={() => setLeft(true)}
           />
         )}

@@ -56,6 +56,15 @@ export interface TownBackend {
    * with a feeling. Nothing of the reader's own, which the town has whole.
    */
   more?(ask: MoreAsk): Promise<TownMore>;
+  /**
+   * Forgets the reader's books of scan `batch` taken back and still out
+   * since `removedAt` (forget-books.ts), at most FORGET_MOST a call, as the
+   * database decides: the ids that went.
+   */
+  forgetBooks?(
+    books: { id: string; removedAt: string }[],
+    batch: string,
+  ): Promise<string[]>;
   /** Stops background work once the store moves on to another backend. */
   close?(): void;
 }

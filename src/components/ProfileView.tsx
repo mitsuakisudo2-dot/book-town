@@ -17,7 +17,6 @@ import { getTownSnapshot, useTownBackend, useTownMore } from "../lib/store";
 import { readerPosts, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { formatDuration, readingTotals } from "../lib/reading";
 import { bookPath } from "../lib/books";
-import { ScanSession } from "./ScanSession";
 import { JournalNotes, TitlesToType } from "./LibraryJournalNotes";
 import { booksBeforeSearch } from "../lib/book-lists";
 import { linkLabel, normalizeLink, PROFILE_LINK_LIMIT } from "../lib/links";
@@ -107,6 +106,12 @@ import { SavedShops } from "./SavedShops";
 import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import { BRIGHTNESSES, PALETTES, TEXT_SIZES } from "../lib/appearance";
 import {
+  TONE_CHOICES,
+  chooseTone,
+  playTone,
+  useToneChoice,
+} from "../lib/scan-tones";
+import {
   setBrightness,
   setPalette,
   setTextSize,
@@ -130,6 +135,14 @@ import {
   KEPT,
   NAMES,
 } from "../lib/words";
+import dynamic from "next/dynamic";
+
+// The scanner is only fetched when the reader opens it (as from Home and
+// 検索): the page reads less before it runs.
+const ScanSession = dynamic(
+  () => import("./ScanSession").then((file) => file.ScanSession),
+  { ssr: false },
+);
 
 /** The search for books to add to the nine, by its name. */
 const NINE_SEARCH = "人生の9冊に追加する本を検索";
@@ -176,6 +189,7 @@ export function ProfileView({
   const palette = usePalette();
   const brightness = useBrightness();
   const textSize = useTextSize();
+  const tone = useToneChoice();
   const [sheet, setSheet] = useState<
     | "following"
     | "followers"
@@ -1133,6 +1147,31 @@ export function ProfileView({
                 {choice.name}
               </label>
             ))}
+          </fieldset>
+          <fieldset className="record-visibility palette-choices">
+            <legend>読み取りの音</legend>
+            {TONE_CHOICES.map((choice) => (
+              <label key={choice.id}>
+                <input
+                  type="radio"
+                  name="scan-tone"
+                  value={choice.id}
+                  checked={tone === choice.id}
+                  onChange={() => {
+                    chooseTone(choice.id);
+                    notify(`読み取りの音を${choice.name}にしました`);
+                  }}
+                  // Heard each time it is pressed, the one chosen too.
+                  onClick={() => {
+                    if (choice.id !== "off") playTone(choice.id, "in");
+                  }}
+                />
+                {choice.name}
+              </label>
+            ))}
+            <p className="palette-note">
+              スキャナーで本のバーコードを読んだときの音です。
+            </p>
           </fieldset>
           <VisibilitySettings state={state} actions={actions} notify={notify} />
           <fieldset className="record-visibility spoiler-display">
