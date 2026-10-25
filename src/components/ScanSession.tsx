@@ -80,6 +80,7 @@ import {
   KEPT,
   ON_SHELF,
   restorable,
+  takenBack,
   showsOf,
   tally,
   UNDOABLE,
@@ -1356,6 +1357,7 @@ export function ScanSession({
     closed.current = true;
     // ［完了］: this time is over, and not offered again.
     if (how.ended && owner) endLastScan(owner, session);
+    void journalTown.forget?.(takenBack(latest.current.cards), session);
     const { added, waiting, later } = counts.closing;
     onClose(how.land !== false && added + waiting + later > 0);
     // Closed from 完了's summary, which said it all: nothing more, but for

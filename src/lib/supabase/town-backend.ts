@@ -1721,6 +1721,19 @@ export function accountTownBackend(
     save: sync.save,
     watch: sync.watch,
     absorb: sync.absorb,
+    async forgetBooks(
+      books: { id: string; removedAt: string }[],
+      batch: string,
+    ) {
+      const { data } = await settled(
+        client.rpc("forget_books", {
+          ids: books.map((book) => book.id),
+          removed: books.map((book) => book.removedAt),
+          batch,
+        }),
+      );
+      return Array.isArray(data) ? data : [];
+    },
     ...remoteReads(client, userId, sync.current, () => myBooks),
     close: sync.close,
   };

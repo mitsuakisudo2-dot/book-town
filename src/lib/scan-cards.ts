@@ -57,6 +57,15 @@ export const ON_SHELF: ShownNow[] = [
   "offline",
 ];
 
+/**
+ * The books of this time still taken back: forgotten once it ends
+ * (forget-books.ts), when ［元に戻す］ can no longer bring them back.
+ */
+export const takenBack = (cards: readonly Card[]): string[] =>
+  cards.flatMap((card) =>
+    card.shows === "undone" && card.bookId ? [card.bookId] : [],
+  );
+
 /** A card that can be taken back (登録を取り消す), as can one still saving. */
 export const UNDOABLE: Shows[] = ["added", ...KEPT];
 

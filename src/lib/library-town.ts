@@ -443,7 +443,7 @@ export function undoLibraryChange(
 }
 
 /** The books the reader uses: their own posts, posters (drafts too), 人生の9冊 and shop. */
-function usedBooks(state: TownState): string[] {
+export function usedBooks(state: TownState): string[] {
   const own = (authorId: string) => authorId === ME_ID;
   return [
     ...state.posts.flatMap((post) =>

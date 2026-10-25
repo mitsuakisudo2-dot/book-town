@@ -32,6 +32,7 @@
 /tests/db-counts.test.ts           @mitsuakisudo2-dot
 /tests/db-editions.test.ts         @mitsuakisudo2-dot
 /tests/db-fetching.test.ts         @mitsuakisudo2-dot
+/tests/db-forget-books.test.ts     @mitsuakisudo2-dot
 /tests/db-holds.test.ts            @mitsuakisudo2-dot
 /tests/db-judging.test.ts          @mitsuakisudo2-dot
 /tests/db-newest-books.test.ts     @mitsuakisudo2-dot

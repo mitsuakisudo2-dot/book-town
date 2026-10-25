@@ -1559,6 +1559,33 @@ export function createTownStore(
     getReadsSnapshot: () => !loading && Boolean(backend.newer),
     getServerReadsSnapshot: () => false,
     /**
+     * Forgets the books of scan `batch` taken back and still out (AUD-055,
+     * forget-books.ts): in the demo at once; in an account once what is
+     * saved has them taken out, as the database answers (each with when it
+     * was taken out, so one taken out again elsewhere since stays), taken
+     * in as its own reading so nothing is written back. Not one a draft in
+     * this browser names. The ids that went.
+     */
+    async forget(ids: string[], batch: string): Promise<string[]> {
+      const from = generation;
+      // Read only when a scan ends, so no page carries it for nothing.
+      const { forgetIn } = await import("./forget-books");
+      return forgetIn(
+        {
+          town: () => (loading || from !== generation ? null : state),
+          backend,
+          commit,
+          settled: () => townSettled(this),
+          take: (next) => {
+            state = next;
+            notify();
+          },
+        },
+        ids,
+        batch,
+      );
+    },
+    /**
      * Takes in what was read after the town (arrived.ts) as the backend's
      * own reading, by the path a refused change comes back by: never
      * through `commit`, so nothing of it is saved. `from` is the generation
@@ -1778,6 +1805,7 @@ export function journalTownOf(
     changeLibrary: (bookId, set) => {
       store.actions.changeLibrary([bookId], set);
     },
+    forget: (bookIds, batch) => store.forget(bookIds, batch),
   };
 }
 
