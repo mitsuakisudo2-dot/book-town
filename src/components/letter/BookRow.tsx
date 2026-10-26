@@ -17,7 +17,7 @@ import type {
 import { BookJacket } from "../ui";
 import { LetterIcon } from "./icons";
 import { NAMES } from "../../lib/words";
-import { MET_TOAST, memoOffer } from "../../lib/encounter-memo";
+import { memoOffer } from "../../lib/encounter-memo";
 
 /**
  * The book a 便り is about, in a thin frame: its cover whole, its title and
@@ -101,11 +101,11 @@ export function WantButton({
           return notify(
             `この${NAMES.letter}で出会った記録を外しました。読みたい本には残っています`,
           );
-        // With its メモ, a short line: the card pressed shows which book.
+        // With its メモ, one short line: which book.
         const offer = memoOffer(state, actions);
         notify(
           offer
-            ? MET_TOAST.wanted
+            ? `${quotedTitle(book)}を読みたいに入れました`
             : `${quotedTitle(book)}を読みたいに入れました。` +
                 (keepsMeeting
                   ? `${author.name}さんの${NAMES.letter}で出会った本として残します。`

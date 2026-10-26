@@ -729,14 +729,12 @@ function Toast({
           onHold(false);
       }}
     >
-      {/* Turned away from a 見本, or a save refused with the work kept: a
-          leaf, not a tick, for nothing was done. */}
-      <Icon
-        name={
-          message === SAMPLE_NOTICE || isKeptNotice(message) ? "leaf" : "check"
-        }
-        size={17}
-      />
+      {/* What was done needs no mark: the words say it, and the line keeps
+          its room for them. Turned away from a 見本, or a save refused with
+          the work kept, a leaf says nothing was done. */}
+      {(message === SAMPLE_NOTICE || isKeptNotice(message)) && (
+        <Icon name="leaf" size={17} />
+      )}
       {message}
       {undo && (
         <button type="button" className="toast-undo" onClick={undo.run}>

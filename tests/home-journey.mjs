@@ -712,7 +712,7 @@ try {
         await want.tap();
         await expect(want).toHaveAttribute("aria-pressed", "true");
         await expect(page.locator(".toast")).toContainText(
-          "読みたい本に入れました",
+          "『見えない都市』を読みたいに入れました",
         );
         await expectReadable(want.locator(".letter-want-pill"), "読みたい, on");
         await want.tap();

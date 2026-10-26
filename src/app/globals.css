@@ -619,7 +619,7 @@ input[type="checkbox"] {
   overflow-wrap: anywhere;
   animation: fade-in var(--dur-appear) ease;
 }
-/* The words make room as they fold; the tick keeps its size. */
+/* The words make room as they fold; the leaf keeps its size. */
 .toast > svg {
   flex: none;
 }

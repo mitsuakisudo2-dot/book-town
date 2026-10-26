@@ -494,11 +494,8 @@ try {
           await toast.evaluate((t) => t.scrollWidth <= t.clientWidth),
           `${key}: the toast holds its words`,
         ).toBe(true);
-        const tick = await toast.locator("svg").first().boundingBox();
-        expect(tick.width, `${key}: the tick keeps its size`).toBeCloseTo(
-          17,
-          0,
-        );
+        // What was done carries no tick (けにー 10-26: the words say it).
+        await expect(toast.locator("svg")).toHaveCount(0);
         const back = await undo.boundingBox();
         expect(back.x, `${key}: 元に戻す on the screen`).toBeGreaterThanOrEqual(
           0,
