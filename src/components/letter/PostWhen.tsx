@@ -1,7 +1,7 @@
 "use client";
 
 import { formatPostTime, postAge } from "../../lib/social";
-import { useNow } from "../home/hooks";
+import { useNow } from "../../lib/now";
 
 /**
  * When a post was written, in a list: いま, 5分前, 3時間前, then the day.
