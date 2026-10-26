@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -52,7 +53,14 @@ import "./profile.css";
 import "./reading.css";
 import "./account.css";
 import "./leave.css";
-import { counted, failure, AGAIN, NAMES, NOT_CONNECTED } from "../lib/words";
+import {
+  counted,
+  failure,
+  AGAIN,
+  NAMES,
+  NOT_CONNECTED,
+  TABS,
+} from "../lib/words";
 import { leavePath } from "../lib/paths";
 
 /** Sign-in with a code from email, then the first profile. One page for both. */
@@ -310,8 +318,16 @@ function SignIn() {
 type Way = "town" | "quiet";
 
 function FirstProfile({ userId }: { userId: string }) {
+  const router = useRouter();
   // The name and the ID typed so far are kept through a reload, by person.
   const kept = useKeptDraft(profileWorkStore, userId);
+  // Begun, the reader goes straight home: not to this page's ログイン and
+  // 退会 a second time first (通し確認 10-26). The page is left, not stacked,
+  // so 戻る does not come back to it.
+  const begun = () => {
+    kept.clear();
+    router.replace("/");
+  };
   const [suggested] = useState(suggestProfile);
   const work = kept.draft ?? suggested;
   const { name, handle } = work;
@@ -372,7 +388,7 @@ function FirstProfile({ userId }: { userId: string }) {
     const draft = { handle, name, ageConfirmed, readingPublic };
     const result = await accountActions.createProfile(draft);
     setBusy(false);
-    if (result.ok) return kept.clear();
+    if (result.ok) return begun();
     setError(result.message);
     const issue = coarse ? profileDraftIssue(draft) : null;
     if (issue)
@@ -388,7 +404,7 @@ function FirstProfile({ userId }: { userId: string }) {
     setError("");
     const result = await accountActions.startQuietly(ageConfirmed);
     setBusy(false);
-    if (result.ok) return kept.clear();
+    if (result.ok) return begun();
     setError(result.message);
     if (coarse && !ageConfirmed) markField(ageField.current);
   }
@@ -616,8 +632,9 @@ function SignedIn({
           ? `${name}（@${handle}）さんとして、本の街にいます。`
           : "人とつながらず、自分の記録だけで使っています。"}
       </p>
+      {/* Records only, home is the reading room, not the town. */}
       <Link className="btn fill" href="/">
-        本の街へ
+        {handle ? "本の街へ" : TABS.home + "へ"}
       </Link>
       <div className="account-email">
         <span>ログインのメールアドレス</span>
