@@ -31,6 +31,8 @@ export interface Refusal {
   status: number;
   code: string;
   message: string;
+  /** The database's hint (booktown:reading_mode…), when it gives one. */
+  hint?: string;
 }
 
 export interface FakeWrite {
@@ -299,13 +301,17 @@ export function fakeSupabase(
 
   type Answer = {
     data: unknown;
-    error: { message: string; code: string } | null;
+    error: { message: string; code: string; hint?: string } | null;
     status: number;
     count: number | null;
   };
   const failed = (refusal: Refusal): Answer => ({
     data: null,
-    error: { message: refusal.message, code: refusal.code },
+    error: {
+      message: refusal.message,
+      code: refusal.code,
+      ...(refusal.hint ? { hint: refusal.hint } : {}),
+    },
     status: refusal.status,
     count: null,
   });

@@ -36,6 +36,7 @@ import { mine } from "../lib/own-books";
 import { useBibliography } from "../lib/bibliography-session";
 import { HeldBook } from "./HeldBook";
 import { PLACE } from "../lib/words";
+import { inManageMode } from "../lib/town-mode";
 import "./book-in-hand.css";
 
 type Shared = {
@@ -139,23 +140,10 @@ export function BookView({
         </Link>
       </div>
     );
+  // 読書管理モード: the book and the reader only (town-mode.ts).
+  const manage = inManageMode(town);
   // The cover, its lookup and the shop links go by the heading's name.
   const named = bookNamedBy(book, master);
-  // Shops show the book as their owner's own registration of it: the same
-  // work is the same book here.
-  const work = booksOfWork(state.books, book.id);
-  const matches = [
-    ...state.shops,
-    ...(state.ownShop ? [state.ownShop] : []),
-  ].flatMap((shop) =>
-    shop.shelves
-      .filter((s) => s.isPublic)
-      .flatMap((shelf) =>
-        shelf.items
-          .filter((i) => work.has(i.bookId))
-          .map((item) => ({ shop, shelf, item })),
-      ),
-  );
   return (
     <>
       <BackLink className="back-link" />
@@ -189,7 +177,7 @@ export function BookView({
             actions={actions}
             notify={notify}
             register
-            toShop
+            toShop={!manage}
           />
           <span className="jacket-disclaimer">{bookNote(book)}</span>
         </div>
@@ -200,19 +188,48 @@ export function BookView({
         actions={actions}
         notify={notify}
       />
-      <BookEncounters
-        book={book}
-        state={state}
-        actions={actions}
-        notify={notify}
-      />
-      <BookPosters state={state} book={book} />
-      <BookReviews
-        book={book}
-        state={state}
-        actions={actions}
-        notify={notify}
-      />
+      {/* Meetings carry others' words (a POP, a 便り): the town's. */}
+      {!manage && (
+        <BookEncounters
+          book={book}
+          state={state}
+          actions={actions}
+          notify={notify}
+        />
+      )}
+      {!manage && <BookPosters state={state} book={book} />}
+      {!manage && (
+        <BookReviews
+          book={book}
+          state={state}
+          actions={actions}
+          notify={notify}
+        />
+      )}
+      {!manage && <BookStockists state={state} book={book} />}
+    </>
+  );
+}
+
+/** The shops that have the book (its work) on a public shelf. */
+function BookStockists({ state, book }: { state: TownState; book: Book }) {
+  // Shops show the book as their owner's own registration of it: the same
+  // work is the same book here.
+  const work = booksOfWork(state.books, book.id);
+  const matches = [
+    ...state.shops,
+    ...(state.ownShop ? [state.ownShop] : []),
+  ].flatMap((shop) =>
+    shop.shelves
+      .filter((s) => s.isPublic)
+      .flatMap((shelf) =>
+        shelf.items
+          .filter((i) => work.has(i.bookId))
+          .map((item) => ({ shop, shelf, item })),
+      ),
+  );
+  return (
+    <>
       <div className="book-path-heading">
         <span className="eyebrow">FOLLOW THE BOOK, MEET THE READER</span>
         <h2>この本を並べている書店</h2>

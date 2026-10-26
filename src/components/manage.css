@@ -1,0 +1,241 @@
+/*
+ * 読書管理モード's home and the pages that rest in it (ManageMode.tsx):
+ * the reader and their books only. Each part is a door into a screen that
+ * is already there, drawn large enough to be tapped without aiming.
+ */
+.manage-home {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 22px 0 32px;
+}
+.manage-hero h1 {
+  margin: 6px 0 0;
+  font-family: var(--serif);
+  font-size: var(--t-head);
+  line-height: 1.45;
+  color: var(--ink);
+}
+.manage-home h2 {
+  margin: 0 0 12px;
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  color: var(--ink);
+}
+.manage-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* The reader's own numbers, each a door to where they come from. */
+.manage-stat-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.manage-stat-list a {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+  color: var(--ink);
+  transition: transform var(--dur-press) var(--ease-standard);
+}
+.manage-stat-list a:active {
+  transform: scale(0.97);
+}
+.manage-stat-list small {
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+}
+.manage-stat-list b {
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  line-height: 1.3;
+  color: var(--green);
+  overflow-wrap: anywhere;
+}
+
+/* The books being read: large covers side by side, each with 記録する. */
+.manage-reading-list {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 4px 2px 8px;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+.manage-reading-list li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 0 0 116px;
+  scroll-snap-align: start;
+}
+.manage-reading-book {
+  display: block;
+  width: 96px;
+  border-radius: var(--r-edge);
+  box-shadow: var(--lift-2);
+  transition: transform var(--dur-press) var(--ease-standard);
+}
+.manage-reading-book:active {
+  transform: scale(0.97);
+}
+.manage-reading-list b {
+  font-size: var(--t-ui);
+  line-height: 1.4;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.manage-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-cap);
+  color: var(--green);
+}
+.manage-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--green);
+  animation: manage-live var(--dur-pulse) var(--ease-standard) infinite;
+}
+@keyframes manage-live {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .manage-live i {
+    animation: none;
+  }
+}
+.manage-reading-list .btn {
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+/* The two large doors, first on the home: 本を登録 and 読書をはじめる,
+ * each one tap from opening the app (けにーさん 10-25 22:49Z). */
+.manage-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.manage-start,
+.manage-register {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 116px;
+  padding: 16px;
+  border: 0;
+  border-radius: var(--r-card);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--lift-2);
+  transition: transform var(--dur-press) var(--ease-standard);
+}
+.manage-start:active,
+.manage-register:active {
+  transform: scale(0.97);
+}
+.manage-start span,
+.manage-register span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+.manage-start b,
+.manage-register b {
+  font-size: var(--t-page);
+}
+.manage-start small,
+.manage-register small {
+  font-size: var(--t-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.manage-start {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.manage-start small {
+  color: var(--ink-2);
+}
+.manage-register {
+  background: var(--green);
+  color: var(--on-green);
+}
+
+/* The reader's own shelves: one row each, to that shelf of the library. */
+.manage-shelf-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.manage-shelf-list a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+  color: var(--ink);
+}
+.manage-shelf-list a > svg {
+  color: var(--green);
+  flex: none;
+}
+.manage-shelf-list span {
+  flex: 1;
+  font-size: var(--t-ui);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.manage-shelf-list small {
+  font-size: var(--t-meta);
+  color: var(--ink-2);
+}
+.manage-shelf-list .manage-new-shelf {
+  border-style: dashed;
+  border-color: var(--line-2);
+  background: transparent;
+  color: var(--green);
+}
+
+.manage-rest {
+  max-width: 520px;
+  margin: 40px auto;
+}

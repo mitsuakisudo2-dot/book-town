@@ -34,6 +34,7 @@ import { shownToOthers } from "./visibility";
 import { someCount } from "./words";
 import { workOfId } from "./works";
 import { NAMES } from "./words";
+import { inManageMode, ownNotice } from "./town-mode";
 
 export interface Notice {
   id: string;
@@ -417,7 +418,11 @@ export function notificationsFor(
           text: `${name(entry.readerId)}さんも今${quoteTitle(title(entry.bookId))}を読んでいます`,
           href: readingPath(),
         });
+  // In 読書管理モード only the reader's own; others' wait, unseen, for the
+  // town (told as they came once the reader is back).
+  const manage = inManageMode(state);
   return notices
+    .filter((notice) => !manage || ownNotice(notice.id))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 40);
 }

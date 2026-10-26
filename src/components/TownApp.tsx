@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent,
@@ -77,6 +78,7 @@ import {
 import { useAnnouncement } from "../lib/live-region";
 import { useBookHolds } from "../lib/bibliography-session";
 import { NAMES, TABS } from "../lib/words";
+import { inManageMode } from "../lib/town-mode";
 
 // Every screen comes in its own file, so a page reads only the screen it
 // shows: Home's code is not read on a book's page, nor a book's page's on
@@ -128,6 +130,12 @@ const Wishlist = dynamic(() =>
 // The memo sheet (押したときのメモ) is read once a memo is first asked for.
 const EncounterMemoHost = dynamic(() =>
   import("./EncounterMemo").then((file) => file.EncounterMemoHost),
+);
+const ManageHome = dynamic(() =>
+  import("./ManageMode").then((file) => file.ManageHome),
+);
+const ManageRest = dynamic(() =>
+  import("./ManageMode").then((file) => file.ManageRest),
 );
 
 type View =
@@ -186,6 +194,21 @@ const plainClick = (event: MouseEvent<HTMLAnchorElement>) =>
   !event.ctrlKey &&
   !event.shiftKey &&
   !event.altKey;
+/**
+ * The pages of the town, which rest in 読書管理モード: walking the shops, a
+ * shop, the reader's own shop, posters, a 便り's page, another reader.
+ */
+function restsInManageMode(view: View, selectedId?: string): boolean {
+  if (view === "profile") return (selectedId || "me") !== "me";
+  return (
+    view === "walk" ||
+    view === "shop" ||
+    view === "editor" ||
+    view === "poster" ||
+    view === "poster-new" ||
+    view === "post"
+  );
+}
 /** Which item of the main navigation a view belongs to. */
 function sectionOf(
   view: View,
@@ -218,6 +241,12 @@ export default function TownApp({
   bookId?: string;
 }) {
   const { state, actions } = useTownStore();
+  // 読書管理モード: the same screens, the town left out (town-mode.ts).
+  const manage = inManageMode(state);
+  const tabs = useMemo(
+    () => (manage ? links.filter((l) => l.section !== "walk") : links),
+    [manage],
+  );
   const persistence = usePersistenceStatus();
   const savedIn = useTownBackend();
   const account = useAccountState();
@@ -394,12 +423,12 @@ export default function TownApp({
   // the chosen tab along the bar to it (tab-motion.ts). Only where it shows.
   const navRef = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
-    const index = links.findIndex((l) => l.section === section);
+    const index = tabs.findIndex((l) => l.section === section);
     const move = tabMove(index < 0 ? null : index);
     const nav = navRef.current;
     if (!nav || getComputedStyle(nav).display === "none") return;
     playTabMove(move, nav);
-  }, [section]);
+  }, [section, tabs]);
   const clickOf = (link: (typeof links)[number]) =>
     link.section === "home"
       ? homeClick
@@ -428,7 +457,7 @@ export default function TownApp({
         </Link>
         <div className="side-caption">本の向こうに、誰かがいる。</div>
         <nav aria-label="メインナビゲーション">
-          {links.map((l) => (
+          {tabs.map((l) => (
             <Link
               key={l.section}
               href={hrefOf(l)}
@@ -444,11 +473,13 @@ export default function TownApp({
             </Link>
           ))}
         </nav>
-        <Link className="open-shop-link" href={myShopPath()}>
-          <Icon name="plus" size={18} />
-          {state.ownShop ? "書店を整える" : "あなたも、店主に。"}
-          <Icon name="arrow" size={15} />
-        </Link>
+        {!manage && (
+          <Link className="open-shop-link" href={myShopPath()}>
+            <Icon name="plus" size={18} />
+            {state.ownShop ? "書店を整える" : "あなたも、店主に。"}
+            <Icon name="arrow" size={15} />
+          </Link>
+        )}
         <div className="side-philosophy">
           <Icon name="leaf" size={23} />
           <p>
@@ -496,8 +527,8 @@ export default function TownApp({
           >
             <Icon name="search" size={18} />
             <input
-              placeholder="本や、気になる書店を探す"
-              aria-label="本や書店を検索"
+              placeholder={manage ? "本を探す" : "本や、気になる書店を探す"}
+              aria-label={manage ? "本を検索" : "本や書店を検索"}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => {
@@ -568,6 +599,10 @@ export default function TownApp({
         >
           {visitor && ownPage ? (
             <VisitorPage page={ownPage} />
+          ) : manage && restsInManageMode(view, selectedId) ? (
+            <ManageRest {...shared} />
+          ) : manage && (view === "town" || view === "timeline") ? (
+            <ManageHome {...shared} />
           ) : view === "walk" ? (
             <WalkView {...shared} />
           ) : view === "town" || view === "timeline" ? (
@@ -605,10 +640,13 @@ export default function TownApp({
           )}
         </main>
         <GoogleCoversCredit />
-        <footer className="town-footer">
-          <span>読書の終わりを、交流の始まりに。</span>
-          <small>BOOK TOWN · それぞれの「好き」が集まる、本の街。</small>
-        </footer>
+        {/* The town's words: not said in 読書管理モード. */}
+        {!manage && (
+          <footer className="town-footer">
+            <span>読書の終わりを、交流の始まりに。</span>
+            <small>BOOK TOWN · それぞれの「好き」が集まる、本の街。</small>
+          </footer>
+        )}
       </div>
       <nav
         className="town-bottom-nav"
@@ -616,7 +654,7 @@ export default function TownApp({
         aria-label="スマートフォンナビゲーション"
         inert={layered}
       >
-        {links.map((l) => (
+        {tabs.map((l) => (
           <Link
             href={hrefOf(l)}
             onClick={clickOf(l)}

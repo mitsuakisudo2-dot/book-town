@@ -78,6 +78,7 @@ import { blockable, withoutReaders } from "./blocks";
 import {
   COMPOSE_ICONS,
   SPOILER_DISPLAYS,
+  TOWN_MODES,
   LIKE_TAPS_MAX,
   ME_ID,
   POP_REACTIONS,
@@ -1498,6 +1499,11 @@ export function createTownStore(
         ...state,
         settings: { ...state.settings, spoilerDisplay: value },
       });
+    },
+    setTownMode(mode) {
+      initialize();
+      if (!TOWN_MODES.includes(mode) || state.settings.mode === mode) return;
+      commit({ ...state, settings: { ...state.settings, mode } });
     },
     noteReport(report) {
       initialize();

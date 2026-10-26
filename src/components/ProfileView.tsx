@@ -136,6 +136,8 @@ import {
   NAMES,
 } from "../lib/words";
 import dynamic from "next/dynamic";
+import { inManageMode } from "../lib/town-mode";
+import { ModeSwitch } from "./ModeSwitch";
 
 // The scanner is only fetched when the reader opens it (as from Home and
 // 検索): the page reads less before it runs.
@@ -164,6 +166,9 @@ export function ProfileView({
   notify,
 }: ProfileViewProps) {
   const isSelf = readerId === town.me.id;
+  // The reader's own page in 読書管理モード: what is theirs and private only
+  // (no shop, posters, 便り, follows, nor the nine others read them by).
+  const quiet = isSelf && inManageMode(town);
   // Another reader's 人生の9冊 and records, with their words, are read when
   // their page opens (AUD-006): the town holds none of their nine.
   const { state, ready: nineRead } = useTownMore(
@@ -569,7 +574,7 @@ export function ProfileView({
         </div>
         <div className="profile-reader-text">
           <p className="profile-eyebrow">
-            READER IN BOOK TOWN{" "}
+            {quiet ? "MY READING ROOM" : "READER IN BOOK TOWN"}{" "}
             {!isSelf && isSampleId(reader.id) && (
               <span className="profile-demo">見本の読書家</span>
             )}
@@ -578,7 +583,7 @@ export function ProfileView({
           <p className="profile-handle">@{reader.handle}</p>
           <FoldedWords state={state} kind="profile" id={reader.id}>
             <p className="profile-bio">
-              {reader.bio || "読書家の名刺は、好きな本から。"}
+              {reader.bio || (quiet ? "" : "読書家の名刺は、好きな本から。")}
             </p>
           </FoldedWords>
           {reader.links && reader.links.length > 0 && (
@@ -599,23 +604,25 @@ export function ProfileView({
             </ul>
           )}
           {/* Only what has happened is counted: an empty count is left out. */}
-          {(postCount > 0 ||
-            (isSelf && state.following.length > 0) ||
-            (followerCount > 0 && (isSelf || isSampleId(reader.id))) ||
+          {((!quiet && postCount > 0) ||
+            (!quiet && isSelf && state.following.length > 0) ||
+            (!quiet &&
+              followerCount > 0 &&
+              (isSelf || isSampleId(reader.id))) ||
             (isSelf && Boolean(readingTime))) && (
             <div className="profile-stats">
-              {postCount > 0 && (
+              {!quiet && postCount > 0 && (
                 <span>
                   <b>{postCount}</b> {NAMES.letter}
                 </span>
               )}
-              {isSelf && state.following.length > 0 && (
+              {!quiet && isSelf && state.following.length > 0 && (
                 <button type="button" onClick={() => setSheet("following")}>
                   <b>{state.following.length}</b> フォロー
                 </button>
               )}
               {/* Nobody counts a reader's followers but the reader. */}
-              {followerCount > 0 && isSelf && (
+              {!quiet && followerCount > 0 && isSelf && (
                 <button type="button" onClick={() => setSheet("followers")}>
                   <b>{followerCount}</b> フォロワー
                 </button>
@@ -628,7 +635,16 @@ export function ProfileView({
             </div>
           )}
           <div className="profile-reader-actions">
-            {isSelf ? (
+            {quiet ? (
+              <>
+                <button className="btn fill" onClick={() => setSheet("scan")}>
+                  <Icon name="barcode" /> 本を登録
+                </button>
+                <button className="btn" onClick={() => setSheet("settings")}>
+                  <Icon name="settings" /> 設定
+                </button>
+              </>
+            ) : isSelf ? (
               <>
                 {/* One main step (the shop); the rest stay small beside it. */}
                 <Link className="btn fill" href={myShopPath()}>
@@ -677,7 +693,7 @@ export function ProfileView({
                 </button>
               )
             )}
-            {shop && (
+            {shop && !quiet && (
               <Link className="profile-text-link" href={shopPath(shop.id)}>
                 <Icon name="store" />{" "}
                 {isSelf ? "自分の書店を見る" : "この人の書店へ"}
@@ -704,84 +720,88 @@ export function ProfileView({
         </div>
       </section>
 
-      <section className="profile-nine" aria-labelledby="life-nine-title">
-        <div className="profile-section-heading">
-          <div>
-            <p className="profile-eyebrow">A SMALL PORTRAIT, IN BOOKS</p>
-            <h2 id="life-nine-title">人生の9冊</h2>
+      {!quiet && (
+        <section className="profile-nine" aria-labelledby="life-nine-title">
+          <div className="profile-section-heading">
+            <div>
+              <p className="profile-eyebrow">A SMALL PORTRAIT, IN BOOKS</p>
+              <h2 id="life-nine-title">人生の9冊</h2>
+            </div>
+            {isSelf && (
+              <button
+                className="btn profile-edit-nine"
+                disabled={!owner}
+                onClick={beginNineEdit}
+              >
+                <Icon name="edit" /> 編集
+              </button>
+            )}
           </div>
-          {isSelf && (
-            <button
-              className="btn profile-edit-nine"
-              disabled={!owner}
-              onClick={beginNineEdit}
-            >
-              <Icon name="edit" /> 編集
-            </button>
-          )}
-        </div>
-        <p className="profile-section-description">
-          {isSelf
-            ? "自分を少し語ってくれる本を。9冊すべてを埋める必要はありません。"
-            : "心に残り続ける本。その人の輪郭が、少し見えてきます。"}
-        </p>
-        <div className="profile-nine-grid">
-          {lifeNine.map((book, index) =>
-            book ? (
-              <div className="profile-nine-item" key={`${book.id}-${index}`}>
-                <Link
-                  href={bookPath(book.id)}
-                  className="profile-nine-book"
-                  aria-label={`${bookTitle(book)}の詳細を見る`}
-                >
-                  <span className="profile-nine-number">0{index + 1}</span>
-                  <BookJacket book={book} />
-                </Link>
-                <Link className="profile-nine-title" href={bookPath(book.id)}>
-                  {bookTitle(book)}
-                </Link>
-                <p className="profile-nine-author">{bookAuthor(book)}</p>
-                {reader.nineNotes[book.id] && (
-                  <button
-                    className="profile-nine-note"
-                    onClick={() => setSelectedNote(book.id)}
-                    aria-label={`${bookTitle(book)}についてのひとことを読む`}
+          <p className="profile-section-description">
+            {isSelf
+              ? "自分を少し語ってくれる本を。9冊すべてを埋める必要はありません。"
+              : "心に残り続ける本。その人の輪郭が、少し見えてきます。"}
+          </p>
+          <div className="profile-nine-grid">
+            {lifeNine.map((book, index) =>
+              book ? (
+                <div className="profile-nine-item" key={`${book.id}-${index}`}>
+                  <Link
+                    href={bookPath(book.id)}
+                    className="profile-nine-book"
+                    aria-label={`${bookTitle(book)}の詳細を見る`}
                   >
-                    <Icon name="leaf" />
-                    ひとことを読む
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="profile-nine-empty" key={`empty-${index}`}>
-                {isSelf ? (
-                  <button
-                    onClick={beginNineEdit}
-                    aria-label={`${nth(index + 1, "冊")}を選ぶ`}
-                  >
-                    <span>0{index + 1}</span>
-                    <Icon name="plus" />
-                    <small>一冊を選ぶ</small>
-                  </button>
-                ) : nineRead ? (
-                  <div>
-                    <span>0{index + 1}</span>
-                    <Icon name="book" />
-                    <small>これからの一冊</small>
-                  </div>
-                ) : (
-                  // Their nine is on its way: nothing said of it yet.
-                  <div aria-busy="true">
-                    <span>0{index + 1}</span>
-                  </div>
-                )}
-              </div>
-            ),
-          )}
-        </div>
-      </section>
+                    <span className="profile-nine-number">0{index + 1}</span>
+                    <BookJacket book={book} />
+                  </Link>
+                  <Link className="profile-nine-title" href={bookPath(book.id)}>
+                    {bookTitle(book)}
+                  </Link>
+                  <p className="profile-nine-author">{bookAuthor(book)}</p>
+                  {reader.nineNotes[book.id] && (
+                    <button
+                      className="profile-nine-note"
+                      onClick={() => setSelectedNote(book.id)}
+                      aria-label={`${bookTitle(book)}についてのひとことを読む`}
+                    >
+                      <Icon name="leaf" />
+                      ひとことを読む
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="profile-nine-empty" key={`empty-${index}`}>
+                  {isSelf ? (
+                    <button
+                      onClick={beginNineEdit}
+                      aria-label={`${nth(index + 1, "冊")}を選ぶ`}
+                    >
+                      <span>0{index + 1}</span>
+                      <Icon name="plus" />
+                      <small>一冊を選ぶ</small>
+                    </button>
+                  ) : nineRead ? (
+                    <div>
+                      <span>0{index + 1}</span>
+                      <Icon name="book" />
+                      <small>これからの一冊</small>
+                    </div>
+                  ) : (
+                    // Their nine is on its way: nothing said of it yet.
+                    <div aria-busy="true">
+                      <span>0{index + 1}</span>
+                    </div>
+                  )}
+                </div>
+              ),
+            )}
+          </div>
+        </section>
+      )}
 
-      <ProfilePosters state={state} readerId={reader.id} isSelf={isSelf} />
+      {!quiet && (
+        <ProfilePosters state={state} readerId={reader.id} isSelf={isSelf} />
+      )}
 
       <RecordShelf
         state={state}
@@ -904,7 +924,7 @@ export function ProfileView({
                     : "登録した本は、まだありません。"}
               </p>
               {/* The library's way in is ［＋本を登録］, just above. */}
-              {collection !== "library" && (
+              {collection !== "library" && !quiet && (
                 <Link href="/">
                   本の街で一冊に出会う <Icon name="arrow" size={16} />
                 </Link>
@@ -914,110 +934,116 @@ export function ProfileView({
         </section>
       )}
 
-      {isSelf && <SavedShops state={state} />}
+      {isSelf && !quiet && <SavedShops state={state} />}
 
-      <section
-        className="profile-shop-section"
-        aria-labelledby="profile-shop-title"
-      >
-        <div className="profile-section-heading">
-          <div>
-            <p className="profile-eyebrow">A BOOKSHOP OF ONE’S OWN</p>
-            <h2 id="profile-shop-title">
-              {isSelf ? "わたしの書店" : `${reader.name}さんの書店`}
-            </h2>
+      {!quiet && (
+        <section
+          className="profile-shop-section"
+          aria-labelledby="profile-shop-title"
+        >
+          <div className="profile-section-heading">
+            <div>
+              <p className="profile-eyebrow">A BOOKSHOP OF ONE’S OWN</p>
+              <h2 id="profile-shop-title">
+                {isSelf ? "わたしの書店" : `${reader.name}さんの書店`}
+              </h2>
+            </div>
           </div>
-        </div>
-        {shop ? (
-          <>
-            <Link
-              className={`profile-shop-sign theme-${shop.theme}`}
-              href={shopPath(shop.id)}
-            >
-              <div className="profile-shop-mark">
-                <Icon name="store" />
-              </div>
-              <div>
-                {ownTagline(shop) && (
-                  <p className="profile-shop-tagline">{ownTagline(shop)}</p>
-                )}
-                <h3>{shop.name}</h3>
-                <FoldedWords state={state} kind="shop" id={shop.id} inLink>
-                  <p className="profile-shop-description">{shop.description}</p>
-                </FoldedWords>
-              </div>
-              <span className="profile-shop-enter">
-                書店に入る <Icon name="arrow" />
-              </span>
-            </Link>
-            {(isSelf || publicShelves.length > 0) && (
-              <div className="profile-public-shelves">
-                <h3>
-                  <Icon name="book" /> 公開している棚
-                </h3>
-                {publicShelves.length ? (
-                  <div className="profile-shelf-links">
-                    {publicShelves.map((shelf) => (
-                      <Link
-                        href={shopPath(shop.id, shelf.id)}
-                        className="profile-shelf-link"
-                        key={shelf.id}
-                      >
-                        <div>
-                          <span className="profile-shelf-name">
-                            {shelf.name}
-                          </span>
-                          <span className="profile-shelf-preview">
-                            {shelf.items
-                              .slice(0, 3)
-                              .map((item) =>
-                                titleById(state.books, item.bookId),
-                              )
-                              .filter(Boolean)
-                              .join(" · ") ||
-                              "空の棚にも、これからの出会いが。"}
-                          </span>
-                        </div>
-                        <Icon name="arrow" />
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="profile-muted">
-                    棚を「公開」にすると、ここに並び、街の人が見に来られます。
-                  </p>
-                )}
-              </div>
-            )}
-            {isSelf && (
-              <Link className="btn" href={myShopPath()}>
-                <Icon name="edit" /> 書店と棚を編集する
+          {shop ? (
+            <>
+              <Link
+                className={`profile-shop-sign theme-${shop.theme}`}
+                href={shopPath(shop.id)}
+              >
+                <div className="profile-shop-mark">
+                  <Icon name="store" />
+                </div>
+                <div>
+                  {ownTagline(shop) && (
+                    <p className="profile-shop-tagline">{ownTagline(shop)}</p>
+                  )}
+                  <h3>{shop.name}</h3>
+                  <FoldedWords state={state} kind="shop" id={shop.id} inLink>
+                    <p className="profile-shop-description">
+                      {shop.description}
+                    </p>
+                  </FoldedWords>
+                </div>
+                <span className="profile-shop-enter">
+                  書店に入る <Icon name="arrow" />
+                </span>
               </Link>
-            )}
-          </>
-        ) : (
-          <div className="profile-no-shop">
-            <Icon name="store" />
-            <p>
-              {isSelf
-                ? "好きな本を並べた、あなたの小さな書店を。"
-                : "この読書家の書店は、準備中です。"}
-            </p>
-            {isSelf && (
-              <Link className="btn fill" href={myShopPath()}>
-                3分で書店を開く <Icon name="arrow" />
-              </Link>
-            )}
-          </div>
-        )}
-      </section>
+              {(isSelf || publicShelves.length > 0) && (
+                <div className="profile-public-shelves">
+                  <h3>
+                    <Icon name="book" /> 公開している棚
+                  </h3>
+                  {publicShelves.length ? (
+                    <div className="profile-shelf-links">
+                      {publicShelves.map((shelf) => (
+                        <Link
+                          href={shopPath(shop.id, shelf.id)}
+                          className="profile-shelf-link"
+                          key={shelf.id}
+                        >
+                          <div>
+                            <span className="profile-shelf-name">
+                              {shelf.name}
+                            </span>
+                            <span className="profile-shelf-preview">
+                              {shelf.items
+                                .slice(0, 3)
+                                .map((item) =>
+                                  titleById(state.books, item.bookId),
+                                )
+                                .filter(Boolean)
+                                .join(" · ") ||
+                                "空の棚にも、これからの出会いが。"}
+                            </span>
+                          </div>
+                          <Icon name="arrow" />
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="profile-muted">
+                      棚を「公開」にすると、ここに並び、街の人が見に来られます。
+                    </p>
+                  )}
+                </div>
+              )}
+              {isSelf && (
+                <Link className="btn" href={myShopPath()}>
+                  <Icon name="edit" /> 書店と棚を編集する
+                </Link>
+              )}
+            </>
+          ) : (
+            <div className="profile-no-shop">
+              <Icon name="store" />
+              <p>
+                {isSelf
+                  ? "好きな本を並べた、あなたの小さな書店を。"
+                  : "この読書家の書店は、準備中です。"}
+              </p>
+              {isSelf && (
+                <Link className="btn fill" href={myShopPath()}>
+                  3分で書店を開く <Icon name="arrow" />
+                </Link>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
-      <ProfilePosts
-        state={state}
-        actions={actions}
-        notify={notify}
-        readerId={reader.id}
-      />
+      {!quiet && (
+        <ProfilePosts
+          state={state}
+          actions={actions}
+          notify={notify}
+          readerId={reader.id}
+        />
+      )}
 
       {sheet === "following" && (
         <Modal title="フォロー" onClose={() => setSheet(null)}>
@@ -1079,6 +1105,7 @@ export function ProfileView({
       )}
       {sheet === "settings" && (
         <Modal title="設定" onClose={() => setSheet(null)}>
+          <ModeSwitch state={town} actions={actions} notify={notify} />
           <fieldset className="record-visibility palette-choices">
             <legend>画面の色</legend>
             {PALETTES.map((choice) => (

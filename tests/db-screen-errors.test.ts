@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import {
   SUPABASE_STANDIN,
+  clearOfJapanMidnight,
   migrationFiles,
   migrationText,
 } from "./fixtures/pglite-supabase";
@@ -47,6 +48,8 @@ async function migrated(): Promise<PGlite> {
 async function main() {
   let passed = 0;
   async function check(name: string, run: () => Promise<void>) {
+    // Most checks report twice and expect the same day in Japan.
+    await clearOfJapanMidnight();
     await run();
     passed += 1;
     console.log("PASS " + name);

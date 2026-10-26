@@ -1530,6 +1530,7 @@ export function createInitialState(): TownState {
       shelfAudiences: {},
       spoilerDisplay: "fold_possible",
       memoHint: true,
+      mode: "normal",
     },
     seenNotifications: [],
     shopMessages: [],

@@ -17,6 +17,7 @@ import { Icon, ReaderAvatar } from "./ui";
 import "./reading.css";
 import { myShopPath, walkPath } from "../lib/paths";
 import { NAMES } from "../lib/words";
+import { inManageMode } from "../lib/town-mode";
 
 type Shared = {
   state: TownState;
@@ -30,6 +31,7 @@ export function NotificationsView({ state, actions }: Shared) {
   // Asked again as it opens: a book can be held while the page stays open.
   const holds = useBookHolds(true);
   const notices = notificationsFor(state, clock?.openedAt ?? 0, holds);
+  const manage = inManageMode(state);
   // Notices that were unread when this page showed them keep their mark until it closes.
   const [fresh, setFresh] = useState<string[]>([]);
   const unread = notices
@@ -71,6 +73,14 @@ export function NotificationsView({ state, actions }: Shared) {
             );
           })}
         </ul>
+      ) : manage ? (
+        <div className="empty-state">
+          <Icon name="bell" size={34} />
+          <h2>静かな時間です</h2>
+          <p>
+            読書管理モードでは、あなたの本の確かめごとと、あなたの通報の進みだけが、ここに届きます。
+          </p>
+        </div>
       ) : (
         <div className="empty-state">
           <Icon name="bell" size={34} />
@@ -93,9 +103,11 @@ export function NotificationsView({ state, actions }: Shared) {
       )}
       <OwnReports state={state} />
       <p className="search-note">
-        {savedIn === "local"
-          ? `お知らせはこのブラウザの中の出来事から作っています。デモの読書家の${NAMES.letter}は架空のデモデータです。`
-          : `お知らせは、この街の${NAMES.letter}と、あなたの${NAMES.letter}への反応から作っています。`}
+        {manage
+          ? "人からのお知らせは、通常モードに戻したときに届きます。"
+          : savedIn === "local"
+            ? `お知らせはこのブラウザの中の出来事から作っています。デモの読書家の${NAMES.letter}は架空のデモデータです。`
+            : `お知らせは、この街の${NAMES.letter}と、あなたの${NAMES.letter}への反応から作っています。`}
       </p>
     </div>
   );
