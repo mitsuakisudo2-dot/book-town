@@ -43,7 +43,7 @@ export function FirstSteps({
       <ol>
         <li>
           <button type="button" className={at(steps.book)} onClick={onScan}>
-            {step(1, steps.book, REGISTER.start, "バーコードか、書名で")}
+            {step(1, steps.book, REGISTER.start, REGISTER.how)}
           </button>
         </li>
         <li>

@@ -1821,7 +1821,15 @@ try {
         "spine",
         "spine",
       ]);
-      await page.getByRole("button", { name: "棚を整える" }).click();
+      // The new shop is tended in 整える; closing it leaves the shop's page.
+      await page.getByRole("button", { name: "店を整える" }).click();
+      await expect(page.locator(".tidy .walk-artboard")).toBeVisible();
+      await page
+        .locator(".tidy")
+        .getByRole("button", { name: "閉じる" })
+        .first()
+        .click();
+      await expect(page.locator(".tidy")).toHaveCount(0);
       await expect(page.locator(".editor-shelf-panel")).toHaveCount(1);
       // For a day, the street opens with the new shop and says it joined.
       await goHome();
@@ -1834,12 +1842,22 @@ try {
         "一頁ぶん、遠回り。",
       );
       await expect(page.locator(".street-new-own")).toHaveCount(1);
+      // The street's 整える opens 整える itself, and a reload does not again.
+      await first.getByRole("link", { name: "店を整える" }).click();
+      await expect(page.locator(".tidy .walk-artboard")).toBeVisible();
+      await expect.poll(() => new URL(page.url()).search).toBe("");
+      await page
+        .locator(".tidy")
+        .getByRole("button", { name: "閉じる" })
+        .first()
+        .click();
+      await expect(page.locator(".tidy")).toHaveCount(0);
       await go("/profiles/me/");
       await expect(
         page
           .locator(".profile-reader-actions")
           .getByRole("link", { name: "書店を整える" }),
-      ).toHaveAttribute("href", "/my-shop/");
+      ).toHaveAttribute("href", "/my-shop/?tidy=1");
     },
   );
 
@@ -1851,7 +1869,7 @@ try {
       // One's own shop is tended, not liked or kept for later.
       await expect(
         page.getByRole("link", { name: "自分の店を整える" }),
-      ).toHaveAttribute("href", "/my-shop/");
+      ).toHaveAttribute("href", "/my-shop/?tidy=1");
       await expect(
         page.getByRole("button", { name: "この店が好き" }),
       ).toHaveCount(0);

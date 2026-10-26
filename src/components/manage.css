@@ -192,6 +192,16 @@
   background: var(--green);
   color: var(--on-green);
 }
+/* Its words are set, not a title: on a narrow phone they take a second line
+ * after 「、」 rather than lose their end (バーコードか、書名で at 320px). */
+.manage-register small {
+  white-space: normal;
+}
+.manage-register small > i {
+  display: inline;
+  font-style: normal;
+  white-space: nowrap;
+}
 
 /* The reader's own shelves: one row each, to that shelf of the library. */
 .manage-shelf-list {

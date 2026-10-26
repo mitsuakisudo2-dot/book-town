@@ -20,7 +20,7 @@ import {
 } from "../lib/library";
 import { libraryStateOf, townShopBooks } from "../lib/library-town";
 import { libraryPath, readingPath } from "../lib/paths";
-import { counted, NAMES } from "../lib/words";
+import { counted, NAMES, REGISTER } from "../lib/words";
 import { BookJacket, Icon } from "./ui";
 import { ShelfBook, ShelfRow } from "./WoodenShelf";
 import { useClock } from "./useClock";
@@ -116,8 +116,12 @@ export function ManageHome({ state, actions, notify }: Shared) {
         <Link href={libraryPath({ addBook: true })} className="manage-register">
           <Icon name="barcode" size={26} />
           <span>
-            <b>本を登録</b>
-            <small>バーコードを読む</small>
+            <b>{REGISTER.start}</b>
+            <small>
+              {REGISTER.how.split(/(?<=、)/).map((part) => (
+                <i key={part}>{part}</i>
+              ))}
+            </small>
           </span>
         </Link>
         {running || !next ? (

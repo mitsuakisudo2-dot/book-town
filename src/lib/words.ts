@@ -152,6 +152,8 @@ export const REGISTER = {
   byIsbn: "このISBNで登録",
   /** First of はじめの3つ, and the scanner's own name. */
   start: "本を登録",
+  /** Said under it: the two ways in (#383). */
+  how: "バーコードか、書名で",
   /** What is said once a book, named in 『』, is in or was in already. */
   added: (quoted: string) => `${quoted}を登録しました`,
   already: (quoted: string) => `${quoted}はもうライブラリにあります`,
@@ -200,6 +202,9 @@ export const PLACE = {
   /** Shows the next books of a long shelf. */
   more: "もっと見る",
 } as const;
+
+/** The door to 整える, where the reader's shop is tended (けにー 10-25). */
+export const SHOP_TIDY = "店を整える";
 
 // ── Failure notices ─────────────────────────────────────────────────────
 
