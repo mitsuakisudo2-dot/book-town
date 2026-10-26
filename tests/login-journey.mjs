@@ -5448,7 +5448,32 @@ try {
       await expect(dialog).toContainText(
         "「レンさんのポスター」について、運営に知らせます。",
       );
-      await dialog.getByLabel("宣伝・スパム").check();
+      const spam = dialog.getByLabel("宣伝・スパム");
+      try {
+        await spam.check();
+      } catch (error) {
+        // In CI the click has twice left the reason unchosen: say what
+        // the radio was like then, to find out why.
+        const seen = await spam.evaluate((radio) => {
+          const box = radio.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          );
+          const styled = (element) =>
+            element
+              ? getComputedStyle(element).getPropertyValue("interactivity")
+              : "";
+          let drafts = "";
+          try {
+            drafts = localStorage.getItem("book-town-report-drafts-v1") ?? "";
+          } catch {
+            drafts = "unreadable";
+          }
+          return `checked ${radio.checked}; interactivity ${styled(radio)}, the dialog's ${styled(radio.closest('[role="dialog"]'))}; inert above ${Boolean(radio.closest("[inert]"))}; dialog[open] ${document.querySelectorAll("dialog[open]").length}; at its middle <${hit?.tagName.toLowerCase()} class="${hit?.className}">; kept ${drafts}`;
+        });
+        throw new Error(`${error.message}\n${seen}`);
+      }
       await dialog.getByRole("button", { name: "通報する" }).click();
       await expect(dialog).toContainText(
         "このポスターは、あなたの画面ではたたんでおきます。",
