@@ -105,7 +105,7 @@ const NO_SHELVES: ReadonlySet<string> = new Set();
  * in the library's ［選ぶ］, and whether it is on their shop's shelves. Set on a book not in the library,
  * or taken out of it, it brings the book in, as 登録 does.
  */
-function MyBook({
+export function MyBook({
   book,
   state,
   actions,

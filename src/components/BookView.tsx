@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useState, useSyncExternalStore } from "react";
 import { usePersistenceStatus, useTownMore } from "../lib/store";
 import { bookKind } from "../lib/samples";
 import {
@@ -9,7 +10,13 @@ import {
   type Notify,
 } from "../lib/types";
 import { BookJacket, CoverCredit, Icon } from "./ui";
-import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
+import {
+  BookActions,
+  BookPrice,
+  BookPurchase,
+  MyBook,
+  bookNote,
+} from "./BookActions";
 import { InLibraryMark } from "./RegisterBook";
 import { SeriesStrip } from "./series-later";
 import { BookReviews } from "./Social";
@@ -23,7 +30,7 @@ import {
 } from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
 import { CoverRemovalLink } from "./Report";
-import { BookFeelings } from "./ReadingRecords";
+import { BookFeelings, OwnFeeling } from "./ReadingRecords";
 import { BookEncounters } from "./BookEncounters";
 import { BackLink } from "./BackLink";
 import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
@@ -37,6 +44,8 @@ import { useBibliography } from "../lib/bibliography-session";
 import { HeldBook } from "./HeldBook";
 import { PLACE } from "../lib/words";
 import { inManageMode } from "../lib/town-mode";
+import { formatDuration, sessionSeconds } from "../lib/reading";
+import { japanMonthDay } from "../lib/japan-time";
 import "./book-in-hand.css";
 
 type Shared = {
@@ -129,6 +138,7 @@ export function BookView({
   const state = known ? town : read;
   const book = known ?? bookById(read.books, bookId);
   const master = useBibliography(bookId);
+  const face = useFace();
   if (!book)
     return persistence === "loading" || !ready ? (
       <p role="status">本を開いています…</p>
@@ -144,9 +154,24 @@ export function BookView({
   const manage = inManageMode(town);
   // The cover, its lookup and the shop links go by the heading's name.
   const named = bookNamedBy(book, master);
+  // 読書管理モード is the reader's own already: one face, as it was.
+  if (!manage && face === "me")
+    return (
+      <>
+        <PageTop face={face} />
+        <MyBookPage
+          book={book}
+          named={named}
+          master={master}
+          state={state}
+          actions={actions}
+          notify={notify}
+        />
+      </>
+    );
   return (
     <>
-      <BackLink className="back-link" />
+      {manage ? <BackLink className="back-link" /> : <PageTop face={face} />}
       <section className="book-page-hero">
         <BookJacket
           book={named}
@@ -188,15 +213,6 @@ export function BookView({
         actions={actions}
         notify={notify}
       />
-      {/* Meetings carry others' words (a POP, a 便り): the town's. */}
-      {!manage && (
-        <BookEncounters
-          book={book}
-          state={state}
-          actions={actions}
-          notify={notify}
-        />
-      )}
       {!manage && <BookPosters state={state} book={book} />}
       {!manage && (
         <BookReviews
@@ -207,6 +223,164 @@ export function BookView({
         />
       )}
       {!manage && <BookStockists state={state} book={book} />}
+    </>
+  );
+}
+
+/** The book page's two faces (管理表 17): the town's, and the reader's own. */
+type Face = "town" | "me";
+
+const FACE_EVENT = "book-face";
+const subscribeFace = (change: () => void) => {
+  addEventListener("popstate", change);
+  addEventListener(FACE_EVENT, change);
+  return () => {
+    removeEventListener("popstate", change);
+    removeEventListener(FACE_EVENT, change);
+  };
+};
+const faceNow = (): Face =>
+  new URLSearchParams(location.search).get("face") === "me" ? "me" : "town";
+
+/**
+ * The face the address names (?face=me), so a reload or 戻る keeps it and
+ * the library opens the reader's own. The exported page starts on みんな.
+ */
+function useFace(): Face {
+  return useSyncExternalStore(subscribeFace, faceNow, () => "town");
+}
+
+/**
+ * 戻る, and at the right the switch between the book's page and the
+ * reader's own of it (けにー 10-26「本のページの右上に切り替えられる
+ * スイッチ」). Switching replaces the address: 戻る still leaves the book.
+ */
+function PageTop({ face }: { face: Face }) {
+  const to = (next: Face) => {
+    if (next === face) return;
+    const params = new URLSearchParams(location.search);
+    if (next === "me") params.set("face", "me");
+    else params.delete("face");
+    const query = params.toString();
+    history.replaceState(
+      history.state,
+      "",
+      location.pathname + (query ? "?" + query : "") + location.hash,
+    );
+    dispatchEvent(new Event(FACE_EVENT));
+    scrollTo({ top: 0 });
+  };
+  return (
+    <div className="book-page-top">
+      <BackLink className="back-link" />
+      <div
+        className="book-face-switch"
+        role="group"
+        aria-label="ページの切り替え"
+      >
+        <button
+          type="button"
+          aria-pressed={face === "town"}
+          onClick={() => to("town")}
+        >
+          本のページ
+        </button>
+        <button
+          type="button"
+          aria-pressed={face === "me"}
+          onClick={() => to("me")}
+        >
+          <Icon name="lock" size={14} />
+          わたし
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * わたし: the reader's own page of the book, for them alone (管理表 17):
+ * their reading of it, the feelings they left, and where and from whom
+ * they met it with their memos.
+ */
+function MyBookPage({
+  book,
+  named,
+  master,
+  state,
+  actions,
+  notify,
+}: Shared & { book: Book; named: Book; master: Bibliography | null }) {
+  const { title, author } = bookHeading(book, master);
+  // Sessions are read against the time the page opened; one still running
+  // counts up to then.
+  const [now] = useState(() => Date.now());
+  const work = booksOfWork(state.books, book.id);
+  const sessions = state.readingSessions.filter(
+    (session) => session.bookId !== null && work.has(session.bookId),
+  );
+  const seconds = sessions.reduce(
+    (sum, session) => sum + sessionSeconds(session, now),
+    0,
+  );
+  const last = sessions
+    .map((session) => session.startedAt)
+    .sort()
+    .at(-1);
+  return (
+    <>
+      <section className="my-book-head">
+        <BookJacket book={named} />
+        <div>
+          <span className="eyebrow">YOU AND THIS BOOK</span>
+          <h1>{title}</h1>
+          {author.length > 0 && (
+            <Parts className="book-page-author" parts={author} mark="／" />
+          )}
+          <p className="my-book-private">
+            <Icon name="lock" size={13} />
+            あなたにだけ見えています
+          </p>
+        </div>
+      </section>
+      <section className="my-book-part" aria-labelledby="my-book-reading">
+        <h2 id="my-book-reading">読書の記録</h2>
+        <MyBook book={book} state={state} actions={actions} notify={notify} />
+        {sessions.length > 0 ? (
+          <dl className="my-book-facts">
+            <div>
+              <dt>読んだ時間</dt>
+              <dd>{formatDuration(seconds)}</dd>
+            </div>
+            <div>
+              <dt>開いた回数</dt>
+              <dd>{sessions.length}回</dd>
+            </div>
+            {last && (
+              <div>
+                <dt>最後に読んだ日</dt>
+                <dd>{japanMonthDay(last)}</dd>
+              </div>
+            )}
+          </dl>
+        ) : (
+          <p className="my-book-quiet">
+            読みはじめると、読んだ時間がここにたまっていきます。
+          </p>
+        )}
+        <OwnFeeling
+          book={book}
+          state={state}
+          actions={actions}
+          notify={notify}
+        />
+      </section>
+      <BookEncounters
+        book={book}
+        state={state}
+        actions={actions}
+        notify={notify}
+      />
     </>
   );
 }

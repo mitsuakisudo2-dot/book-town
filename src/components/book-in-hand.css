@@ -923,3 +923,117 @@
   font-size: var(--t-ui);
   font-weight: 700;
 }
+
+/* The book page's top: 戻る, and at the right the switch between the
+   book's page and the reader's own (管理表 17). */
+.book-page-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 25px;
+}
+.book-page-top .back-link {
+  margin-bottom: 0;
+}
+.book-face-switch {
+  display: inline-flex;
+  flex: none;
+  padding: 3px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--sheet);
+}
+.book-face-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+.book-face-switch button[aria-pressed="true"] {
+  background: var(--green);
+  color: var(--on-green);
+  font-weight: 700;
+}
+
+/* わたし: the reader's own page of the book. */
+.my-book-head {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.my-book-head h1 {
+  font-family: var(--serif);
+  font-size: var(--t-head);
+  font-weight: 500;
+  margin: 4px 0 2px;
+}
+.my-book-private {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+.my-book-part {
+  margin: 0 0 24px;
+  padding: 22px 24px;
+  border-radius: var(--r-box);
+  background: var(--sheet);
+  border: 1px solid var(--line);
+}
+.my-book-part h2 {
+  font-family: var(--serif);
+  font-size: var(--t-head);
+  font-weight: 500;
+  margin: 0 0 14px;
+}
+.my-book-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 12px;
+  margin: 0 0 18px;
+}
+.my-book-facts div {
+  display: grid;
+  gap: 2px;
+}
+.my-book-facts dt {
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+.my-book-facts dd {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  color: var(--green);
+}
+.my-book-quiet {
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  line-height: 1.8;
+  margin: 14px 0 16px;
+}
+.my-book-part .my-book-facts {
+  margin-top: 16px;
+}
+@media (max-width: 600px) {
+  .my-book-part {
+    padding: 18px 16px;
+  }
+  .my-book-head {
+    grid-template-columns: 80px 1fr;
+    gap: 14px;
+  }
+}
