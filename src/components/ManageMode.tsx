@@ -117,7 +117,11 @@ export function ManageHome({ state, actions, notify }: Shared) {
           <Icon name="barcode" size={26} />
           <span>
             <b>{REGISTER.start}</b>
-            <small>{REGISTER.how}</small>
+            <small>
+              {REGISTER.how.split(/(?<=、)/).map((part) => (
+                <i key={part}>{part}</i>
+              ))}
+            </small>
           </span>
         </Link>
         {running || !next ? (
