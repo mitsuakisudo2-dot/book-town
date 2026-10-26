@@ -130,7 +130,14 @@ await check(`searching finds a book, and its page opens`, async () => {
   await expect(broken).toHaveCount(0);
 });
 
-for (const route of ["/library/", "/credits/", "/login/"])
+for (const route of [
+  "/library/",
+  "/credits/",
+  "/login/",
+  "/login/help/",
+  "/terms/",
+  "/privacy/",
+])
   await check(`${route} opens`, async () => {
     const response = await page.goto(baseURL + route);
     if (response && response.status() !== 200)
