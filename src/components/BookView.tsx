@@ -42,7 +42,7 @@ import type { Bibliography } from "../lib/bibliography";
 import { mine } from "../lib/own-books";
 import { useBibliography } from "../lib/bibliography-session";
 import { HeldBook } from "./HeldBook";
-import { PLACE } from "../lib/words";
+import { PLACE, counted } from "../lib/words";
 import { inManageMode } from "../lib/town-mode";
 import { formatDuration, sessionSeconds } from "../lib/reading";
 import { japanMonthDay } from "../lib/japan-time";
@@ -354,7 +354,7 @@ function MyBookPage({
             </div>
             <div>
               <dt>開いた回数</dt>
-              <dd>{sessions.length}回</dd>
+              <dd>{counted(sessions.length, "回")}</dd>
             </div>
             {last && (
               <div>
