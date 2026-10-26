@@ -629,6 +629,28 @@
   color: var(--ink-2);
   font-size: var(--t-cap);
 }
+/* The scanner's ［手で入力］: the box that finds the book, its rows as the
+   search page's, and the form behind 見つからないときは. */
+.register-find {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.register-find .search-box {
+  margin-top: 4px;
+}
+.register-find .search-list {
+  margin: 0;
+}
+.register-find-not {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  font-size: var(--t-cap);
+  color: var(--ink-2);
+}
 .register-camera {
   min-height: 44px;
 }

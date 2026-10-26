@@ -1182,6 +1182,9 @@ try {
         name: "本を登録",
         exact: true,
       });
+      await dialog
+        .getByRole("button", { name: "書名やISBNを入れて登録" })
+        .click();
       await dialog.getByLabel("ISBN").fill("978-4-00-000000-2");
       await dialog.getByRole("button", { name: "ISBNで探す" }).click();
       await expect(
@@ -1254,16 +1257,20 @@ try {
         name: "本を登録",
         exact: true,
       });
+      // An ISBN typed in the box nothing finds: in by that ISBN, looked up.
       await scanner.getByRole("button", { name: "手で入力" }).click();
-      await dialog.getByLabel("ISBN").fill(OPENBD_ISBN);
-      await dialog.getByRole("button", { name: "ISBNで探す" }).click();
+      await dialog.getByLabel("登録する本を探す").fill(OPENBD_ISBN);
+      await dialog.getByRole("button", { name: "このISBNで登録" }).click();
       await expect(dialog.getByLabel("タイトル")).toHaveValue("表紙のある本");
       await dialog.getByRole("button", { name: "登録する" }).click();
       await expect(dialog).toHaveCount(0);
 
       // A book without an ISBN, by hand from the same scanner.
+      // Its title typed in the box, the form opens with it.
       await scanner.getByRole("button", { name: "手で入力" }).click();
-      await dialog.getByLabel("タイトル").fill("手で書いた本");
+      await dialog.getByLabel("登録する本を探す").fill("手で書いた本");
+      await dialog.getByRole("button", { name: "この書名で登録" }).click();
+      await expect(dialog.getByLabel("タイトル")).toHaveValue("手で書いた本");
       await dialog.getByLabel("著者").fill("試験 次郎");
       await dialog.getByRole("button", { name: "登録する" }).click();
       await expect(dialog).toHaveCount(0);
