@@ -487,6 +487,10 @@ mark.hidden-words.is-open {
     width: 56px;
     height: 56px;
   }
+  /* A toast stands above the compose button, never over it. */
+  :root:not([data-fab-aside]) body:has(.compose-fab) .toast {
+    bottom: calc(164px + env(safe-area-inset-bottom, 0px));
+  }
   .top-search {
     display: none !important;
   }
