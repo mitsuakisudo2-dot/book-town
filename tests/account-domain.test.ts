@@ -5,6 +5,8 @@ import {
   createAccountStore,
   failureMessages,
   LEAVE_HANDLE_MISMATCH,
+  LEAVE_WORD,
+  LEAVE_WORD_MISMATCH,
   linkFailure,
   normalizeCode,
   profileDraftIssue,
@@ -84,6 +86,8 @@ function fakeBackend() {
     /** Aki's passkeys, and what this device's passkey window answers. */
     passkeys: [] as Passkey[],
     passkeyWindow: null as AccountFailure | null,
+    /** reader_settings.mode, as each reader's was written. */
+    modes: new Map<string, string>(),
     emit: (user: AccountUser | null) => listener(user),
     release() {
       control.held.splice(0).forEach((resume) => resume());
@@ -180,14 +184,35 @@ function fakeBackend() {
       return profiles.get(userId) ?? null;
     },
     async createProfile(row) {
-      if ([...profiles.values()].some((p) => p.handle === row.handle))
+      if (
+        row.handle !== null &&
+        [...profiles.values()].some((p) => p.handle === row.handle)
+      )
         return { failure: "handle-taken" as AccountFailure };
+      // Like profiles_published_named: an ID exactly on a public profile.
+      if ((row.published ?? true) !== (row.handle != null))
+        return { failure: "invalid-profile" as AccountFailure };
       const profile = {
         ...profileOf(row.id, row.handle ?? "", row.name),
+        handle: row.handle ?? null,
+        published: row.published ?? true,
         reading_visibility: row.reading_visibility ?? "private",
       };
       profiles.set(row.id, profile);
       return { profile };
+    },
+    async publishProfile(userId, chosen) {
+      if ([...profiles.values()].some((p) => p.handle === chosen.handle))
+        return { failure: "handle-taken" as AccountFailure };
+      const was = profiles.get(userId);
+      if (!was) return { failure: "network" as AccountFailure };
+      const profile = { ...was, ...chosen, published: true };
+      profiles.set(userId, profile);
+      return { profile };
+    },
+    async startInManageMode(userId) {
+      control.modes.set(userId, "manage");
+      return null;
     },
   };
   return { backend, control };
@@ -387,6 +412,60 @@ async function main() {
         message: failureMessages["handle-taken"],
       });
       assert.equal(store.getSnapshot().status, "needs-profile");
+    },
+  );
+
+  await check(
+    "「自分の記録だけで使う」: no ID, no name, in 読書管理モード, and a name later",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set("user-ben", profileOf("user-ben", "ben", "ベン"));
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      control.emit(AKI);
+      await settle();
+      // The age is asked of everyone.
+      assert.equal((await store.actions.startQuietly(false)).ok, false);
+      assert.equal(control.profiles.has(AKI.id), false);
+      assert.deepEqual(await store.actions.startQuietly(true), { ok: true });
+      const state = store.getSnapshot();
+      assert.equal(state.status, "signed-in");
+      if (state.status === "signed-in") {
+        assert.equal(state.profile.handle, null);
+        assert.equal(state.profile.name, "");
+        assert.equal(state.profile.published, false);
+        assert.equal(state.profile.reading_visibility, "private");
+      }
+      assert.equal(control.modes.get(AKI.id), "manage");
+      // Leaving asks for the word, as there is no ID to type.
+      assert.deepEqual(await store.actions.deleteAccount(""), {
+        ok: false,
+        message: LEAVE_WORD_MISMATCH,
+      });
+      assert.equal(control.calls.deleteAccount, 0);
+      // A name and an ID later: checked, a taken ID said, then public.
+      assert.equal(
+        (await store.actions.publishProfile({ handle: "ab", name: "アキ" })).ok,
+        false,
+      );
+      assert.deepEqual(
+        await store.actions.publishProfile({ handle: "ben", name: "アキ" }),
+        { ok: false, message: failureMessages["handle-taken"] },
+      );
+      assert.deepEqual(
+        await store.actions.publishProfile({ handle: " Aki ", name: " アキ " }),
+        { ok: true },
+      );
+      const named = store.getSnapshot();
+      if (named.status !== "signed-in") throw new Error("signed out");
+      assert.equal(named.profile.handle, "aki");
+      assert.equal(named.profile.name, "アキ");
+      assert.equal(named.profile.published, true);
+      // Now the ID is what confirms leaving.
+      assert.deepEqual(await store.actions.deleteAccount(LEAVE_WORD), {
+        ok: false,
+        message: LEAVE_HANDLE_MISMATCH,
+      });
     },
   );
 

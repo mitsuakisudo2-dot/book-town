@@ -8,6 +8,7 @@ import { counted, failure, AGAIN, KEPT, NOT_CONNECTED } from "./words";
 export const CODE_LENGTH = 6;
 /** The youngest age Booktown is offered to. */
 export const MINIMUM_AGE = 13;
+const AGE_PROBLEM = `Booktownは${MINIMUM_AGE}歳以上の方が使えます。`;
 export const NAME_MAX_LENGTH = 40;
 /** How many passkeys one account can have (the auth server's own limit). */
 export const PASSKEY_LIMIT = 10;
@@ -130,6 +131,12 @@ export const failureMessages: Record<AccountFailure, string> = {
 /** The ID typed to confirm 退会 is not the reader's. */
 export const LEAVE_HANDLE_MISMATCH =
   "IDが違います。@のあとの、あなたのユーザーIDを入れてください。";
+/**
+ * What a reader with no ID (no public profile) types to confirm 退会: their
+ * records go too, so it is never one tap.
+ */
+export const LEAVE_WORD = "退会";
+export const LEAVE_WORD_MISMATCH = `確かめるため、「${LEAVE_WORD}」と入れてください。`;
 
 export type AccountResult = { ok: true } | { ok: false; message: string };
 
@@ -206,6 +213,16 @@ export interface AccountBackend {
   createProfile(
     row: ProfileInsert,
   ): Promise<{ profile: ProfileRow } | { failure: AccountFailure }>;
+  /**
+   * Gives a profile with no public face (started with 「自分の記録だけで
+   * 使う」) its ID and name, and makes it public, in one write.
+   */
+  publishProfile(
+    userId: string,
+    chosen: { handle: string; name: string },
+  ): Promise<{ profile: ProfileRow } | { failure: AccountFailure }>;
+  /** Starts the reader in 読書管理モード (reader_settings.mode). */
+  startInManageMode(userId: string): Promise<AccountFailure | null>;
 }
 
 export const normalizeEmail = (raw: string): string => raw.trim().toLowerCase();
@@ -253,12 +270,26 @@ export function profileDraftIssue(
       field: "name",
       message: `ユーザー名は${counted(NAME_MAX_LENGTH, "文字")}までです。`,
     };
-  if (!draft.ageConfirmed)
-    return {
-      field: "age",
-      message: `Booktownは${MINIMUM_AGE}歳以上の方が使えます。`,
-    };
+  if (!draft.ageConfirmed) return { field: "age", message: AGE_PROBLEM };
   return null;
+}
+
+/**
+ * The name and ID a reader with no public profile chooses (public-profile.ts),
+ * checked as a first profile's are, the age having been said already.
+ */
+export function publishDraftIssue(chosen: {
+  handle: string;
+  name: string;
+}): { field: "handle" | "name"; message: string } | null {
+  const issue = profileDraftIssue({
+    ...chosen,
+    ageConfirmed: true,
+    readingPublic: false,
+  });
+  return issue && issue.field !== "age"
+    ? { field: issue.field, message: issue.message }
+    : null;
 }
 
 /** Why a first profile cannot be created yet, or null when it can. */
@@ -565,6 +596,56 @@ export function createAccountStore(
       set({ status: "signed-in", user, profile: result.profile });
       return { ok: true };
     },
+    /**
+     * 「人とつながらず、自分の記録だけで使う」 (管理表 99): a profile with no
+     * ID and no name, seen by nobody, starting in 読書管理モード. Only the
+     * age is asked, as it is of everyone.
+     */
+    async startQuietly(ageConfirmed: boolean): Promise<AccountResult> {
+      start();
+      if (!ageConfirmed) return { ok: false, message: AGE_PROBLEM };
+      if (!backend || state.status !== "needs-profile")
+        return failed("network");
+      const user = state.user;
+      const result = await backend.createProfile({
+        id: user.id,
+        handle: null,
+        name: "",
+        published: false,
+        reading_visibility: "private",
+      });
+      if ("failure" in result) return failed(result.failure);
+      // Not started in 読書管理モード (a lost answer), the reader is in the
+      // usual mode with nothing public, and switches in 設定.
+      await backend.startInManageMode(user.id).catch(() => null);
+      generation += 1;
+      set({ status: "signed-in", user, profile: result.profile });
+      return { ok: true };
+    },
+    /** A name and an ID for a reader with no public profile, made public. */
+    async publishProfile(chosen: {
+      handle: string;
+      name: string;
+    }): Promise<AccountResult> {
+      start();
+      const issue = publishDraftIssue(chosen);
+      if (issue) return { ok: false, message: issue.message };
+      if (!backend || state.status !== "signed-in") return failed("network");
+      const user = state.user;
+      let result: Awaited<ReturnType<AccountBackend["publishProfile"]>>;
+      try {
+        result = await backend.publishProfile(user.id, {
+          handle: normalizeHandle(chosen.handle),
+          name: chosen.name.trim(),
+        });
+      } catch {
+        return failed("network");
+      }
+      if ("failure" in result) return failed(result.failure);
+      if (state.status === "signed-in" && state.user.id === user.id)
+        set({ status: "signed-in", user, profile: result.profile });
+      return { ok: true };
+    },
     async retry() {
       start();
       const user = userOf(state);
@@ -584,8 +665,8 @@ export function createAccountStore(
     },
     /**
      * 退会: only for the reader signed in now, and only when `confirm` is
-     * their ID as they typed it to say so (a reader with no profile yet has
-     * none to type). On success, what this browser keeps for them goes, and
+     * their ID as they typed it to say so, or LEAVE_WORD for a profile with
+     * no ID (a reader with no profile yet has nothing to type). On success, what this browser keeps for them goes, and
      * `onLeft` is told, before the page shows them signed out.
      */
     async deleteAccount(
@@ -595,11 +676,13 @@ export function createAccountStore(
       start();
       if (state.status !== "signed-in" && state.status !== "needs-profile")
         return failed("network");
-      if (
-        state.status === "signed-in" &&
-        normalizeHandle(confirm) !== state.profile.handle
-      )
-        return { ok: false, message: LEAVE_HANDLE_MISMATCH };
+      if (state.status === "signed-in") {
+        const handle = state.profile.handle;
+        if (handle === null && confirm.trim() !== LEAVE_WORD)
+          return { ok: false, message: LEAVE_WORD_MISMATCH };
+        if (handle !== null && normalizeHandle(confirm) !== handle)
+          return { ok: false, message: LEAVE_HANDLE_MISMATCH };
+      }
       if (!backend || deleting) return failed("network");
       const user = state.user;
       deleting = true;

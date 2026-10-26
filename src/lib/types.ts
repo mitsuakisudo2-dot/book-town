@@ -87,6 +87,12 @@ export interface Reader {
   nineNotes: Record<string, string>;
   /** Web pages the reader shares on their profile (note, YouTube, an official site…). */
   links?: string[];
+  /**
+   * The reader's own profile only: true while it is not public (started with
+   * 「人とつながらず、自分の記録だけで使う」), with no ID and perhaps no name.
+   * Others are never given such a profile (reading_mode).
+   */
+  unpublished?: boolean;
 }
 
 export interface ShelfItem {
@@ -564,6 +570,12 @@ export interface TownActions {
     links?: string[],
     handle?: string,
   ): boolean;
+  /**
+   * Gives a reader with no public profile their name and ID, and makes the
+   * profile public (public-profile.ts). False when the name is empty, the ID
+   * is not one that can be used, or the profile is public already.
+   */
+  publishProfile(name: string, handle: string): boolean;
   updateNine(ids: string[], notes: Record<string, string>): void;
   createPost(draft: PostDraft): string | null;
   deletePost(postId: string): void;

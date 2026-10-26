@@ -82,6 +82,31 @@
   opacity: 0.5;
   cursor: default;
 }
+/* 「人とつながらず、自分の記録だけで使う」 under 「はじめる」, and the way back
+   (管理表 99): a quiet door, not a second button to weigh against the first. */
+.account-quiet {
+  align-self: center;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 8px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--t-meta);
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.account-quiet-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding-left: 1.2em;
+  font-size: var(--t-meta);
+  line-height: 1.7;
+  color: var(--ink-2);
+}
 /* Cloudflare's check (HumanCheck.tsx): takes no room in the card's column
    until Turnstile puts something in it. */
 .account-human-check:empty {

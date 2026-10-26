@@ -52,6 +52,12 @@ import {
   type ReadingStatus,
 } from "./library";
 import { requestAccount } from "./visitor";
+import {
+  askForName,
+  needsName,
+  reachesPeople,
+  WRITTEN,
+} from "./public-profile";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId, isSampleId } from "./record-kind";
 import { bookAuthor, bookById, bookByIsbn, booksOfIsbn } from "./book-name";
@@ -159,6 +165,12 @@ export interface TownStoreOptions {
   onVisitor?: () => void;
   /** Called when a signed-in reader's like or follow would go to a 見本. */
   onSample?: () => void;
+  /**
+   * Called when a reader with no public profile tries something that would
+   * reach people (public-profile.ts): `then` does it again once they have
+   * chosen a name and an ID.
+   */
+  onNeedsName?: (then: () => void) => void;
   /**
    * Called once for each batch of changes that did not reach the database
    * (supabase/sync.ts): it keeps what can be kept of them and answers the
@@ -854,9 +866,14 @@ export function createTownStore(
     updateProfile(name, bio, links, handle) {
       initialize();
       if (!name.trim()) return false;
+      // With no public profile there is no ID to change: publishProfile
+      // gives the first one.
       const nextHandle =
-        handle === undefined ? state.me.handle : normalizeHandle(handle);
-      if (handleProblem(nextHandle, state.readers)) return false;
+        handle === undefined || state.me.unpublished
+          ? state.me.handle
+          : normalizeHandle(handle);
+      if (!state.me.unpublished && handleProblem(nextHandle, state.readers))
+        return false;
       commit({
         ...state,
         me: {
@@ -866,6 +883,26 @@ export function createTownStore(
           bio: clean(bio, BIO_MAX_LENGTH),
           links:
             links === undefined ? (state.me.links ?? []) : cleanLinks(links),
+        },
+      });
+      return true;
+    },
+    publishProfile(name, handle) {
+      initialize();
+      const chosen = normalizeHandle(handle);
+      if (
+        !state.me.unpublished ||
+        !name.trim() ||
+        handleProblem(chosen, state.readers)
+      )
+        return false;
+      commit({
+        ...state,
+        me: {
+          ...state.me,
+          handle: chosen,
+          name: clean(name.trim(), READER_NAME_MAX_LENGTH),
+          unpublished: false,
         },
       });
       return true;
@@ -1604,6 +1641,19 @@ export function createTownStore(
           options.onSample?.();
           return refused(name);
         }
+        if (
+          backend.kind !== "visitor" &&
+          needsName(state) &&
+          reachesPeople(name, args, state)
+        ) {
+          // Nothing is done yet: it is done once the name is chosen. What a
+          // sheet sends, the sheet sends again itself (askFirst).
+          options.onNeedsName?.(() => {
+            if (!WRITTEN.has(name))
+              (gated[name] as (...a: unknown[]) => unknown)(...args);
+          });
+          return refused(name);
+        }
         if (backend.kind !== "visitor")
           try {
             return (actions[name] as (...a: unknown[]) => unknown)(...args);
@@ -1768,10 +1818,11 @@ export const townStore = createTownStore(
         follow: followAccount,
         onVisitor: requestAccount,
         onSample: refuseForSample,
+        onNeedsName: askForName,
         onMissed: (lost) =>
           townMissedLine(lost, draftOwner(accountStore.getSnapshot())),
       }
-    : {},
+    : { onNeedsName: askForName },
 );
 export const townActions = townStore.actions;
 export const actions = townActions;

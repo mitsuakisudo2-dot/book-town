@@ -336,6 +336,14 @@ function FirstProfile({ userId }: { userId: string }) {
   const [readingPublic, setReadingPublic] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // 「人とつながらず、自分の記録だけで使う」: no name and no ID (管理表 99).
+  const [quietly, setQuietly] = useState(false);
+  // Either way round, the new heading is where the reader is taken.
+  const turned = useRef(false);
+  useEffect(() => {
+    if (turned.current) heading.current?.focus();
+    turned.current = true;
+  }, [quietly]);
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -353,6 +361,62 @@ function FirstProfile({ userId }: { userId: string }) {
           .current,
       );
   }
+
+  async function startQuietly(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const result = await accountActions.startQuietly(ageConfirmed);
+    setBusy(false);
+    if (result.ok) return kept.clear();
+    setError(result.message);
+    if (coarse && !ageConfirmed) markField(ageField.current);
+  }
+
+  const age = (
+    <label className="account-check">
+      <input
+        ref={ageField}
+        type="checkbox"
+        checked={ageConfirmed}
+        onChange={(event) => setAgeConfirmed(event.target.checked)}
+      />
+      {MINIMUM_AGE}歳以上です
+    </label>
+  );
+
+  if (quietly)
+    return (
+      <>
+        <h1 ref={heading} tabIndex={-1}>
+          自分の記録だけで使う
+        </h1>
+        <p className="account-lead">
+          名前もIDも決めずに、本と読書の記録だけで始めます。だれにも見えず、人の数にも入りません。
+        </p>
+        <ul className="account-quiet-list">
+          <li>本の登録、本棚、読書の時間と記録は、ぜんぶ使えます</li>
+          <li>人とつながりたくなったら、そのときに名前とIDを決められます</li>
+        </ul>
+        <form className="profile-form" onSubmit={startQuietly} noValidate>
+          {age}
+          <ErrorLine message={error} />
+          <button className="btn fill" disabled={busy}>
+            {busy ? "準備しています…" : "記録だけではじめる"}
+          </button>
+        </form>
+        <button
+          type="button"
+          className="account-quiet"
+          onClick={() => {
+            setQuietly(false);
+            setError("");
+          }}
+        >
+          名前を決めて、本の街ではじめる
+        </button>
+      </>
+    );
 
   return (
     <>
@@ -404,15 +468,7 @@ function FirstProfile({ userId }: { userId: string }) {
         <p id="account-handle-hint" className="profile-form-hint">
           3〜20文字の半角英小文字・数字・_。ほかの読書家と同じIDは使えません。
         </p>
-        <label className="account-check">
-          <input
-            ref={ageField}
-            type="checkbox"
-            checked={ageConfirmed}
-            onChange={(event) => setAgeConfirmed(event.target.checked)}
-          />
-          {MINIMUM_AGE}歳以上です
-        </label>
+        {age}
         <fieldset className="account-choice">
           <legend>読み終えた本の記録</legend>
           <label>
@@ -445,6 +501,16 @@ function FirstProfile({ userId }: { userId: string }) {
           {busy ? "準備しています…" : "はじめる"}
         </button>
       </form>
+      <button
+        type="button"
+        className="account-quiet"
+        onClick={() => {
+          setQuietly(true);
+          setError("");
+        }}
+      >
+        人とつながらず、自分の記録だけで使う
+      </button>
     </>
   );
 }
@@ -498,7 +564,9 @@ function SignedIn({
     <>
       <h1>ログインしています</h1>
       <p className="account-lead">
-        {name}（@{handle}）さんとして、本の街にいます。
+        {handle
+          ? `${name}（@${handle}）さんとして、本の街にいます。`
+          : "人とつながらず、自分の記録だけで使っています。"}
       </p>
       <Link className="btn fill" href="/">
         本の街へ

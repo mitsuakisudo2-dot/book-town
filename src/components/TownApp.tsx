@@ -49,6 +49,12 @@ import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { ReportDialog } from "./Report";
 import { SiteNotesGate } from "./SiteNotesGate";
 import { accountRequested, closeAccountRequest } from "../lib/visitor";
+import {
+  answerName,
+  nameAsked,
+  ownName,
+  useNameRequest,
+} from "../lib/public-profile";
 import { closeReport } from "../lib/report";
 import { carriedToast, noteToast } from "../lib/carried-toast";
 import { isKeptNotice } from "../lib/kept-draft";
@@ -128,6 +134,10 @@ const Wishlist = dynamic(() =>
 );
 const ManageHome = dynamic(() =>
   import("./ManageMode").then((file) => file.ManageHome),
+);
+// Only while it asks (public-profile.ts), so its file is read then.
+const NameSheet = dynamic(() =>
+  import("./NameSheet").then((file) => file.NameSheet),
 );
 const ManageRest = dynamic(() =>
   import("./ManageMode").then((file) => file.ManageRest),
@@ -301,6 +311,7 @@ export default function TownApp({
   useEffect(() => {
     closeReport();
     closeAccountRequest();
+    if (nameAsked()) answerName(false);
   }, [view, selectedId]);
   // When a visitor's change became an invitation to sign in, nothing was done,
   // so the message saying it was done stays quiet.
@@ -310,7 +321,7 @@ export default function TownApp({
     [],
   );
   const notify = useCallback<Notify>((message, undo) => {
-    if (accountRequested() || refusedForSample()) return;
+    if (accountRequested() || refusedForSample() || nameAsked()) return;
     noteToast(message);
     setToast({ message, undo, at: Date.now() });
   }, []);
@@ -318,6 +329,7 @@ export default function TownApp({
   // them, here on every page (library-journal.ts).
   useJournalSender(journalTown, notify);
   const shared = { state, actions, notify };
+  const askingName = useNameRequest();
   // A 便り's page is open over this screen: what is beneath it waits.
   const postLayer = usePostLayer();
   const layered = postLayer !== null && view !== "post";
@@ -493,7 +505,7 @@ export default function TownApp({
           <Link href={profilePath("me")} className="side-me">
             <ReaderAvatar reader={state.me} size={36} />
             <span>
-              <b>{state.me.name}</b>
+              <b>{ownName(state.me)}</b>
               <small>あなたのプロフィール</small>
             </span>
             <Icon name="chevron" size={15} />
@@ -716,6 +728,7 @@ export default function TownApp({
         <span key={said.at}>{said.text}</span>
       </div>
       <AccountInvite />
+      {askingName && <NameSheet {...shared} />}
       <ReportDialog />
       <SiteNotesGate notify={notify} />
     </div>

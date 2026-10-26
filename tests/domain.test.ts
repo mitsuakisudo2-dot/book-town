@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { seedState } from "../src/lib/data";
+import { createInitialState, seedState } from "../src/lib/data";
 import {
   createMemoryRepository,
   deserializeTown,
@@ -8,6 +8,7 @@ import {
 } from "../src/lib/repository";
 import { createTownStore } from "../src/lib/store";
 import { ownNotice } from "../src/lib/town-mode";
+import { needsName, reachesPeople } from "../src/lib/public-profile";
 import { bookById } from "../src/lib/book-name";
 import { bookFixOf } from "../src/lib/book-fix-draft";
 import { bookWords } from "../src/lib/library-journal";
@@ -2600,6 +2601,96 @@ check(
     );
   },
 );
+
+check(
+  "with no public profile, the first thing that reaches people asks for a name, then goes on",
+  () => {
+    const seed = createInitialState();
+    const repo = createMemoryRepository({
+      ...seed,
+      me: { ...seed.me, unpublished: true },
+    });
+    const asked: (() => void)[] = [];
+    const town = createTownStore(repo, undefined, {
+      onNeedsName: (then) => asked.push(then),
+    });
+    town.initialize();
+    const shop = "shop-orbit";
+    const following = () => town.getSnapshot().following.includes(shop);
+    assert.ok(needsName(town.getSnapshot()));
+    // Things of the reader's own go ahead: a private record, reading alone.
+    const book = town.getSnapshot().books[0].id;
+    const record = town.actions.recordReading({
+      bookId: book,
+      feelings: [],
+      note: "",
+      spoiler: false,
+      audience: "private",
+    });
+    assert.ok(record);
+    assert.ok(town.actions.startReading(book, "solo"));
+    assert.equal(asked.length, 0);
+    // A follow asks first, and nothing is done until the name is chosen.
+    town.actions.toggleFollow(shop);
+    assert.equal(asked.length, 1);
+    assert.equal(following(), false);
+    assert.equal(town.actions.publishProfile("", "aki_new"), false);
+    assert.equal(town.actions.publishProfile("アキ", "x"), false);
+    assert.ok(town.actions.publishProfile("アキ", "aki_new"));
+    assert.equal(town.actions.publishProfile("アキ", "aki_other"), false);
+    asked[0]();
+    assert.equal(following(), true);
+    assert.equal(town.getSnapshot().me.handle, "aki_new");
+    assert.equal(town.getSnapshot().me.unpublished, false);
+    assert.equal(needsName(town.getSnapshot()), false);
+    // The record from before stays the reader's own.
+    assert.equal(
+      town.getSnapshot().readingRecords.find((entry) => entry.id === record)
+        ?.audience,
+      "private",
+    );
+  },
+);
+
+check("a 便り asked about is sent again by its sheet, not by the town", () => {
+  const seed = createInitialState();
+  const asked: (() => void)[] = [];
+  const town = createTownStore(
+    createMemoryRepository({ ...seed, me: { ...seed.me, unpublished: true } }),
+    undefined,
+    { onNeedsName: (then) => asked.push(then) },
+  );
+  const posts = () => town.getSnapshot().posts.length;
+  const before = posts();
+  assert.equal(town.actions.createPost({ body: "こんばんは" }), null);
+  assert.ok(town.actions.publishProfile("アキ", "aki_new"));
+  asked[0]();
+  assert.equal(posts(), before);
+  // In 読書管理モード nothing asks: the town's screens are resting.
+  const resting = createTownStore(
+    createMemoryRepository({
+      ...seed,
+      me: { ...seed.me, unpublished: true },
+      settings: { ...seed.settings, mode: "manage" },
+    }),
+    undefined,
+    { onNeedsName: () => assert.fail("asked in 読書管理モード") },
+  );
+  resting.initialize();
+  assert.equal(needsName(resting.getSnapshot()), false);
+  assert.equal(
+    reachesPeople("startReading", ["x", "together"], resting.getSnapshot()),
+    true,
+  );
+  assert.equal(
+    reachesPeople(
+      "setVisibility",
+      ["records", "private"],
+      resting.getSnapshot(),
+    ),
+    false,
+  );
+});
 
 check("the spoiler setting and filed reports are kept as the store's", () => {
   const repo = createMemoryRepository();

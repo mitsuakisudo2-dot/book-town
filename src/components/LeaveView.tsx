@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 import { normalizeHandle } from "../lib/handles";
+import { LEAVE_WORD } from "../lib/account";
 import { accountActions, useAccountState } from "../lib/account-session";
 import { HANDLE_FIELD_MAX_LENGTH } from "../lib/account-draft";
 import { cameFromTown } from "../lib/in-town";
@@ -79,7 +80,7 @@ export default function LeaveView() {
         ) : (
           <LeaveForm
             profile={
-              account.status === "signed-in" && account.profile.handle !== null
+              account.status === "signed-in"
                 ? { handle: account.profile.handle, name: account.profile.name }
                 : null
             }
@@ -95,8 +96,11 @@ function LeaveForm({
   profile,
   onLeft,
 }: {
-  /** Null for a reader who signed in but has not made a profile yet. */
-  profile: { handle: string; name: string } | null;
+  /**
+   * Null for a reader who signed in but has not made a profile yet; a handle
+   * of null for one who uses only their own records (no public profile).
+   */
+  profile: { handle: string | null; name: string } | null;
   onLeft: () => void;
 }) {
   const router = useRouter();
@@ -109,7 +113,10 @@ function LeaveForm({
   const field = useRef<HTMLInputElement>(null);
   useFocusFieldOnShow(field, { instead: heading, when: profile !== null });
   const confirmed =
-    profile === null || normalizeHandle(typed) === profile.handle;
+    profile === null ||
+    (profile.handle === null
+      ? typed.trim() === LEAVE_WORD
+      : normalizeHandle(typed) === profile.handle);
 
   async function leave(event: FormEvent) {
     event.preventDefault();
@@ -135,7 +142,9 @@ function LeaveForm({
         退会する
       </h1>
       <p className="account-lead">
-        {profile ? (
+        {profile?.handle === null ? (
+          "このアカウントと、入れた本と記録をすべて消します。"
+        ) : profile ? (
           <>
             {profile.name}（@{profile.handle}
             ）さんのアカウントと、作ったものをすべて消します。
@@ -145,7 +154,17 @@ function LeaveForm({
         )}
         消したものは、元に戻せません。
       </p>
-      {profile && (
+      {profile?.handle === null && (
+        <>
+          <h2 className="leave-heading">消えるもの</h2>
+          <ul className="leave-list">
+            <li>登録した本、本棚、読みたい本</li>
+            <li>読書の時間と記録、出会いの記録</li>
+            <li>この端末に残っている書きかけ</li>
+          </ul>
+        </>
+      )}
+      {profile && profile.handle !== null && (
         <>
           <h2 className="leave-heading">消えるもの</h2>
           <ul className="leave-list">
@@ -162,7 +181,26 @@ function LeaveForm({
         </>
       )}
       <form className="profile-form" onSubmit={leave} noValidate>
-        {profile && (
+        {profile?.handle === null && (
+          <>
+            <label htmlFor="leave-handle">
+              確かめるため、「{LEAVE_WORD}」と入れてください
+            </label>
+            <input
+              id="leave-handle"
+              ref={field}
+              autoComplete="off"
+              spellCheck={false}
+              value={typed}
+              onChange={(event) => {
+                setTyped(event.target.value);
+                setError("");
+              }}
+              aria-describedby={error ? "leave-error" : undefined}
+            />
+          </>
+        )}
+        {profile && profile.handle !== null && (
           <>
             <label htmlFor="leave-handle">
               確かめるため、あなたのユーザーID（{profile.handle}
