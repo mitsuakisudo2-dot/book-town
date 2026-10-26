@@ -53,7 +53,8 @@ import { coverSelection, splitHidden } from "../lib/hidden-words";
 import { focusField } from "../lib/coarse-pointer";
 import { bookTitle } from "../lib/book-name";
 import { counted, failure, offlineFor, NAMES } from "../lib/words";
-import { townOffline } from "../lib/store";
+import { getTownSnapshot, townOffline } from "../lib/store";
+import { askFirst } from "../lib/public-profile";
 
 type Shared = {
   state: TownState;
@@ -264,13 +265,22 @@ export function PostComposer({
   ].filter((entry, index, list) => list.indexOf(entry) === index);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const offline = townOffline();
-    const created = actions.createPost({
+    const form = event.currentTarget;
+    const draft = {
       body,
       bookId: attached,
       spoiler: canSpoil && spoiler,
       parentId: parent?.id ?? null,
-    });
+    };
+    // With no public profile yet, the name comes first; then it is sent.
+    if (
+      askFirst(getTownSnapshot(), "createPost", [draft], () =>
+        form.requestSubmit(),
+      )
+    )
+      return;
+    const offline = townOffline();
+    const created = actions.createPost(draft);
     // Not taken: the words stay in the draft, and the writer is told why.
     if (!created) {
       notify(notTaken);

@@ -17,6 +17,7 @@ import {
   getTownSnapshot,
   usePersistenceStatus,
 } from "../lib/store";
+import { askFirst } from "../lib/public-profile";
 import { recentlyFinished } from "../lib/records";
 import { BookPicker } from "./BookPicker";
 import { booksBeforeSearch } from "../lib/book-lists";
@@ -384,6 +385,9 @@ export function OpenShop({
   function open() {
     const shopName = name.trim();
     if (!shopName || !ready) return;
+    // With no public profile yet, the name comes first; then it opens.
+    if (askFirst(getTownSnapshot(), "createShop", [shopName, "", theme], open))
+      return;
     onOpen();
     setFrom(null);
     if (!townTook(() => actions.createShop(shopName, "", theme))) {

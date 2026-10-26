@@ -41,7 +41,8 @@ import {
 import { LengthNearLimit } from "./Social";
 import { shownToOthers, type Audience } from "../lib/visibility";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
-import { townOffline, useTownMore } from "../lib/store";
+import { getTownSnapshot, townOffline, useTownMore } from "../lib/store";
+import { askFirst } from "../lib/public-profile";
 import { failure, offlineFor } from "../lib/words";
 import { inManageMode } from "../lib/town-mode";
 import "./records.css";
@@ -185,6 +186,14 @@ export function RecordSheet({
   // out to others (with the way back), and when it came back to the reader.
   // A change the town did not take keeps the sheet open, with the work.
   function save() {
+    // Shown to others with no public profile yet: the name comes first.
+    const town = getTownSnapshot();
+    if (
+      record
+        ? askFirst(town, "updateRecord", [record.id, draft ?? {}], save)
+        : askFirst(town, "recordReading", [{ ...work, bookId: book.id }], save)
+    )
+      return;
     // The record waits on this device until it is saved (outbox.ts); should
     // the database turn it away, its words come back to the draft
     // (missed-changes.ts).

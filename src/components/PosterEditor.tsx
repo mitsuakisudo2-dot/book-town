@@ -55,6 +55,7 @@ import {
   usePersistenceStatus,
   useTownBackend,
 } from "../lib/store";
+import { askFirst } from "../lib/public-profile";
 import { posterNewPath, posterPath, profilePath } from "../lib/paths";
 import { accountRequested } from "../lib/visitor";
 import { refusedForSample } from "../lib/sample-notice";
@@ -461,6 +462,16 @@ function PosterMaker({
       if (first >= 0) setPageIndex(first);
       return;
     }
+    // Put up with no public profile yet: the name comes first.
+    if (
+      askFirst(
+        getTownSnapshot(),
+        "savePoster",
+        [finished(status), poster?.id],
+        () => save(status),
+      )
+    )
+      return;
     const id = actions.savePoster(finished(status), poster?.id);
     if (!id) {
       // Nothing was kept, so the work stays here. A visitor is invited to

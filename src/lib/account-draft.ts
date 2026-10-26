@@ -51,6 +51,36 @@ export type ProfileWork = { name: string; handle: string };
 /** The ID field takes an @ and an ID of up to 20 characters. */
 export const HANDLE_FIELD_MAX_LENGTH = 21;
 
+// A name and an ID put in to start with, so はじめる can be pressed as it is
+// (けにーさん 10-26 01:35Z 「ユーザー名とIDはとりあえずランダムでいいように」).
+// Either can be changed then, or later.
+const NAME_FIRST = [
+  "夜更けの",
+  "窓辺の",
+  "雨の日の",
+  "木陰の",
+  "灯りの",
+  "旅する",
+  "静かな",
+  "栞の",
+];
+const NAME_LAST = ["読書家", "本の虫", "読み手", "本好き"];
+const ID_LETTERS = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+export function suggestProfile(): ProfileWork {
+  const picks = crypto.getRandomValues(new Uint32Array(8));
+  const id = Array.from(
+    picks.slice(2),
+    (n) => ID_LETTERS[n % ID_LETTERS.length],
+  );
+  return {
+    name:
+      NAME_FIRST[picks[0] % NAME_FIRST.length] +
+      NAME_LAST[picks[1] % NAME_LAST.length],
+    handle: `reader_${id.join("")}`,
+  };
+}
+
 /** The first profile read back, if it fits the form's fields. */
 export function readProfileWork(value: unknown): ProfileWork | null {
   const work = value as Partial<ProfileWork> | null;

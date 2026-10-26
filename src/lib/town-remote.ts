@@ -805,7 +805,12 @@ export function townFromRows(
     books,
     readers,
     shops,
-    me: ownProfile ? readerFrom(ownProfile) : visitorReader(),
+    me: ownProfile
+      ? {
+          ...readerFrom(ownProfile),
+          ...(ownProfile.published === false ? { unpublished: true } : {}),
+        }
+      : visitorReader(),
     ownShop,
     following: [
       ...new Set(
@@ -1274,7 +1279,13 @@ export type Write =
       patch: Partial<
         Pick<
           Tables<"profiles">,
-          "handle" | "name" | "bio" | "links" | "color" | "compose_icon"
+          | "handle"
+          | "name"
+          | "bio"
+          | "links"
+          | "color"
+          | "compose_icon"
+          | "published"
         >
       >;
     }
@@ -1675,6 +1686,9 @@ export function planWrites(
     });
 
   const profile: Extract<Write, { kind: "profile" }>["patch"] = {};
+  // A profile made public once (publishProfile) takes its ID and name in the
+  // same write: the database keeps an ID exactly on a public profile.
+  if (base.me.unpublished && !next.me.unpublished) profile.published = true;
   if (next.me.handle !== base.me.handle) profile.handle = next.me.handle;
   if (next.me.name !== base.me.name) profile.name = next.me.name;
   if (next.me.bio !== base.me.bio) profile.bio = next.me.bio;
