@@ -7,7 +7,6 @@ import { NAMES, OPERATOR } from "../lib/words";
 import {
   creditsPath,
   leavePath,
-  loginHelpPath,
   loginPath,
   privacyPath,
   termsPath,
@@ -534,16 +533,5 @@ export function LoginHelpView() {
         </p>
       </Section>
     </TextPage>
-  );
-}
-
-/** The quiet links to the terms, the privacy page and the help, under the login. */
-export function LegalLinks({ help = false }: { help?: boolean }) {
-  return (
-    <nav className="legal-links" aria-label="規約と困ったとき">
-      {help && <Link href={loginHelpPath()}>ログインできないとき</Link>}
-      <Link href={termsPath()}>利用規約</Link>
-      <Link href={privacyPath()}>プライバシー</Link>
-    </nav>
   );
 }

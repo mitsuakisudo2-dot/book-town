@@ -274,3 +274,17 @@
     padding: 26px 18px;
   }
 }
+/* Under the login: quiet, like the account's other small links. */
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 18px;
+  font-size: var(--t-cap);
+}
+.legal-links a {
+  padding: 6px 0;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
