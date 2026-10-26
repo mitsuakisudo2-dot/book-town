@@ -142,12 +142,21 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
     people: { user_id: "delete" },
     readers: "blocks",
   },
-  // The reader's own side of a session (its card) and 今日のノート on it:
-  // read by nobody else, gone with the session.
-  "public.reading_cards": { people: { user_id: "delete" }, readers: "own" },
+  // One reading (its card), the books read in it and 今日のノート on it:
+  // read by nobody else, gone with the sessions and the card. The card's
+  // and the note's own ids are made by the device (the key is the reader's
+  // and the id).
+  "public.reading_cards": {
+    people: { user_id: "delete" },
+    notPeople: ["id"],
+    readers: "own",
+  },
+  "public.reading_card_books": {
+    people: { user_id: "delete" },
+    readers: "own",
+  },
   "public.reading_notes": {
     people: { user_id: "delete" },
-    // The note's own id, made by the device (the key is the reader's and it).
     notPeople: ["id"],
     readers: "own",
   },

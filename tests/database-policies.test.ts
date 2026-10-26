@@ -5783,10 +5783,11 @@ async function main() {
       { post: true, shop: false, other_reader_id: BEN, memo: "ベンの言葉" },
     ]);
     // And the rest of what a reader can leave: blocks both ways, follows
-    // both ways, a fold on his profile, reading (a time read with its card
-    // and a note of it), a shop followed, the notes and staff row of an
+    // both ways, a fold on his profile, reading (a time read on a card,
+    // with a note), a shop followed, the notes and staff row of an
     // annotator, and his books' turns.
     const BENS_READ = deviceId();
+    const BENS_CARD = deviceId();
     await operator(`
       insert into blocks (blocker_id, blocked_id)
         values ('${BEN}', '${CHI}'), ('${CHI}', '${BEN}') on conflict do nothing;
@@ -5800,10 +5801,12 @@ async function main() {
         values ('${BEN}', '${bens}', 'solo');
       insert into reading_sessions (id, user_id, book_id, mode, ended_at)
         values ('${BENS_READ}', '${BEN}', '${bens}', 'solo', now());
-      insert into reading_cards (user_id, session_id, page_to, finished)
-        values ('${BEN}', '${BENS_READ}', 120, true);
-      insert into reading_notes (id, user_id, session_id, kind, body)
-        values ('${deviceId()}', '${BEN}', '${BENS_READ}', 'quote', 'ベンの好きな一文');
+      insert into reading_cards (id, user_id) values ('${BENS_CARD}', '${BEN}');
+      insert into reading_card_books (user_id, card_id, session_id, page_to, finished)
+        values ('${BEN}', '${BENS_CARD}', '${BENS_READ}', 120, true);
+      insert into reading_notes (id, user_id, card_id, session_id, kind, body)
+        values ('${deviceId()}', '${BEN}', '${BENS_CARD}', '${BENS_READ}', 'quote',
+          'ベンの好きな一文');
       insert into private.staff (user_id) values ('${BEN}') on conflict do nothing;
       insert into site_notes (user_id, page, x, y, viewport_w, viewport_h, scroll_y, body)
         values ('${BEN}', '/', 1, 1, 390, 844, 0, 'ベンの注釈');
