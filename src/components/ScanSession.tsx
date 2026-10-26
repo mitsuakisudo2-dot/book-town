@@ -2343,9 +2343,10 @@ export function ScanSession({
           actions={manualActions}
           notify={notify}
           onClose={closeManual}
-          lead="書名やISBNを入れて1冊ずつ登録します"
+          lead="書名・著者・ISBNで探して登録します"
           camera={false}
           startIsbn={manualIsbn}
+          find
         />
       )}
     </div>

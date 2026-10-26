@@ -2404,6 +2404,9 @@ try {
         name: "登録する",
         exact: true,
       });
+      await dialog
+        .getByRole("button", { name: "書名やISBNを入れて登録" })
+        .click();
       await dialog.getByLabel("タイトル").fill("こころ");
       await register.click();
       await expect(dialog.locator(".register-message")).toHaveText(

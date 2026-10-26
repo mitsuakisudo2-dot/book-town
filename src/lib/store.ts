@@ -1154,10 +1154,15 @@ export function createTownStore(
       // in the library did not) is that book again; otherwise a book the
       // town has with the ISBN, but never one another reader typed in: the
       // reader registers their own of it (own-books.ts), so what either of
-      // them later fixes stays theirs.
-      const sent = isbn ? bookById(state.books, bookId) : undefined;
+      // them later fixes stays theirs. One with no ISBN is named by its id
+      // alone (a book found for ［手で入力］): that book, never a new one.
+      const sent = bookById(state.books, bookId);
       const decided =
-        sent && sent.isbn === isbn && !sent.theirs ? sent : undefined;
+        sent && !sent.theirs && (isbn ? sent.isbn === isbn : !sent.isbn)
+          ? sent
+          : undefined;
+      if (!isbn && decided && state.library.includes(decided.id))
+        return { result: "already", bookId: decided.id, title: decided.title };
       const existing = decided ?? bookByIsbn(state.books, isbn);
       // The library remembers how a book first came in.
       // A scan session's id, as the database keeps it (a UUID).

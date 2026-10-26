@@ -8,10 +8,19 @@ import {
 } from "../lib/books";
 import { lookUpBook } from "../lib/openbd";
 import { libraryBookByIsbn, useTownBackend } from "../lib/store";
-import { libraryBookByName, SAME_BOOK } from "../lib/same-book";
-import type { TownActions, TownState } from "../lib/types";
-import { BookJacket, Icon, Modal } from "./ui";
 import {
+  FIND_BOOK,
+  foundAsNew,
+  libraryBookByName,
+  SAME_BOOK,
+} from "../lib/same-book";
+import { useFoundBooks } from "../lib/search/use-found-books";
+import { holds } from "../lib/own-books";
+import type { Book, TownActions, TownState } from "../lib/types";
+import { BookJacket, Icon, Modal } from "./ui";
+import { InLibraryMark } from "./RegisterBook";
+import {
+  authorAndKind,
   bookAuthor,
   bookByIsbn,
   bookTitle,
@@ -35,9 +44,14 @@ const NOT_AN_ISBN = failure({
   next: "本の裏表紙にある978か979で始まる13桁の数字を入力してください",
 });
 
+/** How many found books the box shows: the best, with room to see them. */
+const FOUND_SHOWN = 8;
+
 /**
  * Register a book by scanning its ISBN barcode with the camera (where the browser can
  * read barcodes), or by typing the ISBN. Unknown ISBNs are completed by hand.
+ * With `find` (the scanner's ［手で入力］), a box finds books first by title,
+ * author or ISBN, each in with one tap; the form waits behind 見つからないとき.
  */
 export function BarcodeRegister({
   state,
@@ -48,6 +62,7 @@ export function BarcodeRegister({
   camera = true,
   startTitle = "",
   startIsbn = null,
+  find = false,
 }: {
   state: TownState;
   actions: TownActions;
@@ -61,6 +76,8 @@ export function BarcodeRegister({
   startTitle?: string;
   /** An ISBN searched for and not found: looked up as the form opens. */
   startIsbn?: string | null;
+  /** A box that finds the book first (find_books too), over the form. */
+  find?: boolean;
 }) {
   const id = useId();
   const savedIn = useTownBackend();
@@ -86,6 +103,12 @@ export function BarcodeRegister({
     price: string;
   } | null>(null);
   const canScan = Boolean(detectorClass());
+  // The box that finds the book; the form is open from the start without
+  // it, and for an ISBN brought here.
+  const [typed, setTyped] = useState("");
+  const [formOpen, setFormOpen] = useState(!find || Boolean(startIsbn));
+  const found = useFoundBooks(state.books, find && !formOpen ? typed : "");
+  const typedAsIsbn = normalizeIsbn(typed.trim());
 
   useEffect(() => {
     if (!scanning) return;
@@ -225,6 +248,54 @@ export function BarcodeRegister({
       ? named
       : undefined;
 
+  /** Said when a register was not kept, as the form says it. */
+  const notSaved = () =>
+    setMessage(
+      savedIn === "unavailable"
+        ? failure({
+            what: "保存できません",
+            next: "ページを読み込み直してから、もう一度登録してください",
+          })
+        : failure({
+            what: "まだ保存できません",
+            next: AGAIN.pressWhenLoaded,
+          }),
+    );
+
+  /** Already in the reader's library: by the book, or its ISBN. */
+  const inLibrary = (book: Book) =>
+    holds(state, state.library, book.id) ||
+    Boolean(book.isbn && libraryBookByIsbn(state, book.isbn));
+
+  /**
+   * A found book in with one tap, as by its ISBN, and the box stays open
+   * for the next (books with no barcode come several together). Its own
+   * book is made from what was found, never pointing at another's.
+   */
+  function take(book: Book) {
+    setMessage("");
+    // One with no ISBN is a book of the town's or the reader's own taken
+    // out before: that book itself goes in, named by its id.
+    const done = book.isbn
+      ? actions.registerBook(foundAsNew(book), "isbn")
+      : actions.registerBook(foundAsNew(book), "manual", book.id);
+    if (!done) return;
+    if (done.result === "not-saved") return notSaved();
+    notify(
+      done.result === "already"
+        ? REGISTER.already(quotedTitle(done))
+        : REGISTER.added(quotedTitle(done)),
+    );
+  }
+
+  /** Not found: the form, with what was typed as its title or ISBN. */
+  function openForm() {
+    setFormOpen(true);
+    setMessage("");
+    if (typedAsIsbn) void accept(typedAsIsbn);
+    else setTitle(typed.trim());
+  }
+
   function checkIsbn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const found = normalizeIsbn(isbnText);
@@ -258,20 +329,7 @@ export function BarcodeRegister({
     );
     // A visitor is asked to sign in instead; nothing was registered.
     if (!done) return;
-    if (done.result === "not-saved") {
-      setMessage(
-        savedIn === "unavailable"
-          ? failure({
-              what: "保存できません",
-              next: "ページを読み込み直してから、もう一度登録してください",
-            })
-          : failure({
-              what: "まだ保存できません",
-              next: AGAIN.pressWhenLoaded,
-            }),
-      );
-      return;
-    }
+    if (done.result === "not-saved") return notSaved();
     // Named as kept: a book the town knew by its own title, a long one cut.
     notify(
       done.result === "already"
@@ -284,11 +342,13 @@ export function BarcodeRegister({
   return (
     <Modal title="本を登録" onClose={onClose}>
       <p className="modal-lead">{lead}</p>
-      <p className="muted">
-        {camera
-          ? `裏表紙のISBNバーコード（978・979で始まる段）を読み取ります。登録した本は、読書の開始や${NAMES.letter}で選べます。`
-          : "ISBNがあれば探せます。書名だけでも登録できます。"}
-      </p>
+      {(camera || formOpen) && (
+        <p className="muted">
+          {camera
+            ? `裏表紙のISBNバーコード（978・979で始まる段）を読み取ります。登録した本は、読書の開始や${NAMES.letter}で選べます。`
+            : "ISBNがあれば探せます。書名だけでも登録できます。"}
+        </p>
+      )}
       {!camera ? null : scanning ? (
         <div className="scan-frame">
           <video ref={video} muted playsInline aria-label="カメラの映像" />
@@ -323,97 +383,202 @@ export function BarcodeRegister({
           })}
         </p>
       )}
-      <form className="register-form" onSubmit={checkIsbn}>
-        <label className="form-label" htmlFor={id + "-isbn"}>
-          ISBN
-          <input
-            id={id + "-isbn"}
-            className="field"
-            inputMode="numeric"
-            placeholder="978-4-..."
-            value={isbnText}
-            onChange={(event) => {
-              setIsbnText(event.target.value);
-              // Another ISBN: the old one's answer is no longer awaited, and
-              // what was found for it is taken back out.
-              moveTo(normalizeIsbn(event.target.value));
+      {!formOpen && (
+        <div className="register-find">
+          <form
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              // Enter puts the keyboard away: the books are the choice.
+              (document.activeElement as HTMLElement | null)?.blur();
             }}
-          />
-        </label>
-        <button type="submit" className="btn" disabled={looking}>
-          <Icon name="barcode" size={16} />
-          ISBNで探す
-        </button>
-      </form>
-      {message && (
-        <p className="register-message" role="status">
-          {message}
-        </p>
-      )}
-      <form className="register-form" onSubmit={register}>
-        <label className="form-label" htmlFor={id + "-title"}>
-          タイトル
-          <input
-            id={id + "-title"}
-            className="field"
-            value={title}
-            maxLength={BOOK_TEXT_MAX}
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </label>
-        <label className="form-label" htmlFor={id + "-author"}>
-          著者
-          <input
-            id={id + "-author"}
-            className="field"
-            value={author}
-            maxLength={BOOK_TEXT_MAX}
-            onChange={(event) => setAuthor(event.target.value)}
-          />
-        </label>
-        <label className="form-label" htmlFor={id + "-price"}>
-          定価（税込・任意）
-          <input
-            id={id + "-price"}
-            className="field"
-            inputMode="numeric"
-            placeholder="1540"
-            value={price}
-            maxLength={BOOK_PRICE_MAX_LENGTH}
-            onChange={(event) => setPrice(event.target.value)}
-          />
-        </label>
-        {alike && (
-          <div className="register-same" role="status">
-            <b>{SAME_BOOK.ask}</b>
-            <div className="register-same-book">
-              <BookJacket book={alike} className="search-jacket" />
-              <span>
-                <b>{bookTitle(alike)}</b>
-                <small>{bookAuthor(alike)}</small>
-                <small>{SAME_BOOK.inLibrary}</small>
-              </span>
+          >
+            <label className="search-box" htmlFor={id + "-find"}>
+              <Icon name="search" size={19} />
+              <span className="sr-only">{FIND_BOOK.label}</span>
+              <input
+                id={id + "-find"}
+                type="search"
+                value={typed}
+                onChange={(event) => {
+                  setTyped(event.target.value);
+                  setMessage("");
+                }}
+                placeholder={FIND_BOOK.placeholder}
+                enterKeyHint="search"
+                autoComplete="off"
+              />
+            </label>
+          </form>
+          {message && (
+            <p className="register-message" role="status">
+              {message}
+            </p>
+          )}
+          {found.query && (
+            <ul className="search-list" aria-label={FIND_BOOK.found}>
+              {[...found.found, ...found.near]
+                // Another reader's book with no ISBN is theirs to name.
+                .filter(({ book }) => book.isbn || !book.theirs)
+                .slice(0, FOUND_SHOWN)
+                .map(({ book }) => {
+                  const done = inLibrary(book);
+                  return (
+                    <li key={book.id} className="search-book-row">
+                      <div className="search-book">
+                        <BookJacket
+                          book={book}
+                          className="search-jacket"
+                          mark={<InLibraryMark book={book} state={state} />}
+                        />
+                        <span>
+                          <b>{bookTitle(book)}</b>
+                          <small>{authorAndKind(book)}</small>
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className={[
+                          "btn",
+                          done ? "is-in" : "soft",
+                          "register-book",
+                        ].join(" ")}
+                        aria-label={`${quotedTitle(book)}を${REGISTER.button}`}
+                        aria-pressed={done}
+                        onClick={() =>
+                          done
+                            ? notify(REGISTER.already(quotedTitle(book)))
+                            : take(book)
+                        }
+                      >
+                        <Icon name={done ? "check" : "plus"} size={18} />
+                        <span className="register-label">
+                          <span>{done ? REGISTER.doneTap : REGISTER.tap}</span>
+                          <span aria-hidden="true">
+                            {done ? REGISTER.tap : REGISTER.doneTap}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+            </ul>
+          )}
+          {!typed.trim() ? (
+            <div className="register-find-not">
+              <button type="button" className="btn" onClick={openForm}>
+                <Icon name="plus" size={16} />
+                {FIND_BOOK.byHand}
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn fill"
-              onClick={() => {
-                notify(REGISTER.already(quotedTitle(alike)));
-                onClose();
-              }}
-            >
-              {SAME_BOOK.same}
+          ) : (
+            found.settled && (
+              <div className="register-find-not">
+                <span>{FIND_BOOK.notFound}</span>
+                <button type="button" className="btn" onClick={openForm}>
+                  <Icon name={typedAsIsbn ? "barcode" : "plus"} size={16} />
+                  {typedAsIsbn ? REGISTER.byIsbn : REGISTER.byTitle}
+                </button>
+              </div>
+            )
+          )}
+        </div>
+      )}
+      {formOpen && (
+        <>
+          <form className="register-form" onSubmit={checkIsbn}>
+            <label className="form-label" htmlFor={id + "-isbn"}>
+              ISBN
+              <input
+                id={id + "-isbn"}
+                className="field"
+                inputMode="numeric"
+                placeholder="978-4-..."
+                value={isbnText}
+                onChange={(event) => {
+                  setIsbnText(event.target.value);
+                  // Another ISBN: the old one's answer is no longer awaited, and
+                  // what was found for it is taken back out.
+                  moveTo(normalizeIsbn(event.target.value));
+                }}
+              />
+            </label>
+            <button type="submit" className="btn" disabled={looking}>
+              <Icon name="barcode" size={16} />
+              ISBNで探す
             </button>
-          </div>
-        )}
-        <button
-          type="submit"
-          className={alike ? "btn" : "btn fill"}
-          disabled={!title.trim() || looking}
-        >
-          {alike ? SAME_BOOK.another : "登録する"}
-        </button>
-      </form>
+          </form>
+          {message && (
+            <p className="register-message" role="status">
+              {message}
+            </p>
+          )}
+          <form className="register-form" onSubmit={register}>
+            <label className="form-label" htmlFor={id + "-title"}>
+              タイトル
+              <input
+                id={id + "-title"}
+                className="field"
+                value={title}
+                maxLength={BOOK_TEXT_MAX}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </label>
+            <label className="form-label" htmlFor={id + "-author"}>
+              著者
+              <input
+                id={id + "-author"}
+                className="field"
+                value={author}
+                maxLength={BOOK_TEXT_MAX}
+                onChange={(event) => setAuthor(event.target.value)}
+              />
+            </label>
+            <label className="form-label" htmlFor={id + "-price"}>
+              定価（税込・任意）
+              <input
+                id={id + "-price"}
+                className="field"
+                inputMode="numeric"
+                placeholder="1540"
+                value={price}
+                maxLength={BOOK_PRICE_MAX_LENGTH}
+                onChange={(event) => setPrice(event.target.value)}
+              />
+            </label>
+            {alike && (
+              <div className="register-same" role="status">
+                <b>{SAME_BOOK.ask}</b>
+                <div className="register-same-book">
+                  <BookJacket book={alike} className="search-jacket" />
+                  <span>
+                    <b>{bookTitle(alike)}</b>
+                    <small>{bookAuthor(alike)}</small>
+                    <small>{SAME_BOOK.inLibrary}</small>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="btn fill"
+                  onClick={() => {
+                    notify(REGISTER.already(quotedTitle(alike)));
+                    onClose();
+                  }}
+                >
+                  {SAME_BOOK.same}
+                </button>
+              </div>
+            )}
+            <button
+              type="submit"
+              className={alike ? "btn" : "btn fill"}
+              disabled={!title.trim() || looking}
+            >
+              {alike ? SAME_BOOK.another : "登録する"}
+            </button>
+          </form>
+        </>
+      )}
     </Modal>
   );
 }

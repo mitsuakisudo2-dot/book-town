@@ -1,5 +1,5 @@
 import { bookAuthor, type Named } from "./book-name";
-import type { Book, TownState } from "./types";
+import type { Book, NewBook, TownState } from "./types";
 
 // 「この本ですか？」(101): a book typed in by hand that is named as one the
 // reader already has is shown before it goes in a second time. Only the
@@ -12,6 +12,16 @@ export const SAME_BOOK = {
   inLibrary: "ライブラリにあります",
   same: "この本です",
   another: "別の本として登録",
+} as const;
+
+/** The scanner's ［手で入力］: the book found first, the form behind it. */
+export const FIND_BOOK = {
+  label: "登録する本を探す",
+  placeholder: "書名・著者・ISBN",
+  found: "見つかった本",
+  notFound: "見つからないときは",
+  /** Under the box while nothing is typed: the form at once. */
+  byHand: "書名やISBNを入れて登録",
 } as const;
 
 /** A title or an author as it may be typed again: width, case and spaces aside. */
@@ -52,3 +62,13 @@ export const libraryBookByName = (
     title,
     author,
   );
+
+/**
+ * A found book as the reader's own registers it: by what was found, its
+ * ISBN deciding the edition, never pointing at another's book.
+ */
+export const foundAsNew = (book: Book): NewBook => ({
+  title: book.title,
+  author: book.author,
+  ...(book.isbn ? { isbn: book.isbn } : {}),
+});
