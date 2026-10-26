@@ -1200,7 +1200,7 @@ export type Database = {
           rest_minutes: number | null;
           room: string | null;
           session_id: string;
-          shown: Json;
+          shown: NonNullable<Json>;
           time_zone: string;
           timer: string;
           timer_at: string | null;
@@ -1225,7 +1225,7 @@ export type Database = {
           rest_minutes?: number | null;
           room?: string | null;
           session_id: string;
-          shown?: Json;
+          shown?: NonNullable<Json>;
           time_zone?: string;
           timer?: string;
           timer_at?: string | null;
@@ -1249,7 +1249,7 @@ export type Database = {
           rest_minutes?: number | null;
           room?: string | null;
           session_id?: string;
-          shown?: Json;
+          shown?: NonNullable<Json>;
           time_zone?: string;
           timer?: string;
           timer_at?: string | null;
