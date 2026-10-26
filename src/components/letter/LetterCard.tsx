@@ -42,6 +42,7 @@ import { CoverCredit, ReaderAvatar } from "../ui";
 import { BookRow, WantButton } from "./BookRow";
 import { LetterIcon } from "./icons";
 import { LetterMenu, hasMenuRows, type LetterMenuRows } from "./LetterMenu";
+import { PostWhen } from "./PostWhen";
 import { LetterText, useLineFold } from "./LetterText";
 import { LikeButton, LikeUndo } from "./LikeButton";
 import { forgetOpened, noteOpened, openPost, wasOpened } from "./post-layer";
@@ -267,20 +268,21 @@ export function LetterCard({
         <header className="post-head">
           <p className="letter-who">
             <Link href={profile} className="post-author">
-              {author.name}
+              <span>{author.name}</span>
             </Link>
             {sample && <span className="letter-tag">見本</span>}
             {isReply && opAuthorId === post.authorId && (
               <span className="letter-tag">投稿した人</span>
             )}
-          </p>
-          <p className="letter-meta">
             <span className="post-handle">@{author.handle}</span>
-            {shop && <span className="letter-shop">{shop.name}の店主</span>}
             {!leads ? (
-              <time className="letter-when" dateTime={post.createdAt}>
-                {formatPostTime(post.createdAt)}
-              </time>
+              onPage ? (
+                <time className="letter-when" dateTime={post.createdAt}>
+                  {formatPostTime(post.createdAt)}
+                </time>
+              ) : (
+                <PostWhen className="letter-when" at={post.createdAt} />
+              )
             ) : (
               <a
                 ref={timeRef}
@@ -300,12 +302,11 @@ export function LetterCard({
                   openPage();
                 }}
               >
-                <time dateTime={post.createdAt}>
-                  {formatPostTime(post.createdAt)}
-                </time>
+                <PostWhen at={post.createdAt} />
               </a>
             )}
           </p>
+          {onPage && shop && <p className="letter-shop">{shop.name}の店主</p>}
         </header>
         <div className="letter-body">
           {hasTags && <p className="letter-tags">{tags}</p>}

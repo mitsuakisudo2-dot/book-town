@@ -66,22 +66,25 @@
   min-width: 0;
 }
 
-/* The head: the name and 見本 on the first line, so nothing cuts 見本;
-   @handle, the shop and the time on the second. */
+/* The head is one line, as on X (けにーさん 2026-10-25): the name, 見本,
+   @handle and when. Where it does not fit, the @handle gives way first, then
+   the name; the time and the tags are never cut. */
 .letter-who {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0 6px;
+  gap: 0 4px;
+  min-width: 0;
   margin: 0;
   font-size: var(--t-who);
   line-height: 1.45;
+  white-space: nowrap;
 }
 /* The name's target is 44px each way, a one-character name too: it
    reaches into the gap before it and under 「見本」 after it, while the
    name itself keeps the text's left edge. */
 .letter .post-author {
   display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
   min-width: 44px;
   min-height: 44px;
@@ -89,10 +92,15 @@
   padding: 0 18px 0 12px;
   font-weight: 700;
   color: var(--ink);
-  overflow-wrap: anywhere;
+}
+.letter .post-author > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .letter-tag {
   display: inline-block;
+  flex: none;
   padding: 0 6px;
   border: 1px solid var(--line-2);
   border-radius: var(--r-tag);
@@ -102,44 +110,40 @@
   line-height: 1.5;
   white-space: nowrap;
 }
-.letter-meta {
-  display: flex;
-  align-items: center;
+.letter .post-handle {
+  flex: 0 1000 auto;
   min-width: 0;
-  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ink-2);
   font-size: var(--t-meta);
-  line-height: 1.5;
-  white-space: nowrap;
-}
-.letter-meta > * {
-  min-width: 0;
-}
-.letter-meta > * + *::before {
-  content: "·";
-  content: "·" / "";
-  margin: 0 4px;
-}
-.letter .post-handle {
-  flex: 0 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.letter-shop {
-  flex: 0 100 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .letter-time,
 .letter-when {
   flex: none;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+}
+.letter-time::before,
+.letter-when::before {
+  content: "·";
+  content: "·" / "";
+  margin-right: 4px;
+}
+/* On the post's own page, the shop under the name. */
+.letter-shop {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  line-height: 1.5;
 }
 .letter-time {
   display: inline-flex;
   align-items: center;
+  /* 「いま」 is short: the target stays 44px wide, the room after it. */
+  min-width: 44px;
   min-height: 44px;
   margin-block: -11.5px;
-  color: inherit;
   text-decoration: none;
 }
 .letter-tags {

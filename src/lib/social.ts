@@ -7,7 +7,7 @@ import {
   type ReviewKind,
   type TownState,
 } from "./types";
-import { japanFormat } from "./japan-time";
+import { japanFormat, japanMonthDay, japanYear } from "./japan-time";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
 import { hasFinished } from "./reading";
 import { bookById } from "./book-name";
@@ -285,4 +285,20 @@ const postTime = japanFormat({
 export function formatPostTime(createdAt: string): string {
   const date = new Date(createdAt);
   return Number.isNaN(date.getTime()) ? "" : postTime.format(date);
+}
+
+/**
+ * When a post was written, as a list shows it (けにーさん 2026-10-25):
+ * いま, 5分前, 3時間前, then the day (10月25日), with the year once it is
+ * not this year's. Never 0分前. The post's own page keeps the whole time.
+ */
+export function postAge(createdAt: string, now: number): string {
+  const at = Date.parse(createdAt);
+  if (Number.isNaN(at)) return "";
+  const minutes = Math.floor((now - at) / 60_000);
+  if (minutes < 1) return "いま";
+  if (minutes < 60) return `${minutes}分前`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}時間前`;
+  const year = japanYear(at);
+  return (year === japanYear(now) ? "" : `${year}年`) + japanMonthDay(at);
 }

@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from "react";
+import { PostWhen } from "./letter/PostWhen";
 import Link from "next/link";
 import { type Book, type Reader, type TownState } from "../lib/types";
 import {
@@ -25,7 +26,6 @@ import {
 import { bookPath } from "../lib/books";
 import {
   findReader,
-  formatPostTime,
   reviewCoverOf,
   reviewCoverWords,
   reviewNoteOf,
@@ -717,15 +717,13 @@ export function PosterCard({
       <div className="post-main">
         <header className="post-head">
           <Link href={profile} className="post-author">
-            {author.name}
+            <span>{author.name}</span>
           </Link>
           <span className="post-handle">
             @{author.handle}
             {isSampleId(author.id) && " · 見本"}
           </span>
-          <time dateTime={poster.createdAt}>
-            {formatPostTime(poster.createdAt)}
-          </time>
+          <PostWhen className="post-when" at={poster.createdAt} />
         </header>
         <span className="poster-tag">ポスター</span>
         {cover ? (

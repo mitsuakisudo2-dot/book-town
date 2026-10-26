@@ -665,11 +665,13 @@ a.poster-cover:hover {
 .poster-card > .post-main {
   min-width: 0;
 }
+/* One line, as a 便り's head: the @ID gives way first, then the name. */
 .poster-card .post-head {
   display: flex;
-  flex-wrap: wrap;
   align-items: baseline;
-  gap: 0 8px;
+  gap: 0 6px;
+  min-width: 0;
+  white-space: nowrap;
   margin-bottom: 6px;
   color: var(--ink-2);
   font-size: var(--t-meta);
@@ -685,9 +687,28 @@ a.poster-cover:hover {
   margin: -11px -18px -11px -12px;
   padding: 0 18px 0 12px;
   color: var(--ink);
+  flex: 0 1 auto;
   font-size: var(--t-who);
   font-weight: 700;
-  overflow-wrap: anywhere;
+}
+.poster-card .post-author > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.poster-card .post-handle {
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.poster-card .post-when {
+  flex: none;
+}
+.poster-card .post-when::before {
+  content: "·";
+  content: "·" / "";
+  margin-right: 6px;
 }
 .poster-tag {
   display: inline-block;
