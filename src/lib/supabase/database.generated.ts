@@ -1183,6 +1183,137 @@ export type Database = {
           },
         ];
       };
+      reading_card_books: {
+        Row: {
+          card_id: string;
+          created_at: string;
+          finished: boolean;
+          format: string | null;
+          page_from: number | null;
+          page_to: number | null;
+          page_unit: string;
+          read_seconds: number | null;
+          session_id: string;
+          updated_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          card_id: string;
+          created_at?: string;
+          finished?: boolean;
+          format?: string | null;
+          page_from?: number | null;
+          page_to?: number | null;
+          page_unit?: string;
+          read_seconds?: number | null;
+          session_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          card_id?: string;
+          created_at?: string;
+          finished?: boolean;
+          format?: string | null;
+          page_from?: number | null;
+          page_to?: number | null;
+          page_unit?: string;
+          read_seconds?: number | null;
+          session_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reading_card_books_user_id_card_id_fkey";
+            columns: ["user_id", "card_id"];
+            isOneToOne: false;
+            referencedRelation: "reading_cards";
+            referencedColumns: ["user_id", "id"];
+          },
+          {
+            foreignKeyName: "reading_card_books_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reading_card_books_user_id_session_id_fkey";
+            columns: ["user_id", "session_id"];
+            isOneToOne: true;
+            referencedRelation: "reading_sessions";
+            referencedColumns: ["user_id", "id"];
+          },
+        ];
+      };
+      reading_cards: {
+        Row: {
+          added_later: boolean;
+          created_at: string;
+          id: string;
+          light: string | null;
+          look: string | null;
+          paused_at: string | null;
+          paused_seconds: number;
+          rest_minutes: number | null;
+          room: string | null;
+          shown: NonNullable<Json>;
+          time_zone: string;
+          timer: string;
+          timer_at: string | null;
+          timer_minutes: number | null;
+          updated_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          added_later?: boolean;
+          created_at?: string;
+          id: string;
+          light?: string | null;
+          look?: string | null;
+          paused_at?: string | null;
+          paused_seconds?: number;
+          rest_minutes?: number | null;
+          room?: string | null;
+          shown?: NonNullable<Json>;
+          time_zone?: string;
+          timer?: string;
+          timer_at?: string | null;
+          timer_minutes?: number | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          added_later?: boolean;
+          created_at?: string;
+          id?: string;
+          light?: string | null;
+          look?: string | null;
+          paused_at?: string | null;
+          paused_seconds?: number;
+          rest_minutes?: number | null;
+          room?: string | null;
+          shown?: NonNullable<Json>;
+          time_zone?: string;
+          timer?: string;
+          timer_at?: string | null;
+          timer_minutes?: number | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reading_cards_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       reading_entries: {
         Row: {
           audience: string;
@@ -1234,6 +1365,65 @@ export type Database = {
           },
           {
             foreignKeyName: "reading_entries_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      reading_notes: {
+        Row: {
+          body: string;
+          card_id: string;
+          created_at: string;
+          id: string;
+          kind: string;
+          page: number | null;
+          session_id: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          body: string;
+          card_id: string;
+          created_at?: string;
+          id: string;
+          kind: string;
+          page?: number | null;
+          session_id?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          body?: string;
+          card_id?: string;
+          created_at?: string;
+          id?: string;
+          kind?: string;
+          page?: number | null;
+          session_id?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reading_notes_user_id_card_id_fkey";
+            columns: ["user_id", "card_id"];
+            isOneToOne: false;
+            referencedRelation: "reading_cards";
+            referencedColumns: ["user_id", "id"];
+          },
+          {
+            foreignKeyName: "reading_notes_user_id_card_id_session_id_fkey";
+            columns: ["user_id", "card_id", "session_id"];
+            isOneToOne: false;
+            referencedRelation: "reading_card_books";
+            referencedColumns: ["user_id", "card_id", "session_id"];
+          },
+          {
+            foreignKeyName: "reading_notes_user_id_fkey";
             columns: ["user_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
