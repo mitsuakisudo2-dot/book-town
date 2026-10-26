@@ -284,7 +284,8 @@ export function supabaseAccountBackend(
     async termsToAgree() {
       const { data, error } = await client.rpc("terms_to_agree");
       if (error) throw error;
-      return data ?? null;
+      // Only a version's name asks: anything else (an empty answer) is none.
+      return typeof data === "string" && data ? data : null;
     },
     async agreeToTerms(userId, version) {
       // Agreed already (another tab, a lost answer): the same consent is kept.
