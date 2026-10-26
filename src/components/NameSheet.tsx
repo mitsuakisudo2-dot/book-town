@@ -6,6 +6,7 @@ import { accountActions, useAccountState } from "../lib/account-session";
 import {
   HANDLE_FIELD_MAX_LENGTH,
   profileWorkStore,
+  suggestProfile,
   type ProfileWork,
 } from "../lib/account-draft";
 import { handleProblem, normalizeHandle } from "../lib/handles";
@@ -15,8 +16,6 @@ import type { Notify, TownActions, TownState } from "../lib/types";
 import { Modal } from "./ui";
 import "./profile.css";
 import "./name-sheet.css";
-
-const NO_WORK: ProfileWork = { name: "", handle: "" };
 
 /**
  * The small sheet a reader with no public profile meets the first time they
@@ -37,9 +36,11 @@ export function NameSheet({
   const account = useAccountState();
   const userId = account.status === "signed-in" ? account.user.id : null;
   const kept = useKeptDraft(profileWorkStore, userId);
-  // In the demo there is no one to keep it for: it lives as long as the sheet.
-  const [local, setLocal] = useState(NO_WORK);
-  const work = userId ? (kept.draft ?? NO_WORK) : local;
+  // A name and an ID are put in to start with (suggestProfile). In the demo
+  // there is no one to keep them for: they live as long as the sheet.
+  const [suggested, setSuggested] = useState(suggestProfile);
+  const [local, setLocal] = useState<ProfileWork | null>(null);
+  const work = (userId ? kept.draft : local) ?? suggested;
   const change = (patch: Partial<ProfileWork>) => {
     const next = { ...work, ...patch };
     if (userId) kept.set(next);
@@ -73,7 +74,8 @@ export function NameSheet({
     if (!actions.publishProfile(work.name, handle))
       return setError("名前とIDを確かめてください。");
     if (userId) kept.clear();
-    else setLocal(NO_WORK);
+    else setLocal(null);
+    setSuggested(suggestProfile());
     notify(`${work.name.trim()}（@${handle}）として、人とつながれます`);
     answerName(true);
   }
@@ -82,7 +84,7 @@ export function NameSheet({
     <Modal title="名前を決めて、人とつながる" onClose={close}>
       <form className="profile-form name-sheet" onSubmit={decide} noValidate>
         <p className="name-sheet-lead">
-          ここから先は、ほかの読書家に届きます。街で呼ばれる名前と、あなたのIDを決めてください。どちらもあとから変えられます。
+          ここから先は、ほかの読書家に届きます。街で呼ばれる名前とIDは、おまかせで入れておきました。そのままでも、変えても大丈夫です。あとからも変えられます。
         </p>
         <label htmlFor="name-sheet-name">ユーザー名</label>
         <input

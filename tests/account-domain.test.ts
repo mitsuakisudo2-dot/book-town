@@ -18,7 +18,8 @@ import {
   type Passkey,
   type SignedOut,
 } from "../src/lib/account";
-import { RESERVED_HANDLES } from "../src/lib/handles";
+import { handleProblem, RESERVED_HANDLES } from "../src/lib/handles";
+import { suggestProfile } from "../src/lib/account-draft";
 import {
   humanCheckKey,
   TURNSTILE_HOSTS,
@@ -1137,6 +1138,25 @@ async function main() {
     const reserved = [...list.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]);
     assert.deepEqual([...reserved].sort(), [...RESERVED_HANDLES].sort());
   });
+
+  await check(
+    "the name and the ID put in to start with can be used as they are",
+    () => {
+      for (let i = 0; i < 200; i += 1) {
+        const work = suggestProfile();
+        assert.equal(handleProblem(work.handle, []), null, work.handle);
+        assert.equal(
+          profileDraftIssue({
+            ...work,
+            ageConfirmed: true,
+            readingPublic: false,
+          }),
+          null,
+          work.name,
+        );
+      }
+    },
+  );
 
   console.log(passed + " account domain checks passed");
 }
