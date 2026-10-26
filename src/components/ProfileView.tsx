@@ -1222,6 +1222,27 @@ export function ProfileView({
             </p>
           </fieldset>
           <fieldset className="record-visibility">
+            <legend>メモの案内</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={state.settings.memoHint}
+                onChange={(event) => {
+                  actions.setMemoHint(event.target.checked);
+                  notify(
+                    event.target.checked
+                      ? "いいねや読みたいのあとに、メモの案内を出します"
+                      : "メモの案内を出さないようにしました",
+                  );
+                }}
+              />
+              いいねや読みたいを押したあと、メモの案内を出す
+            </label>
+            <p className="palette-note">
+              なぜ気になったかを、あとで本のページから読み返せます。
+            </p>
+          </fieldset>
+          <fieldset className="record-visibility">
             <legend>読書中の画面</legend>
             <label>
               <input

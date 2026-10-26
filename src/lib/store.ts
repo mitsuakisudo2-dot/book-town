@@ -44,6 +44,7 @@ import {
   popEncounterKind,
   positionAfter,
   undoEncounter,
+  writeMemo,
   type EncounterInput,
   READING_STATUSES,
   readRule,
@@ -309,8 +310,21 @@ export function createTownStore(
   }
 
   /** Whether the change was taken: nothing is changed while the town loads. */
+  // The encounter a press is making (withMet), and once it is in the town,
+  // the one takeMet gives its toast: only within the same turn of the press,
+  // so a press that met nothing new is never offered an older one's.
+  let pendingMet: string | null = null;
+  let lastMet: string | null = null;
   function commit(next: TownState): boolean {
+    const making = pendingMet;
+    pendingMet = null;
     if (next === state || loading) return false;
+    if (making && next.encounters.some((c) => c.id === making)) {
+      lastMet = making;
+      queueMicrotask(() => {
+        if (lastMet === making) lastMet = null;
+      });
+    }
     state = keepingUses(state, next);
     status = backend.save(state);
     notify();
@@ -459,8 +473,10 @@ export function createTownStore(
     );
     if (!c) return town;
     if (on) {
-      const met = meetEncounter(town.encounters, c);
-      return met.met ? { ...town, encounters: met.encounters } : town;
+      const meeting = meetEncounter(town.encounters, c);
+      if (!meeting.met) return town;
+      pendingMet = meeting.encounter.id;
+      return { ...town, encounters: meeting.encounters };
     }
     const encounters = undoEncounter(town.encounters, c, at);
     return encounters === town.encounters ? town : { ...town, encounters };
@@ -767,6 +783,27 @@ export function createTownStore(
       commit(
         encounters === wished.encounters ? wished : { ...wished, encounters },
       );
+    },
+    takeMet() {
+      const id = lastMet;
+      lastMet = null;
+      return id;
+    },
+    writeEncounterMemo(encounterId, memo) {
+      initialize();
+      const encounters = writeMemo(
+        state.encounters,
+        encounterId,
+        memo,
+        now().toISOString(),
+      );
+      if (encounters === state.encounters) return false;
+      return commit({ ...state, encounters });
+    },
+    setMemoHint(on) {
+      initialize();
+      if (state.settings.memoHint === on) return;
+      commit({ ...state, settings: { ...state.settings, memoHint: on } });
     },
     meetScenePop(shopId, given, placementKey, reaction, on) {
       initialize();

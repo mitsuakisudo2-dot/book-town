@@ -309,19 +309,70 @@ try {
         await expect(want).toHaveAttribute("aria-pressed", "false");
         await want.click();
         await expect(want).toHaveAttribute("aria-pressed", "true");
-        await expect(page.locator(".toast")).toHaveText(
-          "『見えない都市』を読みたいに入れました。すみれさんの便りで出会った本として残します。",
+        const toast = page.locator(".toast");
+        await expect(toast).toContainText(
+          "『見えない都市』を読みたいに入れました",
         );
+        // On a phone the compose button steps aside while the toast is said,
+        // so its メモ is not pressed for 投稿 (けにー 10-26).
+        if (viewport.width <= 760)
+          await expect(page.locator(".compose-fab")).toBeHidden();
         // How many readers wanted it is the writer's to know, not ours.
         await expect(want).toHaveText("読みたい");
         await expect(post).not.toContainText(/\d+人/);
+        // The toast offers a memo of why (押したときのメモ).
+        await toast.getByRole("button", { name: "メモ" }).click();
+        const memo = page.getByRole("dialog", { name: "出会いのメモ" });
+        await expect(memo).toContainText("すみれさんの便りで読みたくなった");
+        await memo.getByRole("textbox").fill("旅の前に読みたい");
+        await memo.getByRole("button", { name: "残す" }).click();
+        await expect(memo).toHaveCount(0);
+        await expect(toast).toHaveText("メモを残しました");
         await go("/books/invisible-cities/");
         await expect(
           page.getByText("すみれさんの感想で、読みたくなった本です。"),
         ).toBeVisible();
+        const met = page.locator(".book-encounters li").first();
+        await expect(met.locator("q")).toHaveText("旅の前に読みたい");
+        // Changed from the book's page, the same sheet holds the memo.
+        await met.getByRole("button", { name: "メモを直す" }).click();
+        await expect(memo.getByRole("textbox")).toHaveValue("旅の前に読みたい");
+        await memo.getByRole("textbox").fill("旅の前に、駅で読みたい");
+        await memo.getByRole("button", { name: "残す" }).click();
+        await expect(met.locator("q")).toHaveText("旅の前に、駅で読みたい");
         await expect(
           page.getByRole("button", { name: "読みたいに登録済み" }),
         ).toBeVisible();
+      },
+    );
+
+    await check(
+      `${label} a first いいね on a 便り about a book offers a memo, once the tapping stops`,
+      async () => {
+        await go("/timeline/");
+        const post = card("凪", "十年ぶりに再読");
+        const like = post.getByRole("button", { name: "いいね", exact: true });
+        await like.click();
+        await like.click();
+        await like.click();
+        const toast = page.locator(".toast");
+        await expect(toast).toContainText("いいねした本に入れました");
+        await expect(toast.getByRole("button", { name: "メモ" })).toHaveCount(
+          1,
+        );
+        await toast.getByRole("button", { name: "メモ" }).click();
+        const memo = page.getByRole("dialog", { name: "出会いのメモ" });
+        await expect(memo).toContainText("凪さんの便りでいいね");
+        await memo.getByRole("button", { name: "やめる" }).click();
+        await expect(memo).toHaveCount(0);
+        await noOverflow(`${label} memo`);
+        // Forgotten on the book's page, the いいね stays and the page is as before.
+        await go("/books/solaris/");
+        await page
+          .locator(".book-encounters")
+          .getByRole("button", { name: "消す" })
+          .click();
+        await expect(page.locator(".book-encounters")).toHaveCount(0);
       },
     );
 
@@ -338,6 +389,8 @@ try {
         await expect(pill).toHaveText("1回");
         await expect(pill).toHaveCount(0);
         await expect(post).not.toContainText("回");
+        // A 便り without a book meets none: no memo is offered.
+        await expect(page.locator(".toast")).toHaveCount(0);
         for (let press = 1; press < 10; press += 1) await like.click();
         await expect(pill).toHaveText("10回");
         // The press after the tenth asks to take it back.

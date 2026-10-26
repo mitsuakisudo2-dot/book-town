@@ -4,10 +4,10 @@ import dynamic from "next/dynamic";
 import type { Book, Notify, TownActions, TownState } from "../lib/types";
 import type { Encounter } from "../lib/library";
 import { booksOfWork } from "../lib/works";
-import { findReader } from "../lib/social";
 import { japanMonthDay } from "../lib/japan-time";
 import { shopPath, walkPath } from "../lib/paths";
-import { ENCOUNTER_WORDS, encounterLine } from "../lib/encounter-words";
+import { ENCOUNTER_WORDS, encounterLineIn } from "../lib/encounter-words";
+import { askMemo } from "../lib/encounter-memo";
 import { scenePopOf, shelfPopOf } from "../lib/encounter-places";
 import { LetterCard } from "./letter/LetterCard";
 
@@ -43,18 +43,6 @@ export function BookEncounters({
     )
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   if (!shown.length) return null;
-  const shopOf = (c: Encounter) =>
-    c.shopId ? state.shops.find((s) => s.id === c.shopId) : undefined;
-  const lineOf = (c: Encounter) => {
-    const post = c.postId
-      ? state.posts.find((p) => p.id === c.postId)
-      : undefined;
-    const whoId = post?.authorId ?? c.otherReaderId;
-    return encounterLine(c, {
-      who: whoId ? findReader(state, whoId)?.name : undefined,
-      shop: shopOf(c)?.name,
-    });
-  };
   const forget = (c: Encounter) => {
     actions.forgetEncounter(c.id);
     notify(ENCOUNTER_WORDS.forgotten, {
@@ -79,16 +67,25 @@ export function BookEncounters({
             <div className="book-encounters-head">
               <time dateTime={c.createdAt}>{japanMonthDay(c.createdAt)}</time>
               <span className="book-encounters-line">
-                {lineOf(c)}
+                {encounterLineIn(state, c)}
                 {c.memo && <q>{c.memo}</q>}
               </span>
-              <button
-                type="button"
-                className="text-btn"
-                onClick={() => forget(c)}
-              >
-                {ENCOUNTER_WORDS.forget}
-              </button>
+              <span className="book-encounters-acts">
+                <button
+                  type="button"
+                  className="text-btn"
+                  onClick={() => askMemo(c.id)}
+                >
+                  {c.memo ? ENCOUNTER_WORDS.memoEdit : ENCOUNTER_WORDS.memoWrite}
+                </button>
+                <button
+                  type="button"
+                  className="text-btn"
+                  onClick={() => forget(c)}
+                >
+                  {ENCOUNTER_WORDS.forget}
+                </button>
+              </span>
             </div>
             <MetThere
               encounter={c}

@@ -276,6 +276,8 @@ export interface Settings {
   shelfAudiences: ShelfAudiences;
   /** 「ネタバレの表示」: the reader's own. */
   spoilerDisplay: SpoilerDisplay;
+  /** 「メモの案内を出す」: a press that meets a book offers a memo in its toast. */
+  memoHint: boolean;
   /** 読書管理モード or not; switching changes nothing else. */
   mode: TownMode;
 }
@@ -552,6 +554,17 @@ export interface TownActions {
   forgetEncounter(encounterId: string): void;
   /** Puts a forgotten encounter back as it was (the toast's 元に戻す). */
   restoreEncounter(encounter: Encounter): void;
+  /**
+   * The encounter the last press made, once: asked right after the press,
+   * for its toast's メモ. Null when that press met nothing new.
+   */
+  takeMet(): string | null;
+  /**
+   * Writes, changes or (blank) erases an encounter's memo. False when nothing
+   * changed: no such encounter, the same words, or too long.
+   */
+  writeEncounterMemo(encounterId: string, memo: string): boolean;
+  setMemoHint(on: boolean): void;
   togglePopReaction(
     shopId: string,
     shelfId: string,
