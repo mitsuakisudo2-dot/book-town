@@ -28,7 +28,7 @@ import "./text-page.css";
  * When these words start to apply: the day they are published (けにー 10-26
  * 02:17Z「おすすめで」; the β has no date yet). Set on the day of merging.
  */
-export const TERMS_DATE = "2026年11月1日";
+export const TERMS_DATE = "2026年10月26日";
 /**
  * The court the terms name, said by where the operator lives rather than by
  * its name, which would tell readers where that is (けにー 10-26 02:17Z).
