@@ -4514,7 +4514,12 @@ try {
             const index = [
               ...document.querySelectorAll(".home-live-line"),
             ].indexOf(line);
-            return `focus on <${on?.tagName.toLowerCase()} class="${on?.className}"> line ${index} ${line?.getAttribute("data-post-id") ?? ""}`;
+            // The list styled inert though nothing over it is (AUD-196).
+            const list = document.querySelector(".home-live-list");
+            const styled = list
+              ? getComputedStyle(list).getPropertyValue("interactivity")
+              : "";
+            return `focus on <${on?.tagName.toLowerCase()} class="${on?.className}"> line ${index} ${line?.getAttribute("data-post-id") ?? ""}; the list's interactivity ${styled}`;
           });
         await expect(keyed, await focusAt()).toBeFocused();
         await box.evaluate((element) =>
