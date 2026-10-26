@@ -559,10 +559,14 @@ export const useInWritingSheet = () => useContext(WritingSheet);
  * is then over the screen that opened it (a walk keeps its own layers, under
  * the bottom bar), and still under the shell's rules that size words and
  * fields for a phone (usability.css; a phone zooms in on a text box under
- * 16px, and the sheet would no longer fit what the keyboard leaves).
+ * 16px, and the sheet would no longer fit what the keyboard leaves). Over
+ * a book in hand (a native <dialog>, in the browser's top layer), the end of
+ * that dialog, which the shell holds: anywhere else it would be beneath it.
  */
 const writingHost = () =>
-  document.querySelector<HTMLElement>(".town-shell") ?? document.body;
+  document.querySelector<HTMLElement>(".town-shell dialog[open]") ??
+  document.querySelector<HTMLElement>(".town-shell") ??
+  document.body;
 
 export function Modal({
   title,
@@ -571,6 +575,7 @@ export function Modal({
   wide = false,
   writing = false,
   fromBottom = false,
+  compact = false,
 }: {
   title: string;
   onClose: () => void;
@@ -589,6 +594,12 @@ export function Modal({
    * buttons (a .writing-toolbar, last) just above the keyboard.
    */
   writing?: boolean;
+  /**
+   * A small note to write (a word or two, not a post): a card only as tall
+   * as what it holds. With a finger it sits just above the keyboard, the
+   * page above it still in sight, instead of taking the whole screen.
+   */
+  compact?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const writingRef = useRef(writing);
@@ -694,7 +705,8 @@ export function Modal({
       className={
         "modal-backdrop" +
         (fitted ? " is-writing" : "") +
-        (fromBottom ? " is-sheet" : "")
+        (fromBottom ? " is-sheet" : "") +
+        (compact ? " is-compact" : "")
       }
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -705,7 +717,8 @@ export function Modal({
           "modal " +
           (wide ? "wide" : "") +
           (fitted ? " is-writing" : "") +
-          (fromBottom ? " is-sheet" : "")
+          (fromBottom ? " is-sheet" : "") +
+          (compact ? " is-compact" : "")
         }
         ref={ref}
         role="dialog"

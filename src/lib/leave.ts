@@ -10,6 +10,7 @@
 import { forgetOwnerEverywhere } from "./kept-draft";
 import "./account-draft";
 import "./book-fix-draft";
+import "./encounter-memo-draft";
 import "./library-shelf-draft";
 import "./open-shop-draft";
 import "./post-draft";

@@ -44,6 +44,7 @@ import {
   popEncounterKind,
   positionAfter,
   undoEncounter,
+  writeMemo,
   type EncounterInput,
   READING_STATUSES,
   readRule,
@@ -321,8 +322,21 @@ export function createTownStore(
   }
 
   /** Whether the change was taken: nothing is changed while the town loads. */
+  // The encounter a press is making (withMet), and once it is in the town,
+  // the one takeMet gives its toast: only within the same turn of the press,
+  // so a press that met nothing new is never offered an older one's.
+  let pendingMet: string | null = null;
+  let lastMet: string | null = null;
   function commit(next: TownState): boolean {
+    const making = pendingMet;
+    pendingMet = null;
     if (next === state || loading) return false;
+    if (making && next.encounters.some((c) => c.id === making)) {
+      lastMet = making;
+      queueMicrotask(() => {
+        if (lastMet === making) lastMet = null;
+      });
+    }
     state = keepingUses(state, next);
     status = backend.save(state);
     notify();
@@ -471,8 +485,10 @@ export function createTownStore(
     );
     if (!c) return town;
     if (on) {
-      const met = meetEncounter(town.encounters, c);
-      return met.met ? { ...town, encounters: met.encounters } : town;
+      const meeting = meetEncounter(town.encounters, c);
+      if (!meeting.met) return town;
+      pendingMet = meeting.encounter.id;
+      return { ...town, encounters: meeting.encounters };
     }
     const encounters = undoEncounter(town.encounters, c, at);
     return encounters === town.encounters ? town : { ...town, encounters };
@@ -779,6 +795,27 @@ export function createTownStore(
       commit(
         encounters === wished.encounters ? wished : { ...wished, encounters },
       );
+    },
+    takeMet() {
+      const id = lastMet;
+      lastMet = null;
+      return id;
+    },
+    writeEncounterMemo(encounterId, memo) {
+      initialize();
+      const encounters = writeMemo(
+        state.encounters,
+        encounterId,
+        memo,
+        now().toISOString(),
+      );
+      if (encounters === state.encounters) return false;
+      return commit({ ...state, encounters });
+    },
+    setMemoHint(on) {
+      initialize();
+      if (state.settings.memoHint === on) return;
+      commit({ ...state, settings: { ...state.settings, memoHint: on } });
     },
     meetScenePop(shopId, given, placementKey, reaction, on) {
       initialize();
@@ -1154,10 +1191,15 @@ export function createTownStore(
       // in the library did not) is that book again; otherwise a book the
       // town has with the ISBN, but never one another reader typed in: the
       // reader registers their own of it (own-books.ts), so what either of
-      // them later fixes stays theirs.
-      const sent = isbn ? bookById(state.books, bookId) : undefined;
+      // them later fixes stays theirs. One with no ISBN is named by its id
+      // alone (a book found for ［手で入力］): that book, never a new one.
+      const sent = bookById(state.books, bookId);
       const decided =
-        sent && sent.isbn === isbn && !sent.theirs ? sent : undefined;
+        sent && !sent.theirs && (isbn ? sent.isbn === isbn : !sent.isbn)
+          ? sent
+          : undefined;
+      if (!isbn && decided && state.library.includes(decided.id))
+        return { result: "already", bookId: decided.id, title: decided.title };
       const existing = decided ?? bookByIsbn(state.books, isbn);
       // The library remembers how a book first came in.
       // A scan session's id, as the database keeps it (a UUID).

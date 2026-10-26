@@ -57,6 +57,7 @@ import {
 } from "../lib/public-profile";
 import { closeReport } from "../lib/report";
 import { carriedToast, noteToast } from "../lib/carried-toast";
+import { useAskedMemo, useMemoEverAsked } from "../lib/encounter-memo";
 import { isKeptNotice } from "../lib/kept-draft";
 import {
   SAMPLE_NOTICE,
@@ -131,6 +132,10 @@ const BookView = dynamic(() =>
 );
 const Wishlist = dynamic(() =>
   import("./Wishlist").then((file) => file.Wishlist),
+);
+// The memo sheet (押したときのメモ) is read once a memo is first asked for.
+const EncounterMemoHost = dynamic(() =>
+  import("./EncounterMemo").then((file) => file.EncounterMemoHost),
 );
 const ManageHome = dynamic(() =>
   import("./ManageMode").then((file) => file.ManageHome),
@@ -330,6 +335,12 @@ export default function TownApp({
   useJournalSender(journalTown, notify);
   const shared = { state, actions, notify };
   const askingName = useNameRequest();
+  const memoAsked = useMemoEverAsked();
+  // The toast whose メモ opened the sheet has said its part.
+  const memoOpen = useAskedMemo();
+  useEffect(() => {
+    if (memoOpen) setToast(null);
+  }, [memoOpen]);
   // A 便り's page is open over this screen: what is beneath it waits.
   const postLayer = usePostLayer();
   const layered = postLayer !== null && view !== "post";
@@ -675,6 +686,7 @@ export default function TownApp({
           </Link>
         ))}
       </nav>
+      {memoAsked && <EncounterMemoHost {...shared} />}
       {toast && <Toast toast={toast} onHold={holdToast} />}
       {about && (
         <Modal
@@ -768,14 +780,12 @@ function Toast({
           onHold(false);
       }}
     >
-      {/* Turned away from a 見本, or a save refused with the work kept: a
-          leaf, not a tick, for nothing was done. */}
-      <Icon
-        name={
-          message === SAMPLE_NOTICE || isKeptNotice(message) ? "leaf" : "check"
-        }
-        size={17}
-      />
+      {/* What was done needs no mark: the words say it, and the line keeps
+          its room for them. Turned away from a 見本, or a save refused with
+          the work kept, a leaf says nothing was done. */}
+      {(message === SAMPLE_NOTICE || isKeptNotice(message)) && (
+        <Icon name="leaf" size={17} />
+      )}
       {message}
       {undo && (
         <button type="button" className="toast-undo" onClick={undo.run}>

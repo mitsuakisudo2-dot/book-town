@@ -24,7 +24,7 @@ import {
   searchPresence,
   type BookMatch,
 } from "../lib/search";
-import { useBookSearch } from "../lib/search/use-book-search";
+import { useFoundBooks } from "../lib/search/use-found-books";
 import {
   onSearchRequest,
   postsWithTag,
@@ -235,16 +235,9 @@ export function SearchView({ state, actions, notify }: Shared) {
   // What is typed is asked of the database too, once typing rests: every
   // book the reader may read, not only the town's (find_books, AUD-006).
   const searched = term && !tagTerm ? query.trim() : "";
-  const [asked, setAsked] = useState("");
-  useEffect(() => {
-    const timer = setTimeout(() => setAsked(searched), searched ? 300 : 0);
-    return () => clearTimeout(timer);
-  }, [searched]);
-  const { read: fromDatabase } = useMoreRead(asked ? { search: asked } : null);
-  const books = useBookSearch(state.books, searched ? query : "", {
+  const books = useFoundBooks(state.books, searched ? query : "", {
     presence,
     genreFinds: shown,
-    extra: fromDatabase?.books,
   });
   const { found, near } = books;
   const tagResults = tagTerm ? postsWithTag(state, tagTerm) : [];
