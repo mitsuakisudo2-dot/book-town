@@ -648,7 +648,7 @@ export function ProfileView({
             ) : isSelf ? (
               <>
                 {/* One main step (the shop); the rest stay small beside it. */}
-                <Link className="btn fill" href={myShopPath()}>
+                <Link className="btn fill" href={myShopPath({ tidy: !!shop })}>
                   <Icon name="store" /> {shop ? "書店を整える" : "書店をひらく"}
                 </Link>
                 {reader.unpublished ? (

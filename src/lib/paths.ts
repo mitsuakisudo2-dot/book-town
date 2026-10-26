@@ -71,14 +71,17 @@ export const libraryPath = (
 
 /**
  * The reader's own shop, or the door to open one; `place` opens it with that
- * book chosen, ready to put on a shelf (管理表 103).
+ * book chosen, ready to put on a shelf (管理表 103), and `tidy` straight in
+ * 整える, where the shop is tended (けにー 10-25).
  */
 export const myShopPath = (
-  options: { place?: string; at?: string } = {},
+  options: { place?: string; tidy?: boolean; at?: string } = {},
 ): string =>
   (options.place
     ? "/my-shop/?place=" + encodeURIComponent(options.place)
-    : "/my-shop/") + (options.at ? "#" + options.at : "");
+    : options.tidy
+      ? "/my-shop/?tidy=1"
+      : "/my-shop/") + (options.at ? "#" + options.at : "");
 
 /** The notifications page (お知らせ); `at` jumps to a part of it. */
 export const notificationsPath = (at?: string): string =>

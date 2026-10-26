@@ -46,6 +46,7 @@ import {
   KEPT,
   PLACE,
   FIRST_SHELF_NAME,
+  SHOP_TIDY,
 } from "../lib/words";
 import { pickSources } from "../lib/shop-picks";
 import { useUrlParam } from "../lib/url-state";
@@ -210,7 +211,7 @@ export function OpenShop({
   startBook?: string | null;
   /** Called just before the shop is created, so the page keeps this flow on screen. */
   onOpen: () => void;
-  /** Leaves the flow for the full shop editor. */
+  /** Leaves the flow for 整える, where the new shop is tended. */
   onDone: () => void;
 }) {
   const nameId = useId();
@@ -499,7 +500,7 @@ export function OpenShop({
           </Link>
           <button type="button" className="btn" onClick={onDone}>
             <Icon name="shelf" size={17} />
-            棚を整える
+            {SHOP_TIDY}
           </button>
         </div>
       </section>
