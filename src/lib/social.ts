@@ -8,6 +8,7 @@ import {
   type TownState,
 } from "./types";
 import { japanFormat, japanMonthDay, japanYear } from "./japan-time";
+import { counted } from "./words";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
 import { hasFinished } from "./reading";
 import { bookById } from "./book-name";
@@ -297,8 +298,9 @@ export function postAge(createdAt: string, now: number): string {
   if (Number.isNaN(at)) return "";
   const minutes = Math.floor((now - at) / 60_000);
   if (minutes < 1) return "いま";
-  if (minutes < 60) return `${minutes}分前`;
-  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}時間前`;
+  if (minutes < 60) return counted(minutes, "分") + "前";
+  if (minutes < 24 * 60)
+    return counted(Math.floor(minutes / 60), "時間") + "前";
   const year = japanYear(at);
   return (year === japanYear(now) ? "" : `${year}年`) + japanMonthDay(at);
 }
