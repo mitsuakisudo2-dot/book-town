@@ -7,11 +7,7 @@ import {
   normalizeIsbn,
 } from "../lib/books";
 import { lookUpBook } from "../lib/openbd";
-import {
-  getTownSnapshot,
-  libraryBookByIsbn,
-  useTownBackend,
-} from "../lib/store";
+import { libraryBookByIsbn, useTownBackend } from "../lib/store";
 import {
   FIND_BOOK,
   foundAsNew,
@@ -279,16 +275,10 @@ export function BarcodeRegister({
   function take(book: Book) {
     setMessage("");
     // One with no ISBN is a book of the town's or the reader's own taken
-    // out before: that book itself goes in, as 登録 does on the search page.
-    if (!book.isbn) {
-      actions.toggleLibrary(book.id);
-      const town = getTownSnapshot();
-      if (holds(town, town.library, book.id))
-        notify(REGISTER.added(quotedTitle(book)));
-      else notSaved();
-      return;
-    }
-    const done = actions.registerBook(foundAsNew(book), "isbn");
+    // out before: that book itself goes in, named by its id.
+    const done = book.isbn
+      ? actions.registerBook(foundAsNew(book), "isbn")
+      : actions.registerBook(foundAsNew(book), "manual", book.id);
     if (!done) return;
     if (done.result === "not-saved") return notSaved();
     notify(
