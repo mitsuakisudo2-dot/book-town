@@ -1183,6 +1183,97 @@ export type Database = {
           },
         ];
       };
+      reading_cards: {
+        Row: {
+          added_later: boolean;
+          created_at: string;
+          finished: boolean;
+          format: string | null;
+          light: string | null;
+          look: string | null;
+          page_from: number | null;
+          page_to: number | null;
+          page_unit: string;
+          paused_at: string | null;
+          paused_seconds: number;
+          read_seconds: number | null;
+          rest_minutes: number | null;
+          room: string | null;
+          session_id: string;
+          shown: Json;
+          time_zone: string;
+          timer: string;
+          timer_at: string | null;
+          timer_minutes: number | null;
+          updated_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          added_later?: boolean;
+          created_at?: string;
+          finished?: boolean;
+          format?: string | null;
+          light?: string | null;
+          look?: string | null;
+          page_from?: number | null;
+          page_to?: number | null;
+          page_unit?: string;
+          paused_at?: string | null;
+          paused_seconds?: number;
+          read_seconds?: number | null;
+          rest_minutes?: number | null;
+          room?: string | null;
+          session_id: string;
+          shown?: Json;
+          time_zone?: string;
+          timer?: string;
+          timer_at?: string | null;
+          timer_minutes?: number | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          added_later?: boolean;
+          created_at?: string;
+          finished?: boolean;
+          format?: string | null;
+          light?: string | null;
+          look?: string | null;
+          page_from?: number | null;
+          page_to?: number | null;
+          page_unit?: string;
+          paused_at?: string | null;
+          paused_seconds?: number;
+          read_seconds?: number | null;
+          rest_minutes?: number | null;
+          room?: string | null;
+          session_id?: string;
+          shown?: Json;
+          time_zone?: string;
+          timer?: string;
+          timer_at?: string | null;
+          timer_minutes?: number | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reading_cards_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reading_cards_user_id_session_id_fkey";
+            columns: ["user_id", "session_id"];
+            isOneToOne: true;
+            referencedRelation: "reading_sessions";
+            referencedColumns: ["user_id", "id"];
+          },
+        ];
+      };
       reading_entries: {
         Row: {
           audience: string;
@@ -1238,6 +1329,55 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "profiles";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      reading_notes: {
+        Row: {
+          body: string;
+          created_at: string;
+          id: string;
+          kind: string;
+          page: number | null;
+          session_id: string;
+          updated_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          body: string;
+          created_at?: string;
+          id: string;
+          kind: string;
+          page?: number | null;
+          session_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          body?: string;
+          created_at?: string;
+          id?: string;
+          kind?: string;
+          page?: number | null;
+          session_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reading_notes_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reading_notes_user_id_session_id_fkey";
+            columns: ["user_id", "session_id"];
+            isOneToOne: false;
+            referencedRelation: "reading_cards";
+            referencedColumns: ["user_id", "session_id"];
           },
         ];
       };
