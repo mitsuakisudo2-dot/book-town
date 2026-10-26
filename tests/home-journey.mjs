@@ -1171,7 +1171,22 @@ try {
         );
         const sample = card("すみれ", "どこから開いてもいい本");
         await expectReadable(sample.locator(".post-text"), "card text");
-        await expectReadable(sample.locator(".letter-meta"), "card meta");
+        await expectReadable(sample.locator(".post-handle"), "card @ID");
+        // The head is one line: the name, 見本, @ID and when (けにーさん 2026-10-25).
+        const head = await sample.locator(".letter-who").evaluate((element) => {
+          const line = parseFloat(getComputedStyle(element).lineHeight);
+          const time = element.querySelector(".letter-time, .letter-when");
+          return {
+            lines: Math.round(element.getBoundingClientRect().height / line),
+            time: time?.textContent ?? "",
+            cut: time ? time.scrollWidth > time.clientWidth : true,
+          };
+        });
+        expect(head.lines, "the head is one line").toBe(1);
+        expect(head.time, "the time is shown whole").toMatch(
+          /^(いま|\d+分前|\d+時間前|(\d+年)?\d+月\d+日)$/,
+        );
+        expect(head.cut, "the time is not cut").toBe(false);
         await expectReadable(
           sample.locator(".letter-tag", { hasText: "見本" }),
           "見本",

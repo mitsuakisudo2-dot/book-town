@@ -11,7 +11,7 @@ import {
   spoilerBars,
 } from "../src/lib/letter";
 import { notificationsFor } from "../src/lib/notifications";
-import { spoilerBookOf, spoilerViewOf } from "../src/lib/social";
+import { postAge, spoilerBookOf, spoilerViewOf } from "../src/lib/social";
 import { LIKE_TAPS_MAX, ME_ID, type Post } from "../src/lib/types";
 
 let passed = 0;
@@ -184,6 +184,23 @@ check("notices about a post lead to its page while it is in the town", () => {
     )?.href,
     "/profiles/me/",
   );
+});
+
+check("a list says when as いま, N分前, N時間前, then the day", () => {
+  const now = Date.parse("2026-10-26T10:00:00+09:00");
+  const ago = (ms: number) => new Date(now - ms).toISOString();
+  assert.equal(postAge(ago(0), now), "いま");
+  assert.equal(postAge(ago(59_000), now), "いま");
+  assert.equal(postAge(ago(-30_000), now), "いま", "a clock ahead");
+  assert.equal(postAge(ago(60_000), now), "1分前");
+  assert.equal(postAge(ago(59 * 60_000), now), "59分前");
+  assert.equal(postAge(ago(60 * 60_000), now), "1時間前");
+  assert.equal(postAge(ago(23 * 3_600_000 + 59 * 60_000), now), "23時間前");
+  assert.equal(postAge(ago(24 * 3_600_000), now), "10月25日");
+  // The day in Japan, not the browser's.
+  assert.equal(postAge("2026-10-24T15:30:00Z", now), "10月25日");
+  assert.equal(postAge("2025-12-31T14:00:00Z", now), "2025年12月31日");
+  assert.equal(postAge("not a date", now), "");
 });
 
 console.log(`letter ok (${passed})`);

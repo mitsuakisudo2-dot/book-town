@@ -1352,6 +1352,9 @@ html[data-home-tab] {
   display: inline-flex;
   flex: none;
   align-items: center;
+  justify-content: flex-end;
+  /* 「いま」 is short: the target stays 44px wide. */
+  min-width: 44px;
   min-height: 44px;
   margin-block: -11px;
   margin-left: auto;

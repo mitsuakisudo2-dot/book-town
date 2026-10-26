@@ -1,25 +1,13 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import { usePersistenceStatus } from "../../lib/store";
 import { scrollBehavior } from "../../lib/motion";
 import { useUrlParam } from "../../lib/url-state";
 
-const MINUTE = 60_000;
-const still = () => () => {};
+import { useNow } from "../../lib/now";
 
-/**
- * The time, to the minute. Null in the static page and while it hydrates, so
- * what depends on the day (今夜の一軒, the 特集) is drawn only in the browser
- * and the first render matches the HTML.
- */
-export function useNow(): number | null {
-  return useSyncExternalStore(
-    still,
-    () => Math.floor(Date.now() / MINUTE) * MINUTE,
-    () => null,
-  );
-}
+export { useNow };
 
 /**
  * Which reading of the town the panes draw: null while one is on its way,

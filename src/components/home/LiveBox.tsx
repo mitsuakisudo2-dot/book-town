@@ -26,12 +26,7 @@ import {
   togetherIds,
 } from "../../lib/live";
 import { postPath } from "../../lib/paths";
-import {
-  findReader,
-  formatPostTime,
-  spoilerBookOf,
-  spoilerViewOf,
-} from "../../lib/social";
+import { findReader, spoilerBookOf, spoilerViewOf } from "../../lib/social";
 import { useTownReads } from "../../lib/store";
 import { bookById, bookTitle, quotedTitle } from "../../lib/book-name";
 import { isSampleId } from "../../lib/record-kind";
@@ -39,6 +34,7 @@ import type { Post, TownState } from "../../lib/types";
 import { DUR_MS, EASE, reducedMotion } from "../../lib/motion";
 import { BookJacket, Icon } from "../ui";
 import { spoilerWords } from "../letter/LetterCard";
+import { PostWhen } from "../letter/PostWhen";
 import { forgetOpened, noteOpened, openPost } from "../letter/post-layer";
 import { SpoilerCover } from "../letter/SpoilerCover";
 import type { Shared } from "./Letters";
@@ -422,9 +418,7 @@ function LiveLine({
               openPage();
             }}
           >
-            <time dateTime={post.createdAt}>
-              {formatPostTime(post.createdAt)}
-            </time>
+            <PostWhen at={post.createdAt} />
           </a>
         </p>
         {guarded ? (
