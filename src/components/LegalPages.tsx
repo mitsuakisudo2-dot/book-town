@@ -25,12 +25,15 @@ import "./text-page.css";
 // what is sent out of the browser in docs/開発と運用/外部サービス.md.
 
 /**
- * When these words start to apply. Until the β starts it is the day they
- * were last changed (仮, けにーさんが決める).
+ * When these words start to apply: the day they are published (けにー 10-26
+ * 02:17Z「おすすめで」; the β has no date yet). Set on the day of merging.
  */
 export const TERMS_DATE = "2026年11月1日";
-/** The court the terms name (仮, けにーさんが決める). */
-const COURT = "東京地方裁判所";
+/**
+ * The court the terms name, said by where the operator lives rather than by
+ * its name, which would tell readers where that is (けにー 10-26 02:17Z).
+ */
+const COURT = "運営者の住所地を管轄する地方裁判所";
 
 const service = NAMES.service;
 // The commission's survey of other countries' systems (個人情報保護法 28条).
