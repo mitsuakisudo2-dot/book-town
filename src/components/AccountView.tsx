@@ -46,6 +46,7 @@ import {
 import { Icon } from "./ui";
 import { KeptDraftNote } from "./KeptDraftNote";
 import { useHumanCheck } from "./HumanCheck";
+import { LegalLinks } from "./LegalPages";
 import "./profile.css";
 import "./reading.css";
 import "./account.css";
@@ -100,6 +101,7 @@ export default function AccountView() {
           />
         )}
       </section>
+      <LegalLinks help={account.status === "signed-out"} />
     </main>
   );
 }

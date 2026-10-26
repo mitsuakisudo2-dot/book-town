@@ -1255,6 +1255,44 @@ try {
   );
 
   await check(
+    "under the sign-in, the help, the terms and the privacy page say who runs the town and where to write (管理表 44)",
+    async () => {
+      const help = page.getByRole("link", { name: "ログインできないとき" });
+      await expect(help).toHaveAttribute("href", "/login/help/");
+      await help.click();
+      await expect(
+        page.getByRole("heading", { level: 1, name: "ログインできないとき" }),
+      ).toBeVisible();
+      const mail = page.getByRole("link", { name: "hello@booktown.page" });
+      await expect(mail.first()).toHaveAttribute(
+        "href",
+        "mailto:hello@booktown.page",
+      );
+      await noOverflow("login help");
+      await page.getByRole("link", { name: "利用規約" }).first().click();
+      await expect(
+        page.getByRole("heading", { level: 1, name: "利用規約" }),
+      ).toBeVisible();
+      await expect(page.locator("main")).toContainText("BookTown運営");
+      await expect(mail).toBeVisible();
+      await noOverflow("terms");
+      await page.goto(base + "/privacy/");
+      await expect(
+        page.getByRole("heading", { level: 1, name: "プライバシーについて" }),
+      ).toBeVisible();
+      await expect(page.locator("main")).toContainText(
+        "求めがあれば、すみやかにお答えします",
+      );
+      await expect(mail).toBeVisible();
+      await noOverflow("privacy");
+      await page.goto(base + "/login/");
+      await expect(
+        page.getByRole("heading", { name: "本の街に入る" }),
+      ).toBeVisible();
+    },
+  );
+
+  await check(
     "on a phone, an address that is not one is marked without the keyboard",
     async () => {
       const email = page.getByLabel("メールアドレス");

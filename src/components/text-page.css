@@ -1,0 +1,87 @@
+/* Pages that are read through (the credits, the terms, the privacy page,
+   ログインできないとき): at the width of a book's page text. */
+.text-page {
+  max-width: 680px;
+}
+.text-page > p,
+.text-page section p {
+  margin-top: 14px;
+  font-size: var(--t-body);
+  line-height: 1.9;
+}
+.text-page section {
+  margin-top: 30px;
+}
+.text-page h2 {
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  font-weight: 500;
+}
+.text-page a {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+.text-page ol,
+.text-page ul {
+  margin-top: 10px;
+  padding-left: 1.6em;
+  list-style: decimal;
+  font-size: var(--t-body);
+  line-height: 1.9;
+}
+.text-page li + li {
+  margin-top: 4px;
+}
+.text-page table {
+  margin-top: 12px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-meta);
+  line-height: 1.7;
+}
+.text-page th,
+.text-page td {
+  border-top: 1px solid var(--line);
+  padding: 8px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+.text-page th {
+  width: 9em;
+  font-weight: 500;
+}
+/* On a phone, each row's name sits above what it says. */
+@media (max-width: 480px) {
+  .text-page th,
+  .text-page td {
+    display: block;
+    width: auto;
+  }
+  .text-page th {
+    padding-bottom: 0;
+  }
+  .text-page td {
+    border-top: 0;
+    padding-top: 2px;
+  }
+}
+.text-page .text-page-date {
+  margin-top: 30px;
+  color: var(--ink-2);
+}
+/* Under the login: quiet, like the account's other small links. */
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 18px;
+  font-size: var(--t-cap);
+}
+.legal-links a {
+  padding: 6px 0;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

@@ -262,3 +262,15 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* The pages read through (LegalPages.tsx) sit in the card, made wide for
+   reading. */
+.account-card.text-page {
+  max-width: 680px;
+  gap: 0;
+}
+@media (max-width: 420px) {
+  .account-card.text-page {
+    padding: 26px 18px;
+  }
+}
