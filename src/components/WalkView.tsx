@@ -713,7 +713,7 @@ export function WalkView({
               ? "あなたの書店は、まだ棚に本がないので書店めぐりに出ていません。一冊並べると、ここに灯りがともります。"
               : "あなたの書店は、まだありません。3分で開けます。"}
           </span>
-          <Link href={myShopPath()}>
+          <Link href={myShopPath({ tidy: !!state.ownShop })}>
             {state.ownShop ? "自分の書店を整える" : "書店を開く"}
           </Link>
           <button aria-label="閉じる" onClick={() => setOwnMissing(false)}>
@@ -868,7 +868,10 @@ export function WalkView({
               >
                 {ownShop ? (
                   // One's own shop is tended, not liked or kept for later.
-                  <Link href={myShopPath()} aria-label="自分の店を整える">
+                  <Link
+                    href={myShopPath({ tidy: true })}
+                    aria-label="自分の店を整える"
+                  >
                     <span>
                       <Icon name="edit" />
                     </span>
@@ -937,7 +940,10 @@ export function WalkView({
                 <>
                   <h1>まだ、灯りのついた書店がありません</h1>
                   <p>最初の一軒を開くと、ここから街の人が訪ねてこられます。</p>
-                  <Link className="btn fill" href={myShopPath()}>
+                  <Link
+                    className="btn fill"
+                    href={myShopPath({ tidy: !!state.ownShop })}
+                  >
                     {state.ownShop ? "自分の書店を整える" : "書店を開く"}
                     <Icon name="arrow" />
                   </Link>

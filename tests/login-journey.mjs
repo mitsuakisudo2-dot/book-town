@@ -8253,6 +8253,11 @@ try {
         await expect(
           page.getByRole("heading", { name: "今日は、どの本と過ごしますか" }),
         ).toBeVisible();
+        // Both ways in are said, and nothing up top invites into the town.
+        await expect(page.locator(".manage-register")).toContainText(
+          "バーコードか、書名で",
+        );
+        await expect(page.locator(".demo-pill")).toHaveCount(0);
         await both("quiet-2-home");
         await page.goto(base + "/profiles/me/");
         await expect(

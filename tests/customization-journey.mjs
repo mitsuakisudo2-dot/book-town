@@ -91,7 +91,9 @@ try {
   await page.getByRole("button", { name: "空の棚から始める" }).click();
   await page.getByLabel("書店の名前").fill("私の静かな本屋");
   await page.getByRole("button", { name: "書店をひらく", exact: true }).click();
-  await page.getByRole("button", { name: "棚を整える" }).click();
+  await page.getByRole("button", { name: "店を整える" }).click();
+  await expect(tidy().locator(".walk-artboard")).toBeVisible();
+  await close();
   await expect(page.locator(".shop-editor")).toBeVisible();
   await check(
     "empty saved store explains how to open it instead of opening a different shop",
@@ -121,7 +123,7 @@ try {
       await expect(missing).toContainText("まだ棚に本がないので");
       await expect(
         missing.getByRole("link", { name: "自分の書店を整える" }),
-      ).toHaveAttribute("href", "/my-shop/");
+      ).toHaveAttribute("href", "/my-shop/?tidy=1");
       await missing.getByRole("button", { name: "閉じる" }).click();
       await expect(missing).toHaveCount(0);
       await page.goto(base + "/my-shop/");

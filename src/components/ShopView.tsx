@@ -165,7 +165,7 @@ export function ShopView({
             </Link>
           )}
           {shop.ownerId === "me" ? (
-            <Link href={myShopPath()} className="btn">
+            <Link href={myShopPath({ tidy: true })} className="btn">
               <Icon name="edit" size={15} />
               書店を整える
             </Link>

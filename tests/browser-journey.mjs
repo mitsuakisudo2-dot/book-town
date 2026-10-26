@@ -319,7 +319,12 @@ try {
       await page
         .getByRole("button", { name: "書店をひらく", exact: true })
         .click();
-      await page.getByRole("button", { name: "棚を整える" }).click();
+      await page.getByRole("button", { name: "店を整える" }).click();
+      await page
+        .locator(".tidy")
+        .getByRole("button", { name: "閉じる" })
+        .first()
+        .click();
       await expect(page.locator(".editor-shelf-panel")).toHaveCount(1);
       // An empty shelf tells its room, not a count of nothing.
       await expect(page.locator(".editor-space-row")).toHaveText(
@@ -346,9 +351,7 @@ try {
       await shelf
         .getByRole("textbox", { name: "棚の名前", exact: true })
         .press("Enter");
-      await page
-        .getByRole("button", { name: "棚を追加", exact: true })
-        .click();
+      await page.getByRole("button", { name: "棚を追加", exact: true }).click();
       await page
         .getByRole("dialog")
         .getByRole("textbox", { name: "棚の名前", exact: true })
@@ -761,9 +764,7 @@ try {
       const title = await addFirstBook(page, gone);
       await gone.locator(".shelf-book-button").first().click();
       await gone.getByRole("button", { name: "この本を棚から外す" }).click();
-      await gone
-        .getByRole("button", { name: "棚を編集", exact: true })
-        .click();
+      await gone.getByRole("button", { name: "棚を編集", exact: true }).click();
       const picker = page.getByRole("dialog", { name: "棚を編集" });
       await expect(
         picker.locator(".editor-book-choice").filter({ hasText: title }),
@@ -1286,9 +1287,7 @@ try {
       const newShelf = phone.getByRole("dialog", {
         name: "新しい棚をつくる",
       });
-      await phone
-        .getByRole("button", { name: "棚を追加", exact: true })
-        .tap();
+      await phone.getByRole("button", { name: "棚を追加", exact: true }).tap();
       await expectNoKeyboard(phone, "new shelf", newShelf);
       await expectTapWrites(
         newShelf.getByRole("textbox", { name: "棚の名前" }),

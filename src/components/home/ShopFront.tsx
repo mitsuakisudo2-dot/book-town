@@ -18,7 +18,7 @@ import { bookById, quotedTitle } from "../../lib/book-name";
 import type { Shared } from "./Letters";
 import "../street.css";
 import { reducedMotion } from "../../lib/motion";
-import { counted } from "../../lib/words";
+import { counted, SHOP_TIDY } from "../../lib/words";
 
 /** A book picked off a shelf, to be held in the hand (BookInHand). */
 export type Picked = { shop: Shop; shelf: Shelf; item: ShelfItem };
@@ -116,9 +116,9 @@ export function ShopFront({
             </Link>
           )}
           {shop.ownerId === ME_ID ? (
-            <Link href={myShopPath()} className="street-follow">
+            <Link href={myShopPath({ tidy: true })} className="street-follow">
               <Icon name="edit" size={14} />
-              棚を整える
+              {SHOP_TIDY}
             </Link>
           ) : (
             <button
