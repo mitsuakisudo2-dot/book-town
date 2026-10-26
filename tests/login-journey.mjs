@@ -61,6 +61,9 @@ const session = () => {
 };
 
 let profile = null;
+// The terms the reader is still to agree to (管理表44), and what was kept.
+let termsToAgree = "2026-10-26";
+const consents = [];
 /** What was written to reader_settings, in order. */
 const settingsWritten = [];
 // How long the stand-in takes to read the signed-in person's own profile.
@@ -546,6 +549,16 @@ const standIn = async (route) => {
         ? json(200, profile)
         : route.fulfill({ status: 204, body: "" });
     }
+  }
+  if (url.pathname === "/rest/v1/rpc/terms_to_agree")
+    return json(200, termsToAgree);
+  if (
+    url.pathname === "/rest/v1/terms_consents" &&
+    request.method() === "POST"
+  ) {
+    consents.push(body);
+    termsToAgree = null;
+    return route.fulfill({ status: 201, body: "" });
   }
   // The reader's own settings, as 「自分の記録だけで使う」 writes them.
   if (
@@ -1461,6 +1474,11 @@ try {
       )
       .toBeNull();
     await shot("3-welcome");
+    // The box that agrees to the terms fits a narrow phone (管理表44).
+    await page.setViewportSize({ width: 320, height: 640 });
+    await noOverflow("first profile 320");
+    await shot("3-welcome-320");
+    await page.setViewportSize({ width: 390, height: 844 });
   });
 
   await check(
@@ -1524,7 +1542,9 @@ try {
       await expectNoKeyboard(page, "name left empty");
       await page.getByLabel("ユーザー名").fill("アキ");
       await page.getByLabel("ユーザーID").fill("booktown");
-      await page.getByLabel("13歳以上です").check();
+      await page
+        .getByLabel("13歳以上で、利用規約とプライバシーに同意します")
+        .check();
       await page.getByRole("button", { name: "はじめる" }).click();
       await expect(page.locator("#account-error")).toContainText(
         "このIDは使えません",
@@ -1535,7 +1555,9 @@ try {
         "ほかの読書家が使っています",
       );
       await page.getByLabel("ユーザーID").fill("aki_books");
-      await page.getByLabel("13歳以上です").uncheck();
+      await page
+        .getByLabel("13歳以上で、利用規約とプライバシーに同意します")
+        .uncheck();
       await page.getByRole("button", { name: "はじめる" }).click();
       await expect(page.locator("#account-error")).toContainText("13歳以上");
       expect(inserted.map((row) => row.handle)).toEqual(["taken"]);
@@ -1543,7 +1565,9 @@ try {
   );
 
   await check("the profile is created as the signed-in person", async () => {
-    await page.getByLabel("13歳以上です").check();
+    await page
+      .getByLabel("13歳以上で、利用規約とプライバシーに同意します")
+      .check();
     // Records start private: 自分だけ comes first, chosen; each one can be
     // published, and is told when it is.
     const choices = page.getByRole("radio");
@@ -1572,6 +1596,10 @@ try {
       name: "アキ",
       reading_visibility: "private",
     });
+    // The box ticked was the consent to the terms now published (管理表44).
+    expect(consents).toEqual([
+      { user_id: user.id, version: "2026-10-26", thirteen_or_older: true },
+    ]);
     await shot("4-signed-in");
   });
 
@@ -1701,6 +1729,51 @@ try {
     await shot("7-empty-shelf");
     town = null;
   });
+
+  await check(
+    "a reader from before the terms is asked once over the town, and not again once agreed (管理表44)",
+    async () => {
+      termsToAgree = "2026-10-26";
+      await page.goto(base + "/");
+      const ask = page.getByRole("dialog", { name: "利用規約とプライバシー" });
+      await expect(ask).toBeVisible();
+      const agree = ask.getByRole("button", { name: "同意する" });
+      await expect(agree).toBeDisabled();
+      await expect(ask.getByRole("link", { name: "利用規約" })).toHaveAttribute(
+        "href",
+        "/terms/",
+      );
+      await expect(
+        ask.getByRole("link", { name: "プライバシー" }),
+      ).toHaveAttribute("href", "/privacy/");
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 700 });
+        await noOverflow(`terms ask ${width}`);
+        await page.screenshot({
+          path: path.join(output, `44-terms-ask-${width}.png`),
+        });
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+      // Closed, it asks again the next time the town opens.
+      await ask.getByRole("button", { name: "閉じる" }).click();
+      await expect(ask).toBeHidden();
+      await page.reload();
+      await expect(ask).toBeVisible();
+      await ask
+        .getByLabel("13歳以上で、利用規約とプライバシーに同意します")
+        .check();
+      await agree.click();
+      await expect(ask).toBeHidden();
+      expect(consents.at(-1)).toEqual({
+        user_id: user.id,
+        version: "2026-10-26",
+        thirteen_or_older: true,
+      });
+      await page.reload();
+      await expect(page.locator(".town-topbar")).toBeVisible();
+      await expect(ask).toHaveCount(0);
+    },
+  );
 
   await check(
     "what a visitor wrote on a finished book waits for them once signed in",
@@ -2436,11 +2509,13 @@ try {
         const request = route.request();
         const url = new URL(request.url());
         // Asking whether the reader is staff (注釈モード), which of their
-        // books are held back, or a book's series, writes nothing.
+        // books are held back, a book's series, or the terms still to agree
+        // to, writes nothing.
         if (
           url.pathname === "/rest/v1/rpc/can_annotate" ||
           url.pathname === "/rest/v1/rpc/book_holds" ||
-          url.pathname === "/rest/v1/rpc/series_for_isbn"
+          url.pathname === "/rest/v1/rpc/series_for_isbn" ||
+          url.pathname === "/rest/v1/rpc/terms_to_agree"
         )
           return route.fallback();
         // Which books the reader typed in (my_books), the town itself
@@ -2529,11 +2604,13 @@ try {
         const request = route.request();
         const url = new URL(request.url());
         // Asking whether the reader is staff (注釈モード), which of their
-        // books are held back, or a book's series, writes nothing.
+        // books are held back, a book's series, or the terms still to agree
+        // to, writes nothing.
         if (
           url.pathname === "/rest/v1/rpc/can_annotate" ||
           url.pathname === "/rest/v1/rpc/book_holds" ||
-          url.pathname === "/rest/v1/rpc/series_for_isbn"
+          url.pathname === "/rest/v1/rpc/series_for_isbn" ||
+          url.pathname === "/rest/v1/rpc/terms_to_agree"
         )
           return route.fallback();
         // Which books the reader typed in (my_books), the town itself
@@ -8267,7 +8344,9 @@ try {
           page.getByRole("heading", { name: "どちらで使いますか？" }),
         ).toBeFocused();
         await door.click();
-        await page.getByLabel("13歳以上です").check();
+        await page
+          .getByLabel("13歳以上で、利用規約とプライバシーに同意します")
+          .check();
         await start.click();
         await expect(
           page.getByRole("heading", { name: "ログインしています" }),

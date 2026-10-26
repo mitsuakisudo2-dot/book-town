@@ -48,6 +48,7 @@ import { enterPressed } from "../lib/keys";
 import { AccountInvite, VisitorPage } from "./VisitorInvite";
 import { ReportDialog } from "./Report";
 import { SiteNotesGate } from "./SiteNotesGate";
+import { TermsGate } from "./TermsGate";
 import { accountRequested, closeAccountRequest } from "../lib/visitor";
 import {
   answerName,
@@ -767,6 +768,7 @@ export default function TownApp({
       {askingName && <NameSheet {...shared} />}
       <ReportDialog />
       <SiteNotesGate notify={notify} />
+      <TermsGate />
     </div>
   );
 }

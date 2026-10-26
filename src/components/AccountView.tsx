@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   CODE_LENGTH,
-  MINIMUM_AGE,
   NAME_MAX_LENGTH,
   type Passkey,
   failureMessages,
@@ -47,7 +46,7 @@ import {
 import { Icon } from "./ui";
 import { KeptDraftNote } from "./KeptDraftNote";
 import { useHumanCheck } from "./HumanCheck";
-import { LegalLinks } from "./LegalLinks";
+import { AgreeToTerms, LegalLinks } from "./LegalLinks";
 import "./profile.css";
 import "./reading.css";
 import "./account.css";
@@ -394,15 +393,11 @@ function FirstProfile({ userId }: { userId: string }) {
   }
 
   const age = (
-    <label className="account-check">
-      <input
-        ref={ageField}
-        type="checkbox"
-        checked={ageConfirmed}
-        onChange={(event) => setAgeConfirmed(event.target.checked)}
-      />
-      {MINIMUM_AGE}歳以上です
-    </label>
+    <AgreeToTerms
+      inputRef={ageField}
+      checked={ageConfirmed}
+      onChange={setAgeConfirmed}
+    />
   );
 
   if (way === "ask")

@@ -281,5 +281,17 @@ export function supabaseAccountBackend(
         .upsert({ user_id: userId, mode: "manage" });
       return error ? "network" : null;
     },
+    async termsToAgree() {
+      const { data, error } = await client.rpc("terms_to_agree");
+      if (error) throw error;
+      return data ?? null;
+    },
+    async agreeToTerms(userId, version) {
+      // Agreed already (another tab, a lost answer): the same consent is kept.
+      const { error } = await client
+        .from("terms_consents")
+        .insert({ user_id: userId, version, thirteen_or_older: true });
+      return error && error.code !== "23505" ? "network" : null;
+    },
   };
 }
