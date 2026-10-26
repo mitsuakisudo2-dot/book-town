@@ -327,6 +327,67 @@ async function main() {
     },
   );
 
+  // A reader keeps one book of their own for an ISBN (AUD-010,
+  // supabase/migrations/*_own_isbn_once.sql), so a book taken back here
+  // and forgotten leaves its ISBN free to be registered again.
+  await check(
+    "a reader's second book of one ISBN is refused, another reader's, the catalog's and books without one are not, and a forgotten one frees its ISBN",
+    async () => {
+      const typed = (who: string, id: string, isbn: string | null) =>
+        as(
+          who,
+          "insert into books (id, isbn, title, author, created_by) values ($1, $2, '同じ本', '試験 花子', $3)",
+          [id, isbn, who],
+        );
+      const X = numbered(50);
+      await typed(AKI, book(50), X);
+      // Sent again under the same id (an answer lost), it is the same book.
+      await as(
+        AKI,
+        `insert into books (id, isbn, title, author, created_by)
+         values ($1, $2, '同じ本', '試験 花子', $3) on conflict (id) do nothing`,
+        [book(50), X, AKI],
+      );
+      // From another page under another id: refused, nothing added.
+      await refused(
+        () => typed(AKI, book(51), X),
+        /books_own_isbn/,
+        "a second book of an ISBN the reader has",
+      );
+      assert.equal(await left(51), 0);
+      // Nor may another of hers be moved to it.
+      await typed(AKI, book(52), numbered(52));
+      await refused(
+        () =>
+          as(AKI, "update books set isbn = $2 where id = $1", [book(52), X]),
+        /books_own_isbn/,
+        "an ISBN fixed to one the reader has",
+      );
+      // Another reader, the catalog, and books without an ISBN are free.
+      await typed(BEN, book(53), X);
+      await rows(
+        "insert into books (id, isbn, title, author, source, created_by) values ($1, $2, '同じ本', '', 'ndl', null)",
+        [book(54), X],
+      );
+      await typed(AKI, book(55), null);
+      await typed(AKI, book(56), null);
+      assert.equal(
+        await count("select count(*) from books where isbn = $1", [X]),
+        3,
+      );
+      // Taken back in a scan and forgotten, its ISBN may come in again.
+      await takenBack(db, 57);
+      await refused(
+        () => typed(AKI, book(58), numbered(57)),
+        /books_own_isbn/,
+        "an ISBN still held by a book taken back",
+      );
+      assert.deepEqual(await forget(AKI, [book(57)]), [book(57)]);
+      await typed(AKI, book(58), numbered(57));
+      assert.equal(await left(58), 1);
+    },
+  );
+
   await check("the helper is no one's to call through the API", async () => {
     await refused(
       () =>
