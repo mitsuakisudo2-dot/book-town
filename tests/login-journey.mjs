@@ -1556,10 +1556,9 @@ try {
       "公開したときは、毎回お知らせします。",
     );
     await page.getByRole("button", { name: "はじめる" }).click();
-    await expect(
-      page.getByRole("heading", { name: "ログインしています" }),
-    ).toBeVisible();
-    await expect(page.getByText("アキ（@aki_books）さん")).toBeVisible();
+    // Begun, the reader is home at once.
+    await expect(page.locator(".town-topbar")).toBeVisible();
+    await expect(page).toHaveURL(base + "/");
     // Kept until now through reloads, the typed profile is not kept after.
     expect(
       await page.evaluate(() =>
@@ -1576,7 +1575,6 @@ try {
   });
 
   await check("the town is read from the account, not the demo", async () => {
-    await page.getByRole("link", { name: "本の街へ" }).click();
     await expect(page.locator(".town-topbar")).toBeVisible();
     await expect(page.getByRole("link", { name: "ログイン" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /本の街/ })).toBeVisible();
@@ -8269,11 +8267,9 @@ try {
         await door.click();
         await page.getByLabel("13歳以上です").check();
         await start.click();
+        // Begun, the reader is home at once: the reading room, the town rests.
         await expect(
-          page.getByRole("heading", { name: "ログインしています" }),
-        ).toBeVisible();
-        await expect(
-          page.getByText("人とつながらず、自分の記録だけで使っています。"),
+          page.getByRole("heading", { name: "今日は、どの本と過ごしますか" }),
         ).toBeVisible();
         expect(inserted.at(-1)).toEqual({
           id: user.id,
@@ -8286,11 +8282,6 @@ try {
           user_id: user.id,
           mode: "manage",
         });
-        // Home is the reading room; the town rests.
-        await page.getByRole("link", { name: "本の街へ" }).click();
-        await expect(
-          page.getByRole("heading", { name: "今日は、どの本と過ごしますか" }),
-        ).toBeVisible();
         // Both ways in are said, and nothing up top invites into the town.
         await expect(page.locator(".manage-register")).toContainText(
           "バーコードか、書名で",
