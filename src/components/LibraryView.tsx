@@ -53,6 +53,7 @@ import {
 } from "../lib/library-changes";
 import { CHOICE_NAMES, type Audience } from "../lib/visibility";
 import { walkPath } from "../lib/paths";
+import { inManageMode } from "../lib/town-mode";
 import "./library.css";
 import dynamic from "next/dynamic";
 
@@ -614,9 +615,11 @@ export function LibraryView({
             >
               <Icon name="plus" /> 本を登録
             </button>
-            <Link className="btn" href={walkPath()}>
-              書店めぐりに出かける
-            </Link>
+            {!inManageMode(state) && (
+              <Link className="btn" href={walkPath()}>
+                書店めぐりに出かける
+              </Link>
+            )}
           </div>
         </section>
       </div>

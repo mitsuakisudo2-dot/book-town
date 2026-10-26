@@ -2379,6 +2379,36 @@ async function main() {
     assert.deepEqual(empty.myReports, []);
   });
 
+  await check(
+    "読書管理モード is read and written as the reader's setting alone",
+    () => {
+      assert.equal(townFromRows(rows(), ids).settings.mode, "normal");
+      assert.equal(
+        townFromRows(rows({ readerSettings: { mode: "manage" } }), ids).settings
+          .mode,
+        "manage",
+      );
+      assert.equal(
+        townFromRows(rows({ readerSettings: { mode: "x" } }), ids).settings
+          .mode,
+        "normal",
+      );
+      assert.equal(emptyTown().settings.mode, "normal");
+      const before = townFromRows(rows(), ids);
+      const manage: TownState = {
+        ...before,
+        settings: { ...before.settings, mode: "manage" },
+      };
+      // Only the one column: nothing else of the reader's is touched.
+      assert.deepEqual(planWrites(before, manage, ids), [
+        { kind: "reader-settings", row: { user_id: AKI, mode: "manage" } },
+      ]);
+      assert.deepEqual(planWrites(manage, before, ids), [
+        { kind: "reader-settings", row: { user_id: AKI, mode: "normal" } },
+      ]);
+    },
+  );
+
   await check("the spoiler setting is written only when it changes", () => {
     const before = townFromRows(rows(), ids);
     const next: TownState = {

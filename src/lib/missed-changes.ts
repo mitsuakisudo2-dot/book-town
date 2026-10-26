@@ -220,18 +220,23 @@ export function townMissedLine(
   const wordsKept = owner !== null && keepMissedWords(owner, missed.refused);
   const withShelves = (kept: boolean) =>
     kept ? new Set([...KEPT_TOWN, "shelves"]) : KEPT_TOWN;
-  return missedLine(
-    missed.refused.flatMap(townWriteLabels),
-    missed.elsewhere.flatMap(townWriteLabels),
-    wordsKept ||
+  return withWhy(
+    missed,
+    missedLine(
+      missed.refused.flatMap(townWriteLabels),
+      missed.elsewhere.flatMap(townWriteLabels),
+      wordsKept ||
+        allKept(
+          missed.refused,
+          withShelves(
+            owner !== null && shelvesStillKept(owner, missed.refused),
+          ),
+        ),
       allKept(
-        missed.refused,
-        withShelves(owner !== null && shelvesStillKept(owner, missed.refused)),
-      ),
-    allKept(
-      missed.elsewhere,
-      withShelves(
-        owner !== null && keepShelvesNotSent(owner, missed.elsewhere),
+        missed.elsewhere,
+        withShelves(
+          owner !== null && keepShelvesNotSent(owner, missed.elsewhere),
+        ),
       ),
     ),
   );
@@ -239,9 +244,23 @@ export function townMissedLine(
 
 /** What the walk tells of a batch it missed. */
 export const walkMissedLine = (missed: Missed<WalkWrite>) =>
-  missedLine(
-    missed.refused.flatMap(walkWriteLabels),
-    missed.elsewhere.flatMap(walkWriteLabels),
-    allKept(missed.refused, KEPT_WALK),
-    allKept(missed.elsewhere, KEPT_WALK),
+  withWhy(
+    missed,
+    missedLine(
+      missed.refused.flatMap(walkWriteLabels),
+      missed.elsewhere.flatMap(walkWriteLabels),
+      allKept(missed.refused, KEPT_WALK),
+      allKept(missed.elsewhere, KEPT_WALK),
+    ),
   );
+
+/**
+ * The line, with why when the database said: what reaches people was
+ * turned away for 読書管理モード, switched to on another device or tab
+ * (docs/機能/読書管理モード.md 「人に届く操作を断る」).
+ */
+export const READING_MODE_HINT = "booktown:reading_mode";
+function withWhy<W>(missed: Missed<W>, line: string | null): string | null {
+  if (!line || !missed.hints?.includes(READING_MODE_HINT)) return line;
+  return line + "読書管理モードに切り替わっています。";
+}

@@ -4,7 +4,7 @@ import type { PersistenceStatus } from "../types";
 /** What a Supabase request hands back, as far as saving needs to know. */
 export interface Outcome<T> {
   data: T | null;
-  error: { message: string; code?: string } | null;
+  error: { message: string; code?: string; hint?: string } | null;
   status: number;
   count?: number | null;
 }
@@ -16,6 +16,8 @@ export class TownSyncError extends Error {
     readonly retry: boolean,
     /** The database's code for it (PGRST202, 23514…), when it gave one. */
     readonly code = "",
+    /** Its hint, when it gave one (booktown:reading_mode…). */
+    readonly hint = "",
   ) {
     super(message);
   }
@@ -63,6 +65,7 @@ export async function settled<T>(
       outcome.error.message,
       shouldRetry(outcome.status, outcome.error.code),
       outcome.error.code,
+      outcome.error.hint,
     );
   return outcome;
 }
@@ -226,6 +229,12 @@ export interface Missed<W> {
   refused: W[];
   /** Kept on the device, but changed on another device since: not sent. */
   elsewhere: W[];
+  /**
+   * Why the database turned them away, when it said (the hints it gave,
+   * each once): booktown:reading_mode, for one, says the reader is in
+   * 読書管理モード now, switched to on another device or tab.
+   */
+  hints?: string[];
 }
 
 export const missedNothing = <W>(missed: Missed<W>) =>
@@ -453,7 +462,11 @@ export function backgroundSync<T, W>(
           error.code === CHANGED_ELSEWHERE
         )
           into.elsewhere.push(write);
-        else into.refused.push(write);
+        else {
+          into.refused.push(write);
+          if (error instanceof TownSyncError && error.hint)
+            into.hints = [...new Set([...(into.hints ?? []), error.hint])];
+        }
       }
     }
     for (const kept of writes) {
@@ -502,6 +515,8 @@ export function backgroundSync<T, W>(
       if (closed) return;
       missed.refused.push(...into.refused);
       missed.elsewhere.push(...into.elsewhere);
+      if (into.hints)
+        missed.hints = [...new Set([...(missed.hints ?? []), ...into.hints])];
       left = left.slice(1);
       stale = true;
       // What was turned away is kept here before it is let go there.
@@ -574,6 +589,10 @@ export function backgroundSync<T, W>(
         if (into.refused.length || into.elsewhere.length) {
           missed.refused.push(...into.refused);
           missed.elsewhere.push(...into.elsewhere);
+          if (into.hints)
+            missed.hints = [
+              ...new Set([...(missed.hints ?? []), ...into.hints]),
+            ];
           stale = true;
         }
         keep();

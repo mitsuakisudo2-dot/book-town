@@ -1529,6 +1529,7 @@ export function createInitialState(): TownState {
       visibility: cleanVisibilities(null),
       shelfAudiences: {},
       spoilerDisplay: "fold_possible",
+      mode: "normal",
     },
     seenNotifications: [],
     shopMessages: [],

@@ -73,6 +73,7 @@ import {
   WHILE_OFFLINE,
   NAMES,
 } from "../lib/words";
+import { inManageMode } from "../lib/town-mode";
 import { townOffline } from "../lib/store";
 import { booksOfWork } from "../lib/works";
 
@@ -149,6 +150,8 @@ export function ReadingView(props: Shared) {
   // sitting's end, asked for in the same tap, is rendered with it.
   const openReview = (read?: Book, line?: string) =>
     flushSync(() => setReview({ book: read, line }));
+  // 読書管理モード: reading alone, nothing written for others (town-mode.ts).
+  const manage = inManageMode(props.state);
   return (
     <>
       {active ? (
@@ -166,11 +169,14 @@ export function ReadingView(props: Shared) {
           {closed && (
             <ClosedCard
               closed={closed}
-              onReview={() =>
-                flushSync(() => {
-                  setReview({ book: closed.book });
-                  setClosed(null);
-                })
+              onReview={
+                manage
+                  ? null
+                  : () =>
+                      flushSync(() => {
+                        setReview({ book: closed.book });
+                        setClosed(null);
+                      })
               }
               onDismiss={() => setClosed(null)}
             />
@@ -356,7 +362,8 @@ function ClosedCard({
   onDismiss,
 }: {
   closed: Closed;
-  onReview: () => void;
+  /** Null in 読書管理モード: a 感想 is written for others. */
+  onReview: (() => void) | null;
   onDismiss: () => void;
 }) {
   return (
@@ -381,10 +388,12 @@ function ClosedCard({
           <blockquote className="reading-closed-memo">{closed.memo}</blockquote>
         )}
         <div className="reading-closed-actions">
-          <button type="button" className="btn" onClick={onReview}>
-            <Icon name="pen" size={15} />
-            感想を書く
-          </button>
+          {onReview && (
+            <button type="button" className="btn" onClick={onReview}>
+              <Icon name="pen" size={15} />
+              感想を書く
+            </button>
+          )}
           <button type="button" className="text-btn" onClick={onDismiss}>
             閉じる
           </button>
@@ -487,18 +496,20 @@ function UnsentLines({
                 : "本を選ばずに読みながら"}
             </small>
             <div className="reading-unsent-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  // It starts the review, unless one is already being written.
-                  carryLine(owner, sessionId, book);
-                  onReview(book, sessionId);
-                }}
-              >
-                <Icon name="pen" size={15} />
-                感想に使う
-              </button>
+              {!inManageMode(state) && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    // It starts the review, unless one is already being written.
+                    carryLine(owner, sessionId, book);
+                    onReview(book, sessionId);
+                  }}
+                >
+                  <Icon name="pen" size={15} />
+                  感想に使う
+                </button>
+              )}
               <DiscardDraft
                 wordsLost
                 onDiscard={() =>
@@ -542,6 +553,7 @@ function StartReading({
     phrase: string;
   } | null>(null);
   const chosen = bookId ? bookById(state.books, bookId) : undefined;
+  const manage = inManageMode(state);
   function start(mode: ReadingMode) {
     setConfirm(null);
     if (!actions.startReading(bookId, mode)) return;
@@ -557,7 +569,9 @@ function StartReading({
       <span className="eyebrow">OPEN A BOOK</span>
       <h1 className="page-title">読書を開始</h1>
       <p className="page-subtitle">
-        読み方を選ぶと、読書時間の記録が始まります。本は選ばなくても始められます。
+        {manage
+          ? "「一人で読む」を押すと、読書時間の記録が始まります。本は選ばなくても始められます。"
+          : "読み方を選ぶと、読書時間の記録が始まります。本は選ばなくても始められます。"}
       </p>
       <section className="reading-start" aria-label="これから読む本">
         <h2>
@@ -590,24 +604,28 @@ function StartReading({
               読んでいることは誰にも見えません。メモは自分だけのものです。
             </small>
           </button>
-          <button
-            type="button"
-            className="reading-mode"
-            onClick={() =>
-              setConfirm({ mode: "together", phrase: pick(START_PHRASES) })
-            }
-          >
-            <Icon name="users" size={20} />
-            <b>みんなで読む</b>
-            <small>
-              同じ時間に読んでいる人に、あなたが読書中だと見えます。
-              {NAMES.letter}はタイムラインにも流れます。
-            </small>
-          </button>
+          {!manage && (
+            <button
+              type="button"
+              className="reading-mode"
+              onClick={() =>
+                setConfirm({ mode: "together", phrase: pick(START_PHRASES) })
+              }
+            >
+              <Icon name="users" size={20} />
+              <b>みんなで読む</b>
+              <small>
+                同じ時間に読んでいる人に、あなたが読書中だと見えます。
+                {NAMES.letter}はタイムラインにも流れます。
+              </small>
+            </button>
+          )}
         </div>
       </section>
-      <ReadersNow state={state} clock={clock} />
-      <ReadingFeed state={state} actions={actions} notify={notify} />
+      {!manage && <ReadersNow state={state} clock={clock} />}
+      {!manage && (
+        <ReadingFeed state={state} actions={actions} notify={notify} />
+      )}
       <section className="reading-log" aria-labelledby="reading-log-title">
         <h2 id="reading-log-title">読書の記録</h2>
         {sessions.length > 0 && (
@@ -917,38 +935,40 @@ function ReadingRoom({
         </section>
       )}
       {together && <ReadersNow state={state} clock={clock} bookId={book?.id} />}
-      <details className="reading-peek" open={peekOpen}>
-        <summary>
-          <Icon name="chevron" size={14} />
-          ひと休みに、
-          {together ? `みんなの${NAMES.letter}` : "街の読書"}
-          をのぞく
-        </summary>
-        <label className="reading-peek-keep">
-          <input
-            type="checkbox"
-            checked={peekOpen}
-            onChange={(event) => {
-              setReadingPeekOpen(event.target.checked);
-              notify(
-                event.target.checked
-                  ? "読書中も、街の言葉を開いておきます"
-                  : "読書中は、街の言葉をたたんでおきます",
-              );
-            }}
+      {!inManageMode(state) && (
+        <details className="reading-peek" open={peekOpen}>
+          <summary>
+            <Icon name="chevron" size={14} />
+            ひと休みに、
+            {together ? `みんなの${NAMES.letter}` : "街の読書"}
+            をのぞく
+          </summary>
+          <label className="reading-peek-keep">
+            <input
+              type="checkbox"
+              checked={peekOpen}
+              onChange={(event) => {
+                setReadingPeekOpen(event.target.checked);
+                notify(
+                  event.target.checked
+                    ? "読書中も、街の言葉を開いておきます"
+                    : "読書中は、街の言葉をたたんでおきます",
+                );
+              }}
+            />
+            読書中はいつも開いておく
+          </label>
+          {!together && (
+            <ReadersNow state={state} clock={clock} bookId={book?.id} />
+          )}
+          <ReadingFeed
+            state={state}
+            actions={actions}
+            notify={notify}
+            excludeMine
           />
-          読書中はいつも開いておく
-        </label>
-        {!together && (
-          <ReadersNow state={state} clock={clock} bookId={book?.id} />
-        )}
-        <ReadingFeed
-          state={state}
-          actions={actions}
-          notify={notify}
-          excludeMine
-        />
-      </details>
+        </details>
+      )}
       {ending && (
         <Modal
           title={ending.finished ? "読み終えましたか？" : "読書を終えますか？"}
@@ -991,19 +1011,21 @@ function ReadingRoom({
               >
                 もう少し読む
               </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  actions.endReading(ending.finished);
-                  // The line not sent starts the review, when that is empty.
-                  if (owner !== null) carryLine(owner, session.id, book);
-                  onReview(book, session.id);
-                }}
-              >
-                <Icon name="pen" size={15} />
-                感想を書く
-              </button>
+              {!inManageMode(state) && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    actions.endReading(ending.finished);
+                    // The line not sent starts the review, when that is empty.
+                    if (owner !== null) carryLine(owner, session.id, book);
+                    onReview(book, session.id);
+                  }}
+                >
+                  <Icon name="pen" size={15} />
+                  感想を書く
+                </button>
+              )}
               <button
                 type="button"
                 className="btn fill"

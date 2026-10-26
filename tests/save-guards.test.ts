@@ -334,6 +334,39 @@ async function main() {
   );
 
   await check(
+    "turned away for 読書管理モード switched to elsewhere, the line says so",
+    async () => {
+      const db = fakeSupabase(AKI, seed());
+      const store = await townOf(db);
+      // Another tab went into 読書管理モード: what reaches people is
+      // refused, with the database's hint; the rest is saved.
+      db.refuse = (write) =>
+        write.table === "shop_follows"
+          ? {
+              status: 403,
+              code: "42501",
+              message: "new row violates row-level security policy",
+              hint: "booktown:reading_mode",
+            }
+          : null;
+      store.actions.toggleFollow(BEN_SHOP);
+      store.actions.recordReading({
+        bookId: BOOK,
+        feelings: ["quiet"],
+        note: "",
+        spoiler: false,
+        audience: "private",
+      });
+      assert.equal(await settled(store), "recovered");
+      assert.equal(db.tables.reading_entries?.length, 1);
+      assert.equal(
+        store.getMissedSnapshot()?.line,
+        "フォローを保存できませんでした。読書管理モードに切り替わっています。",
+      );
+    },
+  );
+
+  await check(
     "a whole thing changed on the device is not sent over a newer save",
     async () => {
       const db = fakeSupabase(AKI, seed());

@@ -43,6 +43,7 @@ import { shownToOthers, type Audience } from "../lib/visibility";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import { townOffline, useTownMore } from "../lib/store";
 import { failure, offlineFor } from "../lib/words";
+import { inManageMode } from "../lib/town-mode";
 import "./records.css";
 
 type Shared = {
@@ -157,7 +158,11 @@ export function RecordSheet({
         feelings: [],
         note: "",
         spoiler: false,
-        audience: state.settings.visibility.records.audience,
+        // In 読書管理モード a new record is the reader's alone (the
+        // database starts it so whatever is sent).
+        audience: inManageMode(state)
+          ? "private"
+          : state.settings.visibility.records.audience,
       };
   // Only the changes are kept, over the record as it is now.
   const work: RecordWork = { ...base, ...draft };
@@ -280,13 +285,16 @@ export function RecordSheet({
             ? "公開します（同じ本を読んだ人に届きます）"
             : "自分だけに残します"}
         </span>
-        <button
-          type="button"
-          className="text-btn"
-          onClick={() => change({ audience: flipped(audience) })}
-        >
-          {isPublic ? "自分だけにする" : "公開にする"}
-        </button>
+        {/* Never widened in 読書管理モード; one shown can be narrowed. */}
+        {(isPublic || !inManageMode(state)) && (
+          <button
+            type="button"
+            className="text-btn"
+            onClick={() => change({ audience: flipped(audience) })}
+          >
+            {isPublic ? "自分だけにする" : "公開にする"}
+          </button>
+        )}
       </p>
       <KeptDraftNote
         continuing={continuing && draft !== null}
@@ -348,19 +356,26 @@ export function BookFeelings({
   book,
 }: Shared & { book: Book }) {
   const [open, setOpen] = useState(false);
+  // 読書管理モード: the reader's own record only; others' are not read.
+  const manage = inManageMode(state);
   // The records of the book's work, read when its page opens (AUD-006): the
   // town holds only a window of others'.
-  const { state: shown } = useTownMore(state, { work: book.id });
-  const words = bookFeelings(shown, book.id);
-  const talkers = talkersOf(shown, book.id);
+  const { state: shown } = useTownMore(
+    state,
+    manage ? null : { work: book.id },
+  );
+  const words = manage ? [] : bookFeelings(shown, book.id);
+  const talkers = manage ? [] : talkersOf(shown, book.id);
   const own = ownRecordFor(state, book.id);
   // Feelings chosen and left for later are picked up where they were.
   const keptNew = useRecordWorkKept({ bookId: book.id });
   return (
     <section className="book-feelings" aria-labelledby="book-feelings-title">
       <span className="eyebrow">AFTER THE LAST PAGE</span>
-      <h2 id="book-feelings-title">読み終えた人の気持ち</h2>
-      {words.length ? (
+      <h2 id="book-feelings-title">
+        {manage ? "読み終えた気持ち" : "読み終えた人の気持ち"}
+      </h2>
+      {manage ? null : words.length ? (
         <p className="book-feelings-words">
           {words.map((feeling) => (
             <span key={feeling}>{FEELING_WORDS[feeling]}</span>
@@ -408,7 +423,10 @@ export function BookFeelings({
             >
               見直す
             </button>
-            <PublishButton actions={actions} notify={notify} record={own} />
+            {/* In 読書管理モード a record is never widened; one shown can still be narrowed. */}
+            {(!manage || shownToOthers(own.audience)) && (
+              <PublishButton actions={actions} notify={notify} record={own} />
+            )}
           </span>
         </div>
       ) : (

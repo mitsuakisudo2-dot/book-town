@@ -7,6 +7,7 @@ import {
   type RepositorySnapshot,
 } from "../src/lib/repository";
 import { createTownStore } from "../src/lib/store";
+import { ownNotice } from "../src/lib/town-mode";
 import { bookById } from "../src/lib/book-name";
 import { bookFixOf } from "../src/lib/book-fix-draft";
 import { bookWords } from "../src/lib/library-journal";
@@ -91,6 +92,7 @@ import {
   type Liker,
   type Post,
   type SpoilerDisplay,
+  type TownMode,
   type TownState,
 } from "../src/lib/types";
 
@@ -2552,6 +2554,53 @@ check("folded and left-out posts are not quoted in notices", () => {
   assert.equal(find(reported, "follow:x-folded"), undefined);
 });
 
+check(
+  "読書管理モード: only the setting changes, and only own notices show",
+  () => {
+    const repo = createMemoryRepository();
+    const town = createTownStore(repo);
+    town.actions.toggleFollow("shop-orbit");
+    const before = town.getSnapshot();
+    assert.equal(before.settings.mode, "normal");
+    const others = notificationsFor(before).filter(
+      (notice) => !ownNotice(notice.id),
+    );
+    assert.ok(others.length > 0, "the seed town tells of others");
+    town.actions.setTownMode("manage");
+    town.actions.setTownMode("elsewhere" as TownMode);
+    const after = town.getSnapshot();
+    assert.equal(after.settings.mode, "manage");
+    // Nothing but the setting: the books, shelves, records and choices stay.
+    assert.deepEqual(
+      { ...after, settings: { ...after.settings, mode: "normal" } },
+      before,
+    );
+    assert.equal(repo.load().state.settings.mode, "manage");
+    // Others' notices wait, unseen, for the town; the reader's own still come.
+    assert.deepEqual(
+      notificationsFor(after).filter((notice) => !ownNotice(notice.id)),
+      [],
+    );
+    assert.equal(unreadCount(after), 0);
+    town.actions.setTownMode("normal");
+    assert.deepEqual(
+      notificationsFor(town.getSnapshot()).map((notice) => notice.id),
+      notificationsFor(before).map((notice) => notice.id),
+    );
+    // A browser's town saved before the mode, or with one it does not know.
+    const saved = JSON.parse(serializeTown(after));
+    assert.equal(
+      deserializeTown(JSON.stringify(saved)).state.settings.mode,
+      "manage",
+    );
+    saved.data.settings.mode = "quiet";
+    assert.equal(
+      deserializeTown(JSON.stringify(saved)).state.settings.mode,
+      "normal",
+    );
+  },
+);
+
 check("the spoiler setting and filed reports are kept as the store's", () => {
   const repo = createMemoryRepository();
   const town = createTownStore(repo);
@@ -2664,64 +2713,88 @@ check("words are not taken while the town loads or cannot be kept", () => {
   assert.equal(town.getSnapshot().posts.length, 0);
 });
 
-check("a book the reader registered is fixed: its title, author and ISBN", () => {
-  const town = createTownStore(createMemoryRepository());
-  const id = town.actions.addBook({
-    title: "よるのとしょかん",
-    author: "ドウ",
-    isbn: "9784000000000",
-  });
-  assert.ok(id);
-  const other = town.actions.addBook({ title: "ほかの本", author: "", isbn: "9784000000017" });
-  assert.ok(other);
-  const fix = (title: string, author: string, isbn: string) =>
-    town.actions.fixBook(id, { title, author, isbn });
-  assert.equal(fix("  ", "ドウ", ""), "no-title");
-  assert.equal(fix("夜の図書館", "ドウ", "978-4"), "bad-isbn");
-  assert.equal(fix("よるのとしょかん", "ドウ", "9784000000000"), "unchanged");
-  // Another book of the library has that ISBN: not two of one book.
-  assert.equal(fix("夜の図書館", "ドウ", "978-4-00-000001-7"), "already");
-  assert.equal(fix(" 夜の図書館 ", "ジェーン・ドウ", "978-4-00-000003-1"), "fixed");
-  const fixed = bookById(town.getSnapshot().books, id);
-  assert.equal(fixed?.title, "夜の図書館");
-  assert.equal(fixed?.author, "ジェーン・ドウ");
-  assert.equal(fixed?.isbn, "9784000000031");
-  // An empty ISBN takes it away; the book stays in the library.
-  assert.equal(fix("夜の図書館", "ジェーン・ドウ", ""), "fixed");
-  assert.equal(bookById(town.getSnapshot().books, id)?.isbn, undefined);
-  assert.ok(town.getSnapshot().library.includes(id));
-  assert.equal(town.actions.fixBook("no-such-book", { title: "x", author: "", isbn: "" }), "not-saved");
-});
+check(
+  "a book the reader registered is fixed: its title, author and ISBN",
+  () => {
+    const town = createTownStore(createMemoryRepository());
+    const id = town.actions.addBook({
+      title: "よるのとしょかん",
+      author: "ドウ",
+      isbn: "9784000000000",
+    });
+    assert.ok(id);
+    const other = town.actions.addBook({
+      title: "ほかの本",
+      author: "",
+      isbn: "9784000000017",
+    });
+    assert.ok(other);
+    const fix = (title: string, author: string, isbn: string) =>
+      town.actions.fixBook(id, { title, author, isbn });
+    assert.equal(fix("  ", "ドウ", ""), "no-title");
+    assert.equal(fix("夜の図書館", "ドウ", "978-4"), "bad-isbn");
+    assert.equal(fix("よるのとしょかん", "ドウ", "9784000000000"), "unchanged");
+    // Another book of the library has that ISBN: not two of one book.
+    assert.equal(fix("夜の図書館", "ドウ", "978-4-00-000001-7"), "already");
+    assert.equal(
+      fix(" 夜の図書館 ", "ジェーン・ドウ", "978-4-00-000003-1"),
+      "fixed",
+    );
+    const fixed = bookById(town.getSnapshot().books, id);
+    assert.equal(fixed?.title, "夜の図書館");
+    assert.equal(fixed?.author, "ジェーン・ドウ");
+    assert.equal(fixed?.isbn, "9784000000031");
+    // An empty ISBN takes it away; the book stays in the library.
+    assert.equal(fix("夜の図書館", "ジェーン・ドウ", ""), "fixed");
+    assert.equal(bookById(town.getSnapshot().books, id)?.isbn, undefined);
+    assert.ok(town.getSnapshot().library.includes(id));
+    assert.equal(
+      town.actions.fixBook("no-such-book", {
+        title: "x",
+        author: "",
+        isbn: "",
+      }),
+      "not-saved",
+    );
+  },
+);
 
-check("a catalogue's author comes as the reader sees it, and stays as written when left so", () => {
-  // A scan's item and the field filled from openBD take the reader's shape.
-  assert.equal(
-    bookWords({ title: "ノルウェイの森", author: "村上,春樹,1949-" }).author,
-    "村上春樹",
-  );
-  const town = createTownStore(createMemoryRepository());
-  const id = town.actions.addBook({
-    title: "ノルウェイの森",
-    author: "村上,春樹,1949-",
-    isbn: "9784000000055",
-  });
-  assert.ok(id);
-  const book = () => bookById(town.getSnapshot().books, id)!;
-  // The form to fix it starts from the author as shown.
-  assert.equal(bookFixOf(book()).author, "村上春樹");
-  const fix = (author: string, isbn: string) =>
-    town.actions.fixBook(id, { title: "ノルウェイの森", author, isbn });
-  assert.equal(fix("村上春樹", "9784000000055"), "unchanged");
-  // Only the ISBN fixed: the author is left as it was written.
-  assert.equal(fix("村上春樹", "9784000000062"), "fixed");
-  assert.equal(book().author, "村上,春樹,1949-");
-  assert.equal(fix("村上 春樹", "9784000000062"), "fixed");
-  assert.equal(book().author, "村上 春樹");
-});
+check(
+  "a catalogue's author comes as the reader sees it, and stays as written when left so",
+  () => {
+    // A scan's item and the field filled from openBD take the reader's shape.
+    assert.equal(
+      bookWords({ title: "ノルウェイの森", author: "村上,春樹,1949-" }).author,
+      "村上春樹",
+    );
+    const town = createTownStore(createMemoryRepository());
+    const id = town.actions.addBook({
+      title: "ノルウェイの森",
+      author: "村上,春樹,1949-",
+      isbn: "9784000000055",
+    });
+    assert.ok(id);
+    const book = () => bookById(town.getSnapshot().books, id)!;
+    // The form to fix it starts from the author as shown.
+    assert.equal(bookFixOf(book()).author, "村上春樹");
+    const fix = (author: string, isbn: string) =>
+      town.actions.fixBook(id, { title: "ノルウェイの森", author, isbn });
+    assert.equal(fix("村上春樹", "9784000000055"), "unchanged");
+    // Only the ISBN fixed: the author is left as it was written.
+    assert.equal(fix("村上春樹", "9784000000062"), "fixed");
+    assert.equal(book().author, "村上,春樹,1949-");
+    assert.equal(fix("村上 春樹", "9784000000062"), "fixed");
+    assert.equal(book().author, "村上 春樹");
+  },
+);
 
 check("a book held back is told once in お知らせ, leading to its page", () => {
   const town = createTownStore(createMemoryRepository());
-  const id = town.actions.addBook({ title: "よるのとしょかん", author: "", isbn: "9784000000000" });
+  const id = town.actions.addBook({
+    title: "よるのとしょかん",
+    author: "",
+    isbn: "9784000000000",
+  });
   assert.ok(id);
   const state = town.getSnapshot();
   const hold = {
