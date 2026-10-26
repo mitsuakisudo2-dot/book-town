@@ -330,10 +330,20 @@ try {
           await expect(page.locator(".compose-fab")).toBeVisible();
         await page.mouse.click(4, 200);
         await expect(toast).toHaveCount(0);
+        // The book's page is the town's; the reader's own of it, where they
+        // met it, is a switch away at its top right (管理表 17).
         await go("/books/invisible-cities/");
         await expect(
           page.getByText("すみれさんの感想で、読みたくなった本です。"),
         ).toBeVisible();
+        await expect(page.locator(".book-encounters")).toHaveCount(0);
+        const faces = page.getByRole("group", { name: "ページの切り替え" });
+        await faces.getByRole("button", { name: "わたし" }).click();
+        await expect(page).toHaveURL(/\/books\/invisible-cities\/\?face=me$/);
+        await expect(
+          faces.getByRole("button", { name: "わたし" }),
+        ).toHaveAttribute("aria-pressed", "true");
+        await noOverflow(`${label} the reader's own page of a book`);
         const met = page.locator(".book-encounters li").first();
         await expect(met.locator("q")).toHaveText("旅の前に読みたい");
         // Changed from the book's page, the same sheet holds the memo.
@@ -342,6 +352,12 @@ try {
         await memo.getByRole("textbox").fill("旅の前に、駅で読みたい");
         await memo.getByRole("button", { name: "残す" }).click();
         await expect(met.locator("q")).toHaveText("旅の前に、駅で読みたい");
+        // Kept on a reload, and switched back the town's page is as it was.
+        await reload();
+        await expect(met.locator("q")).toHaveText("旅の前に、駅で読みたい");
+        await faces.getByRole("button", { name: "本のページ" }).click();
+        await expect(page).toHaveURL(/\/books\/invisible-cities\/$/);
+        await expect(page.locator(".book-encounters")).toHaveCount(0);
         await expect(
           page.getByRole("button", { name: "読みたいに登録済み" }),
         ).toBeVisible();
@@ -369,7 +385,7 @@ try {
         await expect(memo).toHaveCount(0);
         await noOverflow(`${label} memo`);
         // Forgotten on the book's page, the いいね stays and the page is as before.
-        await go("/books/solaris/");
+        await go("/books/solaris/?face=me");
         await page
           .locator(".book-encounters")
           .getByRole("button", { name: "消す" })

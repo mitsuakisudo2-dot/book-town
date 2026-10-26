@@ -1020,7 +1020,8 @@ try {
       await expect(closed).toContainText("ちょうど第二章。");
       await expect(
         closed.getByRole("link", { name: "『ソラリス』の作品ページへ" }),
-      ).toHaveAttribute("href", "/books/solaris/");
+        // The reader's own page of the book, from their reading (管理表 17).
+      ).toHaveAttribute("href", "/books/solaris/?face=me");
       await closed.getByRole("button", { name: "閉じる" }).click();
       await expect(closed).toHaveCount(0);
       await expect(page.locator(".picker-chosen")).toContainText("ソラリス");

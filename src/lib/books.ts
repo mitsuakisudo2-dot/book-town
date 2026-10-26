@@ -107,6 +107,15 @@ export function bookPath(id: string): string {
     : "/books/" + encodeURIComponent(id) + "/";
 }
 
+/**
+ * A book's page opened on わたし, the reader's own of it (管理表 17): from
+ * the library and the reading records.
+ */
+export function myBookPath(id: string): string {
+  const path = bookPath(id);
+  return path + (path.includes("?") ? "&" : "?") + "face=me";
+}
+
 export function createRegisteredBook(id: string, book: NewBook): Book {
   const seed = hash(id + book.title);
   const [color, ink] = jackets[seed % jackets.length];

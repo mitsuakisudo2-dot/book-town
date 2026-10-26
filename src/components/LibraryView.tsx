@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { afterLayerCloses, leaveLayers, useBackLayer } from "../lib/back-layer";
 import { bookAuthor, bookTitle, quotedTitle } from "../lib/book-name";
-import { bookPath } from "../lib/books";
+import { myBookPath } from "../lib/books";
 import {
   countsOf,
   defaultShelfAudience,
@@ -870,7 +870,7 @@ export function LibraryView({
                     {face}
                   </button>
                 ) : (
-                  <Link className="library-book" href={bookPath(id)}>
+                  <Link className="library-book" href={myBookPath(id)}>
                     {face}
                   </Link>
                 )}

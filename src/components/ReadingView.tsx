@@ -37,7 +37,7 @@ import { useClock } from "./useClock";
 import "./reading.css";
 import { profilePath } from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
-import { bookPath } from "../lib/books";
+import { bookPath, myBookPath } from "../lib/books";
 import { recentlyFinished } from "../lib/records";
 import { uncoverHidden } from "../lib/hidden-words";
 import { focusField } from "../lib/coarse-pointer";
@@ -370,7 +370,7 @@ function ClosedCard({
     <section className="reading-closed" aria-label="今日の読書" role="status">
       {closed.book && (
         <Link
-          href={bookPath(closed.book.id)}
+          href={myBookPath(closed.book.id)}
           className="reading-jacket-link"
           aria-label={`${quotedTitle(closed.book)}の作品ページへ`}
         >
@@ -807,7 +807,7 @@ function ReadingRoom({
       <section className="reading-now-card" aria-label="読書中">
         {book ? (
           <Link
-            href={bookPath(book.id)}
+            href={myBookPath(book.id)}
             className="reading-jacket-link"
             aria-label={`${quotedTitle(book)}の作品ページへ`}
           >
