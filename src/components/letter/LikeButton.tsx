@@ -8,34 +8,51 @@ import type { Notify, TownActions, TownState } from "../../lib/types";
 import { Modal } from "../ui";
 import { LetterIcon } from "./icons";
 import { counted } from "../../lib/words";
+import { memoOffer, MET_TOAST } from "../../lib/encounter-memo";
 
 /** How long 「n回」 shows above the heart. */
 const PILL_FOR = 1000;
+/** After the last tap, the wait before a first いいね offers its memo. */
+const OFFER_AFTER = 1000;
 
 /**
  * いいね (仮): each tap adds one, up to ten. The heart pops and 「n回」 shows
  * above it for a moment; at rest no count is shown to anyone. The tap after
- * the tenth asks whether to take the いいね back (`onAsk`).
+ * the tenth asks whether to take the いいね back (`onAsk`). The first, which
+ * meets the post's book, offers a memo once the tapping stops (押したときの
+ * メモ): one toast however many taps.
  */
 export function LikeButton({
   state,
   actions,
+  notify,
   postId,
   onAsk,
 }: {
   state: TownState;
   actions: TownActions;
+  notify: Notify;
   postId: string;
   onAsk: () => void;
 }) {
   const taps = tapsOf(state, postId);
   const [pill, setPill] = useState<{ key: number; taps: number } | null>(null);
   const made = useRef(0);
+  const offer = useRef<{ run: () => void; timer: number } | null>(null);
   useEffect(() => {
     if (!pill) return;
     const timer = setTimeout(() => setPill(null), PILL_FOR);
     return () => clearTimeout(timer);
   }, [pill]);
+  // Said even when the card is gone from the screen meanwhile.
+  useEffect(
+    () => () => {
+      if (!offer.current) return;
+      clearTimeout(offer.current.timer);
+      offer.current.run();
+    },
+    [],
+  );
   return (
     <button
       type="button"
@@ -49,6 +66,18 @@ export function LikeButton({
         // Refused (a 見本, or a visitor asked to sign in): nothing shows.
         const now: unknown = actions.tapLike(postId);
         if (typeof now !== "number" || now <= taps) return;
+        const met = memoOffer(state, actions);
+        const waiting = offer.current;
+        if (met || waiting) {
+          if (waiting) clearTimeout(waiting.timer);
+          const run = met
+            ? () => {
+                offer.current = null;
+                notify(MET_TOAST.liked, met);
+              }
+            : waiting!.run;
+          offer.current = { run, timer: window.setTimeout(run, OFFER_AFTER) };
+        }
         made.current += 1;
         setPill({ key: made.current, taps: now });
         announce(`いいね ${counted(now, "回")}`);

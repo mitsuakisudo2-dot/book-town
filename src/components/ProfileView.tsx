@@ -137,6 +137,7 @@ import {
 } from "../lib/words";
 import dynamic from "next/dynamic";
 import { inManageMode } from "../lib/town-mode";
+import { askForName, ownName } from "../lib/public-profile";
 import { ModeSwitch } from "./ModeSwitch";
 
 // The scanner is only fetched when the reader opens it (as from Home and
@@ -579,8 +580,8 @@ export function ProfileView({
               <span className="profile-demo">見本の読書家</span>
             )}
           </p>
-          <h1 id="profile-name">{reader.name}</h1>
-          <p className="profile-handle">@{reader.handle}</p>
+          <h1 id="profile-name">{isSelf ? ownName(reader) : reader.name}</h1>
+          {reader.handle && <p className="profile-handle">@{reader.handle}</p>}
           <FoldedWords state={state} kind="profile" id={reader.id}>
             <p className="profile-bio">
               {reader.bio || (quiet ? "" : "読書家の名刺は、好きな本から。")}
@@ -650,13 +651,23 @@ export function ProfileView({
                 <Link className="btn fill" href={myShopPath()}>
                   <Icon name="store" /> {shop ? "書店を整える" : "書店をひらく"}
                 </Link>
-                <button
-                  className="btn"
-                  disabled={!owner}
-                  onClick={beginProfileEdit}
-                >
-                  <Icon name="edit" /> プロフィールを編集
-                </button>
+                {reader.unpublished ? (
+                  // No public profile yet: its name and ID come first.
+                  <button
+                    className="btn"
+                    onClick={() => askForName(() => undefined)}
+                  >
+                    <Icon name="edit" /> 名前を決める
+                  </button>
+                ) : (
+                  <button
+                    className="btn"
+                    disabled={!owner}
+                    onClick={beginProfileEdit}
+                  >
+                    <Icon name="edit" /> プロフィールを編集
+                  </button>
+                )}
                 <span className="profile-minor-actions">
                   <button
                     type="button"
@@ -1219,6 +1230,27 @@ export function ProfileView({
             ))}
             <p className="spoiler-display-note">
               書いた人がネタバレの印を付けたものは、はじめからたたんであります。
+            </p>
+          </fieldset>
+          <fieldset className="record-visibility">
+            <legend>メモの案内</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={state.settings.memoHint}
+                onChange={(event) => {
+                  actions.setMemoHint(event.target.checked);
+                  notify(
+                    event.target.checked
+                      ? "いいねや読みたいのあとに、メモの案内を出します"
+                      : "メモの案内を出さないようにしました",
+                  );
+                }}
+              />
+              いいねや読みたいを押したあと、メモの案内を出す
+            </label>
+            <p className="palette-note">
+              なぜ気になったかを、あとで本のページから読み返せます。
             </p>
           </fieldset>
           <fieldset className="record-visibility">

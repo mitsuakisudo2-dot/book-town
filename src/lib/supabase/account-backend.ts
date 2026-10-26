@@ -257,5 +257,29 @@ export function supabaseAccountBackend(
         };
       return { profile: data };
     },
+    async publishProfile(userId, chosen) {
+      const { data, error } = await client
+        .from("profiles")
+        .update({ ...chosen, published: true })
+        .eq("id", userId)
+        .select()
+        .single();
+      if (error)
+        return {
+          failure:
+            error.code === "23505"
+              ? "handle-taken"
+              : error.code === "23514"
+                ? "invalid-profile"
+                : "network",
+        };
+      return { profile: data };
+    },
+    async startInManageMode(userId) {
+      const { error } = await client
+        .from("reader_settings")
+        .upsert({ user_id: userId, mode: "manage" });
+      return error ? "network" : null;
+    },
   };
 }

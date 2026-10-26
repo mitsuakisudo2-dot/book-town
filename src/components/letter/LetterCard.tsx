@@ -400,6 +400,7 @@ export function LetterCard({
           <LikeButton
             state={state}
             actions={actions}
+            notify={notify}
             postId={post.id}
             onAsk={() => setAskingUnlike(true)}
           />

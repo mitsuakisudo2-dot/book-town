@@ -805,7 +805,12 @@ export function townFromRows(
     books,
     readers,
     shops,
-    me: ownProfile ? readerFrom(ownProfile) : visitorReader(),
+    me: ownProfile
+      ? {
+          ...readerFrom(ownProfile),
+          ...(ownProfile.published === false ? { unpublished: true } : {}),
+        }
+      : visitorReader(),
     ownShop,
     following: [
       ...new Set(
@@ -875,6 +880,7 @@ export function townFromRows(
       )
         ? (rows.readerSettings?.spoiler_display as SpoilerDisplay)
         : "fold_possible",
+      memoHint: rows.readerSettings?.memo_hint !== false,
       // No row, or a database a migration behind: the town as ever.
       mode: rows.readerSettings?.mode === "manage" ? "manage" : "normal",
     },
@@ -1273,7 +1279,13 @@ export type Write =
       patch: Partial<
         Pick<
           Tables<"profiles">,
-          "handle" | "name" | "bio" | "links" | "color" | "compose_icon"
+          | "handle"
+          | "name"
+          | "bio"
+          | "links"
+          | "color"
+          | "compose_icon"
+          | "published"
         >
       >;
     }
@@ -1315,6 +1327,7 @@ export type Write =
             TablesInsert<"reader_settings">,
             | "spoiler_display"
             | "shelf_audiences"
+            | "memo_hint"
             | "mode"
             | SettingsVisibilityColumn
           >
@@ -1673,6 +1686,9 @@ export function planWrites(
     });
 
   const profile: Extract<Write, { kind: "profile" }>["patch"] = {};
+  // A profile made public once (publishProfile) takes its ID and name in the
+  // same write: the database keeps an ID exactly on a public profile.
+  if (base.me.unpublished && !next.me.unpublished) profile.published = true;
   if (next.me.handle !== base.me.handle) profile.handle = next.me.handle;
   if (next.me.name !== base.me.name) profile.name = next.me.name;
   if (next.me.bio !== base.me.bio) profile.bio = next.me.bio;
@@ -1693,6 +1709,8 @@ export function planWrites(
   };
   if (next.settings.spoilerDisplay !== base.settings.spoilerDisplay)
     settingsRow.spoiler_display = next.settings.spoilerDisplay;
+  if (next.settings.memoHint !== base.settings.memoHint)
+    settingsRow.memo_hint = next.settings.memoHint;
   if (next.settings.mode !== base.settings.mode)
     settingsRow.mode = next.settings.mode;
   Object.assign(
@@ -2371,6 +2389,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
       visibility: cleanVisibilities(null),
       shelfAudiences: {},
       spoilerDisplay: "fold_possible",
+      memoHint: true,
       mode: "normal",
     },
     seenNotifications: [],

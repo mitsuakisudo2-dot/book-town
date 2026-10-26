@@ -5,12 +5,14 @@ import { useEffect, useId, useRef, useState, type TouchEvent } from "react";
 import {
   POP_REACTIONS,
   popReactionKey,
+  type Notify,
   type PopReaction,
   type Shelf,
   type Shop,
   type TownActions,
   type TownState,
 } from "../lib/types";
+import { memoOffer, MET_TOAST } from "../lib/encounter-memo";
 import { BookJacket, CoverCredit, Icon, ReaderAvatar } from "./ui";
 import { CoverRemovalLink } from "./Report";
 import { BookActions, BookPrice, BookPurchase, bookNote } from "./BookActions";
@@ -55,7 +57,7 @@ type BookInHandProps = {
   state: TownState;
   actions: TownActions;
   onClose: () => void;
-  notify: (message: string) => void;
+  notify: Notify;
 } & (
   | { shop: Shop; shelf: Shelf; itemId: string; reading?: never }
   | { shop?: never; shelf?: never; itemId?: never; reading: SceneReading }
@@ -252,6 +254,10 @@ export function BookInHand({
       );
       reading.toggleReaction(key, reaction);
     }
+    // A POP that brought the book to the reader offers a memo of why.
+    const offer = memoOffer(state, actions);
+    if (offer)
+      notify(reaction === "read" ? MET_TOAST.wanted : MET_TOAST.liked, offer);
   }
   // A turn is told to a screen reader from a hidden copy of the new POP.
   // While the copy is there the page on show is hidden from it, so the
@@ -704,6 +710,7 @@ export function BookInHand({
             actions={actions}
             notify={notify}
             myPlace
+            inShop={shop.id}
           />
           <BookDiscovery
             shop={shop}
@@ -755,9 +762,8 @@ export function BookInHand({
             onClick={() => {
               actions.toggleWish(book.id, shop.id);
               notify(
-                wished
-                  ? "読みたいリストから外しました"
-                  : "読みたい本に入れました",
+                wished ? "読みたいリストから外しました" : MET_TOAST.wanted,
+                wished ? undefined : memoOffer(state, actions),
               );
             }}
           >

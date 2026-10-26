@@ -434,11 +434,19 @@ const dialog = () =>
 const message = () => dialog().locator(".register-message");
 const registerButton = () =>
   dialog().getByRole("button", { name: "登録する", exact: true });
-/** 「本を登録」, then ［手で入力］ in the scanner: the one-book form. */
-async function openRegister() {
+/** 「本を登録」, then ［手で入力］ in the scanner: the box that finds the book. */
+async function openFind() {
   await openScanner();
   await scanner().getByRole("button", { name: "手で入力" }).click();
   await expect(dialog()).toBeVisible();
+}
+/** ［手で入力］, then the one-book form behind the box. */
+async function openRegister() {
+  await openFind();
+  await dialog()
+    .getByRole("button", { name: "書名やISBNを入れて登録" })
+    .click();
+  await expect(dialog().getByLabel("タイトル")).toBeVisible();
 }
 /** The one-book form closed back to the scanner, saying so. */
 async function registered(text) {
@@ -669,6 +677,71 @@ try {
   );
 
   await check(
+    "［手で入力］ finds a book by its title, in with one tap, and stays open for the next",
+    async () => {
+      expect(await finishScanning()).toContain("1冊の登録が完了しました");
+      await page
+        .getByRole("button", { name: "こころを登録した本から外す" })
+        .click();
+      await expect
+        .poll(async () => (await stored()).library)
+        .toEqual(["isbn-" + WHEEL, "isbn-" + MON]);
+      await toasts();
+      await openFind();
+      const box = dialog().getByLabel("登録する本を探す");
+      await box.fill("こころ");
+      const row = dialog()
+        .locator(".search-book-row")
+        .filter({ hasText: "こころ" });
+      const tap = row.getByRole("button", {
+        name: "『こころ』をライブラリに登録",
+      });
+      await expect(tap).toHaveAttribute("aria-pressed", "false");
+      await page.screenshot({ path: path.join(output, "find-by-title.png") });
+      await tap.click();
+      await expect(page.locator(".toast")).toContainText(
+        "『こころ』を登録しました",
+      );
+      // Still open, the book marked in, for the next one.
+      await expect(dialog()).toBeVisible();
+      await expect(tap).toHaveAttribute("aria-pressed", "true");
+      await expect(row.locator(".in-library-mark")).toBeVisible();
+      // One already in says so, and changes nothing.
+      await box.fill("門");
+      const mon = dialog()
+        .locator(".search-book-row")
+        .filter({ hasText: "門" })
+        .getByRole("button", { name: "『門』をライブラリに登録" });
+      await expect(mon).toHaveAttribute("aria-pressed", "true");
+      await mon.click();
+      await expect(page.locator(".toast")).toContainText(
+        "『門』はもうライブラリにあります",
+      );
+      // Nothing found: in by what was typed, as its title.
+      await box.fill("どこにもない本");
+      await dialog().getByRole("button", { name: "この書名で登録" }).click();
+      await expect(dialog().getByLabel("タイトル")).toHaveValue(
+        "どこにもない本",
+      );
+      await dialog().getByRole("button", { name: "閉じる" }).click();
+      await expect(dialog()).toHaveCount(0);
+      // The book found joined this time, as one read would.
+      await expect(
+        scanner().locator(".scan-item").filter({ hasText: "こころ" }),
+      ).toHaveCount(1);
+      const data = await stored();
+      expect(data.library).toEqual([
+        "isbn-" + WHEEL,
+        "isbn-" + MON,
+        "isbn-" + KOKORO,
+      ]);
+      expect(
+        data.addedBooks.filter((book) => book.title === "こころ"),
+      ).toHaveLength(1);
+    },
+  );
+
+  await check(
     "openBD's answer fills the book in, its author as the reader sees it, and a long title ends in …",
     async () => {
       await openRegister();
@@ -837,7 +910,7 @@ try {
       const byHand = scanner().getByRole("button", { name: "手で入力" });
       await byHand.tap();
       await expectNoKeyboard(page, "本を登録", dialog());
-      await expectTapWrites(dialog().getByLabel("ISBN"));
+      await expectTapWrites(dialog().getByLabel("登録する本を探す"));
       await dialog().getByRole("button", { name: "閉じる" }).tap();
       await expect(dialog()).toHaveCount(0);
       await expect(byHand).toBeFocused();
@@ -1516,6 +1589,9 @@ try {
         name: "本を登録",
         exact: true,
       });
+      await form
+        .getByRole("button", { name: "書名やISBNを入れて登録" })
+        .click();
       await expect(form).toContainText(
         "ISBNがあれば探せます。書名だけでも登録できます。",
       );

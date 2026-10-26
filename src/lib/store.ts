@@ -44,6 +44,7 @@ import {
   popEncounterKind,
   positionAfter,
   undoEncounter,
+  writeMemo,
   type EncounterInput,
   READING_STATUSES,
   readRule,
@@ -52,6 +53,12 @@ import {
   type ReadingStatus,
 } from "./library";
 import { requestAccount } from "./visitor";
+import {
+  askForName,
+  needsName,
+  reachesPeople,
+  WRITTEN,
+} from "./public-profile";
 import { refuseForSample } from "./sample-notice";
 import { isDatabaseId, isSampleId } from "./record-kind";
 import { bookAuthor, bookById, bookByIsbn, booksOfIsbn } from "./book-name";
@@ -159,6 +166,12 @@ export interface TownStoreOptions {
   onVisitor?: () => void;
   /** Called when a signed-in reader's like or follow would go to a 見本. */
   onSample?: () => void;
+  /**
+   * Called when a reader with no public profile tries something that would
+   * reach people (public-profile.ts): `then` does it again once they have
+   * chosen a name and an ID.
+   */
+  onNeedsName?: (then: () => void) => void;
   /**
    * Called once for each batch of changes that did not reach the database
    * (supabase/sync.ts): it keeps what can be kept of them and answers the
@@ -309,8 +322,21 @@ export function createTownStore(
   }
 
   /** Whether the change was taken: nothing is changed while the town loads. */
+  // The encounter a press is making (withMet), and once it is in the town,
+  // the one takeMet gives its toast: only within the same turn of the press,
+  // so a press that met nothing new is never offered an older one's.
+  let pendingMet: string | null = null;
+  let lastMet: string | null = null;
   function commit(next: TownState): boolean {
+    const making = pendingMet;
+    pendingMet = null;
     if (next === state || loading) return false;
+    if (making && next.encounters.some((c) => c.id === making)) {
+      lastMet = making;
+      queueMicrotask(() => {
+        if (lastMet === making) lastMet = null;
+      });
+    }
     state = keepingUses(state, next);
     status = backend.save(state);
     notify();
@@ -459,8 +485,10 @@ export function createTownStore(
     );
     if (!c) return town;
     if (on) {
-      const met = meetEncounter(town.encounters, c);
-      return met.met ? { ...town, encounters: met.encounters } : town;
+      const meeting = meetEncounter(town.encounters, c);
+      if (!meeting.met) return town;
+      pendingMet = meeting.encounter.id;
+      return { ...town, encounters: meeting.encounters };
     }
     const encounters = undoEncounter(town.encounters, c, at);
     return encounters === town.encounters ? town : { ...town, encounters };
@@ -768,6 +796,27 @@ export function createTownStore(
         encounters === wished.encounters ? wished : { ...wished, encounters },
       );
     },
+    takeMet() {
+      const id = lastMet;
+      lastMet = null;
+      return id;
+    },
+    writeEncounterMemo(encounterId, memo) {
+      initialize();
+      const encounters = writeMemo(
+        state.encounters,
+        encounterId,
+        memo,
+        now().toISOString(),
+      );
+      if (encounters === state.encounters) return false;
+      return commit({ ...state, encounters });
+    },
+    setMemoHint(on) {
+      initialize();
+      if (state.settings.memoHint === on) return;
+      commit({ ...state, settings: { ...state.settings, memoHint: on } });
+    },
     meetScenePop(shopId, given, placementKey, reaction, on) {
       initialize();
       const shop = shopOf(shopId);
@@ -854,9 +903,14 @@ export function createTownStore(
     updateProfile(name, bio, links, handle) {
       initialize();
       if (!name.trim()) return false;
+      // With no public profile there is no ID to change: publishProfile
+      // gives the first one.
       const nextHandle =
-        handle === undefined ? state.me.handle : normalizeHandle(handle);
-      if (handleProblem(nextHandle, state.readers)) return false;
+        handle === undefined || state.me.unpublished
+          ? state.me.handle
+          : normalizeHandle(handle);
+      if (!state.me.unpublished && handleProblem(nextHandle, state.readers))
+        return false;
       commit({
         ...state,
         me: {
@@ -866,6 +920,26 @@ export function createTownStore(
           bio: clean(bio, BIO_MAX_LENGTH),
           links:
             links === undefined ? (state.me.links ?? []) : cleanLinks(links),
+        },
+      });
+      return true;
+    },
+    publishProfile(name, handle) {
+      initialize();
+      const chosen = normalizeHandle(handle);
+      if (
+        !state.me.unpublished ||
+        !name.trim() ||
+        handleProblem(chosen, state.readers)
+      )
+        return false;
+      commit({
+        ...state,
+        me: {
+          ...state.me,
+          handle: chosen,
+          name: clean(name.trim(), READER_NAME_MAX_LENGTH),
+          unpublished: false,
         },
       });
       return true;
@@ -1117,10 +1191,15 @@ export function createTownStore(
       // in the library did not) is that book again; otherwise a book the
       // town has with the ISBN, but never one another reader typed in: the
       // reader registers their own of it (own-books.ts), so what either of
-      // them later fixes stays theirs.
-      const sent = isbn ? bookById(state.books, bookId) : undefined;
+      // them later fixes stays theirs. One with no ISBN is named by its id
+      // alone (a book found for ［手で入力］): that book, never a new one.
+      const sent = bookById(state.books, bookId);
       const decided =
-        sent && sent.isbn === isbn && !sent.theirs ? sent : undefined;
+        sent && !sent.theirs && (isbn ? sent.isbn === isbn : !sent.isbn)
+          ? sent
+          : undefined;
+      if (!isbn && decided && state.library.includes(decided.id))
+        return { result: "already", bookId: decided.id, title: decided.title };
       const existing = decided ?? bookByIsbn(state.books, isbn);
       // The library remembers how a book first came in.
       // A scan session's id, as the database keeps it (a UUID).
@@ -1604,6 +1683,19 @@ export function createTownStore(
           options.onSample?.();
           return refused(name);
         }
+        if (
+          backend.kind !== "visitor" &&
+          needsName(state) &&
+          reachesPeople(name, args, state)
+        ) {
+          // Nothing is done yet: it is done once the name is chosen. What a
+          // sheet sends, the sheet sends again itself (askFirst).
+          options.onNeedsName?.(() => {
+            if (!WRITTEN.has(name))
+              (gated[name] as (...a: unknown[]) => unknown)(...args);
+          });
+          return refused(name);
+        }
         if (backend.kind !== "visitor")
           try {
             return (actions[name] as (...a: unknown[]) => unknown)(...args);
@@ -1768,10 +1860,11 @@ export const townStore = createTownStore(
         follow: followAccount,
         onVisitor: requestAccount,
         onSample: refuseForSample,
+        onNeedsName: askForName,
         onMissed: (lost) =>
           townMissedLine(lost, draftOwner(accountStore.getSnapshot())),
       }
-    : {},
+    : { onNeedsName: askForName },
 );
 export const townActions = townStore.actions;
 export const actions = townActions;

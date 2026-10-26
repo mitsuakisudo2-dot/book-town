@@ -10,6 +10,7 @@ import { Icon } from "./ui";
 import { RegisterBook } from "./RegisterBook";
 import { holds, mine } from "../lib/own-books";
 import { quotedTitle } from "../lib/book-name";
+import { memoOffer, MET_TOAST } from "../lib/encounter-memo";
 import { entriesOf, townShopBooks } from "../lib/library-town";
 import {
   OWNED_MARKS,
@@ -177,6 +178,7 @@ export function BookActions({
   register = false,
   myPlace = register,
   toShop = false,
+  inShop,
 }: {
   book: Book;
   state: TownState;
@@ -194,6 +196,8 @@ export function BookActions({
    * this book chosen (管理表 103).
    */
   toShop?: boolean;
+  /** Held in hand in a shop: 読みたい keeps the shop as where it was met. */
+  inShop?: string;
 }) {
   // Of the reader's own book for it, when another reader typed it in.
   const wished = holds(state, state.wishlist, book.id);
@@ -215,11 +219,10 @@ export function BookActions({
           className={`btn bh-save ${wished ? "soft bh-saved" : "fill"}`}
           aria-pressed={wished}
           onClick={() => {
-            actions.toggleWish(book.id);
+            actions.toggleWish(book.id, inShop);
             notify(
-              wished
-                ? "読みたいリストから外しました"
-                : "読みたい本に入れました",
+              wished ? "読みたいリストから外しました" : MET_TOAST.wanted,
+              wished ? undefined : memoOffer(state, actions),
             );
           }}
         >

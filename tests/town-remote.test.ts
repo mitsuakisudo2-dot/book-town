@@ -2409,6 +2409,44 @@ async function main() {
     },
   );
 
+  await check(
+    "a profile with no public face is the reader's own, made public in one write",
+    () => {
+      const quiet = {
+        ...profile(AKI, "aki"),
+        handle: null,
+        name: "",
+        published: false,
+      };
+      const before = townFromRows(
+        rows({ profiles: [quiet, profile(BEN, "ben")] }),
+        ids,
+      );
+      assert.equal(before.me.unpublished, true);
+      assert.equal(before.me.handle, "");
+      assert.equal(townFromRows(rows(), ids).me.unpublished, undefined);
+      // A bio or color changed alone sends no ID and keeps it unpublished.
+      const colored: TownState = {
+        ...before,
+        me: { ...before.me, color: "#123456" },
+      };
+      assert.deepEqual(planWrites(before, colored, ids), [
+        { kind: "profile", patch: { color: "#123456" } },
+      ]);
+      // Published: the ID, the name and published go together.
+      const named: TownState = {
+        ...before,
+        me: { ...before.me, name: "アキ", handle: "aki2", unpublished: false },
+      };
+      assert.deepEqual(planWrites(before, named, ids), [
+        {
+          kind: "profile",
+          patch: { published: true, handle: "aki2", name: "アキ" },
+        },
+      ]);
+    },
+  );
+
   await check("the spoiler setting is written only when it changes", () => {
     const before = townFromRows(rows(), ids);
     const next: TownState = {
@@ -2437,6 +2475,21 @@ async function main() {
     assert.deepEqual(
       planWrites(before, { ...next, settings: before.settings }, ids),
       [],
+    );
+    // 「メモの案内を出す」: on unless the reader turned it off.
+    assert.equal(before.settings.memoHint, true);
+    assert.equal(
+      townFromRows(rows({ readerSettings: { memo_hint: false } }), ids).settings
+        .memoHint,
+      false,
+    );
+    assert.deepEqual(
+      planWrites(
+        before,
+        { ...before, settings: { ...before.settings, memoHint: false } },
+        ids,
+      ),
+      [{ kind: "reader-settings", row: { user_id: AKI, memo_hint: false } }],
     );
     // A starting choice is sent alone, as is 読書の状態's detail.
     const status: TownState = {

@@ -26,6 +26,7 @@ import {
   emailChangeStore,
   profileWorkStore,
   sentCodeStore,
+  suggestProfile,
   type ProfileWork,
 } from "../lib/account-draft";
 import { EMAIL_MAX_LENGTH } from "../lib/types";
@@ -306,12 +307,13 @@ function SignIn() {
   }
 }
 
-const NO_PROFILE_WORK: ProfileWork = { name: "", handle: "" };
+type Way = "town" | "quiet";
 
 function FirstProfile({ userId }: { userId: string }) {
   // The name and the ID typed so far are kept through a reload, by person.
   const kept = useKeptDraft(profileWorkStore, userId);
-  const work = kept.draft ?? NO_PROFILE_WORK;
+  const [suggested] = useState(suggestProfile);
+  const work = kept.draft ?? suggested;
   const { name, handle } = work;
   // Whether the form opened on work kept from before, said once.
   const [resumed, setResumed] = useState<boolean | null>(null);
@@ -332,12 +334,36 @@ function FirstProfile({ userId }: { userId: string }) {
   const nameField = useRef<HTMLInputElement>(null);
   const handleField = useRef<HTMLInputElement>(null);
   const ageField = useRef<HTMLInputElement>(null);
-  useFocusFieldOnShow(nameField, { instead: heading });
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   // Records start private; each one can be published, and is told when it is.
   const [readingPublic, setReadingPublic] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // 「どちらで使いますか？」 first (けにーさん 10-26 01:34Z): the town, with a
+  // name and an ID, or 自分の記録だけ, with neither (管理表 99). A name being
+  // typed from before goes straight back to the town's form.
+  const [chosen, setChosen] = useState<Way | null>(null);
+  const way: Way | "ask" = chosen ?? (hasWork ? "town" : "ask");
+  const choose = (next: Way | null) => {
+    setChosen(next);
+    setError("");
+  };
+  // On each screen the focus starts at its heading, or with a mouse at the
+  // name to type (in place of autoFocus, as useFocusFieldOnShow).
+  useEffect(() => {
+    if (way === "town")
+      focusField(nameField.current, { instead: heading.current });
+    else heading.current?.focus();
+  }, [way]);
+  const again = (
+    <button
+      type="button"
+      className="account-quiet"
+      onClick={() => choose(null)}
+    >
+      使い方を選びなおす
+    </button>
+  );
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -356,13 +382,104 @@ function FirstProfile({ userId }: { userId: string }) {
       );
   }
 
+  async function startQuietly(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const result = await accountActions.startQuietly(ageConfirmed);
+    setBusy(false);
+    if (result.ok) return kept.clear();
+    setError(result.message);
+    if (coarse && !ageConfirmed) markField(ageField.current);
+  }
+
+  const age = (
+    <label className="account-check">
+      <input
+        ref={ageField}
+        type="checkbox"
+        checked={ageConfirmed}
+        onChange={(event) => setAgeConfirmed(event.target.checked)}
+      />
+      {MINIMUM_AGE}歳以上です
+    </label>
+  );
+
+  if (way === "ask")
+    return (
+      <>
+        <h1 ref={heading} tabIndex={-1}>
+          どちらで使いますか？
+        </h1>
+        <p className="account-lead">あとから、いつでも変えられます。</p>
+        <div className="account-ways">
+          <button
+            type="button"
+            className="account-way"
+            onClick={() => choose("town")}
+          >
+            <span className="account-way-mark">
+              <Icon name="store" size={22} />
+            </span>
+            <span className="account-way-words">
+              <b>本の街で使う</b>
+              <span>
+                自分の{NAMES.shop}を開いて、本を通じて人と出会います。
+              </span>
+            </span>
+            <Icon name="chevron" size={18} />
+          </button>
+          <button
+            type="button"
+            className="account-way"
+            onClick={() => choose("quiet")}
+          >
+            <span className="account-way-mark">
+              <Icon name="reading" size={22} />
+            </span>
+            <span className="account-way-words">
+              <b>自分の記録だけで使う</b>
+              <span>
+                本の登録と読書の記録だけ。名前もIDもいらず、だれにも見えません。
+              </span>
+            </span>
+            <Icon name="chevron" size={18} />
+          </button>
+        </div>
+      </>
+    );
+
+  if (way === "quiet")
+    return (
+      <>
+        <h1 ref={heading} tabIndex={-1}>
+          自分の記録だけで使う
+        </h1>
+        <p className="account-lead">
+          名前もIDも決めずに、本と読書の記録だけで始めます。だれにも見えず、人の数にも入りません。
+        </p>
+        <ul className="account-quiet-list">
+          <li>本の登録、本棚、読書の時間と記録は、ぜんぶ使えます</li>
+          <li>人とつながりたくなったら、そのときに名前とIDを決められます</li>
+        </ul>
+        <form className="profile-form" onSubmit={startQuietly} noValidate>
+          {age}
+          <ErrorLine message={error} />
+          <button className="btn fill" disabled={busy}>
+            {busy ? "準備しています…" : "記録だけではじめる"}
+          </button>
+        </form>
+        {again}
+      </>
+    );
+
   return (
     <>
       <h1 ref={heading} tabIndex={-1}>
         ようこそ、本の街へ
       </h1>
       <p className="account-lead">
-        街で呼ばれる名前と、あなたのIDを決めてください。どちらもあとから変えられます。
+        街で呼ばれる名前とIDは、おまかせで入れておきました。そのままでも、好きなものに変えても大丈夫です。あとからも変えられます。
       </p>
       <KeptDraftNote
         className="account-kept"
@@ -371,6 +488,8 @@ function FirstProfile({ userId }: { userId: string }) {
         saved={kept.saved}
         wordsLost
         onDiscard={() => {
+          // The form stays, with what is put in to start with.
+          setChosen("town");
           kept.clear();
           setResumed(false);
           focusField(nameField.current, { instead: heading.current });
@@ -406,15 +525,7 @@ function FirstProfile({ userId }: { userId: string }) {
         <p id="account-handle-hint" className="profile-form-hint">
           3〜20文字の半角英小文字・数字・_。ほかの読書家と同じIDは使えません。
         </p>
-        <label className="account-check">
-          <input
-            ref={ageField}
-            type="checkbox"
-            checked={ageConfirmed}
-            onChange={(event) => setAgeConfirmed(event.target.checked)}
-          />
-          {MINIMUM_AGE}歳以上です
-        </label>
+        {age}
         <fieldset className="account-choice">
           <legend>読み終えた本の記録</legend>
           <label>
@@ -447,6 +558,7 @@ function FirstProfile({ userId }: { userId: string }) {
           {busy ? "準備しています…" : "はじめる"}
         </button>
       </form>
+      {again}
     </>
   );
 }
@@ -500,7 +612,9 @@ function SignedIn({
     <>
       <h1>ログインしています</h1>
       <p className="account-lead">
-        {name}（@{handle}）さんとして、本の街にいます。
+        {handle
+          ? `${name}（@${handle}）さんとして、本の街にいます。`
+          : "人とつながらず、自分の記録だけで使っています。"}
       </p>
       <Link className="btn fill" href="/">
         本の街へ

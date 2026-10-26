@@ -1,0 +1,19 @@
+/*
+ * The sheet that asks a reader with no public profile for a name and an ID,
+ * the first time they reach people (NameSheet.tsx, 管理表 99).
+ */
+.name-sheet-lead {
+  margin: 0 0 4px;
+  font-size: var(--t-ui);
+  line-height: 1.7;
+  color: var(--ink);
+}
+.name-sheet-note {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--r-box);
+  background: var(--green-soft);
+  font-size: var(--t-meta);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
