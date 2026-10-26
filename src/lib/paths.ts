@@ -93,6 +93,15 @@ export const timelinePath = (): string => "/timeline/";
 /** Where the sources of the book data are named. */
 export const creditsPath = (): string => "/credits/";
 
+/** The terms of use (利用規約, 管理表 44). */
+export const termsPath = (): string => "/terms/";
+
+/** How the town keeps what readers give it (プライバシー, 管理表 44). */
+export const privacyPath = (): string => "/privacy/";
+
+/** For a reader who cannot log in (ログインできないとき, 管理表 44・107). */
+export const loginHelpPath = (): string => "/login/help/";
+
 /** The reading list. */
 export const readingListPath = (): string => "/reading-list/";
 

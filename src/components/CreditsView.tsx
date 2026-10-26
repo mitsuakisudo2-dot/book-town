@@ -1,5 +1,5 @@
 import { BackLink } from "./BackLink";
-import "./credits.css";
+import "./text-page.css";
 
 // Where the town's book data comes from, in the words its sources ask for
 // (docs/09「書誌マスタ」の「出典」). One page for every book, linked from
@@ -13,7 +13,7 @@ const CC_BY = "https://creativecommons.org/licenses/by/4.0/legalcode.ja";
 
 export function CreditsView() {
   return (
-    <div className="credits-page">
+    <div className="text-page">
       <BackLink className="back-link" />
       <span className="eyebrow">CREDITS</span>
       <h1 className="page-title">本のデータの出典</h1>

@@ -6,11 +6,13 @@
   "/leave/": 209,
   "/library/": 269,
   "/login/": 249,
+  "/login/help/": 210,
   "/my-shop/": 296,
   "/notifications/": 259,
   "/post/": 257,
   "/posters/": 257,
   "/posters/new/": 257,
+  "/privacy/": 210,
   "/profile/": 257,
   "/profiles/[id]/": 300,
   "/reading-list/": 258,
@@ -18,6 +20,7 @@
   "/search/": 271,
   "/shop/": 257,
   "/shops/[id]/": 270,
+  "/terms/": 210,
   "/timeline/": 288,
   "/walk/": 287
 }
