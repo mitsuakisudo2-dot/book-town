@@ -487,13 +487,6 @@ mark.hidden-words.is-open {
     width: 56px;
     height: 56px;
   }
-  /* While a toast is said, the compose button steps aside: the toast's メモ
-     or 元に戻す would sit by it, one easily pressed for the other. */
-  body:has(.toast) .compose-fab {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-  }
   .top-search {
     display: none !important;
   }

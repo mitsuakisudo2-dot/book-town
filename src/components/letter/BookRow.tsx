@@ -4,13 +4,10 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { bookPath } from "../../lib/books";
 import { bookAuthor, bookTitle, quotedTitle } from "../../lib/book-name";
-import { isDatabaseId } from "../../lib/record-kind";
-import { useTownBackend } from "../../lib/store";
 import type {
   Book,
   Notify,
   Post,
-  Reader,
   TownActions,
   TownState,
 } from "../../lib/types";
@@ -68,20 +65,14 @@ export function WantButton({
   notify,
   post,
   book,
-  author,
 }: {
   state: TownState;
   actions: TownActions;
   notify: Notify;
   post: Post;
   book: Book;
-  author: Reader;
 }) {
-  const savedIn = useTownBackend();
   const wanted = state.wantedPosts.includes(post.id);
-  // A 見本's 便り is not in the database, so with an account only the
-  // wishlist is kept, not where the book was met.
-  const keepsMeeting = savedIn !== "account" || isDatabaseId(post.id);
   // Turned on just now: the lamp's light, once.
   const [lit, setLit] = useState(false);
   return (
@@ -101,16 +92,10 @@ export function WantButton({
           return notify(
             `この${NAMES.letter}で出会った記録を外しました。読みたい本には残っています`,
           );
-        // With its メモ, one short line: which book.
-        const offer = memoOffer(state, actions);
+        // One short line, which book: with its メモ when it met the book.
         notify(
-          offer
-            ? `${quotedTitle(book)}を読みたいに入れました`
-            : `${quotedTitle(book)}を読みたいに入れました。` +
-                (keepsMeeting
-                  ? `${author.name}さんの${NAMES.letter}で出会った本として残します。`
-                  : ""),
-          offer,
+          `${quotedTitle(book)}を読みたいに入れました`,
+          memoOffer(state, actions),
         );
       }}
     >
