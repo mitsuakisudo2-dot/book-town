@@ -4499,14 +4499,32 @@ try {
         await box.evaluate((element) =>
           element.scrollIntoView({ block: "center" }),
         );
-        await at.keyboard.press("Tab");
+        // Tab onto the third line from the second, as a reader does: a
+        // focus() from a script is :focus-visible only as the browser likes
+        // (AUD-196), so it starts the walk and the Tab makes the keyboard's.
         const keyed = rows.nth(2).locator("a.home-live-time");
-        await keyed.focus();
+        await rows.nth(1).locator("a.home-live-time").focus();
+        for (let step = 0; step < 4; step += 1) {
+          await at.keyboard.press("Tab");
+          if (await keyed.evaluate((link) => link === document.activeElement))
+            break;
+        }
+        const focusAt = () =>
+          at.evaluate(() => {
+            const on = document.activeElement;
+            const line = on?.closest(".home-live-line");
+            const index = [
+              ...document.querySelectorAll(".home-live-line"),
+            ].indexOf(line);
+            return `focus on <${on?.tagName.toLowerCase()} class="${on?.className}"> line ${index} ${line?.getAttribute("data-post-id") ?? ""}`;
+          });
+        await expect(keyed, await focusAt()).toBeFocused();
         await box.evaluate((element) =>
           element.scrollIntoView({ block: "center" }),
         );
         expect(
           await keyed.evaluate((link) => link.matches(":focus-visible")),
+          await focusAt(),
         ).toBe(true);
         const fifth = arrive(5, "キーボードで読んでいる間に届いたひとこと。");
         before = newReads();
