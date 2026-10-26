@@ -51,7 +51,11 @@ import { SiteNotesGate } from "./SiteNotesGate";
 import { accountRequested, closeAccountRequest } from "../lib/visitor";
 import { closeReport } from "../lib/report";
 import { carriedToast, noteToast } from "../lib/carried-toast";
-import { useAskedMemo, useMemoEverAsked } from "../lib/encounter-memo";
+import {
+  MEMO_OFFER,
+  useAskedMemo,
+  useMemoEverAsked,
+} from "../lib/encounter-memo";
 import { isKeptNotice } from "../lib/kept-draft";
 import {
   SAMPLE_NOTICE,
@@ -287,6 +291,20 @@ export default function TownApp({
     const timer = setTimeout(() => setToast(null), toast.undo ? 8000 : 3500);
     return () => clearTimeout(timer);
   }, [toast]);
+  // A tap anywhere but its メモ puts a toast away (けにー 10-26): it never
+  // stands between the reader and what lies under it. One with 元に戻す
+  // stays its time, the only way back.
+  const awayOnTap =
+    toast !== null && (!toast.undo || toast.undo.label === MEMO_OFFER);
+  useEffect(() => {
+    if (!awayOnTap) return;
+    const away = (event: PointerEvent) => {
+      if (!(event.target as Element | null)?.closest?.(".toast-undo"))
+        setToast(null);
+    };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [awayOnTap]);
   // A change the database turned away, or one left waiting as the sign-in
   // ended, is told above (missed-changes.ts): the message that said it was
   // done gives way, in the same frame. One with an undo stays, the only way

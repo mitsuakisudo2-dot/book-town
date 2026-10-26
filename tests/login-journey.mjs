@@ -6424,8 +6424,8 @@ try {
       await expect(toast).toContainText("書きかけの注釈を戻しました");
       await annotate.click();
       await expect(notesField).toHaveValue("右端の余白");
-      // The pin is low, so the sheet opens at the top, and the toast still
-      // showing drops to the bottom: nothing lies over 残す.
+      // The pin is low, so the sheet opens at the top: nothing lies over 残す.
+      // (The toast went with the tap on 注釈, as any tap puts it away.)
       const leave = notesSheet.getByRole("button", {
         name: "残す",
         exact: true,
@@ -6442,7 +6442,7 @@ try {
           self: !!hit && button.contains(hit),
         };
       });
-      expect(onLeave).toEqual({ toast: true, self: true });
+      expect(onLeave).toEqual({ toast: false, self: true });
       await leave.click();
       await expect(toast).toContainText("注釈を残しました");
       expect(notesSent.at(-1)).toMatchObject({ body: "右端の余白", x: 380 });

@@ -169,7 +169,6 @@ export function LetterCard({
         notify={notify}
         post={post}
         book={book}
-        author={author}
       />
     ) : null;
   const taps = tapsOf(state, post.id);

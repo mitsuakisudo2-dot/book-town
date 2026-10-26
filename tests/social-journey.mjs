@@ -313,10 +313,6 @@ try {
         await expect(toast).toContainText(
           "『見えない都市』を読みたいに入れました",
         );
-        // On a phone the compose button steps aside while the toast is said,
-        // so its メモ is not pressed for 投稿 (けにー 10-26).
-        if (viewport.width <= 760)
-          await expect(page.locator(".compose-fab")).toBeHidden();
         // How many readers wanted it is the writer's to know, not ours.
         await expect(want).toHaveText("読みたい");
         await expect(post).not.toContainText(/\d+人/);
@@ -328,6 +324,12 @@ try {
         await memo.getByRole("button", { name: "残す" }).click();
         await expect(memo).toHaveCount(0);
         await expect(toast).toHaveText("メモを残しました");
+        // A tap anywhere but its button puts the toast away, and the compose
+        // button stays where it is (けにー 10-26).
+        if (viewport.width <= 760)
+          await expect(page.locator(".compose-fab")).toBeVisible();
+        await page.mouse.click(4, 200);
+        await expect(toast).toHaveCount(0);
         await go("/books/invisible-cities/");
         await expect(
           page.getByText("すみれさんの感想で、読みたくなった本です。"),
