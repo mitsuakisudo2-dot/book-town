@@ -1580,10 +1580,9 @@ try {
       "公開したときは、毎回お知らせします。",
     );
     await page.getByRole("button", { name: "はじめる" }).click();
-    await expect(
-      page.getByRole("heading", { name: "ログインしています" }),
-    ).toBeVisible();
-    await expect(page.getByText("アキ（@aki_books）さん")).toBeVisible();
+    // Begun, the reader is home at once.
+    await expect(page.locator(".town-topbar")).toBeVisible();
+    await expect(page).toHaveURL(base + "/");
     // Kept until now through reloads, the typed profile is not kept after.
     expect(
       await page.evaluate(() =>
@@ -1604,7 +1603,6 @@ try {
   });
 
   await check("the town is read from the account, not the demo", async () => {
-    await page.getByRole("link", { name: "本の街へ" }).click();
     await expect(page.locator(".town-topbar")).toBeVisible();
     await expect(page.getByRole("link", { name: "ログイン" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /本の街/ })).toBeVisible();
@@ -4576,14 +4574,32 @@ try {
         await box.evaluate((element) =>
           element.scrollIntoView({ block: "center" }),
         );
-        await at.keyboard.press("Tab");
+        // Tab onto the third line from the second, as a reader does: a
+        // focus() from a script is :focus-visible only as the browser likes
+        // (AUD-196), so it starts the walk and the Tab makes the keyboard's.
         const keyed = rows.nth(2).locator("a.home-live-time");
-        await keyed.focus();
+        await rows.nth(1).locator("a.home-live-time").focus();
+        for (let step = 0; step < 4; step += 1) {
+          await at.keyboard.press("Tab");
+          if (await keyed.evaluate((link) => link === document.activeElement))
+            break;
+        }
+        const focusAt = () =>
+          at.evaluate(() => {
+            const on = document.activeElement;
+            const line = on?.closest(".home-live-line");
+            const index = [
+              ...document.querySelectorAll(".home-live-line"),
+            ].indexOf(line);
+            return `focus on <${on?.tagName.toLowerCase()} class="${on?.className}"> line ${index} ${line?.getAttribute("data-post-id") ?? ""}`;
+          });
+        await expect(keyed, await focusAt()).toBeFocused();
         await box.evaluate((element) =>
           element.scrollIntoView({ block: "center" }),
         );
         expect(
           await keyed.evaluate((link) => link.matches(":focus-visible")),
+          await focusAt(),
         ).toBe(true);
         const fifth = arrive(5, "キーボードで読んでいる間に届いたひとこと。");
         before = newReads();
@@ -8348,11 +8364,9 @@ try {
           .getByLabel("13歳以上で、利用規約とプライバシーに同意します")
           .check();
         await start.click();
+        // Begun, the reader is home at once: the reading room, the town rests.
         await expect(
-          page.getByRole("heading", { name: "ログインしています" }),
-        ).toBeVisible();
-        await expect(
-          page.getByText("人とつながらず、自分の記録だけで使っています。"),
+          page.getByRole("heading", { name: "今日は、どの本と過ごしますか" }),
         ).toBeVisible();
         expect(inserted.at(-1)).toEqual({
           id: user.id,
@@ -8365,11 +8379,6 @@ try {
           user_id: user.id,
           mode: "manage",
         });
-        // Home is the reading room; the town rests.
-        await page.getByRole("link", { name: "本の街へ" }).click();
-        await expect(
-          page.getByRole("heading", { name: "今日は、どの本と過ごしますか" }),
-        ).toBeVisible();
         // Both ways in are said, and nothing up top invites into the town.
         await expect(page.locator(".manage-register")).toContainText(
           "バーコードか、書名で",
