@@ -6,11 +6,13 @@
   "/leave/": 17,
   "/library/": 30,
   "/login/": 17,
+  "/login/help/": 12,
   "/my-shop/": 35,
   "/notifications/": 29,
   "/post/": 29,
   "/posters/": 29,
   "/posters/new/": 29,
+  "/privacy/": 12,
   "/profile/": 29,
   "/profiles/[id]/": 29,
   "/reading-list/": 29,
@@ -18,6 +20,7 @@
   "/search/": 29,
   "/shop/": 29,
   "/shops/[id]/": 29,
+  "/terms/": 12,
   "/timeline/": 33,
   "/walk/": 39
 }

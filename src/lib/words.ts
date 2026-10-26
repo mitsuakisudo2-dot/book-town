@@ -95,6 +95,20 @@ export const NAMES = {
   postTap: "投稿",
 } as const;
 
+/**
+ * Who runs the town and where to write to them (管理表 44, けにー 10-26
+ * 00:49Z). The address is shown only on the terms, the privacy page and
+ * the page for a reader who cannot log in; in the app the way to the
+ * operator will be a message (管理表 79). Mail to it is passed on through
+ * ImprovMX, and the inbox it reaches is never written here.
+ */
+export const OPERATOR = {
+  name: "BookTown運営",
+  mail: "hello@booktown.page",
+  /** Where the login email comes from (docs/09「ログインのメール」). */
+  loginMail: "login@booktown.page",
+} as const;
+
 /** The page's title: "便りだけ | BookTown". */
 export const pageTitle = (name: string) => `${name} | ${NAMES.service}`;
 
@@ -152,6 +166,8 @@ export const REGISTER = {
   byIsbn: "このISBNで登録",
   /** First of はじめの3つ, and the scanner's own name. */
   start: "本を登録",
+  /** Said under it: the two ways in (#383). */
+  how: "バーコードか、書名で",
   /** What is said once a book, named in 『』, is in or was in already. */
   added: (quoted: string) => `${quoted}を登録しました`,
   already: (quoted: string) => `${quoted}はもうライブラリにあります`,
@@ -200,6 +216,9 @@ export const PLACE = {
   /** Shows the next books of a long shelf. */
   more: "もっと見る",
 } as const;
+
+/** The door to 整える, where the reader's shop is tended (けにー 10-25). */
+export const SHOP_TIDY = "店を整える";
 
 // ── Failure notices ─────────────────────────────────────────────────────
 

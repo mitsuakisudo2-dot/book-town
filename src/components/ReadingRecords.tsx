@@ -364,7 +364,6 @@ export function BookFeelings({
   notify,
   book,
 }: Shared & { book: Book }) {
-  const [open, setOpen] = useState(false);
   // 読書管理モード: the reader's own record only; others' are not read.
   const manage = inManageMode(state);
   // The records of the book's work, read when its page opens (AUD-006): the
@@ -375,9 +374,6 @@ export function BookFeelings({
   );
   const words = manage ? [] : bookFeelings(shown, book.id);
   const talkers = manage ? [] : talkersOf(shown, book.id);
-  const own = ownRecordFor(state, book.id);
-  // Feelings chosen and left for later are picked up where they were.
-  const keptNew = useRecordWorkKept({ bookId: book.id });
   return (
     <section className="book-feelings" aria-labelledby="book-feelings-title">
       <span className="eyebrow">AFTER THE LAST PAGE</span>
@@ -410,6 +406,29 @@ export function BookFeelings({
           </ul>
         </div>
       )}
+      <OwnFeeling state={state} actions={actions} notify={notify} book={book} />
+    </section>
+  );
+}
+
+/**
+ * The reader's own 読み終えた気持ち of a book: the record with 見直す and
+ * its 公開, or the way to leave one. In the book page's 読み終えた人の気持ち,
+ * and on its わたし face (管理表 17).
+ */
+export function OwnFeeling({
+  state,
+  actions,
+  notify,
+  book,
+}: Shared & { book: Book }) {
+  const [open, setOpen] = useState(false);
+  const manage = inManageMode(state);
+  const own = ownRecordFor(state, book.id);
+  // Feelings chosen and left for later are picked up where they were.
+  const keptNew = useRecordWorkKept({ bookId: book.id });
+  return (
+    <>
       {own ? (
         <div className="book-feelings-own">
           <p>
@@ -454,7 +473,7 @@ export function BookFeelings({
           onClose={() => setOpen(false)}
         />
       )}
-    </section>
+    </>
   );
 }
 

@@ -504,7 +504,10 @@ export default function TownApp({
           ))}
         </nav>
         {!manage && (
-          <Link className="open-shop-link" href={myShopPath()}>
+          <Link
+            className="open-shop-link"
+            href={myShopPath({ tidy: !!state.ownShop })}
+          >
             <Icon name="plus" size={18} />
             {state.ownShop ? "書店を整える" : "あなたも、店主に。"}
             <Icon name="arrow" size={15} />
@@ -571,16 +574,19 @@ export default function TownApp({
             <kbd>↵</kbd>
           </form>
           <div className="top-actions">
-            <button
-              className="demo-pill"
-              onClick={() => setAbout(true)}
-              aria-label={
-                (savedIn === "local" ? "デモの街" : "本の街") + "について"
-              }
-            >
-              {savedIn === "local" ? "デモの街" : "本の街"}
-              <Icon name="leaf" size={12} />
-            </button>
+            {/* The town rests in 管理モード: nothing invites into it (10-25). */}
+            {!manage && (
+              <button
+                className="demo-pill"
+                onClick={() => setAbout(true)}
+                aria-label={
+                  (savedIn === "local" ? "デモの街" : "本の街") + "について"
+                }
+              >
+                {savedIn === "local" ? "デモの街" : "本の街"}
+                <Icon name="leaf" size={12} />
+              </button>
+            )}
             {!visitor && (
               <Link
                 href={libraryPath({ addBook: true })}

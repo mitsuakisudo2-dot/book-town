@@ -186,7 +186,7 @@ export function Alley({
             通りの入口へ
             <Icon name="back" size={15} />
           </button>
-          <Link href={myShopPath()}>
+          <Link href={myShopPath({ tidy: !!state.ownShop })}>
             {state.ownShop ? "自分の棚を整える" : "あなたの一冊を並べる"}
             <Icon name="plus" size={15} />
           </Link>

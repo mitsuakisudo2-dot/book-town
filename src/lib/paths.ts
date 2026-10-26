@@ -71,14 +71,17 @@ export const libraryPath = (
 
 /**
  * The reader's own shop, or the door to open one; `place` opens it with that
- * book chosen, ready to put on a shelf (管理表 103).
+ * book chosen, ready to put on a shelf (管理表 103), and `tidy` straight in
+ * 整える, where the shop is tended (けにー 10-25).
  */
 export const myShopPath = (
-  options: { place?: string; at?: string } = {},
+  options: { place?: string; tidy?: boolean; at?: string } = {},
 ): string =>
   (options.place
     ? "/my-shop/?place=" + encodeURIComponent(options.place)
-    : "/my-shop/") + (options.at ? "#" + options.at : "");
+    : options.tidy
+      ? "/my-shop/?tidy=1"
+      : "/my-shop/") + (options.at ? "#" + options.at : "");
 
 /** The notifications page (お知らせ); `at` jumps to a part of it. */
 export const notificationsPath = (at?: string): string =>
@@ -89,6 +92,15 @@ export const timelinePath = (): string => "/timeline/";
 
 /** Where the sources of the book data are named. */
 export const creditsPath = (): string => "/credits/";
+
+/** The terms of use (利用規約, 管理表 44). */
+export const termsPath = (): string => "/terms/";
+
+/** How the town keeps what readers give it (プライバシー, 管理表 44). */
+export const privacyPath = (): string => "/privacy/";
+
+/** For a reader who cannot log in (ログインできないとき, 管理表 44・107). */
+export const loginHelpPath = (): string => "/login/help/";
 
 /** The reading list. */
 export const readingListPath = (): string => "/reading-list/";

@@ -76,7 +76,14 @@ import { focusField } from "../lib/coarse-pointer";
 import "./scene-editor.css";
 import "./editor.css";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
-import { counted, whenSome, failure, AGAIN, PLACE } from "../lib/words";
+import {
+  counted,
+  whenSome,
+  failure,
+  AGAIN,
+  PLACE,
+  SHOP_TIDY,
+} from "../lib/words";
 import { libraryBookIds, ownFirst } from "../lib/shop-picks";
 import { mine } from "../lib/own-books";
 import { useUrlParam } from "../lib/url-state";
@@ -1202,6 +1209,22 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
     persistenceStatus !== "loading" &&
     persistenceStatus !== "unavailable" &&
     persistenceStatus !== "recovered";
+  // ?tidy= (the street's and the walk's 整える) opens 整える at once, once it
+  // can write; the address goes back to the page's own, so a reload does not.
+  const [tidyParam, setTidyParam] = useUrlParam("tidy");
+  useEffect(() => {
+    if (!tidyParam || !townIn || !walk.ready) return;
+    setTidyParam(null);
+    if (shop && walkWritable && townKnown) setTidyOpen(true);
+  }, [
+    tidyParam,
+    setTidyParam,
+    townIn,
+    walk.ready,
+    shop,
+    walkWritable,
+    townKnown,
+  ]);
   useEffect(() => {
     if (!shop || shop.demo || !ownScene || !walkKnown || !townKnown) return;
     const next = sceneForShelves(ownScene, shop, state.books);
@@ -1351,7 +1374,10 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
           setOpening(true);
           setPlacing(null);
         }}
-        onDone={() => setOpening(false)}
+        onDone={() => {
+          setOpening(false);
+          if (walkWritable && townKnown) setTidyOpen(true);
+        }}
       />
     );
   return (
@@ -1391,7 +1417,7 @@ export function ShopEditor({ state, actions, notify }: ShopEditorProps) {
             onClick={() => setTidyOpen(true)}
           >
             <Icon name="shelf" size={17} />
-            店を整える
+            {SHOP_TIDY}
           </button>
           {inWalk && (
             <Link className="btn" href={walkPath("mine")}>
