@@ -1845,6 +1845,170 @@ async function main() {
     },
   );
 
+  await check(
+    "管理表18 a reading's card, its books' times and 今日のノート are kept, read on, and not kept when the reader says so",
+    async () => {
+      const kai = await reader("kai");
+      // An hour ago, so nothing the device sends is in the database's future.
+      let clock = Date.now() - 60 * 60_000;
+      const storeAt = async () => {
+        const store = createTownStore(
+          accountTownBackend(kai.client, kai.id, {
+            delay: 0,
+            retryDelays: [50],
+            storage: false,
+          }),
+          () => new Date(clock),
+        );
+        store.initialize();
+        await settled(store);
+        return store;
+      };
+      const store = await storeAt();
+      const first = store.actions.addBook({
+        title: "こころ",
+        author: "夏目漱石",
+      })!;
+      const second = store.actions.addBook({
+        title: "檸檬",
+        author: "梶井基次郎",
+      })!;
+      assert.ok(store.actions.startReading(first, "solo"));
+      clock += 10 * 60_000;
+      store.actions.pauseReading();
+      clock += 2 * 60_000;
+      assert.ok(store.actions.changeReadingBook(second));
+      const cardId = store.getSnapshot().readingCards[0].id;
+      const word = store.actions.writeReadingNote(cardId, {
+        kind: "word",
+        body: "鷹揚",
+        page: 3,
+      })!;
+      clock += 5 * 60_000;
+      store.actions.endReading(false);
+      const last = store.getSnapshot().readingSessions.at(-1)!.id;
+      assert.ok(
+        store.actions.changeCardBook(last, { pageTo: 120, finished: true }),
+      );
+      await settled(store);
+
+      let town = (await storeAt()).getSnapshot();
+      assert.equal(town.readingCards.length, 1);
+      assert.equal(town.readingCards[0].pausedSeconds, 2 * 60);
+      assert.equal(town.readingCards[0].pausedAt, null);
+      assert.deepEqual(
+        town.readingCardBooks
+          .map((book) => [
+            town.readingSessions.find((s) => s.id === book.sessionId)?.bookId,
+            book.readSeconds,
+            book.pageTo,
+            book.finished,
+          ])
+          .sort((a, b) => Number(a[1]) - Number(b[1])),
+        [
+          [second, 5 * 60, 120, true],
+          [first, 10 * 60, null, false],
+        ],
+      );
+      assert.deepEqual(
+        town.readingNotes.map((note) => [note.id, note.body, note.page]),
+        [[word, "鷹揚", 3]],
+      );
+      assert.ok(town.finishedBooks.includes(second));
+
+      // 読書にもどる on another page, then a note changed and 記録しない.
+      const again = await storeAt();
+      clock += 4 * 60_000;
+      assert.ok(again.actions.readOn(cardId));
+      assert.ok(again.actions.changeReadingNote(word, { body: "鷹揚な人" }));
+      await settled(again);
+      town = (await storeAt()).getSnapshot();
+      assert.equal(town.readingSessions.filter((s) => !s.endedAt).length, 1);
+      assert.equal(town.readingCards[0].pausedSeconds, 6 * 60);
+      assert.equal(town.readingNotes[0].body, "鷹揚な人");
+      const stale = await storeAt();
+      again.actions.discardReading(cardId);
+      await settled(again);
+      // A note written on another page that still shows the card is not
+      // kept, and said so: never passed over as saved.
+      assert.ok(
+        stale.actions.writeReadingNote(cardId, {
+          kind: "thought",
+          body: "残しておきたい言葉",
+        }),
+      );
+      await settled(stale, "recovered");
+      assert.equal(stale.getSnapshot().readingCards.length, 0);
+      town = (await storeAt()).getSnapshot();
+      assert.deepEqual(
+        [
+          town.readingSessions.length,
+          town.readingCards.length,
+          town.readingCardBooks.length,
+          town.readingNotes.length,
+        ],
+        [0, 0, 0, 0],
+      );
+      // Nothing of it is left behind in the database.
+      for (const table of [
+        "reading_sessions",
+        "reading_cards",
+        "reading_card_books",
+        "reading_notes",
+      ] as const) {
+        const left = await admin
+          .from(table)
+          .select("user_id", { count: "exact", head: true })
+          .eq("user_id", kai.id);
+        assert.ifError(left.error);
+        assert.equal(left.count, 0, table);
+      }
+
+      // A reading added afterwards, read away from the app: yesterday's
+      // times as the reader gave them, and one whose time is not known.
+      const later = await storeAt();
+      const yesterday = new Date(clock - 24 * 60 * 60_000).toISOString();
+      const added = later.actions.addReadingLater(first, {
+        startedAt: yesterday,
+        seconds: 30 * 60,
+        pageFrom: 1,
+        pageTo: 64,
+        finished: true,
+      })!;
+      assert.ok(
+        later.actions.addReadingLater(second, {
+          startedAt: yesterday,
+          seconds: null,
+          pageTo: 12,
+        }),
+      );
+      await settled(later);
+      town = (await storeAt()).getSnapshot();
+      const card = town.readingCards.find((entry) => entry.id === added)!;
+      assert.equal(card.addedLater, true);
+      const spanId = town.readingCardBooks.find(
+        (book) => book.cardId === added,
+      )?.sessionId;
+      const span = town.readingSessions.find((s) => s.id === spanId)!;
+      assert.equal(Date.parse(span.startedAt), Date.parse(yesterday));
+      assert.equal(
+        Date.parse(span.endedAt!),
+        Date.parse(yesterday) + 30 * 60_000,
+      );
+      assert.equal(span.mode, "solo");
+      assert.deepEqual(
+        town.readingCardBooks
+          .map((book) => [book.readSeconds, book.pageFrom, book.pageTo])
+          .sort((a, b) => Number(b[0]) - Number(a[0])),
+        [
+          [30 * 60, 1, 64],
+          [0, null, 12],
+        ],
+      );
+      assert.ok(town.finishedBooks.includes(first));
+    },
+  );
+
   console.log(passed + " Supabase town checks passed");
 }
 

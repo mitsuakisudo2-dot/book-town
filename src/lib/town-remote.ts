@@ -25,6 +25,15 @@ import {
 } from "./library";
 import { entriesOf } from "./library-town";
 import {
+  keptCards,
+  readCard,
+  readCardBook,
+  readNote,
+  type ReadingCard,
+  type ReadingCardBook,
+  type ReadingNote,
+} from "./reading-cards";
+import {
   COMPOSE_ICONS,
   SPOILER_DISPLAYS,
   ME_ID,
@@ -211,6 +220,13 @@ export interface RemoteRows {
   popReactions: Tables<"pop_reactions">[];
   /** The person's own reading, and others' reading together right now. */
   sessions: Tables<"reading_sessions">[];
+  /**
+   * The person's own readings (読書記録): their cards, the books of them and
+   * 今日のノート. None in a visitor's town.
+   */
+  readingCards?: Tables<"reading_cards">[];
+  readingCardBooks?: Tables<"reading_card_books">[];
+  readingNotes?: Tables<"reading_notes">[];
   /**
    * The person's own reading records, and others' they may read: every one,
    * or, from town_view's window, the ones the town shows (TOWN_VIEW_ARGS).
@@ -509,6 +525,63 @@ function shelfBooksFromRows(
   );
 }
 
+/** The person's own cards, their books and notes, as the town keeps them. */
+function cardsFromRows(
+  rows: RemoteRows,
+  userId: string | null,
+  sessions: ReadingSession[],
+): Pick<TownState, "readingCards" | "readingCardBooks" | "readingNotes"> {
+  const own = <T extends { user_id: string }>(list: T[] | undefined) =>
+    (list ?? []).filter((row) => row.user_id === userId);
+  return keptCards(
+    sessions,
+    own(rows.readingCards).flatMap(
+      (row) =>
+        readCard({
+          id: row.id,
+          timeZone: row.time_zone,
+          addedLater: row.added_later,
+          pausedAt: row.paused_at,
+          pausedSeconds: row.paused_seconds,
+          timer: row.timer,
+          timerMinutes: row.timer_minutes,
+          restMinutes: row.rest_minutes,
+          timerAt: row.timer_at,
+          room: row.room,
+          light: row.light,
+          look: row.look,
+          createdAt: row.created_at,
+        }) ?? [],
+    ),
+    own(rows.readingCardBooks).flatMap(
+      (row) =>
+        readCardBook({
+          sessionId: row.session_id,
+          cardId: row.card_id,
+          readSeconds: row.read_seconds,
+          pageFrom: row.page_from,
+          pageTo: row.page_to,
+          pageUnit: row.page_unit,
+          format: row.format,
+          finished: row.finished,
+          createdAt: row.created_at,
+        }) ?? [],
+    ),
+    own(rows.readingNotes).flatMap(
+      (row) =>
+        readNote({
+          id: row.id,
+          cardId: row.card_id,
+          sessionId: row.session_id,
+          kind: row.kind,
+          body: row.body,
+          page: row.page,
+          createdAt: row.created_at,
+        }) ?? [],
+    ),
+  );
+}
+
 /** The person's own encounters, of books the town knows, oldest first. */
 function encountersFromRows(
   rows: Tables<"book_encounters">[],
@@ -776,6 +849,7 @@ export function townFromRows(
       endedAt: row.ended_at,
     }))
     .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
+  const cards = cardsFromRows(rows, userId, readingSessions);
   const readingNow: ReadingNow[] = rows.sessions
     .filter(
       (row) =>
@@ -855,6 +929,7 @@ export function townFromRows(
       .filter((id) => postIds.has(id)),
     readingNow,
     readingSessions,
+    ...cards,
     readingRecords: rows.records
       .filter(
         (row) =>
@@ -1253,6 +1328,40 @@ export function referencedBookIds(rows: Omit<RemoteRows, "books">): string[] {
 
 type Pair = Record<string, string>;
 
+/** What changes of a card the app sends: everything but its id and reader. */
+type ReadingCardPatch = Partial<
+  Pick<
+    Tables<"reading_cards">,
+    | "time_zone"
+    | "added_later"
+    | "paused_at"
+    | "paused_seconds"
+    | "timer"
+    | "timer_minutes"
+    | "rest_minutes"
+    | "timer_at"
+    | "room"
+    | "light"
+    | "look"
+  >
+>;
+/** What changes of a book of a card the app sends. */
+type ReadingCardBookPatch = Partial<
+  Pick<
+    Tables<"reading_card_books">,
+    | "read_seconds"
+    | "page_from"
+    | "page_to"
+    | "page_unit"
+    | "format"
+    | "finished"
+  >
+>;
+/** What changes of a note the app sends. */
+type ReadingNotePatch = Partial<
+  Pick<Tables<"reading_notes">, "kind" | "body" | "page">
+>;
+
 /** One step of saving. Each one can be run again safely after a failure. */
 export type Write =
   // The database gives a book its edition and work; a reader may name neither.
@@ -1306,7 +1415,47 @@ export type Write =
   | { kind: "mark-spoilers"; ids: string[] }
   | { kind: "like-taps"; rows: { post_id: string; taps: number }[] }
   | { kind: "end-sessions"; rows: { id: string; ended_at: string }[] }
+  | {
+      kind: "session-changes";
+      /**
+       * A span's book changed a minute or less into it, or one ended read on
+       * again (読書にもどる).
+       */
+      rows: {
+        id: string;
+        patch: Partial<
+          Pick<Tables<"reading_sessions">, "book_id" | "ended_at">
+        >;
+      }[];
+    }
   | { kind: "sessions"; rows: TablesInsert<"reading_sessions">[] }
+  | {
+      kind: "reading-cards";
+      /** Cards new to the database: inserted, one already there kept as it is. */
+      add: TablesInsert<"reading_cards">[];
+      patches: { id: string; patch: ReadingCardPatch }[];
+    }
+  | {
+      kind: "reading-card-books";
+      /** Books of cards new to the database, as cards are. */
+      add: TablesInsert<"reading_card_books">[];
+      patches: { session_id: string; patch: ReadingCardBookPatch }[];
+    }
+  | {
+      kind: "reading-notes";
+      add: TablesInsert<"reading_notes">[];
+      patches: { id: string; patch: ReadingNotePatch }[];
+      remove: string[];
+    }
+  | {
+      kind: "discard-readings";
+      /**
+       * Cards not kept (記録しない): the spans of their books first, then the
+       * cards, so no span is left looking like a reading from before cards.
+       */
+      sessions: string[];
+      cards: string[];
+    }
   | { kind: "delete-records"; ids: string[] }
   | { kind: "records"; rows: TablesInsert<"reading_entries">[] }
   | {
@@ -1800,6 +1949,7 @@ export function planWrites(
       ids: marked.map((post) => post.id),
     });
 
+  writes.push(...discardWrites(base, next));
   const before = new Map(
     base.readingSessions.map((entry) => [entry.id, entry]),
   );
@@ -1818,6 +1968,21 @@ export function planWrites(
         ended_at: entry.endedAt as string,
       })),
     });
+  // A span's book changed, or one ended read on again: after the ends, so
+  // the one read on is the only one running; before any new one begins.
+  const sessionChanges = next.readingSessions.flatMap((entry) => {
+    const was = before.get(entry.id);
+    if (!was || was === entry) return [];
+    const patch: Extract<
+      Write,
+      { kind: "session-changes" }
+    >["rows"][number]["patch"] = {};
+    if (was.bookId !== entry.bookId) patch.book_id = entry.bookId;
+    if (was.endedAt !== null && entry.endedAt === null) patch.ended_at = null;
+    return Object.keys(patch).length ? [{ id: entry.id, patch }] : [];
+  });
+  if (sessionChanges.length)
+    writes.push({ kind: "session-changes", rows: sessionChanges });
   const started = next.readingSessions.filter((entry) => !before.has(entry.id));
   if (started.length)
     writes.push({
@@ -1831,6 +1996,7 @@ export function planWrites(
         ended_at: entry.endedAt,
       })),
     });
+  writes.push(...cardWrites(base, next, user));
 
   const mine = (state: TownState) =>
     new Map(
@@ -1983,6 +2149,178 @@ export function planWrites(
   return withSampleRows(writes);
 }
 /**
+ * What changed of the reader's cards, after their spans (docs/機能/読書記録.md
+ * 「アプリが書くときの決まり」): cards, then their books, then notes, every
+ * row new to the database sent whole. A card not kept goes before
+ * (discardWrites), its notes with it.
+ */
+function cardWrites(base: TownState, next: TownState, user: string): Write[] {
+  const writes: Write[] = [];
+
+  const baseCards = byId(base.readingCards);
+  const cards = next.readingCards.filter((card) => !baseCards.has(card.id));
+  const cardPatches = columnChanges(
+    baseCards,
+    next.readingCards,
+    (card) => card.id,
+    CARD_COLUMNS,
+  );
+  if (cards.length || cardPatches.length)
+    writes.push({
+      kind: "reading-cards",
+      add: cards.map((card) => ({
+        id: card.id,
+        user_id: user,
+        ...columnsOf(CARD_COLUMNS, card),
+        created_at: card.createdAt,
+      })),
+      patches: cardPatches.map(({ key, patch }) => ({ id: key, patch })),
+    });
+
+  const baseBooks = new Map(
+    base.readingCardBooks.map((book) => [book.sessionId, book]),
+  );
+  const books = next.readingCardBooks.filter(
+    (book) => !baseBooks.has(book.sessionId),
+  );
+  const bookPatches = columnChanges(
+    baseBooks,
+    next.readingCardBooks,
+    (book) => book.sessionId,
+    BOOK_COLUMNS,
+  );
+  if (books.length || bookPatches.length)
+    writes.push({
+      kind: "reading-card-books",
+      add: books.map((book) => ({
+        user_id: user,
+        session_id: book.sessionId,
+        card_id: book.cardId,
+        ...columnsOf(BOOK_COLUMNS, book),
+        created_at: book.createdAt,
+      })),
+      patches: bookPatches.map(({ key, patch }) => ({
+        session_id: key,
+        patch,
+      })),
+    });
+
+  const nextCards = byId(next.readingCards);
+  const baseNotes = byId(base.readingNotes);
+  const nextNotes = byId(next.readingNotes);
+  const notes = next.readingNotes.filter((note) => !baseNotes.has(note.id));
+  const notePatches = columnChanges(
+    baseNotes,
+    next.readingNotes,
+    (note) => note.id,
+    NOTE_COLUMNS,
+  );
+  // A note of a card not kept goes with the card.
+  const erased = base.readingNotes
+    .filter((note) => !nextNotes.has(note.id) && nextCards.has(note.cardId))
+    .map((note) => note.id);
+  if (notes.length || notePatches.length || erased.length)
+    writes.push({
+      kind: "reading-notes",
+      add: notes.map((note) => ({
+        id: note.id,
+        user_id: user,
+        card_id: note.cardId,
+        session_id: note.sessionId,
+        ...columnsOf(NOTE_COLUMNS, note),
+        created_at: note.createdAt,
+      })),
+      patches: notePatches.map(({ key, patch }) => ({ id: key, patch })),
+      remove: erased,
+    });
+
+  return writes;
+}
+
+const byId = <T extends { id: string }>(rows: T[]) =>
+  new Map(rows.map((row) => [row.id, row]));
+
+/** Columns the app changes of a row, each with how it keeps it. */
+type Columns<T, P> = [keyof P, (row: T) => unknown][];
+
+/** The row's columns, as the database keeps them. */
+const columnsOf = <T, P>(columns: Columns<T, P>, row: T) =>
+  Object.fromEntries(
+    columns.map(([column, value]) => [column, value(row)]),
+  ) as Required<P>;
+
+/** The rows of `now` changed since `was`, each with its columns that changed. */
+const columnChanges = <T, P>(
+  was: Map<string, T>,
+  now: T[],
+  key: (row: T) => string,
+  columns: Columns<T, P>,
+) =>
+  now.flatMap((row) => {
+    const before = was.get(key(row));
+    if (!before || before === row) return [];
+    const patch = Object.fromEntries(
+      columns.flatMap(([column, value]) =>
+        value(before) === value(row) ? [] : [[column, value(row)]],
+      ),
+    ) as Partial<P>;
+    return Object.keys(patch).length ? [{ key: key(row), patch }] : [];
+  });
+
+/**
+ * The cards not kept (記録しない), their spans before them: first of the
+ * reading's writes, so a reading begun after it is not refused for one
+ * still running. Only a span of a card not kept is ever deleted.
+ */
+function discardWrites(base: TownState, next: TownState): Write[] {
+  const kept = new Set(next.readingCards.map((card) => card.id));
+  const cards = base.readingCards
+    .filter((card) => !kept.has(card.id))
+    .map((card) => card.id);
+  if (!cards.length) return [];
+  const gone = new Set(cards);
+  const sessions = new Set(next.readingSessions.map((session) => session.id));
+  return [
+    {
+      kind: "discard-readings",
+      sessions: base.readingCardBooks
+        .filter(
+          (book) => gone.has(book.cardId) && !sessions.has(book.sessionId),
+        )
+        .map((book) => book.sessionId),
+      cards,
+    },
+  ];
+}
+
+const CARD_COLUMNS: Columns<ReadingCard, ReadingCardPatch> = [
+  ["time_zone", (card) => card.timeZone],
+  ["added_later", (card) => card.addedLater],
+  ["paused_at", (card) => card.pausedAt],
+  ["paused_seconds", (card) => card.pausedSeconds],
+  ["timer", (card) => card.timer],
+  ["timer_minutes", (card) => card.timerMinutes],
+  ["rest_minutes", (card) => card.restMinutes],
+  ["timer_at", (card) => card.timerAt],
+  ["room", (card) => card.room],
+  ["light", (card) => card.light],
+  ["look", (card) => card.look],
+];
+const BOOK_COLUMNS: Columns<ReadingCardBook, ReadingCardBookPatch> = [
+  ["read_seconds", (book) => book.readSeconds],
+  ["page_from", (book) => book.pageFrom],
+  ["page_to", (book) => book.pageTo],
+  ["page_unit", (book) => book.pageUnit],
+  ["format", (book) => book.format],
+  ["finished", (book) => book.finished],
+];
+const NOTE_COLUMNS: Columns<ReadingNote, ReadingNotePatch> = [
+  ["kind", (note) => note.kind],
+  ["body", (note) => note.body],
+  ["page", (note) => note.page],
+];
+
+/**
  * The 見本 in what is written. Their books are named by their database ids,
  * rows the database keeps for everyone and nobody's (AUD-078), so none is
  * ever written; nobody stands behind their shops and posts, so nothing
@@ -2009,6 +2347,16 @@ function withSampleRows(writes: Write[]): Write[] {
       }
       case "sessions":
         return [{ ...write, rows: write.rows.map(named) }];
+      case "session-changes":
+        return [
+          {
+            ...write,
+            rows: write.rows.map((row) => ({
+              ...row,
+              patch: named(row.patch),
+            })),
+          },
+        ];
       case "records":
         return [{ ...write, rows: write.rows.map(named) }];
       case "posters":
@@ -2110,7 +2458,12 @@ const WRITE_KINDS: Record<Write["kind"], true> = {
   "mark-spoilers": true,
   "like-taps": true,
   "end-sessions": true,
+  "session-changes": true,
   sessions: true,
+  "reading-cards": true,
+  "reading-card-books": true,
+  "reading-notes": true,
+  "discard-readings": true,
   "delete-records": true,
   records: true,
   "update-record": true,
@@ -2149,10 +2502,39 @@ export function splitWrite(write: Write): Write[] {
     case "posts":
     case "like-taps":
     case "end-sessions":
+    case "session-changes":
     case "sessions":
     case "records":
     case "posters":
       return write.rows.map((row) => ({ ...write, rows: [row] }) as Write);
+    case "reading-cards":
+    case "reading-card-books":
+      return [
+        ...write.add.map((row) => ({ ...write, add: [row], patches: [] })),
+        ...write.patches.map((row) => ({ ...write, add: [], patches: [row] })),
+      ] as Write[];
+    case "reading-notes":
+      // As applyWrite sends them: the erased first.
+      return [
+        ...write.remove.map((id) => ({
+          ...write,
+          add: [],
+          patches: [],
+          remove: [id],
+        })),
+        ...write.add.map((row) => ({
+          ...write,
+          add: [row],
+          patches: [],
+          remove: [],
+        })),
+        ...write.patches.map((row) => ({
+          ...write,
+          add: [],
+          patches: [row],
+          remove: [],
+        })),
+      ];
     case "remove":
     case "add":
       return write.rows.map((row) => ({ ...write, rows: [row] }));
@@ -2377,6 +2759,9 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
     spoilerReports: [],
     readingNow: [],
     readingSessions: [],
+    readingCards: [],
+    readingCardBooks: [],
+    readingNotes: [],
     finishedBooks: [],
     library: [],
     libraryEntries: {},

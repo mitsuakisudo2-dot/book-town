@@ -49,6 +49,12 @@ import {
 } from "../src/lib/types";
 import { cleanVisibilities } from "../src/lib/visibility";
 import { sameWork, workOf } from "../src/lib/works";
+import {
+  withBookChanged,
+  withCardBegun,
+  withCardDiscarded,
+  withReadOn,
+} from "../src/lib/reading-cards";
 
 // Checks, without a database, how the signed-in town is built from rows and
 // what is written back. Everything runs inside main() because tsx compiles this
@@ -1496,6 +1502,325 @@ async function main() {
         ],
         [E3, AKI, "pop", null],
       );
+    },
+  );
+
+  await check(
+    "管理表18 a reading's card is read as the reader's own and written after its span: cards, their books, then notes, each whole when new; a card not kept goes first, its spans before it",
+    () => {
+      const S1 = "00000000-0000-4000-8000-0000000003a1";
+      const S2 = "00000000-0000-4000-8000-0000000003a2";
+      const S3 = "00000000-0000-4000-8000-0000000003a3";
+      const C1 = "00000000-0000-4000-8000-0000000005c1";
+      const C2 = "00000000-0000-4000-8000-0000000005c2";
+      const N1 = "00000000-0000-4000-8000-0000000004b1";
+      const N2 = "00000000-0000-4000-8000-0000000004b2";
+      const begun = "2026-10-27T10:00:00.000Z";
+      const session = (
+        id: string,
+        extra: Partial<Tables<"reading_sessions">> = {},
+      ): Tables<"reading_sessions"> => ({
+        id,
+        user_id: AKI,
+        book_id: BOOK,
+        mode: "solo",
+        started_at: begun,
+        ended_at: null,
+        ...extra,
+      });
+      const cardRow = (
+        id: string,
+        extra: Partial<Tables<"reading_cards">> = {},
+      ): Tables<"reading_cards"> => ({
+        id,
+        user_id: AKI,
+        time_zone: "Asia/Tokyo",
+        added_later: false,
+        paused_at: null,
+        paused_seconds: 0,
+        timer: "none",
+        timer_minutes: null,
+        rest_minutes: null,
+        timer_at: null,
+        room: null,
+        light: null,
+        look: null,
+        shown: {},
+        created_at: begun,
+        updated_at: begun,
+        ...extra,
+      });
+      const bookRow = (
+        sessionId: string,
+        cardId: string,
+        extra: Partial<Tables<"reading_card_books">> = {},
+      ): Tables<"reading_card_books"> => ({
+        user_id: AKI,
+        session_id: sessionId,
+        card_id: cardId,
+        read_seconds: null,
+        page_from: 12,
+        page_to: null,
+        page_unit: "page",
+        format: null,
+        finished: false,
+        created_at: begun,
+        updated_at: begun,
+        ...extra,
+      });
+      const noteRow = (
+        id: string,
+        extra: Partial<Tables<"reading_notes">> = {},
+      ): Tables<"reading_notes"> => ({
+        id,
+        user_id: AKI,
+        card_id: C1,
+        session_id: S1,
+        kind: "word",
+        body: "鷹揚",
+        page: null,
+        created_at: begun,
+        updated_at: begun,
+        ...extra,
+      });
+      const reading = (extra: Partial<RemoteRows> = {}) =>
+        townFromRows(
+          rows({
+            sessions: [session(S1)],
+            readingCards: [cardRow(C1), cardRow(C2, { user_id: BEN })],
+            readingCardBooks: [
+              bookRow(S1, C1),
+              // Another's, and one of a card not there: neither is read.
+              bookRow(S2, C2, { user_id: BEN }),
+              bookRow(S3, C2),
+            ],
+            readingNotes: [
+              noteRow(N1),
+              noteRow(N2, { card_id: C2, user_id: BEN }),
+            ],
+            ...extra,
+          }),
+          ids,
+        );
+      const before = reading();
+      assert.deepEqual(
+        before.readingCards.map((card) => card.id),
+        [C1],
+      );
+      assert.deepEqual(before.readingCardBooks, [
+        {
+          sessionId: S1,
+          cardId: C1,
+          readSeconds: null,
+          pageFrom: 12,
+          pageTo: null,
+          pageUnit: "page",
+          format: null,
+          finished: false,
+          createdAt: begun,
+        },
+      ]);
+      assert.deepEqual(
+        before.readingNotes.map((note) => [note.id, note.sessionId]),
+        [[N1, S1]],
+      );
+
+      // Another book 25 minutes in: the span ends, the next begins on the
+      // card, then the card's books, then a note.
+      const changed = withBookChanged(
+        before,
+        OTHER_BOOK,
+        "2026-10-27T10:25:00.000Z",
+        S2,
+      );
+      assert.ok(changed && !changed.replaced);
+      const noted: TownState = {
+        ...changed.state,
+        readingNotes: [
+          ...changed.state.readingNotes,
+          {
+            id: N2,
+            cardId: C1,
+            sessionId: S2,
+            kind: "quote",
+            body: "向上心のないものは馬鹿だ",
+            page: 40,
+            createdAt: "2026-10-27T10:26:00.000Z",
+          },
+        ],
+      };
+      let writes = planWrites(before, noted, ids);
+      assert.deepEqual(kinds(writes), [
+        "end-sessions",
+        "sessions",
+        "reading-card-books",
+        "reading-notes",
+      ]);
+      const books = writes[2] as Extract<Write, { kind: "reading-card-books" }>;
+      assert.deepEqual(books.patches, [
+        { session_id: S1, patch: { read_seconds: 25 * 60 } },
+      ]);
+      assert.deepEqual(books.add, [
+        {
+          user_id: AKI,
+          session_id: S2,
+          card_id: C1,
+          read_seconds: null,
+          page_from: null,
+          page_to: null,
+          page_unit: "page",
+          format: null,
+          finished: false,
+          created_at: "2026-10-27T10:25:00.000Z",
+        },
+      ]);
+      const notes = writes[3] as Extract<Write, { kind: "reading-notes" }>;
+      assert.deepEqual(notes.add, [
+        {
+          id: N2,
+          user_id: AKI,
+          card_id: C1,
+          session_id: S2,
+          kind: "quote",
+          body: "向上心のないものは馬鹿だ",
+          page: 40,
+          created_at: "2026-10-27T10:26:00.000Z",
+        },
+      ]);
+
+      // Less than a minute in, with nothing written at it, the span is
+      // given the other book: a 見本's by its row's id.
+      const quiet = { ...before, readingNotes: [] };
+      const soon = withBookChanged(
+        quiet,
+        "solaris",
+        "2026-10-27T10:00:30.000Z",
+        S2,
+      );
+      assert.ok(soon?.replaced === true);
+      writes = planWrites(quiet, soon.state, ids);
+      assert.deepEqual(kinds(writes), [
+        "session-changes",
+        "reading-card-books",
+      ]);
+      assert.deepEqual(
+        (writes[0] as Extract<Write, { kind: "session-changes" }>).rows,
+        [{ id: S1, patch: { book_id: sampleBookRowId("solaris") } }],
+      );
+      assert.deepEqual(
+        (writes[1] as Extract<Write, { kind: "reading-card-books" }>).patches,
+        [{ session_id: S1, patch: { page_from: null } }],
+      );
+
+      // 記録しない, and a new reading at once (offline, sent together): the
+      // card not kept goes first, so the new span is not refused for one
+      // still running; a new card is sent whole.
+      const discarded = withCardDiscarded(before, C1);
+      const next = withCardBegun(
+        {
+          ...discarded,
+          readingSessions: [
+            ...discarded.readingSessions,
+            {
+              id: S3,
+              bookId: OTHER_BOOK,
+              mode: "solo",
+              startedAt: "2026-10-27T10:30:00.000Z",
+              endedAt: null,
+            },
+          ],
+        },
+        {
+          id: S3,
+          bookId: OTHER_BOOK,
+          mode: "solo",
+          startedAt: "2026-10-27T10:30:00.000Z",
+          endedAt: null,
+        },
+        C2,
+        "Europe/Paris",
+      );
+      writes = planWrites(before, next, ids);
+      assert.deepEqual(kinds(writes), [
+        "discard-readings",
+        "sessions",
+        "reading-cards",
+        "reading-card-books",
+      ]);
+      assert.deepEqual(writes[0], {
+        kind: "discard-readings",
+        sessions: [S1],
+        cards: [C1],
+      });
+      const cards = writes[2] as Extract<Write, { kind: "reading-cards" }>;
+      assert.deepEqual(cards.patches, []);
+      assert.deepEqual(cards.add, [
+        {
+          id: C2,
+          user_id: AKI,
+          time_zone: "Europe/Paris",
+          added_later: false,
+          paused_at: null,
+          paused_seconds: 0,
+          timer: "none",
+          timer_minutes: null,
+          rest_minutes: null,
+          timer_at: null,
+          room: null,
+          light: null,
+          look: null,
+          created_at: "2026-10-27T10:30:00.000Z",
+        },
+      ]);
+
+      // 読書にもどる: the span runs again, the time between a pause.
+      const ended = reading({
+        sessions: [session(S1, { ended_at: "2026-10-27T10:20:00.000Z" })],
+        readingCardBooks: [bookRow(S1, C1, { read_seconds: 20 * 60 })],
+      });
+      const readOn = withReadOn(ended, C1, "2026-10-27T10:23:00.000Z");
+      assert.ok(readOn);
+      writes = planWrites(ended, readOn, ids);
+      assert.deepEqual(kinds(writes), [
+        "session-changes",
+        "reading-cards",
+        "reading-card-books",
+      ]);
+      assert.deepEqual(
+        (writes[0] as Extract<Write, { kind: "session-changes" }>).rows,
+        [{ id: S1, patch: { ended_at: null } }],
+      );
+      assert.deepEqual(
+        (writes[1] as Extract<Write, { kind: "reading-cards" }>).patches,
+        [{ id: C1, patch: { paused_seconds: 180 } }],
+      );
+      assert.deepEqual(
+        (writes[2] as Extract<Write, { kind: "reading-card-books" }>).patches,
+        [{ session_id: S1, patch: { read_seconds: null } }],
+      );
+      // A note changed and one erased, each as itself.
+      const twice = reading({
+        readingNotes: [
+          noteRow(N1),
+          noteRow(N2, { kind: "thought", body: "夜" }),
+        ],
+      });
+      writes = planWrites(
+        twice,
+        {
+          ...twice,
+          readingNotes: [{ ...twice.readingNotes[0], body: "鷹揚さ", page: 3 }],
+        },
+        ids,
+      );
+      assert.deepEqual(writes, [
+        {
+          kind: "reading-notes",
+          add: [],
+          patches: [{ id: N1, patch: { body: "鷹揚さ", page: 3 } }],
+          remove: [N2],
+        },
+      ]);
     },
   );
 

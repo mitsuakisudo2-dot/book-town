@@ -60,8 +60,16 @@ export function townWriteLabels(write: Write): string[] {
     case "like-taps":
       return ["いいね"];
     case "end-sessions":
+    case "session-changes":
     case "sessions":
       return ["読書の時間"];
+    case "reading-cards":
+    case "reading-card-books":
+      return ["読書カード"];
+    case "reading-notes":
+      return ["今日のノート"];
+    case "discard-readings":
+      return ["読書カードの削除"];
     case "delete-records":
       return ["読書の記録の削除"];
     case "records":

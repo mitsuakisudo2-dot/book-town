@@ -19,8 +19,8 @@ import {
   readersNow,
   readingFeed,
   readingTotals,
-  sessionSeconds,
 } from "../lib/reading";
+import { sessionReadSeconds } from "../lib/reading-cards";
 import { findReader, formatPostTime } from "../lib/social";
 import { BookPicker } from "./BookPicker";
 import { booksBeforeSearch } from "../lib/book-lists";
@@ -652,7 +652,9 @@ function StartReading({
                     </small>
                   </span>
                   <em>
-                    {formatDuration(sessionSeconds(session, clock?.now ?? 0))}
+                    {formatDuration(
+                      sessionReadSeconds(state, session, clock?.now ?? 0),
+                    )}
                   </em>
                 </li>
               );
@@ -740,7 +742,7 @@ function ReadingRoom({
     phrase: string;
   } | null>(null);
   if (!session) return null;
-  const seconds = clock ? sessionSeconds(session, clock.now) : null;
+  const seconds = clock ? sessionReadSeconds(state, session, clock.now) : null;
   const bookTotal =
     clock && book
       ? (readingTotals(state, clock.now).byBook.get(book.id) ?? 0)

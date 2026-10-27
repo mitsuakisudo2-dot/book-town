@@ -45,6 +45,13 @@ import {
   wordsFolded,
 } from "../src/lib/social";
 import {
+  cardReadSeconds,
+  cardSessions,
+  runningCard,
+  sessionReadSeconds,
+} from "../src/lib/reading-cards";
+import { entriesOf } from "../src/lib/library-town";
+import {
   activeSession,
   bookToContinue,
   currentBookId,
@@ -2921,5 +2928,511 @@ check("a book held back is told once in お知らせ, leading to its page", () =
     0,
   );
 });
+
+// 読書記録 (item 18, docs/機能/読書記録.md): one reading is one card, every
+// book read in it is on that card with its own time, the clock leaves its
+// pauses out, and 今日のノート are written on it. Checked in the demo's town,
+// which keeps them as an account does.
+
+const MINUTE = 60_000;
+const START = Date.parse("2026-10-27T10:00:00Z");
+
+function townWithClock() {
+  let clock = START;
+  const repository = createMemoryRepository();
+  const store = createTownStore(repository, () => new Date(clock));
+  return {
+    store,
+    repository,
+    actions: store.actions,
+    town: () => store.getSnapshot(),
+    pass: (minutes: number) => {
+      clock += minutes * MINUTE;
+    },
+    now: () => clock,
+  };
+}
+
+const statusOf = (town: TownState, bookId: string) =>
+  entriesOf(town)[bookId]?.status ?? null;
+
+check(
+  "a reading begun is a card with its book, read from where it was left",
+  () => {
+    const t = townWithClock();
+    const session = t.actions.startReading("solaris", "solo");
+    assert.ok(session);
+    const town = t.town();
+    assert.equal(town.readingCards.length, 1);
+    const [card] = town.readingCards;
+    assert.equal(card.createdAt, new Date(START).toISOString());
+    assert.equal(card.pausedSeconds, 0);
+    assert.equal(card.timer, "none");
+    assert.ok(card.timeZone.length > 0);
+    assert.deepEqual(town.readingCardBooks, [
+      {
+        sessionId: session,
+        cardId: card.id,
+        readSeconds: null,
+        pageFrom: null,
+        pageTo: null,
+        pageUnit: "page",
+        format: null,
+        finished: false,
+        createdAt: new Date(START).toISOString(),
+      },
+    ]);
+    assert.equal(statusOf(town, "solaris"), "reading");
+    // どこまで読んだ is where the next reading of the book begins.
+    t.pass(30);
+    t.actions.endReading(false);
+    assert.ok(t.actions.changeCardBook(session, { pageTo: 120 }));
+    t.actions.startReading("solaris", "solo");
+    assert.equal(t.town().readingCardBooks.at(-1)?.pageFrom, 120);
+    assert.equal(t.town().readingCards.length, 2);
+  },
+);
+
+check(
+  "the clock leaves its pauses out, and ending counts the book's time",
+  () => {
+    const t = townWithClock();
+    const session = t.actions.startReading("solaris", "solo") as string;
+    t.pass(10);
+    t.actions.pauseReading();
+    t.pass(5);
+    const paused = runningCard(t.town());
+    assert.ok(paused?.card.pausedAt);
+    assert.equal(
+      sessionReadSeconds(t.town(), paused.session, t.now()),
+      10 * 60,
+    );
+    t.actions.resumeReading();
+    assert.equal(runningCard(t.town())?.card.pausedSeconds, 5 * 60);
+    t.pass(15);
+    t.actions.pauseReading();
+    t.pass(3);
+    // Ended while paused, the pause is let go: the card is not paused.
+    t.actions.endReading(false);
+    const town = t.town();
+    assert.equal(activeSession(town), undefined);
+    assert.equal(town.readingCards[0].pausedAt, null);
+    assert.equal(town.readingCards[0].pausedSeconds, 8 * 60);
+    assert.equal(town.readingCardBooks[0].readSeconds, 25 * 60);
+    assert.equal(readingTotals(town, t.now()).total, 25 * 60);
+    assert.equal(
+      town.readingSessions.find((s) => s.id === session)?.endedAt,
+      new Date(START + 33 * MINUTE).toISOString(),
+    );
+  },
+);
+
+check(
+  "a book changed within a minute takes the place of the one before",
+  () => {
+    const t = townWithClock();
+    const before = statusOf(t.town(), "momo");
+    const session = t.actions.startReading("momo", "solo") as string;
+    assert.equal(statusOf(t.town(), "momo"), "reading");
+    t.pass(0.5);
+    assert.ok(t.actions.changeReadingBook("solaris"));
+    const town = t.town();
+    assert.equal(town.readingSessions.length, 1);
+    assert.equal(town.readingSessions[0].id, session);
+    assert.equal(town.readingSessions[0].bookId, "solaris");
+    assert.equal(town.readingCardBooks.length, 1);
+    // The book given way to is as the library had it before the reading.
+    assert.equal(statusOf(town, "momo"), before);
+    assert.equal(statusOf(town, "solaris"), "reading");
+    // The same book again changes nothing.
+    assert.equal(t.actions.changeReadingBook("solaris"), false);
+  },
+);
+
+check(
+  "books changed one after another within a minute each go back as they were",
+  () => {
+    // Begun with no book: the first one chosen is marked on the span, and
+    // goes back when the next takes its place.
+    const t = townWithClock();
+    const momo = statusOf(t.town(), "momo");
+    const solaris = statusOf(t.town(), "solaris");
+    t.actions.startReading(null, "solo");
+    t.pass(0.25);
+    assert.ok(t.actions.changeReadingBook("momo"));
+    assert.equal(statusOf(t.town(), "momo"), "reading");
+    t.pass(0.25);
+    assert.ok(t.actions.changeReadingBook("solaris"));
+    assert.equal(statusOf(t.town(), "momo"), momo);
+    assert.equal(statusOf(t.town(), "solaris"), "reading");
+    assert.equal(t.town().readingSessions.length, 1);
+
+    // この本を読み終えた said of the book given way to is taken back too.
+    const u = townWithClock();
+    const session = u.actions.startReading("momo", "solo") as string;
+    assert.ok(u.actions.changeCardBook(session, { finished: true }));
+    assert.equal(statusOf(u.town(), "momo"), "finished");
+    u.pass(0.5);
+    assert.ok(u.actions.changeReadingBook("solaris"));
+    let town = u.town();
+    assert.equal(statusOf(town, "momo"), momo);
+    assert.equal(town.readingCardBooks[0].finished, false);
+    // 記録しない: nothing of momo's is left to undo, and solaris goes back
+    // as it was before the reading.
+    u.actions.discardReading(town.readingCards[0].id);
+    town = u.town();
+    assert.equal(statusOf(town, "momo"), momo);
+    assert.equal(statusOf(town, "solaris"), solaris);
+
+    // A note written at the book keeps it on the card, however soon.
+    const v = townWithClock();
+    v.actions.startReading("momo", "solo");
+    const card = v.town().readingCards[0].id;
+    assert.ok(
+      v.actions.writeReadingNote(card, { kind: "quote", body: "時間どろぼう" }),
+    );
+    v.pass(0.5);
+    assert.ok(v.actions.changeReadingBook("solaris"));
+    town = v.town();
+    const [first, next] = cardSessions(town, card);
+    assert.equal(first.bookId, "momo");
+    assert.equal(next.bookId, "solaris");
+    assert.equal(town.readingNotes[0].sessionId, first.id);
+    assert.equal(statusOf(town, "momo"), "reading");
+  },
+);
+
+check(
+  "a book changed later is read on the same card, the clock going on",
+  () => {
+    const t = townWithClock();
+    t.actions.startReading("momo", "solo");
+    t.pass(20);
+    t.actions.pauseReading();
+    t.pass(4);
+    assert.ok(t.actions.changeReadingBook("solaris"));
+    let town = t.town();
+    assert.equal(town.readingCards.length, 1);
+    const [first, second] = cardSessions(town, town.readingCards[0].id);
+    assert.equal(first.bookId, "momo");
+    assert.equal(first.endedAt, new Date(START + 24 * MINUTE).toISOString());
+    assert.equal(second.bookId, "solaris");
+    assert.equal(second.startedAt, first.endedAt);
+    assert.equal(second.mode, "solo");
+    // A book chosen is a book being read: the pause is let go.
+    assert.equal(town.readingCards[0].pausedAt, null);
+    assert.equal(town.readingCards[0].pausedSeconds, 4 * 60);
+    assert.equal(
+      town.readingCardBooks.find((b) => b.sessionId === first.id)?.readSeconds,
+      20 * 60,
+    );
+    assert.equal(statusOf(town, "momo"), "reading");
+    t.pass(10);
+    town = t.town();
+    assert.equal(sessionReadSeconds(town, second, t.now()), 10 * 60);
+    assert.equal(
+      cardReadSeconds(town, town.readingCards[0].id, t.now()),
+      30 * 60,
+    );
+    t.actions.endReading(false);
+    assert.equal(t.town().readingCardBooks[1].readSeconds, 10 * 60);
+    // Nothing runs: no book to change.
+    assert.equal(t.actions.changeReadingBook("momo"), false);
+  },
+);
+
+check(
+  "a reading added afterwards is a card of its own, ended, said added later",
+  () => {
+    const t = townWithClock();
+    const before = statusOf(t.town(), "momo");
+    const yesterday = new Date(START - 24 * 60 * MINUTE).toISOString();
+    const cardId = t.actions.addReadingLater("momo", {
+      startedAt: yesterday,
+      seconds: 40 * 60,
+      pageFrom: 10,
+      pageTo: 58,
+      finished: true,
+    });
+    assert.ok(cardId);
+    let town = t.town();
+    const card = town.readingCards.find((entry) => entry.id === cardId)!;
+    assert.equal(card.addedLater, true);
+    const [session] = cardSessions(town, card.id);
+    assert.equal(session.mode, "solo");
+    assert.equal(session.startedAt, yesterday);
+    assert.equal(
+      session.endedAt,
+      new Date(START - 24 * 60 * MINUTE + 40 * MINUTE).toISOString(),
+    );
+    assert.equal(activeSession(town), undefined);
+    assert.deepEqual(
+      [
+        town.readingCardBooks[0].readSeconds,
+        town.readingCardBooks[0].pageFrom,
+        town.readingCardBooks[0].pageTo,
+        town.readingCardBooks[0].finished,
+      ],
+      [40 * 60, 10, 58, true],
+    );
+    assert.equal(readingTotals(town, t.now()).total, 40 * 60);
+    assert.equal(statusOf(town, "momo"), "finished");
+    // Not read on: it was not read with the app's clock.
+    assert.equal(t.actions.readOn(cardId), false);
+    // 記録しない takes its 読了 back with it.
+    t.actions.discardReading(cardId);
+    town = t.town();
+    assert.equal(town.readingCards.length, 0);
+    assert.equal(statusOf(town, "momo"), before);
+
+    // Its time not known: pages alone, no time added.
+    const pages = t.actions.addReadingLater("solaris", {
+      startedAt: yesterday,
+      seconds: null,
+      pageTo: 30,
+    });
+    assert.ok(pages);
+    town = t.town();
+    assert.equal(town.readingCardBooks[0].readSeconds, 0);
+    assert.equal(readingTotals(town, t.now()).total, 0);
+
+    // Nothing after now, and no time beyond a day or below a second.
+    for (const reading of [
+      { startedAt: new Date(START + MINUTE).toISOString(), seconds: null },
+      {
+        startedAt: new Date(START - 10 * MINUTE).toISOString(),
+        seconds: 20 * 60,
+      },
+      { startedAt: yesterday, seconds: 24 * 60 * 60 + 1 },
+      { startedAt: yesterday, seconds: 0 },
+      { startedAt: "きのう", seconds: 60 },
+    ])
+      assert.equal(t.actions.addReadingLater("momo", reading), null);
+    // A book that is not the reader's.
+    assert.equal(
+      t.actions.addReadingLater("no-such-book", {
+        startedAt: yesterday,
+        seconds: 60,
+      }),
+      null,
+    );
+    assert.equal(t.town().readingCards.length, 1);
+  },
+);
+
+check("読書にもどる reads on the card, the time between left out", () => {
+  const t = townWithClock();
+  t.actions.startReading("momo", "solo");
+  t.pass(12);
+  t.actions.endReading(false);
+  const cardId = t.town().readingCards[0].id;
+  t.pass(7);
+  assert.ok(t.actions.readOn(cardId));
+  let town = t.town();
+  assert.equal(activeSession(town)?.bookId, "momo");
+  assert.equal(town.readingCardBooks[0].readSeconds, null);
+  assert.equal(town.readingCards[0].pausedSeconds, 7 * 60);
+  t.pass(3);
+  t.actions.endReading(false);
+  town = t.town();
+  assert.equal(town.readingCardBooks[0].readSeconds, 15 * 60);
+  assert.equal(town.readingSessions.length, 1);
+  // Only a card ended can be read on, and only while nothing else runs.
+  t.actions.startReading("solaris", "solo");
+  assert.equal(t.actions.readOn(cardId), false);
+  // Only the last reading: one begun after it is ended, and the card before
+  // stays as it was read.
+  t.pass(5);
+  t.actions.endReading(false);
+  assert.equal(t.actions.readOn(cardId), false);
+  assert.ok(t.actions.readOn(t.town().readingCards[1].id));
+});
+
+check(
+  "記録しない takes the card, its books' times and its notes, and its marks back",
+  () => {
+    const t = townWithClock();
+    const momo = statusOf(t.town(), "momo");
+    t.actions.startReading("solaris", "solo");
+    t.pass(5);
+    const kept = t.town().readingCards[0].id;
+    t.actions.endReading(false);
+    t.actions.startReading("momo", "solo");
+    t.pass(3);
+    t.actions.changeReadingBook("solaris");
+    t.pass(2);
+    const cardId = runningCard(t.town())?.card.id as string;
+    assert.ok(
+      t.actions.writeReadingNote(cardId, { kind: "thought", body: "夜" }),
+    );
+    t.actions.endReading(false);
+    const last = t.town().readingSessions.at(-1)?.id as string;
+    assert.ok(t.actions.changeCardBook(last, { finished: true }));
+    assert.ok(t.town().finishedBooks.includes("solaris"));
+    t.actions.discardReading(cardId);
+    const town = t.town();
+    assert.deepEqual(
+      town.readingCards.map((card) => card.id),
+      [kept],
+    );
+    assert.equal(town.readingSessions.length, 1);
+    assert.equal(town.readingCardBooks.length, 1);
+    assert.equal(town.readingNotes.length, 0);
+    assert.ok(!town.finishedBooks.includes("solaris"));
+    // 読書中 of the reading not kept goes back; solaris is still being read
+    // from the card kept.
+    assert.equal(statusOf(town, "momo"), momo);
+    assert.equal(statusOf(town, "solaris"), "reading");
+  },
+);
+
+check(
+  "この本を読み終えた marks the book 読了, and taking it back undoes that",
+  () => {
+    const t = townWithClock();
+    const session = t.actions.startReading("momo", "solo") as string;
+    t.pass(30);
+    t.actions.endReading(false);
+    assert.ok(
+      t.actions.changeCardBook(session, { finished: true, pageTo: 300 }),
+    );
+    let town = t.town();
+    assert.deepEqual(town.readingCardBooks[0].finished, true);
+    assert.equal(town.readingCardBooks[0].pageTo, 300);
+    assert.ok(town.finishedBooks.includes("momo"));
+    assert.ok(t.actions.changeCardBook(session, { finished: false }));
+    town = t.town();
+    assert.equal(town.readingCardBooks[0].finished, false);
+    assert.ok(!town.finishedBooks.includes("momo"));
+    assert.equal(statusOf(town, "momo"), "reading");
+    // A page out of the database's range is none; the same again is no change.
+    assert.ok(t.actions.changeCardBook(session, { pageTo: -1 }));
+    assert.equal(t.town().readingCardBooks[0].pageTo, null);
+    assert.equal(t.actions.changeCardBook(session, { pageTo: null }), false);
+    assert.equal(t.actions.changeCardBook("nothing", { pageTo: 3 }), false);
+    // Ending a reading finished marks the book on the card too.
+    const again = t.actions.startReading("momo", "solo") as string;
+    t.actions.endReading(true);
+    assert.equal(
+      t.town().readingCardBooks.find((b) => b.sessionId === again)?.finished,
+      true,
+    );
+  },
+);
+
+check("今日のノート are written on the card, at the book read then", () => {
+  const t = townWithClock();
+  t.actions.startReading("momo", "solo");
+  const cardId = t.town().readingCards[0].id;
+  assert.equal(
+    t.actions.writeReadingNote(cardId, { kind: "word", body: " 　\n" }),
+    null,
+  );
+  assert.equal(
+    t.actions.writeReadingNote(cardId, {
+      kind: "quote",
+      body: "あ".repeat(2001),
+    }),
+    null,
+  );
+  assert.equal(
+    t.actions.writeReadingNote("nothing", { kind: "word", body: "鷹揚" }),
+    null,
+  );
+  const word = t.actions.writeReadingNote(cardId, {
+    kind: "word",
+    body: "  鷹揚 ",
+    page: 12,
+  }) as string;
+  assert.ok(word);
+  t.pass(5);
+  t.actions.changeReadingBook("solaris");
+  const quote = t.actions.writeReadingNote(cardId, {
+    kind: "quote",
+    body: "向上心のないものは馬鹿だ",
+  }) as string;
+  let town = t.town();
+  const [first, second] = cardSessions(town, cardId);
+  assert.deepEqual(
+    town.readingNotes.map((note) => [
+      note.kind,
+      note.body,
+      note.page,
+      note.sessionId,
+    ]),
+    [
+      ["word", "鷹揚", 12, first.id],
+      ["quote", "向上心のないものは馬鹿だ", null, second.id],
+    ],
+  );
+  assert.ok(t.actions.changeReadingNote(quote, { kind: "thought", page: 40 }));
+  assert.equal(t.actions.changeReadingNote(quote, { body: "  " }), false);
+  assert.equal(t.actions.changeReadingNote(quote, { kind: "thought" }), false);
+  t.actions.eraseReadingNote(word);
+  town = t.town();
+  assert.deepEqual(
+    town.readingNotes.map((note) => [note.id, note.kind, note.page]),
+    [[quote, "thought", 40]],
+  );
+});
+
+check(
+  "cards, their books and notes are kept in the browser, and what does not fit them is dropped",
+  () => {
+    const t = townWithClock();
+    t.actions.startReading("momo", "solo");
+    t.pass(2);
+    t.actions.changeReadingBook("solaris");
+    const cardId = t.town().readingCards[0].id;
+    t.actions.writeReadingNote(cardId, {
+      kind: "thought",
+      body: "続きが気になる",
+    });
+    t.actions.pauseReading();
+    const loaded = t.repository.load().state;
+    assert.deepEqual(loaded.readingCards, t.town().readingCards);
+    assert.deepEqual(loaded.readingCardBooks, t.town().readingCardBooks);
+    assert.deepEqual(loaded.readingNotes, t.town().readingNotes);
+
+    const envelope = JSON.parse(serializeTown(t.town()));
+    const [book] = envelope.data.readingCardBooks;
+    const [note] = envelope.data.readingNotes;
+    envelope.data.readingCards.push(
+      { ...envelope.data.readingCards[0] },
+      { ...envelope.data.readingCards[0], id: "me-card-9", timer: "egg" },
+    );
+    envelope.data.readingCardBooks.push(
+      { ...book, sessionId: "me-reading-9" },
+      { ...book, sessionId: "me-reading-1", cardId: "me-card-8" },
+      { ...book, pageTo: 2_000_000 },
+    );
+    envelope.data.readingNotes.push(
+      { ...note, id: "me-note-7", cardId: "me-card-8" },
+      { ...note, id: "me-note-8", sessionId: "me-reading-9" },
+      { ...note, id: "me-note-9", body: "   " },
+    );
+    const read = deserializeTown(JSON.stringify(envelope));
+    assert.equal(read.status, "saved");
+    assert.deepEqual(
+      read.state.readingCards.map((card) => card.id),
+      [cardId],
+    );
+    assert.deepEqual(read.state.readingCardBooks, t.town().readingCardBooks);
+    assert.deepEqual(
+      read.state.readingNotes.map((entry) => [entry.id, entry.sessionId]),
+      [
+        [note.id, note.sessionId],
+        ["me-note-8", null],
+      ],
+    );
+    // A save from before the cards loads with none.
+    delete envelope.data.readingCards;
+    delete envelope.data.readingCardBooks;
+    delete envelope.data.readingNotes;
+    const older = deserializeTown(JSON.stringify(envelope));
+    assert.deepEqual(older.state.readingCards, []);
+    assert.equal(older.state.readingSessions.length, 2);
+  },
+);
 
 console.log(`${passed} domain checks passed.`);

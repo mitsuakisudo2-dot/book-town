@@ -1,6 +1,7 @@
 "use client";
 import { useSyncExternalStore } from "react";
 import { inManageMode } from "./town-mode";
+import { cardSessions } from "./reading-cards";
 import type { PosterDraft } from "./posters";
 import type {
   LibraryShelfChange,
@@ -54,6 +55,13 @@ const REACHES: Partial<
     return running?.mode === "together";
   },
   startReading: ([, mode]) => (mode as ReadingMode) === "together",
+  // Reading together, another book or reading on again is seen by others.
+  changeReadingBook: (_, state) =>
+    state.readingSessions.some(
+      (s) => s.endedAt === null && s.mode === "together",
+    ),
+  readOn: ([cardId], state) =>
+    cardSessions(state, cardId as string).at(-1)?.mode === "together",
   savePoster: ([draft]) => (draft as PosterDraft).status === "published",
   recordReading: ([draft]) => wider((draft as RecordDraft).audience),
   updateRecord: ([, patch]) => wider((patch as Partial<RecordDraft>).audience),

@@ -3,6 +3,7 @@ import { cleanLinks } from "./links";
 import { cleanRecord } from "./records";
 import { cleanVisibilities } from "./visibility";
 import { restorePoster, type Poster } from "./posters";
+import { keptCards, readCard, readCardBook, readNote } from "./reading-cards";
 import {
   validateEntry,
   cleanShelfAudiences,
@@ -88,6 +89,10 @@ type PersonalData = Pick<
   libraryShelfBooks?: TownState["libraryShelfBooks"];
   /** Where the viewer met books; none in a save from before them. */
   encounters?: TownState["encounters"];
+  /** The viewer's reading cards, their books and notes; none in a save from before them. */
+  readingCards?: TownState["readingCards"];
+  readingCardBooks?: TownState["readingCardBooks"];
+  readingNotes?: TownState["readingNotes"];
   /** Only books the viewer registered; their jackets are redrawn on load. */
   addedBooks: Pick<Book, "id" | "title" | "author" | "isbn" | "price">[];
 };
@@ -356,6 +361,12 @@ function restoreShelfBooks(
   });
 }
 
+/** The items of a list kept here that `read` takes. */
+const restoreList = <T>(value: unknown, read: (item: unknown) => T | null) =>
+  Array.isArray(value)
+    ? value.flatMap((item: unknown) => read(item) ?? [])
+    : [];
+
 /** The encounters kept here, of books the town knows, each once. */
 function restoreEncounters(value: unknown, bookIds: Set<string>): Encounter[] {
   if (!Array.isArray(value)) return [];
@@ -536,6 +547,7 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
           )
         : [];
     const settings = object(data.settings) ? data.settings : {};
+    const readingSessions = restoreSessions(data.readingSessions, bookIds);
     const posts = [
       ...initial.posts,
       ...restorePosts(data.posts, initial.posts, bookIds),
@@ -589,7 +601,13 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
           data.spoilerReports,
           (post) => !post.spoiler && post.authorId !== ME_ID,
         ),
-        readingSessions: restoreSessions(data.readingSessions, bookIds),
+        readingSessions,
+        ...keptCards(
+          readingSessions,
+          restoreList(data.readingCards, readCard),
+          restoreList(data.readingCardBooks, readCardBook),
+          restoreList(data.readingNotes, readNote),
+        ),
         finishedBooks: knownBooks(data.finishedBooks),
         library: knownBooks(data.library),
         libraryEntries,
@@ -666,6 +684,9 @@ export function serializeTown(state: TownState): string {
       libraryShelves: state.libraryShelves,
       libraryShelfBooks: state.libraryShelfBooks,
       encounters: state.encounters,
+      readingCards: state.readingCards,
+      readingCardBooks: state.readingCardBooks,
+      readingNotes: state.readingNotes,
       readingRecords: state.readingRecords.filter(
         (record) => record.readerId === ME_ID,
       ),

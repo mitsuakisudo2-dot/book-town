@@ -7,7 +7,15 @@ import type { PersistenceStatus, TownState } from "./types";
 
 /** The kinds of record the town creates, each with its own ids. */
 export type RecordKind =
-  "post" | "reading" | "record" | "book" | "shelf" | "item" | "poster";
+  | "post"
+  | "reading"
+  | "card"
+  | "note"
+  | "record"
+  | "book"
+  | "shelf"
+  | "item"
+  | "poster";
 
 /** What the town store saves through: this browser, or the person's account. */
 export interface TownBackend {
@@ -106,6 +114,8 @@ export interface TownBackendListener {
 const PREFIXES: Record<RecordKind, string> = {
   post: "me-post-",
   reading: "me-reading-",
+  card: "me-card-",
+  note: "me-note-",
   record: "me-record-",
   book: "my-book-",
   shelf: "mine-shelf-",
