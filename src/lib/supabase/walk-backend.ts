@@ -320,6 +320,8 @@ export function accountWalkBackend(
       apply: (write, base) => applyWalkWrite(client, write, loaded(), base),
       split: splitWalkWrite,
       stake: walkStake,
+      // The shop's scene is its shelves as the reader arranged them.
+      stumble: (write) => (write.kind === "scene" ? "shelf" : null),
       outbox:
         device === null
           ? undefined

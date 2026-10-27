@@ -25,6 +25,7 @@ import {
   type ReadingStatus,
 } from "./library";
 import { lookUpBooks, type OpenBdAnswer } from "./openbd";
+import { countStumble } from "./stumbles";
 import type { TownBackend } from "./town-backend";
 import type {
   NewBook,
@@ -696,8 +697,11 @@ export async function sendJournal(
         const book = answer.found.get(isbn);
         if (book)
           journal.update(owner, id, { ...bookWords(book), state: "ready" });
-        else if (!answer.unanswered.includes(isbn))
+        else if (!answer.unanswered.includes(isbn)) {
           journal.update(owner, id, { state: "untitled" });
+          // A book the camera read that nobody knows (管理表 110).
+          if (item.via === "scan") countStumble("barcode", "not_found");
+        }
       }
       journal.reload(owner);
     }

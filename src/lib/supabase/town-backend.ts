@@ -54,12 +54,18 @@ import {
   settled,
   shouldRetry,
   steadily,
+  stumbleOf,
   TownSyncError,
   Versioned,
   type SyncOptions,
   type Versions,
 } from "./sync";
 import { takeTownAhead } from "./town-ahead";
+import {
+  countStumble,
+  setStumbleSender,
+  type StumbleFeature,
+} from "../stumbles";
 
 type Client = SupabaseClient<Database>;
 
@@ -1127,8 +1133,11 @@ function remoteReads(
           // A database from before find_books: the town's books are searched.
           if (error instanceof TownSyncError && error.code === "PGRST202")
             return emptyMore();
+          const result = stumbleOf(error);
+          if (result) countStumble("search", result);
           throw error;
         }
+        countStumble("search", books.length ? "ok" : "not_found");
         // An ISBN nothing answers is counted, the ISBN alone, for choosing
         // what the catalog takes first (note_missing_isbn). Nothing waits
         // on it, and a failure changes nothing.
@@ -1847,6 +1856,7 @@ export function accountTownBackend(
       },
       split: splitWrite,
       stake: writeStake,
+      stumble: townWriteFeature,
       landed(base, target) {
         if (storage && target.seenNotifications !== base.seenNotifications)
           writeSeen(userId, target.seenNotifications);
@@ -1863,6 +1873,11 @@ export function accountTownBackend(
             ),
     },
     options,
+  );
+
+  // The signed-in reader's counts go with their session (stumbles.ts).
+  const stopCounting = setStumbleSender((counts) =>
+    settled(client.rpc("count_stumbles", counts)),
   );
 
   return {
@@ -1891,8 +1906,29 @@ export function accountTownBackend(
       return Array.isArray(data) ? data : [];
     },
     ...remoteReads(client, userId, sync.current, () => myBooks),
-    close: sync.close,
+    close() {
+      stopCounting();
+      sync.close();
+    },
   };
+}
+
+/**
+ * The feature a town write's try counts for (stumbles.ts): books new to the
+ * library are registered, shelves are saved. A change of a book's reading
+ * state or of anything else is not counted.
+ */
+export function townWriteFeature(write: Write): StumbleFeature | null {
+  switch (write.kind) {
+    case "library-entries":
+      return write.rows.length ? "register" : null;
+    case "shelves":
+    case "library-shelves":
+    case "shelf-books":
+      return "shelf";
+    default:
+      return null;
+  }
 }
 
 export { emptyTown };

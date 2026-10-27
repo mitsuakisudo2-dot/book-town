@@ -47,6 +47,7 @@
 /tests/db-series.test.ts           @mitsuakisudo2-dot
 /tests/db-shelf-audience.test.ts   @mitsuakisudo2-dot
 /tests/db-site-reports.test.ts     @mitsuakisudo2-dot
+/tests/db-stumbles.test.ts         @mitsuakisudo2-dot
 /tests/db-town-size.test.ts        @mitsuakisudo2-dot
 /tests/db-town-view.test.ts        @mitsuakisudo2-dot
 /tests/db-town-window.test.ts      @mitsuakisudo2-dot

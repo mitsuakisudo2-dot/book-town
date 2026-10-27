@@ -127,6 +127,7 @@ import { SeriesSheet } from "./series-later";
 import { BookJacket, GoogleCoversCredit, Icon } from "./ui";
 import "./scan.css";
 import { bookAuthor, bookById, bookByIsbn, bookTitle } from "../lib/book-name";
+import { countStumble } from "../lib/stumbles";
 
 // 自由3枠's sheet, with what drags its buttons: read when it is opened.
 const ScanSlots = dynamic(
@@ -576,6 +577,8 @@ export function ScanSession({
       reads.current = noteRead(reads.current, isbn, at, null);
       return;
     }
+    // An ISBN the camera read (管理表 110): its book is looked up after.
+    if (via === "scan") countStumble("barcode", "ok");
     if (reaction.kind !== "new") {
       sound.play("nothing-new");
       if (reaction.kind === "again") {
@@ -667,7 +670,10 @@ export function ScanSession({
     let timer: ReturnType<typeof setTimeout> | undefined;
     let frameAsked: number | undefined;
     const typeInstead = (why: TypingWhy) => {
-      if (!stopped) setInput({ kind: "typing", why });
+      if (stopped) return;
+      // The camera could not read for the reader: counted (管理表 110).
+      countStumble("barcode", why === "denied" ? "refused" : "other");
+      setInput({ kind: "typing", why });
     };
     const element = video.current;
     if (!element || !canRead()) {
