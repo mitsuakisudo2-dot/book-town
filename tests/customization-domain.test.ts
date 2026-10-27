@@ -5,6 +5,7 @@ import {
   addBookPlacement,
   bookPop,
   objectById,
+  safeBackgroundUrl,
   setBookPop,
   unplacedBooks,
   validateScene,
@@ -32,6 +33,13 @@ import {
   validateOwnedScene,
 } from "../src/lib/store-customization";
 import { WALK_KEY, decodeWalk, encodeWalk } from "../src/lib/walk-repository";
+import {
+  SHOP_LOOKS,
+  WOOD_LOOK,
+  shopLookOf,
+  wearLook,
+} from "../src/lib/shop-looks";
+import { existsSync } from "node:fs";
 import { GROW_MAX_TIERS, tiersOf, unpinRow } from "../src/lib/growing-shop";
 import { emptyWalk, startWalk } from "../src/lib/walk-state";
 import { saveOwnedScene, updateWalk } from "../src/lib/walk-store";
@@ -892,6 +900,41 @@ check(
     const waiting = unplacedBooks(full)[0];
     assert.ok(waiting);
     assert.equal(moveBook(full, waiting.id, "row-0", 0, books), null);
+  },
+);
+check(
+  "a look changes the room and the case, and nothing the owner put in",
+  () => {
+    for (const look of SHOP_LOOKS)
+      for (const src of [look.room, ...Object.values(look.parts)]) {
+        assert.ok(existsSync("public" + src), src);
+        assert.equal(safeBackgroundUrl(src), src);
+      }
+    const start = migrateShopScene(shop, books);
+    assert.equal(start.theme.id, WOOD_LOOK);
+    assert.equal(shopLookOf(start), undefined);
+    for (const look of SHOP_LOOKS) {
+      const worn = wearLook(start, look);
+      assert.equal(shopLookOf(worn), look);
+      assert.equal(worn.background.url, look.room);
+      assert.deepEqual(worn.objects, start.objects);
+      assert.equal(worn.templateId, start.templateId);
+      assert.equal(worn.growth, start.growth);
+      assert.deepEqual(validateOwnedScene(worn, shop, books), []);
+      // A wood template brings the wood shop back, with the books where they were.
+      const wood = applyStoreTemplate(worn, "study", books);
+      assert.equal(wood.theme.id, WOOD_LOOK);
+      assert.deepEqual(validateOwnedScene(wood, shop, books), []);
+    }
+    // A shop saved before it grew keeps its look when its size is chosen.
+    const old = wearLook(structuredClone(fixedScene(shop)), SHOP_LOOKS[0]);
+    const sized = setShopSize(old, "auto", shop, books);
+    assert.equal(shopLookOf(sized), SHOP_LOOKS[0]);
+    assert.equal(sized.background.url, SHOP_LOOKS[0].room);
+    // A look this version does not know shows as the wood shop.
+    const unknown = structuredClone(start);
+    unknown.theme.id = "someday";
+    assert.equal(shopLookOf(unknown), undefined);
   },
 );
 console.log(passed + " customization domain checks passed");
