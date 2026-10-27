@@ -316,21 +316,19 @@ export const isPublished = (poster: Poster) => poster.status === "published";
 
 /**
  * How a poster reaches this reader, by its maker's spoiler mark and the
- * reader's 「ネタバレの表示」, as a post its writer marked does: behind its
- * door whatever the setting, and not listed at all for a reader who chose
- * 出さない. The maker always sees their own.
+ * reader's 「ネタバレの表示」, as a post its writer marked does: open for a
+ * reader who chose すべて表示する (けにーさん 10-16 05:43Z, 10-27 22:48Z),
+ * not listed at all for one who chose 出さない, else behind its cover. The
+ * maker always sees their own.
  */
 export function posterSpoilerView(
   state: Pick<TownState, "settings">,
   poster: Pick<Poster, "spoiler" | "authorId">,
 ): SpoilerView {
   if (!poster.spoiler) return "open";
-  if (
-    state.settings.spoilerDisplay === "leave_out" &&
-    poster.authorId !== ME_ID
-  )
-    return "left_out";
-  return "folded";
+  const mode = state.settings.spoilerDisplay;
+  if (mode === "leave_out" && poster.authorId !== ME_ID) return "left_out";
+  return mode === "show_all" ? "open" : "folded";
 }
 
 const listed = (state: TownState, poster: Poster) =>

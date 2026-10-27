@@ -95,7 +95,7 @@ import {
   shopPath,
 } from "../lib/paths";
 import { isSampleId } from "../lib/record-kind";
-import { postersOf } from "../lib/posters";
+import { posterSpoilerView, postersOf } from "../lib/posters";
 import { PosterThumb } from "./PosterView";
 import "./poster-screen.css";
 import "./leave.css";
@@ -1776,6 +1776,7 @@ function ProfilePosters({
             <li key={poster.id}>
               <PosterThumb
                 poster={poster}
+                covered={posterSpoilerView(state, poster) !== "open"}
                 books={state.books}
                 href={posterPath(poster.id)}
                 badge={poster.status === "draft" ? "下書き" : undefined}
