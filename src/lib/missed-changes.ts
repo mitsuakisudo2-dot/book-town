@@ -10,6 +10,7 @@ import type { Missed } from "./supabase/sync";
 import { writtenWords, type RelationTable, type Write } from "./town-remote";
 import type { ShopTable, WalkWrite } from "./walk-remote";
 import { keepShelvesNotSent, shelvesStillKept } from "./shelves-draft";
+import { returnNoteWords } from "./reading-note-draft";
 import { failure, KEPT } from "./words";
 import { NAMES } from "./words";
 
@@ -159,16 +160,19 @@ export function missedLine(
 }
 
 /**
- * Puts the words of 便り and records the database turned away back into
- * `owner`'s drafts, so nothing written is lost: a 便り into the composer of
- * 投稿する (its reply's page may be gone), after the words already there,
- * or where it was written when they would not fit; a record into its draft.
- * Whether any words were kept.
+ * Puts the words of 便り, records and notes the database turned away back
+ * into `owner`'s drafts, so nothing written is lost: a 便り into the
+ * composer of 投稿する (its reply's page may be gone), after the words
+ * already there, or where it was written when they would not fit; a record
+ * into its draft; a note into the words being written on its card. Whether
+ * any words were kept.
  */
 export function keepMissedWords(owner: string, writes: Write[]): boolean {
   let kept = false;
   for (const write of writes) {
-    const { posts, records } = writtenWords(write);
+    const { posts, records, notes } = writtenWords(write);
+    for (const { cardId, kind, body } of notes)
+      if (returnNoteWords(owner, cardId, { kind, body })) kept = true;
     for (const post of posts) {
       if (!post.body.trim()) continue;
       const words = {

@@ -49,7 +49,7 @@ export function StartReadingSheet({
     if (!actions.startReading(chosen, mode)) return onClose();
     notify(
       mode === "solo"
-        ? "一人で読み始めました。メモはあなただけに見えます"
+        ? "一人で読み始めました。ノートはあなただけに見えます"
         : "みんなで読み始めました。同じ時間に読んでいる人に見えます",
     );
     leaveLayers(() => router.push(readingPath()));

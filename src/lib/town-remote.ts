@@ -26,9 +26,11 @@ import {
 import { entriesOf } from "./library-town";
 import {
   keptCards,
+  NOTE_KINDS,
   readCard,
   readCardBook,
   readNote,
+  type NoteKind,
   type ReadingCard,
   type ReadingCardBook,
   type ReadingNote,
@@ -2680,12 +2682,14 @@ export interface WrittenWords {
         "body" | "feelings" | "spoiler" | "audience"
       >
     >)[];
+  /** A note written in 今日のノート, by its card. */
+  notes: { cardId: string; kind: NoteKind; body: string }[];
 }
 
 /**
- * What the reader wrote that `write` carries: the words of 便り and records,
- * with a 見本's book named by its own id as the screens name it, not by its
- * row's (withSampleRows). Nothing for any other write.
+ * What the reader wrote that `write` carries: the words of 便り, records and
+ * notes written, with a 見本's book named by its own id as the screens name
+ * it, not by its row's (withSampleRows). Nothing for any other write.
  */
 export function writtenWords(write: Write): WrittenWords {
   const book = (id: string | null | undefined) =>
@@ -2700,6 +2704,7 @@ export function writtenWords(write: Write): WrittenWords {
           parentId: row.parent_id ?? null,
         })),
         records: [],
+        notes: [],
       };
     case "records":
       return {
@@ -2718,11 +2723,25 @@ export function writtenWords(write: Write): WrittenWords {
               ]
             : [];
         }),
+        notes: [],
       };
     case "update-record":
-      return { posts: [], records: [{ recordId: write.id, ...write.patch }] };
+      return {
+        posts: [],
+        records: [{ recordId: write.id, ...write.patch }],
+        notes: [],
+      };
+    case "reading-notes":
+      return {
+        posts: [],
+        records: [],
+        notes: write.add.flatMap((row) => {
+          const kind = NOTE_KINDS.find((entry) => entry === row.kind);
+          return kind ? [{ cardId: row.card_id, kind, body: row.body }] : [];
+        }),
+      };
     default:
-      return { posts: [], records: [] };
+      return { posts: [], records: [], notes: [] };
   }
 }
 

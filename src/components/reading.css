@@ -408,61 +408,6 @@
   font-size: var(--t-cap);
   white-space: nowrap;
 }
-.reading-now-card {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  padding: 22px;
-  border-radius: var(--r-box);
-  background: var(--sheet);
-  border: 1px solid var(--line);
-}
-.book-jacket.reading-jacket {
-  width: 120px;
-  flex-shrink: 0;
-}
-.reading-now-main {
-  min-width: 0;
-  flex: 1;
-}
-.reading-now-main h1 {
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: var(--t-head);
-  margin-top: 8px;
-}
-.reading-now-main > p {
-  color: var(--ink-2);
-  font-size: var(--t-cap);
-}
-.reading-mode-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--t-cap);
-  padding: 2px 9px;
-  border-radius: var(--r-pill);
-  background: var(--band);
-  color: var(--ink-2);
-}
-.reading-mode-tag.is-together {
-  background: var(--green-soft);
-  color: var(--green);
-}
-.reading-now-main .reading-timer {
-  font-family: var(--serif);
-  font-size: var(--t-clock);
-  color: var(--green);
-  letter-spacing: 1px;
-  font-variant-numeric: tabular-nums;
-  margin: 10px 0 2px;
-}
-.reading-end {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-}
 .memo-composer label {
   display: block;
   font-size: var(--t-cap);
@@ -678,18 +623,6 @@
   .reading-modes {
     grid-template-columns: 1fr;
   }
-  .reading-now-card {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 14px;
-    padding: 16px;
-  }
-  .book-jacket.reading-jacket {
-    width: 90px;
-  }
-  .reading-now-main .reading-timer {
-    font-size: var(--t-display);
-  }
 }
 .profile-links {
   list-style: none;
@@ -757,16 +690,6 @@
   border-radius: var(--r-pill);
   padding: 2px 9px;
 }
-.reading-no-book {
-  display: grid;
-  place-items: center;
-  aspect-ratio: 0.675;
-  max-width: 100%;
-  border-radius: var(--r-edge);
-  border: 1px dashed var(--line-2);
-  background: var(--green-soft);
-  color: var(--ink-2);
-}
 .reading-confirm {
   display: grid;
   gap: 14px;
@@ -830,101 +753,12 @@
   flex: 1;
 }
 
-/* While reading: everyone else's words wait behind a fold. */
-.reading-peek {
-  margin-top: 22px;
-  border-top: 1px solid var(--line);
-}
-.reading-peek > summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 14px 2px;
-  font-size: var(--t-meta);
-  color: var(--ink-2);
-  cursor: pointer;
-  list-style: none;
-}
-.reading-peek > summary::-webkit-details-marker {
-  display: none;
-}
-.reading-peek > summary svg {
-  transform: rotate(90deg);
-  transition: transform var(--dur-move) ease;
-}
-.reading-peek[open] > summary svg {
-  transform: rotate(-90deg);
-}
-.reading-peek-keep {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 2px 12px;
-  font-size: var(--t-cap);
-  color: var(--ink-2);
-}
 .reading-mine {
   margin-top: 14px;
 }
 
-/* Just after closing the book. */
-.reading-closed {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  max-width: 720px;
-  margin: 0 auto 8px;
-  padding: 18px 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-box);
-  background: var(--sheet);
-  animation: reading-closed-in var(--dur-enter-l) ease-out;
-}
-.reading-closed-jacket {
-  flex: none;
-  width: 58px;
-  height: 84px;
-  padding: 0;
-}
-.reading-closed-time {
-  margin: 0;
-  font-size: var(--t-meta);
-  color: var(--ink-2);
-}
-.reading-closed-time b {
-  font-family: var(--serif);
-  font-size: var(--t-head);
-  font-weight: 600;
-  color: var(--ink);
-}
-.reading-closed-title {
-  margin: 4px 0 0;
-  font-family: var(--serif);
-  font-size: var(--t-meta);
-  color: var(--ink);
-}
-.reading-closed-memo {
-  margin: 10px 0 0;
-  padding-left: 12px;
-  border-left: 2px solid var(--line-2);
-  font-size: var(--t-meta);
-  line-height: 1.8;
-  color: var(--ink);
-  white-space: pre-wrap;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.reading-closed-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 14px;
-  margin-top: 14px;
-}
-/* A line written while reading and not sent: offered as the book closes,
-   then kept above the start until it is used or thrown away. */
+/* Words written while reading and not sent or kept: offered once the book
+   is closed, then kept above the start until used or thrown away. */
 .reading-unsent-line {
   display: grid;
   justify-items: center;
@@ -994,17 +828,6 @@
   gap: 8px 14px;
   margin-top: 10px;
 }
-@keyframes reading-closed-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .reading-closed {
-    animation: none;
-  }
-}
 
 /* お知らせ「あなたの通報」: one quiet line each, newest first. */
 .own-reports {
@@ -1030,12 +853,6 @@
   padding: 7px 12px;
   border-radius: var(--r-tag);
   background: var(--paper);
-}
-/* A jacket that can show an outside cover leads to the book's own page. */
-.reading-jacket-link {
-  flex: none;
-  display: block;
-  border-radius: var(--r-tag);
 }
 /* What a book has besides its registering, asked about before it goes. */
 .register-traces {

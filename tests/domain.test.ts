@@ -53,8 +53,10 @@ import {
 import { entriesOf } from "../src/lib/library-town";
 import {
   activeSession,
+  booksToRead,
   bookToContinue,
   currentBookId,
+  formatClock,
   formatDuration,
   readersNow,
   readingFeed,
@@ -940,6 +942,47 @@ check("reading sessions time themselves and keep one running at a time", () => {
   assert.equal(currentBookId(state), "solaris");
   fresh.actions.startReading("momo", "solo");
   assert.deepEqual(fresh.getSnapshot().finishedBooks, []);
+});
+
+check(
+  "the books offered to read: the one read last, lately, the library, the wishlist",
+  () => {
+    const sat = (id: string, bookId: string | null, day: number) => ({
+      id,
+      bookId,
+      mode: "solo" as const,
+      startedAt: `2026-10-0${day}T10:00:00Z`,
+      endedAt: `2026-10-0${day}T11:00:00Z`,
+    });
+    const state: TownState = {
+      ...seedState,
+      readingSessions: [
+        sat("s1", "momo", 1),
+        sat("s2", null, 2),
+        sat("s3", "solaris", 3),
+        sat("s4", "walden", 4),
+      ],
+      finishedBooks: ["walden"],
+      library: ["ten-nights", "momo"],
+      wishlist: ["walden", "silence"],
+    };
+    // Each once, none finished: walden was read last, and is done.
+    assert.deepEqual(booksToRead(state), [
+      "solaris",
+      "momo",
+      "ten-nights",
+      "silence",
+    ]);
+  },
+);
+
+check("the reading clock counts up from 0:00, the hours once past one", () => {
+  assert.equal(formatClock(0), "0:00");
+  assert.equal(formatClock(59), "0:59");
+  assert.equal(formatClock(25 * 60 + 2), "25:02");
+  assert.equal(formatClock(3599), "59:59");
+  assert.equal(formatClock(3600), "1:00:00");
+  assert.equal(formatClock(2 * 3600 + 30 * 60 + 2), "2:30:02");
 });
 
 check("reading memos: together is public, solo stays private", () => {

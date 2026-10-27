@@ -16,6 +16,7 @@ import "./open-shop-draft";
 import "./post-draft";
 import "./poster-draft";
 import "./profile-draft";
+import "./reading-note-draft";
 import "./record-draft";
 import "./report-draft";
 import "./scene-draft";
