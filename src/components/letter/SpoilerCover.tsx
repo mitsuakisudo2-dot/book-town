@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { LetterIcon } from "./icons";
 import { quote } from "../../lib/book-name";
 
@@ -35,12 +36,16 @@ export function SpoilerCover({
       <span className="letter-spoiler-words">
         <LetterIcon name="lock" size={18} />
         <span>
-          {/* Folded at its 「・」 only, so 「押すと表示」 never breaks apart. */}
+          {/* Folded at its 「・」 only, so 「押すと表示」 never breaks apart;
+              inline, so its name reads as one line. */}
           {words.split("・").map((part, index) => (
-            <span key={index} className="letter-spoiler-part">
-              {index > 0 && "・"}
-              {part}
-            </span>
+            <Fragment key={index}>
+              {index > 0 && <wbr />}
+              <span className="letter-spoiler-part">
+                {index > 0 && "・"}
+                {part}
+              </span>
+            </Fragment>
           ))}
           {title && <span className="sr-only">（{quote(title)}）</span>}
         </span>

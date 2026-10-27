@@ -2130,10 +2130,11 @@ export function useTownStore(): { state: TownState; actions: TownActions } {
 }
 
 /**
- * The town with the series lines its ranged spoilers are about (管理表 22 ①,
+ * The town with the series lines its marked spoilers are about (管理表 22 ①,
  * spoiler-range.ts): read with series_for_isbn as they come, kept by the
  * store like any page's reading (useMoreRead), and laid over the town only.
- * A town with no ranged spoiler reads nothing.
+ * One that could not be read is asked again once, a little later. Where
+ * nothing can be read (the demo, the town on its way), none are laid.
  */
 function useSpoilerLines(town: TownState): TownState {
   const reads = useTownReads();
@@ -2150,12 +2151,22 @@ function useSpoilerLines(town: TownState): TownState {
   );
   useEffect(() => {
     if (!reads || !wanted) return;
+    let live = true;
+    const retries: ReturnType<typeof setTimeout>[] = [];
+    const tryRead = (isbn: string, again: boolean) =>
+      townStore.more({ series: isbn })?.catch(() => {
+        if (live && again)
+          retries.push(setTimeout(() => tryRead(isbn, false), 5000));
+      });
     for (const isbn of wanted.split(" "))
-      if (!townStore.getMore(moreKey({ series: isbn })))
-        townStore.more({ series: isbn })?.catch(() => undefined);
+      if (!townStore.getMore(moreKey({ series: isbn }))) tryRead(isbn, true);
+    return () => {
+      live = false;
+      retries.forEach(clearTimeout);
+    };
   }, [reads, wanted]);
   return useMemo(() => {
-    if (!isbns.length) return town;
+    if (!reads) return town;
     const lines: Record<string, SpoilerLine | null> = {};
     for (const isbn of isbns) {
       const read = townStore.getMore(moreKey({ series: isbn }));
@@ -2170,7 +2181,7 @@ function useSpoilerLines(town: TownState): TownState {
     return { ...town, spoilerLines: lines };
     // `came` tells when one more is read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [town, isbns, came]);
+  }, [town, isbns, came, reads]);
 }
 
 /** Where the town is saved: this browser ("local") or an account. */

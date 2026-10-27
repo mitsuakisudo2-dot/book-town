@@ -24,6 +24,9 @@ export type CountUnit =
   | "分"
   | "時間";
 
+/** A volume of a series by how its number is written: 「3巻」「上巻」. */
+export const volumeName = (shown: string): string => `${shown}巻`;
+
 /**
  * "3冊". For a count that is the reader's own record (shown as it is, 0 too:
  * けにーさん 2026-10-16「数字に嘘をついてはいけない」), a limit, or a number

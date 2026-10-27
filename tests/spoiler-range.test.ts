@@ -157,8 +157,9 @@ async function main() {
   );
 
   await check(
-    "a spoiler with no range is about its own book, as before",
+    "a mark with no range on a series goes as far as the whole",
     () => {
+      // A mark from before ranges, or put on afterwards: the safe side.
       const whole: Post = {
         ...ranged,
         id: "x-whole",
@@ -168,7 +169,39 @@ async function main() {
       assert.equal(spoilerViewOf(state, whole), "folded");
       assert.equal(
         spoilerViewOf({ ...state, finishedBooks: ["vol-2"] }, whole),
+        "folded",
+      );
+      assert.equal(
+        spoilerViewOf({ ...state, finishedBooks: ["vol-5"] }, whole),
         "open",
+      );
+      assert.equal(spoilerUntil(state, whole, "vol-2")?.number, 5);
+      // Not read yet in an account: nothing opens.
+      assert.equal(
+        readFarEnough(
+          { ...state, spoilerLines: {}, finishedBooks: ["vol-5"] },
+          whole,
+          "vol-2",
+        ),
+        false,
+      );
+      // A book in no series, or where lines are not read (the demo): its own book.
+      const alone = { ...state, spoilerLines: { [isbn(2)]: null } };
+      assert.equal(readFarEnough(alone, whole, "vol-2"), false);
+      assert.equal(
+        readFarEnough({ ...alone, finishedBooks: ["vol-2"] }, whole, "vol-2"),
+        true,
+      );
+      const demo = {
+        ...state,
+        spoilerLines: undefined,
+        finishedBooks: ["vol-2"],
+      };
+      assert.equal(readFarEnough(demo, whole, "vol-2"), true);
+      // A ranged one where lines are not read never opens by reading.
+      assert.equal(
+        readFarEnough({ ...demo, finishedBooks: ["vol-5"] }, ranged, "vol-2"),
+        false,
       );
     },
   );
@@ -194,7 +227,7 @@ async function main() {
   });
 
   await check(
-    "the lines to read: the ranged spoilers' books, a reply's by its post",
+    "the lines to read: the marked spoilers' books, a reply's by its post",
     () => {
       const reply: Post = {
         ...writer,
@@ -214,9 +247,15 @@ async function main() {
       assert.deepEqual(
         rangedIsbns({
           books: town().books,
-          posts: [ranged, reply, plain, marked],
+          posts: [
+            ranged,
+            reply,
+            plain,
+            marked,
+            { ...writer, id: "x-unmarked", bookId: "vol-4" },
+          ],
         }),
-        [isbn(2), isbn(3)],
+        [isbn(1), isbn(2), isbn(3)],
       );
       assert.deepEqual(rangedIsbns(seedState), []);
     },

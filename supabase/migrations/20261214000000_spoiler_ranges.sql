@@ -5,10 +5,11 @@
 -- spoil a volume that came out after it). A reader who has finished that
 -- far in the same line reads it as it is (src/lib/spoiler-range.ts).
 --
--- One column is added and nothing moves. A post without it (every post
--- now, a book in no series, a reply to one, a post marked afterwards) means
--- what a spoiler mark means today. The number is the volume's number in
--- the line of the post's book (series_volumes.number), read by the app with
+-- One column is added and nothing moves. A marked post without it (every
+-- post now, a post marked afterwards) is, on a book in a series, a spoiler
+-- of the whole series known (the safe side); on a book in no series, of its
+-- own book, as today. The number is the volume's number in the line of the
+-- post's book (series_volumes.number), read by the app with
 -- series_for_isbn; no one's reading is sent or kept for it.
 --
 -- Written with the post and never changed: the writer may still put the
@@ -16,9 +17,9 @@
 -- the widest. A range needs the mark, and a book or a post it answers to
 -- be about (the check below and posts' own).
 --
--- Rollback (a new migration with this line; the app reads a post without
--- it as it does now, and the ranges written are lost, each post then a
--- spoiler of the whole):
+-- Rollback (a new migration with this line; the ranges written are lost,
+-- each such post then a spoiler of the whole series, which opens later,
+-- never sooner):
 --   alter table public.posts drop column spoiler_through;
 
 alter table public.posts

@@ -244,7 +244,7 @@
   flex: none;
 }
 .letter-spoiler-part {
-  display: inline-block;
+  white-space: nowrap;
 }
 
 /* Folded by reports: the same quiet box, and 「読む」. */

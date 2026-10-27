@@ -76,8 +76,11 @@ export function spoilerWords(
 
 /** The small tag beside a spoiler, open or covered. */
 function spoilerTag(state: TownState, post: Post, askedByMe: boolean): string {
+  // The writer's own range only: none is not said to be the whole.
   if (post.spoiler) {
-    const until = spoilerUntil(state, post, spoilerBookOf(state, post));
+    const until =
+      post.spoilerThrough !== undefined &&
+      spoilerUntil(state, post, spoilerBookOf(state, post));
     return until ? SPOILER_RANGE.tag(until.shown) : "ネタバレあり";
   }
   if (askedByMe) return "ネタバレの可能性を報告済み";

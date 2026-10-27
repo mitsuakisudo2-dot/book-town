@@ -290,16 +290,11 @@ async function main() {
     () => {
       const haru = "poster-haru-last-page";
       const ids = (posters: Poster[]) => posters.map((poster) => poster.id);
-      // 印あり: behind its door for one who folds, open for one who shows
-      // all (けにーさん 10-16 05:43Z); listed for both.
+      // 印あり: behind its door whether the reader shows all or folds.
       for (const mode of ["show_all", "fold_possible"] as const) {
         const state = withSetting(mode);
         const poster = state.posters.find((entry) => entry.id === haru)!;
-        assert.equal(
-          posterSpoilerView(state, poster),
-          mode === "show_all" ? "open" : "folded",
-          mode,
-        );
+        assert.equal(posterSpoilerView(state, poster), "folded", mode);
         assert.ok(ids(timelinePosters(state)).includes(haru), mode);
         assert.ok(ids(postersOf(state, "r-haru")).includes(haru), mode);
         assert.ok(

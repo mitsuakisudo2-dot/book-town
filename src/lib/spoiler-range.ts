@@ -1,7 +1,7 @@
 import { normalizeIsbn } from "./books";
 import { bookById } from "./book-name";
 import { hasFinished } from "./reading";
-import { SERIES } from "./series";
+import { volumeName } from "./words";
 import type { Post, SpoilerLine, TownState } from "./types";
 
 // ネタバレの範囲 (管理表 22 ①, docs/機能/通報と安全.md「ネタバレの範囲」).
@@ -9,8 +9,9 @@ import type { Post, SpoilerLine, TownState } from "./types";
 // goes: up to a volume of the line the book is in, or the whole line as it
 // stands (kept as its last volume then, as a post cannot spoil what came out
 // after it). A reader who finished that far in the same line reads it as it
-// is. A spoiler with no range, or on a book in no series, is about its own
-// book: it opens for a reader who finished that book, as before.
+// is. A mark with no range on a book in a series goes as far as the whole
+// series known, the safe side; on a book in no series, a spoiler is about
+// its own book and opens for a reader who finished it, as before.
 
 type Lines = Pick<TownState, "books" | "spoilerLines">;
 
@@ -83,51 +84,60 @@ export function readThrough(
 }
 
 /**
- * The volume a ranged spoiler goes up to, as its line has it: null for a
- * spoiler with no range, or while its line is not known (none, not read yet).
+ * The volume a writer's spoiler goes up to in its book's line: the one they
+ * chose, or, with no range, the last known (the whole series). Null for a
+ * book in no line, or while the line is not known.
  */
 export function spoilerUntil(
   state: Lines,
   post: Pick<Post, "spoiler" | "spoilerThrough">,
   bookId: string | null,
 ): SpoilerLine["volumes"][number] | null {
-  if (!post.spoiler || post.spoilerThrough === undefined) return null;
+  if (!post.spoiler) return null;
   const line = spoilerLineOf(state, bookId);
-  if (!line) return null;
+  if (!line || !line.volumes.length) return null;
+  const through =
+    post.spoilerThrough ?? line.volumes[line.volumes.length - 1].number;
   return (
-    [...line.volumes]
-      .reverse()
-      .find((volume) => volume.number <= post.spoilerThrough!) ?? null
+    [...line.volumes].reverse().find((volume) => volume.number <= through) ??
+    null
   );
 }
 
 /**
- * Whether the reader has read as far as a spoiler goes: for one with a range,
- * that far in its book's line (not while the line is not known); for any
- * other, its own book.
+ * Whether the reader has read as far as a spoiler goes. The writer's mark on
+ * a book in a series goes as far as they said, or with no range the whole
+ * series known (a mark from before ranges, or put on afterwards): it opens
+ * for one who finished that far in the line. Any other spoiler (a book in
+ * no series, three readers' fold) is about its own book. Where lines are
+ * read (an account) and this one is not yet, nothing opens; where they are
+ * not (the demo), a mark with no range is about its own book.
  */
 export function readFarEnough(
   state: Pick<TownState, "books" | "finishedBooks" | "spoilerLines">,
   post: Pick<Post, "spoiler" | "spoilerThrough">,
   bookId: string | null,
 ): boolean {
-  if (!post.spoiler || post.spoilerThrough === undefined)
-    return hasFinished(state, bookId);
-  const line = spoilerLineOf(state, bookId);
-  if (!line) return false;
-  return readThrough(state, line) >= post.spoilerThrough;
+  if (!post.spoiler) return hasFinished(state, bookId);
+  const ranged = post.spoilerThrough !== undefined;
+  const line = state.spoilerLines ? spoilerLineOf(state, bookId) : undefined;
+  if (line === undefined)
+    return !ranged && !state.spoilerLines && hasFinished(state, bookId);
+  if (line === null) return !ranged && hasFinished(state, bookId);
+  const until = spoilerUntil(state, post, bookId);
+  return until !== null && readThrough(state, line) >= until.number;
 }
 
 /**
- * The ISBNs of the books the town's ranged spoilers are about (a reply's:
- * the book of the post it answers), each once, for spoiler-lines to read.
+ * The ISBNs of the books the town's marked spoilers are about (a reply's:
+ * the book of the post it answers), each once, for their lines to be read.
  */
 export function rangedIsbns(
   state: Pick<TownState, "books" | "posts">,
 ): string[] {
   const found = new Set<string>();
   for (const post of state.posts) {
-    if (!post.spoiler || post.spoilerThrough === undefined) continue;
+    if (!post.spoiler) continue;
     const bookId = post.parentId
       ? (state.posts.find((entry) => entry.id === post.parentId)?.bookId ??
         null)
@@ -147,15 +157,15 @@ export const SPOILER_RANGE = {
   /** What the writer chose, under the spines. */
   chosen: (shown: string, whole: boolean) =>
     whole
-      ? `全巻（${SERIES.volume(shown)}まで）のネタバレ`
-      : `${SERIES.volume(shown)}までのネタバレ`,
+      ? `全巻（${volumeName(shown)}まで）のネタバレ`
+      : `${volumeName(shown)}までのネタバレ`,
   /** A spine's name, for a screen reader. */
-  spine: (shown: string) => `${SERIES.volume(shown)}まで`,
+  spine: (shown: string) => `${volumeName(shown)}まで`,
   /** The small tag beside a ranged spoiler. */
-  tag: (shown: string) => `${SERIES.volume(shown)}までのネタバレ`,
+  tag: (shown: string) => `${volumeName(shown)}までのネタバレ`,
   /** On its cover: when it opens of itself, not only that it is hidden. */
   cover: (shown: string) =>
-    `${SERIES.volume(shown)}まで読むと開きます・押すと表示`,
+    `${volumeName(shown)}まで読むと開きます・押すと表示`,
   /** On the cover of a spoiler with no range: its own book. */
   coverBook: "読み終えると開きます・押すと表示",
 } as const;

@@ -2,7 +2,7 @@ import { normalizeIsbn } from "./books";
 import { bookById } from "./book-name";
 import type { LibrarySet } from "./library";
 import type { Book, NewBook, TownActions, TownState } from "./types";
-import { AGAIN, counted, failure, KEPT, outOf } from "./words";
+import { AGAIN, counted, failure, KEPT, outOf, volumeName } from "./words";
 
 // シリーズのまとめ登録 (管理表 13): the volumes of the series a book is in,
 // as series_for_isbn reads them (docs/機能/本と書誌.md「シリーズと巻」), and
@@ -199,7 +199,7 @@ export const SERIES = {
   pickAll: "まだの巻をすべて選ぶ",
   pickNone: "選ぶのをやめる",
   registered: "登録済み",
-  volume: (shown: string) => `${shown}巻`,
+  volume: volumeName,
   /** The line of a series with no name of its own. */
   mainLine: "通常版",
   line: (n: number) => `並び${n}`,

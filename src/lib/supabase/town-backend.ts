@@ -1449,7 +1449,8 @@ export async function applyWrite(
         );
       } catch (error) {
         // A database from before the range (the app can be out before its
-        // migration): the post is kept as a spoiler of the whole, the wider.
+        // migration): the post is kept as a spoiler of the whole series,
+        // which opens later than its range, never sooner (spoiler-range.ts).
         if (
           !(error instanceof TownSyncError && error.code === "PGRST204") ||
           !write.rows.some((row) => "spoiler_through" in row)
