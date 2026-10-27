@@ -280,6 +280,15 @@ const shapes: Record<string, ReactNode> = {
     </>
   ),
   again: <path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.6M20 3.5v5.1h-5.1" />,
+  /** ⌄: a screen laid over the town steps down out of the way. */
+  down: <path d="m6 9.5 6 6 6-6" />,
+  /** 読書中の画面をつけたままにする. */
+  bulb: (
+    <>
+      <path d="M12 3.2a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.1v.6h5v-.6c0-.8.4-1.6 1.1-2.1A6 6 0 0 0 12 3.2z" />
+      <path d="M9.6 19.2h4.8M10.5 21.4h3" />
+    </>
+  ),
 };
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return (

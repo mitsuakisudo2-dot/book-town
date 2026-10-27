@@ -36,6 +36,27 @@ export function currentBookId(state: TownState): string | null {
   return last?.bookId ?? null;
 }
 
+/**
+ * The books offered to read before anything is typed: the one read now or
+ * last, those read lately, the library and the wishlist, each once, none
+ * the reader finished.
+ */
+export function booksToRead(state: TownState): string[] {
+  const current = currentBookId(state);
+  const recent = [...state.readingSessions]
+    .reverse()
+    .flatMap((session) => (session.bookId ? [session.bookId] : []));
+  return [
+    ...(current ? [current] : []),
+    ...recent,
+    ...state.library,
+    ...state.wishlist,
+  ].filter(
+    (entry, index, list) =>
+      list.indexOf(entry) === index && !state.finishedBooks.includes(entry),
+  );
+}
+
 export const sessionSeconds = (session: ReadingSession, now: number): number =>
   Math.max(
     0,
@@ -125,14 +146,15 @@ export function formatDuration(seconds: number): string {
   return "1分未満";
 }
 
-export function formatTimer(seconds: number): string {
+/** The reading clock (光の輪): 0:00 at the start, 25:02, then 2:30:02 past an hour. */
+export function formatClock(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const rest = seconds % 60;
   const pad = (value: number) => String(value).padStart(2, "0");
   return hours
     ? `${hours}:${pad(minutes)}:${pad(rest)}`
-    : `${pad(minutes)}:${pad(rest)}`;
+    : `${minutes}:${pad(rest)}`;
 }
 
 /**

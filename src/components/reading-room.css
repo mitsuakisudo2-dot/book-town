@@ -1,0 +1,766 @@
+/*
+ * 読書中 (ReadingRoom) and おわりのあと (ReadingDone), 管理表 18. The room
+ * is the whole screen and its parts are glass over it: what is set at the
+ * top, the time (光の輪) in the middle, what is written at the bottom. The
+ * eight rooms and their lights come next (管理表 18 の2本目の続き); until
+ * then the room is the paper lit by a lamp. The decided look is
+ * docs/機能/読書記録.md.
+ */
+
+/* The town beneath stays still while the room is over it. A notice drops
+   from under the bar at the top, clear of the words being written. */
+body:has(.reading-room) {
+  overflow: hidden;
+}
+body:has(.reading-room) .toast {
+  top: calc(env(safe-area-inset-top, 0px) + 62px);
+  bottom: auto;
+  left: 50%;
+}
+
+.reading-room {
+  /* Glass: the room shows through, the words stay readable on it. */
+  --glass: color-mix(in srgb, var(--sheet) 46%, transparent);
+  --glass-thick: color-mix(in srgb, var(--sheet) 76%, transparent);
+  --glass-line: color-mix(in srgb, var(--ink) 16%, transparent);
+  --glass-shine: color-mix(in srgb, var(--sheet) 60%, transparent);
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-page);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+  color: var(--ink);
+  background:
+    radial-gradient(
+      circle at 50% 40%,
+      color-mix(in srgb, var(--lamp-glow) 26%, transparent),
+      transparent 64%
+    ),
+    linear-gradient(var(--band), var(--paper));
+  isolation: isolate;
+}
+.reading-room > * {
+  width: 100%;
+  max-width: 560px;
+}
+
+/* At the top: out of the way, the town, the screen kept on. */
+.reading-room-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px max(12px, env(safe-area-inset-right, 0px)) 0
+    max(12px, env(safe-area-inset-left, 0px));
+}
+.reading-room-set {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.reading-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-pill);
+  background: var(--glass-thick);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  color: var(--ink);
+  font-size: var(--t-meta);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.reading-chip:active {
+  opacity: 0.6;
+}
+.reading-chip[aria-pressed="true"] {
+  border-color: var(--lamp-glow);
+  background: var(--lamp-glow);
+}
+.reading-chip.is-together {
+  color: var(--green);
+}
+
+/* The book's page and 今日のノート, side by side: a swipe or ノート moves. */
+.reading-panes {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.reading-panes::-webkit-scrollbar {
+  display: none;
+}
+.reading-pane {
+  flex: 0 0 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+.reading-stage {
+  flex: 1 1 auto;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The book: a small window at the top left. Its cover is shown whole. */
+.reading-hud {
+  align-self: flex-start;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  max-width: calc(100% - 24px);
+  margin: 10px max(12px, env(safe-area-inset-left, 0px)) 0;
+  padding: 6px 12px 6px 6px;
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-card);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.reading-hud-cover {
+  display: block;
+  flex: none;
+  /* A finger's width: the jacket is the button. */
+  width: 44px;
+  padding: 0;
+}
+.reading-hud-cover .book-jacket {
+  box-shadow: var(--lift-2);
+}
+.reading-hud-cover.is-none {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 0.675;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-edge);
+  background: var(--glass-thick);
+  color: var(--ink-2);
+}
+.reading-hud-text {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 13em;
+}
+.reading-hud-book {
+  display: grid;
+  gap: 1px;
+  min-height: 44px;
+  padding: 2px 0 0;
+  color: var(--ink);
+  text-align: left;
+}
+.reading-hud-book b {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-family: var(--serif);
+  font-size: var(--t-who);
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.reading-hud-book span {
+  overflow: hidden;
+  font-size: var(--t-cap);
+  font-weight: 700;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reading-hud-book em {
+  font-style: normal;
+  font-size: var(--t-cap);
+  font-weight: 700;
+  color: var(--green);
+}
+.reading-hud .cover-credit {
+  margin: 2px 0 0;
+  line-height: 1.45;
+}
+
+/* 光の輪: a glass disc, the light going round its edge once an hour. */
+.reading-clock {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 8px 0;
+  container-type: size;
+}
+.reading-bigtime {
+  position: relative;
+  width: min(68cqw, 264px, 94cqh);
+  aspect-ratio: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 2cqw;
+  border: 1px solid var(--glass-shine);
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle at 30% 24%,
+      color-mix(in srgb, var(--sheet) 34%, transparent),
+      transparent 52%
+    ),
+    var(--glass);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  box-shadow: var(--lift-2);
+  container-type: inline-size;
+  white-space: nowrap;
+}
+.reading-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.reading-face-track {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ink) 15%, transparent);
+  stroke-width: 1.3;
+}
+.reading-face-tick {
+  stroke: color-mix(in srgb, var(--ink) 34%, transparent);
+  stroke-width: 0.7;
+  stroke-linecap: round;
+}
+.reading-face-tick.is-quarter {
+  stroke: color-mix(in srgb, var(--ink) 62%, transparent);
+  stroke-width: 1.2;
+}
+.reading-face-arc {
+  fill: none;
+  stroke: var(--lamp-glow);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+.reading-face-halo {
+  fill: var(--lamp-glow);
+  opacity: 0.32;
+  animation: reading-glow var(--dur-arrive) ease-in-out infinite;
+}
+.reading-face-knob {
+  fill: var(--lamp-glow);
+}
+.reading-face-core {
+  fill: color-mix(in srgb, var(--sheet) 90%, transparent);
+}
+@keyframes reading-glow {
+  50% {
+    opacity: 0.06;
+  }
+}
+.reading-bigtime > small {
+  position: relative;
+  min-height: 1.3em;
+  font-size: max(var(--t-cap), 6cqw);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
+}
+.reading-bigtime > b {
+  position: relative;
+  min-height: 1em;
+  font-family: var(--serif);
+  font-size: 25cqw;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.reading-bigtime[data-long] > b {
+  font-size: 18cqw;
+}
+.reading-stop {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-top: 2cqw;
+  border: 1px solid var(--glass-line);
+  border-radius: 50%;
+  background: var(--glass-thick);
+  box-shadow: var(--lift-1);
+  color: var(--ink);
+}
+/* ひと休み中: the light stops and the numbers grow faint. */
+.reading-room.is-paused .reading-stop {
+  background: var(--lamp-glow);
+}
+.reading-room.is-paused .reading-bigtime {
+  background: color-mix(in srgb, var(--lamp-glow) 20%, var(--glass));
+}
+.reading-room.is-paused .reading-bigtime > b {
+  opacity: 0.5;
+}
+.reading-room.is-paused .reading-face-arc {
+  stroke: color-mix(in srgb, var(--ink) 40%, transparent);
+}
+.reading-room.is-paused .reading-face-halo {
+  opacity: 0;
+  animation: none;
+}
+.reading-room.is-paused .reading-face-knob {
+  fill: var(--ink-2);
+}
+.reading-room.is-paused .reading-face-core {
+  fill: var(--sheet);
+}
+
+/* At the bottom: what is written, all of it in 今日のノート. */
+.reading-desk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin: 0 max(10px, env(safe-area-inset-right, 0px)) 0
+    max(10px, env(safe-area-inset-left, 0px));
+  padding: 10px 12px;
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-card);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.reading-desk > .reading-muted,
+.reading-desk > .kept-note {
+  margin: 0;
+}
+.reading-kinds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-box);
+  background: color-mix(in srgb, var(--sheet) 40%, transparent);
+}
+.reading-kinds button {
+  min-height: 44px;
+  border-radius: var(--r-box);
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.reading-kinds button[aria-selected="true"] {
+  background: var(--sheet);
+  box-shadow: var(--lift-1);
+  color: var(--ink);
+}
+.reading-write {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-box);
+  background: var(--glass-thick);
+}
+.reading-write:focus-within {
+  border-color: var(--green);
+}
+.reading-write textarea {
+  flex: 1 1 0;
+  min-width: 0;
+  max-height: 6.4em;
+  padding: 10px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--t-page);
+  line-height: 1.5;
+  resize: none;
+  field-sizing: content;
+}
+.reading-write textarea::placeholder {
+  color: var(--ink-2);
+}
+.reading-write.is-quote textarea {
+  font-family: var(--serif);
+}
+.reading-write .btn {
+  flex: none;
+}
+.reading-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) 6px
+    max(16px, env(safe-area-inset-left, 0px));
+}
+.reading-end {
+  flex: 1 1 auto;
+  min-height: 52px;
+  padding-left: calc(18px + 0.4em);
+  border-radius: var(--r-pill);
+  box-shadow: var(--lift-2);
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  letter-spacing: 0.4em;
+}
+.reading-to-notes i {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 今日のノート: a page of a notebook, the reader's own. */
+.reading-notes-pane {
+  padding-top: 10px;
+}
+.reading-leaf {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 max(16px, env(safe-area-inset-right, 0px)) 0
+    max(16px, env(safe-area-inset-left, 0px));
+  padding: 12px 14px 10px 30px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag) var(--r-card) var(--r-card) var(--r-tag);
+  background: var(--sheet);
+  box-shadow: var(--lift-2);
+}
+.reading-leaf::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 18px;
+  width: 1.5px;
+  background: color-mix(in srgb, var(--alert) 40%, transparent);
+}
+.reading-leaf h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  color: var(--ink-2);
+  font-family: var(--serif);
+  font-size: var(--t-meta);
+  font-weight: 500;
+}
+.reading-leaf h2 small {
+  font-size: var(--t-cap);
+}
+.reading-notes {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.reading-notes li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--line-2);
+  font-size: var(--t-body);
+  line-height: 1.6;
+}
+.reading-notes li > i {
+  padding: 0 4px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-tag);
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  font-style: normal;
+  white-space: nowrap;
+}
+.reading-notes li > span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reading-notes li.is-quote > span {
+  font-family: var(--serif);
+}
+.reading-notes .icon-btn {
+  align-self: center;
+  color: var(--ink-2);
+}
+.reading-note-ask {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* Sheets over the room: the book, its cover, the town. */
+.reading-books,
+.reading-people {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.reading-people {
+  gap: 18px;
+}
+.reading-books-now {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--line-2);
+}
+.reading-books-now .reading-hud-cover {
+  width: 56px;
+}
+.reading-books-now > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.reading-books-now small {
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+.reading-books-now b {
+  overflow: hidden;
+  font-family: var(--serif);
+  font-size: var(--t-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reading-books-now .cover-credit {
+  margin: 0;
+}
+.reading-books > .btn.quiet {
+  justify-self: center;
+}
+.reading-cover-big {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+.reading-cover-big .book-jacket {
+  width: min(240px, 70vw);
+  box-shadow: var(--lift-3);
+}
+
+/* おわりのあと: the card just made, put away or not. */
+.reading-done {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  max-width: 520px;
+}
+.reading-done > .text-btn:first-child {
+  justify-self: start;
+  gap: 4px;
+  margin-left: -12px;
+}
+.reading-done-made {
+  display: grid;
+  gap: 2px;
+  text-align: center;
+}
+.reading-done-made h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: var(--t-big);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.reading-done-made p,
+.reading-done-made small {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+}
+.reading-done-made small {
+  font-size: var(--t-cap);
+}
+.reading-done-made .reading-done-phrase {
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-family: var(--serif);
+}
+.reading-done-book {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+}
+.reading-done-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.reading-done-title > a {
+  display: block;
+  flex: none;
+  width: 44px;
+}
+.reading-done-title > div {
+  display: grid;
+  min-width: 0;
+}
+.reading-done-title h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: var(--t-page);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.reading-done-title .cover-credit {
+  margin: 2px 0 0;
+}
+.reading-done-book > .reading-muted {
+  margin: -4px 0 0;
+}
+.reading-done-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.reading-done-row > label,
+.reading-done-row > span {
+  font-size: var(--t-ui);
+  font-weight: 700;
+}
+.reading-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.reading-step button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--t-title);
+  line-height: 1;
+}
+.reading-step button:disabled {
+  opacity: 0.4;
+}
+.reading-step input {
+  width: 4.6em;
+  min-height: 44px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-box);
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: var(--t-title);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  appearance: textfield;
+}
+.reading-step input::-webkit-inner-spin-button,
+.reading-step input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+.reading-step span {
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+}
+/* この本を読み終えた: a switch, 44px to the finger. */
+.reading-switch {
+  position: relative;
+  flex: none;
+  width: 56px;
+  height: 44px;
+}
+.reading-switch::before {
+  content: "";
+  position: absolute;
+  inset: 6px 2px;
+  border-radius: var(--r-pill);
+  background: var(--line-2);
+  transition: background var(--dur-move) var(--ease-standard);
+}
+.reading-switch::after {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: 5px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--sheet);
+  box-shadow: var(--lift-1);
+  transition: transform var(--dur-move) var(--ease-standard);
+}
+.reading-switch[aria-checked="true"]::before {
+  background: var(--green);
+}
+.reading-switch[aria-checked="true"]::after {
+  transform: translateX(20px);
+}
+.reading-done-keep {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+.reading-done-keep .btn.fill {
+  width: 100%;
+  min-height: 52px;
+  border-radius: var(--r-pill);
+  font-size: var(--t-page);
+}
+.reading-done-keep .is-asking {
+  color: var(--alert);
+  font-weight: 700;
+  white-space: normal;
+  text-align: center;
+}
+
+@media (max-width: 360px) {
+  .reading-end {
+    padding-left: calc(14px + 0.3em);
+    letter-spacing: 0.3em;
+  }
+  .reading-foot {
+    gap: 10px;
+  }
+}
+/* A short screen (a phone on its side): the clock and the window shrink. */
+@container (max-height: 260px) {
+  .reading-bigtime > small {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reading-face-halo {
+    animation: none;
+  }
+  .reading-switch::before,
+  .reading-switch::after {
+    transition: none;
+  }
+}

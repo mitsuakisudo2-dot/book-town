@@ -103,7 +103,6 @@ import { BlockButton, BlockedList, BlockedNote } from "./BlockReader";
 import { RecordShelf } from "./ReadingRecords";
 import { BackLink } from "./BackLink";
 import { SavedShops } from "./SavedShops";
-import { setReadingPeekOpen, useReadingPeekOpen } from "../lib/reading-peek";
 import { BRIGHTNESSES, PALETTES, TEXT_SIZES } from "../lib/appearance";
 import {
   TONE_CHOICES,
@@ -191,7 +190,6 @@ export function ProfileView({
     : "wishlist";
   const setCollection = (next: Collection) =>
     setBooks(next === "wishlist" ? null : next);
-  const peekOpen = useReadingPeekOpen();
   const palette = usePalette();
   const brightness = useBrightness();
   const textSize = useTextSize();
@@ -1252,24 +1250,6 @@ export function ProfileView({
             <p className="palette-note">
               なぜ気になったかを、あとで本のページから読み返せます。
             </p>
-          </fieldset>
-          <fieldset className="record-visibility">
-            <legend>読書中の画面</legend>
-            <label>
-              <input
-                type="checkbox"
-                checked={peekOpen}
-                onChange={(event) => {
-                  setReadingPeekOpen(event.target.checked);
-                  notify(
-                    event.target.checked
-                      ? "読書中も、街の言葉を開いておきます"
-                      : "読書中は、街の言葉をたたんでおきます",
-                  );
-                }}
-              />
-              みんなの{NAMES.letter}を、たたまずに開いておく
-            </label>
           </fieldset>
           <fieldset className="icon-choices">
             <legend>投稿ボタンのアイコン</legend>

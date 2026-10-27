@@ -854,7 +854,7 @@ try {
     );
 
     await check(
-      `${label} a line written while reading survives leaving, a reload and closing the book`,
+      `${label} words written while reading survive leaving, a reload and おわり`,
       async () => {
         await go("/reading/");
         await page
@@ -866,35 +866,81 @@ try {
           .getByRole("dialog", { name: "読書をはじめますか？" })
           .getByRole("button", { name: "本を開く", exact: true })
           .click();
-        const memo = page.getByLabel("読書メモ（自分だけ）");
-        await memo.fill("百年待っていてください。");
-        await expect(
-          page.locator(".memo-composer .composer-count"),
-        ).toHaveCount(0);
-        // Leaving and coming back, 戻る, and a reload all keep it.
+        // The note being written is kept in this browser until 今日のノート
+        // has it: leaving and coming back, 戻る, and a reload all keep it.
+        const note = page.getByRole("textbox", {
+          name: "思ったことを書きとめる（自分だけ）",
+        });
+        await note.fill("百年待っていてください。");
         await go("/timeline/");
         await go("/reading/");
-        await expect(memo).toHaveValue("百年待っていてください。");
+        await expect(note).toHaveValue("百年待っていてください。");
         await expect(page.getByText("書きかけを続けています")).toBeVisible();
         await go("/timeline/");
         await page.goBack();
-        await expect(memo).toHaveValue("百年待っていてください。");
+        await expect(note).toHaveValue("百年待っていてください。");
         await reload();
-        await expect(memo).toHaveValue("百年待っていてください。");
-        // Closing the book offers the line not sent.
-        await page.getByRole("button", { name: "読書を終える" }).click();
-        const ending = page.getByRole("dialog", { name: "読書を終えますか？" });
-        await expect(ending).toContainText("まだメモしていない言葉があります");
-        await expect(ending.locator("blockquote")).toHaveText(
-          "百年待っていてください。",
-        );
+        await expect(note).toHaveValue("百年待っていてください。");
+        // おわり puts the words in 今日のノート first: nothing waits after.
+        await page.getByRole("button", { name: "おわり" }).first().click();
         await expect(
-          ending.getByRole("button", { name: "メモして閉じる" }),
+          page.getByRole("heading", { name: "カードができました" }),
         ).toBeVisible();
-        // Closed without sending, it waits above the start, even after a reload.
-        await ending
-          .getByRole("button", { name: "本を閉じる", exact: true })
+        await expect(
+          page.getByText("まだノートに残していない言葉があります"),
+        ).toHaveCount(0);
+        const town = () =>
+          page.evaluate(
+            () => JSON.parse(localStorage.getItem("book-town-v1")).data,
+          );
+        expect(
+          (await town()).readingNotes.map((entry) => [entry.kind, entry.body]),
+        ).toEqual([["thought", "百年待っていてください。"]]);
+        expect(
+          await page.evaluate(() =>
+            localStorage.getItem("book-town-reading-note-drafts-v1"),
+          ),
+        ).toBeNull();
+        await noOverflow(`${label} card made`);
+        // 読書にもどる: the reading goes on, on the same card, its note there.
+        await page.getByRole("button", { name: "読書にもどる" }).click();
+        await page
+          .getByRole("button", { name: "今日のノートをひらく" })
           .click();
+        const notes = page.getByRole("region", { name: /今日のノート/ });
+        await expect(notes).toContainText("百年待っていてください。");
+        await notes.getByRole("button", { name: "おわり" }).click();
+        await page.getByRole("button", { name: "カードをしまう" }).click();
+        expect((await town()).readingCards).toHaveLength(1);
+
+        // A 便り written reading together and not sent waits above the start
+        // once the card is put away, even after a reload.
+        const startTogether = async () => {
+          await go("/reading/");
+          await page.getByRole("button", { name: /みんなで読む/ }).click();
+          await page
+            .getByRole("dialog", { name: "読書をはじめますか？" })
+            .getByRole("button", { name: /^(本を開く|はじめる)$/ })
+            .click();
+        };
+        const people = page.getByRole("dialog", { name: "みんなで読む" });
+        const writeLetter = async (line) => {
+          await page
+            .getByRole("button", {
+              name: "みんなで読む：いま読んでいる人と便り",
+            })
+            .click();
+          await people
+            .getByRole("textbox", { name: "読書中の便り" })
+            .fill(line);
+        };
+        await startTogether();
+        await expect(page.locator(".reading-hud-book")).toContainText("夢十夜");
+        await writeLetter("百年待っていてください。");
+        await page.keyboard.press("Escape");
+        await expect(people).toHaveCount(0);
+        await page.getByRole("button", { name: "おわり" }).first().click();
+        await page.getByRole("button", { name: "カードをしまう" }).click();
         const unsent = page.getByRole("region", {
           name: "読みながら書いて、送っていない言葉",
         });
@@ -936,18 +982,11 @@ try {
         );
         // A review with words of its own is not overwritten by the line; the
         // review shows the line, and 書き足す adds it at the end.
-        const startSolo = async () => {
-          await go("/reading/");
-          await page.getByRole("button", { name: /一人で読む/ }).click();
-          await page
-            .getByRole("dialog", { name: "読書をはじめますか？" })
-            .getByRole("button", { name: /^(本を開く|はじめる)$/ })
-            .click();
-        };
-        await startSolo();
-        await memo.fill("三夜目の一行。");
-        await page.getByRole("button", { name: "読書を終える" }).click();
-        await ending.getByRole("button", { name: "感想を書く" }).click();
+        await startTogether();
+        await writeLetter("三夜目の一行。");
+        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: "おわり" }).first().click();
+        await page.getByRole("button", { name: "感想を書く" }).click();
         await expect(review.locator("textarea")).toHaveValue(
           "前から書いていた感想。",
         );
@@ -965,6 +1004,7 @@ try {
         await expect(toAdd).toHaveCount(0);
         await page.keyboard.press("Escape");
         await expect(review).toHaveCount(0);
+        await page.getByRole("button", { name: "カードをしまう" }).click();
         await expect(unsent).toHaveCount(0);
         await go("/books/ten-nights/");
         await expect(reviews.locator("textarea")).toHaveValue(
@@ -975,15 +1015,19 @@ try {
           .getByRole("button", { name: "消す", exact: true })
           .click();
         await expect(reviews.locator("textarea")).toHaveValue("");
-        // A line sent as the book closes is posted, and kept nowhere else.
-        await startSolo();
-        await memo.fill("二夜目の一行。");
-        await page.getByRole("button", { name: "読書を終える" }).click();
-        await ending.getByRole("button", { name: "メモして閉じる" }).click();
-        await expect(ending).toHaveCount(0);
-        const closed = page.getByRole("status", { name: "今日の読書" });
-        await expect(closed).toContainText("二夜目の一行。");
-        await expect(closed).toContainText("1分未満");
+        // A 便り sent while reading is posted, and kept nowhere else.
+        await startTogether();
+        await writeLetter("二夜目の一行。");
+        await people.getByRole("button", { name: "つぶやく" }).click();
+        await expect(
+          people.getByRole("region", { name: "今回書いたこと" }),
+        ).toContainText("二夜目の一行。");
+        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: "おわり" }).first().click();
+        await expect(page.locator(".reading-done-made")).toContainText(
+          "1分未満",
+        );
+        await page.getByRole("button", { name: "カードをしまう" }).click();
         await expect(unsent).toHaveCount(0);
         const posts = await page.evaluate(
           () => JSON.parse(localStorage.getItem("book-town-v1")).data.posts,
@@ -1749,41 +1793,60 @@ try {
           page.getByRole("group", { name: "読む本を探す" }),
         ).toHaveCount(0);
         // 夢十夜 alone; read again, the book read last is chosen already.
-        const read = async () => {
+        const read = async (mode = "solo") => {
           const search = page.getByRole("searchbox", { name: "読む本を探す" });
           if (await search.count()) {
             await search.fill("夢十夜");
             await page.getByRole("button", { name: /^夢十夜/ }).tap();
           }
           await expect(page.locator(".picker-chosen")).toContainText("夢十夜");
-          await page.getByRole("button", { name: /一人で読む/ }).tap();
+          await page
+            .getByRole("button", {
+              name: mode === "solo" ? /一人で読む/ : /みんなで読む/,
+            })
+            .tap();
           await page
             .getByRole("dialog", { name: "読書をはじめますか？" })
             .getByRole("button", { name: "本を開く", exact: true })
             .tap();
         };
         await read();
-        const memo = page.getByLabel("読書メモ（自分だけ）");
-        // The memo thrown away after a reload: the keyboard stays down.
-        await memo.fill("消える一行。");
+        const note = page.getByRole("textbox", {
+          name: "思ったことを書きとめる（自分だけ）",
+        });
+        // The note thrown away after a reload: the keyboard stays down.
+        await note.fill("消える一行。");
         await reload();
         await page.getByRole("button", { name: "書きかけを消す" }).tap();
         await page.getByRole("button", { name: "消す", exact: true }).tap();
-        await expect(memo).toHaveValue("");
+        await expect(note).toHaveValue("");
         await expectNoKeyboard(
           page,
-          "memo thrown away",
-          page.locator("form.memo-composer"),
+          "note thrown away",
+          page.locator("form.reading-desk"),
         );
-        // 読書を終える, then 感想を書く: the review is a writing screen,
-        // ready within the tap.
-        await memo.fill("三夜目の一行。");
-        await page.getByRole("button", { name: "読書を終える" }).tap();
+        await page.getByRole("button", { name: "おわり" }).first().tap();
+        await page.getByRole("button", { name: "カードをしまう" }).tap();
+        // おわり, then 感想を書く: the review is a writing screen, ready
+        // within the tap.
+        const writeLetter = async (line) => {
+          await page
+            .getByRole("button", {
+              name: "みんなで読む：いま読んでいる人と便り",
+            })
+            .tap();
+          const people = page.getByRole("dialog", { name: "みんなで読む" });
+          await people
+            .getByRole("textbox", { name: "読書中の便り" })
+            .fill(line);
+          await people.getByRole("button", { name: "閉じる" }).first().tap();
+          await expect(people).toHaveCount(0);
+        };
+        await read("together");
+        await writeLetter("三夜目の一行。");
+        await page.getByRole("button", { name: "おわり" }).first().tap();
         await forgetFocus(page);
-        await page
-          .getByRole("dialog", { name: "読書を終えますか？" })
-          .getByRole("button", { name: "感想を書く" })
-          .tap();
+        await page.getByRole("button", { name: "感想を書く" }).tap();
         const review = page.getByRole("dialog", { name: "『夢十夜』の感想" });
         const reviewText = review.locator("textarea");
         await expectKeyboardUp(page, reviewText, "感想を書く");
@@ -1796,20 +1859,18 @@ try {
         await expect(reviewText).toBeInViewport();
         await page.keyboard.press("Escape");
         await expect(review).toHaveCount(0);
-        // The book closed with a line not sent: the closing card's 感想を書く
-        // and the line's 感想に使う open the review ready too.
-        await read();
-        await memo.fill("四夜目の一行。");
-        await page.getByRole("button", { name: "読書を終える" }).tap();
-        await page
-          .getByRole("dialog", { name: "読書を終えますか？" })
-          .getByRole("button", { name: "本を閉じる" })
-          .tap();
+        await page.getByRole("button", { name: "カードをしまう" }).tap();
+        // A card made with a line not sent: its 感想を書く, and the line's
+        // 感想に使う once the card is put away, open the review ready too.
+        await read("together");
+        await writeLetter("四夜目の一行。");
+        await page.getByRole("button", { name: "おわり" }).first().tap();
         await forgetFocus(page);
         await page.getByRole("button", { name: "感想を書く" }).tap();
-        await expectKeyboardUp(page, reviewText, "the closing card");
+        await expectKeyboardUp(page, reviewText, "the card made");
         await page.keyboard.press("Escape");
         await expect(review).toHaveCount(0);
+        await page.getByRole("button", { name: "カードをしまう" }).tap();
         await forgetFocus(page);
         await page.getByRole("button", { name: "感想に使う" }).tap();
         await expectKeyboardUp(page, reviewText, "a line not sent");

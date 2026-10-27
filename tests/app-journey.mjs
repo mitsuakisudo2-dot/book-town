@@ -954,24 +954,35 @@ try {
       await page.getByRole("button", { name: /^ソラリス/ }).click();
       await page.getByRole("button", { name: /みんなで読む/ }).click();
       await confirmIn("読書をはじめますか？", "本を開く");
-      await expect(
-        page.getByRole("heading", { name: "ソラリス" }),
-      ).toBeVisible();
-      await expect(page.getByRole("timer")).toHaveText(/00:0[1-9]/, {
+      // The room: the book at the top, the time in the middle (光の輪).
+      const room = page.getByRole("region", { name: "読書中" });
+      await expect(room.locator(".reading-hud-book")).toContainText("ソラリス");
+      await expect(room.locator(".reading-hud-book")).toContainText(
+        "はじめから",
+      );
+      await expect(page.getByRole("timer")).toHaveText(/^0:0[1-9]$/, {
         timeout: 5000,
       });
-      await expect(
-        page.getByRole("heading", { name: /同じ本を、いま3人が読んでいます/ }),
-      ).toBeVisible();
+      await noOverflow("reading room");
       const nav = page.getByRole("navigation", {
         name: "スマートフォンナビゲーション",
       });
       await expect(nav.getByRole("link", { name: "読書中" })).toBeVisible();
-      await page
+      // Readers now and the 便り wait behind the people at the top.
+      await room
+        .getByRole("button", { name: "みんなで読む：いま読んでいる人と便り" })
+        .click();
+      const people = page.getByRole("dialog", { name: "みんなで読む" });
+      await expect(
+        people.getByRole("heading", {
+          name: /同じ本を、いま3人が読んでいます/,
+        }),
+      ).toBeVisible();
+      await people
         .getByRole("textbox", { name: "読書中の便り" })
         .fill("ちょうど第二章。");
-      await page.getByRole("button", { name: "つぶやく" }).click();
-      const memo = page
+      await people.getByRole("button", { name: "つぶやく" }).click();
+      const memo = people
         .getByRole("region", { name: "今回書いたこと" })
         .locator("article.post-card")
         .filter({ hasText: "ちょうど第二章。" });
@@ -1008,22 +1019,31 @@ try {
     async () => {
       await go("/reading/");
       await page.waitForTimeout(1200);
-      await page.getByRole("button", { name: "読書を終える" }).click();
-      await confirmIn("読書を終えますか？", "本を閉じる");
+      await page.getByRole("button", { name: "おわり" }).first().click();
+      // おわり makes the reading's card: the book, the time, how far.
+      await expect(
+        page.getByRole("heading", { name: "カードができました" }),
+      ).toBeVisible();
+      const card = page.locator(".reading-done-made");
+      await expect(card).toContainText("『ソラリス』・1分未満");
+      await expect(
+        page.getByRole("link", { name: "『ソラリス』の作品ページへ" }),
+        // The reader's own page of the book, from their reading (管理表 17).
+      ).toHaveAttribute("href", "/books/solaris/?face=me");
+      await expect(
+        page.getByRole("spinbutton", { name: "どこまで読んだ？" }),
+      ).toHaveValue("");
+      await expect(
+        page.getByRole("switch", { name: "この本を読み終えた" }),
+      ).toHaveAttribute("aria-checked", "false");
+      await noOverflow("card made");
+      await page.getByRole("button", { name: "カードをしまう" }).click();
+      await expect(
+        page.getByText("カードをしまいました。読書の記録に残っています"),
+      ).toBeVisible();
       await expect(
         page.getByRole("heading", { name: "読書を開始" }),
       ).toBeVisible();
-      // Closing the book leaves this sitting's time, the book and a line written.
-      const closed = page.getByRole("status", { name: "今日の読書" });
-      await expect(closed).toContainText("今日の読書");
-      await expect(closed).toContainText("『ソラリス』");
-      await expect(closed).toContainText("ちょうど第二章。");
-      await expect(
-        closed.getByRole("link", { name: "『ソラリス』の作品ページへ" }),
-        // The reader's own page of the book, from their reading (管理表 17).
-      ).toHaveAttribute("href", "/books/solaris/?face=me");
-      await closed.getByRole("button", { name: "閉じる" }).click();
-      await expect(closed).toHaveCount(0);
       await expect(page.locator(".picker-chosen")).toContainText("ソラリス");
       await expect(
         page.getByText("いま読んでいる本を選んでいます。"),
@@ -1059,7 +1079,8 @@ try {
     async () => {
       await page.getByRole("button", { name: /一人で読む/ }).click();
       await confirmIn("読書をはじめますか？", "本を開く");
-      // Reading alone, the town's readers and words wait behind a fold.
+      // Reading alone, the town's readers and words wait behind the people
+      // at the top, and the reader is not among them.
       const others = page.getByRole("heading", {
         name: /同じ本を、いま2人が読んでいます/,
       });
@@ -1067,25 +1088,37 @@ try {
       await expect(
         page.getByRole("heading", { name: "みんなの読書中の便り" }),
       ).toBeHidden();
-      await page.getByText("ひと休みに、街の読書をのぞく").click();
-      await expect(others).toBeVisible();
-      // Kept open, the fold stays open the next time the page is shown.
-      await page.getByLabel("読書中はいつも開いておく").check();
-      await page.reload();
-      await expect(others).toBeVisible();
-      await page.getByLabel("読書中はいつも開いておく").uncheck();
-      await page.reload();
-      await expect(others).toBeHidden();
+      await page.getByRole("button", { name: "街の読書をのぞく" }).click();
+      const town = page.getByRole("dialog", { name: "街の読書" });
+      await expect(town.getByRole("heading", { name: /同じ本を/ })).toHaveText(
+        /同じ本を、いま2人が読んでいます/,
+      );
+      await expect(town.getByRole("textbox")).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(town).toHaveCount(0);
+      // The words written go to 今日のノート, the reader's alone.
       await page
-        .getByLabel("読書メモ（自分だけ）")
+        .getByRole("textbox", { name: "思ったことを書きとめる（自分だけ）" })
         .fill("ここは自分だけのメモ。");
-      await page.getByRole("button", { name: "メモする" }).click();
+      await page.getByRole("button", { name: "残す", exact: true }).click();
+      await expect(page.getByText("ノートに書きとめました")).toBeVisible();
+      await page.getByRole("button", { name: "今日のノートをひらく" }).click();
+      const notes = page.getByRole("region", { name: /今日のノート/ });
+      await expect(notes.getByRole("listitem")).toHaveText([
+        /思った\s*ここは自分だけのメモ。/,
+      ]);
+      // 読み終えた is said on the card, after おわり.
+      await notes.getByRole("button", { name: "おわり" }).click();
+      await page.getByRole("switch", { name: "この本を読み終えた" }).click();
       await expect(
-        page.getByText("自分だけのメモ", { exact: true }),
-      ).toBeVisible();
-      await page.getByRole("button", { name: "読み終えた！" }).click();
-      await confirmIn("読み終えましたか？", "読み終えた");
+        page.getByRole("switch", { name: "この本を読み終えた" }),
+      ).toHaveAttribute("aria-checked", "true");
       expect((await stored()).finishedBooks).toEqual(["solaris"]);
+      await page.getByRole("button", { name: "カードをしまう" }).click();
+      await expect(
+        page.getByRole("dialog", { name: "読み終えた気持ち" }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
       await go("/timeline/");
       await expect(page.getByText("ここは自分だけのメモ。")).toHaveCount(0);
       await go("/books/solaris/");
@@ -1393,23 +1426,28 @@ try {
     if (await clear.count()) await clear.click();
     await page.getByRole("button", { name: /一人で読む/ }).click();
     await confirmIn("読書をはじめますか？", "はじめる");
-    await expect(
-      page.getByRole("heading", { name: "読書中", exact: true }),
-    ).toBeVisible();
-    await expect(page.getByText("本を選ばずに読んでいます")).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "読み終えた！" }),
-    ).toHaveCount(0);
+    const room = page.getByRole("region", { name: "読書中" });
+    await expect(room.locator(".reading-hud-book")).toHaveText(
+      /本を選ばずに\s*本を選ぶ ›/,
+    );
     await expect(page.getByText("ネタバレあり")).toHaveCount(0);
     await page
-      .getByRole("textbox", { name: "読書メモ（自分だけ）" })
+      .getByRole("textbox", { name: "思ったことを書きとめる（自分だけ）" })
       .fill("本を決めずに、ぱらぱらと。");
-    await page.getByRole("button", { name: "メモする" }).click();
+    await page.getByRole("button", { name: "残す", exact: true }).click();
     await expect(
-      page.getByRole("region", { name: "今回書いたこと" }),
+      page.getByRole("region", { name: /今日のノート/ }),
     ).toContainText("本を決めずに、ぱらぱらと。");
-    await page.getByRole("button", { name: "読書を終える" }).click();
-    await confirmIn("読書を終えますか？", "本を閉じる");
+    await page.getByRole("button", { name: "おわり" }).first().click();
+    // A card without a book: no pages to keep, nothing to finish.
+    await expect(page.locator(".reading-done-made")).toContainText(
+      "本を選ばずに・1分未満",
+    );
+    await expect(page.getByRole("switch")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "感想を書く" })).toHaveCount(
+      0,
+    );
+    await page.getByRole("button", { name: "カードをしまう" }).click();
     await expect(page.locator(".reading-log")).toContainText("本を選ばずに");
   });
 
@@ -1568,12 +1606,9 @@ try {
       await page.getByRole("button", { name: /^モモ/ }).click();
       await page.getByRole("button", { name: /一人で読む/ }).click();
       await confirmIn("読書をはじめますか？", "本を開く");
-      await page.getByRole("button", { name: "読書を終える" }).click();
+      await page.getByRole("button", { name: "おわり" }).first().tap();
       await forgetFocus(page);
-      await page
-        .getByRole("dialog", { name: "読書を終えますか？" })
-        .getByRole("button", { name: "感想を書く" })
-        .tap();
+      await page.getByRole("button", { name: "感想を書く" }).tap();
       const review = page.getByRole("dialog", { name: "『モモ』の感想" });
       // A review is a writing screen: on a touch screen it opens with its
       // text box ready, focused within the tap, and the keyboard up.
@@ -1585,6 +1620,8 @@ try {
       await page.keyboard.type("時間どろぼうの話を、時間をかけて読んだ。");
       await review.getByRole("button", { name: "投稿する" }).tap();
       await expect(review).toHaveCount(0);
+      // The card waits to be put away.
+      await page.getByRole("button", { name: "カードをしまう" }).tap();
       await expect(
         page.getByRole("heading", { name: "読書を開始" }),
       ).toBeVisible();

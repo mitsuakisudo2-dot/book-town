@@ -16,6 +16,15 @@ import {
   type RecordWork,
 } from "../src/lib/record-draft";
 import {
+  noteDraftOptions,
+  noteWorkKey,
+  READING_NOTE_DRAFT_KEY,
+  readNoteWork,
+  returnNoteWords,
+} from "../src/lib/reading-note-draft";
+import { READING_NOTE_MAX_LENGTH } from "../src/lib/reading-cards";
+import { writtenWords } from "../src/lib/town-remote";
+import {
   readReportWork,
   REPORT_DRAFT_KEY,
   REPORT_DRAFT_OPTIONS,
@@ -120,6 +129,96 @@ check("a reading line can be added after a review's own words", () => {
   assert.equal(drafts.carry(line, "u-1:review:solaris", true), false);
   assert.equal(drafts.get("u-1:review:solaris")?.body.length, 995);
   assert.equal(drafts.get(line)?.body, "海の記憶。");
+});
+
+check("the words of 今日のノート are kept by reader and card", () => {
+  const storage = memory();
+  const notes = createKeptDraftStore(noteDraftOptions, () => storage);
+  const key = noteWorkKey("u-1", "card-1");
+  assert.equal(key, "u-1:card-1");
+  notes.set(key, { kind: "quote", body: "海は、ただそこにあった。" });
+  const reopened = createKeptDraftStore(noteDraftOptions, () => storage);
+  reopened.initialize();
+  assert.deepEqual(reopened.get(key), {
+    kind: "quote",
+    body: "海は、ただそこにあった。",
+  });
+  // Nothing written is nothing kept; a key of no owner is not kept.
+  reopened.set("u-1:card-2", { kind: "word", body: "  " });
+  reopened.set("card-3", { kind: "word", body: "x" });
+  assert.deepEqual(Object.keys(reopened.getSnapshot().drafts), [key]);
+  assert.deepEqual(
+    Object.keys(JSON.parse(storage.data.get(READING_NOTE_DRAFT_KEY)!).drafts),
+    [key],
+  );
+  // Read back, only work the screen could make.
+  assert.equal(readNoteWork({ kind: "memo", body: "x" }), null);
+  assert.equal(readNoteWork({ kind: "word", body: 3 }), null);
+  assert.equal(
+    readNoteWork({
+      kind: "thought",
+      body: "あ".repeat(READING_NOTE_MAX_LENGTH + 1),
+    }),
+    null,
+  );
+  assert.deepEqual(readNoteWork({ kind: "word", body: "ミモイド" }), {
+    kind: "word",
+    body: "ミモイド",
+  });
+});
+
+check("a note turned away comes back after the words kept for its card", () => {
+  const notes = createKeptDraftStore(noteDraftOptions, oneMemory());
+  const key = noteWorkKey("u-1", "card-1");
+  const words = (body: string) => ({ kind: "thought" as const, body });
+  // With nothing there, as it was.
+  assert.equal(
+    returnNoteWords("u-1", "card-1", words("一つ目。"), notes),
+    true,
+  );
+  assert.deepEqual(notes.get(key), words("一つ目。"));
+  // After words being written, on a line of their own, of their kind.
+  notes.set(key, { kind: "quote", body: "書きかけの一文" });
+  assert.equal(
+    returnNoteWords("u-1", "card-1", words("二つ目。"), notes),
+    true,
+  );
+  assert.deepEqual(notes.get(key), {
+    kind: "quote",
+    body: "書きかけの一文\n二つ目。",
+  });
+  // Too long together, or nothing to return: nothing changes.
+  const long = words("海".repeat(READING_NOTE_MAX_LENGTH));
+  assert.equal(returnNoteWords("u-1", "card-1", long, notes), false);
+  assert.equal(returnNoteWords("u-1", "card-1", words(" "), notes), false);
+  assert.equal(notes.get(key)?.body, "書きかけの一文\n二つ目。");
+  // Each reader's and card's words are their own.
+  assert.equal(notes.get(noteWorkKey("u-2", "card-1")), null);
+});
+
+check("a note write turned away gives back its words, by card", () => {
+  const add = (kind: string, body: string) =>
+    ({
+      id: "n-" + body,
+      user_id: "u-1",
+      card_id: "card-1",
+      session_id: "s-1",
+      kind,
+      body,
+    }) as never;
+  assert.deepEqual(
+    writtenWords({
+      kind: "reading-notes",
+      add: [add("word", "ミモイド"), add("memo", "形のちがう言葉")],
+      patches: [],
+      remove: [],
+    }),
+    {
+      posts: [],
+      records: [],
+      notes: [{ cardId: "card-1", kind: "word", body: "ミモイド" }],
+    },
+  );
 });
 
 check("post drafts read back too long or misshapen are dropped", () => {
