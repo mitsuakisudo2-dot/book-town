@@ -1,4 +1,5 @@
 import { valueMark } from "../canonical";
+import type { StumbleResult } from "../stumbles";
 import type { PersistenceStatus } from "../types";
 
 /** What a Supabase request hands back, as far as saving needs to know. */
@@ -296,6 +297,12 @@ export interface SyncSpec<T, W> {
   landed?(base: T, target: T): void;
   /** Keeps the changes on the device while they wait. */
   outbox?: Outbox<W>;
+  /**
+   * Told how each write sent went, once, as a whole (its parts turned away
+   * or not): for counting stumbles (stumbles.ts). Not told of a write
+   * passed over or only told again.
+   */
+  tally?(write: W, result: Exclude<StumbleResult, "not_found">): void;
 }
 
 /**
@@ -418,6 +425,21 @@ export function backgroundSync<T, W>(
 
   const isRetry = (error: unknown) =>
     error instanceof TownSyncError && error.retry;
+  // Writes told how they went since a round last went through: a round cut
+  // off by network trouble sends them all again, and each is told once.
+  const told = new Set<string>();
+  /** Counting never stops a save. */
+  const tell = (write: W, result: Exclude<StumbleResult, "not_found">) => {
+    if (!spec.tally) return;
+    try {
+      if (result !== "offline") {
+        const mark = valueMark(write);
+        if (told.has(mark)) return;
+        told.add(mark);
+      }
+      spec.tally(write, result);
+    } catch {}
+  };
 
   /**
    * Sends `writes`, planned from `from`, in order. A write set whole goes
@@ -487,9 +509,27 @@ export function backgroundSync<T, W>(
           continue;
         }
       }
-      const missed = into.refused.length + into.elsewhere.length;
-      await one(kept.write);
-      if (now && into.refused.length + into.elsewhere.length === missed)
+      const refused = into.refused.length;
+      const elsewhere = into.elsewhere.length;
+      try {
+        await one(kept.write);
+      } catch (error) {
+        tell(kept.write, "offline");
+        throw error;
+      }
+      tell(
+        kept.write,
+        into.refused.length > refused
+          ? "refused"
+          : into.elsewhere.length > elsewhere
+            ? "other"
+            : "ok",
+      );
+      if (
+        now &&
+        into.refused.length === refused &&
+        into.elsewhere.length === elsewhere
+      )
         placed?.set(now.key, kept.to as string);
     }
   }
@@ -598,6 +638,7 @@ export function backgroundSync<T, W>(
         keep();
         report(pending() || stale ? "saving" : "saved");
       }
+      told.clear();
     } catch (error) {
       if (closed) return;
       if (!isRetry(error)) console.error(error);

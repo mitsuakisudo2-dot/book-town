@@ -2096,6 +2096,10 @@ export type Database = {
         Args: { copy: string; original: string };
         Returns: undefined;
       };
+      count_stumbles: {
+        Args: { features: string[]; results: string[]; times: number[] };
+        Returns: undefined;
+      };
       delete_my_account: {
         Args: Record<PropertyKey, never>;
         Returns: undefined;

@@ -15,6 +15,7 @@ import {
   type WalkRows,
   type WalkWrite,
 } from "../walk-remote";
+import { countStumble } from "../stumbles";
 import { loadPosition, noPosition, savePosition } from "../walk-repository";
 import { isDatabaseId } from "../record-kind";
 import type { StoreScene } from "../store-scene";
@@ -320,6 +321,10 @@ export function accountWalkBackend(
       apply: (write, base) => applyWalkWrite(client, write, loaded(), base),
       split: splitWalkWrite,
       stake: walkStake,
+      // The shop's scene is its shelves as the reader arranged them.
+      tally(write, result) {
+        if (write.kind === "scene") countStumble("shelf", result);
+      },
       outbox:
         device === null
           ? undefined
