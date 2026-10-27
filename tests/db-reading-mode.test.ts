@@ -1400,11 +1400,15 @@ async function main() {
         );
         return row.v;
       };
-      assert.equal(await toAgree(AKI), null, "none published yet");
+      // The first terms, published with the pages (管理表44).
+      assert.equal(await toAgree(AKI), "2026-10-26");
       assert.equal(
         (await refused(null, "select terms_to_agree()")).code,
         "42501",
       );
+      // From none published, as before the first terms.
+      await rows("delete from private.terms_versions");
+      assert.equal(await toAgree(AKI), null, "none published yet");
       await rows(
         "insert into private.terms_versions (version, published_at) values ('1', now() - interval '2 days')",
       );

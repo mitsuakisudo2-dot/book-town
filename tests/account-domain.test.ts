@@ -55,6 +55,8 @@ const profileOf = (id: string, handle: string, name: string): ProfileRow => ({
 /** A pretend Supabase with one invited email and adjustable failures. */
 function fakeBackend() {
   let listener: (user: AccountUser | null) => void = () => {};
+  // Who is signed in, as the database's auth.uid().
+  let who: string | null = null;
   const profiles = new Map<string, ProfileRow>();
   const calls = {
     sendCode: 0,
@@ -89,6 +91,10 @@ function fakeBackend() {
     passkeyWindow: null as AccountFailure | null,
     /** reader_settings.mode, as each reader's was written. */
     modes: new Map<string, string>(),
+    /** The terms now published, and each reader's consents. */
+    terms: "2026-10-26" as string | null,
+    termsFail: false,
+    consents: new Map<string, string[]>(),
     emit: (user: AccountUser | null) => listener(user),
     release() {
       control.held.splice(0).forEach((resume) => resume());
@@ -96,7 +102,10 @@ function fakeBackend() {
   };
   const backend: AccountBackend = {
     onUserChange(next) {
-      listener = next;
+      listener = (user) => {
+        who = user?.id ?? null;
+        next(user);
+      };
       next(null);
       return () => {};
     },
@@ -215,6 +224,21 @@ function fakeBackend() {
       control.modes.set(userId, "manage");
       return null;
     },
+    async termsToAgree() {
+      if (control.termsFail) throw new Error("offline");
+      const agreed = control.consents.get(who ?? "") ?? [];
+      return who && control.terms && !agreed.includes(control.terms)
+        ? control.terms
+        : null;
+    },
+    async agreeToTerms(userId, version) {
+      if (control.termsFail) return "network";
+      control.consents.set(userId, [
+        ...(control.consents.get(userId) ?? []),
+        version,
+      ]);
+      return null;
+    },
   };
   return { backend, control };
 }
@@ -323,9 +347,9 @@ async function main() {
   );
 
   await check(
-    "a first sign-in asks for an ID, a name and the age",
+    "a first sign-in asks for an ID, a name and the age, with the consent to the terms",
     async () => {
-      const { backend } = fakeBackend();
+      const { backend, control } = fakeBackend();
       const store = createAccountStore(() => backend, true);
       store.subscribe(() => {});
       await store.actions.verifyCode(AKI.email, "123456");
@@ -382,7 +406,11 @@ async function main() {
           .ok,
         false,
       );
+      assert.equal(control.consents.size, 0, "not agreed while refused");
       assert.deepEqual(await store.actions.createProfile(draft), { ok: true });
+      // The box ticked was the consent to the terms now published (管理表44).
+      assert.deepEqual(control.consents.get(AKI.id), ["2026-10-26"]);
+      assert.equal(await store.actions.termsToAgree(), null);
       const state = store.getSnapshot();
       assert.equal(state.status, "signed-in");
       if (state.status === "signed-in") {
@@ -438,6 +466,7 @@ async function main() {
         assert.equal(state.profile.reading_visibility, "private");
       }
       assert.equal(control.modes.get(AKI.id), "manage");
+      assert.deepEqual(control.consents.get(AKI.id), ["2026-10-26"]);
       // Leaving asks for the word, as there is no ID to type.
       assert.deepEqual(await store.actions.deleteAccount(""), {
         ok: false,
@@ -1155,6 +1184,41 @@ async function main() {
           work.name,
         );
       }
+    },
+  );
+
+  await check(
+    "a reader from before the terms is asked once in the town, and a start that could not keep the consent is asked too (管理表44)",
+    async () => {
+      const { backend, control } = fakeBackend();
+      control.profiles.set(AKI.id, profileOf(AKI.id, "aki", "アキ"));
+      const store = createAccountStore(() => backend, true);
+      store.subscribe(() => {});
+      // Signed out: nothing is asked.
+      assert.equal(await store.actions.termsToAgree(), null);
+      control.emit(AKI);
+      await settle();
+      assert.equal(await store.actions.termsToAgree(), "2026-10-26");
+      assert.deepEqual(await store.actions.agreeToTerms("2026-10-26"), {
+        ok: true,
+      });
+      assert.equal(await store.actions.termsToAgree(), null);
+      // Unread, it is not asked; refused, it is said.
+      control.consents.clear();
+      control.termsFail = true;
+      assert.equal(await store.actions.termsToAgree(), null);
+      assert.equal((await store.actions.agreeToTerms("2026-10-26")).ok, false);
+      // A first profile made offline from the terms is made all the same,
+      // and asks once the terms can be read.
+      const other = fakeBackend();
+      const starting = createAccountStore(() => other.backend, true);
+      starting.subscribe(() => {});
+      other.control.emit(AKI);
+      await settle();
+      other.control.termsFail = true;
+      assert.deepEqual(await starting.actions.startQuietly(true), { ok: true });
+      other.control.termsFail = false;
+      assert.equal(await starting.actions.termsToAgree(), "2026-10-26");
     },
   );
 

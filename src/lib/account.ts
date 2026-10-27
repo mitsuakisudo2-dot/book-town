@@ -8,7 +8,7 @@ import { counted, failure, AGAIN, KEPT, NOT_CONNECTED } from "./words";
 export const CODE_LENGTH = 6;
 /** The youngest age Booktown is offered to. */
 export const MINIMUM_AGE = 13;
-const AGE_PROBLEM = `Booktownは${MINIMUM_AGE}歳以上の方が使えます。`;
+const AGE_PROBLEM = `Booktownは${MINIMUM_AGE}歳以上で、利用規約とプライバシーに同意した方が使えます。`;
 export const NAME_MAX_LENGTH = 40;
 /** How many passkeys one account can have (the auth server's own limit). */
 export const PASSKEY_LIMIT = 10;
@@ -223,6 +223,13 @@ export interface AccountBackend {
   ): Promise<{ profile: ProfileRow } | { failure: AccountFailure }>;
   /** Starts the reader in 読書管理モード (reader_settings.mode). */
   startInManageMode(userId: string): Promise<AccountFailure | null>;
+  /**
+   * The version of the terms the signed-in reader is to agree to now, or
+   * null (none published, or agreed to already). Throws when unread.
+   */
+  termsToAgree(): Promise<string | null>;
+  /** Keeps the reader's consent to that version, with being 13 or older. */
+  agreeToTerms(userId: string, version: string): Promise<AccountFailure | null>;
 }
 
 export const normalizeEmail = (raw: string): string => raw.trim().toLowerCase();
@@ -460,6 +467,17 @@ export function createAccountStore(
     backend.onUserChange((user) => void adopt(user));
   }
 
+  /**
+   * A reader who ticked the box as they started agreed to the terms then
+   * (管理表44). Kept after the profile, which the consent points to; not
+   * kept (offline, none published), they are asked in the town (TermsAsk).
+   */
+  async function agreeOnStart(userId: string) {
+    if (!backend) return;
+    const version = await backend.termsToAgree().catch(() => null);
+    if (version) await backend.agreeToTerms(userId, version).catch(() => null);
+  }
+
   const actions = {
     async sendCode(
       rawEmail: string,
@@ -592,6 +610,7 @@ export function createAccountStore(
         reading_visibility: draft.readingPublic ? "public" : "private",
       });
       if ("failure" in result) return failed(result.failure);
+      await agreeOnStart(user.id);
       generation += 1;
       set({ status: "signed-in", user, profile: result.profile });
       return { ok: true };
@@ -618,9 +637,24 @@ export function createAccountStore(
       // Not started in 読書管理モード (a lost answer), the reader is in the
       // usual mode with nothing public, and switches in 設定.
       await backend.startInManageMode(user.id).catch(() => null);
+      await agreeOnStart(user.id);
       generation += 1;
       set({ status: "signed-in", user, profile: result.profile });
       return { ok: true };
+    },
+    /** The terms the signed-in reader is still to agree to, or null. */
+    async termsToAgree(): Promise<string | null> {
+      start();
+      if (!backend || state.status !== "signed-in") return null;
+      return backend.termsToAgree().catch(() => null);
+    },
+    async agreeToTerms(version: string): Promise<AccountResult> {
+      start();
+      if (!backend || state.status !== "signed-in") return failed("network");
+      const failure = await backend
+        .agreeToTerms(state.user.id, version)
+        .catch((): AccountFailure => "network");
+      return failure ? failed(failure) : { ok: true };
     },
     /** A name and an ID for a reader with no public profile, made public. */
     async publishProfile(chosen: {
