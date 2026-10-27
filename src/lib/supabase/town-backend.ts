@@ -509,6 +509,9 @@ async function readTown(
     libraryShelves,
     libraryShelfBooks,
     encounters,
+    readingCards,
+    readingCardBooks,
+    readingNotes,
     myBooks,
   ] = await Promise.all([
     townViewOf(client, userId),
@@ -623,6 +626,31 @@ async function readTown(
         ["id"],
       ),
     ),
+    // The person's readings (読書記録): cards, their books, 今日のノート.
+    own((id) =>
+      allRows(
+        (count) =>
+          client.from("reading_cards").select("*", { count }).eq("user_id", id),
+        ["id"],
+      ),
+    ),
+    own((id) =>
+      allRows(
+        (count) =>
+          client
+            .from("reading_card_books")
+            .select("*", { count })
+            .eq("user_id", id),
+        ["session_id"],
+      ),
+    ),
+    own((id) =>
+      allRows(
+        (count) =>
+          client.from("reading_notes").select("*", { count }).eq("user_id", id),
+        ["id"],
+      ),
+    ),
     // The books the person typed in, to tell others' apart.
     userId === null ? undefined : myBooksOf(client),
   ]);
@@ -700,6 +728,9 @@ async function readTown(
     spoilerReports,
     popReactions,
     sessions: [...ownSessions, ...together],
+    readingCards,
+    readingCardBooks,
+    readingNotes,
     records,
     posters,
     folds,
@@ -1432,12 +1463,96 @@ export async function applyWrite(
             .eq("id", row.id),
         );
       return;
+    case "session-changes":
+      for (const row of write.rows)
+        await settled(
+          client
+            .from("reading_sessions")
+            .update(row.patch)
+            .match({ user_id: ids.userId, id: row.id }),
+        );
+      return;
     case "sessions":
       await settled(
         client
           .from("reading_sessions")
           .upsert(write.rows, { onConflict: "id", ...ignore }),
       );
+      return;
+    // 読書記録 (docs/機能/読書記録.md 「アプリが書くときの決まり」): each row
+    // new to the database sent whole and passed over when there already
+    // (its key is the device's), its changes sent as changes.
+    case "reading-cards":
+      if (write.add.length)
+        await settled(
+          client
+            .from("reading_cards")
+            .upsert(write.add, { onConflict: "user_id,id", ...ignore }),
+        );
+      for (const { id, patch } of write.patches)
+        await settled(
+          client
+            .from("reading_cards")
+            .update(patch)
+            .match({ user_id: ids.userId, id }),
+        );
+      return;
+    // A book or note of a card gone first (記録しない on another device) is
+    // turned away (23503), told as not saved like any other (sync.ts): the
+    // words of a note come back to the reader, and nothing already saved,
+    // its span among it, is taken away for it.
+    case "reading-card-books":
+      if (write.add.length)
+        await settled(
+          client
+            .from("reading_card_books")
+            .upsert(write.add, { onConflict: "user_id,session_id", ...ignore }),
+        );
+      for (const { session_id, patch } of write.patches)
+        await settled(
+          client
+            .from("reading_card_books")
+            .update(patch)
+            .match({ user_id: ids.userId, session_id }),
+        );
+      return;
+    case "reading-notes":
+      for (const id of write.remove)
+        await settled(
+          client
+            .from("reading_notes")
+            .delete()
+            .match({ user_id: ids.userId, id }),
+        );
+      if (write.add.length)
+        await settled(
+          client
+            .from("reading_notes")
+            .upsert(write.add, { onConflict: "user_id,id", ...ignore }),
+        );
+      for (const { id, patch } of write.patches)
+        await settled(
+          client
+            .from("reading_notes")
+            .update(patch)
+            .match({ user_id: ids.userId, id }),
+        );
+      return;
+    case "discard-readings":
+      for (const id of write.sessions)
+        await settled(
+          client
+            .from("reading_sessions")
+            .delete()
+            .match({ user_id: ids.userId, id }),
+        );
+      for (const id of write.cards)
+        await settled(
+          client
+            .from("reading_cards")
+            .delete()
+            .match({ user_id: ids.userId, id }),
+        );
       return;
     case "delete-records":
       await settled(

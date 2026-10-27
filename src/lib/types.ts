@@ -6,6 +6,15 @@ import type {
 } from "./library";
 import type { LibraryChange, LibraryUndo } from "./library-town";
 import type { Poster, PosterDraft } from "./posters";
+import type {
+  CardBookChange,
+  NoteChange,
+  NoteKind,
+  ReadingAddedLater,
+  ReadingCard,
+  ReadingCardBook,
+  ReadingNote,
+} from "./reading-cards";
 import type { FiledReport } from "./supabase/reports";
 import type {
   Audience,
@@ -419,6 +428,14 @@ export interface TownState {
   spoilerReports: string[];
   readingNow: ReadingNow[];
   readingSessions: ReadingSession[];
+  /**
+   * The reader's readings (読書記録), the reader's own: one card a reading,
+   * the books read in it (one a session), and 今日のノート written on it
+   * (reading-cards.ts). A session from before the cards has none.
+   */
+  readingCards: ReadingCard[];
+  readingCardBooks: ReadingCardBook[];
+  readingNotes: ReadingNote[];
   finishedBooks: string[];
   /**
    * Books the viewer registered on purpose (scanned, typed in, added from a
@@ -599,8 +616,60 @@ export interface TownActions {
   toggleSpoilerReport(postId: string): void;
   /** The writer puts the spoiler mark on their own post afterwards. */
   markSpoiler(postId: string): void;
+  /**
+   * Begins a reading: its span of the book (or none) on a new card. Ends
+   * whatever was running. Answers the span's id, or null when not taken.
+   */
   startReading(bookId: string | null, mode: ReadingMode): string | null;
+  /**
+   * Ends the reading going on (おわり): its card stays, to be put away, read
+   * on or not kept. `finished` says the book was read to its end.
+   */
   endReading(finished: boolean): void;
+  /**
+   * 本を変える while reading: less than a minute into the book, the new one
+   * takes its place; later, the new book is read on the same card. False
+   * when nothing is read on a card, or the book is not taken.
+   */
+  changeReadingBook(bookId: string): boolean;
+  /**
+   * 記録し忘れた日を、あとから足す, or a reading done away from the app: a
+   * card of its own, said added later, of the reader's book. Answers the
+   * card's id; null when the book is not theirs, it would end after now, or
+   * its time is not one kept (ADDED_READING_MAX_SECONDS).
+   */
+  addReadingLater(bookId: string, reading: ReadingAddedLater): string | null;
+  /** Stops the clock of the reading going on, and starts it again. */
+  pauseReading(): void;
+  resumeReading(): void;
+  /**
+   * 読書にもどる: reads on a card just ended, the last reading begun. False
+   * when it cannot.
+   */
+  readOn(cardId: string): boolean;
+  /** 記録しない: the card, its books' times and its notes are not kept. */
+  discardReading(cardId: string): void;
+  /**
+   * どこまで読んだ and この本を読み終えた of a book of a card (by its
+   * session). Finishing it marks the book 読了 in the library; taking that
+   * back undoes the mark made here.
+   */
+  changeCardBook(sessionId: string, change: CardBookChange): boolean;
+  /**
+   * Writes a note in 今日のノート of a card, at the book being read on it
+   * (or its last). Answers its id; null for blank words or too many.
+   */
+  writeReadingNote(
+    cardId: string,
+    note: { kind: NoteKind; body: string; page?: number | null },
+  ): string | null;
+  /**
+   * Changes a note; false when nothing changed, the words would not be
+   * kept, or nothing can be saved now (as for writing one).
+   */
+  changeReadingNote(noteId: string, change: NoteChange): boolean;
+  /** Erases a note; nothing while nothing can be saved. */
+  eraseReadingNote(noteId: string): void;
   /**
    * The one way a book enters the reader's library. A title or author over
    * 200 characters is cut to end in …. Null when there is no title, when the

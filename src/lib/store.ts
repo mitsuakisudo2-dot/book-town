@@ -31,6 +31,7 @@ import {
   libraryChange,
   undoLibraryChange,
   withLibraryOp,
+  type LibraryUndo,
   keepingUses,
   withoutRegistering,
 } from "./library-town";
@@ -78,6 +79,26 @@ import {
   withVisibility,
 } from "./visibility";
 import { cleanPosterDraft, posterProblem, type Poster } from "./posters";
+import {
+  NOTE_KINDS,
+  cardById,
+  changedNote,
+  cleanNoteBody,
+  cleanPage,
+  deviceTimeZone,
+  noteSessionOf,
+  runningCard,
+  withBookChanged,
+  withCardBegun,
+  withCardBookChanged,
+  withCardDiscarded,
+  withPaused,
+  withReadOn,
+  withReadingAdded,
+  withReadingEnded,
+  withResumed,
+  type ReadingNote,
+} from "./reading-cards";
 import { handleProblem, normalizeHandle } from "./handles";
 import { tapsOf } from "./social";
 import { blockable, withoutReaders } from "./blocks";
@@ -214,10 +235,14 @@ const reachesSample = (name: string, args: unknown[]) => {
 const ANSWERING_ACTIONS = new Set<keyof TownActions>([
   "addShelfBook",
   "blockReader",
+  "changeCardBook",
   "changeDisplay",
+  "changeReadingBook",
+  "changeReadingNote",
   "deletePoster",
   "editLibraryShelf",
   "putAwayLibraryShelf",
+  "readOn",
   "setDefaultShelfAudience",
   "updateRecord",
 ]);
@@ -327,6 +352,12 @@ export function createTownStore(
   // so a press that met nothing new is never offered an older one's.
   let pendingMet: string | null = null;
   let lastMet: string | null = null;
+  // What a reading marked in the library, by its session, to undo while
+  // this page is open: 読書中 when its book gives way to another within a
+  // minute, 読了 when it is taken back or the card is not kept. Gone with
+  // the page: the library is the reader's to change after that.
+  const readingMarks = new Map<string, LibraryUndo>();
+  const finishMarks = new Map<string, LibraryUndo>();
   function commit(next: TownState): boolean {
     const making = pendingMet;
     pendingMet = null;
@@ -1108,6 +1139,8 @@ export function createTownStore(
       )
         return null;
       const time = now().toISOString();
+      // Starting a new reading ends whatever was running.
+      const ended = withReadingEnded(state, time);
       const session: ReadingSession = {
         id: nextId(
           "reading",
@@ -1123,24 +1156,28 @@ export function createTownStore(
       // the row worked out for it 読書中, and nothing would be kept.
       const marked =
         bookId === null
-          ? state
-          : withLibraryOp(
-              state,
+          ? null
+          : libraryChange(
+              ended,
               [bookId],
               { status: "reading" },
               time,
               "reading",
             );
-      commit({
-        ...marked,
-        readingSessions: [
-          // Starting a new book closes whatever was running.
-          ...marked.readingSessions.map((entry) =>
-            entry.endedAt === null ? { ...entry, endedAt: time } : entry,
-          ),
-          session,
-        ],
-      });
+      const begun = withCardBegun(
+        {
+          ...(marked?.state ?? ended),
+          readingSessions: [...ended.readingSessions, session],
+        },
+        session,
+        nextId(
+          "card",
+          state.readingCards.map((card) => card.id),
+        ),
+        deviceTimeZone(),
+      );
+      if (!commit(begun)) return null;
+      if (marked) readingMarks.set(session.id, marked.undo);
       return session.id;
     },
     endReading(finished) {
@@ -1150,25 +1187,226 @@ export function createTownStore(
       );
       if (!active) return;
       const time = now().toISOString();
-      const ended: TownState = {
-        ...state,
-        readingSessions: state.readingSessions.map((entry) =>
-          entry.id === active.id ? { ...entry, endedAt: time } : entry,
+      const ended = withReadingEnded(state, time);
+      if (!finished || active.bookId === null) {
+        commit(ended);
+        return;
+      }
+      const done = withCardBookChanged(ended, active.id, { finished: true });
+      const marked = state.finishedBooks.includes(active.bookId)
+        ? null
+        : libraryChange(
+            done,
+            [active.bookId],
+            { status: "finished" },
+            time,
+            "reading",
+          );
+      if (commit(marked?.state ?? done) && marked)
+        finishMarks.set(active.id, marked.undo);
+    },
+    changeReadingBook(given) {
+      initialize();
+      const [bookId] = own([given]);
+      if (!bookId || !state.books.some((book) => book.id === bookId))
+        return false;
+      const running = runningCard(state);
+      const time = now().toISOString();
+      const nextSession = nextId(
+        "reading",
+        state.readingSessions.map((entry) => entry.id),
+      );
+      const changed = withBookChanged(state, bookId, time, nextSession);
+      if (!running || !changed) return false;
+      // The library first, as for a reading begun (startReading): the book
+      // given way to so soon goes back to what the library said of it before
+      // this reading (読書中, and 読了 if it was said finished), and the new
+      // one is 読書中.
+      let library: TownState = state;
+      const span = running.session.id;
+      if (changed.replaced)
+        for (const undo of [finishMarks.get(span), readingMarks.get(span)])
+          if (undo) library = undoLibraryChange(library, undo, time).state;
+      const marked = libraryChange(
+        library,
+        [bookId],
+        { status: "reading" },
+        time,
+        "reading",
+      );
+      if (marked) library = marked.state;
+      const read = changed.replaced ? span : nextSession;
+      if (
+        !commit({
+          ...library,
+          readingSessions: changed.state.readingSessions,
+          readingCards: changed.state.readingCards,
+          readingCardBooks: changed.state.readingCardBooks,
+        })
+      )
+        return false;
+      if (changed.replaced) {
+        readingMarks.delete(span);
+        finishMarks.delete(span);
+      }
+      if (marked) readingMarks.set(read, marked.undo);
+      return true;
+    },
+    addReadingLater(given, reading) {
+      initialize();
+      const [bookId] = own([given]);
+      if (!bookId || !state.books.some((book) => book.id === bookId))
+        return null;
+      const time = now().toISOString();
+      const ids = {
+        sessionId: nextId(
+          "reading",
+          state.readingSessions.map((entry) => entry.id),
+        ),
+        cardId: nextId(
+          "card",
+          state.readingCards.map((card) => card.id),
         ),
       };
-      commit(
-        finished &&
-          active.bookId !== null &&
-          !state.finishedBooks.includes(active.bookId)
-          ? withLibraryOp(
-              ended,
-              [active.bookId],
+      const added = withReadingAdded(
+        state,
+        ids,
+        bookId,
+        reading,
+        deviceTimeZone(),
+        time,
+      );
+      if (!added) return null;
+      // Finished in it, the book is 読了, as a reading ended finished; 記録
+      // しない or taking it back undoes that (finishMarks).
+      const marked =
+        reading.finished === true && !state.finishedBooks.includes(bookId)
+          ? libraryChange(
+              added,
+              [bookId],
               { status: "finished" },
               time,
               "reading",
             )
-          : ended,
+          : null;
+      if (!commit(marked?.state ?? added)) return null;
+      if (marked) finishMarks.set(ids.sessionId, marked.undo);
+      return ids.cardId;
+    },
+    pauseReading() {
+      initialize();
+      commit(withPaused(state, now().toISOString()));
+    },
+    resumeReading() {
+      initialize();
+      commit(withResumed(state, now().toISOString()));
+    },
+    readOn(cardId) {
+      initialize();
+      const next = withReadOn(state, cardId, now().toISOString());
+      return next !== null && commit(next);
+    },
+    discardReading(cardId) {
+      initialize();
+      const card = cardById(state, cardId);
+      if (!card) return;
+      // What the reading marked in the library (読了, then 読書中) goes
+      // back as it was: nothing of the reading is kept.
+      const time = now().toISOString();
+      const sessions = state.readingCardBooks
+        .filter((book) => book.cardId === cardId)
+        .map((book) => book.sessionId);
+      let next = withCardDiscarded(state, cardId);
+      for (const session of [...sessions].reverse())
+        for (const undo of [
+          finishMarks.get(session),
+          readingMarks.get(session),
+        ])
+          if (undo) next = undoLibraryChange(next, undo, time).state;
+      if (!commit(next)) return;
+      for (const session of sessions) {
+        finishMarks.delete(session);
+        readingMarks.delete(session);
+      }
+    },
+    changeCardBook(sessionId, change) {
+      initialize();
+      const next = withCardBookChanged(state, sessionId, change);
+      if (next === state) return false;
+      const session = state.readingSessions.find(
+        (entry) => entry.id === sessionId,
       );
+      const time = now().toISOString();
+      const bookId = session?.bookId ?? null;
+      // 読み終えた marks the book 読了 in the library, as ending a reading
+      // finished does; taken back, the mark made here is undone.
+      let library: { state: TownState; undo?: LibraryUndo } = { state: next };
+      if (change.finished === true && bookId !== null) {
+        const marked = state.finishedBooks.includes(bookId)
+          ? null
+          : libraryChange(
+              next,
+              [bookId],
+              { status: "finished" },
+              time,
+              "reading",
+            );
+        if (marked) library = marked;
+      } else if (change.finished === false) {
+        const undo = finishMarks.get(sessionId);
+        if (undo)
+          library = { state: undoLibraryChange(next, undo, time).state };
+      }
+      if (!commit(library.state)) return false;
+      if (library.undo) finishMarks.set(sessionId, library.undo);
+      else if (change.finished === false) finishMarks.delete(sessionId);
+      return true;
+    },
+    writeReadingNote(cardId, given) {
+      initialize();
+      if (!keepsWords() || !cardById(state, cardId)) return null;
+      const body = cleanNoteBody(given.body);
+      if (body === null || !NOTE_KINDS.includes(given.kind)) return null;
+      const note: ReadingNote = {
+        id: nextId(
+          "note",
+          state.readingNotes.map((entry) => entry.id),
+        ),
+        cardId,
+        sessionId: noteSessionOf(state, cardId),
+        kind: given.kind,
+        body,
+        page: cleanPage(given.page),
+        createdAt: now().toISOString(),
+      };
+      return commit({ ...state, readingNotes: [...state.readingNotes, note] })
+        ? note.id
+        : null;
+    },
+    changeReadingNote(noteId, change) {
+      initialize();
+      if (!keepsWords()) return false;
+      const note = state.readingNotes.find((entry) => entry.id === noteId);
+      const next = note && changedNote(note, change);
+      if (!next) return false;
+      return commit({
+        ...state,
+        readingNotes: state.readingNotes.map((entry) =>
+          entry === note ? next : entry,
+        ),
+      });
+    },
+    eraseReadingNote(noteId) {
+      initialize();
+      if (
+        !keepsWords() ||
+        !state.readingNotes.some((entry) => entry.id === noteId)
+      )
+        return;
+      commit({
+        ...state,
+        readingNotes: state.readingNotes.filter((entry) => entry.id !== noteId),
+      });
     },
     registerBook(input, via, bookId, batchId) {
       initialize();

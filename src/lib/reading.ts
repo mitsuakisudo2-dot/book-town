@@ -3,6 +3,7 @@ import { uncoverHidden } from "./hidden-words";
 import { notLeftOut } from "./social";
 import { counted } from "./words";
 import { booksOfWork } from "./works";
+import { sessionReadSeconds } from "./reading-cards";
 
 export const activeSession = (state: TownState): ReadingSession | undefined =>
   state.readingSessions.find((session) => session.endedAt === null);
@@ -45,11 +46,20 @@ export const sessionSeconds = (session: ReadingSession, now: number): number =>
     ),
   );
 
+/** Time read, by `now`: in all, and by book. A card's pauses are left out. */
 export function readingTotals(state: TownState, now: number) {
   const byBook = new Map<string, number>();
   let total = 0;
+  // A span over is as counted when it ended (sessionReadSeconds), looked
+  // up once here: this runs on every tick of the clock.
+  const readSeconds = new Map(
+    state.readingCardBooks.map((book) => [book.sessionId, book.readSeconds]),
+  );
   for (const session of state.readingSessions) {
-    const seconds = sessionSeconds(session, now);
+    const seconds =
+      session.endedAt === null
+        ? sessionReadSeconds(state, session, now)
+        : (readSeconds.get(session.id) ?? sessionSeconds(session, now));
     total += seconds;
     if (session.bookId)
       byBook.set(session.bookId, (byBook.get(session.bookId) ?? 0) + seconds);

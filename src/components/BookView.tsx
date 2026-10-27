@@ -44,7 +44,8 @@ import { useBibliography } from "../lib/bibliography-session";
 import { HeldBook } from "./HeldBook";
 import { PLACE, counted } from "../lib/words";
 import { inManageMode } from "../lib/town-mode";
-import { formatDuration, sessionSeconds } from "../lib/reading";
+import { formatDuration } from "../lib/reading";
+import { sessionReadSeconds } from "../lib/reading-cards";
 import { japanMonthDay } from "../lib/japan-time";
 import "./book-in-hand.css";
 
@@ -320,7 +321,7 @@ function MyBookPage({
     (session) => session.bookId !== null && work.has(session.bookId),
   );
   const seconds = sessions.reduce(
-    (sum, session) => sum + sessionSeconds(session, now),
+    (sum, session) => sum + sessionReadSeconds(state, session, now),
     0,
   );
   const last = sessions

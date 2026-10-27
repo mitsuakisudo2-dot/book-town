@@ -781,8 +781,10 @@ async function main() {
       assert.deepEqual(shared, [], "nothing shared is read table by table");
       const books = viewed.asked.filter((name) => name === "rpc:town_books");
       assert.ok(books.length <= 20, `${books.length} town_books requests`);
+      // The reader's own tables are a request each, read side by side: the
+      // reading cards (管理表18) brought three, their books and notes.
       const others = viewed.asked.length - books.length;
-      assert.ok(others <= 20, `${others} requests besides the books`);
+      assert.ok(others <= 23, `${others} requests besides the books`);
       const tabled = counted(fakeSupabase(AKI, seed, { versions: true }));
       await loadTown(tabled.client, AKI, [], () => "shop");
       console.log(
