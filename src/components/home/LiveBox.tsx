@@ -226,6 +226,10 @@ export function LiveBox({
             easing: "ease-out",
           },
         );
+    // Come in as a 便り's page closes, the list can stay inert in Chrome
+    // although nothing over it is: the lines then take no tap and no focus
+    // (AUD-196). A style of its own has it styled afresh.
+    element.style.setProperty("--live-arrival", String(arrival.key));
   }, [arrival]);
   const headId = useId();
   const boxId = useId();
