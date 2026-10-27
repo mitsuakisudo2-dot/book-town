@@ -1441,11 +1441,27 @@ export async function applyWrite(
       await settled(client.from("posts").delete().in("id", write.ids));
       return;
     case "posts":
-      await settled(
-        client
-          .from("posts")
-          .upsert(write.rows, { onConflict: "id", ...ignore }),
-      );
+      try {
+        await settled(
+          client
+            .from("posts")
+            .upsert(write.rows, { onConflict: "id", ...ignore }),
+        );
+      } catch (error) {
+        // A database from before the range (the app can be out before its
+        // migration): the post is kept as a spoiler of the whole, the wider.
+        if (
+          !(error instanceof TownSyncError && error.code === "PGRST204") ||
+          !write.rows.some((row) => "spoiler_through" in row)
+        )
+          throw error;
+        await settled(
+          client.from("posts").upsert(
+            write.rows.map(({ spoiler_through: _, ...row }) => row),
+            { onConflict: "id", ...ignore },
+          ),
+        );
+      }
       return;
     case "mark-spoilers":
       await settled(

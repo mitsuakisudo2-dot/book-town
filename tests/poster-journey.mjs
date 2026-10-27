@@ -450,7 +450,7 @@ try {
         await expect(
           page.getByRole("article", { name: "はるのポスター" }),
         ).toBeVisible();
-        await setting("ネタバレの印があるもの・可能性があるものは出さない");
+        await setting("読んだところより先のネタバレは、一覧にも出さない");
         await goHome();
         await expect(
           page.getByRole("article", { name: "はるのポスター" }),
@@ -492,9 +492,7 @@ try {
             .first(),
         ).toBeVisible();
         // Back to folding: listed again, behind its door.
-        await setting(
-          "ネタバレの可能性があるもの（3人以上が「ネタバレでは？」）はたたんで表示する",
-        );
+        await setting("読んだところより先のネタバレは、たたんで表示する");
         await go("/books/hundred-years/");
         await expect(spoilerThumb()).toBeVisible();
         await expect(leftOut).toHaveCount(0);

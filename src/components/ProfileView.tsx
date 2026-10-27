@@ -57,7 +57,10 @@ const composeIconNames: Record<ComposeIcon, string> = {
   quill: "羽根ペン",
 };
 
-/** 「ネタバレの表示」, in the order of how much is shown. */
+/**
+ * 「ネタバレの表示」, in the order of how much is shown (けにーさん 10-16
+ * 05:43Z): what is past where the reader has read, how it reaches them.
+ */
 const SPOILER_CHOICES: {
   value: SpoilerDisplay;
   label: string;
@@ -66,18 +69,17 @@ const SPOILER_CHOICES: {
   {
     value: "show_all",
     label: "すべて表示する",
-    told: "ネタバレの可能性があるものも、そのまま表示します",
+    told: "ネタバレも、読んだところに関係なくそのまま表示します",
   },
   {
     value: "fold_possible",
-    label:
-      "ネタバレの可能性があるもの（3人以上が「ネタバレでは？」）はたたんで表示する",
-    told: "ネタバレの可能性があるものは、たたんで表示します",
+    label: "読んだところより先のネタバレは、たたんで表示する",
+    told: "読んだところより先のネタバレは、たたんで表示します。押すと読めます",
   },
   {
     value: "leave_out",
-    label: "ネタバレの印があるもの・可能性があるものは出さない",
-    told: `ネタバレの印があるもの・可能性があるものは、出さないようにします（読み終えた本の${NAMES.letter}は出します）`,
+    label: "読んだところより先のネタバレは、一覧にも出さない",
+    told: `読んだところより先のネタバレは、出さないようにします（読んだところまでの${NAMES.letter}は出します）`,
   },
 ];
 import "./profile.css";

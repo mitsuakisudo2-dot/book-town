@@ -226,10 +226,10 @@ try {
         // chooses to see it: the words are not on the page until then.
         await expect(page.getByText("ラストの一行で")).toHaveCount(0);
         const covered = card("あなた", "沈黙");
-        await expect(covered).toContainText("結末に触れています・押すと表示");
+        await expect(covered).toContainText("読み終えると開きます・押すと表示");
         // The whole box is one button, named with its book.
         const cover = covered.getByRole("button", {
-          name: /結末に触れています/,
+          name: /読み終えると開きます/,
         });
         await expect(cover).toHaveAttribute("aria-expanded", "false");
         await expect(cover).toHaveAccessibleName(/『沈黙』/);
@@ -575,7 +575,7 @@ try {
         const display = settings.getByRole("group", { name: "ネタバレの表示" });
         await expect(
           display.getByLabel(
-            "ネタバレの可能性があるもの（3人以上が「ネタバレでは？」）はたたんで表示する",
+            "読んだところより先のネタバレは、たたんで表示する",
           ),
         ).toBeChecked();
         await expect(display).toContainText(
@@ -592,10 +592,10 @@ try {
         await expect(records.getByRole("radio").first()).toBeChecked();
         await expect(records.getByLabel("自分だけ")).toBeChecked();
         await display
-          .getByLabel("ネタバレの印があるもの・可能性があるものは出さない")
+          .getByLabel("読んだところより先のネタバレは、一覧にも出さない")
           .check();
         await expect(page.locator(".toast")).toContainText(
-          "ネタバレの印があるもの・可能性があるものは、出さないようにします（読み終えた本の便りは出します）",
+          "読んだところより先のネタバレは、出さないようにします（読んだところまでの便りは出します）",
         );
         await noOverflow(`${label} settings`);
         await page.screenshot({
@@ -634,9 +634,7 @@ try {
         await page.getByRole("button", { name: "設定" }).click();
         await page
           .getByRole("dialog", { name: "設定" })
-          .getByLabel(
-            "ネタバレの可能性があるもの（3人以上が「ネタバレでは？」）はたたんで表示する",
-          )
+          .getByLabel("読んだところより先のネタバレは、たたんで表示する")
           .check();
         await page.keyboard.press("Escape");
         await go("/books/galaxy-railroad/");

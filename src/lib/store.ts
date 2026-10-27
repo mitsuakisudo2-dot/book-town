@@ -101,6 +101,7 @@ import {
 } from "./reading-cards";
 import { handleProblem, normalizeHandle } from "./handles";
 import { tapsOf } from "./social";
+import { rangedIsbns } from "./spoiler-range";
 import { blockable, withoutReaders } from "./blocks";
 import {
   COMPOSE_ICONS,
@@ -110,6 +111,7 @@ import {
   ME_ID,
   POP_REACTIONS,
   POST_MAX_LENGTH,
+  SPOILER_THROUGH_MAX,
   BIO_MAX_LENGTH,
   NINE_NOTE_MAX_LENGTH,
   POP_MAX_LENGTH,
@@ -134,6 +136,7 @@ import {
   type Shelf,
   type Shop,
   type ShopTheme,
+  type SpoilerLine,
   type TownActions,
   type TownState,
 } from "./types";
@@ -1010,6 +1013,14 @@ export function createTownStore(
       const bookId = session ? session.bookId : own([draft.bookId ?? null])[0];
       const parentId = session ? null : (draft.parentId ?? null);
       const spoiler = draft.spoiler === true;
+      // How far it goes: a volume's number, on a spoiler only (管理表 22 ①).
+      const through =
+        spoiler &&
+        Number.isInteger(draft.spoilerThrough) &&
+        draft.spoilerThrough! >= 1 &&
+        draft.spoilerThrough! <= SPOILER_THROUGH_MAX
+          ? draft.spoilerThrough!
+          : undefined;
       const parent = parentId
         ? state.posts.find((entry) => entry.id === parentId)
         : undefined;
@@ -1031,6 +1042,7 @@ export function createTownStore(
         body,
         bookId,
         spoiler,
+        ...(through !== undefined ? { spoilerThrough: through } : {}),
         parentId,
         createdAt: now().toISOString(),
         likes: 0,
@@ -2109,12 +2121,56 @@ export const actions = townActions;
 export const getTownSnapshot = townStore.getSnapshot;
 
 export function useTownStore(): { state: TownState; actions: TownActions } {
-  const state = useSyncExternalStore(
+  const town = useSyncExternalStore(
     townStore.subscribe,
     townStore.getSnapshot,
     townStore.getServerSnapshot,
   );
-  return { state, actions: townActions };
+  return { state: useSpoilerLines(town), actions: townActions };
+}
+
+/**
+ * The town with the series lines its ranged spoilers are about (管理表 22 ①,
+ * spoiler-range.ts): read with series_for_isbn as they come, kept by the
+ * store like any page's reading (useMoreRead), and laid over the town only.
+ * A town with no ranged spoiler reads nothing.
+ */
+function useSpoilerLines(town: TownState): TownState {
+  const reads = useTownReads();
+  const isbns = useMemo(() => rangedIsbns(town), [town]);
+  const wanted = isbns.join(" ");
+  // Which of them are read: changes as each comes.
+  const came = useSyncExternalStore(
+    townStore.subscribe,
+    () =>
+      isbns
+        .map((isbn) => (townStore.getMore(moreKey({ series: isbn })) ? 1 : 0))
+        .join(""),
+    () => "",
+  );
+  useEffect(() => {
+    if (!reads || !wanted) return;
+    for (const isbn of wanted.split(" "))
+      if (!townStore.getMore(moreKey({ series: isbn })))
+        townStore.more({ series: isbn })?.catch(() => undefined);
+  }, [reads, wanted]);
+  return useMemo(() => {
+    if (!isbns.length) return town;
+    const lines: Record<string, SpoilerLine | null> = {};
+    for (const isbn of isbns) {
+      const read = townStore.getMore(moreKey({ series: isbn }));
+      if (!read) continue;
+      lines[isbn] =
+        (read.series ?? [])
+          .flatMap((series) => series.lines)
+          .find((line) =>
+            line.volumes.some((volume) => volume.isbn === isbn),
+          ) ?? null;
+    }
+    return { ...town, spoilerLines: lines };
+    // `came` tells when one more is read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [town, isbns, came]);
 }
 
 /** Where the town is saved: this browser ("local") or an account. */

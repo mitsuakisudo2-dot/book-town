@@ -439,7 +439,7 @@ function LiveLine({
           </button>
         ) : covered ? (
           <SpoilerCover
-            words={spoilerWords(post, askedByMe)}
+            words={spoilerWords(town, post, askedByMe)}
             title={spoilerBook && bookTitle(spoilerBook)}
             bars={1}
             onOpen={() => {

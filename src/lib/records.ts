@@ -12,6 +12,7 @@ import { isAudience, shownToOthers } from "./visibility";
 import { bookById } from "./book-name";
 import { mine } from "./own-books";
 import { booksOfWork, workOf, type WorkId } from "./works";
+import { hasFinished } from "./reading";
 
 type RecordFields = Pick<
   ReadingRecord,
@@ -48,8 +49,9 @@ export function recordsOf(state: TownState, readerId: string): ReadingRecord[] {
 }
 
 /**
- * How a record's few words reach this reader. The reader's own are open; a
- * note marked as a spoiler is folded (a tap reads it), or left out for a
+ * How a record's few words reach this reader. The reader's own are open, and
+ * so is a note marked as a spoiler to a reader who finished its book or chose
+ * すべて表示する; otherwise it is folded (a tap reads it), or left out for a
  * reader who chose not to see spoilers. Its feelings show either way.
  */
 export function recordNoteView(
@@ -57,7 +59,10 @@ export function recordNoteView(
   record: ReadingRecord,
 ): "open" | "folded" | "left_out" {
   if (record.readerId === ME_ID || !record.spoiler) return "open";
-  return state.settings.spoilerDisplay === "leave_out" ? "left_out" : "folded";
+  if (hasFinished(state, record.bookId)) return "open";
+  const mode = state.settings.spoilerDisplay;
+  if (mode === "leave_out") return "left_out";
+  return mode === "show_all" ? "open" : "folded";
 }
 
 /**

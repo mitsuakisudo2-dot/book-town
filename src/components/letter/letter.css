@@ -243,6 +243,9 @@
 .letter-spoiler-words svg {
   flex: none;
 }
+.letter-spoiler-part {
+  display: inline-block;
+}
 
 /* Folded by reports: the same quiet box, and 「読む」. */
 .letter-covered {

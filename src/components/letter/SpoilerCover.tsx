@@ -35,7 +35,13 @@ export function SpoilerCover({
       <span className="letter-spoiler-words">
         <LetterIcon name="lock" size={18} />
         <span>
-          {words}
+          {/* Folded at its 「・」 only, so 「押すと表示」 never breaks apart. */}
+          {words.split("・").map((part, index) => (
+            <span key={index} className="letter-spoiler-part">
+              {index > 0 && "・"}
+              {part}
+            </span>
+          ))}
           {title && <span className="sr-only">（{quote(title)}）</span>}
         </span>
       </span>

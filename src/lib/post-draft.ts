@@ -8,13 +8,18 @@ import {
   useOwnedDraft,
 } from "./kept-draft";
 import { DRAFT_OWNER } from "./draft-owner";
-import { POST_MAX_LENGTH } from "./types";
+import { POST_MAX_LENGTH, SPOILER_THROUGH_MAX } from "./types";
 
 export const POST_DRAFT_KEY = "book-town-post-drafts-v1";
 export type PostDraft = {
   body: string;
   bookId: string | null;
   spoiler: boolean;
+  /**
+   * How far the spoiler goes, when the writer chose a volume (管理表 22 ①);
+   * none for the whole series as it stands.
+   */
+  spoilerThrough?: number;
 };
 export const EMPTY_POST_DRAFT: PostDraft = {
   body: "",
@@ -61,7 +66,20 @@ function readPostDraft(value: unknown): PostDraft | null {
     typeof draft.spoiler !== "boolean"
   )
     return null;
-  return { body: draft.body, bookId: draft.bookId, spoiler: draft.spoiler };
+  const through =
+    draft.spoiler &&
+    typeof draft.spoilerThrough === "number" &&
+    Number.isInteger(draft.spoilerThrough) &&
+    draft.spoilerThrough >= 1 &&
+    draft.spoilerThrough <= SPOILER_THROUGH_MAX
+      ? { spoilerThrough: draft.spoilerThrough }
+      : {};
+  return {
+    body: draft.body,
+    bookId: draft.bookId,
+    spoiler: draft.spoiler,
+    ...through,
+  };
 }
 
 /** Words after others, on a new line; null when too long for one post. */
@@ -84,15 +102,26 @@ export function joinPostDrafts(
       ? kept.body
       : joinWords(kept.body, work.body);
   if (body === null) return null;
-  const joined = {
+  const spoiler = kept.spoiler || work.spoiler;
+  // The wider range of the two: none (the whole) when either has none.
+  const ranges = [kept, work]
+    .filter((draft) => draft.spoiler)
+    .map((draft) => draft.spoilerThrough);
+  const through =
+    spoiler && ranges.every((range) => range !== undefined)
+      ? Math.max(...(ranges as number[]))
+      : undefined;
+  const joined: PostDraft = {
     body,
     bookId: kept.bookId ?? work.bookId,
     // A spoiler mark on either marks the whole, as when a line is carried.
-    spoiler: kept.spoiler || work.spoiler,
+    spoiler,
+    ...(through !== undefined ? { spoilerThrough: through } : {}),
   };
   return joined.body === kept.body &&
     joined.bookId === kept.bookId &&
-    joined.spoiler === kept.spoiler
+    joined.spoiler === kept.spoiler &&
+    joined.spoilerThrough === kept.spoilerThrough
     ? kept
     : joined;
 }

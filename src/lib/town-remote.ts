@@ -639,6 +639,9 @@ function postFromRow(
     body: row.body,
     bookId: row.book_id,
     spoiler: row.spoiler,
+    ...(row.spoiler && typeof row.spoiler_through === "number"
+      ? { spoilerThrough: row.spoiler_through }
+      : {}),
     ...(row.spoiler_folded && !row.spoiler ? { folded: true } : {}),
     parentId: row.parent_id,
     createdAt: row.created_at,
@@ -1936,6 +1939,11 @@ export function planWrites(
         body: post.body,
         book_id: post.bookId,
         spoiler: post.spoiler,
+        // Only on a ranged spoiler, so a database from before the range
+        // (20261214000000_spoiler_ranges) takes every other post.
+        ...(post.spoiler && post.spoilerThrough !== undefined
+          ? { spoiler_through: post.spoilerThrough }
+          : {}),
         parent_id: post.parentId,
         reading_mode: post.readingMode,
       })),
