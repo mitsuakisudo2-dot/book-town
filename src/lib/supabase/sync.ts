@@ -1,5 +1,9 @@
 import { valueMark } from "../canonical";
-import type { StumbleResult } from "../stumbles";
+import {
+  countStumble,
+  type StumbleFeature,
+  type StumbleResult,
+} from "../stumbles";
 import type { PersistenceStatus } from "../types";
 
 /** What a Supabase request hands back, as far as saving needs to know. */
@@ -19,6 +23,11 @@ export class TownSyncError extends Error {
     readonly code = "",
     /** Its hint, when it gave one (booktown:reading_mode…). */
     readonly hint = "",
+    /**
+     * The HTTP status the answer came with (0: none came, the network);
+     * none for a wait of the app's own (the town not read yet).
+     */
+    readonly status?: number,
   ) {
     super(message);
   }
@@ -57,6 +66,18 @@ export function shouldRetry(status: number, code = ""): boolean {
   );
 }
 
+/**
+ * How a request that failed counts as a stumble (stumbles.ts): turned away,
+ * no network, or the server's trouble (busy, timed out, the login gone).
+ * A wait of the app's own is no try: null.
+ */
+export function stumbleOf(error: unknown): StumbleResult | null {
+  if (!(error instanceof TownSyncError)) return "other";
+  if (!error.retry) return "refused";
+  if (error.status === undefined) return null;
+  return error.status === 0 ? "offline" : "other";
+}
+
 export async function settled<T>(
   request: PromiseLike<Outcome<T>>,
 ): Promise<Outcome<T>> {
@@ -67,6 +88,7 @@ export async function settled<T>(
       shouldRetry(outcome.status, outcome.error.code),
       outcome.error.code,
       outcome.error.hint,
+      outcome.status,
     );
   return outcome;
 }
@@ -298,11 +320,11 @@ export interface SyncSpec<T, W> {
   /** Keeps the changes on the device while they wait. */
   outbox?: Outbox<W>;
   /**
-   * Told how each write sent went, once, as a whole (its parts turned away
-   * or not): for counting stumbles (stumbles.ts). Not told of a write
-   * passed over or only told again.
+   * The feature a write's try counts for (stumbles.ts), or null. Each write
+   * sent is counted once, as a whole (its parts turned away or not); one
+   * passed over or only told again is not.
    */
-  tally?(write: W, result: Exclude<StumbleResult, "not_found">): void;
+  stumble?(write: W): StumbleFeature | null;
 }
 
 /**
@@ -425,19 +447,24 @@ export function backgroundSync<T, W>(
 
   const isRetry = (error: unknown) =>
     error instanceof TownSyncError && error.retry;
-  // Writes told how they went since a round last went through: a round cut
-  // off by network trouble sends them all again, and each is told once.
+  // Writes counted since a round last went through: a round cut off by
+  // network trouble sends them all again, and each is counted once.
   const told = new Set<string>();
   /** Counting never stops a save. */
-  const tell = (write: W, result: Exclude<StumbleResult, "not_found">) => {
-    if (!spec.tally) return;
+  const tell = (write: W, result: StumbleResult | null, thrown = false) => {
+    if (!spec.stumble || result === null) return;
     try {
-      if (result !== "offline") {
+      const feature = spec.stumble(write);
+      if (!feature) return;
+      // A write that failed to be tried again is counted each time (network
+      // trouble once a feature, by the tally itself); one that went through
+      // or was turned away, once.
+      if (!thrown) {
         const mark = valueMark(write);
         if (told.has(mark)) return;
         told.add(mark);
       }
-      spec.tally(write, result);
+      countStumble(feature, result);
     } catch {}
   };
 
@@ -514,7 +541,7 @@ export function backgroundSync<T, W>(
       try {
         await one(kept.write);
       } catch (error) {
-        tell(kept.write, "offline");
+        tell(kept.write, stumbleOf(error), true);
         throw error;
       }
       tell(

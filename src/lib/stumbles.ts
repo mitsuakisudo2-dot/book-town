@@ -6,8 +6,10 @@
 //
 // Only a signed-in reader's counts go: the account's town gives the sender
 // (accountTownBackend) and takes it back when it closes; a try counted
-// without one is not kept. Counts go every few minutes and when the page is
-// hidden; what could not be sent is dropped, never sent again.
+// without one is not kept. Counts go every few minutes, soon after a try
+// that went wrong (a reader who meets one often leaves), and when the page
+// is hidden. Counts that could not go wait for the next send while the page
+// is open; closed, they are dropped.
 
 /** The features counted (けにーさん 10-18: まずは4つ). */
 export const STUMBLE_FEATURES = [
@@ -36,6 +38,8 @@ export type StumbleResult = (typeof STUMBLE_RESULTS)[number];
 export const STUMBLES_PER_SEND = 100;
 /** How often what was counted is sent while the page stays open. */
 export const STUMBLES_EVERY_MS = 5 * 60_000;
+/** How soon a try that went wrong is sent. */
+export const STUMBLES_SOON_MS = 20_000;
 
 export interface StumbleCounts {
   features: StumbleFeature[];
@@ -65,6 +69,16 @@ export function stumbleTally() {
       const at = key(feature, result);
       counts.set(at, Math.min((counts.get(at) ?? 0) + 1, STUMBLES_PER_SEND));
     },
+    /** Counts that could not be sent, back with the rest. */
+    restore(taken: StumbleCounts) {
+      taken.features.forEach((feature, i) => {
+        const at = key(feature, taken.results[i]);
+        counts.set(
+          at,
+          Math.min((counts.get(at) ?? 0) + taken.times[i], STUMBLES_PER_SEND),
+        );
+      });
+    },
     /** What was counted, in the shape the database takes; then none. */
     take(): StumbleCounts | null {
       if (!counts.size) return null;
@@ -86,14 +100,31 @@ export function stumbleTally() {
 const tally = stumbleTally();
 let sender: StumbleSender | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
+let soon: ReturnType<typeof setTimeout> | null = null;
 
-/** Sends what was counted, if anyone is signed in to send it. Never throws. */
+/**
+ * Sends what was counted, if anyone is signed in to send it. Offline, or
+ * turned back, the counts wait for the next send. Never throws.
+ */
 export function sendStumbles() {
+  if (soon !== null) {
+    clearTimeout(soon);
+    soon = null;
+  }
+  const send = sender;
+  if (!send) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
   const counts = tally.take();
-  if (!counts || !sender) return;
+  if (!counts) return;
+  const back = () => {
+    // Only to the same reader's page: another's counts are not theirs.
+    if (sender === send) tally.restore(counts);
+  };
   try {
-    void Promise.resolve(sender(counts)).catch(() => {});
-  } catch {}
+    void Promise.resolve(send(counts)).then(undefined, back);
+  } catch {
+    back();
+  }
 }
 
 const onHidden = () => {
@@ -107,7 +138,10 @@ const listen = (on: boolean) => {
 
 /** Counts one try, while a signed-in reader's sender is set. */
 export function countStumble(feature: StumbleFeature, result: StumbleResult) {
-  if (sender) tally.count(feature, result);
+  if (!sender) return;
+  tally.count(feature, result);
+  if (result !== "ok" && soon === null && typeof window !== "undefined")
+    soon = setTimeout(sendStumbles, STUMBLES_SOON_MS);
 }
 
 /**
@@ -115,7 +149,12 @@ export function countStumble(feature: StumbleFeature, result: StumbleResult) {
  * take it back: what was counted is sent first.
  */
 export function setStumbleSender(send: StumbleSender): () => void {
-  if (sender) sendStumbles();
+  // The page before keeps no counts for the next reader: what could not
+  // go is dropped.
+  if (sender) {
+    sendStumbles();
+    tally.take();
+  }
   sender = send;
   if (typeof document !== "undefined" && timer === null) {
     timer = setInterval(sendStumbles, STUMBLES_EVERY_MS);
@@ -124,7 +163,12 @@ export function setStumbleSender(send: StumbleSender): () => void {
   return () => {
     if (sender !== send) return;
     sendStumbles();
+    tally.take();
     sender = null;
+    if (soon !== null) {
+      clearTimeout(soon);
+      soon = null;
+    }
     if (timer !== null) {
       clearInterval(timer);
       timer = null;

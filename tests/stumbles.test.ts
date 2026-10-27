@@ -6,8 +6,13 @@ import {
   setStumbleSender,
   stumbleTally,
   type StumbleCounts,
+  type StumbleFeature,
 } from "../src/lib/stumbles";
-import { backgroundSync, TownSyncError } from "../src/lib/supabase/sync";
+import {
+  backgroundSync,
+  stumbleOf,
+  TownSyncError,
+} from "../src/lib/supabase/sync";
 import { townWriteFeature } from "../src/lib/supabase/town-backend";
 import type { Write } from "../src/lib/town-remote";
 
@@ -99,18 +104,82 @@ async function main() {
     },
   );
 
-  await check("a sender that fails or throws changes nothing", async () => {
-    const stop = setStumbleSender(() => {
-      throw new Error("no network");
-    });
-    countStumble("search", "ok");
-    sendStumbles();
-    stop();
-    const stopAgain = setStumbleSender(() => Promise.reject(new Error("401")));
-    countStumble("search", "ok");
-    sendStumbles();
-    stopAgain();
-    await new Promise((resume) => setTimeout(resume, 0));
+  await check(
+    "counts a sender could not send wait for the next send; offline, none is tried",
+    async () => {
+      let fail = true;
+      const sent: StumbleCounts[] = [];
+      const stop = setStumbleSender(async (counts) => {
+        if (fail) throw new Error("401");
+        sent.push(counts);
+      });
+      countStumble("search", "refused");
+      sendStumbles();
+      await new Promise((resume) => setTimeout(resume, 0));
+      assert.equal(sent.length, 0);
+      // Offline: nothing is tried, and the counts wait.
+      Object.defineProperty(globalThis.navigator, "onLine", {
+        value: false,
+        configurable: true,
+      });
+      fail = false;
+      countStumble("search", "refused");
+      sendStumbles();
+      await new Promise((resume) => setTimeout(resume, 0));
+      assert.equal(sent.length, 0);
+      Object.defineProperty(globalThis.navigator, "onLine", {
+        value: true,
+        configurable: true,
+      });
+      sendStumbles();
+      await new Promise((resume) => setTimeout(resume, 0));
+      assert.deepEqual(sent, [
+        { features: ["search"], results: ["refused"], times: [2] },
+      ]);
+      // Taken back while one cannot go: dropped, not left for the next
+      // reader.
+      fail = true;
+      countStumble("barcode", "ok");
+      stop();
+      await new Promise((resume) => setTimeout(resume, 0));
+      const next: StumbleCounts[] = [];
+      setStumbleSender(async (counts) => {
+        next.push(counts);
+      })();
+      assert.deepEqual(next, []);
+      // A sender that throws at once is no harm.
+      const stopThrowing = setStumbleSender(() => {
+        throw new Error("no network");
+      });
+      countStumble("search", "ok");
+      sendStumbles();
+      stopThrowing();
+    },
+  );
+
+  await check("how a failed request counts", () => {
+    assert.equal(
+      stumbleOf(new TownSyncError("rule", false, "23514", "", 400)),
+      "refused",
+    );
+    assert.equal(
+      stumbleOf(new TownSyncError("network", true, "", "", 0)),
+      "offline",
+    );
+    assert.equal(
+      stumbleOf(new TownSyncError("busy", true, "", "", 503)),
+      "other",
+    );
+    assert.equal(
+      stumbleOf(new TownSyncError("login gone", true, "", "", 401)),
+      "other",
+    );
+    // A wait of the app's own (the town not read yet) is no try.
+    assert.equal(
+      stumbleOf(new TownSyncError("The town is not loaded yet", true)),
+      null,
+    );
+    assert.equal(stumbleOf(new Error("bug")), "other");
   });
 
   await check("which town writes count, and for what", () => {
@@ -143,53 +212,82 @@ async function main() {
   });
 
   await check(
-    "a save tells how each write went once, as a whole: saved, turned away, changed elsewhere, offline",
+    "a save counts each write once, as a whole: saved, turned away, changed elsewhere, offline, server trouble",
     async () => {
-      const told: [string, string][] = [];
       // Writes are words; "no" is turned away, "elsewhere" was changed on
-      // another device, "both" is two parts of which "no" is turned away.
-      let offline = 1;
+      // another device, "both" is two parts of which "no" is turned away,
+      // "late" meets the network gone once, "busy" a busy server once, and
+      // "wait" the app's own wait once.
+      const feature: Record<string, StumbleFeature> = {
+        yes: "search",
+        busy: "search",
+        no: "register",
+        both: "register",
+        elsewhere: "barcode",
+        late: "shelf",
+        wait: "shelf",
+      };
+      const once = new Set(["late", "busy", "wait"]);
+      const sent: StumbleCounts[] = [];
+      const stop = setStumbleSender(async (counts) => {
+        sent.push(counts);
+      });
+      let saved = false;
       const sync = backgroundSync<string[], string>(
         {
           read: async () => [],
           plan: (base, target) => target.filter((w) => !base.includes(w)),
           async apply(write) {
-            if (write === "late" && offline-- > 0)
-              throw new TownSyncError("network", true);
+            if (once.delete(write)) {
+              if (write === "late")
+                throw new TownSyncError("network", true, "", "", 0);
+              if (write === "busy")
+                throw new TownSyncError("busy", true, "", "", 503);
+              throw new TownSyncError("The town is not loaded yet", true);
+            }
             if (write === "no") throw new TownSyncError("rule", false);
             if (write === "elsewhere")
               throw new TownSyncError("changed", false, "PT409");
             if (write === "both") throw new TownSyncError("rule", false);
           },
           split: (write) => (write === "both" ? ["yes", "no"] : []),
-          tally: (write, result) => told.push([write, result]),
+          stumble: (write) => feature[write] ?? null,
         },
         { delay: 0, retryDelays: [0] },
       );
       await sync.load();
-      sync.watch({ status() {}, replace() {} });
-      sync.save(["yes", "no", "elsewhere", "both", "late"]);
-      for (
-        let wait = 0;
-        wait < 200 && told.at(-1)?.join() !== "late,ok";
-        wait += 1
-      )
+      sync.watch({
+        status() {},
+        replace() {
+          saved = true;
+        },
+      });
+      sync.save(["yes", "no", "elsewhere", "both", "late", "busy", "wait"]);
+      for (let wait = 0; wait < 400 && !saved; wait += 1)
         await new Promise((resume) => setTimeout(resume, 5));
       sync.close();
-      assert.deepEqual(told, [
-        ["yes", "ok"],
-        ["no", "refused"],
-        ["elsewhere", "other"],
-        ["both", "refused"],
-        ["late", "offline"],
-        // Tried again once the network is back: the round is sent again
-        // whole, and only the write not told yet is told.
-        ["late", "ok"],
+      stop();
+      await Promise.resolve();
+      // Sent again whole after each cut-off round, a write already counted
+      // is not counted again.
+      assert.deepEqual(sent, [
+        {
+          features: [
+            "search",
+            "search",
+            "register",
+            "barcode",
+            "shelf",
+            "shelf",
+          ],
+          results: ["ok", "other", "refused", "other", "ok", "offline"],
+          times: [2, 1, 2, 1, 2, 1],
+        },
       ]);
     },
   );
 
-  await check("a tally that throws never stops a save", async () => {
+  await check("counting that throws never stops a save", async () => {
     const applied: string[] = [];
     const sync = backgroundSync<string[], string>(
       {
@@ -198,7 +296,7 @@ async function main() {
         async apply(write) {
           applied.push(write);
         },
-        tally() {
+        stumble() {
           throw new Error("counting broke");
         },
       },

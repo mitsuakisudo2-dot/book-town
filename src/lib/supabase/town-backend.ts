@@ -54,6 +54,7 @@ import {
   settled,
   shouldRetry,
   steadily,
+  stumbleOf,
   TownSyncError,
   Versioned,
   type SyncOptions,
@@ -1132,12 +1133,8 @@ function remoteReads(
           // A database from before find_books: the town's books are searched.
           if (error instanceof TownSyncError && error.code === "PGRST202")
             return emptyMore();
-          countStumble(
-            "search",
-            error instanceof TownSyncError && !error.retry
-              ? "refused"
-              : "offline",
-          );
+          const result = stumbleOf(error);
+          if (result) countStumble("search", result);
           throw error;
         }
         countStumble("search", books.length ? "ok" : "not_found");
@@ -1859,10 +1856,7 @@ export function accountTownBackend(
       },
       split: splitWrite,
       stake: writeStake,
-      tally(write, result) {
-        const feature = townWriteFeature(write);
-        if (feature) countStumble(feature, result);
-      },
+      stumble: townWriteFeature,
       landed(base, target) {
         if (storage && target.seenNotifications !== base.seenNotifications)
           writeSeen(userId, target.seenNotifications);
@@ -1883,7 +1877,7 @@ export function accountTownBackend(
 
   // The signed-in reader's counts go with their session (stumbles.ts).
   const stopCounting = setStumbleSender((counts) =>
-    client.rpc("count_stumbles", counts),
+    settled(client.rpc("count_stumbles", counts)),
   );
 
   return {
