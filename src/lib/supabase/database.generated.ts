@@ -2072,6 +2072,14 @@ export type Database = {
           volume: string;
         }[];
       };
+      book_facts: {
+        Args: { ids: string[] };
+        Returns: {
+          book_id: string;
+          genre: string;
+          pages: number;
+        }[];
+      };
       book_holds: {
         Args: Record<PropertyKey, never>;
         Returns: {
