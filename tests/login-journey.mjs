@@ -1086,6 +1086,14 @@ try {
       // No one is signed in, so no one is asked whether they are staff.
       expect(annotateAsks).toHaveLength(0);
       await expect(page.locator("[data-site-notes]")).toHaveCount(0);
+      // The top bar fits a narrow phone: ログイン stands where the bell was,
+      // since a visitor's お知らせ only asked them to sign in.
+      await page.setViewportSize({ width: 320, height: 640 });
+      const bar = page.locator(".town-topbar");
+      await expect(bar.getByRole("link", { name: "ログイン" })).toBeVisible();
+      await expect(bar.getByRole("link", { name: /^お知らせ/ })).toHaveCount(0);
+      await noOverflow("visitor's top bar 320");
+      await page.setViewportSize({ width: 390, height: 844 });
     },
   );
 
