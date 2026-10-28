@@ -1071,6 +1071,69 @@ async function main() {
     },
   );
 
+  await check(
+    "a spoiler's range is written with it, on a spoiler only, and kept",
+    async () => {
+      // 管理表 22 ① (20261214000000_spoiler_ranges): up to a volume's number.
+      const [ranged] = await as<{ id: string; spoiler_through: number }>(
+        AKI,
+        "insert into posts (author_id, body, book_id, spoiler, spoiler_through) values ($1, '4巻の話', $2, true, 4) returning id, spoiler_through",
+        [AKI, book.id],
+      );
+      assert.equal(ranged.spoiler_through, 4);
+      // Everyone who reads the post reads how far it goes.
+      assert.deepEqual(
+        await as(BEN, "select spoiler_through from posts where id = $1", [
+          ranged.id,
+        ]),
+        [{ spoiler_through: 4 }],
+      );
+      // A range needs the mark; a number is a volume's (1 and up).
+      await refused(
+        AKI,
+        "insert into posts (author_id, body, book_id, spoiler, spoiler_through) values ($1, '印なし', $2, false, 4)",
+        [AKI, book.id],
+        /check constraint/,
+      );
+      await refused(
+        AKI,
+        "insert into posts (author_id, body, book_id, spoiler, spoiler_through) values ($1, '0巻', $2, true, 0)",
+        [AKI, book.id],
+        /check constraint/,
+      );
+      // Written with the post, never changed afterwards, by anyone.
+      await refused(
+        AKI,
+        "update posts set spoiler_through = 2 where id = $1",
+        [ranged.id],
+        /permission/,
+      );
+      // Marked afterwards, a post has no range: the whole, the widest.
+      const [later] = await as<{ id: string }>(
+        AKI,
+        "insert into posts (author_id, body, book_id) values ($1, 'あとで印', $2) returning id",
+        [AKI, book.id],
+      );
+      assert.equal(
+        await affects(AKI, "update posts set spoiler = true where id = $1", [
+          later.id,
+        ]),
+        1,
+      );
+      assert.deepEqual(
+        (
+          await db.query("select spoiler_through from posts where id = $1", [
+            later.id,
+          ])
+        ).rows,
+        [{ spoiler_through: null }],
+      );
+      await db.query("delete from posts where id = any($1)", [
+        [ranged.id, later.id],
+      ]);
+    },
+  );
+
   await check("a report of a spoiler never hides a post outright", async () => {
     const [post] = await as<{ id: string }>(
       AKI,

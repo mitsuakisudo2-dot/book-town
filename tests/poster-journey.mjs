@@ -450,7 +450,7 @@ try {
         await expect(
           page.getByRole("article", { name: "はるのポスター" }),
         ).toBeVisible();
-        await setting("ネタバレの印があるもの・可能性があるものは出さない");
+        await setting("読んだところより先のネタバレは、一覧にも出さない");
         await goHome();
         await expect(
           page.getByRole("article", { name: "はるのポスター" }),
@@ -491,10 +491,40 @@ try {
             .locator(".poster-sheet")
             .first(),
         ).toBeVisible();
+        // Showing all: no door anywhere, as for a 便り (けにーさん 10-27).
+        await setting("すべて表示する");
+        await go("/books/hundred-years/");
+        await expect(spoilerThumb()).toHaveCount(0);
+        await expect(leftOut).toHaveCount(0);
+        await go("/posters/?id=poster-haru-last-page");
+        await expect(
+          page.getByRole("button", { name: "表示する" }),
+        ).toHaveCount(0);
+        await expect(
+          page.getByRole("button", { name: "もう一度隠す" }),
+        ).toHaveCount(0);
+        await expect(
+          page
+            .getByRole("region", { name: "はるのポスター" })
+            .locator(".poster-sheet")
+            .first(),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("heading", { name: "ネタバレを含むポスター" }),
+        ).toHaveCount(0);
+        await goHome();
+        const card = page.getByRole("article", { name: "はるのポスター" });
+        await expect(card.locator(".poster-sheet").first()).toBeVisible();
+        await expect(card.getByText("ネタバレあり")).toBeVisible();
+        await expect(
+          card.getByRole("button", { name: "表示する" }),
+        ).toHaveCount(0);
+        await card.scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: path.join(output, `${at}-spoiler-poster-shown-all.png`),
+        });
         // Back to folding: listed again, behind its door.
-        await setting(
-          "ネタバレの可能性があるもの（3人以上が「ネタバレでは？」）はたたんで表示する",
-        );
+        await setting("読んだところより先のネタバレは、たたんで表示する");
         await go("/books/hundred-years/");
         await expect(spoilerThumb()).toBeVisible();
         await expect(leftOut).toHaveCount(0);

@@ -31,6 +31,7 @@ import {
 } from "../../lib/social";
 import { useTownBackend } from "../../lib/store";
 import { bookById, bookTitle } from "../../lib/book-name";
+import { SPOILER_RANGE, spoilerUntil } from "../../lib/spoiler-range";
 import {
   ME_ID,
   type Notify,
@@ -56,16 +57,32 @@ type Shared = {
   notify: Notify;
 };
 
-/** What the covered box says, by why it is covered (仮, §4.2 #8). */
-export function spoilerWords(post: Post, askedByMe: boolean): string {
-  if (post.spoiler) return "結末に触れています・押すと表示";
+/**
+ * What the covered box says, by why it is covered (仮, §4.2 #8): the writer's
+ * mark says when it opens of itself (管理表 22 ①), as far as it goes.
+ */
+export function spoilerWords(
+  state: TownState,
+  post: Post,
+  askedByMe: boolean,
+): string {
   if (askedByMe) return "ネタバレの可能性を報告済み・押すと表示";
+  if (post.spoiler) {
+    const until = spoilerUntil(state, post, spoilerBookOf(state, post));
+    return until ? SPOILER_RANGE.cover(until.shown) : SPOILER_RANGE.coverBook;
+  }
   return "ネタバレかもしれません・押すと表示";
 }
 
 /** The small tag beside a spoiler, open or covered. */
-function spoilerTag(post: Post, askedByMe: boolean): string {
-  if (post.spoiler) return "ネタバレあり";
+function spoilerTag(state: TownState, post: Post, askedByMe: boolean): string {
+  // The writer's own range only: none is not said to be the whole.
+  if (post.spoiler) {
+    const until =
+      post.spoilerThrough !== undefined &&
+      spoilerUntil(state, post, spoilerBookOf(state, post));
+    return until ? SPOILER_RANGE.tag(until.shown) : "ネタバレあり";
+  }
   if (askedByMe) return "ネタバレの可能性を報告済み";
   return "ネタバレかもしれません";
 }
@@ -232,7 +249,7 @@ export function LetterCard({
       )}
       {(post.spoiler || post.folded || askedByMe) && (
         <span className="letter-tag is-spoiler">
-          {spoilerTag(post, askedByMe)}
+          {spoilerTag(state, post, askedByMe)}
         </span>
       )}
     </>
@@ -325,7 +342,7 @@ export function LetterCard({
             </div>
           ) : hidden ? (
             <SpoilerCover
-              words={spoilerWords(post, askedByMe)}
+              words={spoilerWords(state, post, askedByMe)}
               title={spoilerBook && bookTitle(spoilerBook)}
               bars={spoilerBars(post.body)}
               onOpen={() => {

@@ -949,6 +949,7 @@ export type Database = {
           reading_mode: string | null;
           spoiler: boolean;
           spoiler_folded: boolean;
+          spoiler_through: number | null;
         };
         ComputedFields: never;
         Insert: {
@@ -961,6 +962,7 @@ export type Database = {
           reading_mode?: string | null;
           spoiler?: boolean;
           spoiler_folded?: boolean;
+          spoiler_through?: number | null;
         };
         Update: {
           author_id?: string;
@@ -972,6 +974,7 @@ export type Database = {
           reading_mode?: string | null;
           spoiler?: boolean;
           spoiler_folded?: boolean;
+          spoiler_through?: number | null;
         };
         Relationships: [
           {

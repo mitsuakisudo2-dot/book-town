@@ -10,7 +10,7 @@ import {
 import { japanFormat, japanMonthDay, japanYear } from "./japan-time";
 import { counted } from "./words";
 import { REPORT_KIND_WORDS } from "./supabase/reports";
-import { hasFinished } from "./reading";
+import { readFarEnough } from "./spoiler-range";
 import { bookById } from "./book-name";
 import { booksOfWork } from "./works";
 
@@ -42,26 +42,26 @@ export function spoilerBookOf(
 }
 
 /**
- * Decides spoilers, by the writer's mark, the readers' 「ネタバレでは？」 and
- * the reader's 「ネタバレの表示」. A reader who finished the book reads what
- * is said of it as it is: the writer's mark and three readers' folds open
- * for them, whatever they chose (their own 「ネタバレでは？」 still folds it).
- * For everyone else, a post its writer marked is folded from the start,
- * always; one three readers asked about (folded) is folded unless the reader
- * shows everything; one the reader asked about is folded for them. A reader
- * who chose 出さない gets none of these, except their own posts.
+ * Decides spoilers, by the writer's mark and how far it goes, the readers'
+ * 「ネタバレでは？」 and the reader's 「ネタバレの表示」. A reader who has
+ * read as far as it goes reads it as it is: as far as the writer said in
+ * the series (spoiler-range.ts), else the book itself. The writer's mark
+ * and three readers' folds open for them, whatever they chose (their own
+ * 「ネタバレでは？」 still folds it). For everyone else: すべて表示する opens
+ * everything but what they asked about themselves; 出さない shows none of
+ * it, except their own posts; otherwise it is folded, there to be opened.
  */
 export function spoilerViewOf(state: TownState, post: Post): SpoilerView {
   const marked = post.spoiler;
   const askedByMe = state.spoilerReports.includes(post.id);
   const possible = post.folded === true || askedByMe;
   if (!marked && !possible) return "open";
-  if (!askedByMe && hasFinished(state, spoilerBookOf(state, post)))
+  if (!askedByMe && readFarEnough(state, post, spoilerBookOf(state, post)))
     return "open";
   const mode = state.settings.spoilerDisplay;
   if (mode === "leave_out" && post.authorId !== ME_ID) return "left_out";
-  if (marked || askedByMe) return "folded";
-  return mode === "show_all" ? "open" : "folded";
+  if (mode === "show_all" && !askedByMe) return "open";
+  return "folded";
 }
 
 /** Whether a post reaches this reader at all. */

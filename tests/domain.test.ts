@@ -2125,8 +2125,10 @@ check(
       plain: { ...base, id: "x-plain" },
     };
     const expected: Record<SpoilerDisplay, Record<string, string>> = {
+      // すべて表示する opens everything but what the reader asked about
+      // themselves (けにーさん 10-16 05:43Z).
       show_all: {
-        marked: "folded",
+        marked: "open",
         folded: "open",
         asked: "folded",
         plain: "open",
@@ -2164,7 +2166,10 @@ check(
           mode + " mine " + kind,
         );
         if (kind === "marked")
-          assert.equal(spoilerViewOf(state, mine), "folded");
+          assert.equal(
+            spoilerViewOf(state, mine),
+            mode === "show_all" ? "open" : "folded",
+          );
       }
   },
 );
@@ -2256,10 +2261,10 @@ check(
     assert.ok(ids(usual.spoilers).includes("p-1"));
     assert.equal(usual.leftOut, false);
     assert.ok(ids(timelinePosts(folded)).includes("p-7"));
-    // show_all: three readers' fold opens; the writer's mark still folds.
+    // show_all: three readers' fold and the writer's mark both open.
     const all = showing("show_all", folded);
     assert.ok(ids(bookReviews(all, "solaris").open).includes("p-1"));
-    assert.ok(ids(bookReviews(all, "left-hand").spoilers).includes("p-7"));
+    assert.ok(ids(bookReviews(all, "left-hand").open).includes("p-7"));
     // leave_out: out of the timeline, the book page, profiles, threads, feeds and tags.
     const out = showing("leave_out", folded);
     assert.ok(!ids(timelinePosts(out)).includes("p-7"));
@@ -2319,8 +2324,16 @@ check("a record's spoiler note is folded, or left out, for others only", () => {
     spoiler: true,
   };
   assert.equal(recordNoteView(seedState, record), "folded");
-  assert.equal(recordNoteView(showing("show_all"), record), "folded");
+  assert.equal(recordNoteView(showing("show_all"), record), "open");
   assert.equal(recordNoteView(showing("leave_out"), record), "left_out");
+  // One who finished its book reads it, whatever they chose.
+  assert.equal(
+    recordNoteView(
+      { ...showing("leave_out"), finishedBooks: [record.bookId] },
+      record,
+    ),
+    "open",
+  );
   assert.equal(
     recordNoteView(showing("leave_out"), { ...record, readerId: ME_ID }),
     "open",
@@ -2417,7 +2430,12 @@ check(
       const town = showing(mode, state);
       // Folded by reports, or a spoiler: its words stay behind the cover.
       assert.ok(!offered(town).includes("山田太郎の家"), mode);
-      assert.ok(!offered(town).includes("犯人は執事"), mode);
+      // A writer's mark too, but for one who shows all (10-16 05:43Z).
+      assert.equal(
+        offered(town).includes("犯人は執事"),
+        mode === "show_all",
+        mode,
+      );
       // Every tag offered leads to a post the reader can read.
       for (const tag of offered(town))
         assert.ok(postsWithTag(town, tag).length > 0, mode + " #" + tag);

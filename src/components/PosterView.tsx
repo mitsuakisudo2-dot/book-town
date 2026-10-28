@@ -296,10 +296,11 @@ const quietScroll = () => (reducedMotion() ? "auto" : "smooth");
 /**
  * A whole poster: its pages side by side, turned by a swipe, the arrows or
  * the dots. A spoiler poster stays behind a door until the reader opens it,
- * and can be closed again.
+ * and can be closed again, unless the reader shows all (posterSpoilerView).
  */
 export function PosterPages({
   poster,
+  covered,
   books,
   author,
   compact = false,
@@ -308,6 +309,8 @@ export function PosterPages({
   takeFocus = false,
 }: {
   poster: Poster;
+  /** Behind its spoiler door for this reader: posterSpoilerView is not open. */
+  covered: boolean;
   books: Book[];
   author: Reader;
   /** Among other posts, a covered poster takes a short band, not a page. */
@@ -325,11 +328,9 @@ export function PosterPages({
   const count = poster.pages.length;
   const many = count > 1;
   const within = (at: number) => Math.max(0, Math.min(count - 1, at));
-  const [index, setIndex] = useState(() =>
-    poster.spoiler ? 0 : within(startPage),
-  );
+  const [index, setIndex] = useState(() => (covered ? 0 : within(startPage)));
   const [start] = useState(index);
-  const [open, setOpen] = useState(!poster.spoiler);
+  const [open, setOpen] = useState(!covered);
   const [cut, setCut] = useState<boolean[]>([]);
   const [reading, setReading] = useState<number | null>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -484,7 +485,7 @@ export function PosterPages({
           {`${nth(index + 1, "ページ")}（全${counted(count, "ページ")}）`}
         </span>
       )}
-      {(many || poster.spoiler) && (
+      {(many || covered) && (
         <div className="poster-controls">
           {many && (
             <>
@@ -526,7 +527,7 @@ export function PosterPages({
               </button>
             </>
           )}
-          {poster.spoiler && (
+          {covered && (
             <button
               type="button"
               ref={hide}
@@ -612,6 +613,7 @@ export function PosterFoldCover({
  */
 export function PosterThumb({
   poster,
+  covered,
   books,
   href,
   badge,
@@ -620,6 +622,8 @@ export function PosterThumb({
   note = null,
 }: {
   poster: Poster;
+  /** Behind its spoiler door for this reader: posterSpoilerView is not open. */
+  covered: boolean;
   books: Book[];
   href: string;
   badge?: string;
@@ -637,7 +641,7 @@ export function PosterThumb({
       href={href}
       className="poster-thumb"
       aria-label={
-        posterThumbName(poster, books, folded) +
+        posterThumbName({ ...poster, spoiler: covered }, books, folded) +
         (caption ? "、" + caption : "") +
         (badge ? `（${badge}）` : "") +
         (review ? `（${review}）` : "")
@@ -650,7 +654,7 @@ export function PosterThumb({
             たたんでいます
             <small>{FOLDED_POSTER_REASONS[folded]}</small>
           </span>
-        ) : poster.spoiler ? (
+        ) : covered ? (
           <span className="poster-thumb-door" style={themeStyle(poster)}>
             <Icon name="lock" size={16} />
             ネタバレを含む
@@ -699,7 +703,9 @@ export function PosterCard({
     : reviewCoverOf(state, "poster", poster.id, poster.authorId);
   const note = reviewNoteOf(state, "poster", poster.id, poster.authorId);
   // A reader who chose not to see spoilers is not shown this one at all.
-  if (!author || posterSpoilerView(state, poster) === "left_out") return null;
+  const view = posterSpoilerView(state, poster);
+  if (!author || view === "left_out") return null;
+  const covered = view !== "open";
   const profile = profilePath(author.id);
   return (
     <article
@@ -726,6 +732,10 @@ export function PosterCard({
           <PostWhen className="post-when" at={poster.createdAt} />
         </header>
         <span className="poster-tag">ポスター</span>
+        {/* Shown as it is to a reader who shows all: still said, as a 便り's. */}
+        {poster.spoiler && !covered && (
+          <span className="poster-tag">ネタバレあり</span>
+        )}
         {cover ? (
           <PosterFoldCover
             cover={cover}
@@ -736,6 +746,7 @@ export function PosterCard({
         ) : (
           <PosterPages
             poster={poster}
+            covered={covered}
             books={state.books}
             author={author}
             compact

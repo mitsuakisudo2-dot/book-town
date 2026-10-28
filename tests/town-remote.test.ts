@@ -45,6 +45,7 @@ import {
   ME_ID,
   OWN_SHOP_ID,
   popReactionKey,
+  type Post,
   type TownState,
 } from "../src/lib/types";
 import { cleanVisibilities } from "../src/lib/visibility";
@@ -135,6 +136,7 @@ const post = (
   book_id: null,
   spoiler: false,
   spoiler_folded: false,
+  spoiler_through: null,
   parent_id: null,
   reading_mode: null,
   created_at: at,
@@ -1960,6 +1962,62 @@ async function main() {
 
     const deleted = planWrites(next, before, ids);
     assert.deepEqual(kinds(deleted), ["delete-posts"]);
+  });
+
+  await check("a spoiler's range is written with it, and read back", () => {
+    const before = base();
+    const made = (id: string, patch: Partial<Post>): Post => ({
+      id,
+      authorId: ME_ID,
+      body: "4巻の話",
+      bookId: null,
+      spoiler: false,
+      parentId: null,
+      createdAt: at,
+      likes: 0,
+      wants: 0,
+      readingMode: null,
+      ...patch,
+    });
+    const ranged = made("00000000-0000-4000-8000-0000000000d1", {
+      spoiler: true,
+      spoilerThrough: 4,
+    });
+    const whole = made("00000000-0000-4000-8000-0000000000d2", {
+      spoiler: true,
+    });
+    const plain = made("00000000-0000-4000-8000-0000000000d3", {});
+    const writes = planWrites(
+      before,
+      { ...before, posts: [...before.posts, ranged, whole, plain] },
+      ids,
+    );
+    const rowsWritten = (writes[0] as Extract<Write, { kind: "posts" }>).rows;
+    // Only on the ranged one: a database from before the range takes the rest.
+    assert.deepEqual(
+      rowsWritten.map((row) =>
+        "spoiler_through" in row ? row.spoiler_through : "none",
+      ),
+      [4, "none", "none"],
+    );
+    const town = townFromRows(
+      rows({
+        posts: [
+          post("00000000-0000-4000-8000-0000000000d4", BEN, {
+            spoiler: true,
+            spoiler_through: 3,
+          }),
+          post("00000000-0000-4000-8000-0000000000d5", BEN, {
+            spoiler: true,
+          }),
+        ],
+      }),
+      ids,
+    );
+    assert.deepEqual(
+      town.posts.map((entry) => entry.spoilerThrough),
+      [3, undefined],
+    );
   });
 
   await check(

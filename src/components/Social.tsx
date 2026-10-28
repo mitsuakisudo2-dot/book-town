@@ -38,6 +38,7 @@ import { BookPicker } from "./BookPicker";
 import { booksBeforeSearch } from "../lib/book-lists";
 import { Icon, Modal, ReaderAvatar } from "./ui";
 import "./social.css";
+import { SpoilerRangeShelf, useRangeChoices } from "./SpoilerRange";
 import "./poster-screen.css";
 import { posterNewPath, searchPath, timelinePath } from "../lib/paths";
 import { leaveLayers } from "../lib/back-layer";
@@ -204,7 +205,7 @@ export function PostComposer({
   const id = useId();
   const owner = useDraftOwner();
   const {
-    draft: { body, bookId, spoiler },
+    draft: { body, bookId, spoiler, spoilerThrough },
     kept,
     saved,
     loaded,
@@ -257,6 +258,9 @@ export function PostComposer({
   const isReply = Boolean(parent);
   // A top-level spoiler needs a book to sit behind; replies already belong to one.
   const canSpoil = isReply || attached !== null;
+  // How far it goes, in the series of the book it is about (管理表 22 ①).
+  const spoilerBook = isReply ? (parent?.bookId ?? null) : attached;
+  const ranges = useRangeChoices(state, spoilerBook);
   const reading = currentBookId(state);
   const suggestions = [
     ...(reading ? [reading] : []),
@@ -270,6 +274,15 @@ export function PostComposer({
       body,
       bookId: attached,
       spoiler: canSpoil && spoiler,
+      // The whole is kept as the last volume known now: a post cannot spoil
+      // a volume that comes out after it.
+      spoilerThrough:
+        canSpoil && spoiler && ranges.length
+          ? (
+              ranges.find((volume) => volume.number === spoilerThrough) ??
+              ranges[ranges.length - 1]
+            ).number
+          : null,
       parentId: parent?.id ?? null,
     };
     // With no public profile yet, the name comes first; then it is sent.
@@ -325,7 +338,12 @@ export function PostComposer({
           <input
             type="checkbox"
             checked={spoiler}
-            onChange={(event) => update({ spoiler: event.target.checked })}
+            onChange={(event) =>
+              update({
+                spoiler: event.target.checked,
+                spoilerThrough: undefined,
+              })
+            }
           />
           ネタバレあり
         </label>
@@ -348,6 +366,15 @@ export function PostComposer({
         </button>
       </span>
     </div>
+  );
+  // Under ネタバレあり; in a writing screen, above its toolbar.
+  const range = canSpoil && spoiler && (
+    <SpoilerRangeShelf
+      state={state}
+      bookId={spoilerBook}
+      through={spoilerThrough}
+      onChange={(next) => update({ spoilerThrough: next })}
+    />
   );
   return (
     <form
@@ -387,6 +414,8 @@ export function PostComposer({
             onChange={(next) => {
               update({
                 bookId: next,
+                // Another book has other volumes: the range starts again.
+                spoilerThrough: undefined,
                 ...(!next && !isReply ? { spoiler: false } : {}),
               });
               if (!next) {
@@ -400,6 +429,7 @@ export function PostComposer({
           />
         )}
         {!sheet && tools}
+        {!sheet && range}
         <KeptDraftNote
           continuing={continuing && kept}
           saved={saved}
@@ -410,6 +440,7 @@ export function PostComposer({
             focusField(field.current);
           }}
         />
+        {sheet && range}
         {sheet && tools}
       </div>
     </form>

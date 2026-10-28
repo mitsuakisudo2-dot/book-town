@@ -7,6 +7,7 @@ import {
   FOLDED_POSTER_NAMES,
   POSTER_TEMPLATE_WORDS,
   posterBookIds,
+  posterSpoilerView,
   posterTitle,
 } from "../lib/posters";
 import { bookPath } from "../lib/books";
@@ -123,11 +124,12 @@ export function PosterScreen({
   const note = reviewNoteOf(state, "poster", poster.id, poster.authorId);
   // Opened with 読む, it stays open while the reader is here.
   const covering = read ? null : cover;
+  const covered = posterSpoilerView(state, poster) !== "open";
   // A spoiler's words, its heading too, stay behind the door; a folded
   // poster's stay behind its cover, and are not its page's name either.
   const title = cover
     ? FOLDED_POSTER_NAMES[cover]
-    : poster.spoiler
+    : covered
       ? "ネタバレを含むポスター"
       : posterTitle(poster, state.books);
   const profile = profilePath(author.id);
@@ -145,6 +147,9 @@ export function PosterScreen({
           ) : (
             <PosterPages
               poster={poster}
+              covered={covered}
+              // A setting read after the page opened starts it over.
+              key={String(covered)}
               books={state.books}
               author={author}
               startPage={startPage}

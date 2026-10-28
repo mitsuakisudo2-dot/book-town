@@ -720,6 +720,9 @@ a.poster-cover:hover {
   font-size: var(--t-cap);
   letter-spacing: 0.08em;
 }
+.poster-tag + .poster-tag {
+  margin-left: 6px;
+}
 .poster-card .poster-pages {
   max-width: 440px;
 }

@@ -1,0 +1,85 @@
+/* ネタバレの範囲 (管理表 22 ①): the volumes as spines on a small shelf; the
+   band covers those the spoiler goes up to. */
+.spoiler-range {
+  min-width: 0;
+  margin: 10px 0 0;
+  padding: 10px 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--sheet);
+}
+.spoiler-range-ask {
+  padding: 0 4px;
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+}
+.spoiler-range-shelf {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 4px 2px 22px;
+  border-bottom: 3px solid var(--cork);
+  scrollbar-width: thin;
+}
+.spoiler-range-spine {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: start center;
+  width: 30px;
+  height: 64px;
+  padding-top: 6px;
+  border: 1px dashed var(--line-2);
+  border-bottom: 0;
+  border-radius: var(--r-edge) var(--r-edge) 0 0;
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  cursor: pointer;
+  transition:
+    background var(--dur-move) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
+}
+.spoiler-range-spine.is-covered {
+  border-style: solid;
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+}
+.spoiler-range-spine.is-chosen {
+  transform: translateY(-4px);
+}
+.spoiler-range-spine:has(:focus-visible) {
+  outline: 2px solid var(--lamp);
+  outline-offset: 2px;
+}
+.spoiler-range-number {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-weight: 600;
+}
+.spoiler-range-whole {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--ink-2);
+  font-size: var(--t-cap);
+  white-space: nowrap;
+}
+.spoiler-range-chosen {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-size: var(--t-meta);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spoiler-range-spine {
+    transition: none;
+  }
+  .spoiler-range-spine.is-chosen {
+    transform: none;
+  }
+}

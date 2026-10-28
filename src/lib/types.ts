@@ -147,6 +147,8 @@ export interface Shop {
 }
 
 export const POST_MAX_LENGTH = 1000;
+/** The highest volume number a spoiler may go up to (series_volumes.number). */
+export const SPOILER_THROUGH_MAX = 9999;
 /** The longest email address the sign-in takes (as the auth server does). */
 export const EMAIL_MAX_LENGTH = 254;
 /** The same limits as the database (supabase/migrations), so a save is never refused for length. */
@@ -206,6 +208,12 @@ export interface Post {
    * marked spoiler. Only the database folds; demo posts never are.
    */
   folded?: boolean;
+  /**
+   * How far a spoiler goes, its writer said: up to this volume's number in
+   * the line of the series its book is in (a reply: the book of the post it
+   * answers). None: a spoiler of the whole (管理表 22 ①, spoiler-range.ts).
+   */
+  spoilerThrough?: number;
   /** Replies point to a top-level post. Threads are one level deep. */
   parentId: string | null;
   createdAt: string;
@@ -230,6 +238,8 @@ export interface PostDraft {
   body: string;
   bookId?: string | null;
   spoiler?: boolean;
+  /** How far the spoiler goes (Post.spoilerThrough); none for the whole. */
+  spoilerThrough?: number | null;
   parentId?: string | null;
   /** Attach the post to the active reading session, which decides its book and visibility. */
   fromReading?: boolean;
@@ -401,6 +411,11 @@ export type Registration =
     }
   | { result: "not-saved" };
 
+/** A line of a series, as a ranged spoiler reads it (series.ts SeriesLine). */
+export interface SpoilerLine {
+  volumes: { number: number; shown: string; isbn: string; bookId: string }[];
+}
+
 export interface TownState {
   books: Book[];
   readers: Reader[];
@@ -426,6 +441,12 @@ export interface TownState {
   /** Posts that made the viewer want to read their book; the post records who inspired it. */
   wantedPosts: string[];
   spoilerReports: string[];
+  /**
+   * The series lines of the books that ranged spoilers are about, by ISBN,
+   * as read for the screen (spoiler-lines.ts): null for a book in none, a
+   * book not read yet missing. Laid over the town, never kept with it.
+   */
+  spoilerLines?: Record<string, SpoilerLine | null>;
   readingNow: ReadingNow[];
   readingSessions: ReadingSession[];
   /**

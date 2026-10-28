@@ -33,7 +33,11 @@ import { CoverRemovalLink } from "./Report";
 import { BookFeelings, OwnFeeling } from "./ReadingRecords";
 import { BookEncounters } from "./BookEncounters";
 import { BackLink } from "./BackLink";
-import { postersLeftOutOfBook, postersOfBook } from "../lib/posters";
+import {
+  posterSpoilerView,
+  postersLeftOutOfBook,
+  postersOfBook,
+} from "../lib/posters";
 import { findReader, reviewCoverOf, reviewNoteOf } from "../lib/social";
 import { PosterThumb } from "./PosterView";
 import { bookById, bookHeading, bookNamedBy } from "../lib/book-name";
@@ -500,6 +504,7 @@ function BookPosters({ state, book }: { state: TownState; book: Book }) {
             <li key={poster.id}>
               <PosterThumb
                 poster={poster}
+                covered={posterSpoilerView(state, poster) !== "open"}
                 books={state.books}
                 href={posterPath(poster.id)}
                 caption={

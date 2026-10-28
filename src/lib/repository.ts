@@ -25,6 +25,7 @@ import {
   ME_ID,
   POP_REACTIONS,
   POST_MAX_LENGTH,
+  SPOILER_THROUGH_MAX,
   READING_MODES,
   popReactionKey,
   type PopReaction,
@@ -440,6 +441,12 @@ function restorePosts(
       (post.bookId === null ||
         (typeof post.bookId === "string" && bookIds.has(post.bookId))) &&
       typeof post.spoiler === "boolean" &&
+      (post.spoilerThrough === undefined ||
+        (post.spoiler &&
+          typeof post.spoilerThrough === "number" &&
+          Number.isInteger(post.spoilerThrough) &&
+          post.spoilerThrough >= 1 &&
+          post.spoilerThrough <= SPOILER_THROUGH_MAX)) &&
       (post.parentId === null || text(post.parentId, 200)) &&
       (post.spoiler === false ||
         post.parentId !== null ||

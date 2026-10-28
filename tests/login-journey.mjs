@@ -2490,6 +2490,100 @@ try {
       await view("13-series-sheet-320");
       await page.setViewportSize({ width: 390, height: 844 });
       await page.keyboard.press("Escape");
+
+      // ネタバレの範囲 (管理表 22 ①): a review of volume 2 says how far its
+      // spoiler goes, on the series' spines, from its own to the last known.
+      const MORE = [
+        ["9784000000048", "c1a00000-0000-4000-8000-000000000004", "4"],
+        ["9784000000055", "c1a00000-0000-4000-8000-000000000005", "5"],
+        ["9784000000062", "c1a00000-0000-4000-8000-000000000006", "6"],
+        ["9784000000079", "c1a00000-0000-4000-8000-000000000007", "7"],
+        ["9784000000086", "c1a00000-0000-4000-8000-000000000008", "8"],
+      ];
+      seriesRows = [
+        ...seriesRows,
+        ...MORE.map(([isbn, book_id, shown]) => ({
+          ...seriesRows[0],
+          number: Number(shown),
+          shown,
+          volume_isbn: isbn,
+          book_id,
+          title: "夜の図書館 " + shown,
+        })),
+      ];
+      seriesBooks = [
+        ...seriesBooks,
+        ...MORE.map(([isbn, id, shown]) => ({
+          ...seriesBooks[0],
+          id,
+          isbn,
+          title: "夜の図書館 " + shown,
+        })),
+      ];
+      const posted = [];
+      const notePosts = (route) => {
+        const request = route.request();
+        if (request.method() === "POST")
+          posted.push(...[request.postDataJSON()].flat());
+        return route.fallback();
+      };
+      await page.route(supabase + "/rest/v1/posts*", notePosts);
+      await page.goto(base + "/books/registered/?id=" + VOLUMES[1][1]);
+      const review = page.getByPlaceholder(
+        "この本の感想を書く（ネタバレは下の印を付けて）",
+      );
+      await review.fill(
+        "5巻の終わりまで読んで、2巻のあの場面の意味がわかった。",
+      );
+      await page.getByLabel("ネタバレあり").check();
+      const range = page.getByRole("group", { name: "どこまでのネタバレ？" });
+      // Its own volume to the last; the whole series, as it stands, first.
+      await expect(range.getByRole("radio")).toHaveCount(7);
+      await expect(range.getByRole("radio", { name: "全巻" })).toBeChecked();
+      await expect(range).toContainText("全巻（8巻まで）のネタバレ");
+      await range.getByText("5", { exact: true }).click();
+      await expect(range.getByRole("radio", { name: "5巻まで" })).toBeChecked();
+      await expect(range).toContainText("5巻までのネタバレ");
+      await range.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await noOverflow("the spoiler's range at 390");
+      await view("22-spoiler-range-390");
+      await page.setViewportSize({ width: 320, height: 640 });
+      await range.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await noOverflow("the spoiler's range at 320");
+      await view("22-spoiler-range-320");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByRole("button", { name: "投稿する" }).click();
+      await expect
+        .poll(() => posted.map((row) => [row.spoiler, row.spoiler_through]))
+        .toEqual([[true, 5]]);
+      // Behind the book page's door, it says how far it goes.
+      const door = page.getByRole("button", { name: /ネタバレありのレビュー/ });
+      await door.click();
+      const behind = page.locator(".spoiler-door");
+      await expect(behind).toContainText("5巻までのネタバレ");
+      await behind.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await view("22-spoiler-door-390");
+      // On Home, covered, it says when it opens of itself.
+      await page
+        .getByRole("navigation", { name: "スマートフォンナビゲーション" })
+        .getByRole("link", { name: "ホーム" })
+        .click();
+      const cover = page.getByRole("button", {
+        name: /5巻まで読むと開きます・押すと表示/,
+      });
+      await expect(cover.first()).toBeVisible();
+      await cover
+        .first()
+        .evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await view("22-spoiler-cover-390");
+      await page.setViewportSize({ width: 320, height: 640 });
+      await cover
+        .first()
+        .evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await noOverflow("the spoiler's cover at 320");
+      await view("22-spoiler-cover-320");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.unroute(supabase + "/rest/v1/posts*", notePosts);
       seriesRows = [];
       seriesBooks = [];
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Poster } from "../../../lib/posters";
+import { posterSpoilerView, type Poster } from "../../../lib/posters";
 import type { TownState } from "../../../lib/types";
 import { findReader } from "../../../lib/social";
 import { posterPath } from "../../../lib/paths";
@@ -22,6 +22,7 @@ export function Exhibition({
       <li key={poster.id} className="home-poster-tile">
         <PosterThumb
           poster={poster}
+          covered={posterSpoilerView(state, poster) !== "open"}
           books={state.books}
           href={posterPath(poster.id)}
           caption={

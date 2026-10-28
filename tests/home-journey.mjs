@@ -582,7 +582,7 @@ try {
         await expect(cover).toHaveAttribute("aria-expanded", "false");
         await expect(
           spoiler.getByRole("button", {
-            name: /結末に触れています・押すと表示/,
+            name: /読み終えると開きます・押すと表示/,
           }),
         ).toHaveAccessibleName(/『闇の左手』/);
         await expect(page.getByText("最後の数章を読んだ夜は")).toHaveCount(0);

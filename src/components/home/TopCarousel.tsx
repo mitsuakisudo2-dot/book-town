@@ -14,7 +14,7 @@ import {
   type Shop,
   type TownState,
 } from "../../lib/types";
-import { posterTitle, type Poster } from "../../lib/posters";
+import { posterSpoilerView, posterTitle, type Poster } from "../../lib/posters";
 import { posterPath, walkPath } from "../../lib/paths";
 import { isSampleId } from "../../lib/record-kind";
 import { BookJacket, Icon } from "../ui";
@@ -294,6 +294,7 @@ function SlideBody({ slide, state }: { slide: Slide; state: TownState }) {
           <div className="home-slide-show is-poster" aria-hidden="true" inert>
             <PosterThumb
               poster={slide.poster}
+              covered={posterSpoilerView(state, slide.poster) !== "open"}
               books={state.books}
               href={posterPath(slide.poster.id)}
             />
