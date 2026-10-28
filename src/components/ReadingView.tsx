@@ -46,6 +46,13 @@ import { inManageMode } from "../lib/town-mode";
 import { ReadersNow, ReadingFeed } from "./ReadingTogether";
 import { ReadingRoom } from "./ReadingRoom";
 import { ReadingDone } from "./ReadingDone";
+import dynamic from "next/dynamic";
+
+// 読書の統計 comes in its own file, after the page itself (管理表 19).
+const ReadingStats = dynamic(
+  () => import("./stats/ReadingStats").then((file) => file.ReadingStats),
+  { ssr: false, loading: () => null },
+);
 
 type Shared = {
   state: TownState;
@@ -454,6 +461,11 @@ function StartReading({
           )}
         </div>
       </section>
+      <ReadingStats
+        state={state}
+        now={clock?.now ?? 0}
+        onArrange={actions.setStatsLayout}
+      />
       {!manage && <ReadersNow state={state} clock={clock} />}
       {!manage && (
         <ReadingFeed state={state} actions={actions} notify={notify} />
