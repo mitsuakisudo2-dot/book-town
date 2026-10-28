@@ -3,7 +3,7 @@
 // ReadSpan, cut into Pieces by the hour it fell in on the clock of the zone
 // it was read in; each time a book was finished becomes one Finish. The
 // rules beyond the four settled ones (memo booktown-stats-calc-rules) are
-// provisional, asked of けにーさん 10-28 (docs/機能/読書記録.md「統計」):
+// settled too, by けにーさん 10-28 (docs/機能/読書記録.md「統計」):
 //   - one span counts up to READ_SECONDS_MAX (a clock left running for
 //     months is not months of reading), laid from its start: the days and
 //     hours after are not read on; the card itself is not changed
