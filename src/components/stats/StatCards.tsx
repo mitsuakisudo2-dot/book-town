@@ -5,7 +5,7 @@
 // (最大, and the sheet a smaller card opens). Numbers come from
 // src/lib/reading-stats; words from its words.ts.
 
-import { useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { bookById, bookTitle } from "../../lib/book-name";
 import { NAMES } from "../../lib/words";
@@ -75,6 +75,7 @@ import {
   Pile,
   Ring,
   Spines,
+  TimeChart,
   TONES,
   type DayDot,
   type MarkName,
@@ -556,14 +557,17 @@ function Tile({
   parts,
   note,
   mark,
+  bare = false,
 }: {
   label: string;
   parts: Amount[];
   note?: ReactNode;
   mark?: MarkName;
+  /** The label names the unit: in a narrow tile the number goes without it. */
+  bare?: boolean;
 }) {
   return (
-    <div className="stats-tile">
+    <div className={"stats-tile" + (bare ? " bare" : "")}>
       {mark && <Mark name={mark} />}
       <b>
         <Amounts parts={parts} />
@@ -579,8 +583,6 @@ function YearFull({ view }: { view: StatsView }) {
   const before = sameTimeBefore(view.period, view.data.today, view.data.first);
   const was = before ? finishedIn(view.data, before).length : null;
   const more = was === null ? null : sums.finished.length - was;
-  const finished = finishedBooks(view);
-  const reading = readingBooks(view);
   const undated =
     view.period.kind === "all"
       ? sums.finished.filter((finish) => finish.day === null).length
@@ -589,7 +591,7 @@ function YearFull({ view }: { view: StatsView }) {
     return (
       <div className="stats-full">
         <p className="stats-note">{W.yearNotYet}</p>
-        <BookShelf finished={[]} reading={reading.map((one) => one.book)} />
+        <BookShelf view={view} />
       </div>
     );
   return (
@@ -605,14 +607,20 @@ function YearFull({ view }: { view: StatsView }) {
               : undefined
           }
         />
-        <Tile mark="pages" label={W.pagesRead} parts={[amount(sums.pages, "ページ")]} />
-        <Tile mark="days" label={W.daysRead} parts={[amount(sums.days, "日")]} />
+        <Tile
+          mark="pages"
+          bare
+          label={W.pagesRead}
+          parts={[amount(sums.pages, "ページ")]}
+        />
+        <Tile
+          mark="days"
+          label={W.daysRead}
+          parts={[amount(sums.days, "日")]}
+        />
         <Tile mark="time" label={W.timeRead} parts={shortTime(sums.seconds)} />
       </div>
-      <BookShelf
-        finished={finished.map((one) => one.book)}
-        reading={reading.map((one) => one.book)}
-      />
+      <BookShelf view={view} />
       {undated > 0 && <p className="stats-note">{W.undated(undated)}</p>}
     </div>
   );
@@ -623,43 +631,76 @@ const beforeName = (view: StatsView) =>
     view.period.kind as "week" | "month" | "year"
   ] ?? "前";
 
-/** The books finished, oldest on the left, the newest in sight; those being read stand at the left. */
-function BookShelf({
-  finished,
-  reading,
-}: {
-  finished: Book[];
-  reading: Book[];
-}) {
+/** The books finished, oldest on the left, the newest in sight; those being read stand at the left, a bookmark in each as far as it is read. */
+function BookShelf({ view }: { view: StatsView }) {
+  const reading = readingBooks(view);
+  const finished = fresh(view) ? [] : finishedBooks(view);
+  const months = view.period.kind === "year" || view.period.kind === "all";
+  const groups: { key: string; label: string; books: Book[] }[] = [];
+  for (const { book, finish } of finished) {
+    const key = months && finish.day ? finish.day.slice(0, 7) : "";
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.books.push(book);
+    else
+      groups.push({
+        key,
+        label: key ? monthLabel(key, view.data.today) : "",
+        books: [book],
+      });
+  }
   return (
     <div className="stats-shelf">
       {reading.length > 0 && (
-        <div className="stats-shelf-reading" aria-label={W.readingShelf}>
-          {reading.slice(0, 4).map((book) => (
-            <BookJacket
-              key={book.id}
-              book={book}
-              className="stats-shelf-book"
-              sizes="40px"
-            />
-          ))}
+        <div className="stats-shelf-box reading">
+          <div className="stats-shelf-boards" aria-label={W.readingShelf}>
+            {reading.slice(0, 4).map(({ book, pages }) => {
+              const at = view.data.positions.get(book.id) ?? 0;
+              const share = pages ? Math.min(1, at / pages) : 0;
+              return (
+                <span
+                  key={book.id}
+                  className="stats-shelf-standing"
+                  style={{ "--read": share.toFixed(2) } as CSSProperties}
+                >
+                  <BookJacket
+                    book={book}
+                    className="stats-shelf-book"
+                    sizes="48px"
+                  />
+                  <i className="stats-bookmark" aria-hidden="true" />
+                </span>
+              );
+            })}
+          </div>
+          <span className="stats-shelf-label">{W.readingShelf}</span>
         </div>
       )}
       <div
-        className="stats-shelf-row"
-        ref={(row) => {
-          if (row) row.scrollLeft = row.scrollWidth;
+        className="stats-shelf-box finished"
+        ref={(box) => {
+          if (box) box.scrollLeft = box.scrollWidth;
         }}
       >
-        {finished.length ? (
-          finished.map((book, at) => (
-            <BookJacket
-              key={book.id + at}
-              book={book}
-              className="stats-shelf-book"
-              sizes="48px"
-            />
-          ))
+        {groups.length ? (
+          <div className="stats-shelf-groups">
+            {groups.map((group) => (
+              <div key={group.key || "all"} className="stats-shelf-group">
+                <div className="stats-shelf-boards">
+                  {group.books.map((book, at) => (
+                    <BookJacket
+                      key={book.id + at}
+                      book={book}
+                      className="stats-shelf-book"
+                      sizes="48px"
+                    />
+                  ))}
+                </div>
+                {group.label && (
+                  <span className="stats-shelf-label">{group.label}</span>
+                )}
+              </div>
+            ))}
+          </div>
         ) : (
           <p className="stats-note">{W.shelfFinishedHint}</p>
         )}
@@ -667,6 +708,12 @@ function BookShelf({
     </div>
   );
 }
+
+/** 9月, and another year's 2025年9月. */
+const monthLabel = (month: string, today: DayKey) =>
+  (month.slice(0, 4) === today.slice(0, 4)
+    ? ""
+    : `${Number(month.slice(0, 4))}年`) + `${Number(month.slice(5, 7))}月`;
 
 function ChartFull({ view }: { view: StatsView }) {
   const sums = yearNumbers(view);
@@ -693,17 +740,60 @@ function ChartFull({ view }: { view: StatsView }) {
         </span>
       </p>
       {sums.seconds > 0 ? (
-        <Bars
+        <TimeChart
           values={bars.map((bar) => bar.seconds)}
           labels={labels}
+          names={bars.map((bar) => barName(bar, view.period.kind))}
           on={on}
-          tall
+          average={
+            view.period.kind === "all" || view.period.kind === "day"
+              ? null
+              : average
+          }
+          unit={UNIT_OF[view.period.kind]}
+          say={timeWords}
+          sayAxis={axisWords}
+          averageName={W.average}
         />
       ) : (
         <p className="stats-note">{W.clockNotYet}</p>
       )}
     </div>
   );
+}
+
+/** The unit after the chart's last label: 1 … 12 月. */
+const UNIT_OF: Partial<Record<Period["kind"], string>> = {
+  year: "月",
+  all: "年",
+  month: "日",
+};
+
+/** A bar's name, pressed: 4月, 10月4日, 月曜日, 8時台, 2025年. */
+function barName(
+  bar: { from: DayKey; to: DayKey; hour?: number },
+  kind: Period["kind"],
+): string {
+  if (bar.hour !== undefined) return `${bar.hour}時台`;
+  const [y, m, d] = bar.from.split("-").map(Number);
+  if (kind === "all") return `${y}年`;
+  if (kind === "year" || (bar.from.slice(8) === "01" && bar.to !== bar.from))
+    return `${m}月`;
+  if (kind === "week") return `${WEEKDAY_NAMES[weekdayOf(bar.from)]}曜日`;
+  return `${m}月${d}日`;
+}
+
+/** The axis's ticks (10時間, 30分) and a bar's number over it (20, cut down to whole hours or minutes). */
+function axisWords(
+  seconds: number,
+  inHours: boolean,
+  withUnit: boolean,
+): string {
+  const part = amount(
+    Math.floor(seconds / (inHours ? 3600 : 60)),
+    inHours ? "時間" : "分",
+  );
+  return withUnit ? amountWords(part) : part.n;
 }
 
 function DaysFull({ view }: { view: StatsView }) {

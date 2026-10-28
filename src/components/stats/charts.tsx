@@ -2,7 +2,7 @@
 // parts, a ring, the pace's line and the month's dots. Drawn with the town's
 // colours (tokens.css); a book's own colour where a book is drawn.
 
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import type { Book } from "../../lib/types";
 import type { Amount } from "../../lib/reading-stats/words";
 import { Icon } from "../ui";
@@ -50,8 +50,12 @@ const MARKS = {
       <path d="M16 5h5v5" />
     </>
   ),
-  shelf: <path d="M4 20h16M5 20V7h3v13M9 20V4h3v16M13 20V9h3v11M17 20V6h2.5v14" />,
-  hourglass: <path d="M8 3h8M8 21h8M9 3c0 5 6 5 6 9s-6 4-6 9M15 3c0 5-6 5-6 9" />,
+  shelf: (
+    <path d="M4 20h16M5 20V7h3v13M9 20V4h3v16M13 20V9h3v11M17 20V6h2.5v14" />
+  ),
+  hourglass: (
+    <path d="M8 3h8M8 21h8M9 3c0 5 6 5 6 9s-6 4-6 9M15 3c0 5-6 5-6 9" />
+  ),
   house: (
     <>
       <path d="M4 11l8-6 8 6v9H4z" />
@@ -169,7 +173,13 @@ export function Band({ parts }: { parts: Part[] }) {
   );
 }
 
-export function Legend({ parts, row = false }: { parts: Part[]; row?: boolean }) {
+export function Legend({
+  parts,
+  row = false,
+}: {
+  parts: Part[];
+  row?: boolean;
+}) {
   return (
     <span className={`stats-legend${row ? " row" : ""}`}>
       {parts.map((part) => (
@@ -184,7 +194,13 @@ export function Legend({ parts, row = false }: { parts: Part[]; row?: boolean })
 }
 
 /** A ring of parts, largest first. */
-export function Ring({ parts, size }: { parts: Part[]; size: "small" | "large" }) {
+export function Ring({
+  parts,
+  size,
+}: {
+  parts: Part[];
+  size: "small" | "large";
+}) {
   const total = parts.reduce((sum, part) => sum + part.value, 0) || 1;
   const ends = parts.map(
     (_, at) =>
@@ -240,7 +256,10 @@ export function PaceLine({
       <path d={`M0 ${height - 2}H${width}`} className="base" />
       <path d={line} className="done" />
       {ahead !== null && (
-        <path d={`M${x(at)} ${y(done)}L${width} ${y(ahead)}`} className="ahead" />
+        <path
+          d={`M${x(at)} ${y(done)}L${width} ${y(ahead)}`}
+          className="ahead"
+        />
       )}
       <circle cx={x(at)} cy={y(done)} r="3" className="now" />
     </svg>
@@ -250,7 +269,13 @@ export function PaceLine({
 /** A day of the month's dots: read (brighter the longer), today, days to come, before the 1st. */
 export type DayDot = "pad" | "later" | { read: number; today: boolean };
 
-export function MonthDots({ days, heads }: { days: DayDot[]; heads: string[] }) {
+export function MonthDots({
+  days,
+  heads,
+}: {
+  days: DayDot[];
+  heads: string[];
+}) {
   return (
     <span className="stats-month" aria-hidden="true">
       {heads.map((head) => (
@@ -267,7 +292,9 @@ export function MonthDots({ days, heads }: { days: DayDot[]; heads: string[] }) 
             className={`${day.read ? "on" : ""}${day.today ? " today" : ""}`}
             style={
               day.read
-                ? ({ "--glow": `${35 + Math.round(day.read * 65)}%` } as CSSProperties)
+                ? ({
+                    "--glow": `${35 + Math.round(day.read * 65)}%`,
+                  } as CSSProperties)
                 : undefined
             }
           />
@@ -278,7 +305,11 @@ export function MonthDots({ days, heads }: { days: DayDot[]; heads: string[] }) 
 }
 
 /** Spines on a shelf: the books met and read. */
-export function Spines({ books }: { books: { book: Book; pages: number | null }[] }) {
+export function Spines({
+  books,
+}: {
+  books: { book: Book; pages: number | null }[];
+}) {
   return (
     <span className="stats-spines" aria-hidden="true">
       {books.map(({ book, pages }, at) => (
@@ -312,7 +343,7 @@ export function Pile({
             style={{
               background: book.color,
               height: `${Math.max(5, Math.round((pages ?? 240) / 38))}px`,
-              width: `${68 + (seed * 13) % 30}%`,
+              width: `${68 + ((seed * 13) % 30)}%`,
               marginLeft: `${(seed * 7) % 14}%`,
             }}
           />
@@ -347,5 +378,130 @@ export function CardFace({
       {says && <span className="stats-card-says">{says}</span>}
       {drawing && <span className="stats-card-drawing">{drawing}</span>}
     </>
+  );
+}
+
+/** A round step for an axis to `most`, in about three steps: 10時間, 20分. */
+function axisStep(most: number, unit: number): number {
+  const rough = most / unit / 3;
+  const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+  return (
+    (steps.find((step) => step >= rough) ?? steps[steps.length - 1]) * unit
+  );
+}
+
+/**
+ * 読書時間チャート in full (刷新版 4節): bars on an axis with its lines, the
+ * average dashed across, the longest bar's and today's numbers over them.
+ * A bar pressed is outlined and says itself in a row of its own over the
+ * chart, on the right, so the sums above are never covered.
+ */
+export function TimeChart({
+  values,
+  labels,
+  names,
+  on,
+  average,
+  unit,
+  say,
+  sayAxis,
+  averageName,
+}: {
+  /** Seconds a bar. */
+  values: number[];
+  labels: (string | null)[];
+  /** Each bar's name when pressed: 4月. */
+  names: string[];
+  /** Today's bar; the bars after it are still to come. */
+  on: number;
+  /** Seconds, the dashed line; null for none. */
+  average: number | null;
+  /** The bars' unit, after the last label: 月. */
+  unit?: string;
+  /** A bar's time, pressed: 16時間19分. */
+  say: (seconds: number) => string;
+  /** A tick's time, or a bar's over it, in the axis's hours or minutes: 10時間, 20. */
+  sayAxis: (seconds: number, inHours: boolean, withUnit: boolean) => string;
+  averageName: string;
+}) {
+  const [pressed, setPressed] = useState<number | null>(null);
+  const most = Math.max(1, ...values, average ?? 0);
+  const inHours = most >= 3600;
+  const step = axisStep(most, inHours ? 3600 : 60);
+  const top = Math.ceil(most / step) * step;
+  const ticks = Array.from(
+    { length: Math.round(top / step) + 1 },
+    (_, n) => n * step,
+  );
+  const longest = values.indexOf(Math.max(...values));
+  const height = (seconds: number) => `${(seconds / top) * 100}%`;
+  return (
+    <div className="stats-chart">
+      <p className="stats-chart-pressed" aria-live="polite">
+        {pressed !== null && (
+          <span>
+            <b>{names[pressed]}</b>
+            <b>{say(values[pressed])}</b>
+          </span>
+        )}
+      </p>
+      <div className="stats-chart-body">
+        <span className="stats-chart-axis" aria-hidden="true">
+          {ticks.map((tick) => (
+            <em key={tick} style={{ bottom: height(tick) }}>
+              {tick ? sayAxis(tick, inHours, true) : "0"}
+            </em>
+          ))}
+        </span>
+        <div className="stats-chart-bars">
+          {ticks.slice(1).map((tick) => (
+            <s
+              key={tick}
+              className="stats-chart-rule"
+              style={{ bottom: height(tick) }}
+            />
+          ))}
+          {values.map((value, at) => (
+            <button
+              key={at}
+              type="button"
+              className={
+                (at === on ? "on" : "") +
+                (at > on && on >= 0 ? " later" : "") +
+                (at === pressed ? " pressed" : "")
+              }
+              aria-label={`${names[at]} ${say(value)}`}
+              aria-pressed={at === pressed}
+              disabled={at > on && on >= 0}
+              onClick={() => setPressed(at === pressed ? null : at)}
+            >
+              <span style={{ height: height(value) }}>
+                {value > 0 && (at === longest || at === on) && (
+                  <em className={at === longest ? "top" : undefined}>
+                    {sayAxis(value, inHours, false)}
+                  </em>
+                )}
+              </span>
+            </button>
+          ))}
+          {average !== null && average > 0 && (
+            <i
+              className="stats-chart-average"
+              style={{ bottom: height(average) }}
+            >
+              <b>{averageName}</b>
+            </i>
+          )}
+        </div>
+        <span />
+        <span className="stats-chart-labels" aria-hidden="true">
+          {labels.map((label, at) => (
+            <em key={at}>{label ?? ""}</em>
+          ))}
+        </span>
+        {unit && <span />}
+        {unit && <span className="stats-chart-unit">{unit}</span>}
+      </div>
+    </div>
   );
 }

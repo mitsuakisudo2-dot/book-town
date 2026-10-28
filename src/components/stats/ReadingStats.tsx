@@ -60,8 +60,10 @@ export function ReadingStats({
     ? (kindParam as BandKind)
     : "year";
   const step = Math.min(0, Math.trunc(Number(stepParam) || 0));
-  const kept = BOOK_KINDS.find((entry) => entry.kind === kindsParam)?.kind ?? null;
+  const kept =
+    BOOK_KINDS.find((entry) => entry.kind === kindsParam)?.kind ?? null;
   const [open, setOpen] = useState<StatCard | null>(null);
+  const [arrangeAsked, setArrangeAsked] = useState(0);
   const close = useCallback(() => setOpen(null), []);
 
   const ids = useMemo(
@@ -83,7 +85,10 @@ export function ReadingStats({
   const data = useMemo(
     () =>
       kept
-        ? onlyBooks(all, (bookId) => kindOf(facts(bookId)?.genre ?? null) === kept)
+        ? onlyBooks(
+            all,
+            (bookId) => kindOf(facts(bookId)?.genre ?? null) === kept,
+          )
         : all,
     [all, kept, facts],
   );
@@ -127,10 +132,12 @@ export function ReadingStats({
           <button
             type="button"
             aria-label="前へ"
-            disabled={kind === "all" || all.first === null || period.from <= all.first}
+            disabled={
+              kind === "all" || all.first === null || period.from <= all.first
+            }
             onClick={() => setStep(String(step - 1))}
           >
-            <Icon name="back" size={18} />
+            <Icon name="chevron" size={18} />
           </button>
           <h2>{periodTitle(period)}</h2>
           <button
@@ -142,28 +149,38 @@ export function ReadingStats({
             <Icon name="chevron" size={18} />
           </button>
         </div>
-        {kinds.length > 1 && (
-          <label className="stats-kinds">
-            <span>{W.kindsLabel}</span>
-            <select
-              value={kept ?? ""}
-              onChange={(event) => setKinds(event.target.value || null)}
-            >
-              <option value="">{W.kindsAll}</option>
-              {kinds.map((entry) => (
-                <option key={entry.kind} value={entry.kind}>
-                  {entry.kind}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <div className="stats-choices">
+          {kinds.length > 1 && (
+            <label className="stats-kinds">
+              <span>{W.kindsLabel}</span>
+              <select
+                value={kept ?? ""}
+                onChange={(event) => setKinds(event.target.value || null)}
+              >
+                <option value="">{W.kindsAll}</option>
+                {kinds.map((entry) => (
+                  <option key={entry.kind} value={entry.kind}>
+                    {entry.kind}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <button
+            type="button"
+            className="stats-arrange"
+            onClick={() => setArrangeAsked((n) => n + 1)}
+          >
+            {W.arrange}
+          </button>
+        </div>
       </div>
       <StatsBoard
         tiles={layoutOf(state.settings.statsLayout)}
         view={view}
         onKeep={onArrange}
         onOpen={setOpen}
+        arrangeAsked={arrangeAsked}
       />
       {open && (
         <Modal title={cardTitle(open, view)} onClose={close} fromBottom>
@@ -177,7 +194,13 @@ export function ReadingStats({
 }
 
 /** A card in full, in the sheet from below; pulled down, it closes. */
-function Sheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+function Sheet({
+  onClose,
+  children,
+}: {
+  onClose: () => void;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useSheetPull(ref, onClose);
   return (
