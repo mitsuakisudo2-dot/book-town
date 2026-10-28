@@ -6,6 +6,7 @@ import type {
 } from "./library";
 import type { LibraryChange, LibraryUndo } from "./library-town";
 import type { Poster, PosterDraft } from "./posters";
+import type { StatsLayout } from "./reading-stats/kept-layout";
 import type {
   CardBookChange,
   NoteChange,
@@ -305,6 +306,8 @@ export interface Settings {
   memoHint: boolean;
   /** 読書管理モード or not; switching changes nothing else. */
   mode: TownMode;
+  /** How the statistics' cards are arranged; null for the first arrangement. */
+  statsLayout: StatsLayout | null;
 }
 
 /** What can be folded by reports. */
@@ -609,6 +612,8 @@ export interface TownActions {
    */
   writeEncounterMemo(encounterId: string, memo: string): boolean;
   setMemoHint(on: boolean): void;
+  /** The statistics' cards as the reader arranged them; null puts back the first arrangement. */
+  setStatsLayout(layout: StatsLayout | null): void;
   togglePopReaction(
     shopId: string,
     shelfId: string,

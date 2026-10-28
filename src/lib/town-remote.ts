@@ -74,6 +74,7 @@ import { withoutReaders } from "./blocks";
 import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
 import { filedReportFrom } from "./supabase/reports";
 import type { Arrived } from "./arrived";
+import { readLayout } from "./reading-stats/kept-layout";
 import {
   emptyMore,
   type CountedWork,
@@ -963,6 +964,8 @@ export function townFromRows(
       memoHint: rows.readerSettings?.memo_hint !== false,
       // No row, or a database a migration behind: the town as ever.
       mode: rows.readerSettings?.mode === "manage" ? "manage" : "normal",
+      // A database a migration behind has none: the first arrangement.
+      statsLayout: readLayout(rows.readerSettings?.stats_layout),
     },
     seenNotifications: rows.seenNotifications.slice(-500),
     shopMessages: rows.shopMessages
@@ -1483,6 +1486,7 @@ export type Write =
             | "shelf_audiences"
             | "memo_hint"
             | "mode"
+            | "stats_layout"
             | SettingsVisibilityColumn
           >
         >;
@@ -1874,6 +1878,9 @@ export function planWrites(
   if (!sameJson(next.settings.shelfAudiences, base.settings.shelfAudiences))
     settingsRow.shelf_audiences = next.settings
       .shelfAudiences as TablesInsert<"reader_settings">["shelf_audiences"];
+  if (!sameJson(next.settings.statsLayout, base.settings.statsLayout))
+    settingsRow.stats_layout = next.settings
+      .statsLayout as TablesInsert<"reader_settings">["stats_layout"];
   if (Object.keys(settingsRow).length > 1)
     writes.push({ kind: "reader-settings", row: settingsRow });
 
@@ -2803,6 +2810,7 @@ export function emptyTown(me: Partial<Reader> = {}): TownState {
       spoilerDisplay: "fold_possible",
       memoHint: true,
       mode: "normal",
+      statsLayout: null,
     },
     seenNotifications: [],
     shopMessages: [],

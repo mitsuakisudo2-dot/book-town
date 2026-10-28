@@ -1364,6 +1364,19 @@ check(
 
     store.actions.setMemoHint(false);
     assert.equal(store.getSnapshot().settings.memoHint, false);
+
+    // The statistics' arrangement is kept made whole, and null is the first.
+    store.actions.setStatsLayout([
+      { card: "days", size: "half" },
+      { card: "shape", size: "full" },
+    ]);
+    assert.deepEqual(store.getSnapshot().settings.statsLayout, [
+      { card: "days", size: "half" },
+      { card: null, size: "half" },
+      { card: "shape", size: "full" },
+    ]);
+    store.actions.setStatsLayout(null);
+    assert.equal(store.getSnapshot().settings.statsLayout, null);
   },
 );
 

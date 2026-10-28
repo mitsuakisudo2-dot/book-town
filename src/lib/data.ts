@@ -1534,6 +1534,7 @@ export function createInitialState(): TownState {
       spoilerDisplay: "fold_possible",
       memoHint: true,
       mode: "normal",
+      statsLayout: null,
     },
     seenNotifications: [],
     shopMessages: [],

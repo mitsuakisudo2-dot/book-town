@@ -4,6 +4,7 @@ import { cleanRecord } from "./records";
 import { cleanVisibilities } from "./visibility";
 import { restorePoster, type Poster } from "./posters";
 import { keptCards, readCard, readCardBook, readNote } from "./reading-cards";
+import { readLayout } from "./reading-stats/kept-layout";
 import {
   validateEntry,
   cleanShelfAudiences,
@@ -651,6 +652,7 @@ export function deserializeTown(raw: string | null): RepositorySnapshot {
             : initial.settings.spoilerDisplay,
           memoHint: settings.memoHint !== false,
           mode: settings.mode === "manage" ? "manage" : "normal",
+          statsLayout: readLayout(settings.statsLayout),
         },
         seenNotifications: Array.isArray(data.seenNotifications)
           ? [...new Set(data.seenNotifications)]

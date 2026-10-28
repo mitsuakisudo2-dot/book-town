@@ -2874,6 +2874,41 @@ async function main() {
       ),
       [{ kind: "reader-settings", row: { user_id: AKI, memo_hint: false } }],
     );
+    // The statistics' arrangement: the first one until the reader moves a
+    // card; sent alone, and read back made whole.
+    assert.equal(before.settings.statsLayout, null);
+    const arranged = [
+      { card: "shape" as const, size: "full" as const },
+      { card: "days" as const, size: "half" as const },
+      { card: null, size: "half" as const },
+    ];
+    assert.deepEqual(
+      planWrites(
+        before,
+        { ...before, settings: { ...before.settings, statsLayout: arranged } },
+        ids,
+      ),
+      [
+        {
+          kind: "reader-settings",
+          row: { user_id: AKI, stats_layout: arranged },
+        },
+      ],
+    );
+    assert.deepEqual(
+      townFromRows(
+        rows({
+          readerSettings: {
+            stats_layout: [
+              ...arranged,
+              { card: "a_card_from_a_newer_app", size: "half" },
+            ],
+          },
+        }),
+        ids,
+      ).settings.statsLayout,
+      arranged,
+    );
     // A starting choice is sent alone, as is 読書の状態's detail.
     const status: TownState = {
       ...before,

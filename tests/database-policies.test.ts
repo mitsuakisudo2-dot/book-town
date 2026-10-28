@@ -5180,6 +5180,77 @@ async function main() {
   );
 
   await check(
+    "the statistics' arrangement is the reader's own, a small array, and the old app leaves it",
+    async () => {
+      const layoutOf = async (visitor: string, of: string) =>
+        (
+          await as(
+            visitor,
+            "select stats_layout from reader_settings where user_id = $1",
+            [of],
+          )
+        )[0]?.stats_layout;
+      const arrange = (visitor: string, of: string, layout: string | null) =>
+        as(
+          visitor,
+          `insert into reader_settings (user_id, stats_layout) values ($1, $2::jsonb)
+           on conflict (user_id) do update
+             set user_id = excluded.user_id, stats_layout = excluded.stats_layout`,
+          [of, layout],
+        );
+      const mine = [
+        { card: "year", size: "full" },
+        { card: null, size: "half" },
+        { card: "a_card_not_known_yet", size: "half" },
+      ];
+      await arrange(CHI, CHI, JSON.stringify(mine));
+      assert.deepEqual(await layoutOf(CHI, CHI), mine);
+      // The old app's upsert keeps it.
+      await as(
+        CHI,
+        `insert into reader_settings (user_id, spoiler_display) values ($1, 'show_all')
+         on conflict (user_id) do update
+           set user_id = excluded.user_id, spoiler_display = excluded.spoiler_display`,
+        [CHI],
+      );
+      assert.deepEqual(await layoutOf(CHI, CHI), mine);
+      // Nobody else reads or writes it.
+      assert.equal(await layoutOf(BEN, CHI), undefined, "Ben reads none");
+      await refused(
+        BEN,
+        "insert into reader_settings (user_id, stats_layout) values ($1, '[]')",
+        [CHI],
+      );
+      await as(
+        BEN,
+        "update reader_settings set stats_layout = '[]' where user_id = $1",
+        [CHI],
+      );
+      assert.deepEqual(await layoutOf(CHI, CHI), mine);
+      // An array of at most 64, at most 4096 bytes; back to the first one with null.
+      const many = (n: number) =>
+        JSON.stringify(
+          Array.from({ length: n }, () => ({ card: null, size: "half" })),
+        );
+      await arrange(CHI, CHI, many(64));
+      for (const value of [
+        '{"card": "year"}',
+        '"year"',
+        many(65),
+        JSON.stringify(["x".repeat(4100)]),
+      ])
+        await refused(
+          CHI,
+          "update reader_settings set stats_layout = $2::jsonb where user_id = $1",
+          [CHI, value],
+          /check constraint/,
+        );
+      await arrange(CHI, CHI, null);
+      assert.equal(await layoutOf(CHI, CHI), null);
+    },
+  );
+
+  await check(
     "a 見本's book is read by whoever keeps it in their library or met it, and only while they do",
     async () => {
       // Nobody's, as a book typed in by someone else can be nobody else's

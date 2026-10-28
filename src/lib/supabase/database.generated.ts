@@ -1131,6 +1131,7 @@ export type Database = {
           shelves_audience: string;
           spoiler_display: string;
           stats_audience: string;
+          stats_layout: Json | null;
           status_audience: string;
           status_detail: string;
           updated_at: string;
@@ -1151,6 +1152,7 @@ export type Database = {
           shelves_audience?: string;
           spoiler_display?: string;
           stats_audience?: string;
+          stats_layout?: Json | null;
           status_audience?: string;
           status_detail?: string;
           updated_at?: string;
@@ -1170,6 +1172,7 @@ export type Database = {
           shelves_audience?: string;
           spoiler_display?: string;
           stats_audience?: string;
+          stats_layout?: Json | null;
           status_audience?: string;
           status_detail?: string;
           updated_at?: string;
