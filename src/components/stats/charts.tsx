@@ -5,7 +5,6 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { Book } from "../../lib/types";
 import type { Amount } from "../../lib/reading-stats/words";
-import { Icon } from "../ui";
 
 /** The statistics' own marks, as the 試作 draws them (on a 24 grid, in the town's line). */
 const MARKS = {
@@ -78,11 +77,22 @@ const MARKS = {
 };
 export type MarkName = keyof typeof MARKS;
 
-/** A mark in its tinted circle, as each card and number is headed. */
+/** A mark in its tinted circle, as each card and number is headed; drawn in the line of ui's Icon. */
 export function Mark({ name, size = 14 }: { name: MarkName; size?: number }) {
   return (
     <span className="stats-mark" aria-hidden="true">
-      <Icon drawn={MARKS[name]} size={size} />
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.65"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {MARKS[name]}
+      </svg>
     </span>
   );
 }

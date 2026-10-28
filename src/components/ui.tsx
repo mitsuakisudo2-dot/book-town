@@ -290,16 +290,7 @@ const shapes: Record<string, ReactNode> = {
     </>
   ),
 };
-/** A drawing in the town's line; `drawn` is a screen's own shape (the statistics' marks), drawn as the rest. */
-export function Icon({
-  name = "book",
-  size = 20,
-  drawn,
-}: {
-  name?: string;
-  size?: number;
-  drawn?: ReactNode;
-}) {
+export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return (
     <svg
       aria-hidden="true"
@@ -312,7 +303,7 @@ export function Icon({
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {drawn ?? (shapes[name] || shapes.book)}
+      {shapes[name] || shapes.book}
     </svg>
   );
 }
