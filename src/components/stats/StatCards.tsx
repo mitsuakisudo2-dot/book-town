@@ -62,13 +62,14 @@ import {
   WEEKDAY_NAMES,
   type Amount,
 } from "../../lib/reading-stats/words";
-import { BookJacket, Icon } from "../ui";
+import { BookJacket } from "../ui";
 import {
   Amounts,
   Band,
   Bars,
   CardFace,
   Legend,
+  Mark,
   MonthDots,
   PaceLine,
   Pile,
@@ -76,6 +77,7 @@ import {
   Spines,
   TONES,
   type DayDot,
+  type MarkName,
   type Part,
 } from "./charts";
 
@@ -89,19 +91,19 @@ export interface StatsView {
   now: number;
 }
 
-const ICONS: Record<StatCard, string> = {
-  year: "shelf",
-  chart: "clock",
-  days: "bookmark",
-  clock: "light",
-  genre: "leaf",
-  pace: "arrow",
-  shelf: "rows",
-  joy: "spark",
-  met: "pin",
-  stack: "grid",
-  album: "star",
-  shape: "pen",
+const MARK_OF: Record<StatCard, MarkName> = {
+  year: "books",
+  chart: "chart",
+  days: "calendar",
+  clock: "moon",
+  genre: "pie",
+  pace: "rise",
+  shelf: "shelf",
+  joy: "hourglass",
+  met: "house",
+  stack: "pile",
+  album: "cards",
+  shape: "leaf",
 };
 
 const bookOf = (view: StatsView, id: string): Book | undefined =>
@@ -117,7 +119,7 @@ export function CardSmall({ card, view }: { card: StatCard; view: StatsView }) {
   return (
     <CardFace
       name={cardName(card, view.period, view.data.today)}
-      icon={<Icon name={ICONS[card]} size={14} />}
+      icon={<Mark name={MARK_OF[card]} />}
       big={face.big}
       says={face.says}
       drawing={face.drawing}
@@ -143,9 +145,7 @@ export function CardHeading({
 }) {
   return (
     <Tag className="stats-heading">
-      <span className="stats-heading-icon">
-        <Icon name={ICONS[card]} size={16} />
-      </span>
+      <Mark name={MARK_OF[card]} />
       {cardName(card, view.period, view.data.today)}
     </Tag>
   );
@@ -334,15 +334,8 @@ const FACES: Record<StatCard, (view: StatsView) => Face> = {
     if (fresh(view)) return { big: notYet, says: W.clockNotYet };
     const sums = yearNumbers(view);
     const { bars, on, labels } = chartBars(view);
-    const hours = Math.floor(sums.seconds / 3600);
     return {
-      big: (
-        <Amounts
-          parts={
-            hours >= 10 ? [amount(hours, "時間")] : timeAmounts(sums.seconds)
-          }
-        />
-      ),
+      big: <Amounts parts={shortTime(sums.seconds)} />,
       says: W.chartTotal(periodName(view.period, view.data.today)),
       drawing: (
         <Bars
@@ -520,6 +513,12 @@ const FACES: Record<StatCard, (view: StatsView) => Face> = {
   },
 };
 
+/** Time read where room is short: from 10 hours on, the hours alone (cut down, rule 4): 131時間. */
+function shortTime(seconds: number): Amount[] {
+  const hours = Math.floor(seconds / 3600);
+  return hours >= 10 ? [amount(hours, "時間")] : timeAmounts(seconds);
+}
+
 /** Millimetres stacked as the card says them: 約21cm, under 10cm to a tenth. */
 function centimetres(mm: number, lead: string): Amount {
   const cm = mm / 10;
@@ -556,13 +555,16 @@ function Tile({
   label,
   parts,
   note,
+  mark,
 }: {
   label: string;
   parts: Amount[];
   note?: ReactNode;
+  mark?: MarkName;
 }) {
   return (
     <div className="stats-tile">
+      {mark && <Mark name={mark} />}
       <b>
         <Amounts parts={parts} />
       </b>
@@ -592,8 +594,9 @@ function YearFull({ view }: { view: StatsView }) {
     );
   return (
     <div className="stats-full">
-      <div className="stats-tiles">
+      <div className="stats-tiles four">
         <Tile
+          mark="books"
           label={W.finishedBooks}
           parts={[amount(sums.finished.length, "冊")]}
           note={
@@ -602,9 +605,9 @@ function YearFull({ view }: { view: StatsView }) {
               : undefined
           }
         />
-        <Tile label={W.pagesRead} parts={[amount(sums.pages, "ページ")]} />
-        <Tile label={W.daysRead} parts={[amount(sums.days, "日")]} />
-        <Tile label={W.timeRead} parts={timeAmounts(sums.seconds)} />
+        <Tile mark="pages" label={W.pagesRead} parts={[amount(sums.pages, "ページ")]} />
+        <Tile mark="days" label={W.daysRead} parts={[amount(sums.days, "日")]} />
+        <Tile mark="time" label={W.timeRead} parts={shortTime(sums.seconds)} />
       </div>
       <BookShelf
         finished={finished.map((one) => one.book)}
