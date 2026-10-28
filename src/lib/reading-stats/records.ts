@@ -5,7 +5,8 @@
 // rules beyond the four settled ones (memo booktown-stats-calc-rules) are
 // provisional, asked of けにーさん 10-28 (docs/機能/読書記録.md「統計」):
 //   - one span counts up to READ_SECONDS_MAX (a clock left running for
-//     months is not months of reading); the card itself is not changed
+//     months is not months of reading), laid from its start: the days and
+//     hours after are not read on; the card itself is not changed
 //   - a span over midnight, or an hour's turn, is shared by wall time
 //   - pages read are where the span ended less where it began (the page it
 //     began at, else where the book's last span ended); a book finished
@@ -45,12 +46,16 @@ export interface ReadSpan {
   bookId: string | null;
   start: number;
   end: number;
+  /** Where its time is laid to: its end, or READ_SECONDS_MAX on from its start when longer. */
+  until: number;
   /** Read, pauses left out, at most READ_SECONDS_MAX. */
   seconds: number;
   /** Read by the clock, or added later with a length: it counts for time and the hours. */
   timed: boolean;
   zone: string;
   pages: number;
+  /** Of them, those written down; not the rest of a book finished without its last page. The pace counts these. */
+  writtenPages: number;
   format: ReadingFormat | null;
   finished: boolean;
 }
@@ -63,6 +68,7 @@ export interface Piece {
   weekday: number;
   seconds: number;
   pages: number;
+  writtenPages: number;
 }
 
 export interface Finish {
@@ -113,11 +119,13 @@ export function readSpans(
         bookId: session.bookId,
         start,
         end,
+        until: Math.min(end, start + READ_SECONDS_MAX * 1000),
         seconds,
         // あとから足した読書の「わからない」は 0 秒: ページだけが残る.
         timed: !(card?.addedLater && seconds === 0),
         zone: readableZone(card?.timeZone ?? JAPAN_ZONE),
         pages: 0,
+        writtenPages: 0,
         format: book?.format ?? null,
         finished: book?.finished ?? false,
       };
@@ -157,7 +165,11 @@ function countPages(
     const book = books.get(span.sessionId);
     let position = at.get(span.bookId) ?? 0;
     if (book?.pageUnit === "page" && book.pageTo !== null) {
-      span.pages += Math.max(0, book.pageTo - (book.pageFrom ?? position));
+      span.writtenPages = Math.max(
+        0,
+        book.pageTo - (book.pageFrom ?? position),
+      );
+      span.pages += span.writtenPages;
       position = book.pageTo;
     }
     if (span.finished) {
@@ -169,9 +181,9 @@ function countPages(
   }
 }
 
-/** A span cut by the hours it fell in on its clock, its time and pages shared by wall time. */
+/** A span cut by the hours it fell in on its clock, its time and pages shared by wall time up to `until`. */
 export function piecesOf(span: ReadSpan): Piece[] {
-  const wall = span.end - span.start;
+  const wall = span.until - span.start;
   const pieces: Piece[] = [];
   const add = (from: number, to: number) => {
     const share = wall > 0 ? (to - from) / wall : 1;
@@ -180,12 +192,14 @@ export function piecesOf(span: ReadSpan): Piece[] {
     if (last && last.day === local.day && last.hour === local.hour) {
       last.seconds += span.seconds * share;
       last.pages += span.pages * share;
+      last.writtenPages += span.writtenPages * share;
     } else
       pieces.push({
         span,
         ...local,
         seconds: span.seconds * share,
         pages: span.pages * share,
+        writtenPages: span.writtenPages * share,
       });
   };
   if (wall <= 0) {
@@ -193,8 +207,8 @@ export function piecesOf(span: ReadSpan): Piece[] {
     return pieces;
   }
   let from = span.start;
-  while (from < span.end) {
-    const to = Math.min(span.end, (Math.floor(from / CUT_MS) + 1) * CUT_MS);
+  while (from < span.until) {
+    const to = Math.min(span.until, (Math.floor(from / CUT_MS) + 1) * CUT_MS);
     add(from, to);
     from = to;
   }

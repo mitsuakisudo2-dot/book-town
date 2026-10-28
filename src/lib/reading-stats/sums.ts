@@ -347,12 +347,15 @@ export function readingSpeed(data: StatsData, period: Period): Speed | null {
   ] as const) {
     const pieces = piecesIn(data, within).filter(
       (piece) =>
-        piece.span.timed && piece.span.seconds > 0 && piece.span.pages > 0,
+        piece.span.timed &&
+        piece.span.seconds > 0 &&
+        piece.span.writtenPages > 0,
     );
     const seconds = sum(pieces.map((piece) => piece.seconds));
     if (seconds > 0)
       return {
-        pagesPerSecond: sum(pieces.map((piece) => piece.pages)) / seconds,
+        pagesPerSecond:
+          sum(pieces.map((piece) => piece.writtenPages)) / seconds,
         of,
       };
   }
@@ -443,11 +446,11 @@ export function timeToFinish(
       span.bookId === bookId &&
       span.timed &&
       span.seconds > 0 &&
-      span.pages > 0,
+      span.writtenPages > 0,
   );
   const ownSeconds = sum(own.map((span) => span.seconds));
   const pagesPerSecond = ownSeconds
-    ? sum(own.map((span) => span.pages)) / ownSeconds
+    ? sum(own.map((span) => span.writtenPages)) / ownSeconds
     : (speed?.pagesPerSecond ?? 0);
   return left === null || !pagesPerSecond ? null : left / pagesPerSecond;
 }

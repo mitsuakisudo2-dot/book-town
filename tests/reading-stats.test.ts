@@ -233,6 +233,40 @@ check(
 );
 
 check(
+  "a clock left running is laid from its start: the days after are not days read",
+  () => {
+    const { town, read } = reader();
+    read("a", "2026-08-01T20:00:00+09:00", "2026-10-27T20:00:00+09:00");
+    const data = statsData(town, NOW, "Asia/Tokyo", facts);
+    const days = readDays(data, periodAt("year", data.today));
+    assert.deepEqual([...days.keys()], ["2026-08-01", "2026-08-02"]);
+    assert.equal(days.get("2026-08-01"), 4 * HOUR);
+    assert.equal(totals(data, periodAt("month", data.today)).days, 0);
+    // The finish, had it been one, is still when it ended.
+    assert.equal(data.spans[0].end, at("2026-10-27T20:00:00+09:00"));
+  },
+);
+
+check(
+  "the rest of a book finished without its last page is in the pages read, not in the pace",
+  () => {
+    const { town, read } = reader();
+    read("a", "2026-10-01T20:00:00+09:00", "2026-10-01T21:00:00+09:00", {
+      pageTo: 60,
+    });
+    read("a", "2026-10-02T20:00:00+09:00", "2026-10-02T20:10:00+09:00", {
+      finished: true,
+    });
+    const data = statsData(town, NOW, "Asia/Tokyo", facts);
+    assert.equal(totals(data, periodAt("month", data.today)).pages, 300);
+    assert.deepEqual(readingSpeed(data, periodAt("month", data.today)), {
+      pagesPerSecond: 60 / HOUR,
+      of: "period",
+    });
+  },
+);
+
+check(
   "a reading over midnight is shared between the two days by the clock",
   () => {
     const { town, read } = reader();
