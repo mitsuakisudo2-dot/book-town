@@ -6,7 +6,7 @@ import type {
 } from "./library";
 import type { LibraryChange, LibraryUndo } from "./library-town";
 import type { Poster, PosterDraft } from "./posters";
-import type { StatsLayout } from "./reading-stats/layout";
+import type { StatsLayout } from "./reading-stats/kept-layout";
 import type {
   CardBookChange,
   NoteChange,

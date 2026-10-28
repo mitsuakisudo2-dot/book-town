@@ -74,7 +74,7 @@ import { withoutReaders } from "./blocks";
 import { isSampleBook, sampleBookOfRow, sampleBookRowId } from "./samples";
 import { filedReportFrom } from "./supabase/reports";
 import type { Arrived } from "./arrived";
-import { readLayout, sameLayout } from "./reading-stats/layout";
+import { readLayout } from "./reading-stats/kept-layout";
 import {
   emptyMore,
   type CountedWork,
@@ -1878,7 +1878,7 @@ export function planWrites(
   if (!sameJson(next.settings.shelfAudiences, base.settings.shelfAudiences))
     settingsRow.shelf_audiences = next.settings
       .shelfAudiences as TablesInsert<"reader_settings">["shelf_audiences"];
-  if (!sameLayout(next.settings.statsLayout, base.settings.statsLayout))
+  if (!sameJson(next.settings.statsLayout, base.settings.statsLayout))
     settingsRow.stats_layout = next.settings
       .statsLayout as TablesInsert<"reader_settings">["stats_layout"];
   if (Object.keys(settingsRow).length > 1)

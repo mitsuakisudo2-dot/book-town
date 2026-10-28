@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { seedState } from "./data";
 import { localTownRepository, type TownRepository } from "./repository";
-import { readLayout, sameLayout } from "./reading-stats/layout";
+import { readLayout } from "./reading-stats/kept-layout";
+import { valueMark } from "./canonical";
 import {
   localBackend,
   unavailableBackend,
@@ -856,7 +857,7 @@ export function createTownStore(
       initialize();
       // Made whole as a kept one is, so what is saved reads back the same.
       const next = layout === null ? null : readLayout(layout);
-      if (sameLayout(state.settings.statsLayout, next)) return;
+      if (valueMark(state.settings.statsLayout) === valueMark(next)) return;
       commit({ ...state, settings: { ...state.settings, statsLayout: next } });
     },
     meetScenePop(shopId, given, placementKey, reaction, on) {

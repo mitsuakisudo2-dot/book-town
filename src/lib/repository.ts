@@ -4,7 +4,7 @@ import { cleanRecord } from "./records";
 import { cleanVisibilities } from "./visibility";
 import { restorePoster, type Poster } from "./posters";
 import { keptCards, readCard, readCardBook, readNote } from "./reading-cards";
-import { readLayout } from "./reading-stats/layout";
+import { readLayout } from "./reading-stats/kept-layout";
 import {
   validateEntry,
   cleanShelfAudiences,

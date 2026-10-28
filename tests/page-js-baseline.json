@@ -1,8 +1,8 @@
 {
-  "/": 293,
-  "/books/[id]/": 289,
+  "/": 296,
+  "/books/[id]/": 292,
   "/books/registered/": 262,
-  "/credits/": 263,
+  "/credits/": 266,
   "/leave/": 213,
   "/library/": 274,
   "/login/": 254,
@@ -14,13 +14,13 @@
   "/posters/new/": 262,
   "/privacy/": 214,
   "/profile/": 262,
-  "/profiles/[id]/": 305,
+  "/profiles/[id]/": 308,
   "/reading-list/": 263,
   "/reading/": 283,
   "/search/": 277,
   "/shop/": 262,
   "/shops/[id]/": 276,
   "/terms/": 214,
-  "/timeline/": 293,
+  "/timeline/": 296,
   "/walk/": 292
 }
