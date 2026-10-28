@@ -177,6 +177,8 @@ export const STATS_WORDS = {
   metGo: "書店めぐりに出かける",
   stackHow: (books: number) => `読み終えた ${counted(books, "冊")}を積むと`,
   stackAhead: (books: number) => `読書中の ${counted(books, "冊")}を読み終えると`,
+  yearNotYet: "読書をはじめると、読んだ本と時間がここにたまります",
+  shelfNotYet: "本を登録すると、いまの状態が出ます",
   stackNotYet: "読み終えた本を積んでいきます",
   albumNotYet: "読み終えて「おわり」を押すと、ここにカードがたまります",
   clockNotYet: "読書をはじめると、ここに出ます",

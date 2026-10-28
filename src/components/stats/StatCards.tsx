@@ -112,13 +112,7 @@ const sumOf = (values: number[]) => values.reduce((a, b) => a + b, 0);
 const notYet = <small>{NOT_YET}</small>;
 
 /** The card as a half or wide card shows it. */
-export function CardSmall({
-  card,
-  view,
-}: {
-  card: StatCard;
-  view: StatsView;
-}) {
+export function CardSmall({ card, view }: { card: StatCard; view: StatsView }) {
   const face = FACES[card](view);
   return (
     <CardFace
@@ -132,13 +126,7 @@ export function CardSmall({
 }
 
 /** The card in full: 最大, and the sheet a smaller one opens. */
-export function CardFull({
-  card,
-  view,
-}: {
-  card: StatCard;
-  view: StatsView;
-}) {
+export function CardFull({ card, view }: { card: StatCard; view: StatsView }) {
   const Full = FULL[card];
   return <Full view={view} />;
 }
@@ -185,13 +173,18 @@ function chartBars(view: StatsView) {
   const on = bars.findIndex((bar) => bar.from <= today && today <= bar.to);
   const kind = view.period.kind;
   const labels = bars.map((bar) => {
-    if (bar.hour !== undefined) return bar.hour % 6 === 0 ? String(bar.hour) : null;
+    if (bar.hour !== undefined)
+      return bar.hour % 6 === 0 ? String(bar.hour) : null;
     const [y, m, d] = bar.from.split("-").map(Number);
     if (kind === "all") return String(y);
-    if (kind === "year" || bar.from.slice(8) === "01" && bar.to !== bar.from)
+    if (kind === "year" || (bar.from.slice(8) === "01" && bar.to !== bar.from))
       return String(m);
     if (kind === "week") return WEEKDAY_NAMES[weekdayOf(bar.from)];
-    return bars.length > 14 ? (d === 1 || d % 5 === 0 ? String(d) : null) : String(d);
+    return bars.length > 14
+      ? d === 1 || d % 5 === 0
+        ? String(d)
+        : null
+      : String(d);
   });
   return { bars, on, labels };
 }
@@ -223,8 +216,7 @@ function genreParts(view: StatsView, by: GenreBy, most = 4): Part[] {
   return shown.map((slice, at) => ({
     label: slice.genre,
     value: slice.value,
-    tone:
-      slice.genre === OTHER_GENRE ? TONES[TONES.length - 1] : TONES[at % 5],
+    tone: slice.genre === OTHER_GENRE ? TONES[TONES.length - 1] : TONES[at % 5],
     says: `${Math.round((slice.value / total) * 100)}%`,
   }));
 }
@@ -235,7 +227,11 @@ function genreByOf(view: StatsView): GenreBy {
   return totals(view.data, view.period).seconds > 0 ? "time" : "pages";
 }
 
-function monthDots(view: StatsView): { days: DayDot[]; count: number; month: number } {
+function monthDots(view: StatsView): {
+  days: DayDot[];
+  count: number;
+  month: number;
+} {
   const month = periodAt("month", view.data.today);
   const read = readDays(view.data, month);
   const most = Math.max(30 * 60, ...read.values());
@@ -263,7 +259,11 @@ function shelfParts(view: StatsView): Part[] {
   return [
     { label: W.states.tsundoku, value: states.tsundoku.length, tone: TONES[0] },
     { label: W.states.reading, value: states.reading.length, tone: TONES[1] },
-    { label: W.states.finished, value: states.finished.length, tone: "var(--cork)" },
+    {
+      label: W.states.finished,
+      value: states.finished.length,
+      tone: "var(--cork)",
+    },
   ].map((part) => ({ ...part, says: amountWords(amount(part.value, "冊")) }));
 }
 
@@ -291,15 +291,30 @@ function finishedBooks(view: StatsView) {
 function cardsIn(view: StatsView) {
   const cards = view.state.readingCards.filter((card) => {
     const span = view.data.spans.find((one) => one.readingId === card.id);
-    return span && view.data.pieces.some(
-      (piece) => piece.span === span && piece.day >= view.period.from && piece.day <= view.period.to,
+    return (
+      span &&
+      view.data.pieces.some(
+        (piece) =>
+          piece.span === span &&
+          piece.day >= view.period.from &&
+          piece.day <= view.period.to,
+      )
     );
   });
   return { shown: cards, all: view.state.readingCards.length };
 }
 
+/**
+ * Nothing read yet, ever: the cards say what will come rather than a row of
+ * 0s (an empty town shows no 0, login-journey). Once there is a record, a
+ * period with none says its 0 (作るときの規格「自分の記録の数は0も出す」).
+ */
+const fresh = (view: StatsView) =>
+  view.data.first === null && !view.data.finishes.length;
+
 const FACES: Record<StatCard, (view: StatsView) => Face> = {
   year: (view) => {
+    if (fresh(view)) return { big: notYet, says: W.yearNotYet };
     const sums = yearNumbers(view);
     const reading = readingBooks(view);
     return {
@@ -316,13 +331,16 @@ const FACES: Record<StatCard, (view: StatsView) => Face> = {
     };
   },
   chart: (view) => {
+    if (fresh(view)) return { big: notYet, says: W.clockNotYet };
     const sums = yearNumbers(view);
     const { bars, on, labels } = chartBars(view);
     const hours = Math.floor(sums.seconds / 3600);
     return {
       big: (
         <Amounts
-          parts={hours >= 10 ? [amount(hours, "時間")] : timeAmounts(sums.seconds)}
+          parts={
+            hours >= 10 ? [amount(hours, "時間")] : timeAmounts(sums.seconds)
+          }
         />
       ),
       says: W.chartTotal(periodName(view.period, view.data.today)),
@@ -339,7 +357,11 @@ const FACES: Record<StatCard, (view: StatsView) => Face> = {
   days: (view) => {
     const month = monthDots(view);
     return {
-      big: <Amounts parts={[amount(month.count, "日")]} />,
+      big: fresh(view) ? (
+        notYet
+      ) : (
+        <Amounts parts={[amount(month.count, "日")]} />
+      ),
       says: W.readDaysHow(month.month),
       drawing: <MonthDots days={month.days} heads={WEEKDAYS_FROM_MONDAY} />,
     };
@@ -375,7 +397,15 @@ const FACES: Record<StatCard, (view: StatsView) => Face> = {
     );
     return {
       big: parts[0].label,
-      says: ties.length > 1 ? W.sameAs(ties.slice(1).map((p) => p.label).join("・")) : undefined,
+      says:
+        ties.length > 1
+          ? W.sameAs(
+              ties
+                .slice(1)
+                .map((p) => p.label)
+                .join("・"),
+            )
+          : undefined,
       drawing: (
         <span className="stats-genre">
           <Ring parts={parts} size="small" />
@@ -401,6 +431,7 @@ const FACES: Record<StatCard, (view: StatsView) => Face> = {
   },
   shelf: (view) => {
     const parts = shelfParts(view);
+    if (!view.data.library.length) return { big: notYet, says: W.shelfNotYet };
     return {
       big: <Amounts parts={[amount(sumOf(parts.map((p) => p.value)), "冊")]} />,
       says: W.shelfNow,
@@ -410,10 +441,17 @@ const FACES: Record<StatCard, (view: StatsView) => Face> = {
   joy: (view) => {
     const ahead = joy(view.data, view.speed);
     const parts = shelfParts(view).slice(0, 2);
-    if (!ahead) return { big: notYet, says: W.joyNotYet, drawing: <Band parts={parts} /> };
+    if (!ahead)
+      return {
+        big: notYet,
+        says: W.joyNotYet,
+        drawing: <Band parts={parts} />,
+      };
     return {
       big: (
-        <Amounts parts={[aboutTime(ahead.tsundokuSeconds + ahead.readingSeconds)]} />
+        <Amounts
+          parts={[aboutTime(ahead.tsundokuSeconds + ahead.readingSeconds)]}
+        />
       ),
       says: W.joyHow,
       drawing: <Band parts={parts} />,
@@ -459,12 +497,19 @@ const FACES: Record<StatCard, (view: StatsView) => Face> = {
     return {
       big: <Amounts parts={[amount(cards.shown.length, "枚")]} />,
       says: W.albumAll(amountWords(amount(cards.all, "枚"))),
-      drawing: <span className="stats-album" aria-hidden="true">{cards.shown.slice(-4).map((card) => <i key={card.id} />)}</span>,
+      drawing: (
+        <span className="stats-album" aria-hidden="true">
+          {cards.shown.slice(-4).map((card) => (
+            <i key={card.id} />
+          ))}
+        </span>
+      ),
     };
   },
   shape: (view) => {
     const way = shape(view.data, view.period);
-    if (way.band === null && !way.genre) return { big: notYet, says: W.shapeNotYet };
+    if (way.band === null && !way.genre)
+      return { big: notYet, says: W.shapeNotYet };
     return {
       big: way.genre ?? BAND_NAMES[way.band ?? 0],
       says:
@@ -492,8 +537,13 @@ function PaceDrawing({ view }: { view: StatsView }) {
     Math.min(1, (dayNumber(day) - dayNumber(view.period.from) + 1) / days);
   return (
     <PaceLine
-      points={look.line.map((point) => ({ at: share(point.day), books: point.books }))}
-      at={share(view.data.today < view.period.to ? view.data.today : view.period.to)}
+      points={look.line.map((point) => ({
+        at: share(point.day),
+        books: point.books,
+      }))}
+      at={share(
+        view.data.today < view.period.to ? view.data.today : view.period.to,
+      )}
       done={look.line.length}
       ahead={look.ahead}
     />
@@ -502,7 +552,15 @@ function PaceDrawing({ view }: { view: StatsView }) {
 
 // ── In full ──────────────────────────────────────────────────────────────
 
-function Tile({ label, parts, note }: { label: string; parts: Amount[]; note?: ReactNode }) {
+function Tile({
+  label,
+  parts,
+  note,
+}: {
+  label: string;
+  parts: Amount[];
+  note?: ReactNode;
+}) {
   return (
     <div className="stats-tile">
       <b>
@@ -525,6 +583,13 @@ function YearFull({ view }: { view: StatsView }) {
     view.period.kind === "all"
       ? sums.finished.filter((finish) => finish.day === null).length
       : 0;
+  if (fresh(view))
+    return (
+      <div className="stats-full">
+        <p className="stats-note">{W.yearNotYet}</p>
+        <BookShelf finished={[]} reading={reading.map((one) => one.book)} />
+      </div>
+    );
   return (
     <div className="stats-full">
       <div className="stats-tiles">
@@ -541,7 +606,10 @@ function YearFull({ view }: { view: StatsView }) {
         <Tile label={W.daysRead} parts={[amount(sums.days, "日")]} />
         <Tile label={W.timeRead} parts={timeAmounts(sums.seconds)} />
       </div>
-      <BookShelf finished={finished.map((one) => one.book)} reading={reading.map((one) => one.book)} />
+      <BookShelf
+        finished={finished.map((one) => one.book)}
+        reading={reading.map((one) => one.book)}
+      />
       {undated > 0 && <p className="stats-note">{W.undated(undated)}</p>}
     </div>
   );
@@ -553,13 +621,24 @@ const beforeName = (view: StatsView) =>
   ] ?? "前";
 
 /** The books finished, oldest on the left, the newest in sight; those being read stand at the left. */
-function BookShelf({ finished, reading }: { finished: Book[]; reading: Book[] }) {
+function BookShelf({
+  finished,
+  reading,
+}: {
+  finished: Book[];
+  reading: Book[];
+}) {
   return (
     <div className="stats-shelf">
       {reading.length > 0 && (
         <div className="stats-shelf-reading" aria-label={W.readingShelf}>
           {reading.slice(0, 4).map((book) => (
-            <BookJacket key={book.id} book={book} className="stats-shelf-book" sizes="40px" />
+            <BookJacket
+              key={book.id}
+              book={book}
+              className="stats-shelf-book"
+              sizes="40px"
+            />
           ))}
         </div>
       )}
@@ -571,7 +650,12 @@ function BookShelf({ finished, reading }: { finished: Book[]; reading: Book[] })
       >
         {finished.length ? (
           finished.map((book, at) => (
-            <BookJacket key={book.id + at} book={book} className="stats-shelf-book" sizes="48px" />
+            <BookJacket
+              key={book.id + at}
+              book={book}
+              className="stats-shelf-book"
+              sizes="48px"
+            />
           ))
         ) : (
           <p className="stats-note">{W.shelfFinishedHint}</p>
@@ -588,6 +672,12 @@ function ChartFull({ view }: { view: StatsView }) {
   const average = monthly
     ? (perDay(view.data, view.period, sums.seconds) * 365) / 12
     : perDay(view.data, view.period, sums.seconds);
+  if (fresh(view))
+    return (
+      <div className="stats-full">
+        <p className="stats-note">{W.clockNotYet}</p>
+      </div>
+    );
   return (
     <div className="stats-full">
       <p className="stats-sums">
@@ -600,7 +690,12 @@ function ChartFull({ view }: { view: StatsView }) {
         </span>
       </p>
       {sums.seconds > 0 ? (
-        <Bars values={bars.map((bar) => bar.seconds)} labels={labels} on={on} tall />
+        <Bars
+          values={bars.map((bar) => bar.seconds)}
+          labels={labels}
+          on={on}
+          tall
+        />
       ) : (
         <p className="stats-note">{W.clockNotYet}</p>
       )}
@@ -618,23 +713,37 @@ function DaysFull({ view }: { view: StatsView }) {
   const month = monthDots(view);
   return (
     <div className="stats-full">
-      <p className="stats-sums">
-        <span>
-          {W.readDaysHow(month.month)} <Amounts parts={[amount(month.count, "日")]} />
-        </span>
-        <span>
-          {periodName(year, view.data.today)}{" "}
-          <Amounts parts={[amount([...read.values()].filter((s) => s > 0).length, "日")]} />
-        </span>
-      </p>
+      {fresh(view) ? (
+        <p className="stats-note">{W.clockNotYet}</p>
+      ) : (
+        <p className="stats-sums">
+          <span>
+            {W.readDaysHow(month.month)}{" "}
+            <Amounts parts={[amount(month.count, "日")]} />
+          </span>
+          <span>
+            {periodName(year, view.data.today)}{" "}
+            <Amounts
+              parts={[
+                amount([...read.values()].filter((s) => s > 0).length, "日"),
+              ]}
+            />
+          </span>
+        </p>
+      )}
       <div className="stats-months">
         {months.reverse().map((one) => {
-          const days: DayDot[] = Array<DayDot>((weekdayOf(one.from) + 6) % 7).fill("pad");
+          const days: DayDot[] = Array<DayDot>(
+            (weekdayOf(one.from) + 6) % 7,
+          ).fill("pad");
           for (let day = one.from; day <= one.to; day = addDays(day, 1))
             days.push(
               day > view.data.today
                 ? "later"
-                : { read: (read.get(day) ?? 0) / most, today: day === view.data.today },
+                : {
+                    read: (read.get(day) ?? 0) / most,
+                    today: day === view.data.today,
+                  },
             );
           return (
             <div key={one.from}>
@@ -659,7 +768,10 @@ function ClockFull({ view }: { view: StatsView }) {
   return (
     <div className="stats-full">
       <Switch
-        choices={(["time", "count"] as const).map((key) => ({ key, label: W.timeBy[key] }))}
+        choices={(["time", "count"] as const).map((key) => ({
+          key,
+          label: W.timeBy[key],
+        }))}
         value={by}
         onChange={setBy}
       />
@@ -668,13 +780,13 @@ function ClockFull({ view }: { view: StatsView }) {
       ) : (
         <>
           <p className="stats-sums">
-            <span>
-              {W.topHour(top, say(times.hours[top]))}
-            </span>
+            <span>{W.topHour(top, say(times.hours[top]))}</span>
           </p>
           <Bars
             values={times.hours}
-            labels={times.hours.map((_, hour) => (hour % 6 === 0 ? `${hour}時` : null))}
+            labels={times.hours.map((_, hour) =>
+              hour % 6 === 0 ? `${hour}時` : null,
+            )}
             on={top}
             tall
           />
@@ -722,7 +834,10 @@ function GenreFull({ view }: { view: StatsView }) {
   return (
     <div className="stats-full">
       <Switch
-        choices={(["count", "pages", "time"] as const).map((key) => ({ key, label: W.genreBy[key] }))}
+        choices={(["count", "pages", "time"] as const).map((key) => ({
+          key,
+          label: W.genreBy[key],
+        }))}
         value={by}
         onChange={setBy}
       />
@@ -742,6 +857,12 @@ function PaceFull({ view }: { view: StatsView }) {
   const look = pace(view.data, view.period);
   const sums = yearNumbers(view);
   const daily = perDay(view.data, view.period, sums.seconds);
+  if (fresh(view))
+    return (
+      <div className="stats-full">
+        <p className="stats-note">{W.paceNotYet}</p>
+      </div>
+    );
   return (
     <div className="stats-full">
       <div className="stats-tiles">
@@ -750,7 +871,10 @@ function PaceFull({ view }: { view: StatsView }) {
         )}
         <Tile label={W.perDayRead} parts={timeAmounts(daily)} />
         {look.daysPerBook !== null && (
-          <Tile label={W.daysPerBook} parts={[amount(look.daysPerBook, "日", "約")]} />
+          <Tile
+            label={W.daysPerBook}
+            parts={[amount(look.daysPerBook, "日", "約")]}
+          />
         )}
       </div>
       {look.ahead !== null && <PaceDrawing view={view} />}
@@ -789,7 +913,12 @@ function ShelfFull({ view }: { view: StatsView }) {
 function JoyFull({ view }: { view: StatsView }) {
   const ahead = joy(view.data, view.speed);
   const states = shelfStates(view.data);
-  if (!ahead) return <div className="stats-full"><p className="stats-note">{W.joyNotYet}</p></div>;
+  if (!ahead)
+    return (
+      <div className="stats-full">
+        <p className="stats-note">{W.joyNotYet}</p>
+      </div>
+    );
   const rows = [...states.reading, ...states.tsundoku].flatMap((id) => {
     const book = bookOf(view, id);
     const seconds = timeToFinish(view.data, id, view.speed);
@@ -798,8 +927,14 @@ function JoyFull({ view }: { view: StatsView }) {
   return (
     <div className="stats-full">
       <div className="stats-tiles">
-        <Tile label={W.states.tsundoku} parts={[aboutTime(ahead.tsundokuSeconds)]} />
-        <Tile label={W.states.reading} parts={[aboutTime(ahead.readingSeconds)]} />
+        <Tile
+          label={W.states.tsundoku}
+          parts={[aboutTime(ahead.tsundokuSeconds)]}
+        />
+        <Tile
+          label={W.states.reading}
+          parts={[aboutTime(ahead.readingSeconds)]}
+        />
       </div>
       <ul className="stats-rows">
         {rows.slice(0, 30).map(({ book, seconds }) => (
@@ -809,7 +944,9 @@ function JoyFull({ view }: { view: StatsView }) {
           </li>
         ))}
       </ul>
-      {ahead.guessed > 0 && <p className="stats-note">{W.guessed(ahead.guessed)}</p>}
+      {ahead.guessed > 0 && (
+        <p className="stats-note">{W.guessed(ahead.guessed)}</p>
+      )}
     </div>
   );
 }
@@ -848,7 +985,8 @@ function MetFull({ view }: { view: StatsView }) {
   );
 }
 
-const shortDay = (day: DayKey) => `${Number(day.slice(5, 7))}/${Number(day.slice(8))}`;
+const shortDay = (day: DayKey) =>
+  `${Number(day.slice(5, 7))}/${Number(day.slice(8))}`;
 
 function StackFull({ view }: { view: StatsView }) {
   const height = stackHeight(view.data, view.period);
@@ -861,7 +999,9 @@ function StackFull({ view }: { view: StatsView }) {
         </span>
       </p>
       <Pile books={finished.slice().reverse()} />
-      {height.unknown > 0 && <p className="stats-note">{W.unknownPages(height.unknown)}</p>}
+      {height.unknown > 0 && (
+        <p className="stats-note">{W.unknownPages(height.unknown)}</p>
+      )}
     </div>
   );
 }
@@ -870,7 +1010,11 @@ function AlbumFull({ view }: { view: StatsView }) {
   const cards = cardsIn(view);
   return (
     <div className="stats-full">
-      <p className="stats-note">{cards.all ? W.albumAll(amountWords(amount(cards.all, "枚"))) : W.albumNotYet}</p>
+      <p className="stats-note">
+        {cards.all
+          ? W.albumAll(amountWords(amount(cards.all, "枚")))
+          : W.albumNotYet}
+      </p>
     </div>
   );
 }
@@ -890,28 +1034,50 @@ function ShapeFull({ view }: { view: StatsView }) {
     );
   const lines: ReactNode[] = [];
   if (look.daysPerBook !== null)
-    lines.push(<>1冊は平均 <u>{amountWords(amount(look.daysPerBook, "日"))}</u> で読み終えます。</>);
+    lines.push(
+      <>
+        1冊は平均 <u>{amountWords(amount(look.daysPerBook, "日"))}</u>{" "}
+        で読み終えます。
+      </>,
+    );
   if (sums.seconds > 0)
     lines.push(
       <>
-        1日 平均 <u>{timeWords(sums.seconds / days)}</u>、<u>{amountWords(amount(sums.pages / days, "ページ"))}</u> 読んでいます。
+        1日 平均 <u>{timeWords(sums.seconds / days)}</u>、
+        <u>{amountWords(amount(sums.pages / days, "ページ"))}</u> 読んでいます。
       </>,
     );
   if (sums.readings > 0)
     lines.push(
       <>
-        1回に 平均 <u>{timeWords(sums.seconds / readings)}</u>、<u>{amountWords(amount(sums.pages / readings, "ページ"))}</u> 読みます。
+        1回に 平均 <u>{timeWords(sums.seconds / readings)}</u>、
+        <u>{amountWords(amount(sums.pages / readings, "ページ"))}</u> 読みます。
       </>,
     );
   if (hours >= 1 && sums.pages > 0)
-    lines.push(<>1時間に 平均 <u>{amountWords(amount(sums.pages / hours, "ページ"))}</u> のペースです。</>);
+    lines.push(
+      <>
+        1時間に 平均 <u>{amountWords(amount(sums.pages / hours, "ページ"))}</u>{" "}
+        のペースです。
+      </>,
+    );
   if (way.averagePages !== null)
-    lines.push(<>{W.averagePages} <u>{amountWords(amount(way.averagePages, "ページ"))}</u> です。</>);
+    lines.push(
+      <>
+        {W.averagePages}{" "}
+        <u>{amountWords(amount(way.averagePages, "ページ"))}</u> です。
+      </>,
+    );
   if (way.weekdays.length)
-    lines.push(<>{W.mostWeekday} <u>{way.weekdays.map((d) => WEEKDAY_NAMES[d] + "曜日").join("と")}</u> です。</>);
+    lines.push(
+      <>
+        {W.mostWeekday}{" "}
+        <u>{way.weekdays.map((d) => WEEKDAY_NAMES[d] + "曜日").join("と")}</u>{" "}
+        です。
+      </>,
+    );
   const met = metList(view).length;
-  if (met > 0)
-    lines.push(<>{W.metShare(amountWords(amount(met, "冊")))}</>);
+  if (met > 0) lines.push(<>{W.metShare(amountWords(amount(met, "冊")))}</>);
   return (
     <div className="stats-full">
       <p className="stats-sentence">
