@@ -8,6 +8,7 @@
 - 新しい表には必ず RLS と権限を書き、`pnpm test:db`（`tests/database-policies.test.ts`）に確認を足す。台帳（`tests/fixtures/account-tables.ts`）にも1行足し、退会のテストに消える人の行を入れる（下の「アカウント削除の型」）。
 - 版 `20261020000000`（`privacy_locks`）のマイグレーションから、public に新しく作った表・関数は誰にも開かれていない状態で始まる。関数も、呼ばせたい相手に `grant execute` が要る。
 - 今あるデータを移すマイグレーションは、控えを取ってから移し、照らし合わせる（下の「移す工事の前の控えと戻す手順」）。
+- `.claude/skills/supabase` と `.claude/skills/supabase-postgres-best-practices` は Supabase 社の手引きの写しで（MIT、出どころと版は各フォルダの `SOURCE.md`）、RLS・索引・型の一般の注意として読む。この資料・[公開範囲.md](../機能/公開範囲.md)・[権限と鍵.md](./権限と鍵.md) と食い違えばこちらが勝つ。とくに、手引きが勧める MCP の `execute_sql`・`apply_migration` や `supabase db push` で DB を変えない（作業環境の接続は本番を読むだけ。変更は手元の Supabase か PGlite で試し、マイグレーションの PR で入れる）。`.mcp.json` は足さない。写しは書き換えず、新しい版にするときは丸ごと入れ替えて `SOURCE.md` を直す（けにーさん 2026-10-29 了承）。
 
 ## 本を指す物を足すとき
 
