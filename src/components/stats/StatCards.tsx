@@ -428,7 +428,6 @@ const FACES: Record<StatCard, (view: StatsView) => Face> = {
     if (!view.data.library.length) return { big: notYet, says: W.shelfNotYet };
     return {
       big: <Amounts parts={[amount(sumOf(parts.map((p) => p.value)), "冊")]} />,
-      says: W.shelfNow,
       drawing: <Band parts={parts} />,
     };
   },

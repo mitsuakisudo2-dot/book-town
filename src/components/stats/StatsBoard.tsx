@@ -33,13 +33,7 @@ import {
 } from "../../lib/reading-stats/words";
 import { DUR_MS, EASE, reducedMotion } from "../../lib/motion";
 import { Icon, Modal } from "../ui";
-import {
-  CardFull,
-  CardHeading,
-  CardSmall,
-  cardTitle,
-  type StatsView,
-} from "./StatCards";
+import { CardFull, CardHeading, CardSmall, type StatsView } from "./StatCards";
 
 /** How long a finger rests on a card before it lifts (試作 0.48 秒). */
 const HOLD_MS = 480;
@@ -421,13 +415,6 @@ export function StatsBoard({
               {W.addCard}
             </button>
           )}
-          <button
-            type="button"
-            className="stats-arrange"
-            onClick={() => setArranging(true)}
-          >
-            {W.arrange}
-          </button>
         </div>
       )}
       {arranging && (
@@ -593,7 +580,7 @@ function Place({
       <button
         type="button"
         className={`stats-card ${tile.size}`}
-        aria-label={cardTitle(card, view) + W.open}
+        aria-haspopup="dialog"
         onClick={() => onOpen(card)}
       >
         <CardSmall card={card} view={view} />

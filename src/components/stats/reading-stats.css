@@ -95,7 +95,7 @@
   font-weight: 700;
 }
 
-/* Under the cards: ＋欄を足す and 並べ替え, as the 試作 ends. */
+/* Under the cards: ＋欄を足す (並べ替え is in the band above, and a long press). */
 .stats-foot {
   display: flex;
   gap: 10px;
@@ -103,11 +103,6 @@
 
 .stats-foot .stats-add {
   flex: 1;
-}
-
-.stats-foot .stats-arrange {
-  min-height: 52px;
-  border-radius: var(--r-card);
 }
 
 .stats-kinds {

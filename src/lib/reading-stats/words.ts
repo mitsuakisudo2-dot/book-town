@@ -167,16 +167,14 @@ export const WEEKDAY_NAMES = ["日", "月", "火", "水", "木", "金", "土"];
 export const NOT_YET = "これから";
 
 export const STATS_WORDS = {
-  open: "をくわしく見る",
   readingNow: (books: number) => `いま ${counted(books, "冊")}を読んでいます`,
   sameAs: (others: string) => `${others}と同じくらい`,
   soFar: "いまのところ",
   aheadIf: "このまま読むと",
   perDayRead: "1日に読む時間",
-  shelfNow: "いまの状態",
-  joyHow: "積読と読書中の残りを読み切るまで",
+  joyHow: "読み切るまで",
   joyNotYet: "読書をはじめると、読み切るまでの時間が出ます",
-  metHow: `${NAMES.service} で出会い、読み終えた本`,
+  metHow: "読み終えた本のうち",
   metNotYet: "書店めぐりで出会って読み終えた本が、ここに並びます",
   metGo: "書店めぐりに出かける",
   stackHow: (books: number) => `読み終えた ${counted(books, "冊")}を積むと`,
@@ -190,7 +188,7 @@ export const STATS_WORDS = {
   genreNotYet: "読むと、ここに出ます",
   paceNotYet: "本を開くと、ここに出ます",
   shapeNotYet: "読むと、自分の読み方が一文で出ます",
-  readDaysHow: (month: number) => `今月（${month}月）`,
+  readDaysHow: (month: number) => `${month}月`,
   chartTotal: (name: string) => `${name}の合計`,
   chartAverage: "1か月の平均",
   chartAverageDay: "1日の平均",
