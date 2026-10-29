@@ -602,19 +602,26 @@ export default function TownApp({
                 ログイン
               </Link>
             )}
-            <Link
-              href={notificationsPath()}
-              className={
-                "top-bell" + (view === "notifications" ? " active" : "")
-              }
-              aria-label={
-                unread ? "お知らせ（新しいお知らせがあります）" : "お知らせ"
-              }
-            >
-              <Icon name="bell" size={21} />
-              {/* A small light, not a count that piles up and hurries. */}
-              {unread > 0 && <span className="bell-light" aria-hidden="true" />}
-            </Link>
+            {/* A visitor has no お知らせ yet; the bell only asked them to
+                sign in, which ログイン beside it already does. Without it
+                the bar fits 320px. */}
+            {!(visitor && account.status === "signed-out") && (
+              <Link
+                href={notificationsPath()}
+                className={
+                  "top-bell" + (view === "notifications" ? " active" : "")
+                }
+                aria-label={
+                  unread ? "お知らせ（新しいお知らせがあります）" : "お知らせ"
+                }
+              >
+                <Icon name="bell" size={21} />
+                {/* A small light, not a count that piles up and hurries. */}
+                {unread > 0 && (
+                  <span className="bell-light" aria-hidden="true" />
+                )}
+              </Link>
+            )}
             {!visitor && (
               <Link
                 href={profilePath("me")}
