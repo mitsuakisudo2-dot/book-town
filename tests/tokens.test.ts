@@ -462,6 +462,13 @@ check(
       tokens,
       /font-family: "Device Mincho";\s*src:\s*local\("Noto Serif CJK JP"\)/,
     );
+    // The headings and the handwriting are the prototypes' web fonts
+    // (けにーさん 2026-10-30), and the page's font CSS asks for them.
+    assert.ok(serif.trim().startsWith('"Shippori Mincho"'), serif);
+    assert.match(tokens, /--hand:\s*"Klee One",[^;]*var\(--serif\);/);
+    const layout = read("src/app/layout.tsx");
+    assert.match(layout, /family=Shippori\+Mincho:wght@400;600&/);
+    assert.match(layout, /family=Klee\+One&/);
     assert.match(tokens, /--poster-mincho:\s*"Noto Serif JP"/);
     assert.match(tokens, /--poster-gothic:\s*"Noto Sans JP"/);
     const poster = read("src/components/poster.css");
