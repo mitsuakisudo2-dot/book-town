@@ -190,7 +190,7 @@
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-family: "Kaisei HarunoUmi", var(--serif);
+  font-family: var(--hand);
   font-size: var(--t-meta);
   line-height: 1.75;
 }

@@ -289,7 +289,7 @@
   font-weight: 600;
 }
 .wishlist-invitations q {
-  font-family: "Kaisei HarunoUmi", var(--serif);
+  font-family: var(--hand);
   font-size: var(--t-meta);
   line-height: 1.7;
   display: -webkit-box;
