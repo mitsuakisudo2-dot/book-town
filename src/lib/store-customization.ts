@@ -29,6 +29,7 @@ import {
   type ShopSize,
 } from "./growing-shop";
 import { bookById } from "./book-name";
+import { keepLook } from "./shop-looks";
 import {
   SCENE_BOARD_TITLE_MAX_LENGTH,
   SCENE_POP_MAX_LENGTH,
@@ -594,10 +595,13 @@ export function setShopSize(
   const sized = { ...structuredClone(scene), growth: size };
   const next =
     scene.growth === undefined
-      ? applyStoreTemplate(
-          sized,
-          (scene.templateId ?? "warm") as TemplateId,
-          books,
+      ? keepLook(
+          applyStoreTemplate(
+            sized,
+            (scene.templateId ?? "warm") as TemplateId,
+            books,
+          ),
+          scene,
         )
       : sized;
   return regrow(next, shop, books, { fresh: true });

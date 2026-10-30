@@ -40,3 +40,10 @@ The home's 「今日の街」 slides and the 本棚をのぞく cards use two 16
 - `lamp-{390,780,1170}-v1.webp`: `room.webp`, the box (0, 0)–(940, 588), the lamp and the wall under it.
 
 They follow the same rule as `-vN` files here: kept a year (`vercel.json`, `/home/(.*-v\d+\.webp)`), their bytes recorded in `VERSIONED` in `tests/head.test.ts`. A new look is a new name (`-v2`).
+
+## Shop looks (`public/themes/seaside/`, `public/themes/white/`, 2026-10-27)
+
+A look (`src/lib/shop-looks.ts`) is a room and four case parts (top, post, board, bottom). The same `-vN` rule applies; hashes are in `VERSIONED`.
+
+- `seaside/`: drawn with ChatGPT by the project owner on 2026-10-27 (an empty white-painted shelf with a transparent background, and a seaside room with no floor). `room-v1.webp` is the room, re-encoded only. The shelf was cut with PIL into `top-v1`, `post-v1` (the left post of one tier; the right is the same picture mirrored), `board-v1` and `bottom-v1`, each cropped to its opaque box; no pixels were redrawn.
+- `white/`: drawn by Claude as code. `room-v1.webp` is a PIL wall and floor with a soft light; the case parts are hand-written SVG gradients (steel posts, wire boards, feet). No outside material.

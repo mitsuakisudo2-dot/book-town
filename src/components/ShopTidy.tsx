@@ -68,6 +68,12 @@ import { DoodleIcon, StoreCanvas, StoreStamp } from "./StoreCanvas";
 import { ShopSizeChoices, sizeName } from "./ShopSize";
 import { BookJacket, Icon } from "./ui";
 import { KeptDraftNote, useDraftOwner } from "./KeptDraftNote";
+import {
+  SHOP_LOOKS,
+  shopLookOf,
+  wearLook,
+  type ShopLook,
+} from "../lib/shop-looks";
 import "./walk.css";
 import "./scene-editor.css";
 
@@ -130,6 +136,7 @@ type Sheet =
   | { kind: "add" }
   | { kind: "face" }
   | { kind: "size" }
+  | { kind: "room" }
   | { kind: "waiting" }
   | { kind: "row"; rowId: string }
   | { kind: "book"; id: string; writing?: boolean };
@@ -509,6 +516,7 @@ export function ShopTidy({
     if (e.type === "pointerup" && lift.at) carry(lift.id, lift.at);
   }
 
+  const look = shopLookOf(scene);
   const style = {
     "--walk-wood": scene.theme.wood,
     "--walk-paper": scene.theme.paper,
@@ -578,6 +586,8 @@ export function ShopTidy({
         <div
           ref={board}
           className="walk-artboard"
+          data-look={look?.id}
+          style={look ? { backgroundImage: `url("${look.room}")` } : undefined}
           aria-label="店内"
           onPointerDown={rest}
           onPointerMove={slide}
@@ -668,6 +678,62 @@ export function ShopTidy({
                 disabled={!ready}
                 onChoose={chooseSize}
               />
+            </>
+          )}
+          {sheet.kind === "room" && (
+            <>
+              <h3>{GROW.room}</h3>
+              <div
+                className="scene-template-options"
+                role="group"
+                aria-label={GROW.room}
+              >
+                {STORE_TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={!ready}
+                    aria-pressed={!look && scene.templateId === t.id}
+                    onClick={() =>
+                      (look || scene.templateId !== t.id) &&
+                      save(
+                        applyStoreTemplate(
+                          scene,
+                          t.id as TemplateId,
+                          state.books,
+                        ),
+                      )
+                    }
+                    style={{ "--template-wood": t.wood } as CSSProperties}
+                  >
+                    <span className="scene-template-swatch" aria-hidden="true">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                    <b>{t.name}</b>
+                  </button>
+                ))}
+                {SHOP_LOOKS.map((l) => (
+                  <button
+                    key={l.id}
+                    type="button"
+                    disabled={!ready}
+                    aria-pressed={look?.id === l.id}
+                    onClick={() =>
+                      look?.id !== l.id && save(wearLook(scene, l))
+                    }
+                  >
+                    <span
+                      className="scene-template-swatch is-picture"
+                      aria-hidden="true"
+                      style={lookPicture(l)}
+                    />
+                    <b>{l.name}</b>
+                  </button>
+                ))}
+              </div>
+              <p className="shop-size-hint">{GROW.roomHint}</p>
             </>
           )}
           {sheet.kind === "add" && (
@@ -762,37 +828,6 @@ export function ShopTidy({
                     }}
                   />
                 )}
-                <div className="tidy-chips-label">{GROW.mood}</div>
-                <div className="scene-template-options">
-                  {STORE_TEMPLATES.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      aria-pressed={scene.templateId === t.id}
-                      onClick={() =>
-                        scene.templateId !== t.id &&
-                        save(
-                          applyStoreTemplate(
-                            scene,
-                            t.id as TemplateId,
-                            state.books,
-                          ),
-                        )
-                      }
-                      style={{ "--template-wood": t.wood } as CSSProperties}
-                    >
-                      <span
-                        className="scene-template-swatch"
-                        aria-hidden="true"
-                      >
-                        <i />
-                        <i />
-                        <i />
-                      </span>
-                      <b>{t.name}</b>
-                    </button>
-                  ))}
-                </div>
               </div>
             </>
           )}
@@ -1101,6 +1136,14 @@ export function ShopTidy({
           <Icon name="rows" />
           {GROW.size}
         </button>
+        <button
+          type="button"
+          aria-pressed={sheet?.kind === "room"}
+          onClick={() => show(sheet?.kind === "room" ? null : { kind: "room" })}
+        >
+          <Icon name="store" />
+          {GROW.room}
+        </button>
         <button type="button" disabled={!undo.length} onClick={stepBack}>
           <Icon name="back" />
           元に戻す
@@ -1108,6 +1151,19 @@ export function ShopTidy({
       </nav>
     </div>
   );
+}
+
+/** A look drawn small: its room, and its case's top and two boards. */
+function lookPicture(look: ShopLook): CSSProperties {
+  const { top, board } = look.parts;
+  return {
+    backgroundImage: [top, board, board, look.room]
+      .map((src) => `url("${src}")`)
+      .join(", "),
+    backgroundSize: "64% 9%, 60% 7%, 60% 7%, cover",
+    backgroundPosition: "50% 30%, 50% 62%, 50% 94%, center 40%",
+    backgroundRepeat: "no-repeat",
+  };
 }
 
 /** A row of choices drawn as what they put in the shop. */
