@@ -75,7 +75,11 @@ export const CARD_NAMES: Record<StatCard, string> = {
 };
 
 /** The card's name for the period: 今年の読書, 10月のペース. */
-export function cardName(card: StatCard, period: Period, today: DayKey): string {
+export function cardName(
+  card: StatCard,
+  period: Period,
+  today: DayKey,
+): string {
   const name = CARD_NAMES[card];
   return card === "year" || card === "pace"
     ? periodName(period, today) + name
@@ -163,20 +167,19 @@ export const WEEKDAY_NAMES = ["日", "月", "火", "水", "木", "金", "土"];
 export const NOT_YET = "これから";
 
 export const STATS_WORDS = {
-  open: "をくわしく見る",
   readingNow: (books: number) => `いま ${counted(books, "冊")}を読んでいます`,
   sameAs: (others: string) => `${others}と同じくらい`,
   soFar: "いまのところ",
   aheadIf: "このまま読むと",
   perDayRead: "1日に読む時間",
-  shelfNow: "いまの状態",
-  joyHow: "積読と読書中の残りを読み切るまで",
+  joyHow: "読み切るまで",
   joyNotYet: "読書をはじめると、読み切るまでの時間が出ます",
-  metHow: `${NAMES.service} で出会い、読み終えた本`,
+  metHow: "読み終えた本のうち",
   metNotYet: "書店めぐりで出会って読み終えた本が、ここに並びます",
   metGo: "書店めぐりに出かける",
   stackHow: (books: number) => `読み終えた ${counted(books, "冊")}を積むと`,
-  stackAhead: (books: number) => `読書中の ${counted(books, "冊")}を読み終えると`,
+  stackAhead: (books: number) =>
+    `読書中の ${counted(books, "冊")}を読み終えると`,
   yearNotYet: "読書をはじめると、読んだ本と時間がここにたまります",
   shelfNotYet: "本を登録すると、いまの状態が出ます",
   stackNotYet: "読み終えた本を積んでいきます",
@@ -185,10 +188,11 @@ export const STATS_WORDS = {
   genreNotYet: "読むと、ここに出ます",
   paceNotYet: "本を開くと、ここに出ます",
   shapeNotYet: "読むと、自分の読み方が一文で出ます",
-  readDaysHow: (month: number) => `今月（${month}月）`,
+  readDaysHow: (month: number) => `${month}月`,
   chartTotal: (name: string) => `${name}の合計`,
   chartAverage: "1か月の平均",
   chartAverageDay: "1日の平均",
+  average: "平均",
   pagesAndDays: (pages: string, days: string) => `${pages}・${days}`,
   states: { tsundoku: "積読", reading: "読書中", finished: "読了" },
   finishedBooks: "読んだ本",
@@ -204,7 +208,8 @@ export const STATS_WORDS = {
   kindsLabel: "見る本",
   guessed: (books: number) =>
     `ページ数のわからない ${counted(books, "冊")}は、本棚の本の平均の厚さで見込んでいます`,
-  unknownPages: (books: number) => `ページ数のわからない ${counted(books, "冊")}は入れていません`,
+  unknownPages: (books: number) =>
+    `ページ数のわからない ${counted(books, "冊")}は入れていません`,
   undated: (books: number) =>
     `登録したときに読了にした ${counted(books, "冊")}は、いつ読んだかわからないので「ぜんぶ」だけに入れています`,
   timeBy: { time: "読んだ時間", count: "読んだ回数" },
@@ -225,6 +230,7 @@ export const STATS_WORDS = {
   sumLabel: "合計",
   topHour: (hour: number, says: string) => `いちばんは ${hour}時台・${says}`,
   arranging: "札の並べ替え",
+  arrange: "並べ替え",
   arrangeHint: "札を押して、大きさを選べます",
   sizeOf: (name: string) => `${name} の大きさ`,
   done: "完了",
