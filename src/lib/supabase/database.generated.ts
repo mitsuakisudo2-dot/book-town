@@ -2114,6 +2114,10 @@ export type Database = {
         Args: { features: string[]; results: string[]; times: number[] };
         Returns: undefined;
       };
+      count_tab_taps: {
+        Args: { modes: string[]; tabs: string[]; times: number[] };
+        Returns: undefined;
+      };
       delete_my_account: {
         Args: Record<PropertyKey, never>;
         Returns: undefined;
