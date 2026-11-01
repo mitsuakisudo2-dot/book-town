@@ -279,6 +279,8 @@ export const ACCOUNT_TABLES: Record<string, AccountTable> = {
   // How tries of a few features went, a count a day (stumble_counts); they
   // name no one.
   "private.stumbles": { people: {}, readers: "nobody" },
+  // Which tab is pressed how often, a count a day (tab_taps); no reader.
+  "private.tab_taps": { people: {}, readers: "nobody" },
   // What readers tell the operator (site_reports); only staff read them,
   // through site_reports(), which is the operator's own reading.
   "private.site_reports": { people: { user_id: "delete" }, readers: "nobody" },

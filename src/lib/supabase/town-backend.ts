@@ -66,6 +66,7 @@ import {
   setStumbleSender,
   type StumbleFeature,
 } from "../stumbles";
+import { setTabTapSender } from "../tab-taps";
 
 type Client = SupabaseClient<Database>;
 
@@ -1896,6 +1897,10 @@ export function accountTownBackend(
   const stopCounting = setStumbleSender((counts) =>
     settled(client.rpc("count_stumbles", counts)),
   );
+  // And which tabs they press (tab-taps.ts), the same way.
+  const stopCountingTabs = setTabTapSender((counts) =>
+    settled(client.rpc("count_tab_taps", counts)),
+  );
 
   return {
     kind: "account",
@@ -1925,6 +1930,7 @@ export function accountTownBackend(
     ...remoteReads(client, userId, sync.current, () => myBooks),
     close() {
       stopCounting();
+      stopCountingTabs();
       sync.close();
     },
   };

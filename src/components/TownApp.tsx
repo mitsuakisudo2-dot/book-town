@@ -89,6 +89,7 @@ import {
 import { useAnnouncement } from "../lib/live-region";
 import { useBookHolds } from "../lib/bibliography-session";
 import { NAMES, TABS } from "../lib/words";
+import { countTabTap, type TabTapTab } from "../lib/tab-taps";
 import { inManageMode } from "../lib/town-mode";
 
 // Every screen comes in its own file, so a page reads only the screen it
@@ -202,6 +203,15 @@ const links: { href: string; icon: string; label: string; section: Section }[] =
       section: "profile",
     },
   ];
+/** The word a tab of the row is counted under (tab-taps.ts). */
+const TAB_TAP_OF: Record<Section, TabTapTab> = {
+  home: "home",
+  search: "search",
+  walk: "walk",
+  shelf: "library",
+  reading: "reading",
+  profile: "profile",
+};
 /** A plain click on a link: not one that opens another tab or window. */
 const plainClick = (event: MouseEvent<HTMLAnchorElement>) =>
   event.button === 0 &&
@@ -468,6 +478,20 @@ export default function TownApp({
         : link.section === "profile"
           ? meClick
           : undefined;
+  // Which tab of the phone's row (and of the bar at the top) is pressed how
+  // often, as counts alone (tab-taps.ts, けにーさん 11-01). Only while the
+  // row at the bottom shows: a wide screen's side bar is not the question.
+  const tapped = (tab: TabTapTab) => {
+    const nav = navRef.current;
+    if (!nav || getComputedStyle(nav).display === "none") return;
+    countTabTap(manage ? "manage" : "town", tab);
+  };
+  const bottomClickOf =
+    (link: (typeof links)[number]) =>
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      tapped(TAB_TAP_OF[link.section]);
+      clickOf(link)?.(event);
+    };
   return (
     <div
       className={
@@ -591,6 +615,7 @@ export default function TownApp({
             {!visitor && (
               <Link
                 href={libraryPath({ addBook: true })}
+                onClick={() => tapped("top_add")}
                 className="top-bell top-add"
                 aria-label="本を登録"
               >
@@ -608,6 +633,7 @@ export default function TownApp({
             {!(visitor && account.status === "signed-out") && (
               <Link
                 href={notificationsPath()}
+                onClick={() => tapped("top_bell")}
                 className={
                   "top-bell" + (view === "notifications" ? " active" : "")
                 }
@@ -625,6 +651,7 @@ export default function TownApp({
             {!visitor && (
               <Link
                 href={profilePath("me")}
+                onClick={() => tapped("top_me")}
                 className="top-avatar"
                 aria-label="自分のプロフィール"
               >
@@ -701,7 +728,7 @@ export default function TownApp({
         {tabs.map((l) => (
           <Link
             href={hrefOf(l)}
-            onClick={clickOf(l)}
+            onClick={bottomClickOf(l)}
             key={l.section}
             className={
               (section === l.section ? "active" : "") +
