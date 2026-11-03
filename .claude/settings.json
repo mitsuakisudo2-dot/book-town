@@ -9,6 +9,18 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__hearthbot__update_progress_checklist",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/desk-sync.sh",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
