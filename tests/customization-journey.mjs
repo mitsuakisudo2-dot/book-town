@@ -47,6 +47,11 @@ async function face() {
   await tidy().getByRole("button", { name: "看板", exact: true }).click();
   await expect(tidy().getByLabel("看板の店名")).toBeVisible();
 }
+/** The sheet of the room: the wood shop's three templates and the looks. */
+async function room() {
+  await tidy().getByRole("button", { name: "店内", exact: true }).click();
+  await expect(tidy().locator(".scene-template-options")).toBeVisible();
+}
 /** A book's sheet (Enter opens even a thin spine's own). */
 async function bookSheet(id) {
   await tidy().locator(`[data-placement="${id}"]`).press("Enter");
@@ -181,10 +186,10 @@ try {
       await open();
       // The public shelf's two books stand in the shop; the secret one not.
       await expect(tidy().locator("[data-placement]")).toHaveCount(2);
-      await face();
+      await room();
       await expect(
         tidy().locator(".scene-template-options button"),
-      ).toHaveCount(3);
+      ).toHaveCount(5);
       await close();
       expect((await legacy()).ownShop).toEqual(original);
       const value = await page.evaluate(() =>
@@ -304,7 +309,7 @@ try {
     async () => {
       const before = (await walkData()).sceneOverrides[0];
       await open();
-      await face();
+      await room();
       await tidy()
         .getByRole("button", { name: /窓辺の選書/ })
         .click();
@@ -330,6 +335,52 @@ try {
           .map((o) => [o.id, o.parentId, o.order]);
       expect(rows(next)).toEqual(rows(before));
       expect((await walkData()).legacyBackups).toHaveLength(1);
+      await close();
+    },
+  );
+  await check(
+    "a look (店内) changes the room and the case; the books, POPs and words stay, and a visitor sees it",
+    async () => {
+      const before = (await walkData()).sceneOverrides[0];
+      await open();
+      await room();
+      await tidy()
+        .getByRole("button", { name: /海辺の朝/ })
+        .click();
+      await expect
+        .poll(async () => (await walkData()).sceneOverrides[0].theme.id)
+        .toBe("seaside");
+      const sea = (await walkData()).sceneOverrides[0];
+      expect(sea.background.url).toBe("/themes/seaside/room-v1.webp");
+      expect(sea.objects).toEqual(before.objects);
+      await expect(
+        tidy().locator('.walk-store-objects[data-look="seaside"]'),
+      ).toHaveCount(1);
+      await expect(
+        tidy().getByRole("button", { name: /海辺の朝/ }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await close();
+      await page.goto(base + "/walk/#mine");
+      await expect(page.locator('.walk-view[data-look="seaside"]')).toHaveCount(
+        1,
+      );
+      await expect(page.locator(".walk-room img").first()).toHaveAttribute(
+        "src",
+        /seaside\/room-v1/,
+      );
+      await page.goto(base + "/my-shop/");
+      // The wood shop comes back with its own room.
+      await open();
+      await room();
+      await tidy()
+        .getByRole("button", { name: /窓辺の選書/ })
+        .click();
+      await expect
+        .poll(async () => (await walkData()).sceneOverrides[0].theme.id)
+        .toBe("woodshop");
+      await expect(
+        tidy().locator(".walk-store-objects[data-look]"),
+      ).toHaveCount(0);
       await close();
     },
   );

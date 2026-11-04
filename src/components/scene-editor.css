@@ -15,6 +15,10 @@
     url("/themes/woodshop/room.webp") center/cover;
   animation: none;
 }
+.scene-preview .walk-artboard[data-look] {
+  background-size: cover;
+  background-position: center;
+}
 .scene-preview > p {
   font-size: var(--t-cap);
   line-height: 1.7;
@@ -69,6 +73,10 @@
 .scene-template-swatch i:nth-child(3) {
   background: #adb1c5;
   height: 27px;
+}
+/* A look's own room, as its picture. */
+.scene-template-swatch.is-picture {
+  border-bottom: 0;
 }
 .scene-hint {
   font-size: var(--t-cap);
@@ -387,7 +395,7 @@
 }
 .tidy-tools {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   padding: 4px 8px env(safe-area-inset-bottom);
   background: var(--paper);
   color: var(--ink);
