@@ -33,7 +33,7 @@ import {
 } from "../../lib/reading-stats/words";
 import { DUR_MS, EASE, reducedMotion } from "../../lib/motion";
 import { Icon, Modal } from "../ui";
-import { CardFull, CardHeading, CardSmall, cardTitle, type StatsView } from "./StatCards";
+import { CardFull, CardHeading, CardSmall, type StatsView } from "./StatCards";
 
 /** How long a finger rests on a card before it lifts (試作 0.48 秒). */
 const HOLD_MS = 480;
@@ -67,17 +67,28 @@ export function StatsBoard({
   view,
   onKeep,
   onOpen,
+  arrangeAsked,
 }: {
   tiles: StatsLayout;
   view: StatsView;
   onKeep: (tiles: StatsLayout) => void;
   onOpen: (card: StatCard) => void;
+  /** Counts the ［並べ替え］ presses above the cards: each starts arranging. */
+  arrangeAsked: number;
 }) {
   const [arranging, setArranging] = useState(false);
+  const [asked, setAsked] = useState(arrangeAsked);
+  if (asked !== arrangeAsked) {
+    setAsked(arrangeAsked);
+    setArranging(true);
+  }
   const [chosen, setChosen] = useState<StatCard | null>(null);
   const [working, setWorking] = useState<StatsLayout | null>(null);
   const [carried, setCarried] = useState<StatCard | null>(null);
-  const [undo, setUndo] = useState<{ before: StatsLayout; card: StatCard } | null>(null);
+  const [undo, setUndo] = useState<{
+    before: StatsLayout;
+    card: StatCard;
+  } | null>(null);
   const [adding, setAdding] = useState<number | "end" | null>(null);
   const shown = working ?? tiles;
   const left = cardsLeft(shown);
@@ -95,7 +106,9 @@ export function StatsBoard({
 
   const name = (card: StatCard) => cardName(card, view.period, view.data.today);
   const places = () =>
-    Array.from(board.current?.querySelectorAll<HTMLElement>("[data-place]") ?? []);
+    Array.from(
+      board.current?.querySelectorAll<HTMLElement>("[data-place]") ?? [],
+    );
 
   /** Where each card is now, so that after a change the others glide over. */
   const remember = () => {
@@ -154,7 +167,8 @@ export function StatsBoard({
     const tap = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (!target?.isConnected) return;
-      if (board.current?.contains(target) || dock.current?.contains(target)) return;
+      if (board.current?.contains(target) || dock.current?.contains(target))
+        return;
       if ((target as Element).closest?.(".modal-backdrop")) return;
       event.preventDefault();
       event.stopPropagation();
@@ -184,7 +198,10 @@ export function StatsBoard({
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button > 0 || press.current) return;
     const target = event.target as Element;
-    if (target.closest(".stats-takeout, .stats-gap, input, select, .stats-switch")) return;
+    if (
+      target.closest(".stats-takeout, .stats-gap, input, select, .stats-switch")
+    )
+      return;
     const el = target.closest<HTMLElement>("[data-place][data-card]");
     if (!el) return;
     // A swipe on a scrolling shelf inside a card is the shelf's.
@@ -232,7 +249,9 @@ export function StatsBoard({
       const held = press.current;
       if (!held) return;
       if (!held.ready) {
-        if (Math.hypot(event.clientX - held.x, event.clientY - held.y) > HOLD_SLOP) {
+        if (
+          Math.hypot(event.clientX - held.x, event.clientY - held.y) > HOLD_SLOP
+        ) {
           clearTimeout(held.timer);
           held.el.classList.remove("is-holding");
           press.current = null;
@@ -240,7 +259,11 @@ export function StatsBoard({
         return;
       }
       if (!held.moved) {
-        if (Math.hypot(event.clientX - held.x, event.clientY - held.y) < HOLD_SLOP / 2) return;
+        if (
+          Math.hypot(event.clientX - held.x, event.clientY - held.y) <
+          HOLD_SLOP / 2
+        )
+          return;
         held.moved = true;
         const box = held.el.getBoundingClientRect();
         held.offX = held.x - box.left;
@@ -250,7 +273,8 @@ export function StatsBoard({
       last.current = { x: event.clientX, y: event.clientY };
       follow(event.clientX, event.clientY);
       if (event.clientY < EDGE) window.scrollBy(0, -EDGE_STEP);
-      else if (event.clientY > window.innerHeight - EDGE) window.scrollBy(0, EDGE_STEP);
+      else if (event.clientY > window.innerHeight - EDGE)
+        window.scrollBy(0, EDGE_STEP);
       if (performance.now() < settle.current) return;
       const tiles = shownRef.current;
       const from = tiles.findIndex((tile) => tile.card === held.card);
@@ -332,7 +356,9 @@ export function StatsBoard({
     keep(takeOut(tiles, index));
   };
 
-  const chosenIndex = chosen ? tiles.findIndex((tile) => tile.card === chosen) : -1;
+  const chosenIndex = chosen
+    ? tiles.findIndex((tile) => tile.card === chosen)
+    : -1;
 
   return (
     <>
@@ -342,7 +368,9 @@ export function StatsBoard({
         onPointerDown={onPointerDown}
         onClickCapture={onClickCapture}
         onContextMenu={(event) => {
-          const el = (event.target as Element).closest<HTMLElement>("[data-place][data-card]");
+          const el = (event.target as Element).closest<HTMLElement>(
+            "[data-place][data-card]",
+          );
           if (!el) return;
           event.preventDefault();
           setArranging(true);
@@ -364,15 +392,38 @@ export function StatsBoard({
             name={tile.card ? name(tile.card) : ""}
           />
         ))}
-        {left.length > 0 && (arranging || !shown.some((tile) => tile.card === null)) && (
-          <button type="button" className="stats-add" onClick={() => setAdding("end")}>
+        {arranging && left.length > 0 && (
+          <button
+            type="button"
+            className="stats-add"
+            onClick={() => setAdding("end")}
+          >
             <Icon name="plus" size={16} />
             {W.addCard}
           </button>
         )}
       </div>
+      {!arranging && (
+        <div className="stats-foot">
+          {left.length > 0 && !shown.some((tile) => tile.card === null) && (
+            <button
+              type="button"
+              className="stats-add"
+              onClick={() => setAdding("end")}
+            >
+              <Icon name="plus" size={16} />
+              {W.addCard}
+            </button>
+          )}
+        </div>
+      )}
       {arranging && (
-        <div ref={dock} className="stats-dock" role="dialog" aria-label={W.arranging}>
+        <div
+          ref={dock}
+          className="stats-dock"
+          role="dialog"
+          aria-label={W.arranging}
+        >
           <div className="stats-dock-head">
             <span>{chosen ? W.sizeOf(name(chosen)) : W.arrangeHint}</span>
             <button type="button" className="stats-dock-done" onClick={stop}>
@@ -380,7 +431,11 @@ export function StatsBoard({
             </button>
           </div>
           {chosen && chosenIndex >= 0 && (
-            <div className="stats-sizes" role="radiogroup" aria-label={W.sizeOf(name(chosen))}>
+            <div
+              className="stats-sizes"
+              role="radiogroup"
+              aria-label={W.sizeOf(name(chosen))}
+            >
               {TILE_SIZES.map((size) => (
                 <button
                   key={size}
@@ -389,7 +444,10 @@ export function StatsBoard({
                   aria-checked={tiles[chosenIndex].size === size}
                   onClick={() => keep(resize(tiles, chosenIndex, size))}
                 >
-                  <span className={`stats-size-mark ${size}`} aria-hidden="true">
+                  <span
+                    className={`stats-size-mark ${size}`}
+                    aria-hidden="true"
+                  >
                     <i />
                   </span>
                   <b>{SIZE_NAMES[size]}</b>
@@ -422,7 +480,11 @@ export function StatsBoard({
                 <button
                   type="button"
                   onClick={() => {
-                    keep(adding === "end" ? addCard(tiles, card) : putIn(tiles, adding, card));
+                    keep(
+                      adding === "end"
+                        ? addCard(tiles, card)
+                        : putIn(tiles, adding, card),
+                    );
                     setAdding(null);
                     if (arranging) setChosen(card);
                   }}
@@ -518,7 +580,7 @@ function Place({
       <button
         type="button"
         className={`stats-card ${tile.size}`}
-        aria-label={cardTitle(card, view) + W.open}
+        aria-haspopup="dialog"
         onClick={() => onOpen(card)}
       >
         <CardSmall card={card} view={view} />
