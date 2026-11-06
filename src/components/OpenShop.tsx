@@ -713,7 +713,7 @@ export function OpenShop({
             />
           </>
         )}
-        <div className="open-actions">
+        <div className="open-actions is-held">
           <button
             type="button"
             className="btn fill"

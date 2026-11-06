@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
   Book,
@@ -223,6 +223,7 @@ export function ReadingRoom({
   const [sheet, setSheet] = useState<"books" | "cover" | "people" | null>(null);
   const wake = useWakeLock(notify);
   const panes = useRef<HTMLDivElement>(null);
+  const hud = useNoticeBelow();
 
   // The words being written are kept in this browser until 今日のノート has
   // them or the reader throws them away (reading-note-draft.ts).
@@ -319,7 +320,7 @@ export function ReadingRoom({
       <div className="reading-panes" ref={panes}>
         <section className="reading-pane" aria-label="本と時間">
           <div className="reading-stage">
-            <div className="reading-hud">
+            <div className="reading-hud" ref={hud}>
               {book ? (
                 <button
                   type="button"
@@ -695,4 +696,34 @@ function BookSheet({
       </div>
     </Modal>
   );
+}
+
+/**
+ * A notice in the room drops just under the book (AUD-202): the first thing
+ * a reader who began without one wants is 本を選ぶ, and the notice must not
+ * lie over it. The book's lower edge is handed to the notice's CSS
+ * (reading-room.css) as it moves; without it the notice stays under the bar.
+ */
+function useNoticeBelow() {
+  const box = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const root = document.documentElement;
+    const place = () =>
+      root.style.setProperty(
+        "--room-notice-top",
+        `${Math.round(element.getBoundingClientRect().bottom)}px`,
+      );
+    place();
+    const watch = new ResizeObserver(place);
+    watch.observe(element);
+    window.addEventListener("resize", place);
+    return () => {
+      watch.disconnect();
+      window.removeEventListener("resize", place);
+      root.style.removeProperty("--room-notice-top");
+    };
+  }, []);
+  return box;
 }

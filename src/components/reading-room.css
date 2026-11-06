@@ -8,12 +8,20 @@
  */
 
 /* The town beneath stays still while the room is over it. A notice drops
-   from under the bar at the top, clear of the words being written. */
+   from under the book at the top (--room-notice-top, ReadingRoom.tsx), clear
+   of 本を選ぶ above it and of the words being written below (AUD-202). */
 body:has(.reading-room) {
   overflow: hidden;
 }
 body:has(.reading-room) .toast {
-  top: calc(env(safe-area-inset-top, 0px) + 62px);
+  top: calc(
+    var(--room-notice-top, calc(env(safe-area-inset-top, 0px) + 54px)) + 6px
+  );
+  /* Two even lines folded at 。, and thin, so the clock's time under it
+     stays readable on a narrow phone. */
+  padding-block: 6px;
+  word-break: keep-all;
+  text-wrap: balance;
   bottom: auto;
   left: 50%;
 }
