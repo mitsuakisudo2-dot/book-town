@@ -1,0 +1,23 @@
+-- The last two copies the moves took before they changed data
+-- (docs/開発と運用/DBの変え方.md「移す工事の前の控えと戻す手順」), dropped
+-- now that each has passed its time (AUD-185, けにーさん 10-23: fourteen
+-- days from the day the move was checked in production):
+--
+-- - 20261202000000_book_extent (#333): the library's answers and the
+--   books' checks, about 11MB. Checked 2026-10-23 01:36Z with no row and
+--   no link lost; its time ran out 2026-11-06.
+-- - 20261207000000_reading_mode (item 98): profiles, reader settings,
+--   library entries and shelves, reading entries and sessions. That move
+--   only added columns. Checked 2026-10-25 00:22Z with no row and no link
+--   lost; its time runs out 2026-11-08 00:22Z.
+--
+-- Both are in one file so that one approval drops both. This file goes to
+-- production only after 2026-11-08 00:22Z (the PR says so), so neither copy
+-- is dropped before its time.
+--
+-- No table the app reads changes. Without the copies these moves can only
+-- be put right by a new move forward, not written back from a copy.
+-- drop_copy raises when a copy is not there, which rolls the whole file
+-- back and leaves both copies as they were.
+select private.drop_copy('20261202000000_book_extent');
+select private.drop_copy('20261207000000_reading_mode');
