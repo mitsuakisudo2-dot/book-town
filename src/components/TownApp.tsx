@@ -421,6 +421,12 @@ export default function TownApp({
   );
   // A visitor who is not signed in has no pages of their own yet.
   const visitor = savedIn === "visitor";
+  // While the account is being checked the town is not yet anyone's: on a
+  // site with an account it is never the demo, so it is 本の街 from the
+  // start, and what only a signed-in reader has waits for the answer
+  // (AUD-209).
+  const checking = account.status === "loading";
+  const townName = savedIn === "local" && !checking ? "デモの街" : "本の街";
   const ownPage =
     view === "editor"
       ? "shop"
@@ -604,15 +610,13 @@ export default function TownApp({
               <button
                 className="demo-pill"
                 onClick={() => setAbout(true)}
-                aria-label={
-                  (savedIn === "local" ? "デモの街" : "本の街") + "について"
-                }
+                aria-label={townName + "について"}
               >
-                {savedIn === "local" ? "デモの街" : "本の街"}
+                {townName}
                 <Icon name="leaf" size={12} />
               </button>
             )}
-            {!visitor && (
+            {!visitor && !checking && (
               <Link
                 href={libraryPath({ addBook: true })}
                 onClick={() => tapped("top_add")}
@@ -630,7 +634,7 @@ export default function TownApp({
             {/* A visitor has no お知らせ yet; the bell only asked them to
                 sign in, which ログイン beside it already does. Without it
                 the bar fits 320px. */}
-            {!(visitor && account.status === "signed-out") && (
+            {!checking && !(visitor && account.status === "signed-out") && (
               <Link
                 href={notificationsPath()}
                 onClick={() => tapped("top_bell")}
@@ -648,7 +652,7 @@ export default function TownApp({
                 )}
               </Link>
             )}
-            {!visitor && (
+            {!visitor && !checking && (
               <Link
                 href={profilePath("me")}
                 onClick={() => tapped("top_me")}
@@ -762,7 +766,7 @@ export default function TownApp({
                 見るだけなら、ログインはいりません。書店を開いたり、投稿したり、好きを届けたりするときに、ログインをお願いします。
               </div>
             </>
-          ) : savedIn === "local" ? (
+          ) : checking ? null : savedIn === "local" ? (
             <>
               <p className="muted">
                 店主と書店は架空のデモデータです。本の表紙・背表紙はオリジナルの仮デザインを使っています。

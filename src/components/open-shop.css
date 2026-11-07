@@ -238,6 +238,32 @@
   justify-content: flex-end;
   margin-top: 26px;
 }
+/* The step's one way on (看板を決める) stays in reach under the long list
+   of books, as onboarding pickers keep their 次へ (AUD-208): a reader whose
+   shelf is full sees where to go without hunting for it. It reaches over
+   the sheet's side padding so what scrolls under it does not show at its
+   ends. While a field is being typed in, it goes back into the page, out
+   of the keyboard's way. */
+.open-actions.is-held {
+  --held-side: 38px;
+  position: sticky;
+  bottom: env(safe-area-inset-bottom, 0px);
+  z-index: var(--layer-sticky);
+  margin: 26px calc(-1 * var(--held-side)) 0;
+  padding: 12px var(--held-side);
+  border-top: 1px solid var(--line);
+  background: var(--sheet);
+}
+.open-shop:has(input:focus, textarea:focus) .open-actions.is-held {
+  position: static;
+}
+@media (max-width: 760px) {
+  /* Above the tabs at the bottom (.town-bottom-nav, 82px tall with the
+     safe area inside it). */
+  .open-actions.is-held {
+    bottom: 82px;
+  }
+}
 
 /* The sign */
 .open-sign {
@@ -386,6 +412,14 @@
   .open-shop {
     padding: 28px 18px 32px;
     margin-top: 0;
+  }
+  .open-actions.is-held {
+    --held-side: 18px;
+    padding-block: 10px;
+  }
+  .open-actions.is-held .btn {
+    flex: 1;
+    justify-content: center;
   }
   .open-kinds {
     grid-template-columns: 1fr;
