@@ -113,3 +113,25 @@ const open = rows.filter((row) => row.state === "未解決").length;
 console.log(
   `audit ledger: ${rows.length} rows (${open} open), ${sections.length} with history, ${Buffer.byteLength(ledger)} bytes`,
 );
+
+// docs/09 only shrinks (AUD-199, AUD-203): new rules go to the 正本 named in
+// docs/README.md, not here. Its size may not pass the last row of the table in
+// docs/監査/README.md「毎週数える大きさ」; after moving a section out, add a
+// row with the smaller numbers.
+{
+  const readme = readFileSync("docs/監査/README.md", "utf8");
+  const sizeRows = readme
+    .split("\n")
+    .filter((line) => /^\| 20\d\d-\d\d-\d\d/.test(line))
+    .map((line) => line.split("|").map((cell) => cell.trim()));
+  assert.ok(sizeRows.length > 0, "docs/監査/README.md has the size table");
+  const last = sizeRows[sizeRows.length - 1];
+  const maxLines = Number(last[3].replace(/,/g, ""));
+  const maxBytes = Number(last[4].replace(/,/g, ""));
+  const nine = readFileSync("docs/09_段階2_ログインと保存.md");
+  const lines = nine.toString("utf8").split("\n").length - (nine.at(-1) === 10 ? 1 : 0);
+  assert.ok(
+    lines <= maxLines && nine.length <= maxBytes,
+    `docs/09 grew to ${lines} lines and ${nine.length} bytes, past the last row of docs/監査/README.md (${maxLines}, ${maxBytes}). Write new rules in their 正本 (docs/README.md), not docs/09.`,
+  );
+}
