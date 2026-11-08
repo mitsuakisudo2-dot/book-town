@@ -114,12 +114,13 @@ async function main() {
   );
   for (const gone of ["20261027000000_works", "20261029000000_visibility"])
     assert.ok(!kept.some(({ label }) => label === gone), gone);
-  // Only the newest move's copy is open (DBの変え方.md「開いている控え」):
-  // the four of the authors' names went in 20261203000000_drop_author_copies.
-  // 読書管理モード's copies the tables it adds to, though it moves nothing.
+  // No copy is open (DBの変え方.md「開いている控え」): the four of the
+  // authors' names went in 20261203000000_drop_author_copies, and
+  // book_extent's and reading_mode's in 20261218000000_drop_overdue_copies
+  // once their time had passed (AUD-185).
   assert.deepEqual(
     kept.map(({ label }) => label),
-    ["20261202000000_book_extent", "20261207000000_reading_mode"],
+    [],
   );
   for (const { label } of kept)
     await db.query("select private.drop_copy($1)", [label]);
