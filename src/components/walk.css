@@ -2017,3 +2017,105 @@
   border-bottom: 1px dotted rgba(82, 51, 34, 0.7);
   opacity: 0.85;
 }
+
+/* 店内のテーマ (shop-looks.ts): the room is the look's own picture, and the
+   case is built from its four parts, the same parts for any number of tiers.
+   Everything else in the shop (covers, POPs, words) stays as it is. */
+.walk-view[data-look] .walk-room:before {
+  display: none;
+}
+/* A light room keeps the owner's name and the circles on the right legible. */
+.walk-view[data-look] .walk-room:after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--shade) 55%, transparent),
+    transparent 15%
+  );
+}
+.walk-view[data-look] .walk-room img {
+  filter: none;
+}
+.walk-view[data-look] .walk-actions.is-rail :is(button, a) {
+  border-radius: var(--r-tag);
+  background: color-mix(in srgb, var(--shade) 38%, transparent);
+}
+.walk-store-objects[data-look] .walk-furniture.is-shelf,
+.walk-store-objects[data-look] .walk-furniture.is-stand {
+  background: none;
+  box-shadow: none;
+}
+.walk-store-objects[data-look] .walk-row {
+  background: none;
+}
+.walk-store-objects[data-look] .walk-furniture.is-shelf:before {
+  top: 0;
+  left: calc(-1 * var(--look-top-over));
+  right: calc(-1 * var(--look-top-over));
+  height: auto;
+  aspect-ratio: var(--look-top-aspect);
+  transform: translateY(-55%);
+  background: var(--look-top) center / 100% 100% no-repeat;
+  box-shadow: none;
+}
+.walk-store-objects[data-look] .walk-furniture.is-shelf .walk-wood-edge {
+  top: 100%;
+  bottom: auto;
+  left: calc(-1 * var(--look-bottom-over));
+  right: calc(-1 * var(--look-bottom-over));
+  height: auto;
+  aspect-ratio: var(--look-bottom-aspect);
+  transform: translateY(-45%);
+  background: var(--look-bottom) center / 100% 100% no-repeat;
+  box-shadow: none;
+}
+.walk-store-objects[data-look] .walk-case-post {
+  width: var(--look-post-width);
+  background: var(--look-post) center top / 100% auto repeat-y;
+}
+.walk-store-objects[data-look] .walk-case-post.is-right {
+  transform: scaleX(-1);
+}
+.walk-store-objects[data-look] .walk-shelf-lip {
+  background: var(--look-board) center / 100% 100% no-repeat;
+  box-shadow: none;
+}
+.walk-store-objects[data-look] .walk-shelf-lip:before {
+  opacity: 0.18;
+}
+.walk-store-objects[data-look] .walk-shelf-lip:after {
+  display: none;
+}
+/* The reading stand: the cover leans on the look's ledge, with no back. */
+.walk-store-objects[data-look] .walk-furniture.is-stand:before {
+  display: none;
+}
+.walk-store-objects[data-look] .walk-sign {
+  color: var(--look-sign-ink);
+}
+.walk-store-objects[data-look] .walk-sign-board {
+  transform: none;
+  background: var(--look-sign-paper);
+  border: calc(var(--walk-u) * 0.5) solid var(--look-sign-edge);
+  box-shadow: none;
+}
+.walk-store-objects[data-look] .walk-sign-name {
+  text-shadow: none;
+}
+.walk-store-objects[data-look] .walk-sign-tagline {
+  color: var(--look-sign-ink);
+}
+.walk-store-objects[data-look] .walk-row-board {
+  background: var(--look-tag-paper);
+  border-color: var(--look-sign-edge);
+  box-shadow: none;
+  color: var(--look-tag-ink);
+}
+.walk-store-objects[data-look] .walk-row-board:before {
+  display: none;
+}
+.walk-store-objects[data-look] .walk-board-title,
+.walk-store-objects[data-look] .walk-board-body {
+  background: none;
+  color: var(--look-tag-ink);
+  filter: none;
+}

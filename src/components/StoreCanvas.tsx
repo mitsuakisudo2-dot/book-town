@@ -13,6 +13,7 @@ import {
 import { popExcerpt, tierCardOwners } from "../lib/store-scene-adapter";
 import { ART_PANELS, artPanel } from "../lib/book-art";
 import { GROW } from "../lib/growing-shop";
+import { WOOD_LOOK, lookStyle, shopLookOf } from "../lib/shop-looks";
 import type { Book } from "../lib/types";
 import { bookAuthor, bookById, bookTitle } from "../lib/book-name";
 import "./walk.css";
@@ -339,7 +340,8 @@ export function StoreCanvas({
   const greeting = greetingPop?.text;
   // With no words of the owner's, the stamp on the floor POP steps out too.
   const noGreeting = !greeting?.trim();
-  const woodshop = scene.theme.id === "woodshop";
+  const woodshop = scene.theme.id === WOOD_LOOK;
+  const look = shopLookOf(scene);
   const owners = tierCardOwners(scene);
   const cardOwners = new Set(owners.values());
   const hasTable = scene.objects.some(
@@ -827,6 +829,8 @@ export function StoreCanvas({
   return (
     <div
       className="walk-store-objects"
+      data-look={look?.id}
+      style={lookStyle(look) as CSSProperties}
       onPointerDown={() => {
         drag.current = false;
       }}
