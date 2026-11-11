@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "./tokens.css";
 @import "./parts.css";
+/* Tailwind reads every file in the repository for class names. The AI
+   guides under .claude/ are prose full of CSS words, not screens. */
+@source not "../../.claude";
 /* The colours, type and fonts are the tokens' (tokens.css); the shared
    buttons and chips are parts.css. docs/色と部品の決まり.md has the rules. */
 :root {
