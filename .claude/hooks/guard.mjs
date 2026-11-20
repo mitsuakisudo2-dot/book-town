@@ -6,28 +6,32 @@
 //
 // 見るのは呼び出しの文字だけ。ファイルに書いたスクリプトを動かす、文字を組み立てて隠す、
 // といった回り道は止められない。GitHub の側の止め（身元を分ける）が来るまでの柵。
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-// 読むだけでも呼ばない物: 承認の送り先、シークレットと変数の中身と一覧。
-const ALWAYS = [
+// gh のコマンドの形（-R/--repo を前に置いても同じに見る）。言葉の中ではなく、命令として見る。
+const GH_COMMANDS = [
+  [/\bgh\s+(secret|variable)\b/, "シークレットと変数は、一覧も値も読まず、変えません"],
+  [/\bgh\s+repo\s+(edit|delete|rename|archive|unarchive)\b/, "リポジトリの設定は変えません"],
+  [/\bgh\s+pr\s+review\b[^\n;&|]*\s(--approve|-a)(\s|$)/, "提案書の承認（Approve）は押しません"],
+  [/\bgh\s+pr\s+merge\b[^\n;&|]*\s--admin\b/, "決まりを飛ばす取り込み（--admin）はしません"],
+  [/\bgh\s+auth\s+(refresh|login|token)\b|\bgh\s+auth\s+status\b[^\n;&|]*--show-token/, "GitHub の権限を足したり、鍵を出したりしません"],
+];
+
+// 文字のどこにあっても止める物: 承認の送り先と、守りの設定を変える GraphQL の名前。
+const ANYWHERE = [
   [/pending_deployments/, "本番の承認（Review deployments）は けにーさんだけが押します"],
-  [/deployment_protection_rules|deployment-branch-policies|deployment_branch_policies/, "環境の守りの設定は変えません"],
-  [/\bgh\s+secret\b/, "シークレットは一覧も値も読まず、変えません"],
-  [/\bgh\s+variable\b/, "Actions の変数は読まず、変えません"],
+  [/deployment_protection_rules|deployment[-_]branch[-_]policies/, "環境の守りの設定は変えません"],
   [/\b(approve|reject)deployments\b/, "本番の承認は けにーさんだけが押します"],
   [/\b(create|update|delete)(branchprotectionrule|repositoryruleset|environment)\b/, "ルールセット・main の守り・環境は変えません"],
   [/\b(updaterepository|deleterepository|archiverepository|transferrepository)\b/, "リポジトリの設定は変えません"],
-  [/\bgh\s+repo\s+(edit|delete|rename|archive|unarchive)\b/, "リポジトリの設定は変えません"],
-  [/\bgh\s+pr\s+review\b[^\n;&|]*(--approve|-a\b)/, "提案書の承認（Approve）は押しません"],
-  [/\bgh\s+pr\s+merge\b[^\n;&|]*--admin\b/, "決まりを飛ばす取り込み（--admin）はしません"],
-  [/\bgh\s+auth\s+(refresh|login)\b/, "GitHub の権限を足しません"],
 ];
 
 // GitHub を呼ぶときは、読むだけでも止める先。
-const ALWAYS_GITHUB = [
-  [/\/secrets\b/, "シークレットは一覧も値も読まず、変えません"],
-  [/\/variables\b/, "Actions の変数は読まず、変えません"],
+const GITHUB_ALWAYS = [
+  [/secrets\b/, "シークレットは一覧も値も読まず、変えません"],
+  [/\/variables\b|-variables\b/, "Actions の変数は読まず、変えません"],
 ];
 
 // 読むのはよいが、書く呼び出しは止める先。
@@ -39,79 +43,122 @@ const WRITE_GUARDED = [
   [/\/actions\/permissions\b|\/actions\/oidc\b/, "Actions の権限は変えません"],
   [/\/hooks\b|\/keys\b|\/autolinks\b/, "リポジトリの設定は変えません"],
   [/\brepos\/[^/\s"']+\/[^/\s"'?]+(?=["'\s?]|$)/, "リポジトリの設定は変えません"],
+  [/\/git\/refs\/heads\/(main|master)\b/, "main へは直に書かず、提案書を通します"],
+  [/\/contents\/[^\n]*\bbranch\s*[=:]\s*["']?(main|master)\b/, "main へは直に書かず、提案書を通します"],
 ];
 
 // 書く印: gh api の -X POST や -f、curl の -d、ほかの言語で GitHub を呼ぶ物。
 const WRITE_SIGN =
-  /(-X|--method|--request)\s*=?\s*["']?(post|put|patch|delete)\b|\s(-f|-F|--field|--raw-field|--input|-d|--data[\w-]*|--form|-T|--upload-file)(\s|=)|\b(python3?|node|deno|bun|ruby|perl|wget|httpie?|octokit)\b|\bfetch\s*\(/i;
+  /(-[a-z]*x|--method|--request)\s*=?\s*["']?(post|put|patch|delete)\b|\s(-f|--field|--raw-field|--input|-d|--data[\w-]*|--form|-t|--upload-file)(\s|=)|\b(python3?|node|deno|bun|ruby|perl|wget|httpie?|octokit)\b|\bfetch\s*\(/i;
 
-const APPROVE_REVIEW = /\/pulls\/\d+\/reviews\b[^\n]*\bapprove\b/;
+// 空白を含む引用とヒアドキュメントの本文を外した文字（説明の文の言葉で止めないため）。
+// "main" のような一語の引用は、引用を外して残す。
+function bare(text) {
+  return text
+    .replace(/<<-?\s*["']?(\w+)["']?[^\n]*\n[\s\S]*?\n\s*\1\s*(\n|$)/g, " ")
+    .replace(/'([^']*)'/g, (_, inner) => (/\s/.test(inner) ? "''" : inner))
+    .replace(/"((?:[^"\\]|\\.)*)"/g, (_, inner) => (/\s/.test(inner) ? '""' : inner));
+}
 
-// git push で main（か master）を書き換える形。
-function pushesMain(command) {
-  for (const part of command.split(/&&|\|\||;|\n|\|/)) {
-    const words = part.trim().split(/\s+/).map((w) => w.replace(/^["']|["']$/g, ""));
-    if (!words.some((w) => /(^|\/)git$/.test(w))) continue;
-    const at = words.indexOf("push");
+// git push で main（か master）を書き換える形。main にいるときの引数のない push も。
+function pushesMain(command, branch) {
+  for (const part of command.split(/&&|\|\||;|\n|\||&|\(|\)|`|\$\(/)) {
+    const words = part.trim().split(/\s+/);
+    let at = words.findIndex((w) => /(^|\/)git$/.test(w));
     if (at < 0) continue;
+    at += 1;
+    while (words[at] && /^-/.test(words[at])) at += /^-(C|c)$|^--git-dir$|^--work-tree$/.test(words[at]) ? 2 : 1;
+    if (words[at] !== "push") continue;
     const rest = words.slice(at + 1);
     if (rest.some((w) => w === "--mirror" || w === "--all")) return true;
     if (rest.some((w) => /^\+?([^:\s]*:)?(refs\/heads\/)?(main|master)$/.test(w))) return true;
+    const refs = rest.filter((w) => !w.startsWith("-"));
+    const onlyRemote = refs.length <= 1 || (refs.length === 2 && /^(head|@)$/i.test(refs[1]));
+    if (onlyRemote && /^(main|master)$/.test(branch ?? "")) return true;
   }
   return false;
 }
 
-export function judgeBash(command) {
+export function judgeBash(command, branch) {
   const text = String(command ?? "");
   const lower = text.toLowerCase();
-  for (const [pattern, why] of ALWAYS) if (pattern.test(lower)) return why;
-  if (APPROVE_REVIEW.test(lower)) return "提案書の承認（Approve）は押しません";
-  const touchesGitHub = /\bgh\s+api\b|api\.github\.com|\brepos\//.test(lower);
+  const plain = bare(lower).replace(/\bgh((\s+(-r|--repo)(\s+|=)\S+)+)(?=\s)/g, "gh");
+  for (const [pattern, why] of GH_COMMANDS) if (pattern.test(plain)) return why;
+  for (const [pattern, why] of ANYWHERE) if (pattern.test(lower)) return why;
+  if (/\/pulls\/\d+\/reviews\b/.test(lower) && /\bevent\s*[=:]\s*\\?["']?approve\b/.test(lower)) {
+    return "提案書の承認（Approve）は押しません";
+  }
+  const touchesGitHub = /\bgh\s+api\b|api\.github\.com|\brepos\/|\borgs\//.test(lower);
   if (touchesGitHub) {
-    for (const [pattern, why] of ALWAYS_GITHUB) if (pattern.test(lower)) return why;
+    for (const [pattern, why] of GITHUB_ALWAYS) if (pattern.test(lower)) return why;
     for (const [pattern, why] of WRITE_GUARDED) {
       if (pattern.test(lower) && WRITE_SIGN.test(text)) return why;
     }
-    if (/graphql/.test(lower) && /\bmutation\b/.test(lower) && /(protection|ruleset|environment|deployment|collaborator)/.test(lower)) {
+  }
+  if (/graphql/.test(lower) && /\bmutation\b/.test(lower)) {
+    if (/(protection|ruleset|environment|deployment|collaborator)/.test(lower)) {
       return "GitHub の守りの設定を変える呼び出しはしません";
     }
+    if (/\bevent\s*:\s*\\?["']?approve\b/.test(lower)) return "提案書の承認（Approve）は押しません";
+    if (/(updateref|deleteref|createcommitonbranch)/.test(lower) && /\b(main|master)\b/.test(lower)) {
+      return "main へは直に書かず、提案書を通します";
+    }
   }
-  if (pushesMain(text)) return "main へは直に push せず、提案書を通します";
+  if (pushesMain(bare(text), branch)) return "main へは直に push せず、提案書を通します";
   return null;
 }
 
-export function judgeTool(name, input) {
-  if (name === "Bash") return judgeBash(input?.command);
-  if (!/^mcp__.*github/i.test(name)) return null;
+export function judgeTool(name, input, branch) {
+  if (!/^mcp__.*github/i.test(name)) {
+    // Bash と、Monitor のようにシェルの命令を動かす道具。
+    return typeof input?.command === "string" ? judgeBash(input.command, branch) : null;
+  }
   const tool = name.split("__").slice(2).join("__").toLowerCase();
   const all = JSON.stringify(input ?? {});
   if (/review/.test(tool) && /"event"\s*:\s*"approve"/i.test(all)) return "提案書の承認（Approve）は押しません";
   if (/secret_scanning/.test(tool)) return null;
-  if (/secret|variable|environment|ruleset|protection|collaborator|deployment|webhook/.test(tool)) {
-    return "承認・環境・ルールセット・シークレット・協力者には、道具から触りません";
+  if (/secret|variable/.test(tool)) return "シークレットと変数には、道具から触りません";
+  if (/environment|ruleset|protection|collaborator|deployment|webhook/.test(tool) && !/^(list|get)_/.test(tool)) {
+    return "承認・環境・ルールセット・協力者は、道具から変えません";
   }
-  if (/(create_or_update_file|push_files|delete_file)/.test(tool) && /^(refs\/heads\/)?(main|master)$/i.test(String(input?.branch ?? ""))) {
+  if (/(create_or_update_file|push_files|delete_file|update_ref)/.test(tool) && /^\s*(refs\/heads\/)?(main|master)\s*$/i.test(String(input?.branch ?? ""))) {
     return "main へは直に書かず、提案書を通します";
   }
   return null;
 }
 
-function main() {
-  let event;
+function currentBranch(cwd) {
   try {
-    event = JSON.parse(readFileSync(0, "utf8"));
+    return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd: cwd || undefined,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 3000,
+    }).trim();
   } catch {
-    // 読めないときは通さない（守りが黙って外れないように）。
-    process.stderr.write("承認の守り: 呼び出しを読めなかったので止めました（.claude/hooks/guard.mjs）\n");
-    process.exit(2);
+    return "";
   }
-  const why = judgeTool(event.tool_name ?? "", event.tool_input ?? {});
-  if (why) {
-    process.stderr.write(
-      `承認の守りで止めました: ${why}。けにーさんの GitHub アカウントで動いているため、` +
-        "この種類の操作はけにーさんが画面で行います（docs/開発と運用/権限と鍵.md「Claude の手元の止め」、AUD-211）。" +
-        "回り道で同じことをせず、要るなら手順をけにーさんに渡してください。\n",
-    );
+}
+
+const STOPPED =
+  "けにーさんの GitHub アカウントで動いているため、この種類の操作はけにーさんが画面で行います" +
+  "（docs/開発と運用/権限と鍵.md「Claude の手元の止め」、AUD-211）。回り道で同じことをせず、要るなら手順をけにーさんに渡してください。\n";
+
+function main() {
+  try {
+    const event = JSON.parse(readFileSync(0, "utf8"));
+    if (!event || typeof event !== "object") throw new Error("not an object");
+    const input = event.tool_input && typeof event.tool_input === "object" ? event.tool_input : {};
+    const command = typeof input.command === "string" ? input.command : "";
+    const branch = /\bpush\b/.test(command) ? currentBranch(event.cwd) : "";
+    const why = judgeTool(String(event.tool_name ?? ""), input, branch);
+    if (why) {
+      process.stderr.write(`承認の守りで止めました: ${why}。${STOPPED}`);
+      process.exit(2);
+    }
+  } catch {
+    // 読めないときと、止めの中で失敗したときは通さない（守りが黙って外れないように）。
+    process.stderr.write(`承認の守り: 呼び出しを確かめられなかったので止めました。${STOPPED}`);
     process.exit(2);
   }
   process.exit(0);
