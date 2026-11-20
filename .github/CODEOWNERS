@@ -15,6 +15,7 @@
 /tests/production-journey.mjs     @mitsuakisudo2-dot
 /tests/fixtures/pglite-supabase.ts @mitsuakisudo2-dot
 /tests/code-owners.test.ts         @mitsuakisudo2-dot
+/tests/claude-guard.test.ts        @mitsuakisudo2-dot
 /tsconfig.json                     @mitsuakisudo2-dot
 
 # The tests that keep the database's rules (who may see which rows, row level
