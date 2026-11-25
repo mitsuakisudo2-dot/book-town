@@ -28,20 +28,23 @@ export const metadata: Metadata = {
 };
 // Google's CSS for the web fonts. Noto Sans JP and Noto Serif JP are variable
 // fonts: one weight range names the same font files as listing 400 to 700
-// one by one, in a quarter of the CSS. The other two are not variable.
+// one by one, in a quarter of the CSS. The others are not variable. Shippori
+// Mincho (--serif) comes in the two weights the prototypes use, and Klee One
+// (--hand) in its regular weight only, the one the town's POPs take: each
+// weight adds about 30KB of this CSS and its own font files.
 const FONTS_CSS =
-  "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400..700&family=Noto+Serif+JP:wght@400..700&family=Kaisei+HarunoUmi:wght@500;700&family=Zen+Old+Mincho:wght@600&display=swap";
+  "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400..700&family=Noto+Serif+JP:wght@400..700&family=Kaisei+HarunoUmi:wght@500;700&family=Zen+Old+Mincho:wght@600&family=Shippori+Mincho:wght@400;600&family=Klee+One&display=swap";
 // The page paints without waiting for that CSS from another origin: it loads
 // as a print sheet, which holds up no paint, and this turns it on for the
 // screen once it has arrived, or at once if it already has. Until then the
 // text shows in the fallback font, as it does with swap until each file comes.
 //
 // On a first visit the CSS is not even asked for until the page has loaded:
-// it is 150KB, and the font files it names as much again three times over,
-// and on a slow line they took the bandwidth the town's own scripts needed
-// (about 2 seconds of a first Home on Slow 4G, docs/09 「速さ」). The town's
-// letters are the device's own first (tokens.css), so most phones draw the
-// same letters either way; the rest show the fallback a little longer.
+// it is about 240KB gzipped, and the font files it names as much again, and
+// on a slow line they took the bandwidth the town's own scripts needed (about
+// 2 seconds of a first Home on Slow 4G, docs/09 「速さ」). The body's letters
+// are the device's (tokens.css) and never change; the headings and POPs show
+// the device's mincho and rounded letters until their web fonts come.
 //
 // A reader whose browser loaded this CSS within the last day most likely
 // still has it cached (Google sends max-age of a day and a week of
