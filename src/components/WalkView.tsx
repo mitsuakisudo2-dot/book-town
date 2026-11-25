@@ -79,6 +79,7 @@ import {
 } from "../lib/book-name";
 import { failure, WHILE_OFFLINE } from "../lib/words";
 import { walkMissedLine } from "../lib/missed-changes";
+import { shopLookOf } from "../lib/shop-looks";
 
 type Overlay =
   | { kind: "book"; placementId: string; returnRow?: string }
@@ -570,6 +571,7 @@ export function WalkView({
   return (
     <section
       className="walk-view"
+      data-look={scene ? shopLookOf(scene)?.id : undefined}
       style={sceneStyle}
       aria-label="書店めぐり"
       onKeyDown={(e) => {

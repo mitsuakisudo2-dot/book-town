@@ -119,7 +119,9 @@ export const GROW = {
   greeting: "店主からのひとこと",
   writeGreeting: "ひとことを書く",
   stamp: "店のスタンプ",
-  mood: "店の雰囲気",
+  room: "店内",
+  roomHint:
+    "店内の部屋と棚が変わります。並べた本とPOP、看板の言葉はそのまま残ります。",
   rowLabel: "棚の案内札",
   boardTitle: "黒板の見出し",
   boardArt: "黒板の絵",

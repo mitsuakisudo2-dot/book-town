@@ -153,6 +153,16 @@ function cacheControl(pathname: string) {
 // A line stays when its file is removed, so the name cannot come back with
 // other bytes.
 const VERSIONED: Record<string, string> = {
+  "themes/seaside/board-v1.webp": "2148b8af649f85db",
+  "themes/seaside/bottom-v1.webp": "ef9b62f6bec9c293",
+  "themes/seaside/post-v1.webp": "404d43e1052be430",
+  "themes/seaside/room-v1.webp": "6cdb21d9cfe5bd9c",
+  "themes/seaside/top-v1.webp": "1b0cb6b49be36a79",
+  "themes/white/board-v1.svg": "c8925a7bb5afc1e7",
+  "themes/white/bottom-v1.svg": "efe8f1bb6aacdf14",
+  "themes/white/post-v1.svg": "f89db8a280ff82f9",
+  "themes/white/room-v1.webp": "f86843a895a628f3",
+  "themes/white/top-v1.svg": "cf0069e02b364a99",
   "themes/woodshop/chain-v1.svg": "6358aa666d2a980f",
   "themes/woodshop/daisy-vase-v1.svg": "4a858d967a99ac72",
   "themes/woodshop/fg-left-v1.webp": "82fb2c2c3de625cc",
