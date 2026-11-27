@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { gzipSync } from "node:zlib";
 import type { PGlite } from "@electric-sql/pglite";
-import { daily, files, type Target } from "../scripts/catalog-import";
+import { daily, files, patience, type Target } from "../scripts/catalog-import";
 
 // The month's files (scripts/catalog-import.ts files, docs/09「図書館の目録」):
 // once the last file is taken, the day's changes are taken again from the day
 // before the files' cut, so a change made after the cut that the files just
 // took back comes again. Nothing is asked of the library: its answers are
 // made up here, with no record in them. The day's changes (daily) that are
-// too many to take fail the run, and the other set is still taken.
+// too many to take fail the run, and the other set is still taken. A night
+// the library is busy ends well and keeps the marks, so nothing is lost.
 
 let passed = 0;
 async function check(name: string, run: () => Promise<void>) {
@@ -140,6 +141,86 @@ async function main() {
       await daily(db, target);
       console.log = quiet;
       assert.equal(kept.get("oai-iss-ndl-opac"), yesterday);
+    },
+  );
+
+  await check(
+    "a busy library ends the night well and keeps the marks, so the next night takes the same changes",
+    async () => {
+      const answer = (size: number, token: string) =>
+        `<OAI-PMH><ListRecords><resumptionToken completeListSize="${size}">${token}</resumptionToken></ListRecords></OAI-PMH>`;
+      const waits = { ...patience };
+      Object.assign(patience, { tries: 3, gap: 0, first: 0, most: 0 });
+      const yesterday = new Date(Date.now() - 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      // The first set's first page comes; its next page is busy every time.
+      const asked: string[] = [];
+      let status = 429;
+      globalThis.fetch = (async (url: string | URL) => {
+        asked.push(String(url));
+        if (String(url).includes("resumptionToken"))
+          return new Response("busy", { status });
+        return new Response(answer(400, "more"));
+      }) as typeof fetch;
+      const { kept, target } = marks({
+        "oai-iss-ndl-opac": "2026-11-21",
+        "oai-iss-ndl-opac-inprocess": "2026-11-21",
+      });
+      const said: string[] = [];
+      console.log = (line: string) => void said.push(line);
+      await daily(db, target);
+      console.log = quiet;
+      assert.equal(kept.get("oai-iss-ndl-opac"), "2026-11-21");
+      assert.equal(kept.get("oai-iss-ndl-opac-inprocess"), "2026-11-21");
+      // Asked three times for the busy page, and not at all for the second set.
+      assert.equal(
+        asked.filter((u) => u.includes("resumptionToken")).length,
+        3,
+      );
+      assert.equal(asked.filter((u) => u.includes("inprocess")).length, 0);
+      assert.ok(
+        said.some((line) =>
+          /^::warning::The library was busy \(iss-ndl-opac, iss-ndl-opac-inprocess\)/.test(
+            line,
+          ),
+        ),
+      );
+      // 503 is busy too.
+      status = 503;
+      console.log = () => {};
+      await daily(db, target);
+      console.log = quiet;
+      assert.equal(kept.get("oai-iss-ndl-opac"), "2026-11-21");
+      // Another answer is still a failure, and the marks stay.
+      status = 500;
+      console.log = () => {};
+      await assert.rejects(daily(db, target), /the library answered 500/);
+      console.log = quiet;
+      assert.equal(kept.get("oai-iss-ndl-opac"), "2026-11-21");
+      // Busy for the second set only: the first moves on, the second stays.
+      globalThis.fetch = (async (url: string | URL) =>
+        String(url).includes("inprocess")
+          ? new Response("busy", { status: 429 })
+          : new Response(answer(3, ""))) as typeof fetch;
+      console.log = () => {};
+      await daily(db, target);
+      console.log = quiet;
+      assert.equal(kept.get("oai-iss-ndl-opac"), yesterday);
+      assert.equal(kept.get("oai-iss-ndl-opac-inprocess"), "2026-11-21");
+      // The next night the library answers: the second set takes the changes
+      // from the same day it stopped at, and moves on.
+      const from: string[] = [];
+      globalThis.fetch = (async (url: string | URL) => {
+        from.push(/from=([0-9-]+)/.exec(String(url))?.[1] ?? "");
+        return new Response(answer(3, ""));
+      }) as typeof fetch;
+      console.log = () => {};
+      await daily(db, target);
+      console.log = quiet;
+      assert.deepEqual(from, [yesterday, "2026-11-21"]);
+      assert.equal(kept.get("oai-iss-ndl-opac-inprocess"), yesterday);
+      Object.assign(patience, waits);
     },
   );
 

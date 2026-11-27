@@ -5,6 +5,7 @@
   "backupMaxHours": 30,
   "usageWarnPercent": 80,
   "keptCopyDays": 14,
+  "catalogStaleDays": 3,
   "screenErrorsPerDay": 1,
   "screenErrorsRowsWarn": 2800,
   "screenErrorsPerHour": 200,

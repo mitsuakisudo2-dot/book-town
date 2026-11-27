@@ -40,6 +40,7 @@ import {
   pageVerdict,
   usageVerdict,
   copiesVerdict,
+  catalogVerdict,
   errorsVerdict,
   keysVerdict,
   unconfirmedVerdict,
@@ -1588,6 +1589,100 @@ async function main() {
   );
 
   await check(
+    "the catalog watch tells only a mark that has not moved for days",
+    () => {
+      const watch = JSON.parse(readFileSync("scripts/watch.json", "utf8"));
+      assert.equal(watch.catalogStaleDays, 3);
+      const now = Date.parse("2026-11-27T21:17:00Z");
+      const row = (name: string, mark: string, at: string) => ({
+        name,
+        mark,
+        updated_at: at,
+      });
+      // Moved last night (the run late, in the Tokyo morning): well.
+      const fresh = catalogVerdict(
+        [
+          row("oai-iss-ndl-opac", "2026-11-26", "2026-11-27T02:10:00+00:00"),
+          row(
+            "oai-iss-ndl-opac-inprocess",
+            "2026-11-26",
+            "2026-11-27T02:12:00+00:00",
+          ),
+        ],
+        now,
+        3,
+      );
+      assert.equal(fresh.ok, true);
+      assert.equal(
+        fresh.lines[0],
+        "oai-iss-ndl-opac: last moved 2026-11-27T02:10:00Z; the next run takes the changes since 2026-11-26.",
+      );
+      // Busy two nights: still well. Right up to the days, and past them.
+      const at = "2026-11-24T21:17:00+00:00";
+      assert.equal(
+        catalogVerdict([row("oai-iss-ndl-opac", "2026-11-23", at)], now, 3).ok,
+        true,
+      );
+      const past = catalogVerdict(
+        [
+          row(
+            "oai-iss-ndl-opac",
+            "2026-11-21",
+            "2026-11-22T23:56:36.623384+00:00",
+          ),
+          row(
+            "oai-iss-ndl-opac-inprocess",
+            "2026-11-26",
+            "2026-11-27T02:12:00+00:00",
+          ),
+        ],
+        now,
+        3,
+      );
+      assert.equal(past.ok, false);
+      assert.equal(
+        past.lines[0],
+        "oai-iss-ndl-opac: last moved 2026-11-22T23:56:36Z (4.9 days ago, more than 3); the next run takes the changes since 2026-11-21.",
+      );
+      assert.match(past.lines[1], /^oai-iss-ndl-opac-inprocess: last moved/);
+      assert.match(past.lines[2], /nothing is lost/);
+      // Nothing taken yet is not a failure; an answer that is not the
+      // query's, or no days set, is.
+      assert.deepEqual(catalogVerdict([], now, 3), {
+        ok: true,
+        lines: ["Library catalog: no day's changes taken yet."],
+      });
+      assert.equal(catalogVerdict(undefined, now, 3).ok, false);
+      assert.equal(
+        catalogVerdict(
+          [row("oai-iss-ndl-opac", "2026-11-26", at)],
+          now,
+          undefined,
+        ).ok,
+        false,
+      );
+      assert.equal(
+        catalogVerdict([row("x; drop", "2026-11-26", at)], now, 3).ok,
+        false,
+      );
+      assert.equal(
+        catalogVerdict(
+          [{ name: "oai-iss-ndl-opac", database_bytes: 1 }],
+          now,
+          3,
+        ).ok,
+        false,
+      );
+      // A mark that is not a day is not printed.
+      assert.match(
+        catalogVerdict([row("oai-iss-ndl-opac", "978-4-00", at)], now, 3)
+          .lines[0],
+        /since \?\.$/,
+      );
+    },
+  );
+
+  await check(
     "the screen error watch counts, and never prints the words",
     () => {
       const watch = JSON.parse(readFileSync("scripts/watch.json", "utf8"));
@@ -2175,6 +2270,7 @@ async function main() {
     "the backup and usage watches read only, and say so without a token",
     async () => {
       let copiesAnswer: unknown[] = [];
+      let catalogAnswer: unknown[] = [];
       const api = await standIn(({ method, url, body }) => {
         const { pathname } = new URL(url, "http://x");
         if (pathname === "/projects/ref_test/database/backups")
@@ -2186,6 +2282,8 @@ async function main() {
           assert.match(String(body?.query), /^select /);
           if (/from keep\.copies/.test(String(body?.query)))
             return { body: copiesAnswer };
+          if (/from private\.catalog_progress/.test(String(body?.query)))
+            return { body: catalogAnswer };
           return { body: [{ database_bytes: 16777216, storage_bytes: 0 }] };
         }
         return { status: 404, body: {} };
@@ -2218,7 +2316,24 @@ async function main() {
         /::warning::20261101000000_works .*past its 14 days/,
       );
       assert.match(old.output, /^usage: ok$/m);
+      assert.match(old.output, /^catalog: ok$/m);
       copiesAnswer = [];
+      // A mark left for days only warns on a pull request, too.
+      catalogAnswer = [
+        {
+          name: "oai-iss-ndl-opac",
+          mark: "2026-10-01",
+          updated_at: "2026-10-02T00:00:00Z",
+        },
+      ];
+      const stale = await run("scripts/watch.mjs", ["usage"], env);
+      assert.equal(stale.code, 0, stale.output);
+      assert.match(
+        stale.output,
+        /::warning::oai-iss-ndl-opac: last moved .*more than 3/,
+      );
+      assert.match(stale.output, /^usage: ok$/m);
+      catalogAnswer = [];
       const none = await run("scripts/watch.mjs", ["backups"], {});
       assert.equal(none.code, 0);
       assert.match(none.output, /::warning::SUPABASE_ACCESS_TOKEN/);
@@ -2293,6 +2408,8 @@ async function main() {
           if (route === "/database/backups")
             return { body: { pitr_enabled: false, backups: [] } };
           if (/from keep\.copies/.test(String(body?.query)))
+            return { body: [] };
+          if (/from private\.catalog_progress/.test(String(body?.query)))
             return { body: [] };
           return { body: [{ database_bytes: 16777216, storage_bytes: 0 }] };
         }
