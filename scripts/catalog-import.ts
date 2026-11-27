@@ -245,17 +245,38 @@ export const psqlTarget = (url: string): Target => sqlTarget((sql) => psql(url, 
 
 const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
+/**
+ * How patient the asking is: the waits double from `first` up to `most`, for
+ * `tries` asks in all (about ten minutes of waiting), a second between any
+ * two. The tests make them short.
+ */
+export const patience = { tries: 10, gap: 1_000, first: 5_000, most: 120_000 };
+
+/**
+ * The library said it was busy (429, or 503) to every ask. Not the same as
+ * a failure: the night's changes are left for the next night (daily).
+ */
+export class LibraryBusy extends Error {
+  constructor(status: number) {
+    super(`the library answered ${status}`);
+    this.name = "LibraryBusy";
+  }
+}
+
+const busy = (status: number) => status === 429 || status === 503;
+
 /** Asks the library, one request at a time, again when it is busy. */
-export async function ask(url: string, tries = 6): Promise<Response> {
-  let wait = 5_000;
+export async function ask(url: string, tries = patience.tries): Promise<Response> {
+  let wait = patience.first;
   for (let n = 1; ; n++) {
-    await pause(1_000);
+    await pause(patience.gap);
     try {
       const answer = await fetch(url, {
         headers: { "User-Agent": AGENT },
         signal: AbortSignal.timeout(120_000),
       });
       if (answer.ok) return answer;
+      if (n >= tries && busy(answer.status)) throw new LibraryBusy(answer.status);
       if (n >= tries || (answer.status < 500 && answer.status !== 429)) {
         throw new Error(`the library answered ${answer.status}`);
       }
@@ -263,7 +284,7 @@ export async function ask(url: string, tries = 6): Promise<Response> {
       if (n >= tries) throw error;
     }
     await pause(wait);
-    wait *= 2;
+    wait = Math.min(wait * 2, patience.most);
   }
 }
 
@@ -316,36 +337,63 @@ export async function trial(db: PGlite, target: Target, most: number, from: stri
   said("trial", tally);
 }
 
-/** Each day's changes since the last run, for the library's two sets. */
+/**
+ * Each day's changes since the last run, for the library's two sets.
+ *
+ * A night the library is busy (LibraryBusy) is not a failure: the set it was
+ * busy for, and the sets after it, keep their marks where they were, so the
+ * next night takes the same changes again (from the same day on) and nothing
+ * is lost; the rows already sent are taken again as they are. The run ends
+ * well, with a warning. A mark left behind for days is the watch's to tell
+ * (scripts/watch.mjs, catalogStaleDays): it reads when each mark last moved.
+ */
 export async function daily(db: PGlite, target: Target) {
   const started = today();
   // A set with too many changes is left, its mark where it was, and the run
   // fails at the end: the changes not taken are not a quiet night.
   const left: string[] = [];
+  const waiting: string[] = [];
   sets: for (const set of LIBRARY_SETS) {
+    if (waiting.length > 0) {
+      // Busy for one set, the library is not asked again tonight.
+      waiting.push(set);
+      continue;
+    }
     const name = `oai-${set}`;
     const from = (await target.mark(name)) ?? dayBefore(started, 2);
     const tally: Tally = { sent: 0, deleted: 0, gone: 0 };
     let checked = false;
-    for await (const page of changes(set, from)) {
-      if (!checked && (page.size ?? 0) > BULK) {
-        console.log(`${set}: ${page.size} changes since ${from}, more than a day's changes can take`);
-        left.push(set);
-        continue sets;
+    try {
+      for await (const page of changes(set, from)) {
+        if (!checked && (page.size ?? 0) > BULK) {
+          console.log(`${set}: ${page.size} changes since ${from}, more than a day's changes can take`);
+          left.push(set);
+          continue sets;
+        }
+        checked = true;
+        const rows = await rowsOf(db, page.records);
+        await send(target, rows, "oai", tally);
+        tally.sent += rows.length;
+        const gone = page.records.filter((r) => r.deleted && isLibrarys(r)).map((r) => r.id);
+        if (gone.length > 0) {
+          tally.deleted += gone.length;
+          tally.gone += await target.gone(gone);
+        }
       }
-      checked = true;
-      const rows = await rowsOf(db, page.records);
-      await send(target, rows, "oai", tally);
-      tally.sent += rows.length;
-      const gone = page.records.filter((r) => r.deleted && isLibrarys(r)).map((r) => r.id);
-      if (gone.length > 0) {
-        tally.deleted += gone.length;
-        tally.gone += await target.gone(gone);
-      }
+    } catch (error) {
+      if (!(error instanceof LibraryBusy)) throw error;
+      said(`${set} since ${from}, until the library was busy`, tally);
+      waiting.push(set);
+      continue;
     }
     // The next run starts a day back: a change stamped late is not missed.
     await target.setMark(name, dayBefore(started, 1));
     said(`${set} since ${from}`, tally);
+  }
+  if (waiting.length > 0) {
+    console.log(
+      `::warning::The library was busy (${waiting.join(", ")}). Their marks stay where they were; the next night takes the same changes again.`,
+    );
   }
   if (left.length > 0) {
     throw new Error(`not taken: ${left.join(", ")}; take the next month's files (docs/09「図書館の目録」)`);

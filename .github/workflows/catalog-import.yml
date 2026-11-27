@@ -14,6 +14,9 @@ name: Library catalog
 # CATALOG_DB_PASSWORD (given to the role by catalog-role-password.yml) and
 # SUPABASE_PROJECT_ID; without them the run fails, having taken nothing. So
 # does a night whose changes are too many for it (docs/09「図書館の目録」).
+# A night the library stays busy (429 or 503) ends well instead, its marks
+# where they were, so the next night takes the same changes again; the watch
+# tells when a mark has not moved for days (catalogStaleDays, AUD-212).
 
 on:
   schedule:

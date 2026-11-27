@@ -52,6 +52,7 @@ export const TITLES = {
   backups: "毎日の控えが止まっています",
   usage: "Supabase の使用量が上限に近づいています",
   copies: "期限を過ぎた控えが本番の DB に残っています",
+  catalog: "図書館の目録の取り込みが何日も進んでいません",
   journey: "本番の通しが失敗しました",
   publish: "本番の公開が終わりませんでした",
   errors: "読書家の画面でエラーが起きています",
@@ -212,6 +213,64 @@ export const KEPT_COPIES_QUERY =
   "bool_and(c.checked is not null) as all_checked, " +
   "sum(pg_catalog.pg_total_relation_size(pg_catalog.format('keep.%I', c.copy_name)::regclass))::bigint as bytes " +
   "from keep.copies c group by c.label order by c.label";
+
+/**
+ * Whether the library's day's changes are being taken (scripts/catalog-import.ts
+ * daily): when each set's mark last moved (private.catalog_progress, the
+ * oai- names), against the days it may stay. A night the library is busy
+ * leaves the mark where it was and ends well, so only a mark that has not
+ * moved for days is told. Only the sets' names (public), days and times are
+ * printed; the table holds no ISBN or title.
+ *
+ * @returns {{ ok: boolean, lines: string[] }}
+ */
+export function catalogVerdict(rows, now, days) {
+  if (!Array.isArray(rows))
+    return { ok: false, lines: ["Library catalog: not reported."] };
+  if (!Number.isFinite(days) || days <= 0)
+    return {
+      ok: false,
+      lines: ["Library catalog: catalogStaleDays is not set."],
+    };
+  if (rows.length === 0)
+    return {
+      ok: true,
+      lines: ["Library catalog: no day's changes taken yet."],
+    };
+  const lines = [];
+  let ok = true;
+  for (const row of rows) {
+    const name = String(row?.name ?? "");
+    const moved = Date.parse(row?.updated_at ?? "");
+    const mark = String(row?.mark ?? "");
+    if (!/^oai-[a-z-]{1,40}$/.test(name) || !Number.isFinite(moved)) {
+      lines.push("Library catalog: an answer that is not the query's.");
+      ok = false;
+      continue;
+    }
+    const since = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(mark) ? mark : "?";
+    const age = (now - moved) / 86_400_000;
+    if (age > days) {
+      lines.push(
+        `${name}: last moved ${iso(moved)} (${age.toFixed(1)} days ago, more than ${days}); the next run takes the changes since ${since}.`,
+      );
+      ok = false;
+    } else
+      lines.push(
+        `${name}: last moved ${iso(moved)}; the next run takes the changes since ${since}.`,
+      );
+  }
+  if (!ok)
+    lines.push(
+      "Look at the Library catalog runs: the library busy every night (429) keeps the marks where they are, and nothing is lost. Run it by hand (daily) at another hour; past 100,000 changes the month's files are needed (docs/機能/本と書誌.md「取り込み」).",
+    );
+  return { ok, lines };
+}
+
+/** What catalogVerdict reads: the day's changes' marks, no row of the catalog. */
+export const CATALOG_MARKS_QUERY =
+  "select p.name, p.mark, p.updated_at from private.catalog_progress p " +
+  "where p.name like 'oai-%' order by p.name";
 
 /**
  * How many errors readers' screens sent in the last day: kinds (rows) and
@@ -854,6 +913,7 @@ async function main(action, kind, outcome) {
     }
     let supabase = "answered";
     let copies;
+    let catalog;
     try {
       if (action === "errors") {
         let rows;
@@ -900,11 +960,19 @@ async function main(action, kind, outcome) {
           Date.now(),
           config.keptCopyDays,
         );
+        // So are the catalog's marks, under theirs.
+        catalog = catalogVerdict(
+          await call("POST", "/database/query/read-only", {
+            query: CATALOG_MARKS_QUERY,
+          }),
+          Date.now(),
+          config.catalogStaleDays,
+        );
         if (process.env.GITHUB_STEP_SUMMARY) {
           await appendFile(
             process.env.GITHUB_STEP_SUMMARY,
             `### Supabase usage (${iso(Date.now())}, ${config.plan})\n\n` +
-              [...result.lines, ...copies.lines]
+              [...result.lines, ...copies.lines, ...catalog.lines]
                 .map((line) => `- ${line}`)
                 .join("\n") +
               "\n",
@@ -938,6 +1006,14 @@ async function main(action, kind, outcome) {
         await report("copies", copies);
       else for (const line of copies.lines) console.log(`::warning::${line}`);
       if (!copies.ok && process.env.REPORT_ISSUES === "on")
+        process.exitCode = 1;
+    }
+    if (catalog) {
+      // The same: the nights go by on their own, so a pull request only warns.
+      if (process.env.REPORT_ISSUES === "on" || catalog.ok)
+        await report("catalog", catalog);
+      else for (const line of catalog.lines) console.log(`::warning::${line}`);
+      if (!catalog.ok && process.env.REPORT_ISSUES === "on")
         process.exitCode = 1;
     }
     await reportRefusal(action, supabase);
