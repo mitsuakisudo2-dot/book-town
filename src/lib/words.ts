@@ -53,8 +53,10 @@ export function outOf(
 }
 
 /**
- * "3人", or null when there are none: a 0 is never shown, so that a quiet
- * town does not show how quiet it is (CLAUDE.md「画面に0を出さない」).
+ * "3人", or null when there are none, so that a quiet town does not show how
+ * quiet it is. This keeps the old rule; since 2026-11-26 a 0 may be shown
+ * (作るときの規格「数の出し方」); a screen that should show it gets its own
+ * wording here when that screen is changed.
  * Leave the line out, or show a way in instead, where this is null.
  */
 export function someCount(n: number, unit: CountUnit): string | null {
